@@ -32,6 +32,12 @@ pub(super) struct WebAtomeTransformPatch {
 }
 
 #[derive(Clone, Debug, Deserialize)]
+pub(super) struct WebAtomeSurfacePatch {
+    pub(super) width: f32,
+    pub(super) height: f32,
+}
+
+#[derive(Clone, Debug, Deserialize)]
 pub(super) struct WebAtomeStylePatch {
     pub(super) id: String,
     pub(super) color: Option<[f32; 4]>,
@@ -81,6 +87,7 @@ pub(super) enum WebAtomeRenderOp {
     Visibility(WebAtomeVisibilityPatch),
     Text(WebAtomeTextPatch),
     Resource(WebAtomeResourcePatch),
+    Surface(WebAtomeSurfacePatch),
 }
 
 #[derive(Clone, Debug, Component)]
@@ -96,6 +103,12 @@ pub struct AtomeParentEntityId(pub Option<String>);
 pub struct AtomeLogicalSize {
     pub width: f32,
     pub height: f32,
+}
+
+#[derive(Clone, Copy, Debug, Component)]
+pub struct AtomeLogicalPosition {
+    pub x: f32,
+    pub y: f32,
 }
 
 #[derive(Clone, Copy, Debug, Component)]

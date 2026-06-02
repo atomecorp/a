@@ -19,11 +19,13 @@ const createTestCompositor = () => ({
     apply_atome_bevy_layer: () => {},
     apply_atome_bevy_visibility: () => {},
     apply_atome_bevy_resource: () => {},
-    apply_atome_bevy_text_metadata: () => {}
+    apply_atome_bevy_text_metadata: () => {},
+    apply_atome_bevy_surface: () => {}
 });
 
 test('media persistence sanitizes recording Atomes and projects them through Bevy', async () => {
 const commits = [];
+let projectReloadCount = 0;
 const storage = {
     getItem: () => '',
     setItem: () => { },
@@ -57,6 +59,10 @@ Object.assign(globalThis.window, {
         }
     },
     eveToolBase: {
+        loadProjectAtomes: async () => {
+            projectReloadCount += 1;
+            return { ok: true };
+        },
         ensureProjectLayer: () => dom.window.document.getElementById('project'),
         renderAtomeRecord: () => {
             throw new Error('project_media_must_not_call_renderAtomeRecord');
@@ -172,10 +178,12 @@ const hydrated = await ensureProjectMediaAtome({
         project_atome_id: 'audio_recording_pending',
         file_path: 'data/users/user_a/recordings/audio_1779220000002.wav',
         path: 'data/users/user_a/recordings/audio_1779220000002.wav',
-        duration_sec: 1.25
+        duration_sec: 1.25,
+        peaks: [0.1, -0.25, 2, 'bad']
     },
     accessToken: true,
     requireAdoleApi: true,
+    reloadProjectAtomes: true,
     resolvePlacement: () => ({ left: 33, top: 44, zIndex: 55 })
 });
 
@@ -186,12 +194,40 @@ assert.equal(commits[0].atome_id, 'audio_recording_pending');
 assert.equal(commits[0].props.kind, 'audio_recording');
 assert.equal(commits[0].props.pending, false);
 assert.equal(commits[0].props.media_pending, false);
+assert.deepEqual(commits[0].props.peaks, [0.1, 0.25, 1]);
+assert.deepEqual(commits[0].props.waveform_peaks, [0.1, 0.25, 1]);
 assert.match(commits[0].props.visual_ref, /^waveform:/);
 assert.match(commits[0].props.waveform_ref, /^waveform:/);
 assert.equal(commits[0].props.left, 33);
 assert.equal(commits[0].props.top, 44);
 assert.equal(sceneRecords().some((atom) => atom.id === 'audio_recording_pending'), true);
 assert.equal(latestSceneAtom().type, 'audio_waveform');
+assert.deepEqual(latestSceneAtom().content.peaks, [0.1, 0.25, 1]);
+assert.equal(projectReloadCount, 1);
+
+commits.length = 0;
+
+const browserAudio = await ensureProjectMediaAtome({
+    kind: 'sound',
+    fileName: 'audio_1779220000004.wav',
+    result: {
+        file_path: 'data/users/user_a/recordings/audio_1779220000004.wav',
+        path: 'data/users/user_a/recordings/audio_1779220000004.wav',
+        duration_sec: 0.75,
+        peaks: [0.4, 0.8]
+    },
+    accessToken: true,
+    requireAdoleApi: true
+});
+
+assert.equal(browserAudio.ok, true);
+assert.equal(commits.length, 1);
+assert.equal(commits[0].props.kind, 'audio_recording');
+assert.equal(commits[0].props.media_kind, 'sound');
+assert.deepEqual(commits[0].props.waveform_peaks, [0.4, 0.8]);
+const browserAudioSceneAtom = sceneRecords().find((atom) => atom.id === browserAudio.atomeId);
+assert.equal(browserAudioSceneAtom.type, 'audio_waveform');
+assert.deepEqual(browserAudioSceneAtom.content.peaks, [0.4, 0.8]);
 
 commits.length = 0;
 

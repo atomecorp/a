@@ -8,6 +8,15 @@ Copy and paste this entire prompt into the development agent.
 - Done: homothetic resize preserves the X/Y ratio through the canonical resize mutation path.
 - Done: recording-created video Atomes persist through the canonical commit/list/reload path and appear in the project WebGPU canvas projection; stale source-less recording media are filtered before Bevy startup.
 - Done: persisted lightweight media cache inputs are reused on project load; video posters and waveform peaks feed the RenderAtom/Bevy route before source media regeneration, while GPU/RGBA resources remain disposable renderer outputs.
+- Done: browser audio recording now creates canonical `audio_recording_*` project Atomes with persisted waveform peaks; the project scene receives an `audio_waveform` node with peaks instead of a shape-like `sound` node.
+- Done: natural browser refresh reconstruction keeps recorded/imported media Atomes in project list and scene state immediately, while Bevy startup no longer waits synchronously on uncached video/audio texture generation; old cache misses stay visible in Bevy and receive texture resource updates later.
+- Done: project refresh no longer replaces the initial complete scene with a partial media-ready scene. Uncached video/audio nodes stay present as visible Bevy entities and receive textures later through resource updates; WebView resize uses a Bevy surface-size patch instead of forcing media reconstruction.
+- Done: deferred video/audio texture generation is serialized and yields between media records so repeated WebView resizes can apply Bevy surface-size patches before expensive poster/waveform work resumes.
+- Done: video/audio Atomes spawned after Bevy startup now use the same pending-media texture path as reload; `bevy_media_texture_video_metadata_failed:*` is stored as a skipped deferred resource instead of becoming an unhandled diff rejection.
+
+## Open Regression Notes
+
+- Open: remaining selection ownership, selection visuals, hit-testing, drag, lasso priority, and contextual flower-menu routing tasks from the main problem list still need their own focused passes.
 
 ---
 

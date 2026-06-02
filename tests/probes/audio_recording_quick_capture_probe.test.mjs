@@ -233,7 +233,9 @@ const run = async () => {
                 return Array.from(merged.values());
             };
             const listed = collectAtomeListEntries(apiList);
-            const listContains = listed.some((entry) => String(entry?.id || entry?.atome_id || entry?.atomeId || '') === atomeId);
+            const listedEntry = listed.find((entry) => String(entry?.id || entry?.atome_id || entry?.atomeId || '') === atomeId) || null;
+            const listedProps = listedEntry?.properties || listedEntry?.props || listedEntry?.data?.properties || listedEntry?.data?.props || {};
+            const listContains = !!listedEntry;
             return {
                 ok: !!stateRecord && !stateRecord.error && String(stateRecord.id || stateRecord.atome_id || stateRecord.atomeId || atomeId) === atomeId,
                 atome_id: atomeId,
@@ -241,6 +243,10 @@ const run = async () => {
                 state_kind: props.kind || stateRecord?.kind || null,
                 media_url: props.media_url || props.mediaUrl || null,
                 storage_root: props.storage_root || null,
+                state_peak_count: Array.isArray(props.peaks) ? props.peaks.length : 0,
+                state_waveform_peak_count: Array.isArray(props.waveform_peaks) ? props.waveform_peaks.length : 0,
+                list_peak_count: Array.isArray(listedProps.peaks) ? listedProps.peaks.length : 0,
+                list_waveform_peak_count: Array.isArray(listedProps.waveform_peaks) ? listedProps.waveform_peaks.length : 0,
                 api_get_ok: !!apiGet && !apiGet.error && apiGet.skipped !== true,
                 api_get_skipped: apiGet?.skipped === true,
                 api_list_contains: listContains,
@@ -298,6 +304,7 @@ const run = async () => {
                 canvas_css_height: Number(rect?.height || 0),
                 virtual_node_present: !!node,
                 virtual_node_type: node?.type || null,
+                scene_peak_count: Array.isArray(node?.content?.peaks) ? node.content.peaks.length : 0,
                 render_ok: scene?.projection?.ok === true,
                 render_error: scene?.projection?.render_result?.error || scene?.projection?.render_result?.reason || null
             };

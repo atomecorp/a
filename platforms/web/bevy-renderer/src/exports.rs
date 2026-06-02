@@ -96,3 +96,10 @@ pub fn apply_atome_bevy_resource(patch: JsValue) -> Result<(), JsValue> {
     Ok(())
 }
 
+#[wasm_bindgen]
+pub fn apply_atome_bevy_surface(patch: JsValue) -> Result<(), JsValue> {
+    let parsed: WebAtomeSurfacePatch = serde_wasm_bindgen::from_value(patch)
+        .map_err(|error| JsValue::from_str(&format!("bevy_surface_decode_failed:{error}")))?;
+    queue_web_op(WebAtomeRenderOp::Surface(parsed));
+    Ok(())
+}

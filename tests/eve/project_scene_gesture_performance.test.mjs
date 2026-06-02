@@ -46,7 +46,8 @@ const createTestCompositor = (calls = []) => ({
     apply_atome_bevy_layer: (payload) => calls.push({ type: 'layer', payload }),
     apply_atome_bevy_visibility: (payload) => calls.push({ type: 'visibility', payload }),
     apply_atome_bevy_resource: (payload) => calls.push({ type: 'resource', payload }),
-    apply_atome_bevy_text_metadata: (payload) => calls.push({ type: 'text', payload })
+    apply_atome_bevy_text_metadata: (payload) => calls.push({ type: 'text', payload }),
+    apply_atome_bevy_surface: (payload) => calls.push({ type: 'surface', payload })
 });
 
 const installFrameScheduler = (windowRef) => {

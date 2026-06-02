@@ -214,6 +214,54 @@ fn media_nodes_use_explicit_rgba_texture_assets() {
 }
 
 #[test]
+fn media_nodes_without_ready_texture_stay_visible_in_bevy() {
+    let mut world = World::new();
+    world.insert_resource(WebAtomeEntityTable::default());
+    world.insert_resource(WebBevyRendererConfig::new("#test".to_string(), 640.0, 480.0, Vec::new()));
+    world.insert_resource(Assets::<Image>::default());
+    let entity = apply_spawn(&mut world, WebAtomeRenderNode {
+        id: "video_pending".to_string(),
+        kind: "video".to_string(),
+        parent_id: None,
+        logical_position: [10.0, 20.0],
+        logical_size: [160.0, 90.0],
+        layer: 1,
+        color: Some([0.1, 0.2, 0.3, 1.0]),
+        text: None,
+        source: Some("recordings/video_pending.webm".to_string()),
+        texture: None,
+        peaks: None,
+    }).unwrap();
+
+    assert_eq!(world.get::<AtomeRenderKind>(entity).unwrap().0, "video");
+    let sprite = world.get::<Sprite>(entity).unwrap();
+    assert_eq!(sprite.custom_size, Some(Vec2::new(160.0, 90.0)));
+    assert_eq!(sprite.color, Color::srgba(0.1, 0.2, 0.3, 1.0));
+}
+
+#[test]
+fn surface_patch_reprojects_existing_nodes_without_respawn() {
+    let mut world = World::new();
+    world.insert_resource(WebAtomeEntityTable::default());
+    world.insert_resource(WebBevyRendererConfig::new("#test".to_string(), 640.0, 480.0, Vec::new()));
+    world.insert_resource(Assets::<Image>::default());
+    let entity = apply_spawn(&mut world, shape_node("shape_surface")).unwrap();
+
+    assert_eq!(
+        world.get::<Transform>(entity).unwrap().translation,
+        Vec3::new(-268.0, 196.0, -3.0)
+    );
+    apply_surface(&mut world, WebAtomeSurfacePatch { width: 320.0, height: 240.0 }).unwrap();
+    assert_eq!(world.resource::<WebBevyRendererConfig>().width, 320.0);
+    assert_eq!(world.resource::<WebBevyRendererConfig>().height, 240.0);
+    assert_eq!(
+        world.get::<Transform>(entity).unwrap().translation,
+        Vec3::new(-108.0, 76.0, -3.0)
+    );
+    assert_eq!(world.resource::<WebAtomeEntityTable>().by_id.len(), 1);
+}
+
+#[test]
 fn queued_exports_apply_to_running_bevy_world() {
     let _ = drain_web_ops();
     let config = WebBevyRendererConfig::new(
