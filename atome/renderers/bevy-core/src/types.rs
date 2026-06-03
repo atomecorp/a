@@ -1,4 +1,4 @@
-use bevy::prelude::*;
+use bevy::{image::Image, prelude::*};
 use serde::Deserialize;
 use std::collections::HashMap;
 
@@ -168,6 +168,7 @@ pub struct AtomeSelected(pub bool);
 #[derive(Clone, Debug, Component)]
 pub struct AtomeSelectionOverlay {
     pub entities: Vec<Entity>,
+    pub image_handles: Vec<Handle<Image>>,
 }
 
 #[derive(Clone, Debug, Resource, Default)]

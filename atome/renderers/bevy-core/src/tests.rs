@@ -1,5 +1,6 @@
 use bevy::prelude::*;
 
+use crate::selection_overlay::build_shadow_texture_rgba;
 use crate::*;
 
 fn shape_node(id: &str) -> AtomeRenderNode {
@@ -92,7 +93,20 @@ fn selected_nodes_create_overlay_from_configured_visual_style() {
 
     let overlay = world.get::<AtomeSelectionOverlay>(entity).unwrap();
     assert!(overlay.entities.len() > 4);
+    assert_eq!(overlay.image_handles.len(), 1);
     assert_eq!(world.get::<AtomeSelected>(entity).unwrap().0, true);
+    let (texture_width, _texture_height, texture_rgba) = build_shadow_texture_rgba(
+        world.resource::<AtomeBevyRendererConfig>().selection_style,
+        120.0,
+        50.0,
+    )
+    .unwrap();
+    let alpha_at = |x: u32, y: u32| -> u8 {
+        texture_rgba[(y as usize * texture_width as usize + x as usize) * 4 + 3]
+    };
+    assert_eq!(alpha_at(12, 12), 0);
+    assert!(alpha_at(8, 12) > alpha_at(1, 12));
+    assert_eq!(alpha_at(0, 0), 0);
     let selected_depth = world.get::<Transform>(entity).unwrap().translation.z;
     let overlay_depth = world
         .get::<Transform>(overlay.entities[0])
@@ -113,4 +127,5 @@ fn selected_nodes_create_overlay_from_configured_visual_style() {
     .unwrap();
 
     assert!(world.get::<AtomeSelectionOverlay>(entity).is_none());
+    assert_eq!(world.resource::<Assets<Image>>().len(), 0);
 }
