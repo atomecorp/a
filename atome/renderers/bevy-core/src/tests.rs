@@ -93,6 +93,14 @@ fn selected_nodes_create_overlay_from_configured_visual_style() {
     let overlay = world.get::<AtomeSelectionOverlay>(entity).unwrap();
     assert!(overlay.entities.len() > 4);
     assert_eq!(world.get::<AtomeSelected>(entity).unwrap().0, true);
+    let selected_depth = world.get::<Transform>(entity).unwrap().translation.z;
+    let overlay_depth = world
+        .get::<Transform>(overlay.entities[0])
+        .unwrap()
+        .translation
+        .z;
+    assert_eq!(overlay_depth, selected_depth - 0.5);
+    assert!(overlay_depth > depth_for_layer(4));
 
     apply_style(
         &mut world,
