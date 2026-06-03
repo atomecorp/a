@@ -16,11 +16,11 @@ test('createAtome orchestrates canonical commit before render', () => {
     const body = sliceFunction('createAtome');
     const commitIndex = body.indexOf('commitCreateAtome(unitCommand)');
     const refreshIndex = body.indexOf('refreshCreatedAtomeState(unitCommand.atomeId, commitResult)');
-    const renderIndex = body.indexOf('renderCreatedAtome(canonicalState');
+    const renderIndex = body.indexOf('await renderCreatedAtome(canonicalState');
 
     assert.ok(commitIndex > -1, 'createAtome must commit through commitCreateAtome');
     assert.ok(refreshIndex > commitIndex, 'createAtome must refresh canonical state after commit');
-    assert.ok(renderIndex > refreshIndex, 'createAtome must render only after state refresh');
+    assert.ok(renderIndex > refreshIndex, 'createAtome must await render only after state refresh');
     assert.equal(body.includes('createAtomeElement('), false, 'createAtome must not allocate DOM directly');
     assert.equal(body.includes('setRenderedAtomeHost('), false, 'createAtome must not write render caches directly');
     assert.equal(body.includes('document.createElement'), false, 'createAtome must not create DOM before commit');
@@ -50,4 +50,14 @@ test('project visual rendering delegates to the scene runtime', () => {
     assert.ok(body.includes('isProjectSceneParent(parent)'), 'project parents must be detected before DOM host rendering');
     assert.ok(body.includes('renderProjectSceneRecord(record, parent, spec)'), 'project visual records must enter the scene runtime');
     assert.ok(body.indexOf('renderProjectSceneRecord(record, parent, spec)') < body.indexOf('createAtomeElement(spec, spec.id, parent)'), 'project scene routing must happen before legacy host creation');
+});
+
+test('project-root children resolve to the project scene layer', () => {
+    const helperBody = sliceFunction('isProjectRootParentId');
+    const renderBody = sliceFunction('renderCreatedAtome');
+    const realtimeBody = sliceFunction('resolveRecordProjectStatus');
+
+    assert.ok(helperBody.includes('parentKey === projectKey'), 'project root parent detection must compare normalized ids');
+    assert.ok(renderBody.includes('!isProjectRootParentId(spec.parentId, projectId)'), 'created project-root children must not mount under legacy project hosts');
+    assert.ok(realtimeBody.includes('!isProjectRootParentId(info.parentId, projectId)'), 'realtime project-root children must not mount under legacy project hosts');
 });

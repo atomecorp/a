@@ -983,6 +983,8 @@ final class FullscreenWebViewController: UIViewController {
         WebViewManager.setNativeInvokeHandler { command, payload, completion in
             if AppNativeMediaCaptureController.canHandle(command: command) {
                 AppNativeMediaCaptureController.shared.handle(command: command, payload: payload, completion: completion)
+            } else if AppNativeBevyRendererController.canHandle(command: command) {
+                AppNativeBevyRendererController.shared.handle(command: command, payload: payload, completion: completion)
             } else {
                 AppNativeAudioController.shared.handle(command: command, payload: payload, completion: completion)
             }

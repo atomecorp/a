@@ -78,6 +78,7 @@
 				AUv3Diagnostics.swift,
 				AUv3JavaScriptAudio.swift,
 				AUv3PlaybackState.swift,
+				AUv3RecorderAnalysis.swift,
 				AUv3Recorder.swift,
 				AUv3RenderEngine.swift,
 				AUv3TransportObserver.swift,

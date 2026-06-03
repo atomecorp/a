@@ -4,22 +4,21 @@ use atome_bevy_renderer_core::{
     AtomeRenderScene,
 };
 #[cfg(feature = "bevy_renderer_core")]
-use bevy::{
-    prelude::*,
-    window::{Window, WindowPlugin},
-};
+use bevy::prelude::*;
+#[cfg(feature = "bevy_renderer_native")]
+use bevy::window::{Window, WindowPlugin};
 
 #[cfg(feature = "bevy_renderer_native")]
-use super::bevy_winit_settings_for_profile;
-#[cfg(feature = "bevy_renderer_core")]
-use super::{bevy_present_mode_for_profile, AtomePowerProfile};
+use super::{bevy_present_mode_for_profile, bevy_winit_settings_for_profile, AtomePowerProfile};
 
 #[cfg(feature = "bevy_renderer_core")]
 #[derive(Clone, Debug, Resource)]
 pub struct AtomeNativeBevyRendererConfig {
+    #[cfg(feature = "bevy_renderer_native")]
     pub title: String,
     pub width: f32,
     pub height: f32,
+    #[cfg(feature = "bevy_renderer_native")]
     pub power_profile: AtomePowerProfile,
     pub initial_scene: AtomeRenderScene,
 }
@@ -28,9 +27,11 @@ pub struct AtomeNativeBevyRendererConfig {
 impl Default for AtomeNativeBevyRendererConfig {
     fn default() -> Self {
         Self {
+            #[cfg(feature = "bevy_renderer_native")]
             title: "Atome Bevy Renderer".to_string(),
             width: 1280.0,
             height: 720.0,
+            #[cfg(feature = "bevy_renderer_native")]
             power_profile: AtomePowerProfile::default(),
             initial_scene: AtomeRenderScene::default(),
         }
@@ -44,7 +45,7 @@ impl AtomeNativeBevyRendererConfig {
     }
 }
 
-#[cfg(feature = "bevy_renderer_core")]
+#[cfg(feature = "bevy_renderer_native")]
 fn window_for_config(config: &AtomeNativeBevyRendererConfig) -> Window {
     Window {
         title: config.title.clone(),
@@ -61,7 +62,7 @@ fn window_for_config(config: &AtomeNativeBevyRendererConfig) -> Window {
     }
 }
 
-#[cfg(feature = "bevy_renderer_core")]
+#[cfg(feature = "bevy_renderer_native")]
 pub fn build_atome_bevy_app(config: AtomeNativeBevyRendererConfig) -> App {
     let mut app = App::new();
     app.add_plugins(DefaultPlugins.set(WindowPlugin {
@@ -69,6 +70,13 @@ pub fn build_atome_bevy_app(config: AtomeNativeBevyRendererConfig) -> App {
         ..default()
     }))
     .add_plugins(AtomeBevyRendererPlugin::new(config.core_config()));
+    app
+}
+
+#[cfg(feature = "bevy_renderer_core")]
+pub fn build_atome_bevy_embedded_app(config: AtomeNativeBevyRendererConfig) -> App {
+    let mut app = App::new();
+    app.add_plugins(AtomeBevyRendererPlugin::new(config.core_config()));
     app
 }
 
@@ -87,6 +95,7 @@ mod tests {
         AtomeEntityId, AtomeLogicalSize, AtomeRenderNode, AtomeRenderScene,
     };
     use bevy::app::{App, Startup};
+    use bevy::window::Window;
 
     fn shape_node(id: &str) -> AtomeRenderNode {
         AtomeRenderNode {
@@ -134,9 +143,29 @@ mod tests {
     }
 
     #[test]
+    fn embedded_renderer_runs_scene_without_window_plugin() {
+        let config = AtomeNativeBevyRendererConfig {
+            initial_scene: AtomeRenderScene {
+                nodes: vec![shape_node("embedded_shape")],
+                selection_style: None,
+            },
+            ..AtomeNativeBevyRendererConfig::default()
+        };
+        let mut app = build_atome_bevy_embedded_app(config);
+        app.world_mut().run_schedule(Startup);
+
+        let mut window_query = app.world_mut().query::<&Window>();
+        assert_eq!(window_query.iter(app.world()).count(), 0);
+
+        let mut node_query = app.world_mut().query::<&AtomeEntityId>();
+        let nodes: Vec<_> = node_query.iter(app.world()).collect();
+        assert_eq!(nodes.len(), 1);
+        assert_eq!(nodes[0].0, "embedded_shape");
+    }
+
+    #[test]
     fn renderer_config_keeps_native_power_policy_outside_shared_core() {
         let config = AtomeNativeBevyRendererConfig::default();
-        assert_eq!(config.power_profile, AtomePowerProfile::Eco);
         assert!(config.initial_scene.nodes.is_empty());
     }
 }

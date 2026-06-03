@@ -777,6 +777,60 @@ fn require_atome_state(
     })
 }
 
+async fn auth_me_handler(State(state): State<AppState>, headers: HeaderMap) -> impl IntoResponse {
+    let Some(auth_state) = state.auth_state.as_ref() else {
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({ "success": false, "error": "Auth state not initialized" })),
+        );
+    };
+
+    let token = extract_bearer_token(&headers);
+    let response = if let Some(token) = token {
+        local_auth::handle_auth_message(
+            json!({
+                "action": "me",
+                "token": token
+            }),
+            auth_state,
+        )
+        .await
+    } else if let Some(user_id) = extract_user_id_from_headers(&headers) {
+        let phone = headers
+            .get("x-phone")
+            .or_else(|| headers.get("x-user-phone"))
+            .and_then(|value| value.to_str().ok())
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .unwrap_or(user_id.as_str());
+        local_auth::handle_auth_message(
+            json!({
+                "action": "lookup-phone",
+                "phone": phone
+            }),
+            auth_state,
+        )
+        .await
+    } else {
+        return (
+            StatusCode::UNAUTHORIZED,
+            Json(json!({ "success": false, "error": "Unauthorized" })),
+        );
+    };
+
+    if response.success {
+        (StatusCode::OK, Json(json!(response)))
+    } else {
+        (
+            StatusCode::UNAUTHORIZED,
+            Json(json!({
+                "success": false,
+                "error": response.error.unwrap_or_else(|| "Unauthorized".to_string())
+            })),
+        )
+    }
+}
+
 fn clean_remote_segment(value: &str, fallback: &str) -> String {
     let sanitized = sanitize_file_name(value.trim());
     if sanitized.is_empty() || sanitized == "upload.bin" {
@@ -2816,6 +2870,8 @@ async fn upload_handler(
             "success": true,
             "file": stored_file_name,
             "owner": user_id,
+            "owner_id": user_id,
+            "ownerId": user_id,
             "path": rel_path,
             "mime_type": stored_mime_type,
             "size": size,
@@ -3022,7 +3078,9 @@ async fn local_file_write_handler(
             "success": true,
             "file": file_path.file_name().and_then(|s| s.to_str()).unwrap_or("file"),
             "path": relative_path,
-            "owner": user_id
+            "owner": user_id,
+            "owner_id": user_id,
+            "ownerId": user_id
         })),
     )
 }
@@ -3317,6 +3375,8 @@ async fn user_recordings_upload_handler(
             "file": stored_name,
             "path": rel_path,
             "owner": user_id,
+            "owner_id": user_id,
+            "ownerId": user_id,
             "mime_type": stored_mime_type,
             "size": size,
             "converted_from": converted_from
@@ -5579,6 +5639,7 @@ pub async fn start_server(static_dir: PathBuf, uploads_dir: PathBuf, data_dir: P
         .route("/api/server-info", get(server_info_handler))
         .route("/dev/state", get(dev_state_handler))
         .route("/api/fastify-status", get(fastify_status_handler))
+        .route("/api/auth/me", get(auth_me_handler))
         .route("/server_config.json", get(server_config_handler))
         .route("/api/debug-log", post(debug_log_handler))
         .route("/api/db/status", get(db_status_handler))

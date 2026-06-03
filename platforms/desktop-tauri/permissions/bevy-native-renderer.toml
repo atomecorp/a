@@ -1,0 +1,25 @@
+"$schema" = "schemas/schema.json"
+
+[[set]]
+identifier = "bevy-native-renderer"
+description = "Allows the main webview to use the native Bevy renderer commands."
+permissions = [
+  "allow-bevy-native-start",
+  "allow-bevy-native-apply-ops",
+  "allow-bevy-native-resize",
+]
+
+[[permission]]
+identifier = "allow-bevy-native-start"
+description = "Enables the bevy_native_start command."
+commands.allow = ["bevy_native_start"]
+
+[[permission]]
+identifier = "allow-bevy-native-apply-ops"
+description = "Enables the bevy_native_apply_ops command."
+commands.allow = ["bevy_native_apply_ops"]
+
+[[permission]]
+identifier = "allow-bevy-native-resize"
+description = "Enables the bevy_native_resize command."
+commands.allow = ["bevy_native_resize"]

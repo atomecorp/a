@@ -13,6 +13,7 @@
     "core:default",
     "opener:default",
     "stt:default",
-    "audio-engine"
+    "audio-engine",
+    "bevy-native-renderer"
   ]
 }

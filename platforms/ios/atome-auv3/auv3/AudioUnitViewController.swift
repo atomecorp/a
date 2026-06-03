@@ -69,6 +69,8 @@ public class AudioUnitViewController: AUViewController, AUAudioUnitFactory, Audi
     WebViewManager.setNativeInvokeHandler { command, payload, completion in
         if AppNativeMediaCaptureController.canHandle(command: command) {
             AppNativeMediaCaptureController.shared.handle(command: command, payload: payload, completion: completion)
+        } else if AppNativeBevyRendererController.canHandle(command: command) {
+            AppNativeBevyRendererController.shared.handle(command: command, payload: payload, completion: completion)
         } else if command == "audio_init" {
             let sampleRate: Double
             let channels: UInt32

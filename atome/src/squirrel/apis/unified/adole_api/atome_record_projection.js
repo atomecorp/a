@@ -129,9 +129,13 @@ function topologicalSortByParent(items = []) {
 function mapStateCurrentToAtome(state) {
     if (!state || typeof state !== 'object') return null;
     const properties = state.properties || {};
+    const id = state.atome_id || state.atomeId || state.id || properties.id || null;
     return normalizeAtomeRecord({
-        id: state.id || null,
-        type: state.type || properties.type || properties.kind || null,
+        id,
+        atome_id: id,
+        type: state.atome_type || state.atomeType || state.type || properties.type || properties.kind || null,
+        owner_id: state.owner_id || state.ownerId || state.meta?.owner_id || null,
+        parent_id: state.parent_id || state.parentId || state.meta?.parent_id || properties.parent_id || properties.parentId || null,
         meta: {
             owner_id: state.meta?.owner_id || state.owner_id || state.ownerId || null,
             parent_id: state.meta?.parent_id || properties.parent_id || properties.parentId || null,

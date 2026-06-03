@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import { setTimeout as delay } from 'node:timers/promises';
 import { JSDOM } from 'jsdom';
 
@@ -193,3 +194,10 @@ assert.deepEqual(
 const submenu = computeFlowerSubmenuLayout({ childCount: 4, radius: 80 });
 assert.equal(submenu.childPositions.length, 4);
 assert.equal(Number.isFinite(submenu.backPosition.tx), true);
+
+const intuitionSource = await readFile(new URL('../../eVe/intuition/eVeIntuition.js', import.meta.url), 'utf8');
+assert.ok(
+    intuitionSource.includes("type === 'project' && !hasAtomeTarget")
+        && intuitionSource.includes('selectedIds: contextSelectionIds'),
+    'project-only flower context must not inherit stale Atome selection ids'
+);

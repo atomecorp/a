@@ -1,11 +1,9 @@
 mod audio_engine;
+mod bevy_backend;
 mod dev_logging;
 mod native_contacts;
 mod runtime_logging;
 mod server;
-
-#[cfg(feature = "bevy_backend")]
-pub mod bevy_backend;
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -185,6 +183,9 @@ pub fn run() {
             audio_engine::bridge::audio_record_stop,
             audio_engine::bridge::audio_get_levels,
             audio_engine::bridge::audio_shutdown,
+            bevy_backend::bevy_native_start,
+            bevy_backend::bevy_native_apply_ops,
+            bevy_backend::bevy_native_resize,
             project_root
         ])
         .setup(|app| {
