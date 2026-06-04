@@ -3,6 +3,7 @@ use atome_bevy_renderer_core::{
     AtomeRenderScene,
 };
 use bevy::{
+    log::{Level, LogPlugin},
     prelude::*,
     window::{CompositeAlphaMode, PresentMode, Window, WindowPlugin},
 };
@@ -80,10 +81,18 @@ fn web_window_for_config(config: &WebBevyRendererConfig) -> Window {
 fn build_web_bevy_app(config: WebBevyRendererConfig) -> App {
     let window = web_window_for_config(&config);
     let mut app = App::new();
-    app.add_plugins(DefaultPlugins.set(WindowPlugin {
-        primary_window: Some(window),
-        ..default()
-    }))
+    app.add_plugins(
+        DefaultPlugins
+            .set(LogPlugin {
+                level: Level::WARN,
+                filter: "warn,wgpu=error,naga=warn".to_string(),
+                ..default()
+            })
+            .set(WindowPlugin {
+                primary_window: Some(window),
+                ..default()
+            }),
+    )
     .add_plugins(WebBevyRendererPlugin { config });
     app
 }

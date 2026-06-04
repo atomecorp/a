@@ -236,21 +236,27 @@ test('iOS native projection does not report visible rendering before the present
         projectSceneRuntimeSource.includes('if (projectionOk) runtime.virtualScene = virtualScene'),
         'failed native presentation must not mark the virtual scene as successfully started'
     );
-    assert.ok(
-        projectSceneBevyProjectionSource.includes("logProjectRenderDiag('projection:error'"),
-        'project projection must log native renderer errors without pretending the import failed before commit'
+    assert.equal(
+        projectSceneBevyProjectionSource.includes('logProjectRenderDiag'),
+        false,
+        'project projection must not emit temporary render diagnostics after the iOS import diagnosis is complete'
     );
     assert.ok(
-        projectSceneBevyProjectionSource.includes("logProjectRenderDiag('projection:restart_required'"),
+        projectSceneBevyProjectionSource.includes('isNativeRendererNotStarted(error)'),
         'stale native projection state must retry a full native start instead of applying diffs to a missing renderer'
     );
     assert.ok(
         projectSceneRuntimeSource.includes('ok: projectionOk'),
         'project projection must use the presentability-aware ok flag'
     );
+    assert.equal(
+        toolGenesisSource.includes('created:render_result'),
+        false,
+        'created atome diagnostics must not emit temporary render logs'
+    );
     assert.ok(
-        toolGenesisSource.includes('rendered: rendered?.ok === true'),
-        'created atome diagnostics must not treat any projection object as a visible render'
+        toolGenesisSource.includes('return renderAtomeRecord(canonicalState, layer)'),
+        'created atomes must still render through the canonical project render path'
     );
     assert.ok(
         toolGenesisSource.includes('view?.ok === true'),
