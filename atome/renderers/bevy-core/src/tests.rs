@@ -108,13 +108,21 @@ fn selected_nodes_create_overlay_from_configured_visual_style() {
     assert!(alpha_at(8, 12) > alpha_at(1, 12));
     assert_eq!(alpha_at(0, 0), 0);
     let selected_depth = world.get::<Transform>(entity).unwrap().translation.z;
-    let overlay_depth = world
+    let shadow_depth = world
         .get::<Transform>(overlay.entities[0])
         .unwrap()
         .translation
         .z;
-    assert_eq!(overlay_depth, selected_depth - 0.5);
-    assert!(overlay_depth > depth_for_layer(4));
+    let outline_depth = world
+        .get::<Transform>(overlay.entities[1])
+        .unwrap()
+        .translation
+        .z;
+    assert_eq!(shadow_depth, selected_depth - 0.5);
+    assert_eq!(outline_depth, selected_depth + 0.5);
+    assert!(shadow_depth < selected_depth);
+    assert!(outline_depth > selected_depth);
+    assert!(shadow_depth > depth_for_layer(4));
 
     apply_style(
         &mut world,

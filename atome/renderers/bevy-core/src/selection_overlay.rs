@@ -13,8 +13,12 @@ use crate::{
     },
 };
 
-fn overlay_depth_for_layer(layer: i32) -> f32 {
+fn shadow_depth_for_layer(layer: i32) -> f32 {
     depth_for_layer(layer) - 0.5
+}
+
+fn outline_depth_for_layer(layer: i32) -> f32 {
+    depth_for_layer(layer) + 0.5
 }
 
 fn spawn_overlay_rect(
@@ -249,7 +253,8 @@ pub fn rebuild_selection_overlay(world: &mut World, entity: Entity) -> Result<()
     let y = position.y;
     let width = size.width.max(1.0);
     let height = size.height.max(1.0);
-    let z = overlay_depth_for_layer(layer);
+    let shadow_z = shadow_depth_for_layer(layer);
+    let outline_z = outline_depth_for_layer(layer);
     let mut entities = Vec::new();
     let mut image_handles = Vec::new();
     spawn_blurred_shadow(
@@ -258,9 +263,9 @@ pub fn rebuild_selection_overlay(world: &mut World, entity: Entity) -> Result<()
         &mut image_handles,
         style,
         (x, y, width, height),
-        z,
+        shadow_z,
     )?;
-    spawn_dashed_axis(world, &mut entities, style, x, y, width, true, z);
+    spawn_dashed_axis(world, &mut entities, style, x, y, width, true, outline_z);
     spawn_dashed_axis(
         world,
         &mut entities,
@@ -269,9 +274,9 @@ pub fn rebuild_selection_overlay(world: &mut World, entity: Entity) -> Result<()
         y + height - style.border_thickness,
         width,
         true,
-        z,
+        outline_z,
     );
-    spawn_dashed_axis(world, &mut entities, style, x, y, height, false, z);
+    spawn_dashed_axis(world, &mut entities, style, x, y, height, false, outline_z);
     spawn_dashed_axis(
         world,
         &mut entities,
@@ -280,7 +285,7 @@ pub fn rebuild_selection_overlay(world: &mut World, entity: Entity) -> Result<()
         y,
         height,
         false,
-        z,
+        outline_z,
     );
     world.entity_mut(entity).insert(AtomeSelectionOverlay {
         entities,
