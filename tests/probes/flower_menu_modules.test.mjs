@@ -13,8 +13,12 @@ globalThis.HTMLElement = window.HTMLElement;
 globalThis.HTMLImageElement = window.HTMLImageElement;
 
 const {
+    clearFlowerContextHoldCandidate,
+    clearFlowerContextLongPressActive,
     clearAllFlowerPointerLocks,
     scheduleFlowerPointerUnlock,
+    setFlowerContextHoldCandidate,
+    setFlowerContextLongPressActive,
     setFlowerPointerLock
 } = await import('../../eVe/intuition/flower/context_pointer_lock.js');
 const {
@@ -172,6 +176,15 @@ assert.equal(scheduleFlowerPointerUnlock(7, 0), true);
 await delay(1);
 assert.equal(window.__EVE_FLOWER_POINTER_LOCK__['7'], undefined);
 clearAllFlowerPointerLocks();
+assert.equal(setFlowerContextHoldCandidate(8, { contextType: 'atome', atomeId: 'shape_a' }), true);
+assert.equal(window.__EVE_FLOWER_CONTEXT_HOLD_CANDIDATE__.atomeId, 'shape_a');
+assert.equal(clearFlowerContextHoldCandidate(8), true);
+assert.equal(window.__EVE_FLOWER_CONTEXT_HOLD_CANDIDATE__, undefined);
+assert.equal(setFlowerContextLongPressActive(9, { contextType: 'atome', atomeId: 'shape_b', kind: 'shape' }), true);
+assert.equal(window.__EVE_FLOWER_CONTEXT_LONG_PRESS_ACTIVE__.preserveSelection, true);
+assert.equal(window.__EVE_FLOWER_CONTEXT_LONG_PRESS_ACTIVE__.surfaceInteraction, true);
+assert.equal(clearFlowerContextLongPressActive(9), true);
+assert.equal(window.__EVE_FLOWER_CONTEXT_LONG_PRESS_ACTIVE__, undefined);
 
 const item = normalizeItem({
     key: 'import',
