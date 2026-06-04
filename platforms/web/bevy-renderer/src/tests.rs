@@ -2,6 +2,7 @@ use atome_bevy_renderer_core::{
     AtomeEntityTable, AtomeRenderNode, AtomeRenderOp, AtomeRenderScene, AtomeTransformPatch,
 };
 use bevy::prelude::*;
+use bevy::window::RequestRedraw;
 
 use super::*;
 
@@ -64,4 +65,11 @@ fn queued_exports_apply_through_shared_core() {
     app.update();
 
     assert_eq!(app.world().resource::<AtomeEntityTable>().by_id.len(), 1);
+    assert_eq!(
+        app.world()
+            .resource::<Messages<RequestRedraw>>()
+            .iter_current_update_messages()
+            .count(),
+        1
+    );
 }

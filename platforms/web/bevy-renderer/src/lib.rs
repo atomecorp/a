@@ -5,7 +5,8 @@ use atome_bevy_renderer_core::{
 use bevy::{
     log::{Level, LogPlugin},
     prelude::*,
-    window::{CompositeAlphaMode, PresentMode, Window, WindowPlugin},
+    window::{CompositeAlphaMode, PresentMode, RequestRedraw, Window, WindowPlugin},
+    winit::{EventLoopProxy, EventLoopProxyWrapper, WinitUserEvent},
 };
 use std::cell::RefCell;
 
@@ -13,14 +14,35 @@ mod exports;
 
 thread_local! {
     static WEB_PENDING_OPS: RefCell<Vec<AtomeRenderOp>> = RefCell::new(Vec::new());
+    static WEB_EVENT_LOOP_PROXY: RefCell<Option<EventLoopProxy<WinitUserEvent>>> = const { RefCell::new(None) };
 }
 
 fn queue_web_op(op: AtomeRenderOp) {
     WEB_PENDING_OPS.with(|cell| cell.borrow_mut().push(op));
+    wake_web_renderer();
 }
 
 fn drain_web_ops() -> Vec<AtomeRenderOp> {
     WEB_PENDING_OPS.with(|cell| cell.borrow_mut().drain(..).collect())
+}
+
+fn remember_event_loop_proxy(proxy: Option<Res<EventLoopProxyWrapper>>) {
+    let Some(proxy) = proxy else {
+        return;
+    };
+    let wrapper: &EventLoopProxyWrapper = &proxy;
+    let event_loop_proxy: &EventLoopProxy<WinitUserEvent> = wrapper;
+    WEB_EVENT_LOOP_PROXY.with(|cell| {
+        *cell.borrow_mut() = Some(event_loop_proxy.clone());
+    });
+}
+
+fn wake_web_renderer() {
+    WEB_EVENT_LOOP_PROXY.with(|cell| {
+        if let Some(proxy) = cell.borrow().as_ref() {
+            let _ = proxy.send_event(WinitUserEvent::WakeUp);
+        }
+    });
 }
 
 #[derive(Clone, Debug)]
@@ -49,14 +71,21 @@ struct WebBevyRendererPlugin {
 
 impl Plugin for WebBevyRendererPlugin {
     fn build(&self, app: &mut App) {
-        app.insert_resource(ClearColor(Color::NONE))
+        app.add_message::<RequestRedraw>()
+            .insert_resource(ClearColor(Color::NONE))
             .add_plugins(AtomeBevyRendererPlugin::new(self.config.core.clone()))
+            .add_systems(Startup, remember_event_loop_proxy)
             .add_systems(Update, apply_pending_web_ops);
     }
 }
 
 fn apply_pending_web_ops(world: &mut World) {
-    apply_render_ops(world, drain_web_ops());
+    let ops = drain_web_ops();
+    if ops.is_empty() {
+        return;
+    }
+    apply_render_ops(world, ops);
+    world.write_message(RequestRedraw);
 }
 
 fn web_window_for_config(config: &WebBevyRendererConfig) -> Window {
