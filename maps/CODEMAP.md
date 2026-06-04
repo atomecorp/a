@@ -115,7 +115,7 @@ Capture reveal ownership:
 - `eVe/intuition/tools/capture_reveal_runtime.js` owns capture media reveal orchestration for audio recordings, video recordings, and photos.
 - `eVe/intuition/tools/capture_export_geometry.js` owns the viewport-to-project-layer geometry contract for that reveal.
 - `eVe/intuition/tools/capture.js` owns capture tool actions and delegates media reveal creation, animation, and final-position persistence to the reveal runtime.
-- `eVe/intuition/runtime/project_media_import_runtime.js` owns shared project media file selection for flower-menu import and capture import, then delegates durable project media creation to `project_drop.importFilesToProjectViaCreator`.
+- `eVe/intuition/runtime/project_media_import_runtime.js` owns shared project media file selection for flower-menu import and capture import, emits the narrow Xcode-visible import trace for iOS/AUv3 picker diagnosis, then delegates durable project media creation to `project_drop.importFilesToProjectViaCreator`.
 - `eVe/intuition/tools/capture.js` remains a critical oversized legacy module after this scoped extraction. Current reduction ownership is the capture tool action layer; the intended reduction plan is to continue moving cohesive responsibilities into dedicated runtimes: fullscreen capture surface, quick-record pointer session, capture menu registration, and preview session lifecycle.
 
 Atome DOM projection ownership:
@@ -951,6 +951,7 @@ Reusable APIs:
 - Panel API, panel layout policy, layer contract, layer ownership, selection, latched state.
 - Layer contract owns the global stack order and its distinct HTML layer nodes: project tools, floating project palettes, Molecules, component/docked palettes, panels/dialogs, main ribbon, active drag.
 - `project_drop.js` owns project-layer native file drop routing, including document-level drops that resolve back to a `project_view_*` surface before entering the product media import path, plus project tool shortcut drag intent routing back to the main ribbon trash target for canonical soft-delete handling.
+- `eVe/intuition/tools/project_drop_diagnostics.js` owns project-drop debug ring-buffer logging and media import diagnostic normalization. Its verbose diagnostics stay behind `window.__EVE_PROJECT_DROP_DEBUG__` and must not auto-spam iOS/AUv3 Xcode logs.
 - `tool_runtime.js` owns protected system-tool contract reconciliation before gateway execution, including `ui.creator` recovery when persisted registry state has a stale execution mode.
 - Shared media types, DOM utilities, SVG runtime, color values, group state, slider content, slider DOM/data-role selectors, shared slider direct-drag control, and tool drag.
 - IntuitionX projection tool DOM is created by `eVe/intuition/projection/button.js` and projected through `eVe/intuition/projection/tool_strip.js`; static projection visuals live in `eVe/elements/eVe_look.js`, while `eVe/intuition/core/dom.js` prevents projection surface color/shadow constants from being rewritten inline.

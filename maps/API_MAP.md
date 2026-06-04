@@ -322,6 +322,7 @@ Boundary rules:
 
 - File selection is UI intent collection only; durable media creation is delegated to `eVe/intuition/tools/project_drop.js` through `importFilesToProjectViaCreator`.
 - The runtime may use the native iOS/AUv3 document picker, browser file picker, or hidden input picker only as file-selection surfaces.
+- iOS/AUv3 import diagnosis is centralized here as `[ProjectImport]` Xcode-console entries for picker request/result and creator result; project scene, Bevy Web, and `project_drop_diagnostics.js` verbose logs remain explicit-debug only.
 - It must not persist Atome state, upload files, or render media directly.
 - The delegated media creation path must preserve the selected project id through the canonical commit envelope and project scene records, not DOM parent inference.
 
