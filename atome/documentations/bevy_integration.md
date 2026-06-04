@@ -2,7 +2,7 @@
 
 ## Status
 
-Bevy is integrated as an official, feature-gated Tauri Rust dependency, as the active browser/WASM project renderer entry point for browser projections, and as the native command target for Tauri project-surface projection.
+Bevy is integrated as an official, feature-gated Tauri Rust dependency, as the active browser/WASM project renderer entry point for visible WebView project projections, and as a native command target for diagnostics or hosts that explicitly provide a presentable native renderer.
 
 The browser project rendering path is:
 
@@ -10,13 +10,19 @@ The browser project rendering path is:
 canonical Atome record -> RenderAtom / Virtual Scene -> Bevy projection adapter -> browser Bevy WASM renderer
 ```
 
-The Tauri project rendering path is:
+The Tauri and iOS visible WebView project rendering path is:
 
 ```text
-canonical Atome record -> RenderAtom / Virtual Scene -> Bevy projection adapter -> Tauri native Bevy commands -> shared Atome Bevy core
+canonical Atome record -> RenderAtom / Virtual Scene -> Bevy projection adapter -> Bevy WASM renderer -> WebGPU canvas
 ```
 
-The Bevy backend consumes the existing renderer-agnostic virtual scene contract instead of becoming a parallel Atome state model. Browser project rendering starts one Bevy app on the existing shared project canvas and applies Virtual Scene diffs through explicit WASM exports. Tauri project rendering dispatches the same scene and diff contract through `bevy_native_start`, `bevy_native_apply_ops`, and `bevy_native_resize` with `bevy_renderer_core` enabled, without importing the browser/WASM Bevy module for the main project surface.
+When a host declares `window.__ATOME_NATIVE_BEVY_PRESENTABLE__ === true`, the native project rendering path is:
+
+```text
+canonical Atome record -> RenderAtom / Virtual Scene -> Bevy projection adapter -> native Bevy commands -> shared Atome Bevy core -> host-owned presentation surface
+```
+
+The Bevy backend consumes the existing renderer-agnostic virtual scene contract instead of becoming a parallel Atome state model. WebView project rendering starts one Bevy app on the existing shared project canvas and applies Virtual Scene diffs through explicit WASM exports. Native project rendering dispatches the same scene and diff contract through `bevy_native_start`, `bevy_native_apply_ops`, and `bevy_native_resize` only after the host declares a presentable native renderer.
 
 The Tauri IPC bridge uses the embedded native Bevy App builder. That path installs the shared Atome Bevy core and runs the Startup scene schedule, but it intentionally does not install Bevy `WindowPlugin` or run a nested winit/render loop from a Tauri command. It reports `presentable:false`; the JavaScript runtime must not select it for the visible WebView project canvas unless the host explicitly declares `window.__ATOME_NATIVE_BEVY_PRESENTABLE__ === true`. Standalone Bevy window presentation remains owned by `bevy_renderer_native` and `run_atome_bevy_native(...)`.
 
@@ -183,18 +189,21 @@ Platform wrappers live in:
 ```text
 platforms/web/bevy-renderer/
 platforms/desktop-tauri/src/bevy_backend/
+platforms/ios/bevy-renderer/
 ```
 
 They own canvas/window/runtime setup only. They must not duplicate projection, spawn, texture, render-op, or selection-overlay logic that belongs in the shared Atome crate.
 
-Tauri native command ownership:
+Native command ownership:
 
 ```text
 platforms/desktop-tauri/src/bevy_backend/bridge.rs
+platforms/ios/atome-auv3/Common/AppNativeBevyRendererController.swift
+platforms/ios/atome-auv3/Common/AtomeIosBevyRendererBridge.h
 eVe/domains/rendering/bevy_native_renderer_runtime.js
 ```
 
-The JavaScript native runtime chooses Tauri or iOS native invoke when the host is native. It must not call `atome/src/wasm/squirrel_bevy_renderer.js` for the Tauri or iOS main project surface. iOS currently exposes the same command boundary through `AppNativeBevyRendererController`; until a Rust/Metal Bevy library is linked into the Xcode targets, that boundary returns `ios_bevy_native_rust_renderer_not_linked` instead of silently falling back to WASM.
+The JavaScript renderer selects the visible Bevy WebGPU canvas for Tauri and iOS unless the host explicitly declares `window.__ATOME_NATIVE_BEVY_PRESENTABLE__ === true`. iOS still exposes the native command boundary through `AppNativeBevyRendererController`; Xcode builds and links the `platforms/ios/bevy-renderer` Rust staticlib so Swift can call `atome_ios_bevy_renderer_status(...)` and `atome_ios_bevy_scene_probe(...)`. Until the real Rust/Metal Bevy presenter is connected to the project surface, that boundary returns `ios_bevy_native_not_presentable` with `rust_linked=1`, `bevy_core_linked=1`, `presentable=0`, and `renderer_mode=linked_no_presenter`, while the visible project rendering path remains the Bevy WASM/WebGPU canvas.
 
 The source of truth remains outside Bevy:
 

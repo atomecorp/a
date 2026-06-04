@@ -34,12 +34,17 @@ class AudioSchemeHandler: NSObject, WKURLSchemeHandler {
         // 2) atome://audio/Alive.m4a    -> host == "audio", path == "/Alive.m4a"
         if path.hasPrefix("/audio/") {
             let relative = String(path.dropFirst("/audio/".count))
-            serveAudio(relativePath: relative, task: urlSchemeTask)
+            serveSandboxFile(relativePath: relative, label: "audio", task: urlSchemeTask)
             return
         }
         if host == "audio" && path.count > 1 {
             let relative = String(path.dropFirst())
-            serveAudio(relativePath: relative, task: urlSchemeTask)
+            serveSandboxFile(relativePath: relative, label: "audio", task: urlSchemeTask)
+            return
+        }
+        if path.hasPrefix("/file/") {
+            let relative = String(path.dropFirst("/file/".count))
+            serveSandboxFile(relativePath: relative, label: "file", task: urlSchemeTask)
             return
         }
         
@@ -70,10 +75,10 @@ document.getElementById('player').addEventListener('error', e => {
         respondData(html.data(using: .utf8)!, mime: "text/html", task: task)
     }
     
-    private func serveAudio(relativePath rawPath: String, task: WKURLSchemeTask) {
+    private func serveSandboxFile(relativePath rawPath: String, label: String, task: WKURLSchemeTask) {
         let trimmed = rawPath.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let sanitized = SandboxPathValidator.sanitizedRelativePath(trimmed) else {
-            SandboxPathValidator.reportViolation(path: rawPath, context: "AudioSchemeHandler.audio")
+            SandboxPathValidator.reportViolation(path: rawPath, context: "AudioSchemeHandler.\(label)")
             respond404(task: task)
             return
         }
@@ -84,11 +89,11 @@ document.getElementById('player').addEventListener('error', e => {
             ?? SandboxAssetManager.shared.materializeAssetIfNeeded(relativePath: sanitized)
 
         guard let locatedURL = fileURL else {
-            print("[AudioSchemeHandler] Audio missing for \(sanitized)")
+            print("[AudioSchemeHandler] \(label) missing for \(sanitized)")
             respond404(task: task)
             return
         }
-        print("[AudioSchemeHandler] Found audio at path=\(locatedURL.path)")
+        print("[AudioSchemeHandler] Found \(label) at path=\(locatedURL.path)")
         
         do {
             let attr = try fileManager.attributesOfItem(atPath: locatedURL.path)
@@ -163,6 +168,7 @@ document.getElementById('player').addEventListener('error', e => {
     case "svg": return "image/svg+xml"
     case "png": return "image/png"
     case "jpg", "jpeg": return "image/jpeg"
+    case "wasm": return "application/wasm"
         default: return "application/octet-stream"
         }
     }

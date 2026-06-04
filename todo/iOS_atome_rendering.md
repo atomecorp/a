@@ -124,12 +124,11 @@ Both can produce the same user-visible symptom: imported Atomes do not appear af
 
 ## Required iOS Checks
 
-Before enabling native Bevy presentation on iOS, verify all of these conditions:
+On iOS, visible project rendering uses the Bevy WASM/WebGPU canvas unless the host explicitly declares a presentable native Bevy renderer. The Swift/Rust command boundary remains callable for diagnostics and future native presentation. Before claiming native Bevy presentation is visible on iOS, verify all of these conditions:
 
 - the Swift bridge command boundary exists and is callable;
 - the Rust/Bevy native library is actually linked into the iOS targets;
 - the native renderer owns a visible Metal/Bevy presentation surface;
-- the JavaScript runtime does not silently switch to native rendering only because the app is iOS;
 - failed or non-presentable native renderer states return explicit errors;
 - imported media URLs keep owner identity through `owner`, `owner_id`, and `ownerId`;
 - `/api/uploads/...` and `/api/recordings/...` resolve through the local iOS HTTP server;
@@ -153,7 +152,8 @@ The Bevy/Tauri checks confirmed:
 - the embedded bridge is explicitly non-presentable;
 - Tauri native command permissions exist;
 - Tauri WebView rendering does not select the non-presentable native bridge for the visible project canvas;
-- iOS/AUv3 remain on the native command boundary and do not silently use the browser/WASM Bevy path.
+- iOS/AUv3 keep the native command boundary for diagnostics, but visible project rendering uses the Bevy WASM/WebGPU canvas until the native host declares a presentable Bevy renderer.
+- iOS now links a Rust staticlib wrapper around the shared Atome Bevy core, probes native scenes in Rust, and returns `ios_bevy_native_not_presentable` with `renderer_mode=linked_no_presenter`, `rust_linked=1`, `bevy_core_linked=1`, and `presentable=0` until the real Metal/Bevy presenter is connected.
 
 ## Conclusion
 
@@ -169,4 +169,4 @@ The safe rule is:
 native command bridge available != native renderer presentable
 ```
 
-Only a renderer that explicitly proves it owns a visible presentation surface should be selected for native project rendering.
+For iOS, the Bevy WASM/WebGPU canvas is the selected visible project rendering path until a real native Bevy presenter is declared through `window.__ATOME_NATIVE_BEVY_PRESENTABLE__ === true`. The Swift/Rust native boundary remains linked and diagnostic-only while it reports `presentable=0`.

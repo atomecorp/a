@@ -78,8 +78,8 @@
 				AUv3Diagnostics.swift,
 				AUv3JavaScriptAudio.swift,
 				AUv3PlaybackState.swift,
-				AUv3RecorderAnalysis.swift,
 				AUv3Recorder.swift,
+				AUv3RecorderAnalysis.swift,
 				AUv3RenderEngine.swift,
 				AUv3TransportObserver.swift,
 				utils.swift,
@@ -143,6 +143,7 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = 349603F82818619200E13C15 /* Build configuration list for PBXNativeTarget "atome" */;
 			buildPhases = (
+				6BBEVY020000000000000001 /* Build iOS Bevy Renderer */,
 				349603E02818619000E13C15 /* Sources */,
 				349603E12818619000E13C15 /* Frameworks */,
 				349603E22818619000E13C15 /* Resources */,
@@ -167,6 +168,7 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = 34960421281861B500E13C15 /* Build configuration list for PBXNativeTarget "atomeAudioUnit" */;
 			buildPhases = (
+				6BBEVY020000000000000002 /* Build iOS Bevy Renderer */,
 				349603FB281861B500E13C15 /* Sources */,
 				349603FC281861B500E13C15 /* Frameworks */,
 				349603FD281861B500E13C15 /* Resources */,
@@ -243,6 +245,44 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXShellScriptBuildPhase section */
+		6BBEVY020000000000000001 /* Build iOS Bevy Renderer */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+				"$(SRCROOT)/../../../platforms/ios/bevy-renderer/Cargo.toml",
+				"$(SRCROOT)/../../../platforms/ios/bevy-renderer/src/lib.rs",
+				"$(SRCROOT)/../../../atome/renderers/bevy-core/Cargo.toml",
+			);
+			name = "Build iOS Bevy Renderer";
+			outputPaths = (
+				"$(TARGET_TEMP_DIR)/libatome_ios_bevy_renderer.a",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "sh \"$SRCROOT/../build_bevy_renderer.sh\"\n";
+		};
+		6BBEVY020000000000000002 /* Build iOS Bevy Renderer */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+				"$(SRCROOT)/../../../platforms/ios/bevy-renderer/Cargo.toml",
+				"$(SRCROOT)/../../../platforms/ios/bevy-renderer/src/lib.rs",
+				"$(SRCROOT)/../../../atome/renderers/bevy-core/Cargo.toml",
+			);
+			name = "Build iOS Bevy Renderer";
+			outputPaths = (
+				"$(TARGET_TEMP_DIR)/libatome_ios_bevy_renderer.a",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "sh \"$SRCROOT/../build_bevy_renderer.sh\"\n";
+		};
 		6BARCH020000000000000001 /* Copy Atome Resource Root */ = {
 			isa = PBXShellScriptBuildPhase;
 			alwaysOutOfDate = 1;
@@ -258,7 +298,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "set -eu\nrm -rf \"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/atome_open\"\nmkdir -p \"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH\"\ncp -R \"$SRCROOT/../../../atome\" \"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/atome_open\"\n";
+			shellScript = "set -eu\nRESOURCE_ROOT=\"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/atome_open\"\nrm -rf \"$RESOURCE_ROOT\"\nmkdir -p \"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH\"\ncp -R \"$SRCROOT/../../../atome\" \"$RESOURCE_ROOT\"\nfind \"$RESOURCE_ROOT\" -type d -name target -prune -exec rm -rf {} +\n";
 		};
 		6BARCH020000000000000002 /* Copy Atome Resource Root */ = {
 			isa = PBXShellScriptBuildPhase;
@@ -275,7 +315,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "set -eu\nrm -rf \"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/atome_open\"\nmkdir -p \"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH\"\ncp -R \"$SRCROOT/../../../atome\" \"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/atome_open\"\n";
+			shellScript = "set -eu\nRESOURCE_ROOT=\"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/atome_open\"\nrm -rf \"$RESOURCE_ROOT\"\nmkdir -p \"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH\"\ncp -R \"$SRCROOT/../../../atome\" \"$RESOURCE_ROOT\"\nfind \"$RESOURCE_ROOT\" -type d -name target -prune -exec rm -rf {} +\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 
@@ -458,7 +498,16 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
+				LIBRARY_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(BUILT_PRODUCTS_DIR)",
+					"$(TARGET_TEMP_DIR)",
+				);
 				MARKETING_VERSION = 1.02;
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-latome_ios_bevy_renderer",
+				);
 				PRODUCT_BUNDLE_IDENTIFIER = one.atome.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
@@ -497,7 +546,16 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
+				LIBRARY_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(BUILT_PRODUCTS_DIR)",
+					"$(TARGET_TEMP_DIR)",
+				);
 				MARKETING_VERSION = 1.02;
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-latome_ios_bevy_renderer",
+				);
 				PRODUCT_BUNDLE_IDENTIFIER = one.atome.app;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
@@ -532,7 +590,16 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
+				LIBRARY_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(BUILT_PRODUCTS_DIR)",
+					"$(TARGET_TEMP_DIR)",
+				);
 				MARKETING_VERSION = 1.02;
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-latome_ios_bevy_renderer",
+				);
 				PRODUCT_BUNDLE_IDENTIFIER = one.atome.app.atome;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
@@ -566,7 +633,16 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
+				LIBRARY_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(BUILT_PRODUCTS_DIR)",
+					"$(TARGET_TEMP_DIR)",
+				);
 				MARKETING_VERSION = 1.02;
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"-latome_ios_bevy_renderer",
+				);
 				PRODUCT_BUNDLE_IDENTIFIER = one.atome.app.atome;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;

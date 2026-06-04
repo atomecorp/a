@@ -1,0 +1,22 @@
+[package]
+name = "atome-ios-bevy-renderer"
+version = "0.1.0"
+edition = "2021"
+description = "iOS C ABI boundary for the shared Atome Bevy renderer core"
+
+[lib]
+crate-type = ["staticlib"]
+
+[dependencies]
+atome-bevy-renderer-core = { path = "../../../atome/renderers/bevy-core" }
+serde_json = "1"
+
+[profile.dev]
+debug = 0
+panic = "abort"
+strip = "debuginfo"
+
+[profile.release]
+lto = "thin"
+panic = "abort"
+strip = "debuginfo"
