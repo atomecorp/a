@@ -336,6 +336,25 @@ Boundary rules:
 
 Boundary status: Closed product runtime API. It centralizes project media import intent collection for eVe UI tools and preserves the canonical project drop creation path.
 
+### eVe Selected Project Media Playback Runtime API
+
+Ownership: eVe closed product runtime over the project scene and Atome audio boundaries.
+
+Primary source: `eVe/domains/media/selected_project_media_playback_runtime.js`.
+
+Exposure: JavaScript module exports consumed by eVeIntuition media transport actions.
+
+Verified entry points: `runSelectedProjectMediaPlaybackAction`, `stopAllSelectedProjectMediaPlayback`.
+
+Boundary rules:
+
+- The runtime resolves selected media from `project_scene_runtime` records because the cleaned project canvas route intentionally has no per-Atome media DOM host.
+- Audio playback and extracted video-audio playback must go through `Squirrel.av.audio` and the Kira playback facade. It must not instantiate a second audio engine or enable Bevy audio.
+- Browser video presentation uses the shared video decode pool plus disposable project-scene record updates so Bevy/WebGPU remains the visible route. The decode element is an implementation resource, not a visible Atome host or canonical media state.
+- It must not persist playback frame data, mutate durable Atome properties, or use DOM media nodes as canonical selection/project state.
+
+Boundary status: Closed product runtime API. Public promotion would require a product-neutral AV transport contract plus native presenter capability tests.
+
 ### Security and Sync APIs
 
 Ownership: Atome open.
