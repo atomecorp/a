@@ -7,6 +7,8 @@ import {
     clearSessionState,
     loadSessionState,
     getAnonymousCredentials,
+    getCurrentProjectCache,
+    setCurrentProjectCache,
     setAnonymousCredentials,
     clearCurrentProjectCache,
     waitForAuthCheck,
@@ -352,6 +354,125 @@ const migrateAnonymousWorkspace = async (fromUserId, toUserId) => {
     }
 };
 
+const RECOVERABLE_RENDER_TYPES = ['image', 'video', 'shape', 'sound', 'text', 'audio_recording'];
+
+const pickAtomeArray = (result) => {
+    if (Array.isArray(result?.atomes)) return result.atomes;
+    if (Array.isArray(result?.data?.atomes)) return result.data.atomes;
+    return [];
+};
+
+const resolveAtomeOwnerId = (record) => {
+    if (!record || typeof record !== 'object') return null;
+    const props = record.data || record.properties || record.particles || {};
+    const ownerId = record.owner_id || record.ownerId || props.owner_id || props.ownerId || null;
+    return ownerId ? String(ownerId) : null;
+};
+
+const resolveAtomeProjectId = (record) => {
+    if (!record || typeof record !== 'object') return null;
+    const props = record.data || record.properties || record.particles || {};
+    const projectId = record.project_id || record.projectId || props.project_id || props.projectId || record.parent_id || record.parentId || null;
+    return projectId ? String(projectId) : null;
+};
+
+const listLocalRenderableAtomes = async (adapter, ownerId) => {
+    const records = [];
+    for (const type of RECOVERABLE_RENDER_TYPES) {
+        const result = await adapter.atome.list({
+            type,
+            owner_id: ownerId,
+            limit: 1000
+        });
+        pickAtomeArray(result).forEach((record) => records.push(record));
+    }
+    return records;
+};
+
+const recoverSingleLocalWorkspaceCandidate = async (toUserId) => {
+    if (!toUserId || !isTauriRuntime()) {
+        return { ok: false, reason: 'not_tauri' };
+    }
+    const adapter = adapters[getPrimaryBackend()];
+    if (!adapter?.atome?.list || !adapter?.atome?.transferOwner) {
+        return { ok: false, reason: 'adapter_unavailable' };
+    }
+    const currentRecords = await listLocalRenderableAtomes(adapter, toUserId);
+    if (currentRecords.length > 0) {
+        return { ok: false, reason: 'current_workspace_has_renderables' };
+    }
+
+    const byOwner = new Map();
+    for (const type of RECOVERABLE_RENDER_TYPES) {
+        const result = await adapter.atome.list({
+            type,
+            owner_id: '*',
+            limit: 2000
+        });
+        pickAtomeArray(result).forEach((record) => {
+            const ownerId = resolveAtomeOwnerId(record);
+            if (!ownerId || String(ownerId) === String(toUserId)) return;
+            if (!byOwner.has(ownerId)) byOwner.set(ownerId, []);
+            byOwner.get(ownerId).push(record);
+        });
+    }
+
+    if (byOwner.size !== 1) {
+        return { ok: false, reason: 'ambiguous_or_missing_source' };
+    }
+    const [fromOwnerId, records] = Array.from(byOwner.entries())[0];
+    const migration = await migrateAnonymousWorkspace(fromOwnerId, toUserId);
+    if (!migration.ok) return migration;
+
+    const returnedProjectId = migration.raw?.data?.project_id
+        || migration.raw?.data?.projectId
+        || migration.raw?.project_id
+        || migration.raw?.projectId
+        || null;
+    const projectId = returnedProjectId || records.map(resolveAtomeProjectId).find(Boolean);
+    if (projectId) {
+        setCurrentProjectCache({
+            id: projectId,
+            name: null,
+            userId: toUserId,
+            updatedAt: Date.now()
+        });
+    }
+    return { ok: true, sourceId: fromOwnerId, projectId: projectId || null };
+};
+
+const resolveWorkspaceMigrationSourceId = (prevSession, prevProjectCache, nextUserId) => {
+    const explicitAnonymousId = prevSession?.mode === 'anonymous' ? prevSession.user?.id : null;
+    if (explicitAnonymousId && String(explicitAnonymousId) !== String(nextUserId)) {
+        return String(explicitAnonymousId);
+    }
+    const cachedUserId = prevProjectCache?.userId || null;
+    if (cachedUserId && String(cachedUserId) !== String(nextUserId)) {
+        return String(cachedUserId);
+    }
+    return null;
+};
+
+const migratePreviousWorkspace = async (prevSession, prevProjectCache, nextUserId) => {
+    const sourceId = resolveWorkspaceMigrationSourceId(prevSession, prevProjectCache, nextUserId);
+    if (!sourceId) {
+        const recovered = await recoverSingleLocalWorkspaceCandidate(nextUserId);
+        if (!recovered.ok) clearCurrentProjectCache();
+        return;
+    }
+    const migration = await migrateAnonymousWorkspace(sourceId, nextUserId);
+    if (migration.ok && prevProjectCache?.id) {
+        setCurrentProjectCache({
+            id: prevProjectCache.id,
+            name: prevProjectCache.name || null,
+            userId: nextUserId,
+            updatedAt: Date.now()
+        });
+        return;
+    }
+    clearCurrentProjectCache();
+};
+
 const resolveAuthState = () => {
     const state = getSessionState();
     if (!state || state.mode === 'logged_out') return { authenticated: false, anonymous: false, user: null };
@@ -403,7 +524,7 @@ export const auth = {
         
 
         const prevSession = getSessionState();
-        const prevAnonymousId = prevSession?.mode === 'anonymous' ? prevSession.user?.id : null;
+        const prevProjectCache = getCurrentProjectCache();
 
         let primaryResult = await registerBackend(primary, {
             phone: cleanPhone,
@@ -482,11 +603,7 @@ export const auth = {
                 user: activeResult.user,
                 backend: activeBackend
             });
-            clearCurrentProjectCache();
-
-            if (prevAnonymousId && String(prevAnonymousId) !== String(activeResult.user.id)) {
-                await migrateAnonymousWorkspace(prevAnonymousId, activeResult.user.id);
-            }
+            await migratePreviousWorkspace(prevSession, prevProjectCache, activeResult.user.id);
 
             
                 syncLocalProjectsToFastify({ reason: 'register' }).catch(() => { });
@@ -513,7 +630,7 @@ export const auth = {
         const secondary = getSecondaryBackend();
 
         const prevSession = getSessionState();
-        const prevAnonymousId = prevSession?.mode === 'anonymous' ? prevSession.user?.id : null;
+        const prevProjectCache = getCurrentProjectCache();
 
         // Security: clear any stale auth state before attempting a new login
         TauriAdapter?.clearToken?.();
@@ -575,11 +692,7 @@ export const auth = {
                 user: loggedUser,
                 backend: activeBackend
             });
-            clearCurrentProjectCache();
-
-            if (prevAnonymousId && String(prevAnonymousId) !== String(loggedUser.id)) {
-                await migrateAnonymousWorkspace(prevAnonymousId, loggedUser.id);
-            }
+            await migratePreviousWorkspace(prevSession, prevProjectCache, loggedUser.id);
 
             
                 syncLocalProjectsToFastify({ reason: 'login' }).catch(() => { });
@@ -645,12 +758,15 @@ export const auth = {
                 clearSessionState();
                 return { authenticated: false, user: null };
             }
-            const restoreSession = (user, backend = primary) => {
+            const prevSession = getSessionState();
+            const prevProjectCache = getCurrentProjectCache();
+            const restoreSession = async (user, backend = primary) => {
                 setSessionState({
                     mode: 'authenticated',
                     user,
                     backend
                 });
+                await migratePreviousWorkspace(prevSession, prevProjectCache, user.id);
                 return { authenticated: true, user };
             };
 
@@ -663,14 +779,14 @@ export const auth = {
 
             const me = await meBackend(primary);
             if (me.ok && me.user) {
-                return restoreSession(me.user, primary);
+                return await restoreSession(me.user, primary);
             }
 
             const secondary = getSecondaryBackend();
             if (secondary !== primary) {
                 const secondaryMe = await meBackend(secondary);
                 if (secondaryMe.ok && secondaryMe.user) {
-                    return restoreSession(secondaryMe.user, secondary);
+                    return await restoreSession(secondaryMe.user, secondary);
                 }
             }
 
@@ -682,7 +798,7 @@ export const auth = {
                     password: cached.password
                 });
                 if (relogin.ok && relogin.user) {
-                    return restoreSession(relogin.user, primary);
+                    return await restoreSession(relogin.user, primary);
                 }
                 if (secondary !== primary) {
                     const secondaryRelogin = await loginBackend(secondary, {
@@ -690,7 +806,7 @@ export const auth = {
                         password: cached.password
                     });
                     if (secondaryRelogin.ok && secondaryRelogin.user) {
-                        return restoreSession(secondaryRelogin.user, secondary);
+                        return await restoreSession(secondaryRelogin.user, secondary);
                     }
                 }
             }

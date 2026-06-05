@@ -180,7 +180,7 @@ export async function load_saved_current_project() {
     if (!currentUserId || isLoggedOut()) return null;
 
     const cached = getCurrentProjectCache();
-    if (cached?.id && (!cached.userId || String(cached.userId) === String(currentUserId))) {
+    if (cached?.id && cached.userId && String(cached.userId) === String(currentUserId)) {
         return { id: cached.id, name: cached.name || null };
     }
 

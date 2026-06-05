@@ -201,7 +201,8 @@ fn sync_debug(message: &str) {
 fn is_anonymous_user(db: &Connection, user_id: &str) -> bool {
     let phone_json = format!("\"{}\"", ANONYMOUS_PHONE_TAURI);
     let username_json = format!("\"{}\"", ANONYMOUS_USERNAME);
-    db.query_row(
+    let explicit_anonymous = db
+        .query_row(
         "SELECT 1 FROM particles WHERE atome_id = ?1 AND particle_key = 'phone' AND particle_value = ?2 LIMIT 1",
         rusqlite::params![user_id, phone_json],
         |_| Ok(()),
@@ -213,7 +214,26 @@ fn is_anonymous_user(db: &Connection, user_id: &str) -> bool {
                 rusqlite::params![user_id, username_json],
                 |_| Ok(()),
             )
-            .is_ok()
+            .is_ok();
+    if explicit_anonymous {
+        return true;
+    }
+
+    let has_login_phone = db
+        .query_row(
+            "SELECT 1 FROM particles WHERE atome_id = ?1 AND particle_key = 'phone' LIMIT 1",
+            rusqlite::params![user_id],
+            |_| Ok(()),
+        )
+        .is_ok();
+    let has_password_hash = db
+        .query_row(
+            "SELECT 1 FROM particles WHERE atome_id = ?1 AND particle_key = 'password_hash' LIMIT 1",
+            rusqlite::params![user_id],
+            |_| Ok(()),
+        )
+        .is_ok();
+    !has_login_phone && !has_password_hash
 }
 
 fn should_dedupe_request_id(state: &LocalAtomeState, request_id: &Option<String>) -> bool {
@@ -496,7 +516,7 @@ async fn handle_transfer_owner(
             request_id,
             success: true,
             error: None,
-            data: Some(json!({ "updated": 0 })),
+            data: Some(json!({ "updated": 0, "project_id": null })),
             atomes: None,
             count: Some(0),
         };
@@ -504,6 +524,26 @@ async fn handle_transfer_owner(
 
     let now = Utc::now().to_rfc3339();
     let placeholders = vec!["?"; ids.len()].join(", ");
+    let mut project_ids = HashSet::new();
+    if let Ok(mut stmt) = db.prepare(&format!(
+        "SELECT DISTINCT project_id FROM state_current WHERE atome_id IN ({}) AND project_id IS NOT NULL",
+        placeholders
+    )) {
+        let params: Vec<&dyn rusqlite::ToSql> =
+            ids.iter().map(|id| id as &dyn rusqlite::ToSql).collect();
+        if let Ok(rows) = stmt.query_map(params.as_slice(), |row| row.get::<_, String>(0)) {
+            for row in rows.flatten() {
+                if !row.trim().is_empty() {
+                    project_ids.insert(row);
+                }
+            }
+        }
+    }
+    let recovered_project_id = if project_ids.len() == 1 {
+        project_ids.iter().next().cloned()
+    } else {
+        None
+    };
 
     let result = with_transaction(&db, |tx| {
         let mut params: Vec<Box<dyn rusqlite::ToSql>> = Vec::with_capacity(2 + ids.len());
@@ -554,6 +594,23 @@ async fn handle_transfer_owner(
         )
         .map_err(|e| e.to_string())?;
 
+        if let Some(project_id) = recovered_project_id.as_ref() {
+            for key in ["currentProjectId", "current_project_id"] {
+                let value_json = serde_json::to_string(project_id).unwrap_or_default();
+                tx.execute(
+                    "INSERT INTO particles (atome_id, particle_key, particle_value, value_type, version, created_at, updated_at)
+                     VALUES (?1, ?2, ?3, 'string', 1, ?4, ?4)
+                     ON CONFLICT(atome_id, particle_key) DO UPDATE SET
+                        particle_value = excluded.particle_value,
+                        value_type = excluded.value_type,
+                        version = version + 1,
+                        updated_at = excluded.updated_at",
+                    rusqlite::params![to_owner_id, key, value_json, now],
+                )
+                .map_err(|e| e.to_string())?;
+            }
+        }
+
         Ok(())
     });
 
@@ -563,7 +620,7 @@ async fn handle_transfer_owner(
             request_id,
             success: true,
             error: None,
-            data: Some(json!({ "updated": ids.len() })),
+            data: Some(json!({ "updated": ids.len(), "project_id": recovered_project_id })),
             atomes: None,
             count: Some(ids.len() as i64),
         },
@@ -2468,6 +2525,37 @@ mod state_current_owner_tests {
             .expect("owner row");
 
         assert_eq!(owner_id, Some("user_test_1".to_string()));
+    }
+
+    #[test]
+    fn auth_incomplete_local_owner_is_migrable() {
+        let db = Connection::open_in_memory().expect("memory db");
+        db.execute_batch(ADOLE_SCHEMA_SQL).expect("schema");
+        db.execute(
+            "INSERT INTO atomes (atome_id, atome_type, created_at, updated_at) VALUES (?1, 'user', ?2, ?2)",
+            rusqlite::params!["local_owner_1", "2026-04-19T00:00:00Z"],
+        )
+        .expect("insert local owner");
+
+        assert!(is_anonymous_user(&db, "local_owner_1"));
+    }
+
+    #[test]
+    fn credentialed_local_owner_is_not_migrable() {
+        let db = Connection::open_in_memory().expect("memory db");
+        db.execute_batch(ADOLE_SCHEMA_SQL).expect("schema");
+        db.execute(
+            "INSERT INTO atomes (atome_id, atome_type, created_at, updated_at) VALUES (?1, 'user', ?2, ?2)",
+            rusqlite::params!["real_owner_1", "2026-04-19T00:00:00Z"],
+        )
+        .expect("insert real owner");
+        db.execute(
+            "INSERT INTO particles (atome_id, particle_key, particle_value) VALUES (?1, 'phone', ?2)",
+            rusqlite::params!["real_owner_1", "\"33333333\""],
+        )
+        .expect("insert phone");
+
+        assert!(!is_anonymous_user(&db, "real_owner_1"));
     }
 }
 

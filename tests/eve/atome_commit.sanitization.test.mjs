@@ -24,6 +24,17 @@ globalThis.sessionStorage = createStorage();
 
 const { __ATOME_COMMIT_TEST_ONLY__ } = await import('../../eVe/core/atome_commit.js');
 
+assert.equal(
+    __ATOME_COMMIT_TEST_ONLY__.isTauriRuntime(),
+    true,
+    'localhost:3000 must be treated as the local Tauri/Axum runtime'
+);
+assert.equal(
+    __ATOME_COMMIT_TEST_ONLY__.resolveBackendPreference(),
+    'tauri',
+    'atome_commit must keep state_current refreshes on Tauri for localhost:3000'
+);
+
 const event = __ATOME_COMMIT_TEST_ONLY__.normalizeEventInput({
     kind: 'set',
     atome_id: 'shape_a',

@@ -266,14 +266,32 @@ export const clearAnonymousCredentials = () => {
 
 let currentProjectCache = null;
 
-export const getCurrentProjectCache = () => currentProjectCache;
+const normalizeCurrentProjectCache = (payload) => {
+    if (!payload || typeof payload !== 'object' || !payload.id) return null;
+    return {
+        id: String(payload.id),
+        name: payload.name || null,
+        userId: payload.userId ? String(payload.userId) : null,
+        updatedAt: payload.updatedAt || null
+    };
+};
+
+export const getCurrentProjectCache = () => {
+    if (!currentProjectCache) {
+        currentProjectCache = normalizeCurrentProjectCache(readJson(CURRENT_PROJECT_KEY));
+    }
+    return currentProjectCache;
+};
 
 export const setCurrentProjectCache = (payload) => {
-    if (!payload) {
+    const normalized = normalizeCurrentProjectCache(payload);
+    if (!normalized) {
         currentProjectCache = null;
+        removeStorage(CURRENT_PROJECT_KEY);
         return;
     }
-    currentProjectCache = payload;
+    currentProjectCache = normalized;
+    writeJson(CURRENT_PROJECT_KEY, normalized);
 };
 
 export const clearCurrentProjectCache = () => {

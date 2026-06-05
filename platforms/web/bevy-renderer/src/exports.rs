@@ -108,3 +108,8 @@ pub fn apply_atome_bevy_surface(patch: JsValue) -> Result<(), JsValue> {
     queue_web_op(AtomeRenderOp::Surface(parsed));
     Ok(())
 }
+
+#[wasm_bindgen]
+pub fn request_atome_bevy_redraw() {
+    request_web_redraw();
+}

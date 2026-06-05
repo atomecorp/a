@@ -15,6 +15,8 @@ mod exports;
 thread_local! {
     static WEB_PENDING_OPS: RefCell<Vec<AtomeRenderOp>> = RefCell::new(Vec::new());
     static WEB_EVENT_LOOP_PROXY: RefCell<Option<EventLoopProxy<WinitUserEvent>>> = const { RefCell::new(None) };
+    static WEB_WAKE_PENDING: RefCell<bool> = const { RefCell::new(false) };
+    static WEB_REDRAW_PENDING: RefCell<bool> = const { RefCell::new(false) };
 }
 
 fn queue_web_op(op: AtomeRenderOp) {
@@ -26,6 +28,17 @@ fn drain_web_ops() -> Vec<AtomeRenderOp> {
     WEB_PENDING_OPS.with(|cell| cell.borrow_mut().drain(..).collect())
 }
 
+fn request_web_redraw() {
+    WEB_REDRAW_PENDING.with(|cell| {
+        *cell.borrow_mut() = true;
+    });
+    wake_web_renderer();
+}
+
+fn drain_web_redraw_request() -> bool {
+    WEB_REDRAW_PENDING.with(|cell| cell.replace(false))
+}
+
 fn remember_event_loop_proxy(proxy: Option<Res<EventLoopProxyWrapper>>) {
     let Some(proxy) = proxy else {
         return;
@@ -35,12 +48,21 @@ fn remember_event_loop_proxy(proxy: Option<Res<EventLoopProxyWrapper>>) {
     WEB_EVENT_LOOP_PROXY.with(|cell| {
         *cell.borrow_mut() = Some(event_loop_proxy.clone());
     });
+    WEB_WAKE_PENDING.with(|cell| {
+        if cell.replace(false) {
+            let _ = event_loop_proxy.send_event(WinitUserEvent::WakeUp);
+        }
+    });
 }
 
 fn wake_web_renderer() {
     WEB_EVENT_LOOP_PROXY.with(|cell| {
         if let Some(proxy) = cell.borrow().as_ref() {
             let _ = proxy.send_event(WinitUserEvent::WakeUp);
+        } else {
+            WEB_WAKE_PENDING.with(|pending| {
+                *pending.borrow_mut() = true;
+            });
         }
     });
 }
@@ -74,9 +96,14 @@ impl Plugin for WebBevyRendererPlugin {
         app.add_message::<RequestRedraw>()
             .insert_resource(ClearColor(Color::NONE))
             .add_plugins(AtomeBevyRendererPlugin::new(self.config.core.clone()))
-            .add_systems(Startup, remember_event_loop_proxy)
-            .add_systems(Update, apply_pending_web_ops);
+            .add_systems(Startup, (remember_event_loop_proxy, request_initial_web_redraw).chain())
+            .add_systems(Update, (apply_pending_web_ops, apply_pending_web_redraw).chain());
     }
+}
+
+fn request_initial_web_redraw(world: &mut World) {
+    world.write_message(RequestRedraw);
+    wake_web_renderer();
 }
 
 fn apply_pending_web_ops(world: &mut World) {
@@ -86,6 +113,15 @@ fn apply_pending_web_ops(world: &mut World) {
     }
     apply_render_ops(world, ops);
     world.write_message(RequestRedraw);
+    wake_web_renderer();
+}
+
+fn apply_pending_web_redraw(world: &mut World) {
+    if !drain_web_redraw_request() {
+        return;
+    }
+    world.write_message(RequestRedraw);
+    wake_web_renderer();
 }
 
 fn web_window_for_config(config: &WebBevyRendererConfig) -> Window {

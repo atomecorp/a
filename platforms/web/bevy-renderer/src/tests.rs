@@ -73,3 +73,36 @@ fn queued_exports_apply_through_shared_core() {
         1
     );
 }
+
+#[test]
+fn initial_web_redraw_is_requested_before_user_input() {
+    let mut app = App::new();
+    app.add_message::<RequestRedraw>();
+
+    request_initial_web_redraw(app.world_mut());
+
+    assert_eq!(
+        app.world()
+            .resource::<Messages<RequestRedraw>>()
+            .iter_current_update_messages()
+            .count(),
+        1
+    );
+}
+
+#[test]
+fn exported_web_redraw_request_is_applied_before_user_input() {
+    let mut app = App::new();
+    app.add_message::<RequestRedraw>();
+
+    request_web_redraw();
+    apply_pending_web_redraw(app.world_mut());
+
+    assert_eq!(
+        app.world()
+            .resource::<Messages<RequestRedraw>>()
+            .iter_current_update_messages()
+            .count(),
+        1
+    );
+}
