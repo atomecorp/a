@@ -37,15 +37,15 @@ const toggleDilasPanel = async ({
 } = {}) => {
     const panelPerfStart = perfNowMs();
     if (!env || typeof env !== 'object') return false;
-    if (typeof env.toggle_dilas_panel === 'function') {
-        await env.toggle_dilas_panel({ anchorEl });
+    if (typeof env.toggle_aVa_panel === 'function') {
+        await env.toggle_aVa_panel({ anchorEl });
         const totalMs = perfElapsedMs(panelPerfStart);
         perfLog('[Perf] voice.togglePanel', { totalMs, mode: 'toggle' });
         emitPerfEvent('voice.toggle_panel', { ok: true, totalMs, mode: 'toggle' });
         return true;
     }
-    if (typeof env.open_dilas_panel === 'function') {
-        await env.open_dilas_panel({ anchorEl });
+    if (typeof env.open_aVa_panel === 'function') {
+        await env.open_aVa_panel({ anchorEl });
         const totalMs = perfElapsedMs(panelPerfStart);
         perfLog('[Perf] voice.togglePanel', { totalMs, mode: 'open' });
         emitPerfEvent('voice.toggle_panel', { ok: true, totalMs, mode: 'open' });
@@ -54,7 +54,7 @@ const toggleDilasPanel = async ({
     emitPerfEvent('voice.toggle_panel', {
         ok: false,
         totalMs: perfElapsedMs(panelPerfStart),
-        error: 'dilas_panel_unavailable'
+        error: 'aVa_panel_unavailable'
     });
     return false;
 };
@@ -65,22 +65,22 @@ const openDilasPanel = async ({
 } = {}) => {
     const panelPerfStart = perfNowMs();
     if (!env || typeof env !== 'object') return false;
-    if (typeof env.toggle_dilas_panel === 'function') {
-        await env.toggle_dilas_panel({ anchorEl });
+    if (typeof env.toggle_aVa_panel === 'function') {
+        await env.toggle_aVa_panel({ anchorEl });
         const totalMs = perfElapsedMs(panelPerfStart);
         perfLog('[Perf] voice.openPanel', { totalMs, mode: 'toggle' });
         emitPerfEvent('voice.open_panel', { ok: true, totalMs, mode: 'toggle' });
         return true;
     }
-    if (typeof env.open_dilas_panel !== 'function') {
+    if (typeof env.open_aVa_panel !== 'function') {
         emitPerfEvent('voice.open_panel', {
             ok: false,
             totalMs: perfElapsedMs(panelPerfStart),
-            error: 'dilas_panel_unavailable'
+            error: 'aVa_panel_unavailable'
         });
         return false;
     }
-    await env.open_dilas_panel({ anchorEl });
+    await env.open_aVa_panel({ anchorEl });
     const totalMs = perfElapsedMs(panelPerfStart);
     perfLog('[Perf] voice.openPanel', { totalMs, mode: 'open' });
     emitPerfEvent('voice.open_panel', { ok: true, totalMs, mode: 'open' });
@@ -188,7 +188,7 @@ export const bootstrapMainHandleVoiceEntry = ({
     const attach = () => {
         const handles = Array.from(env.document.querySelectorAll(HANDLE_SELECTOR));
         handles.forEach((handle) => {
-        installHandleBridge({ env, handle });
+            installHandleBridge({ env, handle });
         });
         return handles.length;
     };

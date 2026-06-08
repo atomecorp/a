@@ -45,7 +45,7 @@ sequenceDiagram
 10. `eve.languages`
 11. `eve.i18n`
 12. `eve.design`
-13. `eve.dilas_panel`
+13. `eve.aVa_panel`
 14. `eve.project_bootstrap`
 15. `eve.bootstrap`
 16. `eve.shortcut_config`
@@ -64,7 +64,7 @@ sequenceDiagram
 
 ## Lazy-load candidates
 
-- `eve.dilas_panel`
+- `eve.aVa_panel`
 - `eve.user_background`
 - `eve.shortcut_config`
 - capture/perform/delete/clock/code tools imported by `intuition/bootstrap.js`

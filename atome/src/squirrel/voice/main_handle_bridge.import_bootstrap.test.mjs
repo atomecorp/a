@@ -19,7 +19,7 @@ const handle = window.document.querySelector('[data-role="main-toolbox-handle"]'
 
 let openCalls = 0;
 
-window.open_dilas_panel = async () => {
+window.open_aVa_panel = async () => {
     openCalls += 1;
     return true;
 };

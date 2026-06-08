@@ -758,7 +758,7 @@ Should be extended by:
 
 Should not contain:
 
-- Closed eVe product panels. `eve/voice/dilas_panel.js` owns the moved closed Dilas panel.
+- Closed eVe product panels. `eve/voice/aVa_panel.js` owns the moved closed Dilas panel.
 
 Known risks:
 
@@ -1053,7 +1053,7 @@ Purpose: Closed product voice UI modules moved out of Atome.
 
 Main files:
 
-- `eve/voice/dilas_panel.js`
+- `eve/voice/aVa_panel.js`
 
 Should be extended by:
 
