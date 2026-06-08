@@ -5,6 +5,9 @@ use crate::{
     selection_overlay::rebuild_selection_overlay,
     texture::image_handle_from_texture,
     types::*,
+    video_texture::{
+        update_video_texture_handle_for_node, video_image_handle_from_node,
+    },
 };
 
 fn color_for_node(node: &AtomeRenderNode) -> [f32; 4] {
@@ -70,19 +73,26 @@ pub fn spawn_node_in_world(world: &mut World, node: AtomeRenderNode) -> Result<E
                 &node.id,
             )?)
         } else {
-            None
+            let mut images = world
+                .get_resource_mut::<Assets<Image>>()
+                .ok_or_else(|| "bevy_image_assets_required".to_string())?;
+            video_image_handle_from_node(&mut images, &node)
         };
         let (surface_width, surface_height) = {
             let config = world.resource::<AtomeBevyRendererConfig>();
             (config.width, config.height)
         };
-        spawn_node_with_texture_handle(
+        let entity = spawn_node_with_texture_handle(
             world,
             node.clone(),
-            texture_handle,
+            texture_handle.clone(),
             surface_width,
             surface_height,
-        )?
+        )?;
+        if let Some(handle) = texture_handle.as_ref() {
+            update_video_texture_handle_for_node(world, entity, &node, handle);
+        }
+        entity
     };
     world
         .resource_mut::<AtomeEntityTable>()

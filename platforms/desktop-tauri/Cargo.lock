@@ -438,7 +438,11 @@ name = "atome-bevy-renderer-core"
 version = "0.1.0"
 dependencies = [
  "bevy",
+ "js-sys",
  "serde",
+ "wasm-bindgen",
+ "web-sys",
+ "wgpu",
 ]
 
 [[package]]

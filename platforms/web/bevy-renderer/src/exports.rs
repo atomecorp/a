@@ -113,3 +113,15 @@ pub fn apply_atome_bevy_surface(patch: JsValue) -> Result<(), JsValue> {
 pub fn request_atome_bevy_redraw() {
     request_web_redraw();
 }
+
+#[wasm_bindgen]
+pub fn read_atome_bevy_web_diagnostics() -> Result<JsValue, JsValue> {
+    serde_wasm_bindgen::to_value(&read_web_renderer_diagnostics())
+        .map_err(|error| JsValue::from_str(&format!("bevy_web_diagnostics_encode_failed:{error}")))
+}
+
+#[wasm_bindgen]
+pub fn reset_atome_bevy_web_diagnostics() -> Result<JsValue, JsValue> {
+    serde_wasm_bindgen::to_value(&reset_web_renderer_diagnostics())
+        .map_err(|error| JsValue::from_str(&format!("bevy_web_diagnostics_reset_encode_failed:{error}")))
+}

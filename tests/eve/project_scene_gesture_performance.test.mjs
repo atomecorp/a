@@ -77,7 +77,7 @@ const pointerEvent = (windowRef, type, options = {}) => {
     return event;
 };
 
-test('Project scene drag coalesces move frames into one render and one gesture event per animation frame', async () => {
+test('Project scene drag applies direct Bevy transforms without full projection during move frames', async () => {
     clearAllProjectScenes();
     const dom = new JSDOM('<!doctype html><html><body><main id="project"></main></body></html>');
     globalThis.document = dom.window.document;
@@ -105,7 +105,7 @@ test('Project scene drag coalesces move frames into one render and one gesture e
         bubbles: true
     }));
     await flushFrames();
-    const rendersAfterPointerDown = renders.length;
+    const callsAfterPointerDown = renders.length;
 
     for (let index = 1; index <= 5; index += 1) {
         dom.window.document.dispatchEvent(new dom.window.MouseEvent('pointermove', {
@@ -118,14 +118,21 @@ test('Project scene drag coalesces move frames into one render and one gesture e
     await flushFrames.animationFrames();
 
     assert.equal(commits.length, 0);
-    assert.equal(renders.length, rendersAfterPointerDown + 1);
+    const directTransformCalls = renders.slice(callsAfterPointerDown);
+    assert.equal(directTransformCalls.length, 5);
+    assert.equal(directTransformCalls.every((call) => call.type === 'transform'), true);
+    assert.deepEqual(directTransformCalls.at(-1).payload, {
+        id: 'drag_perf_atom',
+        logical_position: [30, 35],
+        logical_size: [40, 30]
+    });
 
     await flushFrames();
 
     assert.equal(commits.length, 1);
     assert.equal(commits[0][0].kind, 'gesture_frame');
     assert.deepEqual(commits[0][0].props, { left: 30, top: 35 });
-    assert.equal(renders.length, rendersAfterPointerDown + 1);
+    assert.equal(renders.slice(callsAfterPointerDown).every((call) => call.type === 'transform'), true);
     assert.equal(getProjectSceneState('project_gesture_perf').records[0].properties.left, 30);
     assert.equal(getProjectSceneState('project_gesture_perf').records[0].properties.top, 35);
 
@@ -140,7 +147,7 @@ test('Project scene drag coalesces move frames into one render and one gesture e
     assert.equal(commits[1][0].kind, 'set');
     assert.deepEqual(commits[1][0].props, { left: 30, top: 35 });
     assert.equal(commits[0][0].gesture_id, commits[1][0].gesture_id);
-    assert.equal(renders.length, rendersAfterPointerDown + 1);
+    assert.equal(renders.filter((call) => call.type === 'transform').at(-1).payload.id, 'drag_perf_atom');
     assert.equal(dom.window.document.querySelectorAll('.eve-atome,img,video,audio,svg').length, 0);
     assert.equal(dom.window.document.querySelectorAll('canvas#eve_surface_project').length, 1);
 });
@@ -198,6 +205,133 @@ test('Project scene drag hit-testing uses logical surface coordinates when the c
     assert.equal(updated.properties.top, 70);
     assert.equal(commits.at(-1)[0].kind, 'set');
     assert.deepEqual(commits.at(-1)[0].props, { left: 40, top: 70 });
+});
+
+test('Project scene direct drag keeps project media dimensions when width and height are not direct props', async () => {
+    clearAllProjectScenes();
+    const dom = new JSDOM('<!doctype html><html><body><main id="project"></main></body></html>');
+    globalThis.document = dom.window.document;
+    globalThis.window = dom.window;
+    const flushFrames = installFrameScheduler(dom.window);
+    const commits = [];
+    const renders = [];
+    dom.window.Atome = {
+        commitBatch: async (events) => {
+            commits.push(events);
+            return { ok: true };
+        }
+    };
+    const record = makeRecord('project_sized_media');
+    delete record.properties.width;
+    delete record.properties.height;
+    record.properties.project_width = 320;
+    record.properties.project_height = 180;
+
+    await renderProjectScene({
+        projectId: 'project_direct_drag_project_size',
+        records: [record],
+        host: dom.window.document.getElementById('project'),
+        compositor: createTestCompositor(renders)
+    });
+
+    dom.window.document.dispatchEvent(pointerEvent(dom.window, 'pointerdown', { clientX: 12, clientY: 22, pointerId: 9 }));
+    await flushFrames();
+    const callsAfterPointerDown = renders.length;
+    dom.window.document.dispatchEvent(pointerEvent(dom.window, 'pointermove', { clientX: 42, clientY: 52, pointerId: 9 }));
+    await flushFrames.animationFrames();
+
+    const transform = renders.slice(callsAfterPointerDown).find((call) => call.type === 'transform');
+    assert.deepEqual(transform.payload.logical_size, [320, 180]);
+    assert.deepEqual(transform.payload.logical_position, [40, 50]);
+    assert.equal(commits.length, 0);
+});
+
+test('Project scene direct drag keeps ordered gesture frames for realtime sharing and film replay', async () => {
+    clearAllProjectScenes();
+    const dom = new JSDOM('<!doctype html><html><body><main id="project"></main></body></html>');
+    globalThis.document = dom.window.document;
+    globalThis.window = dom.window;
+    const flushFrames = installFrameScheduler(dom.window);
+    const commits = [];
+    const renders = [];
+    dom.window.Atome = {
+        commitBatch: async (events) => {
+            commits.push(events.map((event) => ({
+                ...event,
+                props: { ...(event.props || {}) },
+                payload: event.payload ? {
+                    ...event.payload,
+                    props: { ...(event.payload.props || {}) }
+                } : event.payload
+            })));
+            return { ok: true };
+        }
+    };
+
+    await renderProjectScene({
+        projectId: 'project_drag_film_replay',
+        records: [makeRecord('film_drag_atom')],
+        host: dom.window.document.getElementById('project'),
+        compositor: createTestCompositor(renders)
+    });
+
+    dom.window.document.dispatchEvent(pointerEvent(dom.window, 'pointerdown', { clientX: 12, clientY: 22, pointerId: 19 }));
+    await flushFrames();
+    const callsAfterPointerDown = renders.length;
+    const moves = [
+        { clientX: 20, clientY: 30, left: 18, top: 28 },
+        { clientX: 28, clientY: 38, left: 26, top: 36 },
+        { clientX: 40, clientY: 50, left: 38, top: 48 },
+        { clientX: 54, clientY: 62, left: 52, top: 60 }
+    ];
+
+    for (const move of moves) {
+        dom.window.document.dispatchEvent(pointerEvent(dom.window, 'pointermove', {
+            clientX: move.clientX,
+            clientY: move.clientY,
+            pointerId: 19
+        }));
+        await flushFrames();
+    }
+
+    const gestureFrameBatches = commits.filter((batch) => batch[0]?.kind === 'gesture_frame');
+    const expectedFrames = moves.map(({ left, top }) => ({ left, top }));
+    const replayableGestureFrames = gestureFrameBatches
+        .map((batch) => batch[0])
+        .filter((event) => expectedFrames.some((expected) => (
+            event.props?.left === expected.left && event.props?.top === expected.top
+        )));
+    assert.ok(gestureFrameBatches.length >= moves.length);
+    assert.deepEqual(replayableGestureFrames.map((event) => event.props), expectedFrames);
+    assert.equal(new Set(replayableGestureFrames.map((event) => event.gesture_id)).size, 1);
+    assert.equal(gestureFrameBatches.every((batch) => batch[0].payload?.meta?.action === 'drag'), true);
+
+    const directTransforms = renders.slice(callsAfterPointerDown).filter((call) => call.type === 'transform');
+    assert.ok(directTransforms.length >= moves.length);
+    assert.deepEqual(
+        directTransforms
+            .map((call) => call.payload.logical_position)
+            .filter(([left, top]) => expectedFrames.some((expected) => left === expected.left && top === expected.top)),
+        moves.map(({ left, top }) => [left, top])
+    );
+
+    const replayedPositions = [];
+    const replayState = { left: 10, top: 20 };
+    replayableGestureFrames.forEach((event) => {
+        Object.assign(replayState, event.props);
+        replayedPositions.push({ left: replayState.left, top: replayState.top });
+    });
+    assert.deepEqual(replayedPositions, expectedFrames);
+
+    dom.window.document.dispatchEvent(pointerEvent(dom.window, 'pointerup', { clientX: 54, clientY: 62, pointerId: 19 }));
+    await flushFrames();
+
+    const finalBatch = commits.at(-1);
+    assert.equal(finalBatch[0].kind, 'set');
+    assert.deepEqual(finalBatch[0].props, { left: 52, top: 60 });
+    assert.equal(finalBatch[0].gesture_id, replayableGestureFrames.at(-1).gesture_id);
+    assert.equal(getProjectSceneState('project_drag_film_replay').records[0].properties.left, 52);
+    assert.equal(getProjectSceneState('project_drag_film_replay').records[0].properties.top, 60);
 });
 
 test('Project scene resize accepts five extra logical pixels inside the Atome edge', async () => {

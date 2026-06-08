@@ -254,7 +254,8 @@ assert.equal(commits[0].atome_id, 'video_recording_pending');
 assert.match(commits[0].props.visual_ref, /^thumbnail:/);
 assert.match(commits[0].props.thumbnail_ref, /^thumbnail:/);
 assert.equal(sceneRecords().some((atom) => atom.id === 'video_recording_pending'), true);
-assert.equal(dom.window.document.querySelectorAll('.eve-atome,img,video,audio,svg').length, 0);
+assert.equal(dom.window.document.querySelectorAll('.eve-atome,img,audio,svg').length, 0);
+assert.equal(dom.window.document.querySelectorAll('video:not(#eve_bevy_video_decode_root video)').length, 0);
 
 }, 30000);
 

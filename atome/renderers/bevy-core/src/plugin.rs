@@ -3,6 +3,9 @@ use bevy::{image::Image, prelude::*};
 use crate::{
     render_ops::apply_render_op, selection_overlay::rebuild_selection_overlay,
     spawn::spawn_node_with_texture_handle, texture::image_handle_from_texture, types::*,
+    video_texture::{
+        update_video_texture_handle_for_node, video_image_handle_from_node, AtomeVideoTexturePlugin,
+    },
 };
 
 pub struct AtomeBevyRendererPlugin {
@@ -18,6 +21,7 @@ impl AtomeBevyRendererPlugin {
 impl Plugin for AtomeBevyRendererPlugin {
     fn build(&self, app: &mut App) {
         app.insert_resource(self.config.clone())
+            .add_plugins(AtomeVideoTexturePlugin)
             .init_resource::<AtomeEntityTable>()
             .init_resource::<AtomeRendererDiagnostics>()
             .init_resource::<Assets<Image>>()
@@ -39,7 +43,7 @@ fn spawn_atome_bevy_scene(
                     .unwrap_or_else(|error| panic!("{error}")),
             )
         } else {
-            None
+            video_image_handle_from_node(&mut images, node)
         };
         let node_for_world = node.clone();
         let surface_width = config.width;
@@ -47,13 +51,16 @@ fn spawn_atome_bevy_scene(
         commands.queue(move |world: &mut World| {
             let result = spawn_node_with_texture_handle(
                 world,
-                node_for_world,
-                texture_handle,
+                node_for_world.clone(),
+                texture_handle.clone(),
                 surface_width,
                 surface_height,
             );
             match result {
                 Ok(entity) => {
+                    if let Some(handle) = texture_handle.as_ref() {
+                        update_video_texture_handle_for_node(world, entity, &node_for_world, handle);
+                    }
                     world
                         .resource_mut::<AtomeEntityTable>()
                         .by_id

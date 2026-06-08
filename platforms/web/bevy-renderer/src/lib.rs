@@ -8,6 +8,7 @@ use bevy::{
     window::{CompositeAlphaMode, PresentMode, RequestRedraw, Window, WindowPlugin},
     winit::{EventLoopProxy, EventLoopProxyWrapper, WinitUserEvent},
 };
+use serde::Serialize;
 use std::cell::RefCell;
 
 mod exports;
@@ -17,18 +18,52 @@ thread_local! {
     static WEB_EVENT_LOOP_PROXY: RefCell<Option<EventLoopProxy<WinitUserEvent>>> = const { RefCell::new(None) };
     static WEB_WAKE_PENDING: RefCell<bool> = const { RefCell::new(false) };
     static WEB_REDRAW_PENDING: RefCell<bool> = const { RefCell::new(false) };
+    static WEB_DIAGNOSTICS: RefCell<WebRendererDiagnostics> = RefCell::new(WebRendererDiagnostics::default());
+}
+
+#[derive(Clone, Debug, Default, Serialize)]
+struct WebRendererDiagnostics {
+    queued_ops: u32,
+    transform_ops: u32,
+    drained_ops: u32,
+    drain_batches: u32,
+    max_queue_depth: u32,
+    redraw_requests: u32,
+    redraw_applied: u32,
+    wake_calls: u32,
 }
 
 fn queue_web_op(op: AtomeRenderOp) {
+    let is_transform = matches!(op, AtomeRenderOp::Transform(_));
     WEB_PENDING_OPS.with(|cell| cell.borrow_mut().push(op));
+    let queue_depth = WEB_PENDING_OPS.with(|cell| cell.borrow().len() as u32);
+    WEB_DIAGNOSTICS.with(|cell| {
+        let mut diagnostics = cell.borrow_mut();
+        diagnostics.queued_ops += 1;
+        if is_transform {
+            diagnostics.transform_ops += 1;
+        }
+        diagnostics.max_queue_depth = diagnostics.max_queue_depth.max(queue_depth);
+    });
     wake_web_renderer();
 }
 
 fn drain_web_ops() -> Vec<AtomeRenderOp> {
-    WEB_PENDING_OPS.with(|cell| cell.borrow_mut().drain(..).collect())
+    let ops: Vec<AtomeRenderOp> = WEB_PENDING_OPS.with(|cell| cell.borrow_mut().drain(..).collect());
+    if !ops.is_empty() {
+        WEB_DIAGNOSTICS.with(|cell| {
+            let mut diagnostics = cell.borrow_mut();
+            diagnostics.drained_ops += ops.len() as u32;
+            diagnostics.drain_batches += 1;
+        });
+    }
+    ops
 }
 
 fn request_web_redraw() {
+    WEB_DIAGNOSTICS.with(|cell| {
+        cell.borrow_mut().redraw_requests += 1;
+    });
     WEB_REDRAW_PENDING.with(|cell| {
         *cell.borrow_mut() = true;
     });
@@ -56,6 +91,9 @@ fn remember_event_loop_proxy(proxy: Option<Res<EventLoopProxyWrapper>>) {
 }
 
 fn wake_web_renderer() {
+    WEB_DIAGNOSTICS.with(|cell| {
+        cell.borrow_mut().wake_calls += 1;
+    });
     WEB_EVENT_LOOP_PROXY.with(|cell| {
         if let Some(proxy) = cell.borrow().as_ref() {
             let _ = proxy.send_event(WinitUserEvent::WakeUp);
@@ -120,8 +158,23 @@ fn apply_pending_web_redraw(world: &mut World) {
     if !drain_web_redraw_request() {
         return;
     }
+    WEB_DIAGNOSTICS.with(|cell| {
+        cell.borrow_mut().redraw_applied += 1;
+    });
     world.write_message(RequestRedraw);
     wake_web_renderer();
+}
+
+fn read_web_renderer_diagnostics() -> WebRendererDiagnostics {
+    WEB_DIAGNOSTICS.with(|cell| cell.borrow().clone())
+}
+
+fn reset_web_renderer_diagnostics() -> WebRendererDiagnostics {
+    WEB_DIAGNOSTICS.with(|cell| {
+        let previous = cell.borrow().clone();
+        *cell.borrow_mut() = WebRendererDiagnostics::default();
+        previous
+    })
 }
 
 fn web_window_for_config(config: &WebBevyRendererConfig) -> Window {
@@ -135,7 +188,7 @@ fn web_window_for_config(config: &WebBevyRendererConfig) -> Window {
         )
             .into(),
         composite_alpha_mode: CompositeAlphaMode::PreMultiplied,
-        present_mode: PresentMode::AutoVsync,
+        present_mode: PresentMode::AutoNoVsync,
         title: "Atome Bevy Renderer".to_string(),
         transparent: true,
         visible: true,

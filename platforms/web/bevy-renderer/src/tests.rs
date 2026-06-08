@@ -39,6 +39,7 @@ fn web_window_targets_canvas_and_transparent_surface() {
     assert_eq!(window.canvas, Some("#atome-bevy".to_string()));
     assert!(window.transparent);
     assert!(!window.fit_canvas_to_parent);
+    assert_eq!(window.present_mode, PresentMode::AutoNoVsync);
 }
 
 #[test]

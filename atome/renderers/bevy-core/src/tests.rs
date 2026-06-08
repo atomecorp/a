@@ -20,6 +20,23 @@ fn shape_node(id: &str) -> AtomeRenderNode {
     }
 }
 
+fn video_node(id: &str) -> AtomeRenderNode {
+    AtomeRenderNode {
+        id: id.to_string(),
+        kind: "video".to_string(),
+        parent_id: None,
+        logical_position: [20.0, 30.0],
+        logical_size: [160.0, 90.0],
+        layer: 4,
+        color: Some([0.24, 0.55, 0.92, 1.0]),
+        text: None,
+        source: Some("/fixtures/video.mp4".to_string()),
+        texture: None,
+        peaks: None,
+        selected: None,
+    }
+}
+
 #[test]
 fn plugin_spawns_projected_nodes_and_camera() {
     let scene = AtomeRenderScene {
@@ -136,4 +153,25 @@ fn selected_nodes_create_overlay_from_configured_visual_style() {
 
     assert!(world.get::<AtomeSelectionOverlay>(entity).is_none());
     assert_eq!(world.resource::<Assets<Image>>().len(), 0);
+}
+
+#[test]
+fn video_nodes_without_cpu_texture_spawn_bevy_gpu_texture_target() {
+    let mut world = World::new();
+    world.insert_resource(AtomeEntityTable::default());
+    world.insert_resource(AtomeBevyRendererConfig::empty(640.0, 480.0));
+    world.insert_resource(AtomeRendererDiagnostics::default());
+    world.insert_resource(Assets::<Image>::default());
+
+    let entity = apply_spawn(&mut world, video_node("gpu_video")).unwrap();
+
+    let sprite = world.get::<Sprite>(entity).unwrap();
+    let image = world
+        .resource::<Assets<Image>>()
+        .get(&sprite.image)
+        .expect("video sprite should reference a Bevy image");
+    assert_eq!(image.texture_descriptor.size.width, 160);
+    assert_eq!(image.texture_descriptor.size.height, 90);
+    assert!(image.data.is_none());
+    assert!(world.get::<video_texture::AtomeVideoTexture>(entity).is_some());
 }

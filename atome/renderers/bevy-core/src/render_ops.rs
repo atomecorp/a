@@ -6,6 +6,7 @@ use crate::{
     spawn::spawn_node_in_world,
     texture::image_handle_from_texture,
     types::*,
+    video_texture::AtomeVideoTexture,
 };
 
 fn entity_for(world: &World, id: &str) -> Result<Entity, String> {
@@ -237,8 +238,21 @@ pub fn apply_resource(world: &mut World, patch: AtomeResourcePatch) -> Result<()
         .get::<AtomeRenderKind>(entity)
         .map(|value| value.0.clone())
         .unwrap_or_default();
-    if kind == "image" || kind == "video" || kind == "audio_waveform" {
-        if kind == "image" || kind == "video" {
+    if kind == "video" {
+        let _source = source.ok_or_else(|| format!("bevy_media_source_required:{}", patch.id))?;
+        let handle = world
+            .get::<Sprite>(entity)
+            .ok_or_else(|| format!("bevy_resource_sprite_missing:{}", patch.id))?
+            .image
+            .clone();
+        world.entity_mut(entity).insert(AtomeVideoTexture {
+            id: patch.id,
+            handle,
+        });
+        return Ok(());
+    }
+    if kind == "image" || kind == "audio_waveform" {
+        if kind == "image" {
             let _source =
                 source.ok_or_else(|| format!("bevy_media_source_required:{}", patch.id))?;
         }
