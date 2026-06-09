@@ -156,3 +156,111 @@ test('MTraX play toggle pauses and resumes without resetting playhead until expl
     assert.equal(state.playhead, 0);
     assert.equal(stopReasons.at(-1), 'stop');
 });
+
+test('MTraX natural timeline end clears the play tool latch', () => {
+    const previousWindow = globalThis.window;
+    const previousCustomEvent = globalThis.CustomEvent;
+    const previousRequestAnimationFrame = globalThis.requestAnimationFrame;
+    const previousCancelAnimationFrame = globalThis.cancelAnimationFrame;
+    const events = [];
+    let frameCallback = null;
+    const eventTarget = new EventTarget();
+    globalThis.window = eventTarget;
+    window.setInterval = () => 0;
+    globalThis.CustomEvent = class extends Event {
+        constructor(type, init = {}) {
+            super(type);
+            this.detail = init.detail;
+        }
+    };
+    globalThis.requestAnimationFrame = (callback) => {
+        frameCallback = callback;
+        return 42;
+    };
+    globalThis.cancelAnimationFrame = () => {};
+    window.addEventListener('eve:tool-state-changed', (event) => {
+        events.push(event.detail);
+    });
+    try {
+        const state = {
+            clips: [{
+                id: 'clip_1',
+                kind: 'video',
+                start: 0,
+                duration: 1
+            }],
+            playhead: 0,
+            maxTime: 1,
+            isPlaying: false,
+            playbackStartPending: false,
+            playbackStartToken: 0,
+            mediaRecordPlayPendingToken: 0,
+            selectedLoopCellKeys: new Set(),
+            hmtracksAudioLoop: { enabled: false, start_seconds: 0, end_seconds: 0 },
+            ui: {},
+            projectPlaybackRuntime: { playing: false }
+        };
+        const controls = createTimelineTransportControlsRuntime({
+            getState: () => state,
+            isHmtracksAudioEngineFeatureEnabled: () => false,
+            stopHmtracksNativeAudioPlayback: () => ({ ok: true }),
+            stopAllMediaImpl: () => {},
+            updatePlaybackFrame: () => ({ ok: true }),
+            syncPlayhead: () => {},
+            syncStatus: () => {},
+            stopMediaRecordActionCapture: () => Promise.resolve({ ok: true }),
+            flushDeferredKaraokePersist: () => {},
+            logHmtracksAudioStage: () => {},
+            logHmtracksAudioDebugSnapshot: () => {},
+            stopHmtracksAudioDebugLogs: () => {}
+        });
+        const play = createTimelinePlayRuntime({
+            getState: () => state,
+            isHmtracksAudioEngineFeatureEnabled: () => false,
+            updatePlaybackFrame: () => ({ ok: true }),
+            syncPlayhead: () => {},
+            syncStatus: () => {},
+            logMtrack: () => {},
+            logMtrackDiag: () => {},
+            logHmtracksAudioStage: () => {},
+            logHmtracksAudioDebugSnapshot: () => {},
+            dispatchMtrackPreviewFrame: () => {},
+            startHmtracksAudioDebugLogs: () => {},
+            resolveStopTimeline: () => controls.stopTimeline,
+            resolveVisualClockPlayheadSeconds: () => 1,
+            ensureMtraxPerfDebug: () => ({
+                beginFrame() {},
+                endFrame() {}
+            })
+        });
+
+        const result = play.playTimeline();
+        assert.equal(result.ok, true);
+        assert.equal(result.state, 'playing');
+        assert.equal(state.isPlaying, true);
+        assert.equal(typeof frameCallback, 'function');
+
+        frameCallback(16);
+
+        assert.equal(state.isPlaying, false);
+        assert.equal(state.lastPlaybackStopReason, 'timeline_end_reached');
+        assert.deepEqual(
+            events.find((event) => event?.tool_id === 'ui.play'),
+            {
+                ts: events.find((event) => event?.tool_id === 'ui.play')?.ts,
+                tool_id: 'ui.play',
+                name_key: 'play',
+                action: 'close',
+                latched: false,
+                active: false,
+                surface_key: 'play',
+                route: 'mtrack_transport:timeline_end_reached'
+            }
+        );
+    } finally {
+        globalThis.window = previousWindow;
+        globalThis.CustomEvent = previousCustomEvent;
+        globalThis.requestAnimationFrame = previousRequestAnimationFrame;
+        globalThis.cancelAnimationFrame = previousCancelAnimationFrame;
+    }
+});
