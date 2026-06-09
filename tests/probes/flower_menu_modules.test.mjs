@@ -164,6 +164,17 @@ assert.equal(staleProjectSelectionMode.useSelection, false);
 assert.equal(staleProjectSelectionMode.mixedKinds, false);
 assert.equal(staleProjectSelectionMode.kind, '');
 
+const audioWaveformSelectionMode = resolveFlowerSelectionMode({
+    context: {
+        atomeId: 'audio_atom',
+        kind: 'audio_waveform'
+    },
+    selectedIds: ['audio_atom'],
+    kindForId: () => 'audio_waveform'
+});
+assert.deepEqual(audioWaveformSelectionMode.activeIds, ['audio_atom']);
+assert.equal(audioWaveformSelectionMode.kind, 'audio');
+
 const panel = document.createElement('div');
 panel.dataset.evePanel = 'true';
 document.body.appendChild(panel);
