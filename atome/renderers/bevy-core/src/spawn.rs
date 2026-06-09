@@ -5,9 +5,8 @@ use crate::{
     selection_overlay::rebuild_selection_overlay,
     texture::image_handle_from_texture,
     types::*,
-    video_texture::{
-        update_video_texture_handle_for_node, video_image_handle_from_node,
-    },
+    video_texture::{update_video_texture_handle_for_node, video_image_handle_from_node},
+    waveform_playback_overlay::rebuild_waveform_playback_overlay,
 };
 
 fn color_for_node(node: &AtomeRenderNode) -> [f32; 4] {
@@ -30,6 +29,7 @@ fn node_base_components(
     AtomeTextMetadata,
     AtomeMediaSource,
     AtomeWaveformPeaks,
+    AtomeWaveformPlaybackProgress,
     AtomeSelected,
     Visibility,
     Transform,
@@ -47,6 +47,7 @@ fn node_base_components(
         AtomeTextMetadata(node.text.clone()),
         AtomeMediaSource(node.source.clone()),
         AtomeWaveformPeaks(node.peaks.clone().unwrap_or_default()),
+        AtomeWaveformPlaybackProgress(node.playback_progress.map(|value| value.clamp(0.0, 1.0))),
         AtomeSelected(node.selected.unwrap_or(false)),
         Visibility::Visible,
         atome_rect_transform(
@@ -99,6 +100,7 @@ pub fn spawn_node_in_world(world: &mut World, node: AtomeRenderNode) -> Result<E
         .by_id
         .insert(node.id, entity);
     rebuild_selection_overlay(world, entity)?;
+    rebuild_waveform_playback_overlay(world, entity)?;
     Ok(entity)
 }
 

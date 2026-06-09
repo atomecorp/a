@@ -7,6 +7,9 @@ use crate::{
     texture::image_handle_from_texture,
     types::*,
     video_texture::{video_image_handle_from_size, AtomeVideoTexture},
+    waveform_playback_overlay::{
+        rebuild_waveform_playback_overlay, remove_waveform_playback_overlay,
+    },
 };
 
 fn entity_for(world: &World, id: &str) -> Result<Entity, String> {
@@ -39,6 +42,7 @@ pub fn apply_despawn(world: &mut World, id: &str) -> Result<(), String> {
         .remove(id)
         .ok_or_else(|| format!("bevy_despawn_entity_missing:{id}"))?;
     remove_selection_overlay(world, entity);
+    remove_waveform_playback_overlay(world, entity);
     world.despawn(entity);
     Ok(())
 }
@@ -86,6 +90,7 @@ pub fn apply_transform(world: &mut World, patch: AtomeTransformPatch) -> Result<
         *bounds = TextBounds::from(Vec2::new(width, height));
     }
     rebuild_selection_overlay(world, entity)?;
+    rebuild_waveform_playback_overlay(world, entity)?;
     Ok(())
 }
 
@@ -132,6 +137,7 @@ pub fn apply_surface(world: &mut World, patch: AtomeSurfacePatch) -> Result<(), 
         )
         .translation;
         rebuild_selection_overlay(world, entity)?;
+        rebuild_waveform_playback_overlay(world, entity)?;
     }
     Ok(())
 }
@@ -151,6 +157,12 @@ pub fn apply_style(world: &mut World, patch: AtomeStylePatch) -> Result<(), Stri
             current.0 = selected;
         }
         rebuild_selection_overlay(world, entity)?;
+    }
+    if let Some(progress) = patch.playback_progress {
+        if let Some(mut current) = world.get_mut::<AtomeWaveformPlaybackProgress>(entity) {
+            current.0 = progress.map(|value| value.clamp(0.0, 1.0));
+        }
+        rebuild_waveform_playback_overlay(world, entity)?;
     }
     Ok(())
 }
@@ -175,6 +187,7 @@ pub fn apply_layer(world: &mut World, patch: AtomeLayerPatch) -> Result<(), Stri
         .ok_or_else(|| format!("bevy_layer_transform_missing:{}", patch.id))?;
     transform.translation.z = depth_for_layer(patch.layer);
     rebuild_selection_overlay(world, entity)?;
+    rebuild_waveform_playback_overlay(world, entity)?;
     Ok(())
 }
 
@@ -190,8 +203,10 @@ pub fn apply_visibility(world: &mut World, patch: AtomeVisibilityPatch) -> Resul
         };
     if patch.visible {
         rebuild_selection_overlay(world, entity)?;
+        rebuild_waveform_playback_overlay(world, entity)?;
     } else {
         remove_selection_overlay(world, entity);
+        remove_waveform_playback_overlay(world, entity);
     }
     Ok(())
 }

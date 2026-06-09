@@ -36,7 +36,13 @@ struct WebRendererDiagnostics {
 
 fn queue_web_op(op: AtomeRenderOp) {
     let is_transform = matches!(op, AtomeRenderOp::Transform(_));
-    WEB_PENDING_OPS.with(|cell| cell.borrow_mut().push(op));
+    WEB_PENDING_OPS.with(|cell| {
+        let mut ops = cell.borrow_mut();
+        if let Some(id) = progress_only_style_id(&op) {
+            ops.retain(|pending| progress_only_style_id(pending).as_deref() != Some(id.as_str()));
+        }
+        ops.push(op);
+    });
     let queue_depth = WEB_PENDING_OPS.with(|cell| cell.borrow().len() as u32);
     WEB_DIAGNOSTICS.with(|cell| {
         let mut diagnostics = cell.borrow_mut();
@@ -47,6 +53,20 @@ fn queue_web_op(op: AtomeRenderOp) {
         diagnostics.max_queue_depth = diagnostics.max_queue_depth.max(queue_depth);
     });
     wake_web_renderer();
+}
+
+fn progress_only_style_id(op: &AtomeRenderOp) -> Option<String> {
+    let AtomeRenderOp::Style(patch) = op else {
+        return None;
+    };
+    if patch.color.is_some() || patch.selected.is_some() || patch.playback_progress.is_none() {
+        return None;
+    }
+    let id = patch.id.trim();
+    if id.is_empty() {
+        return None;
+    }
+    Some(id.to_string())
 }
 
 fn drain_web_ops() -> Vec<AtomeRenderOp> {

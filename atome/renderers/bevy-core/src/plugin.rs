@@ -1,11 +1,15 @@
 use bevy::{image::Image, prelude::*};
 
 use crate::{
-    render_ops::apply_render_op, selection_overlay::rebuild_selection_overlay,
-    spawn::spawn_node_with_texture_handle, texture::image_handle_from_texture, types::*,
+    render_ops::apply_render_op,
+    selection_overlay::rebuild_selection_overlay,
+    spawn::spawn_node_with_texture_handle,
+    texture::image_handle_from_texture,
+    types::*,
     video_texture::{
         update_video_texture_handle_for_node, video_image_handle_from_node, AtomeVideoTexturePlugin,
     },
+    waveform_playback_overlay::rebuild_waveform_playback_overlay,
 };
 
 pub struct AtomeBevyRendererPlugin {
@@ -59,13 +63,21 @@ fn spawn_atome_bevy_scene(
             match result {
                 Ok(entity) => {
                     if let Some(handle) = texture_handle.as_ref() {
-                        update_video_texture_handle_for_node(world, entity, &node_for_world, handle);
+                        update_video_texture_handle_for_node(
+                            world,
+                            entity,
+                            &node_for_world,
+                            handle,
+                        );
                     }
                     world
                         .resource_mut::<AtomeEntityTable>()
                         .by_id
                         .insert(node_id, entity);
                     if let Err(error) = rebuild_selection_overlay(world, entity) {
+                        world.resource_mut::<AtomeRendererDiagnostics>().last_error = Some(error);
+                    }
+                    if let Err(error) = rebuild_waveform_playback_overlay(world, entity) {
                         world.resource_mut::<AtomeRendererDiagnostics>().last_error = Some(error);
                     }
                 }

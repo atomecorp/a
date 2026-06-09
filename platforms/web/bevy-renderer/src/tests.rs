@@ -1,5 +1,6 @@
 use atome_bevy_renderer_core::{
-    AtomeEntityTable, AtomeRenderNode, AtomeRenderOp, AtomeRenderScene, AtomeTransformPatch,
+    AtomeEntityTable, AtomeRenderNode, AtomeRenderOp, AtomeRenderScene, AtomeStylePatch,
+    AtomeTransformPatch,
 };
 use bevy::prelude::*;
 use bevy::window::RequestRedraw;
@@ -20,6 +21,7 @@ fn shape_node(id: &str) -> AtomeRenderNode {
         texture_size: None,
         texture: None,
         peaks: None,
+        playback_progress: None,
         selected: None,
     }
 }
@@ -74,6 +76,43 @@ fn queued_exports_apply_through_shared_core() {
             .count(),
         1
     );
+}
+
+#[test]
+fn queued_audio_progress_styles_are_coalesced_per_atome() {
+    let _ = drain_web_ops();
+
+    queue_web_op(AtomeRenderOp::Style(AtomeStylePatch {
+        id: "waveform_1".to_string(),
+        color: None,
+        selected: None,
+        playback_progress: Some(Some(0.1)),
+    }));
+    queue_web_op(AtomeRenderOp::Style(AtomeStylePatch {
+        id: "waveform_1".to_string(),
+        color: None,
+        selected: None,
+        playback_progress: Some(Some(0.7)),
+    }));
+    queue_web_op(AtomeRenderOp::Style(AtomeStylePatch {
+        id: "waveform_2".to_string(),
+        color: None,
+        selected: None,
+        playback_progress: Some(Some(0.3)),
+    }));
+
+    let ops = drain_web_ops();
+    assert_eq!(ops.len(), 2);
+    let AtomeRenderOp::Style(first) = &ops[0] else {
+        panic!("expected first coalesced op to be style");
+    };
+    let AtomeRenderOp::Style(second) = &ops[1] else {
+        panic!("expected second coalesced op to be style");
+    };
+    assert_eq!(first.id, "waveform_1");
+    assert_eq!(first.playback_progress, Some(Some(0.7)));
+    assert_eq!(second.id, "waveform_2");
+    assert_eq!(second.playback_progress, Some(Some(0.3)));
 }
 
 #[test]

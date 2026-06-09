@@ -20,6 +20,7 @@ fn shape_node(id: &str) -> AtomeRenderNode {
         texture_size: None,
         texture: None,
         peaks: None,
+        playback_progress: None,
         selected: None,
     }
 }
@@ -38,6 +39,7 @@ fn video_node(id: &str) -> AtomeRenderNode {
         texture_size: None,
         texture: None,
         peaks: None,
+        playback_progress: None,
         selected: None,
     }
 }
@@ -152,6 +154,7 @@ fn selected_nodes_create_overlay_from_configured_visual_style() {
             id: "selected_shape".to_string(),
             color: None,
             selected: Some(false),
+            playback_progress: None,
         },
     )
     .unwrap();
@@ -177,10 +180,7 @@ fn video_nodes_spawn_bevy_gpu_texture_target_without_cpu_frame_data() {
         .expect("video sprite should reference a Bevy image");
     assert_eq!(image.texture_descriptor.size.width, 160);
     assert_eq!(image.texture_descriptor.size.height, 90);
-    assert_eq!(
-        image.texture_descriptor.format,
-        TextureFormat::Rgba8Unorm
-    );
+    assert_eq!(image.texture_descriptor.format, TextureFormat::Rgba8Unorm);
     assert!(image
         .texture_descriptor
         .usage
@@ -254,4 +254,78 @@ fn video_resource_patch_replaces_gpu_texture_with_media_size() {
     assert_eq!(image.texture_descriptor.size.width, 478);
     assert_eq!(image.texture_descriptor.size.height, 850);
     assert_eq!(image.data, None);
+}
+
+#[test]
+fn audio_waveform_progress_spawns_and_moves_bevy_playhead_overlay() {
+    let mut world = World::new();
+    world.insert_resource(AtomeEntityTable::default());
+    world.insert_resource(AtomeBevyRendererConfig::empty(640.0, 480.0));
+    world.insert_resource(AtomeRendererDiagnostics::default());
+    world.insert_resource(Assets::<Image>::default());
+
+    let entity = apply_spawn(
+        &mut world,
+        AtomeRenderNode {
+            id: "waveform_progress".to_string(),
+            kind: "audio_waveform".to_string(),
+            parent_id: None,
+            logical_position: [20.0, 30.0],
+            logical_size: [200.0, 60.0],
+            layer: 2,
+            color: Some([0.2, 0.4, 0.6, 1.0]),
+            text: None,
+            source: None,
+            texture_size: None,
+            texture: None,
+            peaks: Some(vec![0.1, 0.5, -0.2]),
+            playback_progress: Some(0.25),
+            selected: None,
+        },
+    )
+    .unwrap();
+
+    let overlay = world
+        .get::<AtomeWaveformPlaybackOverlay>(entity)
+        .expect("waveform progress should create a Bevy overlay");
+    assert_eq!(overlay.entities.len(), 3);
+    let line_entity = overlay.entities[2];
+    assert_eq!(
+        world.get::<Transform>(line_entity).unwrap().translation,
+        Vec3::new(-250.0, 180.0, -1.3)
+    );
+
+    apply_style(
+        &mut world,
+        AtomeStylePatch {
+            id: "waveform_progress".to_string(),
+            color: None,
+            selected: None,
+            playback_progress: Some(Some(0.75)),
+        },
+    )
+    .unwrap();
+
+    let moved_overlay = world.get::<AtomeWaveformPlaybackOverlay>(entity).unwrap();
+    let moved_line_entity = moved_overlay.entities[2];
+    assert_eq!(
+        world
+            .get::<Transform>(moved_line_entity)
+            .unwrap()
+            .translation,
+        Vec3::new(-150.0, 180.0, -1.3)
+    );
+
+    apply_style(
+        &mut world,
+        AtomeStylePatch {
+            id: "waveform_progress".to_string(),
+            color: None,
+            selected: None,
+            playback_progress: Some(None),
+        },
+    )
+    .unwrap();
+
+    assert!(world.get::<AtomeWaveformPlaybackOverlay>(entity).is_none());
 }

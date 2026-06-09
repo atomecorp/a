@@ -53,6 +53,7 @@ pub struct AtomeRenderNode {
     pub texture_size: Option<[u32; 2]>,
     pub texture: Option<AtomeTexture>,
     pub peaks: Option<Vec<f32>>,
+    pub playback_progress: Option<f32>,
     pub selected: Option<bool>,
 }
 
@@ -81,6 +82,8 @@ pub struct AtomeStylePatch {
     pub id: String,
     pub color: Option<[f32; 4]>,
     pub selected: Option<bool>,
+    #[serde(default)]
+    pub playback_progress: Option<Option<f32>>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -165,12 +168,20 @@ pub struct AtomeMediaSource(pub Option<String>);
 pub struct AtomeWaveformPeaks(pub Vec<f32>);
 
 #[derive(Clone, Copy, Debug, Component)]
+pub struct AtomeWaveformPlaybackProgress(pub Option<f32>);
+
+#[derive(Clone, Copy, Debug, Component)]
 pub struct AtomeSelected(pub bool);
 
 #[derive(Clone, Debug, Component)]
 pub struct AtomeSelectionOverlay {
     pub entities: Vec<Entity>,
     pub image_handles: Vec<Handle<Image>>,
+}
+
+#[derive(Clone, Debug, Component)]
+pub struct AtomeWaveformPlaybackOverlay {
+    pub entities: Vec<Entity>,
 }
 
 #[derive(Clone, Debug, Resource, Default)]

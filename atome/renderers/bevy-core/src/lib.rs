@@ -6,6 +6,7 @@ pub mod spawn;
 pub mod texture;
 pub mod types;
 pub mod video_texture;
+pub mod waveform_playback_overlay;
 
 pub use plugin::{apply_render_ops, AtomeBevyRendererPlugin};
 pub use render_math::{atome_rect_transform, color_from_rgba, depth_for_layer};
