@@ -100,3 +100,72 @@ test('project video playback keeps previous targets running when another video s
         globalThis.cancelAnimationFrame = previousCancel;
     }
 });
+
+test('project video playback waits for real decode end when stored duration is short', async () => {
+    const previousRaf = globalThis.requestAnimationFrame;
+    const previousCancel = globalThis.cancelAnimationFrame;
+    let rafId = 0;
+    const queuedRafs = new Map();
+    globalThis.requestAnimationFrame = (callback) => {
+        rafId += 1;
+        queuedRafs.set(rafId, callback);
+        return rafId;
+    };
+    globalThis.cancelAnimationFrame = (id) => {
+        queuedRafs.delete(id);
+    };
+
+    const state = createState();
+    const decodeCalls = [];
+    let nowMs = 0;
+    let videoStatus = {
+        exists: true,
+        currentTime: 0,
+        duration: 2,
+        ended: false,
+        errored: false
+    };
+    const runtime = createProjectPlaybackTimelineRuntime({
+        getState: () => state,
+        hasObjectShape: (value) => !!value && typeof value === 'object' && !Array.isArray(value),
+        toKey: (value) => String(value || '').trim(),
+        roundTimelineNumber: (value) => Math.round(Number(value) * 1000) / 1000,
+        applyProjectPlaybackTargetFrame: () => true,
+        maybeLogProjectPlaybackFrame: () => {},
+        resolveProjectPlaybackNowMs: () => nowMs,
+        restoreProjectPlaybackTarget: () => true,
+        buildProjectPlaybackTarget: async (atomeId) => ({
+            atomeId,
+            kind: 'video',
+            timeline: { duration: 1, automation_lanes: [] },
+            appliedPropKeys: new Set(),
+            lastAppliedSignature: ''
+        }),
+        mtrackTimelineEpsilon: 0.001,
+        setVideoDecodePlayback: (ids, active) => {
+            decodeCalls.push({ ids: ids.slice(), active });
+        },
+        getVideoDecodeStatus: () => videoStatus
+    });
+
+    try {
+        const started = await runtime.playProjectAtomeTimelines({ atomeIds: ['video_short_meta'], action: 'play' });
+        assert.equal(started.ok, true);
+        assert.equal(state.projectPlaybackRuntime.targets.get('video_short_meta').playing, true);
+
+        nowMs = 1100;
+        videoStatus = { ...videoStatus, currentTime: 0.8 };
+        queuedRafs.get(1)();
+        assert.equal(state.projectPlaybackRuntime.targets.get('video_short_meta').playing, true);
+        assert.deepEqual(decodeCalls.at(-1), { ids: ['video_short_meta'], active: true });
+
+        nowMs = 2100;
+        videoStatus = { ...videoStatus, currentTime: 2, ended: true };
+        queuedRafs.get(2)();
+        assert.equal(state.projectPlaybackRuntime.targets.get('video_short_meta').playing, false);
+        assert.deepEqual(decodeCalls.at(-1), { ids: ['video_short_meta'], active: false });
+    } finally {
+        globalThis.requestAnimationFrame = previousRaf;
+        globalThis.cancelAnimationFrame = previousCancel;
+    }
+});
