@@ -248,16 +248,16 @@ function wasm_bindgen__convert__closures_____invoke__h5ca707e6c08eb6c7(arg0, arg
     wasm.wasm_bindgen__convert__closures_____invoke__h5ca707e6c08eb6c7(arg0, arg1, arg2);
 }
 
-function wasm_bindgen__convert__closures_____invoke__h0f2406f0952c411f(arg0, arg1, arg2, arg3) {
-    wasm.wasm_bindgen__convert__closures_____invoke__h0f2406f0952c411f(arg0, arg1, arg2, arg3);
-}
-
 function wasm_bindgen__convert__closures_____invoke__h35bfebd84f6c108c(arg0, arg1) {
     wasm.wasm_bindgen__convert__closures_____invoke__h35bfebd84f6c108c(arg0, arg1);
 }
 
 function wasm_bindgen__convert__closures_____invoke__h394380805492be99(arg0, arg1, arg2) {
     wasm.wasm_bindgen__convert__closures_____invoke__h394380805492be99(arg0, arg1, isLikeNone(arg2) ? 0 : addToExternrefTable0(arg2));
+}
+
+function wasm_bindgen__convert__closures_____invoke__h0f2406f0952c411f(arg0, arg1, arg2, arg3) {
+    wasm.wasm_bindgen__convert__closures_____invoke__h0f2406f0952c411f(arg0, arg1, arg2, arg3);
 }
 
 const __wbindgen_enum_GpuAddressMode = ["clamp-to-edge", "repeat", "mirror-repeat"];
