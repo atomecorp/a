@@ -6,7 +6,7 @@ use crate::{
     spawn::spawn_node_in_world,
     texture::image_handle_from_texture,
     types::*,
-    video_texture::AtomeVideoTexture,
+    video_texture::{video_image_handle_from_size, AtomeVideoTexture},
 };
 
 fn entity_for(world: &World, id: &str) -> Result<Entity, String> {
@@ -240,11 +240,27 @@ pub fn apply_resource(world: &mut World, patch: AtomeResourcePatch) -> Result<()
         .unwrap_or_default();
     if kind == "video" {
         let _source = source.ok_or_else(|| format!("bevy_media_source_required:{}", patch.id))?;
-        let handle = world
-            .get::<Sprite>(entity)
-            .ok_or_else(|| format!("bevy_resource_sprite_missing:{}", patch.id))?
-            .image
-            .clone();
+        let handle = if let Some(texture_size) = patch.texture_size {
+            let handle = {
+                let mut images = world
+                    .get_resource_mut::<Assets<Image>>()
+                    .ok_or_else(|| "bevy_image_assets_required".to_string())?;
+                video_image_handle_from_size(&mut images, texture_size)
+                    .ok_or_else(|| format!("bevy_video_texture_create_failed:{}", patch.id))?
+            };
+            let mut sprite = world
+                .get_mut::<Sprite>(entity)
+                .ok_or_else(|| format!("bevy_resource_sprite_missing:{}", patch.id))?;
+            sprite.image = handle.clone();
+            sprite.color = Color::WHITE;
+            handle
+        } else {
+            world
+                .get::<Sprite>(entity)
+                .ok_or_else(|| format!("bevy_resource_sprite_missing:{}", patch.id))?
+                .image
+                .clone()
+        };
         world.entity_mut(entity).insert(AtomeVideoTexture {
             id: patch.id,
             handle,

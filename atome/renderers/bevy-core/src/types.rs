@@ -50,6 +50,7 @@ pub struct AtomeRenderNode {
     pub color: Option<[f32; 4]>,
     pub text: Option<String>,
     pub source: Option<String>,
+    pub texture_size: Option<[u32; 2]>,
     pub texture: Option<AtomeTexture>,
     pub peaks: Option<Vec<f32>>,
     pub selected: Option<bool>,
@@ -111,6 +112,7 @@ pub struct AtomeTextPatch {
 pub struct AtomeResourcePatch {
     pub id: String,
     pub source: Option<String>,
+    pub texture_size: Option<[u32; 2]>,
     pub texture: Option<AtomeTexture>,
     pub peaks: Option<Vec<f32>>,
 }

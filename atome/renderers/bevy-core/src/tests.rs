@@ -1,4 +1,7 @@
-use bevy::prelude::*;
+use bevy::{
+    prelude::*,
+    render::render_resource::{TextureFormat, TextureUsages},
+};
 
 use crate::selection_overlay::build_shadow_texture_rgba;
 use crate::*;
@@ -14,6 +17,7 @@ fn shape_node(id: &str) -> AtomeRenderNode {
         color: Some([0.1, 0.2, 0.3, 1.0]),
         text: None,
         source: None,
+        texture_size: None,
         texture: None,
         peaks: None,
         selected: None,
@@ -31,6 +35,7 @@ fn video_node(id: &str) -> AtomeRenderNode {
         color: Some([0.24, 0.55, 0.92, 1.0]),
         text: None,
         source: Some("/fixtures/video.mp4".to_string()),
+        texture_size: None,
         texture: None,
         peaks: None,
         selected: None,
@@ -156,7 +161,7 @@ fn selected_nodes_create_overlay_from_configured_visual_style() {
 }
 
 #[test]
-fn video_nodes_without_cpu_texture_spawn_bevy_gpu_texture_target() {
+fn video_nodes_spawn_bevy_gpu_texture_target_without_cpu_frame_data() {
     let mut world = World::new();
     world.insert_resource(AtomeEntityTable::default());
     world.insert_resource(AtomeBevyRendererConfig::empty(640.0, 480.0));
@@ -172,6 +177,81 @@ fn video_nodes_without_cpu_texture_spawn_bevy_gpu_texture_target() {
         .expect("video sprite should reference a Bevy image");
     assert_eq!(image.texture_descriptor.size.width, 160);
     assert_eq!(image.texture_descriptor.size.height, 90);
-    assert!(image.data.is_none());
-    assert!(world.get::<video_texture::AtomeVideoTexture>(entity).is_some());
+    assert_eq!(
+        image.texture_descriptor.format,
+        TextureFormat::Rgba8Unorm
+    );
+    assert!(image
+        .texture_descriptor
+        .usage
+        .contains(TextureUsages::COPY_DST));
+    assert!(image
+        .texture_descriptor
+        .usage
+        .contains(TextureUsages::RENDER_ATTACHMENT));
+    assert_eq!(image.data, None);
+    assert!(world
+        .get::<video_texture::AtomeVideoTexture>(entity)
+        .is_some());
+}
+
+#[test]
+fn video_nodes_use_media_texture_size_when_source_aspect_differs_from_atom() {
+    let mut world = World::new();
+    world.insert_resource(AtomeEntityTable::default());
+    world.insert_resource(AtomeBevyRendererConfig::empty(640.0, 480.0));
+    world.insert_resource(AtomeRendererDiagnostics::default());
+    world.insert_resource(Assets::<Image>::default());
+
+    let entity = apply_spawn(
+        &mut world,
+        AtomeRenderNode {
+            logical_size: [180.0, 180.0],
+            texture_size: Some([1920, 1080]),
+            ..video_node("wide_gpu_video")
+        },
+    )
+    .unwrap();
+
+    let sprite = world.get::<Sprite>(entity).unwrap();
+    assert_eq!(sprite.custom_size, Some(Vec2::new(180.0, 180.0)));
+    let image = world
+        .resource::<Assets<Image>>()
+        .get(&sprite.image)
+        .expect("video sprite should reference a Bevy image");
+    assert_eq!(image.texture_descriptor.size.width, 1920);
+    assert_eq!(image.texture_descriptor.size.height, 1080);
+    assert_eq!(image.data, None);
+}
+
+#[test]
+fn video_resource_patch_replaces_gpu_texture_with_media_size() {
+    let mut world = World::new();
+    world.insert_resource(AtomeEntityTable::default());
+    world.insert_resource(AtomeBevyRendererConfig::empty(640.0, 480.0));
+    world.insert_resource(AtomeRendererDiagnostics::default());
+    world.insert_resource(Assets::<Image>::default());
+
+    let entity = apply_spawn(&mut world, video_node("resized_video")).unwrap();
+    apply_resource(
+        &mut world,
+        AtomeResourcePatch {
+            id: "resized_video".to_string(),
+            source: Some("/fixtures/video.mp4".to_string()),
+            texture_size: Some([478, 850]),
+            texture: None,
+            peaks: None,
+        },
+    )
+    .unwrap();
+
+    let sprite = world.get::<Sprite>(entity).unwrap();
+    assert_eq!(sprite.custom_size, Some(Vec2::new(160.0, 90.0)));
+    let image = world
+        .resource::<Assets<Image>>()
+        .get(&sprite.image)
+        .expect("video sprite should reference a Bevy image");
+    assert_eq!(image.texture_descriptor.size.width, 478);
+    assert_eq!(image.texture_descriptor.size.height, 850);
+    assert_eq!(image.data, None);
 }

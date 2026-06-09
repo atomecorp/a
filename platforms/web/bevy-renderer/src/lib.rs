@@ -6,7 +6,7 @@ use bevy::{
     log::{Level, LogPlugin},
     prelude::*,
     window::{CompositeAlphaMode, PresentMode, RequestRedraw, Window, WindowPlugin},
-    winit::{EventLoopProxy, EventLoopProxyWrapper, WinitUserEvent},
+    winit::{EventLoopProxy, EventLoopProxyWrapper, WinitSettings, WinitUserEvent},
 };
 use serde::Serialize;
 use std::cell::RefCell;
@@ -15,6 +15,7 @@ mod exports;
 
 thread_local! {
     static WEB_PENDING_OPS: RefCell<Vec<AtomeRenderOp>> = RefCell::new(Vec::new());
+    static WEB_PENDING_VIDEO_FRAMES: RefCell<u32> = const { RefCell::new(0) };
     static WEB_EVENT_LOOP_PROXY: RefCell<Option<EventLoopProxy<WinitUserEvent>>> = const { RefCell::new(None) };
     static WEB_WAKE_PENDING: RefCell<bool> = const { RefCell::new(false) };
     static WEB_REDRAW_PENDING: RefCell<bool> = const { RefCell::new(false) };
@@ -49,7 +50,8 @@ fn queue_web_op(op: AtomeRenderOp) {
 }
 
 fn drain_web_ops() -> Vec<AtomeRenderOp> {
-    let ops: Vec<AtomeRenderOp> = WEB_PENDING_OPS.with(|cell| cell.borrow_mut().drain(..).collect());
+    let ops: Vec<AtomeRenderOp> =
+        WEB_PENDING_OPS.with(|cell| cell.borrow_mut().drain(..).collect());
     if !ops.is_empty() {
         WEB_DIAGNOSTICS.with(|cell| {
             let mut diagnostics = cell.borrow_mut();
@@ -68,6 +70,21 @@ fn request_web_redraw() {
         *cell.borrow_mut() = true;
     });
     wake_web_renderer();
+}
+
+fn notify_web_video_frame(id: String, frame_version: u32) {
+    if id.trim().is_empty() || frame_version == 0 {
+        return;
+    }
+    WEB_PENDING_VIDEO_FRAMES.with(|cell| {
+        let mut pending = cell.borrow_mut();
+        *pending = pending.saturating_add(1);
+    });
+    wake_web_renderer();
+}
+
+fn drain_web_video_frames() -> u32 {
+    WEB_PENDING_VIDEO_FRAMES.with(|cell| cell.replace(0))
 }
 
 fn drain_web_redraw_request() -> bool {
@@ -133,9 +150,22 @@ impl Plugin for WebBevyRendererPlugin {
     fn build(&self, app: &mut App) {
         app.add_message::<RequestRedraw>()
             .insert_resource(ClearColor(Color::NONE))
+            .insert_resource(WinitSettings::continuous())
             .add_plugins(AtomeBevyRendererPlugin::new(self.config.core.clone()))
-            .add_systems(Startup, (remember_event_loop_proxy, request_initial_web_redraw).chain())
-            .add_systems(Update, (apply_pending_web_ops, apply_pending_web_redraw).chain());
+            .add_systems(
+                Startup,
+                (remember_event_loop_proxy, request_initial_web_redraw).chain(),
+            )
+            .add_systems(
+                Update,
+                (
+                    remember_event_loop_proxy,
+                    apply_pending_web_ops,
+                    apply_pending_video_frame_notifications,
+                    apply_pending_web_redraw,
+                )
+                    .chain(),
+            );
     }
 }
 
@@ -161,6 +191,15 @@ fn apply_pending_web_redraw(world: &mut World) {
     WEB_DIAGNOSTICS.with(|cell| {
         cell.borrow_mut().redraw_applied += 1;
     });
+    world.write_message(RequestRedraw);
+    wake_web_renderer();
+}
+
+fn apply_pending_video_frame_notifications(world: &mut World) {
+    let drained = drain_web_video_frames();
+    if drained == 0 {
+        return;
+    }
     world.write_message(RequestRedraw);
     wake_web_renderer();
 }

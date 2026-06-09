@@ -115,6 +115,11 @@ pub fn request_atome_bevy_redraw() {
 }
 
 #[wasm_bindgen]
+pub fn notify_atome_bevy_video_frame(id: String, frame_version: u32) {
+    notify_web_video_frame(id, frame_version);
+}
+
+#[wasm_bindgen]
 pub fn read_atome_bevy_web_diagnostics() -> Result<JsValue, JsValue> {
     serde_wasm_bindgen::to_value(&read_web_renderer_diagnostics())
         .map_err(|error| JsValue::from_str(&format!("bevy_web_diagnostics_encode_failed:{error}")))
@@ -122,6 +127,7 @@ pub fn read_atome_bevy_web_diagnostics() -> Result<JsValue, JsValue> {
 
 #[wasm_bindgen]
 pub fn reset_atome_bevy_web_diagnostics() -> Result<JsValue, JsValue> {
-    serde_wasm_bindgen::to_value(&reset_web_renderer_diagnostics())
-        .map_err(|error| JsValue::from_str(&format!("bevy_web_diagnostics_reset_encode_failed:{error}")))
+    serde_wasm_bindgen::to_value(&reset_web_renderer_diagnostics()).map_err(|error| {
+        JsValue::from_str(&format!("bevy_web_diagnostics_reset_encode_failed:{error}"))
+    })
 }
