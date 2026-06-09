@@ -26,6 +26,8 @@ const {
     resolveContextFromTarget
 } = await import('../../eVe/intuition/flower/context_target.js');
 const {
+    FLOWER_MIXED_SELECTION_TOOL_KEYS,
+    resolveFlowerTransportSelectionIds,
     resolveFlowerSelectionMode
 } = await import('../../eVe/intuition/flower/context_selection.js');
 const {
@@ -138,6 +140,14 @@ const mixedSelectionMode = resolveFlowerSelectionMode({
 });
 assert.equal(mixedSelectionMode.useSelection, true);
 assert.equal(mixedSelectionMode.mixedKinds, true);
+assert.deepEqual(FLOWER_MIXED_SELECTION_TOOL_KEYS, ['info', 'play']);
+assert.deepEqual(
+    resolveFlowerTransportSelectionIds({
+        atomeId: 'shape_a',
+        selectionIds: mixedSelectionMode.activeIds
+    }),
+    ['shape_a', 'video_b']
+);
 
 const pointerOutsideSelectionMode = resolveFlowerSelectionMode({
     context: {
@@ -222,6 +232,8 @@ assert.equal(Number.isFinite(submenu.backPosition.tx), true);
 const intuitionSource = await readFile(new URL('../../eVe/intuition/eVeIntuition.js', import.meta.url), 'utf8');
 assert.ok(
     intuitionSource.includes("type === 'project' && !hasAtomeTarget")
-        && intuitionSource.includes('selectedIds: contextSelectionIds'),
-    'project-only flower context must not inherit stale Atome selection ids'
+        && intuitionSource.includes('selectedIds: contextSelectionIds')
+        && intuitionSource.includes('selectionIds,')
+        && intuitionSource.includes('resolveFlowerTransportSelectionIds'),
+    'flower context must preserve project-only selection hygiene and pass multi-selection ids into transport tools'
 );
