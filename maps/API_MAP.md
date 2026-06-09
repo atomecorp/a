@@ -240,6 +240,7 @@ Boundary rules:
 - This API must not be used to persist, replay, synchronize, serialize, or audit Atome facts.
 
 Forbidden API pattern: adding new Atome `data-*` attributes or reading behavior decisions from Atome `data-*` attributes in final rendered Atome DOM. Legacy read-only fallbacks are temporary migration debt and must not become new contracts.
+
 - `props`, `properties`, `patch`, and `delta` are normalized into `payload.props` before transport.
 - `atome/src/shared/atome_contract.js` owns removal of reserved Atome envelope fields from durable property payloads; project Atome creation code and commit code must consume this shared contract rather than maintaining local sanitizer modules or parallel reserved-key lists.
 - Reserved envelope fields such as `id`, `type`, `owner_id`, `project_id`, `parent_id`, timestamps, sync fields, selection fields, and media render aliases such as `media_type` or `visualType` must not be emitted as durable properties.
