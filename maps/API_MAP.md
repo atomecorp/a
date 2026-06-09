@@ -351,6 +351,7 @@ Boundary rules:
 
 - The runtime resolves selected media from `project_scene_runtime` records because the cleaned project canvas route intentionally has no per-Atome media DOM host.
 - Audio playback and extracted video-audio playback must go through `Squirrel.av.audio` and the Kira playback facade. It must not instantiate a second audio engine or enable Bevy audio.
+- Project Audio Atome `toggle` playback uses Kira `play_instance`/`stop_instance` when available so pressing the play tool while audio is active pauses the current voice and preserves a runtime-only position; the next play/toggle resumes from that position with `startSeconds`. Explicit `stop` still clears the project playback runtime and resets progress.
 - Browser video presentation uses the shared video decode pool plus disposable project-scene record updates so Bevy/WebGPU remains the visible route. The decode element is an implementation resource, not a visible Atome host or canonical media state.
 - It must not persist playback frame data, mutate durable Atome properties, or use DOM media nodes as canonical selection/project state.
 
