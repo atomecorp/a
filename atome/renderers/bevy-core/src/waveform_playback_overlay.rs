@@ -9,11 +9,7 @@ use crate::{
 };
 
 const PLAYHEAD_WIDTH: f32 = 2.0;
-const PLAYHEAD_CONTRAST_WIDTH: f32 = 4.0;
-const PLAYHEAD_GLOW_WIDTH: f32 = 6.0;
 const PLAYHEAD_COLOR: [f32; 4] = [0.96, 0.98, 1.0, 0.92];
-const PLAYHEAD_CONTRAST_COLOR: [f32; 4] = [0.02, 0.025, 0.03, 0.42];
-const PLAYHEAD_GLOW_COLOR: [f32; 4] = [0.96, 0.98, 1.0, 0.18];
 const PLAYHEAD_DEPTH_OFFSET: f32 = 0.7;
 
 fn playback_depth_for_layer(layer: i32) -> f32 {
@@ -102,35 +98,15 @@ pub fn rebuild_waveform_playback_overlay(world: &mut World, entity: Entity) -> R
     let height = size.height.max(1.0);
     let x = position.x + width * progress.clamp(0.0, 1.0);
     let z = playback_depth_for_layer(layer);
-    let entities = vec![
-        spawn_playhead_rect(
-            world,
-            x - PLAYHEAD_CONTRAST_WIDTH / 2.0,
-            position.y,
-            PLAYHEAD_CONTRAST_WIDTH,
-            height,
-            PLAYHEAD_CONTRAST_COLOR,
-            z - 0.02,
-        ),
-        spawn_playhead_rect(
-            world,
-            x - PLAYHEAD_GLOW_WIDTH / 2.0,
-            position.y,
-            PLAYHEAD_GLOW_WIDTH,
-            height,
-            PLAYHEAD_GLOW_COLOR,
-            z - 0.01,
-        ),
-        spawn_playhead_rect(
-            world,
-            x - PLAYHEAD_WIDTH / 2.0,
-            position.y,
-            PLAYHEAD_WIDTH,
-            height,
-            PLAYHEAD_COLOR,
-            z,
-        ),
-    ];
+    let entities = vec![spawn_playhead_rect(
+        world,
+        x - PLAYHEAD_WIDTH / 2.0,
+        position.y,
+        PLAYHEAD_WIDTH,
+        height,
+        PLAYHEAD_COLOR,
+        z,
+    )];
     world
         .entity_mut(entity)
         .insert(AtomeWaveformPlaybackOverlay { entities });

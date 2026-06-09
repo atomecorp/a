@@ -288,8 +288,8 @@ fn audio_waveform_progress_spawns_and_moves_bevy_playhead_overlay() {
     let overlay = world
         .get::<AtomeWaveformPlaybackOverlay>(entity)
         .expect("waveform progress should create a Bevy overlay");
-    assert_eq!(overlay.entities.len(), 3);
-    let line_entity = overlay.entities[2];
+    assert_eq!(overlay.entities.len(), 1);
+    let line_entity = overlay.entities[0];
     assert_eq!(
         world.get::<Transform>(line_entity).unwrap().translation,
         Vec3::new(-250.0, 180.0, -1.3)
@@ -307,7 +307,7 @@ fn audio_waveform_progress_spawns_and_moves_bevy_playhead_overlay() {
     .unwrap();
 
     let moved_overlay = world.get::<AtomeWaveformPlaybackOverlay>(entity).unwrap();
-    let moved_line_entity = moved_overlay.entities[2];
+    let moved_line_entity = moved_overlay.entities[0];
     assert_eq!(
         world
             .get::<Transform>(moved_line_entity)
