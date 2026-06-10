@@ -18,7 +18,7 @@ afterEach(() => {
     delete global.HTMLElement;
 });
 
-test('text creation provisional block starts at the pointer with a one pixel width', () => {
+test('text creation keyboard bridge stays hidden while preserving focus', () => {
     installDom();
     const layer = document.getElementById('layer');
 
@@ -30,15 +30,19 @@ test('text creation provisional block starts at the pointer with a one pixel wid
         localY: 24
     });
 
-    assert.equal(el.style.left, '42px');
-    assert.equal(el.style.top, '24px');
+    assert.equal(el.tagName, 'TEXTAREA');
+    assert.equal(el.style.position, 'fixed');
+    assert.equal(el.style.left, '-10000px');
+    assert.equal(el.style.opacity, '0');
     assert.equal(el.style.width, '1px');
-    assert.equal(el.style.minWidth, '1px');
     assert.equal(el.style.padding, '0px');
+    assert.equal(document.activeElement, el);
 });
 
 test('empty text auto-fit preserves a one pixel origin width', () => {
-    const runtime = createTextFitRuntime();
+    const runtime = createTextFitRuntime({
+        getAtomeKindFromElement: () => 'text'
+    });
     const host = {
         dataset: { atomeKind: 'text' },
         style: { width: '1px', height: '24px' },
