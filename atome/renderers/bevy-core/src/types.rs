@@ -78,6 +78,21 @@ pub struct AtomeSurfacePatch {
 }
 
 #[derive(Clone, Debug, Deserialize)]
+pub struct AtomeSurfaceBackgroundPatch {
+    pub signature: String,
+    pub color: [f32; 4],
+    pub texture: Option<AtomeTexture>,
+}
+
+impl AtomeSurfaceBackgroundPatch {
+    pub fn texture_size(&self) -> Option<[u32; 2]> {
+        self.texture
+            .as_ref()
+            .map(|texture| [texture.width, texture.height])
+    }
+}
+
+#[derive(Clone, Debug, Deserialize)]
 pub struct AtomeStylePatch {
     pub id: String,
     pub color: Option<[f32; 4]>,
@@ -132,6 +147,7 @@ pub enum AtomeRenderOp {
     Text(AtomeTextPatch),
     Resource(AtomeResourcePatch),
     Surface(AtomeSurfacePatch),
+    SurfaceBackground(AtomeSurfaceBackgroundPatch),
 }
 
 #[derive(Clone, Debug, Component)]
@@ -182,6 +198,16 @@ pub struct AtomeSelectionOverlay {
 #[derive(Clone, Debug, Component)]
 pub struct AtomeWaveformPlaybackOverlay {
     pub entities: Vec<Entity>,
+}
+
+#[derive(Clone, Copy, Debug, Component)]
+pub struct AtomeSurfaceBackground;
+
+#[derive(Clone, Debug, Component)]
+pub struct AtomeSurfaceBackgroundVisual {
+    pub signature: String,
+    pub texture_size: Option<[u32; 2]>,
+    pub image_handle: Option<Handle<Image>>,
 }
 
 #[derive(Clone, Debug, Resource, Default)]

@@ -1,6 +1,7 @@
 use bevy::{image::Image, prelude::*, text::TextBounds};
 
 use crate::{
+    background::{apply_surface_background, resize_surface_background},
     render_math::{atome_rect_transform, color_from_rgba, depth_for_layer},
     selection_overlay::{rebuild_selection_overlay, remove_selection_overlay},
     spawn::spawn_node_in_world,
@@ -139,6 +140,7 @@ pub fn apply_surface(world: &mut World, patch: AtomeSurfacePatch) -> Result<(), 
         rebuild_selection_overlay(world, entity)?;
         rebuild_waveform_playback_overlay(world, entity)?;
     }
+    resize_surface_background(world);
     Ok(())
 }
 
@@ -314,5 +316,8 @@ pub fn apply_render_op(world: &mut World, op: AtomeRenderOp) -> Result<(), Strin
         AtomeRenderOp::Text(patch) => apply_text(world, patch),
         AtomeRenderOp::Resource(patch) => apply_resource(world, patch),
         AtomeRenderOp::Surface(patch) => apply_surface(world, patch),
+        AtomeRenderOp::SurfaceBackground(patch) => {
+            apply_surface_background(world, patch).map(|_| ())
+        }
     }
 }

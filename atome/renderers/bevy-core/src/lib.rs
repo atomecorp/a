@@ -1,3 +1,4 @@
+pub mod background;
 pub mod plugin;
 pub mod render_math;
 pub mod render_ops;

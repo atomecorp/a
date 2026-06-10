@@ -1,9 +1,9 @@
 use atome_bevy_renderer_core::{
     AtomeEntityTable, AtomeRenderNode, AtomeRenderOp, AtomeRenderScene, AtomeStylePatch,
-    AtomeTransformPatch,
+    AtomeSurfaceBackgroundPatch, AtomeTransformPatch,
 };
 use bevy::prelude::*;
-use bevy::window::RequestRedraw;
+use bevy::window::{CompositeAlphaMode, RequestRedraw};
 
 use super::*;
 
@@ -27,7 +27,7 @@ fn shape_node(id: &str) -> AtomeRenderNode {
 }
 
 #[test]
-fn web_window_targets_canvas_and_transparent_surface() {
+fn web_window_targets_canvas_and_opaque_surface() {
     let config = WebBevyRendererConfig::new(
         "#atome-bevy".to_string(),
         640.0,
@@ -40,7 +40,8 @@ fn web_window_targets_canvas_and_transparent_surface() {
     let window = web_window_for_config(&config);
 
     assert_eq!(window.canvas, Some("#atome-bevy".to_string()));
-    assert!(window.transparent);
+    assert!(!window.transparent);
+    assert_eq!(window.composite_alpha_mode, CompositeAlphaMode::Opaque);
     assert!(!window.fit_canvas_to_parent);
     assert_eq!(window.present_mode, PresentMode::AutoNoVsync);
 }
@@ -76,6 +77,26 @@ fn queued_exports_apply_through_shared_core() {
             .count(),
         1
     );
+}
+
+#[test]
+fn queued_surface_background_export_uses_shared_core_op() {
+    let _ = drain_web_ops();
+    queue_web_op(AtomeRenderOp::SurfaceBackground(
+        AtomeSurfaceBackgroundPatch {
+            signature: "generated:surface".to_string(),
+            color: [0.12, 0.12, 0.12, 1.0],
+            texture: None,
+        },
+    ));
+
+    let ops = drain_web_ops();
+    assert_eq!(ops.len(), 1);
+    let AtomeRenderOp::SurfaceBackground(patch) = &ops[0] else {
+        panic!("expected surface background op");
+    };
+    assert_eq!(patch.signature, "generated:surface");
+    assert_eq!(patch.color, [0.12, 0.12, 0.12, 1.0]);
 }
 
 #[test]

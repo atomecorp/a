@@ -169,7 +169,7 @@ struct WebBevyRendererPlugin {
 impl Plugin for WebBevyRendererPlugin {
     fn build(&self, app: &mut App) {
         app.add_message::<RequestRedraw>()
-            .insert_resource(ClearColor(Color::NONE))
+            .insert_resource(ClearColor(Color::BLACK))
             .insert_resource(WinitSettings::continuous())
             .add_plugins(AtomeBevyRendererPlugin::new(self.config.core.clone()))
             .add_systems(
@@ -246,10 +246,10 @@ fn web_window_for_config(config: &WebBevyRendererConfig) -> Window {
             config.core.height.round() as u32,
         )
             .into(),
-        composite_alpha_mode: CompositeAlphaMode::PreMultiplied,
+        composite_alpha_mode: CompositeAlphaMode::Opaque,
         present_mode: PresentMode::AutoNoVsync,
         title: "Atome Bevy Renderer".to_string(),
-        transparent: true,
+        transparent: false,
         visible: true,
         ..default()
     }

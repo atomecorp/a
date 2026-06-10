@@ -68,6 +68,18 @@ fn text_node_with_texture(id: &str) -> AtomeRenderNode {
     }
 }
 
+fn assert_vec2_near(actual: Option<Vec2>, expected: Vec2) {
+    let actual = actual.expect("sprite custom size should be set");
+    assert!(
+        (actual.x - expected.x).abs() < 0.01,
+        "x: {actual:?} != {expected:?}"
+    );
+    assert!(
+        (actual.y - expected.y).abs() < 0.01,
+        "y: {actual:?} != {expected:?}"
+    );
+}
+
 #[test]
 fn plugin_spawns_projected_nodes_and_camera() {
     let scene = AtomeRenderScene {
@@ -109,6 +121,91 @@ fn transform_and_surface_patches_reproject_nodes() {
     assert_eq!(
         world.get::<Transform>(entity).unwrap().translation,
         Vec3::new(-88.0, 71.0, -3.0)
+    );
+}
+
+#[test]
+fn surface_background_stays_behind_atomes_and_outside_entity_table() {
+    let mut world = World::new();
+    world.insert_resource(AtomeEntityTable::default());
+    world.insert_resource(AtomeBevyRendererConfig::empty(640.0, 480.0));
+    world.insert_resource(AtomeRendererDiagnostics::default());
+    world.insert_resource(Assets::<Image>::default());
+
+    let atome_entity = apply_spawn(&mut world, shape_node("shape_above_background")).unwrap();
+    let background_entity = background::apply_surface_background(
+        &mut world,
+        AtomeSurfaceBackgroundPatch {
+            signature: "solid".to_string(),
+            color: [0.1, 0.1, 0.1, 1.0],
+            texture: None,
+        },
+    )
+    .unwrap();
+
+    assert!(world
+        .get::<AtomeSurfaceBackground>(background_entity)
+        .is_some());
+    assert_eq!(world.resource::<AtomeEntityTable>().by_id.len(), 1);
+    assert_eq!(
+        world
+            .resource::<AtomeEntityTable>()
+            .by_id
+            .get("shape_above_background"),
+        Some(&atome_entity)
+    );
+    assert!(world
+        .resource::<AtomeEntityTable>()
+        .by_id
+        .values()
+        .all(|entity| *entity != background_entity));
+    assert!(
+        world
+            .get::<Transform>(background_entity)
+            .unwrap()
+            .translation
+            .z
+            < world.get::<Transform>(atome_entity).unwrap().translation.z
+    );
+}
+
+#[test]
+fn surface_background_cover_size_tracks_surface_resize() {
+    let mut world = World::new();
+    world.insert_resource(AtomeEntityTable::default());
+    world.insert_resource(AtomeBevyRendererConfig::empty(640.0, 480.0));
+    world.insert_resource(AtomeRendererDiagnostics::default());
+    world.insert_resource(Assets::<Image>::default());
+
+    let background_entity = background::apply_surface_background(
+        &mut world,
+        AtomeSurfaceBackgroundPatch {
+            signature: "wide".to_string(),
+            color: [0.0, 0.0, 0.0, 1.0],
+            texture: Some(AtomeTexture {
+                width: 200,
+                height: 100,
+                rgba: vec![255; 200 * 100 * 4],
+            }),
+        },
+    )
+    .unwrap();
+
+    assert_vec2_near(
+        world.get::<Sprite>(background_entity).unwrap().custom_size,
+        Vec2::new(960.0, 480.0),
+    );
+    apply_surface(
+        &mut world,
+        AtomeSurfacePatch {
+            width: 300.0,
+            height: 300.0,
+        },
+    )
+    .unwrap();
+    assert_vec2_near(
+        world.get::<Sprite>(background_entity).unwrap().custom_size,
+        Vec2::new(600.0, 300.0),
     );
 }
 
