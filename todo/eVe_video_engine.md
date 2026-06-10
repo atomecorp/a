@@ -1,63 +1,351 @@
-# eVe Video Engine - Plan d'architecture, tests et controle qualite
+# eVe Video Engine - Unified Rendering Audit, Bevy Performance, and GPU Video Plan
 
-## Objectif non negociable
+## Purpose
 
-Construire un moteur video eVe/Bevy/WebGPU capable de servir une solution de montage et compositing video temps reel.
+This file is the single active planning source for the rendering and video-engine work that was previously split across:
 
-Critere cible:
+- `todo/full_rendering_audit.md`
+- `todo/solve_Bevy_perf.md`
+- `todo/eVe_video_engine.md`
 
-- 10 flux video simultanes dans le canvas Bevy.
-- 60 FPS constant sur la resolution courante du canvas et au DPI reel.
-- Drag et resize d'atomes sans degradation perceptible, avec ou sans lecture video.
-- Aucun chemin de lecture live base sur `canvas 2D -> getImageData -> RGBA -> WASM`.
-- Rendu video dans le canvas Bevy, sans overlay DOM visible.
-- Nettete pleine resolution: pas de downscale cache pour masquer un probleme de performance.
+Those files described one connected problem: the project canvas, Atome rendering, Bevy/WebGPU performance, and the future GPU-first video engine cannot be planned independently. This document keeps the audit gate, the current Bevy performance remediation, and the target video engine in one execution order.
 
-## Diagnostic de depart
+## Non-negotiable target
 
-Le pipeline actuel est trop lent pour du montage/compositing:
+Build an eVe/Bevy/WebGPU video engine capable of real-time editing and compositing:
+
+- 10 simultaneous video streams in the Bevy project canvas.
+- Stable 60 FPS at the current canvas resolution and real device pixel ratio.
+- Smooth Atome drag and resize with or without video playback.
+- No live playback route based on `canvas 2D -> getImageData -> RGBA -> WASM`.
+- Video rendered in the Bevy canvas, without visible DOM video overlays.
+- Full-resolution sharpness; no downscale cache used to hide performance problems.
+- One visible Bevy/WebGPU project canvas as the presentation surface.
+
+## Architectural rules
+
+1. Live video must not cross `ImageData`, `Uint8Array RGBA`, or `Vec<u8>` for playback.
+2. Drag and resize are priority interaction paths and must remain independent from video work.
+3. Video compositing belongs in Bevy/WebGPU, not DOM, not an intermediate 2D canvas.
+4. Persistent mutations must not execute during `pointermove`.
+5. Any optimization must be kept only when it improves a reproducible measurement.
+6. No fallback renderer, compatibility shim, or parallel old/new rendering path may become the product route.
+7. The DOM remains disposable projection only; canonical Atome state stays outside the DOM.
+
+## Current known state
+
+Already implemented or largely treated:
+
+- Bevy project rendering is the visible project canvas route.
+- Direct drag transform exists through `apply_atome_bevy_transform`.
+- `project_scene_direct_transform_runtime.js` applies direct runtime transform patches.
+- `project_scene_gesture_performance.test.mjs` covers direct transforms during drag.
+- `__EVE_BEVY_VIDEO_FRAME_VERSION_FOR_ID__` exists.
+- `AtomeVideoFrameCopies` exists in the Rust Bevy texture path.
+- Video texture copy is now version-gated so unchanged frames are not copied repeatedly.
+- A temporary WebGPU external texture probe exists in `temp/webgpu_external_video_probe.mjs`.
+- Media preview has a WebGPU external texture implementation in `eVe/domains/media/preview/webgpu_video_preview_renderer.js`.
+
+Still open:
+
+- The Bevy project renderer still uses `copy_external_image_to_texture` for live video texture upload.
+- The Bevy project renderer does not yet use `GPUExternalTexture` / `texture_external` for live project video.
+- `schedulePresentationRedrawPrime(..., 'diff')` still exists and must be audited for transform-only paths.
+- The latest Bevy canvas fluency report with 10 streams was `ok:false`, with playback p95 above target and `gpu_video_import` / `gpu_video_draw` at 0 for the Bevy project path.
+- `todo/WEBGPU_to_repair.md` has not been produced yet.
+
+## Phase A - Global Rendering / Atome / Storage Audit
+
+### Objective
+
+Produce a precise, complete, actionable audit of the display, rendering, manipulation, storage, and reading strategy for Atomes.
+
+This phase is analysis and documentation only. It must not modify application code.
+
+### Deliverable
+
+Create or update exactly:
 
 ```text
-HTMLVideoElement
--> canvas 2D drawImage
--> getImageData
--> Uint8 RGBA
--> JS/WASM
--> Bevy Image
--> upload GPU
--> canvas Bevy
+todo/WEBGPU_to_repair.md
 ```
 
-Ce chemin impose des copies CPU, bloque le thread principal, degrade la nettete si on reduit la texture, et entre en concurrence avec le drag/resize.
+The report must start with:
 
-Le pipeline cible doit etre:
+```text
+# Audit WebGPU / Canvas / Bevy / Atomes
+```
+
+### Audit scope
+
+Inspect and document:
+
+- WebGPU adapter/device/queue/surface initialization.
+- WebGPU error handling, device lost, context lost, and resource recreation.
+- Canvas creation, sizing, DPR, resize, viewport, focus/blur, zoom, and scroll behavior.
+- Bevy ECS architecture, schedules, systems, resources, commands, assets, diagnostics, WASM constraints, and per-frame work.
+- Atome model, parsing, serialization, deserialization, interpretation, state ownership, identity, and mutation flow.
+- Database and storage reads/writes, transactions, indexes, migrations, local/offline cache, and frame-critical access.
+- Rastering, cache, dirty regions, dirty Atomes, batching, instancing, culling, z-order, textures, redraw, zoom, and pan.
+- Refresh strategy, requestAnimationFrame use, redraw coalescing, Bevy redraw scheduling, and update loops.
+- Reliability around invalid data, empty/corrupt database, async races, WASM/Rust panics, background tabs, and large volumes.
+
+### Mandatory report structure
+
+`todo/WEBGPU_to_repair.md` must contain:
+
+1. `## 1. Resume executif`
+2. `## 2. Cartographie des fichiers inspectes`
+3. `## 3. Flux de donnees actuels`
+4. `## 4. Problemes critiques detectes`
+5. `## 5. Problemes de performance`
+6. `## 6. Problemes de fiabilite`
+7. `## 7. Analyse de la strategie actuelle d'affichage`
+8. `## 8. Analyse de la strategie de stockage des atomes`
+9. `## 9. Architecture recommandee`
+10. `## 10. Plan de reparation priorise`
+11. `## 11. Tests et instrumentation a ajouter`
+12. `## 12. Liste des hypotheses a verifier`
+13. `## 13. Conclusion technique`
+
+### Mandatory tables
+
+The report must include:
+
+```text
+| Zone | Fichiers inspectes | Role | Risque principal |
+|---|---|---|---|
+```
+
+```text
+| ID | Gravite | Zone | Probleme | Preuve dans le code | Impact | Correction recommandee |
+|---|---|---|---|---|---|---|
+```
+
+```text
+| ID | Zone | Symptome probable | Cause technique | Fichiers concernes | Correction | Gain attendu |
+|---|---|---|---|---|---|---|
+```
+
+```text
+| ID | Zone | Risque | Declencheur | Impact | Correction |
+|---|---|---|---|---|---|
+```
+
+```text
+| Priorite | Action | Fichiers concernes | Impact | Effort | Risque | Validation |
+|---|---|---|---|---|---|---|
+```
+
+```text
+| Hypothese | Pourquoi c'est suspect | Comment verifier |
+|---|---|---|
+```
+
+### Anti-patterns to inspect first
+
+1. Database reads during render loops.
+2. Database writes on every micro-change without batch/debounce.
+3. GPU texture recreation per frame.
+4. GPU buffer recreation per frame.
+5. Pipeline or bind group recreation without need.
+6. Full re-rastering after small changes.
+7. Systematic full redraws.
+8. Missing dirty flags.
+9. Missing memory cache for Atomes.
+10. Missing GPU/raster cache.
+11. Massive clones of Atome collections.
+12. Repeated serialization/deserialization.
+13. Direct database-to-render conversion without stable intermediate state.
+14. Coupling between storage, Atome logic, and rendering.
+15. Bevy systems running every frame without condition.
+16. Incorrect canvas/WebGPU resize handling.
+17. Missing device-lost strategy.
+18. Duplicate state between database, ECS, memory, and GPU.
+19. Fragile async handling.
+20. Missing performance instrumentation.
+
+### Commands and checks to document
+
+Before finalizing `todo/WEBGPU_to_repair.md`, inspect the project with targeted source searches. When applicable and safe, document relevant command results or why they were not run:
+
+```text
+rg "webgpu|wgpu|canvas|bevy|atom|atoms|raster|render|texture|buffer|pipeline|database|db|storage|cache|dirty|resize|viewport|requestAnimationFrame"
+cargo check
+cargo test
+npm run test:run -- tests/eve/project_scene_gesture_performance.test.mjs
+npm run test:run -- tests/eve/unified_rendering_contract.test.mjs
+npm run check:syntax
+```
+
+### Phase A exit criteria
+
+- `todo/WEBGPU_to_repair.md` exists.
+- It cites exact files, functions, modules, and systems.
+- It distinguishes facts from hypotheses.
+- It gives prioritized P0/P1/P2/P3 repairs.
+- It documents commands executed, failed, skipped, and why.
+- It is precise enough to repair the system without repeating the audit.
+
+## Phase B - Current Bevy Performance Stabilization
+
+### Objective
+
+Restore professional-level drag/resize fluidity with Bevy as the only visible project canvas renderer, without visible DOM rendering, without CPU video fallback for live playback, and without the old proprietary WebGPU renderer owning the canvas.
+
+### B1 - Video copy gating
+
+Status: largely treated, keep as regression guard.
+
+Observed problem:
+
+- Bevy copied `HTMLVideoElement` frames into Bevy textures during redraws.
+- Drag forced redraws.
+- If videos existed in the scene, frames could be recopied even when playback was stopped.
+
+Required invariant:
+
+- Copy video texture data only when a newly decoded frame is available.
+- Use `__EVE_BEVY_VIDEO_FRAME_VERSION_FOR_ID__`.
+- Keep a render-world cache of the last copied frame version for each video Atome.
+- Do not call `copy_external_image_to_texture` if the frame has not changed.
+
+Current evidence:
+
+- `eVe/domains/rendering/bevy_video_decode_source_runtime.js` exposes `__EVE_BEVY_VIDEO_FRAME_VERSION_FOR_ID__`.
+- `atome/renderers/bevy-core/src/video_texture.rs` owns `AtomeVideoFrameCopies`.
+- `tests/eve/bevy_project_renderer_guards.test.mjs` guards the version/copy path.
+
+Validation:
+
+```text
+npm run test:run -- tests/eve/bevy_video_decode_source_runtime.test.mjs
+npm run test:run -- tests/eve/bevy_project_renderer_guards.test.mjs
+```
+
+### B2 - Redraw primes on transform
+
+Status: partially open.
+
+Observed problem:
+
+- `schedulePresentationRedrawPrime` schedules delayed redraws.
+- It can still be called after diffs.
+- Transform-heavy paths must not accumulate delayed redraws during drag/resize.
+
+Required action:
+
+- Keep redraw primes only for start, resize, spawn/resource/media priming, or another documented presentation need.
+- For transform-only updates, use one coalesced redraw.
+- Prove transform-only drag/resize does not create a delayed redraw backlog.
+
+Validation:
+
+```text
+npm run test:run -- tests/eve/project_scene_gesture_performance.test.mjs
+BEVY_FLUENCY_VIDEO_STREAMS=1 node temp/bevy_canvas_fluency_probe.mjs
+```
+
+### B3 - Direct drag transform path
+
+Status: treated, keep as regression guard.
+
+Required invariant:
+
+```text
+pointermove
+-> hit test runtime
+-> local prop calculation
+-> apply_atome_bevy_transform
+-> coalesced redraw
+```
+
+Forbidden during `pointermove`:
+
+- `Atome.commit`
+- `Atome.commitBatch`
+- network sync
+- full scene rebuild
+- video upload
+- `getImageData`
+- video decode
+- texture create/destroy
+
+Current evidence:
+
+- `eVe/domains/rendering/project_scene_direct_transform_runtime.js`
+- `applyBevyWebRendererTransformPatch`
+- `tests/eve/project_scene_gesture_performance.test.mjs`
+
+Validation:
+
+```text
+npm run test:run -- tests/eve/project_scene_gesture_performance.test.mjs
+npm run test:run -- tests/eve/project_scene_multi_selection_transform.test.mjs
+npm run test:run -- tests/eve/project_scene_stale_drag_regression.test.mjs
+```
+
+### B4 - Instrumentation if performance remains below target
+
+Status: partially open.
+
+Measure:
+
+- pointer event duration
+- `applyGestureFrame`
+- projection runtime
+- VirtualScene diff
+- WASM `apply_atome_bevy_transform`
+- Bevy redraw
+- operations per frame
+- redraw requests
+- video copies performed
+- video copies skipped
+- GPU external video imports/draws
+
+Output:
+
+```text
+temp/probe_reports/bevy_canvas_fluency_probe/report.json
+temp/probe_reports/bevy_canvas_fluency_probe/timeline.json
+```
+
+Validation:
+
+- Probe output reports FPS, video FPS, copy counts, redraw counts, frame p50/p95/p99, and gaps.
+
+### B5 - Minimal Bevy isolation if the problem persists
+
+Status: diagnostic fallback.
+
+Create minimal comparison scenarios only if Phase B4 still shows unexplained gaps:
+
+- Bevy scene with shapes/images/text, no videos.
+- Same scene with videos present but video copies disabled.
+- Same scene with direct transform only.
+- Compare WebKit, Tauri, Safari, and Chromium.
+
+Decision:
+
+- If the minimal case still stutters, investigate Bevy/WASM/WebKit/Tauri integration, present mode, wake loop, and render loop configuration.
+
+## Phase C - GPU-First Video Engine
+
+### Objective
+
+Replace live video playback copying with a GPU-first route:
 
 ```text
 Decode video
--> GPUExternalTexture / VideoFrame GPU
--> material/render node Bevy dedie
--> shader WGSL compositing
--> render pass Bevy canvas
+-> GPUExternalTexture / native decoded texture
+-> Bevy material or render node
+-> WGSL compositing
+-> Bevy project canvas
 ```
 
-References techniques:
+The existing RGBA texture path may remain only for debug, poster frame, or explicitly non-live extraction. It must not be the live playback engine.
 
-- MDN `GPUDevice.importExternalTexture`: https://developer.mozilla.org/en-US/docs/Web/API/GPUDevice/importExternalTexture
-- WebGPU external video textures: https://webgpufundamentals.org/webgpu/lessons/webgpu-textures-external-video.html
-- WebGPU explainer `GPUExternalTexture`: https://gpuweb.github.io/gpuweb/explainer/
-
-## Principes d'architecture
-
-1. La video live ne doit jamais traverser `ImageData`, `Uint8Array RGBA`, ni `Vec<u8>` pour la lecture.
-2. Le drag/resize est un pipeline prioritaire et independant de la video.
-3. Le compositing video se fait dans Bevy/WebGPU, pas dans le DOM, pas dans un canvas 2D intermediaire.
-4. Les mutations persistantes ne doivent pas etre executees pendant `pointermove`.
-5. Les tests doivent mesurer le comportement reel avec Playwright et logs de timeline, pas seulement des tests unitaires.
-6. Chaque optimisation doit etre conservee uniquement si elle ameliore une mesure reproductible.
-
-## Architecture cible
-
-### Modules
+### Target modules
 
 ```text
 eVe/domains/media/bevy_video_engine_runtime.js
@@ -72,261 +360,71 @@ atome/renderers/bevy-core/src/video_material.rs
 atome/renderers/bevy-core/assets/shaders/video_external.wgsl
 ```
 
-### Responsabilites
+Create these only if the existing architecture cannot host the responsibility cleanly. Before creating them, inspect maps and current rendering modules.
 
-`bevy_video_engine_runtime.js`
+### Responsibilities
 
-- Gere les pistes video actives.
-- Gere play/pause/stop.
-- Gere le mapping `atome_id -> video source`.
-- Expose une API stable au reste de eVe.
-- Ne gere pas le drag/resize.
+`bevy_video_engine_runtime.js`:
 
-`bevy_video_timeline_runtime.js`
+- Manage active video tracks.
+- Manage play, pause, and stop.
+- Manage `atome_id -> video source`.
+- Expose a stable API to eVe.
+- Never own drag/resize behavior.
 
-- Gere playhead, vitesse, loop, offset, trim in/out.
-- Synchronise les pistes.
-- Prepare le futur montage multipiste.
+`bevy_video_timeline_runtime.js`:
 
-`bevy_web_video_bridge.js`
+- Manage playhead, speed, loop, offset, trim in/out.
+- Synchronize tracks.
+- Prepare future multi-track editing.
 
-- Interface web specifique `GPUExternalTexture`.
-- Cree les bind groups video par frame si necessaire.
-- Gere les contraintes d'expiration des external textures.
-- Ne fait aucun `getImageData`.
+`bevy_web_video_bridge.js`:
 
-`video_external.rs`
+- Own web-specific `GPUExternalTexture` interaction.
+- Import external textures in the frame where they are drawn.
+- Manage bind group validity.
+- Never call `getImageData`.
 
-- Integre les ressources video web au renderer Bevy.
-- Fournit un render path dedie aux quads video.
-- Isole le code web/WASM du core multiplateforme.
+`video_external.rs`:
 
-`video_compositor.rs`
+- Integrate web video resources into the Bevy renderer.
+- Provide a dedicated video quad render path.
+- Isolate web/WASM-specific code from portable core logic.
 
-- Gere z-order, opacity, transforms, blend modes.
-- Prepare les operations de compositing.
-- Doit rester compatible avec une implementation native Tauri/iOS future.
+`video_compositor.rs`:
 
-`video_external.wgsl`
+- Own z-order, opacity, transform, UV/crop, and blend-mode preparation.
+- Stay compatible with future native Tauri/iOS decoded texture routes.
+
+`video_external.wgsl`:
 
 - Sample `texture_external`.
-- Utilise `textureSampleBaseClampToEdge`.
-- Applique color space, opacity, alpha, crop, transform UV.
+- Use `textureSampleBaseClampToEdge`.
+- Apply color space, opacity, alpha, crop, and transform UV.
 
-## Pipeline interaction canvas
+### C1 - WebGPU external texture prototype
 
-Le drag/resize doit rester minimal:
+Status: explored in `temp/webgpu_external_video_probe.mjs`, keep as proof and regression reference.
 
-```text
-pointermove
--> hit test runtime
--> calcul props locales
--> apply_atome_bevy_transform
--> request redraw coalesce
-```
+Acceptance:
 
-Interdit pendant `pointermove`:
+- 10 videos visible in one WebGPU canvas.
+- 60 FPS p95 <= 18 ms.
+- No `getImageData`.
+- No RGBA live upload.
+- Full canvas/DPI sharpness.
 
-- `Atome.commit`
-- `Atome.commitBatch`
-- sync reseau
-- rebuild complet de scene
-- upload video
-- `getImageData`
-- decode video
-- creation/destruction de textures
-
-Commit final:
-
-```text
-pointerup
--> commit canonique unique
--> sync/realtime/history
-```
-
-## Pipeline video web cible
-
-Par frame:
-
-```text
-requestAnimationFrame
--> lire playhead global
--> importer les videos dues via device.importExternalTexture({ source: video })
--> construire bind groups video courants
--> render Bevy video pass
--> render overlays/selection/atoms
--> present canvas
-```
-
-Contraintes:
-
-- `GPUExternalTexture` cree depuis `HTMLVideoElement` expire vite; importer chaque frame ou chaque draw necessaire.
-- Les bind groups video doivent etre recrees ou recycles selon validite.
-- Cross-origin doit etre gere proprement: CORS valide ou source locale.
-- Pas de fallback silencieux vers RGBA live.
-
-## Phases d'implementation
-
-### Phase 0 - Etat propre et baseline
-
-Objectif:
-
-- Repartir de l'etat rollback utilisateur ou drag/resize est fluide sans video.
-- Ne pas reintroduire les changements experimentaux non prouves.
-
-Actions:
-
-- Lire `git status`.
-- Identifier les fichiers modifies.
-- Verifier que le drag/resize est fluide sans video.
-- Lancer un probe baseline sans lecture video.
-
-Tests:
-
-```text
-npm run test:run -- tests/eve/project_scene_gesture_performance.test.mjs
-npm run test:run -- tests/eve/unified_rendering_contract.test.mjs
-npm run check:syntax
-```
-
-Probe:
-
-```text
-node temp/bevy_canvas_fluency_probe.mjs
-```
-
-Critere d'acceptation:
-
-- Drag p95 <= 18 ms.
-- Resize p95 <= 18 ms.
-- Aucun `gesture_frame` ou commit pendant `pointermove`.
-- Aucun appel video dans les logs pendant drag sans lecture.
-
-Critere de refus:
-
-- Un commit ou sync apparait pendant `pointermove`.
-- Un rebuild complet de scene apparait pendant `pointermove`.
-
-### Phase 1 - Instrumentation de diagnostic
-
-Objectif:
-
-- Mesurer exactement les blocages.
-
-Actions:
-
-- Ajouter logs de probe uniquement, pas de logs produit permanents.
-- Enregistrer:
-  - `pointerdown`, `pointermove`, `pointerup`;
-  - gaps RAF;
-  - appels Bevy transform/resource/redraw;
-  - commits Atome;
-  - video import/upload;
-  - drawImage/getImageData si present;
-  - phase active: setup, playback, drag, resize.
-
-Sorties:
-
-```text
-temp/probe_reports/bevy_canvas_fluency_probe/report.json
-temp/probe_reports/bevy_canvas_fluency_probe/timeline.json
-```
-
-Critere d'acceptation:
-
-- Le probe produit une timeline exploitable.
-- Chaque gap > 24 ms est visible et correle a une operation.
-
-Critere de refus:
-
-- Logs incomplets.
-- Logs uniquement console sans fichier exploitable.
-
-### Phase 2 - Decouplage interaction/video
-
-Objectif:
-
-- La video ne doit jamais bloquer le drag/resize.
-
-Actions:
-
-- Isoler le moteur video dans `bevy_video_engine_runtime.js`.
-- Interdire les operations video pendant session pointer active.
-- Verifier que le moteur video ne touche pas aux mutations d'atomes.
-- Verifier que drag/resize n'appelle pas les APIs video.
-
-Tests:
-
-```text
-npm run test:run -- tests/eve/project_scene_gesture_performance.test.mjs
-npm run test:run -- tests/eve/project_scene_multi_selection_transform.test.mjs
-npm run test:run -- tests/eve/project_scene_stale_drag_regression.test.mjs
-```
-
-Probe:
-
-```text
-BEVY_FLUENCY_VIDEO_STREAMS=1 node temp/bevy_canvas_fluency_probe.mjs
-BEVY_FLUENCY_VIDEO_STREAMS=2 node temp/bevy_canvas_fluency_probe.mjs
-```
-
-Critere d'acceptation:
-
-- Drag p95 <= 18 ms avec video active.
-- Resize p95 <= 18 ms avec video active.
-- Aucun upload video pendant interaction active.
-- Aucun commit pendant `pointermove`.
-
-Critere de refus:
-
-- Un pic de drag est correle a une operation video.
-- La video modifie le runtime d'interaction.
-
-### Phase 3 - Prototype WebGPU external texture hors Bevy
-
-Objectif:
-
-- Prouver que 10 videos peuvent etre samplees sans copie CPU dans un canvas WebGPU minimal.
-
-Actions:
-
-- Creer un prototype temporaire dans `temp/`.
-- Utiliser `navigator.gpu`.
-- Utiliser `device.importExternalTexture({ source: video })`.
-- Shader WGSL avec `texture_external`.
-- Dessiner 10 quads video.
-- Mesurer FPS et frame gaps.
-
-Tests:
+Validation:
 
 ```text
 node temp/webgpu_external_video_probe.mjs
 ```
 
-Critere d'acceptation:
+### C2 - Bevy web renderer integration
 
-- 10 videos visibles dans un canvas WebGPU.
-- 60 FPS p95 <= 18 ms.
-- Aucun `getImageData`.
-- Aucun upload RGBA.
-- Nettete full canvas/DPI.
+Status: open.
 
-Critere de refus:
-
-- Fallback canvas 2D.
-- Downscale cache.
-- 10 flux sous 60 FPS.
-
-### Phase 4 - Integration Bevy web renderer
-
-Objectif:
-
-- Integrer le chemin GPU externe dans le renderer Bevy web.
-
-Actions:
-
-- Ajouter un type `AtomeVideoTrack`.
-- Ajouter une op Bevy web:
+Add or expose:
 
 ```text
 apply_atome_bevy_video_track(track)
@@ -334,54 +432,54 @@ remove_atome_bevy_video_track(id)
 update_atome_bevy_video_transform(id, transform)
 ```
 
-- Ajouter render node ou pipeline dedie video.
-- Ajouter shader `video_external.wgsl`.
-- Garder les sprites/images existants hors du chemin video.
+Implement:
 
-Tests Rust:
+- `AtomeVideoTrack` type or equivalent canonical track payload.
+- Dedicated video render node or pipeline.
+- `video_external.wgsl`.
+- Existing sprite/image path remains separate from video.
+- Project video rendering stays in `canvas#eve_surface_project`.
+
+Acceptance:
+
+- A Bevy project video uses the external texture path.
+- The live playback route does not call `getImageData`.
+- The live playback route does not convert video frames into Bevy `Image` via RGBA.
+- No visible DOM video is used for project presentation.
+
+Validation:
 
 ```text
 cargo check
 cargo test
 ./platforms/web/bevy-renderer/build.sh
-```
-
-Tests JS:
-
-```text
 npm run test:run -- tests/eve/selected_project_media_playback_runtime.test.mjs
 npm run test:run -- tests/eve/unified_rendering_contract.test.mjs
 npm run check:syntax
 ```
 
-Critere d'acceptation:
+### C3 - Multi-track compositing
 
-- Une video Bevy utilise le chemin external texture.
-- Le chemin RGBA n'est pas appele pour la lecture live.
-- Rendu dans `canvas#eve_surface_project`.
+Status: open.
 
-Critere de refus:
+Implement:
 
-- `getImageData` appele pendant lecture live.
-- Texture video convertie en `Image`.
-- Rendu hors canvas Bevy.
+- z-index per track
+- opacity
+- normal/add/multiply/screen blend modes if supported
+- crop/UV rect
+- transform per track
+- timeline preparation: start, duration, trim in/out
 
-### Phase 5 - Multipiste et compositing
+Acceptance:
 
-Objectif:
+- 10 visible streams.
+- Stable playback p95 <= 18 ms.
+- No RAF gap > 34 ms in stable playback.
+- Drag/resize during playback p95 <= 18 ms.
+- No quality loss compared to canvas DPI.
 
-- 10 pistes video simultanees avec compositing.
-
-Actions:
-
-- Ajouter z-index par piste.
-- Ajouter opacity.
-- Ajouter blend mode normal/add/multiply/screen si supporte.
-- Ajouter crop/UV rect.
-- Ajouter transform par piste.
-- Ajouter preparation timeline: start, duration, trim in/out.
-
-Tests:
+Validation:
 
 ```text
 BEVY_FLUENCY_VIDEO_STREAMS=1 node temp/bevy_canvas_fluency_probe.mjs
@@ -390,37 +488,21 @@ BEVY_FLUENCY_VIDEO_STREAMS=4 node temp/bevy_canvas_fluency_probe.mjs
 BEVY_FLUENCY_VIDEO_STREAMS=10 node temp/bevy_canvas_fluency_probe.mjs
 ```
 
-Critere d'acceptation:
+### C4 - Quality, maps, and final cleanup
 
-- 10 flux visibles.
-- 60 FPS: p95 <= 18 ms, max acceptable documente.
-- Aucun trou RAF > 34 ms en lecture stable.
-- Drag/resize pendant lecture: p95 <= 18 ms.
-- Pas de perte de nettete vs canvas DPI.
-
-Critere de refus:
-
-- Une seule frame > 50 ms correlee au moteur video.
-- Tout fallback CPU pendant lecture.
-- Video pixelisee par downscale interne.
-
-### Phase 6 - Qualite, regression et nettoyage
-
-Objectif:
-
-- Stabiliser et nettoyer.
+Status: open.
 
 Actions:
 
-- Supprimer probes temporaires inutiles.
-- Garder uniquement les probes utiles sous `temp/` si la convention projet l'accepte.
-- Mettre a jour:
-  - `maps/CODEMAP.md`;
-  - `maps/API_MAP.md`;
-  - tests de contrat.
-- Documenter les limites navigateur.
+- Remove obsolete temporary probes and failed experiments.
+- Keep useful probes under `temp/` only when they remain intentional diagnostics.
+- Update `maps/CODEMAP.md`.
+- Update `maps/API_MAP.md`.
+- Update `maps/ARCHITECTURE_MAP.md` when ownership or lifecycle changes.
+- Update `maps/DESIGN_MAP.md` only if user-visible visual contracts or design tokens change.
+- Document browser limits for `GPUExternalTexture`.
 
-Tests finaux:
+Final validation:
 
 ```text
 cargo test
@@ -432,74 +514,59 @@ npm run check:syntax
 BEVY_FLUENCY_VIDEO_STREAMS=10 node temp/bevy_canvas_fluency_probe.mjs
 ```
 
-Critere d'acceptation final:
+## Required metrics in every progress report
 
-- Tests automatises verts.
-- Probe 10 flux vert.
-- Timeline sans `getImageData`.
-- Timeline sans commit pendant drag/resize.
-- Canvas unique Bevy.
-- Pas de DOM video visible dans la scene.
-- DPI respecte.
-
-## Controle qualite obligatoire
-
-### Metrics a publier dans chaque rapport
-
-- FPS moyen.
+- Average FPS.
 - Frame p50/p95/p99.
-- Nombre de frames > 24 ms.
-- Nombre de frames > 34 ms.
-- Nombre de frames > 50 ms.
-- Nombre de `pointermove`.
-- Nombre de transform patches.
-- Nombre de commits pendant mouvement.
-- Nombre de video imports.
-- Nombre de readbacks CPU.
-- Nombre de redraws.
-- DPI canvas CSS/pixel.
+- Number of frames > 24 ms.
+- Number of frames > 34 ms.
+- Number of frames > 50 ms.
+- Number of `pointermove` events.
+- Number of transform patches.
+- Number of commits during movement.
+- Number of video imports.
+- Number of CPU readbacks.
+- Number of redraws.
+- Canvas CSS size and pixel size / DPR.
 
-### Definition de "fluide"
+## Definition of fluid
 
-Lecture seule:
+Playback:
 
 - p95 <= 18 ms.
-- aucun gap > 34 ms sur 10 secondes.
-- aucun readback CPU.
+- no gap > 34 ms over a 10 second stable sample.
+- no CPU readback.
 
 Drag/resize:
 
 - p95 <= 18 ms.
-- aucun commit pendant mouvement.
-- aucune operation video pendant interaction active.
-- aucune perte de suivi entre pointeur et atome.
+- no commit during movement.
+- no video operation during active interaction.
+- no loss of pointer-to-Atome tracking.
 
-Qualite image:
+Image quality:
 
-- pas de downscale cache.
-- video samplee a la resolution source ou a la resolution necessaire au canvas DPI.
-- aucune pixelisation introduite par le moteur.
+- no downscale cache.
+- video sampled at source resolution or at the resolution required by canvas DPI.
+- no pixelation introduced by the engine.
 
-## Risques connus
+## Known risks
 
-- `GPUExternalTexture` n'est pas disponible partout et depend du navigateur.
-- Les external textures expirent vite; il faut recreer/importer dans la frame courante.
-- CORS peut bloquer les sources distantes.
-- Bevy peut ne pas exposer directement toute l'API necessaire; il faudra peut-etre un render node wgpu specifique web.
-- Tauri/iOS auront un chemin natif different.
+- `GPUExternalTexture` availability depends on browser support.
+- External textures expire quickly and must be imported in the current frame/draw window.
+- CORS can block remote media.
+- Bevy may require a specific wgpu render node for web video.
+- Tauri and iOS need a different native decoded-texture path.
+- If native Bevy commands exist without a presentable surface, the web canvas must remain the visible renderer.
 
-## Decision d'architecture
+## Final acceptance
 
-Le chemin RGBA actuel peut rester uniquement comme fallback de debug ou poster frame, jamais comme moteur de lecture live.
+This file is complete only when:
 
-La solution professionnelle est un moteur video GPU-first:
+- `todo/WEBGPU_to_repair.md` exists and Phase A is closed.
+- Current Bevy drag/resize performance regressions are closed or explicitly documented with evidence.
+- Live project video playback uses a GPU-first route instead of RGBA live copying.
+- 10 project video streams pass the Bevy canvas fluency probe.
+- Maps and tests reflect the final architecture.
 
-```text
-GPUExternalTexture pour web
-texture native decodee pour Tauri/iOS
-compositing Bevy/WGSL
-interaction canvas isolee
-tests Playwright instrumentes
-```
-
-Tant que cette architecture n'est pas en place, 10 flux a 60 FPS net et stable ne peut pas etre considere comme livre.
+Until then, 10 sharp video streams at stable 60 FPS cannot be considered delivered.
