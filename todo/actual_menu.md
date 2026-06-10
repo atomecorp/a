@@ -43,7 +43,7 @@ Any rebuild that treats the current system as one renderer will fail because the
 | Main ribbon shell | `eVe/intuition/ribbon/menu.js` | Bottom menu layout, reveal, overflow, palette expansion, quick capture, drag-to-delete preview, latched and external-open sync |
 | Main ribbon bootstrap | `eVe/intuition/menu/index.js` and `eVe/intuition/eVeIntuition.js` | Creates the ribbon, binds auth gate, registers tool handlers, routes tool activation |
 | Flower view | `eVe/intuition/flower/menu.js` | Generic radial menu UI, submenu stack, animations, hover state, draggable tool payloads |
-| Flower contextual runtime | `eVe/intuition/tools/contextual/flower_menu_context.js` | Long press, contextmenu, drag-hover activation, blocker detection, preview interaction suspension |
+| Flower contextual runtime | `eVe/intuition/flower/context.js` | Long press, contextmenu, hold-hover activation, blocked-target detection, drag-start cancel |
 | Flower context resolution | `eVe/intuition/flower/context_target.js`, `eVe/intuition/flower/context_selection.js`, `eVe/intuition/eVeIntuition.js` | Determines target, selection mode, kind, and which items appear |
 | Floating Atome footer | `eVe/intuition/footer/runtime.js` | Anchored close-variant ribbon used as the floating footer shell |
 | Footer tool-definition and selection runtime | `eVe/intuition/eVeIntuition.js` | Kind defaults, selection-bound payloads, double-click open/close logic, MTraX redirect, public footer API |
@@ -214,7 +214,7 @@ The flower is a transient contextual radial menu. It is opened from the current 
 The key architectural split is:
 
 - `eVe/intuition/flower/menu.js`: generic radial menu UI.
-- `eVe/intuition/tools/contextual/flower_menu_context.js`: runtime that decides when, where, and why the flower opens.
+- `eVe/intuition/flower/context.js`: runtime that decides when, where, and why the flower opens.
 
 The flower view is reusable. The flower context runtime is the production owner.
 

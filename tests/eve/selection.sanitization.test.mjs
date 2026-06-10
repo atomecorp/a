@@ -70,13 +70,6 @@ assert.doesNotMatch(flowerContextTargetSource, /host\.dataset\?\.toolShortcut/);
 assert.doesNotMatch(flowerContextTargetSource, /host\.dataset\?\.atomeRole/);
 assert.doesNotMatch(flowerContextTargetSource, /data-tool-shortcut/);
 
-const flowerMenuContextSource = readFileSync(new URL('../../eVe/intuition/tools/contextual/flower_menu_context.js', import.meta.url), 'utf8');
-assert.doesNotMatch(flowerMenuContextSource, /host\.dataset\?\.toolShortcut/);
-assert.doesNotMatch(flowerMenuContextSource, /host\.dataset\?\.atomeRole/);
-assert.doesNotMatch(flowerMenuContextSource, /host\.getAttribute\?\('data-tool-shortcut'\)/);
-assert.doesNotMatch(flowerMenuContextSource, /atomeHost\.dataset\?\.atomeRole/);
-assert.doesNotMatch(flowerMenuContextSource, /projectRoot\.dataset\?\.projectId/);
-
 const performSource = readFileSync(new URL('../../eVe/intuition/tools/perform.js', import.meta.url), 'utf8');
 assert.doesNotMatch(performSource, /element\.dataset\?\.toolShortcut/);
 assert.doesNotMatch(performSource, /element\.dataset\?\.atomeRole/);

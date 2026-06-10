@@ -1,4 +1,5 @@
 use bevy::{
+    image::ImageSampler,
     prelude::*,
     render::render_resource::{TextureFormat, TextureUsages},
 };
@@ -38,6 +39,29 @@ fn video_node(id: &str) -> AtomeRenderNode {
         source: Some("/fixtures/video.mp4".to_string()),
         texture_size: None,
         texture: None,
+        peaks: None,
+        playback_progress: None,
+        selected: None,
+    }
+}
+
+fn text_node_with_texture(id: &str) -> AtomeRenderNode {
+    AtomeRenderNode {
+        id: id.to_string(),
+        kind: "text".to_string(),
+        parent_id: None,
+        logical_position: [18.0, 26.0],
+        logical_size: [80.0, 30.0],
+        layer: 5,
+        color: Some([1.0, 1.0, 1.0, 1.0]),
+        text: Some("Sharp".to_string()),
+        source: None,
+        texture_size: None,
+        texture: Some(AtomeTexture {
+            width: 160,
+            height: 60,
+            rgba: vec![255; 160 * 60 * 4],
+        }),
         peaks: None,
         playback_progress: None,
         selected: None,
@@ -193,6 +217,28 @@ fn video_nodes_spawn_bevy_gpu_texture_target_without_cpu_frame_data() {
     assert!(world
         .get::<video_texture::AtomeVideoTexture>(entity)
         .is_some());
+}
+
+#[test]
+fn imported_text_textures_use_linear_sampling_without_changing_logical_size() {
+    let mut world = World::new();
+    world.insert_resource(AtomeEntityTable::default());
+    world.insert_resource(AtomeBevyRendererConfig::empty(640.0, 480.0));
+    world.insert_resource(AtomeRendererDiagnostics::default());
+    world.insert_resource(Assets::<Image>::default());
+
+    let entity = apply_spawn(&mut world, text_node_with_texture("sampled_text")).unwrap();
+
+    let sprite = world.get::<Sprite>(entity).unwrap();
+    assert_eq!(sprite.custom_size, Some(Vec2::new(80.0, 30.0)));
+    let image = world
+        .resource::<Assets<Image>>()
+        .get(&sprite.image)
+        .expect("text sprite should reference a Bevy image");
+    assert_eq!(image.texture_descriptor.size.width, 160);
+    assert_eq!(image.texture_descriptor.size.height, 60);
+    assert!(matches!(image.sampler, ImageSampler::Descriptor(_)));
+    assert_eq!(image.sampler, ImageSampler::linear());
 }
 
 #[test]

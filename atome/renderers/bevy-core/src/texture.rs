@@ -1,6 +1,6 @@
 use bevy::{
     asset::RenderAssetUsages,
-    image::Image,
+    image::{Image, ImageSampler},
     prelude::*,
     render::render_resource::{Extent3d, TextureDimension, TextureFormat},
 };
@@ -15,7 +15,7 @@ fn image_from_texture(texture: &AtomeTexture, id: &str) -> Result<Image, String>
     if texture.rgba.len() != expected_len {
         return Err(format!("bevy_texture_rgba_length_invalid:{id}"));
     }
-    Ok(Image::new(
+    let mut image = Image::new(
         Extent3d {
             width: texture.width,
             height: texture.height,
@@ -25,7 +25,9 @@ fn image_from_texture(texture: &AtomeTexture, id: &str) -> Result<Image, String>
         texture.rgba.clone(),
         TextureFormat::Rgba8UnormSrgb,
         RenderAssetUsages::default(),
-    ))
+    );
+    image.sampler = ImageSampler::linear();
+    Ok(image)
 }
 
 pub fn image_handle_from_texture(
