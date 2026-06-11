@@ -432,6 +432,18 @@ Role:
 
 Design rule: icon styling belongs in visual factories or tokens. Do not duplicate SVG variants just to express state when color/filter/mask tokens can express it.
 
+## Login Sequence Surface
+
+Primary source: `eVe/intuition/tools/user_login_sequence.js`
+
+Role:
+
+- Owns the unauthenticated initial login sequence visual surface: black full-screen shell, top instruction, central mirrored input value/cursor, and bottom Atome logo validation control.
+- Reuses eVe design factories for text, phone input, and password input. The bottom validation control reuses the shared disconnected Atome handle pulse from `eVe/intuition/ribbon/disconnected_handle_logo.js`, because the generic button factory clamps text and is not a stable host for nested logo chrome.
+- Uses `eVe/i18n/languages.js` keys under `eve.user.login_sequence.*` for visible and assistive text.
+
+Design rule: this surface must remain minimal and must not reintroduce the legacy compact phone/password panel as the initial unauthenticated login UI.
+
 ## Validation Expectations
 
 For any design change:

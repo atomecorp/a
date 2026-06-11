@@ -53,12 +53,39 @@ assert.equal(typeof window.open_home_panel, 'function', 'open_home_panel must be
 
 const authOpen = await window.open_home_panel({ source: { type: 'user_panel_contract.auth' } });
 assert.equal(authOpen.ok, true, 'auth panel open must succeed');
-assert.equal(authOpen.panel_id, 'eve_auth_dialog', 'anonymous state must open auth dialog');
+assert.equal(authOpen.panel_id, 'eve_login_sequence', 'anonymous state must open login sequence');
 
+const loginSequence = document.getElementById('eve_login_sequence');
+assert.equal(loginSequence?.style?.display, 'block', 'login sequence must be visible');
+assert.equal(
+    document.getElementById('eve_login_sequence__instruction')?.textContent,
+    'Entrez votre téléphone',
+    'login sequence must start on the phone step'
+);
+await new Promise((resolve) => setTimeout(resolve, 0));
+assert.equal(
+    document.activeElement?.id,
+    'eve_login_sequence__phone_input',
+    'phone input must receive initial focus'
+);
+const logoButton = document.getElementById('eve_login_sequence__logo');
+assert.equal(logoButton?.style?.background, 'transparent', 'login validation logo must not render a square background');
+assert.equal(logoButton?.style?.border, '0px', 'login validation logo must not render a rounded square border');
+assert.equal(logoButton?.style?.boxShadow, 'none', 'login validation logo must not render a panel shadow');
+assert.equal(logoButton?.style?.position, 'fixed', 'login validation logo must stay pinned to the page bottom');
+const logoImage = logoButton?.querySelector?.('img');
+assert.ok(logoImage?.src?.includes('atome.svg'), 'login validation control must render the pulsing Atome logo image');
 const authBody = document.getElementById('eve_auth_dialog__body');
 const authFooter = document.getElementById('eve_auth_dialog__body_footer');
-assert.ok(authBody?.children?.length > 0, 'auth dialog body must contain login fields');
-assert.ok(authFooter?.children?.length > 0, 'auth dialog footer must contain actions');
+assert.equal(document.getElementById('eve_auth_dialog')?.style?.display, 'none', 'old auth dialog must stay hidden');
+assert.equal(authFooter?.children?.length || 0, 0, 'old auth dialog footer must not keep login actions');
+[
+    'eve_auth_dialog__phone',
+    'eve_auth_dialog__password',
+    'eve_auth_dialog__actions'
+].forEach((id) => {
+    assert.equal(document.getElementById(id), null, `${id} must not remain in the old auth dialog`);
+});
 
 window.__authCheckResult = {
     complete: true,
@@ -78,6 +105,11 @@ const userBody = document.getElementById('eve_user_dialog__body');
 const userFooter = document.getElementById('eve_user_dialog__body_footer');
 assert.ok(userBody?.children?.length > 0, 'user dialog body must contain profile fields');
 assert.ok(userFooter?.children?.length > 0, 'user dialog footer must contain actions');
+assert.equal(
+    document.getElementById('eve_user_dialog__actions__create'),
+    null,
+    'user dialog footer must not expose the create user action'
+);
 
 [
     'eve_user_dialog__name',
@@ -89,6 +121,44 @@ assert.ok(userFooter?.children?.length > 0, 'user dialog footer must contain act
 ].forEach((id) => {
     assert.ok(document.getElementById(id), `${id} must exist`);
 });
+
+const { createUserLoginSequence } = await import('../../eVe/intuition/tools/user_login_sequence.js');
+const spoken = [];
+const heard = ['0612345678', 'oui', 'secret vocal', 'oui'];
+window.Squirrel = window.Squirrel || {};
+window.Squirrel.voice = {
+    speak: async (text) => {
+        spoken.push(String(text || ''));
+        return { ok: true };
+    },
+    listen: async () => ({ text: heard.shift() || '' })
+};
+let submittedLogin = null;
+const sequence = createUserLoginSequence({
+    onSubmit: async (payload) => {
+        submittedLogin = payload;
+        return { ok: true };
+    },
+    documentRef: document
+});
+sequence.open();
+const sequenceRoot = document.getElementById('eve_login_sequence');
+sequenceRoot.dispatchEvent(new window.MouseEvent('pointerdown', { bubbles: true }));
+await new Promise((resolve) => setTimeout(resolve, 720));
+assert.equal(
+    document.getElementById('eve_login_sequence__instruction')?.textContent,
+    'Entrez votre mot de passe',
+    'voice-confirmed phone must advance to password step'
+);
+sequenceRoot.dispatchEvent(new window.MouseEvent('pointerdown', { bubbles: true }));
+await new Promise((resolve) => setTimeout(resolve, 720));
+assert.equal(submittedLogin?.phone, '0612345678', 'voice phone must be submitted through the login payload');
+assert.equal(submittedLogin?.password, 'secret vocal', 'voice password must be submitted through the login payload');
+assert.equal(
+    spoken.some((entry) => entry.includes('secret vocal')),
+    false,
+    'voice password must not be spoken back in clear text'
+);
 
 console.log('user_panel_content_contract.test: PASS');
 process.exit(0);

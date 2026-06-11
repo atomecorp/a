@@ -103,6 +103,13 @@ npm run cargo:bevy:check
 npm run cargo:bevy:test
 ```
 
+Test convention: vitest only runs the suites listed in `tests/vitest.manifest.json`
+(enforced both ways by `tests/governance/vitest_manifest_guard.test.mjs`).
+Every other `*.test.mjs` file is a standalone node script (probe, guard,
+contract) executed with `node <file>` or its dedicated npm script — vitest
+never picks those up. New vitest suites must be added to the manifest; new
+node scripts need no registration.
+
 The Bevy integration is documented in `atome/documentations/bevy_integration.md`.
 
 ## Upload workflow

@@ -60,6 +60,10 @@ tests/eve/*
 !tests/eve/project_scene_gesture_performance.test.mjs
 !tests/probes/
 !tests/probes/flower_menu_modules.test.mjs
+!tests/molecule/
+!tests/molecule/run_molecule_tests.mjs
+!tests/governance/
+!tests/vitest.manifest.json
 
 
 # Test files

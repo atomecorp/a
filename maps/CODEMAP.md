@@ -973,6 +973,8 @@ Reusable APIs:
 - `eVe/intuition/matrix/ui/view.js` owns Matrix root/project-view/tile DOM orchestration; `eVe/intuition/matrix/ui/matrix_layout.js` owns Matrix viewport fitting, toolbar-aware row/column sizing, scroll positioning, and layout observers.
 - `eVe/intuition/matrix/core/project_dom_state.js` stores Matrix/project DOM projection metadata outside attributes and is consumed by Matrix runtime, project bootstrap, user project surfaces, and project drop/tool projection paths.
 - `eVe/intuition/matrix/ui/matrix_virtual_slots.js` owns Matrix logical slot virtualization: it maps projects to collision-free logical slots and keeps repeated empty slots out of the DOM, leaving only project tiles and the first actionable empty creation tile.
+- `eVe/intuition/ribbon/disconnected_handle_logo.js` owns the shared disconnected Atome handle pulse style used by the initial main handle and the login validation control.
+- `eVe/intuition/tools/user_login_sequence.js` owns the unauthenticated initial login collection UI. `eVe/intuition/tools/user.js` opens this full-screen sequence instead of showing the legacy compact auth dialog, while the actual authentication call remains in the existing `executeLoginFlow`/`AdoleAPI.auth.login` path. `eVe/intuition/eVeIntuition.js` opens the home panel once the initial auth gate reports an unauthenticated user, so first display lands directly on the phone request instead of the disconnected main handle.
 - Tool definition SSOT and tool instances.
 
 Should be extended by:
