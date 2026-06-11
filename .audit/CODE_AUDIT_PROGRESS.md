@@ -97,6 +97,11 @@ Artefact d'audit temporaire. Statuts : TODO | IN_PROGRESS | DONE | BLOCKED | MAN
 | J1 | DONE | Validation finale complète | — | m1 OK, build OK, vitest 37/120 verts (vs 34/116) | OK | Faible |
 | B1b | DONE | BUG drag texte lent pendant lecture audio | virtual_scene_contract.js, bevy_web_renderer_runtime.js | A/B mesuré app live : re-rasterisations texte 596 ms→0, rendu max 303→3,2 ms | OK | Faible |
 | B2b | DONE | BUG flower long-clic se ferme au relâchement | surface_runtime.js (3× stopImmediatePropagation retirés des branches flower-active) | reproduit (reload authentifié) rouge→vert + 8 scénarios non-régression | OK | Faible |
+| P1a | DONE | Convention de tests : manifest vitest explicite + garde bidirectionnelle | vitest.config.js, tests/vitest.manifest.json, tests/governance/vitest_manifest_guard.test.mjs, README | signal 309 fichiers rouges→13 (tous réels, zone rendering) ; la garde a attrapé une suite tierce non déclarée | OK | Faible |
+| P1b | DONE | Runner molecule + manifest + garde whitelistés dans .gitignore | .gitignore | check-ignore négatif ×3, test:molecule 9/9 | OK | Faible |
+| P1c | DONE | Contrat panneau Molecule 32/32 vert (était bloqué au check 3) | eVeIntuition.js (hôte dock synthétique route canvas + re-résolution au dock), header_title_runtime.js (gesture rename non exclusive), mtrack_dock_controller.js (taille utilisateur mémorisée prioritaire sur planchers restore), cleanup.test aligné | molecule_panel_contract_probe 32/32 ; dock cleanup test ✓ ; m1 ✓ ; panel_layout_policy ✗ préexistant (échouait avant modifs) | OK | Moyen |
+| B3 | DONE | BUG picking z-order : hit-test aligné sur l'ordre affiché Bevy | scene_graph.js (option layerOrderById), project_scene_runtime.js (2 producteurs de scène alimentés par le renderLayer du virtual scene) | contrat hit_order rouge→vert 3/3 ; z_order_media (IA tierce) 5/5 inchangé ; probes live hierarchy+creator_import OK ; vitest 31 verts (+2), 13 rouges = baseline préexistante | OK | Faible |
+| B3b | NOTE | Volet « média importé dessous » : déjà corrigé par l'IA tierce (project_scene_stack_runtime + câblage ui.creator, commit 12:16) — validé en réel via gateway (z persisté, affiché dessus, picking OK) | — | probe creator_import 3× vert | OK | — |
 
 ## Phase C — Résultats d'analyse statique
 

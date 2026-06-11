@@ -22,6 +22,7 @@
   "tests/eve/project_layer_canvas_lasso_selection.test.mjs",
   "tests/eve/project_media_atome_renderer_pending.test.mjs",
   "tests/eve/project_scene_gesture_performance.test.mjs",
+  "tests/eve/project_scene_hit_order_contract.test.mjs",
   "tests/eve/project_scene_media_projection_filter.test.mjs",
   "tests/eve/project_scene_multi_selection_transform.test.mjs",
   "tests/eve/project_scene_native_capability_selection.test.mjs",
@@ -38,8 +39,8 @@
   "tests/probes/bevy_web_renderer_runtime_media_failure.test.mjs",
   "tests/probes/clip_crop_preview_mask_runtime.test.mjs",
   "tests/probes/clip_preview_metadata_source_window.test.mjs",
+  "tests/probes/project_scene_z_order_media_regression.test.mjs",
   "tests/probes/record_capture_source_atome_contract.test.mjs",
   "tests/probes/render_atom_persistent_media_cache.test.mjs",
-  "tests/probes/project_scene_z_order_media_regression.test.mjs",
   "tests/probes/tauri_bevy_native_permission.test.mjs"
 ]
