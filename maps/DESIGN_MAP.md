@@ -245,7 +245,6 @@ Primary sources:
 - `eVe/intuition/projection/button.js`
 - `eVe/intuition/projection/tool_strip.js`
 - `eVe/intuition/shared/slider_tool_dom.js`
-- `eVe/intuition/shared/slider_direct_drag.js`
 
 P8 projection style ownership:
 
@@ -297,7 +296,6 @@ Primary sources:
 - `eVe/intuition/flower/menu_layout.js`
 - `eVe/intuition/flower/menu_items.js`
 - `eVe/intuition/flower/context_selection.js`
-- `eVe/intuition/tools/contextual/flower_menu_visual.js`
 - `eVe/intuition/matrix/visual/matrix_visual_tokens.js`
 - `eVe/intuition/matrix/ui/matrix_layout.js`
 - `eVe/intuition/matrix/ui/view.js`

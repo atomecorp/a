@@ -540,7 +540,6 @@ Main files:
 - `apis/shortcut.js`
 - `apis/dragdrop.js`
 - `apis/loader.js`
-- `apis/runtime_env.js`
 - `apis/serverUrls.js`
 - `apis/svg_utils.js`
 - `apis/update_atome.js`

@@ -428,7 +428,7 @@ Known constraints: `play_record_core.js` must stay focused on runtime orchestrat
 
 Ownership: eVe closed.
 
-Primary sources: `eVe/intuition/tools/core/tool_registry.js`, `eVe/intuition/tools/core/tool_runtime.js`, `eVe/intuition/tools/core/tool_instances.js`, `eVe/intuition/tools/core/tool_definition_ssot.js`, `eVe/intuition/tools/core/tool_interaction.js`, `eVe/intuition/tools/index.js`, `eVe/intuition/runtime/shared_project_override_runtime.js`, `eVe/intuition/runtime/implicit_gesture_commit_runtime.js`, `atome/src/squirrel/components/tool_slider_builder.js`, `eVe/intuition/shared/slider_tool_content.js`, `eVe/intuition/shared/slider_tool_dom.js`, `eVe/intuition/shared/slider_direct_drag.js`, `eVe/intuition/projection/button.js`, `eVe/intuition/tools/ui/tool_button_factory.js`.
+Primary sources: `eVe/intuition/tools/core/tool_registry.js`, `eVe/intuition/tools/core/tool_runtime.js`, `eVe/intuition/tools/core/tool_instances.js`, `eVe/intuition/tools/core/tool_definition_ssot.js`, `eVe/intuition/tools/core/tool_interaction.js`, `eVe/intuition/tools/index.js`, `eVe/intuition/runtime/shared_project_override_runtime.js`, `eVe/intuition/runtime/implicit_gesture_commit_runtime.js`, `atome/src/squirrel/components/tool_slider_builder.js`, `eVe/intuition/shared/slider_tool_content.js`, `eVe/intuition/shared/slider_tool_dom.js`, `eVe/intuition/projection/button.js`, `eVe/intuition/tools/ui/tool_button_factory.js`.
 
 Exposure: closed product runtime installed under `window.atome.tools`, plus tool registry/runtime module exports.
 
@@ -438,7 +438,7 @@ Verified shared slider runtime responsibilities:
 
 - `atome/src/squirrel/components/tool_slider_builder.js` exports the canonical slider DOM/data-role selector contract, shared direct-drag controller, and expanding-square slider-tool runtime behavior.
 - `eVe/intuition/shared/slider_tool_content.js` is the product wrapper that injects ribbon text tokens into the Atome-owned tool-slider runtime.
-- `eVe/intuition/shared/slider_tool_dom.js` and `eVe/intuition/shared/slider_direct_drag.js` are compatibility re-export surfaces for existing eVe imports.
+- `eVe/intuition/shared/slider_tool_dom.js` is a compatibility re-export surface for existing eVe imports; the unused `slider_direct_drag.js` re-export shim was removed.
 
 Verified shared project override entry points: `createSharedProjectOverrideRuntime`, `fetchSharedOverrideAtomes`, `setSharedProjectOverride`, `getSharedProjectOverride`, `removeSharedProjectOverride`, `listSharedOverrideIdsForProject`, `resetSharedOverrides`.
 

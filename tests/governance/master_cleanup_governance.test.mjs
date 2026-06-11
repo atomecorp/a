@@ -4,11 +4,13 @@ import { describe, expect, it } from "vitest";
 
 const root = path.resolve(new URL("../../", import.meta.url).pathname);
 
+// The todo tree was reorganized: the plan moved into todo/cleanup_architecture/
+// and the audit report into done/. The machine-readable findings JSON and the
+// file tree snapshot were deliberately removed during the todo cleanup, so the
+// governance contract only covers the surviving evidence artifacts.
 const requiredArtifacts = [
-  "todos/eve_atome_master_cleanup_plan.md",
-  "todos/eve_master_cleanup_audit_report.md",
-  "todos/eve_master_cleanup_findings.json",
-  "todos/eve_master_cleanup_file_tree.txt",
+  "todo/cleanup_architecture/eve_atome_master_cleanup_plan.md",
+  "done/eve_master_cleanup_audit_report.md",
 ];
 
 describe("eVe master cleanup governance", () => {
@@ -21,21 +23,9 @@ describe("eVe master cleanup governance", () => {
   });
 
   it("keeps the master cleanup plan fully checked for the completed pass", () => {
-    const planPath = path.join(root, "todos/eve_atome_master_cleanup_plan.md");
+    const planPath = path.join(root, "todo/cleanup_architecture/eve_atome_master_cleanup_plan.md");
     const plan = fs.readFileSync(planPath, "utf8");
     expect(plan.includes("[ ]")).toBe(false);
     expect(plan).toContain("# Completed Cleanup Phases");
-  });
-
-  it("keeps machine-readable cleanup findings structurally valid", () => {
-    const findingsPath = path.join(root, "todos/eve_master_cleanup_findings.json");
-    const findings = JSON.parse(fs.readFileSync(findingsPath, "utf8"));
-    expect(findings.summary.totalFiles).toBeGreaterThan(0);
-    expect(findings.summary.firstPartyFiles).toBeGreaterThan(0);
-    expect(Array.isArray(findings.oversized.over1000)).toBe(true);
-    expect(Array.isArray(findings.emptyFiles)).toBe(true);
-    expect(Array.isArray(findings.longFunctions)).toBe(true);
-    expect(findings.runtimeInventory).toBeTypeOf("object");
-    expect(findings.securityInventory).toBeTypeOf("object");
   });
 });
