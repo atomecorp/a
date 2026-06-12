@@ -136,6 +136,20 @@ Role:
 
 Design rule: broad product styling belongs here only when it is genuinely shared. Feature-specific styling belongs in the feature visual module.
 
+### Finder Map Visuals
+
+Primary sources:
+
+- `eVe/intuition/tools/map.js`
+- `eVe/elements/eVe_look.js`
+
+Role:
+
+- `eVe/intuition/tools/map.js` owns the Finder `place` scope Leaflet runtime and keeps map attribution passive inside the app: the Leaflet prefix is disabled, OpenStreetMap attribution remains visible as plain text, and attribution-link clicks are prevented inside the map surface so Tauri WebViews cannot navigate away from eVe.
+- `eVe/elements/eVe_look.js` owns the Finder map wrapper, canvas, result rows, and Leaflet attribution visual rules.
+
+Design rule: do not edit vendored Leaflet CSS or JavaScript for product behavior. Keep tile attribution visible but non-navigating inside the app shell.
+
 ### Atome Projection Visual Contract
 
 Primary sources:
