@@ -21,6 +21,7 @@ const {
     isFlowerMenuOpen
 } = await import('../../eVe/intuition/flower/index.js');
 const { registerAtomeElement } = await import('../../eVe/core/atome_dom_id.js');
+const { ensureIntuitionMenuLayer } = await import('../../eVe/intuition/runtime/layer_contract.js');
 
 const defineReadonly = (target, key, value) => {
     Object.defineProperty(target, key, {
@@ -76,6 +77,12 @@ document.elementFromPoint = (x = 0) => {
 
 const activations = [];
 const opens = [];
+let flowerItems = [{
+    key: 'shape',
+    label: 'Shape',
+    icon: 'tool',
+    onSelect: (meta = {}) => activations.push(String(meta.source || ''))
+}];
 const cleanup = installIntuitionXFlowerContextRuntime({
     longPressMs: 2,
     moveTolerancePx: 8,
@@ -85,12 +92,7 @@ const cleanup = installIntuitionXFlowerContextRuntime({
             x: Number(context.x || 0),
             y: Number(context.y || 0)
         });
-        return [{
-            key: 'shape',
-            label: 'Shape',
-            icon: 'tool',
-            onSelect: (meta = {}) => activations.push(String(meta.source || ''))
-        }];
+        return flowerItems;
     }
 });
 
@@ -185,6 +187,50 @@ host.dispatchEvent(makeMouseEvent('contextmenu', { button: 2, buttons: 0, client
 await delay(8);
 document.dispatchEvent(makePointerEvent('pointerup', { pointerId: 60, button: 2, buttons: 0, clientX: 180, clientY: 180 }));
 assert.equal(isFlowerMenuOpen(), true, 'right-click release must keep the contextual flower open (the parity target for left long press)');
+
+flowerItems = [{
+    key: 'perform',
+    label: 'Perform',
+    icon: 'fullscreen',
+    onSelect: (meta = {}) => activations.push(`perform:${String(meta.source || '')}`)
+}];
+
+const hideMenuLayerAsPerformModeDoes = () => {
+    const layer = ensureIntuitionMenuLayer();
+    layer.style.display = 'none';
+    layer.dataset.intuitionPrevDisplay = '';
+    layer.setAttribute('aria-hidden', 'true');
+    return layer;
+};
+
+closeFlowerMenu();
+await delay(20);
+const rightClickHiddenLayer = hideMenuLayerAsPerformModeDoes();
+host.dispatchEvent(makeMouseEvent('contextmenu', { button: 2, buttons: 0, clientX: 180, clientY: 180 }));
+await delay(8);
+assert.notEqual(rightClickHiddenLayer.style.display, 'none', 'perform-mode right-click flower must reveal the hidden menu host layer');
+assert.equal(rightClickHiddenLayer.getAttribute('aria-hidden'), null, 'perform-mode right-click flower host layer must become accessible while the flower is open');
+assert.equal(isFlowerMenuOpen(), true, 'perform-mode right-click must open the flower');
+assert.equal(
+    document.querySelector('[data-role="eve_intuitionx-flower-item"]')?.dataset.key,
+    'perform',
+    'perform-mode right-click flower must expose the perform tool to exit the mode'
+);
+
+closeFlowerMenu();
+await delay(20);
+const longPressHiddenLayer = hideMenuLayerAsPerformModeDoes();
+host.dispatchEvent(makePointerEvent('pointerdown', { pointerId: 61, clientX: 180, clientY: 180 }));
+await delay(8);
+document.dispatchEvent(makePointerEvent('pointerup', { pointerId: 61, buttons: 0, clientX: 180, clientY: 180 }));
+assert.notEqual(longPressHiddenLayer.style.display, 'none', 'perform-mode long-press flower must reveal the hidden menu host layer');
+assert.equal(longPressHiddenLayer.getAttribute('aria-hidden'), null, 'perform-mode long-press flower host layer must become accessible while the flower is open');
+assert.equal(isFlowerMenuOpen(), true, 'perform-mode long press must open the flower');
+assert.equal(
+    document.querySelector('[data-role="eve_intuitionx-flower-item"]')?.dataset.key,
+    'perform',
+    'perform-mode long-press flower must expose the perform tool to exit the mode'
+);
 
 closeFlowerMenu();
 cleanup();

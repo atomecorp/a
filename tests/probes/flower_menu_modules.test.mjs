@@ -230,10 +230,32 @@ assert.equal(submenu.childPositions.length, 4);
 assert.equal(Number.isFinite(submenu.backPosition.tx), true);
 
 const intuitionSource = await readFile(new URL('../../eVe/intuition/eVeIntuition.js', import.meta.url), 'utf8');
+const performSource = await readFile(new URL('../../eVe/intuition/tools/perform.js', import.meta.url), 'utf8');
+const flowerMenuSource = await readFile(new URL('../../eVe/intuition/flower/menu.js', import.meta.url), 'utf8');
 assert.ok(
     intuitionSource.includes("type === 'project' && !hasAtomeTarget")
         && intuitionSource.includes('selectedIds: contextSelectionIds')
         && intuitionSource.includes('selectionIds,')
         && intuitionSource.includes('resolveFlowerTransportSelectionIds'),
     'flower context must preserve project-only selection hygiene and pass multi-selection ids into transport tools'
+);
+assert.ok(
+    flowerMenuSource.includes("const PERFORM_FLOWER_EXIT_EVENT = 'eve:perform-flower-exit';")
+        && flowerMenuSource.includes("document.body?.classList?.contains(PERFORM_CLASS)")
+        && flowerMenuSource.includes('window.dispatchEvent(event);'),
+    'perform flower activation must request a canonical perform runtime exit when active'
+);
+assert.ok(
+    performSource.includes("const PERFORM_FLOWER_EXIT_EVENT = 'eve:perform-flower-exit';")
+        && performSource.includes('const bindPerformFlowerExitEvent = () => {')
+        && performSource.includes("runPerformToolAction({ action: 'state.off', event: 'inactive' });")
+        && performSource.includes('bindPerformFlowerExitEvent();'),
+    'perform runtime must own the flower exit event and force state.off'
+);
+assert.ok(
+    performSource.includes('const isPerformModeMarkedActive = () => {')
+        && performSource.includes("document.body?.classList?.contains(PERFORM_CLASS)")
+        && performSource.includes('if (!isPerformModeMarkedActive()) return;')
+        && performSource.includes("setElementVisible(menuEl, { preservePrevDisplay: false })"),
+    'perform deactivation must honor visible runtime state and restore hidden menu layers'
 );
