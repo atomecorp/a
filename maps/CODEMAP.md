@@ -148,6 +148,7 @@ Unified rendering ownership:
 - `eVe/core/atome_events/project_layer_runtime.js` owns project background and lasso gestures. On the cleaned canvas route it must ask `project_scene_runtime.js` for scene hit-tests before arming lasso, and lasso rectangle selection must use scene Atome ids when no per-Atome DOM hosts exist.
 - `eVe/intuition/runtime/project_scene_render_bridge.js` owns the `tool_genesis.js` bridge from bounded project shell parents to the project scene runtime. It prevents the active project visual path from depending on `HTMLElement` Atome hosts while leaving non-project tool/system UI rendering intact.
 - `eVe/intuition/runtime/atome_description_frame_runtime.js` owns description-derived frame memory for legacy non-project host synchronization and project bridge bookkeeping. `tool_genesis.js` consumes this owner instead of storing the frame registry inline.
+- `eVe/intuition/runtime/panel_open_settle_runtime.js` owns the prepared-panel open lifecycle: panel visibility snapshots, hide-until-prepared, settle (layer attach + placement + reveal), and post-open floating placement scheduling. `eVeIntuition.js` injects its placement primitives (layer attach, near-tool positioning, placement observers, docked-mtrack detection) and consumes the returned API; the settle semantics must not be re-owned inline.
 - `eVe/intuition/runtime/media_integrity_runtime.js` owns non-project legacy media host integrity state: media kind hints, integrity history, text-patch key classification, and media-host repair observers. `tool_genesis.js` may wire the runtime with Atome lookup and media URL dependencies, but must not re-own the media integrity registries inline.
 - `eVe/intuition/runtime/shape_svg_runtime.js` owns non-project legacy SVG shape detection, SVG data-url decoding, protected SVG fetch, and host mounting. `tool_genesis.js` may inject platform/media credential helpers and Atome lookup callbacks, but SVG parsing and mounting must not be reintroduced inline.
 - `eVe/intuition/runtime/group_visual_runtime.js` owns non-project legacy group host visual projection: group placeholder layers, preview mounting, member visibility state, group-step visual synchronization, and group refresh. It must keep canonical group state in Atome/runtime state and must not become the active project scene path; project-visible group Atomes remain `RenderAtom` entries in `project_scene_runtime.js`.
@@ -698,15 +699,12 @@ Main files:
 - `tool_slider_builder.js`
 - `table_builder.js`
 - `table_visual_contract.js`
-- `intuition_builder/index.js`
-- `intuition_builder/layer_contract.js`
 
 Reusable APIs:
 
 - Component builders for common Squirrel UI structures.
 - `table_builder.js` owns table runtime creation and interactions; `table_visual_contract.js` owns the product-neutral table templates and style variants.
 - Canonical Squirrel system control builders now include Button, Slider, ToolSlider, Input, and Console via the spark bootstrap registry.
-- Minimal Intuition builder and layer contract isolated from eVe closed UI.
 
 Should be extended by:
 
@@ -801,7 +799,7 @@ Path: `eve/core/`
 
 Owner: eVe closed layer.
 
-Purpose: Product event commits, timelines, stores, persistence adapters, media engine, project security, and platform-specific storage backends.
+Purpose: Product event commits, timelines, media engine, and project security. Persistence is owned by the local-first servers (Axum/AiS) and Fastify through the commit boundary — no client-side store layer (atome_concepts.md §7.5, §21.1).
 
 Main files:
 
@@ -811,12 +809,6 @@ Main files:
 - `atome_timeline.js` owns timeline event replay, preview, undo/redo, and backend apply. It remains an oversized legacy module after the DOM-baseline removal; the active reduction plan is to split pure replay snapshot construction, DOM preview projection, backend apply, and transport controls into cohesive modules before adding new timeline feature scope.
 - `event_bus.js`
 - `project_security.js`
-- `event_store/*`
-- `media_store/*`
-- `project_store/*`
-- `browser_store/indexeddb_backend.js`
-- `ios_store/ios_sqlite_backend.js`
-- `tauri_store/tauri_sqlite_backend.js`
 - `media_engine/*`
 
 Reusable APIs:
@@ -962,6 +954,7 @@ Reusable APIs:
 - `tool_runtime.js` owns protected system-tool contract reconciliation before gateway execution, including `ui.creator` recovery when persisted registry state has a stale execution mode.
 - Shared media types, DOM utilities, SVG runtime, color values, group state, slider content, slider DOM/data-role selectors, shared slider direct-drag control, and tool drag.
 - IntuitionX projection tool DOM is created by `eVe/intuition/projection/button.js` and projected through `eVe/intuition/projection/tool_strip.js`; static projection visuals live in `eVe/elements/eVe_look.js`, while `eVe/intuition/core/dom.js` prevents projection surface color/shadow constants from being rewritten inline.
+- `eVe/intuition/ribbon/menu.js` creates the main ribbon tool roots and must attach the shared `.eve-intuitionx-projection-tool` visual class so those buttons use the projection reset instead of browser-native borders.
 - `eVe/intuition/shared/group_state_runtime.js` owns disposable host-side group projection state for group steps, timelines, and previews. Group renderers may keep cloned runtime values on host object properties, but must not serialize group timelines, steps, members, media sources, or previews into `data-*` attributes as canonical state.
 - `eVe/intuition/shared/tool_children_projection_state.js` owns disposable host-side palette child projection state for Intuition tool buttons and tool-instance hosts. Tool renderers may use it to bind palette expansion behavior to DOM hosts, but must not serialize palette child lists into `data-tool-children` or `data-source-tool-children`.
 - `eVe/intuition/shared/dom_utils.js` owns reusable DOM style helpers, including `toPx`, `applyStyleObject`, `toKebabCase`, and `buildCssRule`; feature tools must consume these helpers instead of cloning CSS serialization logic.
@@ -1377,7 +1370,7 @@ Atome:
 
 eVe:
 
-- `intuition`, `tool_registry`, `tool_gateway`, `panel_api`, `panel_chrome`, `molecule`, `mtrax`, `hmtracks`, `media_store`, `project_store`, `event_store`, `eveT`, `layer_contract`.
+- `intuition`, `tool_registry`, `tool_gateway`, `panel_api`, `panel_chrome`, `molecule`, `mtrax`, `hmtracks`, `eveT`, `layer_contract`.
 
 Server/platform:
 

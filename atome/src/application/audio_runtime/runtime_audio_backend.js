@@ -269,7 +269,9 @@ export const resolveNativeMediaLocalPath = (...values) => {
         if (/^\//.test(normalizedPath) && !/^\/api\//i.test(normalizedPath)) {
             return normalizedPath;
         }
-        if (!/^[a-z][a-z0-9+.-]*:/i.test(raw) && /^[^?#]+\.[a-z0-9]{2,8}$/i.test(normalizedPath)) {
+        if (!/^[a-z][a-z0-9+.-]*:/i.test(raw)
+            && !/^\/?api\//i.test(normalizedPath)
+            && /^[^?#]+\.[a-z0-9]{2,8}$/i.test(normalizedPath)) {
             return normalizedPath.replace(/^\/+/, '');
         }
         if (parsed && parsed.protocol === 'atome:') {
@@ -294,29 +296,44 @@ export const resolveNativeMediaLocalPathFromObject = (source = {}, extra = {}) =
         object.localPath,
         object.file_path,
         object.filePath,
+        object.path_or_bookmark,
+        object.pathOrBookmark,
+        object.path,
         meta.native_audio_path,
         meta.nativeAudioPath,
         meta.local_path,
         meta.localPath,
         meta.file_path,
         meta.filePath,
+        meta.path_or_bookmark,
+        meta.pathOrBookmark,
+        meta.path,
         extras.native_audio_path,
         extras.nativeAudioPath,
         extras.local_path,
         extras.localPath,
         extras.file_path,
         extras.filePath,
+        extras.path_or_bookmark,
+        extras.pathOrBookmark,
+        extras.path,
         extrasMeta.native_audio_path,
         extrasMeta.nativeAudioPath,
         extrasMeta.local_path,
         extrasMeta.localPath,
         extrasMeta.file_path,
         extrasMeta.filePath,
+        extrasMeta.path_or_bookmark,
+        extrasMeta.pathOrBookmark,
+        extrasMeta.path,
         extraObject.native_audio_path,
         extraObject.nativeAudioPath,
         extraObject.local_path,
         extraObject.localPath,
         extraObject.file_path,
-        extraObject.filePath
+        extraObject.filePath,
+        extraObject.path_or_bookmark,
+        extraObject.pathOrBookmark,
+        extraObject.path
     );
 };

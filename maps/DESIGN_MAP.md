@@ -304,6 +304,7 @@ Role:
 
 - Ribbon tokens define handle icons, tool sizes, flower metrics, drag thresholds, and animation timing.
 - The main ribbon is the primary product surface that materializes the shared tool visual contract used by the user tool, the Atome handle, and the main toolbar tool buttons.
+- Main ribbon tool roots must carry the shared `.eve-intuitionx-projection-tool` visual class so the browser-native button border is reset by the existing projection tool style contract.
 - The main ribbon container is visually transparent; the Atome handle remains docked directly against the WebView bottom-left or bottom-right edge according to handedness.
 - Toolbox styles inject runtime CSS variables and rules for menu V2.
 - Flower menu visuals keep DOM orchestration in `menu.js`, radial placement in `menu_layout.js`, and icon/item visual normalization in `menu_items.js`; active-selection compatibility is owned by `context_selection.js`, with mixed-kind multi-selection constrained to the `info` tool until compatible batch-tool policy is expanded.

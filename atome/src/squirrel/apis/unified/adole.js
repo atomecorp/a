@@ -8,6 +8,7 @@
  */
 
 import { shouldIgnoreRealtimePatch } from './realtime_dedupe.js';
+import { sanitizeAtomeProperties } from '../../../shared/atome_contract.js';
 import {
     alignLoopbackUrlToPageHost,
     canUseFastifyPrimaryOnLocalAxumPage,
@@ -54,40 +55,6 @@ const _connectionState = {
 };
 const MEDIA_PATCH_KIND_HINTS = new Set(['video', 'audio', 'sound', 'image']);
 const mediaPatchHintsByAtomeId = new Map();
-const RESERVED_ATOME_PROPERTY_KEYS = new Set([
-    'id', 'atome_id', 'atomeId',
-    'type', 'atome_type', 'atomeType',
-    'renderer',
-    'meta',
-    'traits',
-    'properties',
-    'props',
-    'particles',
-    'data',
-    'owner', 'owner_id', 'ownerId',
-    'parent', 'parent_id', 'parentId',
-    'project_id', 'projectId',
-    'media_type', 'mediaType',
-    'visualType',
-    'selected',
-    'selection',
-    'creator_id', 'creatorId',
-    'created_at', 'createdAt',
-    'updated_at', 'updatedAt',
-    'deleted_at', 'deletedAt',
-    'last_sync', 'lastSync',
-    'sync_status', 'syncStatus',
-    'created_source', 'createdSource'
-]);
-const sanitizeAtomeProperties = (properties = {}) => {
-    if (!properties || typeof properties !== 'object' || Array.isArray(properties)) return {};
-    const sanitized = {};
-    Object.entries(properties).forEach(([key, value]) => {
-        if (!key || value === undefined || RESERVED_ATOME_PROPERTY_KEYS.has(key)) return;
-        sanitized[key] = value;
-    });
-    return sanitized;
-};
 const normalizeMediaPatchKindHint = (value) => String(value || '').trim().toLowerCase();
 const hasMediaSourceHintsInPatch = (properties = {}) => {
     if (!properties || typeof properties !== 'object') return false;

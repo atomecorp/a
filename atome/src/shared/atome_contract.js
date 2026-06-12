@@ -41,6 +41,7 @@ const RESERVED_PROPERTY_KEYS = new Set([
     'deleted_at',
     'deletedAt',
     'media_type',
+    'mediaType',
     'visualType',
     'selected',
     'selection',

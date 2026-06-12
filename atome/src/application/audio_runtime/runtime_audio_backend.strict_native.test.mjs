@@ -75,7 +75,19 @@ assert.equal(
 );
 assert.equal(
     resolveNativeMediaLocalPathFromObject({
+        path: 'recordings/imported.wav'
+    }),
+    'recordings/imported.wav'
+);
+assert.equal(
+    resolveNativeMediaLocalPathFromObject({
         native_audio_path: 'atome:///api/uploads/imported.mov'
+    }),
+    ''
+);
+assert.equal(
+    resolveNativeMediaLocalPathFromObject({
+        path: '/api/uploads/imported.wav?media_user_id=user_a'
     }),
     ''
 );

@@ -448,16 +448,6 @@ Boundary status: Closed product API. Atome AI/MCP may invoke it only through exp
 
 Known constraints: `tool_runtime.js` is a critical oversized legacy file. Do not expand it without reduction ownership.
 
-### eVe Store APIs
-
-Ownership: eVe closed product persistence layer.
-
-Primary sources: `eVe/core/event_store/`, `eVe/core/project_store/`, `eVe/core/media_store/`, `eVe/core/browser_store/`, `eVe/core/tauri_store/`, `eVe/core/ios_store/`.
-
-Verified entry points: `createEventStore`, `createMemoryEventAdapter`, `createProjectStore`, `createMemoryProjectAdapter`, `createMediaStore`, `createMemoryMediaAdapter`, `buildMediaRef`, `validateProbe`, `validateRuntimeAssets`.
-
-Boundary status: Closed product stores unless a product-neutral persistence contract is explicitly promoted into Atome.
-
 ### eVe Molecule and MTraX APIs
 
 Ownership: eVe closed.
@@ -922,26 +912,6 @@ Owner: eVe closed design layer.
 Use only from: eVe product UI and closed panels/tools.
 
 Status: Semi-public product design API. Exact function names must be verified in `design.js` before use because the file is large and exports many helpers.
-
-#### Semi-Public eVe Store APIs
-
-Visibility: Semi-public closed product persistence APIs.
-
-Evidence: exports in `eVe/core/event_store/index.js`, `project_store/index.js`, `media_store/index.js`, `browser_store/indexeddb_backend.js`, `tauri_store/tauri_sqlite_backend.js`, `ios_store/ios_sqlite_backend.js`, and `molecule_store_bootstrap.js`.
-
-Entry points:
-
-- Event store: `createEventStore`, `createMemoryEventAdapter`, `EventStoreError`.
-- Project store: `createProjectStore`, `createMemoryProjectAdapter`, `ProjectStoreError`.
-- Media store: `createMediaStore`, `createMemoryMediaAdapter`, `buildMediaRef`, `validateProbe`, `validateRuntimeAssets`, `MediaStoreError`.
-- Store backends: `createMemoryIndexedDbBackend`, `createTauriSqliteBackend`, `createIosSqliteBackend`.
-- Molecule store bootstrap: `MOLECULE_STORE_PLATFORMS`, `MoleculeStoreBootstrapError`, `createBrowserMoleculeStores`, `createTauriMoleculeStores`, `createIosMoleculeStores`, `detectMoleculeStorePlatform`.
-
-Owner: eVe closed product store layer.
-
-Use only from: eVe product runtime and Molecule/MTraX store composition.
-
-Status: Semi-public closed product API. Do not use for generic Atome persistence.
 
 #### Molecule and MTraX Runtime APIs
 
