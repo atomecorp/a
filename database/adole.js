@@ -1177,13 +1177,18 @@ export async function getParticleHistory(atomeId, key, limit = 50) {
  */
 export async function restoreParticleVersion(atomeId, key, version, author = null) {
     const versionRow = await query('get', `
-		SELECT particle_value, value_type FROM particles_versions
+		SELECT new_value FROM particles_versions
 		WHERE atome_id = ? AND particle_key = ? AND version = ?
 	`, [atomeId, key, version]);
 
     if (!versionRow) throw new Error(`Version ${version} not found for particle ${key}`);
 
-    const value = JSON.parse(versionRow.particle_value);
+    let value;
+    try {
+        value = JSON.parse(versionRow.new_value);
+    } catch {
+        value = versionRow.new_value;
+    }
     await setParticle(atomeId, key, value, author);
 }
 
@@ -1193,19 +1198,19 @@ export async function restoreParticleVersion(atomeId, key, version, author = nul
 export async function getChangesSince(sinceTimestamp = null) {
     if (!sinceTimestamp) {
         return await query('all', `
-			SELECT pv.*, a.atome_type, a.parent_id, a.owner_id
+			SELECT pv.*, pv.changed_at AS created_at, a.atome_type, a.parent_id, a.owner_id
 			FROM particles_versions pv
 			JOIN atomes a ON pv.atome_id = a.atome_id
-			ORDER BY pv.created_at ASC
+			ORDER BY pv.changed_at ASC
 			LIMIT 1000
 		`);
     }
     return await query('all', `
-		SELECT pv.*, a.atome_type, a.parent_id, a.owner_id
+		SELECT pv.*, pv.changed_at AS created_at, a.atome_type, a.parent_id, a.owner_id
 		FROM particles_versions pv
 		JOIN atomes a ON pv.atome_id = a.atome_id
-		WHERE pv.created_at > ?
-		ORDER BY pv.created_at ASC
+		WHERE pv.changed_at > ?
+		ORDER BY pv.changed_at ASC
 		LIMIT 1000
 	`, [sinceTimestamp]);
 }
