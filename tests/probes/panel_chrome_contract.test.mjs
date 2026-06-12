@@ -114,11 +114,20 @@ const assertCanonicalPanelChrome = (dialog, id) => {
     assert.equal(close.dataset.evePanelClose, 'true', `${id} close control must use the shared close marker`);
     assert.equal(footer.style.paddingLeft, '5px', `${id} close control left inset must match its vertical chrome inset`);
     assert.equal(footer.style.paddingRight, '5px', `${id} footer horizontal inset must stay symmetric`);
+    assert.equal(dialog.title.style.position, 'absolute', `${id} title must be centered independently from footer controls`);
+    assert.equal(dialog.title.style.left, '50%', `${id} title must stay horizontally centered in the footer`);
+    assert.equal(dialog.title.style.top, '50%', `${id} title must stay vertically centered in the footer`);
+    assert.equal(dialog.title.style.transform, 'translate(-50%, -50%)', `${id} title centering must not depend on panel width`);
+    assert.equal(dialog.title.style.textAlign, 'center', `${id} title text must be centered`);
+    assert.equal(dialog.title.style.pointerEvents, 'none', `${id} centered title must preserve footer drag behavior`);
 
     const grips = Array.from(root.querySelectorAll('[data-role="dialog-resize-grip"]'));
     assert.equal(grips.length, 1, `${id} must expose exactly one canonical resize grip`);
     assert.equal(grips[0].dataset.edge, 'right', `${id} resize grip must be right-sided`);
     assert.equal(footer.contains(grips[0]), true, `${id} resize grip must live in the footer`);
+    assert.equal(grips[0].style.right, '0px', `${id} resize grip must keep the bottom-right footer edge`);
+    assert.equal(grips[0].style.opacity, '0', `${id} resize grip must remain invisible`);
+    assert.equal(grips[0].style.pointerEvents, 'auto', `${id} resize grip must remain interactive`);
 
     const children = Array.from(root.children);
     const contentHost = dialog.content || body;

@@ -960,7 +960,7 @@ Reusable APIs:
 - `eVe/intuition/shared/dom_utils.js` owns reusable DOM style helpers, including `toPx`, `applyStyleObject`, `toKebabCase`, and `buildCssRule`; feature tools must consume these helpers instead of cloning CSS serialization logic.
 - `eVe/intuition/shared/dom_utils.js` also owns reusable CSS declaration/rule serialization through `serializeCssDeclarations()` and `serializeCssRule()`; generated style modules such as toolbox visual CSS must consume those helpers instead of local serializers.
 - Finder tool drops create `tool_instance` projection hosts through `project_drop.js` and `tool_instances.js`; they must not create persisted `shape` atomes or `tool_shortcut` DOM hosts.
-- `eVe/intuition/tools/map.js` owns the Finder `place` scope Leaflet integration: container lifecycle, Nominatim search dispatch, map marker focus, and passive in-app attribution handling. Do not edit vendored Leaflet files or move map behavior into `finder.js`.
+- `eVe/intuition/tools/map.js` owns the Finder `place` scope Leaflet integration: container lifecycle, Nominatim search dispatch, map marker focus, responsive Leaflet size invalidation, and passive in-app attribution handling. Do not edit vendored Leaflet files or move map behavior into `finder.js`.
 - `eVe/intuition/tools/visual/atome_editor_runtime_style.js` owns Atome editor footer/fullscreen generated runtime style rules; `eVeIntuition.js` may install the style node but must not own the rule construction.
 - `eVe/intuition/tools/clipboard/` owns shared copy/paste clipboard state, Atome record normalization for clipboard payloads, system clipboard writes, and paste event generation. `copy.js` and `paste.js` remain product tool entrypoints and panel/action registration surfaces.
 - `eVe/intuition/flower/menu.js` owns flower menu DOM orchestration; `menu_layout.js` owns radial geometry, `menu_items.js` owns item/icon normalization, `context_target.js` owns context target resolution including lazy project-canvas Atome hit testing, `context_selection.js` owns active-selection and mixed-kind menu strategy, and `context_pointer_lock.js` owns flower pointer locks.
@@ -1020,6 +1020,7 @@ Reusable APIs:
 - `eveT`, `eveTList`, locale helpers.
 - Panel chrome and overflow indicator contracts.
 - Dialog bounds/fullscreen runtime, including viewport resize reflow while fullscreen is active. Fullscreen dialogs use exact container edges and stop at the main toolbar top; no margin-based viewport constraint helper owns this geometry.
+- Shared footer title placement belongs to `eVe/elements/design/panel_chrome.js`: titles stay centered in the footer across resize/fullscreen changes, while the invisible bottom-right resize grip remains interactive.
 - Fullscreen double-click is limited to explicit panel chrome handles so tool/body double-clicks stay context-owned.
 - Preset and token APIs.
 

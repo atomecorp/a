@@ -6,6 +6,25 @@ const { window, document } = installMockBrowserEnv();
 globalThis.requestAnimationFrame = window.requestAnimationFrame;
 globalThis.cancelAnimationFrame = window.cancelAnimationFrame;
 
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const resizeObserverCallbacks = [];
+window.ResizeObserver = class {
+    constructor(callback) {
+        this.callback = callback;
+        this.targets = [];
+        resizeObserverCallbacks.push(callback);
+    }
+
+    observe(target) {
+        this.targets.push(target);
+    }
+
+    disconnect() {
+        this.targets = [];
+    }
+};
+
 const status = document.createElement('div');
 status.id = 'eve_finder_dialog__results_status';
 document.body.appendChild(status);
@@ -29,10 +48,13 @@ const mapInstance = {
         }
     },
     _container: null,
+    invalidateCount: 0,
     setView() {
         return this;
     },
-    invalidateSize() {},
+    invalidateSize() {
+        this.invalidateCount += 1;
+    },
     remove() {}
 };
 
@@ -70,11 +92,24 @@ window.L = {
 await import('../../eVe/intuition/tools/map.js');
 
 window.__eveMap.activate();
+await sleep(20);
 
 assert.equal(mapOptions.zoomControl, true, 'Finder map must keep the Leaflet zoom control enabled');
 assert.equal(mapInstance.attributionControl.prefix, false, 'Finder map must disable the clickable Leaflet attribution prefix');
 assert.equal(tileOptions.attribution, '&copy; OpenStreetMap contributors', 'Finder map must keep OSM attribution visible as plain text');
 assert.equal(tileOptions.attribution.includes('<a'), false, 'Finder map tile attribution must not inject a clickable link');
+assert.equal(resizeObserverCallbacks.length, 1, 'Finder map must install one resize observer for responsive Leaflet sizing');
+assert.ok(mapInstance.invalidateCount >= 1, 'Finder map must invalidate Leaflet size after initial mount');
+
+const invalidateCountAfterMount = mapInstance.invalidateCount;
+resizeObserverCallbacks.forEach((callback) => callback([]));
+await sleep(20);
+assert.ok(mapInstance.invalidateCount > invalidateCountAfterMount, 'Finder map must invalidate Leaflet size after observed container resize');
+
+const invalidateCountAfterObservedResize = mapInstance.invalidateCount;
+window.dispatchEvent(new window.Event('resize'));
+await sleep(20);
+assert.ok(mapInstance.invalidateCount > invalidateCountAfterObservedResize, 'Finder map must invalidate Leaflet size after viewport resize');
 
 const attributionLink = document.querySelector('.leaflet-control-attribution a');
 assert.ok(attributionLink, 'test setup must expose a simulated third-party attribution link');

@@ -145,10 +145,10 @@ Primary sources:
 
 Role:
 
-- `eVe/intuition/tools/map.js` owns the Finder `place` scope Leaflet runtime and keeps map attribution passive inside the app: the Leaflet prefix is disabled, OpenStreetMap attribution remains visible as plain text, and attribution-link clicks are prevented inside the map surface so Tauri WebViews cannot navigate away from eVe.
-- `eVe/elements/eVe_look.js` owns the Finder map wrapper, canvas, result rows, and Leaflet attribution visual rules.
+- `eVe/intuition/tools/map.js` owns the Finder `place` scope Leaflet runtime, including responsive `invalidateSize()` scheduling when the map canvas, results area, panel, or viewport changes. It also keeps map attribution passive inside the app: the Leaflet prefix is disabled, OpenStreetMap attribution remains visible as plain text, and attribution-link clicks are prevented inside the map surface so Tauri WebViews cannot navigate away from eVe.
+- `eVe/elements/eVe_look.js` owns the Finder map wrapper, fluid map canvas sizing, result rows, and Leaflet attribution visual rules.
 
-Design rule: do not edit vendored Leaflet CSS or JavaScript for product behavior. Keep tile attribution visible but non-navigating inside the app shell.
+Design rule: do not edit vendored Leaflet CSS or JavaScript for product behavior. Keep tile attribution visible but non-navigating inside the app shell, and keep the Finder map canvas fluid so Leaflet can fill resized panel space.
 
 ### Atome Projection Visual Contract
 
@@ -199,6 +199,7 @@ Role:
 - Defines the shared panel header/footer/tools dock chrome.
 - Converts system panel chrome values into eVe CSS variables and style objects.
 - Supports the current panel contract: header, body, tools dock, footer, close control, resize grip, and overflow indicators.
+- Panel footer titles are horizontally and vertically centered inside the footer through the shared chrome layer, independent of panel width and resize state. The bottom-right resize grip remains invisible but interactive and must not be replaced by title placement logic.
 - `createEveCloseControl` is the generic close-control entry point for eVe panels and close affordances; `createEvePanelCloseControl` remains an alias to the same implementation for existing panel code.
 - Owns fullscreen panel geometry reflow on viewport resize; custom and restored panel sizes must not track viewport changes.
 - Dialog fullscreen geometry is direct: left/top are `0`, width matches the dialog container, and height stops exactly at the main toolbar top when the toolbar is present.
