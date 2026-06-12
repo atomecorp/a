@@ -241,82 +241,60 @@ async fn handle_bootstrap(
         Err(e) => return error_response(request_id, &e.to_string()),
     };
 
-    let existing_user = find_user_record_by_phone(&db, &phone);
-
-    let password_hash = match hash(password, DEFAULT_COST) {
-        Ok(h) => h,
-        Err(e) => return error_response(request_id, &e.to_string()),
-    };
+    let existing_user = find_user_record_by_phone(&db, &phone)
+        .or_else(|| find_user_record_by_id(&db, &generate_user_id(&phone)));
 
     let user_id = generate_user_id(&phone);
     let now = Utc::now().to_rfc3339();
 
     if let Some((existing_id, existing_type, deleted_at)) = existing_user {
+        if deleted_at.is_some() {
+            return error_response(request_id, "Invalid credentials");
+        }
         if existing_type != "user" {
             let _ = coerce_user_atome_type(&db, &existing_id, &now);
         }
-        if deleted_at.is_some() {
-            if let Err(e) = db.execute(
-                "UPDATE atomes SET deleted_at = NULL, updated_at = ?1 WHERE atome_id = ?2",
-                rusqlite::params![&now, &existing_id],
-            ) {
-                return error_response(request_id, &e.to_string());
-            }
-        } else if let Err(e) = db.execute(
+
+        let visibility = db
+            .query_row(
+                "SELECT particle_value FROM particles WHERE atome_id = ?1 AND particle_key = 'visibility'",
+                rusqlite::params![&existing_id],
+                |row| row.get::<_, String>(0),
+            )
+            .ok()
+            .and_then(|v| serde_json::from_str::<String>(&v).ok())
+            .unwrap_or_else(|| "public".to_string());
+
+        let (stored_username, password_hash, created_at) = match get_user_particles(&db, &existing_id) {
+            Ok(particles) => particles,
+            Err(_) => return error_response(request_id, "Invalid credentials"),
+        };
+
+        if !verify(password, &password_hash).unwrap_or(false) {
+            return error_response(request_id, "Invalid credentials");
+        }
+
+        if let Err(e) = db.execute(
             "UPDATE atomes SET updated_at = ?1 WHERE atome_id = ?2",
             rusqlite::params![&now, &existing_id],
         ) {
             return error_response(request_id, &e.to_string());
         }
 
-        let particles = [
-            ("username", &username),
-            ("phone", &phone),
-            ("password_hash", &password_hash),
-            ("visibility", &visibility),
-        ];
-
-        for (key, value) in particles {
-            let value_json = serde_json::to_string(value).unwrap_or_default();
-            let updated = db
-                .execute(
-                    "UPDATE particles SET particle_value = ?1, version = version + 1, updated_at = ?2
-                     WHERE atome_id = ?3 AND particle_key = ?4",
-                    rusqlite::params![&value_json, &now, &existing_id, key],
-                )
-                .unwrap_or(0);
-
-            if updated == 0 {
-                let _ = db.execute(
-                    "INSERT INTO particles (atome_id, particle_key, particle_value, value_type, version, created_at, updated_at)
-                     VALUES (?1, ?2, ?3, 'string', 1, ?4, ?4)",
-                    rusqlite::params![&existing_id, key, &value_json, &now],
-                );
-            }
-        }
-
-        let created_at = db
-            .query_row(
-                "SELECT created_at FROM atomes WHERE atome_id = ?1",
-                rusqlite::params![&existing_id],
-                |row| row.get::<_, String>(0),
-            )
-            .unwrap_or_else(|_| now.clone());
-
-        let _ = upsert_optional_particles(&db, &existing_id, &optional, &now);
+        let empty_optional = JsonMap::new();
         if let Err(err) = upsert_user_state_current(
             &db,
             &existing_id,
-            &username,
+            &stored_username,
             &phone,
             &visibility,
             &now,
-            &optional,
+            &empty_optional,
         ) {
             println!("[Auth Debug] state_current update failed: {}", err);
         }
 
-        let token = match generate_token(&state.jwt_secret, &existing_id, &username, &phone) {
+        let token = match generate_token(&state.jwt_secret, &existing_id, &stored_username, &phone) {
             Ok(t) => t,
             Err(e) => return error_response(request_id, &e.to_string()),
         };
@@ -329,13 +307,18 @@ async fn handle_bootstrap(
             error: None,
             user: Some(UserInfo {
                 user_id: existing_id,
-                username,
+                username: stored_username,
                 phone,
                 created_at: Some(created_at),
             }),
             token: Some(token),
         };
     }
+
+    let password_hash = match hash(password, DEFAULT_COST) {
+        Ok(h) => h,
+        Err(e) => return error_response(request_id, &e.to_string()),
+    };
 
     if let Err(e) = db.execute(
         "INSERT INTO atomes (atome_id, atome_type, owner_id, creator_id, created_at, updated_at, last_sync, created_source, sync_status)

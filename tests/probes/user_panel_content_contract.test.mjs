@@ -87,6 +87,59 @@ assert.equal(authFooter?.children?.length || 0, 0, 'old auth dialog footer must 
     assert.equal(document.getElementById(id), null, `${id} must not remain in the old auth dialog`);
 });
 
+let createdSession = null;
+const authAttempts = [];
+window.Atome.getStateCurrent = async () => null;
+window.AdoleAPI.projects = {
+    loadSaved: async () => null,
+    list: async () => ({ fastify: { projects: [] }, tauri: { projects: [] } }),
+    create: async () => ({ fastify: { data: { atome_id: 'created_project' } } }),
+    setCurrent: async () => ({ ok: true })
+};
+window.AdoleAPI.auth.bootstrap = async (phone, password, username, visibility) => {
+    authAttempts.push({ action: 'bootstrap', phone, password, username, visibility });
+    createdSession = { id: 'created_user', username, phone };
+    return {
+        fastify: {
+            success: true,
+            data: { user: { id: createdSession.id, user_id: createdSession.id, username, phone }, token: 'token' }
+        },
+        tauri: { success: false }
+    };
+};
+window.AdoleAPI.auth.current = async () => createdSession
+    ? { logged: true, user: { id: createdSession.id, user_id: createdSession.id, username: createdSession.username, phone: createdSession.phone } }
+    : { logged: false, user: null };
+window.AdoleAPI.auth.getCurrentInfo = () => createdSession ? { id: createdSession.id } : null;
+window.AdoleAPI.security.isAuthenticated = () => !!createdSession;
+window.AdoleAPI.security.isAnonymous = () => false;
+
+const dispatchInput = (node) => node.dispatchEvent(new window.Event('input', { bubbles: true }));
+const dispatchEnter = (node) => node.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+
+const sequencePhoneInput = document.getElementById('eve_login_sequence__phone_input');
+sequencePhoneInput.value = '0612345678';
+dispatchInput(sequencePhoneInput);
+dispatchEnter(sequencePhoneInput);
+await new Promise((resolve) => setTimeout(resolve, 0));
+assert.equal(
+    document.getElementById('eve_login_sequence__instruction')?.textContent,
+    'Entrez votre mot de passe',
+    'validated phone must advance to password entry'
+);
+const sequencePasswordInput = document.getElementById('eve_login_sequence__password_field__input');
+sequencePasswordInput.value = 'validpass';
+dispatchInput(sequencePasswordInput);
+dispatchEnter(sequencePasswordInput);
+await new Promise((resolve) => setTimeout(resolve, 20));
+assert.deepEqual(
+    authAttempts.map((entry) => entry.action),
+    ['bootstrap'],
+    'login sequence must use the atomic auth bootstrap contract'
+);
+assert.equal(authAttempts[0].visibility, 'public', 'login sequence bootstrap must use explicit public visibility');
+assert.equal(loginSequence.style.display, 'none', 'successful login-sequence creation must close the first auth screen');
+
 window.__authCheckResult = {
     complete: true,
     authenticated: true,
@@ -136,6 +189,39 @@ assert.equal(
 });
 
 const { createUserLoginSequence } = await import('../../eVe/intuition/tools/user_login_sequence.js');
+let failedLoginPayload = null;
+const invalidSequence = createUserLoginSequence({
+    onSubmit: async (payload) => {
+        failedLoginPayload = payload;
+        return { ok: false, errorText: 'Identifiant ou mot de passe incorrect' };
+    },
+    documentRef: document
+});
+invalidSequence.open();
+const invalidPhoneInput = document.getElementById('eve_login_sequence__phone_input');
+invalidPhoneInput.value = '0699999999';
+dispatchInput(invalidPhoneInput);
+dispatchEnter(invalidPhoneInput);
+await new Promise((resolve) => setTimeout(resolve, 0));
+const invalidPasswordInput = document.getElementById('eve_login_sequence__password_field__input');
+invalidPasswordInput.value = 'badpass';
+dispatchInput(invalidPasswordInput);
+dispatchEnter(invalidPasswordInput);
+await new Promise((resolve) => setTimeout(resolve, 0));
+const invalidInstruction = document.getElementById('eve_login_sequence__instruction');
+const invalidNotice = document.getElementById('eve_login_sequence__notice');
+assert.equal(failedLoginPayload?.phone, '0699999999', 'failed login must submit the entered phone');
+assert.equal(invalidInstruction?.textContent, 'Entrez votre téléphone', 'failed login must return to phone entry immediately');
+assert.equal(document.activeElement?.id, 'eve_login_sequence__phone_input', 'failed login must focus phone entry');
+assert.equal(invalidNotice?.textContent, 'Identifiant ou mot de passe incorrect', 'failed login must keep the generic auth message visible');
+assert.equal(invalidNotice?.style?.fontSize, invalidInstruction?.style?.fontSize, 'invalid auth message must use instruction font size');
+assert.equal(invalidNotice?.style?.lineHeight, invalidInstruction?.style?.lineHeight, 'invalid auth message must use instruction line height');
+assert.equal(invalidNotice?.style?.fontWeight, invalidInstruction?.style?.fontWeight, 'invalid auth message must use instruction font weight');
+invalidPhoneInput.value = '0';
+dispatchInput(invalidPhoneInput);
+assert.equal(invalidNotice?.textContent, '', 'invalid auth message must clear when phone entry starts');
+invalidSequence.destroy();
+
 const spoken = [];
 const heard = ['0612345678', 'oui', 'secret vocal', 'oui'];
 window.Squirrel = window.Squirrel || {};

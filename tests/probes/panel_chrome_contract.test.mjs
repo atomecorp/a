@@ -56,12 +56,50 @@ globalThis.$ = (tag, options = {}) => {
 
 const { createEveDialog } = await import('../../eVe/elements/design.js');
 const { createEveCloseControl, createEvePanelCloseControl } = await import('../../eVe/elements/design/panel_chrome.js');
+const {
+    SYSTEM_UI_PANEL_CHROME_TOKENS,
+    SYSTEM_UI_PANEL_EDGE_COLOR,
+    SYSTEM_UI_INPUT_TOKENS,
+    SYSTEM_UI_THEME_TOKENS
+} = await import('../../eVe/elements/system_ui_tokens.js');
 
 assert.equal(createEveCloseControl, createEvePanelCloseControl, 'generic and panel close factories must share one implementation');
 const closeControl = createEveCloseControl();
+const hasNoBorderContour = (style) => (
+    !style?.border
+    || style.border === 'none'
+    || style.borderStyle === 'none'
+    || style.borderWidth === '0px'
+);
 assert.equal(closeControl.style.width, '16px', 'shared close control should stay compact inside panel chrome');
 assert.equal(closeControl.style.height, '16px', 'shared close control should preserve square geometry');
 assert.equal(closeControl.style.borderRadius, '3px', 'shared close control should keep a restrained rounded corner');
+assert.equal(hasNoBorderContour(closeControl.style), true, 'shared close control must not reserve a transparent contour');
+assert.equal(
+    SYSTEM_UI_PANEL_CHROME_TOKENS.background,
+    SYSTEM_UI_PANEL_EDGE_COLOR,
+    'panel chrome background must be opaque so bright app content cannot bleed through rounded edge antialiasing'
+);
+assert.equal(
+    SYSTEM_UI_THEME_TOKENS.panelShadow,
+    '0 0 12px 1px rgba(0, 0, 0, 1)',
+    'panel root shadow must start at the outer edge without relying on a border contour'
+);
+assert.equal(
+    SYSTEM_UI_INPUT_TOKENS.borderWidthPx,
+    0,
+    'shared panel inputs must not reserve a transparent border pixel'
+);
+assert.equal(
+    SYSTEM_UI_INPUT_TOKENS.borderStyle,
+    'none',
+    'shared panel inputs must not keep a hidden border style'
+);
+assert.equal(
+    SYSTEM_UI_PANEL_CHROME_TOKENS.innerShadow,
+    'inset 0 -1px 4px rgba(0,0,0,0.34)',
+    'panel chrome shadow must not draw a light inset that looks like a border'
+);
 
 const installStyleRect = (node) => {
     Object.defineProperty(node, 'offsetWidth', {
@@ -112,15 +150,40 @@ const assertCanonicalPanelChrome = (dialog, id) => {
     assert.equal(footer.contains(dialog.title), true, `${id} title must live in the footer`);
     assert.equal(footer.contains(close), true, `${id} close control must live in the footer`);
     assert.equal(close.dataset.evePanelClose, 'true', `${id} close control must use the shared close marker`);
-    assert.equal(root.style.borderWidth, '0px', `${id} root border must not reserve a visible chrome inset`);
+    assert.equal(
+        root.style.background,
+        'var(--eve-panel-chrome-bg, var(--system-panel-chrome-background))',
+        `${id} root edge surface must match header/footer chrome`
+    );
+    assert.equal(hasNoBorderContour(root.style), true, `${id} root must not reserve a visible or transparent border contour`);
+    assert.equal(root.style.padding, '', `${id} root must not add padding around chrome bands`);
+    assert.equal(root.style.margin, '', `${id} root must not add margin around chrome bands`);
     assert.equal(header.style.paddingLeft, '0px', `${id} header chrome must touch the left panel edge`);
     assert.equal(header.style.paddingRight, '0px', `${id} header chrome must touch the right panel edge`);
     assert.equal(footer.style.paddingLeft, '0px', `${id} footer chrome must touch the left panel edge`);
     assert.equal(footer.style.paddingRight, '0px', `${id} footer chrome must touch the right panel edge`);
-    assert.equal(header.style.width, '100%', `${id} header chrome must fill the panel width`);
-    assert.equal(footer.style.width, '100%', `${id} footer chrome must fill the panel width`);
+    assert.equal(header.style.width, '100%', `${id} header chrome must exactly match the parent width`);
+    assert.equal(footer.style.width, '100%', `${id} footer chrome must exactly match the parent width`);
+    assert.equal(toolsDock.style.width, '100%', `${id} tools dock must fill the panel width`);
     assert.equal(header.style.boxSizing, 'border-box', `${id} header chrome width must include its own geometry`);
     assert.equal(footer.style.boxSizing, 'border-box', `${id} footer chrome width must include its own geometry`);
+    assert.equal(toolsDock.style.boxSizing, 'border-box', `${id} tools dock width must include its own geometry`);
+    assert.equal(header.style.marginLeft, '0px', `${id} header chrome must not offset from the left edge`);
+    assert.equal(header.style.marginRight, '0px', `${id} header chrome must not offset from the right edge`);
+    assert.equal(header.style.marginTop, '0px', `${id} header chrome must not offset from the top edge`);
+    assert.equal(footer.style.marginLeft, '0px', `${id} footer chrome must not offset from the left edge`);
+    assert.equal(footer.style.marginRight, '0px', `${id} footer chrome must not offset from the right edge`);
+    assert.equal(footer.style.marginBottom, '0px', `${id} footer chrome must not offset from the bottom edge`);
+    assert.equal(
+        toolsDock.style.background,
+        'linear-gradient(180deg, rgba(0, 0, 0, 0.34) 0%, rgba(0, 0, 0, 0.24) 58%, rgba(0, 0, 0, 0.08) 88%, rgba(0, 0, 0, 0) 100%)',
+        `${id} tools dock gradient must extend across the full dock height while keeping the bottom transparent`
+    );
+    assert.equal(
+        toolsDock.style.boxShadow,
+        'inset 0 10px 12px -12px rgba(0, 0, 0, 0.95), 0 -8px 14px -12px rgba(0, 0, 0, 0.9)',
+        `${id} tools dock must expose a visible top shadow`
+    );
     assert.equal(header.style.borderTopLeftRadius, 'inherit', `${id} header must inherit the outer top-left panel corner`);
     assert.equal(header.style.borderTopRightRadius, 'inherit', `${id} header must inherit the outer top-right panel corner`);
     assert.equal(header.style.borderBottomLeftRadius, '0px', `${id} header must not round its inner bottom-left corner`);
@@ -129,6 +192,16 @@ const assertCanonicalPanelChrome = (dialog, id) => {
     assert.equal(footer.style.borderTopRightRadius, '0px', `${id} footer must not round its inner top-right corner`);
     assert.equal(footer.style.borderBottomLeftRadius, 'inherit', `${id} footer must inherit the outer bottom-left panel corner`);
     assert.equal(footer.style.borderBottomRightRadius, 'inherit', `${id} footer must inherit the outer bottom-right panel corner`);
+    assert.equal(
+        body.style.background,
+        'var(--eve-panel-surface, var(--system-panel-surface))',
+        `${id} body must own the inner panel surface instead of relying on the root`
+    );
+    assert.equal(body.style.margin, '', `${id} body must not create an outer margin against panel chrome`);
+    assert.equal(body.style.border, '', `${id} body must not create a border against panel chrome`);
+    assert.equal(header.style.border, '', `${id} header chrome must not create a border contour`);
+    assert.equal(footer.style.border, '', `${id} footer chrome must not create a border contour`);
+    assert.equal(hasNoBorderContour(close.style), true, `${id} close control must not create a border contour`);
     assert.equal(close.style.marginLeft, '5px', `${id} close control must keep its visual inset without padding the footer chrome`);
     assert.equal(dialog.title.style.position, 'absolute', `${id} title must be centered independently from footer controls`);
     assert.equal(dialog.title.style.left, '50%', `${id} title must stay horizontally centered in the footer`);
@@ -143,6 +216,7 @@ const assertCanonicalPanelChrome = (dialog, id) => {
     assert.equal(footer.contains(grips[0]), true, `${id} resize grip must live in the footer`);
     assert.equal(grips[0].style.right, '0px', `${id} resize grip must keep the bottom-right footer edge`);
     assert.equal(grips[0].style.opacity, '0', `${id} resize grip must remain invisible`);
+    assert.equal(grips[0].style.background, 'transparent', `${id} resize grip must remain visually transparent`);
     assert.equal(grips[0].style.pointerEvents, 'auto', `${id} resize grip must remain interactive`);
 
     const children = Array.from(root.children);
@@ -155,6 +229,14 @@ const assertCanonicalPanelChrome = (dialog, id) => {
         assert.equal(dialog.content.contains(body), true, `${id} body must live in the content wrapper`);
         assert.equal(dialog.content.contains(dialog.bodyHeader), true, `${id} body header must live in the content wrapper`);
         assert.equal(dialog.content.contains(dialog.bodyFooter), true, `${id} body footer must live in the content wrapper`);
+        assert.equal(
+            dialog.content.style.background,
+            'var(--eve-panel-surface, var(--system-panel-surface))',
+            `${id} content wrapper must own the inner panel surface`
+        );
+        assert.equal(dialog.content.style.margin, '', `${id} content wrapper must not offset from chrome`);
+        assert.equal(dialog.content.style.padding, '', `${id} content wrapper must not pad chrome`);
+        assert.equal(dialog.content.style.border, '', `${id} content wrapper must not border chrome`);
     }
 
     const scrollableValues = new Set(['auto', 'scroll', 'overlay']);

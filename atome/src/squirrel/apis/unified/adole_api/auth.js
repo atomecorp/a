@@ -73,6 +73,13 @@ const extractToken = (result) => {
         || null;
 };
 
+const extractAlreadyExists = (result) => !!(
+    result?.alreadyExists
+    || result?.data?.alreadyExists
+    || result?.data?.data?.alreadyExists
+    || result?.result?.alreadyExists
+);
+
 const normalizeUser = (user) => {
     if (!user) return null;
     const id = user.user_id || user.userId || user.id || user.atome_id || null;
@@ -89,6 +96,7 @@ const getPrimaryBackend = () => normalizeBackend(resolveAuthSource()) || (isTaur
 const getSecondaryBackend = () => (getPrimaryBackend() === 'tauri' ? 'fastify' : 'tauri');
 
 const hasToken = (backend) => !!adapters[backend]?.getToken?.();
+const hasAuthenticatedToken = (backend, result) => !!result?.token || hasToken(backend);
 
 const loginBackend = async (backend, { phone, password }) => {
     const adapter = adapters[backend];
@@ -126,7 +134,10 @@ const registerBackend = async (backend, { phone, password, username, visibility 
     const adapter = adapters[backend];
     if (!adapter?.auth?.register) return { ok: false, error: 'auth_unavailable' };
     const result = await adapter.auth.register({ phone, password, username, visibility });
-    const ok = !!(result?.ok || result?.success);
+    const alreadyExists = extractAlreadyExists(result);
+    const token = extractToken(result);
+    let ok = !!(result?.ok || result?.success);
+    if (alreadyExists && !token) ok = false;
     let user = normalizeUser(extractUser(result));
     if (ok && !user) {
         
@@ -134,12 +145,55 @@ const registerBackend = async (backend, { phone, password, username, visibility 
             if (me.ok && me.user) user = me.user;
         
     }
+    let error = ok ? null : (result?.error || (alreadyExists ? 'user_exists' : 'register_failed'));
+    if (ok && !user) {
+        ok = false;
+        error = 'missing_user';
+    }
+    if (ok && !isPhoneMatch(user, phone)) {
+        ok = false;
+        user = null;
+        adapter?.clearToken?.();
+        error = 'phone_mismatch';
+    }
+    return {
+        ok,
+        user,
+        token,
+        raw: result,
+        error
+    };
+};
+
+const bootstrapBackend = async (backend, { phone, password, username, visibility }) => {
+    const adapter = adapters[backend];
+    if (!adapter?.auth?.bootstrap) return { ok: false, error: 'auth_unavailable' };
+    const result = await adapter.auth.bootstrap({ phone, password, username, visibility });
+    let ok = !!(result?.ok || result?.success);
+    let user = normalizeUser(extractUser(result));
+    if (ok && !user) {
+        
+            const me = await meBackend(backend);
+            if (me.ok && me.user) user = me.user;
+        
+    }
+    let error = ok ? null : (result?.error || 'bootstrap_failed');
+    if (ok && !user) {
+        ok = false;
+        error = 'missing_user';
+    }
+    if (ok && !isPhoneMatch(user, phone)) {
+        ok = false;
+        user = null;
+        adapter?.clearToken?.();
+        error = 'phone_mismatch';
+    }
     return {
         ok,
         user,
         token: extractToken(result),
         raw: result,
-        error: ok ? null : (result?.error || 'register_failed')
+        error
     };
 };
 
@@ -506,6 +560,102 @@ const normalizeSessionUser = (user) => {
 };
 
 export const auth = {
+    async bootstrap(phone, password, username, visibility = 'public') {
+        const cleanPhone = normalizePhone(phone);
+        const cleanName = normalizeUsername(username) || cleanPhone;
+        if (!cleanPhone || !password || password.length < 8) {
+            return {
+                tauri: { success: false, error: 'invalid_credentials' },
+                fastify: { success: false, error: 'invalid_credentials' }
+            };
+        }
+
+        const availability = await ensureBackendAvailability();
+        const primary = getPrimaryBackend();
+        const secondary = getSecondaryBackend();
+        const prevSession = getSessionState();
+        const prevProjectCache = getCurrentProjectCache();
+
+        TauriAdapter?.clearToken?.();
+        FastifyAdapter?.clearToken?.();
+        clearSessionState();
+
+        const response = {
+            tauri: { success: false, data: null, error: null },
+            fastify: { success: false, data: null, error: null }
+        };
+
+        const primaryResult = await bootstrapBackend(primary, {
+            phone: cleanPhone,
+            password,
+            username: cleanName,
+            visibility
+        });
+        let activeBackend = primary;
+        let activeResult = primaryResult;
+
+        response[primary] = {
+            success: primaryResult.ok,
+            data: primaryResult.raw,
+            error: primaryResult.ok ? null : primaryResult.error
+        };
+
+        let secondaryResult = null;
+        if (!primaryResult.ok && availability[secondary]) {
+            secondaryResult = await bootstrapBackend(secondary, {
+                phone: cleanPhone,
+                password,
+                username: cleanName,
+                visibility
+            });
+            response[secondary] = {
+                success: secondaryResult.ok,
+                data: secondaryResult.raw,
+                error: secondaryResult.ok ? null : secondaryResult.error
+            };
+            if (secondaryResult.ok) {
+                activeBackend = secondary;
+                activeResult = secondaryResult;
+            }
+        } else if (primaryResult.ok && availability[secondary]) {
+            secondaryResult = await bootstrapBackend(secondary, {
+                phone: cleanPhone,
+                password,
+                username: cleanName,
+                visibility
+            });
+            response[secondary] = {
+                success: secondaryResult.ok,
+                data: secondaryResult.raw,
+                error: secondaryResult.ok ? null : secondaryResult.error
+            };
+        }
+
+        const authenticated = !!(activeResult?.ok && activeResult.user?.id && hasAuthenticatedToken(activeBackend, activeResult));
+        if (!authenticated) {
+            response[activeBackend] = {
+                success: false,
+                data: activeResult?.raw || null,
+                error: activeResult?.error || 'missing_authenticated_session'
+            };
+            return response;
+        }
+
+        persistFastifyLoginCache({ phone: cleanPhone, password });
+        setSessionState({
+            mode: 'authenticated',
+            user: activeResult.user,
+            backend: activeBackend
+        });
+        await migratePreviousWorkspace(prevSession, prevProjectCache, activeResult.user.id);
+
+        
+            syncLocalProjectsToFastify({ reason: 'bootstrap' }).catch(() => { });
+        
+
+        return response;
+    },
+
     async register(phone, password, username, visibility = 'public') {
         const cleanPhone = normalizePhone(phone);
         const cleanName = normalizeUsername(username) || cleanPhone;
@@ -525,6 +675,10 @@ export const auth = {
 
         const prevSession = getSessionState();
         const prevProjectCache = getCurrentProjectCache();
+
+        TauriAdapter?.clearToken?.();
+        FastifyAdapter?.clearToken?.();
+        clearSessionState();
 
         let primaryResult = await registerBackend(primary, {
             phone: cleanPhone,
@@ -590,13 +744,14 @@ export const auth = {
             
             
             response[secondary] = {
-                success: secondaryResult.ok || secondaryResult.error === 'user_exists',
+                success: secondaryResult.ok,
                 data: secondaryResult.raw,
                 error: secondaryResult.ok ? null : secondaryResult.error
             };
         }
 
-        if (activeResult?.ok && activeResult.user) {
+        const authenticated = !!(activeResult?.ok && activeResult.user && hasAuthenticatedToken(activeBackend, activeResult));
+        if (authenticated) {
             persistFastifyLoginCache({ phone: cleanPhone, password });
             setSessionState({
                 mode: 'authenticated',
@@ -608,6 +763,12 @@ export const auth = {
             
                 syncLocalProjectsToFastify({ reason: 'register' }).catch(() => { });
             
+        } else if (activeResult?.ok) {
+            response[activeBackend] = {
+                success: false,
+                data: activeResult.raw,
+                error: 'missing_authenticated_session'
+            };
         }
 
         

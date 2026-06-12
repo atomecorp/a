@@ -3360,18 +3360,20 @@ async function startServer() {
             const dataSource = db.getDataSourceAdapter();
 
             try {
-              if (action === 'register' || action === 'create-user') {
+              if (action === 'bootstrap' || action === 'register' || action === 'create-user') {
                 const { username, phone, password } = data;
+                const isBootstrap = action === 'bootstrap';
+                const requestedUsername = String(username || '').trim();
                 const normalizeAccessValue = (value) => (String(value || '').toLowerCase() === 'public' ? 'public' : 'private');
                 const incomingAccess = data.access ?? data.visibility;
                 const visibility = normalizeAccessValue(incomingAccess || 'public');
                 console.log(`[ws/api] Register request access=${incomingAccess ?? 'n/a'} resolvedVisibility=${visibility}`);
-                if (!username || !phone || !password) {
+                if ((!isBootstrap && !requestedUsername) || !phone || !password) {
                   safeSend({
                     type: 'auth-response',
                     requestId,
                     success: false,
-                    error: 'Missing required fields: username, phone, password'
+                    error: isBootstrap ? 'Missing required fields: phone, password' : 'Missing required fields: username, phone, password'
                   });
                   return;
                 }
@@ -3395,23 +3397,92 @@ async function startServer() {
                   });
                   return;
                 }
+                const cleanUsername = requestedUsername || cleanPhone;
 
                 // Check if user already exists
                 const existingUser = await findUserByPhone(dataSource, cleanPhone);
                 if (existingUser) {
+                  if (!isBootstrap) {
+                    safeSend({
+                      type: 'auth-response',
+                      requestId,
+                      success: false,
+                      alreadyExists: true,
+                      error: 'Invalid credentials'
+                    });
+                    return;
+                  }
+
+                  const normalizedUserPhone = normalizePhone(existingUser.phone);
+                  if (!normalizedUserPhone || normalizedUserPhone !== cleanPhone) {
+                    console.warn(`[ws/api] 🚨 Phone mismatch on bootstrap: expected ${String(cleanPhone || '').slice(0, 4)}*** got ${String(existingUser.phone || '').slice(0, 4)}*** (userId=${existingUser.user_id})`);
+                    safeSend({
+                      type: 'auth-response',
+                      requestId,
+                      success: false,
+                      error: 'Invalid credentials'
+                    });
+                    return;
+                  }
+
+                  const { verifyPassword } = await import('./auth.js');
+                  const isValid = await verifyPassword(password, existingUser.password_hash);
+                  if (!isValid) {
+                    safeSend({
+                      type: 'auth-response',
+                      requestId,
+                      success: false,
+                      error: 'Invalid credentials'
+                    });
+                    return;
+                  }
+
+                  const jwt = await import('jsonwebtoken');
+                  const jwtSecret = getRequiredJwtSecret();
+                  const token = jwt.default.sign(
+                    { userId: existingUser.user_id, phone: existingUser.phone },
+                    jwtSecret,
+                    { expiresIn: '7d' }
+                  );
+
+                  try {
+                    await ensureUserHome(projectRoot, {
+                      id: existingUser.user_id,
+                      username: existingUser.username,
+                      phone: existingUser.phone
+                    });
+                  } catch (e) {
+                    console.warn('[ws/api] Failed to prepare user home:', e.message);
+                  }
+
                   safeSend({
                     type: 'auth-response',
                     requestId,
                     success: true,
+                    ok: true,
                     alreadyExists: true,
+                    token,
                     user: {
                       id: existingUser.user_id,
                       user_id: existingUser.user_id,
                       username: existingUser.username,
                       phone: existingUser.phone
                     },
-                    message: 'User already exists - ready to login'
+                    message: 'User authenticated successfully'
                   });
+
+                  attachWsApiClientToUser(connection, existingUser.user_id);
+                  try {
+                    const decoded = jwt.default.verify(token, jwtSecret);
+                    if (decoded && typeof decoded.exp === 'number') {
+                      connection._wsApiAuthExpMs = decoded.exp * 1000;
+                    } else {
+                      connection._wsApiAuthExpMs = null;
+                    }
+                  } catch (error) {
+                    console.warn("[server] operation failed", error);
+                    connection._wsApiAuthExpMs = null;
+                  }
                   return;
                 }
 
@@ -3420,7 +3491,7 @@ async function startServer() {
                 const passwordHash = await hashPassword(password);
                 const userId = generateDeterministicUserId(cleanPhone);
                 try {
-                  await createUserAtome(dataSource, userId, username, cleanPhone, passwordHash, visibility, data.optional || {});
+                  await createUserAtome(dataSource, userId, cleanUsername, cleanPhone, passwordHash, visibility, data.optional || {});
 
                   try {
                     const accessRows = await dataSource.query(
@@ -3439,15 +3510,9 @@ async function startServer() {
                     safeSend({
                       type: 'auth-response',
                       requestId,
-                      success: true,
+                      success: false,
                       alreadyExists: true,
-                      user: {
-                        id: userId,
-                        user_id: userId,
-                        username,
-                        phone: cleanPhone
-                      },
-                      message: 'User already exists - ready to login'
+                      error: 'Invalid credentials'
                     });
                     return;
                   }
@@ -3465,8 +3530,8 @@ async function startServer() {
                       runtime: 'Fastify',
                       payload: {
                         userId,
-                        username,
-                        phone,
+                        username: cleanUsername,
+                        phone: cleanPhone,
                         optional: data.optional || {},
                         visibility,
                         access: visibility
@@ -3496,7 +3561,7 @@ async function startServer() {
                   user: {
                     id: userId,
                     user_id: userId,
-                    username,
+                    username: cleanUsername,
                     phone: cleanPhone
                   },
                   message: 'User created successfully'

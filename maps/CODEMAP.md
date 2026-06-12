@@ -556,7 +556,7 @@ Reusable APIs:
 - Platform and server URL utilities.
 - ADOLE auth, session, projects, storage, sharing, activities, atomes, and runtime modules.
 - `adole_api/session.js`, `projects.js`, and `auth.js` jointly own durable current-project restoration across WebView reloads: the cache is stored in `squirrel_current_project_v2` with `userId`, restored only for the same authenticated user, and preserved through login/register only when `transferOwner` successfully migrates the previous pre-auth workspace.
-- `eVe/intuition/tools/project_bootstrap.js` may recover from a stale empty current project by selecting the single renderable `project_id` already owned by the authenticated user in `state_current`; it must not select from another owner or from DOM state.
+- `eVe/intuition/tools/project_bootstrap.js` may recover from a stale empty current project by selecting the single renderable `project_id` already owned by the authenticated user in `state_current`; it must not select from another owner or from DOM state. If `squirrel:user-logged-in` arrives while a project bootstrap is already in flight, it queues a forced authenticated re-bootstrap so the newly authenticated user's project and atomes load without requiring a browser refresh.
 - ADOLE atome project-state reads keep Tauri loopback state authoritative and avoid secondary cross-origin loopback Fastify `/api/state_current` fetches.
 - Realtime dedupe and text DOM contracts.
 
@@ -968,7 +968,7 @@ Reusable APIs:
 - `eVe/intuition/matrix/core/project_dom_state.js` stores Matrix/project DOM projection metadata outside attributes and is consumed by Matrix runtime, project bootstrap, user project surfaces, and project drop/tool projection paths.
 - `eVe/intuition/matrix/ui/matrix_virtual_slots.js` owns Matrix logical slot virtualization: it maps projects to collision-free logical slots and keeps repeated empty slots out of the DOM, leaving only project tiles and the first actionable empty creation tile.
 - `eVe/intuition/ribbon/disconnected_handle_logo.js` owns the shared disconnected Atome handle pulse style used by the initial main handle and the login validation control.
-- `eVe/intuition/tools/user_login_sequence.js` owns the unauthenticated initial login collection UI. `eVe/intuition/tools/user.js` opens this full-screen sequence instead of showing the legacy compact auth dialog, while the actual authentication call remains in the existing `executeLoginFlow`/`AdoleAPI.auth.login` path. `eVe/intuition/eVeIntuition.js` opens the home panel once the initial auth gate reports an unauthenticated user, so first display lands directly on the phone request instead of the disconnected main handle.
+- `eVe/intuition/tools/user_login_sequence.js` owns the unauthenticated initial login collection UI. `eVe/intuition/tools/user.js` opens this full-screen sequence instead of showing the legacy compact auth dialog, while `executeLoginFlow` calls the atomic `AdoleAPI.auth.bootstrap` contract so existing-phone attempts verify the password and unknown-phone attempts create through the backend-owned protocol. `eVe/intuition/eVeIntuition.js` opens the home panel once the initial auth gate reports an unauthenticated user, so first display lands directly on the phone request instead of the disconnected main handle.
 - Tool definition SSOT and tool instances.
 
 Should be extended by:

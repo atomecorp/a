@@ -1133,8 +1133,7 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
             const existingUser = await findUserByPhone(dataSource, cleanPhone);
 
             if (existingUser) {
-                // Return 200 with success:true and message to avoid browser console error
-                return { success: true, message: 'User already exists - ready to login', alreadyExists: true };
+                return { success: false, error: 'Invalid credentials', alreadyExists: true };
             }
 
             // Hash password

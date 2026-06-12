@@ -52,6 +52,7 @@ const getAnonymousIdentity = () => {
 export const AdoleAPI = {
   auth: {
     create: auth.register,
+    bootstrap: auth.bootstrap,
     login: auth.login,
     logout: auth.logout,
     current: auth.current,
