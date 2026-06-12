@@ -34,6 +34,8 @@
 
 ## Livré hors liste (même période)
 
+- RÉGRESSION TAURI import+son (12/06) : tokens locaux périmés sans mécanique de guérison. Enquête : Kira natif prouvé sain (remote control, son audible), 401 systématiques sur `/api/uploads` et `/api/events/commit`. Fixes canoniques : invalidation symétrique du token local + **rejeu unique** de la requête au transport des commits (`atome_commit.js`), guérison upload (refresh pré-envoi + retry sur 401) branchée sur `refreshLocalTauriTokenAfterAccessDenied` exporté (`asset_box.js`). Validé par l'utilisateur via `run.sh` (import + son OK). Sondes [AUDIO_DIAG] posées puis intégralement retirées (0 résidu). Pollution de test (atome `Downloads/…` 404 d'un probe défectueux) soft-supprimée → m1 ✓. Cartographie audio documentée : Kira natif (Tauri), Kira WASM (browser), AVAudioEngine/AUv3 Swift sous le même protocole de commandes (iOS).
+
 - RÉGRESSION SON/CURSEUR (12/06) : deadlock de la file de textures différées (`bevy_web_renderer_runtime.js`) — le `finally` du drain sautait le nettoyage de `deferred_texture_running` si la surface redémarrait pendant une résolution en vol, et la reprise d'état par sélecteur adoptait le flag figé → plus aucune waveform résolue de la session → durée inconnue → pas de curseur, atomes audio sans forme d'onde, lecture sans repère. Fix : nettoyage inconditionnel + réarmement du drain à l'adoption. Validé : file 35→0, durée mémorisée 24,6 s, son réel entendu + RMS 0.10, curseur progresse, contrat molecule 32/32, vitest baseline.
 
 - Bug flower : menu contextuel se fermait au relâchement après reload authentifié (`stopImmediatePropagation` surface) — corrigé + 9 scénarios validés.
