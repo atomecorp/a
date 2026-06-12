@@ -137,7 +137,7 @@ test('RenderAtom keeps media natural dimensions out of project bounds', () => {
     assert.equal(video.content.naturalHeight, 1080);
 });
 
-test('Bevy web runtime reuses selector runtime after canvas object replacement', async () => {
+test('Bevy web runtime starts a fresh renderer after canvas object replacement', async () => {
     const dom = new JSDOM('<!doctype html><html><body><canvas id="eve_surface_project_login"></canvas></body></html>');
     const firstSurface = dom.window.document.getElementById('eve_surface_project_login');
     const calls = [];
@@ -179,10 +179,15 @@ test('Bevy web runtime reuses selector runtime after canvas object replacement',
     });
 
     assert.equal(first.started, true);
-    assert.equal(second.already_started, true);
-    assert.equal(second.synced, true);
-    assert.equal(calls.filter((call) => call.type === 'run').length, 1);
-    assert.equal(calls.filter((call) => call.type === 'ops').length, 1);
-    assert.equal(calls.find((call) => call.type === 'ops').ops[0].node.id, 'login_shape_b');
+    await flushBevyRun();
+
+    assert.equal(second.started, true);
+    assert.equal(second.already_started, false);
+    assert.equal(calls.filter((call) => call.type === 'run').length, 2);
+    assert.equal(calls.filter((call) => call.type === 'ops').length, 0);
+    assert.deepEqual(calls.filter((call) => call.type === 'run')[1].initialNodes.nodes.map((node) => node.id), [
+        'login_shape_a',
+        'login_shape_b'
+    ]);
     assert.equal(readBevyWebRendererState(secondSurface).node_count, 2);
 });

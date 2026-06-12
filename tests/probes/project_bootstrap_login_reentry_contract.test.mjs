@@ -96,3 +96,18 @@ assert.deepEqual(
 );
 assert.equal(window.__currentProject?.id, 'project_valid', 'authenticated project must become current');
 
+const projectView = document.createElement('div');
+projectView.id = 'project_view_project_valid';
+const projectCanvas = document.createElement('canvas');
+projectCanvas.id = 'eve_surface_project';
+projectView.appendChild(projectCanvas);
+view.appendChild(projectView);
+
+loggedIn = false;
+window.dispatchEvent(new CustomEvent('squirrel:user-logged-out'));
+await new Promise((resolve) => setTimeout(resolve, 0));
+
+assert.equal(document.getElementById('project_view_project_valid'), null, 'logout must remove project-specific containers');
+assert.equal(document.getElementById('eve_surface_project'), projectCanvas, 'logout must preserve the shared Bevy canvas');
+assert.equal(projectCanvas.parentElement, view, 'logout must move the shared canvas back to the neutral view root');
+assert.equal(projectCanvas.style.visibility, 'hidden', 'logout must hide the shared canvas until the next successful render');
