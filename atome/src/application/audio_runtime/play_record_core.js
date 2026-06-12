@@ -24,22 +24,6 @@ export { canonicalizePlayRecordMediaSource } from './play_record_media_source.js
 
 const safeString = (value) => String(value ?? '').trim();
 
-// [AUDIO_DIAG] temporary Tauri regression diagnostics — remove after fix.
-const diagAudio = (stage, data = {}) => {
-    const tauriInvoke = getTauriInvoke(globalThis);
-    if (typeof tauriInvoke !== 'function') return;
-    Promise.resolve(tauriInvoke('log_from_webview', {
-        payload: {
-            level: 'warn',
-            source: 'tauri_webview',
-            component: 'mtrack_audio_diag',
-            message: `[AUDIO_DIAG] play_record_core ${stage}`,
-            data,
-            timestamp: new Date().toISOString()
-        }
-    })).catch(() => { });
-};
-
 const readAudioFacade = (env = globalThis) => env?.Squirrel?.av?.audio || null;
 
 const stableSerialize = (value) => {
@@ -241,32 +225,12 @@ export class PlayRecordCore {
             runtime.playback === 'tauri_native_kira'
             || runtime.playback === 'ios_native_kira'
         ) {
-            diagAudio('loadAsset:native', {
-                asset_id: assetId,
-                playback: runtime.playback,
-                media: {
-                    mediaRef: media.mediaRef || null,
-                    localPath: media.localPath || null,
-                    url: media.url || null,
-                    source: media.source || null,
-                    bytes_length: media.bytes?.byteLength || media.bytes?.length || 0
-                },
-                input_keys: Object.keys(input || {})
-            });
             if (!media.localPath) {
-                diagAudio('loadAsset:native:NO_LOCAL_PATH', { asset_id: assetId });
                 throw new Error('play_record_native_local_path_required');
             }
             const result = await this.invoke()('audio_load_clip', {
                 id: assetId,
                 path: media.localPath
-            });
-            diagAudio('loadAsset:native:result', {
-                asset_id: assetId,
-                success: result?.success === true,
-                error: result?.error || null,
-                resolved_path: result?.path || null,
-                duration_seconds: result?.duration_seconds ?? null
             });
             if (result?.success !== true) {
                 throw new Error(safeString(result?.error) || 'play_record_native_load_failed');

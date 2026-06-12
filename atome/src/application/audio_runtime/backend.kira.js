@@ -32,22 +32,6 @@ import {
   let wasmModulePromise = null;
   let wasmAudioManagerReady = false;
 
-  // [AUDIO_DIAG] temporary Tauri regression diagnostics — remove after fix.
-  function diagAudio(stage, data) {
-    var tauriInvoke = getTauriInvoke(window);
-    if (typeof tauriInvoke !== 'function') return;
-    Promise.resolve(tauriInvoke('log_from_webview', {
-      payload: {
-        level: 'warn',
-        source: 'tauri_webview',
-        component: 'mtrack_audio_diag',
-        message: '[AUDIO_DIAG] backend.kira ' + stage,
-        data: data || {},
-        timestamp: new Date().toISOString()
-      }
-    })).catch(function () { });
-  }
-
   function resolveClipId(arg) {
     if (typeof arg === 'string') return arg;
     return arg && (arg.id || arg.clip_id || arg.clipId) || '';
@@ -145,12 +129,7 @@ import {
       if (mode === 'tauri') return initPromise || Promise.resolve();
       if (!initPromise) {
         mode = 'tauri';
-        diagAudio('ensureRuntimeMode:native', { runtime: runtime, invoke_available: typeof getTauriInvoke(window) === 'function' });
-        initPromise = invoke('audio_init').then(function (result) {
-          diagAudio('audio_init:ok', { result: result });
-          return result;
-        }).catch(function (error) {
-          diagAudio('audio_init:FAILED', { error: String(error && error.message || error) });
+        initPromise = invoke('audio_init').catch(function (error) {
           mode = null;
           initPromise = null;
           throw error;
@@ -158,7 +137,6 @@ import {
       }
       return initPromise;
     }
-    diagAudio('ensureRuntimeMode:non_native', { runtime: runtime });
     if (runtime.playback === 'web_wasm_kira') {
       mode = 'wasm';
       return loadWasmModule().then(function () {
@@ -183,7 +161,6 @@ import {
    * Load a clip from a URL. Returns a Promise so the caller can track completion.
    */
   function loadClipFromUrl(id, url) {
-    diagAudio('loadClipFromUrl:start', { id: id, url: String(url || '').slice(0, 160), mode: mode });
     return ensureRuntimeMode({ audioManager: false }).then(function () {
       if (mode === 'tauri' && isIosHostAppRuntime(window)) {
         return rejectIosHostAppBytesLoad('load_url_requires_local_path(' + id + ')');
@@ -204,7 +181,6 @@ import {
       })
       .then(function (buf) {
         var bytes = new Uint8Array(buf);
-        diagAudio('loadClipFromUrl:bytes', { id: id, byte_length: bytes.length, mode: mode });
         if (mode === 'wasm' && wasm && typeof wasm.audio_load_clip_from_bytes === 'function') {
           wasm.audio_load_clip_from_bytes(id, bytes);
           return;
@@ -214,7 +190,6 @@ import {
         return invoke('audio_load_clip_from_bytes', { id: id, bytes: Array.from(bytes) });
       })
       .catch(function (e) {
-        diagAudio('loadClipFromUrl:FAILED', { id: id, error: String(e && e.message || e) });
         emitError('fetch+load(' + id + ')', e);
         throw e; // Re-throw so callers know the load failed
       });
@@ -310,16 +285,11 @@ import {
       var payload = normalizeKiraPlayInstancePayload(arg);
       if (!payload.assetId || !payload.voiceId) return;
       return ensureRuntimeMode({ audioManager: true }).then(function () {
-        diagAudio('play_instance:invoke', { asset_id: payload.assetId, voice_id: payload.voiceId, mode: mode });
         return invoke(
           KIRA_AUDIO_COMMANDS.PLAY_INSTANCE,
           buildTauriKiraAudioPayload(KIRA_AUDIO_COMMANDS.PLAY_INSTANCE, payload)
-        ).then(function (result) {
-          diagAudio('play_instance:ok', { asset_id: payload.assetId, result: result });
-          return result;
-        });
+        );
       }).catch(function (e) {
-        diagAudio('play_instance:FAILED', { asset_id: payload.assetId, error: String(e && e.message || e) });
         emitError('play_instance(' + payload.assetId + '/' + payload.voiceId + ')', e);
         throw e;
       });
