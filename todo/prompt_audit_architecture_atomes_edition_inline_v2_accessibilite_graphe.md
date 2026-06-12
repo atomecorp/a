@@ -176,11 +176,114 @@ Vérifier si l’architecture actuelle est compatible avec les exigences suivant
 11. L’édition inline ne casse pas l’historique.
 12. L’édition inline ne pollue pas l’arbre métier avec des éléments UI temporaires.
 13. L’architecture est compatible avec les standards d’accessibilité applicables.
-14. L’architecture est robuste sur Tauri + Bevy WASM.
-15. Le système reste compatible avec le mode droitier/gaucher.
+14. Le graphe des atomes contient ou peut produire une sémantique accessible persistante.
+15. L’architecture est robuste sur Tauri + Bevy WASM.
+16. Le système reste compatible avec le mode droitier/gaucher.
 ```
 
 ---
+
+## Accessibilité prioritaire : graphe des atomes, pas seulement UI
+
+Point fondamental de cet audit : l’accessibilité à vérifier concerne **d’abord le graphe métier des atomes**.
+
+L’objectif n’est pas seulement de vérifier que les boutons, menus ou panneaux UI sont accessibles. Il faut surtout vérifier que l’arbre stocké des atomes contient une représentation sémantique suffisante pour générer une expérience accessible indépendamment du rendu Bevy/canvas.
+
+Chaque atome doit pouvoir exposer, selon son kind et ses capacités :
+
+```text
+- un identifiant stable ;
+- un nom lisible ;
+- un kind primaire ;
+- un rôle sémantique ;
+- une description accessible ;
+- un état logique ;
+- des relations parent/enfant ;
+- un ordre de lecture/navigation ;
+- un statut focusable ou non focusable ;
+- les actions disponibles ;
+- les alternatives textuelles nécessaires ;
+- les transcriptions nécessaires ;
+- les métadonnées média nécessaires ;
+- les relations avec d’autres atomes si elles ont une signification accessible ;
+- un mapping stable entre AtomId et représentation accessible.
+```
+
+L’audit doit donc répondre explicitement à cette question :
+
+```text
+Le graphe des atomes contient-il assez de sémantique pour produire :
+- une navigation clavier logique entre atomes ;
+- une lecture alternative du document ;
+- une liste/layer tree accessible ;
+- des noms et rôles compréhensibles par lecteur d’écran ;
+- des alternatives pour audio, vidéo, image et contenus composites ;
+- un export structuré ou une couche DOM/ARIA miroir ;
+- une restauration parfaite de cette sémantique après sauvegarde/rechargement ?
+```
+
+Ne limite pas l’accessibilité aux éléments UI visibles.
+Ne valide pas l’accessibilité si le modèle Atome ne stocke pas ou ne permet pas de produire les informations sémantiques nécessaires.
+
+Exemples attendus à vérifier :
+
+```text
+TextAtom
+├── name
+├── kind: text
+├── role: heading | paragraph | label | caption | custom
+├── text_content
+├── accessibility_label
+├── accessibility_description
+├── reading_order
+└── focusable
+
+ImageAtom
+├── name
+├── kind: image
+├── role: image | decorative | button | custom
+├── alt_text
+├── long_description?
+├── decorative: bool
+└── focusable
+
+VideoAtom
+├── name
+├── kind: video
+├── role: media
+├── accessibility_label
+├── captions?
+├── transcript?
+├── audio_description?
+├── duration
+└── controls_available
+
+AudioAtom
+├── name
+├── kind: audio
+├── role: media
+├── transcript?
+├── duration
+├── waveform_description?
+└── controls_available
+
+CompositeAtom / GroupAtom
+├── name
+├── role: group | region | composition | custom
+├── children
+├── reading_order
+├── navigation_order
+├── accessibility_description
+└── child semantics preserved
+```
+
+Verdict spécifique obligatoire :
+
+```text
+Accessibilité du graphe Atome : OK / PARTIEL / NON / INCONNU
+```
+
+Un verdict `OK` exige des preuves concrètes dans les types, schémas DB, sérialisations et tests.
 
 ## Standards d’accessibilité à utiliser comme référence
 
@@ -524,6 +627,13 @@ Produis un audit WCAG 2.2 AA orienté application graphique.
 Points minimum à vérifier :
 
 ```text
+- le graphe Atome stocke-t-il un nom accessible distinct du nom technique si nécessaire ;
+- le graphe Atome stocke-t-il les rôles sémantiques des atomes ;
+- le graphe Atome stocke-t-il alt text, transcript, captions ou descriptions selon les kinds ;
+- le graphe Atome stocke-t-il un ordre de lecture/navigation ;
+- le graphe Atome permet-il une couche DOM/ARIA miroir ou équivalent ;
+- les enfants d’un CompositeAtom / GroupAtom conservent-ils leur sémantique ;
+- l’historique et la DB préservent-ils les métadonnées d’accessibilité ;
 - accès clavier à la sélection d’atome ;
 - accès clavier à l’entrée en édition ;
 - accès clavier au renommage ;
@@ -771,6 +881,8 @@ Inclure :
 Inclure :
 
 ```text
+- accessibilité du graphe Atome : sémantique stockée, rôles, noms, descriptions, alternatives, ordre de lecture/navigation ;
+- preuves que cette sémantique est persistée ou reconstructible après rechargement ;
 - conformité WCAG 2.2 AA estimée ;
 - points bloquants ;
 - stratégie pour canvas/Bevy ;
@@ -890,7 +1002,7 @@ Le rapport doit permettre de décider clairement :
 4. Est-ce qu’on peut ajouter de nouveaux kinds proprement ?
 5. Est-ce que l’historique en base permet un undo/redo parfait ?
 6. Est-ce que l’édition inline peut être ajoutée sans casser l’existant ?
-7. Est-ce que l’accessibilité est réellement couverte ?
+7. Est-ce que l’accessibilité du graphe des atomes est réellement couverte, et pas seulement celle de l’UI ?
 8. Est-ce que le mode droitier/gaucher reste compatible sans dock ?
 9. Quels sont les risques exacts ?
 10. Quelle est la première étape de correction si nécessaire ?

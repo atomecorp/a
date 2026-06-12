@@ -898,11 +898,11 @@ Status: Semi-public inside eVe closed. Verify exact exports in the owning module
 
 Visibility: Semi-public closed product design APIs.
 
-Evidence: exports in `eVe/elements/design.js`, `eVe/elements/eVe_look.js`, `eVe/elements/system_ui_tokens.js`, `eVe/elements/design/panel_chrome.js`, `panel_chrome_tokens.js`, `panel_overflow_indicators.js`, and the `dialog_runtime.js` facade over dialog drag, geometry, reveal, and viewport runtimes; `window.eveUI` install in `design.js`.
+Evidence: exports in `eVe/elements/design.js`, `eVe/elements/eVe_look.js`, `eVe/elements/system_ui_tokens.js`, `eVe/elements/design/panel_chrome.js`, `panel_chrome_tokens.js`, and the `dialog_runtime.js` facade over dialog drag, geometry, reveal, and viewport runtimes; `window.eveUI` install in `design.js`.
 
 Entry point families:
 
-- Dialog and panel factories: `createEveDialog`, `revealEveDialog`, `createEveCloseControl`, panel chrome helpers, bounds helpers, fullscreen helpers with viewport resize tracking only while fullscreen is active, chrome-scoped fullscreen double-click handles, overflow indicators.
+- Dialog and panel factories: `createEveDialog`, `revealEveDialog`, `createEveCloseControl`, panel chrome helpers, bounds helpers, fullscreen helpers with viewport resize tracking only while fullscreen is active, and chrome-scoped fullscreen double-click handles.
 - UI primitives: rows, buttons, inputs, editable text, text helpers, and `eveUI` namespace.
 - Tokens and presets: system UI tokens, eVe tokens, CSS variable application, base style installation, panel chrome tokens and metrics.
 - i18n binding helpers for visible text.

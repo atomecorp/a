@@ -112,8 +112,24 @@ const assertCanonicalPanelChrome = (dialog, id) => {
     assert.equal(footer.contains(dialog.title), true, `${id} title must live in the footer`);
     assert.equal(footer.contains(close), true, `${id} close control must live in the footer`);
     assert.equal(close.dataset.evePanelClose, 'true', `${id} close control must use the shared close marker`);
-    assert.equal(footer.style.paddingLeft, '5px', `${id} close control left inset must match its vertical chrome inset`);
-    assert.equal(footer.style.paddingRight, '5px', `${id} footer horizontal inset must stay symmetric`);
+    assert.equal(root.style.borderWidth, '0px', `${id} root border must not reserve a visible chrome inset`);
+    assert.equal(header.style.paddingLeft, '0px', `${id} header chrome must touch the left panel edge`);
+    assert.equal(header.style.paddingRight, '0px', `${id} header chrome must touch the right panel edge`);
+    assert.equal(footer.style.paddingLeft, '0px', `${id} footer chrome must touch the left panel edge`);
+    assert.equal(footer.style.paddingRight, '0px', `${id} footer chrome must touch the right panel edge`);
+    assert.equal(header.style.width, '100%', `${id} header chrome must fill the panel width`);
+    assert.equal(footer.style.width, '100%', `${id} footer chrome must fill the panel width`);
+    assert.equal(header.style.boxSizing, 'border-box', `${id} header chrome width must include its own geometry`);
+    assert.equal(footer.style.boxSizing, 'border-box', `${id} footer chrome width must include its own geometry`);
+    assert.equal(header.style.borderTopLeftRadius, 'inherit', `${id} header must inherit the outer top-left panel corner`);
+    assert.equal(header.style.borderTopRightRadius, 'inherit', `${id} header must inherit the outer top-right panel corner`);
+    assert.equal(header.style.borderBottomLeftRadius, '0px', `${id} header must not round its inner bottom-left corner`);
+    assert.equal(header.style.borderBottomRightRadius, '0px', `${id} header must not round its inner bottom-right corner`);
+    assert.equal(footer.style.borderTopLeftRadius, '0px', `${id} footer must not round its inner top-left corner`);
+    assert.equal(footer.style.borderTopRightRadius, '0px', `${id} footer must not round its inner top-right corner`);
+    assert.equal(footer.style.borderBottomLeftRadius, 'inherit', `${id} footer must inherit the outer bottom-left panel corner`);
+    assert.equal(footer.style.borderBottomRightRadius, 'inherit', `${id} footer must inherit the outer bottom-right panel corner`);
+    assert.equal(close.style.marginLeft, '5px', `${id} close control must keep its visual inset without padding the footer chrome`);
     assert.equal(dialog.title.style.position, 'absolute', `${id} title must be centered independently from footer controls`);
     assert.equal(dialog.title.style.left, '50%', `${id} title must stay horizontally centered in the footer`);
     assert.equal(dialog.title.style.top, '50%', `${id} title must stay vertically centered in the footer`);
@@ -155,29 +171,13 @@ const assertCanonicalPanelChrome = (dialog, id) => {
     assert.equal(isScrollable(header), false, `${id} header must not become a scroll container`);
     assert.equal(isScrollable(toolsDock), false, `${id} tools dock must not become a scroll container`);
     assert.equal(isScrollable(footer), false, `${id} footer must not become a scroll container`);
+
+    assert.equal(
+        body.querySelectorAll('[data-role="eve-panel-overflow-indicator"]').length,
+        0,
+        `${id} must not inject scroll overflow arrow indicators`
+    );
 };
-
-const waitForPanelFrame = () => new Promise((resolve) => setTimeout(resolve, 0));
-
-const setScrollMetrics = (node, { scrollTop = 0, clientHeight = 0, scrollHeight = 0 } = {}) => {
-    Object.defineProperty(node, 'clientHeight', { configurable: true, get: () => clientHeight });
-    Object.defineProperty(node, 'scrollHeight', { configurable: true, get: () => scrollHeight });
-    Object.defineProperty(node, 'scrollTop', {
-        configurable: true,
-        get() {
-            return scrollTop;
-        },
-        set(value) {
-            scrollTop = Number(value) || 0;
-        }
-    });
-    node.scrollTop = scrollTop;
-};
-
-const readOverflowIndicators = (dialog) => ({
-    top: dialog.body.querySelector('[data-role="eve-panel-overflow-indicator"][data-direction="top"]'),
-    bottom: dialog.body.querySelector('[data-role="eve-panel-overflow-indicator"][data-direction="bottom"]')
-});
 
 const standardDialog = createEveDialog({
     id: 'eve_contract_probe_dialog',
@@ -186,39 +186,6 @@ const standardDialog = createEveDialog({
     resize: 'both'
 });
 assertCanonicalPanelChrome(standardDialog, 'standard panel');
-
-const overflowIndicators = readOverflowIndicators(standardDialog);
-assert.equal(standardDialog.body.contains(overflowIndicators.top), true, 'top overflow indicator must live in the real scroll container');
-assert.equal(standardDialog.body.contains(overflowIndicators.bottom), true, 'bottom overflow indicator must live in the real scroll container');
-assert.equal(overflowIndicators.top.style.pointerEvents, 'none', 'top overflow indicator must not block panel content interaction');
-assert.equal(overflowIndicators.bottom.style.pointerEvents, 'none', 'bottom overflow indicator must not block panel content interaction');
-
-setScrollMetrics(standardDialog.body, { scrollTop: 0, clientHeight: 300, scrollHeight: 300 });
-standardDialog.body.dispatchEvent(new window.Event('scroll'));
-await waitForPanelFrame();
-assert.equal(overflowIndicators.top.dataset.visible, 'false', 'fully visible panel must hide the top overflow indicator');
-assert.equal(overflowIndicators.bottom.dataset.visible, 'false', 'fully visible panel must hide the bottom overflow indicator');
-
-standardDialog.body.scrollTop = 0;
-setScrollMetrics(standardDialog.body, { scrollTop: 0, clientHeight: 100, scrollHeight: 300 });
-standardDialog.body.dispatchEvent(new window.Event('scroll'));
-await waitForPanelFrame();
-assert.equal(overflowIndicators.top.dataset.visible, 'false', 'panel at top must hide the top overflow indicator');
-assert.equal(overflowIndicators.bottom.dataset.visible, 'true', 'panel with hidden content below must show the bottom overflow indicator');
-
-standardDialog.body.scrollTop = 120;
-setScrollMetrics(standardDialog.body, { scrollTop: 120, clientHeight: 100, scrollHeight: 300 });
-standardDialog.body.dispatchEvent(new window.Event('scroll'));
-await waitForPanelFrame();
-assert.equal(overflowIndicators.top.dataset.visible, 'true', 'panel with hidden content above must show the top overflow indicator');
-assert.equal(overflowIndicators.bottom.dataset.visible, 'true', 'panel with hidden content below must keep the bottom overflow indicator visible');
-
-standardDialog.body.scrollTop = 200;
-setScrollMetrics(standardDialog.body, { scrollTop: 200, clientHeight: 100, scrollHeight: 300 });
-standardDialog.body.dispatchEvent(new window.Event('scroll'));
-await waitForPanelFrame();
-assert.equal(overflowIndicators.top.dataset.visible, 'true', 'panel at bottom must keep the top overflow indicator visible');
-assert.equal(overflowIndicators.bottom.dataset.visible, 'false', 'panel at bottom must hide the bottom overflow indicator');
 
 assertCanonicalPanelChrome(createEveDialog({
     id: 'eve_mtrack_dialog',

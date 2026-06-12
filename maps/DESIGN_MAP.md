@@ -191,15 +191,16 @@ Related sources:
 - `eVe/elements/design/dialog_reveal_runtime.js`
 - `eVe/elements/design/dialog_viewport_runtime.js`
 - `eVe/elements/design/dialog_bounds.js`
-- `eVe/elements/design/panel_overflow_indicators.js`
 - `eVe/elements/design/panel_fullscreen_runtime.js`
 
 Role:
 
 - Defines the shared panel header/footer/tools dock chrome.
 - Converts system panel chrome values into eVe CSS variables and style objects.
-- Supports the current panel contract: header, body, tools dock, footer, close control, resize grip, and overflow indicators.
+- Supports the current panel contract: header, body, tools dock, footer, close control, and resize grip.
+- Panel scrollable bodies must not inject top/bottom overflow arrow indicators; hidden content is indicated by native scroll behavior only.
 - Panel footer titles are horizontally and vertically centered inside the footer through the shared chrome layer, independent of panel width and resize state. The bottom-right resize grip remains invisible but interactive and must not be replaced by title placement logic.
+- Panel header and footer chrome bands must sit flush against the panel edges: the root dialog must not reserve a transparent border, the bands own full-width border-box geometry, and only the outer panel corners are rounded. Control spacing belongs to controls such as close, not to band padding.
 - `createEveCloseControl` is the generic close-control entry point for eVe panels and close affordances; `createEvePanelCloseControl` remains an alias to the same implementation for existing panel code.
 - Owns fullscreen panel geometry reflow on viewport resize; custom and restored panel sizes must not track viewport changes.
 - Dialog fullscreen geometry is direct: left/top are `0`, width matches the dialog container, and height stops exactly at the main toolbar top when the toolbar is present.
@@ -353,6 +354,8 @@ Role:
 - Panel visual tokens and component visual tokens own reusable product component visuals.
 
 Design rule: new panels should use the panel creator and shared panel chrome before adding panel-local styling.
+
+User panel layout rule: `eVe/intuition/tools/user.js` keeps authenticated account actions inside the scrollable user dialog body, directly below the `Preferences` accordion; they must not return to a fixed body footer.
 
 Menu ownership rule: application example files must not call `window.new_menu_v2.updateContent()` or `updateTheme()` to replace the product menu. Main menu visual and content ownership stays in the Intuition ribbon/menu stack and panel definitions.
 

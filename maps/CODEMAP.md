@@ -202,7 +202,7 @@ Main entry points:
 - `tests/probes/media_api_suite_probe.test.mjs` guards the project media import DOM projection contract for image, SVG, video, and audio Atomes. It fails when final Atome DOM contains forbidden Atome `data-*` attributes, runtime/custom attributes, empty `class=""`, disguised runtime classes such as `eve-system-layer-*`, forbidden selection classes, `border: medium`, inline outline without `is-selected`, or renderer state stored in DOM instead of runtime state.
 - `tests/strangler_v2/_env.mjs` owns the maintained mock browser fixture for colocated eVe Intuition runtime tests.
 - `tests/strangler_v2/palette_ssot_guard.test.mjs` guards the menu/palette source-of-truth contract by preventing legacy example entrypoints from mutating `new_menu_v2` directly.
-- `tests/probes/user_panel_content_contract.test.mjs` verifies the home/user panel module still mounts non-empty auth and profile dialog bodies from the canonical panel controls.
+- `tests/probes/user_panel_content_contract.test.mjs` verifies the home/user panel module still mounts non-empty auth and profile dialog bodies from the canonical panel controls, and keeps authenticated account actions in the scrollable user body directly below Preferences.
 
 Status: Verified by current tree inspection.
 
@@ -1005,7 +1005,6 @@ Main files:
 - `eVe/elements/eVe_look.js`
 - `eVe/elements/design/panel_chrome.js`
 - `eVe/elements/design/panel_chrome_tokens.js`
-- `eVe/elements/design/panel_overflow_indicators.js`
 - `eVe/elements/design/dialog_runtime.js`
 - `eVe/elements/design/dialog_drag_runtime.js`
 - `eVe/elements/design/dialog_geometry_runtime.js`
@@ -1018,7 +1017,7 @@ Main files:
 Reusable APIs:
 
 - `eveT`, `eveTList`, locale helpers.
-- Panel chrome and overflow indicator contracts.
+- Panel chrome contracts without injected scroll overflow arrow indicators.
 - Dialog bounds/fullscreen runtime, including viewport resize reflow while fullscreen is active. Fullscreen dialogs use exact container edges and stop at the main toolbar top; no margin-based viewport constraint helper owns this geometry.
 - Shared footer title placement belongs to `eVe/elements/design/panel_chrome.js`: titles stay centered in the footer across resize/fullscreen changes, while the invisible bottom-right resize grip remains interactive.
 - Fullscreen double-click is limited to explicit panel chrome handles so tool/body double-clicks stay context-owned.

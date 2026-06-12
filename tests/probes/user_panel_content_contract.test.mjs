@@ -103,8 +103,21 @@ assert.equal(userOpen.panel_id, 'eve_user_dialog', 'authenticated state must ope
 
 const userBody = document.getElementById('eve_user_dialog__body');
 const userFooter = document.getElementById('eve_user_dialog__body_footer');
+const userActions = document.getElementById('eve_user_dialog__actions');
+const preferences = document.getElementById('eve_user_dialog__preferences');
 assert.ok(userBody?.children?.length > 0, 'user dialog body must contain profile fields');
-assert.ok(userFooter?.children?.length > 0, 'user dialog footer must contain actions');
+assert.ok(userActions, 'user dialog actions row must exist');
+assert.equal(userBody?.contains(userActions), true, 'user dialog actions must live in the scrollable body');
+assert.equal(userFooter?.contains(userActions) || false, false, 'user dialog footer must not contain actions');
+assert.equal(userActions?.previousElementSibling, preferences, 'user dialog actions must be directly below preferences');
+assert.ok(
+    userActions?.contains(document.getElementById('eve_user_dialog__actions__logout')),
+    'user dialog actions must contain logout'
+);
+assert.ok(
+    userActions?.contains(document.getElementById('eve_user_dialog__actions__delete')),
+    'user dialog actions must contain delete user'
+);
 assert.equal(
     document.getElementById('eve_user_dialog__actions__create'),
     null,
