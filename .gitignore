@@ -44,6 +44,21 @@ tests
 
 tests/*
 !tests/
+!tests/database/
+tests/database/*
+!tests/database/adole_event_replay_rebuild.test.mjs
+!tests/database/adole_history_transactions.test.mjs
+!tests/database/adole_legacy_snapshot_event_restore.test.mjs
+!tests/database/adole_restart_safe_interactions.test.mjs
+!tests/shared/
+tests/shared/*
+!tests/shared/accessible_atom_node.test.mjs
+!tests/shared/accessibility_graph.test.mjs
+!tests/shared/accessibility_bridge_contract.test.mjs
+!tests/shared/accessibility_behavior_contract.test.mjs
+!tests/shared/atom_graph.test.mjs
+!tests/shared/core_atome_types.test.mjs
+!tests/shared/semantic_rename_contract.test.mjs
 !tests/eve/
 tests/eve/*
 !tests/eve/atome_commit.sanitization.test.mjs
@@ -58,8 +73,12 @@ tests/eve/*
 !tests/eve/tool_instance_projection_store.test.mjs
 !tests/eve/project_drop_tool_instance_contract.test.mjs
 !tests/eve/project_scene_gesture_performance.test.mjs
+!tests/eve/bevy_projection_adapter_contract.test.mjs
+!tests/eve/inline_edit_close_overlay_contract.test.mjs
+!tests/eve/inline_edit_session_contract.test.mjs
 !tests/probes/
 !tests/probes/flower_menu_modules.test.mjs
+!tests/probes/project_scene_inline_edit_accessibility_bridge_smoke.test.mjs
 !tests/molecule/
 !tests/molecule/run_molecule_tests.mjs
 !tests/governance/

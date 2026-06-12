@@ -35,6 +35,25 @@ The assistant must act as:
 CORE PRINCIPLES
 ────────────────────────────────
 
+## Current Graph-Based Accessibility Ownership
+
+Status as of 2026-06-12:
+
+* Atome durable state owns semantic accessibility fields under canonical Atome properties.
+* `atome/src/shared/atom_graph.js` owns structural graph derivation from canonical state rows or append-only events, including roots, parent-child links, visual order, semantic reading order, focus order, and diagnostics.
+* `atome/src/shared/accessible_atom_node.js` owns accessible node normalization for role, label, description, alt text, focusability, visibility, actions, and relations.
+* `atome/src/shared/accessibility_graph.js` owns graph-level accessibility derivation from `AtomGraph` and Atome properties. It owns accessible nodes, reading order, focus order, structural relations, inaccessible-node filtering, and diagnostics without reading visible DOM, browser accessibility APIs, renderer payloads, or product UI state.
+* `atome/src/shared/accessibility_bridge_contract.js` owns the disposable semantic bridge payload for future browser, WebView, native, or assistant consumers. It mirrors graph ids, labels, roles, actions, relations, reading order, and focus order; it must not create DOM nodes, ARIA attributes, CSS selectors, renderer state, or product UI state.
+* `atome/src/shared/semantic_rename_contract.js` owns semantic rename behavior. The canonical rename field is `properties.label`; rename patches also update `properties.accessibility.label`; durable rename events require explicit `tx_id`.
+* `eVe/domains/rendering/inline_edit_session.js` owns inline edit session state and focus restoration metadata. It may reference graph or bridge ids as pure data but must reject DOM nodes, functions, selectors, and mutable UI objects.
+
+Ownership rule:
+
+* Accessibility truth must be derived from canonical Atome state and append-only history, not from DOM, Bevy ECS, browser accessibility APIs, hidden text editors, product panel state, screenshots, or visual renderer payloads.
+* Accessible actions are declarative capabilities. They may be routed later through approved tool/runtime capability paths, but the graph and bridge do not execute actions and do not imply a DOM event target.
+* Focus restoration after inline editing must use pure session data and graph/bridge identifiers. It must not store browser elements or selector strings as authoritative state.
+* Product design may consume semantic labels, roles, actions, and order data for presentation, but design tokens, CSS classes, inline styles, and visual selection state remain separate from the accessibility graph.
+
 1. Accessibility is native
 
 Accessibility must NOT be delegated to:
@@ -431,4 +450,3 @@ It must understand:
   * factorize when needed;
   * optimize without changing expected behavior.
 * During implementation, strictly apply the rules defined in:
-

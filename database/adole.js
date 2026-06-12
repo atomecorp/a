@@ -35,6 +35,29 @@ import {
 } from './adole_storage_projection.js';
 import { runAdoleSchemaMigrations } from './adole_schema_migrations.js';
 import { createAdolePermissionApi } from './adole_permissions.js';
+import {
+    HISTORY_EVENT_CLASS,
+    HISTORY_REDO_RULE,
+    HISTORY_TRANSACTION_VISIBILITY,
+    buildHistoryTransactions,
+    classifyHistoryEvent,
+    normalizeHistoryEvent,
+    resolveHistoryCursor,
+    selectRedoTransaction,
+    selectUndoTransaction
+} from './adole_history_transactions.js';
+
+export {
+    HISTORY_EVENT_CLASS,
+    HISTORY_REDO_RULE,
+    HISTORY_TRANSACTION_VISIBILITY,
+    buildHistoryTransactions,
+    classifyHistoryEvent,
+    normalizeHistoryEvent,
+    resolveHistoryCursor,
+    selectRedoTransaction,
+    selectUndoTransaction
+};
 
 let db = null;
 let isAsync = false;
@@ -169,7 +192,16 @@ function stripEventMetaPatch(patch) {
     return sanitizeAtomeProperties(filtered);
 }
 
-async function upsertAtomeFromEvent({ atomeId, atomeType, parentId, ownerId, ts, deleted, properties }) {
+async function upsertAtomeFromEvent({
+    atomeId,
+    atomeType,
+    parentId,
+    ownerId,
+    ts,
+    deleted,
+    properties,
+    writeParticles = true
+}) {
     if (!atomeId) return;
     const now = ts || new Date().toISOString();
 
@@ -232,10 +264,10 @@ async function upsertAtomeFromEvent({ atomeId, atomeType, parentId, ownerId, ts,
             ]
         );
 
-        if (pendingOwnerId) {
+        if (pendingOwnerId && writeParticles) {
             await setParticle(atomeId, '_pending_owner_id', pendingOwnerId, ownerId || null);
         }
-        if (pendingParentId) {
+        if (pendingParentId && writeParticles) {
             await setParticle(atomeId, '_pending_parent_id', pendingParentId, ownerId || null);
         }
     } else {
@@ -294,18 +326,18 @@ async function upsertAtomeFromEvent({ atomeId, atomeType, parentId, ownerId, ts,
             values.push(atomeId);
             await query('run', `UPDATE atomes SET ${updates.join(', ')} WHERE atome_id = ?`, values);
         }
-        if (pendingOwnerId) {
+        if (pendingOwnerId && writeParticles) {
             await setParticle(atomeId, '_pending_owner_id', pendingOwnerId, ownerId || null);
-        } else if (assignedOwnerId || existing.owner_id) {
+        } else if (writeParticles && (assignedOwnerId || existing.owner_id)) {
             await query(
                 'run',
                 "DELETE FROM particles WHERE atome_id = ? AND particle_key = '_pending_owner_id'",
                 [atomeId]
             );
         }
-        if (pendingParentId) {
+        if (pendingParentId && writeParticles) {
             await setParticle(atomeId, '_pending_parent_id', pendingParentId, ownerId || null);
-        } else if (assignedParentId || existing.parent_id) {
+        } else if (writeParticles && (assignedParentId || existing.parent_id)) {
             await query(
                 'run',
                 "DELETE FROM particles WHERE atome_id = ? AND particle_key = '_pending_parent_id'",
@@ -314,7 +346,7 @@ async function upsertAtomeFromEvent({ atomeId, atomeType, parentId, ownerId, ts,
         }
     }
 
-    if (properties && Object.keys(properties).length > 0) {
+    if (writeParticles && properties && Object.keys(properties).length > 0) {
         await setParticles(atomeId, properties, ownerId || null);
     }
 }
@@ -1219,6 +1251,73 @@ export async function getChangesSince(sinceTimestamp = null) {
 // SNAPSHOTS
 // ============================================================================
 
+function parseSnapshotData(snapshotData) {
+    const data = safeParseJson(snapshotData);
+    if (!data || typeof data !== 'object') {
+        throw new Error('Invalid snapshot data');
+    }
+    return data;
+}
+
+function resolveSnapshotRestoreActor(author, snapshot) {
+    if (author && typeof author === 'object') return author;
+    if (typeof author === 'string' && author.trim()) return { id: author };
+    const snapshotActor = safeParseJson(snapshot?.actor);
+    if (snapshotActor && typeof snapshotActor === 'object') return snapshotActor;
+    if (snapshot?.created_by) return { id: snapshot.created_by };
+    return null;
+}
+
+function selectSnapshotProperties(data) {
+    const candidates = [data?.properties, data?.data, data?.particles];
+    for (const candidate of candidates) {
+        if (candidate && typeof candidate === 'object' && !Array.isArray(candidate)) {
+            return candidate;
+        }
+    }
+    return {};
+}
+
+function buildSnapshotRestorePatch(snapshot, data) {
+    const properties = selectSnapshotProperties(data);
+    const meta = data?.meta && typeof data.meta === 'object' ? data.meta : {};
+    const patch = { ...properties };
+    const atomeType = data.type || data.atome_type || null;
+    const parentId =
+        meta.parent_id ||
+        meta.parentId ||
+        data.parent_id ||
+        data.parentId ||
+        properties.parent_id ||
+        properties.parentId ||
+        null;
+    const projectId =
+        meta.project_id ||
+        meta.projectId ||
+        data.project_id ||
+        data.projectId ||
+        properties.project_id ||
+        properties.projectId ||
+        snapshot.project_id ||
+        null;
+    const ownerId =
+        meta.owner_id ||
+        meta.ownerId ||
+        data.owner_id ||
+        data.ownerId ||
+        properties.owner_id ||
+        properties.ownerId ||
+        snapshot.created_by ||
+        null;
+
+    if (atomeType) patch.type = atomeType;
+    if (parentId) patch.parent_id = parentId;
+    if (projectId) patch.project_id = projectId;
+    if (ownerId) patch.owner_id = ownerId;
+
+    return { patch, projectId };
+}
+
 /**
  * Create a snapshot of an atome's current state
  */
@@ -1255,22 +1354,26 @@ export async function getSnapshots(atomeId, limit = 10) {
 /**
  * Restore an atome from a snapshot
  */
-export async function restoreSnapshot(snapshotId, author = null) {
+export async function restoreSnapshot(snapshotId, author = null, options = {}) {
     const snap = await query('get',
         'SELECT * FROM snapshots WHERE snapshot_id = ?',
         [snapshotId]
     );
     if (!snap) throw new Error('Snapshot not found');
 
-    const data = JSON.parse(snap.snapshot_data);
-
-    // Clear current particles
-    await query('run', 'DELETE FROM particles WHERE atome_id = ?', [snap.atome_id]);
-
-    // Restore all particles
-    if (data.data) {
-        await setParticles(snap.atome_id, data.data, author);
-    }
+    const data = parseSnapshotData(snap.snapshot_data);
+    const actor = resolveSnapshotRestoreActor(author, snap);
+    const txId = options.tx_id || options.txId || `legacy_snapshot_restore_${snapshotId}`;
+    const { patch, projectId } = buildSnapshotRestorePatch(snap, data);
+    await appendEvent({
+        kind: 'set',
+        atome_id: snap.atome_id,
+        project_id: projectId,
+        actor,
+        payload: {
+            props: patch
+        }
+    }, { txId });
 
     return data;
 }
@@ -1312,13 +1415,14 @@ function normalizeEventInput(event, options = {}) {
     };
 }
 
-async function applyEventToStateCurrent(event) {
+async function applyEventToStateCurrent(event, options = {}) {
     const atomeId = event.atome_id;
     if (!atomeId) return null;
 
     const ts = event.ts || new Date().toISOString();
-    const patch = extractEventPatch(event.kind, event.payload, ts);
-    if (!patch) return null;
+    const sourcePatch = extractEventPatch(event.kind, event.payload, ts);
+    if (!sourcePatch) return null;
+    const patch = { ...sourcePatch };
 
     const actorId = resolveActorId(event.actor);
     const patchOwnerId = patch.owner_id || patch.ownerId || patch.owner || null;
@@ -1336,7 +1440,8 @@ async function applyEventToStateCurrent(event) {
         ownerId: ownerFromEvent,
         ts,
         deleted,
-        properties: particlePatch
+        properties: particlePatch,
+        writeParticles: options.writeParticles !== false
     });
 
     if (patch.type == null && patch.atome_type == null && patch.kind == null) {
@@ -1398,6 +1503,69 @@ async function applyEventToStateCurrent(event) {
         properties: nextProps,
         updated_at: ts,
         version: nextVersion
+    };
+}
+
+export async function rebuildStateCurrentFromEvents(options = {}) {
+    const all = options.all === true || options.scope === 'all';
+    const projectId = options.projectId || options.project_id || null;
+    const atomeId = options.atomeId || options.atome_id || null;
+    const limit = Math.max(1, Math.min(Number(options.limit) || 100000, 1000000));
+    if (!all && !projectId && !atomeId) {
+        throw new Error('rebuild_state_current_scope_required');
+    }
+
+    const conditions = [];
+    const params = [];
+    if (projectId) {
+        conditions.push('project_id = ?');
+        params.push(projectId);
+    }
+    if (atomeId) {
+        conditions.push('atome_id = ?');
+        params.push(atomeId);
+    }
+    const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+    const scope = all ? 'all' : (projectId && atomeId ? 'project_and_atome' : (projectId ? 'project' : 'atome'));
+    const applied = [];
+    let eventCount = 0;
+
+    await withTransaction(async () => {
+        if (all) {
+            await query('run', 'DELETE FROM state_current');
+        } else if (projectId && atomeId) {
+            await query('run', 'DELETE FROM state_current WHERE project_id = ? OR atome_id = ?', [projectId, atomeId]);
+        } else if (projectId) {
+            await query('run', 'DELETE FROM state_current WHERE project_id = ?', [projectId]);
+        } else {
+            await query('run', 'DELETE FROM state_current WHERE atome_id = ?', [atomeId]);
+        }
+
+        const rows = await query(
+            'all',
+            `SELECT rowid AS replay_rowid, * FROM events ${where} ORDER BY ts ASC, rowid ASC LIMIT ?`,
+            [...params, limit]
+        );
+        eventCount = rows.length;
+        for (const row of rows) {
+            const projected = await applyEventToStateCurrent({
+                ...row,
+                payload: safeParseJson(row.payload),
+                actor: safeParseJson(row.actor)
+            }, {
+                writeParticles: false
+            });
+            if (projected) applied.push(projected);
+        }
+    });
+
+    return {
+        ok: true,
+        scope,
+        project_id: projectId,
+        atome_id: atomeId,
+        event_count: eventCount,
+        projection_count: applied.length
     };
 }
 
@@ -2086,8 +2254,18 @@ export default {
     appendEvents,
     listEvents,
     getEvent,
+    rebuildStateCurrentFromEvents,
     getStateCurrent,
     listStateCurrent,
+    buildHistoryTransactions,
+    classifyHistoryEvent,
+    normalizeHistoryEvent,
+    resolveHistoryCursor,
+    selectUndoTransaction,
+    selectRedoTransaction,
+    HISTORY_EVENT_CLASS,
+    HISTORY_REDO_RULE,
+    HISTORY_TRANSACTION_VISIBILITY,
 
     // Permissions
     setPermission,

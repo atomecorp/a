@@ -133,6 +133,8 @@ Unified rendering ownership:
 - `eVe/domains/rendering/render_atom.js` owns the disposable RenderAtom content projection and must consume the shared media source canonicalization contract before media reaches Bevy, so bare uploaded or recorded filenames become explicit `/api/uploads/...` or `/api/recordings/...` sources with owner scope instead of browser-relative URLs.
 - `eVe/domains/rendering/virtual_scene_contract.js` owns the Phase 1 renderer-agnostic Virtual Scene contract: disposable `AtomeRenderNode` projection, deterministic tree construction, selected-state projection from the runtime selection table, dense render-layer assignment from the actual scene paint order, render diff operations, and dirty-flag names. It is a projection/diff contract only; it must not become an ECS, renderer, canonical Atome model, or DOM-backed state store.
 - `eVe/domains/rendering/bevy_projection_adapter.js` owns the strict browser Bevy projection adapter from `AtomeRenderNode` Virtual Scene data into the `run_atome_bevy_renderer(...)` payload shape. It maps explicit id, kind, parent, logical position, logical size, paint-order layer, selected flag, fill color, text, media source, media texture, waveform peak fields, and project-audio waveform playback progress, normalizes direct CSS z-index/layer payloads to the Rust `i32` boundary when no Virtual Scene render layer exists, and rejects incomplete projection nodes instead of inventing silent defaults.
+- `eVe/domains/rendering/renderer_adapter_registry.js` owns the pure renderer adapter registry contract: normalized kind ids, renderer names, immutable capability metadata, explicit registration, lookup, assertion, and list operations. It does not own DOM state, canonical Atome state, texture generation, or renderer dispatch side effects.
+- `eVe/domains/rendering/bevy_renderer_adapter_registry.js` owns the default Bevy renderer adapter declarations and kind-specific node/resource mapping callbacks for the currently supported `shape`, `text`, `image`, `video`, and `audio_waveform` kinds. `bevy_projection_adapter.js` owns common Bevy payload validation/base fields and delegates kind-specific projection to the registered adapter.
 - `eVe/domains/rendering/bevy_pending_media_contract.js` owns the browser Bevy contract for source-backed media whose disposable texture is not available at spawn time. It identifies persisted video poster and waveform peak inputs that must be consumed during initial projection, requires image nodes to resolve a texture before spawn, and marks uncached video plus waveform media with transparent material so Rust never exposes its default blue shape while the same Bevy resource path generates the delayed texture.
 - `eVe/domains/rendering/bevy_media_texture_resolver.js` owns disposable browser texture decoding for the Bevy web route. It converts text, raster images, SVG documents, video frames, and audio waveforms into explicit RGBA texture payloads without adding visible media DOM nodes and without rendering through a legacy project adapter; video textures seek to representative frames and prime muted frame presentation before RGBA readback, Safari/WKWebView video decode uses the shared hidden in-flow pool from `eVe/domains/media/shared/video_decode_pool_runtime.js` so frame rasterization is not starved by detached media, treats WebKit user-gesture `play()` rejection as non-fatal for frame readback, rejects transparent or all-black video readbacks as blank-frame failures instead of becoming Bevy textures, accepts the video fixtures in `tests/fixtures/media`, and decodes source-backed audio waveforms to derive real peaks before texture generation.
 - `eVe/domains/rendering/bevy_surface_background_runtime.js` owns browser Bevy project-surface background delivery. It consumes the `eve:surface-background-changed` event from the user background preference path, decodes image backgrounds to cached RGBA texture payloads when needed, forwards generated textures directly, and calls `apply_atome_bevy_surface_background` so the Rust Bevy scene renders background pixels before Atomes and text. `user_background_pattern_renderer.js` owns generated background pixel production, while `user_surface_background_texture_runtime.js` owns preference-to-surface payload orchestration for `eVe/user/background.js`.
@@ -142,7 +144,9 @@ Unified rendering ownership:
 - `eVe/domains/rendering/project_scene_bevy_projection_runtime.js` owns active project Bevy renderer execution. It selects the native or web Bevy runtime according to the existing capability contract, sends startup scenes or diffs, and converts native non-presentable errors into explicit projection results without selecting a Web/WASM fallback on iOS.
 - Legacy active project renderer modules `render_at_time.js`, `project_scene_webgpu_adapter.js`, `image_adapter.js`, `video_adapter.js`, `waveform_adapter.js`, `text_adapter.js`, and `project_scene_selection_overlay.js` were removed once the active project route moved to Bevy. Project Atome rendering must use the Bevy Virtual Scene and media texture route, not the old WebGPU adapter family.
 - Project selection visuals on the cleaned route are projected by `eVe/domains/rendering/` and drawn by the shared Atome Bevy core: `project_scene_selection_state.js` reads existing selection runtime state, `project_scene_runtime.js` marks disposable render atoms, `virtual_scene_contract.js`/`bevy_projection_adapter.js` propagate `selected` plus dense paint-order render layers, `bevy_web_renderer_runtime.js` forwards those fields in style diffs, `atome/shared/render_visual_tokens.js` owns the cross-platform design tokens, and `atome/renderers/bevy-core/src/selection_overlay.rs` draws the selected Atome as a light-gray dotted contour with a progressively faded 12 px shadow blur just above the selected entity and below the next paint layer inside the same project canvas. No per-Atome DOM outline, host class, selection overlay DOM, or legacy WebGPU selection bitmap is allowed on the active project route.
-- `eVe/domains/rendering/project_scene_runtime.js` owns active project scene orchestration, resize, drag, generic scene-intent commits, and synchronous disposable scene refresh when project-visible records are inserted before the async Bevy frame completes. It delegates live drag/resize frame coalescing to `eVe/domains/rendering/project_scene_gesture_runtime.js`, so move bursts update disposable scene records immediately while WebGPU rerenders and realtime `gesture_frame` commits are batched to animation frames. Text editing is delegated to `eVe/domains/rendering/project_scene_text_runtime.js`, active edit ownership is tracked outside the DOM by `eVe/domains/rendering/project_scene_text_edit_state.js`, hidden keyboard capture is owned by `eVe/domains/rendering/hidden_text_service_runtime.js`, direct Bevy transform patches are owned by `eVe/domains/rendering/project_scene_direct_transform_runtime.js`, and selection/video/audio invalidation listeners are owned by `eVe/domains/rendering/project_scene_invalidation_runtime.js`. Text commit and gesture end still persist `set` events through the canonical Atome commit boundary.
+- `eVe/domains/rendering/inline_edit_session.js` owns the pure InlineEditSession state-machine contract: explicit session/project/atom ids, mode, activation source, initial/draft values, focus origin, overlay anchor, `tx_id`, optional gesture id, selection snapshot, immutable open/committed/cancelled transitions, and DOM-authority rejection for session metadata.
+- `eVe/domains/rendering/inline_edit_close_overlay.js` owns the pure close-overlay interaction contract for inline editing. It derives disposable overlay metadata from an InlineEditSession, maps close/Escape/Enter/touch/accessibility activation to commit/cancel/none actions, and returns pure focus-restoration data without creating Atomes, DOM nodes, selectors, or visual style state.
+- `eVe/domains/rendering/project_scene_runtime.js` owns active project scene orchestration, resize, drag, generic scene-intent commits, and synchronous disposable scene refresh when project-visible records are inserted before the async Bevy frame completes. It delegates live drag/resize frame coalescing to `eVe/domains/rendering/project_scene_gesture_runtime.js`, so move bursts update disposable scene records immediately while WebGPU rerenders and realtime `gesture_frame` commits are batched to animation frames. Text editing is delegated to `eVe/domains/rendering/project_scene_text_runtime.js`, active edit ownership is tracked outside the DOM by `eVe/domains/rendering/project_scene_text_edit_state.js`, hidden keyboard capture is owned by `eVe/domains/rendering/hidden_text_service_runtime.js`, direct Bevy transform patches are owned by `eVe/domains/rendering/project_scene_direct_transform_runtime.js`, and selection/video/audio invalidation listeners are owned by `eVe/domains/rendering/project_scene_invalidation_runtime.js`. `project_scene_text_runtime.js` consumes `InlineEditSession` for active text edit draft state, focus metadata, overlay anchor metadata, and deterministic `tx_id` propagation while keeping visible text on the Bevy canvas. Text commit and gesture end still persist `set` events through the canonical Atome commit boundary.
 - `eVe/domains/rendering/surface_runtime.js` owns centralized project-surface pointer routing for select, drag, resize, native double-click text edit re-entry, caret placement, and text drag-selection gestures. It also owns render-surface host attachment, logical size tracking, and client-to-logical coordinate conversion when the visible canvas rect is scaled relative to the render surface. `surface_text_pointer_runtime.js` owns text-specific pointer routing helpers and active-edit guards; active text gives caret/selection precedence over resize except on the bottom-right resize corner. `project_scene_hit_testing.js` owns project-scene client-point and lasso-rect queries against the disposable scene. Resize is resolved through scene hit-testing and logical edge handles on the canvas, not visible per-Atome resize DOM.
 - `eVe/domains/rendering/surface_pointer_runtime.js` owns active project resize geometry for single and multi-selection gestures. Resize is homothetic by default: one uniform scale is derived from the active logical handle and applied to width and height for every selected scene target before the final canonical `set` commit. For inactive text Atomes it recalculates `text_style.font_size` from that scale so Bevy redraws crisp text; for actively edited text it changes only the bounding box. The resize hit band is an internal logical-canvas band on the right and bottom edges with 5 px of additional inward tolerance; it must not be represented by DOM handles or mutate canonical Atome bounds.
 - `eVe/core/atome_events/project_layer_runtime.js` owns project background and lasso gestures. On the cleaned canvas route it must ask `project_scene_runtime.js` for scene hit-tests before arming lasso, and lasso rectangle selection must use scene Atome ids when no per-Atome DOM hosts exist.
@@ -195,6 +199,22 @@ Main entry points:
 - `tests/scripts/check_squirrel_dom_adapter_guardrails.test.mjs` guards Squirrel Atome DOM adapter containment: `this.element` and local `element` projections must not receive canonical business state properties or serialized model payloads.
 - `database/adole.event_projection_invariants.test.mjs` guards event/particle/`state_current` projection coherence: append-only event dedupe, projection versioning, sanitized reserved fields, and matching particle/state properties.
 - `database/adole.snapshot_restore_invariants.test.mjs` guards controlled state snapshot restoration through event replay instead of direct DOM or projection writes.
+- `tests/database/adole_event_replay_rebuild.test.mjs` guards full `state_current` rebuild from append-only events without mutating event or particle history.
+- `tests/database/adole_history_transactions.test.mjs` guards the durable HistoryTransaction contract: `tx_id` grouping, continuous gesture visibility, append-only redo selection after restart, isolated missing-`tx_id` events, and non-contiguous `tx_id` reuse detection.
+- `tests/database/adole_legacy_snapshot_event_restore.test.mjs` guards legacy snapshot containment: `restoreSnapshot` must append a `set` event, restore through projection, and extend particle history instead of deleting particles directly.
+- `tests/database/adole_restart_safe_interactions.test.mjs` guards restart-safe reconstruction for text edit, drag, resize, and semantic rename interactions from append-only events, including durable undo/redo transaction grouping after reload.
+- `tests/shared/atom_graph.test.mjs` guards the pure AtomGraph contract: record normalization, deterministic roots/links/order, event patch folding, deletion filtering, cycle/orphan diagnostics, duplicate state-row diagnostics, stable child order, deleted-parent reachability, and distinct visual/semantic/focus ordering.
+- `tests/shared/accessible_atom_node.test.mjs` guards the pure AccessibleAtomNode schema and sanitizer for role, label, description, alt text, focusable state, actions, relations, invalid diagnostics, and strict assertion behavior.
+- `tests/shared/accessibility_graph.test.mjs` guards the pure AccessibilityGraph derivation from AtomGraph and Atome properties across text, shape, image, video, audio, and group nodes without visible DOM state.
+- `tests/shared/accessibility_bridge_contract.test.mjs` guards the disposable accessibility bridge projection contract: bridge nodes mirror AccessibilityGraph ids, labels, actions, reading/focus order, and remain free of DOM authority fields.
+- `tests/shared/accessibility_behavior_contract.test.mjs` guards accessibility behavior across AccessibilityGraph, AccessibilityBridgeProjection, SemanticRename, and InlineEditSession: reading order, focus order, accessible actions, label update, and focus restoration without DOM-owned state.
+- `tests/shared/core_atome_types.test.mjs` guards the core Atome type definitions and registry installation for text, shape, image, video, audio, waveform, group, project, and tool instance contracts.
+- `tests/shared/semantic_rename_contract.test.mjs` guards semantic rename normalization, deterministic label fallback, `set` event construction with required `tx_id`, HistoryTransaction grouping, and AccessibilityGraph label updates without DOM state.
+- `tests/eve/bevy_projection_adapter_contract.test.mjs` guards Bevy projection adapter compatibility, including the default renderer adapter registry, immutable registry metadata, adapter-delegated kind mapping, existing kind payload parity, CSS layer clamping, natural video texture size, and display-size exclusion from video texture metadata.
+- `tests/eve/inline_edit_close_overlay_contract.test.mjs` guards the pure close-overlay contract: disposable non-Atome overlay metadata, close/Escape cancel behavior, Enter commit behavior when applicable, touch close activation, accessibility activation, and focus restoration.
+- `tests/eve/inline_edit_session_contract.test.mjs` guards the pure InlineEditSession contract: required ids and `tx_id`, activation source and mode enums, immutable draft/overlay updates, commit/cancel transitions, focus restoration metadata, selection snapshots, and rejection of DOM/function data in session metadata.
+- `tests/eve/project_scene_text_edit_contract.test.mjs` guards the active project text route: one hidden editor, no visible `.eve-atome-text`, InlineEditSession exposure through project scene state, text commit `tx_id` propagation, rich-text span commits, cancel cleanup, DOM-independent refresh, pointer caret/selection, and resize behavior.
+- `tests/probes/project_scene_inline_edit_accessibility_bridge_smoke.test.mjs` guards T23 smoke coverage for browser and Tauri/WebView-like project scenes: visible Bevy canvas ownership, inline-edit commit `tx_id`, AtomGraph rebuild from committed events, AccessibilityGraph reading/focus order, disposable AccessibilityBridge labels/actions, and absence of selector/element authority.
 - `tests/probes/mtrax_play_resume_position.test.mjs` guards the MTraX transport contract that `playTimeline()` starts from the current playhead and does not rewind at play start.
 - `tests/probes/mtrax_group_reload_preserve_playhead.test.mjs` guards same-group MTraX timeline reloads so play-triggered reloads do not issue stop before play and preserve the current playhead.
 - `tests/probes/mtrax_keyboard_space_toggle_resume.test.mjs` guards the Molecule space-key shortcut cycle so it calls play, pause, then play again without resetting the playhead.
@@ -311,7 +331,19 @@ Main files:
 - `atome/src/shared/atome_contract.js`
 - `atome/src/shared/atome_universal_contract.js`
 - `atome/src/shared/atome_contract_errors.js`
+- `atome/src/shared/atom_graph.js`
+- `atome/src/shared/accessible_atom_node.js`
+- `atome/src/shared/accessibility_graph.js`
+- `atome/src/shared/accessibility_bridge_contract.js`
+- `atome/src/shared/core_atome_types.js`
+- `atome/src/shared/semantic_rename_contract.js`
 - `atome/shared/atome_contract.js` re-exports the browser-served contract for Node and server consumers.
+- `atome/shared/atom_graph.js` re-exports the browser-served graph contract for Node and server consumers.
+- `atome/shared/accessible_atom_node.js` re-exports the browser-served accessibility-node contract for Node and server consumers.
+- `atome/shared/accessibility_graph.js` re-exports the browser-served accessibility graph contract for Node and server consumers.
+- `atome/shared/accessibility_bridge_contract.js` re-exports the browser-served bridge projection contract for Node and server consumers.
+- `atome/shared/core_atome_types.js` re-exports the browser-served core type definitions for Node and server consumers.
+- `atome/shared/semantic_rename_contract.js` re-exports the browser-served semantic rename contract for Node and server consumers.
 
 Reusable APIs:
 
@@ -323,11 +355,24 @@ Reusable APIs:
 - Tool contract projection through `toolToUniversalAtome`, while keeping tool compatibility data inside a property subtree instead of turning tool fields into envelope fields.
 - Reserved envelope-field rejection for durable property writes.
 - Canonical Atome envelope formatting for tolerant server/database responses.
+- Pure AtomGraph construction through `buildAtomGraph`, with deterministic roots, parent-child links, visual/semantic/focus ordering, deletion filtering, and orphan/cycle/duplicate-state-row diagnostics from state rows or append-only event rows.
+- AtomGraph record normalization through `normalizeAtomGraphRecord`.
+- AccessibleAtomNode schema and sanitation through `sanitizeAccessibleAtomNode` and `assertAccessibleAtomNode`, covering role, label, description, alt text, focusable state, visible-to-accessibility state, actions, and relations without reading the DOM.
+- AccessibilityGraph derivation through `buildAccessibilityGraph`, which filters inaccessible nodes, derives reading/focus orders, wires structural relations, and keeps accessibility semantics independent from visible DOM or renderer payloads.
+- Disposable bridge projection through `buildAccessibilityBridgeProjection`, which mirrors accessibility graph nodes into a browser/WebView/native-ready semantic payload without creating DOM state.
+- Core type registration through `registerCoreAtomeTypes`, with strict schema definitions for `text`, `shape`, `image`, `video`, `audio`, `audio_waveform`, `waveform`, `group`, `project`, and `tool_instance`.
+- Semantic rename patch/event construction through `buildSemanticRenamePatch`, `buildSemanticRenameEvent`, `applySemanticRenameToRecord`, and `resolveSemanticLabel`. The canonical rename property is `properties.label`; rename patches also update `properties.accessibility.label`; durable rename events require explicit `tx_id` and emit `set` events for HistoryTransaction grouping.
 - No public `fromLegacy...` or `toLegacy...` Atome adapter is allowed; historical shapes are input-boundary concerns only, and SQL storage serialization must not circulate as an Atome format.
 
 Should be extended by:
 
 - Open Atome description, validation, history, and persistence contracts needed across client/server/database boundaries.
+
+Must not own:
+
+- DOM projection, renderer-specific scene payloads, Bevy/WebGPU state, product UI traversal, accessibility bridge DOM, or durable mutation writes.
+
+Status: `atom_graph.js` added for T06 and extended through T08/T09 as a pure graph contract. `accessible_atom_node.js` added for T10 as the pure accessibility node schema. `accessibility_graph.js` added for T11 as the pure graph derivation. `accessibility_bridge_contract.js` added for T12 as the disposable bridge projection contract. `core_atome_types.js` added for T15 as the core registry definitions and extended in T21 so every core Atome type accepts `label`. `semantic_rename_contract.js` added for T21 as the deterministic rename contract. T14 documents graph, bridge, semantic rename, and inline focus-restoration ownership across `CODEMAP`, `API_MAP`, `ARCHITECTURE_MAP`, `DESIGN_MAP`, and `todo/eve_features/eve_accessibility.md`.
 
 ### ADOLE Storage Projection
 
@@ -352,6 +397,33 @@ Must not be extended with:
 - public `fromLegacy...` or `toLegacy...` APIs;
 - runtime compatibility shims;
 - application-level propagation of SQL column names as Atome format.
+
+### ADOLE History Transactions
+
+Purpose: Define durable transaction semantics over append-only ADOLE events without depending on client runtime memory.
+
+Main file:
+
+- `database/adole_history_transactions.js`
+
+Reusable APIs:
+
+- `classifyHistoryEvent` classifies persistent, continuous, replay-only, audit-only, and history-control events.
+- `buildHistoryTransactions` sorts events deterministically and groups them by `tx_id`, with isolated `event:<id>` transactions for missing `tx_id`.
+- `selectUndoTransaction` and `selectRedoTransaction` use cursor positions over the append-only transaction list; redo is derived from events after the cursor, not from in-memory snapshots.
+- `HISTORY_EVENT_CLASS`, `HISTORY_TRANSACTION_VISIBILITY`, and `HISTORY_REDO_RULE` define the stable contract vocabulary.
+
+Used by:
+
+- `database/adole.js` re-exports the contract for server/database consumers.
+- Future timeline/runtime undo work must consume this contract instead of inventing local grouping rules.
+
+Must not own:
+
+- DOM replay, UI timeline panels, runtime selection, or renderer projection.
+- Direct event mutation or state projection writes.
+
+Status: Added for T04 durable history semantics.
 
 ### ADOLE Schema Migrations
 
@@ -823,10 +895,12 @@ Reusable APIs:
 - `scripts/check_mutation_ownership_guardrails.mjs` owns the persistent mutation ownership guardrail for source scans: `state_current` remains read/projection-only outside server route owners, event commit transport calls stay inside `eVe/core/atome_commit.js`, Adole adapter ownership, or server route definitions, timeline replay baselines must not be rebuilt from DOM projection state, and timeline preview/replay code must not combine DOM projection reads with backend commits.
 - `scripts/check_squirrel_dom_adapter_guardrails.mjs` owns the Squirrel Atome DOM adapter containment scan: legacy `this.element` remains a renderer adapter only and must not receive `properties`, `state`, `model`, `timeline`, media source/ref/url, waveform, thumbnail, group state, sync, permission, or serialized dataset payloads as canonical state.
 - `scripts/check_dom_projection_guardrails.mjs` owns maintained DOM projection scans and audit reporting. The default scan targets `tests/fixtures/dom`, emits measurable DOM size/node/tag/data/style/id/root/media metrics plus repeated `data-atome-id` projection contexts, inline style ratio/property summaries, data URI/base64/preview-signature counters, source-attribute leak checks, and canvas role distribution, and enforces forbidden model-shaped `data-*` state, durable media error attributes, duplicate ids, subtree document-root rejection for `.dom` exports, nested document roots in full documents, local source leaks, oversized attributes, repeated Atome projection model-data duplication, named canvas renderer surfaces, node-count thresholds, inline-style thresholds, and canvas/video thresholds.
+- T24 final cleanup validation uses the mutation ownership, Squirrel DOM adapter, DOM projection, browser shared import, no-fallback, Tauri FS, Molecule, and syntax guardrails to keep active-project inline edit/accessibility work separated from legacy DOM, footer, dock, and MTraX presentation boundaries.
 - `scripts/export_dom_subtrees.mjs` owns offline extraction from full DOM captures into maintained subtree fixtures. Matrix, project, and timeline exports select one canonical root per file; media-host exports deduplicate by `data-atome-id`; full-app captures are written as `.snapshot` diagnostics under `temp/` and are not treated as maintained `.dom` fixtures.
 - `tests/probes/tool_genesis_create_atome_order.test.mjs` guards the `toolBase.createAtome` orchestration boundary: commit must precede state refresh, render must follow canonical state refresh, `render:false` must stay available, and `createAtome` must not allocate DOM or write render caches directly.
 - `database/adole.js` owns server-side event-to-projection application. `appendEvent` and `appendEvents` must sanitize event patches before writing both `particles` and `state_current.properties`; envelope fields belong in `atomes`, event metadata, or projection columns, not in durable properties.
-- `database/adole.js` exposes `restoreStateSnapshot` as the controlled state snapshot restore path: snapshot records are normalized into `set` events and replayed through `appendEvents`; legacy `restoreSnapshot` remains migration debt.
+- `database/adole_history_transactions.js` owns pure HistoryTransaction semantics over event rows: deterministic event ordering, grouping by `tx_id`, continuous gesture frame replay visibility, undo-visible transaction detection, redo selection from append-only events after a cursor, and integrity detection for non-contiguous `tx_id` reuse.
+- `database/adole.js` exposes `restoreStateSnapshot` as the controlled state snapshot restore path: snapshot records are normalized into `set` events and replayed through `appendEvents`. Legacy `restoreSnapshot` is contained as an event-log adapter: it reads legacy atome snapshots, builds a canonical `set` patch, and calls `appendEvent`; it must not delete particles or write `state_current` directly.
 - Shared Atome property sanitization for eVe commit and project Atome creation boundaries.
 - Event, media, and project store APIs with memory adapters.
 - Platform-specific storage backends.
