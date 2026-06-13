@@ -4,6 +4,8 @@ use atome_bevy_renderer_core::{
 };
 use bevy::prelude::*;
 use bevy::window::{CompositeAlphaMode, RequestRedraw};
+use bevy::winit::UpdateMode;
+use std::time::Duration;
 
 use super::*;
 
@@ -176,6 +178,7 @@ fn exported_web_redraw_request_is_applied_before_user_input() {
 #[test]
 fn exported_video_frame_notification_requests_redraw() {
     let _ = drain_web_video_frames();
+    let _ = reset_web_renderer_diagnostics();
     let mut app = App::new();
     app.add_message::<RequestRedraw>();
 
@@ -189,10 +192,87 @@ fn exported_video_frame_notification_requests_redraw() {
             .count(),
         1
     );
+    let diagnostics = read_web_renderer_diagnostics();
+    assert_eq!(diagnostics.video_frame_notifications, 1);
+    assert_eq!(diagnostics.video_frame_redraws, 1);
 }
 
 #[test]
-fn web_renderer_uses_continuous_winit_updates_for_video_textures() {
+fn video_backend_capabilities_report_current_non_final_copy_path() {
+    let capabilities = read_web_video_backend_capabilities();
+
+    assert_eq!(capabilities.schema, "atome.bevy.web.video_backend.v4");
+    assert_eq!(
+        capabilities.target_live_video_backend,
+        "gpu_external_texture_texture_external"
+    );
+    assert_eq!(
+        capabilities.live_video_backend,
+        "copy_external_image_to_texture"
+    );
+    assert!(!capabilities.current_backend_final);
+    assert!(!capabilities.video_track_api_exposed);
+    assert_eq!(
+        capabilities.backend_blocker,
+        "wgpu_web_external_texture_source_and_resource_binding_unimplemented"
+    );
+    assert!(capabilities.html_video_element_copy);
+    assert!(capabilities.browser_gpu_device_import_external_texture_available);
+    assert!(!capabilities.wgpu_web_external_texture_create);
+    assert!(!capabilities.wgpu_external_texture_source_descriptor);
+    assert!(capabilities.wgpu_external_texture_bind_group_layout);
+    assert!(!capabilities.wgpu_external_texture_bind_group_resource);
+    assert!(!capabilities.gpu_external_texture_import);
+    assert!(!capabilities.texture_external_sampling);
+    assert!(!capabilities.rgba_live_payload);
+    assert!(!capabilities.visible_dom_video_overlay);
+}
+
+#[test]
+fn video_copy_diagnostics_are_shared_with_web_exports() {
+    atome_bevy_renderer_core::reset_video_copy_diagnostics();
+    atome_bevy_renderer_core::record_video_copy_skip(
+        atome_bevy_renderer_core::AtomeVideoCopySkipReason::SourceNotReady,
+        "video_waiting",
+        Some(3),
+    );
+    atome_bevy_renderer_core::record_video_copy_success("video_ready", 4);
+
+    let diagnostics = atome_bevy_renderer_core::read_video_copy_diagnostics();
+    assert_eq!(diagnostics.copy_count, 1);
+    assert_eq!(diagnostics.skip_source_not_ready, 1);
+    assert_eq!(diagnostics.last_copied_id.as_deref(), Some("video_ready"));
+    assert_eq!(diagnostics.last_skip_id.as_deref(), Some("video_waiting"));
+    assert_eq!(
+        diagnostics.last_skip_reason,
+        Some(atome_bevy_renderer_core::AtomeVideoCopySkipReason::SourceNotReady.as_str())
+    );
+
+    let previous = atome_bevy_renderer_core::reset_video_copy_diagnostics();
+    assert_eq!(previous.copy_count, 1);
+    assert_eq!(
+        atome_bevy_renderer_core::read_video_copy_diagnostics().copy_count,
+        0
+    );
+}
+
+fn assert_reactive_mode(mode: UpdateMode, expected_wait: Duration) {
+    let UpdateMode::Reactive {
+        wait,
+        react_to_user_events,
+        react_to_window_events,
+        ..
+    } = mode
+    else {
+        panic!("web renderer must not use continuous winit updates");
+    };
+    assert_eq!(wait, expected_wait);
+    assert!(react_to_user_events);
+    assert!(react_to_window_events);
+}
+
+#[test]
+fn web_renderer_uses_reactive_winit_updates_with_explicit_redraw_wakes() {
     let config = WebBevyRendererConfig::new(
         "#atome-bevy".to_string(),
         640.0,
@@ -206,6 +286,6 @@ fn web_renderer_uses_continuous_winit_updates_for_video_textures() {
     app.add_plugins(WebBevyRendererPlugin { config });
 
     let settings = app.world().resource::<bevy::winit::WinitSettings>();
-    assert_eq!(settings.focused_mode, bevy::winit::UpdateMode::Continuous);
-    assert_eq!(settings.unfocused_mode, bevy::winit::UpdateMode::Continuous);
+    assert_reactive_mode(settings.focused_mode, Duration::from_secs(5));
+    assert_reactive_mode(settings.unfocused_mode, Duration::from_secs(60));
 }

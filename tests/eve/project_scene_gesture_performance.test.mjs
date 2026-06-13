@@ -7,6 +7,7 @@ import {
     getProjectSceneState,
     renderProjectScene
 } from '../../eVe/domains/rendering/project_scene_runtime.js';
+import { ensureBevyPerfDiagnostics } from '../../eVe/domains/rendering/bevy_perf_diagnostics_runtime.js';
 import { getRenderSurfaceState } from '../../eVe/domains/rendering/surface_runtime.js';
 import { createRealtimeAtomeEventsRuntime } from '../../eVe/intuition/runtime/realtime_atome_events_runtime.js';
 import {
@@ -150,6 +151,116 @@ test('Project scene drag applies direct Bevy transforms without full projection 
     assert.equal(renders.filter((call) => call.type === 'transform').at(-1).payload.id, 'drag_perf_atom');
     assert.equal(dom.window.document.querySelectorAll('.eve-atome,img,video,audio,svg').length, 0);
     assert.equal(dom.window.document.querySelectorAll('canvas#eve_surface_project').length, 1);
+});
+
+test('Project scene pointermove stays on direct Bevy transforms without commits, sync, texture work, or rebuilds', async () => {
+    clearAllProjectScenes();
+    const dom = new JSDOM('<!doctype html><html><body><main id="project"></main></body></html>');
+    globalThis.document = dom.window.document;
+    globalThis.window = dom.window;
+    const flushFrames = installFrameScheduler(dom.window);
+    const commits = [];
+    const renders = [];
+    const networkCalls = [];
+    const textureCalls = [];
+    const canvasReadbacks = [];
+    let guardArmed = false;
+    dom.window.fetch = (...args) => {
+        networkCalls.push(args);
+        throw new Error('project_pointermove_network_sync_forbidden');
+    };
+    dom.window.Atome = {
+        commit: async (event, options) => {
+            commits.push({ method: 'commit', event, options });
+            return { ok: true };
+        },
+        commitBatch: async (events, options) => {
+            commits.push({ method: 'commitBatch', events, options });
+            return { ok: true };
+        }
+    };
+    const canvasPrototype = dom.window.HTMLCanvasElement?.prototype;
+    const originalGetContext = canvasPrototype?.getContext;
+    if (canvasPrototype) {
+        canvasPrototype.getContext = function patchedGetContext(type) {
+            if (guardArmed) canvasReadbacks.push({ type: String(type || '') });
+            return {
+                canvas: this,
+                drawImage: () => {
+                    if (guardArmed) canvasReadbacks.push({ type: 'drawImage' });
+                },
+                getImageData: () => {
+                    if (guardArmed) canvasReadbacks.push({ type: 'getImageData' });
+                    return { width: 1, height: 1, data: new Uint8ClampedArray(4) };
+                },
+                createImageData: () => ({ width: 1, height: 1, data: new Uint8ClampedArray(4) }),
+                putImageData: () => null,
+                clearRect: () => null,
+                fillRect: () => null
+            };
+        };
+    }
+
+    try {
+        const compositor = createTestCompositor(renders);
+        compositor.resolve_bevy_media_texture = async (node) => {
+            textureCalls.push({ armed: guardArmed, id: node?.id || null, kind: node?.kind || null });
+            if (guardArmed) throw new Error('project_pointermove_texture_resolution_forbidden');
+            return { width: 1, height: 1, rgba: [255, 0, 0, 255] };
+        };
+
+        await renderProjectScene({
+            projectId: 'project_pointermove_direct_lane',
+            records: [makeRecord('direct_lane_atom')],
+            host: dom.window.document.getElementById('project'),
+            compositor
+        });
+
+        dom.window.document.dispatchEvent(pointerEvent(dom.window, 'pointerdown', { clientX: 12, clientY: 22, pointerId: 11 }));
+        await flushFrames();
+        const callsAfterPointerDown = renders.length;
+        const textureCallsAfterPointerDown = textureCalls.length;
+        commits.length = 0;
+        ensureBevyPerfDiagnostics().reset();
+        guardArmed = true;
+
+        [
+            { clientX: 16, clientY: 26 },
+            { clientX: 24, clientY: 34 },
+            { clientX: 36, clientY: 48 }
+        ].forEach((move) => {
+            dom.window.document.dispatchEvent(pointerEvent(dom.window, 'pointermove', {
+                ...move,
+                pointerId: 11
+            }));
+        });
+        await flushFrames.animationFrames();
+        guardArmed = false;
+
+        const pointerMoveRenderCalls = renders.slice(callsAfterPointerDown);
+        const perf = ensureBevyPerfDiagnostics().summary();
+        assert.equal(commits.length, 0);
+        assert.equal(networkCalls.length, 0);
+        assert.equal(textureCalls.length, textureCallsAfterPointerDown);
+        assert.deepEqual(canvasReadbacks, []);
+        assert.equal(pointerMoveRenderCalls.length, 3);
+        assert.equal(pointerMoveRenderCalls.every((call) => call.type === 'transform'), true);
+        assert.equal(perf.counters['gesture.frame.direct_transform'], 3);
+        assert.equal(perf.counters['gesture.frame.projection_fallback'] || 0, 0);
+        assert.equal(perf.counters['projection.runtime.total'] || 0, 0);
+        assert.equal(perf.counters['projection.video_decode_sync'] || 0, 0);
+        assert.equal(perf.counters['bevy.diff.video_decode_sync'] || 0, 0);
+        assert.equal(perf.counters['bevy.op.spawn'] || 0, 0);
+        assert.equal(perf.counters['bevy.op.resource'] || 0, 0);
+        assert.equal(perf.counters['bevy.op.despawn'] || 0, 0);
+        assert.equal(perf.counters['bevy.diff.map_resource'] || 0, 0);
+
+        dom.window.document.dispatchEvent(pointerEvent(dom.window, 'pointerup', { clientX: 36, clientY: 48, pointerId: 11 }));
+        await flushFrames();
+    } finally {
+        guardArmed = false;
+        if (canvasPrototype) canvasPrototype.getContext = originalGetContext;
+    }
 });
 
 test('Project scene drag hit-testing uses logical surface coordinates when the canvas is visually scaled', async () => {

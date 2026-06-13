@@ -11,6 +11,10 @@ use bevy::{
 use std::collections::HashMap;
 
 use crate::types::AtomeRenderNode;
+#[cfg(target_arch = "wasm32")]
+use crate::video_diagnostics::{
+    record_video_copy_skip, record_video_copy_success, AtomeVideoCopySkipReason,
+};
 
 const VIDEO_TEXTURE_FORMAT: TextureFormat = TextureFormat::Rgba8Unorm;
 
@@ -60,10 +64,13 @@ pub fn video_image_handle_from_node(
     {
         return None;
     }
-    video_image_handle_from_size(images, node.texture_size.unwrap_or([
-        node.logical_size[0].max(1.0).round() as u32,
-        node.logical_size[1].max(1.0).round() as u32,
-    ]))
+    video_image_handle_from_size(
+        images,
+        node.texture_size.unwrap_or([
+            node.logical_size[0].max(1.0).round() as u32,
+            node.logical_size[1].max(1.0).round() as u32,
+        ]),
+    )
 }
 
 pub fn video_image_handle_from_size(
@@ -124,20 +131,37 @@ fn copy_video_sources_to_bevy_textures(
 ) {
     for video in &videos {
         let Some(gpu_image) = gpu_images.get(&video.handle) else {
+            record_video_copy_skip(AtomeVideoCopySkipReason::MissingGpuImage, &video.id, None);
             continue;
         };
         let Some(source) = hidden_video_source_for_id(&video.id) else {
+            record_video_copy_skip(AtomeVideoCopySkipReason::MissingSource, &video.id, None);
             continue;
         };
         let Some(frame_version) = hidden_video_frame_version_for_id(&video.id) else {
+            record_video_copy_skip(
+                AtomeVideoCopySkipReason::MissingFrameVersion,
+                &video.id,
+                None,
+            );
             continue;
         };
         if source.ready_state() < web_sys::HtmlMediaElement::HAVE_CURRENT_DATA {
+            record_video_copy_skip(
+                AtomeVideoCopySkipReason::SourceNotReady,
+                &video.id,
+                Some(frame_version),
+            );
             continue;
         }
         let source_width = source.video_width();
         let source_height = source.video_height();
         if source_width == 0 || source_height == 0 {
+            record_video_copy_skip(
+                AtomeVideoCopySkipReason::EmptySourceSize,
+                &video.id,
+                Some(frame_version),
+            );
             continue;
         }
         let width = gpu_image.size.width.min(source_width);
@@ -152,6 +176,11 @@ fn copy_video_sources_to_bevy_textures(
         if copied_version.is_some_and(|copied| copied >= frame_version)
             && copied_attempts >= required_attempts
         {
+            record_video_copy_skip(
+                AtomeVideoCopySkipReason::FrameAlreadyCopied,
+                &video.id,
+                Some(frame_version),
+            );
             continue;
         }
         let source_info = wgpu::CopyExternalImageSourceInfo {
@@ -182,11 +211,8 @@ fn copy_video_sources_to_bevy_textures(
         copies
             .copied_attempts
             .insert(video.id.clone(), copied_attempts + 1);
-        record_video_copy_event(
-            "bevy.video.copy",
-            &video.id,
-            Some(frame_version),
-        );
+        record_video_copy_success(&video.id, frame_version);
+        record_video_copy_event("bevy.video.copy", &video.id, Some(frame_version));
     }
 }
 

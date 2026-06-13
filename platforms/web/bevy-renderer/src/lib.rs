@@ -32,6 +32,49 @@ struct WebRendererDiagnostics {
     redraw_requests: u32,
     redraw_applied: u32,
     wake_calls: u32,
+    video_frame_notifications: u32,
+    video_frame_redraws: u32,
+}
+
+#[derive(Clone, Debug, Serialize)]
+struct WebVideoBackendCapabilities {
+    schema: &'static str,
+    target_live_video_backend: &'static str,
+    live_video_backend: &'static str,
+    current_backend_final: bool,
+    video_track_api_exposed: bool,
+    backend_blocker: &'static str,
+    html_video_element_copy: bool,
+    browser_gpu_device_import_external_texture_available: bool,
+    wgpu_web_external_texture_create: bool,
+    wgpu_external_texture_source_descriptor: bool,
+    wgpu_external_texture_bind_group_layout: bool,
+    wgpu_external_texture_bind_group_resource: bool,
+    gpu_external_texture_import: bool,
+    texture_external_sampling: bool,
+    rgba_live_payload: bool,
+    visible_dom_video_overlay: bool,
+}
+
+fn read_web_video_backend_capabilities() -> WebVideoBackendCapabilities {
+    WebVideoBackendCapabilities {
+        schema: "atome.bevy.web.video_backend.v4",
+        target_live_video_backend: "gpu_external_texture_texture_external",
+        live_video_backend: "copy_external_image_to_texture",
+        current_backend_final: false,
+        video_track_api_exposed: false,
+        backend_blocker: "wgpu_web_external_texture_source_and_resource_binding_unimplemented",
+        html_video_element_copy: true,
+        browser_gpu_device_import_external_texture_available: true,
+        wgpu_web_external_texture_create: false,
+        wgpu_external_texture_source_descriptor: false,
+        wgpu_external_texture_bind_group_layout: true,
+        wgpu_external_texture_bind_group_resource: false,
+        gpu_external_texture_import: false,
+        texture_external_sampling: false,
+        rgba_live_payload: false,
+        visible_dom_video_overlay: false,
+    }
 }
 
 fn queue_web_op(op: AtomeRenderOp) {
@@ -96,6 +139,9 @@ fn notify_web_video_frame(id: String, frame_version: u32) {
     if id.trim().is_empty() || frame_version == 0 {
         return;
     }
+    WEB_DIAGNOSTICS.with(|cell| {
+        cell.borrow_mut().video_frame_notifications += 1;
+    });
     WEB_PENDING_VIDEO_FRAMES.with(|cell| {
         let mut pending = cell.borrow_mut();
         *pending = pending.saturating_add(1);
@@ -166,11 +212,15 @@ struct WebBevyRendererPlugin {
     config: WebBevyRendererConfig,
 }
 
+fn web_winit_settings() -> WinitSettings {
+    WinitSettings::desktop_app()
+}
+
 impl Plugin for WebBevyRendererPlugin {
     fn build(&self, app: &mut App) {
         app.add_message::<RequestRedraw>()
             .insert_resource(ClearColor(Color::BLACK))
-            .insert_resource(WinitSettings::continuous())
+            .insert_resource(web_winit_settings())
             .add_plugins(AtomeBevyRendererPlugin::new(self.config.core.clone()))
             .add_systems(
                 Startup,
@@ -220,6 +270,10 @@ fn apply_pending_video_frame_notifications(world: &mut World) {
     if drained == 0 {
         return;
     }
+    WEB_DIAGNOSTICS.with(|cell| {
+        let mut diagnostics = cell.borrow_mut();
+        diagnostics.video_frame_redraws = diagnostics.video_frame_redraws.saturating_add(drained);
+    });
     world.write_message(RequestRedraw);
     wake_web_renderer();
 }

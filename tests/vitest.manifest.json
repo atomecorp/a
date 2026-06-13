@@ -29,6 +29,7 @@
   "tests/eve/project_scene_native_capability_selection.test.mjs",
   "tests/eve/project_scene_stale_drag_regression.test.mjs",
   "tests/eve/project_scene_text_edit_contract.test.mjs",
+  "tests/eve/project_scene_unified_rendering_contract.test.mjs",
   "tests/eve/project_video_timeline_playback_contract.test.mjs",
   "tests/eve/render_surface_size_contract.test.mjs",
   "tests/eve/selected_project_media_playback_runtime.test.mjs",

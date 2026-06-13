@@ -141,3 +141,30 @@ pub fn reset_atome_bevy_web_diagnostics() -> Result<JsValue, JsValue> {
         JsValue::from_str(&format!("bevy_web_diagnostics_reset_encode_failed:{error}"))
     })
 }
+
+#[wasm_bindgen]
+pub fn read_atome_bevy_video_backend_capabilities() -> Result<JsValue, JsValue> {
+    serde_wasm_bindgen::to_value(&read_web_video_backend_capabilities()).map_err(|error| {
+        JsValue::from_str(&format!(
+            "bevy_video_backend_capabilities_encode_failed:{error}"
+        ))
+    })
+}
+
+#[wasm_bindgen]
+pub fn read_atome_bevy_video_copy_diagnostics() -> Result<JsValue, JsValue> {
+    serde_wasm_bindgen::to_value(&atome_bevy_renderer_core::read_video_copy_diagnostics()).map_err(
+        |error| {
+            JsValue::from_str(&format!(
+                "bevy_video_copy_diagnostics_encode_failed:{error}"
+            ))
+        },
+    )
+}
+
+#[wasm_bindgen]
+pub fn reset_atome_bevy_video_copy_diagnostics() -> Result<JsValue, JsValue> {
+    serde_wasm_bindgen::to_value(&atome_bevy_renderer_core::reset_video_copy_diagnostics()).map_err(
+        |error| JsValue::from_str(&format!("bevy_video_copy_diagnostics_reset_failed:{error}")),
+    )
+}

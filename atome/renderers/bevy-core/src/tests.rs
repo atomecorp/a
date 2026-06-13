@@ -317,6 +317,40 @@ fn video_nodes_spawn_bevy_gpu_texture_target_without_cpu_frame_data() {
 }
 
 #[test]
+fn video_copy_diagnostics_track_copies_and_skip_reasons() {
+    reset_video_copy_diagnostics();
+
+    record_video_copy_skip(
+        AtomeVideoCopySkipReason::MissingSource,
+        "video_missing",
+        None,
+    );
+    record_video_copy_skip(
+        AtomeVideoCopySkipReason::FrameAlreadyCopied,
+        "video_cached",
+        Some(7),
+    );
+    record_video_copy_success("video_live", 8);
+
+    let diagnostics = read_video_copy_diagnostics();
+    assert_eq!(diagnostics.copy_count, 1);
+    assert_eq!(diagnostics.skip_missing_source, 1);
+    assert_eq!(diagnostics.skip_frame_already_copied, 1);
+    assert_eq!(diagnostics.last_copied_id.as_deref(), Some("video_live"));
+    assert_eq!(diagnostics.last_copied_frame_version, Some(8));
+    assert_eq!(diagnostics.last_skip_id.as_deref(), Some("video_cached"));
+    assert_eq!(diagnostics.last_skip_frame_version, Some(7));
+    assert_eq!(
+        diagnostics.last_skip_reason,
+        Some(AtomeVideoCopySkipReason::FrameAlreadyCopied.as_str())
+    );
+
+    let previous = reset_video_copy_diagnostics();
+    assert_eq!(previous.copy_count, 1);
+    assert_eq!(read_video_copy_diagnostics().copy_count, 0);
+}
+
+#[test]
 fn imported_text_textures_use_linear_sampling_without_changing_logical_size() {
     let mut world = World::new();
     world.insert_resource(AtomeEntityTable::default());
