@@ -46,5 +46,6 @@
   "tests/probes/project_scene_z_order_media_regression.test.mjs",
   "tests/probes/record_capture_source_atome_contract.test.mjs",
   "tests/probes/render_atom_persistent_media_cache.test.mjs",
+  "tests/probes/selected_project_video_audio_sync.test.mjs",
   "tests/probes/tauri_bevy_native_permission.test.mjs"
 ]
