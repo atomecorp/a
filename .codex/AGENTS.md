@@ -42,7 +42,7 @@ Reference integrity marker for the integrated source before the split:
 ## Task routing
 
 - Debugging, regression fixing, root-cause analysis, performance diagnosis, or evidence-driven repair: read `.codex/modules/03-debugging-testing-and-ui-validation.md` and `.codex/modules/06-atome-state-sync-and-runtime-modes.md` when state, replay, sync, or runtime ownership is involved.
-- eVe UI debugging, Playwright tool activation, runtime readiness, hit-testing, overlays, selector/actionability failures, or interaction diagnostics: read `.codex/modules/03-debugging-testing-and-ui-validation.md` and the canonical UI procedure in `../atome/documentations/how_debug_UI.md` before defining diagnostics or changing product code.
+- eVe UI debugging, Playwright tool activation, runtime readiness, hit-testing, overlays, selector/actionability failures, or interaction diagnostics: read `.codex/modules/03-debugging-testing-and-ui-validation.md` and the canonical UI procedure in `atome/documentations/how_debug_UI.md` before defining diagnostics or changing product code.
 - Feature addition, cleanup, refactor, migration, legacy removal, or framework reuse work: read `.codex/modules/04-feature-work-cleanup-and-framework-reuse.md`, then read `.codex/modules/05-api-rendering-and-ui.md` and/or `.codex/modules/06-atome-state-sync-and-runtime-modes.md` depending on the touched surface.
 - API, MCP, command bus, communication, rendering, UI, components, text, media, or WebGPU work: read `.codex/modules/05-api-rendering-and-ui.md`.
 - Atome model, mutation pipeline, replay, history, synchronization, offline behavior, execution modes, or sharing work: read `.codex/modules/06-atome-state-sync-and-runtime-modes.md`.
@@ -62,7 +62,7 @@ Reference integrity marker for the integrated source before the split:
 
 ## Mandatory UI debugging adjunct
 
-When the task concerns eVe UI readiness, missing tool handles, Playwright click failures, hit-testing, overlays, pointer routing, or selector/actionability problems, reading `../atome/documentations/how_debug_UI.md` is mandatory.
+When the task concerns eVe UI readiness, missing tool handles, Playwright click failures, hit-testing, overlays, pointer routing, or selector/actionability problems, reading `atome/documentations/how_debug_UI.md` is mandatory.
 
 Minimum mandatory takeaways:
 
