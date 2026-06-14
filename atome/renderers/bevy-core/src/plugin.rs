@@ -1,4 +1,4 @@
-use bevy::{image::Image, prelude::*};
+use bevy::{image::Image, mesh::Mesh, prelude::*};
 
 use crate::{
     render_ops::apply_render_op,
@@ -6,8 +6,8 @@ use crate::{
     spawn::spawn_node_with_texture_handle,
     texture::image_handle_from_texture,
     types::*,
-    video_texture::{
-        update_video_texture_handle_for_node, video_image_handle_from_node, AtomeVideoTexturePlugin,
+    video_external_texture::{
+        insert_video_external_texture_component_for_node, AtomeVideoExternalTexturePlugin,
     },
     waveform_playback_overlay::rebuild_waveform_playback_overlay,
 };
@@ -25,10 +25,11 @@ impl AtomeBevyRendererPlugin {
 impl Plugin for AtomeBevyRendererPlugin {
     fn build(&self, app: &mut App) {
         app.insert_resource(self.config.clone())
-            .add_plugins(AtomeVideoTexturePlugin)
+            .add_plugins(AtomeVideoExternalTexturePlugin)
             .init_resource::<AtomeEntityTable>()
             .init_resource::<AtomeRendererDiagnostics>()
             .init_resource::<Assets<Image>>()
+            .init_resource::<Assets<Mesh>>()
             .add_systems(Startup, spawn_atome_bevy_scene);
     }
 }
@@ -41,13 +42,15 @@ fn spawn_atome_bevy_scene(
     commands.spawn(Camera2d);
     for node in &config.initial_scene.nodes {
         let node_id = node.id.clone();
-        let texture_handle = if node.texture.is_some() {
+        let texture_handle = if node.kind == "video" {
+            None
+        } else if node.texture.is_some() {
             Some(
                 image_handle_from_texture(&mut images, &node.texture, &node.id)
                     .unwrap_or_else(|error| panic!("{error}")),
             )
         } else {
-            video_image_handle_from_node(&mut images, node)
+            None
         };
         let node_for_world = node.clone();
         let surface_width = config.width;
@@ -62,14 +65,11 @@ fn spawn_atome_bevy_scene(
             );
             match result {
                 Ok(entity) => {
-                    if let Some(handle) = texture_handle.as_ref() {
-                        update_video_texture_handle_for_node(
-                            world,
-                            entity,
-                            &node_for_world,
-                            handle,
-                        );
-                    }
+                    insert_video_external_texture_component_for_node(
+                        world,
+                        entity,
+                        &node_for_world,
+                    );
                     world
                         .resource_mut::<AtomeEntityTable>()
                         .by_id

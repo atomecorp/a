@@ -2,7 +2,8 @@ use super::*;
 use atome_bevy_renderer_core::{
     AtomeLayerPatch, AtomeParentPatch, AtomeRenderNode, AtomeRenderOp, AtomeRenderScene,
     AtomeResourcePatch, AtomeStylePatch, AtomeSurfaceBackgroundPatch, AtomeSurfacePatch,
-    AtomeTextPatch, AtomeTransformPatch, AtomeVisibilityPatch,
+    AtomeTextPatch, AtomeTransformPatch, AtomeVideoTrack, AtomeVideoTransform,
+    AtomeVisibilityPatch,
 };
 use wasm_bindgen::prelude::*;
 
@@ -127,6 +128,40 @@ pub fn request_atome_bevy_redraw() {
 #[wasm_bindgen]
 pub fn notify_atome_bevy_video_frame(id: String, frame_version: u32) {
     notify_web_video_frame(id, frame_version);
+}
+
+#[wasm_bindgen]
+pub fn apply_atome_bevy_video_track(track: JsValue) -> Result<(), JsValue> {
+    let parsed: AtomeVideoTrack = serde_wasm_bindgen::from_value(track)
+        .map_err(|error| JsValue::from_str(&format!("bevy_video_track_decode_failed:{error}")))?;
+    parsed
+        .validate()
+        .map_err(|error| JsValue::from_str(&error))?;
+    queue_web_op(AtomeRenderOp::VideoTrackApply(parsed));
+    Ok(())
+}
+
+#[wasm_bindgen]
+pub fn remove_atome_bevy_video_track(id: String) -> Result<(), JsValue> {
+    if id.trim().is_empty() {
+        return Err(JsValue::from_str("bevy_video_track_id_required"));
+    }
+    queue_web_op(AtomeRenderOp::VideoTrackRemove(id));
+    Ok(())
+}
+
+#[wasm_bindgen]
+pub fn update_atome_bevy_video_transform(id: String, transform: JsValue) -> Result<(), JsValue> {
+    let parsed: AtomeVideoTransform =
+        serde_wasm_bindgen::from_value(transform).map_err(|error| {
+            JsValue::from_str(&format!("bevy_video_transform_decode_failed:{error}"))
+        })?;
+    let patch = parsed.into_patch(id);
+    patch
+        .validate()
+        .map_err(|error| JsValue::from_str(&error))?;
+    queue_web_op(AtomeRenderOp::VideoTrackTransform(patch));
+    Ok(())
 }
 
 #[wasm_bindgen]

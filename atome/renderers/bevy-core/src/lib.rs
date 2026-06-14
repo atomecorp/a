@@ -7,7 +7,9 @@ pub mod spawn;
 pub mod texture;
 pub mod types;
 pub mod video_diagnostics;
-pub mod video_texture;
+pub mod video_external_texture;
+#[cfg(target_arch = "wasm32")]
+pub mod video_external_web;
 pub mod waveform_playback_overlay;
 
 pub use plugin::{apply_render_ops, AtomeBevyRendererPlugin};

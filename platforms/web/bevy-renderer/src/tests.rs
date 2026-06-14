@@ -16,11 +16,16 @@ fn shape_node(id: &str) -> AtomeRenderNode {
         parent_id: None,
         logical_position: [12.0, 24.0],
         logical_size: [120.0, 50.0],
+        scale: [1.0, 1.0],
+        rotation: 0.0,
+        origin: [0.0, 0.0],
         layer: 3,
+        opacity: 1.0,
         color: Some([0.1, 0.2, 0.3, 1.0]),
         text: None,
         source: None,
         texture_size: None,
+        uv_rect: None,
         texture: None,
         peaks: None,
         playback_progress: None,
@@ -68,6 +73,9 @@ fn queued_exports_apply_through_shared_core() {
         id: "shape_1".to_string(),
         logical_position: [64.0, 72.0],
         logical_size: [140.0, 90.0],
+        scale: [1.0, 1.0],
+        rotation: 0.0,
+        origin: [0.0, 0.0],
     }));
     app.update();
 
@@ -109,18 +117,21 @@ fn queued_audio_progress_styles_are_coalesced_per_atome() {
         id: "waveform_1".to_string(),
         color: None,
         selected: None,
+        opacity: None,
         playback_progress: Some(Some(0.1)),
     }));
     queue_web_op(AtomeRenderOp::Style(AtomeStylePatch {
         id: "waveform_1".to_string(),
         color: None,
         selected: None,
+        opacity: None,
         playback_progress: Some(Some(0.7)),
     }));
     queue_web_op(AtomeRenderOp::Style(AtomeStylePatch {
         id: "waveform_2".to_string(),
         color: None,
         selected: None,
+        opacity: None,
         playback_progress: Some(Some(0.3)),
     }));
 
@@ -136,6 +147,29 @@ fn queued_audio_progress_styles_are_coalesced_per_atome() {
     assert_eq!(first.playback_progress, Some(Some(0.7)));
     assert_eq!(second.id, "waveform_2");
     assert_eq!(second.playback_progress, Some(Some(0.3)));
+}
+
+#[test]
+fn queued_opacity_styles_are_not_coalesced_as_audio_progress_only() {
+    let _ = drain_web_ops();
+
+    queue_web_op(AtomeRenderOp::Style(AtomeStylePatch {
+        id: "video_1".to_string(),
+        color: None,
+        selected: None,
+        opacity: Some(0.4),
+        playback_progress: None,
+    }));
+    queue_web_op(AtomeRenderOp::Style(AtomeStylePatch {
+        id: "video_1".to_string(),
+        color: None,
+        selected: None,
+        opacity: Some(0.8),
+        playback_progress: None,
+    }));
+
+    let ops = drain_web_ops();
+    assert_eq!(ops.len(), 2);
 }
 
 #[test]
@@ -195,35 +229,33 @@ fn exported_video_frame_notification_requests_redraw() {
     let diagnostics = read_web_renderer_diagnostics();
     assert_eq!(diagnostics.video_frame_notifications, 1);
     assert_eq!(diagnostics.video_frame_redraws, 1);
+    assert_eq!(diagnostics.wake_calls, 1);
 }
 
 #[test]
-fn video_backend_capabilities_report_current_non_final_copy_path() {
+fn video_backend_capabilities_report_external_texture_path_with_track_api() {
     let capabilities = read_web_video_backend_capabilities();
 
-    assert_eq!(capabilities.schema, "atome.bevy.web.video_backend.v4");
+    assert_eq!(capabilities.schema, "atome.bevy.web.video_backend.v6");
     assert_eq!(
         capabilities.target_live_video_backend,
         "gpu_external_texture_texture_external"
     );
     assert_eq!(
         capabilities.live_video_backend,
-        "copy_external_image_to_texture"
+        "gpu_external_texture_texture_external"
     );
-    assert!(!capabilities.current_backend_final);
-    assert!(!capabilities.video_track_api_exposed);
-    assert_eq!(
-        capabilities.backend_blocker,
-        "wgpu_web_external_texture_source_and_resource_binding_unimplemented"
-    );
-    assert!(capabilities.html_video_element_copy);
+    assert!(capabilities.current_backend_final);
+    assert!(capabilities.video_track_api_exposed);
+    assert_eq!(capabilities.backend_blocker, "none");
+    assert!(!capabilities.html_video_element_copy);
     assert!(capabilities.browser_gpu_device_import_external_texture_available);
-    assert!(!capabilities.wgpu_web_external_texture_create);
-    assert!(!capabilities.wgpu_external_texture_source_descriptor);
+    assert!(capabilities.wgpu_web_external_texture_create);
+    assert!(capabilities.wgpu_external_texture_source_descriptor);
     assert!(capabilities.wgpu_external_texture_bind_group_layout);
-    assert!(!capabilities.wgpu_external_texture_bind_group_resource);
-    assert!(!capabilities.gpu_external_texture_import);
-    assert!(!capabilities.texture_external_sampling);
+    assert!(capabilities.wgpu_external_texture_bind_group_resource);
+    assert!(capabilities.gpu_external_texture_import);
+    assert!(capabilities.texture_external_sampling);
     assert!(!capabilities.rgba_live_payload);
     assert!(!capabilities.visible_dom_video_overlay);
 }

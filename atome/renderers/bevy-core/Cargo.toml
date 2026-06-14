@@ -29,3 +29,7 @@ js-sys = "0.3"
 wasm-bindgen = "0.2"
 web-sys = { version = "0.3", features = ["HtmlMediaElement", "HtmlVideoElement", "Window"] }
 wgpu = { version = "27.0.1", default-features = false, features = ["webgpu"] }
+
+[patch.crates-io]
+wgpu = { path = "../wgpu-web-external-texture/wgpu-27.0.1" }
+wgpu-types = { path = "../wgpu-web-external-texture/wgpu-types-27.0.1" }

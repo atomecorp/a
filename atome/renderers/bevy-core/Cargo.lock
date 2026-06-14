@@ -4196,8 +4196,6 @@ dependencies = [
 [[package]]
 name = "wgpu"
 version = "27.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bfe68bac7cde125de7a731c3400723cadaaf1703795ad3f4805f187459cd7a77"
 dependencies = [
  "arrayvec",
  "bitflags 2.12.1",
@@ -4315,8 +4313,6 @@ dependencies = [
 [[package]]
 name = "wgpu-types"
 version = "27.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "afdcf84c395990db737f2dd91628706cb31e86d72e53482320d368e52b5da5eb"
 dependencies = [
  "bitflags 2.12.1",
  "bytemuck",

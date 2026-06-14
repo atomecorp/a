@@ -1,8 +1,4 @@
-use bevy::{
-    image::ImageSampler,
-    prelude::*,
-    render::render_resource::{TextureFormat, TextureUsages},
-};
+use bevy::{image::ImageSampler, prelude::*};
 
 use crate::selection_overlay::build_shadow_texture_rgba;
 use crate::*;
@@ -14,30 +10,16 @@ fn shape_node(id: &str) -> AtomeRenderNode {
         parent_id: None,
         logical_position: [12.0, 24.0],
         logical_size: [120.0, 50.0],
+        scale: [1.0, 1.0],
+        rotation: 0.0,
+        origin: [0.0, 0.0],
         layer: 3,
+        opacity: 1.0,
         color: Some([0.1, 0.2, 0.3, 1.0]),
         text: None,
         source: None,
         texture_size: None,
-        texture: None,
-        peaks: None,
-        playback_progress: None,
-        selected: None,
-    }
-}
-
-fn video_node(id: &str) -> AtomeRenderNode {
-    AtomeRenderNode {
-        id: id.to_string(),
-        kind: "video".to_string(),
-        parent_id: None,
-        logical_position: [20.0, 30.0],
-        logical_size: [160.0, 90.0],
-        layer: 4,
-        color: Some([0.24, 0.55, 0.92, 1.0]),
-        text: None,
-        source: Some("/fixtures/video.mp4".to_string()),
-        texture_size: None,
+        uv_rect: None,
         texture: None,
         peaks: None,
         playback_progress: None,
@@ -52,11 +34,16 @@ fn text_node_with_texture(id: &str) -> AtomeRenderNode {
         parent_id: None,
         logical_position: [18.0, 26.0],
         logical_size: [80.0, 30.0],
+        scale: [1.0, 1.0],
+        rotation: 0.0,
+        origin: [0.0, 0.0],
         layer: 5,
+        opacity: 1.0,
         color: Some([1.0, 1.0, 1.0, 1.0]),
         text: Some("Sharp".to_string()),
         source: None,
         texture_size: None,
+        uv_rect: None,
         texture: Some(AtomeTexture {
             width: 160,
             height: 60,
@@ -108,7 +95,7 @@ fn transform_and_surface_patches_reproject_nodes() {
 
     assert_eq!(
         world.get::<Transform>(entity).unwrap().translation,
-        Vec3::new(-248.0, 191.0, -3.0)
+        Vec3::new(-248.0, 191.0, depth_for_layer(3))
     );
     apply_surface(
         &mut world,
@@ -120,7 +107,7 @@ fn transform_and_surface_patches_reproject_nodes() {
     .unwrap();
     assert_eq!(
         world.get::<Transform>(entity).unwrap().translation,
-        Vec3::new(-88.0, 71.0, -3.0)
+        Vec3::new(-88.0, 71.0, depth_for_layer(3))
     );
 }
 
@@ -267,7 +254,7 @@ fn selected_nodes_create_overlay_from_configured_visual_style() {
     assert_eq!(outline_depth, selected_depth + 0.5);
     assert!(shadow_depth < selected_depth);
     assert!(outline_depth > selected_depth);
-    assert!(shadow_depth > depth_for_layer(4));
+    assert!(shadow_depth < depth_for_layer(4));
 
     apply_style(
         &mut world,
@@ -275,6 +262,7 @@ fn selected_nodes_create_overlay_from_configured_visual_style() {
             id: "selected_shape".to_string(),
             color: None,
             selected: Some(false),
+            opacity: None,
             playback_progress: None,
         },
     )
@@ -282,72 +270,6 @@ fn selected_nodes_create_overlay_from_configured_visual_style() {
 
     assert!(world.get::<AtomeSelectionOverlay>(entity).is_none());
     assert_eq!(world.resource::<Assets<Image>>().len(), 0);
-}
-
-#[test]
-fn video_nodes_spawn_bevy_gpu_texture_target_without_cpu_frame_data() {
-    let mut world = World::new();
-    world.insert_resource(AtomeEntityTable::default());
-    world.insert_resource(AtomeBevyRendererConfig::empty(640.0, 480.0));
-    world.insert_resource(AtomeRendererDiagnostics::default());
-    world.insert_resource(Assets::<Image>::default());
-
-    let entity = apply_spawn(&mut world, video_node("gpu_video")).unwrap();
-
-    let sprite = world.get::<Sprite>(entity).unwrap();
-    let image = world
-        .resource::<Assets<Image>>()
-        .get(&sprite.image)
-        .expect("video sprite should reference a Bevy image");
-    assert_eq!(image.texture_descriptor.size.width, 160);
-    assert_eq!(image.texture_descriptor.size.height, 90);
-    assert_eq!(image.texture_descriptor.format, TextureFormat::Rgba8Unorm);
-    assert!(image
-        .texture_descriptor
-        .usage
-        .contains(TextureUsages::COPY_DST));
-    assert!(image
-        .texture_descriptor
-        .usage
-        .contains(TextureUsages::RENDER_ATTACHMENT));
-    assert_eq!(image.data, None);
-    assert!(world
-        .get::<video_texture::AtomeVideoTexture>(entity)
-        .is_some());
-}
-
-#[test]
-fn video_copy_diagnostics_track_copies_and_skip_reasons() {
-    reset_video_copy_diagnostics();
-
-    record_video_copy_skip(
-        AtomeVideoCopySkipReason::MissingSource,
-        "video_missing",
-        None,
-    );
-    record_video_copy_skip(
-        AtomeVideoCopySkipReason::FrameAlreadyCopied,
-        "video_cached",
-        Some(7),
-    );
-    record_video_copy_success("video_live", 8);
-
-    let diagnostics = read_video_copy_diagnostics();
-    assert_eq!(diagnostics.copy_count, 1);
-    assert_eq!(diagnostics.skip_missing_source, 1);
-    assert_eq!(diagnostics.skip_frame_already_copied, 1);
-    assert_eq!(diagnostics.last_copied_id.as_deref(), Some("video_live"));
-    assert_eq!(diagnostics.last_copied_frame_version, Some(8));
-    assert_eq!(diagnostics.last_skip_id.as_deref(), Some("video_cached"));
-    assert_eq!(diagnostics.last_skip_frame_version, Some(7));
-    assert_eq!(
-        diagnostics.last_skip_reason,
-        Some(AtomeVideoCopySkipReason::FrameAlreadyCopied.as_str())
-    );
-
-    let previous = reset_video_copy_diagnostics();
-    assert_eq!(previous.copy_count, 1);
-    assert_eq!(read_video_copy_diagnostics().copy_count, 0);
 }
 
 #[test]
@@ -373,67 +295,6 @@ fn imported_text_textures_use_linear_sampling_without_changing_logical_size() {
 }
 
 #[test]
-fn video_nodes_use_media_texture_size_when_source_aspect_differs_from_atom() {
-    let mut world = World::new();
-    world.insert_resource(AtomeEntityTable::default());
-    world.insert_resource(AtomeBevyRendererConfig::empty(640.0, 480.0));
-    world.insert_resource(AtomeRendererDiagnostics::default());
-    world.insert_resource(Assets::<Image>::default());
-
-    let entity = apply_spawn(
-        &mut world,
-        AtomeRenderNode {
-            logical_size: [180.0, 180.0],
-            texture_size: Some([1920, 1080]),
-            ..video_node("wide_gpu_video")
-        },
-    )
-    .unwrap();
-
-    let sprite = world.get::<Sprite>(entity).unwrap();
-    assert_eq!(sprite.custom_size, Some(Vec2::new(180.0, 180.0)));
-    let image = world
-        .resource::<Assets<Image>>()
-        .get(&sprite.image)
-        .expect("video sprite should reference a Bevy image");
-    assert_eq!(image.texture_descriptor.size.width, 1920);
-    assert_eq!(image.texture_descriptor.size.height, 1080);
-    assert_eq!(image.data, None);
-}
-
-#[test]
-fn video_resource_patch_replaces_gpu_texture_with_media_size() {
-    let mut world = World::new();
-    world.insert_resource(AtomeEntityTable::default());
-    world.insert_resource(AtomeBevyRendererConfig::empty(640.0, 480.0));
-    world.insert_resource(AtomeRendererDiagnostics::default());
-    world.insert_resource(Assets::<Image>::default());
-
-    let entity = apply_spawn(&mut world, video_node("resized_video")).unwrap();
-    apply_resource(
-        &mut world,
-        AtomeResourcePatch {
-            id: "resized_video".to_string(),
-            source: Some("/fixtures/video.mp4".to_string()),
-            texture_size: Some([478, 850]),
-            texture: None,
-            peaks: None,
-        },
-    )
-    .unwrap();
-
-    let sprite = world.get::<Sprite>(entity).unwrap();
-    assert_eq!(sprite.custom_size, Some(Vec2::new(160.0, 90.0)));
-    let image = world
-        .resource::<Assets<Image>>()
-        .get(&sprite.image)
-        .expect("video sprite should reference a Bevy image");
-    assert_eq!(image.texture_descriptor.size.width, 478);
-    assert_eq!(image.texture_descriptor.size.height, 850);
-    assert_eq!(image.data, None);
-}
-
-#[test]
 fn audio_waveform_progress_spawns_and_moves_bevy_playhead_overlay() {
     let mut world = World::new();
     world.insert_resource(AtomeEntityTable::default());
@@ -449,11 +310,16 @@ fn audio_waveform_progress_spawns_and_moves_bevy_playhead_overlay() {
             parent_id: None,
             logical_position: [20.0, 30.0],
             logical_size: [200.0, 60.0],
+            scale: [1.0, 1.0],
+            rotation: 0.0,
+            origin: [0.0, 0.0],
             layer: 2,
+            opacity: 1.0,
             color: Some([0.2, 0.4, 0.6, 1.0]),
             text: None,
             source: None,
             texture_size: None,
+            uv_rect: None,
             texture: None,
             peaks: Some(vec![0.1, 0.5, -0.2]),
             playback_progress: Some(0.25),
@@ -469,7 +335,7 @@ fn audio_waveform_progress_spawns_and_moves_bevy_playhead_overlay() {
     let line_entity = overlay.entities[0];
     assert_eq!(
         world.get::<Transform>(line_entity).unwrap().translation,
-        Vec3::new(-250.0, 180.0, -1.3)
+        Vec3::new(-250.0, 180.0, depth_for_layer(2) + 0.7)
     );
 
     apply_style(
@@ -478,6 +344,7 @@ fn audio_waveform_progress_spawns_and_moves_bevy_playhead_overlay() {
             id: "waveform_progress".to_string(),
             color: None,
             selected: None,
+            opacity: None,
             playback_progress: Some(Some(0.75)),
         },
     )
@@ -490,7 +357,7 @@ fn audio_waveform_progress_spawns_and_moves_bevy_playhead_overlay() {
             .get::<Transform>(moved_line_entity)
             .unwrap()
             .translation,
-        Vec3::new(-150.0, 180.0, -1.3)
+        Vec3::new(-150.0, 180.0, depth_for_layer(2) + 0.7)
     );
 
     apply_style(
@@ -499,6 +366,7 @@ fn audio_waveform_progress_spawns_and_moves_bevy_playhead_overlay() {
             id: "waveform_progress".to_string(),
             color: None,
             selected: None,
+            opacity: None,
             playback_progress: Some(None),
         },
     )

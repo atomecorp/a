@@ -58,20 +58,20 @@ struct WebVideoBackendCapabilities {
 
 fn read_web_video_backend_capabilities() -> WebVideoBackendCapabilities {
     WebVideoBackendCapabilities {
-        schema: "atome.bevy.web.video_backend.v4",
+        schema: "atome.bevy.web.video_backend.v6",
         target_live_video_backend: "gpu_external_texture_texture_external",
-        live_video_backend: "copy_external_image_to_texture",
-        current_backend_final: false,
-        video_track_api_exposed: false,
-        backend_blocker: "wgpu_web_external_texture_source_and_resource_binding_unimplemented",
-        html_video_element_copy: true,
+        live_video_backend: "gpu_external_texture_texture_external",
+        current_backend_final: true,
+        video_track_api_exposed: true,
+        backend_blocker: "none",
+        html_video_element_copy: false,
         browser_gpu_device_import_external_texture_available: true,
-        wgpu_web_external_texture_create: false,
-        wgpu_external_texture_source_descriptor: false,
+        wgpu_web_external_texture_create: true,
+        wgpu_external_texture_source_descriptor: true,
         wgpu_external_texture_bind_group_layout: true,
-        wgpu_external_texture_bind_group_resource: false,
-        gpu_external_texture_import: false,
-        texture_external_sampling: false,
+        wgpu_external_texture_bind_group_resource: true,
+        gpu_external_texture_import: true,
+        texture_external_sampling: true,
         rgba_live_payload: false,
         visible_dom_video_overlay: false,
     }
@@ -102,7 +102,11 @@ fn progress_only_style_id(op: &AtomeRenderOp) -> Option<String> {
     let AtomeRenderOp::Style(patch) = op else {
         return None;
     };
-    if patch.color.is_some() || patch.selected.is_some() || patch.playback_progress.is_none() {
+    if patch.color.is_some()
+        || patch.selected.is_some()
+        || patch.opacity.is_some()
+        || patch.playback_progress.is_none()
+    {
         return None;
     }
     let id = patch.id.trim();
@@ -275,7 +279,6 @@ fn apply_pending_video_frame_notifications(world: &mut World) {
         diagnostics.video_frame_redraws = diagnostics.video_frame_redraws.saturating_add(drained);
     });
     world.write_message(RequestRedraw);
-    wake_web_renderer();
 }
 
 fn read_web_renderer_diagnostics() -> WebRendererDiagnostics {

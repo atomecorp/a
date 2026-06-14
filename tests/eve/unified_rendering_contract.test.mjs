@@ -51,6 +51,16 @@ test('RenderAtom normalization keeps render data disposable and cacheable', () =
     assert.equal(svg.type, 'image');
     assert.equal(text.capabilities.editable, true);
     assert.equal(video.capabilities.playable, true);
+    const croppedVideo = normalizeRenderAtom({
+        ...makeRecord('video_crop', 'video', 6),
+        properties: {
+            ...makeRecord('video_crop', 'video', 6).properties,
+            uvRect: { x: 0.25, y: 0.125, width: 0.5, height: 0.75 },
+            cropRect: { x: 160, y: 90, width: 320, height: 180 }
+        }
+    });
+    assert.deepEqual(croppedVideo.content.uvRect, { x: 0.25, y: 0.125, width: 0.5, height: 0.75 });
+    assert.deepEqual(croppedVideo.content.sourceRect, { x: 160, y: 90, width: 320, height: 180 });
     assert.match(buildTextCacheKey(text), /^text:eve\.renderatom\.v1:text_a:/);
     assert.match(buildTextureCacheKey(image), /^texture:eve\.renderatom\.v1:image:/);
     assert.match(buildTextureCacheKey(video), /^texture:eve\.renderatom\.v1:video:/);

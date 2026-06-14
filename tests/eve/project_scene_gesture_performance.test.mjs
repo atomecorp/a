@@ -125,7 +125,10 @@ test('Project scene drag applies direct Bevy transforms without full projection 
     assert.deepEqual(directTransformCalls.at(-1).payload, {
         id: 'drag_perf_atom',
         logical_position: [30, 35],
-        logical_size: [40, 30]
+        logical_size: [40, 30],
+        scale: [1, 1],
+        rotation: 0,
+        origin: [0, 0]
     });
 
     await flushFrames();
@@ -337,6 +340,11 @@ test('Project scene direct drag keeps project media dimensions when width and he
     delete record.properties.height;
     record.properties.project_width = 320;
     record.properties.project_height = 180;
+    record.properties.scale_x = 1.5;
+    record.properties.scale_y = 0.75;
+    record.properties.rotation = 22;
+    record.properties.origin_x = 0.5;
+    record.properties.origin_y = 0.5;
 
     await renderProjectScene({
         projectId: 'project_direct_drag_project_size',
@@ -354,6 +362,9 @@ test('Project scene direct drag keeps project media dimensions when width and he
     const transform = renders.slice(callsAfterPointerDown).find((call) => call.type === 'transform');
     assert.deepEqual(transform.payload.logical_size, [320, 180]);
     assert.deepEqual(transform.payload.logical_position, [40, 50]);
+    assert.deepEqual(transform.payload.scale, [1.5, 0.75]);
+    assert.equal(transform.payload.rotation, 22);
+    assert.deepEqual(transform.payload.origin, [0.5, 0.5]);
     assert.equal(commits.length, 0);
 });
 

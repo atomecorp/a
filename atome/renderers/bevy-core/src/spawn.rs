@@ -1,11 +1,13 @@
-use bevy::{image::Image, prelude::*, text::TextBounds};
+use bevy::{image::Image, prelude::*, render::batching::NoAutomaticBatching, text::TextBounds};
 
 use crate::{
-    render_math::{atome_rect_transform, color_from_rgba, depth_for_layer},
+    render_math::{atome_rect_transform_with_local, color_from_rgba, depth_for_layer},
     selection_overlay::rebuild_selection_overlay,
     texture::image_handle_from_texture,
     types::*,
-    video_texture::{update_video_texture_handle_for_node, video_image_handle_from_node},
+    video_external_texture::{
+        insert_video_external_texture_component_for_node, insert_video_quad_mesh,
+    },
     waveform_playback_overlay::rebuild_waveform_playback_overlay,
 };
 
@@ -24,6 +26,7 @@ fn node_base_components(
     AtomeParentEntityId,
     AtomeLogicalPosition,
     AtomeLogicalSize,
+    AtomeLocalTransform,
     AtomeLayer,
     AtomeRenderKind,
     AtomeTextMetadata,
@@ -42,6 +45,7 @@ fn node_base_components(
             y: node.logical_position[1],
         },
         AtomeLogicalSize { width, height },
+        AtomeLocalTransform::new(node.scale, node.rotation, node.origin),
         AtomeLayer(node.layer),
         AtomeRenderKind(node.kind.clone()),
         AtomeTextMetadata(node.text.clone()),
@@ -50,7 +54,7 @@ fn node_base_components(
         AtomeWaveformPlaybackProgress(node.playback_progress.map(|value| value.clamp(0.0, 1.0))),
         AtomeSelected(node.selected.unwrap_or(false)),
         Visibility::Visible,
-        atome_rect_transform(
+        atome_rect_transform_with_local(
             node.logical_position[0],
             node.logical_position[1],
             width,
@@ -58,13 +62,18 @@ fn node_base_components(
             surface_width,
             surface_height,
             depth_for_layer(node.layer),
+            node.scale,
+            node.rotation,
+            node.origin,
         ),
     )
 }
 
 pub fn spawn_node_in_world(world: &mut World, node: AtomeRenderNode) -> Result<Entity, String> {
     let entity = {
-        let texture_handle = if node.texture.is_some() {
+        let texture_handle = if node.kind == "video" {
+            None
+        } else if node.texture.is_some() {
             let mut images = world
                 .get_resource_mut::<Assets<Image>>()
                 .ok_or_else(|| "bevy_image_assets_required".to_string())?;
@@ -74,10 +83,7 @@ pub fn spawn_node_in_world(world: &mut World, node: AtomeRenderNode) -> Result<E
                 &node.id,
             )?)
         } else {
-            let mut images = world
-                .get_resource_mut::<Assets<Image>>()
-                .ok_or_else(|| "bevy_image_assets_required".to_string())?;
-            video_image_handle_from_node(&mut images, &node)
+            None
         };
         let (surface_width, surface_height) = {
             let config = world.resource::<AtomeBevyRendererConfig>();
@@ -90,9 +96,7 @@ pub fn spawn_node_in_world(world: &mut World, node: AtomeRenderNode) -> Result<E
             surface_width,
             surface_height,
         )?;
-        if let Some(handle) = texture_handle.as_ref() {
-            update_video_texture_handle_for_node(world, entity, &node, handle);
-        }
+        insert_video_external_texture_component_for_node(world, entity, &node);
         entity
     };
     world
@@ -148,7 +152,7 @@ pub fn spawn_node_with_texture_handle(
                     .id()
             }
         }
-        "image" | "video" => {
+        "image" => {
             let _source = node
                 .source
                 .clone()
@@ -170,6 +174,26 @@ pub fn spawn_node_with_texture_handle(
                     sprite,
                 ))
                 .id()
+        }
+        "video" => {
+            let _source = node
+                .source
+                .clone()
+                .filter(|value| !value.trim().is_empty())
+                .ok_or_else(|| format!("bevy_media_source_required:{}", node.id))?;
+            let entity = world
+                .spawn((
+                    node_base_components(&node, width, height, surface_width, surface_height),
+                    NoAutomaticBatching,
+                ))
+                .id();
+            insert_video_quad_mesh(
+                world,
+                entity,
+                [width, height],
+                normalize_uv_rect(node.uv_rect),
+            )?;
+            entity
         }
         "audio_waveform" => {
             let has_texture = texture_handle.is_some();

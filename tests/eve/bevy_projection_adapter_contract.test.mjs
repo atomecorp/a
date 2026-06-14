@@ -8,7 +8,8 @@ import {
     mapVirtualSceneLayerToBevyPatch,
     mapVirtualSceneNodeToBevyPayload,
     mapVirtualSceneResourceToBevyPatch,
-    mapVirtualSceneStyleToBevyPatch
+    mapVirtualSceneStyleToBevyPatch,
+    mapVirtualSceneTransformToBevyPatch
 } from '../../eVe/domains/rendering/bevy_projection_adapter.js';
 import {
     createRendererAdapterRegistry,
@@ -175,6 +176,114 @@ test('Bevy projection normalizes oversized CSS layers to the Rust i32 boundary',
     assert.equal(layer.layer, 2147483647);
 });
 
+test('Bevy projection carries opacity through initial nodes and style patches', () => {
+    const node = mapVirtualSceneNodeToBevyPayload({
+        id: 'video_opacity',
+        kind: 'video',
+        parentId: null,
+        bounds: { x: 0, y: 0, width: 320, height: 180 },
+        renderLayer: 1,
+        opacity: 0.42,
+        material: null,
+        content: { source: '/api/media/video.mp4' }
+    });
+    const style = mapVirtualSceneStyleToBevyPatch({
+        id: 'video_opacity',
+        patch: { opacity: 0.35, material: null }
+    });
+    const clamped = mapVirtualSceneStyleToBevyPatch({
+        id: 'video_opacity',
+        patch: { opacity: 8, material: null }
+    });
+
+    assert.equal(node.opacity, 0.42);
+    assert.equal(style.opacity, 0.35);
+    assert.equal(clamped.opacity, 1);
+});
+
+test('Bevy projection carries canonical local transforms through nodes and transform patches', () => {
+    const node = mapVirtualSceneNodeToBevyPayload({
+        id: 'video_transform_contract',
+        kind: 'video',
+        parentId: null,
+        bounds: { x: 12, y: 24, width: 320, height: 180 },
+        localTransform: {
+            x: 12,
+            y: 24,
+            scaleX: 1.5,
+            scaleY: 0.75,
+            rotation: 22,
+            originX: 0.5,
+            originY: 0.5
+        },
+        renderLayer: 1,
+        material: null,
+        content: { source: '/api/media/video.mp4' }
+    });
+    const patch = mapVirtualSceneTransformToBevyPatch({
+        id: 'video_transform_contract',
+        bounds: { x: 30, y: 40, width: 640, height: 360 },
+        localTransform: {
+            x: 30,
+            y: 40,
+            scaleX: 1.25,
+            scaleY: 1.1,
+            rotation: -15,
+            originX: 0.25,
+            originY: 0.75
+        }
+    });
+
+    assert.deepEqual(node.logical_position, [12, 24]);
+    assert.deepEqual(node.logical_size, [320, 180]);
+    assert.deepEqual(node.scale, [1.5, 0.75]);
+    assert.equal(node.rotation, 22);
+    assert.deepEqual(node.origin, [0.5, 0.5]);
+    assert.deepEqual(patch.logical_position, [30, 40]);
+    assert.deepEqual(patch.logical_size, [640, 360]);
+    assert.deepEqual(patch.scale, [1.25, 1.1]);
+    assert.equal(patch.rotation, -15);
+    assert.deepEqual(patch.origin, [0.25, 0.75]);
+});
+
+test('Bevy projection rejects unsupported advanced blend modes instead of falling back to normal', () => {
+    const baseNode = {
+        id: 'video_blend_contract',
+        kind: 'video',
+        parentId: null,
+        bounds: { x: 0, y: 0, width: 320, height: 180 },
+        renderLayer: 1,
+        opacity: 0.75,
+        content: { source: '/api/media/video.mp4' }
+    };
+
+    assert.equal(mapVirtualSceneNodeToBevyPayload({
+        ...baseNode,
+        material: { blendMode: 'normal' }
+    }).opacity, 0.75);
+    assert.equal(mapVirtualSceneStyleToBevyPatch({
+        id: 'video_blend_contract',
+        patch: { material: { blendMode: 'source_over' } }
+    }).color, null);
+
+    for (const blendMode of ['add', 'multiply', 'screen']) {
+        assert.throws(
+            () => mapVirtualSceneNodeToBevyPayload({
+                ...baseNode,
+                material: { blendMode }
+            }),
+            new RegExp(`bevy_projection_blend_mode_unsupported:video_blend_contract:${blendMode}`)
+        );
+        assert.throws(
+            () => mapVirtualSceneStyleToBevyPatch({
+                id: 'video_blend_contract',
+                patch: { material: { blendMode } }
+            }),
+            new RegExp(`bevy_projection_blend_mode_unsupported:video_blend_contract:${blendMode}`)
+        );
+    }
+});
+
 test('Bevy video resource patch carries natural media texture size', () => {
     const patch = mapVirtualSceneResourceToBevyPatch({
         id: 'video_resized',
@@ -191,6 +300,119 @@ test('Bevy video resource patch carries natural media texture size', () => {
 
     assert.equal(patch.source, '/api/media/video.mp4');
     assert.deepEqual(patch.texture_size, [478, 850]);
+});
+
+test('Bevy video projection carries UV crop rectangles for nodes and resource patches', () => {
+    const node = mapVirtualSceneNodeToBevyPayload({
+        id: 'video_uv_crop',
+        kind: 'video',
+        bounds: { x: 0, y: 0, width: 320, height: 180 },
+        layer: 1,
+        material: null,
+        content: {
+            source: '/api/media/video.mp4',
+            uvRect: { x: 0.25, y: 0.125, width: 0.5, height: 0.75 }
+        }
+    });
+    const patch = mapVirtualSceneResourceToBevyPatch({
+        id: 'video_uv_crop',
+        content: {
+            source: '/api/media/video.mp4',
+            uv_rect: [0.1, 0.2, 0.6, 0.5]
+        },
+        node: {
+            id: 'video_uv_crop',
+            kind: 'video'
+        }
+    });
+
+    assert.deepEqual(node.uv_rect, [0.25, 0.125, 0.5, 0.75]);
+    assert.deepEqual(patch.uv_rect, [0.1, 0.2, 0.6, 0.5]);
+});
+
+test('Bevy video resource patch can explicitly clear a previous UV crop rectangle', () => {
+    const patch = mapVirtualSceneResourceToBevyPatch({
+        id: 'video_uv_crop_clear',
+        previousContent: {
+            source: '/api/media/video.mp4',
+            uvRect: [0.25, 0.125, 0.5, 0.75]
+        },
+        content: {
+            source: '/api/media/video.mp4'
+        },
+        node: {
+            id: 'video_uv_crop_clear',
+            kind: 'video'
+        }
+    });
+
+    assert.equal(Object.prototype.hasOwnProperty.call(patch, 'uv_rect'), true);
+    assert.equal(patch.uv_rect, null);
+});
+
+test('Bevy video projection converts pixel source crop rectangles to normalized UVs', () => {
+    const node = mapVirtualSceneNodeToBevyPayload({
+        id: 'video_source_crop',
+        kind: 'video',
+        bounds: { x: 0, y: 0, width: 320, height: 180 },
+        layer: 1,
+        material: null,
+        content: {
+            source: '/api/media/video.mp4',
+            naturalWidth: 1920,
+            naturalHeight: 1080,
+            sourceRect: { x: 480, y: 270, width: 960, height: 540 }
+        }
+    });
+    const patch = mapVirtualSceneResourceToBevyPatch({
+        id: 'video_source_crop',
+        content: {
+            source: '/api/media/video.mp4',
+            naturalWidth: 1920,
+            naturalHeight: 1080,
+            cropRect: [240, 108, 480, 216]
+        },
+        node: {
+            id: 'video_source_crop',
+            kind: 'video'
+        }
+    });
+
+    assert.deepEqual(node.uv_rect, [0.25, 0.25, 0.5, 0.5]);
+    assert.deepEqual(patch.uv_rect, [0.125, 0.1, 0.25, 0.2]);
+});
+
+test('Bevy video projection rejects crop rectangles outside the media bounds', () => {
+    assert.throws(
+        () => mapVirtualSceneNodeToBevyPayload({
+            id: 'video_uv_invalid',
+            kind: 'video',
+            bounds: { x: 0, y: 0, width: 320, height: 180 },
+            layer: 1,
+            material: null,
+            content: {
+                source: '/api/media/video.mp4',
+                uvRect: [0.75, 0, 0.5, 1]
+            }
+        }),
+        /bevy_projection_uv_rect_bounds_invalid:video_uv_invalid/
+    );
+    assert.throws(
+        () => mapVirtualSceneResourceToBevyPatch({
+            id: 'video_source_crop_invalid',
+            content: {
+                source: '/api/media/video.mp4',
+                naturalWidth: 1920,
+                naturalHeight: 1080,
+                sourceRect: [1600, 0, 640, 100]
+            },
+            node: {
+                id: 'video_source_crop_invalid',
+                kind: 'video'
+            }
+        }),
+        /bevy_projection_source_rect_bounds_invalid:video_source_crop_invalid/
+    );
 });
 
 test('Bevy video texture size ignores ambiguous display width and height content fields', () => {
