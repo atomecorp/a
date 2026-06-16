@@ -28,9 +28,19 @@ fn vertex(vertex: Vertex) -> VertexOutput {
     return out;
 }
 
+// External textures sample in display-encoded sRGB. Bevy's 2d target is sRGB
+// (or HDR-linear), so the GPU re-applies the sRGB OETF on store. Without this
+// decode the encode is applied twice, lifting blacks and washing out contrast.
+fn srgb_to_linear(srgb: vec3<f32>) -> vec3<f32> {
+    let cutoff = srgb <= vec3<f32>(0.04045);
+    let low = srgb / 12.92;
+    let high = pow((srgb + vec3<f32>(0.055)) / 1.055, vec3<f32>(2.4));
+    return select(high, low, cutoff);
+}
+
 @fragment
 fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
     let frame = textureSampleBaseClampToEdge(video_frame, video_sampler, in.uv);
     let opacity = clamp(video_params.x, 0.0, 1.0);
-    return vec4<f32>(frame.rgb, opacity);
+    return vec4<f32>(srgb_to_linear(frame.rgb), opacity);
 }

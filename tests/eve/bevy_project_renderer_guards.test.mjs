@@ -464,3 +464,13 @@ test('live project video without poster cannot enter the RGBA media resolver pat
     );
     assert.equal(canvasReadbacks, 0);
 });
+
+test('Bevy external-video shader linearizes the sampled frame before the sRGB target', () => {
+    const shader = readSource('atome/renderers/bevy-core/assets/shaders/video_external.wgsl');
+    // External textures sample display-encoded sRGB; Bevy's 2d target re-applies the
+    // sRGB OETF on store, so the sample MUST be decoded to linear first. A raw
+    // `frame.rgb` passthrough double-encodes it (lifted blacks, washed-out contrast).
+    assert.match(shader, /fn\s+srgb_to_linear/);
+    assert.match(shader, /return\s+vec4<f32>\(\s*srgb_to_linear\(frame\.rgb\)\s*,\s*opacity\s*\)/);
+    assert.doesNotMatch(shader, /return\s+vec4<f32>\(\s*frame\.rgb\s*,\s*opacity\s*\)/);
+});
