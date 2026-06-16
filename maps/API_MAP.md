@@ -997,6 +997,7 @@ Entry point families:
 - Media persistence service exports.
 - `createMediaDiagnosticsRuntime`.
 - Native frame preview renderer factory.
+- Video recording session preview contract: `startVideoRecordingSession` starts recording first, then passes the returned recording `MediaStream` to `createVideoPreviewRenderer`; `createVideoPreviewRenderer` renders supplied streams through the WebGPU preview renderer without acquiring a second camera stream, and only releases preview-registry streams it acquired itself.
 
 Owner: eVe closed media domain.
 

@@ -34,6 +34,7 @@
   "tests/eve/render_surface_size_contract.test.mjs",
   "tests/eve/selected_project_media_playback_runtime.test.mjs",
   "tests/eve/unified_rendering_contract.test.mjs",
+  "tests/eve/video_recording_preview_stream_contract.test.mjs",
   "tests/eve/video_timeline_fields_contract.test.mjs",
   "tests/eve/virtual_scene_phase1_contract.test.mjs",
   "tests/eve/webgpu_compositor_matrix_contract.test.mjs",

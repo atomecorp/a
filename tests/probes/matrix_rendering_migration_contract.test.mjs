@@ -35,3 +35,14 @@ test('matrix interactions route through one scene hit-test runtime', () => {
     assert.equal(interactionSource.match(/registerPressGesture/g)?.length, 2);
     assert.equal(interactionSource.includes('activeLabelEditor'), true);
 });
+
+test('matrix tile context menu uses the single canonical flower path (no parallel opener)', () => {
+    // Right-click and long-press must resolve the same menu through the canonical
+    // flower context runtime (flower/context.js -> resolveFlowerContextItems). The
+    // matrix interaction runtime must not open its own flower menu, otherwise the
+    // long-press path diverges (the regressed open/duplicate/delete tile menu that
+    // rendered as item_0/item_1/item_2).
+    assert.equal(interactionSource.includes('openFlowerMenu'), false, 'matrix interactions must not open a parallel flower menu');
+    assert.equal(/openTileMenu/.test(interactionSource), false, 'the divergent matrix tile menu builder must not be reintroduced');
+    assert.equal(interactionSource.includes('closeFlowerMenu'), true, 'matrix interactions still close the canonical flower on tile selection');
+});

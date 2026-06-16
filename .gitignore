@@ -78,6 +78,7 @@ tests/eve/*
 !tests/eve/project_video_timeline_playback_contract.test.mjs
 !tests/eve/project_scene_unified_rendering_contract.test.mjs
 !tests/eve/unified_rendering_contract.test.mjs
+!tests/eve/video_recording_preview_stream_contract.test.mjs
 !tests/eve/unified_rendering_test_helpers.mjs
 !tests/eve/inline_edit_close_overlay_contract.test.mjs
 !tests/eve/inline_edit_session_contract.test.mjs

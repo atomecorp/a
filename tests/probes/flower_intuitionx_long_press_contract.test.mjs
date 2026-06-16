@@ -232,5 +232,25 @@ assert.equal(
     'perform-mode long-press flower must expose the perform tool to exit the mode'
 );
 
+// Matrix tile label is a flower-blocked target. A long press there opens the inline
+// rename editor owned by matrix_interaction_runtime, so the radial flower must NOT
+// also open on that hit-area (it must behave like any other blocked target).
+closeFlowerMenu();
+await delay(20);
+const matrixTile = document.createElement('div');
+matrixTile.className = 'eve-matrix-tile';
+const matrixLabel = document.createElement('div');
+matrixLabel.className = 'eve-matrix-tile__label';
+matrixTile.appendChild(matrixLabel);
+document.body.appendChild(matrixTile);
+document.elementFromPoint = () => matrixLabel;
+document.elementsFromPoint = () => [matrixLabel, matrixTile, document.body];
+const opensBeforeMatrixLabel = opens.length;
+matrixLabel.dispatchEvent(makePointerEvent('pointerdown', { pointerId: 62, clientX: 180, clientY: 180 }));
+await delay(8);
+document.dispatchEvent(makePointerEvent('pointerup', { pointerId: 62, buttons: 0, clientX: 180, clientY: 180 }));
+assert.equal(isFlowerMenuOpen(), false, 'a long press on a matrix tile label must not open the IntuitionX flower (the inline rename editor owns that gesture)');
+assert.equal(opens.length, opensBeforeMatrixLabel, 'a blocked matrix tile label must not resolve flower items');
+
 closeFlowerMenu();
 cleanup();
