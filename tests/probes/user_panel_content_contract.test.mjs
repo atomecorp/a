@@ -153,6 +153,30 @@ assert.equal(
     'eve_login_sequence__phone_input',
     'phone input must receive initial focus'
 );
+const pendingAuthPhoneInput = document.getElementById('eve_login_sequence__phone_input');
+pendingAuthPhoneInput.value = '0600000000';
+dispatchInput(pendingAuthPhoneInput);
+dispatchEnter(pendingAuthPhoneInput);
+await new Promise((resolve) => setTimeout(resolve, 0));
+assert.equal(
+    document.getElementById('eve_login_sequence__instruction')?.textContent,
+    'Entrez votre mot de passe',
+    'phone entry must advance to password before auth transition checks'
+);
+window.dispatchEvent(new window.CustomEvent('squirrel:auth-checked', {
+    detail: { authenticated: false, userId: null, anonymous: false }
+}));
+await new Promise((resolve) => setTimeout(resolve, 20));
+assert.equal(
+    document.getElementById('eve_login_sequence__credentials')?.style?.display,
+    'block',
+    'transient unauthenticated auth-check during credential entry must preserve the password screen'
+);
+assert.equal(
+    document.getElementById('eve_login_sequence__choice')?.style?.display,
+    'none',
+    'transient unauthenticated auth-check during credential entry must not redraw the first choice screen'
+);
 const logoButton = document.getElementById('eve_login_sequence__logo');
 assert.equal(logoButton?.style?.background, 'transparent', 'login validation logo must not render a square background');
 assert.equal(logoButton?.style?.border, '0px', 'login validation logo must not render a rounded square border');
