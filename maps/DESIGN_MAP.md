@@ -327,6 +327,7 @@ Role:
 
 - Ribbon tokens define handle icons, tool sizes, flower metrics, drag thresholds, and animation timing.
 - The main ribbon is the primary product surface that materializes the shared tool visual contract used by the user tool, the Atome handle, and the main toolbar tool buttons.
+- The authenticated main ribbon currently exposes `home`, `find`, `time`, `view`, and `help` in that order; `view` is a palette placed immediately before `help` and reveals the `list`, `table`, and `natural` view-mode tools through the existing palette child projection contract.
 - Main ribbon tool roots must carry the shared `.eve-intuitionx-projection-tool` visual class so the browser-native button border is reset by the existing projection tool style contract.
 - The main ribbon container is visually transparent; the Atome handle remains docked directly against the WebView bottom-left or bottom-right edge according to handedness.
 - Toolbox styles inject runtime CSS variables and rules for menu V2.
@@ -364,7 +365,7 @@ Design rule: new panels should use the panel creator and shared panel chrome bef
 
 User panel layout rule: `eVe/intuition/tools/user.js` keeps authenticated account actions inside the scrollable user dialog body, directly below the `Preferences` accordion; they must not return to a fixed body footer.
 
-Menu ownership rule: application example files must not call `window.new_menu_v2.updateContent()` or `updateTheme()` to replace the product menu. Main menu visual and content ownership stays in the Intuition ribbon/menu stack and panel definitions.
+Menu ownership rule: application example files must not call `window.new_menu_v2.updateContent()` or `updateTheme()` to replace the product menu. Main menu visual and content ownership stays in the Intuition ribbon/menu stack and panel definitions. The disconnected Atome-logo-only ribbon is reserved for unauthenticated state; anonymous guest workspaces are visually active desktop sessions and must keep the main ribbon/Flowers tools available while the user panel shows guest-specific actions.
 
 ### Atome Visual Objects
 
@@ -461,15 +462,15 @@ Design rule: icon styling belongs in visual factories or tokens. Do not duplicat
 
 ## Login Sequence Surface
 
-Primary source: `eVe/intuition/tools/user_login_sequence.js`
+Primary sources: `eVe/intuition/tools/user_login_sequence.js`, `eVe/intuition/tools/user_login_choice.js`, `eVe/intuition/tools/user_login_credentials.js`
 
 Role:
 
-- Owns the unauthenticated initial login sequence visual surface: black full-screen shell, top instruction, central mirrored input value/cursor, and bottom Atome logo validation control.
+- Owns the unauthenticated initial login visual surface. The first surface is a full-screen two-zone choice: black left/top for entering without an account, white right/bottom for authentication. The credential surface keeps the black full-screen shell, top instruction, central mirrored input value/cursor, and bottom Atome logo validation control.
 - Reuses eVe design factories for text, phone input, and password input. The bottom validation control reuses the shared disconnected Atome handle pulse from `eVe/intuition/ribbon/disconnected_handle_logo.js`, because the generic button factory clamps text and is not a stable host for nested logo chrome.
-- Uses `eVe/i18n/languages.js` keys under `eve.user.login_sequence.*` for visible and assistive text.
+- Uses `eVe/i18n/languages.js` keys under `eve.user.login_choice.*` and `eve.user.login_sequence.*` for visible and assistive text.
 
-Design rule: this surface must remain minimal and must not reintroduce the legacy compact phone/password panel as the initial unauthenticated login UI.
+Design rule: this surface must remain minimal and must not reintroduce the legacy compact phone/password panel as the initial unauthenticated login UI. Landscape keeps the black choice on the left and white choice on the right; portrait keeps the black choice on top and white choice on the bottom.
 
 ## Validation Expectations
 

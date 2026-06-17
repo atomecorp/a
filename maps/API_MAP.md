@@ -96,7 +96,7 @@ Boundary status: Open application/data API. eVe tools may consume it, but must n
 
 Known constraints: `atome/src/squirrel/apis/unified/adole.js` is a large legacy surface and requires targeted verification before mutation.
 
-Authentication bootstrap: `AdoleAPI.auth.bootstrap(phone, password, username, visibility)` is the atomic first-auth contract. Existing-phone attempts must verify the password and return a real authenticated token/session; unknown-phone attempts may create the account. UI code must not emulate this by calling `auth.login` followed by `auth.create`.
+Authentication bootstrap: `AdoleAPI.auth.bootstrap(phone, password, username, visibility)` is the atomic first-auth contract. Existing-phone attempts must verify the password and return a real authenticated token/session; unknown-phone attempts may create the account. UI code must not emulate this by calling `auth.login` followed by `auth.create`, and must not add its own post-bootstrap session gate beyond the canonical bootstrap success result and auth/session events owned by Atome auth state.
 
 Atome mutation rule: `AdoleAPI.atomes.create` and `AdoleAPI.atomes.alter` are public compatibility method names, but their framework implementation must emit canonical event commits through `adapter.atome.commit`. Direct adapter-level `atome.create` / `atome.alter` calls are legacy WebSocket protocol adapters only and must not be used as durable framework write paths.
 
@@ -472,7 +472,7 @@ Primary sources: `eVe/intuition/tools/core/tool_registry.js`, `eVe/intuition/too
 
 Exposure: closed product runtime installed under `window.atome.tools`, plus tool registry/runtime module exports.
 
-Verified responsibilities: tool definition registration/update, protected system-tool contract reconciliation, tool invocation, action routing, tool instance creation, persistence flows, Finder/tool projection helpers, latch, selection propagation, interaction routing, and consumption of the canonical Atome-owned product-tool slider runtime.
+Verified responsibilities: tool definition registration/update, protected system-tool contract reconciliation, tool invocation, action routing, tool instance creation, persistence flows, Finder/tool projection helpers, latch, selection propagation, interaction routing, main view-mode intention routing through `tool.main.view` plus `ui.view.mode.list`, `ui.view.mode.table`, and `ui.view.mode.natural`, and consumption of the canonical Atome-owned product-tool slider runtime.
 
 Verified shared slider runtime responsibilities:
 

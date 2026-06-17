@@ -72,6 +72,15 @@ await new Promise((resolve) => setTimeout(resolve, 0));
 
 assert.equal(authWaiters.length, 1, 'initial bootstrap must be waiting on auth');
 
+const waitForCondition = async (predicate, timeoutMs = 1200, intervalMs = 25) => {
+    const startedAt = Date.now();
+    while (Date.now() - startedAt < timeoutMs) {
+        if (predicate()) return true;
+        await new Promise((resolve) => setTimeout(resolve, intervalMs));
+    }
+    return false;
+};
+
 loggedIn = true;
 window.dispatchEvent(new CustomEvent('squirrel:user-logged-in', {
     detail: {
@@ -82,7 +91,7 @@ window.dispatchEvent(new CustomEvent('squirrel:user-logged-in', {
 }));
 
 authWaiters.shift()({ authenticated: false, userId: null, anonymous: false });
-await new Promise((resolve) => setTimeout(resolve, 180));
+await waitForCondition(() => currentProjects.length === 1 && loadedProjects.length === 1);
 
 assert.deepEqual(
     currentProjects.map((entry) => entry.projectId),

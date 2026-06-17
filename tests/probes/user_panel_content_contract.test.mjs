@@ -51,16 +51,101 @@ await import('../../eVe/intuition/tools/user.js');
 
 assert.equal(typeof window.open_home_panel, 'function', 'open_home_panel must be installed');
 
+window.dispatchEvent(new window.CustomEvent('squirrel:auth-checked', {
+    detail: { authenticated: false, userId: null, anonymous: false }
+}));
+await new Promise((resolve) => setTimeout(resolve, 20));
+assert.equal(
+    document.getElementById('eve_login_sequence')?.style?.display,
+    'block',
+    'unauthenticated auth-check must open the login sequence instead of leaving only the Atome logo'
+);
+assert.equal(
+    document.getElementById('eve_login_sequence__choice')?.style?.display,
+    'flex',
+    'unauthenticated auth-check must show the black/white pre-auth choice'
+);
+
+const dispatchInput = (node) => node.dispatchEvent(new window.Event('input', { bubbles: true }));
+const dispatchEnter = (node) => node.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+const activateButton = async (node) => {
+    node.dispatchEvent(new window.MouseEvent('pointerdown', { bubbles: true }));
+    node.dispatchEvent(new window.MouseEvent('pointerup', { bubbles: true }));
+    node.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+    await new Promise((resolve) => setTimeout(resolve, 20));
+};
+const setViewport = (width, height) => {
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: width });
+    Object.defineProperty(window, 'innerHeight', { configurable: true, value: height });
+    window.dispatchEvent(new window.Event('resize'));
+};
+const submitLoginCredentials = async (phone, password) => {
+    const choiceAuthenticate = document.getElementById('eve_login_sequence__choice_authenticate');
+    if (document.getElementById('eve_login_sequence__choice')?.style?.display === 'flex') {
+        await activateButton(choiceAuthenticate);
+    }
+    const phoneField = document.getElementById('eve_login_sequence__phone_input');
+    phoneField.value = phone;
+    dispatchInput(phoneField);
+    dispatchEnter(phoneField);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const passwordFieldInput = document.getElementById('eve_login_sequence__password_field__input');
+    passwordFieldInput.value = password;
+    dispatchInput(passwordFieldInput);
+    dispatchEnter(passwordFieldInput);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+};
+
+let anonymousUser = null;
+const anonymousCalls = [];
+window.AdoleAPI.auth.current = async () => anonymousUser
+    ? { logged: true, user: anonymousUser }
+    : { logged: false, user: null };
+window.AdoleAPI.security.isAnonymous = () => !!anonymousUser;
+window.AdoleAPI.security.ensureAnonymousUser = async (options = {}) => {
+    anonymousCalls.push(options);
+    anonymousUser = { id: 'anonymous_user', user_id: 'anonymous_user', username: 'anonymous' };
+    window.__currentProject = { id: 'anonymous_project', name: 'welcome', userId: anonymousUser.id };
+    window.dispatchEvent(new window.CustomEvent('squirrel:project-changed', { detail: window.__currentProject }));
+    return { ok: true, user: anonymousUser };
+};
+
+setViewport(1200, 700);
 const authOpen = await window.open_home_panel({ source: { type: 'user_panel_contract.auth' } });
 assert.equal(authOpen.ok, true, 'auth panel open must succeed');
 assert.equal(authOpen.panel_id, 'eve_login_sequence', 'anonymous state must open login sequence');
 
 const loginSequence = document.getElementById('eve_login_sequence');
 assert.equal(loginSequence?.style?.display, 'block', 'login sequence must be visible');
+const loginChoice = document.getElementById('eve_login_sequence__choice');
+const withoutAccountChoice = document.getElementById('eve_login_sequence__choice_without_account');
+const authenticateChoice = document.getElementById('eve_login_sequence__choice_authenticate');
+assert.equal(loginChoice?.style?.display, 'flex', 'login choice must be the first visible auth surface');
+assert.equal(loginChoice?.style?.flexDirection, 'row', 'landscape login choice must split vertically');
+assert.equal(withoutAccountChoice?.textContent, 'entrez sans compte', 'without-account label must come from i18n');
+assert.equal(authenticateChoice?.textContent, 'authentifiez vous', 'authenticate label must come from i18n');
+assert.equal(withoutAccountChoice?.style?.background, 'rgb(0, 0, 0)', 'without-account side must be black');
+assert.equal(withoutAccountChoice?.style?.color, 'rgb(255, 255, 255)', 'without-account text must be white');
+assert.equal(authenticateChoice?.style?.background, 'rgb(255, 255, 255)', 'authenticate side must be white');
+assert.equal(authenticateChoice?.style?.color, 'rgb(0, 0, 0)', 'authenticate text must be black');
+
+setViewport(700, 1200);
+assert.equal(loginChoice?.style?.flexDirection, 'column', 'portrait login choice must split horizontally');
+
+await activateButton(withoutAccountChoice);
+assert.deepEqual(anonymousCalls, [{ force: true }], 'without-account choice must use the anonymous account flow');
+assert.equal(loginSequence?.style?.display, 'none', 'successful anonymous entry must close the login sequence');
+anonymousUser = null;
+
+setViewport(1200, 700);
+const authOpenAgain = await window.open_home_panel({ source: { type: 'user_panel_contract.auth_again' } });
+assert.equal(authOpenAgain.ok, true, 'auth panel reopen must succeed');
+assert.equal(document.getElementById('eve_login_sequence__choice')?.style?.display, 'flex', 'login choice must re-open before credentials');
+await activateButton(document.getElementById('eve_login_sequence__choice_authenticate'));
 assert.equal(
     document.getElementById('eve_login_sequence__instruction')?.textContent,
     'Entrez votre téléphone',
-    'login sequence must start on the phone step'
+    'authenticate choice must open the phone step'
 );
 await new Promise((resolve) => setTimeout(resolve, 0));
 assert.equal(
@@ -89,6 +174,7 @@ assert.equal(authFooter?.children?.length || 0, 0, 'old auth dialog footer must 
 
 let createdSession = null;
 const authAttempts = [];
+const forbiddenAuthCalls = [];
 window.Atome.getStateCurrent = async () => null;
 window.AdoleAPI.projects = {
     loadSaved: async () => null,
@@ -107,15 +193,18 @@ window.AdoleAPI.auth.bootstrap = async (phone, password, username, visibility) =
         tauri: { success: false }
     };
 };
-window.AdoleAPI.auth.current = async () => createdSession
-    ? { logged: true, user: { id: createdSession.id, user_id: createdSession.id, username: createdSession.username, phone: createdSession.phone } }
-    : { logged: false, user: null };
+window.AdoleAPI.auth.login = async () => {
+    forbiddenAuthCalls.push('login');
+    return { fastify: { success: false, error: 'forbidden' }, tauri: { success: false, error: 'forbidden' } };
+};
+window.AdoleAPI.auth.create = async () => {
+    forbiddenAuthCalls.push('create');
+    return { fastify: { success: false, error: 'forbidden' }, tauri: { success: false, error: 'forbidden' } };
+};
+window.AdoleAPI.auth.current = async () => ({ logged: false, user: null });
 window.AdoleAPI.auth.getCurrentInfo = () => createdSession ? { id: createdSession.id } : null;
 window.AdoleAPI.security.isAuthenticated = () => !!createdSession;
 window.AdoleAPI.security.isAnonymous = () => false;
-
-const dispatchInput = (node) => node.dispatchEvent(new window.Event('input', { bubbles: true }));
-const dispatchEnter = (node) => node.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
 
 const sequencePhoneInput = document.getElementById('eve_login_sequence__phone_input');
 sequencePhoneInput.value = '0612345678';
@@ -138,6 +227,7 @@ assert.deepEqual(
     'login sequence must use the atomic auth bootstrap contract'
 );
 assert.equal(authAttempts[0].visibility, 'public', 'login sequence bootstrap must use explicit public visibility');
+assert.deepEqual(forbiddenAuthCalls, [], 'login sequence must not call auth.login or auth.create after bootstrap');
 assert.equal(loginSequence.style.display, 'none', 'successful login-sequence creation must close the first auth screen');
 
 window.__authCheckResult = {
@@ -158,11 +248,14 @@ const userBody = document.getElementById('eve_user_dialog__body');
 const userFooter = document.getElementById('eve_user_dialog__body_footer');
 const userActions = document.getElementById('eve_user_dialog__actions');
 const preferences = document.getElementById('eve_user_dialog__preferences');
+const userToolsDock = document.getElementById('eve_user_dialog__tools_dock');
 assert.ok(userBody?.children?.length > 0, 'user dialog body must contain profile fields');
 assert.ok(userActions, 'user dialog actions row must exist');
 assert.equal(userBody?.contains(userActions), true, 'user dialog actions must live in the scrollable body');
 assert.equal(userFooter?.contains(userActions) || false, false, 'user dialog footer must not contain actions');
 assert.equal(userActions?.previousElementSibling, preferences, 'user dialog actions must be directly below preferences');
+assert.equal(document.getElementById('eve_user_dialog__contact_tool'), null, 'user dialog must not expose the contact tool');
+assert.equal(userToolsDock?.style?.display, 'none', 'user dialog contact tool dock must stay hidden');
 assert.ok(
     userActions?.contains(document.getElementById('eve_user_dialog__actions__logout')),
     'user dialog actions must contain logout'
@@ -176,6 +269,62 @@ assert.equal(
     null,
     'user dialog footer must not expose the create user action'
 );
+await activateButton(document.getElementById('eve_user_dialog__actions__logout'));
+assert.equal(
+    document.getElementById('eve_login_sequence')?.style?.display,
+    'block',
+    'logout must return to the pre-auth login sequence'
+);
+assert.equal(
+    document.getElementById('eve_login_sequence__choice')?.style?.display,
+    'flex',
+    'logout must show the new pre-auth choice screen'
+);
+
+const contractCalls = [];
+window.AdoleAPI.auth.bootstrap = async (phone, password, username, visibility) => {
+    contractCalls.push({ phone, password, username, visibility });
+    if (phone === '0611111111' && password === 'wrongpass') {
+        return {
+            fastify: { success: false, error: 'Invalid credentials' },
+            tauri: { success: false, error: 'Invalid credentials' }
+        };
+    }
+    if (phone === '0611111111' && password === 'rightpass') {
+        return {
+            fastify: { success: true, data: { user: { id: 'existing_user', user_id: 'existing_user', phone }, token: 'token' } },
+            tauri: { success: false }
+        };
+    }
+    return {
+        fastify: { success: false, error: 'unexpected_credentials' },
+        tauri: { success: false, error: 'unexpected_credentials' }
+    };
+};
+window.AdoleAPI.auth.current = async () => ({ logged: false, user: null });
+await submitLoginCredentials('0611111111', 'wrongpass');
+assert.equal(
+    document.getElementById('eve_login_sequence')?.style?.display,
+    'block',
+    'existing phone with wrong password must stay on login'
+);
+assert.equal(
+    document.getElementById('eve_login_sequence__instruction')?.textContent,
+    'Entrez votre téléphone',
+    'wrong password must reset to phone entry'
+);
+await submitLoginCredentials('0611111111', 'rightpass');
+assert.equal(
+    document.getElementById('eve_login_sequence')?.style?.display,
+    'none',
+    'existing phone with correct password must close login'
+);
+assert.deepEqual(
+    contractCalls.map((entry) => `${entry.phone}:${entry.password}`),
+    ['0611111111:wrongpass', '0611111111:rightpass'],
+    'existing-phone attempts must use bootstrap for bad and good passwords'
+);
+assert.deepEqual(forbiddenAuthCalls, [], 'existing-phone flow must not call auth.login or auth.create');
 
 [
     'eve_user_dialog__name',
@@ -195,9 +344,11 @@ const invalidSequence = createUserLoginSequence({
         failedLoginPayload = payload;
         return { ok: false, errorText: 'Identifiant ou mot de passe incorrect' };
     },
+    onWithoutAccount: async () => ({ ok: true }),
     documentRef: document
 });
 invalidSequence.open();
+await activateButton(document.getElementById('eve_login_sequence__choice_authenticate'));
 const invalidPhoneInput = document.getElementById('eve_login_sequence__phone_input');
 invalidPhoneInput.value = '0699999999';
 dispatchInput(invalidPhoneInput);
@@ -238,18 +389,20 @@ const sequence = createUserLoginSequence({
         submittedLogin = payload;
         return { ok: true };
     },
+    onWithoutAccount: async () => ({ ok: true }),
     documentRef: document
 });
 sequence.open();
-const sequenceRoot = document.getElementById('eve_login_sequence');
-sequenceRoot.dispatchEvent(new window.MouseEvent('pointerdown', { bubbles: true }));
+await activateButton(document.getElementById('eve_login_sequence__choice_authenticate'));
+const sequenceCredentials = document.getElementById('eve_login_sequence__credentials');
+sequenceCredentials.dispatchEvent(new window.MouseEvent('pointerdown', { bubbles: true }));
 await new Promise((resolve) => setTimeout(resolve, 720));
 assert.equal(
     document.getElementById('eve_login_sequence__instruction')?.textContent,
     'Entrez votre mot de passe',
     'voice-confirmed phone must advance to password step'
 );
-sequenceRoot.dispatchEvent(new window.MouseEvent('pointerdown', { bubbles: true }));
+sequenceCredentials.dispatchEvent(new window.MouseEvent('pointerdown', { bubbles: true }));
 await new Promise((resolve) => setTimeout(resolve, 720));
 assert.equal(submittedLogin?.phone, '0612345678', 'voice phone must be submitted through the login payload');
 assert.equal(submittedLogin?.password, 'secret vocal', 'voice password must be submitted through the login payload');

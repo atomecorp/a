@@ -24,18 +24,6 @@ fn entity_for(world: &World, id: &str) -> Result<Entity, String> {
         .ok_or_else(|| format!("bevy_atome_entity_missing:{id}"))
 }
 
-fn ensure_video_entity(world: &World, id: &str, entity: Entity) -> Result<(), String> {
-    let kind = world
-        .get::<AtomeRenderKind>(entity)
-        .map(|value| value.0.as_str())
-        .unwrap_or_default();
-    if kind == "video" {
-        Ok(())
-    } else {
-        Err(format!("bevy_video_track_entity_kind_invalid:{id}"))
-    }
-}
-
 fn sync_global_transform(world: &mut World, entity: Entity, transform: Transform) {
     world
         .entity_mut(entity)
@@ -408,63 +396,6 @@ pub fn apply_resource(world: &mut World, patch: AtomeResourcePatch) -> Result<()
     Ok(())
 }
 
-pub fn apply_video_track(world: &mut World, track: AtomeVideoTrack) -> Result<(), String> {
-    track.validate()?;
-    let node = track.render_node();
-    let existing = world
-        .resource::<AtomeEntityTable>()
-        .by_id
-        .get(&track.id)
-        .copied();
-    let Some(entity) = existing else {
-        apply_spawn(world, node)?;
-        return Ok(());
-    };
-    ensure_video_entity(world, &track.id, entity)?;
-    let mut media_source = world
-        .get_mut::<AtomeMediaSource>(entity)
-        .ok_or_else(|| format!("bevy_video_track_source_component_missing:{}", track.id))?;
-    media_source.0 = Some(track.source.clone());
-    insert_video_external_texture_component_for_node(world, entity, &node);
-    apply_transform(
-        world,
-        AtomeTransformPatch {
-            id: track.id.clone(),
-            logical_position: track.logical_position,
-            logical_size: track.logical_size,
-            scale: track.scale,
-            rotation: track.rotation,
-            origin: track.origin,
-        },
-    )?;
-    apply_layer(
-        world,
-        AtomeLayerPatch {
-            id: track.id,
-            layer: track.layer,
-        },
-    )
-}
-
-pub fn remove_video_track(world: &mut World, id: &str) -> Result<(), String> {
-    if id.trim().is_empty() {
-        return Err("bevy_video_track_id_required".to_string());
-    }
-    let entity = entity_for(world, id)?;
-    ensure_video_entity(world, id, entity)?;
-    apply_despawn(world, id)
-}
-
-pub fn update_video_transform(
-    world: &mut World,
-    patch: AtomeVideoTransformPatch,
-) -> Result<(), String> {
-    patch.validate()?;
-    let entity = entity_for(world, &patch.id)?;
-    ensure_video_entity(world, &patch.id, entity)?;
-    apply_transform(world, patch.transform_patch())
-}
-
 pub fn apply_render_op(world: &mut World, op: AtomeRenderOp) -> Result<(), String> {
     match op {
         AtomeRenderOp::Spawn(node) => apply_spawn(world, node).map(|_| ()),
@@ -480,8 +411,5 @@ pub fn apply_render_op(world: &mut World, op: AtomeRenderOp) -> Result<(), Strin
         AtomeRenderOp::SurfaceBackground(patch) => {
             apply_surface_background(world, patch).map(|_| ())
         }
-        AtomeRenderOp::VideoTrackApply(track) => apply_video_track(world, track),
-        AtomeRenderOp::VideoTrackRemove(id) => remove_video_track(world, &id),
-        AtomeRenderOp::VideoTrackTransform(patch) => update_video_transform(world, patch),
     }
 }

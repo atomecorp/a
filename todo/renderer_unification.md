@@ -1,8 +1,19 @@
 # Renderer Unification — Consolidate All Atome Video/Media Rendering onto Bevy
 
-Status: Planning (no code yet)
+Status: Approved — executing in validated increments.
 Owner intent: One GPU renderer for all Atome content (project scene, media, previews). Everything except menu/UI chrome must render through Bevy + WebGPU canvas, and nothing else.
 Authority: This plan is subordinate to `.codex/AGENTS.md`. If any action below conflicts with a rule there, stop and report the conflict; do not weaken the rule.
+
+## VALIDATED DECISION (2026-06-16)
+Target renderer = **Bevy compiled to WASM using the webview/browser WebGPU** (`startBevyWebRenderer` / `squirrel_bevy_renderer`), on **every** platform: browser, Tauri (Axum:3000), iOS, AUv3.
+- Evidence the native-binary Bevy path is dormant everywhere: native rendering requires `window.__ATOME_NATIVE_BEVY_PRESENTABLE__ === true` (`bevy_native_renderer_runtime.js:127-135`), which is **never set** in the repo; `atome/documentations/bevy_integration.md:206` confirms "the visible project rendering path remains the Bevy WASM/WebGPU canvas" and the iOS native presenter reports `not_presentable`.
+- Consequence: the Section 5 "native video" blocker is **MOOT**. `importExternalTexture` works on all targets, CSS `backdrop-filter` blur keeps working (single DOM+canvas layer), and consolidation is a pure **web/WASM** effort.
+- The native-binary Bevy scaffold (`startBevyNativeRenderer`, `bevy_native_renderer_runtime.js`, `platforms/desktop-tauri` bevy bits, `platforms/ios/bevy-renderer`) is deliberate dormant scaffolding linked into iOS; **leave it intact** (it renders nothing and blocks nothing). Optionally retire later in Stage 5.
+
+## Surgical constraints discovered (preserve, do not delete behavior)
+- `molecule.js` is BOTH the audio engine (`webgpu+kira`) and the per-Atome visual renderer (`molecule.webgpu.js`). Only the **visual** path is redundant with Bevy; **audio must be preserved**.
+- `mtrax_renderer_webgpu_adapter.js` owns A/V clock sync (Kira/AVFoundation drift via `playbackRate`), scrub/seek, per-clip transform+rotation+opacity, selection overlay, text layer, Tauri/WKWebView frame workarounds — all to be relocated to canonical owners, not dropped.
+- The Bevy WASM project surface already renders project `video`/`image` atomes (projection adapter carries source + timeline trim/offset/speed; `bevy_video_decode_source_runtime.js` drives the hidden `<video>`; `video_external.wgsl` samples it). Validate each removal against the running app before deleting.
 
 ---
 
@@ -85,9 +96,11 @@ Any feature above that is NOT yet expressible through the Bevy video-track API b
 
 ---
 
-## 5. The load-bearing blocker — native Bevy video path
+## 5. RESOLVED — native Bevy video is not needed
 
-Bevy video is web-only today. Before paths #2/#3 can be removed on Tauri/iOS, Bevy must render video natively. Open questions to resolve FIRST (investigation step, evidence-driven):
+This was the feared blocker, now **dismissed by the VALIDATED DECISION above**: every platform runs the Bevy **WASM/WebGPU** path, the native-binary path is dormant (`__ATOME_NATIVE_BEVY_PRESENTABLE__` never set; `bevy_integration.md:206`). So there is no cross-GPU-context problem and no native-decode work. The questions below are retained only as the rationale for why native was dropped; they are not action items.
+
+Original (now moot) open questions:
 
 1. Does the Tauri build render the project via **wasm Bevy inside the webview** (same WebGPU context as `<video>`, so `importExternalTexture` works) or via **native wgpu** (`platforms/desktop-tauri` `bevy_renderer_core`, `bevy_native_renderer_runtime.js`)? This decides everything.
    - If webview-wasm: the web external-texture path may already work on Tauri/iOS webviews that support WebGPU + `importExternalTexture`; verify capability with `read_atome_bevy_video_backend_capabilities()`.
@@ -124,10 +137,8 @@ Each stage: smallest reproduction first, evidence-driven, validate before wideni
 1.4 Update probes that target `eve-media-api-webgpu-canvas` (`tests/probes/browser_media_acceptance_probe.js`, mtrack preview probes) to the Bevy surface.
 1.5 Validate: `npm run probe:browser-media-acceptance`, `npm run probe:media-fixtures`, plus the color guard. Confirm zero canvas-per-Atome remains (DOM budget check, AGENTS §9).
 
-### Stage 2 — Native Bevy video path (the real unlock)
-2.1 Resolve Section 5 open questions with capability probes (`read_atome_bevy_video_backend_capabilities()`), under `./temp`.
-2.2 Implement the native video upload + correct YUV/gamut/range conversion in `bevy-core` (fill the matrix/transfer fields; build the renderer for non-wasm targets). Reuse the existing `AtomeVideoExternalTexture` component/mesh/sort path; do not fork a second pipeline.
-2.3 Validate color correctness natively with the harness method (recorded tv/untagged, tagged bt709, superman), Tauri + iOS.
+### Stage 2 — REMOVED (native Bevy video) per the VALIDATED DECISION
+No native video work. All platforms use Bevy WASM/WebGPU, so Stages 1/3/4 are pure web/WASM consolidation with no native blocker.
 
 ### Stage 3 — Migrate MTrax timeline preview onto Bevy and retire path #3
 3.1 Express timeline composition (multi-clip, transform incl. rotation, opacity, layer, crop) through Bevy video-track ops; relocate A/V sync + scrub/seek to `bevy_video_decode_source_runtime.js` / Molecule timeline state.
@@ -180,3 +191,49 @@ Each stage: smallest reproduction first, evidence-driven, validate before wideni
 - Every preserved feature in Section 4 works, proven by tests/probes/real-interaction.
 - No fallback paths; missing deps raise explicit errors.
 - Maps and guardrails updated; all validations in Section 8 pass.
+
+---
+
+# Migration Map & Sequenced Execution Spec (from multi-agent mapping, 2026-06-16)
+
+> Source: 7-agent read-only mapping (run wf_6506957b-089). Synthesis done in-thread (the workflow's synth/critique agents hit the account session limit). Increments ordered lowest-risk-first.
+
+## A. Current architecture (ground truth)
+- **Project scene = already Bevy WASM/WebGPU**, single shared canvas `#eve_surface_project`. Per-kind rendering proven (spawn.rs kind switch + adapter registry): `shape`→Sprite color, `text`→Text2d or CPU rich-text texture, `image`→Sprite RGBA (uv/sourceRect crop), `video`→**Mesh2d quad + GPU `texture_external`** sampled live in `video_external.wgsl` (sRGB→linear + opacity), `audio_waveform`→peaks texture + progress overlay. JS diff pipeline: `createVirtualSceneTree`→`diffVirtualSceneTrees`→`applyBevyWebRendererDiffs`→wasm `apply_atome_bevy_*`.
+- **Video source = hidden muted `<video>` pool** in `eve_bevy_video_decode_root` (`bevy_video_decode_source_runtime.js`); Rust imports it via JS bridge `window.__EVE_BEVY_VIDEO_SOURCE_FOR_ID__`; frames pumped by `requestVideoFrameCallback`→`notify_atome_bevy_video_frame`→RequestRedraw.
+- **Audio + A/V sync = Kira** (finding 4, classified `scaffold` — KEEP, do not delete): Kira is sole audio output + master clock; video follows via threshold-gated hard seeks in `position_runtime.js`/`hmtracks_*`; muted `<video>` invariant; **no `playbackRate` feedback loop**; per-frame order = position all clips → `await syncHmtracksNativeAudioPlayback`.
+- **Redundant renderers still live:**
+  - `molecule.webgpu.js` (per-Atome `.eve-media-canvas`) — `copyExternalImageToTexture`; mounted via `media_mount_runtime.mountMediaApiAtome` from `tool_genesis.js:842,1747-1751` + `group_visual_runtime.js:247` for image/video/audio creation, realtime rehydrate, group previews. `molecule.js` ALSO holds the Kira audio half (KEEP).
+  - `mtrax_renderer_webgpu_adapter.js` (4551 L, `mtrax-gpu-overlay`) — MTrax timeline-editor preview compositor: multi-clip, transform+rotation+opacity, scrub/seek+drift, selection overlay, karaoke/multiline text, waveform, color filters, transitions, blend, hit-test, poster/export readback, WKWebView workaround, crossOrigin/token. Emits control events `eve:mtrack-preview-object-selected` / `eve:mtrack-preview-transform`.
+  - `webgpu_video_preview_renderer.js` (web MediaStream) + `native_frame_video_preview_renderer.js` (iOS/AUv3 base64-JPEG stills) — live recording preview. (A third plain `<video srcObject>` panel path in `video_preview_panel_service.js` is non-WebGPU, separate.)
+- **Native-binary Bevy = dormant** (`__ATOME_NATIVE_BEVY_PRESENTABLE__` never set). Leave intact.
+- **Known gaps in the Bevy target** (must be built to absorb the above): (1) **no live MediaStream/srcObject node** — decode-source only makes `<video src=url>`; (2) **no multi-segment montage on one atome** — montage = multiple layered video atomes; (3) the `apply_video_track` Rust API (render_ops.rs:411-466, types.rs:282-429, exports.rs:133-165) is **unused by JS** and timeline-less → dead scaffolding, do not route through it.
+
+## B. A/V-sync preservation plan (binding)
+Kira stays the sole audio + master clock. The muted decode `<video>` stays the single video time source, slaved to the Kira playhead by the existing threshold-gated seek logic. When a redundant renderer is retired, its hidden `<video>` is **repurposed** as the Bevy `texture_external` source — preserving: `muted=true`, WKWebView contract (`clip-path:inset(100%)` + 320×240, never `opacity:0`/`visibility:hidden`/1×1), `crossOrigin='anonymous'`+`?token=` auth. No second clock, no WebAudio, no unmute, no `playbackRate` correction loop. Validate montage sync (multi-clip + loop) on web + Tauri + iOS per `feedback_validate_real_mechanism` (reproduce real drift+seek, not a mocked-clock probe).
+
+## C. Ordered increments
+- **Inc 0 — DONE:** `video_external.wgsl` sRGB→linear + guard (`tests/eve/bevy_project_renderer_guards.test.mjs`).
+- **Inc 1 — Live recording preview/capture → Bevy.** Add a live-MediaStream node to `bevy_video_decode_source_runtime` (srcObject) + a Bevy preview surface (or a Bevy node) for the recording host (`ensurePreviewOverlay`/capture fullscreen); for native (iOS/AUv3) feed pushed JPEG frames as the node source. Preserve aspect letterbox, fps cadence, black-frame diagnostics, stream acquire/release. Then delete `webgpu_video_preview_renderer.js` + `native_frame_video_preview_renderer.js`. **No playback A/V sync involved** (camera). Risk: medium (new live-source infra + preview surface). Validate: recording flow on :3001 (fake camera) and Tauri :3000.
+- **Inc 2 — Molecule per-Atome → Bevy nodes.** Route `tool_genesis.js:842,1747-1751` + `group_visual_runtime.js:247` image/video/audio creation to Bevy virtual-scene nodes (reuse spawn/resource/transform/style diff ops + image kind + uv/opacity/transform); keep `molecule.js` Kira audio half intact; delete `molecule.webgpu.js` + canvas-mount glue in `molecule.api.js`/`media_mount_runtime.js`. Risk: medium-high (central creation pipeline; audio must stay). Validate: topology probe (zero `.eve-media-canvas`, media on `#eve_surface_project`, audio plays).
+- **Inc 3 — MTrax timeline editor → Bevy.** Relocate compositing (multi-clip/transform/rotation/opacity/crop/blend/filters/transitions) to Bevy material+ops; relocate scrub/seek/drift to decode-source/`hmtracks_*` (already the owner); selection→`selection_overlay.rs`; karaoke/multiline text→Bevy text route; waveform→`waveform_playback_overlay.rs`; **keep emitting** `eve:mtrack-preview-*` control events + `eveMtrackApi.applyClipVisualTool`; reproduce hit-test geometry exactly; poster/export via Bevy offscreen readback. Then delete `mtrax_renderer_webgpu_adapter.js` + runtime/adapter/environment glue. Risk: HIGH (montage A/V sync, hit-test parity, control contract). Validate: `tests/probes/mtrack_*_video_preview_probe.test.mjs` + real montage scrub/loop on web+Tauri+iOS.
+- **Inc 4 — Cleanup + maps + guards.** Delete dead `apply_video_track` API (Rust+exports), dead `mtrax-c2d-*` selectors, stale `data-role` guards; reconcile the **`.eve-media-canvas` vs `eve-media-api-webgpu-canvas` discrepancy** (live code emits the class, not the data-role the probes/todo reference); update maps; add guards (no per-Atome canvas, no JS WebGPU compositor besides Bevy).
+
+## D. Final deletions
+`molecule.webgpu.js`; `mtrax_renderer_webgpu_adapter.js` (+ `mtrax_renderer_runtime.js`/`mtrax_renderer_adapter.js`/`mtrax_renderer_environment.js` glue + `*.host_cleanup.test.mjs`); `webgpu_video_preview_renderer.js` + `native_frame_video_preview_renderer.js`; Rust `apply_video_track`/`AtomeVideoTrack*`/`VideoTrack*` exports; dead `mtrax-c2d-*` selectors.
+
+## E. Maps to update
+`maps/ARCHITECTURE_MAP.md`, `maps/CODEMAP.md`, `maps/API_MAP.md`, `maps/DESIGN_MAP.md`.
+
+## F. Open questions / risks to settle during execution
+- **CONFIRMED CONSTRAINT — Bevy WASM is a SINGLETON (one app / one winit event loop / one canvas).** Evidence: `platforms/web/bevy-renderer/src/lib.rs` holds a single `WEB_EVENT_LOOP_PROXY`, one `WEB_PENDING_OPS`, one `WEB_PENDING_VIDEO_FRAMES`, one `WEB_DIAGNOSTICS` (all thread-local statics). `run_atome_bevy_renderer` cannot run a second concurrent Bevy app/surface. Implications:
+  - **Project atomes** (image/video/text/shape/waveform) → render on the ONE Bevy project surface `#eve_surface_project`. ✅ Feasible — this is the Molecule per-Atome migration (Inc 2) and the import flow already proves it.
+  - **Secondary preview surfaces** — the recording camera viewfinder (Inc 1) AND the MTrax timeline-editor preview (Inc 3, `mtrax-gpu-overlay`) — **cannot be a second Bevy surface** without re-architecting the wasm for multi-surface. This blocks the naive "preview → Bevy" path.
+  - **Decision required for secondary previews (defer, not now):** either (A) re-architect Bevy WASM for multi-surface (large: multiple winit windows/apps or shared-device multi-target on web), or (B) accept them as non-project-Bevy concerns — recording viewfinder = plain `<video srcObject>` UI (camera is UI, not an atome; removes the 2 WebGPU preview renderers), and the MTrax multi-clip preview composited by a Bevy-owned offscreen target driven by the single app, or kept until (A).
+  - **Therefore reorder execution:** do the FEASIBLE single-surface win first (Inc 2, Molecule per-Atome → project surface), and treat Inc 1/Inc 3 (secondary surfaces) as gated on the (A)/(B) decision above.
+  - **DECISION (validated 2026-06-16) — option B, NO second Bevy surface; everything in the one canvas `#eve_surface_project`.** Recording viewfinder → plain `<video srcObject>` UI (it is a transient viewfinder, not an atome) → still removes the 2 WebGPU preview renderers. MTrax timeline preview → a Bevy-owned OFFSCREEN render target presented into the dialog, driven by the single Bevy app — never a 2nd Bevy app/surface. Direct-from-disk is preserved (the single Bevy decode-source already plays disk-backed `<video src=url>` exactly as project video does today). Multi-surface Bevy rework (A) is rejected on perf grounds (2 winit loops / 2 GPU contexts).
+- Live MediaStream source kind end-to-end (decode-source + Rust import already accept any HTMLVideoElement via the bridge).
+- Poster/export readback from a Bevy offscreen target (replaces `captureMtrackPreviewPosterDataUrl`).
+- `backdrop-filter` blur stays valid (single DOM+canvas layer on web — OK in WASM mode).
+- Karaoke / CSS color filters / transitions parity in the Bevy text+material route.
+- Reconcile the `.eve-media-canvas` (live) vs `eve-media-api-webgpu-canvas` (probes/todo) selector mismatch so validation matches the real DOM.
