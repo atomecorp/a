@@ -8,7 +8,7 @@ use bevy::{
     },
 };
 
-use crate::types::{normalize_opacity, normalize_uv_rect, AtomeRenderNode};
+use crate::types::{normalize_opacity, normalize_uv_rect, AtomeColorFilters, AtomeRenderNode};
 
 #[derive(Clone, Debug, Component, ExtractComponent)]
 pub struct AtomeVideoExternalTexture {
@@ -16,6 +16,7 @@ pub struct AtomeVideoExternalTexture {
     pub layer: i32,
     pub opacity: f32,
     pub uv_rect: [f32; 4],
+    pub filters: AtomeColorFilters,
 }
 
 pub struct AtomeVideoExternalTexturePlugin;
@@ -45,6 +46,10 @@ pub fn video_external_texture_component_from_node(
         layer: node.layer,
         opacity: normalize_opacity(node.opacity),
         uv_rect: normalize_uv_rect(node.uv_rect),
+        filters: node
+            .filters
+            .unwrap_or_else(AtomeColorFilters::identity)
+            .normalized(),
     })
 }
 
@@ -117,9 +122,9 @@ mod tests {
         render_math::depth_for_layer,
         render_ops::{apply_resource, apply_spawn, apply_style, apply_transform},
         types::{
-            default_uv_rect, AtomeBevyRendererConfig, AtomeEntityTable, AtomeLocalTransform,
-            AtomeRenderNode, AtomeRendererDiagnostics, AtomeResourcePatch, AtomeStylePatch,
-            AtomeTransformPatch,
+            default_uv_rect, AtomeBevyRendererConfig, AtomeColorFilters, AtomeEntityTable,
+            AtomeLocalTransform, AtomeRenderNode, AtomeRendererDiagnostics, AtomeResourcePatch,
+            AtomeStylePatch, AtomeTransformPatch,
         },
     };
     use bevy::{
@@ -147,6 +152,7 @@ mod tests {
             peaks: None,
             playback_progress: None,
             selected: None,
+            filters: None,
         }
     }
 
@@ -445,6 +451,7 @@ mod tests {
                 selected: None,
                 opacity: Some(0.35),
                 playback_progress: None,
+                filters: None,
             },
         )
         .unwrap();
@@ -465,6 +472,7 @@ mod tests {
                 selected: None,
                 opacity: Some(2.0),
                 playback_progress: None,
+                filters: None,
             },
         )
         .unwrap();
@@ -478,4 +486,119 @@ mod tests {
         );
     }
 
+    #[test]
+    fn video_node_carries_and_clamps_color_filters() {
+        let mut world = world_with_video_assets();
+
+        // In-range filters survive verbatim through spawn.
+        let entity = apply_spawn(
+            &mut world,
+            AtomeRenderNode {
+                filters: Some(AtomeColorFilters {
+                    brightness: 1.5,
+                    grayscale: 1.0,
+                    hue: 1.0,
+                    ..AtomeColorFilters::identity()
+                }),
+                ..video_node("filtered")
+            },
+        )
+        .unwrap();
+        assert_eq!(
+            world
+                .get::<AtomeVideoExternalTexture>(entity)
+                .unwrap()
+                .filters,
+            AtomeColorFilters {
+                brightness: 1.5,
+                grayscale: 1.0,
+                hue: 1.0,
+                ..AtomeColorFilters::identity()
+            }
+        );
+
+        // Out-of-range / non-finite filters are clamped to renderable ranges.
+        let clamped = apply_spawn(
+            &mut world,
+            AtomeRenderNode {
+                filters: Some(AtomeColorFilters {
+                    brightness: -0.5,
+                    contrast: f32::NAN,
+                    saturate: 2.0,
+                    grayscale: 2.0,
+                    sepia: -1.0,
+                    invert: 5.0,
+                    hue: 0.5,
+                }),
+                ..video_node("clamped_filters")
+            },
+        )
+        .unwrap();
+        assert_eq!(
+            world
+                .get::<AtomeVideoExternalTexture>(clamped)
+                .unwrap()
+                .filters,
+            AtomeColorFilters {
+                brightness: 0.0,
+                contrast: 1.0,
+                saturate: 2.0,
+                grayscale: 1.0,
+                sepia: 0.0,
+                invert: 1.0,
+                hue: 0.5,
+            }
+        );
+
+        // Absent filters default to identity (zero regression).
+        let plain = apply_spawn(&mut world, video_node("plain_filters")).unwrap();
+        assert_eq!(
+            world
+                .get::<AtomeVideoExternalTexture>(plain)
+                .unwrap()
+                .filters,
+            AtomeColorFilters::identity()
+        );
+    }
+
+    #[test]
+    fn video_style_patch_updates_color_filters() {
+        let mut world = world_with_video_assets();
+        let entity = apply_spawn(&mut world, video_node("filter_style")).unwrap();
+        assert_eq!(
+            world
+                .get::<AtomeVideoExternalTexture>(entity)
+                .unwrap()
+                .filters,
+            AtomeColorFilters::identity()
+        );
+
+        apply_style(
+            &mut world,
+            AtomeStylePatch {
+                id: "filter_style".to_string(),
+                color: None,
+                selected: None,
+                opacity: None,
+                playback_progress: None,
+                filters: Some(AtomeColorFilters {
+                    sepia: 1.0,
+                    invert: 3.0,
+                    ..AtomeColorFilters::identity()
+                }),
+            },
+        )
+        .unwrap();
+        assert_eq!(
+            world
+                .get::<AtomeVideoExternalTexture>(entity)
+                .unwrap()
+                .filters,
+            AtomeColorFilters {
+                sepia: 1.0,
+                invert: 1.0,
+                ..AtomeColorFilters::identity()
+            }
+        );
+    }
 }

@@ -221,6 +221,13 @@ pub fn apply_style(world: &mut World, patch: AtomeStylePatch) -> Result<(), Stri
             video.opacity = normalize_opacity(opacity);
         }
     }
+    if let Some(filters) = patch.filters {
+        if let Some(mut video) =
+            world.get_mut::<crate::video_external_texture::AtomeVideoExternalTexture>(entity)
+        {
+            video.filters = filters.normalized();
+        }
+    }
     if let Some(progress) = patch.playback_progress {
         if let Some(mut current) = world.get_mut::<AtomeWaveformPlaybackProgress>(entity) {
             current.0 = progress.map(|value| value.clamp(0.0, 1.0));
@@ -339,6 +346,9 @@ pub fn apply_resource(world: &mut World, patch: AtomeResourcePatch) -> Result<()
             .get::<crate::video_external_texture::AtomeVideoExternalTexture>(entity)
             .map(|value| value.uv_rect)
             .unwrap_or_else(default_uv_rect);
+        let current_filters = world
+            .get::<crate::video_external_texture::AtomeVideoExternalTexture>(entity)
+            .map(|value| value.filters);
         let local_transform = world
             .get::<AtomeLocalTransform>(entity)
             .copied()
@@ -371,6 +381,7 @@ pub fn apply_resource(world: &mut World, patch: AtomeResourcePatch) -> Result<()
             peaks: None,
             playback_progress: None,
             selected: None,
+            filters: current_filters,
         };
         insert_video_external_texture_component_for_node(world, entity, &node);
         insert_video_quad_mesh(world, entity, size, uv_rect)?;

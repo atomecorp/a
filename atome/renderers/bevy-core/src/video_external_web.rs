@@ -32,7 +32,11 @@ use bevy::{
 };
 use wasm_bindgen::{JsCast, JsValue};
 
-use crate::{render_math::depth_for_layer, video_external_texture::AtomeVideoExternalTexture};
+use crate::{
+    render_math::depth_for_layer,
+    types::AtomeColorFilters,
+    video_external_texture::AtomeVideoExternalTexture,
+};
 
 const VIDEO_EXTERNAL_SHADER: &str = include_str!("../assets/shaders/video_external.wgsl");
 const IDENTITY_SAMPLE_TRANSFORM: [f32; 6] = [1.0, 0.0, 0.0, 0.0, 1.0, 0.0];
@@ -72,9 +76,23 @@ type DrawVideoExternalTexture2d = (
     DrawVideoExternalTextureMesh2d,
 );
 
-fn opacity_uniform_bytes(opacity: f32) -> [u8; 16] {
-    let mut bytes = [0; 16];
-    bytes[0..4].copy_from_slice(&opacity.clamp(0.0, 1.0).to_ne_bytes());
+// VideoParams uniform — matches the struct in video_external.wgsl:
+// base = (opacity, brightness, contrast, saturate); filters = (grayscale, sepia, invert, hue).
+fn video_params_bytes(opacity: f32, filters: &AtomeColorFilters) -> [u8; 32] {
+    let values: [f32; 8] = [
+        opacity.clamp(0.0, 1.0),
+        filters.brightness,
+        filters.contrast,
+        filters.saturate,
+        filters.grayscale,
+        filters.sepia,
+        filters.invert,
+        filters.hue,
+    ];
+    let mut bytes = [0u8; 32];
+    for (index, value) in values.iter().enumerate() {
+        bytes[index * 4..index * 4 + 4].copy_from_slice(&value.to_ne_bytes());
+    }
     bytes
 }
 
@@ -256,10 +274,10 @@ fn prepare_video_external_texture_bind_groups(
             },
             &[],
         );
-        let opacity_uniform = opacity_uniform_bytes(video.opacity);
+        let params_uniform = video_params_bytes(video.opacity, &video.filters);
         let opacity_buffer = render_device.create_buffer_with_data(&BufferInitDescriptor {
-            label: Some("atome_video_external_texture_opacity"),
-            contents: &opacity_uniform,
+            label: Some("atome_video_external_texture_params"),
+            contents: &params_uniform,
             usage: BufferUsages::UNIFORM,
         });
         let bind_group = render_device.create_bind_group(

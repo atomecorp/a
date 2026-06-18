@@ -14,6 +14,69 @@ pub fn normalize_opacity(opacity: f32) -> f32 {
     }
 }
 
+/// Identity for the multiplicative CSS filters (brightness/contrast/saturate).
+pub fn default_filter_unit() -> f32 {
+    1.0
+}
+
+fn finite_or(value: f32, fallback: f32) -> f32 {
+    if value.is_finite() {
+        value
+    } else {
+        fallback
+    }
+}
+
+/// CSS-style per-clip color filters (identity = no visual change). Deserialized
+/// from the node/style payload and copied into the Bevy video material uniform —
+/// see `assets/shaders/video_external.wgsl`. Missing fields default to identity,
+/// so a partial `{ "brightness": 1.2 }` leaves the rest untouched.
+#[derive(Clone, Copy, Debug, PartialEq, Deserialize)]
+pub struct AtomeColorFilters {
+    #[serde(default = "default_filter_unit")]
+    pub brightness: f32,
+    #[serde(default = "default_filter_unit")]
+    pub contrast: f32,
+    #[serde(default = "default_filter_unit")]
+    pub saturate: f32,
+    #[serde(default)]
+    pub grayscale: f32,
+    #[serde(default)]
+    pub sepia: f32,
+    #[serde(default)]
+    pub invert: f32,
+    #[serde(default)]
+    pub hue: f32,
+}
+
+impl AtomeColorFilters {
+    pub fn identity() -> Self {
+        Self {
+            brightness: 1.0,
+            contrast: 1.0,
+            saturate: 1.0,
+            grayscale: 0.0,
+            sepia: 0.0,
+            invert: 0.0,
+            hue: 0.0,
+        }
+    }
+
+    /// Coerce to renderable ranges: non-finite values fall back to identity,
+    /// the [0,1]-mix filters are clamped, the multiplicative gains stay >= 0.
+    pub fn normalized(self) -> Self {
+        Self {
+            brightness: finite_or(self.brightness, 1.0).max(0.0),
+            contrast: finite_or(self.contrast, 1.0).max(0.0),
+            saturate: finite_or(self.saturate, 1.0).max(0.0),
+            grayscale: finite_or(self.grayscale, 0.0).clamp(0.0, 1.0),
+            sepia: finite_or(self.sepia, 0.0).clamp(0.0, 1.0),
+            invert: finite_or(self.invert, 0.0).clamp(0.0, 1.0),
+            hue: finite_or(self.hue, 0.0),
+        }
+    }
+}
+
 pub fn default_transform_scale() -> [f32; 2] {
     [1.0, 1.0]
 }
@@ -189,6 +252,8 @@ pub struct AtomeRenderNode {
     pub peaks: Option<Vec<f32>>,
     pub playback_progress: Option<f32>,
     pub selected: Option<bool>,
+    #[serde(default)]
+    pub filters: Option<AtomeColorFilters>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -241,6 +306,8 @@ pub struct AtomeStylePatch {
     pub opacity: Option<f32>,
     #[serde(default)]
     pub playback_progress: Option<Option<f32>>,
+    #[serde(default)]
+    pub filters: Option<AtomeColorFilters>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
