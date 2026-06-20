@@ -42,7 +42,6 @@ struct WebVideoBackendCapabilities {
     target_live_video_backend: &'static str,
     live_video_backend: &'static str,
     current_backend_final: bool,
-    video_track_api_exposed: bool,
     backend_blocker: &'static str,
     html_video_element_copy: bool,
     browser_gpu_device_import_external_texture_available: bool,
@@ -58,11 +57,10 @@ struct WebVideoBackendCapabilities {
 
 fn read_web_video_backend_capabilities() -> WebVideoBackendCapabilities {
     WebVideoBackendCapabilities {
-        schema: "atome.bevy.web.video_backend.v6",
+        schema: "atome.bevy.web.video_backend.v7",
         target_live_video_backend: "gpu_external_texture_texture_external",
         live_video_backend: "gpu_external_texture_texture_external",
         current_backend_final: true,
-        video_track_api_exposed: true,
         backend_blocker: "none",
         html_video_element_copy: false,
         browser_gpu_device_import_external_texture_available: true,

@@ -96,7 +96,7 @@ const readFfprobe = (filePath) => {
 };
 
 const run = async () => {
-    const report = { ok: false, record: null, file: null, state: null, scene: null, rawAudio: null, extractedAudio: null, mtrack: null, ffprobe: null, errors: [] };
+    const report = { ok: false, record: null, file: null, state: null, scene: null, rawAudio: null, extractedAudio: null, ffprobe: null, errors: [] };
     const browser = await chromium.launch({
         headless: process.env.HEADLESS !== '0',
         args: [
@@ -239,7 +239,7 @@ const run = async () => {
         };
         report.ffprobe = readFfprobe(localFilePath);
 
-        const mtrackAtomeId = report.record.project?.atomeId || report.record.result?.atomeId || report.record.result?.atome_id || null;
+        const projectAtomeId = report.record.project?.atomeId || report.record.result?.atomeId || report.record.result?.atome_id || null;
         report.state = await safeEval(page, async (input) => {
             const atomeId = String(input?.atomeId || '').trim();
             const projectId = String(input?.projectId || '').trim();
@@ -289,7 +289,7 @@ const run = async () => {
                 api_error: apiGet?.error || apiList?.error || null
             };
         }, {
-            atomeId: mtrackAtomeId,
+            atomeId: projectAtomeId,
             projectId: report.record.project?.projectId || null
         }, 60000);
 
@@ -346,7 +346,7 @@ const run = async () => {
                 render_error: scene?.projection?.render_result?.error || scene?.projection?.render_result?.reason || null
             };
         }, {
-            atomeId: mtrackAtomeId,
+            atomeId: projectAtomeId,
             projectId: report.record.project?.projectId || null
         }, 60000);
 
@@ -412,72 +412,10 @@ const run = async () => {
         report.rawAudio = await analyzeAudio(report.record.mediaUrl, 'raw_recording_webm');
         report.extractedAudio = await analyzeAudio(report.record.extractUrl, 'server_extracted_audio');
 
-        report.mtrack = await safeEval(page, async (atomeId) => {
-            if (!atomeId) return { ok: false, error: 'atome_id_missing' };
-            const { openGroupTimeline } = await import('/eVe/intuition/runtime/group_timeline_api.js');
-            const open = await openGroupTimeline({
-                atome_id: atomeId,
-                atomeId,
-                target_id: atomeId,
-                targetId: atomeId,
-                selection_ids: [atomeId],
-                selectionIds: [atomeId],
-                action: 'open',
-                toggle: false,
-                media_timeline: true,
-                mediaTimeline: true,
-                media_kind: 'video',
-                mediaKind: 'video',
-                dock_to_atome: false,
-                dockToAtome: false
-            });
-            if (!open?.ok) {
-                return {
-                    ok: false,
-                    error: open?.error || 'mtrack_open_failed',
-                    open
-                };
-            }
-            const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-            const deadline = Date.now() + 30000;
-            let lastState = null;
-            while (Date.now() < deadline) {
-                const state = window.eveMtrackApi?.getState?.() || null;
-                lastState = state;
-                const clipCount = Number.isFinite(Number(state?.clipCount)) ? Number(state.clipCount) : 0;
-                const loadedClipAtomeIds = Array.isArray(state?.loadedClipAtomeIds)
-                    ? state.loadedClipAtomeIds.map((value) => String(value || '').trim()).filter(Boolean)
-                    : [];
-                const expectedAtomeLoadCount = loadedClipAtomeIds.filter((value) => value === String(atomeId || '')).length;
-                if (clipCount >= 2 && expectedAtomeLoadCount >= 2) {
-                    return {
-                        ok: true,
-                        clip_count: clipCount,
-                        track_count: Number.isFinite(Number(state?.trackCount)) ? Number(state.trackCount) : null,
-                        loaded_clip_atome_ids: loadedClipAtomeIds,
-                        expected_atome_load_count: expectedAtomeLoadCount,
-                        audio_engine: state?.audioEngine || null
-                    };
-                }
-                await sleep(250);
-            }
-            return {
-                ok: false,
-                error: 'video_audio_clip_missing',
-                state: lastState ? {
-                    activeGroupId: lastState.activeGroupId || '',
-                    clipCount: Number.isFinite(Number(lastState.clipCount)) ? Number(lastState.clipCount) : null,
-                    trackCount: Number.isFinite(Number(lastState.trackCount)) ? Number(lastState.trackCount) : null,
-                    loadedClipAtomeIds: Array.isArray(lastState.loadedClipAtomeIds) ? lastState.loadedClipAtomeIds : []
-                } : null,
-                trace_tail: Array.isArray(window.__EVE_MTRAX_TRACE__) ? window.__EVE_MTRAX_TRACE__.slice(-60) : []
-            };
-        }, mtrackAtomeId, 40000);
-
         report.ok = report.file?.ok === true && report.file?.in_recordings === true
             && report.state?.ok === true && report.scene?.ok === true
             && report.ffprobe?.has_video === true && report.ffprobe?.has_audio === true
-            && report.rawAudio?.ok === true && report.extractedAudio?.ok === true && report.mtrack?.ok === true;
+            && report.rawAudio?.ok === true && report.extractedAudio?.ok === true;
     } catch (error) {
         report.errors.push(error?.message || String(error || 'probe_failed'));
     } finally {

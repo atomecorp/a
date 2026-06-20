@@ -14,6 +14,17 @@ globalThis.HTMLMediaElement = dom.window.HTMLMediaElement;
 globalThis.Blob = dom.window.Blob;
 globalThis.URL = dom.window.URL;
 globalThis.performance = dom.window.performance;
+Object.defineProperty(dom.window.HTMLMediaElement.prototype, 'play', {
+    configurable: true,
+    value() {
+        this.dispatchEvent(new dom.window.Event('error'));
+        return Promise.resolve();
+    }
+});
+Object.defineProperty(dom.window.HTMLMediaElement.prototype, 'load', {
+    configurable: true,
+    value() {}
+});
 Object.defineProperty(globalThis, 'navigator', {
     value: dom.window.navigator,
     configurable: true
@@ -39,9 +50,10 @@ await assert.rejects(
         id: 'molecule_transaction_probe_video',
         kind: 'video',
         src: '/api/uploads/Vampire.m4v',
-        mediaUrl: '/api/uploads/Vampire.m4v'
+        mediaUrl: '/api/uploads/Vampire.m4v',
+        duration: 1
     }),
-    /WebGPU|adapter|renderer/i
+    /Video metadata load failed/i
 );
 
 assert.equal(engine.sessions.size, 0, 'failed mountVisual must rollback the registered Molecule session');

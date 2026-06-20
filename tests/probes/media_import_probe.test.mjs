@@ -108,7 +108,6 @@ const run = async () => {
   await context.addInitScript(() => {
     window.__CHECK_DEBUG__ = true;
     window.__EVE_MEDIA_DIAG_HEADLESS__ = true;
-    window.__EVE_MTRAX_BRIDGE_LOGS__ = true;
     window.__EVE_PANEL_OPEN_DEBUG__ = true;
   });
   const page = await context.newPage();
@@ -337,7 +336,6 @@ const run = async () => {
 
   const state = await safeEval(page, async () => ({
     debug_state: window.__DEBUG__?.getAppState?.() || null,
-    mtrack_state: window.eveMtrackApi?.getState?.() || null,
     media_diag_state: window.eveMediaDiagnostics?.getState?.() || null
   }), null, 30000);
   writeJson('final_state.json', state);

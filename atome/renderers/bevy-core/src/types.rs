@@ -1,6 +1,6 @@
-use bevy::{image::Image, prelude::*};
 use serde::Deserialize;
-use std::collections::HashMap;
+
+pub use crate::components::*;
 
 pub fn default_opacity() -> f32 {
     1.0
@@ -73,6 +73,45 @@ impl AtomeColorFilters {
             sepia: finite_or(self.sepia, 0.0).clamp(0.0, 1.0),
             invert: finite_or(self.invert, 0.0).clamp(0.0, 1.0),
             hue: finite_or(self.hue, 0.0),
+        }
+    }
+}
+
+/// Per-clip timeline transition applied in the video material — see
+/// `apply_transition` in `assets/shaders/video_external.wgsl`. All-f32 so it
+/// copies straight into the uniform. kind: 0 none, 1 fade, 2 wipe, 3 slide;
+/// role: 0 incoming, 1 outgoing. `none()` = no transition (identity).
+#[derive(Clone, Copy, Debug, PartialEq, Deserialize)]
+pub struct AtomeTransition {
+    #[serde(default)]
+    pub kind: f32,
+    #[serde(default)]
+    pub progress: f32,
+    #[serde(default)]
+    pub role: f32,
+    #[serde(default)]
+    pub softness: f32,
+}
+
+impl AtomeTransition {
+    pub fn none() -> Self {
+        Self {
+            kind: 0.0,
+            progress: 0.0,
+            role: 0.0,
+            softness: 0.0,
+        }
+    }
+
+    /// Coerce to renderable ranges: kind snapped to {0,1,2,3}, progress in
+    /// [0,1], role to {0,1}, softness in [0,1]; non-finite falls back to none.
+    pub fn normalized(self) -> Self {
+        let kind = finite_or(self.kind, 0.0).round().clamp(0.0, 3.0);
+        Self {
+            kind,
+            progress: finite_or(self.progress, 0.0).clamp(0.0, 1.0),
+            role: if self.role >= 0.5 { 1.0 } else { 0.0 },
+            softness: finite_or(self.softness, 0.0).clamp(0.0, 1.0),
         }
     }
 }
@@ -254,6 +293,8 @@ pub struct AtomeRenderNode {
     pub selected: Option<bool>,
     #[serde(default)]
     pub filters: Option<AtomeColorFilters>,
+    #[serde(default)]
+    pub transition: Option<AtomeTransition>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -308,6 +349,8 @@ pub struct AtomeStylePatch {
     pub playback_progress: Option<Option<f32>>,
     #[serde(default)]
     pub filters: Option<AtomeColorFilters>,
+    #[serde(default)]
+    pub transition: Option<AtomeTransition>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -359,126 +402,4 @@ pub enum AtomeRenderOp {
     Resource(AtomeResourcePatch),
     Surface(AtomeSurfacePatch),
     SurfaceBackground(AtomeSurfaceBackgroundPatch),
-}
-
-#[derive(Clone, Debug, Component)]
-pub struct AtomeEntityId(pub String);
-
-#[derive(Clone, Debug, Component)]
-pub struct AtomeParentEntityId(pub Option<String>);
-
-#[derive(Clone, Copy, Debug, Component)]
-pub struct AtomeLogicalSize {
-    pub width: f32,
-    pub height: f32,
-}
-
-#[derive(Clone, Copy, Debug, Component)]
-pub struct AtomeLogicalPosition {
-    pub x: f32,
-    pub y: f32,
-}
-
-#[derive(Clone, Copy, Debug, Component, PartialEq)]
-pub struct AtomeLocalTransform {
-    pub scale: [f32; 2],
-    pub rotation: f32,
-    pub origin: [f32; 2],
-}
-
-impl Default for AtomeLocalTransform {
-    fn default() -> Self {
-        Self {
-            scale: default_transform_scale(),
-            rotation: 0.0,
-            origin: default_transform_origin(),
-        }
-    }
-}
-
-impl AtomeLocalTransform {
-    pub fn new(scale: [f32; 2], rotation: f32, origin: [f32; 2]) -> Self {
-        Self {
-            scale: normalize_transform_scale(scale),
-            rotation: normalize_transform_rotation(rotation),
-            origin: normalize_transform_origin(origin),
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug, Component)]
-pub struct AtomeLayer(pub i32);
-
-#[derive(Clone, Debug, Component)]
-pub struct AtomeTextMetadata(pub Option<String>);
-
-#[derive(Clone, Debug, Component, PartialEq, Eq)]
-pub struct AtomeRenderKind(pub String);
-
-#[derive(Clone, Debug, Component)]
-pub struct AtomeMediaSource(pub Option<String>);
-
-#[derive(Clone, Debug, Component)]
-pub struct AtomeWaveformPeaks(pub Vec<f32>);
-
-#[derive(Clone, Copy, Debug, Component)]
-pub struct AtomeWaveformPlaybackProgress(pub Option<f32>);
-
-#[derive(Clone, Copy, Debug, Component)]
-pub struct AtomeSelected(pub bool);
-
-#[derive(Clone, Debug, Component)]
-pub struct AtomeSelectionOverlay {
-    pub entities: Vec<Entity>,
-    pub image_handles: Vec<Handle<Image>>,
-}
-
-#[derive(Clone, Debug, Component)]
-pub struct AtomeWaveformPlaybackOverlay {
-    pub entities: Vec<Entity>,
-}
-
-#[derive(Clone, Copy, Debug, Component)]
-pub struct AtomeSurfaceBackground;
-
-#[derive(Clone, Debug, Component)]
-pub struct AtomeSurfaceBackgroundVisual {
-    pub signature: String,
-    pub texture_size: Option<[u32; 2]>,
-    pub image_handle: Option<Handle<Image>>,
-}
-
-#[derive(Clone, Debug, Resource, Default)]
-pub struct AtomeEntityTable {
-    pub by_id: HashMap<String, Entity>,
-}
-
-#[derive(Clone, Debug, Resource, Default)]
-pub struct AtomeRendererDiagnostics {
-    pub applied_ops: usize,
-    pub last_error: Option<String>,
-}
-
-#[derive(Clone, Debug, Resource)]
-pub struct AtomeBevyRendererConfig {
-    pub width: f32,
-    pub height: f32,
-    pub initial_scene: AtomeRenderScene,
-    pub selection_style: SelectionVisualStyle,
-}
-
-impl AtomeBevyRendererConfig {
-    pub fn new(width: f32, height: f32, initial_scene: AtomeRenderScene) -> Self {
-        let selection_style = initial_scene.selection_style();
-        Self {
-            width: width.max(1.0),
-            height: height.max(1.0),
-            initial_scene,
-            selection_style,
-        }
-    }
-
-    pub fn empty(width: f32, height: f32) -> Self {
-        Self::new(width, height, AtomeRenderScene::default())
-    }
 }

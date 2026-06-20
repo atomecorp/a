@@ -1,21 +1,5 @@
-const PANEL_ID = 'squirrel-voice-panel';
-const LAUNCHER_ID = 'squirrel-voice-launcher';
-const LOG_LIMIT = 24;
-
-const isTauriLikeEnv = (env) => {
-    if (!env || typeof env !== 'object') return false;
-    if (env.__SQUIRREL_FORCE_FASTIFY__ === true) return false;
-    if (env.__SQUIRREL_FORCE_TAURI_RUNTIME__ === true) return true;
-    const protocol = env.location?.protocol || '';
-    const host = env.location?.hostname || '';
-    if (protocol === 'tauri:' || protocol === 'asset:' || protocol === 'ipc:' || host === 'tauri.localhost') return true;
-    const hasTauriInvoke = !!(env.__TAURI_INTERNALS__ && typeof env.__TAURI_INTERNALS__.invoke === 'function');
-    if (hasTauriInvoke) return true;
-    const hasTauriObjects = !!(env.__TAURI__ || env.__TAURI_INTERNALS__);
-    if (!hasTauriObjects) return false;
-    if (typeof env.navigator !== 'undefined' && /tauri/i.test(env.navigator.userAgent || '')) return true;
-    return false;
-};
+import { PANEL_ID, createVoicePanelView } from './panel_view.js';
+import { createVoiceProbeController } from './panel_probe.js';
 
 const readLocalStorage = (env, key) => {
     try {
@@ -44,37 +28,6 @@ export const shouldEnableVoicePanel = (env = window) => {
     return false;
 };
 
-const createElement = (doc, tag, style = {}, attrs = {}) => {
-    const node = doc.createElement(tag);
-    Object.assign(node.style, style);
-    Object.entries(attrs).forEach(([key, value]) => {
-        if (value === null || value === undefined) return;
-        if (key === 'text') {
-            node.textContent = String(value);
-            return;
-        }
-        node.setAttribute(key, String(value));
-    });
-    return node;
-};
-
-const createButton = (doc, label, accentBorder = 'rgba(79, 79, 79, 0.16)') => {
-    const button = createElement(doc, 'button', {
-        border: `1px solid ${accentBorder}`,
-        background: 'var(--system-input-bg-strong, rgba(255, 255, 255, 0.48))',
-        color: 'var(--system-text-color, rgba(58, 58, 58, 0.94))',
-        borderRadius: '8px',
-        padding: '6px 10px',
-        cursor: 'pointer',
-        fontSize: '12px',
-        fontWeight: '600'
-    }, {
-        type: 'button',
-        text: label
-    });
-    return button;
-};
-
 const truncate = (value, limit = 18) => {
     const text = String(value || '');
     if (text.length <= limit) return text;
@@ -98,12 +51,7 @@ const inferFallbackSuggestions = (intent = {}) => {
         suggestions.push('Ou en est mon compte');
         suggestions.push('Ou ai-je le plus depense cette semaine');
     }
-    if (normalized.includes('mtrack') || normalized.includes('montage') || normalized.includes('timeline')) {
-        suggestions.push('Ouvre Mtrack');
-        suggestions.push('Lance la lecture');
-    }
     if (suggestions.length === 0) {
-        suggestions.push('Ouvre Mtrack');
         suggestions.push('Lis mes mails');
         suggestions.push('Quels sont mes rendez-vous demain');
     }
@@ -136,216 +84,35 @@ export const mountVoicePanel = async ({
         listening: false,
         recording: false,
         lastFollowup: null,
-        probe: {
-            status: 'idle',
-            speech_stopped: false,
-            processing_aborted: false,
-            new_command_accepted: false,
-            speaking_settled: false,
-            processing_settled: false,
-            cancel_latency_ms: null
-        },
         unsubscribe: () => { }
     };
 
-    const launcher = createElement(doc, 'button', {
-        position: 'fixed',
-        right: '16px',
-        bottom: '16px',
-        width: '52px',
-        height: '52px',
-        borderRadius: '999px',
-        border: '1px solid rgba(14, 116, 110, 0.28)',
-        background: 'var(--system-panel-surface, rgba(48, 48, 48, 0.66))',
-        color: 'var(--system-text-color, rgba(244, 244, 244, 0.94))',
-        zIndex: '9999',
-        cursor: 'pointer',
-        boxShadow: 'var(--system-panel-shadow, 0 14px 36px rgba(0, 0, 0, 0.16))',
-        fontWeight: '700',
-        letterSpacing: '0.02em'
-    }, {
-        id: LAUNCHER_ID,
-        type: 'button',
-        'aria-label': 'Open voice panel',
-        text: 'Mic'
-    });
-
-    const panel = createElement(doc, 'div', {
-        position: 'fixed',
-        right: '16px',
-        bottom: '80px',
-        width: '340px',
-        minHeight: '260px',
-        maxHeight: '78vh',
-        display: 'none',
-        flexDirection: 'column',
-        gap: '10px',
-        padding: '14px',
-        borderRadius: '18px',
-        border: '1px solid var(--system-panel-border, rgba(79, 79, 79, 0.16))',
-        background: 'var(--system-panel-surface, rgba(48, 48, 48, 0.66))',
-        boxShadow: 'var(--system-panel-shadow, 0 14px 36px rgba(0, 0, 0, 0.16))',
-        color: 'var(--system-text-color, rgba(244, 244, 244, 0.94))',
-        fontFamily: 'Menlo, Consolas, monospace',
-        zIndex: '9999',
-        overflow: 'hidden',
-        backdropFilter: 'var(--system-backdrop-filter, blur(18px) saturate(145%))'
-    }, {
-        id: PANEL_ID
-    });
-
-    const header = createElement(doc, 'div', {
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        gap: '10px'
-    });
-
-    const titleWrap = createElement(doc, 'div', {
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '2px'
-    });
-    const title = createElement(doc, 'div', {
-        fontSize: '13px',
-        fontWeight: '700',
-        letterSpacing: '0.04em',
-        textTransform: 'uppercase'
-    }, { text: 'Voice Runtime' });
-    const providersLine = createElement(doc, 'div', {
-        fontSize: '11px',
-        color: 'var(--system-text-muted, rgba(82, 82, 82, 0.74))'
-    }, { text: 'providers: loading...' });
-    titleWrap.append(title, providersLine);
-
-    const closeButton = createButton(doc, 'Close', '#1f2937');
-    closeButton.style.padding = '5px 8px';
-    closeButton.style.fontSize = '11px';
-    header.append(titleWrap, closeButton);
-
-    const meta = createElement(doc, 'div', {
-        display: 'grid',
-        gridTemplateColumns: '1fr 1fr',
-        gap: '8px',
-        fontSize: '11px',
-        color: '#c6d3df'
-    });
-    const phaseLine = createElement(doc, 'div', {}, { 'data-test-id': 'voice-panel-phase', text: 'phase: idle' });
-    const sessionLine = createElement(doc, 'div', {}, { 'data-test-id': 'voice-panel-session', text: 'session: none' });
-    const followupLine = createElement(doc, 'div', {}, { 'data-test-id': 'voice-panel-followup', text: 'followup: none' });
-    const statusLine = createElement(doc, 'div', {}, { 'data-test-id': 'voice-panel-status', text: 'status: ready' });
-    const probeLine = createElement(doc, 'div', {}, { 'data-test-id': 'voice-panel-probe', text: 'probe: idle' });
-    meta.append(phaseLine, sessionLine, followupLine, statusLine, probeLine);
-
-    const transcript = createElement(doc, 'div', {
-        minHeight: '66px',
-        maxHeight: '120px',
-        overflowY: 'auto',
-        padding: '10px',
-        borderRadius: '12px',
-        background: 'var(--system-panel-surface, rgba(48, 48, 48, 0.66))',
-        border: '1px solid var(--system-panel-border, rgba(79, 79, 79, 0.16))',
-        fontSize: '12px',
-        lineHeight: '1.45',
-        whiteSpace: 'pre-wrap'
-    }, { 'data-test-id': 'voice-panel-transcript', text: 'No transcript yet.' });
-
-    const fallback = createElement(doc, 'div', {
-        display: 'none',
-        minHeight: '44px',
-        padding: '10px',
-        borderRadius: '12px',
-        background: 'rgba(245, 158, 11, 0.12)',
-        border: '1px solid rgba(245, 158, 11, 0.26)',
-        fontSize: '11px',
-        lineHeight: '1.45',
-        whiteSpace: 'pre-wrap',
-        color: '#fde68a'
-    }, { 'data-test-id': 'voice-panel-fallback', text: '' });
-
-    const input = createElement(doc, 'textarea', {
-        minHeight: '56px',
-        resize: 'vertical',
-        width: '100%',
-        borderRadius: '12px',
-        border: '1px solid var(--system-panel-border, rgba(79, 79, 79, 0.16))',
-        background: 'var(--system-input-bg, rgba(88, 88, 88, 0.52))',
-        color: 'var(--system-text-color, rgba(244, 244, 244, 0.94))',
-        padding: '10px',
-        fontSize: '12px',
-        boxSizing: 'border-box'
-    }, {
-        'data-test-id': 'voice-panel-input'
-    });
-    input.value = 'Je lis un message de test qui pourra etre interrompu.';
-
-    const commandInput = createElement(doc, 'input', {
-        width: '100%',
-        height: '34px',
-        borderRadius: '10px',
-        border: '1px solid var(--system-panel-border, rgba(79, 79, 79, 0.16))',
-        background: 'var(--system-input-bg, rgba(88, 88, 88, 0.52))',
-        color: 'var(--system-text-color, rgba(244, 244, 244, 0.94))',
-        padding: '0 10px',
-        fontSize: '12px',
-        boxSizing: 'border-box'
-    }, {
-        type: 'text',
-        placeholder: 'Commande locale: stop, passe au suivant, resume...',
-        'data-test-id': 'voice-panel-command-input'
-    });
-    commandInput.value = 'passe au suivant';
-
-    const row1 = createElement(doc, 'div', {
-        display: 'grid',
-        gridTemplateColumns: 'repeat(4, 1fr)',
-        gap: '8px'
-    });
-    const newSessionButton = createButton(doc, 'New', '#334155');
-    const listenButton = createButton(doc, 'Listen', '#0f766e');
-    const speakButton = createButton(doc, 'Speak', '#1d4ed8');
-    const stopButton = createButton(doc, 'Stop', '#b91c1c');
-    row1.append(newSessionButton, listenButton, speakButton, stopButton);
-
-    const row2 = createElement(doc, 'div', {
-        display: 'grid',
-        gridTemplateColumns: 'repeat(5, 1fr)',
-        gap: '8px'
-    });
-    const captureButton = createButton(doc, 'Capture', '#7c3aed');
-    const commandButton = createButton(doc, 'Send Cmd', '#0f766e');
-    const followupButton = createButton(doc, 'Followup', '#475569');
-    const intentButton = createButton(doc, 'Intent', '#92400e');
-    const probeButton = createButton(doc, 'Probe', '#7c2d12');
-    row2.append(captureButton, commandButton, followupButton, intentButton, probeButton);
-
-    const log = createElement(doc, 'div', {
-        minHeight: '96px',
-        maxHeight: '180px',
-        overflowY: 'auto',
-        padding: '8px',
-        borderRadius: '12px',
-        background: 'var(--system-panel-surface, rgba(48, 48, 48, 0.66))',
-        border: '1px solid var(--system-panel-border, rgba(79, 79, 79, 0.16))',
-        fontSize: '11px',
-        lineHeight: '1.4'
-    }, { 'data-test-id': 'voice-panel-log' });
-
-    panel.append(header, meta, transcript, fallback, input, commandInput, row1, row2, log);
+    const {
+        launcher,
+        panel,
+        providersLine,
+        phaseLine,
+        sessionLine,
+        followupLine,
+        statusLine,
+        probeLine,
+        transcript,
+        fallback,
+        input,
+        commandInput,
+        closeButton,
+        newSessionButton,
+        listenButton,
+        speakButton,
+        stopButton,
+        captureButton,
+        commandButton,
+        followupButton,
+        intentButton,
+        probeButton,
+        appendLog
+    } = createVoicePanelView(doc);
     doc.body.append(launcher, panel);
-
-    const appendLog = (message, color = 'var(--system-text-color, rgba(244, 244, 244, 0.94))') => {
-        const line = createElement(doc, 'div', {
-            color,
-            marginBottom: '4px'
-        }, {
-            text: `[${new Date().toLocaleTimeString()}] ${message}`
-        });
-        log.prepend(line);
-        while (log.childNodes.length > LOG_LIMIT) {
-            log.removeChild(log.lastChild);
-        }
-    };
 
     const setOpen = (value) => {
         state.open = value === true;
@@ -355,45 +122,6 @@ export const mountVoicePanel = async ({
 
     const setStatus = (text) => {
         statusLine.textContent = `status: ${text}`;
-    };
-
-    const syncProbeLine = () => {
-        const probe = state.probe || {};
-        const latency = Number.isFinite(probe.cancel_latency_ms) ? `${Math.round(probe.cancel_latency_ms)}ms` : 'n/a';
-        probeLine.textContent = `probe: ${probe.status || 'idle'} stop=${probe.speech_stopped ? 'yes' : 'no'} abort=${probe.processing_aborted ? 'yes' : 'no'} next=${probe.new_command_accepted ? 'yes' : 'no'} cancel=${latency}`;
-    };
-
-    const refreshProbeLatency = async () => {
-        if (!state.currentSessionId || typeof api.telemetry?.snapshot !== 'function') return;
-        const snapshot = api.telemetry.snapshot(state.currentSessionId);
-        const latency = snapshot?.metrics?.cancel_roundtrip_ms;
-        if (Number.isFinite(latency)) {
-            state.probe.cancel_latency_ms = latency;
-            syncProbeLine();
-        }
-    };
-
-    const maybeFinalizeProbe = async () => {
-        if (state.probe.status === 'running' || state.probe.status === 'awaiting_command') {
-            if (state.probe.speaking_settled && state.probe.processing_settled) {
-                state.probe.status = state.probe.new_command_accepted ? 'validated' : 'awaiting_command';
-                if (state.probe.status === 'validated') {
-                    await refreshProbeLatency();
-                    setStatus('probe validated');
-                    appendLog('probe validated', '#8fd3ff');
-                } else {
-                    setStatus('probe awaiting command');
-                }
-                syncProbeLine();
-            }
-        }
-    };
-
-    const markProbeFailed = (message) => {
-        state.probe.status = 'failed';
-        syncProbeLine();
-        setStatus('probe failed');
-        appendLog(`probe failed: ${message}`, '#fca5a5');
     };
 
     const renderFallback = (intent = null) => {
@@ -473,54 +201,16 @@ export const mountVoicePanel = async ({
         await refreshSnapshot();
     };
 
-    const runProbe = async () => {
-        const sessionId = await ensureSession();
-        state.probe = {
-            status: 'running',
-            speech_stopped: false,
-            processing_aborted: false,
-            new_command_accepted: false,
-            speaking_settled: false,
-            processing_settled: false,
-            cancel_latency_ms: null
-        };
-        syncProbeLine();
-        setStatus('probe running');
-        appendLog('interrupt probe started', '#f59e0b');
-        const processing = await api.runProcessing(sessionId, ({ signal }) => new Promise((resolve, reject) => {
-            const timer = env.setTimeout(() => resolve({ ok: true }), 12000);
-            signal?.addEventListener?.('abort', () => {
-                env.clearTimeout(timer);
-                reject(new Error(String(signal.reason || 'aborted')));
-            }, { once: true });
-        }), {
-            step: 'voice_panel_probe'
-        });
-        processing?.promise
-            ?.then(async (result) => {
-                state.probe.processing_settled = true;
-                state.probe.processing_aborted = result?.aborted === true;
-                appendLog(`probe processing ${state.probe.processing_aborted ? 'aborted' : 'completed'}`, state.probe.processing_aborted ? '#8fd3ff' : '#f59e0b');
-                await maybeFinalizeProbe();
-            })
-            ?.catch((error) => {
-                markProbeFailed(error?.message || error);
-            });
-        const speaking = await api.speak(input.value || 'Message de test.', {
-            session_id: sessionId,
-            voiceId: 'system-fr'
-        });
-        speaking?.promise
-            ?.then(async (result) => {
-                state.probe.speaking_settled = true;
-                state.probe.speech_stopped = result?.stopped === true;
-                appendLog(`probe speech ${state.probe.speech_stopped ? 'stopped' : 'completed'}`, state.probe.speech_stopped ? '#8fd3ff' : '#f59e0b');
-                await maybeFinalizeProbe();
-            })
-            ?.catch((error) => {
-                markProbeFailed(error?.message || error);
-            });
-    };
+    const probeController = createVoiceProbeController({
+        env,
+        api,
+        probeLine,
+        input,
+        ensureSession,
+        getSessionId: () => state.currentSessionId,
+        setStatus,
+        appendLog
+    });
 
     launcher.addEventListener('click', () => setOpen(!state.open));
     closeButton.addEventListener('click', () => setOpen(false));
@@ -584,7 +274,7 @@ export const mountVoicePanel = async ({
             await api.stopSpeaking(state.currentSessionId, {
                 reason: 'voice_panel_stop'
             });
-            await refreshProbeLatency();
+            await probeController.refreshLatency();
             await refreshSnapshot();
         } catch (error) {
             appendLog(`stop failed: ${error?.message || error}`, '#fca5a5');
@@ -620,10 +310,7 @@ export const mountVoicePanel = async ({
             const result = await api.interrupt(sessionId, {
                 utterance
             });
-            if (state.probe.status === 'running' || state.probe.status === 'awaiting_command') {
-                state.probe.new_command_accepted = result?.matched === true && !!result?.command && String(result.command) !== 'stop';
-                await maybeFinalizeProbe();
-            }
+            await probeController.noteCommand(result);
             await refreshSnapshot();
         } catch (error) {
             appendLog(`command failed: ${error?.message || error}`, '#fca5a5');
@@ -665,7 +352,7 @@ export const mountVoicePanel = async ({
 
     probeButton.addEventListener('click', async () => {
         try {
-            await runProbe();
+            await probeController.run();
             await refreshSnapshot();
         } catch (error) {
             appendLog(`probe result: ${error?.message || error}`, '#f59e0b');
@@ -686,7 +373,7 @@ export const mountVoicePanel = async ({
             listening: state.listening,
             recording: state.recording,
             lastFollowup: state.lastFollowup,
-            probe: state.probe
+            probe: probeController.snapshot()
         }),
         destroy: () => {
             state.unsubscribe();

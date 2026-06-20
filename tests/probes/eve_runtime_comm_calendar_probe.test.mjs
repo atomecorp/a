@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { installMockBrowserEnv } from '../../eve/application/tests/strangler_v2/_env.mjs';
+import { installMockBrowserEnv } from '../strangler_v2/_env.mjs';
 
 const outDir = path.resolve('temp/probe_reports');
 fs.mkdirSync(outDir, { recursive: true });
@@ -29,14 +29,23 @@ const unwrapResult = (value = null) => {
     return current && typeof current === 'object' ? current : {};
 };
 
+const hasNestedFieldValue = (value = null, field = '', expected = null) => {
+    if (!value || typeof value !== 'object') return false;
+    if (value[field] === expected) return true;
+    if (value.result && typeof value.result === 'object') {
+        return hasNestedFieldValue(value.result, field, expected);
+    }
+    return false;
+};
+
 const toResult = (step, payload = {}, extra = {}) => {
     const resolved = unwrapResult(payload?.result || payload || {});
     let ok = payload?.ok === true;
     if (ok && Object.prototype.hasOwnProperty.call(extra, 'expected_surface_key')) {
-        ok = resolved?.surface_key === extra.expected_surface_key;
+        ok = hasNestedFieldValue(payload?.result || payload || {}, 'surface_key', extra.expected_surface_key);
     }
     if (ok && Object.prototype.hasOwnProperty.call(extra, 'expected_proxy_tool_id')) {
-        ok = resolved?.proxy_tool_id === extra.expected_proxy_tool_id;
+        ok = hasNestedFieldValue(payload?.result || payload || {}, 'proxy_tool_id', extra.expected_proxy_tool_id);
     }
     if (ok && Array.isArray(extra.expected_children)) {
         const actualChildren = Array.isArray(resolved?.children) ? resolved.children : [];
@@ -58,11 +67,13 @@ const run = async () => {
         ok: false,
         groups: {
             communication: [],
-            calendar: []
+            calendar: [],
+            mode: []
         },
         summary: {
             communication: null,
-            calendar: null
+            calendar: null,
+            mode: null
         },
         notes: [
             'Current runtime communication/calendar surface is panel/palette level in headless mode.',
@@ -72,7 +83,21 @@ const run = async () => {
     };
 
     try {
-        const { toolRuntimeV2 } = await import('../../eve/application/intuition/runtime/index.js');
+        const { registerPanelApi, toolRuntimeV2 } = await import('../../eVe/intuition/runtime/index.js');
+        registerPanelApi({
+            openPanelSurface: async (surfaceKey) => ({
+                ok: true,
+                active: true,
+                opened: true,
+                surface_key: String(surfaceKey || '').trim()
+            }),
+            closePanelSurface: async (surfaceKey) => ({
+                ok: true,
+                active: false,
+                closed: true,
+                surface_key: String(surfaceKey || '').trim()
+            })
+        });
         const invoke = async ({ tool_id, action = 'pointer.click', input = {} }) => {
             const result = await toolRuntimeV2.invokeById({
                 tool_id,
@@ -109,18 +134,33 @@ const run = async () => {
         report.groups.calendar.push(toResult(
             'time_palette',
             await invoke({ tool_id: 'tool.main.time' }),
-            { expected_children: ['ui.timeline.panel', 'ui.calendar.panel'] }
+            { expected_children: ['ui.calendar.panel'] }
         ));
         report.groups.calendar.push(toResult(
             'calendar_panel',
             await invoke({ tool_id: 'ui.calendar.panel' }),
             { expected_surface_key: 'calendar' }
         ));
+        report.groups.mode.push(toResult(
+            'mode_palette',
+            await invoke({ tool_id: 'tool.main.mode' }),
+            { expected_children: ['tool.main.perform', 'ui.mode.edit', 'ui.mode.consume'] }
+        ));
+        report.groups.mode.push(toResult(
+            'mode_edit',
+            await invoke({ tool_id: 'ui.mode.edit' })
+        ));
+        report.groups.mode.push(toResult(
+            'mode_consume',
+            await invoke({ tool_id: 'ui.mode.consume' })
+        ));
 
         report.summary.communication = summarize(report.groups.communication);
         report.summary.calendar = summarize(report.groups.calendar);
+        report.summary.mode = summarize(report.groups.mode);
         report.ok = report.summary.communication.failed === 0
-            && report.summary.calendar.failed === 0;
+            && report.summary.calendar.failed === 0
+            && report.summary.mode.failed === 0;
     } catch (error) {
         report.errors.push(String(error?.message || error));
     }
@@ -133,6 +173,9 @@ const run = async () => {
         notes: report.notes,
         errors: report.errors
     }, null, 2));
+    if (report.ok !== true) {
+        throw new Error(`eve_runtime_comm_calendar_probe_failed:${outFile}`);
+    }
 };
 
 await run();

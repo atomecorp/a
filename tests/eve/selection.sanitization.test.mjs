@@ -115,21 +115,6 @@ assert.doesNotMatch(captureSource, /entry\.dataset\?\.atome_id/);
 assert.doesNotMatch(captureSource, /host\?\.dataset\?\.groupAtome/);
 assert.doesNotMatch(captureSource, /data-source-tool-/);
 
-const playbackMirrorSource = readFileSync(new URL('../../eVe/domains/mtrax/project/project_playback_mirror_runtime.js', import.meta.url), 'utf8');
-assert.doesNotMatch(playbackMirrorSource, /host\?\.dataset\?\.atomeKind/);
-assert.doesNotMatch(playbackMirrorSource, /host\.dataset\?\.atomeKind/);
-
-const playbackTargetSource = readFileSync(new URL('../../eVe/domains/mtrax/project/project_playback_target_runtime.js', import.meta.url), 'utf8');
-assert.doesNotMatch(playbackTargetSource, /host\?\.dataset\?\.atomeKind/);
-assert.doesNotMatch(playbackTargetSource, /host\.dataset\?\.atomeKind/);
-
-const footerEmbedSource = readFileSync(new URL('../../eVe/domains/mtrax/ui/footer_embed_primitives.js', import.meta.url), 'utf8');
-assert.doesNotMatch(footerEmbedSource, /node\.dataset\?\.atomeKind/);
-assert.doesNotMatch(footerEmbedSource, /node\.dataset\?\.groupAtome/);
-
-const timelinePlaySource = readFileSync(new URL('../../eVe/domains/mtrax/timeline/play_runtime.js', import.meta.url), 'utf8');
-assert.doesNotMatch(timelinePlaySource, /node\.dataset\?\.atomeKind/);
-
 const textEditRuntimeSource = readFileSync(new URL('../../eVe/core/atome_events/text_edit_runtime.js', import.meta.url), 'utf8');
 assert.doesNotMatch(textEditRuntimeSource, /host\.dataset\?\.textToolKeepEmpty/);
 assert.doesNotMatch(textEditRuntimeSource, /host\.dataset\?\.text_tool_keep_empty/);
@@ -175,31 +160,12 @@ const toolShortcutVisualSource = readFileSync(new URL('../../eVe/intuition/share
 assert.doesNotMatch(toolShortcutVisualSource, /dataset\.atomeRole/);
 assert.doesNotMatch(toolShortcutVisualSource, /dataset\.toolShortcut/);
 
-const mtrackDockControllerSource = readFileSync(new URL('../../eVe/intuition/runtime/mtrack_dock_controller.js', import.meta.url), 'utf8');
-assert.doesNotMatch(mtrackDockControllerSource, /groupHost\.dataset\?\.atomeId/);
-assert.doesNotMatch(mtrackDockControllerSource, /groupHost\?\.dataset\?\.atomeId/);
-assert.doesNotMatch(mtrackDockControllerSource, /groupHost\.dataset\?\.groupId/);
-assert.doesNotMatch(mtrackDockControllerSource, /groupHost\?\.dataset\?\.groupId/);
-
-const mtraxBridgeRuntimeSource = readFileSync(new URL('../../eVe/intuition/runtime/eve_intuition/mtrax_bridge_runtime.js', import.meta.url), 'utf8');
-assert.doesNotMatch(mtraxBridgeRuntimeSource, /dataset\?\.atomeId/);
-assert.doesNotMatch(mtraxBridgeRuntimeSource, /dataset\?\.groupId/);
-
-const mtraxDiagnosticsSource = readFileSync(new URL('../../eVe/domains/mtrax/core/diagnostics.js', import.meta.url), 'utf8');
-assert.doesNotMatch(mtraxDiagnosticsSource, /dataset\?\.atomeId/);
-
 const projectDropSource = readFileSync(new URL('../../eVe/intuition/tools/project_drop.js', import.meta.url), 'utf8');
 assert.doesNotMatch(projectDropSource, /host\?\.dataset\?\.atomeId/);
 assert.doesNotMatch(projectDropSource, /host\.dataset\?\.projectId/);
 assert.doesNotMatch(projectDropSource, /host\?\.dataset\?\.projectId/);
 assert.doesNotMatch(projectDropSource, /hostEl\.dataset\?\.projectId/);
 assert.doesNotMatch(projectDropSource, /hostEl\?\.dataset\?\.projectId/);
-
-const mtraxRecordCaptureSource = readFileSync(new URL('../../eVe/domains/mtrax/media/record_capture_runtime.js', import.meta.url), 'utf8');
-assert.doesNotMatch(mtraxRecordCaptureSource, /data-source-tool-/);
-
-const mtraxClipSelectionSource = readFileSync(new URL('../../eVe/domains/mtrax/clips/selection_runtime.js', import.meta.url), 'utf8');
-assert.doesNotMatch(mtraxClipSelectionSource, /data-source-tool-/);
 
 const clockToolSource = readFileSync(new URL('../../eVe/intuition/tools/clock.js', import.meta.url), 'utf8');
 assert.doesNotMatch(clockToolSource, /data-atome-clock-canvas/);

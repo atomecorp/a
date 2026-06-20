@@ -5,6 +5,9 @@ struct VideoParams {
     base: vec4<f32>,
     // x = grayscale, y = sepia, z = invert, w = hue (radians)
     filters: vec4<f32>,
+    // x = kind (0 none, 1 fade, 2 wipe, 3 slide), y = progress [0,1],
+    // z = role (0 incoming, 1 outgoing), w = wipe-edge softness
+    transition: vec4<f32>,
 };
 
 @group(2) @binding(0) var video_frame: texture_external;
@@ -76,10 +79,50 @@ fn apply_color_filters(color_in: vec3<f32>, base: vec4<f32>, filters: vec4<f32>)
     return clamp(c, vec3<f32>(0.0), vec3<f32>(1.0));
 }
 
+const TRANSITION_FADE: f32 = 1.0;
+const TRANSITION_WIPE: f32 = 2.0;
+const TRANSITION_SLIDE: f32 = 3.0;
+
+struct TransitionResult {
+    // UV to sample (slide shifts it); out-of-[0,1] is flagged transparent below.
+    uv: vec2<f32>,
+    // Multiplicative alpha factor (fade ramp, wipe reveal, slide off-screen mask).
+    alpha: f32,
+};
+
+// Per-clip timeline transition applied in the video material. `t` is
+// (kind, progress, role, softness); role 0 = incoming (revealed/rises), 1 =
+// outgoing (falls). Cross-dissolve = both clips fade with complementary role;
+// wipe/slide animate only the incoming clip on top. No spatial direction is
+// carried by the timeline, so wipe sweeps +x and slide enters from +x.
+fn apply_transition(uv_in: vec2<f32>, t: vec4<f32>) -> TransitionResult {
+    let kind = t.x;
+    let progress = clamp(t.y, 0.0, 1.0);
+    let role = t.z;
+    var out: TransitionResult;
+    out.uv = uv_in;
+    out.alpha = 1.0;
+    if (kind == TRANSITION_FADE) {
+        out.alpha = select(progress, 1.0 - progress, role >= 0.5);
+    } else if (kind == TRANSITION_WIPE && role < 0.5) {
+        let edge = max(t.w, 0.0001);
+        out.alpha = clamp((progress - uv_in.x) / edge + 0.5, 0.0, 1.0);
+    } else if (kind == TRANSITION_SLIDE && role < 0.5) {
+        // Incoming slides in from +x: left edge moves screen x=1 -> x=0.
+        let shifted = uv_in.x - (1.0 - progress);
+        out.uv = vec2<f32>(shifted, uv_in.y);
+        if (shifted < 0.0 || shifted > 1.0) {
+            out.alpha = 0.0;
+        }
+    }
+    return out;
+}
+
 @fragment
 fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
-    let frame = textureSampleBaseClampToEdge(video_frame, video_sampler, in.uv);
+    let transition = apply_transition(in.uv, video_params.transition);
+    let frame = textureSampleBaseClampToEdge(video_frame, video_sampler, transition.uv);
     let filtered = apply_color_filters(frame.rgb, video_params.base, video_params.filters);
-    let opacity = clamp(video_params.base.x, 0.0, 1.0);
+    let opacity = clamp(video_params.base.x, 0.0, 1.0) * transition.alpha;
     return vec4<f32>(srgb_to_linear(filtered), opacity);
 }

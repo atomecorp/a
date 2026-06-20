@@ -20,6 +20,25 @@ import {
 
 const projectDom = () => installDom('<!doctype html><html><body><main id="project"></main></body></html>');
 
+const assertHiddenDecodeVideoContract = (documentRef, expectedCount) => {
+    const root = documentRef.getElementById('eve_bevy_video_decode_root');
+    assert.ok(root, 'source-backed project video must use the hidden Bevy decode root');
+    assert.equal(root.getAttribute('aria-hidden'), 'true');
+    assert.equal(root.style.opacity, '0');
+    assert.equal(root.style.pointerEvents, 'none');
+    assert.equal(root.style.width, '1px');
+    assert.equal(root.style.height, '1px');
+    const videos = Array.from(root.querySelectorAll('video'));
+    assert.equal(videos.length, expectedCount);
+    videos.forEach((video) => {
+        assert.equal(video.getAttribute('aria-hidden'), 'true');
+        assert.equal(video.style.opacity, '0');
+        assert.equal(video.style.pointerEvents, 'none');
+        assert.equal(video.style.width, '1px');
+        assert.equal(video.style.height, '1px');
+    });
+};
+
 test('Project scene runtime renders heterogeneous Atomes through one project canvas', async () => {
     clearAllProjectScenes();
     const dom = projectDom();
@@ -41,7 +60,10 @@ test('Project scene runtime renders heterogeneous Atomes through one project can
     assert.equal(projection.scene.atoms.length, 100);
     assert.equal(calls.filter((call) => call.type === 'run').length, 1);
     assert.equal(calls.find((call) => call.type === 'run').initialNodes.nodes.length, 100);
-    assert.equal(calls.find((call) => call.type === 'run').initialNodes.nodes.some((node) => node.kind === 'video'), true);
+    const initialNodes = calls.find((call) => call.type === 'run').initialNodes.nodes;
+    const videoNodeCount = initialNodes.filter((node) => node.kind === 'video').length;
+    assert.equal(videoNodeCount > 0, true);
+    assertHiddenDecodeVideoContract(dom.window.document, videoNodeCount);
     assert.equal(calls.some((call) => call.type === 'resource' && call.payload?.texture), false);
     await nextTick(70);
     assert.equal(calls.some((call) => call.type === 'resource' && call.payload?.texture), false);

@@ -128,13 +128,26 @@ Related sources:
 
 - `eVe/elements/look/css_preset.js`
 - `eVe/elements/look/preset_ensurers.js`
+- `eVe/elements/look/tokens.js`
+- `eVe/elements/look/base_preset.js`
+- `eVe/elements/look/eve_presets.js`
+- `eVe/elements/look/goey_menu_preset.js`
+- `eVe/elements/look/matrix_preset.js`
+- `eVe/elements/look/calendar_preset.js`
+- `eVe/elements/look/utility_presets.js`
+- `eVe/elements/look/preset_chrome.js`
+- `eVe/elements/look/preset_comm_table.js`
+- `eVe/elements/look/preset_comm_surface.js`
+- `eVe/elements/look/preset_controls.js`
+- `eVe/elements/look/tool_theme.js`
 
 Role:
 
-- Translates system tokens into `eveTokens`, `eveCssVars`, and `evePresets`.
-- Installs root CSS custom properties through `applyEveCssVars()`.
-- Injects base product rules through `ensureEveBaseStyle()`.
-- Owns base rules for inputs, placeholders, finder rows, scope prompts, and shared product UI affordances.
+- `eVe/elements/eVe_look.js` is the public design facade and composed export surface.
+- `look/tokens.js` translates system tokens into `eveTokens` and `eveCssVars`, then installs root CSS custom properties through `applyEveCssVars()`.
+- `look/base_preset.js` injects base product rules through `ensureEveBaseStyle()`.
+- `look/eve_presets.js` composes the shared `evePresets` registry from the feature preset modules.
+- Look preset modules own base rules for inputs, placeholders, finder rows, scope prompts, panel chrome, Goey menu, Matrix, Calendar, communication surfaces, and shared product UI affordances.
 
 Design rule: broad product styling belongs here only when it is genuinely shared. Feature-specific styling belongs in the feature visual module.
 
@@ -164,7 +177,7 @@ Primary sources:
 
 Role:
 
-- `eVe/elements/eVe_look.js` owns the shared visual CSS rules for final Atome hosts and their media/SVG projection children: `eve-atome`, `eve-matrix-tile`, `eve-media-atome`, `eve-shape-atome`, `eve-svg-atome`, `eve-rounded-large`, `is-selected`, `eve-atome-shape-svg`, `eve-atome-group-placeholder`, `eve-mtrax-import-preview-media`, `eve-media-canvas`, and `eve-media-audio-host`.
+- `eVe/elements/eVe_look.js` owns the shared visual CSS rules for final Atome hosts and their media/SVG projection children: `eve-atome`, `eve-matrix-tile`, `eve-media-atome`, `eve-shape-atome`, `eve-svg-atome`, `eve-rounded-large`, `is-selected`, `eve-atome-shape-svg`, `eve-atome-group-placeholder`, `eve-group-import-preview-media`, `eve-media-canvas`, and `eve-media-audio-host`.
 - `eVe/intuition/runtime/tool_genesis.js` owns host class projection and keeps final Atome host inline styles limited to dynamic geometry such as left, top, width, height, and z-index.
 - `eVe/intuition/runtime/selection.js` owns selected-state projection through the generic `is-selected` class only.
 - `eVe/core/media_engine/molecule.api.js` owns Molecule media canvas/audio host creation without decorative inline styles.
@@ -173,7 +186,7 @@ Role:
 - `eVe/domains/rendering/project_scene_runtime.js` owns active project Atome visual projection into the bounded project canvas. Project Atome count must change scene entries, not visible DOM hosts, text nodes, media elements, SVG nodes, or per-Atome canvases.
 - Active project selected-state styling is canvas-rendered through the Bevy project projection. `atome/shared/render_visual_tokens.js` owns the cross-platform selection visual tokens; `project_scene_runtime.js` reads transient selection runtime state and sends selected projection changes through Bevy diffs; the Virtual Scene provides dense paint-order layers so the shared Atome Rust Bevy core draws a very light gray dotted contour and a progressively faded visible 12 px shadow blur around each selected Atome above that Atome but below any object already in front. It must not be implemented as per-Atome DOM outline, inline style, class mutation, DOM overlay, or legacy WebGPU selection bitmap.
 - Active project audio waveform playback progress is canvas-rendered through the same Bevy project projection. The visual is one thin near-white vertical playhead, approximately 2 logical pixels wide, positioned over the waveform from left to right by runtime playback progress. It is valid only for Audio Atomes represented on the project canvas and must not appear in Molecule, sequencer, timeline, API-only playback, DOM overlays, per-Atome canvas surfaces, or waveform DOM children.
-- `eVe/intuition/runtime/group_visual_runtime.js` owns legacy non-project group host visual projection, including placeholder layers and preview media mounting. This is a non-project DOM path only; project-visible group Atomes must remain canvas scene entries.
+- `eVe/intuition/runtime/group_visual_runtime.js` owns legacy non-project group host visual orchestration, and `eVe/intuition/runtime/group_visual_preview_runtime.js` owns its disposable placeholder layer plus preview media/text/member DOM mounting. This is a non-project DOM path only; project-visible group Atomes must remain canvas scene entries.
 - Project resize affordance on the active route is a logical canvas hit region derived from scene bounds. It must not create visible per-Atome resize handles or host-level resize classes. Active project resize is homothetic by default: the canvas interaction layer applies one uniform scale to the selected Atome or selected group, preserving the visible width/height ratio through the Bevy projection route.
 - Project text editing uses the centralized hidden text service from `eVe/domains/rendering/hidden_text_service_runtime.js`, active-edit state from `eVe/domains/rendering/project_scene_text_edit_state.js`, pure session state from `eVe/domains/rendering/inline_edit_session.js`, the pure close-overlay action model from `eVe/domains/rendering/inline_edit_close_overlay.js`, pointer routing from `eVe/domains/rendering/surface_text_pointer_runtime.js`, and the project-scene bridge in `eVe/domains/rendering/project_scene_text_runtime.js`. The hidden textarea may capture keyboard, IME, selection, copy, paste, deletion, line breaks, cursor repositioning, and focus only; visible multi-line text, live cursor projection, selected-range highlight, sizing feedback, rich-text spans, and committed text display stay on the Bevy project canvas. Selected text formatting currently uses the canonical `rich_text.spans` projection for bold and color ranges, rendered into the bounded high-resolution Bevy text texture by `eVe/domains/rendering/bevy_media_texture_resolver.js`; transparent text-edge pixels keep neighboring glyph color for linear WebGPU sampling, and text-bound transforms refresh the Bevy texture instead of stretching an obsolete raster. Native double-click re-enters editing for existing text; click and drag in the active text manipulate the Bevy-projected caret and selection, not a visible HTML editor, with active resize kept to the bottom-right corner. Close-overlay controls are disposable interaction metadata and must not become Atomes, visible DOM hosts, selector-backed state, or design-token owners. The active project path must not create visible `.eve-atome-text` nodes or per-Atome text editors; commit/cancel/session state stays outside the visible DOM.
 - `eVe/intuition/matrix/ui/view.js` may render bounded Matrix shell tiles, labels, and preview slots for layout. Tile interaction behavior belongs to `eVe/intuition/matrix/ui/matrix_interaction_runtime.js`, and preview imagery belongs to the unified Matrix preview renderer, not cloned project DOM.
@@ -263,25 +276,27 @@ Primary sources:
 - `eVe/intuition/tools/visual/tool_visual_tokens.js`
 - `eVe/intuition/tools/visual/atome_editor_runtime_style.js`
 - `eVe/intuition/tools/ui/tool_button_factory.js`
+- `eVe/intuition/tools/ui/tool_button_params.js`
 - `eVe/intuition/tools/core/tool_definition_ssot.js`
 - `eVe/intuition/tools/core/tool_runtime.js`
 - `eVe/intuition/projection/button.js`
 - `eVe/intuition/projection/tool_strip.js`
 - `eVe/intuition/shared/slider_tool_dom.js`
+- `eVe/intuition/shared/tool_drag.js`
 
 P8 projection style ownership:
 
 - `eVe/intuition/projection/button.js` owns IntuitionX projection tool DOM roles and dynamic slider dimensions.
 - Static projection host, surface, icon, and label visuals are generated as classes by `eVe/elements/eVe_look.js`.
 - `eVe/intuition/core/dom.js` rejects static `background` and `boxShadow` writes on `.eve-intuitionx-projection-tool-surface`; those constants must stay class-owned.
-- `eVe/intuition/ribbon/menu.js` may update projection visual state through `data-visual-active`, `data-visual-kind`, and `data-hovered`, but must not reintroduce static inline surface colors or shadows.
+- `eVe/intuition/ribbon/menu.js` coordinates the ribbon runtimes but must not reintroduce static inline projection surface colors or shadows. `menu_model.js` owns ribbon tool sizing/radius decisions, handle icon selection, color interpolation, transform composition, and pressed/tool visual-state helper behavior; `menu_tool_render_runtime.js` owns projection tool/palette DOM rendering and press-hover routing; `menu_layout_runtime.js`, `menu_scroll_runtime.js`, `menu_placement_runtime.js`, and `menu_visibility_runtime.js` own ribbon layout, native scroll snap, placement/handedness, and visibility timing; `menu_shell_runtime.js` owns the layer/root/handle/viewport/cap shell; `menu_delete_visual_runtime.js` and `menu_drag_delete_runtime.js` own delete visuals and drag-delete routing; `menu_public_api_runtime.js` owns the public facade/latch adapters; `menu_auth_dock_runtime.js`, `menu_external_open_runtime.js`, and `menu_quick_capture_runtime.js` own auth dock, external-open, and quick-capture behavior.
 - Inline style remains allowed for projection sliders while expanded/collapsed width is actively driven by the runtime.
 - `eVe/intuition/shared/slider_tool_content.js`
 
 Role:
 
 - Owns the current shared product tool surface contract for tool shape, dimensions, active/latched state colors, icon behavior, inline slider visuals, projections, and editor-related visual tokens.
-- `tool_visual_tokens.js` owns base product tool/editor tokens and reusable visual values; `atome_editor_runtime_style.js` owns the generated Atome editor footer/fullscreen runtime rules consumed by `eVeIntuition.js`.
+- `tool_visual_tokens.js` owns base product tool/editor tokens and reusable visual values; `atome_editor_runtime_style.js` owns the generated Atome editor footer/fullscreen runtime rules consumed by `eVeIntuition.js`. `eVe/intuition/menu/core/toolbox_runtime_model.js` owns toolbox sizing constants and model-level slider/drag defaults, `toolbox_latch_runtime.js` owns toolbox latched-state and exclusive-group behavior, `toolbox_hold_runtime.js` owns long-press hold timing, `toolbox_slider_runtime.js` owns slider input/change dispatch timing, `toolbox_drag_runtime.js` owns toolbox drag preview styling application and drag-session visual state, `toolbox_external_open_runtime.js` owns external-open reveal width styling, `toolbox_handle_runtime.js` owns main handle click/swipe interaction timing, `toolbox_palette_runtime.js` owns expanded palette visual application and scroll reveal timing, and `toolbox_runtime.js` keeps runtime DOM orchestration.
 - Finder tool drops materialize existing tools as `tool_instance` projection hosts. They must stay separate from Atome `shape` creation and from legacy `tool_shortcut` persistence markers.
 - Product tools should share this runtime instead of duplicating button CSS or DOM structure.
 - For sliders specifically, the canonical product-tool behavior now lives in `atome/src/squirrel/components/tool_slider_builder.js`: the control rests as a compact square tool, expands on pointer down or touch down, exposes the manipulable slider while expanded, and collapses again on pointer up or pointer cancel unless pinned by the interaction model.
@@ -296,6 +311,11 @@ Design rule: a business capability has one visual tool identity across toolbox, 
 Primary sources:
 
 - `eVe/intuition/tools/capture.js`
+- `eVe/intuition/tools/capture_source_runtime.js`
+- `eVe/intuition/tools/capture_preview_session_runtime.js`
+- `eVe/intuition/tools/capture_quick_record_runtime.js`
+- `eVe/intuition/tools/capture_fullscreen_runtime.js`
+- `eVe/intuition/tools/capture_fullscreen_chrome_runtime.js`
 - `eVe/intuition/tools/capture_reveal_runtime.js`
 - `eVe/intuition/tools/capture_export_geometry.js`
 
@@ -327,7 +347,8 @@ Role:
 
 - Ribbon tokens define handle icons, tool sizes, flower metrics, drag thresholds, and animation timing.
 - The main ribbon is the primary product surface that materializes the shared tool visual contract used by the user tool, the Atome handle, and the main toolbar tool buttons.
-- The authenticated main ribbon currently exposes `home`, `find`, `time`, `view`, and `help` in that order; `view` is a palette placed immediately before `help` and reveals the `list`, `table`, and `natural` view-mode tools through the existing palette child projection contract.
+- Runtime-specific ribbon behavior is split out of `menu.js`: shell creation lives in `menu_shell_runtime.js`, layout/scroll/placement/visibility live in `menu_layout_runtime.js`, `menu_scroll_runtime.js`, `menu_placement_runtime.js`, and `menu_visibility_runtime.js`, tool/palette rendering lives in `menu_tool_render_runtime.js`, delete visual/routing lives in `menu_delete_visual_runtime.js` and `menu_drag_delete_runtime.js`, the public facade lives in `menu_public_api_runtime.js`, auth dock animation lives in `menu_auth_dock_runtime.js`, external-open width animation lives in `menu_external_open_runtime.js`, and Quick Capture overlay/reveal/fullscreen behavior lives in `menu_quick_capture_runtime.js`.
+- The authenticated main ribbon currently exposes `home`, `find`, `time`, `communicate`, `mode`, `view`, and `help` in that order; `time` reveals the calendar panel child, `mode` reveals `perform`, `edit`, and `consume` mode tools, and `view` reveals the `list`, `table`, and `natural` view-mode tools through the existing palette child projection contract.
 - Main ribbon tool roots must carry the shared `.eve-intuitionx-projection-tool` visual class so the browser-native button border is reset by the existing projection tool style contract.
 - The main ribbon container is visually transparent; the Atome handle remains docked directly against the WebView bottom-left or bottom-right edge according to handedness.
 - Toolbox styles inject runtime CSS variables and rules for menu V2.
@@ -363,7 +384,7 @@ Role:
 
 Design rule: new panels should use the panel creator and shared panel chrome before adding panel-local styling.
 
-User panel layout rule: `eVe/intuition/tools/user.js` keeps authenticated account actions inside the scrollable user dialog body, directly below the `Preferences` accordion; they must not return to a fixed body footer.
+User panel layout rule: `eVe/intuition/tools/user.js` is only the user-panel facade and must stay below 500 lines. `user_dialogs_runtime.js` owns the user/auth dialog chrome; `user_panel_mode_runtime.js` owns compact/full auth-mode visibility; `user_action_buttons_runtime.js` keeps authenticated account actions inside the scrollable user dialog body directly below the `Preferences` accordion, never in a fixed body footer. `user_identity_fields_runtime.js` owns identity/security/display rows; `user_profile_sections_runtime.js` owns Bio/Pro/Pass-and-keys/Preferences section composition; `user_background_language_preferences.js`, `user_visual_preferences_runtime.js`, `user_mail_preferences_runtime.js`, and `user_server_preferences.js` own Background/language, visual, Mail, and server preference controls respectively. `user_background_actions.js` owns Background quick-action behavior so the facade does not re-own background module loading, generator toggling, selection import, upload import, or random download result handling. `user_photo_runtime.js` owns the photo row and preview UI state; `user_profile_model.js`, `user_profile_lifecycle_runtime.js`, and `user_panel_reset_runtime.js` own profile payload/hydration, autosave/restore/auth-event lifecycle, and reset behavior so layout composition stays out of profile state logic.
 
 Menu ownership rule: application example files must not call `window.new_menu_v2.updateContent()` or `updateTheme()` to replace the product menu. Main menu visual and content ownership stays in the Intuition ribbon/menu stack and panel definitions. The disconnected Atome-logo-only ribbon is reserved for unauthenticated state; anonymous guest workspaces are visually active desktop sessions and must keep the main ribbon/Flowers tools available while the user panel shows guest-specific actions.
 
@@ -400,21 +421,20 @@ Role:
 
 - Owns MTraX panel styling, timeline layout, loop cells, preview styling, embedded footer visuals, and Molecule panel/tool composition.
 - Styles are injected or applied by JavaScript and rely on system/eVe CSS custom properties.
-- Preview/tracks separator sizing is owned by `eVe/domains/mtrax/preview/preview_layout_runtime.js`; bounds must be computed from the rendered MTraX stack, including the real tracks viewport, so WebView layout differences cannot collapse the separator resize range to the preview minimum.
+- The old internal MTraX preview section and preview/tracks splitter are removed; the panel is controls/timeline UI while visual project rendering belongs to the renderer path.
 - MTraX integrated tools keep horizontal overflow while hiding native scrollbars, and the position indicator is placed inside the ruler-left column above track headers.
 - MTraX ruler ticks are visual density, not interactive controls. Loop and marker zones remain DOM elements, while repeated tick marks and tick labels render through the ruler canvas surface when available.
-- MTraX content, preview section, preview host, and preview surface containers stay square-edged; rounded corners remain reserved for explicit controls or timeline affordances, not the Molecule composition frame.
-- Docked MTraX keeps the preview section, preview/tracks splitter, and tracks content directly adjacent; the splitter owns the only reserved space between preview and tracks.
+- MTraX content containers stay square-edged; rounded corners remain reserved for explicit controls or timeline affordances, not the Molecule composition frame.
 - Docked Molecule fullscreen bounds have no viewport margin: the host touches the WebView top/left/right edges and stops at the main toolbar top.
 - Molecule/MTraX panel titles are placed in the top header and centered; the bottom-right footer slot is reserved for the visible resize grip, not product text. The grip uses the bundled `assets/images/icons/resize.svg` icon inside the same visible button footprint as the shared close control while preserving its larger resize hit target.
 - Molecule footer transport is exposed as direct `play` and `stop` tool buttons. The former `transport` palette and its `play_media`/`play_animation` child presentation are not part of the Molecule panel surface; the media and animation reader tools remain catalog tools for non-panel invocation paths.
 - Docked MTraX/Molecule footer controls are not the active-project inline-edit close overlay and are not accessibility bridge controls. They remain timeline/product transport controls; any project-media open path must be resolved from canonical Atome state and project-scene records, not from per-Atome DOM host geometry or footer/dock state.
 - MTraX preview compositing treats the top visible track as the playback and scrub priority for video/image clips. Selection may temporarily promote clips while playback and scrub are stopped so editing handles remain reachable, but transport playback/scrub returns to deterministic track-order compositing.
 - Molecule media image canvases clear to transparent and image hosts default to transparent unless canonical Atome properties explicitly request a background. SVG uploads and imports must use the editable vector shape renderer path, not the MTraX group preview or raster image canvas.
-- Molecule poster canvas drawing and flat-surface rejection are owned by `eVe/domains/mtrax/preview/preview_poster_canvas_runtime.js`; persisted molecule previews shown on project atomes must be real image captures, not blank product-background placeholders.
+- Molecule close-time poster capture is clip-source based; the removed internal preview canvas path must not be reintroduced as a fallback.
 - Video clip poster extraction for molecule close is owned by `eVe/domains/mtrax/preview/preview_video_poster_capture_runtime.js` and must seek to the runtime clip `media_time`, so the project poster follows the current playhead frame instead of the clip start.
 - Timeline clip preview projection stores thumbnail and waveform render payloads in `eVe/domains/mtrax/preview/preview_registry_runtime.js`; production DOM may expose `data-preview-id` and `data-preview-status` only, while visual pixels, peaks, frames, and signatures remain renderer/cache data.
-- Molecule WebGPU compositor canvases must expose `data-role="mtrax-webgpu-compositor-canvas"` for projection audits. Hidden MTraX duration-probe media elements must stay detached from the product DOM; Molecule raster-pool videos must mount inside the closed raster-pool shadow root, never serializing upload URLs or `media_user_id` query state in product DOM snapshots.
+- Molecule/MTraX must not recreate an internal WebGPU compositor canvas or `mtrax-webgpu-compositor-canvas` audit role. The panel remains controls/timeline DOM only; visual montage output belongs on the single project Bevy/WebGPU canvas. Hidden MTraX duration-probe media elements must stay detached from the product DOM and must not serialize upload URLs or `media_user_id` query state in product DOM snapshots.
 - Molecule close-time project posters must be captured from the current MTraX playhead. The close lifecycle must not reset the playhead before `exportCurrentMtrackPreviewDescriptor()` runs, so reopening a molecule, scrubbing to another frame, and closing it updates the project atome image to that selected timeline frame.
 - Project video atomes use `eVe/domains/media/shared/media_video_poster_runtime.js` to capture and persist an image poster that the project WebGPU/Bevy route consumes before live video-frame decode, preventing black or transparent live-video rectangles on desktop WebKit after recording or refresh.
 - Project video recording posters are implemented by `eVe/domains/media/shared/media_video_poster_runtime.js` and are captured from the persisted recording file after project atome reuse/creation through the shared WebKit decode pool in `eVe/domains/media/shared/video_decode_pool_runtime.js`, then persisted through `media_poster_data_url`/`poster_data_url`.

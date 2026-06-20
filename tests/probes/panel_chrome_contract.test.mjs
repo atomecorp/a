@@ -1,5 +1,4 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
 import { JSDOM } from 'jsdom';
 
 const dom = new JSDOM('<!doctype html><html><head></head><body><div id="intuition"></div><div id="intuition_panel_layer"></div></body></html>');
@@ -270,13 +269,6 @@ const standardDialog = createEveDialog({
 assertCanonicalPanelChrome(standardDialog, 'standard panel');
 
 assertCanonicalPanelChrome(createEveDialog({
-    id: 'eve_mtrack_dialog',
-    title: 'Mtrack',
-    allowStaticTitle: true,
-    resize: 'both'
-}), 'mtrack panel');
-
-assertCanonicalPanelChrome(createEveDialog({
     id: 'eve_body_zones_contract_probe_dialog',
     title: 'Body Zones Contract Probe',
     allowStaticTitle: true,
@@ -449,30 +441,3 @@ window.dispatchEvent(new window.Event('resize'));
 await new Promise((resolve) => setTimeout(resolve, 10));
 assert.equal(resizedDialog.root.style.width, definedBounds.width, 'restored custom panel width must not track viewport changes');
 assert.equal(resizedDialog.root.style.height, definedBounds.height, 'restored custom panel height must not track viewport changes');
-
-const forbiddenSourceChecks = [
-    {
-        file: 'eVe/domains/mtrax/ui/styles.js',
-        patterns: [
-            '--mtrack-footer-height',
-            'eve-mtrack-footer-resize-corner',
-            '#${MTRACK_DIALOG_ID}.eve-mtrack-in-footer #${MTRACK_DIALOG_ID}__close'
-        ]
-    },
-    {
-        file: 'eVe/intuition/runtime/mtrack_dock_controller.js',
-        patterns: [
-            'eve-mtrack-dock-close-button',
-            'eve-mtrack-dock-move-header',
-            '__dock_close',
-            'panelCloseDisplaySnapshot'
-        ]
-    }
-];
-
-for (const check of forbiddenSourceChecks) {
-    const source = readFileSync(check.file, 'utf8');
-    check.patterns.forEach((pattern) => {
-        assert.equal(source.includes(pattern), false, `${check.file} must not contain ${pattern}`);
-    });
-}

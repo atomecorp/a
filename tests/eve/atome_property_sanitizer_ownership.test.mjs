@@ -8,6 +8,10 @@ const cases = [
         importPattern: /from '\.\.\/\.\.\/\.\.\/\.\.\/atome\/src\/shared\/atome_contract\.js'/
     },
     {
+        path: 'eVe/intuition/matrix/core/project_order_runtime.js',
+        importPattern: /from '\.\.\/\.\.\/\.\.\/\.\.\/atome\/src\/shared\/atome_contract\.js'/
+    },
+    {
         path: 'eVe/intuition/tools/clipboard/paste_events.js',
         importPattern: /from '\.\.\/\.\.\/\.\.\/\.\.\/atome\/src\/shared\/atome_contract\.js'/
     },

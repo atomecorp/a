@@ -137,3 +137,108 @@ test('Molecule persistence controller saves undo and redo snapshots', async () =
     await persistence.redoAndPersist();
     assert.equal(saved.at(-1).timeline.clips[0].timeline.duration_seconds, 5);
 });
+
+test('Molecule session batch is atomic and creates one undo point', async () => {
+    const eventSink = createEventSink();
+    const session = createMoleculeSession({
+        timeline: createFixtureTimeline(),
+        eventSink,
+        txIdFactory: (() => {
+            let index = 0;
+            return () => `tx_batch_${++index}`;
+        })()
+    });
+
+    const result = await session.applyBatch([
+        {
+            operation: 'molecule.clip.move',
+            command: { clip_id: 'clip_video', start_seconds: 2 }
+        },
+        {
+            operation: 'molecule.transport.loop',
+            command: { enabled: true, start_seconds: 2, end_seconds: 5 }
+        }
+    ], { label: 'move and loop' });
+
+    assert.equal(result.ok, true);
+    assert.equal(result.tx_id, 'tx_batch_1');
+    assert.equal(eventSink.events.length, 1);
+    assert.equal(eventSink.events[0].event_type, 'molecule.batch');
+    assert.equal(eventSink.events[0].command.operations.length, 2);
+    assert.equal(session.getHistory().undo.length, 1);
+    assert.equal(session.getState().clips[0].timeline.start_seconds, 2);
+    assert.equal(session.getState().transport.loop.enabled, true);
+
+    await session.undo();
+    assert.equal(session.getState().clips[0].timeline.start_seconds, 0);
+    assert.equal(session.getState().transport.loop.enabled, false);
+});
+
+test('Molecule session batch rejects invalid operations without partial state', async () => {
+    const eventSink = createEventSink();
+    const session = createMoleculeSession({
+        timeline: createFixtureTimeline(),
+        eventSink
+    });
+
+    await assert.rejects(() => session.applyBatch([
+        {
+            operation: 'molecule.clip.move',
+            command: { clip_id: 'clip_video', start_seconds: 2 }
+        },
+        {
+            operation: 'molecule.clip.move',
+            command: { clip_id: 'clip_missing', start_seconds: 4 }
+        }
+    ]), /clip clip_missing not found/);
+
+    assert.equal(eventSink.events.length, 0);
+    assert.equal(session.getHistory().undo.length, 0);
+    assert.equal(session.getState().clips[0].timeline.start_seconds, 0);
+});
+
+test('Molecule session timeline verbs expose clipboard edits through one undo point', async () => {
+    const eventSink = createEventSink();
+    const session = createMoleculeSession({
+        timeline: createFixtureTimeline(),
+        eventSink,
+        txIdFactory: (() => {
+            let index = 0;
+            return () => `tx_clipboard_${++index}`;
+        })()
+    });
+
+    const copied = session.copyClips({ clip_id: 'clip_video' });
+    assert.equal(copied.ok, true);
+    assert.equal(copied.count, 1);
+    assert.equal(eventSink.events.length, 0);
+
+    const pasted = await session.applyTimelineOperation('eve.timeline.clip.paste', {
+        start_seconds: 10,
+        new_clip_ids: ['clip_video_copy']
+    });
+    assert.equal(pasted.ok, true);
+    assert.equal(pasted.tx_id, 'tx_clipboard_1');
+    assert.equal(session.getState().clips.some((clip) => clip.clip_id === 'clip_video_copy'), true);
+
+    const cut = await session.applyTimelineOperation('ui.timeline.clip.cut', {
+        clip_id: 'clip_video_copy'
+    });
+    assert.equal(cut.ok, true);
+    assert.equal(cut.clipboard_count, 1);
+    assert.equal(session.getState().clips.some((clip) => clip.clip_id === 'clip_video_copy'), false);
+
+    const duplicated = await session.applyTimelineOperation('eve.timeline.clip.duplicate', {
+        clip_id: 'clip_video',
+        start_seconds: 12,
+        new_clip_ids: ['clip_video_dup']
+    });
+    assert.equal(duplicated.ok, true);
+    assert.equal(session.getState().clips.some((clip) => clip.clip_id === 'clip_video_dup'), true);
+    assert.deepEqual(eventSink.events.map((event) => event.event_type), [
+        'molecule.batch',
+        'molecule.batch',
+        'molecule.batch'
+    ]);
+    assert.equal(session.getHistory().undo.length, 3);
+});

@@ -119,7 +119,7 @@ const action = host.querySelector('[data-role="eve-voice-action"]');
 const input = host.querySelector('[data-role="eve-voice-input"]');
 const send = host.querySelector('[data-role="eve-voice-send"]');
 assert.equal(action.textContent, "Reprendre l'écoute", 'home voice surface should wait before listening again after speaking to avoid hearing itself');
-input.value = 'Ouvre Mtrack';
+input.value = 'Ouvre Home';
 send.click();
 await new Promise((resolve) => setTimeout(resolve, 0));
 

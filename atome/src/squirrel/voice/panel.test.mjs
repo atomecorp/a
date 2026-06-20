@@ -116,10 +116,10 @@ const voiceApi = {
         return {
             status: 'ready',
             domain: 'media',
-            action: 'open_mtrack',
+            action: 'open_home',
             utterance: {
                 raw: utterance,
-                normalized: 'ouvre mtrack'
+                normalized: 'ouvre home'
             }
         };
     },
@@ -195,6 +195,23 @@ assert.equal(
     panel.querySelector('[data-test-id="voice-panel-transcript"]').textContent,
     'transcript panel test',
     'voice panel should reflect runtime transcript events'
+);
+
+const probeButton = buttons.find((node) => node.textContent === 'Probe');
+probeButton.click();
+await new Promise((resolve) => setTimeout(resolve, 0));
+assert.equal(
+    controller.getState().probe.status,
+    'awaiting_command',
+    'voice panel probe should settle into awaiting_command once speech and processing resolve'
+);
+commandInput.value = 'passe au suivant';
+commandButton.click();
+await new Promise((resolve) => setTimeout(resolve, 0));
+assert.equal(
+    controller.getState().probe.status,
+    'validated',
+    'voice panel probe should validate once a fresh command is accepted mid-cancellation'
 );
 
 controller.destroy();

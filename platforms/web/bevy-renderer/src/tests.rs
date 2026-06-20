@@ -29,6 +29,8 @@ fn shape_node(id: &str) -> AtomeRenderNode {
         texture: None,
         peaks: None,
         playback_progress: None,
+        filters: None,
+        transition: None,
         selected: None,
     }
 }
@@ -119,6 +121,8 @@ fn queued_audio_progress_styles_are_coalesced_per_atome() {
         selected: None,
         opacity: None,
         playback_progress: Some(Some(0.1)),
+        filters: None,
+        transition: None,
     }));
     queue_web_op(AtomeRenderOp::Style(AtomeStylePatch {
         id: "waveform_1".to_string(),
@@ -126,6 +130,8 @@ fn queued_audio_progress_styles_are_coalesced_per_atome() {
         selected: None,
         opacity: None,
         playback_progress: Some(Some(0.7)),
+        filters: None,
+        transition: None,
     }));
     queue_web_op(AtomeRenderOp::Style(AtomeStylePatch {
         id: "waveform_2".to_string(),
@@ -133,6 +139,8 @@ fn queued_audio_progress_styles_are_coalesced_per_atome() {
         selected: None,
         opacity: None,
         playback_progress: Some(Some(0.3)),
+        filters: None,
+        transition: None,
     }));
 
     let ops = drain_web_ops();
@@ -159,6 +167,8 @@ fn queued_opacity_styles_are_not_coalesced_as_audio_progress_only() {
         selected: None,
         opacity: Some(0.4),
         playback_progress: None,
+        filters: None,
+        transition: None,
     }));
     queue_web_op(AtomeRenderOp::Style(AtomeStylePatch {
         id: "video_1".to_string(),
@@ -166,6 +176,8 @@ fn queued_opacity_styles_are_not_coalesced_as_audio_progress_only() {
         selected: None,
         opacity: Some(0.8),
         playback_progress: None,
+        filters: None,
+        transition: None,
     }));
 
     let ops = drain_web_ops();
@@ -233,10 +245,10 @@ fn exported_video_frame_notification_requests_redraw() {
 }
 
 #[test]
-fn video_backend_capabilities_report_external_texture_path_with_track_api() {
+fn video_backend_capabilities_report_external_texture_path_without_dead_track_api() {
     let capabilities = read_web_video_backend_capabilities();
 
-    assert_eq!(capabilities.schema, "atome.bevy.web.video_backend.v6");
+    assert_eq!(capabilities.schema, "atome.bevy.web.video_backend.v7");
     assert_eq!(
         capabilities.target_live_video_backend,
         "gpu_external_texture_texture_external"
@@ -246,7 +258,6 @@ fn video_backend_capabilities_report_external_texture_path_with_track_api() {
         "gpu_external_texture_texture_external"
     );
     assert!(capabilities.current_backend_final);
-    assert!(capabilities.video_track_api_exposed);
     assert_eq!(capabilities.backend_blocker, "none");
     assert!(!capabilities.html_video_element_copy);
     assert!(capabilities.browser_gpu_device_import_external_texture_available);

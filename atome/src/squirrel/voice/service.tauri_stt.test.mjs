@@ -97,7 +97,7 @@ const correctedEnv = {
                 emit('stateChange', { state: 'listening', config });
                 setTimeout(() => {
                     emit('result', {
-                        transcript: 'ouvre m track',
+                        transcript: 'ouvre atom',
                         isFinal: true,
                         confidence: 0.77
                     });
@@ -135,13 +135,13 @@ const correctedVoice = createVoiceService({
 const correctedStarted = await correctedVoice.stt.start({
     lang: 'fr',
     partial: true,
-    speechHints: ['Mtrack'],
+    speechHints: ['Atome'],
     silenceMs: 5
 });
 const correctedFinal = await correctedStarted.promise;
 assert.equal(tauriStartConfig?.language, 'fr-FR', 'native desktop STT should normalize short French locales to fr-FR');
 assert.equal(tauriStartConfig?.maxAlternatives, 5, 'native desktop STT should request more alternatives by default');
-assert.equal(correctedFinal.text, 'ouvre Mtrack', 'native desktop STT should normalize domain-specific product names in the final transcript');
+assert.equal(correctedFinal.text, 'ouvre Atome', 'native desktop STT should normalize domain-specific product names in the final transcript');
 
 const snapshot = runtime.getSession(started.session_id);
 assert.equal(snapshot.transcript.final, 'Releve mes mails', 'native Tauri STT should finalize the runtime transcript');

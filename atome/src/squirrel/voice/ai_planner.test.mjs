@@ -10,13 +10,13 @@ const env = {
                 choices: [{
                     message: {
                         content: JSON.stringify({
-                            reply: 'J ouvre Mtrack.',
+                            reply: 'J ouvre Home.',
                             domain: 'ui_navigation',
                             action: 'open_tool',
                             target: 'runtime_v2',
                             actions: [{
                                 target: 'runtime_v2',
-                                tool_id: 'tool.main.mtrack',
+                                tool_id: 'tool.main.home',
                                 action: 'pointer.click',
                                 input: {}
                             }]
@@ -50,9 +50,9 @@ const planner = createVoiceAiPlanner({
     fetchImpl: env.fetch
 });
 
-const planned = await planner.planUtterance('Ouvre Mtrack', {
+const planned = await planner.planUtterance('Ouvre Home', {
     locale: 'fr-FR',
-    runtime_tools: [{ tool_id: 'tool.main.mtrack', tool_key: 'main_mtrack' }],
+    runtime_tools: [{ tool_id: 'tool.main.home', tool_key: 'main_home' }],
     heuristic_intent: {
         domain: 'ui_navigation',
         action: 'open_tool'
@@ -60,8 +60,8 @@ const planned = await planner.planUtterance('Ouvre Mtrack', {
 });
 
 assert.equal(planned.execution.target, 'runtime_v2', 'voice ai planner should preserve runtime target planning');
-assert.equal(planned.execution.toolchain[0]?.tool_id, 'tool.main.mtrack', 'voice ai planner should return runtime tool ids from the provider plan');
-assert.equal(planned.assistant_reply, 'J ouvre Mtrack.', 'voice ai planner should preserve the provider spoken reply');
+assert.equal(planned.execution.toolchain[0]?.tool_id, 'tool.main.home', 'voice ai planner should return runtime tool ids from the provider plan');
+assert.equal(planned.assistant_reply, 'J ouvre Home.', 'voice ai planner should preserve the provider spoken reply');
 assert.equal(planned.domain, 'ui_navigation', 'voice ai planner should preserve the domain selected by the provider');
 assert.equal(planned.action, 'open_tool', 'voice ai planner should preserve the action selected by the provider');
 
@@ -400,7 +400,7 @@ const failingPlanner = createVoiceAiPlanner({
     }
 });
 
-const failed = await failingPlanner.planUtterance('Open Mtrack', {
+const failed = await failingPlanner.planUtterance('Open Home', {
     locale: 'en-US',
     heuristic_intent: {
         domain: 'ui_navigation',

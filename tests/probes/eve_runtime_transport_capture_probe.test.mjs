@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { installMockBrowserEnv } from '../../eve/application/tests/strangler_v2/_env.mjs';
+import { installMockBrowserEnv } from '../strangler_v2/_env.mjs';
 
 const outDir = path.resolve('temp/probe_reports');
 fs.mkdirSync(outDir, { recursive: true });
@@ -66,19 +66,17 @@ const run = async () => {
         ok: false,
         groups: {
             transport: [],
-            capture: [],
-            mtrack_timeline: []
+            capture: []
         },
         summary: {
             transport: null,
-            capture: null,
-            mtrack_timeline: null
+            capture: null
         },
         errors: []
     };
 
     try {
-        const { toolRuntimeV2 } = await import('../../eve/application/intuition/runtime/index.js');
+        const { toolRuntimeV2 } = await import('../../eVe/intuition/runtime/index.js');
         const invoke = async ({ tool_id, action, input = {} }) => {
             const result = await toolRuntimeV2.invokeById({
                 tool_id,
@@ -148,43 +146,10 @@ const run = async () => {
             { expected_operation: 'validation' }
         ));
 
-        report.groups.mtrack_timeline.push(toResult(
-            'mtrax_open',
-            await invoke({ tool_id: 'ui.mtrax.open', action: 'pointer.click', input: {} }),
-            { expected_active: true }
-        ));
-        report.groups.mtrack_timeline.push(toResult(
-            'timeline_scrub',
-            await invoke({ tool_id: 'ui.timeline_scrub', action: 'drag.end', input: { index: 7 } }),
-            { expected_index: 7 }
-        ));
-        report.groups.mtrack_timeline.push(toResult(
-            'split',
-            await invoke({ tool_id: 'ui.split', action: 'pointer.click', input: { clip_id: 'clip_probe_1' } }),
-            { expected_operation: 'split' }
-        ));
-        report.groups.mtrack_timeline.push(toResult(
-            'crop',
-            await invoke({ tool_id: 'ui.crop', action: 'pointer.click', input: { clip_id: 'clip_probe_1' } }),
-            { expected_operation: 'crop' }
-        ));
-        report.groups.mtrack_timeline.push(toResult(
-            'mute',
-            await invoke({ tool_id: 'ui.mute', action: 'pointer.click', input: { track_ids: [1] } }),
-            { expected_operation: 'mute' }
-        ));
-        report.groups.mtrack_timeline.push(toResult(
-            'solo',
-            await invoke({ tool_id: 'ui.solo', action: 'pointer.click', input: { track_ids: [1] } }),
-            { expected_operation: 'solo' }
-        ));
-
         report.summary.transport = summarize(report.groups.transport);
         report.summary.capture = summarize(report.groups.capture);
-        report.summary.mtrack_timeline = summarize(report.groups.mtrack_timeline);
         report.ok = report.summary.transport.failed === 0
-            && report.summary.capture.failed === 0
-            && report.summary.mtrack_timeline.failed === 0;
+            && report.summary.capture.failed === 0;
     } catch (error) {
         report.errors.push(String(error?.message || error));
     }

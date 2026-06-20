@@ -2,10 +2,36 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { test } from 'node:test';
 
-import {
+const storageStub = {
+    getItem: () => null,
+    setItem: () => {},
+    removeItem: () => {},
+    clear: () => {}
+};
+
+Object.defineProperty(globalThis, 'localStorage', {
+    configurable: true,
+    value: storageStub
+});
+Object.defineProperty(globalThis, 'sessionStorage', {
+    configurable: true,
+    value: storageStub
+});
+Object.defineProperty(globalThis, 'window', {
+    configurable: true,
+    value: {
+        localStorage: storageStub,
+        sessionStorage: storageStub,
+        addEventListener: () => {},
+        removeEventListener: () => {},
+        dispatchEvent: () => true
+    }
+});
+
+const {
     inferUploadAtomeType,
     looksLikeSvgUploadShape
-} from '../../eVe/domains/media/asset_box.js';
+} = await import('../../eVe/domains/media/asset_box.js');
 
 test('svg uploads stay editable shape atomes before media timeline conversion', () => {
     assert.equal(inferUploadAtomeType('icon.svg', ''), 'shape');
@@ -23,17 +49,9 @@ test('svg uploads stay editable shape atomes before media timeline conversion', 
     }), false);
 });
 
-test('project creation keeps imported svg shape specs out of mtrax groups', async () => {
+test('project creation has no imported media timeline conversion branch', async () => {
     const source = await readFile(new URL('../../eVe/intuition/runtime/tool_genesis.js', import.meta.url), 'utf8');
-    const start = source.indexOf('const shouldConvertImportedMediaToMtrax =');
-    assert.notEqual(start, -1, 'shouldConvertImportedMediaToMtrax must exist');
-    const end = source.indexOf('\nconst ', start + 1);
-    assert.notEqual(end, -1, 'shouldConvertImportedMediaToMtrax boundary must be explicit');
-    const body = source.slice(start, end);
-
-    assert.ok(body.includes('if (isSvgShapeSpec(spec)) return false;'), 'svg shape imports must remain editable shapes');
-    assert.ok(
-        body.indexOf('if (isSvgShapeSpec(spec)) return false;') < body.indexOf('return !!normalizeImportedMtraxClipKind(spec);'),
-        'svg shape guard must run before generic media timeline conversion'
-    );
+    assert.equal(source.includes('shouldConvertImportedMediaToMtrax'), false);
+    assert.equal(source.includes('normalizeImportedMtraxClipKind'), false);
+    assert.equal(source.includes('buildImportedMtraxTimeline'), false);
 });

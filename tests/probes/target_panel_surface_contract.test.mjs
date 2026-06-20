@@ -14,8 +14,7 @@ const TARGET_PANEL_KEYS = Object.freeze([
     'home',
     'finder',
     'communicate',
-    'calendar',
-    'mtrack'
+    'calendar'
 ]);
 
 const escapeRegExp = (value) => String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -45,15 +44,3 @@ assertSourceCreatesCanonicalDialog('home');
 assertSourceCreatesCanonicalDialog('finder');
 assertSourceCreatesCanonicalDialog('communicate');
 assertSourceCreatesCanonicalDialog('calendar');
-
-const mtrackDef = PANEL_SURFACE_DEFINITIONS.mtrack;
-const mtrackDialogRuntime = readFileSync('eVe/domains/mtrax/ui/panel_dialog_runtime.js', 'utf8');
-const mtrackEmbedRuntime = readFileSync('eVe/domains/mtrax/ui/panel_embed_bootstrap_runtime.js', 'utf8');
-const mtrackToolSource = readFileSync('eVe/intuition/tools/mtrack.js', 'utf8');
-
-assert.equal(mtrackDef.custom, true, 'mtrack must remain a custom complex panel in the registry');
-assert.equal(mtrackDialogRuntime.includes('createEveDialog({'), true, 'mtrack dialog runtime must create the panel through createEveDialog');
-assert.equal(mtrackDialogRuntime.includes('id: mtrackDialogId'), true, 'mtrack dialog runtime must bind the injected canonical surface id');
-assert.equal(mtrackEmbedRuntime.includes('createPanelDialogRuntime({'), true, 'mtrack embed runtime must own the panel dialog runtime');
-assert.equal(mtrackToolSource.includes('mtrackDialogId: MTRACK_DIALOG_ID'), true, 'mtrack tool must pass the canonical MTrack dialog id');
-assert.equal(mtrackDef.surface_id, 'eve_mtrack_dialog', 'mtrack registry surface id must match the canonical dialog id');

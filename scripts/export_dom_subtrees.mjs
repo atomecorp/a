@@ -33,8 +33,6 @@ const EXPORT_TARGETS = Object.freeze([
         multiple: false,
         selectors: Object.freeze([
             '[data-role*="timeline"]',
-            '.eve-mtrack-timeline',
-            '.mtrax-timeline'
         ])
     }),
     Object.freeze({

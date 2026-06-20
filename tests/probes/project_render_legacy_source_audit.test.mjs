@@ -1,0 +1,154 @@
+import assert from 'node:assert/strict';
+import { test } from 'node:test';
+import { createMediaSourceRuntime } from '../../eVe/intuition/runtime/media_source_runtime.js';
+import {
+    communicationSource,
+    deleteBlackHoleSource,
+    deleteSource,
+    groupVisualSource,
+    infosSource,
+    mediaHydrationSource,
+    mediaIntegritySource,
+    mediaMountSource,
+    mediaSourceSource,
+    projectBridgeSource,
+    shapeSvgSource,
+    sliceFunction,
+    timelineSource,
+    toolGenesisGroupSource,
+    toolGenesisHostSource,
+    toolGenesisMediaSource,
+    toolGenesisSource
+} from './project_render_legacy_audit_fixture.mjs';
+
+test('project restore path updates the scene runtime instead of rendering an HTMLElement host', () => {
+    const body = sliceFunction(deleteBlackHoleSource, 'restoreAtomeToProject');
+
+    assert.equal(body.includes('renderAtomeRecord('), false);
+    assert.equal(body.includes('createAtomeElement('), false);
+    assert.ok(body.includes('updateProjectSceneRecord({'));
+    assert.ok(deleteBlackHoleSource.includes("from '../../../domains/rendering/project_scene_runtime.js'"));
+    assert.ok(deleteSource.includes('deleteBlackHoleRuntime.restoreAtomeToProject'));
+});
+
+test('project info assignment updates the scene runtime instead of requiring an HTMLElement render return', () => {
+    const body = sliceFunction(infosSource, 'ensureAtomeRendered');
+
+    assert.equal(body.includes('renderAtomeRecord('), false);
+    assert.equal(body.includes('createAtomeElement('), false);
+    assert.ok(body.includes('updateProjectSceneRecord({'));
+    assert.ok(infosSource.includes("from '../../domains/rendering/project_scene_runtime.js'"));
+});
+
+test('shared project atomes hydrate the project scene without dead legacy render branches', () => {
+    const body = sliceFunction(communicationSource, 'fetchAndRenderSharedAtomes');
+
+    assert.equal(body.includes('renderAtomeRecord('), false);
+    assert.equal(body.includes('createAtomeElement('), false);
+    assert.ok(body.includes('updateProjectSceneRecord({'));
+});
+
+test('timeline project replay exits through the scene runtime before legacy DOM helpers', () => {
+    const stateBody = sliceFunction(timelineSource, 'applyStateToDom');
+    const eventBody = sliceFunction(timelineSource, 'applyEvent');
+
+    assert.ok(stateBody.indexOf('updateTimelineProjectSceneRecord(atomeId, props, projectId)') < stateBody.indexOf('ensureAtomeElement(atomeId, props, projectId)'));
+    assert.ok(eventBody.indexOf('updateTimelineProjectSceneRecord(atomeId, cleaned, projectId)') < eventBody.indexOf('ensureAtomeElement(atomeId, cleaned, projectId)'));
+});
+
+test('tool genesis delegates project scene routing to a cohesive bridge owner', () => {
+    const createBody = sliceFunction(toolGenesisHostSource, 'createAtomeElement');
+
+    assert.ok(toolGenesisSource.includes("from './project_scene_render_bridge.js'"));
+    assert.ok(toolGenesisSource.includes("from './atome_description_frame_runtime.js'"));
+    assert.ok(toolGenesisSource.includes("from './tool_genesis_host_runtime.js'"));
+    assert.ok(projectBridgeSource.includes('updateProjectSceneRecord({'));
+    assert.ok(projectBridgeSource.includes('projectIdFromProjectLayer'));
+    assert.ok(projectBridgeSource.includes('isProjectSceneParent'));
+    assert.equal(projectBridgeSource.includes('createAtomeElement('), false);
+    assert.equal(projectBridgeSource.includes('bindAtomeHost('), false);
+    assert.equal(createBody.includes('project_view_'), false);
+    assert.equal(createBody.includes('eve-matrix-tile'), false);
+});
+
+test('tool genesis delegates media integrity ownership outside the legacy runtime', () => {
+    assert.ok(toolGenesisSource.includes("from './media_integrity_runtime.js'"));
+    assert.ok(mediaIntegritySource.includes('createMediaHostIntegrityRuntime'));
+    assert.ok(mediaIntegritySource.includes('logMediaIntegrityEvent'));
+    assert.ok(mediaIntegritySource.includes('rememberMediaIntegrityKindHint'));
+    assert.equal(toolGenesisSource.includes('const mediaIntegrityHistory ='), false);
+    assert.equal(toolGenesisSource.includes('const mediaIntegrityKindHintsByAtomeId ='), false);
+    assert.equal(toolGenesisSource.includes("Symbol.for('eve.bind.mediaIntegrityObserver')"), false);
+});
+
+test('tool genesis delegates shape svg ownership outside the legacy runtime', () => {
+    assert.ok(toolGenesisSource.includes("from './shape_svg_runtime.js'"));
+    assert.ok(shapeSvgSource.includes('createShapeSvgRuntime'));
+    assert.ok(shapeSvgSource.includes('isSvgShapeSpec'));
+    assert.ok(shapeSvgSource.includes('createInlineSvgElement'));
+    assert.equal(toolGenesisSource.includes('const SVG_DATA_PREFIX ='), false);
+    assert.equal(toolGenesisSource.includes('const decodeSvgDataUrl ='), false);
+    assert.equal(toolGenesisSource.includes('const fetchSvgMarkup ='), false);
+});
+
+test('tool genesis delegates legacy group visual ownership outside the legacy runtime', () => {
+    assert.ok(toolGenesisSource.includes("from './tool_genesis_group_runtime.js'"));
+    assert.ok(toolGenesisGroupSource.includes("from './group_visual_runtime.js'"));
+    assert.ok(groupVisualSource.includes('createGroupVisualRuntime'));
+    assert.ok(groupVisualSource.includes('renderGroupHostPreview'));
+    assert.ok(groupVisualSource.includes('applyGroupMembership'));
+    assert.ok(groupVisualSource.includes('refreshGroupVisual'));
+    assert.equal(toolGenesisSource.includes('const mediaGroupState ='), false);
+    assert.equal(toolGenesisSource.includes('const renderGroupHostPreview ='), false);
+    assert.equal(toolGenesisSource.includes('const createGroupPersistedPreviewNode ='), false);
+    assert.equal(toolGenesisSource.includes('const createGroupMemberPreviewNode ='), false);
+});
+
+test('tool genesis delegates media source resolution outside the legacy runtime', () => {
+    assert.ok(toolGenesisSource.includes("from './tool_genesis_media_runtime.js'"));
+    assert.ok(toolGenesisMediaSource.includes("from './media_source_runtime.js'"));
+    assert.ok(mediaSourceSource.includes('createMediaSourceRuntime'));
+    assert.ok(mediaSourceSource.includes('resolveMediaUrlFromProperties'));
+    assert.ok(mediaSourceSource.includes('normalizePersistedTimelineMediaSourcesForOwner'));
+    assert.equal(toolGenesisSource.includes('const BUNDLED_MEDIA_ASSET_BY_NAME ='), false);
+    assert.equal(toolGenesisSource.includes('const resolveBundledMediaAsset ='), false);
+    assert.equal(toolGenesisSource.includes('const normalizePersistedMediaUrlForOwner ='), false);
+    assert.equal(
+        toolGenesisSource.includes('/api/recordings/') || toolGenesisSource.includes('audio|video)_'),
+        false
+    );
+});
+
+test('media source runtime normalizes bundled upload recording protected and local media cases', () => {
+    const runtime = createMediaSourceRuntime({
+        isTauriRuntime: () => false,
+        getLocalHttpPort: () => 8794
+    });
+
+    assert.equal(runtime.resolveMediaUrlFromProperties({ media_url: 'superman.mp4' }), '/assets/videos/superman.mp4');
+    assert.equal(runtime.resolveMediaUrlFromProperties({ file_name: 'audio_recording_demo.wav' }), '/api/recordings/audio_recording_demo.wav');
+    assert.equal(runtime.resolveMediaUrlFromProperties({ file_name: 'photo.png', owner_id: 'owner_a' }), '/api/uploads/photo.png?media_user_id=owner_a');
+    assert.equal(runtime.isProtectedMediaUrl('/api/uploads/photo.png'), true);
+    assert.equal(runtime.shouldHydrateProtectedMedia({ recordingId: 'audio_recording_demo.wav' }), true);
+    assert.equal(runtime.shouldAttemptIdentifierHydration({ src: 'clip.mp4' }), true);
+
+    const tauriRuntime = createMediaSourceRuntime({
+        isTauriRuntime: () => true,
+        getLocalHttpPort: () => 8794
+    });
+    assert.equal(tauriRuntime.resolveMediaSrc('/file/local.wav'), 'http://127.0.0.1:8794/file/local.wav');
+    assert.equal(tauriRuntime.resolveProtectedMediaFetchCredentials('http://127.0.0.1:8794/api/uploads/photo.png'), 'omit');
+});
+
+test('tool genesis delegates protected media hydration outside the legacy runtime', () => {
+    assert.ok(toolGenesisMediaSource.includes("from './media_hydration_runtime.js'"));
+    assert.ok(mediaHydrationSource.includes('createMediaHydrationRuntime'));
+    assert.ok(mediaHydrationSource.includes('hydrateProtectedMedia'));
+    assert.ok(mediaHydrationSource.includes('attachHydratedMediaBlob'));
+    assert.ok(mediaHydrationSource.includes('scheduleMediaBlobRevoke'));
+    assert.equal(toolGenesisSource.includes('const MEDIA_BLOB_REVOKE_DELAY_MS ='), false);
+    assert.equal(toolGenesisSource.includes('const scheduleMediaBlobRevoke ='), false);
+    assert.equal(toolGenesisSource.includes('const attachHydratedMediaBlob ='), false);
+    assert.equal(toolGenesisSource.includes('const logMediaRenderDiag ='), false);
+    assert.equal(toolGenesisSource.includes('const hydrateProtectedMedia = async'), false);
+});

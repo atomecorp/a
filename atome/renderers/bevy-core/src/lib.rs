@@ -1,4 +1,5 @@
 pub mod background;
+pub mod components;
 pub mod plugin;
 pub mod render_math;
 pub mod render_ops;
@@ -20,3 +21,5 @@ pub use video_diagnostics::*;
 
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod video_external_texture_tests;

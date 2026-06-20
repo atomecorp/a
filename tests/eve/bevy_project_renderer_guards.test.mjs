@@ -61,8 +61,14 @@ test('Bevy project renderer guards lock canvas ownership, drag, and video playba
     assert.match(externalCompositor, /external_renderer_project_host_forbidden/);
     assert.match(externalCompositor, /eve_surface_project/);
 
-    const mtraxRendererRuntime = readSource('eVe/intuition/tools/core/mtrax_renderer_runtime.js');
-    assert.match(mtraxRendererRuntime, /assertExternalRendererHostAllowed/);
+    // The legacy web-component MTrax renderer (tools/core/mtrax_renderer_*) was
+    // deleted; the montage editor preview will be rewritten on the single Bevy
+    // canvas. Guard against reintroduction.
+    const coreToolFiles = readdirSync(join(repoRoot, 'eVe/intuition/tools/core'));
+    assert.ok(
+        !coreToolFiles.some((name) => /^mtrax_renderer_/.test(name)),
+        'legacy mtrax_renderer_* files must stay deleted (rewrite the editor on Bevy instead)'
+    );
 
     const selectedPlayback = readSource('eVe/domains/media/selected_project_media_playback_runtime.js');
     assert.doesNotMatch(selectedPlayback, /setBevyVideoDecodePlayback/);
@@ -82,15 +88,15 @@ test('Bevy project renderer guards lock canvas ownership, drag, and video playba
     assert.doesNotMatch(syncBody, /video\.play\s*\(/);
     assert.doesNotMatch(syncBody, /setSourcePlayback\s*\(/);
 
-    const timelineRuntime = readSource('eVe/domains/mtrax/project/project_playback_timeline_runtime.js');
-    assert.match(timelineRuntime, /setVideoDecodePlayback/);
-    assert.match(timelineRuntime, /syncVideoDecodePlayback/);
-
+    // The MTrax domain (and its timeline playback driver) was deleted. The project
+    // transport now drives Bevy video decode directly from eVeIntuition so video
+    // does not freeze while Kira audio plays; guard that no other stray caller
+    // reappears outside the decode runtime that defines it.
     const setBevyCallers = jsFilesUnder('eVe')
         .filter((file) => /setBevyVideoDecodePlayback/.test(readFileSync(file, 'utf8')))
         .map((file) => file.slice(repoRoot.length + 1).replaceAll('\\', '/'))
         .filter((file) => file !== 'eVe/domains/rendering/bevy_video_decode_source_runtime.js');
-    assert.deepEqual(setBevyCallers, ['eVe/domains/mtrax/project/project_playback_automation_bundle_runtime.js']);
+    assert.deepEqual(setBevyCallers, ['eVe/intuition/eVeIntuition.js']);
 
     const webRenderer = readSource('eVe/domains/rendering/bevy_web_renderer_runtime.js');
     const mediaResourceRuntime = readSource('eVe/domains/rendering/bevy_media_resource_runtime.js');
@@ -175,11 +181,11 @@ test('Bevy project renderer guards lock canvas ownership, drag, and video playba
     assert.match(webRendererExports, /reset_atome_bevy_video_copy_diagnostics/);
     assert.match(videoDiagnostics, /skip_frame_already_copied/);
     assert.match(videoDiagnostics, /record_video_copy_success/);
-    assert.match(webRendererLib, /schema:\s*"atome\.bevy\.web\.video_backend\.v6"/);
+    assert.match(webRendererLib, /schema:\s*"atome\.bevy\.web\.video_backend\.v7"/);
     assert.match(webRendererLib, /target_live_video_backend:\s*"gpu_external_texture_texture_external"/);
     assert.match(webRendererLib, /live_video_backend:\s*"gpu_external_texture_texture_external"/);
     assert.match(webRendererLib, /current_backend_final:\s*true/);
-    assert.match(webRendererLib, /video_track_api_exposed:\s*true/);
+    assert.doesNotMatch(webRendererLib, /video_track_api_exposed/);
     assert.match(webRendererLib, /backend_blocker:\s*"none"/);
     assert.match(webRendererLib, /browser_gpu_device_import_external_texture_available:\s*true/);
     assert.match(webRendererLib, /wgpu_web_external_texture_create:\s*true/);
@@ -200,21 +206,18 @@ test('Bevy project renderer guards lock canvas ownership, drag, and video playba
     assert.match(generatedBevyWasmTypes, /read_atome_bevy_video_backend_capabilities/);
     assert.match(generatedBevyWasmTypes, /read_atome_bevy_video_copy_diagnostics/);
     assert.match(generatedBevyWasmTypes, /reset_atome_bevy_video_copy_diagnostics/);
-    assert.match(bevyTypes, /pub struct AtomeVideoTrack/);
-    assert.match(bevyTypes, /pub fn validate\(&self\) -> Result<\(\), String>/);
+    // The dead `video_track` Rust API was removed during the renderer
+    // unification; guard against its reintroduction (and against DOM-video /
+    // frame-version coupling leaking into the shared types).
+    assert.doesNotMatch(bevyTypes, /pub struct AtomeVideoTrack/);
     assert.doesNotMatch(bevyTypes, /HtmlVideoElement|frame_version|FrameVersion/);
-    assert.match(webRendererExports, /apply_atome_bevy_video_track/);
-    assert.match(webRendererExports, /AtomeRenderOp::VideoTrackApply/);
-    assert.match(webRendererExports, /remove_atome_bevy_video_track/);
-    assert.match(webRendererExports, /AtomeRenderOp::VideoTrackRemove/);
-    assert.match(webRendererExports, /update_atome_bevy_video_transform/);
-    assert.match(webRendererExports, /AtomeRenderOp::VideoTrackTransform/);
-    assert.match(generatedBevyWasm, /export function apply_atome_bevy_video_track/);
-    assert.match(generatedBevyWasm, /export function remove_atome_bevy_video_track/);
-    assert.match(generatedBevyWasm, /export function update_atome_bevy_video_transform/);
-    assert.match(generatedBevyTypes, /apply_atome_bevy_video_track\(track: any\): void/);
-    assert.match(generatedBevyTypes, /remove_atome_bevy_video_track\(id: string\): void/);
-    assert.match(generatedBevyTypes, /update_atome_bevy_video_transform\(id: string, transform: any\): void/);
+    assert.doesNotMatch(webRendererExports, /apply_atome_bevy_video_track/);
+    assert.doesNotMatch(webRendererExports, /AtomeRenderOp::VideoTrackApply/);
+    assert.doesNotMatch(webRendererExports, /remove_atome_bevy_video_track/);
+    assert.doesNotMatch(webRendererExports, /update_atome_bevy_video_transform/);
+    assert.doesNotMatch(webRendererExports, /AtomeRenderOp::VideoTrack(Remove|Transform)/);
+    assert.doesNotMatch(generatedBevyWasm, /export function (?:apply|remove)_atome_bevy_video_track/);
+    assert.doesNotMatch(generatedBevyWasm, /export function update_atome_bevy_video_transform/);
 });
 
 test('external renderers are forbidden from targeting the Bevy project canvas or host', () => {
@@ -471,6 +474,9 @@ test('Bevy external-video shader linearizes the sampled frame before the sRGB ta
     // sRGB OETF on store, so the sample MUST be decoded to linear first. A raw
     // `frame.rgb` passthrough double-encodes it (lifted blacks, washed-out contrast).
     assert.match(shader, /fn\s+srgb_to_linear/);
-    assert.match(shader, /return\s+vec4<f32>\(\s*srgb_to_linear\(frame\.rgb\)\s*,\s*opacity\s*\)/);
+    // M1/M2 route the sample through color filters + transitions, but the final
+    // store MUST still linearize (now `srgb_to_linear(filtered)`), never a raw
+    // `frame.rgb` passthrough that would double-encode to the sRGB target.
+    assert.match(shader, /return\s+vec4<f32>\(\s*srgb_to_linear\(filtered\)\s*,\s*opacity\s*\)/);
     assert.doesNotMatch(shader, /return\s+vec4<f32>\(\s*frame\.rgb\s*,\s*opacity\s*\)/);
 });

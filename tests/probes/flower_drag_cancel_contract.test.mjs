@@ -116,7 +116,7 @@ const runtime = createDragRuntime({
         throw new Error('cancelled flower drag must not replace selection on release');
     },
     isAtomeSelected: (id) => currentSelectionIds.includes(String(id || '')),
-    isMtrackOrFooterInteractionTargetWithinHost: () => false,
+    isFooterInteractionTargetWithinHost: () => false,
     isInteractiveTargetWithinHost: () => false,
     resolveResizeDirection: () => '',
     isPrimaryPointerActivation: () => true,

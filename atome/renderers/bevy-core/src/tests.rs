@@ -25,6 +25,7 @@ fn shape_node(id: &str) -> AtomeRenderNode {
         playback_progress: None,
         selected: None,
         filters: None,
+        transition: None,
     }
 }
 
@@ -54,6 +55,7 @@ fn text_node_with_texture(id: &str) -> AtomeRenderNode {
         playback_progress: None,
         selected: None,
         filters: None,
+        transition: None,
     }
 }
 
@@ -267,6 +269,7 @@ fn selected_nodes_create_overlay_from_configured_visual_style() {
             opacity: None,
             playback_progress: None,
             filters: None,
+            transition: None,
         },
     )
     .unwrap();
@@ -328,6 +331,7 @@ fn audio_waveform_progress_spawns_and_moves_bevy_playhead_overlay() {
             playback_progress: Some(0.25),
             selected: None,
             filters: None,
+            transition: None,
         },
     )
     .unwrap();
@@ -351,6 +355,7 @@ fn audio_waveform_progress_spawns_and_moves_bevy_playhead_overlay() {
             opacity: None,
             playback_progress: Some(Some(0.75)),
             filters: None,
+            transition: None,
         },
     )
     .unwrap();
@@ -374,6 +379,7 @@ fn audio_waveform_progress_spawns_and_moves_bevy_playhead_overlay() {
             opacity: None,
             playback_progress: Some(None),
             filters: None,
+            transition: None,
         },
     )
     .unwrap();

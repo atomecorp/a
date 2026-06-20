@@ -34,7 +34,7 @@ use wasm_bindgen::{JsCast, JsValue};
 
 use crate::{
     render_math::depth_for_layer,
-    types::AtomeColorFilters,
+    types::{AtomeColorFilters, AtomeTransition},
     video_external_texture::AtomeVideoExternalTexture,
 };
 
@@ -77,9 +77,14 @@ type DrawVideoExternalTexture2d = (
 );
 
 // VideoParams uniform — matches the struct in video_external.wgsl:
-// base = (opacity, brightness, contrast, saturate); filters = (grayscale, sepia, invert, hue).
-fn video_params_bytes(opacity: f32, filters: &AtomeColorFilters) -> [u8; 32] {
-    let values: [f32; 8] = [
+// base = (opacity, brightness, contrast, saturate); filters = (grayscale, sepia,
+// invert, hue); transition = (kind, progress, role, softness).
+fn video_params_bytes(
+    opacity: f32,
+    filters: &AtomeColorFilters,
+    transition: &AtomeTransition,
+) -> [u8; 48] {
+    let values: [f32; 12] = [
         opacity.clamp(0.0, 1.0),
         filters.brightness,
         filters.contrast,
@@ -88,8 +93,12 @@ fn video_params_bytes(opacity: f32, filters: &AtomeColorFilters) -> [u8; 32] {
         filters.sepia,
         filters.invert,
         filters.hue,
+        transition.kind,
+        transition.progress,
+        transition.role,
+        transition.softness,
     ];
-    let mut bytes = [0u8; 32];
+    let mut bytes = [0u8; 48];
     for (index, value) in values.iter().enumerate() {
         bytes[index * 4..index * 4 + 4].copy_from_slice(&value.to_ne_bytes());
     }
@@ -274,7 +283,7 @@ fn prepare_video_external_texture_bind_groups(
             },
             &[],
         );
-        let params_uniform = video_params_bytes(video.opacity, &video.filters);
+        let params_uniform = video_params_bytes(video.opacity, &video.filters, &video.transition);
         let opacity_buffer = render_device.create_buffer_with_data(&BufferInitDescriptor {
             label: Some("atome_video_external_texture_params"),
             contents: &params_uniform,

@@ -96,7 +96,7 @@ let tick = 0;
 let seq = 0;
 const synth = new FakeSpeechSynthesis();
 const runtimeTools = [
-    { tool_id: 'tool.main.mtrack', tool_key: 'main_mtrack' },
+    { tool_id: 'tool.main.home', tool_key: 'main_home' },
     { tool_id: 'calendar.list_events', tool_key: 'calendar_list_events' }
 ];
 const env = {
@@ -168,7 +168,7 @@ const voice = createVoiceService({
                     }
                 };
             }
-            if (/^ouvre mtrack$/i.test(raw)) {
+            if (/^ouvre home$/i.test(raw)) {
                 return {
                     intent_id: options.intent_id || 'voice_service_runtime_llm',
                     utterance: { raw },
@@ -184,7 +184,7 @@ const voice = createVoiceService({
                         confirmation_required: false,
                         toolchain: [{
                             source: 'runtime_v2',
-                            tool_id: 'tool.main.mtrack',
+                            tool_id: 'tool.main.home',
                             action: 'pointer.click',
                             input: {}
                         }]
@@ -289,16 +289,16 @@ assert.equal(telemetry.metrics.stt_final_ms > 0, true, 'voice telemetry should m
 const rerankStarted = await voice.stt.start({
     lang: 'fr',
     partial: true,
-    speechHints: ['Mtrack']
+    speechHints: ['Atome']
 });
 FakeSpeechRecognition.latest.emitResult([
     makeAlternativesResult([
-        { transcript: 'ouvre mes tracks', confidence: 0.93 },
-        { transcript: 'ouvre m track', confidence: 0.61 }
+        { transcript: 'ouvre mes tomes', confidence: 0.93 },
+        { transcript: 'ouvre atom', confidence: 0.61 }
     ], { isFinal: true })
 ]);
 const rerankedFinal = await voice.stt.stop(rerankStarted.session_id);
-assert.equal(rerankedFinal.text, 'ouvre Mtrack', 'browser STT should rerank alternatives using speech hints and normalize product names');
+assert.equal(rerankedFinal.text, 'ouvre Atome', 'browser STT should rerank alternatives using speech hints and normalize product names');
 
 const speaking = await voice.tts.speak('Je lis le prochain mail.', {
     session_id: started.session_id,
@@ -373,12 +373,12 @@ const replyExecution = await replyExecutionPromise;
 assert.equal(replyExecution.transport, 'mail_api', 'voice service should execute contextual followups through the orchestrator facade');
 
 const runtimeSession = runtime.createSession({ locale: 'fr-FR' });
-const runtimeExecutionPromise = voice.executeUtterance('Ouvre Mtrack', {
+const runtimeExecutionPromise = voice.executeUtterance('Ouvre Home', {
     session_id: runtimeSession.session_id
 });
 await flushSpeech();
 const runtimeExecution = await runtimeExecutionPromise;
 assert.equal(runtimeExecution.executed, true, 'voice service should execute runtime utterances through MCP/runtime when available');
-assert.equal(runtimeExecution.result.tool_id, 'tool.main.mtrack', 'voice service should preserve the runtime tool id in execution results');
+assert.equal(runtimeExecution.result.tool_id, 'tool.main.home', 'voice service should preserve the runtime tool id in execution results');
 
 console.log('voice_service: ok');

@@ -117,17 +117,6 @@ if (RUN_BROWSER) {
       }
     },
     {
-      id: 'browser_video_record_mtrack',
-      label: 'Browser video recording, audio track integrity, MTraX import',
-      file: 'tests/probes/video_recording_audio_integrity_probe.test.mjs',
-      report: 'temp/probe_reports/video_recording_audio_integrity_probe/report.json',
-      env: {
-        ADOLE_TEST_URL: BROWSER_URL,
-        ADOLE_TEST_PHONE: phoneFor('02'),
-        ADOLE_TEST_PASSWORD: phoneFor('02')
-      }
-    },
-    {
       id: 'browser_session_project_persistence',
       label: 'Browser session refresh and atome persistence',
       file: 'tests/probes/atome_persistence_probe.test.mjs',
@@ -158,19 +147,6 @@ if (RUN_BROWSER) {
 
 if (RUN_TAURI) {
   steps.push(
-    {
-      id: 'tauri_video_record_mtrack',
-      label: 'Tauri account creation, recorded video streaming, MTraX preview/playback diagnostics',
-      file: 'tests/probes/tauri_video_playback_stable_probe.test.mjs',
-      report: 'temp/probe_reports/tauri_video_playback_stable_probe/report.json',
-      env: {
-        ADOLE_TEST_URL: TAURI_URL,
-        ADOLE_TEST_PHONE: phoneFor('04'),
-        ADOLE_TEST_PASSWORD: phoneFor('04'),
-        HEADLESS: process.env.ADOLE_TEST8_TAURI_HEADLESS || '0',
-        PROBE_TAURI_RUNTIME: '1'
-      }
-    },
     {
       id: 'tauri_fixture_import_playback',
       label: 'Tauri fixture media import, display, video playback, and audio decode',
@@ -214,7 +190,6 @@ const report = {
     'account_creation',
     'audio_recording_and_playback',
     'video_recording_and_playback',
-    'mtrack_preview_frame_motion',
     'session_refresh_persistence',
     'project_atom_persistence',
     'fixture_media_import_display_playback',

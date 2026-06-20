@@ -9,11 +9,6 @@ const DEFAULT_TARGETS = [
     'eVe/core/event_store',
     'eVe/core/media_store'
 ];
-const MTRACK_STYLE_CONTRACT_FILES = [
-    'eVe/domains/mtrax/ui/styles.js',
-    'eVe/domains/mtrax/ui/preview_styles.js'
-];
-
 const SOURCE_EXTENSIONS = new Set(['.js', '.mjs', '.ts', '.mts']);
 const FORBIDDEN_TRANSPORT_PATH = `${'fall'}${'back'}`;
 const FORBIDDEN_OLD_SURFACE = `${'leg'}${'acy'}`;
@@ -82,23 +77,6 @@ const FORBIDDEN_PATTERNS = [
     }
 ];
 
-const MTRACK_FORBIDDEN_STYLE_PATTERNS = [
-    {
-        code: 'mtrack_docked_host_direct_media_style_forbidden',
-        message: 'Molecule docked host styles must not target direct media children; use the dedicated preview surface.',
-        regex: /\.eve-mtrack-docked-host\s*>\s*(?:img|video|svg|canvas|\[data-role=["']atome-shape-svg["']\])/g
-    }
-];
-
-const MTRACK_REQUIRED_STYLE_CONTRACTS = [
-    {
-        code: 'mtrack_preview_surface_required',
-        message: 'Molecule preview media must be isolated behind the dedicated preview surface class.',
-        file: 'eVe/domains/mtrax/ui/preview_styles.js',
-        needle: '.eve-mtrack-preview-surface'
-    }
-];
-
 const normalizeProjectPath = (rootDir, filePath) => path.relative(rootDir, filePath).replace(/\\/g, '/');
 
 const walk = (fullPath, files = []) => {
@@ -125,12 +103,6 @@ const collectFiles = (rootDir, targets) => {
     return Array.from(new Set(files));
 };
 
-const collectExistingContractFiles = (rootDir, relativeFiles) => (
-    relativeFiles
-        .map((file) => path.resolve(rootDir, file))
-        .filter((filePath) => fs.existsSync(filePath) && fs.statSync(filePath).isFile())
-);
-
 const collectViolationsForFile = (rootDir, filePath) => {
     const source = fs.readFileSync(filePath, 'utf8');
     const file = normalizeProjectPath(rootDir, filePath);
@@ -148,54 +120,15 @@ const collectViolationsForFile = (rootDir, filePath) => {
     return violations;
 };
 
-const collectMtrackStyleViolations = (rootDir) => {
-    const violations = [];
-    const files = collectExistingContractFiles(rootDir, MTRACK_STYLE_CONTRACT_FILES);
-    for (const filePath of files) {
-        const source = fs.readFileSync(filePath, 'utf8');
-        const file = normalizeProjectPath(rootDir, filePath);
-        for (const pattern of MTRACK_FORBIDDEN_STYLE_PATTERNS) {
-            for (const match of source.matchAll(pattern.regex)) {
-                violations.push({
-                    code: pattern.code,
-                    file,
-                    message: pattern.message,
-                    excerpt: String(match[0] || '').trim().replace(/\s+/g, ' ').slice(0, 220)
-                });
-            }
-        }
-    }
-    for (const contract of MTRACK_REQUIRED_STYLE_CONTRACTS) {
-        const filePath = path.resolve(rootDir, contract.file);
-        const source = fs.existsSync(filePath) ? fs.readFileSync(filePath, 'utf8') : '';
-        if (!source.includes(contract.needle)) {
-            violations.push({
-                code: contract.code,
-                file: contract.file,
-                message: contract.message,
-                excerpt: contract.needle
-            });
-        }
-    }
-    return violations;
-};
-
 export const checkMoleculeGuardrails = ({
     rootDir = DEFAULT_ROOT,
     targets = DEFAULT_TARGETS
 } = {}) => {
     const files = collectFiles(rootDir, targets);
-    const violations = [
-        ...files.flatMap((filePath) => collectViolationsForFile(rootDir, filePath)),
-        ...collectMtrackStyleViolations(rootDir)
-    ];
+    const violations = files.flatMap((filePath) => collectViolationsForFile(rootDir, filePath));
     return {
         ok: violations.length === 0,
-        scanned_files: [
-            ...files.map((filePath) => normalizeProjectPath(rootDir, filePath)),
-            ...collectExistingContractFiles(rootDir, MTRACK_STYLE_CONTRACT_FILES)
-                .map((filePath) => normalizeProjectPath(rootDir, filePath))
-        ],
+        scanned_files: files.map((filePath) => normalizeProjectPath(rootDir, filePath)),
         violations
     };
 };

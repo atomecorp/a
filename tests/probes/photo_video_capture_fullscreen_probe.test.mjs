@@ -121,184 +121,64 @@ const readCapturedResultMedia = async (page, captureResult) => safeEval(page, as
     };
 }, captureResult, 30000);
 
-const inspectDesktopMediaAtome = async (page, atomeId, kind) => safeEval(page, async ({ atomeId, kind }) => {
-    const host = document.querySelector(`[data-atome-id="${CSS.escape(atomeId)}"]`);
-    if (!(host instanceof HTMLElement)) return { ok: false, error: 'host_missing', atomeId };
-    const media = host.querySelector(kind === 'video' ? 'video, canvas[data-role="eve-media-api-webgpu-canvas"]' : 'img');
-    if (!(media instanceof HTMLElement)) return { ok: false, error: 'media_missing', atomeId, html: host.innerHTML };
-    const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-    const deadline = Date.now() + 18000;
-    while (Date.now() < deadline) {
-        if (kind === 'video' && media instanceof HTMLCanvasElement) {
-            const assetState = window.Molecule?.media?.getAssetState?.(atomeId) || null;
-            if (assetState?.has_target_canvas === true && media.width > 0 && media.height > 0) break;
-        } else if (kind === 'video') {
-            if (media.readyState >= HTMLMediaElement.HAVE_METADATA && media.videoWidth > 0 && media.videoHeight > 0) break;
-        } else if (media instanceof HTMLImageElement) {
-            if (media.complete && media.naturalWidth > 0 && media.naturalHeight > 0) break;
-        }
-        await wait(250);
-    }
-    let frameProbe = null;
-    if (kind === 'video' && media instanceof HTMLCanvasElement) {
-        try {
-            const width = Math.max(1, Math.min(64, media.width || media.clientWidth || 1));
-            const height = Math.max(1, Math.min(64, media.height || media.clientHeight || 1));
-            const sample = document.createElement('canvas');
-            sample.width = width;
-            sample.height = height;
-            const ctx = sample.getContext('2d');
-            ctx.drawImage(media, 0, 0, width, height);
-            const data = ctx.getImageData(0, 0, width, height).data;
-            let nonTransparent = 0;
-            let nonBlack = 0;
-            for (let i = 0; i < data.length; i += 4) {
-                const r = data[i];
-                const g = data[i + 1];
-                const b = data[i + 2];
-                const a = data[i + 3];
-                if (a > 8) nonTransparent += 1;
-                if (a > 8 && (r > 8 || g > 8 || b > 8)) nonBlack += 1;
-            }
-            frameProbe = { ok: nonTransparent > 0 && nonBlack > 0, nonTransparent, nonBlack, width, height };
-        } catch (error) {
-            frameProbe = { ok: false, error: error?.message || String(error || 'canvas_probe_failed') };
-        }
-    } else if (kind === 'video' && media instanceof HTMLVideoElement && media.videoWidth > 0 && media.videoHeight > 0) {
-        frameProbe = { ok: true, metadataOnly: true, width: media.videoWidth, height: media.videoHeight };
-    }
-    const rect = host.getBoundingClientRect();
-    const state = {
-        ok: false,
+const inspectProjectBevyProjection = async (page, projectId, atomeId, kind) => safeEval(page, async ({ projectId, atomeId, kind }) => {
+    const scene = window.eveToolBase?.getProjectSceneState?.(projectId) || null;
+    const records = Array.isArray(scene?.records) ? scene.records : [];
+    const atoms = Array.isArray(scene?.scene?.atoms) ? scene.scene.atoms : [];
+    const matchesId = (entry) => String(
+        entry?.id
+        || entry?.atome_id
+        || entry?.atomeId
+        || entry?.properties?.id
+        || ''
+    ) === String(atomeId || '');
+    const projectHost = document.getElementById(`project_view_${projectId}`)
+        || document.getElementById(String(projectId || ''))
+        || document.querySelector('main')
+        || document.body;
+    const canvas = projectHost.querySelector('canvas') || document.querySelector('canvas');
+    const legacyMediaNodes = Array.from(projectHost.querySelectorAll('.eve-atome,img,audio,svg,video'))
+        .filter((node) => !node.closest('#eve_bevy_video_decode_root'));
+    const record = records.find(matchesId) || atoms.find(matchesId) || null;
+    return {
+        ok: !!scene && !!record && canvas instanceof HTMLCanvasElement && legacyMediaNodes.length === 0,
         atomeId,
         kind,
-        host: {
-            exists: true,
-            width: rect.width,
-            height: rect.height,
-            data_media_src: host.getAttribute('data-media-src') || '',
-            data_eve_media_source: host.getAttribute('data-eve-media-source') || '',
-            media_api_ready: host.getAttribute('data-media-api-ready') || '',
-            media_api_error: host.getAttribute('data-media-api-error') || ''
+        projectId,
+        record_count: scene?.record_count ?? records.length,
+        rendered_layers: scene?.render?.rendered_layers ?? scene?.projection?.rendered_layers ?? null,
+        canvas: {
+            exists: canvas instanceof HTMLCanvasElement,
+            id: canvas?.id || '',
+            width: canvas?.width || 0,
+            height: canvas?.height || 0
         },
-        media: {
-            tag: media.tagName.toLowerCase(),
-            src: media.getAttribute('src') || '',
-            currentSrc: media.currentSrc || '',
-            complete: media.complete === true,
-            naturalWidth: media.naturalWidth || 0,
-            naturalHeight: media.naturalHeight || 0,
-            readyState: media.readyState ?? null,
-            networkState: media.networkState ?? null,
-            videoWidth: media.videoWidth || 0,
-            videoHeight: media.videoHeight || 0,
-            canvasWidth: media instanceof HTMLCanvasElement ? media.width : 0,
-            canvasHeight: media instanceof HTMLCanvasElement ? media.height : 0,
-            duration: Number.isFinite(media.duration) ? media.duration : null,
-            error: media.error ? { code: media.error.code, message: media.error.message || '' } : null
-        },
-        frameProbe,
-        molecule: kind === 'video' ? (window.Molecule?.media?.getAssetState?.(atomeId) || null) : null
+        legacy_media_count: legacyMediaNodes.length,
+        record: record ? {
+            id: record.id || record.atome_id || record.atomeId || '',
+            kind: record.kind || record.properties?.kind || ''
+        } : null
     };
-    state.ok = kind === 'video'
-        ? (
-            media instanceof HTMLCanvasElement
-                ? state.molecule?.has_target_canvas === true && state.molecule?.duration > 0 && frameProbe?.ok === true
-                : state.media.videoWidth > 0 && state.media.videoHeight > 0 && state.media.error == null && frameProbe?.ok === true
-        )
-        : state.media.naturalWidth > 0 && state.media.naturalHeight > 0;
-    return state;
-}, { atomeId, kind }, 30000);
+}, { projectId, atomeId, kind }, 30000);
 
-const waitForAtomeHost = async (page, atomeId) => waitFor(page, (atomeId) => ({
-    ok: !!document.querySelector(`[data-atome-id="${CSS.escape(atomeId)}"]`)
-}), 30000, 300, atomeId);
-
-const resolveVisibleMediaHostId = async (page, preferredId = '') => safeEval(page, async (preferredId) => {
-    const preferred = preferredId ? document.querySelector(`[data-atome-id="${CSS.escape(preferredId)}"]`) : null;
-    if (preferred) return { ok: true, atomeId: preferredId, route: 'preferred' };
-    const hosts = Array.from(document.querySelectorAll('[data-atome-id]')).filter((host) => {
-        const kind = String(host.dataset?.atomeKind || host.dataset?.atomeType || '').toLowerCase();
-        return kind.includes('video') || !!host.querySelector?.('video,canvas[data-role="eve-media-api-webgpu-canvas"]');
-    });
-    const last = hosts[hosts.length - 1] || null;
-    return {
-        ok: !!last,
-        atomeId: String(last?.dataset?.atomeId || ''),
-        route: 'fallback_visible_video',
-        count: hosts.length
-    };
-}, preferredId, 10000);
-
-const openMtrackByDoubleClick = async (page, atomeId) => {
-    const host = page.locator(`[data-atome-id="${atomeId}"]`).first();
-    try {
-        await host.dblclick({ timeout: 20000, force: true });
-    } catch (error) {
-        return { ok: false, error: error?.message || String(error || 'dblclick_failed'), atomeId };
-    }
-    const ready = await waitFor(page, (expectedAtomeId) => {
-        const panel = document.getElementById('eve_mtrack_dialog');
-        const visible = !!(panel && getComputedStyle(panel).display !== 'none' && getComputedStyle(panel).visibility !== 'hidden');
-        const apiState = window.eveMtrackApi?.getState?.() || null;
-        const activeGroupId = String(apiState?.activeGroupId || apiState?.groupId || '').trim();
-        const clipCount = Number.isFinite(Number(apiState?.clipCount))
-            ? Number(apiState.clipCount)
-            : (Array.isArray(apiState?.clips) ? apiState.clips.length : 0);
-        const loadedClipAtomeIds = Array.isArray(apiState?.loadedClipAtomeIds)
-            ? apiState.loadedClipAtomeIds.map((value) => String(value || '').trim()).filter(Boolean)
-            : [];
-        return { ok: visible && !!activeGroupId && clipCount > 0 && loadedClipAtomeIds.includes(expectedAtomeId) };
-    }, 30000, 300, atomeId);
-    return safeEval(page, async ({ ready, expectedAtomeId }) => {
-        const panel = document.getElementById('eve_mtrack_dialog');
-        const visible = !!(panel && getComputedStyle(panel).display !== 'none' && getComputedStyle(panel).visibility !== 'hidden');
-        const apiState = window.eveMtrackApi?.getState?.() || null;
-        const activeGroupId = String(apiState?.activeGroupId || apiState?.groupId || '').trim();
-        const clipCount = Number.isFinite(Number(apiState?.clipCount))
-            ? Number(apiState.clipCount)
-            : (Array.isArray(apiState?.clips) ? apiState.clips.length : 0);
-        const loadedClipAtomeIds = Array.isArray(apiState?.loadedClipAtomeIds)
-            ? apiState.loadedClipAtomeIds.map((value) => String(value || '').trim()).filter(Boolean)
-            : [];
-        return {
-            ok: ready?.ok === true && visible && !!activeGroupId && clipCount > 0 && loadedClipAtomeIds.includes(expectedAtomeId),
-            wait: ready,
-            panel_visible: visible,
-            active_group_id: activeGroupId,
-            track_count: Array.isArray(apiState?.tracks) ? apiState.tracks.length : null,
-            clip_count: clipCount,
-            loaded_clip_atome_ids: loadedClipAtomeIds,
-            state_keys: apiState ? Object.keys(apiState).slice(0, 80) : [],
-            trace_tail: Array.isArray(window.__EVE_MTRAX_TRACE__) ? window.__EVE_MTRAX_TRACE__.slice(-80) : []
-        };
-    }, { ready, expectedAtomeId: atomeId }, 30000);
-};
-
-const closeMtrack = async (page) => safeEval(page, async () => {
-    try {
-        const state = window.eveMtrackApi?.getState?.() || {};
-        const groupId = String(state.activeGroupId || '').trim();
-        const mod = await import('/eve/application/intuition/runtime/group_timeline_api.js');
-        if (groupId) {
-            const result = await mod.closeGroupTimeline(groupId);
-            return { ok: result?.ok !== false, result };
-        }
-    } catch (_) { }
-    try { window.close_mtrack_panel?.(); } catch (_) { }
-    return { ok: true, fallback: true };
-}, null, 15000);
-
-const closeMtrackAndWait = async (page) => {
-    const close = await closeMtrack(page);
-    const closed = await waitFor(page, () => {
-        const panel = document.getElementById('eve_mtrack_dialog');
-        const visible = !!(panel && getComputedStyle(panel).display !== 'none' && getComputedStyle(panel).visibility !== 'hidden');
-        const apiState = window.eveMtrackApi?.getState?.() || null;
-        const activeGroupId = String(apiState?.activeGroupId || '').trim();
-        return { ok: !visible && !activeGroupId };
+const revealCaptureSourceTool = async (page) => {
+    await page.waitForFunction(() => (
+        !!window.__DEBUG__
+        || !!window.new_menu_v2
+        || !!document.getElementById('intuition')
+    ), null, { timeout: 30000 });
+    await safeEval(page, () => {
+        window.new_menu_v2?.reveal?.();
+        return { ok: true };
+    }, null, 10000);
+    const captureButton = page.locator('button[data-tool-id="tool.main.capture"]').first();
+    await captureButton.click({ timeout: 15000 });
+    return waitFor(page, () => {
+        const button = document.querySelector('button[data-tool-id="tool.main.capture"]');
+        if (!(button instanceof HTMLElement)) return { ok: false, error: 'capture_source_missing' };
+        const rect = button.getBoundingClientRect();
+        return { ok: rect.width > 0 && rect.height > 0 };
     }, 15000, 250);
-    return { close, closed };
 };
 
 const run = async () => {
@@ -336,7 +216,7 @@ const run = async () => {
 
         mark('capture_photo_start');
         report.photo = await safeEval(page, async () => {
-            const mod = await import('/eve/application/domains/media/api/video_api.js');
+            const mod = await import('/eVe/domains/media/api/video_api.js');
             const result = await mod.capturePhoto({ fileName: `photo_probe_${Date.now()}.jpg`, previewWarmupMs: 120 });
             return {
                 ok: result?.ok === true,
@@ -348,14 +228,18 @@ const run = async () => {
         if (report.photo?.project_atome_id) {
             mark('photo_project_read_start');
             report.photo.project_state = await readProjectAtome(page, report.photo.project_atome_id);
-            await waitForAtomeHost(page, report.photo.project_atome_id);
-            report.photo.desktop = await inspectDesktopMediaAtome(page, report.photo.project_atome_id, 'image');
-            mark(`photo_desktop_done:${report.photo.desktop?.ok === true}`);
+            report.photo.project_projection = await inspectProjectBevyProjection(
+                page,
+                report.photo?.result?.project?.projectId || '',
+                report.photo.project_atome_id,
+                'image'
+            );
+            mark(`photo_projection_done:${report.photo.project_projection?.ok === true}`);
         }
 
         mark('capture_video_start');
         report.video = await safeEval(page, async () => {
-            const mod = await import('/eve/application/domains/media/api/video_api.js');
+            const mod = await import('/eVe/domains/media/api/video_api.js');
             const started = await mod.startVideoRecording({ fileName: `video_${Date.now()}`, audio: false });
             if (started?.ok !== true) return { ok: false, step: 'start', started };
             await new Promise((resolve) => setTimeout(resolve, 950));
@@ -368,8 +252,7 @@ const run = async () => {
                 started,
                 stopped,
                 project_atome_id: atomeId,
-                desktop_after_stop: {
-                    ok: !!(host && media),
+                legacy_desktop_after_stop: {
                     host_present: !!host,
                     media_tag: media?.tagName?.toLowerCase?.() || '',
                     media_src: media?.getAttribute?.('src') || media?.dataset?.eveMediaSource || host?.dataset?.eveMediaSource || ''
@@ -389,60 +272,47 @@ const run = async () => {
                     byte_length: null
                 }
             };
-            report.video.desktop = report.video.desktop_after_stop || { ok: false, error: 'desktop_after_stop_missing' };
-            mark(`video_desktop_done:${report.video.desktop?.ok === true}`);
-        }
-
-        if (report.video?.project_atome_id) {
-            report.video.mtrack = await openMtrackByDoubleClick(page, report.video.project_atome_id);
-            if (report.video.mtrack?.ok !== true) {
-                const fallbackHost = await resolveVisibleMediaHostId(page, report.video.project_atome_id);
-                report.video.fallback_host = fallbackHost;
-                if (fallbackHost?.ok && fallbackHost.atomeId) {
-                    report.video.mtrack = await openMtrackByDoubleClick(page, fallbackHost.atomeId);
-                }
-            }
-            report.video.mtrack_close = await closeMtrackAndWait(page);
-            mark(`video_mtrack_done:${report.video.mtrack?.ok === true}`);
-        }
-
-        if (report.photo?.project_atome_id) {
-            report.photo.mtrack = await openMtrackByDoubleClick(page, report.photo.project_atome_id);
-            report.photo.mtrack_close = await closeMtrackAndWait(page);
-            mark(`photo_mtrack_done:${report.photo.mtrack?.ok === true}`);
+            report.video.project_projection = await inspectProjectBevyProjection(
+                page,
+                report.video?.stopped?.project?.projectId || '',
+                report.video.project_atome_id,
+                'video'
+            );
+            mark(`video_projection_done:${report.video.project_projection?.ok === true}`);
         }
 
         mark('emergency_start');
+        const captureSource = await revealCaptureSourceTool(page);
+        if (!captureSource?.ok) throw new Error(`capture_source_unavailable:${captureSource?.last?.error || 'unknown'}`);
         report.emergency = await safeEval(page, async () => {
             const api = window.eveCaptureQuickPreviewApi;
-            const open = await api.openFullscreenPreview({ mode: 'record' });
-            return { ok: open?.ok !== false, state: api.getState() };
+            const sourceEl = document.querySelector('button[data-tool-id="tool.main.capture"]');
+            const open = await api.openFullscreenPreview({ mode: 'record', sourceEl });
+            return { ok: open?.ok !== false, open, state: api.getState() };
         }, null, 40000);
-        await page.locator('.eve-capture-fullscreen__record-button[data-kind="video"]').click({ timeout: 15000 });
+        await page.locator('.eve-capture-expanded-tool__record-button[data-kind="video"]').click({ timeout: 15000 });
         await sleep(500);
-        const handle = page.locator('[data-role="eve_intuitionx-handle"], [role="eve_intuitionx-handle"]').first();
+        const handle = page.locator('button[data-role="eve_intuitionx-handle"]').first();
         await handle.click({ timeout: 15000 });
         await sleep(900);
         const emergencyAfter = await safeEval(page, async () => {
-            const videoMod = await import('/eve/application/domains/media/api/video_api.js');
+            const videoMod = await import('/eVe/domains/media/api/video_api.js');
             return {
                 ok: window.eveCaptureQuickPreviewApi?.getState?.()?.open === false
                     && videoMod.getVideoRecordingState().isRecording === false,
                 capture_state: window.eveCaptureQuickPreviewApi?.getState?.(),
                 video_state: videoMod.getVideoRecordingState(),
-                preview_inner: document.querySelector('.eve-capture-fullscreen__preview')?.innerHTML || ''
+                preview_inner: document.querySelector('.eve-preview-live-overlay')?.innerHTML || ''
             };
         }, null, 20000);
         report.emergency = { ...report.emergency, after: emergencyAfter };
 
         report.ok = report.photo?.ok === true
             && report.photo?.project_state?.ok === true
-            && report.photo?.desktop?.ok === true
-            && report.photo?.mtrack?.ok === true
+            && report.photo?.project_projection?.ok === true
             && report.video?.ok === true
             && report.video?.project_state?.ok === true
-            && report.video?.desktop?.ok === true
-            && report.video?.mtrack?.ok === true
+            && report.video?.project_projection?.ok === true
             && report.emergency?.after?.ok === true;
     } finally {
         writeReport(report);

@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { installMockBrowserEnv } from '../../eve/application/tests/strangler_v2/_env.mjs';
+import { installMockBrowserEnv } from '../strangler_v2/_env.mjs';
 
 const outDir = path.resolve('temp/probe_reports');
 fs.mkdirSync(outDir, { recursive: true });
@@ -32,11 +32,6 @@ const FAMILY_RULES = [
         key: 'capture_record_import',
         label: 'Capture / record / import',
         matchers: ['capture', 'record', 'import', 'camera', 'photo', 'screen', 'mic', 'audio', 'video']
-    },
-    {
-        key: 'mtrack_timeline',
-        label: 'MTrack / timeline / clip editing',
-        matchers: ['mtrack', 'clip', 'crop', 'split', 'trim', 'timeline']
     },
     {
         key: 'panels',
@@ -111,7 +106,7 @@ const run = async () => {
             }
         });
 
-        const { toolRuntimeV2 } = await import('../../eve/application/intuition/runtime/index.js');
+        const { toolRuntimeV2 } = await import('../../eVe/intuition/runtime/index.js');
         const tools = await toolRuntimeV2.listTools({ includeDisabled: true });
         const catalog = Array.isArray(tools) ? tools : [];
 

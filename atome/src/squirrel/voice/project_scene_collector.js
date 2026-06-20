@@ -1,7 +1,7 @@
 /**
  * project_scene_collector.js
  *
- * Collects live project, user, selection, mtrack, and recent-event context
+ * Collects live project, user, selection, and recent-event context
  * for injection into the AI planner. Each collector reads existing runtime
  * APIs — no new stores are created.
  */
@@ -49,29 +49,6 @@ const collectSelectionContext = () => {
         selected_ids: ids.slice(0, 20),
         last_id: lastId,
         count: ids.length
-    };
-};
-
-// ---------------------------------------------------------------------------
-// P2 — Mtrack / Timeline + Recent Entities
-// ---------------------------------------------------------------------------
-
-const collectMtrackContext = () => {
-    const w = env();
-    const api = w.eveMtrackApi;
-    if (!api || typeof api.getState !== 'function') return null;
-    const state = safeGet(() => api.getState());
-    if (!state) return null;
-    const selectedClips = state.selectedClipIds instanceof Set
-        ? [...state.selectedClipIds].slice(0, 20)
-        : [];
-    return {
-        is_playing: !!state.isPlaying,
-        playhead: state.playhead ?? null,
-        tempo: state.tempo ?? null,
-        clip_count: state.clipCount ?? (Array.isArray(state.clips) ? state.clips.length : 0),
-        selected_clips: selectedClips.length ? selectedClips : null,
-        active_group_id: state.activeGroupId ?? null
     };
 };
 
@@ -129,10 +106,6 @@ const collectProjectSceneContext = () => {
 
     const selection = safeGet(collectSelectionContext);
     if (selection) snapshot.selection = selection;
-
-    // P2
-    const mtrack = safeGet(collectMtrackContext);
-    if (mtrack) snapshot.mtrack = mtrack;
 
     // P3
     const mutations = safeGet(collectRecentMutations);

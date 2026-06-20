@@ -12,6 +12,14 @@ globalThis.window = window;
 globalThis.document = window.document;
 globalThis.localStorage = window.localStorage;
 window.__EVE_VOICE_ECHO_COOLDOWN_MS = 0;
+window.HTMLCanvasElement.prototype.getContext = () => ({
+    clearRect() {},
+    fillRect() {},
+    beginPath() {},
+    moveTo() {},
+    lineTo() {},
+    stroke() {}
+});
 
 let sessionCounter = 0;
 let startListeningCalls = 0;

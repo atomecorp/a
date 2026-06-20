@@ -198,7 +198,6 @@ const inspectImportedRenderers = async (page, importResult) => {
       'data-group-atome',
       'data-group-id',
       'data-group-type',
-      'data-mtrax-import',
       'data-source-kind',
       'data-media-kind',
       'data-eve-media-renderer',
@@ -218,7 +217,6 @@ const inspectImportedRenderers = async (page, importResult) => {
       'eve-media-kind-',
       'eve-renderer-',
       'eve-source-kind-',
-      'eve-mtrax-import-',
       'eve-atome-kind-',
       'eve-binding-',
       'eve-events-bound-',
@@ -231,7 +229,7 @@ const inspectImportedRenderers = async (page, importResult) => {
       'eve-selected-false'
     ];
     const allowedExactClasses = [
-      'eve-mtrax-import-preview-media'
+      'eve-group-import-preview-media'
     ];
     return importedEntries.map((entry, index) => {
     const host = getAtomeElement(entry.atomeId);
@@ -390,7 +388,6 @@ const run = async () => {
       if (!window.__DEBUG__?.runMediaApiSuite) return { ok: false, error: 'debug_media_api_suite_unavailable' };
       return window.__DEBUG__.runMediaApiSuite();
     }, null, 180000);
-    await waitFor(page, () => !!window.eveMtrackApi, 30000, 250);
     report.transport = await safeEval(page, async () => {
       if (!window.__DEBUG__?.runMediaTransportSuite) return { ok: false, error: 'debug_media_transport_suite_unavailable' };
       return window.__DEBUG__.runMediaTransportSuite({ logToConsole: true });

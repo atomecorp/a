@@ -165,7 +165,7 @@ const discoverToolSelector = async (page) => {
         };
       })
       .filter((entry) => entry.visible);
-    const preferred = candidates.find((entry) => /tool|move|select|text|shape|capture|audio|video|intuition|molecule|mtrack/i.test(`${entry.id} ${entry.text} ${entry.ariaLabel}`))
+    const preferred = candidates.find((entry) => /tool|move|select|text|shape|capture|audio|video|intuition|molecule/i.test(`${entry.id} ${entry.text} ${entry.ariaLabel}`))
       || candidates[0]
       || null;
     return {

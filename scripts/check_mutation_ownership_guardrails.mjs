@@ -8,7 +8,7 @@ const MUTATING_METHOD_RE = /method\s*:\s*['"`](POST|PUT|PATCH|DELETE)['"`]/i;
 const STATE_CURRENT_RE = /\/api\/state_current\b/;
 const EVENTS_COMMIT_RE = /\/api\/events\/commit(?:-batch)?\b/;
 const TIMELINE_DOM_BASELINE_RE = /\breadDomState\b/;
-const TIMELINE_PREVIEW_FILE_RE = /(?:atome_timeline|molecule|mtrack|timeline)/i;
+const TIMELINE_PREVIEW_FILE_RE = /(?:atome_timeline|molecule|timeline)/i;
 const TIMELINE_PREVIEW_DOM_COMMIT_RE = /\b(?:preview|replay)\b[\s\S]{0,1200}\b(?:querySelector|getElementById|getAttribute|dataset)\b[\s\S]{0,1200}\b(?:commitBatch|Atome\.commit|\/api\/events\/commit)/i;
 
 const ALLOWED_STATE_CURRENT_WRITERS = new Set([

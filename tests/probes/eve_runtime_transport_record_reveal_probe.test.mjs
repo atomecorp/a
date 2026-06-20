@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { installMockBrowserEnv } from '../../eve/application/tests/strangler_v2/_env.mjs';
+import { installMockBrowserEnv } from '../strangler_v2/_env.mjs';
 
 const outDir = path.resolve('temp/probe_reports');
 fs.mkdirSync(outDir, { recursive: true });
@@ -60,19 +60,19 @@ const run = async () => {
         ok: false,
         groups: {
             transport: [],
-            mtrack: [],
+            record: [],
             perform: []
         },
         summary: {
             transport: null,
-            mtrack: null,
+            record: null,
             perform: null
         },
         errors: []
     };
 
     try {
-        const { toolRuntimeV2 } = await import('../../eve/application/intuition/runtime/index.js');
+        const { toolRuntimeV2 } = await import('../../eVe/intuition/runtime/index.js');
         const invoke = async ({ tool_id, action = 'pointer.click', input = {} }) => {
             const result = await toolRuntimeV2.invokeById({
                 tool_id,
@@ -101,17 +101,7 @@ const run = async () => {
             { expected_reader: 'animation', expected_active: true }
         ));
 
-        report.groups.mtrack.push(toResult(
-            'join',
-            await invoke({ tool_id: 'ui.join', input: { clip_ids: ['clip_1', 'clip_2'] } }),
-            { expected_operation: 'join' }
-        ));
-        report.groups.mtrack.push(toResult(
-            'automation',
-            await invoke({ tool_id: 'ui.automation', input: { clip_id: 'clip_1', open_lanes: true } }),
-            { expected_operation: 'automation' }
-        ));
-        report.groups.mtrack.push(toResult(
+        report.groups.record.push(toResult(
             'detail_record_toggle',
             await invoke({ tool_id: 'ui.detail.record.toggle', input: { mode: 'audio', record_source: 'audio' } }),
             { expected_active: true, expected_mode: 'audio' }
@@ -124,10 +114,10 @@ const run = async () => {
         ));
 
         report.summary.transport = summarize(report.groups.transport);
-        report.summary.mtrack = summarize(report.groups.mtrack);
+        report.summary.record = summarize(report.groups.record);
         report.summary.perform = summarize(report.groups.perform);
         report.ok = report.summary.transport.failed === 0
-            && report.summary.mtrack.failed === 0
+            && report.summary.record.failed === 0
             && report.summary.perform.failed === 0;
     } catch (error) {
         report.errors.push(String(error?.message || error));

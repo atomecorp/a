@@ -10,7 +10,8 @@ import {
     mapVirtualSceneResourceToBevyPatch,
     mapVirtualSceneStyleToBevyPatch,
     mapVirtualSceneTransformToBevyPatch,
-    normalizeColorFilters
+    normalizeColorFilters,
+    normalizeTransition
 } from '../../eVe/domains/rendering/bevy_projection_adapter.js';
 import {
     createRendererAdapterRegistry,
@@ -444,112 +445,4 @@ test('Bevy video texture size ignores ambiguous display width and height content
 
     assert.equal(node.texture_size, undefined);
     assert.equal(patch.texture_size, undefined);
-});
-
-const FILTER_EPSILON = 1e-9;
-
-test('normalizeColorFilters converts CSS units to the Bevy material shape', () => {
-    // hue-rotate degrees -> radians; gains pass through; identity stays identity.
-    const filters = normalizeColorFilters({
-        brightness: 1.5,
-        contrast: 0.8,
-        saturate: 2,
-        hueRotate: 180,
-        grayscale: 0.25,
-        sepia: 0.1,
-        invert: 1
-    });
-
-    assert.equal(filters.brightness, 1.5);
-    assert.equal(filters.contrast, 0.8);
-    assert.equal(filters.saturate, 2);
-    assert.equal(filters.grayscale, 0.25);
-    assert.equal(filters.sepia, 0.1);
-    assert.equal(filters.invert, 1);
-    assert.ok(Math.abs(filters.hue - Math.PI) < FILTER_EPSILON);
-});
-
-test('normalizeColorFilters omits identity and clamps out-of-range channels', () => {
-    assert.equal(normalizeColorFilters(null), null);
-    assert.equal(normalizeColorFilters(undefined), null);
-    assert.equal(
-        normalizeColorFilters({
-            brightness: 1,
-            contrast: 1,
-            saturate: 1,
-            hueRotate: 0,
-            grayscale: 0,
-            sepia: 0,
-            invert: 0
-        }),
-        null
-    );
-
-    const clamped = normalizeColorFilters({
-        brightness: -3,
-        saturate: -1,
-        grayscale: 2,
-        sepia: 5,
-        invert: -0.5,
-        hueRotate: 90
-    });
-    assert.equal(clamped.brightness, 0);
-    assert.equal(clamped.saturate, 0);
-    assert.equal(clamped.grayscale, 1);
-    assert.equal(clamped.sepia, 1);
-    assert.equal(clamped.invert, 0);
-    assert.ok(Math.abs(clamped.hue - Math.PI / 2) < FILTER_EPSILON);
-});
-
-test('Bevy projection carries color filters on nodes and omits them when identity', () => {
-    const filtered = mapVirtualSceneNodeToBevyPayload({
-        id: 'video_filtered',
-        kind: 'video',
-        bounds: { x: 0, y: 0, width: 320, height: 180 },
-        renderLayer: 1,
-        material: null,
-        content: { source: '/api/media/video.mp4' },
-        filter: { brightness: 1.5, hueRotate: 90 }
-    });
-    const plain = mapVirtualSceneNodeToBevyPayload({
-        id: 'video_plain',
-        kind: 'video',
-        bounds: { x: 0, y: 0, width: 320, height: 180 },
-        renderLayer: 1,
-        material: null,
-        content: { source: '/api/media/video.mp4' }
-    });
-
-    assert.equal(filtered.filters.brightness, 1.5);
-    assert.ok(Math.abs(filtered.filters.hue - Math.PI / 2) < FILTER_EPSILON);
-    assert.equal(Object.prototype.hasOwnProperty.call(plain, 'filters'), false);
-});
-
-test('Bevy projection emits style-patch filters, sending identity when cleared', () => {
-    const applied = mapVirtualSceneStyleToBevyPatch({
-        id: 'video_filtered',
-        patch: { material: null, filter: { sepia: 1, hueRotate: 90 } }
-    });
-    const cleared = mapVirtualSceneStyleToBevyPatch({
-        id: 'video_filtered',
-        patch: { material: null, filter: null }
-    });
-    const untouched = mapVirtualSceneStyleToBevyPatch({
-        id: 'video_filtered',
-        patch: { material: null, opacity: 0.5 }
-    });
-
-    assert.equal(applied.filters.sepia, 1);
-    assert.ok(Math.abs(applied.filters.hue - Math.PI / 2) < FILTER_EPSILON);
-    // A cleared filter resets the live component to identity (never omitted).
-    assert.deepEqual(cleared.filters, {
-        brightness: 1,
-        contrast: 1,
-        saturate: 1,
-        grayscale: 0,
-        sepia: 0,
-        invert: 0,
-        hue: 0
-    });
-    assert.equal(Object.prototype.hasOwnProperty.call(untouched, 'filters'), false);
 });

@@ -115,7 +115,7 @@ pub fn init_tracing() -> Option<WorkerGuard> {
 #[tauri::command]
 pub fn log_from_webview(payload: WebviewLogPayload) {
     let component = payload.component.as_deref().unwrap_or("ui");
-    if !xcode_logs_enabled() && !component.starts_with("mtrack_") {
+    if !xcode_logs_enabled() {
         return;
     }
 
