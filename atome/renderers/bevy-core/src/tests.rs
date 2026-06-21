@@ -15,6 +15,7 @@ fn shape_node(id: &str) -> AtomeRenderNode {
         origin: [0.0, 0.0],
         layer: 3,
         opacity: 1.0,
+        corner_radius: 0.0,
         color: Some([0.1, 0.2, 0.3, 1.0]),
         text: None,
         source: None,
@@ -41,6 +42,7 @@ fn text_node_with_texture(id: &str) -> AtomeRenderNode {
         origin: [0.0, 0.0],
         layer: 5,
         opacity: 1.0,
+        corner_radius: 0.0,
         color: Some([1.0, 1.0, 1.0, 1.0]),
         text: Some("Sharp".to_string()),
         source: None,
@@ -113,6 +115,39 @@ fn transform_and_surface_patches_reproject_nodes() {
         world.get::<Transform>(entity).unwrap().translation,
         Vec3::new(-88.0, 71.0, depth_for_layer(3))
     );
+}
+
+#[test]
+fn rounded_shape_nodes_use_alpha_mask_texture_without_resizing() {
+    let mut world = World::new();
+    world.insert_resource(AtomeEntityTable::default());
+    world.insert_resource(AtomeBevyRendererConfig::empty(640.0, 480.0));
+    world.insert_resource(AtomeRendererDiagnostics::default());
+    world.insert_resource(Assets::<Image>::default());
+
+    let entity = apply_spawn(
+        &mut world,
+        AtomeRenderNode {
+            corner_radius: 8.0,
+            ..shape_node("rounded_shape")
+        },
+    )
+    .unwrap();
+
+    let sprite = world.get::<Sprite>(entity).unwrap();
+    assert_vec2_near(sprite.custom_size, Vec2::new(120.0, 50.0));
+    let image = world
+        .resource::<Assets<Image>>()
+        .get(&sprite.image)
+        .expect("rounded shape should reference a generated mask");
+    assert_eq!(image.texture_descriptor.size.width, 120);
+    assert_eq!(image.texture_descriptor.size.height, 50);
+    let data = image.data.as_ref().expect("rounded mask should keep rgba data");
+    let alpha_at = |x: usize, y: usize| -> u8 {
+        data[(y * 120 + x) * 4 + 3]
+    };
+    assert_eq!(alpha_at(0, 0), 0);
+    assert_eq!(alpha_at(60, 25), 255);
 }
 
 #[test]
@@ -321,6 +356,7 @@ fn audio_waveform_progress_spawns_and_moves_bevy_playhead_overlay() {
             origin: [0.0, 0.0],
             layer: 2,
             opacity: 1.0,
+            corner_radius: 0.0,
             color: Some([0.2, 0.4, 0.6, 1.0]),
             text: None,
             source: None,

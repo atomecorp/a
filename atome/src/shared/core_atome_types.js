@@ -161,6 +161,26 @@ export const CORE_ATOME_TYPE_DEFINITIONS = Object.freeze([
             state: { type: 'object' },
             parameters: { type: 'object' }
         }
+    }),
+    defineType({
+        type: 'record',
+        kind: 'data',
+        traits: ['data', 'editable', 'navigable'],
+        schema: {
+            ...orderSchema,
+            title: { type: 'string' },
+            title_key: { type: 'string' },
+            label_key: { type: 'string' },
+            preview: { type: 'string' },
+            description: { type: 'string' },
+            category_id: { type: 'string' },
+            source_domain: { type: 'string' },
+            metadata: { type: 'object' },
+            payload: { type: 'object' },
+            created_iso: { type: 'string' },
+            updated_iso: { type: 'string' },
+            span: { type: 'number' }
+        }
     })
 ]);
 

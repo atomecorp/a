@@ -1,5 +1,9 @@
 import auth from './adole_api/auth.js';
 import {
+  requestPhoneVerification,
+  verifyPhoneVerification
+} from './adole_api/auth_phone_verification.js';
+import {
   create_project,
   list_projects,
   delete_project,
@@ -62,6 +66,8 @@ export const AdoleAPI = {
     refreshToken: auth.refreshToken,
     list: auth.list,
     lookupPhone: auth.lookupPhone,
+    requestPhoneVerification,
+    verifyPhoneVerification,
     getCurrentInfo: auth.getCurrentInfo,
     setCurrentState: auth.setCurrentState,
     tryAutoLogin: auth.tryAutoLogin,

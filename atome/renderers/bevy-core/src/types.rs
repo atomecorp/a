@@ -282,6 +282,8 @@ pub struct AtomeRenderNode {
     pub layer: i32,
     #[serde(default = "default_opacity")]
     pub opacity: f32,
+    #[serde(default)]
+    pub corner_radius: f32,
     pub color: Option<[f32; 4]>,
     pub text: Option<String>,
     pub source: Option<String>,

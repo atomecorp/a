@@ -24,6 +24,7 @@ fn video_node(id: &str) -> AtomeRenderNode {
         origin: [0.0, 0.0],
         layer: 2,
         opacity: 0.65,
+        corner_radius: 0.0,
         color: Some([0.1, 0.2, 0.3, 1.0]),
         text: None,
         source: Some("/fixtures/video.mp4".to_string()),

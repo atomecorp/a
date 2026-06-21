@@ -27,6 +27,21 @@ Implementation may proceed only after the architectural owner, dependency direct
 
 ## Global Vision
 
+Dashboard Bevy architecture:
+
+- The Atom/Home tool now acts as the dashboard entry point for authenticated workspaces. It toggles an eVe dashboard rendered into the current project Bevy surface and no longer hides the toolbox to reveal dashboard content.
+- The dashboard reserves the measured toolbox height as an excluded bottom band. The toolbox remains the existing product toolbox; dashboard hit-testing and rendering stop above that reserved rectangle.
+- Dashboard category defaults are seeded from `eVe/default_values/constants.json` and normalized by `eVe/domains/dashboard/dashboard_model.js`; runtime state such as active category, scroll offsets, and fullscreen editor focus remains non-durable dashboard state.
+- Initial dashboard open has no active category so each lane shows its own category color/data. Header activation is what starts the focused mode where all lanes mirror the active category data and the active `+` strip appears.
+- Durable item creation flows through canonical APIs: generic News/Monitor/Goals records use `window.Atome.commit`, Calendar/Contacts use their existing domain APIs, Projects delegate to Matrix/Adole project tooling, and Store is visible but disabled.
+- The open Atome `record` type is the v1 storage contract for dashboard generic data. Dashboard category membership is stored as generic `category_id` plus `source_domain: "eve.dashboard"` so the Atome type remains product-neutral.
+- Rounded dashboard geometry is not dashboard-specific renderer code: `corner_radius` is a product-neutral render style carried from Atome records through the virtual scene and Bevy projection adapter into Bevy core shape sprite masks.
+- On WebGPU surfaces where the Bevy presentation uses physical-pixel backing, dashboard keeps CSS-space layout/hit-testing but projects disposable dashboard records with the observed physical render scale and offset so the dashboard fills the visible canvas instead of appearing centered at half size.
+- Fullscreen editor open/close is a dashboard runtime transition from the clicked cell or `+` strip rectangle to the table fullscreen rectangle. The transition affects only ephemeral Bevy projection records and never changes persisted Atome data.
+- Left/right handedness is a persistent runtime preference read by the dashboard layout. It mirrors header side, plus strip, clipping/content direction, hit-test zones, shadow direction, and horizontal scroll sign.
+- Dashboard acceptance is split between deterministic Node contracts for data/layout/mockup invariants and a real Playwright probe for Atom/Home toggling, canvas hit-testing, persistence, toolbox exclusion, fullscreen editor behavior, and handedness mirroring.
+- `setRenderSurfaceInteractionInterceptor()` is the product-neutral surface hook used by dashboard to intercept canvas pointer/wheel events. It must not become a second project event system or a DOM authority layer.
+
 Atome is the open framework layer. It owns product-neutral runtime contracts, Squirrel APIs, security, synchronization primitives, server-facing contracts, audio and AV runtime boundaries, AI/MCP orchestration, voice contracts, and reusable assets.
 
 eVe is the closed product layer. It owns product UI, private tools, visual composition, panels, Matrix, ribbon, flower, Finder-facing product workflows, Molecule/MTraX product behavior, branding, product stores, and closed runtime composition.
@@ -266,6 +281,8 @@ Canonical extension points:
 - `database/adole.js` and `database/driver.js` for SQL persistence and database driver concerns.
 - `server/wsApiState.js`, `server/wsSend.js`, and the Fastify WebSocket registration points for WebSocket runtime state.
 - Existing route modules for their own families only, with size reduction required before feature growth in oversized files.
+- Login pre-auth phone verification belongs to the existing auth/WebSocket boundary: the eVe login shell calls `AdoleAPI.auth.requestPhoneVerification(...)` before password entry, then `AdoleAPI.auth.verifyPhoneVerification(...)`, and only after a successful check may it call `AdoleAPI.auth.bootstrap(...)`. The OTP secret is a transient auth artifact; in test/demo mode it may be projected in the login shell instruction band, but it must not become Atome state, DOM-owned canonical state, durable project state, or a production response field.
+- The login shell owns only a transient visual choreography. Its persistent logo may dock to the Intuition handle during final reveal, and `menu_auth_dock_runtime.js` must suppress the older main-ribbon auth dock movement while that logo docking flag is active so there is never a second competing post-auth movement.
 
 Must not be duplicated by:
 
@@ -450,6 +467,7 @@ Communication:
 
 - Framework communication must stay centralized and WebSocket-based.
 - REST-like route families that exist in the server are current implementation surfaces, but new communication architecture must not add polling, hidden REST fallbacks, or scattered duplicate transports.
+- New login pre-auth OTP communication uses `/ws/api` auth actions only; adding matching REST endpoints would violate the current communication direction.
 
 Status: Target rules verified from authoritative docs. Existing route-level legacy and debug surfaces must be audited in the security and communication phases before being treated as final architecture.
 

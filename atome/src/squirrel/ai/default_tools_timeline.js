@@ -27,7 +27,13 @@ const TIMELINE_WRITE_VERBS = Object.freeze([
     'transport.snap',
     'view.set',
     'marker.upsert',
-    'marker.delete'
+    'marker.delete',
+    'automation.lane.add',
+    'automation.lane.remove',
+    'automation.keyframe.add',
+    'automation.keyframe.move',
+    'automation.keyframe.edit',
+    'automation.keyframe.remove'
 ]);
 
 const registerTimelineWriteVerb = ({ Agent, verb }) => {
@@ -98,6 +104,24 @@ export const registerTimelineDefaultTools = ({ Agent }) => {
             }
         },
         handler: async (params = {}) => requireMoleculeTimelineApi().applyGroupTimelineBatch(params)
+    });
+
+    Agent.registerTool({
+        name: 'eve.timeline.history.undo',
+        description: 'Undo the last Molecule timeline edit on the active session.',
+        capabilities: ['timeline.write'],
+        risk_tier: 'MODERATE',
+        parameters: { type: 'object', properties: { group_id: { type: 'string' } } },
+        handler: async (params = {}) => requireMoleculeTimelineApi().undoGroupTimeline(params)
+    });
+
+    Agent.registerTool({
+        name: 'eve.timeline.history.redo',
+        description: 'Redo the last undone Molecule timeline edit on the active session.',
+        capabilities: ['timeline.write'],
+        risk_tier: 'MODERATE',
+        parameters: { type: 'object', properties: { group_id: { type: 'string' } } },
+        handler: async (params = {}) => requireMoleculeTimelineApi().redoGroupTimeline(params)
     });
 
     TIMELINE_WRITE_VERBS.forEach((verb) => registerTimelineWriteVerb({ Agent, verb }));

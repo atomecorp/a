@@ -28,10 +28,14 @@ const buildTimeline = () => {
 
 const makeBridge = () => {
     const calls = [];
+    const ops = [];
+    let interceptor = null;
     const bridge = createMoleculeTimelineSceneBridge({
-        updateRecords: async (payload) => { calls.push(payload); return { ok: true }; }
+        updateRecords: async (payload) => { calls.push(payload); return { ok: true }; },
+        applyTimelineOperation: async (detail) => { ops.push(detail); return { ok: true }; },
+        registerCommitInterceptor: (fn) => { interceptor = fn; return fn; }
     });
-    return { bridge, calls };
+    return { bridge, calls, ops, getInterceptor: () => interceptor };
 };
 
 test('render pushes lane/clip/playhead records and tracks them per project', async () => {
@@ -70,6 +74,32 @@ test('scrub re-render keeps the same record set (only the playhead moves)', asyn
 
     assert.deepEqual(result.removed_ids, [], 'scrub adds/removes no records');
     assert.ok(result.record_ids.includes('mol:playhead'));
+});
+
+test('a canvas clip drag is translated into a clip.move (px -> seconds) and skips the generic commit', async () => {
+    const { bridge, ops, getInterceptor } = makeBridge();
+    await bridge.render({ projectId: 'proj_b', timeline: buildTimeline() }); // 80 px/s default
+
+    // The render registered the interceptor; simulate a drag.end on a clip block.
+    const handled = await getInterceptor()({
+        kind: 'drag.end',
+        commit: true,
+        targets: [{ atome_id: 'mol:clip:clip_a', props: { left: 560, top: 4 } }]
+    });
+
+    assert.equal(handled, true, 'the bridge claims the clip drag so the generic atome commit is skipped');
+    assert.deepEqual(ops, [{ operation: 'clip.move', command: { clip_id: 'clip_a', start_seconds: 7 } }]);
+});
+
+test('the interceptor ignores drags that touch no clip records', async () => {
+    const { bridge, ops, getInterceptor } = makeBridge();
+    await bridge.render({ projectId: 'proj_b', timeline: buildTimeline() });
+    const handled = await getInterceptor()({
+        kind: 'drag.end', commit: true,
+        targets: [{ atome_id: 'real_atome_123', props: { left: 100, top: 50 } }]
+    });
+    assert.equal(handled, false, 'real atome drags fall through to the generic commit');
+    assert.deepEqual(ops, []);
 });
 
 test('clear removes every tracked record for the project', async () => {

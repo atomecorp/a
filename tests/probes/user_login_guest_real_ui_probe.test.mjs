@@ -67,6 +67,34 @@ const submitLogin = async (page, phone, password) => {
     await phoneInput.waitFor({ state: 'attached', timeout: 8000 });
     await phoneInput.fill(phone);
     await phoneInput.press('Enter');
+    const instruction = page.locator('#eve_login_sequence__instruction').first();
+    const otpReady = await waitFor(page, () => {
+        const text = document.getElementById('eve_login_sequence__instruction')?.textContent || '';
+        return { ok: /O\.T\.P:\s*\d+/.test(text), text };
+    }, 8000);
+    if (!otpReady.ok) throw new Error('visible_otp_missing');
+    const otpText = await instruction.textContent();
+    const otpCode = String(otpText || '').match(/O\.T\.P:\s*(\d+)/)?.[1] || '';
+    if (!otpCode) throw new Error('visible_otp_missing');
+    const otpFocused = await waitFor(page, () => ({
+        ok: document.activeElement?.id === 'eve_login_sequence__otp_input',
+        active: document.activeElement?.id || null
+    }), 8000);
+    if (!otpFocused.ok) throw new Error('otp_focus_missing');
+    const otpInput = page.locator('#eve_login_sequence__otp_input').first();
+    await otpInput.waitFor({ state: 'attached', timeout: 8000 });
+    await otpInput.fill(otpCode);
+    await otpInput.press('Enter');
+    const passwordReady = await waitFor(page, () => {
+        const text = document.getElementById('eve_login_sequence__instruction')?.textContent || '';
+        return { ok: /mot de passe/i.test(text), text };
+    }, 8000);
+    if (!passwordReady.ok) throw new Error('password_step_missing');
+    const passwordFocused = await waitFor(page, () => ({
+        ok: document.activeElement?.id === 'eve_login_sequence__password_field__input',
+        active: document.activeElement?.id || null
+    }), 8000);
+    if (!passwordFocused.ok) throw new Error('password_focus_missing');
     const passwordInput = page.locator('#eve_login_sequence__password_field__input').first();
     await passwordInput.waitFor({ state: 'attached', timeout: 8000 });
     await passwordInput.fill(password);

@@ -89,14 +89,14 @@ test('Bevy project renderer guards lock canvas ownership, drag, and video playba
     assert.doesNotMatch(syncBody, /setSourcePlayback\s*\(/);
 
     // The MTrax domain (and its timeline playback driver) was deleted. The project
-    // transport now drives Bevy video decode directly from eVeIntuition so video
-    // does not freeze while Kira audio plays; guard that no other stray caller
-    // reappears outside the decode runtime that defines it.
+    // transport now drives Bevy video decode directly from the eVeIntuition media
+    // reader tool runtime so video does not freeze while Kira audio plays; guard
+    // that no other stray caller reappears outside the decode runtime that defines it.
     const setBevyCallers = jsFilesUnder('eVe')
         .filter((file) => /setBevyVideoDecodePlayback/.test(readFileSync(file, 'utf8')))
         .map((file) => file.slice(repoRoot.length + 1).replaceAll('\\', '/'))
         .filter((file) => file !== 'eVe/domains/rendering/bevy_video_decode_source_runtime.js');
-    assert.deepEqual(setBevyCallers, ['eVe/intuition/eVeIntuition.js']);
+    assert.deepEqual(setBevyCallers, ['eVe/intuition/runtime/eve_intuition/media_reader_tool_runtime.js']);
 
     const webRenderer = readSource('eVe/domains/rendering/bevy_web_renderer_runtime.js');
     const mediaResourceRuntime = readSource('eVe/domains/rendering/bevy_media_resource_runtime.js');

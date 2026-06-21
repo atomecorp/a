@@ -3,7 +3,7 @@ use bevy::{image::Image, prelude::*, render::batching::NoAutomaticBatching, text
 use crate::{
     render_math::{atome_rect_transform_with_local, color_from_rgba, depth_for_layer},
     selection_overlay::rebuild_selection_overlay,
-    texture::image_handle_from_texture,
+    texture::{image_handle_from_rounded_rect_mask, image_handle_from_texture},
     types::*,
     video_external_texture::{
         insert_video_external_texture_component_for_node, insert_video_quad_mesh,
@@ -82,6 +82,17 @@ pub fn spawn_node_in_world(world: &mut World, node: AtomeRenderNode) -> Result<E
                 &node.texture,
                 &node.id,
             )?)
+        } else if node.kind == "shape" && node.corner_radius > 0.0 {
+            let mut images = world
+                .get_resource_mut::<Assets<Image>>()
+                .ok_or_else(|| "bevy_image_assets_required".to_string())?;
+            Some(image_handle_from_rounded_rect_mask(
+                &mut images,
+                node.logical_size[0],
+                node.logical_size[1],
+                node.corner_radius,
+                &node.id,
+            )?)
         } else {
             None
         };
@@ -120,12 +131,22 @@ pub fn spawn_node_with_texture_handle(
     let color = color_for_node(&node);
     let size = Vec2::new(width, height);
     let entity = match node.kind.as_str() {
-        "shape" => world
-            .spawn((
-                node_base_components(&node, width, height, surface_width, surface_height),
-                Sprite::from_color(color_from_rgba(color), size),
-            ))
-            .id(),
+        "shape" => {
+            let sprite = if let Some(handle) = texture_handle {
+                let mut sprite = Sprite::from_image(handle);
+                sprite.custom_size = Some(size);
+                sprite.color = color_from_rgba(color);
+                sprite
+            } else {
+                Sprite::from_color(color_from_rgba(color), size)
+            };
+            world
+                .spawn((
+                    node_base_components(&node, width, height, surface_width, surface_height),
+                    sprite,
+                ))
+                .id()
+        }
         "text" => {
             if let Some(handle) = texture_handle {
                 let mut sprite = Sprite::from_image(handle);

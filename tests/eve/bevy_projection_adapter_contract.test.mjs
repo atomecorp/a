@@ -178,6 +178,20 @@ test('Bevy projection normalizes oversized CSS layers to the Rust i32 boundary',
     assert.equal(layer.layer, 2147483647);
 });
 
+test('Bevy projection carries reusable shape corner radius to native payloads', () => {
+    const node = mapVirtualSceneNodeToBevyPayload({
+        id: 'rounded_shape',
+        kind: 'shape',
+        bounds: { x: 4, y: 8, width: 120, height: 60 },
+        layer: 3,
+        material: {
+            fill: '#ffffff',
+            cornerRadius: 3
+        }
+    });
+    assert.equal(node.corner_radius, 3);
+});
+
 test('Bevy projection carries opacity through initial nodes and style patches', () => {
     const node = mapVirtualSceneNodeToBevyPayload({
         id: 'video_opacity',

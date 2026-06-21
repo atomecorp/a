@@ -89,6 +89,12 @@ const installMockBrowserEnv = () => {
     window.cancelAnimationFrame = window.cancelAnimationFrame || ((id) => clearTimeout(id));
     window.requestIdleCallback = window.requestIdleCallback || ((fn) => setTimeout(() => fn({ didTimeout: false, timeRemaining: () => 16 }), 0));
     window.cancelIdleCallback = window.cancelIdleCallback || ((id) => clearTimeout(id));
+    window.Element.prototype.animate = function animate() {
+        return {
+            cancel() {},
+            finished: Promise.resolve()
+        };
+    };
 
     globalThis.window = window;
     globalThis.document = window.document;

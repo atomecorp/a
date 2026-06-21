@@ -1,164 +1,42 @@
 import { generateUUID } from '../adole.js';
-import { getSessionState } from './session.js';
 import { list_atomes, create_atome, alter_atome, get_atome } from './atomes.js';
+import {
+    with_callback,
+    getCurrentUserId,
+    isLoggedOut,
+    normalizeKey,
+    normalizeEntries,
+    normalizeRemovedKeys,
+    toArray,
+    mergeById,
+    resolveProjectId,
+    normalizeActivity,
+    normalizeLayer,
+    sortActivities,
+    sortLayers,
+    updateWindowActivity,
+    dispatchActivityChanged,
+    sanitizeLayerIdPart
+} from './activities_support.js';
+import {
+    save_project_toolbox_state,
+    get_project_toolbox_state,
+    save_global_toolbox_state,
+    get_global_toolbox_state,
+    save_activity_toolbox_state,
+    get_activity_toolbox_state
+} from './activities_toolbox_state.js';
 
-const with_callback = (result, callback) => {
-    if (typeof callback === 'function') callback(result);
-    return result;
+export {
+    save_project_toolbox_state,
+    get_project_toolbox_state,
+    save_global_toolbox_state,
+    get_global_toolbox_state,
+    save_activity_toolbox_state,
+    get_activity_toolbox_state
 };
-
-const getCurrentUserId = () => {
-    const state = getSessionState();
-    return state?.user?.id || null;
-};
-
-const isLoggedOut = () => getSessionState().mode === 'logged_out';
-
-const normalizeKey = (value) => String(value || '')
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '_')
-    .replace(/^_+|_+$/g, '');
-
-const normalizeEntries = (value) => {
-    if (!Array.isArray(value)) return [];
-    return value
-        .map((entry) => (entry && typeof entry === 'object' ? { ...entry } : null))
-        .filter(Boolean)
-        .map((entry) => {
-            const key = String(entry.key || '').trim();
-            if (!key) return null;
-            return { ...entry, key };
-        })
-        .filter(Boolean);
-};
-
-const normalizeRemovedKeys = (value) => {
-    if (!Array.isArray(value)) return [];
-    return value
-        .map((entry) => String(entry || '').trim())
-        .filter(Boolean);
-};
-
-const toArray = (value) => {
-    if (Array.isArray(value)) return value;
-    return [];
-};
-
-const mergeById = (left = [], right = []) => {
-    const map = new Map();
-    toArray(left).forEach((item) => {
-        const id = item?.id || item?.atome_id;
-        if (!id) return;
-        map.set(String(id), item);
-    });
-    toArray(right).forEach((item) => {
-        const id = item?.id || item?.atome_id;
-        if (!id) return;
-        if (!map.has(String(id))) {
-            map.set(String(id), item);
-        }
-    });
-    return Array.from(map.values());
-};
-
-const resolveProjectId = (options = {}) => {
-    const explicit = options.projectId || options.project_id || null;
-    if (explicit) return explicit;
-    if (typeof window !== 'undefined' && window.__currentProject?.id) {
-        return window.__currentProject.id;
-    }
-    if (typeof window !== 'undefined' && window.AdoleAPI?.projects?.getCurrentId) {
-        return window.AdoleAPI.projects.getCurrentId();
-    }
-    return null;
-};
-
-const normalizeActivity = (record) => {
-    if (!record || typeof record !== 'object') return null;
-    const id = record.atome_id || record.id || null;
-    const props = record.properties || record.particles || record.data || {};
-    const name = String(props.name || props.activity_name || record.name || '').trim();
-    const key = normalizeKey(props.activity_key || props.key || name || id || '');
-    if (!id || !key) return null;
-    return {
-        ...record,
-        id,
-        atome_id: id,
-        name: name || key,
-        key,
-        icon: props.icon || null,
-        order: Number.isFinite(props.order) ? props.order : 0,
-        enabled: props.enabled !== false,
-        properties: props,
-        particles: props,
-        data: props
-    };
-};
-
-const normalizeLayer = (record) => {
-    if (!record || typeof record !== 'object') return null;
-    const id = record.atome_id || record.id || null;
-    if (!id) return null;
-    const props = record.properties || record.particles || record.data || {};
-    const scope = String(props.scope || 'global').trim().toLowerCase();
-    if (!scope) return null;
-    return {
-        ...record,
-        id,
-        atome_id: id,
-        scope,
-        activity_id: props.activity_id || props.activityId || null,
-        project_id: props.project_id || props.projectId || null,
-        entries: normalizeEntries(props.entries),
-        removed_keys: normalizeRemovedKeys(props.removed_keys || props.removedKeys),
-        updated_at: props.updated_at || props.updatedAt || record.updated_at || record.updatedAt || null,
-        properties: props,
-        particles: props,
-        data: props
-    };
-};
-
-const sortActivities = (activities = []) => activities.slice().sort((a, b) => {
-    const orderA = Number.isFinite(a?.order) ? a.order : 0;
-    const orderB = Number.isFinite(b?.order) ? b.order : 0;
-    if (orderA !== orderB) return orderA - orderB;
-    const nameA = String(a?.name || '').toLowerCase();
-    const nameB = String(b?.name || '').toLowerCase();
-    if (nameA < nameB) return -1;
-    if (nameA > nameB) return 1;
-    return String(a?.id || '').localeCompare(String(b?.id || ''));
-});
-
-const sortLayers = (layers = []) => layers.slice().sort((a, b) => {
-    const tsA = Date.parse(String(a?.updated_at || '')) || 0;
-    const tsB = Date.parse(String(b?.updated_at || '')) || 0;
-    if (tsA !== tsB) return tsA - tsB;
-    return String(a?.id || '').localeCompare(String(b?.id || ''));
-});
 
 let currentActivityCache = null;
-
-const updateWindowActivity = (activity) => {
-    if (typeof window === 'undefined') return;
-    if (!activity) {
-        delete window.__currentActivity;
-        return;
-    }
-    window.__currentActivity = activity;
-};
-
-const dispatchActivityChanged = (detail = {}) => {
-    if (typeof window === 'undefined') return;
-    
-        window.dispatchEvent(new CustomEvent('squirrel:activity-changed', { detail }));
-    
-};
-
-const sanitizeLayerIdPart = (value, fallback = 'all') => {
-    const normalized = normalizeKey(value || fallback);
-    return normalized || fallback;
-};
 
 export async function create_activity(activityName, options = {}, callback) {
     const currentUserId = getCurrentUserId();
@@ -263,14 +141,12 @@ export async function set_current_activity(activityId, activityName = null, pers
 
     if (!persist) return true;
 
-    
-        await alter_atome(currentUserId, {
-            current_activity_id: payload.id,
-            currentActivityId: payload.id,
-            current_activity_name: payload.name || null,
-            currentActivityName: payload.name || null
-        });
-    
+    await alter_atome(currentUserId, {
+        current_activity_id: payload.id,
+        currentActivityId: payload.id,
+        current_activity_name: payload.name || null,
+        currentActivityName: payload.name || null
+    });
 
     return true;
 }
@@ -283,21 +159,19 @@ export async function load_saved_current_activity() {
         return { id: currentActivityCache.id, name: currentActivityCache.name || null };
     }
 
-    
-        const userAtome = await get_atome(currentUserId);
-        const raw = userAtome?.atome || userAtome?.data || null;
-        if (raw && typeof raw === 'object') {
-            const props = raw.properties || raw.particles || raw.data || {};
-            const savedId = props.current_activity_id || props.currentActivityId || null;
-            const savedName = props.current_activity_name || props.currentActivityName || null;
-            if (savedId) {
-                const payload = { id: String(savedId), name: savedName || null, userId: currentUserId };
-                currentActivityCache = payload;
-                updateWindowActivity(payload);
-                return { id: payload.id, name: payload.name };
-            }
+    const userAtome = await get_atome(currentUserId);
+    const raw = userAtome?.atome || userAtome?.data || null;
+    if (raw && typeof raw === 'object') {
+        const props = raw.properties || raw.particles || raw.data || {};
+        const savedId = props.current_activity_id || props.currentActivityId || null;
+        const savedName = props.current_activity_name || props.currentActivityName || null;
+        if (savedId) {
+            const payload = { id: String(savedId), name: savedName || null, userId: currentUserId };
+            currentActivityCache = payload;
+            updateWindowActivity(payload);
+            return { id: payload.id, name: payload.name };
         }
-    
+    }
 
     return null;
 }
@@ -494,188 +368,6 @@ export async function resolve_tool_context(options = {}, callback) {
     };
 
     return with_callback(result, callback);
-}
-
-const sanitizeProjectState = (value) => {
-    if (!value || typeof value !== 'object') return null;
-    const tools = Array.isArray(value.tools) ? value.tools : [];
-    return {
-        version: Number.isFinite(value.version) ? value.version : 1,
-        tools: tools
-            .map((tool) => (tool && typeof tool === 'object' ? { ...tool } : null))
-            .filter(Boolean)
-    };
-};
-
-const resolveProjectStateId = (userId, projectId) => {
-    const safeUser = sanitizeLayerIdPart(userId, 'user');
-    const safeProject = sanitizeLayerIdPart(projectId, 'project');
-    return `project_toolbox_state_${safeUser}_${safeProject}`;
-};
-
-const normalizeScopeState = (value) => {
-    const scope = String(value || '').trim().toLowerCase();
-    if (scope === 'global' || scope === 'activity' || scope === 'project') return scope;
-    return '';
-};
-
-const resolveScopedToolboxStateId = (userId, scope, activityId = null, projectId = null) => {
-    if (scope === 'project') {
-        return resolveProjectStateId(userId, projectId);
-    }
-    const safeUser = sanitizeLayerIdPart(userId, 'user');
-    const safeScope = sanitizeLayerIdPart(scope, 'scope');
-    const safeActivity = sanitizeLayerIdPart(activityId, 'all');
-    const safeProject = sanitizeLayerIdPart(projectId, 'all');
-    return `toolbox_scope_state_${safeScope}_${safeUser}_${safeActivity}_${safeProject}`;
-};
-
-const saveScopedToolboxState = async (scope, options = {}, callback) => {
-    const currentUserId = getCurrentUserId();
-    if (!currentUserId || isLoggedOut()) {
-        const error = 'No user logged in. Please log in first.';
-        return with_callback({
-            tauri: { success: false, error },
-            fastify: { success: false, error }
-        }, callback);
-    }
-
-    const normalizedScope = normalizeScopeState(scope || options.scope);
-    if (!normalizedScope) {
-        const error = 'Invalid scope for toolbox state.';
-        return with_callback({
-            tauri: { success: false, error },
-            fastify: { success: false, error }
-        }, callback);
-    }
-
-    const projectId = resolveProjectId(options);
-    const activityId = options.activity_id || options.activityId || null;
-    if (normalizedScope === 'project' && !projectId) {
-        const error = 'Missing project id for project toolbox state.';
-        return with_callback({
-            tauri: { success: false, error },
-            fastify: { success: false, error }
-        }, callback);
-    }
-    if (normalizedScope === 'activity' && !activityId) {
-        const error = 'Missing activity id for activity toolbox state.';
-        return with_callback({
-            tauri: { success: false, error },
-            fastify: { success: false, error }
-        }, callback);
-    }
-
-    const desktopState = sanitizeProjectState(options.desktop_state || options.desktopState);
-    const atomeId = resolveScopedToolboxStateId(currentUserId, normalizedScope, activityId, projectId);
-    const props = {
-        scope: normalizedScope,
-        activity_id: activityId || null,
-        activityId: activityId || null,
-        project_id: projectId,
-        projectId,
-        desktop_state: desktopState,
-        desktopState: desktopState,
-        updated_at: new Date().toISOString()
-    };
-
-    const existing = await get_atome(atomeId).catch(() => null);
-    const existingAtome = existing?.atome || existing?.data || null;
-    if (existingAtome && typeof existingAtome === 'object') {
-        const result = await alter_atome(atomeId, props);
-        return with_callback(result, callback);
-    }
-
-    const payload = {
-        id: atomeId,
-        atome_id: atomeId,
-        type: normalizedScope === 'project' ? 'project_toolbox_state' : 'toolbox_scope_state',
-        atome_type: normalizedScope === 'project' ? 'project_toolbox_state' : 'toolbox_scope_state',
-        owner_id: currentUserId,
-        parent_id: projectId || activityId || null,
-        project_id: projectId,
-        properties: props
-    };
-    const result = await create_atome(payload);
-    return with_callback(result, callback);
-};
-
-const getScopedToolboxState = async (scope, options = {}, callback) => {
-    const currentUserId = getCurrentUserId();
-    if (!currentUserId || isLoggedOut()) {
-        const error = 'No user logged in. Cannot read project toolbox state.';
-        return with_callback({ ok: false, error, desktop_state: null }, callback);
-    }
-
-    const normalizedScope = normalizeScopeState(scope || options.scope);
-    if (!normalizedScope) {
-        const error = 'Invalid scope for toolbox state.';
-        return with_callback({ ok: false, error, desktop_state: null }, callback);
-    }
-
-    const resolvedProjectId = options.project_id || options.projectId || resolveProjectId(options);
-    const resolvedActivityId = options.activity_id || options.activityId || null;
-    if (normalizedScope === 'project' && !resolvedProjectId) {
-        const error = 'Missing project id.';
-        return with_callback({ ok: false, error, project_id: null, desktop_state: null }, callback);
-    }
-    if (normalizedScope === 'activity' && !resolvedActivityId) {
-        const error = 'Missing activity id.';
-        return with_callback({ ok: false, error, activity_id: null, desktop_state: null }, callback);
-    }
-
-    const atomeId = resolveScopedToolboxStateId(
-        currentUserId,
-        normalizedScope,
-        resolvedActivityId,
-        resolvedProjectId
-    );
-    const result = await get_atome(atomeId).catch(() => null);
-    const raw = result?.atome || result?.data || null;
-    if (!raw || typeof raw !== 'object') {
-        return with_callback({
-            ok: true,
-            exists: false,
-            scope: normalizedScope,
-            activity_id: resolvedActivityId || null,
-            project_id: resolvedProjectId,
-            desktop_state: null
-        }, callback);
-    }
-    const props = raw.properties || raw.particles || raw.data || {};
-    const desktopState = sanitizeProjectState(props.desktop_state || props.desktopState);
-    return with_callback({
-        ok: true,
-        exists: true,
-        scope: normalizedScope,
-        activity_id: resolvedActivityId || props.activity_id || props.activityId || null,
-        project_id: resolvedProjectId,
-        desktop_state: desktopState
-    }, callback);
-};
-
-export async function save_project_toolbox_state(options = {}, callback) {
-    return saveScopedToolboxState('project', options, callback);
-}
-
-export async function get_project_toolbox_state(projectId, callback) {
-    return getScopedToolboxState('project', { project_id: projectId }, callback);
-}
-
-export async function save_global_toolbox_state(options = {}, callback) {
-    return saveScopedToolboxState('global', options, callback);
-}
-
-export async function get_global_toolbox_state(callback) {
-    return getScopedToolboxState('global', {}, callback);
-}
-
-export async function save_activity_toolbox_state(options = {}, callback) {
-    return saveScopedToolboxState('activity', options, callback);
-}
-
-export async function get_activity_toolbox_state(activityId, callback) {
-    return getScopedToolboxState('activity', { activity_id: activityId }, callback);
 }
 
 export default {

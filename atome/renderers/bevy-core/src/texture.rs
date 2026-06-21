@@ -40,3 +40,63 @@ pub fn image_handle_from_texture(
         .ok_or_else(|| format!("bevy_texture_required:{id}"))?;
     Ok(images.add(image_from_texture(texture, id)?))
 }
+
+fn rounded_rect_alpha(x: u32, y: u32, width: u32, height: u32, radius: f32) -> u8 {
+    if radius <= 0.0 {
+        return 255;
+    }
+    let width_f = width as f32;
+    let height_f = height as f32;
+    let radius = radius.min(width_f / 2.0).min(height_f / 2.0);
+    let px = x as f32 + 0.5;
+    let py = y as f32 + 0.5;
+    let cx = if px < radius {
+        radius
+    } else if px > width_f - radius {
+        width_f - radius
+    } else {
+        px
+    };
+    let cy = if py < radius {
+        radius
+    } else if py > height_f - radius {
+        height_f - radius
+    } else {
+        py
+    };
+    let distance = ((px - cx).powi(2) + (py - cy).powi(2)).sqrt();
+    let edge = radius - distance;
+    if edge >= 0.5 {
+        255
+    } else if edge <= -0.5 {
+        0
+    } else {
+        ((edge + 0.5) * 255.0).round().clamp(0.0, 255.0) as u8
+    }
+}
+
+pub fn image_handle_from_rounded_rect_mask(
+    images: &mut Assets<Image>,
+    width: f32,
+    height: f32,
+    radius: f32,
+    id: &str,
+) -> Result<Handle<Image>, String> {
+    let width = width.ceil().max(1.0) as u32;
+    let height = height.ceil().max(1.0) as u32;
+    let mut rgba = vec![255; width as usize * height as usize * 4];
+    for y in 0..height {
+        for x in 0..width {
+            let alpha = rounded_rect_alpha(x, y, width, height, radius);
+            rgba[(y as usize * width as usize + x as usize) * 4 + 3] = alpha;
+        }
+    }
+    Ok(images.add(image_from_texture(
+        &AtomeTexture {
+            width,
+            height,
+            rgba,
+        },
+        id,
+    )?))
+}

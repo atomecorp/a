@@ -43,8 +43,10 @@ const SQUIRREL_USER_NAMESPACE: Uuid = Uuid::from_bytes([
 const DEFAULT_FASTIFY_URL: &str = "http://localhost:3001";
 const AUTH_ATTEMPT_WINDOW_SECONDS: i64 = 15 * 60;
 const AUTH_ATTEMPT_LIMIT: u32 = 8;
+const OTP_EXPIRY_SECONDS: i64 = 10 * 60;
 
 static AUTH_ATTEMPT_STORE: OnceLock<Mutex<HashMap<String, (u32, i64)>>> = OnceLock::new();
+static PHONE_VERIFICATION_STORE: OnceLock<Mutex<HashMap<String, (String, i64)>>> = OnceLock::new();
 
 fn enforce_local_auth_attempt_limit(bucket: &str, identity: &str) -> Result<(), String> {
     let now = Utc::now().timestamp();
@@ -63,6 +65,46 @@ fn enforce_local_auth_attempt_limit(bucket: &str, identity: &str) -> Result<(), 
     if entry.0 > AUTH_ATTEMPT_LIMIT {
         return Err("Too many authentication attempts".to_string());
     }
+    Ok(())
+}
+
+fn is_production_runtime() -> bool {
+    env::var("NODE_ENV")
+        .map(|value| value.trim().eq_ignore_ascii_case("production"))
+        .unwrap_or(false)
+}
+
+fn generate_otp_code() -> String {
+    let value = (Uuid::new_v4().as_u128() % 900000) + 100000;
+    value.to_string()
+}
+
+fn store_phone_verification(phone: &str, code: &str) -> Result<(), String> {
+    let expires_at = Utc::now().timestamp() + OTP_EXPIRY_SECONDS;
+    let store = PHONE_VERIFICATION_STORE.get_or_init(|| Mutex::new(HashMap::new()));
+    let mut entries = store
+        .lock()
+        .map_err(|_| "Phone verification store unavailable".to_string())?;
+    entries.insert(phone.to_string(), (code.to_string(), expires_at));
+    Ok(())
+}
+
+fn verify_phone_verification(phone: &str, code: &str) -> Result<(), String> {
+    let store = PHONE_VERIFICATION_STORE.get_or_init(|| Mutex::new(HashMap::new()));
+    let mut entries = store
+        .lock()
+        .map_err(|_| "Phone verification store unavailable".to_string())?;
+    let Some((stored_code, expires_at)) = entries.get(phone).cloned() else {
+        return Err("No pending OTP request for this phone number".to_string());
+    };
+    if Utc::now().timestamp() > expires_at {
+        entries.remove(phone);
+        return Err("OTP has expired".to_string());
+    }
+    if stored_code != code {
+        return Err("Invalid OTP code".to_string());
+    }
+    entries.remove(phone);
     Ok(())
 }
 
@@ -94,6 +136,8 @@ pub struct AuthResponse {
     pub user: Option<UserInfo>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub token: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub code: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -187,6 +231,10 @@ pub async fn handle_auth_message(
         "register" => handle_register(message, state, request_id).await,
         "bootstrap" => handle_bootstrap(message, state, request_id).await,
         "login" => handle_login(message, state, request_id).await,
+        "request-phone-verification" => {
+            handle_request_phone_verification(message, request_id).await
+        }
+        "verify-phone-verification" => handle_verify_phone_verification(message, request_id).await,
         "lookup-phone" => handle_lookup_phone(message, state, request_id).await,
         "me" => handle_me(message, state, request_id).await,
         "logout" => handle_logout(request_id),
@@ -265,10 +313,11 @@ async fn handle_bootstrap(
             .and_then(|v| serde_json::from_str::<String>(&v).ok())
             .unwrap_or_else(|| "public".to_string());
 
-        let (stored_username, password_hash, created_at) = match get_user_particles(&db, &existing_id) {
-            Ok(particles) => particles,
-            Err(_) => return error_response(request_id, "Invalid credentials"),
-        };
+        let (stored_username, password_hash, created_at) =
+            match get_user_particles(&db, &existing_id) {
+                Ok(particles) => particles,
+                Err(_) => return error_response(request_id, "Invalid credentials"),
+            };
 
         if !verify(password, &password_hash).unwrap_or(false) {
             return error_response(request_id, "Invalid credentials");
@@ -294,7 +343,8 @@ async fn handle_bootstrap(
             println!("[Auth Debug] state_current update failed: {}", err);
         }
 
-        let token = match generate_token(&state.jwt_secret, &existing_id, &stored_username, &phone) {
+        let token = match generate_token(&state.jwt_secret, &existing_id, &stored_username, &phone)
+        {
             Ok(t) => t,
             Err(e) => return error_response(request_id, &e.to_string()),
         };
@@ -312,6 +362,7 @@ async fn handle_bootstrap(
                 created_at: Some(created_at),
             }),
             token: Some(token),
+            code: None,
         };
     }
 
@@ -393,6 +444,7 @@ async fn handle_bootstrap(
             created_at: Some(now),
         }),
         token: Some(token),
+        code: None,
     }
 }
 
@@ -502,6 +554,7 @@ async fn handle_register(
                     created_at: Some(now),
                 }),
                 token: Some(token),
+                code: None,
             };
         }
 
@@ -551,6 +604,7 @@ async fn handle_register(
                     created_at: Some(now),
                 }),
                 token: Some(token),
+                code: None,
             };
         }
 
@@ -571,6 +625,7 @@ async fn handle_register(
                 created_at: Some(created_at),
             }),
             token: None,
+            code: None,
         };
     }
 
@@ -657,6 +712,7 @@ async fn handle_register(
             created_at: Some(now),
         }),
         token: Some(token),
+        code: None,
     }
 }
 
@@ -781,6 +837,72 @@ async fn handle_login(
             created_at: Some(created_at),
         }),
         token: Some(token),
+        code: None,
+    }
+}
+
+async fn handle_request_phone_verification(
+    message: serde_json::Value,
+    request_id: Option<String>,
+) -> AuthResponse {
+    let phone = match message.get("phone").and_then(|v| v.as_str()) {
+        Some(p) if p.trim().len() >= 6 => normalize_phone(p),
+        _ => return error_response(request_id, "Phone must be at least 6 characters"),
+    };
+    if let Err(error) = enforce_local_auth_attempt_limit("phone_verification_request", &phone) {
+        return error_response(request_id, &error);
+    }
+    let code = generate_otp_code();
+    if let Err(error) = store_phone_verification(&phone, &code) {
+        return error_response(request_id, &error);
+    }
+    let expose_for_test = message
+        .get("exposeForTest")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+    AuthResponse {
+        msg_type: "auth-response".into(),
+        request_id,
+        success: true,
+        already_exists: None,
+        error: None,
+        user: None,
+        token: None,
+        code: if expose_for_test && !is_production_runtime() {
+            Some(code)
+        } else {
+            None
+        },
+    }
+}
+
+async fn handle_verify_phone_verification(
+    message: serde_json::Value,
+    request_id: Option<String>,
+) -> AuthResponse {
+    let phone = match message.get("phone").and_then(|v| v.as_str()) {
+        Some(p) if p.trim().len() >= 6 => normalize_phone(p),
+        _ => return error_response(request_id, "Phone must be at least 6 characters"),
+    };
+    let code = match message.get("code").and_then(|v| v.as_str()) {
+        Some(value) if !value.trim().is_empty() => value.trim().to_string(),
+        _ => return error_response(request_id, "Code is required"),
+    };
+    if let Err(error) = enforce_local_auth_attempt_limit("phone_verification_verify", &phone) {
+        return error_response(request_id, &error);
+    }
+    if let Err(error) = verify_phone_verification(&phone, &code) {
+        return error_response(request_id, &error);
+    }
+    AuthResponse {
+        msg_type: "auth-response".into(),
+        request_id,
+        success: true,
+        already_exists: None,
+        error: None,
+        user: None,
+        token: None,
+        code: None,
     }
 }
 
@@ -829,6 +951,7 @@ async fn handle_lookup_phone(
             created_at: Some(created_at),
         }),
         token: None,
+        code: None,
     }
 }
 
@@ -894,6 +1017,7 @@ async fn handle_me(
             created_at: Some(created_at),
         }),
         token: None,
+        code: None,
     }
 }
 
@@ -907,6 +1031,7 @@ fn handle_logout(request_id: Option<String>) -> AuthResponse {
         error: None,
         user: None,
         token: None,
+        code: None,
     }
 }
 
@@ -983,6 +1108,7 @@ async fn handle_change_password(
         error: None,
         user: None,
         token: None,
+        code: None,
     }
 }
 
@@ -1039,6 +1165,7 @@ async fn handle_delete(
         error: None,
         user: None,
         token: None,
+        code: None,
     }
 }
 
@@ -1403,6 +1530,7 @@ fn error_response(request_id: Option<String>, error: &str) -> AuthResponse {
         error: Some(error.into()),
         user: None,
         token: None,
+        code: None,
     }
 }
 
@@ -1470,6 +1598,7 @@ async fn handle_delete_fastify_token(
                 error: None,
                 user: None,
                 token: None,
+                code: None,
             }
         }
         Err(e) => error_response(request_id, &e.to_string()),

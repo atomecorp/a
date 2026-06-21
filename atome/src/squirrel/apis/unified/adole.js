@@ -1042,7 +1042,9 @@ class TauriWebSocket {
                         error: message.error,
                         user: message.user,
                         token: message.token,
-                        userId: message.userId
+                        userId: message.userId,
+                        code: message.code,
+                        context: message.context
                     });
                 }
                 return;
@@ -1425,6 +1427,24 @@ export function createWebSocketAdapter(tokenKey, backend = 'tauri') {
                     token,
                     currentPassword: data.currentPassword,
                     newPassword: data.newPassword
+                });
+            },
+            async requestPhoneVerification(data = {}) {
+                return getWs().send({
+                    type: 'auth',
+                    action: 'request-phone-verification',
+                    phone: data.phone,
+                    context: data.context,
+                    exposeForTest: data.exposeForTest === true
+                });
+            },
+            async verifyPhoneVerification(data = {}) {
+                return getWs().send({
+                    type: 'auth',
+                    action: 'verify-phone-verification',
+                    phone: data.phone,
+                    code: data.code,
+                    context: data.context
                 });
             },
             async deleteAccount(data) {

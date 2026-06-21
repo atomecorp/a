@@ -98,6 +98,23 @@ Cross-boundary design rules:
 
 ## Core Token Sources
 
+### Dashboard Bevy Tokens
+
+Primary source: `eVe/domains/dashboard/dashboard_tokens.js`
+
+Role:
+
+- Owns the dashboard v1 visual token contract for Bevy projection records: colors, radius default, shadows, layers, dimensions, header/plus/card metrics, fullscreen editor padding, and the `300ms` fullscreen transition duration.
+- The default radius is `3` and is customisable through `mergeDashboardTokens()`.
+- Tokens are consumed by `dashboard_layout.js`, `dashboard_records.js`, and `dashboard_transition.js`; static CSS and DOM style islands are not used for dashboard visuals.
+- Dashboard shape records emit `corner_radius`, carried through the product-neutral render contract into Bevy core where native shape sprites use generated alpha masks. Shadows are still represented as separate Bevy records in v1, and lane clipping is enforced by pure layout-visible rectangles rather than a general scissor primitive.
+- The Bevy dashboard follows the R&D canvas mockup structure: joined category-color lanes, square/double-width cells based on lane height, internal inset cards, white bottom-left item labels, projected header shadows, and header icons built from Bevy shape primitives. It opens with no focused category; after an entête click, inactive headers dim and one active full-height `+` strip appears.
+- `tests/eve/dashboard_mockup_design_contract.test.mjs` guards the stable mockup-derived constants and palette so future token changes must stay intentional.
+- Dashboard visual QA samples real Playwright screenshots for the mockup category colors and verifies that active color fills the dashboard crop while the reserved toolbox band remains outside dashboard rendering.
+- Lane drag scroll keeps per-lane offsets in dashboard runtime state, projects the final offset from pointer velocity, then animates to the nearest exact snap point.
+
+Design rule: dashboard UI must remain data-driven and canvas-rendered. Do not add a DOM dashboard renderer, HTML item cards, per-item canvases, or CSS-driven dashboard layout.
+
 ### System UI Tokens
 
 Primary source: `eVe/elements/system_ui_tokens.js`
@@ -482,15 +499,17 @@ Design rule: icon styling belongs in visual factories or tokens. Do not duplicat
 
 ## Login Sequence Surface
 
-Primary sources: `eVe/intuition/tools/user_login_sequence.js`, `eVe/intuition/tools/user_login_choice.js`, `eVe/intuition/tools/user_login_credentials.js`
+Primary sources: `eVe/intuition/tools/user_login_sequence.js`, `eVe/intuition/tools/user_login_choice.js`, `eVe/intuition/tools/user_login_credentials.js`, `eVe/intuition/tools/user_login_choreography.js`
 
 Role:
 
-- Owns the unauthenticated initial login visual surface. The first surface is a full-screen two-zone choice: black left/top for entering without an account, white right/bottom for authentication. The credential surface keeps the black full-screen shell, top instruction, central mirrored input value/cursor, and bottom Atome logo validation control.
-- Reuses eVe design factories for text, phone input, and password input. The bottom validation control reuses the shared disconnected Atome handle pulse from `eVe/intuition/ribbon/disconnected_handle_logo.js`, because the generic button factory clamps text and is not a stable host for nested logo chrome.
+- Owns the unauthenticated initial login visual surface. The first surface is a full-screen two-zone choice: the upper area enters without an account on a dark mauve-to-black animated gradient, the lower area opens authentication on a deep violet-to-black animated gradient, and the single persistent white Atome logo starts exactly on the junction as an authentication control with a soft pulsing violet/white halo.
+- The credential surface is a full-screen 1/7-5/7-1/7 composition for phone, OTP, and password. The upper band owns the current instruction or OTP error, the central band owns the native input capture with a visible caret plus mirrored value, and the persistent Atome logo moves to the bottom band as the validation control. In test/demo OTP mode the upper band displays `O.T.P: {code}` instead of the production SMS instruction.
+- `user_login_choreography.js` owns the continuous animation contract: no duplicated login logo, no teleportation, logo FLIP movement between targets, scroll-down central swaps between phone/OTP/password, fade/micro-motion text transitions, living top/bottom bands, animated gradient breathing, invalid pulses, animated return to the first screen, and sequenced desktop reveal for password success and guest entry. The reveal order is background fade, text blur/scale fade, bands exit, then final logo docking to `button[data-role="eve_intuitionx-handle"]`.
+- Reuses eVe design factories for text, phone input, and password input. `eVe/intuition/tools/user_login_visual_contract.js` owns the login-only structured visual tokens, animated gradients, band geometry, shell, and native-input styles for this sequence.
 - Uses `eVe/i18n/languages.js` keys under `eve.user.login_choice.*` and `eve.user.login_sequence.*` for visible and assistive text.
 
-Design rule: this surface must remain minimal and must not reintroduce the legacy compact phone/password panel as the initial unauthenticated login UI. Landscape keeps the black choice on the left and white choice on the right; portrait keeps the black choice on top and white choice on the bottom.
+Design rule: this surface must remain minimal and must not reintroduce the legacy compact phone/password panel as the initial unauthenticated login UI. It must not draw a phone mockup, notch, extra buttons, error text, step indicators, or a circle/box/background behind the logo. The active flow is choice -> phone -> OTP -> password -> final reveal.
 
 ## Validation Expectations
 

@@ -1,6 +1,11 @@
 # Renderer Unification — Consolidate All Atome Video/Media Rendering onto Bevy
 
-Status: Approved — executing in validated increments.
+Status: **COMPLETE (2026-06-20) — consolidation achieved and guarded; archived to `done/`.**
+- The unique deliverable of this plan — collapse the **four** WebGPU video/media render paths into the **single Bevy renderer** and delete the redundant code — is DONE: `molecule.webgpu.js`, `mtrax_renderer_webgpu_adapter.js` (+ `mtrax_renderer_runtime/adapter/environment.js` glue), `webgpu_video_preview_renderer.js`, `native_frame_video_preview_renderer.js`, and the dead Rust `apply_atome_bevy_video_track`/`AtomeVideoTrack` exports are all removed; `mtrax-c2d-*` private layers are gone. A regression guard now codifies this: `tests/eve/renderer_unification_guard.test.mjs` (3/3).
+- Inc 0 (color), Inc 1 (recording viewfinder → plain UI), Inc 2 (Molecule per-Atome → Bevy) DONE (see increment notes below).
+- Inc 3 (MTrax timeline editor → Bevy) converged with the **NewMolecules** editor reintegration: M1 filters, M2 transitions, M3 scrub/playhead, M4 selection/hit-test are done there on the single Bevy canvas; the old MTrax compositor is deleted. The remaining M5 (karaoke text + waveform overlay) and M7 (cross-platform montage + Kira A/V sync validation) are tracked as **NewMolecules V2.1 / V2.2 / V3** (M7 is hardware-gated on Tauri/iOS/AUv3). They are editor feature-completeness, not renderer-consolidation, so they continue under the editor task — this consolidation plan is complete.
+- Known minor follow-up (non-blocking, not a goal violation): the audio-host `.eve-media-canvas` in `molecule.api.js` `ensureAudioMount` renders nothing (Kira-only audio) but is still created and guarded by `media_api_suite_probe`; safe to retire once that probe's expectation is updated.
+
 Owner intent: One GPU renderer for all Atome content (project scene, media, previews). Everything except menu/UI chrome must render through Bevy + WebGPU canvas, and nothing else.
 Authority: This plan is subordinate to `.codex/AGENTS.md`. If any action below conflicts with a rule there, stop and report the conflict; do not weaken the rule.
 

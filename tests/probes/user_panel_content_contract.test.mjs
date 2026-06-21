@@ -8,6 +8,10 @@ globalThis.getComputedStyle = window.getComputedStyle.bind(window);
 globalThis.requestAnimationFrame = window.requestAnimationFrame;
 globalThis.cancelAnimationFrame = window.cancelAnimationFrame;
 
+const mainHandle = document.createElement('button');
+mainHandle.setAttribute('data-role', 'eve_intuitionx-handle');
+document.body.appendChild(mainHandle);
+
 window.ResizeObserver = class {
     observe() {}
     disconnect() {}
@@ -89,6 +93,11 @@ const submitLoginCredentials = async (phone, password) => {
     dispatchInput(phoneField);
     dispatchEnter(phoneField);
     await new Promise((resolve) => setTimeout(resolve, 0));
+    const otpInput = document.getElementById('eve_login_sequence__otp_input');
+    otpInput.value = '5273';
+    dispatchInput(otpInput);
+    dispatchEnter(otpInput);
+    await new Promise((resolve) => setTimeout(resolve, 0));
     const passwordFieldInput = document.getElementById('eve_login_sequence__password_field__input');
     passwordFieldInput.value = password;
     dispatchInput(passwordFieldInput);
@@ -121,13 +130,19 @@ const loginChoice = document.getElementById('eve_login_sequence__choice');
 const withoutAccountChoice = document.getElementById('eve_login_sequence__choice_without_account');
 const authenticateChoice = document.getElementById('eve_login_sequence__choice_authenticate');
 assert.equal(loginChoice?.style?.display, 'flex', 'login choice must be the first visible auth surface');
-assert.equal(loginChoice?.style?.flexDirection, 'row', 'landscape login choice must split vertically');
-assert.equal(withoutAccountChoice?.textContent, 'entrez sans compte', 'without-account label must come from i18n');
-assert.equal(authenticateChoice?.textContent, 'authentifiez vous', 'authenticate label must come from i18n');
-assert.equal(withoutAccountChoice?.style?.background, 'rgb(0, 0, 0)', 'without-account side must be black');
+assert.equal(loginChoice?.style?.flexDirection, 'column', 'login choice must split horizontally');
+assert.equal(withoutAccountChoice?.textContent, 'Entrez sans compte', 'without-account label must come from i18n');
+assert.equal(authenticateChoice?.textContent, 'Authentification', 'authenticate label must come from i18n');
+assert.equal(withoutAccountChoice?.style?.background, 'transparent', 'without-account button must keep its background on the animated layer');
+assert.match(withoutAccountChoice?.querySelector('span')?.style?.background || '', /linear-gradient/, 'without-account side must use the dark mauve gradient');
 assert.equal(withoutAccountChoice?.style?.color, 'rgb(255, 255, 255)', 'without-account text must be white');
-assert.equal(authenticateChoice?.style?.background, 'rgb(255, 255, 255)', 'authenticate side must be white');
-assert.equal(authenticateChoice?.style?.color, 'rgb(0, 0, 0)', 'authenticate text must be black');
+assert.equal(authenticateChoice?.style?.background, 'transparent', 'authenticate button must keep its background on the animated layer');
+assert.match(authenticateChoice?.querySelector('span')?.style?.background || '', /linear-gradient/, 'authenticate side must use the dark violet gradient');
+assert.equal(authenticateChoice?.style?.color, 'rgb(255, 255, 255)', 'authenticate text must be white');
+const centralLogo = document.getElementById('eve_login_sequence__persistent_logo');
+assert.ok(centralLogo, 'login choice must expose one persistent Atome logo control');
+assert.equal(document.querySelectorAll('#eve_login_sequence__persistent_logo').length, 1, 'login must keep a single persistent logo node');
+assert.equal(document.getElementById('eve_login_sequence__choice_logo'), null, 'login choice must not create a second static logo');
 
 setViewport(700, 1200);
 assert.equal(loginChoice?.style?.flexDirection, 'column', 'portrait login choice must split horizontally');
@@ -144,7 +159,7 @@ assert.equal(document.getElementById('eve_login_sequence__choice')?.style?.displ
 await activateButton(document.getElementById('eve_login_sequence__choice_authenticate'));
 assert.equal(
     document.getElementById('eve_login_sequence__instruction')?.textContent,
-    'Entrez votre téléphone',
+    'Entrez votre numéro de téléphone',
     'authenticate choice must open the phone step'
 );
 await new Promise((resolve) => setTimeout(resolve, 0));
@@ -154,14 +169,36 @@ assert.equal(
     'phone input must receive initial focus'
 );
 const pendingAuthPhoneInput = document.getElementById('eve_login_sequence__phone_input');
+window.AdoleAPI.auth.requestPhoneVerification = async () => ({ ok: true, code: '5273' });
+window.AdoleAPI.auth.verifyPhoneVerification = async (_phone, code) => ({ ok: code === '5273' });
 pendingAuthPhoneInput.value = '0600000000';
 dispatchInput(pendingAuthPhoneInput);
 dispatchEnter(pendingAuthPhoneInput);
 await new Promise((resolve) => setTimeout(resolve, 0));
 assert.equal(
     document.getElementById('eve_login_sequence__instruction')?.textContent,
-    'Entrez votre mot de passe',
-    'phone entry must advance to password before auth transition checks'
+    'O.T.P: 5273',
+    'phone entry must advance to visible demo OTP before auth transition checks'
+);
+const pendingOtpInput = document.getElementById('eve_login_sequence__otp_input');
+pendingOtpInput.value = '0000';
+dispatchInput(pendingOtpInput);
+dispatchEnter(pendingOtpInput);
+await new Promise((resolve) => setTimeout(resolve, 0));
+assert.equal(
+    document.getElementById('eve_login_sequence__instruction')?.textContent,
+    'Code incorrect',
+    'invalid OTP must display a precise error'
+);
+assert.equal(pendingOtpInput.value, '', 'invalid OTP must clear the entered code');
+pendingOtpInput.value = '5273';
+dispatchInput(pendingOtpInput);
+dispatchEnter(pendingOtpInput);
+await new Promise((resolve) => setTimeout(resolve, 0));
+assert.equal(
+    document.getElementById('eve_login_sequence__instruction')?.textContent,
+    'Saisissez votre mot de passe',
+    'validated OTP must advance to password before auth transition checks'
 );
 window.dispatchEvent(new window.CustomEvent('squirrel:auth-checked', {
     detail: { authenticated: false, userId: null, anonymous: false }
@@ -177,11 +214,12 @@ assert.equal(
     'none',
     'transient unauthenticated auth-check during credential entry must not redraw the first choice screen'
 );
-const logoButton = document.getElementById('eve_login_sequence__logo');
+const logoButton = document.getElementById('eve_login_sequence__persistent_logo');
 assert.equal(logoButton?.style?.background, 'transparent', 'login validation logo must not render a square background');
 assert.equal(logoButton?.style?.border, '0px', 'login validation logo must not render a rounded square border');
 assert.equal(logoButton?.style?.boxShadow, 'none', 'login validation logo must not render a panel shadow');
-assert.equal(logoButton?.style?.position, 'fixed', 'login validation logo must stay pinned to the page bottom');
+assert.equal(logoButton?.style?.position, 'absolute', 'login validation logo must stay inside the login shell');
+assert.equal(document.getElementById('eve_login_sequence__logo'), null, 'credential flow must not create a second validation logo');
 const logoImage = logoButton?.querySelector?.('img');
 assert.ok(logoImage?.src?.includes('atome.svg'), 'login validation control must render the pulsing Atome logo image');
 const authBody = document.getElementById('eve_auth_dialog__body');
@@ -230,15 +268,10 @@ window.AdoleAPI.auth.getCurrentInfo = () => createdSession ? { id: createdSessio
 window.AdoleAPI.security.isAuthenticated = () => !!createdSession;
 window.AdoleAPI.security.isAnonymous = () => false;
 
-const sequencePhoneInput = document.getElementById('eve_login_sequence__phone_input');
-sequencePhoneInput.value = '0612345678';
-dispatchInput(sequencePhoneInput);
-dispatchEnter(sequencePhoneInput);
-await new Promise((resolve) => setTimeout(resolve, 0));
 assert.equal(
     document.getElementById('eve_login_sequence__instruction')?.textContent,
-    'Entrez votre mot de passe',
-    'validated phone must advance to password entry'
+    'Saisissez votre mot de passe',
+    'preserved credential flow must remain on password before bootstrap'
 );
 const sequencePasswordInput = document.getElementById('eve_login_sequence__password_field__input');
 sequencePasswordInput.value = 'validpass';
@@ -326,6 +359,8 @@ window.AdoleAPI.auth.bootstrap = async (phone, password, username, visibility) =
     };
 };
 window.AdoleAPI.auth.current = async () => ({ logged: false, user: null });
+window.AdoleAPI.auth.requestPhoneVerification = async () => ({ ok: true, code: '5273' });
+window.AdoleAPI.auth.verifyPhoneVerification = async (_phone, code) => ({ ok: code === '5273' });
 await submitLoginCredentials('0611111111', 'wrongpass');
 assert.equal(
     document.getElementById('eve_login_sequence')?.style?.display,
@@ -333,9 +368,9 @@ assert.equal(
     'existing phone with wrong password must stay on login'
 );
 assert.equal(
-    document.getElementById('eve_login_sequence__instruction')?.textContent,
-    'Entrez votre téléphone',
-    'wrong password must reset to phone entry'
+    document.getElementById('eve_login_sequence__choice')?.style?.display,
+    'flex',
+    'wrong password must return to the first login choice'
 );
 await submitLoginCredentials('0611111111', 'rightpass');
 assert.equal(
@@ -373,10 +408,18 @@ const invalidSequence = createUserLoginSequence({
 });
 invalidSequence.open();
 await activateButton(document.getElementById('eve_login_sequence__choice_authenticate'));
+window.AdoleAPI.auth.requestPhoneVerification = async () => ({ ok: true, code: '5273' });
+window.AdoleAPI.auth.verifyPhoneVerification = async (_phone, code) => ({ ok: code === '5273' });
 const invalidPhoneInput = document.getElementById('eve_login_sequence__phone_input');
 invalidPhoneInput.value = '0699999999';
 dispatchInput(invalidPhoneInput);
 dispatchEnter(invalidPhoneInput);
+await new Promise((resolve) => setTimeout(resolve, 0));
+const invalidOtpInput = document.getElementById('eve_login_sequence__otp_input');
+assert.equal(document.getElementById('eve_login_sequence__instruction')?.textContent, 'O.T.P: 5273', 'failed login test must expose the demo OTP');
+invalidOtpInput.value = '5273';
+dispatchInput(invalidOtpInput);
+dispatchEnter(invalidOtpInput);
 await new Promise((resolve) => setTimeout(resolve, 0));
 const invalidPasswordInput = document.getElementById('eve_login_sequence__password_field__input');
 invalidPasswordInput.value = 'badpass';
@@ -384,17 +427,9 @@ dispatchInput(invalidPasswordInput);
 dispatchEnter(invalidPasswordInput);
 await new Promise((resolve) => setTimeout(resolve, 0));
 const invalidInstruction = document.getElementById('eve_login_sequence__instruction');
-const invalidNotice = document.getElementById('eve_login_sequence__notice');
 assert.equal(failedLoginPayload?.phone, '0699999999', 'failed login must submit the entered phone');
-assert.equal(invalidInstruction?.textContent, 'Entrez votre téléphone', 'failed login must return to phone entry immediately');
-assert.equal(document.activeElement?.id, 'eve_login_sequence__phone_input', 'failed login must focus phone entry');
-assert.equal(invalidNotice?.textContent, 'Identifiant ou mot de passe incorrect', 'failed login must keep the generic auth message visible');
-assert.equal(invalidNotice?.style?.fontSize, invalidInstruction?.style?.fontSize, 'invalid auth message must use instruction font size');
-assert.equal(invalidNotice?.style?.lineHeight, invalidInstruction?.style?.lineHeight, 'invalid auth message must use instruction line height');
-assert.equal(invalidNotice?.style?.fontWeight, invalidInstruction?.style?.fontWeight, 'invalid auth message must use instruction font weight');
-invalidPhoneInput.value = '0';
-dispatchInput(invalidPhoneInput);
-assert.equal(invalidNotice?.textContent, '', 'invalid auth message must clear when phone entry starts');
+assert.equal(document.getElementById('eve_login_sequence__choice')?.style?.display, 'flex', 'failed login must return to the first screen');
+assert.equal(invalidInstruction?.textContent, 'Saisissez votre mot de passe', 'hidden credential surface keeps its last label without showing an error');
 invalidSequence.destroy();
 
 const spoken = [];
@@ -419,13 +454,20 @@ const sequence = createUserLoginSequence({
 sequence.open();
 await activateButton(document.getElementById('eve_login_sequence__choice_authenticate'));
 const sequenceCredentials = document.getElementById('eve_login_sequence__credentials');
+window.AdoleAPI.auth.requestPhoneVerification = async () => ({ ok: true, code: '5273' });
+window.AdoleAPI.auth.verifyPhoneVerification = async (_phone, code) => ({ ok: code === '5273' });
 sequenceCredentials.dispatchEvent(new window.MouseEvent('pointerdown', { bubbles: true }));
 await new Promise((resolve) => setTimeout(resolve, 720));
 assert.equal(
     document.getElementById('eve_login_sequence__instruction')?.textContent,
-    'Entrez votre mot de passe',
-    'voice-confirmed phone must advance to password step'
+    'O.T.P: 5273',
+    'voice-confirmed phone must advance to OTP step'
 );
+const voiceOtpInput = document.getElementById('eve_login_sequence__otp_input');
+voiceOtpInput.value = '5273';
+dispatchInput(voiceOtpInput);
+dispatchEnter(voiceOtpInput);
+await new Promise((resolve) => setTimeout(resolve, 0));
 sequenceCredentials.dispatchEvent(new window.MouseEvent('pointerdown', { bubbles: true }));
 await new Promise((resolve) => setTimeout(resolve, 720));
 assert.equal(submittedLogin?.phone, '0612345678', 'voice phone must be submitted through the login payload');

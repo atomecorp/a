@@ -59,7 +59,7 @@ import {
   getABoxWatcherHandle,
   getABoxEventBus
 } from './aBoxServer.js';
-import { registerAuthRoutes, createUserAtome, findUserByPhone, findUserById, listAllUsers, updateUserParticle, deleteUserAtome, hashPassword, generateDeterministicUserId, normalizePhone } from './auth.js';
+import { registerAuthRoutes, createUserAtome, findUserByPhone, findUserById, listAllUsers, updateUserParticle, deleteUserAtome, hashPassword, generateDeterministicUserId, normalizePhone, generateOTP, storeOTP, verifyOTP, sendSMS, enforceAuthIdentityRateLimit } from './auth.js';
 import {
   commitAtomeEvent,
   commitAtomeEvents,
@@ -3579,6 +3579,96 @@ async function startServer() {
                   console.warn("[server] operation failed", error);
                   connection._wsApiAuthExpMs = null;
                 }
+              } else if (action === 'request-phone-verification') {
+                const rawPhone = data.phone;
+                if (!rawPhone || typeof rawPhone !== 'string') {
+                  safeSend({
+                    type: 'auth-response',
+                    requestId,
+                    success: false,
+                    error: 'Missing required field: phone'
+                  });
+                  return;
+                }
+                const cleanPhone = normalizePhone(rawPhone);
+                if (!cleanPhone || cleanPhone.length < 6) {
+                  safeSend({
+                    type: 'auth-response',
+                    requestId,
+                    success: false,
+                    error: 'Valid phone number is required'
+                  });
+                  return;
+                }
+                const rate = enforceAuthIdentityRateLimit('phone_verification_request', cleanPhone, 3);
+                if (!rate.ok) {
+                  safeSend({
+                    type: 'auth-response',
+                    requestId,
+                    success: false,
+                    ok: false,
+                    retryAfterSeconds: rate.retryAfterSeconds,
+                    error: 'Too many verification requests'
+                  });
+                  return;
+                }
+                const code = generateOTP();
+                storeOTP(cleanPhone, code);
+                await sendSMS(cleanPhone, `Your Atome verification code is: ${code}`);
+                const response = {
+                  type: 'auth-response',
+                  requestId,
+                  success: true,
+                  ok: true,
+                  context: data.context || 'login_demo'
+                };
+                if (data.exposeForTest === true && process.env.NODE_ENV !== 'production') {
+                  response.code = code;
+                }
+                safeSend(response);
+              } else if (action === 'verify-phone-verification') {
+                const rawPhone = data.phone;
+                const code = data.code === undefined || data.code === null ? '' : String(data.code).trim();
+                if (!rawPhone || typeof rawPhone !== 'string' || !code) {
+                  safeSend({
+                    type: 'auth-response',
+                    requestId,
+                    success: false,
+                    error: 'Missing required fields: phone, code'
+                  });
+                  return;
+                }
+                const cleanPhone = normalizePhone(rawPhone);
+                const rate = enforceAuthIdentityRateLimit('phone_verification_verify', cleanPhone, 5);
+                if (!rate.ok) {
+                  safeSend({
+                    type: 'auth-response',
+                    requestId,
+                    success: false,
+                    ok: false,
+                    retryAfterSeconds: rate.retryAfterSeconds,
+                    error: 'Too many verification attempts'
+                  });
+                  return;
+                }
+                const result = verifyOTP(cleanPhone, code);
+                if (!result.valid) {
+                  safeSend({
+                    type: 'auth-response',
+                    requestId,
+                    success: false,
+                    ok: false,
+                    error: result.error || 'Invalid OTP code'
+                  });
+                  return;
+                }
+                safeSend({
+                  type: 'auth-response',
+                  requestId,
+                  success: true,
+                  ok: true,
+                  context: data.context || 'login_demo'
+                });
               } else if (action === 'lookup-phone') {
                 const rawPhone = data.phone;
                 if (!rawPhone || typeof rawPhone !== 'string') {

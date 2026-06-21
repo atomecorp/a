@@ -298,9 +298,9 @@ function readClientRateKey(request, identity = '') {
     return `${ip}:${String(identity || '').trim()}`;
 }
 
-function enforceAuthRateLimit(request, bucket, identity, limit = 8, windowMs = 15 * 60 * 1000) {
+export function enforceAuthIdentityRateLimit(bucket, identity, limit = 8, windowMs = 15 * 60 * 1000) {
     const now = Date.now();
-    const key = `${bucket}:${readClientRateKey(request, identity)}`;
+    const key = `${bucket}:${String(identity || '').trim()}`;
     const current = authRateStore.get(key);
     if (!current || now >= current.resetAt) {
         authRateStore.set(key, { count: 1, resetAt: now + windowMs });
@@ -314,6 +314,10 @@ function enforceAuthRateLimit(request, bucket, identity, limit = 8, windowMs = 1
         };
     }
     return { ok: true };
+}
+
+function enforceAuthRateLimit(request, bucket, identity, limit = 8, windowMs = 15 * 60 * 1000) {
+    return enforceAuthIdentityRateLimit(bucket, readClientRateKey(request, identity), limit, windowMs);
 }
 
 function hashRefreshSecret(secret) {

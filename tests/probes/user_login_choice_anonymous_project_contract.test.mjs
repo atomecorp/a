@@ -43,6 +43,9 @@ globalThis.$ = (tag, options = {}) => {
 const view = document.createElement('div');
 view.id = 'view';
 document.body.appendChild(view);
+const mainHandle = document.createElement('button');
+mainHandle.setAttribute('data-role', 'eve_intuitionx-handle');
+document.body.appendChild(mainHandle);
 
 window.__authCheckComplete = false;
 window.__authCheckResult = { authenticated: false, userId: null, anonymous: false };

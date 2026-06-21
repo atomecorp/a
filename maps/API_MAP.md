@@ -53,6 +53,53 @@ Cross-boundary API rules:
 
 ## Verified API Families
 
+### eVe Dashboard Runtime API
+
+Ownership: eVe closed.
+
+Primary sources:
+
+- `eVe/domains/dashboard/dashboard_runtime.js`
+- `eVe/domains/dashboard/dashboard_data_adapters.js`
+- `eVe/domains/dashboard/dashboard_transition.js`
+- `eVe/domains/rendering/surface_runtime.js`
+
+Exposure:
+
+- JavaScript module exports: `createDashboardRuntime`, `getDashboardRuntime`, `openDashboardRuntime`, `closeDashboardRuntime`, `toggleDashboardRuntime`.
+- Runtime global: `window.eveDashboardRuntime`, installed by the dashboard runtime for product runtime access.
+- Surface interaction hook: `setRenderSurfaceInteractionInterceptor(zone, interceptor)` in `surface_runtime.js`.
+- Tool ids: `tool.dashboard.news`, `tool.dashboard.monitor`, `tool.dashboard.goals`, and hidden future `tool.dashboard.store`.
+
+Boundary status: Semi-public closed eVe product runtime. Dashboard durable generic-record creation must route through `window.Atome.commit`; Calendar, Contacts, and Projects are reached through their existing APIs/adapters. Store intentionally returns an explicit disabled error until its domain is defined.
+
+Effect model:
+
+- Open/close/render are ephemeral Bevy projection operations over the current project surface.
+- Runtime layout and hit-testing stay in CSS coordinates; dashboard render records may be scaled/offset to physical Bevy presentation coordinates by `dashboard_runtime.js` before they enter the project scene.
+- Fullscreen editor transitions are runtime-only rectangle interpolations; the durable item payload is not mutated by animation state.
+- Generic News, Monitor, and Goals record creation is persistent and uses the canonical Atome commit boundary.
+- Generic News, Monitor, and Goals records use the open Atome `record` type with `source_domain: "eve.dashboard"` and a generic `category_id`; no product-specific Atome type is introduced for these domains in v1.
+- Calendar and Contacts creation delegate to their existing domain APIs.
+- Project creation delegates to the existing Matrix/Adole project API and stable project-order helpers; dashboard does not duplicate Matrix project creation logic.
+
+### Bevy Shape Projection Style API
+
+Ownership: Atome open, product-neutral rendering contract.
+
+Primary sources:
+
+- `eVe/domains/rendering/render_atom.js`
+- `eVe/domains/rendering/virtual_scene_contract.js`
+- `eVe/domains/rendering/bevy_projection_adapter.js`
+- `atome/renderers/bevy-core/src/types.rs`
+- `atome/renderers/bevy-core/src/texture.rs`
+- `atome/renderers/bevy-core/src/spawn.rs`
+
+Exposure: render records may set `corner_radius` / `cornerRadius` / `radius`; normalized virtual scene nodes expose `material.cornerRadius`; Bevy payloads expose `corner_radius`; Bevy core applies it to `shape` sprites by generating an alpha-mask texture.
+
+Boundary status: Open product-neutral rendering style. eVe may consume it through render records, but the contract must not encode dashboard-specific behavior.
+
 ### eVe Atome Drag Runtime API
 
 Ownership: eVe closed.
@@ -110,6 +157,8 @@ Known constraints: `atome/src/squirrel/apis/unified/adole.js` is a large legacy 
 
 Authentication bootstrap: `AdoleAPI.auth.bootstrap(phone, password, username, visibility)` is the atomic first-auth contract. Existing-phone attempts must verify the password and return a real authenticated token/session; unknown-phone attempts may create the account. UI code must not emulate this by calling `auth.login` followed by `auth.create`, and must not add its own post-bootstrap session gate beyond the canonical bootstrap success result and auth/session events owned by Atome auth state.
 
+Pre-auth phone verification: `AdoleAPI.auth.requestPhoneVerification(phone, context, { exposeForTest })` and `AdoleAPI.auth.verifyPhoneVerification(phone, code, context)` are the browser-facing pre-auth OTP contract for login demos, account creation, and new-machine checks. The implementation lives in `atome/src/squirrel/apis/unified/adole_api/auth_phone_verification.js`, routes through the single active Adole WebSocket auth backend, and must not fall back to a secondary backend or add HTTP endpoints. Test/demo mode may expose `code` only when the backend explicitly returns it outside production; production responses must not expose the OTP secret.
+
 Atome mutation rule: `AdoleAPI.atomes.create` and `AdoleAPI.atomes.alter` are public compatibility method names, but their framework implementation must emit canonical event commits through `adapter.atome.commit`. Direct adapter-level `atome.create` / `atome.alter` calls are legacy WebSocket protocol adapters only and must not be used as durable framework write paths.
 
 Atome browser projection owner: `atome/src/squirrel/apis/unified/adole_api/atome_record_projection.js` owns browser-side normalization of Atome API records and state-current results into canonical `{ id, type, kind, renderer, meta, traits, properties }` records at network/runtime boundaries. Historical transport aliases may be read only at that boundary and must not be re-emitted as a public Atome format.
@@ -133,6 +182,8 @@ Verified route families:
 - WebSocket APIs: `/ws/api`, `/ws/sync`.
 
 Boundary status: Open server infrastructure. Route names containing `eve` currently exist for product mail integration and must be reviewed before being treated as stable open API names.
+
+Pre-auth OTP WebSocket actions: `/ws/api` auth messages `request-phone-verification` and `verify-phone-verification` own the login pre-auth OTP request/check flow. They reuse `generateOTP`, `storeOTP`, `verifyOTP`, `sendSMS`, and `enforceAuthIdentityRateLimit` from `server/auth.js`; no `/api/auth/request-phone-verification` or `/api/auth/verify-phone-verification` REST route is part of this contract.
 
 Atome route ownership: `server/atomeRoutes.orm.js` owns route orchestration, authentication, and event commit helpers; CRUD HTTP routes are owned by `server/atomeCrudRoutes.js`; event/state/snapshot routes are owned by `server/atomeEventRoutes.js`; boundary formatting lives in `server/atomeRouteContract.js`; WebSocket sync side effects live in `server/atomeSyncRuntime.js`.
 
@@ -384,7 +435,7 @@ Verified entry points: `invokeProjectMediaImport`, `requestProjectImportFiles`, 
 
 Boundary rules:
 
-- File selection is UI intent collection only; durable media creation is delegated to `eVe/intuition/tools/project_drop.js` through `importFilesToProjectViaCreator`, implemented by `project_drop_external_runtime.js` through the canonical `ui.creator` gateway.
+- File selection is UI intent collection only; durable media creation is delegated to `eVe/intuition/tools/project_drop.js` through `importFilesToProjectViaCreator`, implemented by `project_drop_external_runtime.js` through the canonical `ui.creator` gateway. During RF-02, project-drop internals are split into closed focused runtimes: media/drop normalization (`project_drop_media_runtime.js`), Finder payload resolution (`project_drop_finder_payload_runtime.js`), drop-event/project-layer resolution (`project_drop_event_runtime.js`), drop-zone attach/destroy/reset (`project_drop_zone_runtime.js`), main-ribbon trash/drop session state (`project_drop_main_toolbox_session_runtime.js`), projected tool catalog/type/palette resolution (`project_drop_tool_catalog_runtime.js`), projection palette child hydration/expand/collapse/visibility sync (`project_drop_projection_palette_runtime.js`), projection slider relayout/value apply routing (`project_drop_projection_slider_runtime.js`), projection drag ghost-image creation/cleanup (`project_drop_projection_drag_preview_runtime.js`), tool-projection instance drag/move/delete/toolbox-reinsert persistence (`project_drop_projection_move_runtime.js` plus `project_drop_projection_move_flower_guard.js`), the projection dynamic toolbox handle gesture (`project_drop_toolbox_handle_drag_runtime.js`), the projection dynamic toolbox proximity rebalancer/container builder (`project_drop_toolbox_rebalance_runtime.js`), the grouped toolbox container chrome build/refresh + cap stepping (`project_drop_toolbox_chrome_runtime.js`), projection tool visual mounting (`project_drop_tool_visual_mount_runtime.js`), Finder/tool record drop handling (`project_drop_finder_record_drop_runtime.js`), projected tool button latch/icon/payload state (`project_drop_tool_button_state_runtime.js`), projection global event delegation (`project_drop_delegation_runtime.js`), and projection host geometry/clustering leaf helpers (`project_drop_projection_host_geometry_runtime.js`). These modules are internal eVe implementation owners, not new open APIs.
 - The runtime may use the native iOS/AUv3 document picker, browser file picker, or hidden input picker only as file-selection surfaces.
 - Temporary iOS/AUv3 import diagnosis logs were removed after the import and Bevy projection path was validated; this runtime now exposes the same import entry points without Xcode-console spam.
 - It must not persist Atome state, upload files, or render media directly.
@@ -404,15 +455,268 @@ Verified entry points: `createCaptureSourceRuntime`, `createCapturePreviewSessio
 
 Boundary status: Closed product tool runtime API. Capture selection, preview, quick-record, fullscreen, and reveal owners may collect UI intent and projection-only preview state, but durable media Atome creation remains delegated to the existing media/import/recording commit paths.
 
+### eVe Panel Tool Registration Runtime API
+
+Ownership: eVe closed Intuition panel tool registration boundary.
+
+Primary source: `eVe/intuition/runtime/eve_intuition/panel_tool_registration_runtime.js`.
+
+Exposure: JavaScript module export consumed by `eVe/intuition/eVeIntuition.js` during boot registration.
+
+Verified entry point: `registerPanelUiToolsRuntime`.
+
+Boundary rules:
+
+- The runtime registers existing panel surface tools only and keeps actual panel open/close behavior in injected panel callbacks.
+- It may read `PANEL_SURFACE_DEFINITIONS` for canonical tool IDs and surface IDs but must not create duplicate panel definitions or alternate panel state.
+- It must preserve the boot registration order before basic UI tools so existing runtime lookup remains deterministic.
+
+Boundary status: Closed product runtime API. Public promotion would require a product-neutral panel registration contract.
+
+### eVe Main Tool Latched State Runtime API
+
+Ownership: eVe closed Intuition main-tool visual/latched state resolution boundary.
+
+Primary source: `eVe/intuition/runtime/eve_intuition/main_tool_latched_state_runtime.js`.
+
+Exposure: JavaScript module export consumed by `eVe/intuition/eVeIntuition.js` when resolving main tool activation state.
+
+Verified entry point: `createMainToolLatchedStateRuntime`.
+
+Boundary rules:
+
+- The runtime may read runtime tool APIs, cached latch state, menu alias families, visible panel surfaces, and disposable tool button DOM state.
+- It must not invoke tools, open panels, mutate durable Atome state, or create alternate latch caches.
+- Canonical latch writes remain owned by `tool_latched_state_runtime.js`; this runtime is read-only state resolution.
+
+Boundary status: Closed product runtime API. Public promotion would require a product-neutral tool-state contract.
+
+### eVe Main Tool Selection Guard Runtime API
+
+Ownership: eVe closed Intuition selection-required tool policy boundary.
+
+Primary source: `eVe/intuition/runtime/eve_intuition/main_tool_selection_guard_runtime.js`.
+
+Exposure: JavaScript module export consumed by `eVe/intuition/eVeIntuition.js` when blocking selection-required main tool activation without a target.
+
+Verified entry point: `createMainToolSelectionGuardRuntime`.
+
+Boundary rules:
+
+- The runtime may read the canonical selection snapshot and may un-latch a blocked tool through the injected latch sync.
+- It owns the selection-required key/tool-id policy for vector and record-action style tools; consumers must ask this runtime instead of duplicating the required-key set.
+- It must not invoke tools, synthesize selection, or create fallback activation behavior when no target exists.
+
+Boundary status: Closed product runtime API. Public promotion would require a product-neutral selection capability contract.
+
+### eVe Main Menu Runtime APIs
+
+Ownership: eVe closed Intuition main-menu composition, content declaration, auth, catalog, and registration boundary.
+
+Primary sources: `eVe/intuition/runtime/eve_intuition/main_menu_runtime.js`, `main_menu_content_runtime.js`, `main_menu_auth_runtime.js`, `main_tool_interaction_runtime.js`, `main_tool_latched_state_runtime.js`, `main_tool_selection_guard_runtime.js`, and `main_tool_registration_runtime.js`.
+
+Exposure: JavaScript module export consumed by `eVe/intuition/eVeIntuition.js` during boot menu construction.
+
+Verified entry points: `createMainMenuRuntime`, `createMainMenuContentRuntime`, `createMainMenuAuthRuntime`, `createMainToolCatalogRuntime`, `createMainToolInteractionRuntime`, `createMainToolLatchedStateRuntime`, `createMainToolSelectionGuardRuntime`, and `createMainToolRegistrationRuntime`.
+
+Boundary rules:
+
+- The composite runtime owns the closed main-menu wiring and receives product callbacks by injection.
+- The content runtime owns the content object for the main Intuition menu.
+- The visible main sequence is `home`, `find`, `time`, `communicate`, `mode`, and `view`; unimplemented no-op/demo tools must not be exposed.
+- It must not create fallback handlers, alternate tool buses, or non-Bevy atom renderers.
+
+Boundary status: Closed product runtime API. Public promotion would require a product-neutral menu declaration contract.
+
+### eVe Main Tool Interaction Runtime API
+
+Ownership: eVe closed Intuition main-tool interaction and catalog policy boundary.
+
+Primary source: `eVe/intuition/runtime/eve_intuition/main_tool_interaction_runtime.js`.
+
+Exposure: JavaScript module exports consumed by `eVe/intuition/eVeIntuition.js` and main tool registration.
+
+Verified entry points: `createMainToolCatalogRuntime`, `createMainToolInteractionRuntime`.
+
+Boundary rules:
+
+- The runtime owns main tool id resolution, dedicated declaration ids, base Atome-tool filtering, and canonical `triggerMainToolInteraction` dispatch.
+- It may synchronize latch state only through injected canonical latch APIs and may block selection-required tools only through the injected selection guard.
+- It must not reintroduce hidden diagnostic tools, fallback activation, or duplicate main-tool handler tables.
+
+Boundary status: Closed product runtime API. Public promotion would require a product-neutral tool interaction contract.
+
+### eVe Finder Inline Runtime API
+
+Ownership: eVe closed Intuition Finder inline and Finder panel bridge boundary.
+
+Primary sources: `eVe/intuition/runtime/eve_intuition/finder_inline_runtime.js`, `eVe/intuition/runtime/eve_intuition/finder_tool_identity_runtime.js`, `eVe/intuition/runtime/eve_intuition/finder_inline_visual_runtime.js`.
+
+Exposure: JavaScript module exports consumed by `eVe/intuition/eVeIntuition.js`, `tool_window_bridge_runtime.js`, panel tool registration, main tool definitions, and atome edit footer tool invocation.
+
+Verified entry points: `createFinderInlineRuntime`, `createFinderToolIdentityRuntime`, `createFinderInlineVisualRuntime`.
+
+Boundary rules:
+
+- Finder identity normalization and projection-instance recovery live only in `finder_tool_identity_runtime.js`.
+- Disposable inline input styling lives only in `finder_inline_visual_runtime.js`.
+- Finder inline open/close/search and panel wrapper behavior live only in `finder_inline_runtime.js`; callers must use returned functions instead of duplicating Finder DOM searches.
+- The runtime may project transient inline input DOM but must not create canonical Atome state, alternate Finder stores, or non-Bevy atom rendering paths.
+
+Boundary status: Closed product runtime API. Public promotion would require a product-neutral Finder/search bridge contract.
+
+### eVe Atome Edit Footer Runtime APIs
+
+Ownership: eVe closed Intuition Atome-edit footer model, rendering, drag, palette, slider, fullscreen, state, and invocation boundaries.
+
+Primary sources: `eVe/intuition/runtime/eve_intuition/atome_edit_footer_runtime.js`, `atome_edit_footer_lifecycle_runtime.js`, `atome_edit_footer_model_runtime.js`, `atome_focus_fullscreen_runtime.js`, `atome_edit_footer_drag_runtime.js`, `atome_edit_footer_palette_runtime.js`, `atome_edit_footer_slider_runtime.js`, `atome_edit_footer_tool_state_runtime.js`, `atome_edit_footer_child_invocation_runtime.js`, `atome_edit_footer_definition_invocation_runtime.js`, and `atome_edit_footer_row_render_runtime.js`.
+
+Exposure: JavaScript module exports consumed by `eVe/intuition/eVeIntuition.js`; these are closed product runtime seams, not public Atome APIs.
+
+Verified entry points: `createAtomeEditFooterRuntime`, `createAtomeEditFooterLifecycleRuntime`, `createAtomeEditFooterModelRuntime`, `createAtomeFocusFullscreenRuntime`, `createAtomeEditFooterDragRuntime`, `createAtomeEditFooterPaletteRuntime`, `createAtomeEditFooterSliderRuntime`, `createAtomeEditFooterToolStateRuntime`, `createAtomeEditFooterChildInvocationRuntime`, `createAtomeEditFooterDefinitionInvocationRuntime`, and `createAtomeEditFooterRowRenderRuntime`.
+
+Boundary rules:
+
+- Footer model/state policy, persisted footer tools, project-playback availability, and catalog definition projection live in `atome_edit_footer_model_runtime.js`.
+- The composite runtime is the only `eVeIntuition.js` footer entrypoint; footer row DOM rendering, palette children, sliders, drag payloads, focus/fullscreen layout, lifecycle/show/hide, and record-action visual state are split by responsibility and must not be re-inlined into `eVeIntuition.js`.
+- All footer invocations must go through the injected canonical tool invokers and selection guards; these runtimes must not create alternate tool buses, fallback invocation paths, or non-Bevy atom renderers.
+- Atome-editor footer drags continue to use the canonical `application/x-eve-finder-record` payload and active tool drag session only.
+
+Boundary status: Closed product runtime API. Public promotion would require a product-neutral footer/tool-surface contract.
+
+### eVe Basic UI Tool Registration Runtime API
+
+Ownership: eVe closed Intuition runtime tool registration boundary.
+
+Primary source: `eVe/intuition/runtime/eve_intuition/basic_ui_tools_runtime.js`.
+
+Exposure: JavaScript module export consumed by `eVe/intuition/eVeIntuition.js` during boot registration.
+
+Verified entry point: `registerBasicUiToolsRuntime`.
+
+Boundary rules:
+
+- The runtime registers basic UI/catalog tools only; it receives existing menu, panel, selection, text creation, matrix, orientation, and item-state callbacks by injection instead of creating alternate owners.
+- Media transport registration remains delegated to `media_reader_tool_runtime.js`; this runtime only preserves the existing boot registration order.
+- It must not mutate durable Atome state except through the injected existing creation/update callbacks already owned by the Intuition runtime and tool base.
+
+Boundary status: Closed product runtime API. Public promotion would require a product-neutral tool-registration contract.
+
+### eVe Text Tool Runtime APIs
+
+Ownership: eVe closed Intuition text Atome editing, creation, and background input boundaries.
+
+Primary sources: `eVe/intuition/runtime/eve_intuition/text_tool_runtime.js`, `text_tool_editing_runtime.js`, `text_tool_create_runtime.js`, and `text_tool_background_runtime.js`.
+
+Exposure: JavaScript module exports consumed by `eVe/intuition/eVeIntuition.js` during boot registration.
+
+Verified entry points: `createTextToolRuntime`, `createTextToolEditingRuntime`, `createTextToolCreateRuntime`, `createTextToolBackgroundRuntime`.
+
+Boundary rules:
+
+- The composite runtime owns shared text-tool coordinator state and project-id resolution.
+- Text editing owns focus, caret, provisional adoption, cleanup, buffered insert, and immediate commit helpers for text Atomes.
+- Text creation owns text-tool mode state, menu toggle handling, drag create sessions, exact-frame creation, and project-scene text-edit entry.
+- Background runtime owns project-background click and keyboard text creation routing through canonical `invokeTool` and text session APIs.
+- These runtimes must not create fallback DOM renderers, bypass Atome commit/update APIs, or render atoms outside the Bevy/WebGPU canvas route.
+
+Boundary status: Closed product runtime API. Public promotion would require a product-neutral text editing/creation contract.
+
+### eVe Panel Actions Runtime API
+
+Ownership: eVe closed Intuition panel/action orchestration boundary.
+
+Primary source: `eVe/intuition/runtime/eve_intuition/panel_actions_runtime.js`.
+
+Exposure: JavaScript module export consumed by `eVe/intuition/eVeIntuition.js`, main-menu composition, and boot registration.
+
+Verified entry point: `createPanelActionsRuntime`.
+
+Boundary rules:
+
+- The runtime owns standard panel open routing, generated panel operation binding, canonical Home/Matrix/Delete/Undo/Orientation actions, and Intuition item enabled-state updates.
+- It must use the injected panel surface/open-settle APIs and must not create alternate panel registries or tool buses.
+
+Boundary status: Closed product runtime API. Public promotion would require a product-neutral panel action contract.
+
+### eVe Flower Context Items Runtime API
+
+Ownership: eVe closed Flower/context menu item resolution boundary.
+
+Primary source: `eVe/intuition/runtime/eve_intuition/flower_context_items_runtime.js`.
+
+Exposure: JavaScript module exports consumed by `eVe/intuition/eVeIntuition.js` during Flower context runtime installation and footer invocation wiring.
+
+Verified entry points: `createFlowerContextItemsRuntime`, `CONTEXT_BOUND_TRANSPORT_TOOL_IDS`, `resolveAtomeEditFooterDefinitionToolId`.
+
+Boundary rules:
+
+- The runtime owns Flower item construction, mixed-selection/media/text/project context routing, and strict transport-bound extra input construction.
+- It may dispatch through injected canonical delete/import/context-tool invokers only; it must not create a second tool bus or fallback transport route.
+- The shared context-bound transport id set must stay here so footer and Flower payload policies remain identical.
+
+Boundary status: Closed product runtime API. Public promotion would require a product-neutral context-menu contract.
+
+### eVe Atome Edit Footer Selection Runtime API
+
+Ownership: eVe closed Atome-edit footer selection and invocation payload boundary.
+
+Primary source: `eVe/intuition/runtime/eve_intuition/atome_edit_footer_selection_runtime.js`.
+
+Exposure: JavaScript module export consumed by `eVe/intuition/eVeIntuition.js` and injected into footer row/child/definition runtimes.
+
+Verified entry point: `createAtomeEditFooterSelectionRuntime`.
+
+Boundary rules:
+
+- The runtime owns footer selection normalization, publication, and `extraInput` selection/atome id payload construction.
+- It may publish selection only through the existing SelectionAPI/eveToolBase/event surfaces; it must not create alternate canonical selection state.
+
+Boundary status: Closed product runtime API. Public promotion would require a product-neutral selection payload contract.
+
+### eVe Context Tool Invocation Runtime API
+
+Ownership: eVe closed footer/Flower/main-ribbon context invocation boundary.
+
+Primary source: `eVe/intuition/runtime/eve_intuition/context_tool_invocation_runtime.js`.
+
+Exposure: JavaScript module export consumed by `eVe/intuition/eVeIntuition.js` and injected into footer/Flower/main-ribbon handlers.
+
+Verified entry point: `createContextToolInvocationRuntime`.
+
+Boundary rules:
+
+- The runtime owns unified context invocation normalization and main-ribbon definition invocation.
+- It must delegate through the injected canonical `invokeToolFromUiButton`; no alternate tool bus, shim, or fallback invocation path is allowed.
+
+Boundary status: Closed product runtime API. Public promotion would require a product-neutral context invocation contract.
+
+### eVe Intuition Boot Runtime API
+
+Ownership: eVe closed Intuition boot, warmup, registration, and debug exposure boundary.
+
+Primary source: `eVe/intuition/runtime/eve_intuition/boot_runtime.js`.
+
+Exposure: JavaScript module export consumed by `eVe/intuition/eVeIntuition.js` at module boot.
+
+Verified entry point: `installEveIntuitionBootRuntime`.
+
+Boundary rules:
+
+- The runtime owns boot-time window menu exposure, auth sync, panel surface registration, Flower/footer/vector/draw installation, non-critical module warmup, UI tool registration, footer API exposure, and debug runtime installation.
+- It must receive all product callbacks by injection and must not own Bevy/WebGPU rendering, durable Atome state, or tool implementation behavior.
+
+Boundary status: Closed product runtime API. Public promotion would require a product-neutral boot registration contract.
+
 ### eVe Selected Project Media Playback Runtime API
 
 Ownership: eVe closed product runtime over the project scene and Atome audio boundaries.
 
-Primary source: `eVe/domains/media/selected_project_media_playback_runtime.js`.
+Primary sources: `eVe/domains/media/selected_project_media_playback_runtime.js`, `eVe/intuition/runtime/eve_intuition/media_reader_tool_runtime.js`.
 
-Exposure: JavaScript module exports consumed by eVeIntuition media transport actions.
+Exposure: JavaScript module exports consumed by the eVeIntuition media reader tool runtime; registered tool IDs `ui.media.reader`, `ui.animation.reader`, `ui.play`, `ui.pause`, and `ui.stop`.
 
-Verified entry points: `runSelectedProjectMediaPlaybackAction`, `stopAllSelectedProjectMediaPlayback`.
+Verified entry points: `runSelectedProjectMediaPlaybackAction`, `stopAllSelectedProjectMediaPlayback`, `registerMediaReaderToolRuntime`.
 
 Boundary rules:
 
@@ -420,6 +724,7 @@ Boundary rules:
 - Audio playback and extracted video-audio playback must go through `Squirrel.av.audio` and the Kira playback facade. It must not instantiate a second audio engine or enable Bevy audio.
 - Project Audio Atome playback and extracted video-audio playback use Kira `play_instance`/`stop_instance` when available so pressing the play tool while media is active pauses the current voice and preserves a runtime-only position; the next play/toggle resumes from that position with `startSeconds`. For video Atomes, that position is read from the project timeline playback result so Bevy video decode and extracted audio resume from the same playhead. Explicit `stop` still clears the project playback runtime and resets progress.
 - Browser video presentation uses the shared video decode pool plus disposable project-scene record updates so Bevy/WebGPU remains the visible route. The decode element is an implementation resource, not a visible Atome host or canonical media state.
+- `media_reader_tool_runtime.js` is the closed eVeIntuition registration owner for the media/animation reader tools. It may call `setBevyVideoDecodePlayback(...)` for selected project video targets; `selected_project_media_playback_runtime.js` must not call that Bevy decode control directly.
 - eVeIntuition must not route play/pause/stop/toggle through deleted `window.eveMtrackApi` transport methods, `scope=mtrack` forced transport, selected-group timeline loading, selected-group DOM video/audio sequence transport, or selected-Atome DOM `video/audio` transport. Active media transport must use selected project media or project automation; selected-group montage transport stays closed until the Bevy/WebGPU editor owns it.
 - It must not persist playback frame data, mutate durable Atome properties, or use DOM media nodes as canonical selection/project state.
 
@@ -675,6 +980,7 @@ Public route families:
 - File and upload routes: `/api/uploads`, `/api/uploads/chunk`, `/api/uploads/complete`, `/api/uploads/:file`, `/api/files/my-files`, `/api/files/accessible`, `/api/files/share`, `/api/files/unshare`, `/api/files/visibility`, `/api/files/stats`, `/api/recordings/:file`, `/api/extract-audio/:file`.
 - Admin and database routes: `/api/admin/users/export`, `/api/admin/users/import`, `/api/admin/apply-update`, `/api/admin/batch-update`, `/api/admin/sync-from-zip`, `/api/admin/sync-clients`, `/api/db/status`, `/api/db/stats`.
 - WebSocket routes: `/ws/api`, `/ws/sync`, `/ws/visio`.
+- WebSocket auth actions on `/ws/api`: `request-phone-verification`, `verify-phone-verification`.
 - Visio routes: `/contacts/request`, `/contacts/respond`, `/contacts`, `/rooms`, `/rooms/:room_id`, `/rooms/:room_id/invite`, `/rooms/:room_id/join`.
 
 Owner: Atome open server infrastructure when product-neutral.

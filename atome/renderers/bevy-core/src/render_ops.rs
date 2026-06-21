@@ -382,6 +382,7 @@ pub fn apply_resource(world: &mut World, patch: AtomeResourcePatch) -> Result<()
             origin: local_transform.origin,
             layer,
             opacity,
+            corner_radius: 0.0,
             color: None,
             text: None,
             source,
