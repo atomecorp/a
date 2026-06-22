@@ -1,9 +1,11 @@
 use atome_bevy_renderer_core::{
-    AtomeEntityTable, AtomeRenderNode, AtomeRenderOp, AtomeRenderScene, AtomeStylePatch,
-    AtomeSurfaceBackgroundPatch, AtomeTransformPatch,
+    render_math::atome_camera_projection,
+    AtomeBevyRendererConfig, AtomeEntityTable, AtomeRendererDiagnostics, AtomeRenderNode,
+    AtomeRenderOp, AtomeRenderScene, AtomeStylePatch, AtomeSurfaceBackgroundPatch,
+    AtomeTransformPatch,
 };
 use bevy::prelude::*;
-use bevy::window::{CompositeAlphaMode, RequestRedraw};
+use bevy::window::{CompositeAlphaMode, RequestRedraw, WindowResized, WindowResolution};
 use bevy::winit::UpdateMode;
 use std::time::Duration;
 
@@ -21,6 +23,7 @@ fn shape_node(id: &str) -> AtomeRenderNode {
         origin: [0.0, 0.0],
         layer: 3,
         opacity: 1.0,
+        corner_radius: 0.0,
         color: Some([0.1, 0.2, 0.3, 1.0]),
         text: None,
         source: None,
@@ -52,7 +55,83 @@ fn web_window_targets_canvas_and_opaque_surface() {
     assert!(!window.transparent);
     assert_eq!(window.composite_alpha_mode, CompositeAlphaMode::Opaque);
     assert!(!window.fit_canvas_to_parent);
+    assert_eq!(window.resolution.scale_factor_override(), None);
     assert_eq!(window.present_mode, PresentMode::AutoNoVsync);
+}
+
+#[test]
+fn web_surface_resolution_keeps_browser_scale_factor_logical_units() {
+    let mut resolution = WindowResolution::new(1280, 960);
+    resolution.set_scale_factor(2.0);
+    resolution.set(640.0, 480.0);
+
+    assert_eq!(resolution.scale_factor_override(), None);
+    assert_eq!(resolution.physical_width(), 1280);
+    assert_eq!(resolution.physical_height(), 960);
+    assert_eq!(resolution.width(), 640.0);
+    assert_eq!(resolution.height(), 480.0);
+}
+
+#[test]
+fn web_surface_resize_observer_physical_size_stays_logical_through_scale_factor() {
+    let mut window = Window {
+        resolution: WindowResolution::new(1280, 960),
+        ..default()
+    };
+    window.resolution.set_scale_factor(2.0);
+    window.resolution.set_physical_resolution(640, 480);
+
+    assert_eq!(window.resolution.scale_factor_override(), None);
+    assert_eq!(window.resolution.physical_width(), 640);
+    assert_eq!(window.resolution.physical_height(), 480);
+    assert_eq!(window.resolution.width(), 320.0);
+    assert_eq!(window.resolution.height(), 240.0);
+    window.resolution.set(640.0, 480.0);
+    assert_eq!(window.resolution.physical_width(), 1280);
+    assert_eq!(window.resolution.physical_height(), 960);
+    assert_eq!(window.resolution.width(), 640.0);
+    assert_eq!(window.resolution.height(), 480.0);
+}
+
+#[test]
+fn browser_window_resize_event_reprojects_shared_surface_in_logical_units() {
+    let mut app = App::new();
+    app.add_message::<WindowResized>();
+    app.add_message::<RequestRedraw>();
+    app.insert_resource(AtomeBevyRendererConfig::empty(640.0, 480.0));
+    app.insert_resource(AtomeEntityTable::default());
+    app.insert_resource(AtomeRendererDiagnostics::default());
+    app.insert_resource(Assets::<Image>::default());
+    app.world_mut().spawn((
+        Camera2d,
+        atome_camera_projection(640.0, 480.0),
+    ));
+    let window = app.world_mut().spawn(Window {
+        resolution: WindowResolution::new(1280, 960),
+        ..default()
+    }).id();
+    app.world_mut()
+        .entity_mut(window)
+        .get_mut::<Window>()
+        .unwrap()
+        .resolution
+        .set_scale_factor(2.0);
+
+    app.world_mut().write_message(WindowResized {
+        window,
+        width: 320.0,
+        height: 240.0,
+    });
+    apply_browser_window_resize_to_surface(app.world_mut());
+
+    let config = app.world().resource::<AtomeBevyRendererConfig>();
+    assert_eq!(config.width, 320.0);
+    assert_eq!(config.height, 240.0);
+    let window = app.world().get::<Window>(window).unwrap();
+    assert_eq!(window.resolution.physical_width(), 640);
+    assert_eq!(window.resolution.physical_height(), 480);
+    assert_eq!(window.resolution.width(), 320.0);
+    assert_eq!(window.resolution.height(), 240.0);
 }
 
 #[test]

@@ -1,4 +1,4 @@
-use bevy::prelude::*;
+use bevy::{camera::ScalingMode, prelude::*};
 
 use crate::types::{default_transform_origin, default_transform_scale};
 
@@ -10,6 +10,16 @@ pub fn color_from_rgba(color: [f32; 4]) -> Color {
 
 pub fn depth_for_layer(layer: i32) -> f32 {
     (layer as f32).clamp(-BEVY_LAYER_DEPTH_LIMIT, BEVY_LAYER_DEPTH_LIMIT)
+}
+
+pub fn atome_camera_projection(surface_width: f32, surface_height: f32) -> Projection {
+    Projection::Orthographic(OrthographicProjection {
+        scaling_mode: ScalingMode::Fixed {
+            width: surface_width.max(1.0),
+            height: surface_height.max(1.0),
+        },
+        ..OrthographicProjection::default_2d()
+    })
 }
 
 pub fn atome_rect_transform(

@@ -73,16 +73,16 @@ const enterGuestWorkspace = async (page) => {
     return ready.last;
 };
 
-const revealMenu = async (page) => {
+const resolveAtomHandle = async (page) => {
     await waitForRuntimeReady(page);
-    await page.evaluate(() => window.new_menu_v2?.reveal?.());
-    const home = page.locator('button[data-tool-id="tool.main.home"]').first();
-    await home.waitFor({ state: 'visible', timeout: 15000 });
-    const hit = await home.evaluate((button) => {
+    const handle = page.locator('button[data-role="eve_intuitionx-handle"]').first();
+    await handle.waitFor({ state: 'visible', timeout: 15000 });
+    const hit = await handle.evaluate((button) => {
         const rect = button.getBoundingClientRect();
         const top = document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2);
         return {
-            ok: button === top || button.contains(top),
+            ok: rect.width > 0 && rect.height > 0,
+            topMatches: button === top || button.contains(top),
             rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
             topTag: top?.tagName || null,
             topId: top?.id || null,
@@ -90,8 +90,8 @@ const revealMenu = async (page) => {
             topToolId: top?.getAttribute?.('data-tool-id') || null
         };
     });
-    if (!hit.ok) throw new Error(`dashboard_probe_home_tool_not_actionable:${JSON.stringify(hit)}`);
-    return home;
+    if (!hit.ok) throw new Error(`dashboard_probe_atom_handle_not_visible:${JSON.stringify(hit)}`);
+    return handle;
 };
 
 const dashboardSnapshot = async (page) => page.evaluate(async () => {
@@ -117,12 +117,10 @@ const dashboardSnapshot = async (page) => page.evaluate(async () => {
     }, 0);
     const dashboardDomCount = document.querySelectorAll('[id^="__eve_dashboard_"], [data-dashboard]').length;
     const canvas = document.getElementById('eve_surface_project');
-    const renderScale = Number(state?.renderScale || 1) || 1;
-    const renderOffset = state?.renderOffset || { x: 0, y: 0 };
     const recordOverReservedBand = dashboardRecords.filter((record) => {
         const props = record.properties || {};
-        const top = (Number(props.top ?? props.y ?? 0) - Number(renderOffset.y || 0)) / renderScale;
-        const height = Number(props.height ?? 0) / renderScale;
+        const top = Number(props.top ?? props.y ?? 0);
+        const height = Number(props.height ?? 0);
         return layout?.toolbox_reserved_rect && top + height > layout.toolbox_reserved_rect.y + 0.5;
     }).map((record) => record.id);
     return {
@@ -131,8 +129,6 @@ const dashboardSnapshot = async (page) => page.evaluate(async () => {
         activeCategoryId: state?.activeCategoryId || null,
         editorOpen: !!state?.editor,
         editorItemId: state?.editor?.item?.id || null,
-        renderScale,
-        renderOffset,
         projectId,
         canvas: canvas ? {
             width: canvas.getBoundingClientRect().width,
@@ -148,6 +144,7 @@ const dashboardSnapshot = async (page) => page.evaluate(async () => {
             creation_fullscreen_rect: layout.creation_fullscreen_rect,
             lanes: layout.lanes.map((lane) => ({
                 categoryId: lane.category.id,
+                lane_rect: lane.lane_rect,
                 header_rect: lane.header_rect,
                 plus_rect: lane.plus_rect,
                 active: lane.active,
@@ -156,10 +153,10 @@ const dashboardSnapshot = async (page) => page.evaluate(async () => {
         } : null,
         dashboardRecordIds: dashboardRecords.map((record) => record.id),
         editorRect: editorRecord ? {
-            x: (Number(editorRecord.properties?.left ?? editorRecord.properties?.x ?? 0) - Number(renderOffset.x || 0)) / renderScale,
-            y: (Number(editorRecord.properties?.top ?? editorRecord.properties?.y ?? 0) - Number(renderOffset.y || 0)) / renderScale,
-            width: Number(editorRecord.properties?.width ?? 0) / renderScale,
-            height: Number(editorRecord.properties?.height ?? 0) / renderScale
+            x: Number(editorRecord.properties?.left ?? editorRecord.properties?.x ?? 0),
+            y: Number(editorRecord.properties?.top ?? editorRecord.properties?.y ?? 0),
+            width: Number(editorRecord.properties?.width ?? 0),
+            height: Number(editorRecord.properties?.height ?? 0)
         } : null,
         dashboardDomCount,
         recordOverReservedBand
@@ -243,6 +240,41 @@ const colorDistance = (left, right) => Math.max(
     Math.abs(left[2] - right[2])
 );
 
+const countPixelsInRect = (png, rect, predicate, step = 4) => {
+    let count = 0;
+    const left = Math.max(0, Math.floor(Number(rect?.x || 0)));
+    const top = Math.max(0, Math.floor(Number(rect?.y || 0)));
+    const right = Math.min(png.width - 1, Math.ceil(left + Number(rect?.width || 0)));
+    const bottom = Math.min(png.height - 1, Math.ceil(top + Number(rect?.height || 0)));
+    for (let y = top; y <= bottom; y += step) {
+        for (let x = left; x <= right; x += step) {
+            if (predicate(pixelAt(png, x, y))) count += 1;
+        }
+    }
+    return count;
+};
+
+const brightPixel = (pixel) => pixel[0] > 205 && pixel[1] > 205 && pixel[2] > 205 && pixel[3] > 200;
+
+const assertBrightPixels = (png, rect, label, minimum = 4) => {
+    const count = countPixelsInRect(png, rect, brightPixel, 3);
+    if (count < minimum) throw new Error(`${label}_bright_pixels_missing:${JSON.stringify({ count, minimum, rect })}`);
+};
+
+const assertLaneHasCardContrast = (png, lane, expectedHex, label) => {
+    const sampleRect = {
+        x: lane.header_rect.x > lane.lane_rect.x ? lane.lane_rect.x + 8 : lane.plus_rect.x + lane.plus_rect.width + 8,
+        y: lane.lane_rect.y + Math.max(8, lane.lane_rect.height * 0.2),
+        width: Math.max(20, Math.min(80, lane.lane_rect.width - 16)),
+        height: Math.max(20, lane.lane_rect.height * 0.56)
+    };
+    const expected = hexToRgb(expectedHex);
+    const contrasted = countPixelsInRect(png, sampleRect, (pixel) => colorDistance(pixel, expected) > 28 && pixel[3] > 200, 4);
+    if (contrasted < 8) {
+        throw new Error(`${label}_card_contrast_missing:${JSON.stringify({ contrasted, sampleRect, expectedHex })}`);
+    }
+};
+
 const assertNearColor = (actual, expectedHex, label, tolerance = 12) => {
     const expected = hexToRgb(expectedHex);
     const distance = colorDistance(actual, expected);
@@ -255,9 +287,16 @@ const analyzeDashboardVisual = (screenshotPath, snapshot, expectedHex, label) =>
     const png = PNG.sync.read(fs.readFileSync(screenshotPath));
     const lane = snapshot.layout?.lanes?.find((entry) => entry.active) || snapshot.layout?.lanes?.[0];
     if (!lane) throw new Error(`${label}_visual_lane_missing`);
+    const laneFillX = Math.min(
+        lane.lane_rect.x + lane.lane_rect.width - 12,
+        lane.lane_rect.x + lane.lane_rect.height + 12
+    );
     assertNearColor(pixelAt(png, lane.header_rect.x + 7, lane.header_rect.y + 7), expectedHex, `${label}_active_header`);
     assertNearColor(pixelAt(png, lane.plus_rect.x + lane.plus_rect.width / 2, lane.plus_rect.y + lane.plus_rect.height + 12), expectedHex, `${label}_plus_strip`);
-    assertNearColor(pixelAt(png, snapshot.layout.table_rect.x + 12, lane.header_rect.y + 12), expectedHex, `${label}_lane_fill`);
+    assertNearColor(pixelAt(png, laneFillX, lane.header_rect.y + 12), expectedHex, `${label}_lane_fill`);
+    assertBrightPixels(png, lane.header_rect, `${label}_header_text_or_icon`);
+    assertBrightPixels(png, lane.plus_rect, `${label}_plus_symbol`, 2);
+    assertLaneHasCardContrast(png, lane, expectedHex, `${label}_lane`);
     const reserved = snapshot.layout.toolbox_reserved_rect;
     const reservedPixel = pixelAt(png, reserved.x + reserved.width / 2, reserved.y + Math.min(12, reserved.height - 1));
     if (colorDistance(reservedPixel, hexToRgb(expectedHex)) < 18) {
@@ -283,6 +322,8 @@ const analyzeDashboardOverviewVisual = (screenshotPath, snapshot) => {
         if (!expectedHex) continue;
         assertNearColor(pixelAt(png, lane.header_rect.x - 24, lane.header_rect.y + 12), expectedHex, `dashboard_open_lane_${lane.categoryId}`, 18);
         assertNearColor(pixelAt(png, lane.header_rect.x + 7, lane.header_rect.y + 7), expectedHex, `dashboard_open_header_${lane.categoryId}`);
+        assertBrightPixels(png, lane.header_rect, `dashboard_open_header_text_or_icon_${lane.categoryId}`);
+        assertLaneHasCardContrast(png, lane, expectedHex, `dashboard_open_lane_${lane.categoryId}`);
     }
     const reserved = snapshot.layout.toolbox_reserved_rect;
     const reservedPixel = pixelAt(png, reserved.x + reserved.width / 2, reserved.y + Math.min(12, reserved.height - 1));
@@ -326,8 +367,8 @@ const runScenario = async () => {
         await page.goto(APP_URL, { waitUntil: 'domcontentloaded', timeout: 45000 });
         report.checks.push({ name: 'guest_project_ready', ok: true, snapshot: await enterGuestWorkspace(page) });
 
-        const home = await revealMenu(page);
-        await home.click({ timeout: 10000 });
+        const atomHandle = await resolveAtomHandle(page);
+        await atomHandle.click({ timeout: 10000 });
         const opened = await waitForDashboardSnapshot(page, (snapshot) => (
             snapshot.active
             && snapshot.dashboardRecordIds.includes('__eve_dashboard_background')
@@ -393,8 +434,7 @@ const runScenario = async () => {
         if (!editorClosed.ok) throw new Error('dashboard_editor_close_failed');
         report.checks.push({ name: 'header_click_closes_fullscreen_editor', ok: true, snapshot: editorClosed.snapshot });
 
-        await revealMenu(page);
-        await page.locator('button[data-tool-id="tool.main.home"]').first().click({ timeout: 10000 });
+        await (await resolveAtomHandle(page)).click({ timeout: 10000 });
         const closed = await waitForDashboardSnapshot(page, (snapshot) => (
             !snapshot.active && snapshot.dashboardRecordIds.length === 0
         ), 30000);
@@ -402,8 +442,7 @@ const runScenario = async () => {
         report.checks.push({ name: 'atom_second_click_closes_dashboard_and_removes_records', ok: true, snapshot: closed.snapshot });
 
         await page.evaluate(() => window.localStorage?.setItem?.('eve_handedness', 'left'));
-        await revealMenu(page);
-        await page.locator('button[data-tool-id="tool.main.home"]').first().click({ timeout: 10000 });
+        await (await resolveAtomHandle(page)).click({ timeout: 10000 });
         const leftOpened = await waitForDashboardSnapshot(page, (snapshot) => {
             const lane = snapshot.layout?.lanes?.[0];
             return snapshot.active
@@ -415,8 +454,7 @@ const runScenario = async () => {
         if (!leftOpened.ok) throw new Error('dashboard_left_handed_open_failed');
         report.checks.push({ name: 'left_handed_dashboard_mirrors_headers_and_plus_strip', ok: true, snapshot: leftOpened.snapshot });
 
-        await revealMenu(page);
-        await page.locator('button[data-tool-id="tool.main.home"]').first().click({ timeout: 10000 });
+        await (await resolveAtomHandle(page)).click({ timeout: 10000 });
         const leftClosed = await waitForDashboardSnapshot(page, (snapshot) => (
             !snapshot.active && snapshot.dashboardRecordIds.length === 0
         ), 30000);
@@ -436,7 +474,8 @@ const runScenario = async () => {
         report.error = error?.message || String(error);
         try {
             report.failureSnapshot = await dashboardSnapshot(page);
-        } catch (_) {
+        } catch (snapshotError) {
+            report.failureSnapshotError = snapshotError?.message || String(snapshotError);
             report.failureSnapshot = null;
         }
     } finally {

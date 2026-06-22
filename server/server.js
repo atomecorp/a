@@ -138,6 +138,14 @@ const LOG_DIR = path.join(projectRoot, 'logs');
 const FASTIFY_LOG_FILE = path.join(LOG_DIR, 'fastify.log');
 const UPLOADS_TMP_DIR = path.join(projectRoot, 'data', 'uploads_tmp');
 const BROWSER_LOG_FILE = path.join(LOG_DIR, 'browser.log');
+const RANDOM_WALLPAPER_URL = 'https://picsum.photos/1920/1080';
+const RANDOM_WALLPAPER_MAX_BYTES = 12 * 1024 * 1024;
+const RANDOM_WALLPAPER_EXTENSIONS = new Map([
+  ['image/jpeg', '.jpg'],
+  ['image/png', '.png'],
+  ['image/webp', '.webp'],
+  ['image/gif', '.gif']
+]);
 const SNAPSHOT_DIR = path.join(LOG_DIR, 'snapshots');
 const UI_TESTS_DIR = path.join(LOG_DIR, 'ui-tests');
 const SCHEMA_PATH = path.join(projectRoot, 'database', 'schema.sql');
@@ -1677,6 +1685,81 @@ async function startServer() {
         return { success: true, file_name: fileName, owner_id: userId, file_path: relativePath || null };
       } catch (error) {
         request.log.error({ err: error }, 'File upload failed');
+        reply.code(500);
+        return { success: false, error: error.message };
+      }
+    });
+
+    server.post('/api/uploads/remote-wallpaper', async (request, reply) => {
+      try {
+        const { user, userId } = await resolveUploadIdentity(request);
+        const upstream = await fetch(RANDOM_WALLPAPER_URL, {
+          method: 'GET',
+          headers: { Accept: 'image/avif,image/webp,image/png,image/jpeg,image/*;q=0.8' }
+        });
+        if (!upstream.ok) {
+          reply.code(502);
+          return { success: false, error: `wallpaper_source_http_${upstream.status}` };
+        }
+
+        const mimeType = String(upstream.headers.get('content-type') || '').split(';')[0].trim().toLowerCase();
+        const extension = RANDOM_WALLPAPER_EXTENSIONS.get(mimeType);
+        if (!extension) {
+          reply.code(415);
+          return { success: false, error: 'wallpaper_source_not_image' };
+        }
+
+        const contentLength = Number(upstream.headers.get('content-length') || 0);
+        if (Number.isFinite(contentLength) && contentLength > RANDOM_WALLPAPER_MAX_BYTES) {
+          reply.code(413);
+          return { success: false, error: 'wallpaper_source_too_large' };
+        }
+
+        const bytes = Buffer.from(await upstream.arrayBuffer());
+        if (!bytes.length) {
+          reply.code(502);
+          return { success: false, error: 'wallpaper_source_empty' };
+        }
+        if (bytes.length > RANDOM_WALLPAPER_MAX_BYTES) {
+          reply.code(413);
+          return { success: false, error: 'wallpaper_source_too_large' };
+        }
+
+        const resolved = await resolveUserUploadPath(
+          projectRoot,
+          { id: userId, username: user?.username },
+          `wallpaper_${Date.now()}${extension}`
+        );
+        await fs.writeFile(resolved.filePath, bytes);
+        const relativePath = path.join('Downloads', resolved.fileName);
+
+        if (DATABASE_ENABLED) {
+          const registration = await registerFileUpload(resolved.fileName, userId, {
+            atome_id: null,
+            atome_type: 'image',
+            original_name: resolved.fileName,
+            mime_type: mimeType,
+            size_bytes: bytes.length,
+            file_path: relativePath
+          });
+          if (!registration?.success) {
+            await fs.rm(resolved.filePath, { force: true });
+            reply.code(500);
+            return { success: false, error: registration?.error || 'file_registration_failed' };
+          }
+        }
+
+        return {
+          success: true,
+          file_name: resolved.fileName,
+          owner_id: userId,
+          file_path: relativePath,
+          mime_type: mimeType,
+          size_bytes: bytes.length,
+          source: 'remote_wallpaper'
+        };
+      } catch (error) {
+        request.log.error({ err: error }, 'Remote wallpaper download failed');
         reply.code(500);
         return { success: false, error: error.message };
       }

@@ -2,7 +2,9 @@ use bevy::{image::Image, prelude::*, text::TextBounds};
 
 use crate::{
     background::{apply_surface_background, resize_surface_background},
-    render_math::{atome_rect_transform_with_local, color_from_rgba, depth_for_layer},
+    render_math::{
+        atome_camera_projection, atome_rect_transform_with_local, color_from_rgba, depth_for_layer,
+    },
     selection_overlay::{rebuild_selection_overlay, remove_selection_overlay},
     spawn::spawn_node_in_world,
     texture::image_handle_from_texture,
@@ -153,6 +155,12 @@ pub fn apply_surface(world: &mut World, patch: AtomeSurfacePatch) -> Result<(), 
     }
     if let Some(mut window) = world.query::<&mut Window>().iter_mut(world).next() {
         window.resolution.set(width, height);
+    }
+    for mut projection in world
+        .query_filtered::<&mut Projection, With<Camera2d>>()
+        .iter_mut(world)
+    {
+        *projection = atome_camera_projection(width, height);
     }
     let ids: Vec<String> = world
         .resource::<AtomeEntityTable>()

@@ -57,6 +57,21 @@ const authCheckSignals = [];
 const createdProjects = [];
 const currentProjects = [];
 const loadedProjects = [];
+const menuReveals = [];
+const dashboardOpens = [];
+
+window.new_menu_v2 = {
+    reveal: () => {
+        menuReveals.push(Date.now());
+        return true;
+    }
+};
+window.eveDashboardRuntime = {
+    open: async (payload = {}) => {
+        dashboardOpens.push(payload);
+        return { ok: true, active: true };
+    }
+};
 
 window.addEventListener('squirrel:user-logged-in', (event) => {
     loginSignals.push(event.detail || {});
@@ -151,5 +166,11 @@ assert.equal(currentProjects[0]?.projectId, 'anon_project_valid', 'anonymous pro
 assert.equal(loadedProjects[0]?.projectId, 'anon_project_valid', 'anonymous project atomes must load');
 assert.ok(document.getElementById('project_view_anon_project_valid'), 'anonymous project view must be mounted');
 assert.equal(document.getElementById('eve_login_sequence')?.style?.display, 'none', 'choice screen must close after anonymous workspace opens');
+assert.equal(menuReveals.length, 1, 'anonymous workspace must reveal the main menu once');
+assert.deepEqual(
+    dashboardOpens,
+    [{ source: 'anonymous', projectId: 'anon_project_valid' }],
+    'anonymous workspace must open the dashboard after project activation'
+);
 
 console.log('user_login_choice_anonymous_project_contract.test: PASS');

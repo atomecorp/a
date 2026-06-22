@@ -1,11 +1,14 @@
 use atome_bevy_renderer_core::{
-    apply_render_ops, AtomeBevyRendererConfig, AtomeBevyRendererPlugin, AtomeRenderOp,
-    AtomeRenderScene,
+    apply_render_ops, apply_surface, AtomeBevyRendererConfig, AtomeBevyRendererPlugin,
+    AtomeRenderOp, AtomeRenderScene, AtomeRendererDiagnostics, AtomeSurfacePatch,
 };
 use bevy::{
     log::{Level, LogPlugin},
     prelude::*,
-    window::{CompositeAlphaMode, PresentMode, RequestRedraw, Window, WindowPlugin},
+    window::{
+        CompositeAlphaMode, PresentMode, RequestRedraw, Window, WindowPlugin, WindowResized,
+        WindowResolution,
+    },
     winit::{EventLoopProxy, EventLoopProxyWrapper, WinitSettings, WinitUserEvent},
 };
 use serde::Serialize;
@@ -221,6 +224,7 @@ fn web_winit_settings() -> WinitSettings {
 impl Plugin for WebBevyRendererPlugin {
     fn build(&self, app: &mut App) {
         app.add_message::<RequestRedraw>()
+            .add_message::<WindowResized>()
             .insert_resource(ClearColor(Color::BLACK))
             .insert_resource(web_winit_settings())
             .add_plugins(AtomeBevyRendererPlugin::new(self.config.core.clone()))
@@ -232,6 +236,7 @@ impl Plugin for WebBevyRendererPlugin {
                 Update,
                 (
                     remember_event_loop_proxy,
+                    apply_browser_window_resize_to_surface,
                     apply_pending_web_ops,
                     apply_pending_video_frame_notifications,
                     apply_pending_web_redraw,
@@ -252,6 +257,29 @@ fn apply_pending_web_ops(world: &mut World) {
         return;
     }
     apply_render_ops(world, ops);
+    world.write_message(RequestRedraw);
+    wake_web_renderer();
+}
+
+fn apply_browser_window_resize_to_surface(world: &mut World) {
+    let next_size = world
+        .resource::<Messages<WindowResized>>()
+        .iter_current_update_messages()
+        .filter(|event| event.width.is_finite() && event.height.is_finite())
+        .filter(|event| event.width > 0.0 && event.height > 0.0)
+        .last()
+        .map(|event| (event.width, event.height));
+    let Some((width, height)) = next_size else {
+        return;
+    };
+    let current = world.resource::<AtomeBevyRendererConfig>();
+    if (current.width - width).abs() < f32::EPSILON && (current.height - height).abs() < f32::EPSILON {
+        return;
+    }
+    if let Err(error) = apply_surface(world, AtomeSurfacePatch { width, height }) {
+        world.resource_mut::<AtomeRendererDiagnostics>().last_error = Some(error);
+        return;
+    }
     world.write_message(RequestRedraw);
     wake_web_renderer();
 }
@@ -292,15 +320,15 @@ fn reset_web_renderer_diagnostics() -> WebRendererDiagnostics {
 }
 
 fn web_window_for_config(config: &WebBevyRendererConfig) -> Window {
+    let resolution = WindowResolution::new(
+        config.core.width.round() as u32,
+        config.core.height.round() as u32,
+    );
     Window {
         canvas: Some(config.canvas_selector.clone()),
         fit_canvas_to_parent: false,
         prevent_default_event_handling: false,
-        resolution: (
-            config.core.width.round() as u32,
-            config.core.height.round() as u32,
-        )
-            .into(),
+        resolution,
         composite_alpha_mode: CompositeAlphaMode::Opaque,
         present_mode: PresentMode::AutoNoVsync,
         title: "Atome Bevy Renderer".to_string(),

@@ -1,6 +1,7 @@
 use bevy::{image::Image, mesh::Mesh, prelude::*};
 
 use crate::{
+    render_math::atome_camera_projection,
     render_ops::apply_render_op,
     selection_overlay::rebuild_selection_overlay,
     spawn::spawn_node_with_texture_handle,
@@ -39,7 +40,10 @@ fn spawn_atome_bevy_scene(
     config: Res<AtomeBevyRendererConfig>,
     mut images: ResMut<Assets<Image>>,
 ) {
-    commands.spawn(Camera2d);
+    commands.spawn((
+        Camera2d,
+        atome_camera_projection(config.width, config.height),
+    ));
     for node in &config.initial_scene.nodes {
         let node_id = node.id.clone();
         let texture_handle = if node.kind == "video" {

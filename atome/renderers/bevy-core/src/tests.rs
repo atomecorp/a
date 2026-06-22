@@ -73,6 +73,21 @@ fn assert_vec2_near(actual: Option<Vec2>, expected: Vec2) {
     );
 }
 
+fn assert_fixed_projection_size(projection: &Projection, width: f32, height: f32) {
+    let Projection::Orthographic(orthographic) = projection else {
+        panic!("expected orthographic camera projection");
+    };
+    let bevy::camera::ScalingMode::Fixed {
+        width: actual_width,
+        height: actual_height,
+    } = orthographic.scaling_mode
+    else {
+        panic!("expected fixed orthographic scaling mode");
+    };
+    assert!((actual_width - width).abs() < 0.01);
+    assert!((actual_height - height).abs() < 0.01);
+}
+
 #[test]
 fn plugin_spawns_projected_nodes_and_camera() {
     let scene = AtomeRenderScene {
@@ -87,6 +102,9 @@ fn plugin_spawns_projected_nodes_and_camera() {
 
     let mut camera_query = app.world_mut().query::<&Camera2d>();
     assert_eq!(camera_query.iter(app.world()).count(), 1);
+    let mut projection_query = app.world_mut().query::<&Projection>();
+    let projection = projection_query.single(app.world()).unwrap();
+    assert_fixed_projection_size(projection, 640.0, 480.0);
     assert_eq!(app.world().resource::<AtomeEntityTable>().by_id.len(), 1);
 }
 
@@ -97,6 +115,10 @@ fn transform_and_surface_patches_reproject_nodes() {
     world.insert_resource(AtomeBevyRendererConfig::empty(640.0, 480.0));
     world.insert_resource(AtomeRendererDiagnostics::default());
     world.insert_resource(Assets::<Image>::default());
+    world.spawn((
+        Camera2d,
+        crate::render_math::atome_camera_projection(640.0, 480.0),
+    ));
     let entity = apply_spawn(&mut world, shape_node("shape_surface")).unwrap();
 
     assert_eq!(
@@ -115,6 +137,9 @@ fn transform_and_surface_patches_reproject_nodes() {
         world.get::<Transform>(entity).unwrap().translation,
         Vec3::new(-88.0, 71.0, depth_for_layer(3))
     );
+    let mut projection_query = world.query::<&Projection>();
+    let projection = projection_query.single(&world).unwrap();
+    assert_fixed_projection_size(projection, 320.0, 240.0);
 }
 
 #[test]
