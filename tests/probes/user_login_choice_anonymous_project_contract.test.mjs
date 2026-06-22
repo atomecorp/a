@@ -83,6 +83,14 @@ window.addEventListener('squirrel:auth-checked', (event) => {
 window.eveToolBase = {
     loadProjectAtomes: async (projectId, options = {}) => {
         loadedProjects.push({ projectId, options });
+        const view = document.getElementById(`project_view_${projectId}`);
+        if (view && !document.getElementById('eve_surface_project')) {
+            const canvas = document.createElement('canvas');
+            canvas.id = 'eve_surface_project';
+            canvas.width = 800;
+            canvas.height = 600;
+            view.appendChild(canvas);
+        }
         return { ok: true };
     }
 };
@@ -165,6 +173,7 @@ assert.deepEqual(createdProjects, ['welcome'], 'anonymous bootstrap must create 
 assert.equal(currentProjects[0]?.projectId, 'anon_project_valid', 'anonymous project must become current');
 assert.equal(loadedProjects[0]?.projectId, 'anon_project_valid', 'anonymous project atomes must load');
 assert.ok(document.getElementById('project_view_anon_project_valid'), 'anonymous project view must be mounted');
+assert.ok(document.getElementById('project_view_anon_project_valid')?.contains(document.getElementById('eve_surface_project')), 'anonymous workspace must mount the canonical project canvas before dashboard open');
 assert.equal(document.getElementById('eve_login_sequence')?.style?.display, 'none', 'choice screen must close after anonymous workspace opens');
 assert.equal(menuReveals.length, 1, 'anonymous workspace must reveal the main menu once');
 assert.deepEqual(

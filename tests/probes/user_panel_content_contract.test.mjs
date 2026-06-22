@@ -12,10 +12,18 @@ const mainHandle = document.createElement('button');
 mainHandle.setAttribute('data-role', 'eve_intuitionx-handle');
 document.body.appendChild(mainHandle);
 
-window.ResizeObserver = class {
-    observe() {}
-    disconnect() {}
+const view = Object.assign(document.createElement('div'), { id: 'view' });
+document.body.appendChild(view);
+
+window.new_menu_v2 = {
+    reveal: () => true,
+    setToolLatchedState: () => true
 };
+window.eveDashboardRuntime = {
+    open: async () => ({ ok: true, active: true })
+};
+
+window.ResizeObserver = class { observe() {} disconnect() {} };
 globalThis.ResizeObserver = window.ResizeObserver;
 
 globalThis.$ = (tag, options = {}) => {
@@ -78,6 +86,14 @@ const activateButton = async (node) => {
     node.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
     await new Promise((resolve) => setTimeout(resolve, 20));
 };
+const waitForCondition = async (predicate, timeoutMs = 8000) => {
+    const startedAt = Date.now();
+    while (Date.now() - startedAt < timeoutMs) {
+        if (predicate()) return true;
+        await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+    return false;
+};
 const setViewport = (width, height) => {
     Object.defineProperty(window, 'innerWidth', { configurable: true, value: width });
     Object.defineProperty(window, 'innerHeight', { configurable: true, value: height });
@@ -117,6 +133,18 @@ window.AdoleAPI.security.ensureAnonymousUser = async (options = {}) => {
     window.__currentProject = { id: 'anonymous_project', name: 'welcome', userId: anonymousUser.id };
     window.dispatchEvent(new window.CustomEvent('squirrel:project-changed', { detail: window.__currentProject }));
     return { ok: true, user: anonymousUser };
+};
+window.eveToolBase = {
+    loadProjectAtomes: async (projectId) => {
+        const projectView = document.getElementById(`project_view_${projectId}`)
+            || Object.assign(document.createElement('div'), { id: `project_view_${projectId}` });
+        if (!projectView.parentElement) view.appendChild(projectView);
+        const canvas = document.getElementById('eve_surface_project') || document.createElement('canvas');
+        canvas.id = 'eve_surface_project';
+        Object.assign(canvas, { width: 800, height: 600 });
+        if (canvas.parentElement !== projectView) projectView.appendChild(canvas);
+        return { ok: true };
+    }
 };
 
 setViewport(1200, 700);
@@ -222,15 +250,10 @@ assert.equal(logoButton?.style?.position, 'absolute', 'login validation logo mus
 assert.equal(document.getElementById('eve_login_sequence__logo'), null, 'credential flow must not create a second validation logo');
 const logoImage = logoButton?.querySelector?.('img');
 assert.ok(logoImage?.src?.includes('atome.svg'), 'login validation control must render the pulsing Atome logo image');
-const authBody = document.getElementById('eve_auth_dialog__body');
 const authFooter = document.getElementById('eve_auth_dialog__body_footer');
 assert.equal(document.getElementById('eve_auth_dialog')?.style?.display, 'none', 'old auth dialog must stay hidden');
 assert.equal(authFooter?.children?.length || 0, 0, 'old auth dialog footer must not keep login actions');
-[
-    'eve_auth_dialog__phone',
-    'eve_auth_dialog__password',
-    'eve_auth_dialog__actions'
-].forEach((id) => {
+['eve_auth_dialog__phone', 'eve_auth_dialog__password', 'eve_auth_dialog__actions'].forEach((id) => {
     assert.equal(document.getElementById(id), null, `${id} must not remain in the old auth dialog`);
 });
 
@@ -238,12 +261,7 @@ let createdSession = null;
 const authAttempts = [];
 const forbiddenAuthCalls = [];
 window.Atome.getStateCurrent = async () => null;
-window.AdoleAPI.projects = {
-    loadSaved: async () => null,
-    list: async () => ({ fastify: { projects: [] }, tauri: { projects: [] } }),
-    create: async () => ({ fastify: { data: { atome_id: 'created_project' } } }),
-    setCurrent: async () => ({ ok: true })
-};
+window.AdoleAPI.projects = { loadSaved: async () => null, list: async () => ({ fastify: { projects: [] }, tauri: { projects: [] } }), create: async () => ({ fastify: { data: { atome_id: 'created_project' } } }), setCurrent: async () => ({ ok: true }) };
 window.AdoleAPI.auth.bootstrap = async (phone, password, username, visibility) => {
     authAttempts.push({ action: 'bootstrap', phone, password, username, visibility });
     createdSession = { id: 'created_user', username, phone };
@@ -277,7 +295,8 @@ const sequencePasswordInput = document.getElementById('eve_login_sequence__passw
 sequencePasswordInput.value = 'validpass';
 dispatchInput(sequencePasswordInput);
 dispatchEnter(sequencePasswordInput);
-await new Promise((resolve) => setTimeout(resolve, 20));
+await waitForCondition(() => loginSequence.style.display === 'none');
+assert.notEqual(document.activeElement?.id, 'eve_login_sequence__password_field__input', 'successful password submit must clear native password focus before reveal');
 assert.deepEqual(
     authAttempts.map((entry) => entry.action),
     ['bootstrap'],
@@ -479,4 +498,3 @@ assert.equal(
 );
 
 console.log('user_panel_content_contract.test: PASS');
-process.exit(0);

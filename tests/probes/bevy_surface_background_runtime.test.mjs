@@ -173,6 +173,33 @@ test('user background source no longer creates the legacy DOM background layer',
     assert.equal(source.includes('createUserSurfaceBackgroundTextureRuntime'), true);
 });
 
+test('user background module import has no view-owned side effect', async () => {
+    const previousWindow = globalThis.window;
+    const previousDocument = globalThis.document;
+    delete globalThis.window;
+    delete globalThis.document;
+    try {
+        const moduleUrl = `${pathToFileUrl(path.join(repoRoot, 'eVe/user/background.js'))}?no_view=${Date.now()}`;
+        const { startUserBackgroundRuntime } = await import(moduleUrl);
+        assert.equal(typeof startUserBackgroundRuntime, 'function');
+        assert.throws(
+            () => startUserBackgroundRuntime(),
+            /user_background_view_required/
+        );
+    } finally {
+        if (previousWindow === undefined) {
+            delete globalThis.window;
+        } else {
+            globalThis.window = previousWindow;
+        }
+        if (previousDocument === undefined) {
+            delete globalThis.document;
+        } else {
+            globalThis.document = previousDocument;
+        }
+    }
+});
+
 test('user background restore waits for async auth identity after refresh', () => {
     const source = fs.readFileSync(path.join(repoRoot, 'eVe/user/background.js'), 'utf8');
     assert.match(source, /const currentUserId = await resolveCurrentUserId\(\);/);
