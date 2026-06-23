@@ -154,21 +154,21 @@ assert.equal(authOpen.panel_id, 'eve_login_sequence', 'anonymous state must open
 
 const loginSequence = document.getElementById('eve_login_sequence');
 assert.equal(loginSequence?.style?.display, 'block', 'login sequence must be visible');
-const loginChoice = document.getElementById('eve_login_sequence__choice');
-const withoutAccountChoice = document.getElementById('eve_login_sequence__choice_without_account');
-const authenticateChoice = document.getElementById('eve_login_sequence__choice_authenticate');
+const loginChoice = document.getElementById('eve_login_sequence__choice'), withoutAccountChoice = document.getElementById('eve_login_sequence__choice_without_account'), authenticateChoice = document.getElementById('eve_login_sequence__choice_authenticate');
 assert.equal(loginChoice?.style?.display, 'flex', 'login choice must be the first visible auth surface');
 assert.equal(loginChoice?.style?.flexDirection, 'column', 'login choice must split horizontally');
-assert.equal(withoutAccountChoice?.textContent, 'Entrez sans compte', 'without-account label must come from i18n');
-assert.equal(authenticateChoice?.textContent, 'Authentification', 'authenticate label must come from i18n');
+assert.equal(withoutAccountChoice?.textContent, 'Essayer', 'without-account label must come from i18n');
+assert.equal(authenticateChoice?.textContent, 'Connexion / inscription', 'authenticate label must come from i18n');
 assert.equal(withoutAccountChoice?.style?.background, 'transparent', 'without-account button must keep its background on the animated layer');
-assert.match(withoutAccountChoice?.querySelector('span')?.style?.background || '', /linear-gradient/, 'without-account side must use the dark mauve gradient');
+assert.ok(withoutAccountChoice?.loginBackground?.isConnected, 'without-account side must keep its animated background layer');
 assert.equal(withoutAccountChoice?.style?.color, 'rgb(255, 255, 255)', 'without-account text must be white');
 assert.equal(authenticateChoice?.style?.background, 'transparent', 'authenticate button must keep its background on the animated layer');
-assert.match(authenticateChoice?.querySelector('span')?.style?.background || '', /linear-gradient/, 'authenticate side must use the dark violet gradient');
+assert.ok(authenticateChoice?.loginBackground?.isConnected, 'authenticate side must keep its animated background layer');
 assert.equal(authenticateChoice?.style?.color, 'rgb(255, 255, 255)', 'authenticate text must be white');
-const centralLogo = document.getElementById('eve_login_sequence__persistent_logo');
+const centralLogo = document.getElementById('eve_login_sequence__persistent_logo'), logoGlow = document.getElementById('eve_login_sequence__persistent_logo_glow_reveal');
 assert.ok(centralLogo, 'login choice must expose one persistent Atome logo control');
+assert.ok(logoGlow, 'login logo must expose an abstract glow layer');
+assert.ok(document.getElementById('eve_login_sequence__choice_divider'), 'login choice must expose a separator light behind the logo');
 assert.equal(document.querySelectorAll('#eve_login_sequence__persistent_logo').length, 1, 'login must keep a single persistent logo node');
 assert.equal(document.getElementById('eve_login_sequence__choice_logo'), null, 'login choice must not create a second static logo');
 

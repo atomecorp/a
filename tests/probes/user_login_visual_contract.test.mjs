@@ -55,7 +55,7 @@ const waitForCondition = async (predicate, timeoutMs = 3000, intervalMs = 20) =>
 window.AdoleAPI.auth.requestPhoneVerification = async () => ({ ok: true, code: '5273' });
 window.AdoleAPI.auth.verifyPhoneVerification = async (_phone, code) => ({ ok: code === '5273' });
 
-const { LOGIN_GRADIENTS } = await import('../../eVe/intuition/tools/user_login_visual_contract.js');
+const { LOGIN_CHOICE_LIGHT, LOGIN_GRADIENTS } = await import('../../eVe/intuition/tools/user_login_visual_contract.js');
 const { createUserLoginSequence } = await import('../../eVe/intuition/tools/user_login_sequence.js');
 
 setViewport(1200, 700);
@@ -68,10 +68,35 @@ sequence.open();
 const root = document.getElementById('eve_login_sequence');
 const choice = document.getElementById('eve_login_sequence__choice');
 const logo = document.getElementById('eve_login_sequence__persistent_logo');
+const divider = document.getElementById('eve_login_sequence__choice_divider');
+const dividerSweep = document.getElementById('eve_login_sequence__choice_divider_sweep');
+const logoGlowReveal = document.getElementById('eve_login_sequence__persistent_logo_glow_reveal');
+const logoGlowSource = document.getElementById('eve_login_sequence__persistent_logo_glow_source');
+const logoImg = logo?.querySelector('img');
 
 assert.equal(root?.style?.display, 'block', 'login shell must open');
 assert.equal(choice?.style?.display, 'flex', 'choice surface must be visible first');
 assert.match(LOGIN_GRADIENTS.shell, /radial-gradient/, 'login shell token must keep the textured background');
+assert.match(LOGIN_GRADIENTS.guest, /radial-gradient/, 'guest choice must use a layered violet background');
+assert.match(LOGIN_GRADIENTS.auth, /radial-gradient/, 'account choice must use a separate layered violet background');
+assert.equal(document.getElementById('eve_login_sequence__choice_without_account')?.textContent, 'Essayer');
+assert.equal(document.getElementById('eve_login_sequence__choice_authenticate')?.textContent, 'Connexion / inscription');
+assert.ok(divider, 'choice screen must keep the separator light behind the logo');
+assert.equal(divider?.style?.top, '50%', 'choice separator must sit on the two-zone junction');
+assert.match(dividerSweep?.style?.background || '', /radial-gradient/, 'choice separator must use the shared glow sweep token');
+assert.ok(LOGIN_CHOICE_LIGHT.glowHeightPx <= 6, 'choice separator glow must stay very low');
+assert.ok(LOGIN_CHOICE_LIGHT.sweepWidthPx >= 180, 'choice separator sweep must stay wide');
+assert.match(dividerSweep?.style?.filter || '', /brightness/, 'choice separator sweep must keep a bright controlled pulse');
+assert.ok(logoGlowReveal, 'persistent logo must expose one horizontal glow reveal layer');
+assert.ok(logoGlowSource, 'persistent logo must expose one silhouette glow source');
+assert.match(logoGlowReveal?.style?.webkitMaskImage || logoGlowReveal?.style?.maskImage || '', /linear-gradient/, 'logo glow reveal must use a soft horizontal mask');
+assert.match(logoGlowSource?.style?.webkitMaskImage || logoGlowSource?.style?.maskImage || '', /atome/i, 'logo glow source must follow the logo silhouette');
+assert.equal(logoGlowSource?.style?.width, logoImg?.style?.width, 'logo glow source must match the real logo width');
+assert.equal(logoGlowSource?.style?.height, logoImg?.style?.height, 'logo glow source must match the real logo height');
+assert.ok(Number(logoGlowReveal?.style?.zIndex) < Number(logoImg?.style?.zIndex), 'logo glow must stay behind the fixed white logo image');
+assert.equal(document.getElementById('eve_login_sequence__persistent_logo_highlight'), null, 'legacy masked logo highlight must not remain');
+assert.equal(logoImg?.style?.opacity, '1', 'base logo must stay white at full opacity');
+assert.match(logoImg?.style?.filter || '', /brightness\(0\) invert\(1\)/, 'base logo must keep a fixed white filter');
 assert.match(logo?.style?.transform || '', /600px,350px/, 'login logo must start centered in the viewport');
 
 setViewport(700, 1200);

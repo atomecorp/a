@@ -43,125 +43,21 @@ import {
     bracketMatching
 } from '../../js/codemirror.bundle.js';
 
+import { editorTemplates, languageExtensions, languageLabels } from './editor_builder_config.js';
+import {
+    loadAdoleApi,
+    isAdoleAuthenticated,
+    collectAdoleAtomes,
+    extractAdoleAtome,
+    extractCreatedAtomeId,
+    adoleOperationSucceeded,
+    listCodeFileAtomes
+} from './editor_builder_adole.js';
+
 // === REGISTRY GLOBAL ===
 const editorRegistry = new Map();
 let editorCounter = 0;
 
-// === TEMPLATES ===
-const editorTemplates = {
-    'dark': {
-        name: 'Dark Theme',
-        containerStyle: {
-            backgroundColor: '#1e1e1e',
-            border: '1px solid #3c3c3c',
-            borderRadius: '6px',
-            boxShadow: '0 8px 32px rgba(0,0,0,0.4)'
-        },
-        headerStyle: {
-            backgroundColor: '#2d2d30',
-            color: '#cccccc',
-            borderBottom: '1px solid #3c3c3c'
-        },
-        statusStyle: {
-            backgroundColor: '#007acc',
-            color: '#ffffff'
-        }
-    },
-    'light': {
-        name: 'Light Theme',
-        containerStyle: {
-            backgroundColor: '#ffffff',
-            border: '1px solid #d1d5db',
-            borderRadius: '6px',
-            boxShadow: '0 8px 32px rgba(0,0,0,0.15)'
-        },
-        headerStyle: {
-            backgroundColor: '#f3f4f6',
-            color: '#374151',
-            borderBottom: '1px solid #d1d5db'
-        },
-        statusStyle: {
-            backgroundColor: '#0ea5e9',
-            color: '#ffffff'
-        }
-    }
-};
-
-// === LANGUAGE SUPPORT ===
-const languageExtensions = {
-    javascript: () => javascript(),
-    js: () => javascript(),
-    ruby: () => StreamLanguage.define(ruby),
-    rb: () => StreamLanguage.define(ruby)
-};
-
-const languageLabels = {
-    javascript: 'JavaScript',
-    js: 'JavaScript',
-    ruby: 'Ruby',
-    rb: 'Ruby'
-};
-
-const loadAdoleApi = async () => {
-    if (typeof window !== 'undefined' && window.AdoleAPI) return window.AdoleAPI;
-    if (typeof globalThis !== 'undefined' && globalThis.AdoleAPI) return globalThis.AdoleAPI;
-    const mod = await import('../apis/unified/adole_apis.js');
-    return mod.AdoleAPI;
-};
-
-const isAdoleAuthenticated = (api) => !!api?.auth?.isAuthenticated?.();
-
-const collectAdoleAtomes = (result = {}) => {
-    const byId = new Map();
-    const add = (items = [], source = '') => {
-        if (!Array.isArray(items)) return;
-        items.forEach((item) => {
-            const id = item?.atome_id || item?.id || item?.data?.atome_id || item?.data?.id || null;
-            if (!id || byId.has(String(id))) return;
-            byId.set(String(id), { ...item, id, source });
-        });
-    };
-    add(result?.tauri?.atomes, 'tauri');
-    add(result?.fastify?.atomes, 'fastify');
-    add(result?.atomes, result?.source || '');
-    add(result?.data, result?.source || '');
-    return Array.from(byId.values());
-};
-
-const extractAdoleAtome = (result) => (
-    result?.atome
-    || result?.data?.atome
-    || result?.data
-    || result?.tauri?.data?.atome
-    || result?.fastify?.data?.atome
-    || result?.tauri?.data?.data?.atome
-    || result?.fastify?.data?.data?.atome
-    || null
-);
-
-const extractCreatedAtomeId = (result) => (
-    result?.tauri?.data?.atome_id
-    || result?.tauri?.data?.id
-    || result?.tauri?.data?.data?.atome_id
-    || result?.tauri?.data?.data?.id
-    || result?.fastify?.data?.atome_id
-    || result?.fastify?.data?.id
-    || result?.fastify?.data?.data?.atome_id
-    || result?.fastify?.data?.data?.id
-    || null
-);
-
-const adoleOperationSucceeded = (result) => !!(
-    result?.ok
-    || result?.success
-    || result?.tauri?.success
-    || result?.fastify?.success
-);
-
-const listCodeFileAtomes = async (api, options = {}) => {
-    const { kind, ...rest } = options;
-    return collectAdoleAtomes(await api.atomes.list({ ...rest, type: kind || options.type || 'code_file' }));
-};
 
 // === MAIN EDITOR BUILDER ===
 const createEditor = (config = {}) => {

@@ -1288,7 +1288,7 @@ Evidence: exports in `eVe/elements/design.js`, the `eVe/elements/eVe_look.js` fa
 Entry point families:
 
 - Dialog and panel factories: `createEveDialog`, `revealEveDialog`, `createEveCloseControl`, panel chrome helpers, bounds helpers, fullscreen helpers with viewport resize tracking only while fullscreen is active, and chrome-scoped fullscreen double-click handles.
-- UI primitives: rows, buttons, inputs, editable text, text helpers, and `eveUI` namespace.
+- UI primitives: rows, buttons, inputs, editable text, text helpers, and `eveUI` namespace. `createEveButton(...)` accepts `truncateText: false` only for composed visual buttons that own child layers instead of plain text clamping.
 - Tokens and presets: system UI tokens, eVe tokens, CSS variable application, base style installation, panel chrome tokens and metrics.
 - i18n binding helpers for visible text.
 
