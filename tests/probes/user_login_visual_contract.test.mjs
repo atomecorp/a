@@ -66,6 +66,7 @@ window.AdoleAPI.auth.requestPhoneVerification = async () => ({ ok: true, code: '
 window.AdoleAPI.auth.verifyPhoneVerification = async (_phone, code) => ({ ok: code === '5273' });
 
 const {
+    LOGIN_CHOICE_FEEDBACK,
     LOGIN_CHOICE_LIGHT,
     LOGIN_GRADIENT_MOTION,
     LOGIN_GRADIENTS,
@@ -86,6 +87,10 @@ assert.equal(LOGIN_TEXT_STYLE.choiceFontSize, 'clamp(22px, 6.8vw, 58px)', 'choic
 assert.equal(LOGIN_TEXT_STYLE.choiceFontWeight, '220', 'choice labels must expose a thin weight');
 assert.equal(LOGIN_TEXT_STYLE.instructionFontSize, 'clamp(15px, 3.6vw, 22px)', 'instructions must expose a reduced type scale');
 assert.equal(LOGIN_TEXT_STYLE.typedFontSize, 'clamp(25px, 8.2vw, 52px)', 'typed mirror text must expose a reduced type scale');
+assert.equal(LOGIN_CHOICE_FEEDBACK.hoverDimOpacity, '0.6', 'choice feedback must dim the non-hovered label to 0.6');
+assert.equal(LOGIN_CHOICE_FEEDBACK.entryFadeMs, 640, 'choice screen must expose a slow body-to-login fade duration');
+assert.equal(LOGIN_CHOICE_FEEDBACK.clickMs, 320, 'choice click acknowledgement must expose a bounded brightening duration');
+assert.match(LOGIN_CHOICE_FEEDBACK.clickFilter, /30px/, 'choice click glow must expand around the chosen text by about 30px');
 assert.deepEqual(gradientMotionFrames, [
     { filter: 'brightness(1)', backgroundPosition: '0% 50%' },
     { filter: 'brightness(1.032)', backgroundPosition: '100% 50%' },
@@ -151,6 +156,12 @@ assert.equal(document.getElementById('eve_login_sequence__persistent_logo_highli
 assert.equal(logoImg?.style?.opacity, '1', 'base logo must stay white at full opacity');
 assert.match(logoImg?.style?.filter || '', /brightness\(0\) invert\(1\)/, 'base logo must keep a fixed white filter');
 assert.match(logo?.style?.transform || '', /600px,350px/, 'login logo must start centered in the viewport');
+
+withoutAccountButton.dispatchEvent(new window.MouseEvent('pointerenter', { bubbles: true }));
+assert.equal(withoutAccountButton.loginLabel.style.filter, LOGIN_CHOICE_FEEDBACK.hoverFilter, 'hovered choice label must receive the luminous text halo');
+assert.equal(authenticateButton.loginLabel.style.opacity, LOGIN_CHOICE_FEEDBACK.hoverDimOpacity, 'non-hovered choice label must dim on hover');
+withoutAccountButton.dispatchEvent(new window.MouseEvent('pointerleave', { bubbles: true }));
+assert.equal(authenticateButton.loginLabel.style.opacity, LOGIN_TEXT_STYLE.opacity, 'non-hovered label must restore opacity after hover leaves');
 
 setViewport(700, 1200);
 assert.match(logo?.style?.transform || '', /350px,600px/, 'login logo must stay centered after resize');
