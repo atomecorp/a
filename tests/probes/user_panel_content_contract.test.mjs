@@ -26,6 +26,21 @@ window.eveDashboardRuntime = {
 window.ResizeObserver = class { observe() {} disconnect() {} };
 globalThis.ResizeObserver = window.ResizeObserver;
 
+const capturedAnimations = [];
+window.Element.prototype.animate = function animate(frames, options = {}) {
+    const entry = {
+        element: this,
+        frames,
+        options,
+        canceled: false
+    };
+    capturedAnimations.push(entry);
+    return {
+        cancel() { entry.canceled = true; },
+        finished: Promise.resolve()
+    };
+};
+
 globalThis.$ = (tag, options = {}) => {
     const node = document.createElement(tag);
     if (options.id) node.id = String(options.id);
@@ -53,6 +68,51 @@ globalThis.$ = (tag, options = {}) => {
     return node;
 };
 
+const { LOGIN_TEXT_STYLE } = await import('../../eVe/intuition/tools/user_login_visual_contract.js');
+
+const hasActiveHiddenForwardAnimation = (nodes) => capturedAnimations.some((entry) => {
+    const finalFrame = Array.isArray(entry.frames) ? entry.frames.at(-1) : null;
+    return !entry.canceled
+        && nodes.includes(entry.element)
+        && entry.options?.fill === 'forwards'
+        && String(finalFrame?.opacity) === '0';
+});
+
+const hasActiveGradientMotion = (node) => capturedAnimations.some((entry) => Array.isArray(entry.frames)
+    && !entry.canceled
+    && entry.element === node
+    && entry.options?.iterations === Infinity
+    && entry.frames.some((frame) => Object.hasOwn(frame, 'backgroundPosition')));
+
+const assertChoiceVisualReady = (context) => {
+    const sequence = document.getElementById('eve_login_sequence');
+    const choice = document.getElementById('eve_login_sequence__choice');
+    const withoutAccountChoice = document.getElementById('eve_login_sequence__choice_without_account');
+    const authenticateChoice = document.getElementById('eve_login_sequence__choice_authenticate');
+    const labels = [withoutAccountChoice?.loginLabel, authenticateChoice?.loginLabel];
+    const backgrounds = [withoutAccountChoice?.loginBackground, authenticateChoice?.loginBackground];
+    assert.equal(sequence?.style?.display, 'block', `${context}: login sequence must be visible`);
+    assert.equal(choice?.style?.display, 'flex', `${context}: choice screen must be visible`);
+    assert.equal(document.querySelectorAll('#eve_login_sequence__choice').length, 1, `${context}: choice surface must be unique`);
+    assert.equal(document.querySelectorAll('#eve_login_sequence__persistent_logo').length, 1, `${context}: persistent logo must be unique`);
+    assert.equal(withoutAccountChoice?.textContent, 'Essayer', `${context}: without-account label must be restored`);
+    assert.equal(authenticateChoice?.textContent, 'Connexion / inscription', `${context}: authenticate label must be restored`);
+    labels.forEach((label, index) => {
+        assert.ok(label?.isConnected, `${context}: choice label ${index} must stay connected`);
+        assert.equal(label.style.opacity, LOGIN_TEXT_STYLE.opacity, `${context}: choice label ${index} must restore text opacity`);
+        assert.equal(label.style.transform, '', `${context}: choice label ${index} must not keep exit transform`);
+        assert.equal(label.style.filter, '', `${context}: choice label ${index} must not keep exit filter`);
+    });
+    backgrounds.forEach((background, index) => {
+        assert.ok(background?.isConnected, `${context}: choice background ${index} must stay connected`);
+        assert.equal(background.style.opacity, '1', `${context}: choice background ${index} must restore opacity`);
+        assert.equal(hasActiveGradientMotion(background), true, `${context}: choice background ${index} must keep gradient motion`);
+    });
+    assert.equal(hasActiveHiddenForwardAnimation([choice, ...labels, ...backgrounds]), false, `${context}: choice must not keep hidden fill-forwards exit animations`);
+    assert.ok(document.getElementById('eve_login_sequence__choice_divider_sweep'), `${context}: choice divider line animation node must remain`);
+    assert.ok(document.getElementById('eve_login_sequence__persistent_logo_glow_reveal'), `${context}: persistent logo glow reveal must remain`);
+};
+
 window.__authCheckResult = {
     complete: true,
     authenticated: false,
@@ -77,6 +137,7 @@ assert.equal(
     'flex',
     'unauthenticated auth-check must show the black/white pre-auth choice'
 );
+assertChoiceVisualReady('initial unauthenticated auth-check');
 
 const dispatchInput = (node) => node.dispatchEvent(new window.Event('input', { bubbles: true }));
 const dispatchEnter = (node) => node.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
@@ -157,6 +218,7 @@ assert.equal(loginSequence?.style?.display, 'block', 'login sequence must be vis
 const loginChoice = document.getElementById('eve_login_sequence__choice'), withoutAccountChoice = document.getElementById('eve_login_sequence__choice_without_account'), authenticateChoice = document.getElementById('eve_login_sequence__choice_authenticate');
 assert.equal(loginChoice?.style?.display, 'flex', 'login choice must be the first visible auth surface');
 assert.equal(loginChoice?.style?.flexDirection, 'column', 'login choice must split horizontally');
+assertChoiceVisualReady('initial home panel open');
 assert.equal(withoutAccountChoice?.textContent, 'Essayer', 'without-account label must come from i18n');
 assert.equal(authenticateChoice?.textContent, 'Connexion / inscription', 'authenticate label must come from i18n');
 assert.equal(withoutAccountChoice?.style?.background, 'transparent', 'without-account button must keep its background on the animated layer');
@@ -184,6 +246,12 @@ setViewport(1200, 700);
 const authOpenAgain = await window.open_home_panel({ source: { type: 'user_panel_contract.auth_again' } });
 assert.equal(authOpenAgain.ok, true, 'auth panel reopen must succeed');
 assert.equal(document.getElementById('eve_login_sequence__choice')?.style?.display, 'flex', 'login choice must re-open before credentials');
+assertChoiceVisualReady('guest exit then login reopen');
+await activateButton(document.getElementById('eve_login_sequence__choice_authenticate'));
+const emptyPhoneInput = document.getElementById('eve_login_sequence__phone_input');
+dispatchEnter(emptyPhoneInput);
+await new Promise((resolve) => setTimeout(resolve, 20));
+assertChoiceVisualReady('credential empty phone return');
 await activateButton(document.getElementById('eve_login_sequence__choice_authenticate'));
 assert.equal(
     document.getElementById('eve_login_sequence__instruction')?.textContent,
@@ -356,6 +424,7 @@ assert.equal(
     'flex',
     'logout must show the new pre-auth choice screen'
 );
+assertChoiceVisualReady('authenticated logout return');
 
 const contractCalls = [];
 window.AdoleAPI.auth.bootstrap = async (phone, password, username, visibility) => {
@@ -391,6 +460,7 @@ assert.equal(
     'flex',
     'wrong password must return to the first login choice'
 );
+assertChoiceVisualReady('wrong password return');
 await submitLoginCredentials('0611111111', 'rightpass');
 assert.equal(
     document.getElementById('eve_login_sequence')?.style?.display,
@@ -448,6 +518,7 @@ await new Promise((resolve) => setTimeout(resolve, 0));
 const invalidInstruction = document.getElementById('eve_login_sequence__instruction');
 assert.equal(failedLoginPayload?.phone, '0699999999', 'failed login must submit the entered phone');
 assert.equal(document.getElementById('eve_login_sequence__choice')?.style?.display, 'flex', 'failed login must return to the first screen');
+assertChoiceVisualReady('standalone failed login return');
 assert.equal(invalidInstruction?.textContent, 'Saisissez votre mot de passe', 'hidden credential surface keeps its last label without showing an error');
 invalidSequence.destroy();
 
