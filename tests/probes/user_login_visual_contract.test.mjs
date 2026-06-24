@@ -197,12 +197,14 @@ assert.match(logo?.style?.transform || '', /350px,600px/, 'login logo must stay 
 
 await clickButton(document.getElementById('eve_login_sequence__choice_authenticate'));
 const phoneInput = document.getElementById('eve_login_sequence__phone_input');
+assert.equal(document.getElementById('eve_login_sequence__typed_caret')?.style?.opacity, '1', 'mirrored caret must be visible on the active phone step');
 phoneInput.value = '0600000000';
 dispatchInput(phoneInput);
 dispatchEnter(phoneInput);
 await waitForCondition(() => document.getElementById('eve_login_sequence__otp_input')?.style?.display === 'block');
 
 const otpInput = document.getElementById('eve_login_sequence__otp_input');
+assert.equal(document.getElementById('eve_login_sequence__typed_caret')?.style?.opacity, '1', 'mirrored caret must be visible on the active OTP step');
 otpInput.value = '5273';
 dispatchInput(otpInput);
 dispatchEnter(otpInput);
@@ -210,6 +212,7 @@ await waitForCondition(() => document.getElementById('eve_login_sequence__passwo
 
 const passwordInput = document.getElementById('eve_login_sequence__password_field__input');
 const mirroredText = document.getElementById('eve_login_sequence__typed');
+const mirroredCaret = document.getElementById('eve_login_sequence__typed_caret');
 const instruction = document.getElementById('eve_login_sequence__instruction');
 assert.equal(instruction?.style?.fontFamily, LOGIN_TEXT_STYLE.fontFamily, 'credential instruction must use the shared login typography');
 assert.equal(instruction?.style?.fontSize, LOGIN_TEXT_STYLE.instructionFontSize, 'credential instruction must use the reduced type scale');
@@ -222,6 +225,11 @@ assert.equal(mirroredText?.style?.opacity, LOGIN_TEXT_STYLE.opacity, 'mirrored i
 assert.equal(passwordInput?.style?.opacity, '0.01', 'native password input must stay visually hidden');
 assert.equal(passwordInput?.style?.color, 'transparent', 'native password input must not render browser password dots');
 assert.equal(passwordInput?.style?.caretColor, 'transparent', 'native password input must not render a second caret');
+assert.ok(mirroredCaret, 'credential surface must expose a mirrored caret');
+assert.equal(mirroredCaret?.style?.borderLeftWidth, '2px', 'mirrored caret must expose a visible stroke width');
+assert.equal(mirroredCaret?.style?.borderLeftStyle, 'solid', 'mirrored caret must expose a solid stroke');
+assert.match(mirroredCaret?.style?.borderLeftColor || '', /rgba\(255,\s*255,\s*255,\s*0\.92\)/, 'mirrored caret must be visible without using the native caret');
+assert.equal(mirroredCaret?.style?.opacity, '1', 'mirrored caret must be visible on the active password step');
 passwordInput.value = 'abc';
 dispatchInput(passwordInput);
 assert.equal(mirroredText?.textContent, '•••', 'password display must be owned by mirrored bullet text');
@@ -229,6 +237,40 @@ assert.equal(mirroredText?.textContent, '•••', 'password display must be o
 dispatchEnter(passwordInput);
 await waitForCondition(() => root.style.display === 'none' && document.activeElement?.id !== passwordInput.id);
 assert.notEqual(document.activeElement?.id, passwordInput.id, 'successful password submit must clear native password focus');
+
+let invalidPayload = null;
+const invalidSequence = createUserLoginSequence({
+    onSubmit: async (payload) => {
+        invalidPayload = payload;
+        return { ok: false, errorText: 'Identifiant ou mot de passe incorrect' };
+    },
+    onWithoutAccount: async () => ({ ok: true })
+});
+invalidSequence.open();
+await clickButton(document.getElementById('eve_login_sequence__choice_authenticate'));
+const invalidPhoneInput = document.getElementById('eve_login_sequence__phone_input');
+invalidPhoneInput.value = '0600000001';
+dispatchInput(invalidPhoneInput);
+dispatchEnter(invalidPhoneInput);
+await waitForCondition(() => document.getElementById('eve_login_sequence__otp_input')?.style?.display === 'block');
+const invalidOtpInput = document.getElementById('eve_login_sequence__otp_input');
+invalidOtpInput.value = '5273';
+dispatchInput(invalidOtpInput);
+dispatchEnter(invalidOtpInput);
+await waitForCondition(() => document.getElementById('eve_login_sequence__password_field__input')?.style?.display === 'block');
+const invalidPasswordStepInput = document.getElementById('eve_login_sequence__password_field__input');
+invalidPasswordStepInput.value = 'wrong-password';
+dispatchInput(invalidPasswordStepInput);
+dispatchEnter(invalidPasswordStepInput);
+await new Promise((resolve) => setTimeout(resolve, 0));
+assert.equal(invalidPayload?.phone, '0600000001', 'invalid password submit must keep the entered phone in the payload');
+assert.equal(document.getElementById('eve_login_sequence__choice')?.style?.display, 'none', 'invalid password must not return to the choice screen');
+assert.equal(document.getElementById('eve_login_sequence__credentials')?.style?.display, 'block', 'invalid password must keep the credential surface visible');
+assert.equal(invalidPasswordStepInput?.style?.display, 'block', 'invalid password must stay on the password step');
+assert.equal(invalidPasswordStepInput?.value, '', 'invalid password must clear the bad password');
+assert.equal(document.getElementById('eve_login_sequence__typed')?.textContent, '', 'invalid password must clear mirrored bullets');
+assert.equal(document.getElementById('eve_login_sequence__instruction')?.textContent, 'Identifiant ou mot de passe incorrect', 'invalid password must show the auth error');
+invalidSequence.destroy();
 
 capturedAnimations.length = 0;
 setViewport(1200, 700);

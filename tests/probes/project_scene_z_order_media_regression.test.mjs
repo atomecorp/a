@@ -137,7 +137,7 @@ test('RenderAtom keeps media natural dimensions out of project bounds', () => {
     assert.equal(video.content.naturalHeight, 1080);
 });
 
-test('Bevy web runtime starts a fresh renderer after canvas object replacement', async () => {
+test('Bevy web runtime rejects a second canvas after the web event loop is owned', async () => {
     const dom = new JSDOM('<!doctype html><html><body><canvas id="eve_surface_project_login"></canvas></body></html>');
     const firstSurface = dom.window.document.getElementById('eve_surface_project_login');
     const calls = [];
@@ -170,24 +170,63 @@ test('Bevy web runtime starts a fresh renderer after canvas object replacement',
         record('login_shape_b', { left: 55, top: 49, width: 20, height: 20, zIndex: 3 })
     ]);
 
-    const second = await startBevyWebRenderer({
+    await assert.rejects(startBevyWebRenderer({
         surface: secondSurface,
+        width: 320,
+        height: 240,
+        virtualScene: secondScene,
+        wasmModule
+    }), /bevy_renderer_event_loop_already_owned/);
+
+    assert.equal(first.started, true);
+    assert.equal(calls.filter((call) => call.type === 'run').length, 1);
+    assert.equal(calls.filter((call) => call.type === 'ops').length, 0);
+    assert.equal(readBevyWebRendererState(secondSurface), null);
+});
+
+test('Bevy web runtime coalesces concurrent starts on the same canvas', async () => {
+    const dom = new JSDOM('<!doctype html><html><body><canvas id="eve_surface_project_concurrent"></canvas></body></html>');
+    const surface = dom.window.document.getElementById('eve_surface_project_concurrent');
+    const calls = [];
+    const wasmModule = {
+        default: async () => {
+            calls.push({ type: 'init' });
+            await new Promise((resolve) => dom.window.setTimeout(resolve, 8));
+        },
+        run_atome_bevy_renderer: (canvasSelector, width, height, initialNodes) => {
+            calls.push({ type: 'run', canvasSelector, width, height, initialNodes });
+        },
+        apply_atome_bevy_spawn: (node) => calls.push({ type: 'ops', node }),
+        apply_atome_bevy_surface: (payload) => calls.push({ type: 'surface', payload })
+    };
+    const firstScene = createVirtualSceneTree([
+        record('concurrent_a', { left: 2, top: 4, width: 20, height: 20, zIndex: 1 })
+    ]);
+    const secondScene = createVirtualSceneTree([
+        record('concurrent_a', { left: 2, top: 4, width: 20, height: 20, zIndex: 1 }),
+        record('concurrent_b', { left: 40, top: 20, width: 20, height: 20, zIndex: 2 })
+    ]);
+
+    const firstPromise = startBevyWebRenderer({
+        surface,
+        width: 320,
+        height: 240,
+        virtualScene: firstScene,
+        wasmModule
+    });
+    const secondPromise = startBevyWebRenderer({
+        surface,
         width: 320,
         height: 240,
         virtualScene: secondScene,
         wasmModule
     });
 
-    assert.equal(first.started, true);
-    await flushBevyRun();
+    const [first, second] = await Promise.all([firstPromise, secondPromise]);
 
-    assert.equal(second.started, true);
-    assert.equal(second.already_started, false);
-    assert.equal(calls.filter((call) => call.type === 'run').length, 2);
-    assert.equal(calls.filter((call) => call.type === 'ops').length, 0);
-    assert.deepEqual(calls.filter((call) => call.type === 'run')[1].initialNodes.nodes.map((node) => node.id), [
-        'login_shape_a',
-        'login_shape_b'
-    ]);
-    assert.equal(readBevyWebRendererState(secondSurface).node_count, 2);
+    assert.equal(first.started, true);
+    assert.equal(second.already_started, true);
+    assert.equal(calls.filter((call) => call.type === 'run').length, 1);
+    assert.deepEqual(calls.filter((call) => call.type === 'ops').map((call) => call.node.id), ['concurrent_b']);
+    assert.equal(readBevyWebRendererState(surface).node_count, 2);
 });

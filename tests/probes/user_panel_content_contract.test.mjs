@@ -465,10 +465,34 @@ assert.equal(
 );
 assert.equal(
     document.getElementById('eve_login_sequence__choice')?.style?.display,
-    'flex',
-    'wrong password must return to the first login choice'
+    'none',
+    'wrong password must not return to the first login choice'
 );
-assertChoiceVisualReady('wrong password return');
+assert.equal(
+    document.getElementById('eve_login_sequence__credentials')?.style?.display,
+    'block',
+    'wrong password must keep the credential surface visible'
+);
+assert.equal(
+    document.getElementById('eve_login_sequence__password_field__input')?.style?.display,
+    'block',
+    'wrong password must keep the password step active'
+);
+assert.equal(
+    document.getElementById('eve_login_sequence__password_field__input')?.value,
+    '',
+    'wrong password must clear the rejected password'
+);
+assert.equal(
+    document.getElementById('eve_login_sequence__typed')?.textContent,
+    '',
+    'wrong password must clear mirrored password bullets'
+);
+assert.equal(
+    document.getElementById('eve_login_sequence__instruction')?.textContent,
+    'Identifiant ou mot de passe incorrect',
+    'wrong password must show an explicit error'
+);
 await submitLoginCredentials('0611111111', 'rightpass');
 await waitForCondition(() => document.getElementById('eve_login_sequence')?.style?.display === 'none');
 assert.equal(
@@ -526,9 +550,12 @@ dispatchEnter(invalidPasswordInput);
 await new Promise((resolve) => setTimeout(resolve, 0));
 const invalidInstruction = document.getElementById('eve_login_sequence__instruction');
 assert.equal(failedLoginPayload?.phone, '0699999999', 'failed login must submit the entered phone');
-assert.equal(document.getElementById('eve_login_sequence__choice')?.style?.display, 'flex', 'failed login must return to the first screen');
-assertChoiceVisualReady('standalone failed login return');
-assert.equal(invalidInstruction?.textContent, 'Saisissez votre mot de passe', 'hidden credential surface keeps its last label without showing an error');
+assert.equal(document.getElementById('eve_login_sequence__choice')?.style?.display, 'none', 'failed login must stay on the credential surface');
+assert.equal(document.getElementById('eve_login_sequence__credentials')?.style?.display, 'block', 'failed login must keep credentials visible');
+assert.equal(invalidPasswordInput?.style?.display, 'block', 'failed login must stay on the password step');
+assert.equal(invalidPasswordInput?.value, '', 'failed login must clear the wrong password');
+assert.equal(document.getElementById('eve_login_sequence__typed')?.textContent, '', 'failed login must clear mirrored password bullets');
+assert.equal(invalidInstruction?.textContent, 'Identifiant ou mot de passe incorrect', 'failed login must show the invalid password message');
 invalidSequence.destroy();
 
 const spoken = [];
