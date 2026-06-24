@@ -124,6 +124,7 @@ window.__authCheckResult = {
 };
 
 await import('../../eVe/intuition/tools/user.js');
+const { createUserLoginSequence } = await import('../../eVe/intuition/tools/user_login_sequence.js');
 
 assert.equal(typeof window.open_home_panel, 'function', 'open_home_panel must be installed');
 
@@ -518,7 +519,6 @@ assert.deepEqual(forbiddenAuthCalls, [], 'existing-phone flow must not call auth
     assert.ok(document.getElementById(id), `${id} must exist`);
 });
 
-const { createUserLoginSequence } = await import('../../eVe/intuition/tools/user_login_sequence.js');
 let failedLoginPayload = null;
 const invalidSequence = createUserLoginSequence({
     onSubmit: async (payload) => {

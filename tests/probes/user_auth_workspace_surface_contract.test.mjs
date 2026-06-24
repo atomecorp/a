@@ -50,6 +50,15 @@ const runtime = createUserAuthFlowRuntime({
     clearUserNotice: () => calls.push({ name: 'clearUserNotice' })
 });
 
+const shortPasswordOk = await runtime.executeLoginFlow({
+    phone: '0600000000',
+    password: 'short',
+    username: '0600000000'
+});
+assert.equal(shortPasswordOk, false, 'short password must not attempt account creation');
+assert.equal(runtime.getLastLoginErrorText(), 'Mot de passe : 8 caractères minimum', 'short password must expose the account creation password constraint');
+assert.equal(calls.filter((entry) => entry.name === 'bootstrap').length, 0, 'short password must be rejected before bootstrap');
+
 const ok = await runtime.executeLoginFlow({
     phone: '0600000000',
     password: 'valid_password',

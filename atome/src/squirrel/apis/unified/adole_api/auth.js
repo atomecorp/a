@@ -638,6 +638,9 @@ export const auth = {
                 data: activeResult?.raw || null,
                 error: activeResult?.error || 'missing_authenticated_session'
             };
+            response.ok = false;
+            response.error = response[activeBackend].error;
+            response.backend = activeBackend;
             return response;
         }
 
@@ -653,6 +656,10 @@ export const auth = {
             syncLocalProjectsToFastify({ reason: 'bootstrap' }).catch(() => { });
         
 
+        response.ok = true;
+        response.user = activeResult.user;
+        response.token = activeResult.token || null;
+        response.backend = activeBackend;
         return response;
     },
 
