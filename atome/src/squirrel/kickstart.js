@@ -13,7 +13,7 @@ function initKickstart() {
     class: 'atome',
     id: 'view',
     css: {
-      background: '#272727',
+      background: 'transparent',
       color: 'lightgray',
       left: '0px',
       top: '0px',

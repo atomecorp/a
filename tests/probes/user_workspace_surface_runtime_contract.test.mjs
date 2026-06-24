@@ -2,12 +2,14 @@ import assert from 'node:assert/strict';
 import { installMockBrowserEnv } from '../strangler_v2/_env.mjs';
 
 const { window, document } = installMockBrowserEnv();
+window.requestAnimationFrame = (callback) => window.setTimeout(callback, 0);
 
 const view = document.createElement('div');
 view.id = 'view';
 document.body.appendChild(view);
 
 const calls = [];
+const sceneRecordsByProject = new Map();
 
 window.eveToolBase = {
     loadProjectAtomes: async (projectId, options = {}) => {
@@ -24,7 +26,10 @@ window.eveToolBase = {
         canvas.height = 600;
         if (canvas.parentElement !== projectView) projectView.appendChild(canvas);
         return { ok: true };
-    }
+    },
+    getProjectSceneState: (projectId) => ({
+        records: sceneRecordsByProject.get(projectId) || []
+    })
 };
 
 window.new_menu_v2 = {
@@ -37,6 +42,7 @@ window.new_menu_v2 = {
 window.eveDashboardRuntime = {
     open: async (payload = {}) => {
         calls.push({ name: 'dashboardOpen', ...payload });
+        sceneRecordsByProject.set(payload.projectId, [{ id: '__eve_dashboard_background', properties: {} }]);
         return { ok: true, active: true };
     }
 };
@@ -51,16 +57,16 @@ const result = await openWorkspaceDashboardAndMainMenu({
 assert.deepEqual(result, { ok: true, active: true }, 'workspace opener must return the dashboard open result');
 assert.deepEqual(
     calls.map((entry) => entry.name),
-    ['loadProjectAtomes', 'reveal', 'dashboardOpen'],
-    'workspace opener must load the project canvas before revealing the menu and opening dashboard'
+    ['loadProjectAtomes', 'dashboardOpen', 'reveal'],
+    'workspace opener must load the project canvas and dashboard scene before revealing the menu'
 );
 assert.equal(calls[0].projectId, 'project_valid', 'workspace opener must load the requested project');
-assert.deepEqual(calls[1], { name: 'reveal' }, 'workspace opener must reveal the existing menu once');
 assert.deepEqual(
-    calls[2],
+    calls[1],
     { name: 'dashboardOpen', source: 'authenticated', projectId: 'project_valid' },
     'workspace opener must pass the resolved project id to dashboard'
 );
+assert.deepEqual(calls[2], { name: 'reveal' }, 'workspace opener must reveal the existing menu once after dashboard records are ready');
 assert.equal(
     document.getElementById('project_view_project_valid')?.contains(document.getElementById('eve_surface_project')),
     true,

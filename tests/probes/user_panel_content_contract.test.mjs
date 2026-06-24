@@ -19,8 +19,12 @@ window.new_menu_v2 = {
     reveal: () => true,
     setToolLatchedState: () => true
 };
+const sceneRecordsByProject = new Map();
 window.eveDashboardRuntime = {
-    open: async () => ({ ok: true, active: true })
+    open: async ({ projectId } = {}) => {
+        sceneRecordsByProject.set(projectId, [{ id: '__eve_dashboard_background', properties: {} }]);
+        return { ok: true, active: true };
+    }
 };
 
 window.ResizeObserver = class { observe() {} disconnect() {} };
@@ -205,7 +209,10 @@ window.eveToolBase = {
         Object.assign(canvas, { width: 800, height: 600 });
         if (canvas.parentElement !== projectView) projectView.appendChild(canvas);
         return { ok: true };
-    }
+    },
+    getProjectSceneState: (projectId) => ({
+        records: sceneRecordsByProject.get(projectId) || []
+    })
 };
 
 setViewport(1200, 700);
@@ -239,6 +246,7 @@ assert.equal(loginChoice?.style?.flexDirection, 'column', 'portrait login choice
 
 await activateButton(withoutAccountChoice);
 assert.deepEqual(anonymousCalls, [{ force: true }], 'without-account choice must use the anonymous account flow');
+await waitForCondition(() => loginSequence?.style?.display === 'none');
 assert.equal(loginSequence?.style?.display, 'none', 'successful anonymous entry must close the login sequence');
 anonymousUser = null;
 
@@ -462,6 +470,7 @@ assert.equal(
 );
 assertChoiceVisualReady('wrong password return');
 await submitLoginCredentials('0611111111', 'rightpass');
+await waitForCondition(() => document.getElementById('eve_login_sequence')?.style?.display === 'none');
 assert.equal(
     document.getElementById('eve_login_sequence')?.style?.display,
     'none',

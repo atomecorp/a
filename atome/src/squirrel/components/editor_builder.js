@@ -56,6 +56,8 @@ import {
 import { runEditorCode } from './editor_builder_run.js';
 import { showEditorLoadDialog } from './editor_builder_load_dialog.js';
 import { buildEditorDom } from './editor_builder_dom.js';
+import { setupEditorInteractions } from './editor_builder_interactions.js';
+import { makeEditorActions } from './editor_builder_actions.js';
 
 // === REGISTRY GLOBAL ===
 const editorRegistry = new Map();
@@ -225,115 +227,7 @@ const createEditor = (config = {}) => {
         }
     }
 
-    function saveContent() {
-        if (!state.editorView || state.isSaving) return;
-
-        const content = state.editorView.state.doc.toString();
-
-        // Just update local state (real save to localStorage for undo)
-        state.lastSavedContent = content;
-        state.isDirty = false;
-        updateDirtyIndicator(false);
-
-        // Store in localStorage for recovery
-        try {
-            localStorage.setItem(`editor_autosave_${editorId}`, JSON.stringify({
-                content,
-                fileName: state.fileName,
-                language: state.language,
-                timestamp: Date.now()
-            }));
-        } catch (e) {
-        }
-
-        updateStatus('Auto-saved');
-        onSave?.({ editorId, fileName: state.fileName, content, validated: false });
-    }
-
-    async function validateContent() {
-
-        if (!state.editorView || state.isSaving) {
-            return;
-        }
-
-        state.isSaving = true;
-        updateStatus('Saving...');
-
-        const content = state.editorView.state.doc.toString();
-
-        try {
-            const adoleApi = await loadAdoleApi();
-            const authenticated = isAdoleAuthenticated(adoleApi);
-
-            if (!authenticated) {
-                // Save to localStorage only - NO network calls
-                const localKey = `editor_file_${state.fileName}_${Date.now()}`;
-                const localData = {
-                    id: localKey,
-                    fileName: state.fileName,
-                    language: state.language,
-                    content: content,
-                    lastModified: new Date().toISOString()
-                };
-
-                let localFiles = [];
-                try {
-                    localFiles = JSON.parse(localStorage.getItem('editor_local_files') || '[]');
-                } catch (error) {
-                }
-
-                const existingIndex = localFiles.findIndex(f => f.fileName === state.fileName);
-                if (existingIndex >= 0) {
-                    localFiles[existingIndex] = localData;
-                } else {
-                    localFiles.push(localData);
-                }
-
-                localStorage.setItem('editor_local_files', JSON.stringify(localFiles));
-                state.fileId = localKey;
-                state.lastValidatedContent = content;
-                state.isDirty = false;
-                updateDirtyIndicator(false);
-                updateStatus('✓ Saved locally (login for cloud sync)');
-                onValidate?.({ editorId, fileName: state.fileName, fileId: state.fileId, content, local: true });
-                return;
-            }
-
-            // Authenticated - save to server with ADOLE-compliant format
-            const atomeData = {
-                type: 'code_file',
-                properties: {
-                    fileName: state.fileName,
-                    language: state.language,
-                    content: content,
-                    lastModified: new Date().toISOString(),
-                    size: content.length,
-                    fileId: state.fileId || null
-                }
-            };
-
-            const result = await adoleApi.atomes.create(atomeData);
-
-            if (adoleOperationSucceeded(result)) {
-                state.fileId = extractCreatedAtomeId(result) || state.fileId;
-                state.lastValidatedContent = content;
-                state.isDirty = false;
-                updateDirtyIndicator(false);
-                updateStatus('✓ Saved');
-                onValidate?.({ editorId, fileName: state.fileName, fileId: state.fileId, content });
-            } else {
-                const error = result?.tauri?.error || result?.fastify?.error || result?.error || 'Unknown error';
-                updateStatus('✗ Save failed: ' + error);
-            }
-
-        } catch (error) {
-            updateStatus('✗ Failed: ' + error.message);
-            onError?.(error);
-        } finally {
-            state.isSaving = false;
-        }
-    }
-
+    const { saveContent, validateContent } = makeEditorActions({ state, editorId, onSave, onValidate, onError, updateStatus, updateDirtyIndicator });
     function loadFile(file) {
         const props = file.properties || file.data || {};
 
@@ -406,179 +300,6 @@ const createEditor = (config = {}) => {
         onClose?.(editorId);
     }
 
-    // === DRAG & DROP ===
-
-    function setupDragAndDrop() {
-        const editorArea = container.querySelector('.sq-editor-area');
-        const dropOverlay = container.querySelector('.sq-editor-drop-overlay');
-
-        editorArea.addEventListener('dragenter', (e) => {
-            e.preventDefault();
-            dropOverlay.style.display = 'flex';
-        });
-
-        editorArea.addEventListener('dragover', (e) => {
-            e.preventDefault();
-            e.dataTransfer.dropEffect = 'copy';
-        });
-
-        editorArea.addEventListener('dragleave', (e) => {
-            if (!editorArea.contains(e.relatedTarget)) {
-                dropOverlay.style.display = 'none';
-            }
-        });
-
-        editorArea.addEventListener('drop', async (e) => {
-            e.preventDefault();
-            dropOverlay.style.display = 'none';
-
-            const files = e.dataTransfer.files;
-            if (files.length > 0) {
-                const file = files[0];
-
-                // Check if text file
-                if (!file.type.startsWith('text/') && !file.name.match(/\.(js|rb|txt|json|md|html|css)$/i)) {
-                    updateStatus('Only text files are supported');
-                    return;
-                }
-
-                try {
-                    const content = await file.text();
-
-                    // Detect language from extension
-                    const ext = file.name.split('.').pop().toLowerCase();
-                    let detectedLang = 'javascript';
-                    if (ext === 'rb' || ext === 'ruby') detectedLang = 'ruby';
-
-                    state.fileName = file.name;
-                    state.language = detectedLang;
-                    state.isDirty = true;
-                    state.fileId = null; // New file
-
-                    // Update UI
-                    const fileNameInput = container.querySelector('.sq-editor-filename');
-                    if (fileNameInput) fileNameInput.value = state.fileName;
-
-                    const langSelect = container.querySelector('.sq-editor-lang');
-                    if (langSelect) langSelect.value = detectedLang;
-
-                    // Update editor
-                    if (state.editorView) {
-                        state.editorView.dispatch({
-                            changes: {
-                                from: 0,
-                                to: state.editorView.state.doc.length,
-                                insert: content
-                            },
-                            effects: languageCompartment.reconfigure(getLanguageExtension(detectedLang))
-                        });
-                    }
-
-                    updateDirtyIndicator(true);
-                    updateStatus(`Dropped: ${file.name}`);
-                    onDrop?.(file, content);
-                } catch (error) {
-                    updateStatus('Failed to read file');
-                    onError?.(error);
-                }
-            }
-        });
-    }
-
-    // === DRAGGABLE & RESIZABLE ===
-
-    function setupDraggable() {
-        if (!draggable) return;
-
-        const header = container.querySelector('.sq-editor-header');
-        let isDragging = false;
-        let startX, startY, startLeft, startTop;
-
-        header.addEventListener('mousedown', (e) => {
-            if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || e.target.tagName === 'BUTTON') return;
-
-            isDragging = true;
-            startX = e.clientX;
-            startY = e.clientY;
-            startLeft = container.offsetLeft;
-            startTop = container.offsetTop;
-
-            container.style.zIndex = '10000';
-            document.body.style.userSelect = 'none';
-        });
-
-        document.addEventListener('mousemove', (e) => {
-            if (!isDragging) return;
-
-            const dx = e.clientX - startX;
-            const dy = e.clientY - startY;
-
-            container.style.left = `${Math.max(0, startLeft + dx)}px`;
-            container.style.top = `${Math.max(0, startTop + dy)}px`;
-        });
-
-        document.addEventListener('mouseup', () => {
-            if (isDragging) {
-                isDragging = false;
-                container.style.zIndex = '9998';
-                document.body.style.userSelect = '';
-            }
-        });
-    }
-
-    function setupResizable() {
-        if (!resizable) return;
-
-        const handle = container.querySelector('.sq-editor-resize');
-        if (!handle) return;
-
-        let isResizing = false;
-        let startX, startY, startWidth, startHeight;
-
-        handle.addEventListener('mousedown', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-
-            isResizing = true;
-            startX = e.clientX;
-            startY = e.clientY;
-            startWidth = container.offsetWidth;
-            startHeight = container.offsetHeight;
-
-            document.body.style.cursor = 'se-resize';
-            document.body.style.userSelect = 'none';
-        });
-
-        document.addEventListener('mousemove', (e) => {
-            if (!isResizing) return;
-
-            const dx = e.clientX - startX;
-            const dy = e.clientY - startY;
-
-            const newWidth = Math.max(400, startWidth + dx);
-            const newHeight = Math.max(200, startHeight + dy);
-
-            container.style.width = `${newWidth}px`;
-            container.style.height = `${newHeight}px`;
-
-            // Refresh CodeMirror
-            if (state.editorView) {
-                state.editorView.requestMeasure();
-            }
-        });
-
-        document.addEventListener('mouseup', () => {
-            if (isResizing) {
-                isResizing = false;
-                document.body.style.cursor = '';
-                document.body.style.userSelect = '';
-            }
-        });
-    }
-
-    // === CODE EXECUTION ===
-
-
     // === BUILD UI ===
 
     const { container, header, editorArea, outputPanel, statusBar, resizeHandle } = buildEditorDom({
@@ -601,9 +322,7 @@ const createEditor = (config = {}) => {
     initCodeMirror(editorArea);
 
     // Setup interactions
-    setupDragAndDrop();
-    setupDraggable();
-    setupResizable();
+    setupEditorInteractions({ state, container, editorArea, header, draggable, resizable, onDrop, updateStatus, updateDirtyIndicator });
 
     // Register in global registry
     editorRegistry.set(editorId, { container, state, api: null });

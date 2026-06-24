@@ -88,9 +88,10 @@ assert.equal(LOGIN_TEXT_STYLE.choiceFontWeight, '220', 'choice labels must expos
 assert.equal(LOGIN_TEXT_STYLE.instructionFontSize, 'clamp(15px, 3.6vw, 22px)', 'instructions must expose a reduced type scale');
 assert.equal(LOGIN_TEXT_STYLE.typedFontSize, 'clamp(25px, 8.2vw, 52px)', 'typed mirror text must expose a reduced type scale');
 assert.equal(LOGIN_CHOICE_FEEDBACK.hoverDimOpacity, '0.6', 'choice feedback must dim the non-hovered label to 0.6');
-assert.equal(LOGIN_CHOICE_FEEDBACK.entryFadeMs, 640, 'choice screen must expose a slow body-to-login fade duration');
+assert.equal(LOGIN_CHOICE_FEEDBACK.entryFadeMs, 4000, 'choice screen must expose a very slow body-to-login fade duration');
+assert.equal(LOGIN_CHOICE_FEEDBACK.entryEasing, 'ease-in-out', 'choice entry fade must use a slow balanced easing');
 assert.equal(LOGIN_CHOICE_FEEDBACK.clickMs, 320, 'choice click acknowledgement must expose a bounded brightening duration');
-assert.match(LOGIN_CHOICE_FEEDBACK.clickFilter, /30px/, 'choice click glow must expand around the chosen text by about 30px');
+assert.match(LOGIN_CHOICE_FEEDBACK.clickTextShadow, /30px/, 'choice click glow must expand around the chosen text by about 30px');
 assert.deepEqual(gradientMotionFrames, [
     { filter: 'brightness(1)', backgroundPosition: '0% 50%' },
     { filter: 'brightness(1.032)', backgroundPosition: '100% 50%' },
@@ -124,6 +125,8 @@ assert.equal(choice?.style?.display, 'flex', 'choice surface must be visible fir
 assert.match(LOGIN_GRADIENTS.shell, /radial-gradient/, 'login shell token must keep the textured background');
 assert.match(LOGIN_GRADIENTS.guest, /radial-gradient/, 'guest choice must use a layered violet background');
 assert.match(LOGIN_GRADIENTS.auth, /radial-gradient/, 'account choice must use a separate layered violet background');
+assert.doesNotMatch(LOGIN_GRADIENTS.choiceDivider, /gradient/, 'choice divider line must not use a gradient');
+assert.doesNotMatch(LOGIN_GRADIENTS.choiceDivider, /transparent/, 'choice divider line must stay crisp across the full width');
 assert.equal(withoutAccountButton?.textContent, 'Essayer');
 assert.equal(authenticateButton?.textContent, 'Connexion / inscription');
 assert.equal(withoutAccountButton?.loginLabel?.style?.fontFamily, LOGIN_TEXT_STYLE.fontFamily, 'guest label must use the shared login typography');
@@ -141,7 +144,9 @@ assert.deepEqual(authenticateMotion?.frames, gradientMotionFrames, 'auth backgro
 assert.equal(topBandMotion?.options?.duration, LOGIN_GRADIENT_MOTION.bandDurationMs, 'credential band gradient must use the shared band motion duration');
 assert.ok(divider, 'choice screen must keep the separator light behind the logo');
 assert.equal(divider?.style?.top, '50%', 'choice separator must sit on the two-zone junction');
+assert.doesNotMatch(document.getElementById('eve_login_sequence__choice_divider_line')?.style?.background || '', /transparent/, 'choice separator line must not fade at the viewport edges');
 assert.match(dividerSweep?.style?.background || '', /radial-gradient/, 'choice separator must use the shared glow sweep token');
+assert.equal(LOGIN_CHOICE_LIGHT.durationMs, 9600, 'choice separator sweep must move at half the previous speed');
 assert.ok(LOGIN_CHOICE_LIGHT.glowHeightPx <= 6, 'choice separator glow must stay very low');
 assert.ok(LOGIN_CHOICE_LIGHT.sweepWidthPx >= 180, 'choice separator sweep must stay wide');
 assert.match(dividerSweep?.style?.filter || '', /brightness/, 'choice separator sweep must keep a bright controlled pulse');
@@ -153,14 +158,23 @@ assert.equal(logoGlowSource?.style?.width, logoImg?.style?.width, 'logo glow sou
 assert.equal(logoGlowSource?.style?.height, logoImg?.style?.height, 'logo glow source must match the real logo height');
 assert.ok(Number(logoGlowReveal?.style?.zIndex) < Number(logoImg?.style?.zIndex), 'logo glow must stay behind the fixed white logo image');
 assert.equal(document.getElementById('eve_login_sequence__persistent_logo_highlight'), null, 'legacy masked logo highlight must not remain');
+assert.equal(logo?.style?.opacity, '1', 'persistent logo wrapper must stay fully opaque during the choice entry fade');
 assert.equal(logoImg?.style?.opacity, '1', 'base logo must stay white at full opacity');
 assert.match(logoImg?.style?.filter || '', /brightness\(0\) invert\(1\)/, 'base logo must keep a fixed white filter');
 assert.match(logo?.style?.transform || '', /600px,350px/, 'login logo must start centered in the viewport');
+const logoOpacityAnimation = capturedAnimations.find((entry) => entry.element === logo && entry.frames?.some((frame) => Object.hasOwn(frame, 'opacity')));
+assert.equal(logoOpacityAnimation, undefined, 'choice entry fade must not animate the persistent logo opacity');
 
 withoutAccountButton.dispatchEvent(new window.MouseEvent('pointerenter', { bubbles: true }));
-assert.equal(withoutAccountButton.loginLabel.style.filter, LOGIN_CHOICE_FEEDBACK.hoverFilter, 'hovered choice label must receive the luminous text halo');
-assert.equal(authenticateButton.loginLabel.style.opacity, LOGIN_CHOICE_FEEDBACK.hoverDimOpacity, 'non-hovered choice label must dim on hover');
+const hoverTextAnimation = capturedAnimations.find((entry) => entry.element === withoutAccountButton.loginLabel && entry.frames?.at?.(-1)?.textShadow === LOGIN_CHOICE_FEEDBACK.hoverTextShadow);
+const hoverDimAnimation = capturedAnimations.find((entry) => entry.element === authenticateButton.loginLabel && entry.frames?.at?.(-1)?.opacity === LOGIN_CHOICE_FEEDBACK.hoverDimOpacity);
+assert.equal(withoutAccountButton.loginLabel.style.textShadow, LOGIN_CHOICE_FEEDBACK.idleTextShadow, 'hover must not apply the final halo before the animation starts');
+assert.ok(hoverTextAnimation, 'hovered choice label must animate toward the luminous text halo');
+assert.ok(hoverDimAnimation, 'non-hovered choice label must animate toward 0.6 opacity');
+await new Promise((resolve) => setTimeout(resolve, 0));
+assert.equal(authenticateButton.loginLabel.style.opacity, LOGIN_CHOICE_FEEDBACK.hoverDimOpacity, 'non-hovered choice label must settle on dimmed opacity after animation completion');
 withoutAccountButton.dispatchEvent(new window.MouseEvent('pointerleave', { bubbles: true }));
+await new Promise((resolve) => setTimeout(resolve, 0));
 assert.equal(authenticateButton.loginLabel.style.opacity, LOGIN_TEXT_STYLE.opacity, 'non-hovered label must restore opacity after hover leaves');
 
 setViewport(700, 1200);

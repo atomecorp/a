@@ -59,6 +59,7 @@ const currentProjects = [];
 const loadedProjects = [];
 const menuReveals = [];
 const dashboardOpens = [];
+const sceneRecordsByProject = new Map();
 
 window.new_menu_v2 = {
     reveal: () => {
@@ -69,6 +70,7 @@ window.new_menu_v2 = {
 window.eveDashboardRuntime = {
     open: async (payload = {}) => {
         dashboardOpens.push(payload);
+        sceneRecordsByProject.set(payload.projectId, [{ id: '__eve_dashboard_background', properties: {} }]);
         return { ok: true, active: true };
     }
 };
@@ -92,7 +94,10 @@ window.eveToolBase = {
             view.appendChild(canvas);
         }
         return { ok: true };
-    }
+    },
+    getProjectSceneState: (projectId) => ({
+        records: sceneRecordsByProject.get(projectId) || []
+    })
 };
 
 window.AdoleAPI.auth.current = async () => anonymousUser
