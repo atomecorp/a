@@ -121,6 +121,7 @@ const authenticateMotion = capturedAnimations.find((entry) => entry.element === 
 const topBandMotion = capturedAnimations.find((entry) => entry.element?.id === 'eve_login_sequence__top_band');
 
 assert.equal(root?.style?.display, 'block', 'login shell must open');
+assert.equal(root?.style?.backgroundColor, 'inherit', 'login shell must inherit the body background before the choice fade');
 assert.equal(choice?.style?.display, 'flex', 'choice surface must be visible first');
 assert.match(LOGIN_GRADIENTS.shell, /radial-gradient/, 'login shell token must keep the textured background');
 assert.match(LOGIN_GRADIENTS.guest, /radial-gradient/, 'guest choice must use a layered violet background');
