@@ -61,6 +61,10 @@ assert.deepEqual(
     'workspace opener must load the project canvas and dashboard scene before revealing the menu'
 );
 assert.equal(calls[0].projectId, 'project_valid', 'workspace opener must load the requested project');
+assert.deepEqual(calls[0].options, {
+    staleFirst: true,
+    resolveOnFirstPaint: true
+}, 'workspace opener must request the fast first-paint project load path');
 assert.deepEqual(
     calls[1],
     { name: 'dashboardOpen', source: 'authenticated', projectId: 'project_valid' },

@@ -66,12 +66,12 @@ Primary sources:
 
 Exposure:
 
-- JavaScript module exports: `createDashboardRuntime`, `getDashboardRuntime`, `openDashboardRuntime`, `closeDashboardRuntime`, `toggleDashboardRuntime`.
+- JavaScript module exports: `createDashboardRuntime`, `getDashboardRuntime`, `openDashboardRuntime`, `closeDashboardRuntime`, `toggleDashboardRuntime`; runtime instances also expose `refresh()` and `invalidateCache(...)` for explicit dashboard-cache invalidation.
 - Runtime global: `window.eveDashboardRuntime`, installed by the dashboard runtime for product runtime access.
 - Surface interaction hook: `setRenderSurfaceInteractionInterceptor(zone, interceptor)` in `surface_runtime.js`.
 - Project scene UI-intent hook: `setProjectSceneUiIntentHandler(handler)` in `project_scene_runtime.js`, registered by eVe boot so canvas double-click footer open works across all project render/update paths.
 - Tool ids: `tool.dashboard.news`, `tool.dashboard.monitor`, `tool.dashboard.goals`, and hidden future `tool.dashboard.store`.
-- Entry points: the main Atome handle tap (`button[data-role="eve_intuitionx-handle"]`) toggles the dashboard in active workspaces; successful authenticated and anonymous workspace openings route through `eVe/intuition/tools/user_workspace_surface_runtime.js`, which requires the project loader to attach the canonical `eve_surface_project` canvas, opens `window.eveDashboardRuntime.open({ projectId })` on that resolved project, waits for dashboard Bevy scene records, then reveals the existing main ribbon; direct `tool.main.home` gateway calls remain the `ui.home.panel` user/Home panel route.
+- Entry points: the main Atome handle tap (`button[data-role="eve_intuitionx-handle"]`) toggles the dashboard in active workspaces; successful authenticated and anonymous workspace openings route through `eVe/intuition/tools/user_workspace_surface_runtime.js`, which starts `window.eveToolBase.loadProjectAtomes(projectId, { staleFirst: true, resolveOnFirstPaint: true })`, requires the canonical `eve_surface_project` canvas, opens `window.eveDashboardRuntime.open({ projectId })` on that resolved project, verifies dashboard Bevy scene records directly after open, then reveals the existing main ribbon; direct `tool.main.home` gateway calls remain the `ui.home.panel` user/Home panel route.
 - Atome footer project-scene bridge: `window.eveAtomeEditFooterApi.openForProjectSceneAtome({ atomeId, kind, anchorRect })` opens the existing footer from Bevy canvas hit-test geometry without creating visible per-Atome DOM hosts.
 
 Boundary status: Semi-public closed eVe product runtime. Dashboard durable generic-record creation must route through `window.Atome.commit`; Calendar, Contacts, and Projects are reached through their existing APIs/adapters. Store intentionally returns an explicit disabled error until its domain is defined.
@@ -79,6 +79,9 @@ Boundary status: Semi-public closed eVe product runtime. Dashboard durable gener
 Effect model:
 
 - Open/close/render are ephemeral Bevy projection operations over the current project surface.
+- `dashboard_data_adapters.js` exposes `listMany(categories)` for grouped category reads; `generic_record` categories share one `state_current` read and are split by `source_domain: "eve.dashboard"` plus `category_id`.
+- `dashboard_runtime.js` caches derived dashboard item lists by `projectId + categoryId` and reuses them on Atom-dashboard toggles. Cache invalidation is explicit through refresh, project-change lifecycle, logout, and creation updates in the owning runtime.
+- `renderProjectScene(..., { preserveEphemeralRecords: true })` is an internal rendering extension for late project reconciliation; it preserves only explicit ephemeral Bevy overlay records (`__eve_dashboard_`, `mol:lane:`, `mol:clip:`, `mol:kf:`, `mol:playhead`) from the current runtime map.
 - Runtime layout, hit-testing, and dashboard render records stay in the same logical project coordinates used by active Atomes. DPR/backing-buffer sizing remains a canvas storage concern and must not pre-scale the Virtual Scene, dashboard records, or hit-test geometry.
 - Fullscreen editor transitions are runtime-only rectangle interpolations; the durable item payload is not mutated by animation state.
 - Generic News, Monitor, and Goals record creation is persistent and uses the canonical Atome commit boundary.

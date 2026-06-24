@@ -6,7 +6,8 @@ import {
     emitProjectSceneIntent,
     getProjectSceneState,
     renderProjectScene,
-    updateProjectSceneRecord
+    updateProjectSceneRecord,
+    updateProjectSceneRecords
 } from '../../eVe/domains/rendering/project_scene_runtime.js';
 import {
     createTestCompositor,
@@ -90,6 +91,36 @@ test('Project scene record updates preserve bounded DOM and avoid HTMLElement re
     assert.equal(dom.window.document.querySelectorAll('.eve-atome').length, 0);
     assert.equal(dom.window.document.querySelectorAll('canvas#eve_surface_project').length, 1);
     assert.equal(getProjectSceneState('project_scene_b').scene.atoms.length, 2);
+});
+
+test('Late project renders preserve ephemeral Bevy overlay records on request', async () => {
+    clearAllProjectScenes();
+    const dom = projectDom();
+    const host = dom.window.document.getElementById('project');
+    await renderProjectScene({
+        projectId: 'project_ephemeral_overlay',
+        records: [makeRecord('project_atom', 'shape', 1)],
+        host,
+        compositor: createTestCompositor()
+    });
+    await updateProjectSceneRecords({
+        projectId: 'project_ephemeral_overlay',
+        records: [{
+            id: '__eve_dashboard_background',
+            type: 'shape',
+            properties: { left: 0, top: 0, width: 320, height: 180, color: '#111111' }
+        }]
+    });
+    await renderProjectScene({
+        projectId: 'project_ephemeral_overlay',
+        records: [makeRecord('project_atom', 'shape', 2)],
+        host,
+        preserveEphemeralRecords: true
+    });
+    const ids = new Set(getProjectSceneState('project_ephemeral_overlay').records.map((record) => record.id));
+
+    assert.equal(ids.has('project_atom'), true);
+    assert.equal(ids.has('__eve_dashboard_background'), true);
 });
 
 test('Project scene drag intent commits canonical geometry through commitBatch', async () => {

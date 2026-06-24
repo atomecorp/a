@@ -74,6 +74,7 @@ const {
     LOGIN_TEXT_STYLE,
     createLoginGradientMotionFrames
 } = await import('../../eVe/intuition/tools/user_login_visual_contract.js');
+const { ANIMATION_MS } = await import('../../eVe/intuition/tools/user_login_choreography.js');
 const { createUserLoginSequence } = await import('../../eVe/intuition/tools/user_login_sequence.js');
 
 const gradientMotionFrames = createLoginGradientMotionFrames();
@@ -236,6 +237,20 @@ assert.equal(mirroredText?.textContent, '•••', 'password display must be o
 
 dispatchEnter(passwordInput);
 await waitForCondition(() => root.style.display === 'none' && document.activeElement?.id !== passwordInput.id);
+const finalTopReveal = capturedAnimations.find((entry) => (
+    entry.element?.id === 'eve_login_sequence__top_band'
+    && entry.frames?.[0]?.transform === 'translateY(0)'
+    && entry.frames?.at?.(-1)?.transform === 'translateY(-115%)'
+));
+const finalBottomReveal = capturedAnimations.find((entry) => (
+    entry.element?.id === 'eve_login_sequence__bottom_band'
+    && entry.frames?.[0]?.transform === 'translateY(0)'
+    && entry.frames?.at?.(-1)?.transform === 'translateY(115%)'
+));
+assert.ok(finalTopReveal, 'final reveal top band must exit upward');
+assert.ok(finalBottomReveal, 'final reveal bottom band must exit downward');
+assert.equal(finalTopReveal?.options?.duration, ANIMATION_MS.bandsExit, 'final reveal top band must keep the shared exit duration');
+assert.equal(finalBottomReveal?.options?.duration, ANIMATION_MS.bandsExit, 'final reveal bottom band must keep the shared exit duration');
 assert.notEqual(document.activeElement?.id, passwordInput.id, 'successful password submit must clear native password focus');
 
 let invalidPayload = null;
