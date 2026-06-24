@@ -94,6 +94,7 @@ assert.equal(LOGIN_CHOICE_FEEDBACK.entryEasing, 'ease-in-out', 'choice entry fad
 assert.equal(LOGIN_LOGO_INTRO.durationMs, 1500, 'choice logo intro must expose a configurable 1.5s duration');
 assert.equal(LOGIN_LOGO_INTRO.blurPx, 66, 'choice logo intro must expose the starting blur amount');
 assert.equal(LOGIN_LOGO_INTRO.easing, 'ease-in-out', 'choice logo intro must use a soft easing');
+assert.equal(LOGIN_CHOICE_FEEDBACK.guestAckFadeMs, 2000, 'guest acknowledgement fade must stay slow enough to read');
 assert.equal(LOGIN_CHOICE_FEEDBACK.clickMs, 320, 'choice click acknowledgement must expose a bounded brightening duration');
 assert.match(LOGIN_CHOICE_FEEDBACK.clickTextShadow, /30px/, 'choice click glow must expand around the chosen text by about 30px');
 assert.deepEqual(gradientMotionFrames, [
@@ -228,5 +229,44 @@ assert.equal(mirroredText?.textContent, '•••', 'password display must be o
 dispatchEnter(passwordInput);
 await waitForCondition(() => root.style.display === 'none' && document.activeElement?.id !== passwordInput.id);
 assert.notEqual(document.activeElement?.id, passwordInput.id, 'successful password submit must clear native password focus');
+
+capturedAnimations.length = 0;
+setViewport(1200, 700);
+const guestSequence = createUserLoginSequence({
+    onSubmit: async () => ({ ok: true }),
+    onWithoutAccount: async () => ({ ok: true })
+});
+guestSequence.open();
+await new Promise((resolve) => setTimeout(resolve, 0));
+const guestButton = document.getElementById('eve_login_sequence__choice_without_account');
+const guestAuthButton = document.getElementById('eve_login_sequence__choice_authenticate');
+const guestDivider = document.getElementById('eve_login_sequence__choice_divider');
+await clickButton(guestButton);
+await new Promise((resolve) => setTimeout(resolve, 0));
+const guestShineAnimation = capturedAnimations.find((entry) => (
+    entry.element === guestButton.loginLabel
+    && entry.frames?.at?.(-1)?.textShadow === LOGIN_CHOICE_FEEDBACK.clickTextShadow
+));
+const guestLabelFadeAnimation = capturedAnimations.find((entry) => (
+    entry.element === guestButton.loginLabel
+    && entry.frames?.at?.(-1)?.opacity === '0'
+    && entry.frames?.at?.(-1)?.textShadow === LOGIN_CHOICE_FEEDBACK.idleTextShadow
+));
+const guestDividerFadeAnimation = capturedAnimations.find((entry) => (
+    entry.element === guestDivider
+    && entry.frames?.at?.(-1)?.opacity === '0'
+));
+const guestExitTextAnimation = capturedAnimations.find((entry) => (
+    entry.element === guestButton.loginLabel
+    && entry.frames?.[0]?.opacity === '0'
+    && entry.frames?.at?.(-1)?.opacity === 0
+));
+assert.ok(guestShineAnimation, 'guest choice must first acknowledge the click with the selected label glow');
+assert.ok(guestLabelFadeAnimation, 'guest choice label must fade out after its click glow finishes');
+assert.equal(guestLabelFadeAnimation?.options?.duration, LOGIN_CHOICE_FEEDBACK.guestAckFadeMs, 'guest choice label fade must use the shared slow acknowledgement duration');
+assert.ok(guestDividerFadeAnimation, 'choice divider must fade out after the guest click glow finishes');
+assert.equal(guestDividerFadeAnimation?.options?.duration, LOGIN_CHOICE_FEEDBACK.guestAckFadeMs, 'choice divider fade must use the shared slow acknowledgement duration');
+assert.ok(guestExitTextAnimation, 'guest desktop exit must not restart hidden selected label from visible opacity');
+assert.equal(guestAuthButton.loginLabel.style.opacity, '0', 'opposite auth label must stay hidden after guest click acknowledgement');
 
 console.log('user_login_visual_contract.test: PASS');
