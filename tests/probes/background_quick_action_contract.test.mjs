@@ -22,8 +22,11 @@ test('user background download quick action uses the wallpaper download owner', 
         'download quick action must surface download failures through the existing user notice'
     );
     assert.ok(
-        backgroundSource.includes('picsum.photos') && backgroundSource.includes('download_random_background_image'),
-        'background runtime must expose the explicit wallpaper download action'
+        backgroundSource.includes('download_random_background_image')
+            && backgroundSource.includes('downloadRemoteWallpaper')
+            && !backgroundSource.includes('picsum.photos')
+            && !backgroundSource.includes('RANDOM_WALLPAPER_URL'),
+        'background runtime must expose the explicit wallpaper download action through the server wallpaper owner'
     );
     assert.ok(
         backgroundSource.includes('publishBackgroundPreferences') && backgroundSource.includes("source: 'background_panel'"),
@@ -32,7 +35,8 @@ test('user background download quick action uses the wallpaper download owner', 
     assert.ok(
         userSurfaceBackgroundSource.includes('bindProfilePreferencesListener')
             && userSurfaceBackgroundSource.includes("window.addEventListener('eve:profile-preferences-updated'")
-            && userSurfaceBackgroundSource.includes('applyPreferencesObject(prefs, { emitEvent: false })'),
+            && userSurfaceBackgroundSource.includes('applyPreferencesObject(prefs, { emitEvent: false, source: detail.source })')
+            && userSurfaceBackgroundSource.includes('pendingLocalBackgroundSignature'),
         'user surface background runtime must consume profile preference updates from the existing event'
     );
     assert.ok(

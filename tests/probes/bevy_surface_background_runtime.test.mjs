@@ -166,6 +166,19 @@ test('Bevy surface background runtime applies payload emitted before surface reg
     assert.deepEqual(calls[1], { redraw: true });
 });
 
+test('Bevy web renderer registers the surface background after renderer start', () => {
+    const source = fs.readFileSync(path.join(repoRoot, 'eVe/domains/rendering/bevy_web_renderer_runtime.js'), 'utf8');
+    assert.equal(
+        source.includes('registerBevySurfaceBackgroundRuntime(canvas, state);\n        scheduleDeferredInitialNodes'),
+        false,
+        'surface background registration must not happen while the renderer state is still marked as not started'
+    );
+    const startedStateIndex = source.indexOf('started: true,\n            startPromise: null');
+    const registerIndex = source.indexOf('registerBevySurfaceBackgroundRuntime(canvas, SURFACE_RUNTIME.get(canvas))');
+    assert.ok(startedStateIndex > 0, 'renderer start state update must remain explicit');
+    assert.ok(registerIndex > startedStateIndex, 'surface background registration must run after the started state is stored');
+});
+
 test('user background source no longer creates the legacy DOM background layer', () => {
     const source = fs.readFileSync(path.join(repoRoot, 'eVe/user/background.js'), 'utf8');
     assert.equal(source.includes('eve_background_visual_layer'), false);
@@ -223,12 +236,39 @@ test('image background choices persist immediately instead of depending on debou
     assert.match(source, /const schedulePreferenceSave = \(\{ immediate = false \} = \{\}\)/);
 });
 
+test('local wallpaper choice is not overwritten by stale profile polling', () => {
+    const source = fs.readFileSync(path.join(repoRoot, 'eVe/user/background.js'), 'utf8');
+    assert.match(source, /pendingLocalBackgroundSignature/);
+    assert.match(source, /source === 'background_panel'/);
+    assert.match(source, /signature !== pendingLocalBackgroundSignature/);
+    assert.match(source, /pendingLocalBackgroundSignature = ''/);
+});
+
+test('image source changes render without waiting for generated-background raf', () => {
+    const source = fs.readFileSync(path.join(repoRoot, 'eVe/user/background.js'), 'utf8');
+    assert.match(source, /imageSourceChanged/);
+    assert.match(source, /key === 'backgroundSource' \|\| key === 'backgroundImageUrl'/);
+    assert.match(source, /runtime\.resize\(\)/);
+});
+
+test('protected wallpaper fetch starts from the media URL without token refresh gating', () => {
+    const source = fs.readFileSync(path.join(repoRoot, 'eVe/user/background.js'), 'utf8');
+    const resolverStart = source.indexOf('const resolveProtectedBackgroundObjectUrl =');
+    const signatureStart = source.indexOf('const buildBackgroundPreferencesSignature =');
+    assert.ok(resolverStart > 0);
+    assert.ok(signatureStart > resolverStart);
+    const resolverSource = source.slice(resolverStart, signatureStart);
+    assert.match(resolverSource, /fetch\(primaryCandidate/);
+    assert.doesNotMatch(resolverSource, /ensureFastifyToken/);
+});
+
 test('surface background resize path coalesces and avoids repeated image emission', () => {
     const source = fs.readFileSync(path.join(repoRoot, 'eVe/domains/rendering/user_surface_background_texture_runtime.js'), 'utf8');
     assert.match(source, /RESIZE_RENDER_DELAY_MS/);
     assert.match(source, /new ResizeObserver\(scheduleResize\)/);
     assert.match(source, /window\.addEventListener\('resize', scheduleResize\)/);
     assert.match(source, /lastImageSignature === signature/);
+    assert.match(source, /pendingImageSignature === signature/);
 });
 
 test('Bevy background runtime skips duplicate surface signatures', () => {
