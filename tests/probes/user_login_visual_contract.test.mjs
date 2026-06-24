@@ -70,6 +70,7 @@ const {
     LOGIN_CHOICE_LIGHT,
     LOGIN_GRADIENT_MOTION,
     LOGIN_GRADIENTS,
+    LOGIN_LOGO_INTRO,
     LOGIN_TEXT_STYLE,
     createLoginGradientMotionFrames
 } = await import('../../eVe/intuition/tools/user_login_visual_contract.js');
@@ -90,6 +91,9 @@ assert.equal(LOGIN_TEXT_STYLE.typedFontSize, 'clamp(25px, 8.2vw, 52px)', 'typed 
 assert.equal(LOGIN_CHOICE_FEEDBACK.hoverDimOpacity, '0.6', 'choice feedback must dim the non-hovered label to 0.6');
 assert.equal(LOGIN_CHOICE_FEEDBACK.entryFadeMs, 4000, 'choice screen must expose a very slow body-to-login fade duration');
 assert.equal(LOGIN_CHOICE_FEEDBACK.entryEasing, 'ease-in-out', 'choice entry fade must use a slow balanced easing');
+assert.equal(LOGIN_LOGO_INTRO.durationMs, 1500, 'choice logo intro must expose a configurable 1.5s duration');
+assert.equal(LOGIN_LOGO_INTRO.blurPx, 66, 'choice logo intro must expose the starting blur amount');
+assert.equal(LOGIN_LOGO_INTRO.easing, 'ease-in-out', 'choice logo intro must use a soft easing');
 assert.equal(LOGIN_CHOICE_FEEDBACK.clickMs, 320, 'choice click acknowledgement must expose a bounded brightening duration');
 assert.match(LOGIN_CHOICE_FEEDBACK.clickTextShadow, /30px/, 'choice click glow must expand around the chosen text by about 30px');
 assert.deepEqual(gradientMotionFrames, [
@@ -105,6 +109,7 @@ const sequence = createUserLoginSequence({
     onWithoutAccount: async () => ({ ok: true })
 });
 sequence.open();
+await new Promise((resolve) => setTimeout(resolve, 0));
 
 const root = document.getElementById('eve_login_sequence');
 const choice = document.getElementById('eve_login_sequence__choice');
@@ -163,8 +168,16 @@ assert.equal(logo?.style?.opacity, '1', 'persistent logo wrapper must stay fully
 assert.equal(logoImg?.style?.opacity, '1', 'base logo must stay white at full opacity');
 assert.match(logoImg?.style?.filter || '', /brightness\(0\) invert\(1\)/, 'base logo must keep a fixed white filter');
 assert.match(logo?.style?.transform || '', /600px,350px/, 'login logo must start centered in the viewport');
-const logoOpacityAnimation = capturedAnimations.find((entry) => entry.element === logo && entry.frames?.some((frame) => Object.hasOwn(frame, 'opacity')));
-assert.equal(logoOpacityAnimation, undefined, 'choice entry fade must not animate the persistent logo opacity');
+const logoIntroAnimation = capturedAnimations.find((entry) => (
+    entry.element === logo
+    && entry.frames?.[0]?.opacity === '0'
+    && entry.frames?.[0]?.filter === `blur(${LOGIN_LOGO_INTRO.blurPx}px)`
+    && entry.frames?.at?.(-1)?.opacity === '1'
+    && entry.frames?.at?.(-1)?.filter === 'blur(0px)'
+));
+assert.ok(logoIntroAnimation, 'choice logo must animate opacity and blur before the choice surface fade');
+assert.equal(logoIntroAnimation?.options?.duration, LOGIN_LOGO_INTRO.durationMs, 'choice logo intro must use the shared duration token');
+assert.equal(logoIntroAnimation?.options?.easing, LOGIN_LOGO_INTRO.easing, 'choice logo intro must use the shared easing token');
 
 withoutAccountButton.dispatchEvent(new window.MouseEvent('pointerenter', { bubbles: true }));
 const hoverTextAnimation = capturedAnimations.find((entry) => entry.element === withoutAccountButton.loginLabel && entry.frames?.at?.(-1)?.textShadow === LOGIN_CHOICE_FEEDBACK.hoverTextShadow);
