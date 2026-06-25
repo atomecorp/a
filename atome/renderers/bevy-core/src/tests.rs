@@ -16,6 +16,7 @@ fn shape_node(id: &str) -> AtomeRenderNode {
         layer: 3,
         opacity: 1.0,
         corner_radius: 0.0,
+        shadow: None,
         color: Some([0.1, 0.2, 0.3, 1.0]),
         text: None,
         source: None,
@@ -43,6 +44,7 @@ fn text_node_with_texture(id: &str) -> AtomeRenderNode {
         layer: 5,
         opacity: 1.0,
         corner_radius: 0.0,
+        shadow: None,
         color: Some([1.0, 1.0, 1.0, 1.0]),
         text: Some("Sharp".to_string()),
         source: None,
@@ -91,7 +93,16 @@ fn assert_fixed_projection_size(projection: &Projection, width: f32, height: f32
 #[test]
 fn plugin_spawns_projected_nodes_and_camera() {
     let scene = AtomeRenderScene {
-        nodes: vec![shape_node("shape_1")],
+        nodes: vec![AtomeRenderNode {
+            shadow: Some(AtomeShadowStyle {
+                color: [0.0, 0.0, 0.0, 0.3],
+                blur: 10.0,
+                offset_x: -4.0,
+                offset_y: 0.0,
+                spread: 0.0,
+            }),
+            ..shape_node("shape_1")
+        }],
         selection_style: None,
     };
     let mut app = App::new();
@@ -106,6 +117,11 @@ fn plugin_spawns_projected_nodes_and_camera() {
     let projection = projection_query.single(app.world()).unwrap();
     assert_fixed_projection_size(projection, 640.0, 480.0);
     assert_eq!(app.world().resource::<AtomeEntityTable>().by_id.len(), 1);
+    let entity = app.world().resource::<AtomeEntityTable>().by_id["shape_1"];
+    assert!(
+        app.world().get::<AtomeShapeShadowOverlay>(entity).is_some(),
+        "initial scene shape shadow should be spawned by the Bevy plugin"
+    );
 }
 
 #[test]
@@ -173,6 +189,66 @@ fn rounded_shape_nodes_use_alpha_mask_texture_without_resizing() {
     };
     assert_eq!(alpha_at(0, 0), 0);
     assert_eq!(alpha_at(60, 25), 255);
+}
+
+#[test]
+fn shape_shadow_uses_bevy_overlay_without_changing_logical_size() {
+    let mut world = World::new();
+    world.insert_resource(AtomeEntityTable::default());
+    world.insert_resource(AtomeBevyRendererConfig::empty(640.0, 480.0));
+    world.insert_resource(AtomeRendererDiagnostics::default());
+    world.insert_resource(Assets::<Image>::default());
+
+    let entity = apply_spawn(
+        &mut world,
+        AtomeRenderNode {
+            shadow: Some(AtomeShadowStyle {
+                color: [0.0, 0.0, 0.0, 0.42],
+                blur: 8.0,
+                offset_x: 3.0,
+                offset_y: 4.0,
+                spread: 2.0,
+            }),
+            ..shape_node("shadowed_shape")
+        },
+    )
+    .unwrap();
+
+    let sprite = world.get::<Sprite>(entity).unwrap();
+    assert_vec2_near(sprite.custom_size, Vec2::new(120.0, 50.0));
+    let overlay = world
+        .get::<AtomeShapeShadowOverlay>(entity)
+        .expect("shape shadow should create a Bevy overlay");
+    assert_eq!(overlay.entities.len(), 1);
+    assert_eq!(overlay.image_handles.len(), 1);
+    assert_eq!(world.resource::<Assets<Image>>().len(), 1);
+    let shadow_entity = overlay.entities[0];
+    let shadow_sprite = world.get::<Sprite>(shadow_entity).unwrap();
+    let shadow_size = shadow_sprite.custom_size.expect("shadow sprite size");
+    assert!(shadow_size.x > 120.0);
+    assert!(shadow_size.y > 50.0);
+    assert_eq!(
+        world.get::<Transform>(shadow_entity).unwrap().translation.z,
+        depth_for_layer(3) - 0.25
+    );
+
+    apply_style(
+        &mut world,
+        AtomeStylePatch {
+            id: "shadowed_shape".to_string(),
+            color: None,
+            shadow: Some(None),
+            selected: None,
+            opacity: None,
+            playback_progress: None,
+            filters: None,
+            transition: None,
+        },
+    )
+    .unwrap();
+
+    assert!(world.get::<AtomeShapeShadowOverlay>(entity).is_none());
+    assert_eq!(world.resource::<Assets<Image>>().len(), 0);
 }
 
 #[test]
@@ -325,6 +401,7 @@ fn selected_nodes_create_overlay_from_configured_visual_style() {
         AtomeStylePatch {
             id: "selected_shape".to_string(),
             color: None,
+            shadow: None,
             selected: Some(false),
             opacity: None,
             playback_progress: None,
@@ -382,6 +459,7 @@ fn audio_waveform_progress_spawns_and_moves_bevy_playhead_overlay() {
             layer: 2,
             opacity: 1.0,
             corner_radius: 0.0,
+            shadow: None,
             color: Some([0.2, 0.4, 0.6, 1.0]),
             text: None,
             source: None,
@@ -412,6 +490,7 @@ fn audio_waveform_progress_spawns_and_moves_bevy_playhead_overlay() {
         AtomeStylePatch {
             id: "waveform_progress".to_string(),
             color: None,
+            shadow: None,
             selected: None,
             opacity: None,
             playback_progress: Some(Some(0.75)),
@@ -436,6 +515,7 @@ fn audio_waveform_progress_spawns_and_moves_bevy_playhead_overlay() {
         AtomeStylePatch {
             id: "waveform_progress".to_string(),
             color: None,
+            shadow: None,
             selected: None,
             opacity: None,
             playback_progress: Some(None),

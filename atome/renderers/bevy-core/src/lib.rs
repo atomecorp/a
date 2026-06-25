@@ -4,6 +4,7 @@ pub mod plugin;
 pub mod render_math;
 pub mod render_ops;
 pub mod selection_overlay;
+pub mod shape_shadow_overlay;
 pub mod spawn;
 pub mod texture;
 pub mod types;

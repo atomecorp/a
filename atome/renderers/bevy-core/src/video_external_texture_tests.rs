@@ -25,6 +25,7 @@ fn video_node(id: &str) -> AtomeRenderNode {
         layer: 2,
         opacity: 0.65,
         corner_radius: 0.0,
+        shadow: None,
         color: Some([0.1, 0.2, 0.3, 1.0]),
         text: None,
         source: Some("/fixtures/video.mp4".to_string()),
@@ -331,6 +332,7 @@ fn video_style_patch_updates_external_texture_opacity() {
         AtomeStylePatch {
             id: "external_opacity".to_string(),
             color: None,
+            shadow: None,
             selected: None,
             opacity: Some(0.35),
             playback_progress: None,
@@ -353,6 +355,7 @@ fn video_style_patch_updates_external_texture_opacity() {
         AtomeStylePatch {
             id: "external_opacity".to_string(),
             color: None,
+            shadow: None,
             selected: None,
             opacity: Some(2.0),
             playback_progress: None,
@@ -463,6 +466,7 @@ fn video_style_patch_updates_color_filters() {
         AtomeStylePatch {
             id: "filter_style".to_string(),
             color: None,
+            shadow: None,
             selected: None,
             opacity: None,
             playback_progress: None,
@@ -536,6 +540,7 @@ fn video_node_and_style_carry_normalized_transition() {
         AtomeStylePatch {
             id: "plain_transition".to_string(),
             color: None,
+            shadow: None,
             selected: None,
             opacity: None,
             playback_progress: None,

@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use crate::types::{
     default_transform_origin, default_transform_scale, normalize_transform_origin,
     normalize_transform_rotation, normalize_transform_scale, AtomeRenderScene,
-    SelectionVisualStyle,
+    AtomeShadowStyle, SelectionVisualStyle,
 };
 
 #[derive(Clone, Debug, Component)]
@@ -75,6 +75,15 @@ pub struct AtomeSelected(pub bool);
 
 #[derive(Clone, Debug, Component)]
 pub struct AtomeSelectionOverlay {
+    pub entities: Vec<Entity>,
+    pub image_handles: Vec<Handle<Image>>,
+}
+
+#[derive(Clone, Copy, Debug, Component)]
+pub struct AtomeShapeShadow(pub Option<AtomeShadowStyle>);
+
+#[derive(Clone, Debug, Component)]
+pub struct AtomeShapeShadowOverlay {
     pub entities: Vec<Entity>,
     pub image_handles: Vec<Handle<Image>>,
 }

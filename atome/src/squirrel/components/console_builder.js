@@ -7,6 +7,8 @@ import { $, define } from '../squirrel.js';
 import { ConsoleInterceptor, consoleTemplates } from './console_builder_base.js';
 
 // === INTERCEPTEUR DE CONSOLE ===
+import { buildConsoleDom } from './console_builder_dom.js';
+import { makeConsoleInteractions } from './console_builder_interactions.js';
 const createConsole = (config = {}) => {
   const {
     id,
@@ -48,234 +50,6 @@ const createConsole = (config = {}) => {
   });
 
   // === CRÉATION DES ÉLÉMENTS ===
-  function createContainer() {
-    const container = document.createElement('div');
-    container.id = consoleId;
-    container.className = 'hs-console';
-    
-    // Styles du container
-    Object.assign(container.style, {
-      position: 'fixed',
-      left: `${position.x}px`,
-      top: `${position.y}px`,
-      width: `${size.width}px`,
-      height: `${size.height}px`,
-      zIndex: '9999',
-      display: 'none',
-      flexDirection: 'column',
-      ...themeConfig.css
-    });
-
-    return container;
-  }
-
-  function createHeader() {
-    const header = document.createElement('div');
-    header.className = 'hs-console-header';
-    
-    Object.assign(header.style, {
-      padding: finalHeaderPadding,
-      minHeight: `${finalHeaderHeight}px`,
-      maxHeight: `${finalHeaderHeight}px`,
-      height: `${finalHeaderHeight}px`,
-      display: 'flex',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-      cursor: draggable ? 'move' : 'default',
-      userSelect: 'none',
-      overflow: 'hidden',
-      ...themeConfig.headerStyle
-    });
-
-    // Titre
-    const titleEl = document.createElement('span');
-    titleEl.textContent = title;
-    titleEl.style.fontWeight = 'bold';
-    titleEl.style.fontSize = `${Math.max(11, finalHeaderHeight * 0.5)}px`; // Adapter la taille du texte
-    titleEl.style.lineHeight = '1';
-    titleEl.style.overflow = 'hidden';
-    titleEl.style.textOverflow = 'ellipsis';
-    titleEl.style.whiteSpace = 'nowrap';
-
-    // Boutons de contrôle
-    const controls = document.createElement('div');
-    controls.style.display = 'flex';
-    controls.style.gap = '4px';
-    controls.style.alignItems = 'center';
-
-    // Calculer la taille des boutons en fonction de la hauteur du header
-    const buttonSize = Math.max(16, finalHeaderHeight - 8);
-    
-    // Bouton copy
-    const copyBtn = document.createElement('button');
-    copyBtn.textContent = '📋';
-    copyBtn.title = 'Copy console content';
-    copyBtn.style.cssText = `
-      background: none;
-      border: none;
-      color: inherit;
-      cursor: pointer;
-      padding: 2px;
-      border-radius: 2px;
-      width: ${buttonSize}px;
-      height: ${buttonSize}px;
-      font-size: ${Math.max(10, buttonSize * 0.6)}px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      transition: all 0.2s ease;
-    `;
-    
-    // Effets hover pour le bouton copy
-    copyBtn.addEventListener('mouseenter', () => {
-      copyBtn.style.backgroundColor = 'rgba(255,255,255,0.1)';
-      copyBtn.style.transform = 'scale(1.05)';
-    });
-    copyBtn.addEventListener('mouseleave', () => {
-      copyBtn.style.backgroundColor = 'transparent';
-      copyBtn.style.transform = 'scale(1)';
-    });
-    copyBtn.onclick = copyConsoleContent;
-    
-    // Bouton clear
-    const clearBtn = document.createElement('button');
-    clearBtn.textContent = '🗑️';
-    clearBtn.title = 'Clear console';
-    clearBtn.style.cssText = `
-      background: none;
-      border: none;
-      color: inherit;
-      cursor: pointer;
-      padding: 2px;
-      border-radius: 2px;
-      width: ${buttonSize}px;
-      height: ${buttonSize}px;
-      font-size: ${Math.max(10, buttonSize * 0.6)}px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      transition: all 0.2s ease;
-    `;
-    
-    // Effets hover pour le bouton clear
-    clearBtn.addEventListener('mouseenter', () => {
-      clearBtn.style.backgroundColor = 'rgba(255,0,0,0.1)';
-      clearBtn.style.transform = 'scale(1.05)';
-    });
-    clearBtn.addEventListener('mouseleave', () => {
-      clearBtn.style.backgroundColor = 'transparent';
-      clearBtn.style.transform = 'scale(1)';
-    });
-    clearBtn.onclick = clearConsole;
-
-    // Bouton close
-    const closeBtn = document.createElement('button');
-    closeBtn.textContent = '✕';
-    closeBtn.title = 'Close console';
-    closeBtn.style.cssText = `
-      background: none;
-      border: none;
-      color: inherit;
-      cursor: pointer;
-      padding: 2px;
-      border-radius: 2px;
-      width: ${buttonSize}px;
-      height: ${buttonSize}px;
-      font-size: ${Math.max(10, buttonSize * 0.7)}px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      transition: all 0.2s ease;
-    `;
-    
-    // Effets hover pour le bouton close
-    closeBtn.addEventListener('mouseenter', () => {
-      closeBtn.style.backgroundColor = 'rgba(255,0,0,0.2)';
-      closeBtn.style.transform = 'scale(1.05)';
-    });
-    closeBtn.addEventListener('mouseleave', () => {
-      closeBtn.style.backgroundColor = 'transparent';
-      closeBtn.style.transform = 'scale(1)';
-    });
-    closeBtn.onclick = hideConsole;
-
-    controls.appendChild(copyBtn);
-    controls.appendChild(clearBtn);
-    controls.appendChild(closeBtn);
-    header.appendChild(titleEl);
-    header.appendChild(controls);
-
-    return header;
-  }
-
-  function createOutput() {
-    const output = document.createElement('div');
-    output.className = 'hs-console-output';
-    
-    Object.assign(output.style, {
-      flex: '1',
-      padding: '8px',
-      overflowY: 'auto',
-      fontSize: '13px',
-      lineHeight: '1.4',
-      whiteSpace: 'pre-wrap',
-      wordBreak: 'break-word',
-      ...themeConfig.outputStyle
-    });
-
-    return output;
-  }
-
-  function createInput() {
-    const inputContainer = document.createElement('div');
-    inputContainer.className = 'hs-console-input-container';
-    
-    Object.assign(inputContainer.style, {
-      display: 'flex',
-      padding: '8px',
-      gap: '8px',
-      alignItems: 'center',
-      borderTop: `1px solid ${themeConfig.headerStyle.borderBottom || '#3c3c3c'}`
-    });
-
-    // Prompt
-    const prompt = document.createElement('span');
-    prompt.textContent = '>';
-    prompt.style.color = '#569cd6';
-    prompt.style.fontWeight = 'bold';
-
-    // Input
-    const input = document.createElement('input');
-    input.type = 'text';
-    input.className = 'hs-console-input';
-    input.placeholder = 'Enter JavaScript command...';
-    
-    Object.assign(input.style, {
-      flex: '1',
-      background: 'none',
-      outline: 'none',
-      fontFamily: 'inherit',
-      fontSize: 'inherit',
-      color: 'inherit',
-      ...themeConfig.inputStyle
-    });
-
-    // Event listeners
-    input.addEventListener('keydown', handleInputKeydown);
-    input.addEventListener('keyup', (e) => {
-      if (e.key === 'Enter') {
-        executeCommand(input.value.trim());
-        input.value = '';
-      }
-    });
-
-    inputContainer.appendChild(prompt);
-    inputContainer.appendChild(input);
-
-    return inputContainer;
-  }
-
-  // === LOGIQUE MÉTIER ===
   function addOutput(message) {
     const outputEl = container.querySelector('.hs-console-output');
     if (!outputEl) return;
@@ -529,131 +303,15 @@ const createConsole = (config = {}) => {
   }
 
   // === FONCTIONNALITÉS AVANCÉES ===
-  function makeDraggable() {
-    if (!draggable) return;
-    
-    const header = container.querySelector('.hs-console-header');
-    let isDragging = false;
-    let currentX = position.x;
-    let currentY = position.y;
-    let initialX = 0;
-    let initialY = 0;
-    let xOffset = position.x;
-    let yOffset = position.y;
-
-    // Support souris ET touch pour iOS
-    header.addEventListener('mousedown', dragStart);
-    header.addEventListener('touchstart', dragStart, { passive: false });
-    document.addEventListener('mousemove', dragMove);
-    document.addEventListener('touchmove', dragMove, { passive: false });
-    document.addEventListener('mouseup', dragEnd);
-    document.addEventListener('touchend', dragEnd);
-
-    function dragStart(e) {
-      // Gérer à la fois mouse et touch events
-      const clientX = e.clientX || (e.touches && e.touches[0].clientX);
-      const clientY = e.clientY || (e.touches && e.touches[0].clientY);
-      
-      initialX = clientX - xOffset;
-      initialY = clientY - yOffset;
-      isDragging = true;
-      header.style.cursor = 'grabbing';
-      
-      // Empêcher le scroll sur mobile
-      if (e.type === 'touchstart') {
-        e.preventDefault();
-      }
-    }
-
-    function dragMove(e) {
-      if (!isDragging) return;
-      
-      e.preventDefault();
-      
-      // Gérer à la fois mouse et touch events
-      const clientX = e.clientX || (e.touches && e.touches[0].clientX);
-      const clientY = e.clientY || (e.touches && e.touches[0].clientY);
-      
-      currentX = clientX - initialX;
-      currentY = clientY - initialY;
-      
-      // Empêcher que la console sorte par le haut (garder au moins la barre de titre visible)
-      const minY = 0;
-      const maxX = window.innerWidth - 100; // Garder au moins 100px visibles
-      const maxY = window.innerHeight - 50; // Garder au moins 50px visibles
-      
-      // Contraindre les positions
-      currentX = Math.max(-size.width + 100, Math.min(maxX, currentX));
-      currentY = Math.max(minY, Math.min(maxY, currentY));
-      
-      xOffset = currentX;
-      yOffset = currentY;
-      
-      container.style.left = `${currentX}px`;
-      container.style.top = `${currentY}px`;
-    }
-
-    function dragEnd() {
-      isDragging = false;
-      header.style.cursor = 'move';
-    }
-  }
-
-  function makeResizable() {
-    if (!resizable) return;
-    
-    const resizeHandle = document.createElement('div');
-    resizeHandle.className = 'hs-console-resize-handle';
-    resizeHandle.style.cssText = `
-      position: absolute;
-      bottom: 0;
-      right: 0;
-      width: 15px;
-      height: 15px;
-      cursor: se-resize;
-      background: linear-gradient(-45deg, transparent 40%, #666 40%, #666 60%, transparent 60%);
-    `;
-    
-    container.appendChild(resizeHandle);
-    
-    let isResizing = false;
-    let startX, startY, startWidth, startHeight;
-    
-    resizeHandle.addEventListener('mousedown', (e) => {
-      isResizing = true;
-      startX = e.clientX;
-      startY = e.clientY;
-      startWidth = parseInt(document.defaultView.getComputedStyle(container).width, 10);
-      startHeight = parseInt(document.defaultView.getComputedStyle(container).height, 10);
-      e.preventDefault();
-    });
-    
-    document.addEventListener('mousemove', (e) => {
-      if (!isResizing) return;
-      
-      const width = startWidth + e.clientX - startX;
-      const height = startHeight + e.clientY - startY;
-      
-      container.style.width = `${Math.max(300, width)}px`;
-      container.style.height = `${Math.max(200, height)}px`;
-    });
-    
-    document.addEventListener('mouseup', () => {
-      isResizing = false;
-    });
-  }
-
-  // === CONSTRUCTION ET ASSEMBLAGE ===
-  const container = createContainer();
-  const header = createHeader();
-  const output = createOutput();
-  const input = createInput();
+  const { container, header, output, input } = buildConsoleDom({
+    consoleId, themeConfig, finalHeaderHeight, finalHeaderPadding, title, position, size, draggable,
+    clearConsole, copyConsoleContent, hideConsole, executeCommand, handleInputKeydown
+  });
 
   container.appendChild(header);
   container.appendChild(output);
   container.appendChild(input);
 
-  // Attacher au DOM
   const attachPoint = document.querySelector(attach);
   if (attachPoint) {
     attachPoint.appendChild(container);
@@ -661,9 +319,7 @@ const createConsole = (config = {}) => {
     document.body.appendChild(container);
   }
 
-  // Activer les fonctionnalités
-  makeDraggable();
-  makeResizable();
+  makeConsoleInteractions({ container, header, position, size, draggable, resizable });
 
   // Commandes par défaut
   const defaultCommands = {
@@ -779,30 +435,3 @@ const createConsole = (config = {}) => {
 
   return api;
 };
-
-// === MÉTHODES STATIQUES ===
-createConsole.templates = consoleTemplates;
-
-createConsole.getTemplateList = () => {
-  return Object.keys(consoleTemplates).map(key => ({
-    key,
-    ...consoleTemplates[key]
-  }));
-};
-
-createConsole.addTemplate = (name, template) => {
-  consoleTemplates[name] = template;
-  return createConsole;
-};
-
-// === EXPORTS ===
-export { createConsole };
-
-// Alias pour compatibilité
-const Console = createConsole;
-Console.templates = createConsole.templates;
-Console.getTemplateList = createConsole.getTemplateList;
-Console.addTemplate = createConsole.addTemplate;
-
-export { Console };
-export default createConsole;

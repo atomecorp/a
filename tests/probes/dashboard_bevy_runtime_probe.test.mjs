@@ -9,6 +9,7 @@ const REPORT_FILE = path.join(OUT_DIR, 'report.json');
 const DASHBOARD_OPEN_SCREENSHOT = path.join(OUT_DIR, 'dashboard_open.png');
 const DASHBOARD_MONITOR_SCREENSHOT = path.join(OUT_DIR, 'dashboard_monitor.png');
 const DASHBOARD_EDITOR_SCREENSHOT = path.join(OUT_DIR, 'dashboard_editor.png');
+const DASHBOARD_LEFT_SCREENSHOT = path.join(OUT_DIR, 'dashboard_left.png');
 
 fs.mkdirSync(OUT_DIR, { recursive: true });
 
@@ -40,6 +41,26 @@ const waitForRuntimeReady = async (page) => waitFor(page, () => ({
     hasIntuition: !!document.getElementById('intuition')
 }), 45000);
 
+const waitForLoginSequenceInactive = async (page) => waitFor(page, () => {
+    const sequence = document.getElementById('eve_login_sequence');
+    if (!sequence) return { ok: true, state: 'missing' };
+    const style = getComputedStyle(sequence);
+    const rect = sequence.getBoundingClientRect();
+    const hidden = style.display === 'none'
+        || style.visibility === 'hidden'
+        || style.pointerEvents === 'none'
+        || rect.width <= 0
+        || rect.height <= 0;
+    return {
+        ok: hidden,
+        display: style.display,
+        visibility: style.visibility,
+        pointerEvents: style.pointerEvents,
+        opacity: style.opacity,
+        rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height }
+    };
+}, 45000, 250);
+
 const waitForGuestProject = async (page) => waitFor(page, async () => {
     const api = window.AdoleAPI || null;
     let current = null;
@@ -54,7 +75,7 @@ const waitForGuestProject = async (page) => waitFor(page, async () => {
     const sequenceHidden = !sequence || getComputedStyle(sequence).display === 'none';
     const isAnonymous = api?.security?.isAnonymous ? api.security.isAnonymous() : null;
     return {
-        ok: current?.logged === true && isAnonymous === true && !!projectId && !!canvas && sequenceHidden,
+        ok: current?.logged === true && isAnonymous === true && !!projectId && !!canvas,
         current,
         isAnonymous,
         projectId,
@@ -70,12 +91,16 @@ const enterGuestWorkspace = async (page) => {
     await choice.click({ timeout: 10000 });
     const ready = await waitForGuestProject(page);
     if (!ready.ok) throw new Error('dashboard_probe_guest_project_missing');
+    const loginInactive = await waitForLoginSequenceInactive(page);
+    if (!loginInactive.ok) throw new Error(`dashboard_probe_login_sequence_still_interactive:${JSON.stringify(loginInactive.last)}`);
     return ready.last;
 };
 
 const resolveAtomHandle = async (page) => {
     await waitForRuntimeReady(page);
     const handle = page.locator('button[data-role="eve_intuitionx-handle"]').first();
+    const visible = await handle.isVisible().catch(() => false);
+    if (!visible) await page.evaluate(() => window.new_menu_v2?.reveal?.());
     await handle.waitFor({ state: 'visible', timeout: 15000 });
     const hit = await handle.evaluate((button) => {
         const rect = button.getBoundingClientRect();
@@ -295,6 +320,7 @@ const analyzeDashboardVisual = (screenshotPath, snapshot, expectedHex, label) =>
     assertNearColor(pixelAt(png, lane.plus_rect.x + lane.plus_rect.width / 2, lane.plus_rect.y + lane.plus_rect.height + 12), expectedHex, `${label}_plus_strip`);
     assertNearColor(pixelAt(png, laneFillX, lane.header_rect.y + 12), expectedHex, `${label}_lane_fill`);
     assertBrightPixels(png, lane.header_rect, `${label}_header_text_or_icon`);
+    const headerFlatness = assertHeaderInteriorIsFlat(png, lane, label);
     assertBrightPixels(png, lane.plus_rect, `${label}_plus_symbol`, 2);
     assertLaneHasCardContrast(png, lane, expectedHex, `${label}_lane`);
     const reserved = snapshot.layout.toolbox_reserved_rect;
@@ -302,7 +328,47 @@ const analyzeDashboardVisual = (screenshotPath, snapshot, expectedHex, label) =>
     if (colorDistance(reservedPixel, hexToRgb(expectedHex)) < 18) {
         throw new Error(`${label}_dashboard_leaks_into_toolbox_band:${JSON.stringify({ reservedPixel, expectedHex })}`);
     }
-    return { label, expectedHex, width: png.width, height: png.height };
+    return { label, expectedHex, width: png.width, height: png.height, headerFlatness };
+};
+
+const averageColumn = (png, x, y, height) => {
+    const sampleX = Math.max(0, Math.min(png.width - 1, Math.round(x)));
+    const y0 = Math.max(0, Math.min(png.height - 1, Math.round(y)));
+    const y1 = Math.max(y0 + 1, Math.min(png.height, Math.round(y + height)));
+    let red = 0;
+    let green = 0;
+    let blue = 0;
+    let count = 0;
+    for (let yy = y0; yy < y1; yy += 1) {
+        const index = (yy * png.width + sampleX) * 4;
+        red += png.data[index];
+        green += png.data[index + 1];
+        blue += png.data[index + 2];
+        count += 1;
+    }
+    return [red / count, green / count, blue / count];
+};
+
+const assertHeaderInteriorIsFlat = (png, lane, label) => {
+    const header = lane.header_rect;
+    const y = header.y + Math.max(5, Math.min(10, header.height * 0.08));
+    const height = Math.max(6, Math.min(12, header.height * 0.1));
+    const edgeX = header.x + Math.max(3, header.width * 0.04);
+    const cleanX = header.x + Math.max(12, header.width * 0.12);
+    const edge = averageColumn(png, edgeX, y, height);
+    const clean = averageColumn(png, cleanX, y, height);
+    const distance = colorDistance(edge, clean);
+    if (distance > 8) {
+        throw new Error(`${label}_header_internal_shadow_leak:${JSON.stringify({
+            categoryId: lane.categoryId,
+            distance,
+            edge,
+            clean,
+            sample: { y, height, edgeX, cleanX },
+            header
+        })}`);
+    }
+    return { categoryId: lane.categoryId, edgeDistance: distance };
 };
 
 const CATEGORY_COLORS = {
@@ -317,6 +383,7 @@ const CATEGORY_COLORS = {
 
 const analyzeDashboardOverviewVisual = (screenshotPath, snapshot) => {
     const png = PNG.sync.read(fs.readFileSync(screenshotPath));
+    const headerFlatness = [];
     for (const lane of snapshot.layout?.lanes || []) {
         const expectedHex = CATEGORY_COLORS[lane.categoryId];
         if (!expectedHex) continue;
@@ -324,6 +391,7 @@ const analyzeDashboardOverviewVisual = (screenshotPath, snapshot) => {
         assertNearColor(pixelAt(png, lane.header_rect.x + 7, lane.header_rect.y + 7), expectedHex, `dashboard_open_header_${lane.categoryId}`);
         assertBrightPixels(png, lane.header_rect, `dashboard_open_header_text_or_icon_${lane.categoryId}`);
         assertLaneHasCardContrast(png, lane, expectedHex, `dashboard_open_lane_${lane.categoryId}`);
+        headerFlatness.push(assertHeaderInteriorIsFlat(png, lane, `dashboard_open_${lane.categoryId}`));
     }
     const reserved = snapshot.layout.toolbox_reserved_rect;
     const reservedPixel = pixelAt(png, reserved.x + reserved.width / 2, reserved.y + Math.min(12, reserved.height - 1));
@@ -332,7 +400,7 @@ const analyzeDashboardOverviewVisual = (screenshotPath, snapshot) => {
             throw new Error(`dashboard_open_dashboard_leaks_into_toolbox_band:${JSON.stringify({ reservedPixel, expectedHex })}`);
         }
     }
-    return { label: 'dashboard_open_overview', width: png.width, height: png.height };
+    return { label: 'dashboard_open_overview', width: png.width, height: png.height, headerFlatness };
 };
 
 const runScenario = async () => {

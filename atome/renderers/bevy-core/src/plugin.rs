@@ -4,6 +4,7 @@ use crate::{
     render_math::atome_camera_projection,
     render_ops::apply_render_op,
     selection_overlay::rebuild_selection_overlay,
+    shape_shadow_overlay::rebuild_shape_shadow_overlay,
     spawn::spawn_node_with_texture_handle,
     texture::image_handle_from_texture,
     types::*,
@@ -79,6 +80,9 @@ fn spawn_atome_bevy_scene(
                         .by_id
                         .insert(node_id, entity);
                     if let Err(error) = rebuild_selection_overlay(world, entity) {
+                        world.resource_mut::<AtomeRendererDiagnostics>().last_error = Some(error);
+                    }
+                    if let Err(error) = rebuild_shape_shadow_overlay(world, entity) {
                         world.resource_mut::<AtomeRendererDiagnostics>().last_error = Some(error);
                     }
                     if let Err(error) = rebuild_waveform_playback_overlay(world, entity) {

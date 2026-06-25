@@ -14,6 +14,41 @@ pub fn normalize_opacity(opacity: f32) -> f32 {
     }
 }
 
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq)]
+pub struct AtomeShadowStyle {
+    pub color: [f32; 4],
+    #[serde(default)]
+    pub blur: f32,
+    #[serde(default)]
+    pub offset_x: f32,
+    #[serde(default)]
+    pub offset_y: f32,
+    #[serde(default)]
+    pub spread: f32,
+}
+
+impl AtomeShadowStyle {
+    pub fn normalized(self) -> Option<Self> {
+        let color = [
+            finite_or(self.color[0], 0.0).clamp(0.0, 1.0),
+            finite_or(self.color[1], 0.0).clamp(0.0, 1.0),
+            finite_or(self.color[2], 0.0).clamp(0.0, 1.0),
+            finite_or(self.color[3], 0.0).clamp(0.0, 1.0),
+        ];
+        let blur = finite_or(self.blur, 0.0).max(0.0);
+        if color[3] <= 0.0 || blur <= 0.0 {
+            return None;
+        }
+        Some(Self {
+            color,
+            blur,
+            offset_x: finite_or(self.offset_x, 0.0),
+            offset_y: finite_or(self.offset_y, 0.0),
+            spread: finite_or(self.spread, 0.0).max(0.0),
+        })
+    }
+}
+
 /// Identity for the multiplicative CSS filters (brightness/contrast/saturate).
 pub fn default_filter_unit() -> f32 {
     1.0
@@ -284,6 +319,8 @@ pub struct AtomeRenderNode {
     pub opacity: f32,
     #[serde(default)]
     pub corner_radius: f32,
+    #[serde(default)]
+    pub shadow: Option<AtomeShadowStyle>,
     pub color: Option<[f32; 4]>,
     pub text: Option<String>,
     pub source: Option<String>,
@@ -344,6 +381,8 @@ impl AtomeSurfaceBackgroundPatch {
 pub struct AtomeStylePatch {
     pub id: String,
     pub color: Option<[f32; 4]>,
+    #[serde(default)]
+    pub shadow: Option<Option<AtomeShadowStyle>>,
     pub selected: Option<bool>,
     #[serde(default)]
     pub opacity: Option<f32>,

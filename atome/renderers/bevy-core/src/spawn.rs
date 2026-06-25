@@ -3,6 +3,7 @@ use bevy::{image::Image, prelude::*, render::batching::NoAutomaticBatching, text
 use crate::{
     render_math::{atome_rect_transform_with_local, color_from_rgba, depth_for_layer},
     selection_overlay::rebuild_selection_overlay,
+    shape_shadow_overlay::rebuild_shape_shadow_overlay,
     texture::{image_handle_from_rounded_rect_mask, image_handle_from_texture},
     types::*,
     video_external_texture::{
@@ -34,6 +35,7 @@ fn node_base_components(
     AtomeWaveformPeaks,
     AtomeWaveformPlaybackProgress,
     AtomeSelected,
+    AtomeShapeShadow,
     Visibility,
     Transform,
 ) {
@@ -53,6 +55,7 @@ fn node_base_components(
         AtomeWaveformPeaks(node.peaks.clone().unwrap_or_default()),
         AtomeWaveformPlaybackProgress(node.playback_progress.map(|value| value.clamp(0.0, 1.0))),
         AtomeSelected(node.selected.unwrap_or(false)),
+        AtomeShapeShadow(node.shadow),
         Visibility::Visible,
         atome_rect_transform_with_local(
             node.logical_position[0],
@@ -115,6 +118,7 @@ pub fn spawn_node_in_world(world: &mut World, node: AtomeRenderNode) -> Result<E
         .by_id
         .insert(node.id, entity);
     rebuild_selection_overlay(world, entity)?;
+    rebuild_shape_shadow_overlay(world, entity)?;
     rebuild_waveform_playback_overlay(world, entity)?;
     Ok(entity)
 }

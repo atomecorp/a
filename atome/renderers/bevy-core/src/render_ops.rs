@@ -6,6 +6,7 @@ use crate::{
         atome_camera_projection, atome_rect_transform_with_local, color_from_rgba, depth_for_layer,
     },
     selection_overlay::{rebuild_selection_overlay, remove_selection_overlay},
+    shape_shadow_overlay::{rebuild_shape_shadow_overlay, remove_shape_shadow_overlay},
     spawn::spawn_node_in_world,
     texture::image_handle_from_texture,
     types::*,
@@ -77,6 +78,7 @@ pub fn apply_despawn(world: &mut World, id: &str) -> Result<(), String> {
         .remove(id)
         .ok_or_else(|| format!("bevy_despawn_entity_missing:{id}"))?;
     remove_selection_overlay(world, entity);
+    remove_shape_shadow_overlay(world, entity);
     remove_waveform_playback_overlay(world, entity);
     world.despawn(entity);
     Ok(())
@@ -141,6 +143,7 @@ pub fn apply_transform(world: &mut World, patch: AtomeTransformPatch) -> Result<
         *bounds = TextBounds::from(Vec2::new(width, height));
     }
     rebuild_selection_overlay(world, entity)?;
+    rebuild_shape_shadow_overlay(world, entity)?;
     rebuild_waveform_playback_overlay(world, entity)?;
     Ok(())
 }
@@ -200,6 +203,7 @@ pub fn apply_surface(world: &mut World, patch: AtomeSurfacePatch) -> Result<(), 
         world.entity_mut(entity).insert(next_transform);
         sync_global_transform(world, entity, next_transform);
         rebuild_selection_overlay(world, entity)?;
+        rebuild_shape_shadow_overlay(world, entity)?;
         rebuild_waveform_playback_overlay(world, entity)?;
     }
     resize_surface_background(world);
@@ -215,6 +219,12 @@ pub fn apply_style(world: &mut World, patch: AtomeStylePatch) -> Result<(), Stri
         if let Some(mut text_color) = world.get_mut::<TextColor>(entity) {
             text_color.0 = color_from_rgba(color);
         }
+    }
+    if let Some(shadow) = patch.shadow {
+        if let Some(mut current) = world.get_mut::<AtomeShapeShadow>(entity) {
+            current.0 = shadow.and_then(|value| value.normalized());
+        }
+        rebuild_shape_shadow_overlay(world, entity)?;
     }
     if let Some(selected) = patch.selected {
         if let Some(mut current) = world.get_mut::<AtomeSelected>(entity) {
@@ -279,6 +289,7 @@ pub fn apply_layer(world: &mut World, patch: AtomeLayerPatch) -> Result<(), Stri
         video.layer = patch.layer;
     }
     rebuild_selection_overlay(world, entity)?;
+    rebuild_shape_shadow_overlay(world, entity)?;
     rebuild_waveform_playback_overlay(world, entity)?;
     Ok(())
 }
@@ -295,9 +306,11 @@ pub fn apply_visibility(world: &mut World, patch: AtomeVisibilityPatch) -> Resul
         };
     if patch.visible {
         rebuild_selection_overlay(world, entity)?;
+        rebuild_shape_shadow_overlay(world, entity)?;
         rebuild_waveform_playback_overlay(world, entity)?;
     } else {
         remove_selection_overlay(world, entity);
+        remove_shape_shadow_overlay(world, entity);
         remove_waveform_playback_overlay(world, entity);
     }
     Ok(())
@@ -391,6 +404,7 @@ pub fn apply_resource(world: &mut World, patch: AtomeResourcePatch) -> Result<()
             layer,
             opacity,
             corner_radius: 0.0,
+            shadow: None,
             color: None,
             text: None,
             source,

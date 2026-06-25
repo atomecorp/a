@@ -61,6 +61,7 @@ Primary sources:
 
 - `eVe/domains/dashboard/dashboard_runtime.js`
 - `eVe/domains/dashboard/dashboard_data_adapters.js`
+- `eVe/domains/dashboard/dashboard_render_scheduler.js`
 - `eVe/domains/dashboard/dashboard_transition.js`
 - `eVe/domains/rendering/surface_runtime.js`
 
@@ -79,6 +80,7 @@ Boundary status: Semi-public closed eVe product runtime. Dashboard durable gener
 Effect model:
 
 - Open/close/render are ephemeral Bevy projection operations over the current project surface.
+- Dashboard render calls keep an internal record cache and use `dashboard_render_scheduler.js` to emit changed records plus removed ids to `updateProjectSceneRecords(...)`; pointermove, wheel, inertial scroll, and animation ticks are coalesced through `requestAnimationFrame`, while open/close/create/editor-final paths still render immediately.
 - `dashboard_data_adapters.js` exposes `listMany(categories)` for grouped category reads; `generic_record` categories share one `state_current` read and are split by `source_domain: "eve.dashboard"` plus `category_id`.
 - `dashboard_runtime.js` caches derived dashboard item lists by `projectId + categoryId` and reuses them on Atom-dashboard toggles. Cache invalidation is explicit through refresh, project-change lifecycle, logout, and creation updates in the owning runtime.
 - `renderProjectScene(..., { preserveEphemeralRecords: true })` is an internal rendering extension for late project reconciliation; it preserves only explicit ephemeral Bevy overlay records (`__eve_dashboard_`, `mol:lane:`, `mol:clip:`, `mol:kf:`, `mol:playhead`) from the current runtime map.
@@ -99,13 +101,29 @@ Primary sources:
 - `eVe/domains/rendering/render_atom.js`
 - `eVe/domains/rendering/virtual_scene_contract.js`
 - `eVe/domains/rendering/bevy_projection_adapter.js`
+- `eVe/domains/rendering/bevy_projection_style.js`
 - `atome/renderers/bevy-core/src/types.rs`
 - `atome/renderers/bevy-core/src/texture.rs`
+- `atome/renderers/bevy-core/src/shape_shadow_overlay.rs`
 - `atome/renderers/bevy-core/src/spawn.rs`
 
-Exposure: render records may set `corner_radius` / `cornerRadius` / `radius`; normalized virtual scene nodes expose `material.cornerRadius`; Bevy payloads expose `corner_radius`; Bevy core applies it to `shape` sprites by generating an alpha-mask texture.
+Exposure: render records may set `corner_radius` / `cornerRadius` / `radius`; normalized virtual scene nodes expose `material.cornerRadius`; Bevy payloads expose `corner_radius`; Bevy core applies it to `shape` sprites by generating an alpha-mask texture. Render records may also set `material.shadow` with `{ color, blur, offsetX, offsetY, spread }`; normalized Bevy payloads expose `shadow` as `{ color, blur, offset_x, offset_y, spread }`; style patches may pass `material.shadow: null` to clear the shadow.
 
 Boundary status: Open product-neutral rendering style. eVe may consume it through render records, but the contract must not encode dashboard-specific behavior.
+
+### Bevy Text Texture Style API
+
+Ownership: Atome open, product-neutral rendering contract.
+
+Primary sources:
+
+- `eVe/domains/rendering/render_atom.js`
+- `eVe/domains/rendering/virtual_scene_contract.js`
+- `eVe/domains/rendering/bevy_media_texture_resolver.js`
+
+Exposure: text render records may set `text_style` / `textStyle` with font size, font weight, alignment, baseline, padding, stroke color/width, and shadow color/blur/offset. `RenderAtom` and Virtual Scene carry the style as disposable text texture metadata, and the browser Bevy resolver rasterizes fill plus optional stroke and diffuse shadow into one RGBA texture payload without using Canvas `maxWidth` glyph scaling.
+
+Boundary status: Open product-neutral text rendering style. It must not create visible DOM text nodes, duplicate text shadow records, or a fallback renderer.
 
 ### eVe Atome Drag Runtime API
 
