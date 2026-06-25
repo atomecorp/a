@@ -60,9 +60,9 @@ Ownership: eVe closed.
 Primary sources:
 
 - `eVe/domains/dashboard/dashboard_runtime.js`
+- `eVe/domains/dashboard/dashboard_actions.js`
 - `eVe/domains/dashboard/dashboard_data_adapters.js`
 - `eVe/domains/dashboard/dashboard_render_scheduler.js`
-- `eVe/domains/dashboard/dashboard_transition.js`
 - `eVe/domains/rendering/surface_runtime.js`
 
 Exposure:
@@ -75,22 +75,23 @@ Exposure:
 - Entry points: the main Atome handle tap (`button[data-role="eve_intuitionx-handle"]`) toggles the dashboard in active workspaces; successful authenticated and anonymous workspace openings route through `eVe/intuition/tools/user_workspace_surface_runtime.js`, which starts `window.eveToolBase.loadProjectAtomes(projectId, { staleFirst: true, resolveOnFirstPaint: true })`, requires the canonical `eve_surface_project` canvas, opens `window.eveDashboardRuntime.open({ projectId })` on that resolved project, verifies dashboard Bevy scene records directly after open, then reveals the existing main ribbon; direct `tool.main.home` gateway calls remain the `ui.home.panel` user/Home panel route.
 - Atome footer project-scene bridge: `window.eveAtomeEditFooterApi.openForProjectSceneAtome({ atomeId, kind, anchorRect })` opens the existing footer from Bevy canvas hit-test geometry without creating visible per-Atome DOM hosts.
 
-Boundary status: Semi-public closed eVe product runtime. Dashboard durable generic-record creation must route through `window.Atome.commit`; Calendar, Contacts, and Projects are reached through their existing APIs/adapters. Store intentionally returns an explicit disabled error until its domain is defined.
+Boundary status: Semi-public closed eVe product runtime. Dashboard item lists are read-only projections; Calendar, Contacts, and Projects are reached through their existing APIs/adapters. Store is an explicit no-op until its domain is defined.
 
 Effect model:
 
 - Open/close/render are ephemeral Bevy projection operations over the current project surface. Opening includes project-veil, violet reserved-band-fill, and bottom-shadow records below the dashboard foreground; closing clears any dashboard scene effects and removes those records through the same dashboard diff/teardown path so the project returns to its normal presentation without DOM state, CSS filters, or a second renderer. `backdrop_blur` remains an internal scene-effect contract for later renderer work but is disabled by default.
-- Dashboard render calls keep an internal record cache and use `dashboard_render_scheduler.js` to emit changed records plus removed ids to `updateProjectSceneRecords(...)`; pointermove, wheel, inertial scroll, and animation ticks are coalesced through `requestAnimationFrame`, while open/close/create/editor-final paths still render immediately.
-- `dashboard_data_adapters.js` exposes `listMany(categories)` for grouped category reads; `generic_record` categories share one `state_current` read and are split by `source_domain: "eve.dashboard"` plus `category_id`.
-- `dashboard_runtime.js` caches derived dashboard item lists by `projectId + categoryId` and reuses them on Atom-dashboard toggles. Cache invalidation is explicit through refresh, project-change lifecycle, logout, and creation updates in the owning runtime.
+- Dashboard render calls keep an internal record cache and use `dashboard_render_scheduler.js` to emit changed records plus removed ids to `updateProjectSceneRecords(...)`; pointermove, wheel, and inertial scroll are coalesced through `requestAnimationFrame`, while open/close and item-detail paths render immediately.
+- `dashboard_data_adapters.js` exposes read-only `list(category)` and `listMany(categories)` for grouped category reads; `generic_record` categories share one `state_current` read and are split by `source_domain: "eve.dashboard"` plus `category_id`. Calendar lists only dated, non-deleted, unique `CalendarAPI.listEvents()` items. Contacts list the canonical `collectPeopleDirectory()` entries first, then the local contacts API if the directory is empty.
+- `dashboard_actions.js` owns effectful dashboard interactions: no-op plus actions for News, Store, Monitor, and Goals; panel opening for Calendar and Contacts through the canonical eVe panel definitions; project creation/opening through shared Matrix project helpers. Project item clicks close the dashboard and activate/load that project as the Bevy desktop.
+- `dashboard_runtime.js` caches derived dashboard item lists by `projectId + categoryId` and reuses them on Atom-dashboard toggles. Cache invalidation is explicit through refresh, project-change lifecycle, logout, and focused-category forced reloads. Clicking an already active header clears focus and returns to the base dashboard overview.
 - `renderProjectScene(..., { preserveEphemeralRecords: true })` is an internal rendering extension for late project reconciliation; it preserves only explicit ephemeral Bevy overlay records (`__eve_dashboard_`, `mol:lane:`, `mol:clip:`, `mol:kf:`, `mol:playhead`) from the current runtime map.
 - Runtime layout, hit-testing, and dashboard render records stay in the same logical project coordinates used by active Atomes. DPR/backing-buffer sizing remains a canvas storage concern and must not pre-scale the Virtual Scene, dashboard records, or hit-test geometry.
-- Fullscreen editor transitions are runtime-only rectangle interpolations; the durable item payload is not mutated by animation state.
-- Generic News, Monitor, and Goals record creation is persistent and uses the canonical Atome commit boundary.
+- Fullscreen item detail is an immediate runtime-only projection; the durable item payload is not mutated by dashboard detail state.
+- Generic News, Monitor, and Goals record creation is no longer owned by the dashboard `+` action.
 - Calendar dashboard listing consumes the existing `CalendarAPI.listEvents()` item-list response (`items` or legacy `events`) and rejects invalid or explicit error responses instead of silently rendering an empty category.
 - Generic News, Monitor, and Goals records use the open Atome `record` type with `source_domain: "eve.dashboard"` and a generic `category_id`; no product-specific Atome type is introduced for these domains in v1.
-- Calendar and Contacts creation delegate to their existing domain APIs.
-- Project creation delegates to the existing Matrix/Adole project API and stable project-order helpers; dashboard does not duplicate Matrix project creation logic.
+- Calendar and Contacts `+` actions open their existing eVe panels and do not create records.
+- Project `+` creation delegates to shared Matrix/Adole project helpers and project activation; dashboard does not duplicate Matrix project creation or selection logic.
 
 ### Bevy Shape Projection Style API
 
