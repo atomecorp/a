@@ -143,6 +143,7 @@ const dashboardSnapshot = async (page) => page.evaluate(async () => {
     const dashboardDomCount = document.querySelectorAll('[id^="__eve_dashboard_"], [data-dashboard]').length;
     const canvas = document.getElementById('eve_surface_project');
     const recordOverReservedBand = dashboardRecords.filter((record) => {
+        if (record.id === '__eve_dashboard_bottom_shadow') return false;
         const props = record.properties || {};
         const top = Number(props.top ?? props.y ?? 0);
         const height = Number(props.height ?? 0);

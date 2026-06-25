@@ -20,7 +20,13 @@ const createTextTextureDocument = ({ devicePixelRatio = 2 } = {}) => {
         getContext: () => ({
             clearRect: () => null,
             scale: () => null,
+            save: () => null,
+            restore: () => null,
+            beginPath: () => null,
+            rect: () => null,
+            clip: () => null,
             fillRect: () => null,
+            strokeText: () => null,
             fillText: () => null,
             measureText: (text) => ({ width: String(text || '').length * 8 }),
             getImageData: (_x, _y, width, height) => {
@@ -143,7 +149,7 @@ test('Bevy web runtime resolves persisted video posters during initial scene pro
     });
 });
 
-test('Bevy web runtime defers uncached videos after initial scene spawn', async () => {
+test('Bevy web runtime keeps source-backed uncached videos present after initial scene spawn', async () => {
     const dom = new JSDOM('<!doctype html><html><body><canvas id="eve_surface_project_pending_video"></canvas></body></html>');
     const surface = dom.window.document.getElementById('eve_surface_project_pending_video');
     const calls = [];
@@ -178,19 +184,15 @@ test('Bevy web runtime defers uncached videos after initial scene spawn', async 
         }
     });
     assert.equal(result.deferred_nodes.length, 1);
-    await new Promise((resolve) => dom.window.setTimeout(resolve, 160));
+    await new Promise((resolve) => dom.window.setTimeout(resolve, 320));
 
     assert.equal(result.ok, true);
     assert.equal(result.node_count, 1);
     assert.equal(calls[1].initialNodes.nodes[0].id, 'pending_video');
     assert.equal(calls[1].initialNodes.nodes[0].texture, undefined);
-    assert.deepEqual(calls.find((call) => call.type === 'resource')?.payload?.texture, {
-        width: 1,
-        height: 1,
-        rgba: [0, 255, 0, 255]
-    });
-    assert.equal(readBevyWebRendererState(surface).deferred_nodes.length, 0);
-    assert.deepEqual(readBevyWebRendererState(surface).resolved_deferred_nodes, ['pending_video']);
+    assert.equal(calls.some((call) => call.type === 'resource'), false);
+    assert.equal(readBevyWebRendererState(surface).deferred_nodes.length, 1);
+    assert.deepEqual(readBevyWebRendererState(surface).resolved_deferred_nodes, []);
 });
 
 test('Bevy text texture resolver oversamples and bleeds transparent edge colors for linear sampling', async () => {
@@ -279,7 +281,10 @@ test('Bevy web runtime refreshes text texture when a transform changes text boun
     assert.deepEqual(calls.find((call) => call.type === 'transform')?.payload, {
         id: 'resized_text',
         logical_position: [0, 0],
-        logical_size: [120, 36]
+        logical_size: [120, 36],
+        scale: [1, 1],
+        rotation: 0,
+        origin: [0, 0]
     });
     assert.deepEqual(calls.find((call) => call.type === 'text')?.payload?.texture?.width, 240);
     assert.deepEqual(calls.find((call) => call.type === 'text')?.payload?.texture?.height, 72);

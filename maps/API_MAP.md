@@ -79,7 +79,7 @@ Boundary status: Semi-public closed eVe product runtime. Dashboard durable gener
 
 Effect model:
 
-- Open/close/render are ephemeral Bevy projection operations over the current project surface.
+- Open/close/render are ephemeral Bevy projection operations over the current project surface. Opening includes disposable project-veil and bottom-shadow records below the dashboard foreground; closing removes them through the same dashboard diff/teardown path so the project returns to its normal unattenuated presentation without DOM state or CSS filters.
 - Dashboard render calls keep an internal record cache and use `dashboard_render_scheduler.js` to emit changed records plus removed ids to `updateProjectSceneRecords(...)`; pointermove, wheel, inertial scroll, and animation ticks are coalesced through `requestAnimationFrame`, while open/close/create/editor-final paths still render immediately.
 - `dashboard_data_adapters.js` exposes `listMany(categories)` for grouped category reads; `generic_record` categories share one `state_current` read and are split by `source_domain: "eve.dashboard"` plus `category_id`.
 - `dashboard_runtime.js` caches derived dashboard item lists by `projectId + categoryId` and reuses them on Atom-dashboard toggles. Cache invalidation is explicit through refresh, project-change lifecycle, logout, and creation updates in the owning runtime.

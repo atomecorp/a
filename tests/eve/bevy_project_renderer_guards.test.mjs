@@ -318,7 +318,14 @@ test('transform-only Bevy diffs request one redraw without delayed redraw primes
         children: []
     };
     const originalSetTimeout = dom.window.setTimeout;
-    dom.window.setTimeout = () => 1;
+    let startTimerFired = false;
+    dom.window.setTimeout = (callback) => {
+        if (!startTimerFired && typeof callback === 'function') {
+            startTimerFired = true;
+            callback();
+        }
+        return 1;
+    };
     await startBevyWebRenderer({
         surface: canvas,
         width: 100,
