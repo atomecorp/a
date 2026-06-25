@@ -115,11 +115,22 @@ const resolveDesignTokens = (designTokens = {}) => ({
 });
 
 
+const stopBubble = (event) => {
+  if (!event) return;
+  event.stopPropagation?.();
+};
+const stopAndPrevent = (event) => {
+  if (!event) return;
+  event.preventDefault?.();
+  event.stopPropagation?.();
+};
+
 export {
   VALUE_DOUBLE_CLICK_GUARD_MS,
   CANONICAL_SLIDER_TOOL_SHELL_SELECTOR, CANONICAL_SLIDER_TOOL_HITZONE_SELECTOR,
   CANONICAL_SLIDER_TOOL_INPUT_SELECTOR, CANONICAL_SLIDER_TOOL_VALUE_SELECTOR,
   CANONICAL_SLIDER_TOOL_VALUE_INPUT_SELECTOR,
   ensureString, toFiniteNumber, clamp, formatSliderValue, normalizeUnitOptions,
-  addOptionalClassNames, createNode, setStyles, resolveDesignTokens
+  addOptionalClassNames, createNode, setStyles, resolveDesignTokens,
+  stopBubble, stopAndPrevent
 };

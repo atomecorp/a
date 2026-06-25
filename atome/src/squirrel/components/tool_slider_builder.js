@@ -1,13 +1,14 @@
 import { $ } from '../squirrel.js';
 import { createSliderToolElements } from './tool_slider_elements.js';
 import { createDirectSliderDragController } from './tool_slider_drag.js';
+import { createSliderEmitters } from './tool_slider_emit.js';
 import {
   VALUE_DOUBLE_CLICK_GUARD_MS,
   CANONICAL_SLIDER_TOOL_SHELL_SELECTOR, CANONICAL_SLIDER_TOOL_HITZONE_SELECTOR,
   CANONICAL_SLIDER_TOOL_INPUT_SELECTOR, CANONICAL_SLIDER_TOOL_VALUE_SELECTOR,
   CANONICAL_SLIDER_TOOL_VALUE_INPUT_SELECTOR,
   ensureString, toFiniteNumber, clamp, formatSliderValue, normalizeUnitOptions,
-  addOptionalClassNames, createNode, setStyles, resolveDesignTokens
+  addOptionalClassNames, createNode, setStyles, resolveDesignTokens, stopBubble, stopAndPrevent
 } from './tool_slider_helpers.js';
 
 const mountIntuitionXSliderToolContent = ({
@@ -67,51 +68,10 @@ const mountIntuitionXSliderToolContent = ({
         label,
         designTokens: colors
     });
-    const stopBubble = (event) => {
-        if (!event) return;
-        event.stopPropagation?.();
-    };
-    const stopAndPrevent = (event) => {
-        if (!event) return;
-        event.preventDefault?.();
-        event.stopPropagation?.();
-    };
-    const emitInput = (value, source = 'slider.input') => {
-        if (typeof onInput !== 'function') return;
-        onInput(value, {
-            input,
-            button,
-            labelEl,
-            valueButton,
-            unitButton,
-            unit: currentUnit,
-            source
-        });
-    };
-    const emitChange = (value, source = 'slider.change') => {
-        if (typeof onChange !== 'function') return;
-        onChange(value, {
-            input,
-            button,
-            labelEl,
-            valueButton,
-            unitButton,
-            unit: currentUnit,
-            source
-        });
-    };
-    const emitUnitChange = (unit, source = 'slider.unit.change') => {
-        if (typeof onUnitChange !== 'function') return;
-        onUnitChange(unit, {
-            input,
-            button,
-            labelEl,
-            valueButton,
-            unitButton,
-            unit,
-            source
-        });
-    };
+    const { emitInput, emitChange, emitUnitChange } = createSliderEmitters({
+        onInput, onChange, onUnitChange, input, button, labelEl, valueButton, unitButton,
+        getUnit: () => currentUnit
+    });
     const syncValueVisual = () => {
         const currentValue = clamp(toFiniteNumber(input.value, initialValue), min, max);
         valueButton.textContent = formatSliderValue({
