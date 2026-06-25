@@ -1,6 +1,7 @@
 use bevy::{image::Image, mesh::Mesh, prelude::*};
 
 use crate::{
+    backdrop_blur::{apply_scene_effects, refresh_scene_effects},
     render_math::atome_camera_projection,
     render_ops::apply_render_op,
     selection_overlay::rebuild_selection_overlay,
@@ -29,6 +30,7 @@ impl Plugin for AtomeBevyRendererPlugin {
         app.insert_resource(self.config.clone())
             .add_plugins(AtomeVideoExternalTexturePlugin)
             .init_resource::<AtomeEntityTable>()
+            .init_resource::<AtomeBackdropBlurState>()
             .init_resource::<AtomeRendererDiagnostics>()
             .init_resource::<Assets<Image>>()
             .init_resource::<Assets<Mesh>>()
@@ -95,6 +97,12 @@ fn spawn_atome_bevy_scene(
             }
         });
     }
+    commands.queue(|world: &mut World| {
+        let effects = world.resource::<AtomeBevyRendererConfig>().initial_scene.effects.clone();
+        if let Err(error) = apply_scene_effects(world, AtomeSceneEffectsPatch { effects }) {
+            world.resource_mut::<AtomeRendererDiagnostics>().last_error = Some(error);
+        }
+    });
 }
 
 pub fn apply_render_ops(world: &mut World, ops: Vec<AtomeRenderOp>) {
@@ -110,5 +118,8 @@ pub fn apply_render_ops(world: &mut World, ops: Vec<AtomeRenderOp>) {
                     Some(format!("{error:?}"));
             }
         }
+    }
+    if let Err(error) = refresh_scene_effects(world) {
+        world.resource_mut::<AtomeRendererDiagnostics>().last_error = Some(error);
     }
 }

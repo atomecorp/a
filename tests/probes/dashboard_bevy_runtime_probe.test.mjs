@@ -144,6 +144,8 @@ const dashboardSnapshot = async (page) => page.evaluate(async () => {
     const canvas = document.getElementById('eve_surface_project');
     const recordOverReservedBand = dashboardRecords.filter((record) => {
         if (record.id === '__eve_dashboard_bottom_shadow') return false;
+        if (record.id === '__eve_dashboard_project_veil') return false;
+        if (record.id === '__eve_dashboard_reserved_band_fill') return false;
         const props = record.properties || {};
         const top = Number(props.top ?? props.y ?? 0);
         const height = Number(props.height ?? 0);
@@ -436,8 +438,9 @@ const runScenario = async () => {
         await page.goto(APP_URL, { waitUntil: 'domcontentloaded', timeout: 45000 });
         report.checks.push({ name: 'guest_project_ready', ok: true, snapshot: await enterGuestWorkspace(page) });
 
-        const atomHandle = await resolveAtomHandle(page);
-        await atomHandle.click({ timeout: 10000 });
+        let atomHandle = await resolveAtomHandle(page);
+        const alreadyOpen = await dashboardSnapshot(page);
+        if (!alreadyOpen.active) await atomHandle.click({ timeout: 10000 });
         const opened = await waitForDashboardSnapshot(page, (snapshot) => (
             snapshot.active
             && snapshot.dashboardRecordIds.includes('__eve_dashboard_background')
@@ -503,7 +506,8 @@ const runScenario = async () => {
         if (!editorClosed.ok) throw new Error('dashboard_editor_close_failed');
         report.checks.push({ name: 'header_click_closes_fullscreen_editor', ok: true, snapshot: editorClosed.snapshot });
 
-        await (await resolveAtomHandle(page)).click({ timeout: 10000 });
+        atomHandle = await resolveAtomHandle(page);
+        await atomHandle.click({ timeout: 10000 });
         const closed = await waitForDashboardSnapshot(page, (snapshot) => (
             !snapshot.active && snapshot.dashboardRecordIds.length === 0
         ), 30000);

@@ -1,4 +1,5 @@
 pub mod background;
+pub mod backdrop_blur;
 pub mod components;
 pub mod plugin;
 pub mod render_math;

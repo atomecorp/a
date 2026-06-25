@@ -1,8 +1,8 @@
 use super::*;
 use atome_bevy_renderer_core::{
     AtomeLayerPatch, AtomeParentPatch, AtomeRenderNode, AtomeRenderOp, AtomeRenderScene,
-    AtomeResourcePatch, AtomeStylePatch, AtomeSurfaceBackgroundPatch, AtomeSurfacePatch,
-    AtomeTextPatch, AtomeTransformPatch, AtomeVisibilityPatch,
+    AtomeResourcePatch, AtomeSceneEffectsPatch, AtomeStylePatch, AtomeSurfaceBackgroundPatch,
+    AtomeSurfacePatch, AtomeTextPatch, AtomeTransformPatch, AtomeVisibilityPatch,
 };
 use wasm_bindgen::prelude::*;
 
@@ -116,6 +116,16 @@ pub fn apply_atome_bevy_surface_background(patch: JsValue) -> Result<(), JsValue
             JsValue::from_str(&format!("bevy_surface_background_decode_failed:{error}"))
         })?;
     queue_web_op(AtomeRenderOp::SurfaceBackground(parsed));
+    Ok(())
+}
+
+#[wasm_bindgen]
+pub fn apply_atome_bevy_scene_effects(patch: JsValue) -> Result<(), JsValue> {
+    let parsed: AtomeSceneEffectsPatch =
+        serde_wasm_bindgen::from_value(patch).map_err(|error| {
+            JsValue::from_str(&format!("bevy_scene_effects_decode_failed:{error}"))
+        })?;
+    queue_web_op(AtomeRenderOp::SceneEffects(parsed));
     Ok(())
 }
 

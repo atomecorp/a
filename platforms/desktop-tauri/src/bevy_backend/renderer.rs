@@ -104,13 +104,24 @@ mod tests {
             parent_id: None,
             logical_position: [10.0, 20.0],
             logical_size: [80.0, 40.0],
+            scale: [1.0, 1.0],
+            rotation: 0.0,
+            origin: [0.0, 0.0],
             layer: 2,
+            opacity: 1.0,
+            corner_radius: 0.0,
+            shadow: None,
             color: Some([0.24, 0.55, 0.92, 1.0]),
             text: None,
             source: None,
+            texture_size: None,
+            uv_rect: None,
             texture: None,
             peaks: None,
+            playback_progress: None,
             selected: None,
+            filters: None,
+            transition: None,
         }
     }
 
@@ -119,6 +130,7 @@ mod tests {
         let config = AtomeNativeBevyRendererConfig {
             initial_scene: AtomeRenderScene {
                 nodes: vec![shape_node("shape_1")],
+                effects: Vec::new(),
                 selection_style: None,
             },
             ..AtomeNativeBevyRendererConfig::default()
@@ -137,7 +149,7 @@ mod tests {
         assert_eq!(nodes.len(), 1);
         let (node, transform, size) = nodes[0];
         assert_eq!(node.0, "shape_1");
-        assert_eq!(transform.translation, Vec3::new(-590.0, 320.0, -2.0));
+        assert_eq!(transform.translation, Vec3::new(-590.0, 320.0, 2.0));
         assert_eq!(size.width, 80.0);
         assert_eq!(size.height, 40.0);
     }
@@ -147,6 +159,7 @@ mod tests {
         let config = AtomeNativeBevyRendererConfig {
             initial_scene: AtomeRenderScene {
                 nodes: vec![shape_node("embedded_shape")],
+                effects: Vec::new(),
                 selection_style: None,
             },
             ..AtomeNativeBevyRendererConfig::default()

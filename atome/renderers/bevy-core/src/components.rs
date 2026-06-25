@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use crate::types::{
     default_transform_origin, default_transform_scale, normalize_transform_origin,
     normalize_transform_rotation, normalize_transform_scale, AtomeRenderScene,
-    AtomeShadowStyle, SelectionVisualStyle,
+    AtomeSceneEffect, AtomeShadowStyle, SelectionVisualStyle,
 };
 
 #[derive(Clone, Debug, Component)]
@@ -101,6 +101,16 @@ pub struct AtomeSurfaceBackgroundVisual {
     pub signature: String,
     pub texture_size: Option<[u32; 2]>,
     pub image_handle: Option<Handle<Image>>,
+}
+
+#[derive(Clone, Debug, Component)]
+pub struct AtomeBackdropBlurVisual;
+
+#[derive(Clone, Debug, Resource, Default)]
+pub struct AtomeBackdropBlurState {
+    pub effects: Vec<AtomeSceneEffect>,
+    pub entities: Vec<Entity>,
+    pub original_sprite_colors: HashMap<Entity, Color>,
 }
 
 #[derive(Clone, Debug, Resource, Default)]

@@ -25,6 +25,7 @@ fn shape_node(id: &str) -> AtomeRenderNode {
         opacity: 1.0,
         corner_radius: 0.0,
         color: Some([0.1, 0.2, 0.3, 1.0]),
+        shadow: None,
         text: None,
         source: None,
         texture_size: None,
@@ -46,6 +47,7 @@ fn web_window_targets_canvas_and_opaque_surface() {
         480.0,
         AtomeRenderScene {
             nodes: vec![shape_node("shape_1")],
+            effects: Vec::new(),
             selection_style: None,
         },
     );
@@ -143,6 +145,7 @@ fn queued_exports_apply_through_shared_core() {
         480.0,
         AtomeRenderScene {
             nodes: vec![shape_node("shape_1")],
+            effects: Vec::new(),
             selection_style: None,
         },
     );
@@ -202,6 +205,7 @@ fn queued_audio_progress_styles_are_coalesced_per_atome() {
         playback_progress: Some(Some(0.1)),
         filters: None,
         transition: None,
+        shadow: None,
     }));
     queue_web_op(AtomeRenderOp::Style(AtomeStylePatch {
         id: "waveform_1".to_string(),
@@ -211,6 +215,7 @@ fn queued_audio_progress_styles_are_coalesced_per_atome() {
         playback_progress: Some(Some(0.7)),
         filters: None,
         transition: None,
+        shadow: None,
     }));
     queue_web_op(AtomeRenderOp::Style(AtomeStylePatch {
         id: "waveform_2".to_string(),
@@ -220,6 +225,7 @@ fn queued_audio_progress_styles_are_coalesced_per_atome() {
         playback_progress: Some(Some(0.3)),
         filters: None,
         transition: None,
+        shadow: None,
     }));
 
     let ops = drain_web_ops();
@@ -248,6 +254,7 @@ fn queued_opacity_styles_are_not_coalesced_as_audio_progress_only() {
         playback_progress: None,
         filters: None,
         transition: None,
+        shadow: None,
     }));
     queue_web_op(AtomeRenderOp::Style(AtomeStylePatch {
         id: "video_1".to_string(),
@@ -257,6 +264,7 @@ fn queued_opacity_styles_are_not_coalesced_as_audio_progress_only() {
         playback_progress: None,
         filters: None,
         transition: None,
+        shadow: None,
     }));
 
     let ops = drain_web_ops();
@@ -401,6 +409,7 @@ fn web_renderer_uses_reactive_winit_updates_with_explicit_redraw_wakes() {
         480.0,
         AtomeRenderScene {
             nodes: vec![shape_node("shape_1")],
+            effects: Vec::new(),
             selection_style: None,
         },
     );

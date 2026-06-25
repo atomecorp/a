@@ -1,4 +1,4 @@
-use bevy::{image::ImageSampler, prelude::*};
+use bevy::{color::Alpha, image::ImageSampler, prelude::*};
 
 use crate::selection_overlay::build_shadow_texture_rgba;
 use crate::*;
@@ -103,6 +103,7 @@ fn plugin_spawns_projected_nodes_and_camera() {
             }),
             ..shape_node("shape_1")
         }],
+        effects: Vec::new(),
         selection_style: None,
     };
     let mut app = App::new();
@@ -252,6 +253,63 @@ fn shape_shadow_uses_bevy_overlay_without_changing_logical_size() {
 }
 
 #[test]
+fn backdrop_blur_effect_spawns_samples_and_restores_original_sprite() {
+    let mut world = World::new();
+    world.insert_resource(AtomeEntityTable::default());
+    world.insert_resource(AtomeBevyRendererConfig::empty(640.0, 480.0));
+    world.insert_resource(AtomeRendererDiagnostics::default());
+    world.insert_resource(AtomeBackdropBlurState::default());
+    world.insert_resource(Assets::<Image>::default());
+
+    let entity = apply_spawn(&mut world, shape_node("blurred_shape")).unwrap();
+    let original_color = world.get::<Sprite>(entity).unwrap().color;
+    crate::backdrop_blur::apply_scene_effects(
+        &mut world,
+        AtomeSceneEffectsPatch {
+            effects: vec![AtomeSceneEffect {
+                id: "dashboard_blur".to_string(),
+                kind: "backdrop_blur".to_string(),
+                bounds: [0.0, 0.0, 640.0, 480.0],
+                source_layer_max: 10,
+                target_layer: 10,
+                radius: 30.0,
+                downsample: 0.5,
+                tint: [0.0, 0.0, 0.0, 0.16],
+            }],
+        },
+    )
+    .unwrap();
+
+    assert_eq!(
+        world.resource::<AtomeBackdropBlurState>().entities.len(),
+        16
+    );
+    let mut query = world.query_filtered::<&Transform, With<AtomeBackdropBlurVisual>>();
+    let max_horizontal_offset = query
+        .iter(&world)
+        .map(|transform| (transform.translation.x - 10.0).abs())
+        .fold(0.0, f32::max);
+    assert!(max_horizontal_offset >= 30.0);
+    assert!(
+        world.get::<Sprite>(entity).unwrap().color.alpha() < original_color.alpha(),
+        "source sprite should be reduced while blur samples cover it"
+    );
+
+    crate::backdrop_blur::apply_scene_effects(
+        &mut world,
+        AtomeSceneEffectsPatch { effects: Vec::new() },
+    )
+    .unwrap();
+
+    assert_eq!(
+        world.resource::<AtomeBackdropBlurState>().entities.len(),
+        0
+    );
+    assert_eq!(world.get::<Sprite>(entity).unwrap().color, original_color);
+}
+
+
+#[test]
 fn surface_background_stays_behind_atomes_and_outside_entity_table() {
     let mut world = World::new();
     world.insert_resource(AtomeEntityTable::default());
@@ -342,6 +400,7 @@ fn selected_nodes_create_overlay_from_configured_visual_style() {
     world.insert_resource(AtomeEntityTable::default());
     let scene = AtomeRenderScene {
         nodes: Vec::new(),
+        effects: Vec::new(),
         selection_style: Some(SelectionVisualStyle {
             shadow_size: 9.0,
             border_thickness: 2.0,

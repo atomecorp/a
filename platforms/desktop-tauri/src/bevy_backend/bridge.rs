@@ -5,7 +5,7 @@ mod native {
     use atome_bevy_renderer_core::{
         apply_render_ops, AtomeEntityTable, AtomeLayerPatch, AtomeParentPatch, AtomeRenderNode,
         AtomeRenderOp, AtomeRenderScene, AtomeRendererDiagnostics, AtomeResourcePatch,
-        AtomeStylePatch, AtomeSurfacePatch, AtomeTextPatch, AtomeTransformPatch,
+        AtomeSceneEffectsPatch, AtomeStylePatch, AtomeSurfacePatch, AtomeTextPatch, AtomeTransformPatch,
         AtomeVisibilityPatch,
     };
     use bevy::prelude::*;
@@ -114,6 +114,11 @@ mod native {
                 parse_patch::<AtomeSurfacePatch>(input.patch, "bevy_native_surface_patch_required")
                     .map(AtomeRenderOp::Surface)
             }
+            "scene_effects" => parse_patch::<AtomeSceneEffectsPatch>(
+                input.patch,
+                "bevy_native_scene_effects_patch_required",
+            )
+            .map(AtomeRenderOp::SceneEffects),
             other => Err(format!("bevy_native_op_unsupported:{other}")),
         }
     }

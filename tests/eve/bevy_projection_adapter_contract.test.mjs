@@ -5,6 +5,7 @@ import {
     BEVY_RENDERER_ADAPTER_DEFINITIONS,
     DEFAULT_BEVY_RENDERER_ADAPTER_REGISTRY,
     createDefaultBevyRendererAdapterRegistry,
+    mapVirtualSceneEffectsToBevyPayload,
     mapVirtualSceneLayerToBevyPatch,
     mapVirtualSceneNodeToBevyPayload,
     mapVirtualSceneResourceToBevyPatch,
@@ -92,6 +93,32 @@ test('Renderer adapter registry is explicit and clone-safe', () => {
     }, /read only property|object is not extensible/);
     assert.equal(registry.get('custom_kind').capabilities.node_payload, true);
     assert.throws(() => registry.assert('missing', 'custom_kind_missing'), /custom_kind_missing/);
+});
+
+test('Bevy projection maps backdrop blur scene effects to Rust payloads', () => {
+    const effects = mapVirtualSceneEffectsToBevyPayload({
+        effects: [{
+            id: '__eve_dashboard_backdrop_blur',
+            kind: 'backdrop_blur',
+            bounds: { x: 0, y: 0, width: 1200, height: 742 },
+            sourceLayerMax: 4,
+            targetLayer: 4,
+            radius: 30,
+            downsample: 0.5,
+            tint: 'rgba(7,8,10,0.16)'
+        }]
+    });
+
+    assert.deepEqual(effects, [{
+        id: '__eve_dashboard_backdrop_blur',
+        kind: 'backdrop_blur',
+        bounds: [0, 0, 1200, 742],
+        source_layer_max: 4,
+        target_layer: 4,
+        radius: 30,
+        downsample: 0.5,
+        tint: [7 / 255, 8 / 255, 10 / 255, 0.16]
+    }]);
 });
 
 test('Default Bevy renderer adapter registry declares the currently supported kinds', () => {

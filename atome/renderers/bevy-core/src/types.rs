@@ -292,6 +292,8 @@ pub struct AtomeRenderScene {
     #[serde(default)]
     pub nodes: Vec<AtomeRenderNode>,
     #[serde(default)]
+    pub effects: Vec<AtomeSceneEffect>,
+    #[serde(default)]
     pub selection_style: Option<SelectionVisualStyle>,
 }
 
@@ -299,6 +301,25 @@ impl AtomeRenderScene {
     pub fn selection_style(&self) -> SelectionVisualStyle {
         self.selection_style.unwrap_or_default()
     }
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct AtomeSceneEffect {
+    pub id: String,
+    pub kind: String,
+    pub bounds: [f32; 4],
+    pub source_layer_max: i32,
+    pub target_layer: i32,
+    pub radius: f32,
+    #[serde(default)]
+    pub downsample: f32,
+    pub tint: [f32; 4],
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct AtomeSceneEffectsPatch {
+    #[serde(default)]
+    pub effects: Vec<AtomeSceneEffect>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -443,4 +464,5 @@ pub enum AtomeRenderOp {
     Resource(AtomeResourcePatch),
     Surface(AtomeSurfacePatch),
     SurfaceBackground(AtomeSurfaceBackgroundPatch),
+    SceneEffects(AtomeSceneEffectsPatch),
 }
