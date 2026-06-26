@@ -28,13 +28,14 @@ window.eveToolBase = {
         return { ok: true };
     },
     getProjectSceneState: (projectId) => ({
-        records: sceneRecordsByProject.get(projectId) || []
+        records: sceneRecordsByProject.get(projectId) || [],
+        projection: sceneRecordsByProject.has(projectId) ? { ok: true } : null
     })
 };
 
 window.new_menu_v2 = {
-    reveal: () => {
-        calls.push({ name: 'reveal' });
+    showFully: () => {
+        calls.push({ name: 'showFully' });
         return true;
     }
 };
@@ -57,8 +58,8 @@ const result = await openWorkspaceDashboardAndMainMenu({
 assert.deepEqual(result, { ok: true, active: true }, 'workspace opener must return the dashboard open result');
 assert.deepEqual(
     calls.map((entry) => entry.name),
-    ['loadProjectAtomes', 'dashboardOpen', 'reveal'],
-    'workspace opener must load the project canvas and dashboard scene before revealing the menu'
+    ['loadProjectAtomes', 'showFully', 'dashboardOpen'],
+    'workspace opener must stabilize the existing menu before opening the dashboard scene'
 );
 assert.equal(calls[0].projectId, 'project_valid', 'workspace opener must load the requested project');
 assert.deepEqual(calls[0].options, {
@@ -66,11 +67,11 @@ assert.deepEqual(calls[0].options, {
     resolveOnFirstPaint: true
 }, 'workspace opener must request the fast first-paint project load path');
 assert.deepEqual(
-    calls[1],
+    calls[2],
     { name: 'dashboardOpen', source: 'authenticated', projectId: 'project_valid' },
     'workspace opener must pass the resolved project id to dashboard'
 );
-assert.deepEqual(calls[2], { name: 'reveal' }, 'workspace opener must reveal the existing menu once after dashboard records are ready');
+assert.deepEqual(calls[1], { name: 'showFully' }, 'workspace opener must fully show the existing menu before dashboard layout');
 assert.equal(
     document.getElementById('project_view_project_valid')?.contains(document.getElementById('eve_surface_project')),
     true,

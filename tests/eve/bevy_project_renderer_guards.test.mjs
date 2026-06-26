@@ -300,6 +300,7 @@ test('transform-only Bevy diffs request one redraw without delayed redraw primes
         default: async () => {},
         run_atome_bevy_renderer: () => calls.push({ type: 'run' }),
         apply_atome_bevy_transform: (payload) => calls.push({ type: 'transform', payload }),
+        apply_atome_bevy_text_metadata: (payload) => calls.push({ type: 'text', payload }),
         request_atome_bevy_redraw: () => calls.push({ type: 'redraw' })
     };
     const node = {
@@ -366,7 +367,87 @@ test('transform-only Bevy diffs request one redraw without delayed redraw primes
     }
     assert.equal(delayedPrimeCount, 0);
     assert.equal(calls.filter((call) => call.type === 'transform').length, 1);
+    assert.equal(calls.filter((call) => call.type === 'text').length, 0);
     assert.equal(calls.filter((call) => call.type === 'redraw').length, 1);
+});
+
+test('text transform diffs rasterize texture only when text bounds change', async () => {
+    const dom = new JSDOM('<!doctype html><html><body><canvas id="eve_surface_project"></canvas></body></html>');
+    globalThis.window = dom.window;
+    globalThis.document = dom.window.document;
+    const canvas = dom.window.document.getElementById('eve_surface_project');
+    const calls = [];
+    const node = {
+        id: 'text_transform_atom',
+        kind: 'text',
+        parentId: null,
+        localTransform: { x: 10, y: 20, scaleX: 1, scaleY: 1, rotation: 0, originX: 0, originY: 0 },
+        bounds: { x: 10, y: 20, width: 90, height: 24 },
+        visible: true,
+        material: { fill: [255, 255, 255, 255] },
+        text: { text: 'Move me', style: { fontSize: 16 } },
+        content: { text: 'Move me' },
+        renderLayer: 0,
+        zIndex: 0,
+        selected: false,
+        children: []
+    };
+    const wasmModule = {
+        default: async () => {},
+        run_atome_bevy_renderer: () => calls.push({ type: 'run' }),
+        apply_atome_bevy_transform: (payload) => calls.push({ type: 'transform', payload }),
+        apply_atome_bevy_text_metadata: (payload) => calls.push({ type: 'text', payload }),
+        request_atome_bevy_redraw: () => calls.push({ type: 'redraw' })
+    };
+    await startBevyWebRenderer({
+        surface: canvas,
+        width: 200,
+        height: 120,
+        virtualScene: {
+            id: 'text_transform_scene',
+            revision: 1,
+            roots: [node.id],
+            nodes: [node],
+            byId: new Map([[node.id, node]])
+        },
+        wasmModule,
+        mediaTextureResolver: async () => ({ width: 1, height: 1, rgba: [255, 255, 255, 255] })
+    });
+    calls.length = 0;
+    await applyBevyWebRendererDiffs({
+        surface: canvas,
+        ops: [{
+            type: VIRTUAL_SCENE_DIFF_TYPES.updateTransform,
+            id: node.id,
+            localTransform: { ...node.localTransform, x: 30 },
+            bounds: { x: 30, y: 20, width: 90, height: 24 },
+            sizeChanged: false,
+            node: {
+                ...node,
+                localTransform: { ...node.localTransform, x: 30 },
+                bounds: { x: 30, y: 20, width: 90, height: 24 }
+            }
+        }],
+        virtualScene: null
+    });
+    assert.equal(calls.filter((call) => call.type === 'text').length, 0);
+    await applyBevyWebRendererDiffs({
+        surface: canvas,
+        ops: [{
+            type: VIRTUAL_SCENE_DIFF_TYPES.updateTransform,
+            id: node.id,
+            localTransform: { ...node.localTransform, x: 30 },
+            bounds: { x: 30, y: 20, width: 110, height: 24 },
+            sizeChanged: true,
+            node: {
+                ...node,
+                localTransform: { ...node.localTransform, x: 30 },
+                bounds: { x: 30, y: 20, width: 110, height: 24 }
+            }
+        }],
+        virtualScene: null
+    });
+    assert.equal(calls.filter((call) => call.type === 'text').length, 1);
 });
 
 test('video frame dispatcher coalesces same-tick video frames into one WASM wake', async () => {

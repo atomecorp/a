@@ -137,6 +137,42 @@ fn browser_window_resize_event_reprojects_shared_surface_in_logical_units() {
 }
 
 #[test]
+fn browser_physical_window_resize_event_reprojects_shared_surface_in_logical_units() {
+    let mut app = App::new();
+    app.add_message::<WindowResized>();
+    app.add_message::<RequestRedraw>();
+    app.insert_resource(AtomeBevyRendererConfig::empty(640.0, 480.0));
+    app.insert_resource(AtomeEntityTable::default());
+    app.insert_resource(AtomeRendererDiagnostics::default());
+    app.insert_resource(Assets::<Image>::default());
+    app.world_mut().spawn((
+        Camera2d,
+        atome_camera_projection(640.0, 480.0),
+    ));
+    let window = app.world_mut().spawn(Window {
+        resolution: WindowResolution::new(1280, 960),
+        ..default()
+    }).id();
+    {
+        let mut entity = app.world_mut().entity_mut(window);
+        let mut window_mut = entity.get_mut::<Window>().unwrap();
+        window_mut.resolution.set_scale_factor(2.0);
+        window_mut.resolution.set(1280.0, 960.0);
+    }
+
+    app.world_mut().write_message(WindowResized {
+        window,
+        width: 2560.0,
+        height: 1920.0,
+    });
+    apply_browser_window_resize_to_surface(app.world_mut());
+
+    let config = app.world().resource::<AtomeBevyRendererConfig>();
+    assert_eq!(config.width, 1280.0);
+    assert_eq!(config.height, 960.0);
+}
+
+#[test]
 fn queued_exports_apply_through_shared_core() {
     let _ = drain_web_ops();
     let config = WebBevyRendererConfig::new(

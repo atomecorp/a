@@ -261,6 +261,19 @@ fn apply_pending_web_ops(world: &mut World) {
     wake_web_renderer();
 }
 
+fn window_resize_event_logical_size(world: &World, event: &WindowResized) -> (f32, f32) {
+    let Some(window) = world.get::<Window>(event.window) else {
+        return (event.width, event.height);
+    };
+    let resolution = &window.resolution;
+    let physical_width = resolution.physical_width() as f32;
+    let physical_height = resolution.physical_height() as f32;
+    if (event.width - physical_width).abs() <= 1.0 && (event.height - physical_height).abs() <= 1.0 {
+        return (resolution.width(), resolution.height());
+    }
+    (event.width, event.height)
+}
+
 fn apply_browser_window_resize_to_surface(world: &mut World) {
     let next_size = world
         .resource::<Messages<WindowResized>>()
@@ -268,7 +281,7 @@ fn apply_browser_window_resize_to_surface(world: &mut World) {
         .filter(|event| event.width.is_finite() && event.height.is_finite())
         .filter(|event| event.width > 0.0 && event.height > 0.0)
         .last()
-        .map(|event| (event.width, event.height));
+        .map(|event| window_resize_event_logical_size(world, event));
     let Some((width, height)) = next_size else {
         return;
     };
