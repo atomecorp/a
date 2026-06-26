@@ -1,6 +1,11 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 
+import { createDashboardLayout } from '../../eVe/domains/dashboard/dashboard_layout.js';
+import { buildDashboardRecords } from '../../eVe/domains/dashboard/dashboard_records.js';
+import { DASHBOARD_VISUAL_TOKENS } from '../../eVe/domains/dashboard/dashboard_tokens.js';
+import { normalizeRenderAtoms } from '../../eVe/domains/rendering/render_atom.js';
+import { recordsForBevyProjection } from '../../eVe/domains/rendering/project_scene_record_projection.js';
 import {
     clearAllProjectScenes,
     emitProjectSceneIntent,
@@ -9,6 +14,8 @@ import {
     updateProjectSceneRecord,
     updateProjectSceneRecords
 } from '../../eVe/domains/rendering/project_scene_runtime.js';
+import { createRenderScene, hitTestRenderScene } from '../../eVe/domains/rendering/scene_graph.js';
+import { createVirtualSceneTree } from '../../eVe/domains/rendering/virtual_scene_contract.js';
 import {
     createTestCompositor,
     finalSetCommit,
@@ -20,6 +27,32 @@ import {
 } from './unified_rendering_test_helpers.mjs';
 
 const projectDom = () => installDom('<!doctype html><html><body><main id="project"></main></body></html>');
+
+const dashboardCategories = Object.freeze([
+    { id: 'news', label_key: 'eve.dashboard.news', color: '#ff5252', icon_id: 'news' },
+    { id: 'calendar', label_key: 'eve.dashboard.calendar', color: '#ffa726', icon_id: 'calendar' }
+]);
+
+const buildDashboardHitScene = () => {
+    const layout = createDashboardLayout({
+        width: 1200,
+        height: 800,
+        toolboxHeight: 74,
+        categories: dashboardCategories,
+        itemsByCategory: new Map(),
+        tokens: DASHBOARD_VISUAL_TOKENS
+    });
+    const records = buildDashboardRecords({ layout, tokens: DASHBOARD_VISUAL_TOKENS });
+    const virtualScene = createVirtualSceneTree(recordsForBevyProjection(records), {
+        id: 'dashboard_selection_contract',
+        selectedIds: new Set()
+    });
+    const scene = createRenderScene(normalizeRenderAtoms(records), {
+        id: 'dashboard_selection_contract',
+        layerOrderById: new Map(virtualScene.nodes.map((node) => [String(node.id), node.renderLayer]))
+    });
+    return { layout, records, scene };
+};
 
 const assertHiddenDecodeVideoContract = (documentRef, expectedCount) => {
     const root = documentRef.getElementById('eve_bevy_video_decode_root');
@@ -121,6 +154,20 @@ test('Late project renders preserve ephemeral Bevy overlay records on request', 
 
     assert.equal(ids.has('project_atom'), true);
     assert.equal(ids.has('__eve_dashboard_background'), true);
+});
+
+test('Dashboard overlay records stay non-selectable in the project hit-test scene', () => {
+    const { layout, records, scene } = buildDashboardHitScene();
+    assert.ok(records.length > 0);
+    assert.equal(records.every((record) => record.properties.selectable === false), true);
+
+    const reserved = layout.toolbox_reserved_rect;
+    const points = [
+        { x: reserved.x + reserved.width / 2, y: reserved.y + 8 },
+        { x: reserved.x + reserved.width / 2, y: reserved.y + reserved.height / 2 },
+        { x: layout.dashboard_rect.width / 2, y: layout.dashboard_rect.height / 2 }
+    ];
+    assert.deepEqual(points.map((point) => hitTestRenderScene(scene, point)?.id || null), [null, null, null]);
 });
 
 test('Project scene drag intent commits canonical geometry through commitBatch', async () => {

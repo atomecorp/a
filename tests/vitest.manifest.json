@@ -9,6 +9,7 @@
   "tests/eve/bevy_native_renderer_runtime.test.mjs",
   "tests/eve/bevy_project_renderer_guards.test.mjs",
   "tests/eve/bevy_projection_adapter_contract.test.mjs",
+  "tests/eve/bevy_projection_adapter_effects.test.mjs",
   "tests/eve/bevy_video_decode_source_runtime.test.mjs",
   "tests/eve/bevy_web_renderer_redraw_contract.test.mjs",
   "tests/eve/bevy_web_renderer_runtime.test.mjs",
