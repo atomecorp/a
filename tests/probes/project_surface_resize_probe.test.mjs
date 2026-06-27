@@ -101,7 +101,11 @@ const surfaceSnapshot = async (page, label) => page.evaluate(async (snapshotLabe
         visibleDashboardIds: Array.from(window.eveToolBase?.getProjectSceneState?.(currentProjectId)?.records || [])
             .filter((record) => String(record?.id || '').startsWith('__eve_dashboard_'))
             .filter((record) => record?.properties?.visible !== false && Number(record?.properties?.opacity ?? 1) > 0)
-            .map((record) => record.id)
+            .map((record) => record.id),
+        visibleDashboardCardCount: Array.from(window.eveToolBase?.getProjectSceneState?.(currentProjectId)?.records || [])
+            .filter((record) => String(record?.id || '').startsWith('__eve_dashboard_card_'))
+            .filter((record) => record?.properties?.visible !== false && Number(record?.properties?.opacity ?? 1) > 0)
+            .length
     };
 }, label);
 
@@ -129,6 +133,34 @@ const assertDashboardClosed = (snapshot, reason) => {
             visibleDashboardIds: snapshot.visibleDashboardIds
         })}`);
     }
+};
+
+const assertDashboardOpen = (snapshot, reason) => {
+    if (snapshot.dashboardActive !== true || !snapshot.visibleDashboardIds.length || !snapshot.visibleDashboardCardCount) {
+        throw new Error(`dashboard_not_open_after_boot:${reason}:${JSON.stringify({
+            active: snapshot.dashboardActive,
+            visibleDashboardIds: snapshot.visibleDashboardIds,
+            visibleDashboardCardCount: snapshot.visibleDashboardCardCount
+        })}`);
+    }
+};
+
+const waitForDashboardOpen = async (page, label) => {
+    await page.waitForFunction(() => {
+        const currentProjectId = window.__currentProject?.id || window.AdoleAPI?.projects?.getCurrentId?.() || '';
+        const records = Array.from(window.eveToolBase?.getProjectSceneState?.(currentProjectId)?.records || []);
+        const visibleDashboardIds = records
+            .filter((record) => String(record?.id || '').startsWith('__eve_dashboard_'))
+            .filter((record) => record?.properties?.visible !== false && Number(record?.properties?.opacity ?? 1) > 0);
+        const visibleCards = visibleDashboardIds
+            .filter((record) => String(record?.id || '').startsWith('__eve_dashboard_card_'));
+        return window.eveDashboardRuntime?.state?.active === true
+            && visibleDashboardIds.length > 0
+            && visibleCards.length > 0;
+    }, null, { timeout: 30000 });
+    const snapshot = await assertSettled(page, label);
+    assertDashboardOpen(snapshot, label);
+    return snapshot;
 };
 
 const waitWorkspaceOverlayGone = async (page) => {
@@ -182,11 +214,11 @@ const run = async () => {
         await assertSettled(page, 'workspace_ready');
         await closeDashboardIfActive(page);
         await clickMainHandle(page);
-        const opened = await assertSettled(page, 'dashboard_open');
-        if (opened.dashboardActive !== true || !opened.visibleDashboardIds.length) throw new Error('dashboard_open_failed');
+        await waitForDashboardOpen(page, 'dashboard_open');
         await clickMainHandle(page);
         const closed = await assertSettled(page, 'dashboard_closed');
         assertDashboardClosed(closed, 'after_close');
+        let rebooted = false;
         for (let index = 1; index < VIEWPORTS.length; index += 1) {
             await page.setViewportSize(VIEWPORTS[index]);
             if (VIEWPORTS[index].refresh) {
@@ -195,9 +227,18 @@ const run = async () => {
                     (!!window.__DEBUG__ || !!window.new_menu_v2 || !!document.getElementById('intuition'))
                     && !!document.getElementById('eve_surface_project')
                 ), null, { timeout: 45000 });
+                rebooted = true;
             }
             const resized = await assertSettled(page, `resize_${index}_${VIEWPORTS[index].width}x${VIEWPORTS[index].height}`);
-            assertDashboardClosed(resized, `resize_${index}`);
+            if (rebooted) {
+                if (resized.dashboardActive !== true || !resized.visibleDashboardIds.length || !resized.visibleDashboardCardCount) {
+                    await waitForDashboardOpen(page, `resize_${index}_dashboard_ready`);
+                } else {
+                    assertDashboardOpen(resized, `resize_${index}`);
+                }
+            } else {
+                assertDashboardClosed(resized, `resize_${index}`);
+            }
         }
         if (report.console.length || report.pageErrors.length || report.requestFailures.length) {
             throw new Error(`project_surface_resize_console_failure:${JSON.stringify({

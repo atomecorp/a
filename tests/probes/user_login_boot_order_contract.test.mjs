@@ -208,6 +208,10 @@ installEveIntuitionBootRuntime({
 });
 assert.deepEqual(workspaceOpenCalls, [], 'workspace boot must wait for a current project before opening menu/dashboard');
 window.__currentProject = { id: 'boot_project_valid' };
+await new Promise((resolve) => setTimeout(resolve, 120));
+assert.deepEqual(workspaceOpenCalls, [
+    { source: 'boot_workspace', projectId: 'boot_project_valid' }
+], 'workspace boot must retry after auth when the current project is published after the first boot signal');
 window.dispatchEvent(new window.CustomEvent('squirrel:project-changed', {
     detail: { id: 'boot_project_valid' }
 }));
