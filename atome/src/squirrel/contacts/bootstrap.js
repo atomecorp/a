@@ -6,6 +6,14 @@ import { emitPerfEvent, perfElapsedMs, perfLog, perfNowMs } from '../../utils/pe
 
 const SERVICE_KEY = '__SQUIRREL_CONTACTS_SERVICE__';
 const API_KEY = '__SQUIRREL_CONTACTS_API__';
+const PEOPLE_DIRECTORY_UPDATED_EVENT = 'eve:people-directory-updated';
+
+const dispatchPeopleDirectoryUpdated = (env, detail = {}) => {
+    if (!env || typeof env.dispatchEvent !== 'function') return;
+    const EventCtor = env.CustomEvent || globalThis.CustomEvent;
+    if (typeof EventCtor !== 'function') return;
+    env.dispatchEvent(new EventCtor(PEOPLE_DIRECTORY_UPDATED_EVENT, { detail }));
+};
 
 const installContactsGlobals = (env, api) => {
     env.Squirrel = env.Squirrel || {};
@@ -193,13 +201,19 @@ export const createGlobalContactsApi = ({
             });
         },
         async createLocalContact(contact = {}, options = {}) {
-            return getOrCreateService(env).createLocalContact(contact, options);
+            const result = await getOrCreateService(env).createLocalContact(contact, options);
+            if (result?.ok === true) dispatchPeopleDirectoryUpdated(env, { action: 'create', contact: result.contact || null });
+            return result;
         },
         async updateLocalContact(contactId, changes = {}, options = {}) {
-            return getOrCreateService(env).updateLocalContact(contactId, changes, options);
+            const result = await getOrCreateService(env).updateLocalContact(contactId, changes, options);
+            if (result?.ok === true) dispatchPeopleDirectoryUpdated(env, { action: 'update', contact_id: contactId, contact: result.contact || null });
+            return result;
         },
         async deleteLocalContact(contactId, options = {}) {
-            return getOrCreateService(env).deleteLocalContact(contactId, options);
+            const result = await getOrCreateService(env).deleteLocalContact(contactId, options);
+            if (result?.ok === true) dispatchPeopleDirectoryUpdated(env, { action: 'delete', contact_id: contactId });
+            return result;
         },
         search(query, options = {}) {
             return getOrCreateService(env).contactsSearch(query, options);

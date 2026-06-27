@@ -21,7 +21,20 @@ Object.defineProperty(globalThis, 'localStorage', {
     value: createMemoryStorage()
 });
 
+const events = new EventTarget();
+const peopleDirectoryEvents = [];
+class TestCustomEvent extends Event {
+    constructor(type, options = {}) {
+        super(type);
+        this.detail = options.detail;
+    }
+}
+
 const env = {
+    CustomEvent: TestCustomEvent,
+    addEventListener: events.addEventListener.bind(events),
+    removeEventListener: events.removeEventListener.bind(events),
+    dispatchEvent: events.dispatchEvent.bind(events),
     open_contact_panel: async () => {
         env.__panel_opened = true;
     },
@@ -31,6 +44,7 @@ const env = {
 };
 
 const api = createGlobalContactsApi({ env });
+env.addEventListener('eve:people-directory-updated', (event) => peopleDirectoryEvents.push(event.detail));
 
 assert.equal(env.Squirrel.contacts, api, 'contacts bootstrap should expose a global Squirrel contacts API');
 assert.equal(env.atome.contacts, api, 'contacts bootstrap should expose a global atome contacts API');
@@ -79,6 +93,11 @@ assert.equal(updated.contact?.phone, '06 44 55 78 97', 'contacts bootstrap shoul
 const deleted = await api.deleteLocalContact(created.contact?.source_contact_id);
 assert.equal(deleted.ok, true, 'contacts bootstrap should expose a local contact delete helper');
 assert.equal(api.search('Sylvain').items.length, 0, 'contacts bootstrap should remove deleted local contacts from the shared directory view');
+assert.deepEqual(
+    peopleDirectoryEvents.map((event) => event.action),
+    ['create', 'update', 'delete'],
+    'contacts bootstrap should publish dashboard directory invalidation events for local mutations'
+);
 
 const opened = await api.openPanel();
 assert.equal(opened.ok, true, 'contacts bootstrap should graft onto the existing contact panel entrypoint');

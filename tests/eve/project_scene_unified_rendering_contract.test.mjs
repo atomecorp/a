@@ -8,8 +8,10 @@ import { normalizeRenderAtoms } from '../../eVe/domains/rendering/render_atom.js
 import { recordsForBevyProjection } from '../../eVe/domains/rendering/project_scene_record_projection.js';
 import {
     clearAllProjectScenes,
+    clearProjectSceneVisuals,
     emitProjectSceneIntent,
     getProjectSceneState,
+    reconcileProjectSceneRecordsByPrefix,
     renderProjectScene,
     updateProjectSceneRecord,
     updateProjectSceneRecords
@@ -126,7 +128,7 @@ test('Project scene record updates preserve bounded DOM and avoid HTMLElement re
     assert.equal(getProjectSceneState('project_scene_b').scene.atoms.length, 2);
 });
 
-test('Late project renders preserve ephemeral Bevy overlay records on request', async () => {
+test('Late project renders preserve Molecule overlays but never dashboard records', async () => {
     clearAllProjectScenes();
     const dom = projectDom();
     const host = dom.window.document.getElementById('project');
@@ -138,11 +140,18 @@ test('Late project renders preserve ephemeral Bevy overlay records on request', 
     });
     await updateProjectSceneRecords({
         projectId: 'project_ephemeral_overlay',
-        records: [{
-            id: '__eve_dashboard_background',
-            type: 'shape',
-            properties: { left: 0, top: 0, width: 320, height: 180, color: '#111111' }
-        }]
+        records: [
+            {
+                id: '__eve_dashboard_background',
+                type: 'shape',
+                properties: { left: 0, top: 0, width: 320, height: 180, color: '#111111' }
+            },
+            {
+                id: 'mol:playhead',
+                type: 'shape',
+                properties: { left: 4, top: 0, width: 2, height: 180, color: '#ffffff' }
+            }
+        ]
     });
     await renderProjectScene({
         projectId: 'project_ephemeral_overlay',
@@ -153,7 +162,72 @@ test('Late project renders preserve ephemeral Bevy overlay records on request', 
     const ids = new Set(getProjectSceneState('project_ephemeral_overlay').records.map((record) => record.id));
 
     assert.equal(ids.has('project_atom'), true);
-    assert.equal(ids.has('__eve_dashboard_background'), true);
+    assert.equal(ids.has('__eve_dashboard_background'), false);
+    assert.equal(ids.has('mol:playhead'), true);
+});
+
+test('Dashboard prefix reconciliation removes orphan records from runtime and Bevy projection', async () => {
+    clearAllProjectScenes();
+    const dom = projectDom();
+    const calls = [];
+    const host = dom.window.document.getElementById('project');
+    await renderProjectScene({
+        projectId: 'project_dashboard_reconcile',
+        records: [makeRecord('project_atom', 'shape', 1)],
+        host,
+        compositor: createTestCompositor(calls)
+    });
+    await updateProjectSceneRecords({
+        projectId: 'project_dashboard_reconcile',
+        records: [
+            {
+                id: '__eve_dashboard_orphan_card',
+                type: 'shape',
+                properties: { left: 10, top: 10, width: 80, height: 40, color: '#003300' }
+            },
+            makeRecord('mol:playhead', 'shape', 2)
+        ]
+    });
+    assert.equal(
+        getProjectSceneState('project_dashboard_reconcile').records.some((record) => record.id === '__eve_dashboard_orphan_card'),
+        true
+    );
+
+    calls.length = 0;
+    await reconcileProjectSceneRecordsByPrefix({
+        projectId: 'project_dashboard_reconcile',
+        prefix: '__eve_dashboard_',
+        records: [],
+        changedRecords: [],
+        effects: []
+    });
+    const ids = new Set(getProjectSceneState('project_dashboard_reconcile').records.map((record) => record.id));
+    const despawned = calls.filter((call) => call.type === 'despawn').map((call) => call.id);
+
+    assert.equal(ids.has('__eve_dashboard_orphan_card'), false);
+    assert.equal(ids.has('project_atom'), true);
+    assert.equal(ids.has('mol:playhead'), true);
+    assert.deepEqual(despawned, ['__eve_dashboard_orphan_card']);
+});
+
+test('Project scene visual clear despawns previous Bevy nodes before dropping the baseline', async () => {
+    clearAllProjectScenes();
+    const dom = projectDom();
+    const calls = [];
+    const host = dom.window.document.getElementById('project');
+    await renderProjectScene({
+        projectId: 'project_clear_visuals',
+        records: [makeRecord('clear_shape', 'shape', 1), makeRecord('clear_text', 'text', 2)],
+        host,
+        compositor: createTestCompositor(calls)
+    });
+    calls.length = 0;
+    const cleared = await clearProjectSceneVisuals('project_clear_visuals');
+    const despawned = calls.filter((call) => call.type === 'despawn').map((call) => call.id).sort();
+
+    assert.equal(cleared, true);
+    assert.deepEqual(despawned, ['clear_shape', 'clear_text']);
+    assert.equal(getProjectSceneState('project_clear_visuals').record_count, 0);
 });
 
 test('Dashboard overlay records stay non-selectable in the project hit-test scene', () => {

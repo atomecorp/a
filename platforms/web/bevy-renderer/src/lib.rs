@@ -268,8 +268,19 @@ fn window_resize_event_logical_size(world: &World, event: &WindowResized) -> (f3
     let resolution = &window.resolution;
     let physical_width = resolution.physical_width() as f32;
     let physical_height = resolution.physical_height() as f32;
-    if (event.width - physical_width).abs() <= 1.0 && (event.height - physical_height).abs() <= 1.0 {
-        return (resolution.width(), resolution.height());
+    if (event.width - physical_width).abs() <= 1.0 && (event.height - physical_height).abs() <= 1.0
+    {
+        let logical = (resolution.width(), resolution.height());
+        if (logical.0 - event.width).abs() > 1.0 || (logical.1 - event.height).abs() > 1.0 {
+            return logical;
+        }
+    }
+    if let Some(current) = world.get_resource::<AtomeBevyRendererConfig>() {
+        let width_ratio = event.width / current.width.max(1.0);
+        let height_ratio = event.height / current.height.max(1.0);
+        if width_ratio > 1.25 && (width_ratio - height_ratio).abs() <= 0.05 {
+            return (current.width, current.height);
+        }
     }
     (event.width, event.height)
 }
@@ -286,7 +297,9 @@ fn apply_browser_window_resize_to_surface(world: &mut World) {
         return;
     };
     let current = world.resource::<AtomeBevyRendererConfig>();
-    if (current.width - width).abs() < f32::EPSILON && (current.height - height).abs() < f32::EPSILON {
+    if (current.width - width).abs() < f32::EPSILON
+        && (current.height - height).abs() < f32::EPSILON
+    {
         return;
     }
     if let Err(error) = apply_surface(world, AtomeSurfacePatch { width, height }) {
@@ -336,7 +349,8 @@ fn web_window_for_config(config: &WebBevyRendererConfig) -> Window {
     let resolution = WindowResolution::new(
         config.core.width.round() as u32,
         config.core.height.round() as u32,
-    );
+    )
+    .with_scale_factor_override(1.0);
     Window {
         canvas: Some(config.canvas_selector.clone()),
         fit_canvas_to_parent: false,

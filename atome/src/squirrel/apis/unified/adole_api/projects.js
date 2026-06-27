@@ -14,6 +14,11 @@ const dispatchProjectChanged = (detail = {}) => {
     
 };
 
+const dispatchProjectAtomeEvent = (eventName, detail = {}) => {
+    if (typeof window === 'undefined') return;
+    window.dispatchEvent(new CustomEvent(eventName, { detail }));
+};
+
 const getCurrentUserId = () => {
     const state = getSessionState();
     return state?.user?.id || null;
@@ -62,7 +67,25 @@ export async function create_project(projectName, callback) {
     };
 
     const result = await create_atome(payload);
-    return with_callback(result, callback);
+    const created = result?.tauri?.success === true || result?.fastify?.success === true || result?.ok === true || result?.success === true;
+    const normalized = created ? {
+        ...result,
+        id: projectId,
+        atome_id: projectId,
+        project_id: projectId
+    } : result;
+    if (created) {
+        dispatchProjectAtomeEvent('squirrel:atome-created', {
+            id: projectId,
+            atome_id: projectId,
+            projectId,
+            project_id: projectId,
+            type: 'project',
+            atome_type: 'project',
+            properties
+        });
+    }
+    return with_callback(normalized, callback);
 }
 
 export async function list_projects(callback) {
@@ -134,6 +157,17 @@ export async function delete_project(projectId, callback) {
     }
 
     const result = await delete_atome(projectId);
+    const deleted = result?.tauri?.success === true || result?.fastify?.success === true || result?.ok === true || result?.success === true;
+    if (deleted) {
+        dispatchProjectAtomeEvent('squirrel:atome-deleted', {
+            id: projectId,
+            atome_id: projectId,
+            projectId,
+            project_id: projectId,
+            type: 'project',
+            atome_type: 'project'
+        });
+    }
     return with_callback(result, callback);
 }
 

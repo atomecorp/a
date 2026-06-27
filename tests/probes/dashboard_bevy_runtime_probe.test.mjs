@@ -124,6 +124,7 @@ const dashboardSnapshot = async (page) => page.evaluate(async () => {
     const scene = projectId ? window.eveToolBase?.getProjectSceneState?.(projectId) : null;
     const records = Array.isArray(scene?.records) ? scene.records : [];
     const dashboardRecords = records.filter((record) => String(record?.id || '').startsWith('__eve_dashboard_'));
+    const visibleDashboardRecords = dashboardRecords.filter((record) => record?.properties?.visible !== false);
     const editorRecord = dashboardRecords.find((record) => record.id === '__eve_dashboard_editor') || null;
     const layout = state?.layout || null;
     const toolboxCandidates = [
@@ -182,6 +183,7 @@ const dashboardSnapshot = async (page) => page.evaluate(async () => {
             }))
         } : null,
         dashboardRecordIds: dashboardRecords.map((record) => record.id),
+        dashboardVisibleRecordIds: visibleDashboardRecords.map((record) => record.id),
         editorRect: editorRecord ? {
             x: Number(editorRecord.properties?.left ?? editorRecord.properties?.x ?? 0),
             y: Number(editorRecord.properties?.top ?? editorRecord.properties?.y ?? 0),
@@ -207,6 +209,11 @@ const waitForDashboardSnapshot = async (page, predicate, timeoutMs = 30000, inte
     }
     return { ok: false, snapshot };
 };
+
+const waitForPresentationFrames = async (page, count = 2) => page.evaluate(async (frames) => {
+    const waitFrame = () => new Promise((resolve) => requestAnimationFrame(resolve));
+    for (let index = 0; index < frames; index += 1) await waitFrame();
+}, count);
 
 const clickCanvasRectCenter = async (page, rect) => {
     const canvas = page.locator('#eve_surface_project').first();
@@ -418,7 +425,12 @@ const runScenario = async () => {
 
         let atomHandle = await resolveAtomHandle(page);
         const alreadyOpen = await dashboardSnapshot(page);
-        if (!alreadyOpen.active) await atomHandle.click({ timeout: 10000 });
+        if (alreadyOpen.active) {
+            await page.evaluate(() => window.eveDashboardRuntime?.close?.());
+            await waitForDashboardSnapshot(page, (snapshot) => !snapshot.active, 30000);
+            atomHandle = await resolveAtomHandle(page);
+        }
+        await atomHandle.click({ timeout: 10000 });
         const opened = await waitForDashboardSnapshot(page, (snapshot) => (
             snapshot.active
             && snapshot.dashboardRecordIds.includes('__eve_dashboard_background')
@@ -430,6 +442,7 @@ const runScenario = async () => {
         ), 30000);
         if (!opened.ok) throw new Error('dashboard_open_failed');
         report.checks.push({ name: 'atom_opens_dashboard_without_dom_renderer', ok: true, snapshot: opened.snapshot });
+        await waitForPresentationFrames(page, 12);
         await page.screenshot({ path: DASHBOARD_OPEN_SCREENSHOT, fullPage: true });
         report.checks.push({
             name: 'visual_open_matches_mockup_category_bands_and_toolbox_exclusion',
@@ -445,6 +458,7 @@ const runScenario = async () => {
         ), 30000);
         if (!monitorActive.ok) throw new Error('dashboard_monitor_header_click_failed');
         report.checks.push({ name: 'canvas_header_click_activates_monitor', ok: true, snapshot: monitorActive.snapshot });
+        await waitForPresentationFrames(page, 12);
         await page.screenshot({ path: DASHBOARD_MONITOR_SCREENSHOT, fullPage: true });
         report.checks.push({
             name: 'visual_monitor_focus_matches_mockup_color',
@@ -511,7 +525,7 @@ const runScenario = async () => {
             const currentProjectBeforeItem = projectsActive.snapshot.projectId;
             await clickCanvasRectCenter(page, firstProjectItem.rect);
             const projectItemOpened = await waitForDashboardSnapshot(page, (snapshot) => (
-                !snapshot.active && snapshot.dashboardRecordIds.length === 0 && snapshot.projectId === currentProjectBeforeItem
+                !snapshot.active && snapshot.dashboardVisibleRecordIds.length === 0 && snapshot.projectId === currentProjectBeforeItem
             ), 30000);
             if (!projectItemOpened.ok) throw new Error('dashboard_project_item_open_failed');
             report.checks.push({ name: 'project_item_opens_project_without_fullscreen_item', ok: true, snapshot: projectItemOpened.snapshot });
@@ -529,7 +543,7 @@ const runScenario = async () => {
         await clickCanvasRectCenter(page, activeProjectsForPlus.snapshot.layout.lanes.find((lane) => lane.categoryId === 'projects').plus_rect);
         const projectCreated = await waitForDashboardSnapshot(page, (snapshot) => (
             !snapshot.active
-            && snapshot.dashboardRecordIds.length === 0
+            && snapshot.dashboardVisibleRecordIds.length === 0
             && !!snapshot.projectId
             && snapshot.projectId !== beforeProjectCreate
         ), 60000);
@@ -541,13 +555,23 @@ const runScenario = async () => {
         const reopenedAfterProjectCreate = await waitForDashboardSnapshot(page, (snapshot) => snapshot.active, 30000);
         if (!reopenedAfterProjectCreate.ok) throw new Error('dashboard_reopen_after_project_create_failed');
 
-        await page.evaluate(() => window.localStorage?.setItem?.('eve_handedness', 'left'));
+        await page.evaluate(() => {
+            window.localStorage?.setItem?.('eve_handedness', 'left');
+            window.__eveProfilePreferences = {
+                ...(window.__eveProfilePreferences || {}),
+                visual: { ...(window.__eveProfilePreferences?.visual || {}), handedness: 'left' }
+            };
+            window.__eveIntuitionXState = { ...(window.__eveIntuitionXState || {}), handedness: 'left' };
+            window.dispatchEvent(new CustomEvent('eve:profile-preferences-updated', {
+                detail: { preferences: window.__eveProfilePreferences }
+            }));
+        });
         await (await resolveAtomHandle(page)).click({ timeout: 10000 });
         const closed = await waitForDashboardSnapshot(page, (snapshot) => (
-            !snapshot.active && snapshot.dashboardRecordIds.length === 0
+            !snapshot.active && snapshot.dashboardVisibleRecordIds.length === 0
         ), 30000);
         if (!closed.ok) throw new Error('dashboard_close_failed');
-        report.checks.push({ name: 'atom_click_closes_dashboard_and_removes_records', ok: true, snapshot: closed.snapshot });
+        report.checks.push({ name: 'atom_click_closes_dashboard_and_parks_records', ok: true, snapshot: closed.snapshot });
         await (await resolveAtomHandle(page)).click({ timeout: 10000 });
         const leftOpened = await waitForDashboardSnapshot(page, (snapshot) => {
             const lane = snapshot.layout?.lanes?.[0];
@@ -562,10 +586,20 @@ const runScenario = async () => {
 
         await (await resolveAtomHandle(page)).click({ timeout: 10000 });
         const leftClosed = await waitForDashboardSnapshot(page, (snapshot) => (
-            !snapshot.active && snapshot.dashboardRecordIds.length === 0
+            !snapshot.active && snapshot.dashboardVisibleRecordIds.length === 0
         ), 30000);
         if (!leftClosed.ok) throw new Error('dashboard_left_handed_close_failed');
-        await page.evaluate(() => window.localStorage?.removeItem?.('eve_handedness'));
+        await page.evaluate(() => {
+            window.localStorage?.removeItem?.('eve_handedness');
+            window.__eveProfilePreferences = {
+                ...(window.__eveProfilePreferences || {}),
+                visual: { ...(window.__eveProfilePreferences?.visual || {}), handedness: 'right' }
+            };
+            window.__eveIntuitionXState = { ...(window.__eveIntuitionXState || {}), handedness: 'right' };
+            window.dispatchEvent(new CustomEvent('eve:profile-preferences-updated', {
+                detail: { preferences: window.__eveProfilePreferences }
+            }));
+        });
 
         if (report.console.length || report.pageErrors.length || report.requestFailures.length) {
             throw new Error('dashboard_probe_browser_errors_detected');

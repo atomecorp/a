@@ -88,4 +88,78 @@ assert.equal(
     'workspace opener must not create dashboard DOM records'
 );
 
+calls.length = 0;
+const reopened = await openWorkspaceDashboardAndMainMenu({
+    source: 'reopen',
+    projectId: 'project_valid'
+});
+assert.deepEqual(reopened, { ok: true, active: true }, 'workspace opener must reopen over the existing surface');
+assert.equal(
+    calls.some((entry) => entry.name === 'loadProjectAtomes'),
+    false,
+    'workspace opener must not reload project atomes when the canonical surface is already available'
+);
+assert.deepEqual(
+    calls.map((entry) => entry.name),
+    ['showFully', 'dashboardOpen'],
+    'workspace opener must only settle menu and open dashboard over an existing surface'
+);
+
+calls.length = 0;
+window.eveDashboardRuntime.state = { warmedProjectId: 'project_valid' };
+window.eveDashboardRuntime.warmup = async (payload = {}) => {
+    calls.push({ name: 'dashboardWarmup', ...payload });
+    return { ok: true };
+};
+const warmedReopen = await openWorkspaceDashboardAndMainMenu({
+    source: 'warmed',
+    projectId: 'project_valid'
+});
+assert.deepEqual(warmedReopen, { ok: true, active: true }, 'workspace opener must reopen warmed dashboards');
+assert.equal(
+    calls.some((entry) => entry.name === 'dashboardWarmup'),
+    false,
+    'workspace opener must not repeat dashboard warmup when warmed projection is still present'
+);
+
+calls.length = 0;
+sceneRecordsByProject.delete('project_valid_2');
+window.eveDashboardRuntime.open = async (payload = {}) => {
+    calls.push({ name: 'dashboardOpen', ...payload });
+    await new Promise((resolve) => window.setTimeout(resolve, 20));
+    sceneRecordsByProject.set(payload.projectId, [{ id: '__eve_dashboard_background', properties: {} }]);
+    return { ok: true, active: true, source: payload.source };
+};
+
+const [firstConcurrent, secondConcurrent] = await Promise.all([
+    openWorkspaceDashboardAndMainMenu({ source: 'first', projectId: 'project_valid_2' }),
+    openWorkspaceDashboardAndMainMenu({ source: 'second', projectId: 'project_valid_2' })
+]);
+
+assert.deepEqual(
+    firstConcurrent,
+    { ok: true, active: true, source: 'first' },
+    'first concurrent workspace open owns the in-flight dashboard request'
+);
+assert.deepEqual(
+    secondConcurrent,
+    firstConcurrent,
+    'second concurrent workspace open for the same project must reuse the in-flight request'
+);
+assert.equal(
+    calls.filter((entry) => entry.name === 'loadProjectAtomes').length,
+    1,
+    'workspace opener must not double-load a project while the same dashboard open is in flight'
+);
+assert.equal(
+    calls.filter((entry) => entry.name === 'showFully').length,
+    1,
+    'workspace opener must not double-settle the menu while the same dashboard open is in flight'
+);
+assert.equal(
+    calls.filter((entry) => entry.name === 'dashboardOpen').length,
+    1,
+    'workspace opener must not open duplicate dashboards for the same project'
+);
+
 console.log('user_workspace_surface_runtime_contract.test: PASS');

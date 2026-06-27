@@ -15,6 +15,7 @@ import {
 import {
     ensureRenderSurface,
     getRenderSurfaceState,
+    setRenderSurfaceInteractionInterceptor,
     updateRenderSurfaceScene
 } from '../../eVe/domains/rendering/surface_runtime.js';
 import {
@@ -35,6 +36,16 @@ test('RenderAtom normalization keeps render data disposable and cacheable', () =
     const image = normalizeRenderAtom(makeRecord('image_a', 'image', 2));
     const video = normalizeRenderAtom(makeRecord('video_a', 'video', 3));
     const audio = normalizeRenderAtom(makeRecord('audio_a', 'audio_recording', 4));
+    const droppedSound = normalizeRenderAtom({
+        ...makeRecord('sound_a', 'shape', 5),
+        properties: {
+            ...makeRecord('sound_a', 'shape', 5).properties,
+            kind: 'sound',
+            media_kind: 'sound',
+            media_url: '/media/sound_a.m4a',
+            mime_type: 'audio/mp4'
+        }
+    });
     const svg = normalizeRenderAtom({
         ...makeRecord('svg_a', 'shape', 5),
         properties: {
@@ -48,6 +59,7 @@ test('RenderAtom normalization keeps render data disposable and cacheable', () =
     assert.equal(image.type, 'image');
     assert.equal(video.type, 'video');
     assert.equal(audio.type, 'audio_waveform');
+    assert.equal(droppedSound.type, 'audio_waveform');
     assert.equal(svg.type, 'image');
     assert.equal(text.capabilities.editable, true);
     assert.equal(video.capabilities.playable, true);
@@ -164,7 +176,7 @@ test('Rendering surfaces and text bridge stay bounded', () => {
     assert.equal(document.querySelectorAll('canvas.eve-render-surface').length, 2);
     assert.equal(listenerCount, 8);
     assert.equal(getRenderSurfaceState(projectSurface).scene.atoms.length, 100);
-    assert.equal(getRenderSurfaceState(projectSurface).listenerCount, 4);
+    assert.equal(getRenderSurfaceState(projectSurface).listenerCount, 6);
 
     const rootA = ensureHiddenTextServiceRoot(document);
     const rootB = ensureHiddenTextServiceRoot(document);
@@ -175,6 +187,40 @@ test('Rendering surfaces and text bridge stay bounded', () => {
     assert.equal(getTextServiceState().activeEditorCount, 1);
     unmountActiveTextEditor();
     assert.equal(getTextServiceState().activeEditorCount, 0);
+});
+
+test('Project view overlay routes Bevy surface interception without DOM dashboard proxies', () => {
+    const dom = new JSDOM('<!doctype html><html><body><main id="project"></main><div id="view"><div id="project_view_project_alpha" data-layer-role="project_view"></div></div></body></html>');
+    globalThis.document = dom.window.document;
+    globalThis.window = dom.window;
+    const rect = { left: 0, top: 0, width: 320, height: 180, right: 320, bottom: 180 };
+    const projectHost = document.getElementById('project');
+    const projectLayer = document.getElementById('project_view_project_alpha');
+    projectHost.getBoundingClientRect = () => rect;
+    projectLayer.getBoundingClientRect = () => rect;
+    const projectSurface = ensureRenderSurface({ zone: 'project', host: projectHost });
+    projectSurface.getBoundingClientRect = () => rect;
+    updateRenderSurfaceScene(projectSurface, createRenderScene([], { id: 'project_alpha' }));
+    document.elementFromPoint = () => projectLayer;
+
+    const calls = [];
+    setRenderSurfaceInteractionInterceptor('project', ({ phase, point }) => {
+        calls.push({ phase, point });
+        return { handled: true };
+    });
+    const event = new dom.window.MouseEvent('pointerdown', {
+        bubbles: true,
+        cancelable: true,
+        clientX: 42,
+        clientY: 55
+    });
+    projectLayer.dispatchEvent(event);
+    setRenderSurfaceInteractionInterceptor('project', null);
+
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].phase, 'pointerdown');
+    assert.deepEqual(calls[0].point, { x: 42, y: 55 });
+    assert.equal(event.defaultPrevented, true);
 });
 
 test('Text bridge keeps one hidden root, commits through canonical mutation, and cancels without mutation', async () => {
