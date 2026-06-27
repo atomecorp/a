@@ -94,6 +94,22 @@ assert.equal(loginVisibleEventCount, 1, 'login choice must publish a readiness e
 assert.deepEqual(menuUpdates.at(-1)?.toolbox?.children, [], 'disconnected boot must keep toolbox content empty before workspace');
 assert.equal(menuHiddenCount, 1, 'disconnected boot must hide the main menu before the user enters a workspace');
 
+const visibleProjectLayer = document.createElement('div');
+visibleProjectLayer.id = 'project_view_visible_project';
+visibleProjectLayer.getBoundingClientRect = () => ({ x: 0, y: 0, width: 1200, height: 800 });
+const visibleProjectCanvas = document.createElement('canvas');
+visibleProjectCanvas.id = 'eve_surface_project';
+visibleProjectCanvas.getBoundingClientRect = () => ({ x: 0, y: 0, width: 1200, height: 800 });
+visibleProjectLayer.appendChild(visibleProjectCanvas);
+document.body.appendChild(visibleProjectLayer);
+window.__currentProject = { id: 'visible_project' };
+assert.equal(
+    runtime.isWorkspaceActiveForMainMenu(),
+    true,
+    'a visible current project surface must be treated as an active workspace even before auth state catches up'
+);
+visibleProjectLayer.remove();
+
 const workspaceOpenCalls = [];
 window.__eveWorkspaceWarmupsStarted = false;
 delete window.__currentProject;

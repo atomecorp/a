@@ -128,10 +128,11 @@ test('Project scene record updates preserve bounded DOM and avoid HTMLElement re
     assert.equal(getProjectSceneState('project_scene_b').scene.atoms.length, 2);
 });
 
-test('Late project renders preserve Molecule overlays but never dashboard records', async () => {
+test('Late project renders preserve Molecule overlays and active same-project dashboard records only', async () => {
     clearAllProjectScenes();
     const dom = projectDom();
     const host = dom.window.document.getElementById('project');
+    const previousDashboardRuntime = dom.window.eveDashboardRuntime;
     await renderProjectScene({
         projectId: 'project_ephemeral_overlay',
         records: [makeRecord('project_atom', 'shape', 1)],
@@ -164,6 +165,25 @@ test('Late project renders preserve Molecule overlays but never dashboard record
     assert.equal(ids.has('project_atom'), true);
     assert.equal(ids.has('__eve_dashboard_background'), false);
     assert.equal(ids.has('mol:playhead'), true);
+    dom.window.eveDashboardRuntime = { state: { active: true, projectId: 'project_ephemeral_overlay' } };
+    await updateProjectSceneRecords({
+        projectId: 'project_ephemeral_overlay',
+        records: [{
+            id: '__eve_dashboard_background',
+            type: 'shape',
+            properties: { left: 0, top: 0, width: 320, height: 180, color: '#111111' }
+        }]
+    });
+    await renderProjectScene({
+        projectId: 'project_ephemeral_overlay',
+        records: [makeRecord('project_atom', 'shape', 3)],
+        host,
+        preserveEphemeralRecords: true
+    });
+    const activeIds = new Set(getProjectSceneState('project_ephemeral_overlay').records.map((record) => record.id));
+    assert.equal(activeIds.has('__eve_dashboard_background'), true);
+    if (previousDashboardRuntime === undefined) delete dom.window.eveDashboardRuntime;
+    else dom.window.eveDashboardRuntime = previousDashboardRuntime;
 });
 
 test('Dashboard prefix reconciliation removes orphan records from runtime and Bevy projection', async () => {

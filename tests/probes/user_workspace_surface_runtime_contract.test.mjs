@@ -162,4 +162,27 @@ assert.equal(
     'workspace opener must not open duplicate dashboards for the same project'
 );
 
+calls.length = 0;
+window.eveDashboardRuntime.open = async (payload = {}) => {
+    calls.push({ name: 'dashboardOpen', ...payload });
+    sceneRecordsByProject.set(payload.projectId, [{ id: '__eve_dashboard_background', properties: {} }]);
+    return { ok: true, active: true };
+};
+window.AdoleAPI = { projects: { getCurrentId: () => 'project_from_api' } };
+const apiResolved = await openWorkspaceDashboardAndMainMenu({ source: 'boot_workspace' });
+assert.deepEqual(apiResolved, { ok: true, active: true }, 'workspace opener must resolve the current project from the product API when no explicit id is supplied');
+assert.deepEqual(
+    calls.map((entry) => entry.name),
+    ['loadProjectAtomes', 'dashboardWarmup', 'showFully', 'dashboardOpen'],
+    'workspace opener must use the canonical load/menu/dashboard path for API-resolved boot opens'
+);
+assert.equal(calls[0].projectId, 'project_from_api', 'workspace opener must load the project resolved from AdoleAPI');
+assert.equal(calls[1].projectId, 'project_from_api', 'workspace opener must warm the API-resolved dashboard project before opening');
+assert.deepEqual(
+    calls[3],
+    { name: 'dashboardOpen', source: 'boot_workspace', projectId: 'project_from_api' },
+    'workspace opener must pass the API-resolved project id to dashboard boot open'
+);
+delete window.AdoleAPI;
+
 console.log('user_workspace_surface_runtime_contract.test: PASS');
