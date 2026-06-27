@@ -40,6 +40,7 @@ const createReport = () => ({
     console: [],
     pageErrors: [],
     requestFailures: [],
+    ignoredRequestFailures: [],
     projects: [],
     progress: []
 });
@@ -57,6 +58,82 @@ const markProgress = (report, phase, extra = {}) => {
     writeReport(report);
 };
 
+const assertDashboardFocusedColors = async (page, categoryId) => page.evaluate(async (id) => {
+    const { DASHBOARD_VISUAL_TOKENS } = await import('/eVe/domains/dashboard/dashboard_tokens.js');
+    const projectId = window.__currentProject?.id || window.AdoleAPI?.projects?.getCurrentId?.() || null;
+    const scene = projectId ? window.eveToolBase?.getProjectSceneState?.(projectId) : null;
+    const records = Array.isArray(scene?.records) ? scene.records : [];
+    const state = window.eveDashboardRuntime?.state || {};
+    const category = (state.categories || []).find((entry) => String(entry.id) === String(id));
+    const activeColor = category?.color || '';
+    const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
+    const shadeHex = (hex, percent) => {
+        const value = String(hex || '#000000').replace('#', '');
+        const amount = Math.round(2.55 * percent);
+        const red = clamp(Number.parseInt(value.slice(0, 2), 16) + amount, 0, 255);
+        const green = clamp(Number.parseInt(value.slice(2, 4), 16) + amount, 0, 255);
+        const blue = clamp(Number.parseInt(value.slice(4, 6), 16) + amount, 0, 255);
+        return `#${[red, green, blue].map((part) => Math.round(part).toString(16).padStart(2, '0')).join('')}`;
+    };
+    const byId = new Map(records.map((record) => [String(record.id || ''), record]));
+    const readColor = (suffix) => byId.get(`__eve_dashboard_${suffix}`)?.properties?.color || '';
+    const failures = [];
+    const expect = (name, actual, expected) => {
+        if (String(actual).toLowerCase() !== String(expected).toLowerCase()) failures.push({ name, actual, expected });
+    };
+    expect('background', readColor('background'), activeColor);
+    expect('table', readColor('table'), activeColor);
+    expect('plus_strip_active', readColor('plus_strip_active'), activeColor);
+    for (const lane of state.layout?.lanes || []) {
+        const laneId = String(lane.category?.id || '');
+        expect(`lane_${laneId}`, readColor(`lane_${laneId}`), activeColor);
+        expect(
+            `header_bg_${laneId}`,
+            readColor(`header_bg_${laneId}`),
+            laneId === id ? activeColor : shadeHex(activeColor, -18)
+        );
+    }
+    const cardShade = shadeHex(activeColor, -26);
+    const isVisible = (record) => record?.properties?.visible !== false && Number(record?.properties?.opacity ?? 1) > 0;
+    const cards = records.filter((record) => (
+        record.type === 'shape'
+        && String(record.id || '').startsWith('__eve_dashboard_card_')
+        && isVisible(record)
+    ));
+    for (const card of cards) expect(card.id, card.properties?.color, cardShade);
+    return {
+        ok: !!activeColor && failures.length === 0,
+        activeColor,
+        cardShade,
+        cardCount: cards.length,
+        failures,
+        tokenBackground: DASHBOARD_VISUAL_TOKENS.background
+    };
+}, categoryId);
+
+const assertDashboardOverviewColors = async (page) => page.evaluate(async () => {
+    const { DASHBOARD_VISUAL_TOKENS } = await import('/eVe/domains/dashboard/dashboard_tokens.js');
+    const projectId = window.__currentProject?.id || window.AdoleAPI?.projects?.getCurrentId?.() || null;
+    const scene = projectId ? window.eveToolBase?.getProjectSceneState?.(projectId) : null;
+    const records = Array.isArray(scene?.records) ? scene.records : [];
+    const state = window.eveDashboardRuntime?.state || {};
+    const byId = new Map(records.map((record) => [String(record.id || ''), record]));
+    const readColor = (suffix) => byId.get(`__eve_dashboard_${suffix}`)?.properties?.color || '';
+    const failures = [];
+    const expect = (name, actual, expected) => {
+        if (String(actual).toLowerCase() !== String(expected).toLowerCase()) failures.push({ name, actual, expected });
+    };
+    expect('background', readColor('background'), DASHBOARD_VISUAL_TOKENS.background);
+    expect('table', readColor('table'), DASHBOARD_VISUAL_TOKENS.table);
+    for (const lane of state.layout?.lanes || []) {
+        const laneId = String(lane.category?.id || '');
+        const laneColor = lane.category?.color || '';
+        expect(`lane_${laneId}`, readColor(`lane_${laneId}`), laneColor);
+        expect(`header_bg_${laneId}`, readColor(`header_bg_${laneId}`), laneColor);
+    }
+    return { ok: failures.length === 0 && !state.activeCategoryId, failures };
+});
+
 const attachPageDiagnostics = (page, report) => {
     page.on('console', (message) => { if (message.type() === 'error') report.console.push(message.text()); });
     page.on('pageerror', (error) => {
@@ -64,9 +141,14 @@ const attachPageDiagnostics = (page, report) => {
         if (!/^unreachable$/i.test(message)) report.pageErrors.push(message);
     });
     page.on('requestfailed', (request) => {
-        if (!/favicon|apple-touch-icon/i.test(request.url())) {
-            report.requestFailures.push({ url: request.url(), failure: request.failure()?.errorText || '' });
+        const url = request.url();
+        const failure = request.failure()?.errorText || '';
+        if (/favicon|apple-touch-icon/i.test(url)) return;
+        if (failure === 'net::ERR_ABORTED' && (/^blob:/i.test(url) || /\/api\/uploads\/recorded_\d+\.webm/i.test(url))) {
+            report.ignoredRequestFailures.push({ url, failure, reason: 'media_source_replaced_or_context_closed' });
+            return;
         }
+        report.requestFailures.push({ url, failure });
     });
 };
 
@@ -143,13 +225,24 @@ const exerciseDashboardHeaders = async (page, report) => {
         const activated = await waitFor(page, (id) => ({ ok: window.eveDashboardRuntime?.state?.activeCategoryId === id }), 15000, 50, categoryId);
         if (!activated.ok) throw new Error(`dashboard_header_activate_failed:${categoryId}:${JSON.stringify({ last: activated.last, clickTarget })}`);
         const after = await page.evaluate(() => performance.now());
+        const colorProjection = await assertDashboardFocusedColors(page, categoryId);
+        if (!colorProjection.ok) throw new Error(`dashboard_focused_color_projection_failed:${categoryId}:${JSON.stringify(colorProjection)}`);
         headerTimes.push(after - before);
         markProgress(report, 'dashboard:headers:click:done', { index: index + 1, categoryId, ms: Math.round((after - before) * 10) / 10, clickTarget });
     }
     const sortedHeaders = headerTimes.slice().sort((a, b) => a - b);
     const p95 = sortedHeaders[Math.floor((sortedHeaders.length - 1) * 0.95)];
     if (p95 > 100) throw new Error(`dashboard_header_p95_too_slow:${Math.round(p95 * 10) / 10}`);
+    const current = await dashboardSnapshot(page);
+    const activeLane = current.layout?.lanes?.find((entry) => entry.categoryId === current.activeCategoryId);
+    await clickCanvasRect(page, activeLane?.header_rect);
+    const restored = await waitFor(page, () => ({ ok: window.eveDashboardRuntime?.state?.activeCategoryId === '' }), 15000, 50);
+    if (!restored.ok) throw new Error(`dashboard_overview_restore_failed:${JSON.stringify(restored.last)}`);
+    await waitFrames(page, 3);
+    const overviewColors = await assertDashboardOverviewColors(page);
+    if (!overviewColors.ok) throw new Error(`dashboard_overview_color_restore_failed:${JSON.stringify(overviewColors)}`);
     report.checks.push({ name: 'dashboard_header_clicks_fast', ok: true, p95Ms: Math.round(p95 * 10) / 10 });
+    report.checks.push({ name: 'dashboard_focus_color_projection', ok: true, overviewColors });
 };
 
 const switchProjectFromDashboard = async (page, report) => {

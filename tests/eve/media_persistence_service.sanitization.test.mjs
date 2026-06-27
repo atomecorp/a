@@ -131,12 +131,26 @@ assertNoEnvelopeOrAliasProps(commits[0].props);
 assert.equal(commits[0].props.media_user_id, 'user_a');
 assert.equal(commits[0].props.media_kind, 'video');
 assert.equal(commits[0].props.storage_root, 'recordings');
+assert.equal(commits[0].props.media_width, 320);
+assert.equal(commits[0].props.mediaWidth, 320);
+assert.equal(commits[0].props.media_height, 180);
+assert.equal(commits[0].props.mediaHeight, 180);
+assert.equal(commits[0].props.natural_width, 320);
+assert.equal(commits[0].props.naturalWidth, 320);
+assert.equal(commits[0].props.natural_height, 180);
+assert.equal(commits[0].props.naturalHeight, 180);
+assert.equal(commits[0].props.source_width, 320);
+assert.equal(commits[0].props.sourceWidth, 320);
+assert.equal(commits[0].props.source_height, 180);
+assert.equal(commits[0].props.sourceHeight, 180);
 assert.match(commits[0].props.visual_ref, /^thumbnail:/);
 assert.match(commits[0].props.thumbnail_ref, /^thumbnail:/);
 assert.equal(commits[0].props.visual_status, 'pending');
 assert.equal(latestSceneAtom().id, result.atomeId);
 assert.equal(latestSceneAtom().type, 'video');
 assert.match(latestSceneAtom().content.source, /\/api\/recordings\/video_1779220000000\.webm/);
+assert.equal(latestSceneAtom().content.naturalWidth, 320);
+assert.equal(latestSceneAtom().content.naturalHeight, 180);
 
 commits.length = 0;
 

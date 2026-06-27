@@ -1368,7 +1368,7 @@ Entry point families:
 - Video recording atome creation must persist owner metadata (`owner_id` / `media_user_id`) and resolve `/api/recordings/:file` URLs with that owner before the first browser media request.
 - Existing recording Atome reuse is still effectful: the media persistence API must issue the canonical Atome `set` commit with the active `project_id` before rendering so `AdoleAPI.atomes.list({ projectId })`, `state_current`, and project scene reload agree.
 - Client Atome projection APIs must preserve `meta.project_id` from `state_current`; dropping it makes persisted media look projectless after refresh.
-- Media persistence must preserve lightweight render cache fields that are part of the media Atome contract, including video poster data/refs and waveform peaks/refs, so project reload can reuse generated visuals without expensive regeneration. These fields are cache inputs for RenderAtom/Bevy, not a public GPU texture persistence API.
+- Media persistence must preserve lightweight render cache fields that are part of the media Atome contract, including video poster data/refs, waveform peaks/refs, and explicit image/video natural size aliases (`media_width`/`media_height`, `naturalWidth`/`naturalHeight`, `sourceWidth`/`sourceHeight`) when the upload/recording result provides them, so project reload can reuse generated visuals without expensive regeneration or Bevy video metadata stalls. These fields are cache inputs for RenderAtom/Bevy, not a public GPU texture persistence API.
 - Audio API and video API product facades.
 - `VideoRecordingAPI` and `VideoPlaybackAPI` from `video_facade.js`.
 - Media persistence service exports.

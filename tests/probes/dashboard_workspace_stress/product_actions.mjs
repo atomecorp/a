@@ -1,4 +1,4 @@
-import { sceneSnapshot, waitFor } from './support.mjs';
+import { sceneSnapshot, sleep, waitFor } from './support.mjs';
 
 export const ensureProject = async (page, name) => page.evaluate(async (projectName) => {
     const loadProjectWithTimeout = (projectId, options = {}, timeoutMs = 20000) => Promise.race([
@@ -110,17 +110,49 @@ const readCanonicalIds = (page, projectId) => page.evaluate(async (pid) => {
     };
 }, projectId);
 
-const assertExpectedMediaKinds = (project, snapshot) => {
+const invalidExpectedMediaKinds = (project, snapshot) => {
     const expected = [
         [project.mediaIds?.[0], 'image'],
         [project.mediaIds?.[1], 'audio_waveform'],
         [project.mediaIds?.[2], 'video']
     ].filter(([id]) => !!id);
     const kinds = new Map(snapshot.nodeKinds.map((entry) => [entry.id, entry.kind]));
-    const invalid = expected
+    return expected
         .map(([id, kind]) => ({ id, expected: kind, actual: kinds.get(id) || null }))
         .filter((entry) => entry.actual !== entry.expected);
-    if (invalid.length) throw new Error(`project_media_kind_mismatch:${project.id}:${JSON.stringify(invalid)}`);
+};
+
+const waitForProjectedSceneReady = async (page, project, expectedIds) => {
+    const startedAt = Date.now();
+    let last = null;
+    while (Date.now() - startedAt < 60000) {
+        const snapshot = await sceneSnapshot(page, project.id);
+        const missing = Array.from(expectedIds).filter((id) => !snapshot.recordIds.includes(id));
+        const extra = snapshot.recordIds.filter((id) => id && !expectedIds.has(id) && !id.startsWith('__eve_dashboard_'));
+        const skipped = snapshot.bevySkipped.filter((entry) => expectedIds.has(entry.id));
+        const invalidKinds = invalidExpectedMediaKinds(project, snapshot);
+        last = { snapshot, missing, extra, skipped, invalidKinds };
+        if (
+            missing.length === 0
+            && extra.length === 0
+            && skipped.length === 0
+            && invalidKinds.length === 0
+            && snapshot.dashboardVisibleIds.length === 0
+            && snapshot.canvasCount === 1
+            && snapshot.atomeDomCount === 0
+        ) {
+            return snapshot;
+        }
+        await sleep(500);
+    }
+    if (last?.missing?.length) throw new Error(`project_scene_missing_ids:${project.id}:${last.missing.join(',')}`);
+    if (last?.extra?.length) throw new Error(`project_scene_extra_ids:${project.id}:${last.extra.join(',')}`);
+    if (last?.snapshot?.dashboardVisibleIds?.length) throw new Error(`dashboard_visible_in_closed_project:${project.id}:${last.snapshot.dashboardVisibleIds.join(',')}`);
+    if (last?.snapshot?.canvasCount !== 1) throw new Error(`project_canvas_count_invalid:${last?.snapshot?.canvasCount}`);
+    if (last?.snapshot?.atomeDomCount !== 0) throw new Error(`project_atome_dom_hosts_present:${last?.snapshot?.atomeDomCount}`);
+    if (last?.skipped?.length) throw new Error(`media_nodes_skipped:${project.id}:${JSON.stringify(last.skipped)}`);
+    if (last?.invalidKinds?.length) throw new Error(`project_media_kind_mismatch:${project.id}:${JSON.stringify(last.invalidKinds)}`);
+    throw new Error(`project_scene_not_ready:${project.id}:${JSON.stringify(last)}`);
 };
 
 export const assertProjectLoaded = async (page, project) => {
@@ -141,17 +173,7 @@ export const assertProjectLoaded = async (page, project) => {
     const canonicalMissing = Array.from(expectedIds).filter((id) => !canonical.ids.includes(id));
     if (canonicalMissing.length) throw new Error(`project_canonical_missing_ids:${project.id}:${canonicalMissing.join(',')}`);
 
-    const snapshot = await sceneSnapshot(page, project.id);
-    const missing = Array.from(expectedIds).filter((id) => !snapshot.recordIds.includes(id));
-    if (missing.length) throw new Error(`project_scene_missing_ids:${project.id}:${missing.join(',')}`);
-    const extra = snapshot.recordIds.filter((id) => id && !expectedIds.has(id) && !id.startsWith('__eve_dashboard_'));
-    if (extra.length) throw new Error(`project_scene_extra_ids:${project.id}:${extra.join(',')}`);
-    if (snapshot.dashboardVisibleIds.length) throw new Error(`dashboard_visible_in_closed_project:${project.id}:${snapshot.dashboardVisibleIds.join(',')}`);
-    if (snapshot.canvasCount !== 1) throw new Error(`project_canvas_count_invalid:${snapshot.canvasCount}`);
-    if (snapshot.atomeDomCount !== 0) throw new Error(`project_atome_dom_hosts_present:${snapshot.atomeDomCount}`);
-    const skipped = snapshot.bevySkipped.filter((entry) => expectedIds.has(entry.id));
-    if (skipped.length) throw new Error(`media_nodes_skipped:${project.id}:${JSON.stringify(skipped)}`);
-    assertExpectedMediaKinds(project, snapshot);
+    const snapshot = await waitForProjectedSceneReady(page, project, expectedIds);
     return { ...snapshot, canonicalCount: canonical.count };
 };
 
