@@ -47,7 +47,7 @@ async function pathExists(filePath) {
     await fs.access(filePath);
     return true;
   } catch (error) {
-        console.warn("[cleanup] operation failed", error);
+    if (error?.code !== 'ENOENT') throw error;
     return false;
   }
 }

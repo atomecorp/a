@@ -106,6 +106,22 @@ assert.deepEqual(
 );
 
 calls.length = 0;
+const bootWarmup = await openWorkspaceDashboardAndMainMenu({
+    source: 'boot_workspace',
+    projectId: 'project_valid'
+});
+assert.deepEqual(
+    bootWarmup,
+    { ok: true, active: false, warmed: true, projectId: 'project_valid' },
+    'workspace boot must warm the surface/menu without reopening the dashboard'
+);
+assert.deepEqual(
+    calls.map((entry) => entry.name),
+    ['showFully'],
+    'workspace boot must not project dashboard records after a refresh or resize boot signal'
+);
+
+calls.length = 0;
 window.eveDashboardRuntime.state = { warmedProjectId: 'project_valid' };
 window.eveDashboardRuntime.warmup = async (payload = {}) => {
     calls.push({ name: 'dashboardWarmup', ...payload });

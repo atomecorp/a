@@ -220,11 +220,11 @@ const exerciseDashboardHeaders = async (page, report) => {
     for (let index = 0; index < sequence.length; index += 1) {
         const categoryId = sequence[index];
         markProgress(report, 'dashboard:headers:click:start', { index: index + 1, categoryId });
-        const before = await page.evaluate(() => performance.now());
         const snap = await dashboardSnapshot(page);
         const lane = snap.layout?.lanes?.find((entry) => entry.categoryId === categoryId);
+        const before = await page.evaluate(() => performance.now());
         const clickTarget = await clickCanvasRect(page, lane?.header_rect);
-        const activated = await waitFor(page, (id) => ({ ok: window.eveDashboardRuntime?.state?.activeCategoryId === id }), 15000, 50, categoryId);
+        const activated = await waitFor(page, (id) => ({ ok: window.eveDashboardRuntime?.state?.activeCategoryId === id }), 15000, 16, categoryId);
         if (!activated.ok) throw new Error(`dashboard_header_activate_failed:${categoryId}:${JSON.stringify({ last: activated.last, clickTarget })}`);
         const after = await page.evaluate(() => performance.now());
         const colorProjection = await assertDashboardFocusedColors(page, categoryId);

@@ -66,6 +66,7 @@ tests/eve/*
 !tests/eve/media_persistence_service.sanitization.test.mjs
 !tests/eve/mtrax_project_duplication.sanitization.test.mjs
 !tests/eve/project_layer_visibility_contract.test.mjs
+!tests/eve/render_surface_size_contract.test.mjs
 !tests/eve/selection.sanitization.test.mjs
 !tests/eve/copy_clipboard.sanitization.test.mjs
 !tests/eve/adole_commit_boundary.test.mjs

@@ -22,7 +22,7 @@ Per-file method (do in order; check the box ONLY after the file is ≤500 lines 
 5. **Maps** — update `maps/*` when ownership/API/structure changes.
 6. **Check the box** with evidence: `before→after` line count + which validations passed.
 
-Progress = checked boxes / **49 files** (Tier 1 eVe 29 · Tier 2 Squirrel 20; `eVe/R&D/ATG.js` excluded 2026-06-22). **Done so far: 40/49.**
+Progress = checked boxes / **49 files** (Tier 1 eVe 29 · Tier 2 Squirrel 20; `eVe/R&D/ATG.js` excluded 2026-06-22). **Done so far: 41/49.** Remaining 4 (all Tier-1, all need a cycle-breaking/god-function redesign + a non-boot interaction probe): `project_drop.js` 3060, `tool_runtime.js` 2672, `atome_commit.js` 2203, `video_api.js` 1884.
 
 ### Excluded from this cleanup (do NOT touch)
 - **The entire `atome/src/application/` folder is EXCLUDED** (product-owner decision 2026-06-20): all `examples/`, `demos`, and the `lyrix`/`jeezs`/`aBox` sub-apps (35 files) are out of scope.

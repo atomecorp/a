@@ -40,7 +40,7 @@ export async function ensureUserHome(projectRoot, user, rootOverride) {
   try {
     await fs.access(welcomePath);
   } catch (error) {
-        console.warn("[cleanup] operation failed", error);
+    if (error?.code !== 'ENOENT') throw error;
     const text = [
       `Welcome ${label}`,
       `User ID: ${user?.user_id || user?.id || 'unknown'}`,
