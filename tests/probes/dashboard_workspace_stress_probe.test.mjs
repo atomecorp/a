@@ -12,6 +12,7 @@ import {
     dashboardSnapshot,
     enterGuestWorkspace,
     nowId,
+    sceneSnapshot,
     screenshot,
     waitFor,
     waitFrames,
@@ -155,14 +156,15 @@ const attachPageDiagnostics = (page, report) => {
 const createStressProjects = async (page, report, prefix) => {
     for (let index = 0; index < PROJECT_COUNT; index += 1) {
         markProgress(report, 'project:create:start', { index: index + 1 });
-        const project = await ensureProject(page, `${prefix} project ${index + 1}`);
+        const atomeOnly = index === 0;
+        const project = await ensureProject(page, `${prefix} ${atomeOnly ? 'atome-only' : 'media'} project ${index + 1}`);
         if (!project.ok) throw new Error(`project_create_failed:${JSON.stringify(project)}`);
         const basic = await createBasicAtomes(page, project.id, prefix, index);
-        const media = await importProjectMedia(page, project.id, index, MEDIA_FIXTURES);
+        const media = atomeOnly ? { ok: true, results: [] } : await importProjectMedia(page, project.id, index, MEDIA_FIXTURES);
         if (!media?.ok) throw new Error(`project_media_import_failed:${project.id}:${JSON.stringify(media)}`);
         const mediaIds = (media.results || []).map((entry) => entry.atomeId).filter(Boolean);
         const expectedIds = [...basic.ids, ...mediaIds];
-        const entry = { ...project, expectedIds, mediaIds };
+        const entry = { ...project, expectedIds, mediaIds, atomeOnly };
         report.projects.push(entry);
         report.checks.push({ name: `project_${index + 1}_created`, ok: true, project: entry });
         markProgress(report, 'project:create:loaded', { index: index + 1, projectId: project.id });
@@ -245,11 +247,85 @@ const exerciseDashboardHeaders = async (page, report) => {
     report.checks.push({ name: 'dashboard_focus_color_projection', ok: true, overviewColors });
 };
 
-const switchProjectFromDashboard = async (page, report) => {
+const assertDashboardReopensAfterProjectSwitch = async (page, report, project) => {
+    const closedSnap = await dashboardSnapshot(page);
+    if (closedSnap.active) throw new Error(`dashboard_still_active_after_project_switch:${JSON.stringify(closedSnap)}`);
+    if (closedSnap.visibleDashboardIds.length) throw new Error(`dashboard_records_visible_before_reopen:${closedSnap.visibleDashboardIds.join(',')}`);
+    if (closedSnap.projectId !== project.id) throw new Error(`current_project_after_switch_mismatch:${closedSnap.projectId}:${project.id}`);
+    if (closedSnap.runtimeProjectId && closedSnap.runtimeProjectId !== project.id) {
+        throw new Error(`dashboard_runtime_project_stale_after_switch:${closedSnap.runtimeProjectId}:${project.id}`);
+    }
+
+    const beforeResize = await sceneSnapshot(page, project.id);
+    if (beforeResize.foregroundProjectId !== project.id || beforeResize.surfaceOwnerProjectId !== project.id) {
+        throw new Error(`project_scene_owner_mismatch_after_switch:${JSON.stringify(beforeResize)}`);
+    }
+
+    await page.setViewportSize({ width: 1280, height: 860 });
+    let resized = null;
+    const startedAt = Date.now();
+    while (Date.now() - startedAt < 15000) {
+        await waitFrames(page, 3);
+        resized = await sceneSnapshot(page, project.id);
+        const expectedPresent = project.expectedIds.every((id) => resized.recordIds.includes(id) && resized.virtualIds.includes(id));
+        const sizeChanged = resized.canvasSize
+            && beforeResize.canvasSize
+            && (
+                resized.canvasSize.cssWidth !== beforeResize.canvasSize.cssWidth
+                || resized.canvasSize.cssHeight !== beforeResize.canvasSize.cssHeight
+                || resized.canvasSize.pixelWidth !== beforeResize.canvasSize.pixelWidth
+                || resized.canvasSize.pixelHeight !== beforeResize.canvasSize.pixelHeight
+            );
+        if (sizeChanged && expectedPresent && resized.dashboardVisibleIds.length === 0) break;
+        resized = null;
+    }
+    if (!resized) throw new Error(`project_resize_after_dashboard_switch_failed:${JSON.stringify(await sceneSnapshot(page, project.id))}`);
+
+    await page.setViewportSize({ width: 1440, height: 920 });
+    await waitFrames(page, 6);
+    await clickMainHandle(page);
+    const reopened = await waitFor(page, (projectId) => {
+        const currentProjectId = window.__currentProject?.id || window.AdoleAPI?.projects?.getCurrentId?.() || null;
+        const runtime = window.eveDashboardRuntime || null;
+        const state = runtime?.state || {};
+        const scene = currentProjectId ? window.eveToolBase?.getProjectSceneState?.(currentProjectId) : null;
+        const visible = (scene?.records || [])
+            .filter((record) => String(record?.id || '').startsWith('__eve_dashboard_'))
+            .filter((record) => record?.properties?.visible !== false && Number(record?.properties?.opacity ?? 1) > 0)
+            .map((record) => record.id);
+        return {
+            ok: currentProjectId === projectId && state.active === true && state.projectId === projectId && visible.length > 0,
+            currentProjectId,
+            runtimeProjectId: state.projectId || '',
+            active: state.active === true,
+            visibleCount: visible.length
+        };
+    }, 20000, 50, project.id);
+    if (!reopened.ok) throw new Error(`dashboard_reopen_after_project_switch_failed:${JSON.stringify(reopened.last)}`);
+    const reopenShot = await screenshot(page, 'after_project_switch_dashboard_reopen');
+    await clickMainHandle(page);
+    const closedAgain = await waitFor(page, () => ({ ok: window.eveDashboardRuntime?.state?.active !== true }), 15000, 50);
+    if (!closedAgain.ok) throw new Error(`dashboard_close_after_reopen_failed:${JSON.stringify(closedAgain.last)}`);
+    await waitFrames(page, 8);
+    const finalClosed = await dashboardSnapshot(page);
+    if (finalClosed.visibleDashboardIds.length) throw new Error(`dashboard_records_visible_after_reopen_close:${finalClosed.visibleDashboardIds.join(',')}`);
+    report.checks.push({
+        name: 'dashboard_reopens_after_atome_project_switch',
+        ok: true,
+        projectId: project.id,
+        resizedCanvas: resized.canvasSize,
+        screenshot: reopenShot,
+        analysis: analyzeImage(reopenShot)
+    });
+};
+
+const switchProjectFromDashboard = async (page, report, preferredTarget = null) => {
     await page.evaluate(() => window.eveDashboardRuntime?.activateCategory?.('projects'));
     await waitFor(page, () => ({ ok: window.eveDashboardRuntime?.state?.activeCategoryId === 'projects' }), 15000, 50);
     const projectSnap = await dashboardSnapshot(page);
-    const target = report.projects.find((project) => project.id !== projectSnap.projectId);
+    const target = preferredTarget?.id !== projectSnap.projectId
+        ? preferredTarget
+        : report.projects.find((project) => project.id !== projectSnap.projectId);
     const card = await waitFor(page, (projectId) => {
         const lanes = window.eveDashboardRuntime?.state?.layout?.lanes || [];
         const item = lanes.flatMap((lane) => lane.visible_item_rects || [])
@@ -265,6 +341,7 @@ const switchProjectFromDashboard = async (page, report) => {
     await assertProjectLoaded(page, target);
     const switchShot = await screenshot(page, 'after_project_card_switch');
     report.checks.push({ name: 'dashboard_project_card_switches_project', ok: true, screenshot: switchShot, analysis: analyzeImage(switchShot) });
+    await assertDashboardReopensAfterProjectSwitch(page, report, target);
     return target;
 };
 
@@ -305,7 +382,8 @@ const run = async () => {
         markProgress(report, 'projects:create:start');
         await createStressProjects(page, report, prefix);
         markProgress(report, 'projects:create:done', { count: report.projects.length });
-        const activeProject = report.projects[0];
+        const activeProject = report.projects.find((project) => !project.atomeOnly) || report.projects[0];
+        const atomeOnlyProject = report.projects.find((project) => project.atomeOnly) || report.projects.find((project) => project.id !== activeProject.id);
         markProgress(report, 'active_project:set:start', { projectId: activeProject.id });
         await page.evaluate((project) => window.AdoleAPI.projects.setCurrent(project.id, project.name, null, true), activeProject);
         await assertProjectLoaded(page, activeProject);
@@ -327,7 +405,7 @@ const run = async () => {
         await exerciseDashboardHeaders(page, report);
         markProgress(report, 'dashboard:headers:done');
         markProgress(report, 'dashboard:project_switch:start');
-        const switchedProject = await switchProjectFromDashboard(page, report);
+        const switchedProject = await switchProjectFromDashboard(page, report, atomeOnlyProject);
         markProgress(report, 'dashboard:project_switch:done', { projectId: switchedProject.id });
         markProgress(report, 'dynamic_data:start', { projectId: switchedProject.id });
         await exerciseDynamicData(page, switchedProject.id, prefix);

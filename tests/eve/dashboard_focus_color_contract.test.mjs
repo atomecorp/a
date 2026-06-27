@@ -112,11 +112,10 @@ test('clicking the focused rubrique again restores overview state', async () => 
         state,
         data,
         loadCategories: async () => categories,
-        requestRender: () => {
+        render: () => {
             renderCount += 1;
             return { ok: true };
-        },
-        render: async () => {}
+        }
     });
 
     const result = await activator.activateCategory('contacts');

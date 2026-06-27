@@ -139,6 +139,7 @@ export const dashboardSnapshot = (page) => page.evaluate(() => {
         active: state.active === true,
         activeCategoryId: state.activeCategoryId || '',
         projectId,
+        runtimeProjectId: state.projectId || '',
         dashboardIds: dashboard.map((record) => record.id),
         visibleDashboardIds: visible.map((record) => record.id),
         layout,
@@ -148,14 +149,24 @@ export const dashboardSnapshot = (page) => page.evaluate(() => {
 
 export const sceneSnapshot = (page, projectId) => page.evaluate(async (id) => {
     const { readBevyWebRendererState } = await import('/eVe/domains/rendering/bevy_web_renderer_runtime.js');
+    const { sceneState } = await import('/eVe/domains/rendering/project_scene_state.js');
     const scene = window.eveToolBase?.getProjectSceneState?.(id) || null;
     const records = Array.isArray(scene?.records) ? scene.records : [];
     const canvas = document.getElementById('eve_surface_project');
+    const rect = canvas?.getBoundingClientRect?.() || null;
     const bevy = canvas ? readBevyWebRendererState(canvas) : null;
     const nodes = Array.isArray(bevy?.virtual_scene?.nodes) ? bevy.virtual_scene.nodes : [];
     return {
         ok: !!scene,
         projectId: id,
+        foregroundProjectId: sceneState?.foregroundProjectId || null,
+        surfaceOwnerProjectId: sceneState?.surfaceOwnerProjectId || null,
+        canvasSize: rect ? {
+            cssWidth: Number(rect.width || 0),
+            cssHeight: Number(rect.height || 0),
+            pixelWidth: Number(canvas?.width || 0),
+            pixelHeight: Number(canvas?.height || 0)
+        } : null,
         recordIds: records.map((record) => String(record.id || record.atome_id || '')),
         dashboardVisibleIds: records
             .filter((record) => String(record?.id || '').startsWith('__eve_dashboard_'))
