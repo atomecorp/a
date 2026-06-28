@@ -15,6 +15,8 @@ import {
     renderProjectScene
 } from '../../eVe/domains/rendering/project_scene_runtime.js';
 import {
+    mergeProjectSceneStackPosition,
+    readProjectSceneStackBounds,
     resolveProjectSceneNextStackPosition
 } from '../../eVe/domains/rendering/project_scene_stack_runtime.js';
 
@@ -111,6 +113,137 @@ test('Imported media stack position is above the current project scene records',
     assert.equal(stack.order, 101);
     assert.equal(hitTestRenderScene(scene, { x: 20, y: 20 })?.id, 'imported_media');
     clearProjectScene('import_stack_project');
+});
+
+test('Dashboard ephemeral records do not raise imported media above the project stack', async () => {
+    const dom = new JSDOM('<!doctype html><html><body><div id="project"></div></body></html>');
+    const host = dom.window.document.getElementById('project');
+    host.getBoundingClientRect = () => ({
+        left: 0,
+        top: 0,
+        width: 320,
+        height: 240,
+        right: 320,
+        bottom: 240
+    });
+    const wasmModule = {
+        default: async () => undefined,
+        run_atome_bevy_renderer: () => undefined
+    };
+
+    await renderProjectScene({
+        projectId: 'dashboard_stack_ignore_project',
+        records: [
+            record('existing_front', { type: 'image', zIndex: 7, order: 20 }),
+            record('__eve_dashboard_background', { zIndex: 800, order: 0 }),
+            record('__eve_dashboard_header', { zIndex: 813, order: 1 })
+        ],
+        host,
+        documentRef: dom.window.document,
+        bevyWasmModule: wasmModule
+    });
+
+    const bounds = readProjectSceneStackBounds('dashboard_stack_ignore_project');
+    const stack = resolveProjectSceneNextStackPosition('dashboard_stack_ignore_project');
+
+    assert.equal(bounds.maxProjectZIndex, 7);
+    assert.equal(bounds.maxProjectOrder, 20);
+    assert.equal(bounds.dashboardMinZIndex, 800);
+    assert.equal(bounds.dashboardMaxZIndex, 813);
+    assert.equal(stack.zIndex, 8);
+    assert.equal(stack.order, 21);
+    clearProjectScene('dashboard_stack_ignore_project');
+});
+
+test('New media stays below visible Dashboard records when the Dashboard band is adjacent', async () => {
+    const dom = new JSDOM('<!doctype html><html><body><div id="project"></div></body></html>');
+    const host = dom.window.document.getElementById('project');
+    host.getBoundingClientRect = () => ({
+        left: 0,
+        top: 0,
+        width: 320,
+        height: 240,
+        right: 320,
+        bottom: 240
+    });
+    const wasmModule = {
+        default: async () => undefined,
+        run_atome_bevy_renderer: () => undefined
+    };
+
+    await renderProjectScene({
+        projectId: 'dashboard_stack_cap_project',
+        records: [
+            record('existing_front', { type: 'image', zIndex: 797, order: 20 }),
+            record('__eve_dashboard_background', { zIndex: 798, order: 0 })
+        ],
+        host,
+        documentRef: dom.window.document,
+        bevyWasmModule: wasmModule
+    });
+
+    const stack = resolveProjectSceneNextStackPosition('dashboard_stack_cap_project');
+    const imported = record('imported_media', {
+        type: 'image',
+        zIndex: stack.zIndex,
+        order: stack.order
+    });
+    const scene = createRenderScene(normalizeRenderAtoms([
+        record('existing_front', { type: 'image', zIndex: 797, order: 20 }),
+        imported,
+        record('__eve_dashboard_background', { zIndex: 798, order: 0 })
+    ]));
+
+    assert.equal(stack.zIndex, 797);
+    assert.equal(stack.order, 21);
+    assert.equal(hitTestRenderScene(scene, { x: 20, y: 20 })?.id, '__eve_dashboard_background');
+    clearProjectScene('dashboard_stack_cap_project');
+});
+
+test('Repeated explicit media stack positions are clamped below visible Dashboard records', async () => {
+    const dom = new JSDOM('<!doctype html><html><body><div id="project"></div></body></html>');
+    const host = dom.window.document.getElementById('project');
+    host.getBoundingClientRect = () => ({
+        left: 0,
+        top: 0,
+        width: 320,
+        height: 240,
+        right: 320,
+        bottom: 240
+    });
+    const wasmModule = {
+        default: async () => undefined,
+        run_atome_bevy_renderer: () => undefined
+    };
+
+    await renderProjectScene({
+        projectId: 'dashboard_stack_repeated_project',
+        records: [
+            record('existing_front', { type: 'image', zIndex: 900, order: 30 }),
+            record('__eve_dashboard_background', { zIndex: 901, order: 0 })
+        ],
+        host,
+        documentRef: dom.window.document,
+        bevyWasmModule: wasmModule
+    });
+
+    const first = resolveProjectSceneNextStackPosition('dashboard_stack_repeated_project');
+    const second = mergeProjectSceneStackPosition('dashboard_stack_repeated_project', {
+        left: 12,
+        top: 14,
+        zIndex: first.zIndex + 1,
+        z_index: first.zIndex + 1,
+        order: first.order + 1,
+        render_order: first.order + 1,
+        renderOrder: first.order + 1
+    });
+
+    assert.equal(first.zIndex, 900);
+    assert.equal(first.order, 31);
+    assert.equal(second.zIndex, 900);
+    assert.equal(second.z_index, 900);
+    assert.equal(second.order, 32);
+    clearProjectScene('dashboard_stack_repeated_project');
 });
 
 test('RenderAtom keeps media natural dimensions out of project bounds', () => {

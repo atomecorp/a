@@ -92,7 +92,7 @@ Effect model:
 - `dashboard_data_adapters.js` exposes read-only `list(category, { projectId })` and `listMany(categories, { projectId })` for grouped category reads. `generic_record` categories share one explicit-project `state_current(projectId)` read and are split by `source_domain: "eve.dashboard"` plus `category_id`. Calendar lists only dated, non-deleted, unique `CalendarAPI.listEvents({ projectId })` items through `calendar_api.js` so dashboard reads do not initialize the Calendar panel DOM or depend on the implicit current project. Contacts list the canonical `collectPeopleDirectory()` entries first, then the local contacts API if the directory is empty.
 - `dashboard_actions.js` owns effectful dashboard interactions: no-op plus actions for News, Store, Monitor, and Goals; panel opening for Calendar and Contacts through the canonical eVe panel definitions; project creation/opening through shared Matrix project helpers. Focused-category item clicks use the item's real category, not the visual lane used to display it. Project item clicks close the dashboard and activate/load that project as the Bevy desktop.
 - `dashboard_runtime.js` delegates derived item cache and hydration to `dashboard_data_controller.js`, then projects only records whose visibility matches the current active state. Opening resolves an explicit `projectId` first, otherwise the real current project, and uses the previous runtime project only as fallback so a project-card switch cannot reopen the dashboard on a stale scene. Project-change lifecycle cancels pending dashboard hydration/render work, clears the interceptor, and synchronizes the closed runtime project id only for a real project id transition; same-project `squirrel:project-changed` events invalidate cache without closing an already active dashboard, because reload/bootstrap can republish the current project after dashboard boot. Opening and header activation paint immediately from cache when present; header color/focus projection is immediate while header cards may be deferred behind the active-state flip to keep the visible interaction path responsive, and stale deferred work is cancelled when the dashboard closes or another category supersedes it. Explicit `refresh()`, logout, project change, and dynamic invalidation can force only the touched category. Clicking a header focuses that category; the focused category's deduplicated items are distributed once across the existing lanes instead of mirrored into every lane, and clicking the already active header clears focus and returns to the base dashboard overview.
-- `renderProjectScene(..., { preserveEphemeralRecords: true })` is an internal rendering extension for late project reconciliation; it preserves ephemeral Bevy overlay records (`mol:lane:`, `mol:clip:`, `mol:kf:`, `mol:playhead`) from the current runtime map, and preserves `__eve_dashboard_` records only while `dashboard_runtime.js` is active on that same project. Closed or other-project dashboard records are never preserved by project refresh, launch, or late reconciliation. Prefix reconciliation through `reconcileProjectSceneRecordsByPrefix(...)` collects dashboard ids from runtime records plus Bevy virtual scenes, parks controlled records on active close, and removes orphan `__eve_dashboard_` ids on inactive cleanup, refresh, and project changes.
+- `renderProjectScene(..., { preserveEphemeralRecords: true })` is an internal rendering extension for late project reconciliation; it preserves ephemeral Bevy overlay records (`mol:lane:`, `mol:clip:`, `mol:kf:`, `mol:playhead`) from the current runtime map, and preserves `__eve_dashboard_` records only while `dashboard_runtime.js` is active on that same project. Closed or other-project dashboard records are never preserved by project refresh, launch, or late reconciliation. Prefix reconciliation through `reconcileProjectSceneRecordsByPrefix(...)` collects dashboard ids from runtime records plus Bevy virtual scenes, parks controlled records on active close, and removes orphan `__eve_dashboard_` ids on inactive cleanup, refresh, and project changes. Project media/import stack allocation is owned by `project_scene_stack_runtime.js`; it scans durable project records only, ignores ephemeral overlay records, detects visible Dashboard records as an active ceiling, and clamps explicit media/drop positions below that ceiling while preserving order-based stacking among durable project records.
 - Runtime layout, hit-testing, and dashboard render records stay in the same logical project coordinates used by active Atomes. DPR/backing-buffer sizing remains a canvas storage concern and must not pre-scale the Virtual Scene, dashboard records, or hit-test geometry.
 - Fullscreen item detail is an immediate runtime-only projection; the durable item payload is not mutated by dashboard detail state.
 - Generic News, Monitor, and Goals record creation is no longer owned by the dashboard `+` action.
@@ -561,7 +561,7 @@ Boundary rules:
 
 - The composite runtime owns the closed main-menu wiring and receives product callbacks by injection.
 - The content runtime owns the content object for the main Intuition menu.
-- The visible main sequence is `home`, `find`, `time`, `communicate`, `mode`, and `view`; unimplemented no-op/demo tools must not be exposed.
+- The visible main sequence is `home`, `ai`, `find`, `capture`, `time`, `communicate`, `mode`, and `view`; `ai` is the inline IA prompt tool and unimplemented no-op/demo tools must not be exposed.
 - It must not create fallback handlers, alternate tool buses, or non-Bevy atom renderers.
 
 Boundary status: Closed product runtime API. Public promotion would require a product-neutral menu declaration contract.
@@ -584,24 +584,25 @@ Boundary rules:
 
 Boundary status: Closed product runtime API. Public promotion would require a product-neutral tool interaction contract.
 
-### eVe Finder Inline Runtime API
+### eVe Inline Tool Runtime APIs
 
-Ownership: eVe closed Intuition Finder inline and Finder panel bridge boundary.
+Ownership: eVe closed Intuition inline tool and Finder panel bridge boundary.
 
-Primary sources: `eVe/intuition/runtime/eve_intuition/finder_inline_runtime.js`, `eVe/intuition/runtime/eve_intuition/finder_tool_identity_runtime.js`, `eVe/intuition/runtime/eve_intuition/finder_inline_visual_runtime.js`.
+Primary sources: `eVe/intuition/runtime/eve_intuition/finder_inline_runtime.js`, `eVe/intuition/runtime/eve_intuition/finder_tool_identity_runtime.js`, `eVe/intuition/runtime/eve_intuition/finder_inline_visual_runtime.js`, `eVe/intuition/runtime/eve_intuition/ai_inline_runtime.js`, and `eVe/intuition/tools/AI.js`.
 
 Exposure: JavaScript module exports consumed by `eVe/intuition/eVeIntuition.js`, `tool_window_bridge_runtime.js`, panel tool registration, main tool definitions, and atome edit footer tool invocation.
 
-Verified entry points: `createFinderInlineRuntime`, `createFinderToolIdentityRuntime`, `createFinderInlineVisualRuntime`.
+Verified entry points: `createFinderInlineRuntime`, `createFinderToolIdentityRuntime`, `createFinderInlineVisualRuntime`, `createInlineToolVisualRuntime`, `createAiInlineRuntime`, and `submitAiPrompt`.
 
 Boundary rules:
 
 - Finder identity normalization and projection-instance recovery live only in `finder_tool_identity_runtime.js`.
 - Disposable inline input styling lives only in `finder_inline_visual_runtime.js`.
 - Finder inline open/close/search and panel wrapper behavior live only in `finder_inline_runtime.js`; callers must use returned functions instead of duplicating Finder DOM searches.
+- IA prompt input open/close/send behavior lives only in `ai_inline_runtime.js`; prompt provider dispatch and action application live only in `eVe/intuition/tools/AI.js`.
 - The runtime may project transient inline input DOM but must not create canonical Atome state, alternate Finder stores, or non-Bevy atom rendering paths.
 
-Boundary status: Closed product runtime API. Public promotion would require a product-neutral Finder/search bridge contract.
+Boundary status: Closed product runtime API. Public promotion would require a product-neutral inline-tool bridge contract.
 
 ### eVe Atome Edit Footer Runtime APIs
 

@@ -114,8 +114,6 @@ const workspaceOpenCalls = [];
 window.__eveWorkspaceWarmupsStarted = false;
 delete window.__currentProject;
 installEveIntuitionBootRuntime({
-    applyAiPanelClose() {},
-    applyAiPanelOpen() {},
     applyBackgroundPanelClose() {},
     applyBackgroundPanelOpen() {},
     applyCalendarPanelClose() {},
@@ -156,7 +154,6 @@ installEveIntuitionBootRuntime({
     createEditableTextAtome() {},
     destroyLayerInvariantObserver() {},
     ensureActivitiesModule() {},
-    ensureAiPanelModule() {},
     ensureBackgroundPanelModule() {},
     ensureCalendarPanelModule() {},
     ensureCaptureModule() {},
