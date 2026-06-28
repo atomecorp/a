@@ -22,6 +22,8 @@ const imported = await source.importContacts([
 
 assert.equal(imported.ok, true, 'local contacts source should import contacts into the local store');
 assert.equal(imported.items[0]?.source_provider, 'eve_contacts_local', 'local contacts source should re-home imported contacts under the local provider');
+assert.equal(imported.items[0]?.source_writable, true, 'local contacts source should expose local contacts as writable');
+assert.equal(imported.items[0]?.read_only, false, 'local contacts source should not mark local contacts as read-only');
 assert.equal(imported.items[0]?.source_contact_id, 'mac_1', 'local contacts source should preserve the imported source contact identifier');
 assert.equal(imported.items[0]?.custom_fields.some((entry) => entry.label === 'importe depuis' && entry.value === 'Mac Contacts'), true, 'local contacts source should persist import provenance');
 

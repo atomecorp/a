@@ -4,7 +4,7 @@ export const CONTACTS_V1_ARCHITECTURE_DECISION = {
     primary_read_source: {
         id: 'eve_contacts_local',
         role: 'primary',
-        writable: false
+        writable: true
     },
     import_source: {
         id: 'macos_contacts',

@@ -16,6 +16,7 @@
   "tests/eve/bevy_web_renderer_runtime_contract.test.mjs",
   "tests/eve/dashboard_focus_color_contract.test.mjs",
   "tests/eve/dashboard_mockup_design_contract.test.mjs",
+  "tests/eve/dashboard_preferences_contract.test.mjs",
   "tests/eve/dashboard_render_performance_contract.test.mjs",
   "tests/eve/debug_runtime_webgpu_probe.test.mjs",
   "tests/eve/imported_media_durability_contract.test.mjs",

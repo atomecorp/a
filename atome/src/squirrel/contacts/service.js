@@ -128,6 +128,20 @@ export const createContactsService = ({
             .map((entry) => ({ ...entry }));
     };
 
+    const refreshLocalIndexFromSyncSource = (options = {}) => {
+        const requestedSourceId = toText(options.source_id || '');
+        const primarySourceEntry = getPrimarySource();
+        if (!primarySourceEntry || typeof primarySourceEntry.listContactsSync !== 'function') return;
+        if (requestedSourceId && requestedSourceId !== primarySourceEntry.source_id) return;
+        if (!requestedSourceId && contactIndex.size > 0) return;
+        const listed = primarySourceEntry.listContactsSync(options);
+        if (listed?.ok !== true || !Array.isArray(listed.items)) return;
+        storeContacts(listed.items, {
+            mode: 'local',
+            cursor: listed.cursor || null
+        });
+    };
+
     const importSource = async (sourceId, options = {}) => {
         const normalizedSourceId = toText(sourceId || '');
         if (!normalizedSourceId) {
@@ -465,6 +479,7 @@ export const createContactsService = ({
             };
         },
         contactsList(options = {}) {
+            refreshLocalIndexFromSyncSource(options);
             return {
                 ok: true,
                 items: listStoredContacts(options),

@@ -51,9 +51,10 @@ const createMemorySource = ({
     }
 });
 
+const localContactsStorage = createMemoryStorage();
 const service = createContactsService({
     primarySource: createLocalContactsSource({
-        storage: createMemoryStorage()
+        storage: localContactsStorage
     }),
     sources: [
         createMemorySource({
@@ -148,6 +149,18 @@ const updated = await service.updateLocalContact(created.contact?.source_contact
 assert.equal(updated.ok, true, 'contacts service should update a local contact in the primary store');
 assert.equal(updated.contact?.phone, '06 44 55 78 97', 'contacts service should expose updated local contact fields');
 assert.equal(updated.contact?.email, 'sylvain@example.test', 'contacts service should persist newly added local contact fields');
+
+const reloadedService = createContactsService({
+    primarySource: createLocalContactsSource({
+        storage: localContactsStorage
+    })
+});
+const reloadedLocal = reloadedService.contactsList({ source_id: 'eve_contacts_local' });
+assert.equal(
+    reloadedLocal.items.some((entry) => entry.source_contact_id === created.contact?.source_contact_id && entry.email === 'sylvain@example.test'),
+    true,
+    'contacts service should expose persisted local contacts after service recreation'
+);
 
 const deleted = await service.deleteLocalContact(created.contact?.source_contact_id);
 assert.equal(deleted.ok, true, 'contacts service should delete a local contact from the primary store');

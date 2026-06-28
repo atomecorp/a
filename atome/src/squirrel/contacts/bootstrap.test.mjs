@@ -14,15 +14,9 @@ const createMemoryStorage = () => {
     };
 };
 
-const originalLocalStorage = globalThis.localStorage;
-Object.defineProperty(globalThis, 'localStorage', {
-    configurable: true,
-    writable: true,
-    value: createMemoryStorage()
-});
-
 const events = new EventTarget();
 const peopleDirectoryEvents = [];
+const storage = createMemoryStorage();
 class TestCustomEvent extends Event {
     constructor(type, options = {}) {
         super(type);
@@ -31,6 +25,7 @@ class TestCustomEvent extends Event {
 }
 
 const env = {
+    localStorage: storage,
     CustomEvent: TestCustomEvent,
     addEventListener: events.addEventListener.bind(events),
     removeEventListener: events.removeEventListener.bind(events),
@@ -90,6 +85,19 @@ const updated = await api.updateLocalContact(created.contact?.source_contact_id,
 assert.equal(updated.ok, true, 'contacts bootstrap should expose a local contact update helper');
 assert.equal(updated.contact?.phone, '06 44 55 78 97', 'contacts bootstrap should surface the updated local contact payload');
 
+const reloadedEnv = {
+    localStorage: storage,
+    CustomEvent: TestCustomEvent,
+    dispatchEvent: events.dispatchEvent.bind(events)
+};
+const reloadedApi = createGlobalContactsApi({ env: reloadedEnv });
+const reloadedLocal = reloadedApi.list({ source_id: 'eve_contacts_local' });
+assert.equal(
+    reloadedLocal.items.some((entry) => entry.source_contact_id === created.contact?.source_contact_id && entry.phone === '06 44 55 78 97'),
+    true,
+    'contacts bootstrap should expose persisted local contacts after API recreation'
+);
+
 const deleted = await api.deleteLocalContact(created.contact?.source_contact_id);
 assert.equal(deleted.ok, true, 'contacts bootstrap should expose a local contact delete helper');
 assert.equal(api.search('Sylvain').items.length, 0, 'contacts bootstrap should remove deleted local contacts from the shared directory view');
@@ -106,11 +114,5 @@ assert.equal(env.__panel_opened, true, 'contacts bootstrap should call the exist
 const closed = api.closePanel();
 assert.equal(closed.ok, true, 'contacts bootstrap should graft onto the existing contact panel close entrypoint');
 assert.equal(env.__panel_closed, true, 'contacts bootstrap should call the existing close_contact_panel function');
-
-Object.defineProperty(globalThis, 'localStorage', {
-    configurable: true,
-    writable: true,
-    value: originalLocalStorage
-});
 
 console.log('contacts_bootstrap: ok');

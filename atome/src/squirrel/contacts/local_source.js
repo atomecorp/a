@@ -96,10 +96,10 @@ export const normalizeLocalContact = (record = {}, meta = {}) => {
         user_face: toText(record.user_face || ''),
         access: toText(record.access || 'private') || 'private',
         visibility: toText(record.visibility || record.access || 'private') || 'private',
-        read_only: record.read_only !== false,
+        read_only: false,
         source_provider: CONTACTS_V1_ARCHITECTURE_DECISION.primary_read_source.id,
         source_label: 'eVe Contacts',
-        source_writable: false,
+        source_writable: true,
         custom_fields: mergeImportedMetadataFields(record, {
             imported_from_source: importedFromSource,
             imported_from_label: importedFromLabel
@@ -222,6 +222,15 @@ export const createLocalContactsSource = ({
         writable,
         contract,
         syncStatus,
+        listContactsSync(options = {}) {
+            const listed = listItems(options);
+            return {
+                ok: true,
+                source_id,
+                cursor: listed.cursor,
+                items: listed.items
+            };
+        },
         async listContacts(options = {}) {
             const listed = listItems(options);
             return {

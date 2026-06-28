@@ -1,5 +1,6 @@
 import { CONTACTS_V1_ARCHITECTURE_DECISION } from './connector_contract.js';
 import { createIcloudContactsConnector } from './icloud_connector.js';
+import { createLocalContactsSource } from './local_source.js';
 import { createMacosContactsSource } from './macos_source.js';
 import { createContactsService } from './service.js';
 import { emitPerfEvent, perfElapsedMs, perfLog, perfNowMs } from '../../utils/perf_runtime.js';
@@ -28,9 +29,16 @@ const installContactsGlobals = (env, api) => {
     return api;
 };
 
+const isStorageLike = (value) => !!value
+    && typeof value.getItem === 'function'
+    && typeof value.setItem === 'function';
+
 const getOrCreateService = (env) => {
     if (env[SERVICE_KEY]) return env[SERVICE_KEY];
-    const service = createContactsService();
+    const storage = isStorageLike(env.localStorage) ? env.localStorage : null;
+    const service = createContactsService({
+        primarySource: createLocalContactsSource({ storage })
+    });
     env[SERVICE_KEY] = service;
     return service;
 };

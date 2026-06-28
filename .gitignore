@@ -63,6 +63,7 @@ tests/shared/*
 tests/eve/*
 !tests/eve/atome_commit.sanitization.test.mjs
 !tests/eve/dashboard_focus_color_contract.test.mjs
+!tests/eve/dashboard_preferences_contract.test.mjs
 !tests/eve/media_persistence_service.sanitization.test.mjs
 !tests/eve/mtrax_project_duplication.sanitization.test.mjs
 !tests/eve/project_layer_visibility_contract.test.mjs
