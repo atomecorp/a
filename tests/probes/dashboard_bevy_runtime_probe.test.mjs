@@ -127,6 +127,14 @@ const dashboardSnapshot = async (page) => page.evaluate(async () => {
     const visibleDashboardRecords = dashboardRecords.filter((record) => record?.properties?.visible !== false);
     const editorRecord = dashboardRecords.find((record) => record.id === '__eve_dashboard_editor') || null;
     const layout = state?.layout || null;
+    const flower = document.getElementById('eve_intuitionx_flower');
+    const flowerStyle = flower ? getComputedStyle(flower) : null;
+    const flowerRect = flower?.getBoundingClientRect?.() || null;
+    const flowerOpen = !!flower
+        && flowerStyle?.display !== 'none'
+        && flowerStyle?.visibility !== 'hidden'
+        && Number(flowerRect?.width || 0) > 0
+        && Number(flowerRect?.height || 0) > 0;
     const toolboxCandidates = [
         document.querySelector('#eve_intuitionx_main_ribbon'),
         document.querySelector('#eve_intuitionx_menu_layer #eve_intuitionx_main_ribbon'),
@@ -156,6 +164,10 @@ const dashboardSnapshot = async (page) => page.evaluate(async () => {
         activeCategoryId: state?.activeCategoryId || null,
         editorOpen: !!state?.editor,
         editorItemId: state?.editor?.item?.id || null,
+        labelEditorOpen: !!state?.labelEditor,
+        labelEditorItemId: state?.labelEditor?.item_id || null,
+        labelEditorSelection: state?.labelEditor?.selection || null,
+        flowerOpen,
         projectId,
         canvas: canvas ? {
             width: canvas.getBoundingClientRect().width,
@@ -184,6 +196,9 @@ const dashboardSnapshot = async (page) => page.evaluate(async () => {
         } : null,
         dashboardRecordIds: dashboardRecords.map((record) => record.id),
         dashboardVisibleRecordIds: visibleDashboardRecords.map((record) => record.id),
+        dashboardTitleTexts: dashboardRecords
+            .filter((record) => String(record?.id || '').includes('card_title_'))
+            .map((record) => String(record?.properties?.text || '')),
         editorRect: editorRecord ? {
             x: Number(editorRecord.properties?.left ?? editorRecord.properties?.x ?? 0),
             y: Number(editorRecord.properties?.top ?? editorRecord.properties?.y ?? 0),
@@ -227,9 +242,38 @@ const clickCanvasRectCenter = async (page, rect) => {
     });
 };
 
+const longPressCanvasRectCenter = async (page, rect, holdMs = 650) => {
+    const canvas = page.locator('#eve_surface_project').first();
+    await canvas.waitFor({ state: 'visible', timeout: 15000 });
+    const box = await canvas.boundingBox();
+    if (!box) throw new Error('dashboard_canvas_box_missing');
+    const x = box.x + Math.max(1, rect.x + rect.width / 2);
+    const y = box.y + Math.max(1, rect.y + rect.height / 2);
+    await page.mouse.move(x, y);
+    await page.mouse.down();
+    await sleep(holdMs);
+    await page.mouse.up();
+};
+
 const laneIsActive = (snapshot, categoryId) => (
     snapshot.layout?.lanes?.some((lane) => lane.categoryId === categoryId && lane.active === true) === true
 );
+
+const activateDashboardCategory = async (page, categoryId, snapshot = null) => {
+    let current = snapshot || await dashboardSnapshot(page);
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+        if (current.activeCategoryId === categoryId && laneIsActive(current, categoryId)) return { ok: true, snapshot: current };
+        const lane = current.layout?.lanes?.find((entry) => entry.categoryId === categoryId);
+        if (!lane?.header_rect) return { ok: false, snapshot: current };
+        await clickCanvasRectCenter(page, lane.header_rect);
+        const active = await waitForDashboardSnapshot(page, (candidate) => (
+            candidate.activeCategoryId === categoryId && laneIsActive(candidate, categoryId) && !candidate.editorOpen
+        ), 8000);
+        if (active.ok) return active;
+        current = active.snapshot || await dashboardSnapshot(page);
+    }
+    return { ok: false, snapshot: current };
+};
 
 const hexToRgb = (hex) => {
     const value = String(hex || '').replace('#', '');
@@ -516,24 +560,86 @@ const runScenario = async () => {
 
         const projectsLane = contactsActive.snapshot.layout.lanes.find((lane) => lane.categoryId === 'projects');
         await clickCanvasRectCenter(page, projectsLane.header_rect);
-        const projectsActive = await waitForDashboardSnapshot(page, (snapshot) => (
+        let projectsActive = await waitForDashboardSnapshot(page, (snapshot) => (
             snapshot.activeCategoryId === 'projects' && laneIsActive(snapshot, 'projects') && !snapshot.editorOpen
         ), 30000);
         if (!projectsActive.ok) throw new Error('dashboard_projects_header_click_failed');
-        const firstProjectItem = projectsActive.snapshot.layout.lanes.find((lane) => lane.categoryId === 'projects')?.items?.[0];
-        if (firstProjectItem?.rect) {
-            const currentProjectBeforeItem = projectsActive.snapshot.projectId;
-            await clickCanvasRectCenter(page, firstProjectItem.rect);
-            const projectItemOpened = await waitForDashboardSnapshot(page, (snapshot) => (
-                !snapshot.active && snapshot.dashboardVisibleRecordIds.length === 0 && snapshot.projectId === currentProjectBeforeItem
-            ), 30000);
-            if (!projectItemOpened.ok) throw new Error('dashboard_project_item_open_failed');
-            report.checks.push({ name: 'project_item_opens_project_without_fullscreen_item', ok: true, snapshot: projectItemOpened.snapshot });
+        const projectsWithItem = await waitForDashboardSnapshot(page, (snapshot) => (
+            snapshot.activeCategoryId === 'projects'
+            && laneIsActive(snapshot, 'projects')
+            && !snapshot.editorOpen
+            && !!snapshot.layout?.lanes?.find((lane) => lane.categoryId === 'projects')?.items?.[0]?.rect
+        ), 10000);
+        if (projectsWithItem.ok) projectsActive = projectsWithItem;
+        let firstProjectItem = projectsActive.snapshot.layout.lanes.find((lane) => lane.categoryId === 'projects')?.items?.[0];
+        if (!firstProjectItem?.rect) {
+            const beforeSeedProject = projectsActive.snapshot.projectId;
+            await clickCanvasRectCenter(page, projectsActive.snapshot.layout.lanes.find((lane) => lane.categoryId === 'projects').plus_rect);
+            const seededProject = await waitForDashboardSnapshot(page, (snapshot) => (
+                !snapshot.active
+                && snapshot.dashboardVisibleRecordIds.length === 0
+                && !!snapshot.projectId
+                && snapshot.projectId !== beforeSeedProject
+            ), 60000);
+            if (!seededProject.ok) throw new Error('dashboard_project_item_seed_create_failed');
+            report.checks.push({ name: 'project_item_seed_created_for_label_probe', ok: true, snapshot: seededProject.snapshot });
             await (await resolveAtomHandle(page)).click({ timeout: 10000 });
-            const reopenedProjects = await waitForDashboardSnapshot(page, (snapshot) => snapshot.active, 30000);
-            if (!reopenedProjects.ok) throw new Error('dashboard_reopen_after_project_item_failed');
-            await clickCanvasRectCenter(page, reopenedProjects.snapshot.layout.lanes.find((lane) => lane.categoryId === 'projects').header_rect);
+            const reopenedForSeededItem = await waitForDashboardSnapshot(page, (snapshot) => snapshot.active, 30000);
+            if (!reopenedForSeededItem.ok) throw new Error('dashboard_reopen_after_project_item_seed_failed');
+            await clickCanvasRectCenter(page, reopenedForSeededItem.snapshot.layout.lanes.find((lane) => lane.categoryId === 'projects').header_rect);
+            projectsActive = await waitForDashboardSnapshot(page, (snapshot) => (
+                snapshot.activeCategoryId === 'projects'
+                && laneIsActive(snapshot, 'projects')
+                && !snapshot.editorOpen
+                && !!snapshot.layout?.lanes?.find((lane) => lane.categoryId === 'projects')?.items?.[0]?.rect
+            ), 30000);
+            if (!projectsActive.ok) throw new Error('dashboard_projects_header_item_after_seed_failed');
+            firstProjectItem = projectsActive.snapshot.layout.lanes.find((lane) => lane.categoryId === 'projects')?.items?.[0];
         }
+        if (!firstProjectItem?.rect) throw new Error('dashboard_project_item_required_for_label_probe');
+        const currentProjectBeforeLongPress = projectsActive.snapshot.projectId;
+        await longPressCanvasRectCenter(page, firstProjectItem.rect);
+        const labelEditing = await waitForDashboardSnapshot(page, (snapshot) => (
+            snapshot.active
+            && snapshot.projectId === currentProjectBeforeLongPress
+            && snapshot.labelEditorOpen
+            && snapshot.labelEditorItemId === firstProjectItem.id
+            && snapshot.labelEditorSelection?.start === 0
+            && snapshot.labelEditorSelection?.end > 0
+            && snapshot.flowerOpen === false
+        ), 30000);
+        if (!labelEditing.ok) throw new Error('dashboard_project_long_press_label_edit_failed');
+        await page.keyboard.type('Dashboard probe renamed project');
+        const typedLabel = await waitForDashboardSnapshot(page, (snapshot) => (
+            snapshot.active
+            && snapshot.labelEditorOpen
+            && snapshot.projectId === currentProjectBeforeLongPress
+            && snapshot.dashboardTitleTexts.includes('Dashboard probe renamed project')
+            && snapshot.flowerOpen === false
+        ), 30000);
+        if (!typedLabel.ok) throw new Error('dashboard_project_label_typing_failed');
+        await page.keyboard.press('Enter');
+        const labelCommitted = await waitForDashboardSnapshot(page, (snapshot) => (
+            snapshot.active
+            && !snapshot.labelEditorOpen
+            && snapshot.projectId === currentProjectBeforeLongPress
+            && snapshot.dashboardTitleTexts.includes('Dashboard probe renamed project')
+            && snapshot.flowerOpen === false
+        ), 30000);
+        if (!labelCommitted.ok) throw new Error('dashboard_project_label_commit_failed');
+        report.checks.push({ name: 'project_item_long_press_edits_label_without_opening_or_flower', ok: true, snapshot: labelCommitted.snapshot });
+
+        await clickCanvasRectCenter(page, firstProjectItem.rect);
+        const projectItemOpened = await waitForDashboardSnapshot(page, (snapshot) => (
+            !snapshot.active && snapshot.dashboardVisibleRecordIds.length === 0 && snapshot.projectId === firstProjectItem.id
+        ), 30000);
+        if (!projectItemOpened.ok) throw new Error('dashboard_project_item_open_failed');
+        report.checks.push({ name: 'project_item_opens_project_without_fullscreen_item', ok: true, snapshot: projectItemOpened.snapshot });
+        await (await resolveAtomHandle(page)).click({ timeout: 10000 });
+        const reopenedProjects = await waitForDashboardSnapshot(page, (snapshot) => snapshot.active, 30000);
+        if (!reopenedProjects.ok) throw new Error('dashboard_reopen_after_project_item_failed');
+        const reopenedProjectsActive = await activateDashboardCategory(page, 'projects', reopenedProjects.snapshot);
+        if (!reopenedProjectsActive.ok) throw new Error('dashboard_projects_active_after_project_item_failed');
 
         const beforeProjectCreate = (await dashboardSnapshot(page)).projectId;
         const activeProjectsForPlus = await waitForDashboardSnapshot(page, (snapshot) => (
