@@ -17,6 +17,7 @@ document.body.appendChild(view);
 
 window.new_menu_v2 = {
     reveal: () => true,
+    showFully: () => true,
     setToolLatchedState: () => true
 };
 const sceneRecordsByProject = new Map();
@@ -170,6 +171,14 @@ const submitLoginCredentials = async (phone, password) => {
     if (document.getElementById('eve_login_sequence__choice')?.style?.display === 'flex') {
         await activateButton(choiceAuthenticate);
     }
+    const currentPasswordField = document.getElementById('eve_login_sequence__password_field__input');
+    if (currentPasswordField?.style?.display === 'block') {
+        currentPasswordField.value = password;
+        dispatchInput(currentPasswordField);
+        dispatchEnter(currentPasswordField);
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        return;
+    }
     const phoneField = document.getElementById('eve_login_sequence__phone_input');
     phoneField.value = phone;
     dispatchInput(phoneField);
@@ -212,7 +221,8 @@ window.eveToolBase = {
         return { ok: true };
     },
     getProjectSceneState: (projectId) => ({
-        records: sceneRecordsByProject.get(projectId) || []
+        records: sceneRecordsByProject.get(projectId) || [],
+        projection: sceneRecordsByProject.has(projectId) ? { ok: true } : null
     })
 };
 

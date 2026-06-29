@@ -116,9 +116,25 @@ assert.deepEqual(gradientMotionFrames, [
 ], 'gradient motion must only breathe through brightness and background position');
 assert.ok(gradientMotionFrames.every((frame) => !Object.hasOwn(frame, 'background')), 'gradient motion must not rewrite gradient backgrounds');
 
+let sessionOpeningSnapshot = null;
 setViewport(1200, 700);
 const sequence = createUserLoginSequence({
-    onSubmit: async () => ({ ok: true }),
+    onSubmit: async (payload = {}) => {
+        assert.equal(typeof payload.onAuthenticated, 'function', 'successful login payload must expose the authenticated visual callback');
+        await payload.onAuthenticated();
+        const sessionOpening = document.getElementById('eve_login_sequence__session_opening');
+        const logoNode = document.getElementById('eve_login_sequence__persistent_logo');
+        sessionOpeningSnapshot = {
+            rootDisplay: document.getElementById('eve_login_sequence')?.style?.display,
+            messageDisplay: sessionOpening?.style?.display,
+            messageOpacity: sessionOpening?.style?.opacity,
+            line1: document.getElementById('eve_login_sequence__session_opening_line1')?.textContent,
+            line2: document.getElementById('eve_login_sequence__session_opening_line2')?.textContent,
+            logoWidth: logoNode?.style?.width,
+            logoTransform: logoNode?.style?.transform
+        };
+        return { ok: true };
+    },
     onWithoutAccount: async () => ({ ok: true })
 });
 sequence.open();
@@ -256,6 +272,19 @@ assert.equal(mirroredText?.textContent, '•••', 'password display must be o
 
 dispatchEnter(passwordInput);
 await waitForCondition(() => root.style.display === 'none' && document.activeElement?.id !== passwordInput.id);
+assert.deepEqual(
+    sessionOpeningSnapshot,
+    {
+        rootDisplay: 'block',
+        messageDisplay: 'flex',
+        messageOpacity: LOGIN_TEXT_STYLE.opacity,
+        line1: 'Bienvenue,',
+        line2: 'nous ouvrons votre session',
+        logoWidth: '175px',
+        logoTransform: 'translate3d(350px,600px,0) translate(-50%,-50%)'
+    },
+    'authenticated visual callback must keep login visible, enlarge the single logo, and show the localized two-line wait message'
+);
 const finalTopReveal = capturedAnimations.find((entry) => (
     entry.element?.id === 'eve_login_sequence__top_band'
     && entry.frames?.[0]?.transform === 'translateY(0)'
@@ -309,9 +338,11 @@ assert.equal(document.getElementById('eve_login_sequence__typed_value')?.textCon
 emptyPasswordSequence.destroy();
 
 let invalidPayload = null;
+let invalidAuthenticatedCallbackAvailable = false;
 const invalidSequence = createUserLoginSequence({
     onSubmit: async (payload) => {
         invalidPayload = payload;
+        invalidAuthenticatedCallbackAvailable = typeof payload.onAuthenticated === 'function';
         return { ok: false, errorText: 'Identifiant ou mot de passe incorrect' };
     },
     onWithoutAccount: async () => ({ ok: true })
@@ -340,6 +371,8 @@ assert.equal(invalidPasswordStepInput?.style?.display, 'block', 'invalid passwor
 assert.equal(invalidPasswordStepInput?.value, '', 'invalid password must clear the bad password');
 assert.equal(document.getElementById('eve_login_sequence__typed')?.textContent, '', 'invalid password must clear mirrored bullets');
 assert.equal(document.getElementById('eve_login_sequence__instruction')?.textContent, 'Identifiant ou mot de passe incorrect', 'invalid password must show the auth error');
+assert.equal(invalidAuthenticatedCallbackAvailable, true, 'invalid password payload must still expose the callback for the auth owner');
+assert.equal(document.getElementById('eve_login_sequence__session_opening')?.style?.display, 'none', 'invalid password must not start the session-opening message');
 invalidSequence.destroy();
 
 capturedAnimations.length = 0;

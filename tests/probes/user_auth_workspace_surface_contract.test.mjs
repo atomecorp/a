@@ -62,7 +62,10 @@ assert.equal(calls.filter((entry) => entry.name === 'bootstrap').length, 0, 'sho
 const ok = await runtime.executeLoginFlow({
     phone: '0600000000',
     password: 'valid_password',
-    username: '0600000000'
+    username: '0600000000',
+    onAuthenticated: async (payload = {}) => {
+        calls.push({ name: 'onAuthenticated', ...payload });
+    }
 });
 
 assert.equal(ok, true, 'authenticated login must succeed');
@@ -75,6 +78,21 @@ assert.ok(
     calls.findIndex((entry) => entry.name === 'ensureCurrentProject')
     < calls.findIndex((entry) => entry.name === 'afterWorkspaceOpen'),
     'dashboard/menu opening must wait for the current project'
+);
+assert.ok(
+    calls.findIndex((entry) => entry.name === 'bootstrap')
+    < calls.findIndex((entry) => entry.name === 'onAuthenticated'),
+    'authenticated visual callback must wait for successful bootstrap'
+);
+assert.ok(
+    calls.findIndex((entry) => entry.name === 'onAuthenticated')
+    < calls.findIndex((entry) => entry.name === 'restoreUserProfile'),
+    'authenticated visual callback must run before profile/project/workspace work'
+);
+assert.deepEqual(
+    calls.filter((entry) => entry.name === 'onAuthenticated'),
+    [{ name: 'onAuthenticated', phone: '0600000000', username: '0600000000' }],
+    'authenticated visual callback must receive the normalized login identity'
 );
 
 console.log('user_auth_workspace_surface_contract.test: PASS');
