@@ -5,6 +5,7 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { verifyDeployedSource } from './verify_deployed_source.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -291,6 +292,8 @@ async function main() {
     if (!opts.noGit) {
         gitUpdate({ mode: opts.reset ? 'reset' : 'pull' });
     }
+
+    verifyDeployedSource(projectRoot);
 
     if (!opts.noDeps) {
         ensureNodeModules();

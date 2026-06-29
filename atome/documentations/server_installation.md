@@ -99,6 +99,9 @@ For automated quiet runs, set `QUIET=1`; the log is written to
 The update wrapper verifies the deployed source before restart: it prints the
 current Git HEAD and fails if the production `--server` early route or the
 required `package-lock.json` entries are not present.
+The same verification also runs inside `scripts/server_update.js` immediately
+after the Git update and before `npm ci`, so a stale checkout is detected before
+dependency installation can obscure the root cause.
 
 ---
 
