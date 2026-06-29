@@ -401,7 +401,29 @@ postcheck() {
 	fi
 	if command -v systemctl >/dev/null 2>&1 && systemctl is-active --quiet squirrel; then
 		if command -v curl >/dev/null 2>&1; then
-			curl -fsS http://127.0.0.1:3001/health
+			local health_url="${HEALTH_URL:-http://127.0.0.1:3001/health}"
+			local timeout_seconds="${HEALTHCHECK_TIMEOUT_SECONDS:-30}"
+			local started_epoch
+			started_epoch="$(date +%s)"
+			while true; do
+				if curl -fsS "$health_url"; then
+					log_update "healthcheck ok url=$health_url"
+					break
+				fi
+
+				if [[ $(( $(date +%s) - started_epoch )) -ge "$timeout_seconds" ]]; then
+					log_update "healthcheck failed after ${timeout_seconds}s url=$health_url"
+					return 1
+				fi
+
+				if ! systemctl is-active --quiet squirrel; then
+					log_update "service stopped before healthcheck succeeded"
+					return 1
+				fi
+
+				log_update "healthcheck pending url=$health_url"
+				sleep 1
+			done
 		else
 			log_update "curl not found, skipping healthcheck"
 		fi

@@ -111,6 +111,10 @@ Certificate handling does not force Let's Encrypt renewal: if the existing
 certificate is valid beyond `CERT_RENEW_WINDOW_SECONDS` (30 days by default),
 the certificate phase is logged as skipped so dependency installation and service
 restart can continue.
+After restart, the wrapper waits for the local health endpoint before declaring
+success. Override `HEALTH_URL` or `HEALTHCHECK_TIMEOUT_SECONDS` only when the
+production service intentionally listens on a different local endpoint or needs
+more startup time.
 
 For a deliberately forced production repair, `sudo ./update_server.sh --reset`
 resets the local `main` branch to `origin/main` before reinstalling production
