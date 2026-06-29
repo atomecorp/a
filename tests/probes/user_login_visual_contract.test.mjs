@@ -117,10 +117,20 @@ assert.deepEqual(gradientMotionFrames, [
 assert.ok(gradientMotionFrames.every((frame) => !Object.hasOwn(frame, 'background')), 'gradient motion must not rewrite gradient backgrounds');
 
 let sessionOpeningSnapshot = null;
+let authenticatingSnapshot = null;
 setViewport(1200, 700);
 const sequence = createUserLoginSequence({
     onSubmit: async (payload = {}) => {
+        assert.equal(typeof payload.onAuthenticating, 'function', 'successful login payload must expose the immediate visual callback');
         assert.equal(typeof payload.onAuthenticated, 'function', 'successful login payload must expose the authenticated visual callback');
+        await payload.onAuthenticating();
+        const authenticating = document.getElementById('eve_login_sequence__session_opening');
+        authenticatingSnapshot = {
+            rootDisplay: document.getElementById('eve_login_sequence')?.style?.display,
+            messageDisplay: authenticating?.style?.display,
+            line1: document.getElementById('eve_login_sequence__session_opening_line1')?.textContent,
+            line2: document.getElementById('eve_login_sequence__session_opening_line2')?.textContent
+        };
         await payload.onAuthenticated();
         const sessionOpening = document.getElementById('eve_login_sequence__session_opening');
         const logoNode = document.getElementById('eve_login_sequence__persistent_logo');
@@ -273,6 +283,16 @@ assert.equal(mirroredText?.textContent, '•••', 'password display must be o
 dispatchEnter(passwordInput);
 await waitForCondition(() => root.style.display === 'none' && document.activeElement?.id !== passwordInput.id);
 assert.deepEqual(
+    authenticatingSnapshot,
+    {
+        rootDisplay: 'block',
+        messageDisplay: 'flex',
+        line1: 'Validation en cours',
+        line2: 'merci de patienter'
+    },
+    'password submit must show the neutral validation feedback before the authenticated message'
+);
+assert.deepEqual(
     sessionOpeningSnapshot,
     {
         rootDisplay: 'block',
@@ -297,8 +317,8 @@ const finalBottomReveal = capturedAnimations.find((entry) => (
 ));
 assert.ok(finalTopReveal, 'final reveal top band must exit upward');
 assert.ok(finalBottomReveal, 'final reveal bottom band must exit downward');
-assert.equal(finalTopReveal?.options?.duration, ANIMATION_MS.bandsExit, 'final reveal top band must keep the shared exit duration');
-assert.equal(finalBottomReveal?.options?.duration, ANIMATION_MS.bandsExit, 'final reveal bottom band must keep the shared exit duration');
+assert.equal(finalTopReveal?.options?.duration, ANIMATION_MS.authBandsExit, 'final reveal top band must use the fast authenticated exit duration');
+assert.equal(finalBottomReveal?.options?.duration, ANIMATION_MS.authBandsExit, 'final reveal bottom band must use the fast authenticated exit duration');
 assert.notEqual(document.activeElement?.id, passwordInput.id, 'successful password submit must clear native password focus');
 
 let emptyPasswordSubmitted = false;
@@ -338,10 +358,17 @@ assert.equal(document.getElementById('eve_login_sequence__typed_value')?.textCon
 emptyPasswordSequence.destroy();
 
 let invalidPayload = null;
+let invalidAuthenticatingSnapshot = null;
 let invalidAuthenticatedCallbackAvailable = false;
 const invalidSequence = createUserLoginSequence({
     onSubmit: async (payload) => {
         invalidPayload = payload;
+        await payload.onAuthenticating();
+        invalidAuthenticatingSnapshot = {
+            messageDisplay: document.getElementById('eve_login_sequence__session_opening')?.style?.display,
+            line1: document.getElementById('eve_login_sequence__session_opening_line1')?.textContent,
+            line2: document.getElementById('eve_login_sequence__session_opening_line2')?.textContent
+        };
         invalidAuthenticatedCallbackAvailable = typeof payload.onAuthenticated === 'function';
         return { ok: false, errorText: 'Identifiant ou mot de passe incorrect' };
     },
@@ -365,6 +392,15 @@ dispatchInput(invalidPasswordStepInput);
 dispatchEnter(invalidPasswordStepInput);
 await new Promise((resolve) => setTimeout(resolve, 0));
 assert.equal(invalidPayload?.phone, '0600000001', 'invalid password submit must keep the entered phone in the payload');
+assert.deepEqual(
+    invalidAuthenticatingSnapshot,
+    {
+        messageDisplay: 'flex',
+        line1: 'Validation en cours',
+        line2: 'merci de patienter'
+    },
+    'invalid password submit must still show the immediate neutral validation feedback while auth is pending'
+);
 assert.equal(document.getElementById('eve_login_sequence__choice')?.style?.display, 'none', 'invalid password must not return to the choice screen');
 assert.equal(document.getElementById('eve_login_sequence__credentials')?.style?.display, 'block', 'invalid password must keep the credential surface visible');
 assert.equal(invalidPasswordStepInput?.style?.display, 'block', 'invalid password must stay on the password step');

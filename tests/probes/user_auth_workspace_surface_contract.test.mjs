@@ -59,14 +59,23 @@ assert.equal(shortPasswordOk, false, 'short password must not attempt account cr
 assert.equal(runtime.getLastLoginErrorText(), 'Mot de passe : 8 caractères minimum', 'short password must expose the account creation password constraint');
 assert.equal(calls.filter((entry) => entry.name === 'bootstrap').length, 0, 'short password must be rejected before bootstrap');
 
+let resolveAuthenticatedVisual = null;
+const authenticatedVisualFinished = new Promise((resolve) => { resolveAuthenticatedVisual = resolve; });
 const ok = await runtime.executeLoginFlow({
     phone: '0600000000',
     password: 'valid_password',
     username: '0600000000',
+    onAuthenticating: (payload = {}) => {
+        calls.push({ name: 'onAuthenticating', ...payload });
+    },
     onAuthenticated: async (payload = {}) => {
         calls.push({ name: 'onAuthenticated', ...payload });
+        await authenticatedVisualFinished;
+        calls.push({ name: 'onAuthenticatedFinished' });
     }
 });
+resolveAuthenticatedVisual();
+await authenticatedVisualFinished;
 
 assert.equal(ok, true, 'authenticated login must succeed');
 assert.deepEqual(
@@ -80,6 +89,11 @@ assert.ok(
     'dashboard/menu opening must wait for the current project'
 );
 assert.ok(
+    calls.findIndex((entry) => entry.name === 'onAuthenticating')
+    < calls.findIndex((entry) => entry.name === 'bootstrap'),
+    'immediate visual callback must run before bootstrap starts'
+);
+assert.ok(
     calls.findIndex((entry) => entry.name === 'bootstrap')
     < calls.findIndex((entry) => entry.name === 'onAuthenticated'),
     'authenticated visual callback must wait for successful bootstrap'
@@ -88,6 +102,16 @@ assert.ok(
     calls.findIndex((entry) => entry.name === 'onAuthenticated')
     < calls.findIndex((entry) => entry.name === 'restoreUserProfile'),
     'authenticated visual callback must run before profile/project/workspace work'
+);
+assert.ok(
+    calls.findIndex((entry) => entry.name === 'afterWorkspaceOpen')
+    < calls.findIndex((entry) => entry.name === 'onAuthenticatedFinished'),
+    'workspace opening must not wait for the authenticated visual animation to finish'
+);
+assert.deepEqual(
+    calls.filter((entry) => entry.name === 'onAuthenticating'),
+    [{ name: 'onAuthenticating', phone: '0600000000', username: '0600000000' }],
+    'immediate visual callback must receive the normalized login identity'
 );
 assert.deepEqual(
     calls.filter((entry) => entry.name === 'onAuthenticated'),
