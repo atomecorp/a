@@ -96,12 +96,19 @@ sudo ./update_server.sh
 
 For automated quiet runs, set `QUIET=1`; the log is written to
 `logs/update_server.log`.
+Every run prints a `run_id` and logs the same content to
+`logs/update_server.log`. The wrapper records preflight identity, certificate
+handling, the `scripts/server_update.js` execution, optional eVe pull handling,
+deployed-source verification, restart, postcheck, recent service logs, and a
+final summary with the deployed Git HEAD.
+
 The update wrapper verifies the deployed source before restart: it prints the
 current Git HEAD and fails if the production `--server` early route or the
-required `package-lock.json` entries are not present.
-The same verification also runs inside `scripts/server_update.js` immediately
-after the Git update and before `npm ci`, so a stale checkout is detected before
-dependency installation can obscure the root cause.
+required `package-lock.json` entries are not present. The same verification also
+runs inside `scripts/server_update.js` immediately after the Git update and
+before `npm ci`, so a stale checkout is detected before dependency installation
+can obscure the root cause. Any failing phase logs the phase name, exit code,
+current HEAD, command, and log file path.
 
 ---
 

@@ -2,7 +2,6 @@
 
 import { execSync } from 'child_process';
 import fs from 'fs';
-import os from 'os';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { verifyDeployedSource } from './verify_deployed_source.js';
@@ -10,21 +9,87 @@ import { verifyDeployedSource } from './verify_deployed_source.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const projectRoot = path.resolve(__dirname, '..');
+const updateRunId = process.env.RUN_ID || `${new Date().toISOString().replace(/[-:.]/g, '').slice(0, 15)}Z-${process.pid}`;
+let activePhase = 'startup';
+
+function nowIso() {
+    return new Date().toISOString();
+}
+
+function log(message) {
+    process.stdout.write(`[${nowIso()}][server_update][${updateRunId}][${activePhase}] ${message}\n`);
+}
+
+function durationMs(startedAt) {
+    return Date.now() - startedAt;
+}
+
+function phase(name, fn) {
+    activePhase = name;
+    const startedAt = Date.now();
+    log('START');
+    try {
+        const result = fn();
+        log(`END duration_ms=${durationMs(startedAt)}`);
+        activePhase = 'idle';
+        return result;
+    } catch (error) {
+        const exitCode = typeof error?.status === 'number' ? error.status : 1;
+        log(`FAIL exit_code=${exitCode} duration_ms=${durationMs(startedAt)} error=${error?.message || error}`);
+        activePhase = 'idle';
+        throw error;
+    }
+}
+
+function skipPhase(name, reason) {
+    activePhase = name;
+    log(`SKIP ${reason}`);
+    activePhase = 'idle';
+}
 
 function die(message) {
-    process.stderr.write(`${message}\n`);
+    log(`FAIL ${message}`);
     process.exit(1);
 }
 
 function run(command, options = {}) {
     const { cwd = projectRoot, allowFailure = false } = options;
-    process.stdout.write(`\n$ ${command}\n`);
+    const startedAt = Date.now();
+    log(`COMMAND start cwd=${cwd} command=${command}`);
     try {
         execSync(command, { cwd, stdio: 'inherit' });
+        log(`COMMAND end exit_code=0 duration_ms=${durationMs(startedAt)} command=${command}`);
         return true;
     } catch (error) {
-        if (allowFailure) return false;
+        const exitCode = typeof error?.status === 'number' ? error.status : 1;
+        if (allowFailure) {
+            log(`COMMAND allowed_failure exit_code=${exitCode} duration_ms=${durationMs(startedAt)} command=${command}`);
+            return false;
+        }
+        log(`COMMAND fail exit_code=${exitCode} duration_ms=${durationMs(startedAt)} command=${command}`);
         throw error;
+    }
+}
+
+function readCommand(command, options = {}) {
+    const { cwd = projectRoot, allowFailure = false } = options;
+    try {
+        return execSync(command, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
+    } catch (error) {
+        if (allowFailure) return '';
+        throw error;
+    }
+}
+
+function logGitState(label) {
+    const head = readCommand('git rev-parse HEAD', { allowFailure: true });
+    const branch = readCommand('git branch --show-current', { allowFailure: true });
+    const upstream = readCommand('git rev-parse --abbrev-ref --symbolic-full-name @{u}', { allowFailure: true });
+    const status = readCommand('git status --porcelain=v1', { allowFailure: true });
+    const statusCount = status ? status.split('\n').filter(Boolean).length : 0;
+    log(`git_${label} head=${head || 'unknown'} branch=${branch || 'unknown'} upstream=${upstream || 'none'} status_entries=${statusCount}`);
+    if (status) {
+        log(`git_${label}_status=${JSON.stringify(status.split('\n'))}`);
     }
 }
 
@@ -80,7 +145,7 @@ function moveAsideUntrackedFilesThatBlockPull() {
     const backupName = `package-lock.json.untracked.${nowStamp()}.bak`;
     const backupAbs = path.join(projectRoot, backupName);
     fs.renameSync(lockAbs, backupAbs);
-    process.stdout.write(`Moved aside untracked ${lockRel} -> ${backupName}\n`);
+    log(`Moved aside untracked ${lockRel} -> ${backupName}`);
 }
 
 function stashIfDirty() {
@@ -96,12 +161,12 @@ function stashIfDirty() {
 
         const stamp = nowStamp();
         const message = `server_update auto-stash ${stamp}`;
-        process.stdout.write(`\n⚠️  Git working tree is dirty. Creating stash: "${message}"\n`);
+        log(`Git working tree is dirty. Creating stash: "${message}"`);
         run(`git stash push -u -m "${message}"`, { cwd: projectRoot, allowFailure: false });
-        process.stdout.write('✅ Stashed local changes. Continuing with update.\n');
+        log('Stashed local changes. Continuing with update.');
     } catch (error) {
         // If git is not available or status fails, let the normal flow handle it.
-        process.stdout.write(`\n⚠️  Unable to check/stash dirty git state: ${error?.message || error}\n`);
+        log(`Unable to check/stash dirty git state: ${error?.message || error}`);
     }
 }
 
@@ -113,21 +178,21 @@ function ensureEnvFile({ envDir, envFile, appEnvExample, appEnvFallback }) {
     ensureDir(envDir, 0o755);
 
     if (fileExists(envFile)) {
-        process.stdout.write(`Env file exists: ${envFile}\n`);
+        log(`Env file exists: ${envFile}`);
         return;
     }
 
     if (fileExists(appEnvFallback)) {
         fs.copyFileSync(appEnvFallback, envFile);
         fs.chmodSync(envFile, 0o600);
-        process.stdout.write(`Copied env file from ${appEnvFallback} -> ${envFile}\n`);
+        log(`Copied env file from ${appEnvFallback} -> ${envFile}`);
         return;
     }
 
     if (fileExists(appEnvExample)) {
         fs.copyFileSync(appEnvExample, envFile);
         fs.chmodSync(envFile, 0o600);
-        process.stdout.write(`Created env file from example ${appEnvExample} -> ${envFile}\n`);
+        log(`Created env file from example ${appEnvExample} -> ${envFile}`);
         return;
     }
 
@@ -141,7 +206,7 @@ function ensureEnvFile({ envDir, envFile, appEnvExample, appEnvFallback }) {
     ].join('\n');
 
     writeText(envFile, defaultEnv, 0o600);
-    process.stdout.write(`Created default env file: ${envFile}\n`);
+    log(`Created default env file: ${envFile}`);
 }
 
 function ensureSystemdUnit({ serviceName, envFile }) {
@@ -173,12 +238,12 @@ function ensureSystemdUnit({ serviceName, envFile }) {
 
     const needsWrite = !fileExists(unitPath) || readText(unitPath) !== unit;
     if (!needsWrite) {
-        process.stdout.write(`Systemd unit up-to-date: ${unitPath}\n`);
+        log(`Systemd unit up-to-date: ${unitPath}`);
         return;
     }
 
     writeText(unitPath, unit, 0o644);
-    process.stdout.write(`Wrote systemd unit: ${unitPath}\n`);
+    log(`Wrote systemd unit: ${unitPath}`);
     run('systemctl daemon-reload');
     run(`systemctl enable ${serviceName}`, { allowFailure: true });
 }
@@ -203,7 +268,7 @@ function backupPaths({ backupRoot, envFile, pathsToBackup }) {
         run(`tar -czf ${tarPath} ${rels.map((p) => `'${p}'`).join(' ')}`, { cwd: projectRoot, allowFailure: true });
     }
 
-    process.stdout.write(`Backup created: ${backupDir}\n`);
+    log(`Backup created: ${backupDir}`);
 }
 
 function ensureNodeModules() {
@@ -222,6 +287,7 @@ function ensureNodeModules() {
 }
 
 function gitUpdate({ mode }) {
+    logGitState('before');
     moveAsideUntrackedFilesThatBlockPull();
     run('git fetch origin');
 
@@ -232,12 +298,14 @@ function gitUpdate({ mode }) {
     if (mode === 'reset') {
         run('git reset --hard origin/main');
         // DO NOT run `git clean -fd` by default; it wipes .env and node_modules.
+        logGitState('after');
         return;
     }
 
     // Safer default: fast-forward only
     run('git checkout main', { allowFailure: true });
     run('git pull --ff-only');
+    logGitState('after');
 }
 
 function ensureRuntimeDirs() {
@@ -265,58 +333,75 @@ async function main() {
     }
 
     const opts = parseArgs(process.argv.slice(2));
+    log(`run_id=${updateRunId}`);
+    log(`project_root=${projectRoot}`);
+    log(`args=${JSON.stringify(process.argv.slice(2))}`);
+    log(`node=${process.version}`);
+    log(`npm=${readCommand('npm --version', { allowFailure: true }) || 'not found'}`);
+    log(`git=${readCommand('git --version', { allowFailure: true }) || 'not found'}`);
 
     const appEnvExample = path.join(projectRoot, '.env.example');
     const appEnvFallback = path.join(projectRoot, '.env');
 
-    ensureEnvFile({
+    phase('env', () => ensureEnvFile({
         envDir: opts.envDir,
         envFile: opts.envFile,
         appEnvExample,
         appEnvFallback,
-    });
+    }));
 
-    backupPaths({
+    phase('backup', () => backupPaths({
         backupRoot: opts.backupRoot,
         envFile: opts.envFile,
         pathsToBackup: [
             path.join(projectRoot, 'database_storage'),
             path.join(projectRoot, 'uploads'),
         ],
-    });
+    }));
 
-    ensureSystemdUnit({ serviceName: opts.serviceName, envFile: opts.envFile });
+    phase('systemd-unit', () => ensureSystemdUnit({ serviceName: opts.serviceName, envFile: opts.envFile }));
 
-    ensureRuntimeDirs();
+    phase('runtime-dirs', () => ensureRuntimeDirs());
 
     if (!opts.noGit) {
-        gitUpdate({ mode: opts.reset ? 'reset' : 'pull' });
+        phase('git-update', () => gitUpdate({ mode: opts.reset ? 'reset' : 'pull' }));
+    } else {
+        skipPhase('git-update', '--no-git');
     }
 
-    verifyDeployedSource(projectRoot);
+    phase('verify-source', () => verifyDeployedSource(projectRoot));
 
     if (!opts.noDeps) {
-        ensureNodeModules();
+        phase('npm-ci', () => ensureNodeModules());
+    } else {
+        skipPhase('npm-ci', '--no-deps');
     }
 
     if (!opts.noRestart) {
-        run(`systemctl restart ${opts.serviceName}`);
+        phase('restart', () => run(`systemctl restart ${opts.serviceName}`));
+    } else {
+        skipPhase('restart', '--no-restart');
     }
 
-    run(`systemctl status ${opts.serviceName} --no-pager -l`, { allowFailure: true });
+    phase('status', () => run(`systemctl status ${opts.serviceName} --no-pager -l`, { allowFailure: true }));
 
     // Health check - if it fails, nginx will 502.
-    run('curl -fsS http://127.0.0.1:3001/health', { allowFailure: true });
+    phase('health', () => run('curl -fsS http://127.0.0.1:3001/health', { allowFailure: true }));
 
     // Reload nginx if present
-    if (run('nginx -t', { allowFailure: true })) {
-        run('systemctl reload nginx', { allowFailure: true });
-    }
+    phase('nginx-reload', () => {
+        if (run('nginx -t', { allowFailure: true })) {
+            run('systemctl reload nginx', { allowFailure: true });
+        } else {
+            log('nginx config test failed or nginx is unavailable; skipping reload');
+        }
+    });
 
-    process.stdout.write('\nDone.\n');
+    log('Done.');
 }
 
 main().catch((error) => {
-    process.stderr.write(`\nERROR: ${error?.stack || error}\n`);
+    const detail = String(error?.stack || error).replace(/\n/g, '\\n');
+    log(`ERROR ${detail}`);
     process.exit(1);
 });

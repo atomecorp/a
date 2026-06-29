@@ -41,6 +41,11 @@ const REQUIRED_MARKERS = [
         marker: 'node_modules/@rolldown/binding-wasm32-wasi/node_modules/@emnapi/core',
         label: 'package-lock @emnapi resolution',
     },
+    {
+        file: 'package-lock.json',
+        marker: 'node_modules/@rolldown/binding-wasm32-wasi/node_modules/@emnapi/runtime',
+        label: 'package-lock @emnapi runtime resolution',
+    },
 ];
 
 function runGit(projectRoot, args) {
