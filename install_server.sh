@@ -171,6 +171,75 @@ ensure_package() {
     fi
 }
 
+generate_auth_secret() {
+    node --input-type=module -e "import crypto from 'node:crypto'; console.log(crypto.randomBytes(32).toString('hex'));"
+}
+
+read_env_value() {
+    local key="$1"
+    if [[ ! -f "$ENV_FILE" ]]; then
+        return 0
+    fi
+
+    awk -v key="$key" '
+        index($0, key "=") == 1 {
+            value = substr($0, length(key) + 2)
+        }
+        END {
+            if (value != "") print value
+        }
+    ' "$ENV_FILE"
+}
+
+write_env_value() {
+    local key="$1"
+    local value="$2"
+
+    ENV_FILE_PATH="$ENV_FILE" ENV_KEY="$key" ENV_VALUE="$value" node --input-type=module <<'NODE'
+import fs from 'node:fs';
+
+const file = process.env.ENV_FILE_PATH;
+const key = process.env.ENV_KEY;
+const value = process.env.ENV_VALUE;
+const content = fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : '';
+const lines = content.split(/\r?\n/);
+let replaced = false;
+const nextLines = lines.map((line) => {
+  if (line.startsWith(`${key}=`)) {
+    replaced = true;
+    return `${key}=${value}`;
+  }
+  return line;
+});
+
+if (!replaced) {
+  if (nextLines.length > 0 && nextLines[nextLines.length - 1] !== '') {
+    nextLines.push('');
+  }
+  nextLines.push(`${key}=${value}`);
+}
+
+fs.writeFileSync(file, nextLines.join('\n').replace(/\n*$/, '\n'), { mode: 0o600 });
+fs.chmodSync(file, 0o600);
+NODE
+}
+
+ensure_production_auth_secret() {
+    local key="$1"
+    local current
+    current="$(read_env_value "$key" || true)"
+
+    if [[ ${#current} -ge 32 ]] \
+        && [[ "$current" != *"change_me"* ]] \
+        && [[ "$current" != *"change_in_production"* ]]; then
+        log_info "🔐 $key already configured in $ENV_FILE"
+        return 0
+    fi
+
+    write_env_value "$key" "$(generate_auth_secret)"
+    log_info "🔐 Generated $key in $ENV_FILE"
+}
+
 # --- Pre-flight Checks -----------------------------------------------------
 
 if [ "$EUID" -ne 0 ]; then
@@ -304,6 +373,9 @@ if [ ! -f "$ENV_FILE" ]; then
     } >"$ENV_FILE"
     chmod 600 "$ENV_FILE"
 fi
+
+ensure_production_auth_secret "JWT_SECRET"
+ensure_production_auth_secret "COOKIE_SECRET"
 
 # Convenience: keep a local .env so tools that read it still work.
 # Never treat it as canonical (git clean can delete it).

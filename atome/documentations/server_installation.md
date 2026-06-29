@@ -81,6 +81,7 @@ SQUIRREL_MONITORED_DIR=/opt/a/monitored
 * **HOST=127.0.0.1**: Ensures the Node.js server is only accessible via Nginx (security).
 * **PORT**: Internal port (default 3001).
 * **SQUIRREL_MONITORED_DIR**: Folder watched for aBox sync. If missing, aBox sync is disabled and the server will log a warning.
+* **JWT_SECRET** and **COOKIE_SECRET**: Required authentication secrets. `install_server.sh` and `update_server.sh` generate strong values in the service environment file when they are missing or too short, and preserve existing valid values.
 
 > ⚠️ Important: On production servers, do not rely on untracked files inside `/opt/a` (like a manually created `.env`). They can be deleted by update operations. Use `/etc/squirrel/squirrel.env`.
 

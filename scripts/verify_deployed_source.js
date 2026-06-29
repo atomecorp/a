@@ -56,6 +56,11 @@ const REQUIRED_MARKERS = [
         marker: '"node_modules/@emnapi/runtime"',
         label: 'package-lock top-level @emnapi runtime peer resolution',
     },
+    {
+        file: 'scripts/server_update.js',
+        marker: "ensureProductionEnvSecrets(envFile);",
+        label: 'production env auth secret provisioning',
+    },
 ];
 
 function runGit(projectRoot, args) {
