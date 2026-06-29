@@ -22,6 +22,8 @@ bevy_renderer_core = [
     "bevy/default_app",
     "bevy/bevy_window",
     "bevy/bevy_winit",
+    "bevy/x11",
+    "bevy/wayland",
     "bevy/bevy_render",
     "bevy/bevy_core_pipeline",
     "bevy/bevy_camera",
@@ -35,8 +37,6 @@ bevy_renderer_core = [
 bevy_renderer_native = [
     "bevy_renderer_core",
     "bevy/multi_threaded",
-    "bevy/x11",
-    "bevy/wayland",
 ]
 
 [build-dependencies]

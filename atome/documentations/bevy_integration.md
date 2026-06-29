@@ -48,7 +48,7 @@ bevy_backend = ["dep:bevy"]
 
 `default-features = false` keeps setup progressive: Cargo resolves Bevy and the ECS/transform contract used by the backend without enabling a second active audio stack.
 
-`bevy_renderer_core` enables the shared native Bevy scene/ops bridge used by Tauri IPC. `bevy_renderer_native` additionally enables the standalone native Bevy window-loop entry point. The Tauri command bridge must not call the standalone window-loop path from IPC, because Bevy window resources are created by the Bevy/winit event loop rather than by a single command update.
+`bevy_renderer_core` enables the shared native Bevy scene/ops bridge used by Tauri IPC. Because that feature activates `bevy_winit`, it also enables Bevy's Linux `x11` and `wayland` Winit backends so Linux and WSL builds do not require the standalone native-window feature to satisfy Winit's compile-time backend selection. `bevy_renderer_native` additionally enables the standalone native Bevy window-loop entry point and native-window extras such as `bevy/multi_threaded`. The Tauri command bridge must not call the standalone window-loop path from IPC, because Bevy window resources are created by the Bevy/winit event loop rather than by a single command update.
 
 ## Setup
 
@@ -87,6 +87,7 @@ npm run cargo:bevy:test
 ```
 
 `npm run cargo:bevy:check` proves that the Bevy dependency resolves and the feature-gated backend compiles.
+On Linux and WSL, this check must pass with `bevy_renderer_core` alone because that feature owns the Winit display backend selection required by `bevy_winit`.
 
 For the native command bridge used by Tauri project rendering, run:
 
