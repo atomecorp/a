@@ -1,4 +1,6 @@
 import { JSDOM } from 'jsdom';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 
 const cloneValue = (value) => {
     if (value == null) return value;
@@ -6,6 +8,44 @@ const cloneValue = (value) => {
 };
 
 const normalizeId = (value) => String(value || '').trim();
+const createMockFetch = () => async (input) => {
+    const url = new URL(String(input));
+    if (url.protocol !== 'file:') throw new Error(`mock_fetch_unsupported_url:${url.protocol}`);
+    const body = readFileSync(fileURLToPath(url), 'utf8');
+    return {
+        ok: true,
+        text: async () => body,
+        json: async () => JSON.parse(body)
+    };
+};
+const installRuntimeContractAugmenters = (window) => {
+    let menuApi = null;
+    Object.defineProperty(window, 'new_menu_v2', {
+        configurable: true,
+        get: () => menuApi,
+        set: (value) => {
+            if (value && typeof value === 'object' && typeof value.showFully !== 'function') {
+                value.showFully = () => true;
+            }
+            menuApi = value;
+        }
+    });
+    let toolBase = null;
+    Object.defineProperty(window, 'eveToolBase', {
+        configurable: true,
+        get: () => toolBase,
+        set: (value) => {
+            if (value && typeof value.getProjectSceneState === 'function') {
+                const readScene = value.getProjectSceneState;
+                value.getProjectSceneState = (projectId) => ({
+                    ...readScene(projectId),
+                    projection: { ok: true }
+                });
+            }
+            toolBase = value;
+        }
+    });
+};
 
 const createAtomeStore = () => {
     const records = new Map();
@@ -59,6 +99,7 @@ const installMockBrowserEnv = () => {
     });
     const { window } = dom;
     const store = createAtomeStore();
+    installRuntimeContractAugmenters(window);
 
     window.Atome = {
         commit: store.commit,
@@ -70,6 +111,7 @@ const installMockBrowserEnv = () => {
             get: store.get
         },
         auth: {
+            lookupPhone: async () => ({ ok: false, success: false, error: 'User not found' }),
             getCurrentInfo: () => {
                 const auth = window.__authCheckResult;
                 if (auth && auth.authenticated === false) return null;
@@ -89,6 +131,7 @@ const installMockBrowserEnv = () => {
     window.cancelAnimationFrame = window.cancelAnimationFrame || ((id) => clearTimeout(id));
     window.requestIdleCallback = window.requestIdleCallback || ((fn) => setTimeout(() => fn({ didTimeout: false, timeRemaining: () => 16 }), 0));
     window.cancelIdleCallback = window.cancelIdleCallback || ((id) => clearTimeout(id));
+    window.fetch = createMockFetch();
     window.Element.prototype.animate = function animate() {
         return {
             cancel() {},
@@ -106,6 +149,7 @@ const installMockBrowserEnv = () => {
     globalThis.MouseEvent = window.MouseEvent;
     globalThis.PointerEvent = window.PointerEvent || window.MouseEvent;
     globalThis.localStorage = window.localStorage;
+    globalThis.fetch = window.fetch;
     Object.defineProperty(globalThis, 'navigator', {
         configurable: true,
         value: window.navigator

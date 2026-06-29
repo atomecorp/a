@@ -272,6 +272,42 @@ assert.equal(finalTopReveal?.options?.duration, ANIMATION_MS.bandsExit, 'final r
 assert.equal(finalBottomReveal?.options?.duration, ANIMATION_MS.bandsExit, 'final reveal bottom band must keep the shared exit duration');
 assert.notEqual(document.activeElement?.id, passwordInput.id, 'successful password submit must clear native password focus');
 
+let emptyPasswordSubmitted = false;
+const emptyPasswordSequence = createUserLoginSequence({
+    onSubmit: async () => {
+        emptyPasswordSubmitted = true;
+        return { ok: true };
+    },
+    onWithoutAccount: async () => ({ ok: true })
+});
+emptyPasswordSequence.open();
+await clickButton(document.getElementById('eve_login_sequence__choice_authenticate'));
+const emptyPasswordPhoneInput = document.getElementById('eve_login_sequence__phone_input');
+emptyPasswordPhoneInput.value = '0600000002';
+dispatchInput(emptyPasswordPhoneInput);
+dispatchEnter(emptyPasswordPhoneInput);
+await waitForCondition(() => document.getElementById('eve_login_sequence__otp_input')?.style?.display === 'block');
+const emptyPasswordOtpInput = document.getElementById('eve_login_sequence__otp_input');
+emptyPasswordOtpInput.value = '5273';
+dispatchInput(emptyPasswordOtpInput);
+dispatchEnter(emptyPasswordOtpInput);
+await waitForCondition(() => document.getElementById('eve_login_sequence__password_field__input')?.style?.display === 'block');
+const emptyPasswordStepInput = document.getElementById('eve_login_sequence__password_field__input');
+assert.equal(emptyPasswordStepInput?.value, '', 'empty-password regression must start with an empty password input');
+await clickButton(document.getElementById('eve_login_sequence__persistent_logo'));
+await waitForCondition(() => document.getElementById('eve_login_sequence__phone_input')?.style?.display === 'block');
+assert.equal(emptyPasswordSubmitted, false, 'empty password logo click must not submit credentials');
+assert.equal(document.getElementById('eve_login_sequence__choice')?.style?.display, 'none', 'empty password logo click must stay in the credential flow');
+assert.equal(document.getElementById('eve_login_sequence__credentials')?.style?.display, 'block', 'empty password logo click must keep the credential surface open');
+assert.equal(emptyPasswordPhoneInput?.style?.display, 'block', 'empty password logo click must return to the phone step');
+assert.equal(emptyPasswordPhoneInput?.disabled, false, 'returned phone step must keep the phone input enabled');
+assert.equal(document.activeElement?.id, emptyPasswordPhoneInput.id, 'returned phone step must focus the phone input');
+assert.equal(document.getElementById('eve_login_sequence__typed_caret')?.style?.opacity, '1', 'returned phone step must show the mirrored caret');
+emptyPasswordPhoneInput.value = '0611111111';
+dispatchInput(emptyPasswordPhoneInput);
+assert.equal(document.getElementById('eve_login_sequence__typed_value')?.textContent, '0611111111', 'returned phone step must accept input and update the mirrored value');
+emptyPasswordSequence.destroy();
+
 let invalidPayload = null;
 const invalidSequence = createUserLoginSequence({
     onSubmit: async (payload) => {

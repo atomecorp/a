@@ -238,9 +238,11 @@ export const sessionAccountMethods = {
 
     async lookupPhone(phone) {
         const cleanPhone = normalizePhone(phone);
-        if (!cleanPhone) return null;
-        if (!FastifyAdapter?.auth?.lookupPhone) return null;
-        return FastifyAdapter.auth.lookupPhone({ phone: cleanPhone });
+        if (!cleanPhone) return { ok: false, success: false, error: 'missing_phone' };
+        const backend = getPrimaryBackend();
+        const adapter = adapters[backend];
+        if (!adapter?.auth?.lookupPhone) return { ok: false, success: false, error: 'phone_lookup_unavailable', backend };
+        return adapter.auth.lookupPhone({ phone: cleanPhone });
     },
 
     getCurrentInfo() {

@@ -32,13 +32,20 @@ assert.match(fastifyBootstrapBranch, /success: false,[\s\S]*alreadyExists: true,
 assert.doesNotMatch(fastifyBootstrapBranch, /message: 'User already exists - ready to login'/, 'Fastify auth must not preserve the former misleading existing-user success message');
 
 const authApi = readSource('atome/src/squirrel/apis/unified/adole_api/auth.js');
-assert.match(authApi, /const bootstrapBackend = async/, 'Unified auth API must have a bootstrap backend adapter');
-assert.match(authApi, /alreadyExists && !token\) ok = false/, 'Unified register must reject alreadyExists responses that have no token');
-assert.match(authApi, /hasAuthenticatedToken\(activeBackend, activeResult\)/, 'Unified auth must require an effective authenticated backend token before installing a session');
+const authLoginMethods = readSource('atome/src/squirrel/apis/unified/adole_api/auth_methods_login.js');
+const authBackends = readSource('atome/src/squirrel/apis/unified/adole_api/auth_backends.js');
+assert.match(authLoginMethods, /bootstrapBackend/, 'Unified auth login methods must use the bootstrap backend adapter');
+assert.match(authBackends, /alreadyExists && !token\) ok = false/, 'Unified register must reject alreadyExists responses that have no token');
+assert.match(authLoginMethods, /hasAuthenticatedToken\(activeBackend, activeResult\)/, 'Unified auth must require an effective authenticated backend token before installing a session');
 
 const authPhoneVerification = readSource('atome/src/squirrel/apis/unified/adole_api/auth_phone_verification.js');
 assert.match(authPhoneVerification, /requestPhoneVerificationBackend/, 'Unified auth API must route pre-auth phone verification through backend adapters');
 assert.match(authPhoneVerification, /verifyPhoneVerificationBackend/, 'Unified auth API must route pre-auth phone verification checks through backend adapters');
+const sessionAccountMethods = readSource('atome/src/squirrel/apis/unified/adole_api/auth_methods_session_account.js');
+const lookupPhoneMethod = sliceBetween(sessionAccountMethods, 'async lookupPhone(phone)', 'getCurrentInfo()');
+assert.match(lookupPhoneMethod, /const backend = getPrimaryBackend\(\)/, 'Unified lookupPhone must resolve the active auth backend');
+assert.match(lookupPhoneMethod, /const adapter = adapters\[backend\]/, 'Unified lookupPhone must use the active adapter map');
+assert.doesNotMatch(lookupPhoneMethod, /FastifyAdapter\.auth\.lookupPhone/, 'Unified lookupPhone must not force Fastify when Tauri is active');
 
 const adoleApis = readSource('atome/src/squirrel/apis/unified/adole_apis.js');
 assert.match(adoleApis, /bootstrap: auth\.bootstrap/, 'AdoleAPI.auth must expose bootstrap');
@@ -60,7 +67,7 @@ const executeLoginFlow = sliceBetween(userTool, 'const executeLoginFlow = async'
 assert.match(executeLoginFlow, /api\.auth\.bootstrap/, 'Initial login UI must call the atomic bootstrap flow');
 assert.doesNotMatch(executeLoginFlow, /api\.auth\.create/, 'Initial login UI must not create after a failed login');
 assert.doesNotMatch(executeLoginFlow, /api\.auth\.login/, 'Initial login UI must not split bootstrap into a separate login attempt');
-const publicBootstrap = sliceBetween(authApi, 'async bootstrap(phone, password, username, visibility =', 'async register');
+const publicBootstrap = sliceBetween(authLoginMethods, 'async bootstrap(phone, password, username, visibility =', 'async register');
 assert.match(publicBootstrap, /response\.ok = true/, 'Unified bootstrap must expose top-level ok after login or account creation');
 assert.match(publicBootstrap, /response\.user = activeResult\.user/, 'Unified bootstrap must expose the authenticated created/logged user');
 assert.match(publicBootstrap, /response\.backend = activeBackend/, 'Unified bootstrap must expose the authenticated backend');
