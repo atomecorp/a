@@ -98,6 +98,8 @@ Use `./run.sh` with service commands to manage it easily on any platform.
 Production service commands are routed before development bootstrap. They do not
 install Tauri dependencies, run `npm ci`, create local development `.env` values,
 or start foreground development processes.
+On an installed production host, `./run.sh` without arguments exits before
+bootstrap for the same reason; use the service commands below instead.
 
 ### Common Commands
 

@@ -25,6 +25,35 @@ fi
 source "$service_commands"
 dispatch_service_command_if_requested "${1:-}"
 
+abort_production_dev_mode_without_args() {
+    local arg_count="${1:-0}"
+
+    if [[ "$arg_count" -ne 0 ]]; then
+        return 0
+    fi
+
+    local svc_type
+    svc_type="$(detect_service_system)"
+
+    if [[ "$svc_type" == "none" ]] \
+        && [[ ! -f "/etc/squirrel/squirrel.env" ]] \
+        && [[ ! -f "/usr/local/etc/squirrel/squirrel.env" ]]; then
+        return 0
+    fi
+
+    echo "ERROR: Detected a production server setup."
+    echo "       Do not run './run.sh' without arguments (dev mode)."
+    echo "       Use one of these instead:"
+    echo "         - ./run.sh --https"
+    echo "         - ./run.sh status"
+    echo "         - ./run.sh logs"
+    echo "         - ./run.sh update"
+    echo "       If you really want dev server mode, use: ./run.sh --server"
+    exit 1
+}
+
+abort_production_dev_mode_without_args "$#"
+
 run_bootstrap_if_needed() {
     local bootstrap_script="$SCRIPTS_DIR/setup/bootstrap.sh"
     if [[ ! -f "$bootstrap_script" ]]; then
@@ -41,25 +70,6 @@ run_bootstrap_if_needed() {
 }
 
 run_bootstrap_if_needed "${1:-}"
-
-# Guardrail: on production servers, running ./run.sh with no arguments starts dev mode
-# (foreground processes + dependency installs). This is almost always accidental and
-# will stop when the SSH terminal closes. Use service commands instead.
-if [[ $# -eq 0 ]]; then
-    if [[ -f "/etc/systemd/system/squirrel.service" ]] \
-        || [[ -f "/etc/squirrel/squirrel.env" ]] \
-        || [[ -f "/usr/local/etc/squirrel/squirrel.env" ]]; then
-        echo "ERROR: Detected a production server setup."
-        echo "       Do not run './run.sh' without arguments (dev mode)."
-        echo "       Use one of these instead:"
-        echo "         - ./run.sh --https"
-        echo "         - ./run.sh status"
-        echo "         - ./run.sh logs"
-        echo "         - ./run.sh update"
-        echo "       If you really want dev server mode, use: ./run.sh --server"
-        exit 1
-    fi
-fi
 
 # --- Editable defaults -------------------------------------------------------
 # Change DEFAULT_UPLOADS_PATH to point legacy uploads elsewhere (sync watcher).
