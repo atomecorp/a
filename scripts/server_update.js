@@ -300,7 +300,7 @@ async function main() {
         run(`systemctl restart ${opts.serviceName}`);
     }
 
-    run(`systemctl status ${opts.serviceName} --no-pager`, { allowFailure: true });
+    run(`systemctl status ${opts.serviceName} --no-pager -l`, { allowFailure: true });
 
     // Health check - if it fails, nginx will 502.
     run('curl -fsS http://127.0.0.1:3001/health', { allowFailure: true });

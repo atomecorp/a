@@ -192,10 +192,10 @@ If you prefer using native system commands:
 **Linux (systemd):**
 
 ```bash
-systemctl status squirrel
+systemctl status squirrel --no-pager -l
 systemctl start squirrel
 systemctl stop squirrel
-journalctl -u squirrel -f  # Logs
+journalctl -u squirrel -f -l  # Logs
 ```
 
 **FreeBSD (rc.d):**

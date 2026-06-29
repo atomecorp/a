@@ -54,7 +54,7 @@ service_start() {
         systemd)
             echo "Starting $SERVICE_NAME service (systemd)..."
             sudo systemctl start "$SERVICE_NAME"
-            sudo systemctl status "$SERVICE_NAME" --no-pager
+            sudo systemctl status "$SERVICE_NAME" --no-pager -l
             ;;
         rcd)
             echo "Starting $SERVICE_NAME service (rc.d)..."
@@ -97,7 +97,7 @@ service_restart() {
         systemd)
             echo "Restarting $SERVICE_NAME service..."
             sudo systemctl restart "$SERVICE_NAME"
-            sudo systemctl status "$SERVICE_NAME" --no-pager
+            sudo systemctl status "$SERVICE_NAME" --no-pager -l
             ;;
         rcd)
             echo "Restarting $SERVICE_NAME service..."
@@ -116,14 +116,14 @@ service_status() {
 
     case "$svc_type" in
         systemd)
-            sudo systemctl status "$SERVICE_NAME" || true
+            sudo systemctl status "$SERVICE_NAME" --no-pager -l || true
 
             if ! systemctl is-active --quiet "$SERVICE_NAME"; then
                 echo ""
                 echo "WARNING: The server is stopped or restarting repeatedly."
                 echo "Recent logs:"
                 echo "----------------------------------------------------------------"
-                sudo journalctl -u "$SERVICE_NAME" -n 30 --no-pager
+                sudo journalctl -u "$SERVICE_NAME" -n 30 --no-pager -l
                 echo "----------------------------------------------------------------"
                 echo "Tip: run './run.sh logs' to follow live logs."
             fi
@@ -154,7 +154,7 @@ service_logs() {
 
     case "$svc_type" in
         systemd)
-            sudo journalctl -u "$SERVICE_NAME" -f
+            sudo journalctl -u "$SERVICE_NAME" -f -l
             ;;
         rcd)
             if [[ ! -f "/var/log/messages" ]]; then
