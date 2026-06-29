@@ -1465,6 +1465,7 @@ Production service routing:
 - `scripts/setup/service_commands.sh` owns the production service command implementations shared by that early dispatch. Its production `--server` path is foreground diagnostics only: it loads the service environment, refuses to run while the service is active, and directly executes `server/server.js` without development setup.
 - `scripts/setup/bootstrap.sh` owns clean-clone and development bootstrap only. It must not be required for installed production service management.
 - `scripts/server_update.js` owns reproducible production update flow, including dependency reinstall, service restart, and Nginx reload.
+- `update_server.sh` is the root production update wrapper around `scripts/server_update.js`, certificate renewal, optional eVe pull, deployed-source verification, and final restart. Manual runs print to the terminal and append `logs/update_server.log`; `QUIET=1` is reserved for automation. Its verification step prints the deployed Git identity and fails before restart if the production `--server` early route or required lockfile markers are absent. The optional eVe pull is skipped when its updater script is absent; it must not block root repository verification.
 
 Main files:
 

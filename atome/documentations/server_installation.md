@@ -88,6 +88,17 @@ SQUIRREL_MONITORED_DIR=/opt/a/monitored
 
 Production installs use `npm ci`, which requires a committed lockfile.
 Make sure `package-lock.json` is tracked in git and up to date with `package.json`.
+Manual production updates are visible by default:
+
+```bash
+sudo ./update_server.sh
+```
+
+For automated quiet runs, set `QUIET=1`; the log is written to
+`logs/update_server.log`.
+The update wrapper verifies the deployed source before restart: it prints the
+current Git HEAD and fails if the production `--server` early route or the
+required `package-lock.json` entries are not present.
 
 ---
 

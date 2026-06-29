@@ -5,7 +5,7 @@ set -euo pipefail
 project_root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 log_dir="${LOG_DIR:-$project_root/logs}"
 log_file="${LOG_FILE:-$log_dir/update_server.log}"
-quiet="${QUIET:-1}"
+quiet="${QUIET:-0}"
 
 mkdir -p "$log_dir"
 
@@ -13,6 +13,7 @@ if [[ "$quiet" == "1" ]]; then
 	exec >"$log_file" 2>&1
 else
 	exec > >(tee -a "$log_file") 2>&1
+	echo "Writing update log to: $log_file"
 fi
 
 cd "$project_root"
@@ -145,6 +146,55 @@ if [[ "$no_cert" == false ]]; then
 	renew_certificate
 fi
 
+print_git_identity() {
+	local label="$1"
+	local directory="$2"
+
+	if [[ ! -d "$directory/.git" ]] && [[ ! -f "$directory/.git" ]]; then
+		echo "[verify] $label: no git metadata at $directory"
+		return 0
+	fi
+
+	echo "[verify] $label path: $directory"
+	git -C "$directory" rev-parse --show-toplevel 2>/dev/null | sed 's/^/[verify] git root: /'
+	git -C "$directory" branch --show-current 2>/dev/null | sed 's/^/[verify] branch: /'
+	git -C "$directory" rev-parse HEAD 2>/dev/null | sed 's/^/[verify] HEAD: /'
+	git -C "$directory" log -1 --date=iso-strict --pretty='format:[verify] latest commit: %h %cd %s%n' 2>/dev/null || true
+}
+
+require_file_contains() {
+	local file_path="$1"
+	local expected="$2"
+	local label="$3"
+
+	if [[ ! -f "$file_path" ]]; then
+		echo "[verify] ERROR: missing $label: $file_path"
+		exit 1
+	fi
+
+	if ! grep -Fq -- "$expected" "$file_path"; then
+		echo "[verify] ERROR: deployed $label is stale."
+		echo "[verify] Missing marker: $expected"
+		echo "[verify] File: $file_path"
+		exit 1
+	fi
+}
+
+verify_update_applied() {
+	echo "[verify] === deployed source verification START ==="
+	print_git_identity "root repository" "$project_root"
+
+	require_file_contains "$project_root/run.sh" 'RUN_ENTRYPOINT_OVERRIDE="./run.sh" exec "$ROOT_DIR/scripts/setup/run_unix.sh" "$@"' "run.sh entrypoint"
+	require_file_contains "$project_root/scripts/setup/run_unix.sh" 'dispatch_service_command_if_requested "$@"' "run_unix early dispatcher"
+	require_file_contains "$project_root/scripts/setup/run_unix.sh" 'abort_production_dev_mode_without_args "$#"' "run_unix production guard"
+	require_file_contains "$project_root/scripts/setup/service_commands.sh" 'service_foreground_server()' "production foreground server route"
+	require_file_contains "$project_root/scripts/setup/service_commands.sh" 'Production foreground server mode does not accept extra arguments.' "production --server argument guard"
+	require_file_contains "$project_root/package-lock.json" 'node_modules/@rolldown/binding-wasm32-wasi/node_modules/@emnapi/core' "package-lock @emnapi resolution"
+
+	echo "[verify] deployed source contains the expected production routing and lockfile markers."
+	echo "[verify] === deployed source verification END ==="
+}
+
 # ── Application update ────────────────────────────────────────────────────
 update_args=("$@" "--no-restart")
 
@@ -159,10 +209,11 @@ if [[ "$no_git" == false ]]; then
 	if [[ -f "$pull_script" ]]; then
 		bash "$pull_script"
 	else
-		echo "Missing eVe updater script: $pull_script"
-		exit 1
+		echo "Optional eVe updater script not found, skipping: $pull_script"
 	fi
 fi
+
+verify_update_applied
 
 if [[ "$restart_after" == true ]]; then
 	"$project_root/run.sh" restart
