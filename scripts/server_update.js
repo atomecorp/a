@@ -94,6 +94,13 @@ function logGitState(label) {
     }
 }
 
+function logEveState(label) {
+    const submodule = readCommand('git submodule status -- eVe', { allowFailure: true }) || 'missing';
+    const head = readCommand('git -C eVe rev-parse HEAD', { allowFailure: true }) || 'missing';
+    const branch = readCommand('git -C eVe branch --show-current', { allowFailure: true }) || 'detached';
+    log(`eve_${label} submodule=${JSON.stringify(submodule)} head=${head} branch=${branch}`);
+}
+
 function ensureDir(dirPath, mode) {
     fs.mkdirSync(dirPath, { recursive: true, mode });
 }
@@ -361,6 +368,28 @@ function gitUpdate({ mode }) {
     logGitState('after');
 }
 
+function ensureEveSource() {
+    if (!fileExists(path.join(projectRoot, '.gitmodules'))) {
+        die('Missing .gitmodules; eVe submodule cannot be resolved.');
+    }
+
+    const evePath = readCommand('git config --file .gitmodules --get submodule.eVe.path', { allowFailure: true });
+    if (evePath !== 'eVe') {
+        die(`Invalid eVe submodule path: ${evePath || 'missing'}`);
+    }
+
+    logEveState('before');
+    run('git submodule sync -- eVe');
+    run('git submodule update --init --recursive eVe');
+    logEveState('after');
+
+    for (const file of ['eVe/eVe.js', 'eVe/version.txt']) {
+        if (!fileExists(path.join(projectRoot, file))) {
+            die(`Missing required eVe production asset: ${file}`);
+        }
+    }
+}
+
 function ensureRuntimeDirs() {
     ensureDir(path.join(projectRoot, 'uploads'), 0o775);
     ensureDir(path.join(projectRoot, 'database_storage'), 0o755);
@@ -418,8 +447,10 @@ async function main() {
 
     if (!opts.noGit) {
         phase('git-update', () => gitUpdate({ mode: opts.reset ? 'reset' : 'pull' }));
+        phase('eve-source', () => ensureEveSource());
     } else {
         skipPhase('git-update', '--no-git');
+        skipPhase('eve-source', '--no-git');
     }
 
     phase('verify-source', () => verifyDeployedSource(projectRoot));

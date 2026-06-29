@@ -105,9 +105,11 @@ Every run prints a `run_id` and logs the same content to
 the `/opt/a` source with `git fetch`, `git checkout main`, and
 `git pull --ff-only`, stashes local changes when they block a fast-forward
 update, re-executes itself when its own source changes, then records certificate
-handling, the `scripts/server_update.js` execution, optional eVe pull handling,
-deployed-source verification, restart, postcheck, recent service logs, and a
-final summary with the deployed Git HEAD.
+handling, the `scripts/server_update.js` execution, required eVe submodule
+initialization, deployed-source verification, restart, postcheck, recent service
+logs, and a final summary with the deployed Git HEAD. The eVe checkout is part
+of the production contract: the update fails if `eVe/eVe.js` or
+`eVe/version.txt` cannot be installed and verified.
 Certificate handling does not force Let's Encrypt renewal: if the existing
 certificate is valid beyond `CERT_RENEW_WINDOW_SECONDS` (30 days by default),
 the certificate phase is logged as skipped so dependency installation and service
@@ -123,12 +125,16 @@ dependencies and restarting the service. Use it only when the normal
 fast-forward update is blocked by a divergent production checkout.
 
 The update wrapper verifies the deployed source before restart: it prints the
-current Git HEAD and fails if the production `--server` early route or the
-required `package-lock.json` entries are not present. The same verification also
-runs inside `scripts/server_update.js` immediately after the Git update and
-before `npm ci`, so a stale checkout is detected before dependency installation
-can obscure the root cause. Any failing phase logs the phase name, exit code,
-current HEAD, command, and log file path.
+current Atome and eVe Git HEAD values and fails if the production `--server`
+early route, the `/eVe/` static route, the required eVe files, or the required
+`package-lock.json` entries are not present. The same verification also runs
+inside `scripts/server_update.js` immediately after the Git and eVe update
+phases and before `npm ci`, so a stale or incomplete checkout is detected before
+dependency installation can obscure the root cause. After restart, the wrapper
+also verifies `GET /eVe/eVe.js`, `GET /eVe/version.txt`, and
+`GET /api/server-info`; a final `eveVersion: "unknown"` is a failed deployment,
+not a warning. Any failing phase logs the phase name, exit code, current HEAD,
+command, and log file path.
 
 ---
 

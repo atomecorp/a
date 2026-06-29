@@ -392,6 +392,34 @@ verify_update_applied() {
 	"$node_bin" "$verify_script" "$project_root"
 }
 
+verify_eve_http() {
+	local base="${SERVICE_BASE_URL:-http://127.0.0.1:3001}"
+	local eve_version
+	local server_info
+
+	if ! curl -fsS "$base/eVe/eVe.js" >/dev/null; then
+		log_update "missing eVe HTTP entrypoint url=$base/eVe/eVe.js"
+		return 1
+	fi
+	if ! eve_version="$(curl -fsS "$base/eVe/version.txt")"; then
+		log_update "missing eVe HTTP version url=$base/eVe/version.txt"
+		return 1
+	fi
+	if [[ -z "$eve_version" || "$eve_version" == "unknown" ]]; then
+		log_update "invalid eVe HTTP version url=$base/eVe/version.txt version=$eve_version"
+		return 1
+	fi
+	if ! server_info="$(curl -fsS "$base/api/server-info")"; then
+		log_update "server-info HTTP check failed url=$base/api/server-info"
+		return 1
+	fi
+	if [[ "$server_info" == *'"eveVersion":"unknown"'* ]]; then
+		log_update "server-info still reports unknown eVe version"
+		return 1
+	fi
+	log_update "eVe http ok base=$base version=$eve_version"
+}
+
 postcheck() {
 	"$project_root/run.sh" status
 	if command -v journalctl >/dev/null 2>&1; then
@@ -424,6 +452,7 @@ postcheck() {
 				log_update "healthcheck pending url=$health_url"
 				sleep 1
 			done
+			verify_eve_http
 		else
 			log_update "curl not found, skipping healthcheck"
 		fi
@@ -454,17 +483,6 @@ if [[ "${EUID:-$(id -u)}" -eq 0 ]]; then
 	run_phase server_update "$node_bin" "$server_update" "${update_args[@]}"
 else
 	run_phase server_update sudo "$node_bin" "$server_update" "${update_args[@]}"
-fi
-
-if [[ "$no_git" == false ]]; then
-	pull_script="$project_root/eVe/git_utils/pull.sh"
-	if [[ -f "$pull_script" ]]; then
-		run_phase optional_eve_pull bash "$pull_script"
-	else
-		phase_skip optional_eve_pull "script not found: $pull_script"
-	fi
-else
-	phase_skip optional_eve_pull "--no-git"
 fi
 
 run_phase verify_deployed_source verify_update_applied

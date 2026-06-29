@@ -12,6 +12,16 @@ const DEFAULT_PROJECT_ROOT = path.resolve(__dirname, '..');
 
 const REQUIRED_MARKERS = [
     {
+        file: 'server/server.js',
+        marker: "const eveStaticRoot = path.join(projectRoot, 'eVe');",
+        label: 'server eVe static root',
+    },
+    {
+        file: 'server/server.js',
+        marker: "prefix: '/eVe/'",
+        label: 'server eVe static route',
+    },
+    {
         file: 'run.sh',
         marker: 'RUN_ENTRYPOINT_OVERRIDE="./run.sh" exec "$ROOT_DIR/scripts/setup/run_unix.sh" "$@"',
         label: 'run.sh entrypoint',
@@ -61,6 +71,28 @@ const REQUIRED_MARKERS = [
         marker: "ensureProductionEnvSecrets(envFile);",
         label: 'production env auth secret provisioning',
     },
+    {
+        file: 'scripts/server_update.js',
+        marker: "phase('eve-source', () => ensureEveSource());",
+        label: 'production eVe source update phase',
+    },
+    {
+        file: 'update_server.sh',
+        marker: 'verify_eve_http',
+        label: 'production eVe HTTP postcheck',
+    },
+];
+
+const REQUIRED_FILES = [
+    {
+        file: 'eVe/eVe.js',
+        label: 'eVe browser entrypoint',
+    },
+    {
+        file: 'eVe/version.txt',
+        label: 'eVe version file',
+        nonEmpty: true,
+    },
 ];
 
 function runGit(projectRoot, args) {
@@ -85,6 +117,20 @@ function printGitIdentity(projectRoot) {
     process.stdout.write(`[verify] latest commit: ${runGit(projectRoot, "log -1 --date=iso-strict --pretty='format:%h %cd %s'")}\n`);
 }
 
+function printEveIdentity(projectRoot) {
+    const eveRoot = path.join(projectRoot, 'eVe');
+
+    if (!fs.existsSync(eveRoot)) {
+        throw new Error(`[verify] missing eVe checkout: ${eveRoot}`);
+    }
+
+    process.stdout.write(`[verify] eVe path: ${eveRoot}\n`);
+    process.stdout.write(`[verify] eVe git root: ${runGit(eveRoot, 'rev-parse --show-toplevel')}\n`);
+    process.stdout.write(`[verify] eVe branch: ${runGit(eveRoot, 'branch --show-current') || 'detached'}\n`);
+    process.stdout.write(`[verify] eVe HEAD: ${runGit(eveRoot, 'rev-parse HEAD')}\n`);
+    process.stdout.write(`[verify] eVe latest commit: ${runGit(eveRoot, "log -1 --date=iso-strict --pretty='format:%h %cd %s'")}\n`);
+}
+
 function requireMarker(projectRoot, spec) {
     const filePath = path.join(projectRoot, spec.file);
 
@@ -102,17 +148,42 @@ function requireMarker(projectRoot, spec) {
     }
 }
 
+function requireFile(projectRoot, spec) {
+    const filePath = path.join(projectRoot, spec.file);
+
+    if (!fs.existsSync(filePath)) {
+        throw new Error(`[verify] missing ${spec.label}: ${filePath}`);
+    }
+
+    const stat = fs.statSync(filePath);
+    if (!stat.isFile() || stat.size <= 0) {
+        throw new Error(`[verify] invalid ${spec.label}: ${filePath}`);
+    }
+
+    if (spec.nonEmpty) {
+        const content = fs.readFileSync(filePath, 'utf8').trim();
+        if (!content || content === 'unknown') {
+            throw new Error(`[verify] invalid ${spec.label} content: ${filePath}`);
+        }
+    }
+}
+
 export function verifyDeployedSource(projectRoot = DEFAULT_PROJECT_ROOT) {
     const resolvedRoot = path.resolve(projectRoot);
 
     process.stdout.write('[verify] === deployed source verification START ===\n');
     printGitIdentity(resolvedRoot);
+    printEveIdentity(resolvedRoot);
 
     for (const spec of REQUIRED_MARKERS) {
         requireMarker(resolvedRoot, spec);
     }
 
-    process.stdout.write('[verify] deployed source contains the expected production routing and lockfile markers.\n');
+    for (const spec of REQUIRED_FILES) {
+        requireFile(resolvedRoot, spec);
+    }
+
+    process.stdout.write('[verify] deployed source contains the expected production routing, eVe assets, and lockfile markers.\n');
     process.stdout.write('[verify] === deployed source verification END ===\n');
 }
 
