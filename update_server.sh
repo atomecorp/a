@@ -10,6 +10,8 @@ run_id="${RUN_ID:-$(date -u '+%Y%m%dT%H%M%SZ')-$$}"
 run_started_epoch="$(date +%s)"
 active_phase="startup"
 export RUN_ID="$run_id"
+update_remote="${UPDATE_REMOTE:-origin}"
+update_branch="${UPDATE_BRANCH:-main}"
 
 mkdir -p "$log_dir" "$(dirname -- "$log_file")"
 
@@ -51,6 +53,20 @@ command_value() {
 		"$command_name" "$@" 2>&1 | head -n 1 || true
 	else
 		echo "not found"
+	fi
+}
+
+git_run() {
+	local started_epoch
+	started_epoch="$(date +%s)"
+	log_update "COMMAND start cwd=$project_root command=git $*"
+	if git -C "$project_root" "$@"; then
+		log_update "COMMAND end exit_code=0 duration=$(( $(date +%s) - started_epoch ))s command=git $*"
+		return 0
+	else
+		local status="$?"
+		log_update "COMMAND fail exit_code=$status duration=$(( $(date +%s) - started_epoch ))s command=git $*"
+		return "$status"
 	fi
 }
 
@@ -110,6 +126,7 @@ trap 'on_error $? $LINENO "$BASH_COMMAND"' ERR
 restart_after=true
 no_git=false
 no_cert=false
+reset_git=false
 for arg in "$@"; do
 	if [[ "$arg" == "--no-restart" ]]; then
 		restart_after=false
@@ -117,6 +134,8 @@ for arg in "$@"; do
 		no_git=true
 	elif [[ "$arg" == "--no-cert" ]]; then
 		no_cert=true
+	elif [[ "$arg" == "--reset" ]]; then
+		reset_git=true
 	fi
 done
 
@@ -132,6 +151,7 @@ preflight() {
 	log_update "git=$(command_value git --version)"
 	log_update "git_head_initial=$(git_value 'rev-parse HEAD')"
 	log_update "git_branch_initial=$(git_value 'branch --show-current')"
+	log_update "git_remote=$update_remote git_branch_target=$update_branch git_reset=$reset_git"
 	log_update "git_status_initial=$(git_value 'status --porcelain=v1' | wc -l | tr -d ' ') changed entries"
 	if [[ "${EUID:-$(id -u)}" -eq 0 ]]; then
 		log_update "root_check=ok"
@@ -155,6 +175,87 @@ preflight() {
 	log_update "log_file=$log_file"
 	[[ -f "$server_update" ]]
 	[[ -f "$project_root/run.sh" ]]
+}
+
+stash_local_git_changes() {
+	local status
+	status="$(git_value 'status --porcelain=v1')"
+	if [[ -z "$status" ]]; then
+		log_update "git working tree is clean; no stash needed"
+		return 0
+	fi
+
+	local stash_message
+	stash_message="update_server auto-stash $(date -u '+%Y%m%dT%H%M%SZ')"
+	log_update "git working tree is dirty; creating stash message=$stash_message"
+	git_run stash push -u -m "$stash_message"
+}
+
+move_aside_untracked_lockfile_if_needed() {
+	local lock_rel="package-lock.json"
+	local lock_abs="$project_root/$lock_rel"
+
+	if [[ ! -f "$lock_abs" ]]; then
+		return 0
+	fi
+
+	if git -C "$project_root" ls-files --error-unmatch "$lock_rel" >/dev/null 2>&1; then
+		return 0
+	fi
+
+	local backup_name
+	backup_name="package-lock.json.untracked.$(date -u '+%Y%m%dT%H%M%SZ').bak"
+	log_update "moving untracked package-lock.json aside backup=$backup_name"
+	mv "$lock_abs" "$project_root/$backup_name"
+}
+
+self_update_source() {
+	if [[ "$no_git" == true ]]; then
+		log_update "source update skipped by --no-git"
+		return 0
+	fi
+
+	if ! command -v git >/dev/null 2>&1; then
+		log_update "git is required for source update"
+		return 1
+	fi
+
+	if ! git -C "$project_root" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+		log_update "project root is not a git work tree: $project_root"
+		return 1
+	fi
+
+	local before_head
+	local after_head
+	before_head="$(git_value 'rev-parse HEAD')"
+	log_update "git_before head=$before_head branch=$(git_value 'branch --show-current') upstream=$(git_value 'rev-parse --abbrev-ref --symbolic-full-name @{u}')"
+
+	move_aside_untracked_lockfile_if_needed
+	git_run fetch "$update_remote"
+
+	if [[ "$reset_git" == true ]]; then
+		log_update "reset mode enabled: forcing local $update_branch to $update_remote/$update_branch"
+		git_run checkout -B "$update_branch" "$update_remote/$update_branch"
+	else
+		if ! git_run checkout "$update_branch"; then
+			stash_local_git_changes
+			git_run checkout "$update_branch"
+		fi
+
+		if ! git_run pull --ff-only "$update_remote" "$update_branch"; then
+			stash_local_git_changes
+			git_run pull --ff-only "$update_remote" "$update_branch"
+		fi
+	fi
+
+	after_head="$(git_value 'rev-parse HEAD')"
+	log_update "git_after head=$after_head branch=$(git_value 'branch --show-current') upstream=$(git_value 'rev-parse --abbrev-ref --symbolic-full-name @{u}')"
+
+	if [[ "$before_head" != "$after_head" && "${UPDATE_SERVER_REEXEC:-0}" != "1" ]]; then
+		log_update "source changed during update; re-executing update_server.sh from the refreshed checkout"
+		export UPDATE_SERVER_REEXEC=1
+		exec "$project_root/update_server.sh" "$@"
+	fi
 }
 
 # --- SSL certificate check and renewal ---
@@ -261,6 +362,7 @@ renew_certificate() {
 }
 
 run_phase preflight preflight "$@"
+run_phase self_update_source self_update_source "$@"
 
 if [[ "$no_cert" == false ]]; then
 	run_phase certificate renew_certificate

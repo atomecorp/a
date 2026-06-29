@@ -97,10 +97,18 @@ sudo ./update_server.sh
 For automated quiet runs, set `QUIET=1`; the log is written to
 `logs/update_server.log`.
 Every run prints a `run_id` and logs the same content to
-`logs/update_server.log`. The wrapper records preflight identity, certificate
+`logs/update_server.log`. The wrapper records preflight identity, self-updates
+the `/opt/a` source with `git fetch`, `git checkout main`, and
+`git pull --ff-only`, stashes local changes when they block a fast-forward
+update, re-executes itself when its own source changes, then records certificate
 handling, the `scripts/server_update.js` execution, optional eVe pull handling,
 deployed-source verification, restart, postcheck, recent service logs, and a
 final summary with the deployed Git HEAD.
+
+For a deliberately forced production repair, `sudo ./update_server.sh --reset`
+resets the local `main` branch to `origin/main` before reinstalling production
+dependencies and restarting the service. Use it only when the normal
+fast-forward update is blocked by a divergent production checkout.
 
 The update wrapper verifies the deployed source before restart: it prints the
 current Git HEAD and fails if the production `--server` early route or the
