@@ -88,6 +88,9 @@ SQUIRREL_MONITORED_DIR=/opt/a/monitored
 
 Production installs use `npm ci`, which requires a committed lockfile.
 Make sure `package-lock.json` is tracked in git and up to date with `package.json`.
+The lockfile must validate with the production npm version as well as local npm;
+Debian production currently uses npm 10, which requires the top-level optional
+peer entries for `@emnapi/core` and `@emnapi/runtime`.
 Manual production updates are visible by default:
 
 ```bash
