@@ -104,6 +104,10 @@ update, re-executes itself when its own source changes, then records certificate
 handling, the `scripts/server_update.js` execution, optional eVe pull handling,
 deployed-source verification, restart, postcheck, recent service logs, and a
 final summary with the deployed Git HEAD.
+Certificate handling does not force Let's Encrypt renewal: if the existing
+certificate is valid beyond `CERT_RENEW_WINDOW_SECONDS` (30 days by default),
+the certificate phase is logged as skipped so dependency installation and service
+restart can continue.
 
 For a deliberately forced production repair, `sudo ./update_server.sh --reset`
 resets the local `main` branch to `origin/main` before reinstalling production

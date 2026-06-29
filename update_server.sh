@@ -261,7 +261,8 @@ self_update_source() {
 # --- SSL certificate check and renewal ---
 renew_certificate() {
 	local domain="${DOMAIN:-atome.one}"
-	local cert_path="/etc/letsencrypt/live/${domain}/fullchain.pem"
+	local cert_path="${CERT_PATH:-/etc/letsencrypt/live/${domain}/fullchain.pem}"
+	local renew_window_seconds="${CERT_RENEW_WINDOW_SECONDS:-2592000}"
 	local timestamp
 	timestamp="$(date '+%Y-%m-%d %H:%M:%S')"
 
@@ -291,16 +292,22 @@ renew_certificate() {
 		echo "[$timestamp][cert]   expiry:  $before_expiry"
 		echo "[$timestamp][cert]   issuer:  $before_issuer"
 		echo "[$timestamp][cert]   serial:  $before_serial"
+
+		if openssl x509 -checkend "$renew_window_seconds" -noout -in "$cert_path" 2>/dev/null; then
+			echo "[$timestamp][cert] SKIP: existing certificate is valid for at least ${renew_window_seconds}s"
+			echo "[$timestamp][cert] === SSL certificate renewal check END (VALID, SKIPPED) ==="
+			return 0
+		fi
 	else
 		echo "[$timestamp][cert] WARNING: no certificate found at $cert_path"
 	fi
 
 	# Attempt renewal (stop nginx before so certbot can bind port 80, restart after)
-	echo "[$timestamp][cert] Running: certbot renew --non-interactive --force-renewal ..."
+	echo "[$timestamp][cert] Running: certbot renew --non-interactive ..."
 	echo "[$timestamp][cert]   Using pre/post hooks to stop/start nginx (port 80 conflict workaround)"
 	local certbot_output
 	local certbot_exit=0
-	certbot_output="$(certbot renew --non-interactive --force-renewal \
+	certbot_output="$(certbot renew --non-interactive \
 		--pre-hook "systemctl stop nginx" \
 		--post-hook "systemctl start nginx" 2>&1)" || certbot_exit=$?
 
@@ -310,6 +317,12 @@ renew_certificate() {
 	echo "$certbot_output" | sed 's/^/    /'
 
 	if [[ "$certbot_exit" -ne 0 ]]; then
+		if [[ -f "$cert_path" ]] && openssl x509 -checkend 0 -noout -in "$cert_path" 2>/dev/null; then
+			echo "[$timestamp][cert] WARNING: certbot renew failed (exit $certbot_exit), but the existing certificate is still valid"
+			echo "[$timestamp][cert]   Certbot logs: /var/log/letsencrypt/letsencrypt.log"
+			echo "[$timestamp][cert] === SSL certificate renewal check END (CERTBOT FAILED, EXISTING CERT VALID) ==="
+			return 0
+		fi
 		echo "[$timestamp][cert] FAILURE: certbot renew failed (exit $certbot_exit)"
 		echo "[$timestamp][cert]   Troubleshoot: sudo certbot renew --dry-run"
 		echo "[$timestamp][cert]   Certbot logs: /var/log/letsencrypt/letsencrypt.log"
