@@ -23,7 +23,7 @@ fi
 
 # shellcheck disable=SC1090
 source "$service_commands"
-dispatch_service_command_if_requested "${1:-}"
+dispatch_service_command_if_requested "$@"
 
 abort_production_dev_mode_without_args() {
     local arg_count="${1:-0}"
@@ -32,12 +32,7 @@ abort_production_dev_mode_without_args() {
         return 0
     fi
 
-    local svc_type
-    svc_type="$(detect_service_system)"
-
-    if [[ "$svc_type" == "none" ]] \
-        && [[ ! -f "/etc/squirrel/squirrel.env" ]] \
-        && [[ ! -f "/usr/local/etc/squirrel/squirrel.env" ]]; then
+    if ! is_production_install; then
         return 0
     fi
 
@@ -48,7 +43,7 @@ abort_production_dev_mode_without_args() {
     echo "         - ./run.sh status"
     echo "         - ./run.sh logs"
     echo "         - ./run.sh update"
-    echo "       If you really want dev server mode, use: ./run.sh --server"
+    echo "       For foreground diagnostics, stop the service first, then use: ./run.sh --server"
     exit 1
 }
 

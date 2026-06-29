@@ -105,10 +105,13 @@ window.__SQUIRREL_FASTIFY_URL__ = 'https://your-server.com';
 - No Tauri launched
 - Useful for headless development, manual diagnostics, or a foreground server session
 
-For an installed production server, use the service commands documented in
-`server_installation.md` instead: `./run.sh --https`, `./run.sh restart`,
+For an installed production server, prefer the service commands documented in
+`server_installation.md`: `./run.sh --https`, `./run.sh restart`,
 `./run.sh status`, and `./run.sh logs`. Those commands keep Fastify managed by
-systemd or rc.d behind the production reverse proxy.
+systemd or rc.d behind the production reverse proxy. On production hosts,
+`./run.sh --server` is only a foreground diagnostic mode: stop the service first,
+then it starts Fastify directly from the service environment without running
+development bootstrap or `npm ci`.
 
 ### Tauri Only (Remote Server)
 

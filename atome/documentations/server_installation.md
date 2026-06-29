@@ -100,13 +100,16 @@ install Tauri dependencies, run `npm ci`, create local development `.env` values
 or start foreground development processes.
 On an installed production host, `./run.sh` without arguments exits before
 bootstrap for the same reason; use the service commands below instead.
+On an installed production host, `./run.sh --server` is a foreground diagnostic
+mode only. It uses the service environment file and refuses to run while the
+system service is active, so it never runs the development bootstrap or `npm ci`.
 
 ### Common Commands
 
 | Action | Command | Description |
 | :--- | :--- | :--- |
 | **Start (HTTPS)** | `./run.sh --https` | Start production server via systemd/nginx |
-| **Start (HTTP dev)** | `./run.sh --server` | Start dev server (HTTP only, no Tauri) |
+| **Foreground diagnostics** | `./run.sh --server` | Start Fastify in the foreground after stopping the service |
 | **Status** | `./run.sh status` | Check if server is running & view recent logs |
 | **Stop** | `./run.sh stop` | Stop the service |
 | **Restart** | `./run.sh restart` | Restart the service (e.g. after updates) |
@@ -118,6 +121,7 @@ bootstrap for the same reason; use the service commands below instead.
 | Mode | Command | Protocol | Use Case |
 | :--- | :--- | :--- | :--- |
 | **Development** | `./run.sh --server` | HTTP | Local testing, debugging |
+| **Production foreground diagnostics** | `./run.sh stop && ./run.sh --server` | HTTP behind manual session | Direct Fastify diagnostics with the service environment |
 | **Production** | `./run.sh --https` | HTTPS (via Nginx) | Production servers |
 
 ---

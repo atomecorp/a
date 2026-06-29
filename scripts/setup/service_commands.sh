@@ -8,7 +8,7 @@ print_usage() {
     echo "      --prod            Build a production Tauri bundle and exit"
     echo "      --tauri           Launch only Tauri (no local Fastify server)"
     echo "      --tauri-prod      Build and launch the production Tauri app bundle"
-    echo "      --server          Launch only Fastify server (HTTP, dev mode)"
+    echo "      --server          Launch only Fastify server (HTTP, dev or prod foreground diagnostics)"
     echo "      --fastify-url URL Configure remote Fastify server URL for Tauri"
     echo ""
     echo "Production Options:"
@@ -27,7 +27,7 @@ print_usage() {
     echo ""
     echo "Examples:"
     echo "  $ENTRYPOINT_DISPLAY                   # Dev: Start both Fastify + Tauri"
-    echo "  $ENTRYPOINT_DISPLAY --server          # Dev: Start only Fastify (HTTP)"
+    echo "  $ENTRYPOINT_DISPLAY --server          # Start only Fastify (HTTP)"
     echo "  $ENTRYPOINT_DISPLAY --https           # Prod: Start via systemd/nginx (HTTPS)"
     echo "  $ENTRYPOINT_DISPLAY status            # Prod: Check service status"
     echo "  $ENTRYPOINT_DISPLAY logs              # Prod: View live logs"
@@ -46,6 +46,85 @@ detect_service_system() {
         echo "none"
     fi
 }
+
+service_env_file_for_type() {
+    local svc_type="$1"
+
+    case "$svc_type" in
+        systemd)
+            echo "/etc/squirrel/squirrel.env"
+            ;;
+        rcd)
+            echo "/usr/local/etc/squirrel/squirrel.env"
+            ;;
+        *)
+            echo ""
+            ;;
+    esac
+}
+
+is_production_install() {
+    local svc_type
+    svc_type="$(detect_service_system)"
+
+    [[ "$svc_type" != "none" ]] \
+        || [[ -f "/etc/squirrel/squirrel.env" ]] \
+        || [[ -f "/usr/local/etc/squirrel/squirrel.env" ]]
+}
+
+service_is_active() {
+    local svc_type="$1"
+
+    case "$svc_type" in
+        systemd)
+            systemctl is-active --quiet "$SERVICE_NAME"
+            ;;
+        rcd)
+            service "$SERVICE_NAME" status &>/dev/null
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
+service_foreground_server() {
+    local svc_type
+    svc_type="$(detect_service_system)"
+
+    if [[ "$svc_type" == "none" ]]; then
+        echo "ERROR: Production server environment exists, but service '$SERVICE_NAME' is not installed."
+        echo "Run first: sudo ./install_server.sh"
+        exit 1
+    fi
+
+    if service_is_active "$svc_type"; then
+        echo "ERROR: Service '$SERVICE_NAME' is already running."
+        echo "Use './run.sh logs' or './run.sh status' for diagnostics."
+        echo "For foreground server diagnostics, stop it first with: ./run.sh stop"
+        exit 1
+    fi
+
+    local env_file
+    env_file="$(service_env_file_for_type "$svc_type")"
+    if [[ -z "$env_file" ]] || [[ ! -f "$env_file" ]]; then
+        echo "ERROR: Missing production environment file: $env_file"
+        exit 1
+    fi
+
+    set -a
+    # shellcheck disable=SC1090
+    source "$env_file"
+    set +a
+
+    export NODE_ENV=production
+    cd "$PROJECT_ROOT"
+
+    echo "Starting $SERVICE_NAME foreground server with $env_file"
+    echo "Press Ctrl+C to stop."
+    exec node "$PROJECT_ROOT/server/server.js"
+}
+
 service_start() {
     local svc_type
     svc_type=$(detect_service_system)
@@ -260,6 +339,16 @@ dispatch_service_command_if_requested() {
         --help|-h)
             print_usage
             exit 0
+            ;;
+        --server)
+            if is_production_install; then
+                if [[ "$#" -gt 1 ]]; then
+                    echo "ERROR: Production foreground server mode does not accept extra arguments."
+                    exit 1
+                fi
+                service_foreground_server
+                exit 0
+            fi
             ;;
         --https)
             echo "Production HTTPS mode (systemd/nginx)"

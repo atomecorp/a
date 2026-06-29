@@ -1461,8 +1461,8 @@ Purpose: Build scripts, setup workflows, syntax/fallback guardrails, Tauri bound
 
 Production service routing:
 
-- `scripts/setup/run_unix.sh` owns the early production-service dispatch point for `./run.sh --https`, `start`, `stop`, `restart`, `status`, `logs`, `check`, and `update`. These commands must exit before development bootstrap, dependency installation, local `.env` writes, SQLite/upload watcher setup, Fastify dev launch, or Tauri launch. On an installed production host, the no-argument dev path is also rejected before bootstrap so accidental `./run.sh` cannot install Tauri dependencies or run `npm ci`.
-- `scripts/setup/service_commands.sh` owns the production service command implementations shared by that early dispatch.
+- `scripts/setup/run_unix.sh` owns the early production-service dispatch point for `./run.sh --https`, `start`, `stop`, `restart`, `status`, `logs`, `check`, `update`, and installed-production `--server`. These commands must exit before development bootstrap, dependency installation, local `.env` writes, SQLite/upload watcher setup, Fastify dev launch, or Tauri launch. On an installed production host, the no-argument dev path is also rejected before bootstrap so accidental `./run.sh` cannot install Tauri dependencies or run `npm ci`.
+- `scripts/setup/service_commands.sh` owns the production service command implementations shared by that early dispatch. Its production `--server` path is foreground diagnostics only: it loads the service environment, refuses to run while the service is active, and directly executes `server/server.js` without development setup.
 - `scripts/setup/bootstrap.sh` owns clean-clone and development bootstrap only. It must not be required for installed production service management.
 - `scripts/server_update.js` owns reproducible production update flow, including dependency reinstall, service restart, and Nginx reload.
 
