@@ -9,6 +9,7 @@ globalThis.requestAnimationFrame = window.requestAnimationFrame;
 globalThis.cancelAnimationFrame = window.cancelAnimationFrame;
 
 const capturedAnimations = [];
+const spokenLoginTexts = [];
 window.Element.prototype.animate = function animate(frames, options) {
     const entry = { element: this, frames, options };
     capturedAnimations.push(entry);
@@ -16,6 +17,16 @@ window.Element.prototype.animate = function animate(frames, options) {
         cancel() {},
         finished: Promise.resolve()
     };
+};
+
+window.Squirrel = {
+    ...(window.Squirrel || {}),
+    voice: {
+        speak: async (text, options = {}) => {
+            spokenLoginTexts.push({ text, options });
+            return { ok: true };
+        }
+    }
 };
 
 globalThis.$ = (tag, options = {}) => {
@@ -112,6 +123,7 @@ const sequence = createUserLoginSequence({
 });
 sequence.open();
 await new Promise((resolve) => setTimeout(resolve, 0));
+await waitForCondition(() => spokenLoginTexts.length === 1);
 
 const root = document.getElementById('eve_login_sequence');
 const choice = document.getElementById('eve_login_sequence__choice');
@@ -130,6 +142,13 @@ const topBandMotion = capturedAnimations.find((entry) => entry.element?.id === '
 assert.equal(root?.style?.display, 'block', 'login shell must open');
 assert.equal(root?.style?.backgroundColor, 'inherit', 'login shell must inherit the body background before the choice fade');
 assert.equal(choice?.style?.display, 'flex', 'choice surface must be visible first');
+assert.deepEqual(spokenLoginTexts, [{
+    text: 'Souhaitez-vous être guidé vocalement ?',
+    options: {
+        lang: 'fr-FR',
+        source: 'login_choice'
+    }
+}], 'login choice must announce the voice-guidance prompt once through the voice API');
 assert.match(LOGIN_GRADIENTS.shell, /radial-gradient/, 'login shell token must keep the textured background');
 assert.match(LOGIN_GRADIENTS.guest, /radial-gradient/, 'guest choice must use a layered violet background');
 assert.match(LOGIN_GRADIENTS.auth, /radial-gradient/, 'account choice must use a separate layered violet background');

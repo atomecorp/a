@@ -1392,6 +1392,23 @@ Use only from: eVe media tools, MTraX, product import/preview flows, and targete
 
 Status: Semi-public closed product API. Generic playback/recording belongs to Atome AV runtime first.
 
+### eVe User Profile Preferences API
+
+Ownership: eVe closed user/profile domain.
+
+Primary sources:
+
+- `eVe/intuition/tools/user_preferences_cache_runtime.js`
+- `eVe/intuition/tools/user_accessibility_preferences_model.js`
+- `eVe/intuition/tools/user_accessibility_preferences_runtime.js`
+- `eVe/domains/user/profile_api.js`
+
+Exposure: durable profile payload stored under `eve_profile.preferences`. `preferences.accessibility` is normalized as `{ auditory: boolean, visual: boolean }`; missing values default to `false`.
+
+Boundary status: Semi-public closed eVe product profile contract. It is edited by the user panel and persisted through the existing profile autosave path, which writes through `window.Atome.commit` via `upsertUserProfile`.
+
+Effect model: UI controls update only the in-memory profile preference cache, publish the existing `eve:profile-preferences-updated` event, and schedule the existing profile save. They must not write DOM state as preference authority, create a separate persistence route, or bypass the canonical Atome commit path.
+
 ### Internal APIs
 
 #### Internal Atome Framework Helpers

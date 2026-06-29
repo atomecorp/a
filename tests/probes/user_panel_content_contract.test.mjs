@@ -402,11 +402,24 @@ const userFooter = document.getElementById('eve_user_dialog__body_footer');
 const userActions = document.getElementById('eve_user_dialog__actions');
 const preferences = document.getElementById('eve_user_dialog__preferences');
 const userToolsDock = document.getElementById('eve_user_dialog__tools_dock');
+const accessibilityPreferences = document.getElementById('eve_user_dialog__preferences__accessibility');
+const accessibilityAuditoryBox = document.getElementById('eve_user_dialog__preferences__accessibility__body__controls__auditory__enabled__box');
+const accessibilityVisualBox = document.getElementById('eve_user_dialog__preferences__accessibility__body__controls__visual__enabled__box');
 assert.ok(userBody?.children?.length > 0, 'user dialog body must contain profile fields');
 assert.ok(userActions, 'user dialog actions row must exist');
 assert.equal(userBody?.contains(userActions), true, 'user dialog actions must live in the scrollable body');
 assert.equal(userFooter?.contains(userActions) || false, false, 'user dialog footer must not contain actions');
 assert.equal(userActions?.previousElementSibling, preferences, 'user dialog actions must be directly below preferences');
+assert.ok(accessibilityPreferences, 'user preferences must expose the handicap accordion');
+assert.equal(accessibilityAuditoryBox?.getAttribute('aria-checked'), 'false', 'auditory handicap preference must default to off');
+assert.equal(accessibilityVisualBox?.getAttribute('aria-checked'), 'false', 'visual handicap preference must default to off');
+accessibilityVisualBox.dispatchEvent(new window.Event('pointerdown', { bubbles: true, cancelable: true }));
+assert.equal(accessibilityVisualBox?.getAttribute('aria-checked'), 'true', 'visual handicap preference must toggle on');
+assert.deepEqual(
+    window.__eveProfilePreferences?.accessibility,
+    { auditory: false, visual: true },
+    'handicap preferences must persist in the profile preferences cache'
+);
 assert.equal(document.getElementById('eve_user_dialog__contact_tool'), null, 'user dialog must not expose the contact tool');
 assert.equal(userToolsDock?.style?.display, 'none', 'user dialog contact tool dock must stay hidden');
 assert.ok(
