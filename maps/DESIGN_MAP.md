@@ -380,6 +380,7 @@ Role:
 - The main ribbon container is visually transparent; the Atome handle remains docked directly against the WebView bottom-right edge in right-handed mode and bottom-left edge in left-handed mode, matching the Dashboard header side.
 - Toolbox styles inject runtime CSS variables and rules for menu V2.
 - Flower menu visuals keep DOM orchestration in `menu.js`, radial placement in `menu_layout.js`, and icon/item visual normalization in `menu_items.js`; active-selection compatibility is owned by `context_selection.js`, with mixed-kind multi-selection constrained to the `info` tool until compatible batch-tool policy is expanded.
+- Lasso action menu visuals are owned by `eVe/shared/lasso_context_zone_runtime.js`: the selected lasso rectangle remains a passive overlay, the action menu opens from a long press inside the runtime selection bounds, and no separate bottom `+` trigger is rendered. `eVe/intuition/flower/context_target.js` must block flower long press by consulting that runtime lasso point blocker while the lasso context is active.
 - Matrix visual tokens define grid metrics, overlay styling, tile states, labels, and open animation.
 - Matrix layout runtime owns toolbar-aware viewport fitting, CSS grid variable updates, and scroll positioning; Matrix view runtime owns project and tile DOM composition.
 - Matrix visual grids use logical slot virtualization: empty background capacity is represented by grid sizing and slot math, while DOM nodes are reserved for project tiles and the first actionable empty creation tile.

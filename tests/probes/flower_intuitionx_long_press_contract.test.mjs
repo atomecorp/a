@@ -22,6 +22,7 @@ const {
 } = await import('../../eVe/intuition/flower/index.js');
 const { registerAtomeElement } = await import('../../eVe/core/atome_dom_id.js');
 const { ensureIntuitionMenuLayer } = await import('../../eVe/intuition/runtime/layer_contract.js');
+const { createLassoContextZone } = await import('../../eVe/shared/lasso_context_zone_runtime.js');
 
 const defineReadonly = (target, key, value) => {
     Object.defineProperty(target, key, {
@@ -251,6 +252,42 @@ await delay(8);
 document.dispatchEvent(makePointerEvent('pointerup', { pointerId: 62, buttons: 0, clientX: 180, clientY: 180 }));
 assert.equal(isFlowerMenuOpen(), false, 'a long press on a matrix tile label must not open the IntuitionX flower (the inline rename editor owns that gesture)');
 assert.equal(opens.length, opensBeforeMatrixLabel, 'a blocked matrix tile label must not resolve flower items');
+
+closeFlowerMenu();
+await delay(20);
+document.elementFromPoint = () => host;
+document.elementsFromPoint = () => [host, document.body];
+const lassoOverlay = document.createElement('div');
+lassoOverlay.className = 'eve-atome-lasso';
+lassoOverlay.getBoundingClientRect = () => ({
+    left: 150,
+    top: 150,
+    right: 250,
+    bottom: 250,
+    width: 100,
+    height: 100
+});
+document.body.appendChild(lassoOverlay);
+const lassoZone = createLassoContextZone({
+    overlay: lassoOverlay,
+    bounds: { x: 0, y: 0, width: 100, height: 100 },
+    actions: [],
+    autoDismissMs: 10000,
+    longPressMs: 10000
+});
+const opensBeforeLassoBlock = opens.length;
+host.dispatchEvent(makePointerEvent('pointerdown', { pointerId: 63, clientX: 180, clientY: 180 }));
+await delay(8);
+document.dispatchEvent(makePointerEvent('pointerup', { pointerId: 63, buttons: 0, clientX: 180, clientY: 180 }));
+assert.equal(isFlowerMenuOpen(), false, 'a long press inside an active lasso selection must not open the IntuitionX flower');
+assert.equal(opens.length, opensBeforeLassoBlock, 'a lasso-blocked point must not resolve flower items');
+
+lassoZone.dismiss({ immediate: true });
+host.dispatchEvent(makePointerEvent('pointerdown', { pointerId: 64, clientX: 180, clientY: 180 }));
+await delay(8);
+document.dispatchEvent(makePointerEvent('pointerup', { pointerId: 64, buttons: 0, clientX: 180, clientY: 180 }));
+assert.equal(isFlowerMenuOpen(), true, 'dismissing the lasso selection must release the IntuitionX flower block');
+assert.equal(opens.length, opensBeforeLassoBlock + 1, 'flower items must resolve again after lasso dismiss');
 
 closeFlowerMenu();
 cleanup();
