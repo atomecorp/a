@@ -95,6 +95,9 @@ Make sure `package-lock.json` is tracked in git and up to date with `package.jso
 
 Once installed, the server runs in the background as a system service.
 Use `./run.sh` with service commands to manage it easily on any platform.
+Production service commands are routed before development bootstrap. They do not
+install Tauri dependencies, run `npm ci`, create local development `.env` values,
+or start foreground development processes.
 
 ### Common Commands
 
@@ -159,12 +162,16 @@ The Fastify server runs from `server/server.js` and exposes REST + WebSocket end
 ### Start Options (Advanced)
 
 ```bash
-# Recommended (uses run.sh)
+# Foreground HTTP server for development or manual diagnostics
 ./run.sh --server
 
 # Manual (runs Fastify directly)
 node server/server.js
 ```
+
+For installed production servers, prefer the service commands above (`./run.sh
+--https`, `./run.sh restart`, `./run.sh status`, and `./run.sh logs`) so Fastify
+continues to run under systemd or rc.d behind Nginx.
 
 ### Key Endpoints
 

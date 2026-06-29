@@ -103,7 +103,12 @@ window.__SQUIRREL_FASTIFY_URL__ = 'https://your-server.com';
 
 - Starts only Fastify on `localhost:3001`
 - No Tauri launched
-- Useful for headless/production servers
+- Useful for headless development, manual diagnostics, or a foreground server session
+
+For an installed production server, use the service commands documented in
+`server_installation.md` instead: `./run.sh --https`, `./run.sh restart`,
+`./run.sh status`, and `./run.sh logs`. Those commands keep Fastify managed by
+systemd or rc.d behind the production reverse proxy.
 
 ### Tauri Only (Remote Server)
 

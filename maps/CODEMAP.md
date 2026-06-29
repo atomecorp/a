@@ -1459,6 +1459,13 @@ Owner: Development and validation tooling.
 
 Purpose: Build scripts, setup workflows, syntax/fallback guardrails, Tauri boundary checks, Molecule guardrails, Fastify runner, static server, publishing scripts, and live smoke/probe suites.
 
+Production service routing:
+
+- `scripts/setup/run_unix.sh` owns the early production-service dispatch point for `./run.sh --https`, `start`, `stop`, `restart`, `status`, `logs`, `check`, and `update`. These commands must exit before development bootstrap, dependency installation, local `.env` writes, SQLite/upload watcher setup, Fastify dev launch, or Tauri launch.
+- `scripts/setup/service_commands.sh` owns the production service command implementations shared by that early dispatch.
+- `scripts/setup/bootstrap.sh` owns clean-clone and development bootstrap only. It must not be required for installed production service management.
+- `scripts/server_update.js` owns reproducible production update flow, including dependency reinstall, service restart, and Nginx reload.
+
 Main files:
 
 - `scripts/check_no_fallbacks.mjs`
@@ -1467,7 +1474,10 @@ Main files:
 - `scripts/check_eve_ai_guardrails.mjs`
 - `scripts/check_dom_projection_guardrails.mjs`
 - `scripts/export_dom_subtrees.mjs`
+- `scripts/setup/run_unix.sh`
+- `scripts/setup/service_commands.sh`
 - `scripts/setup/bootstrap.sh`
+- `scripts/server_update.js`
 - `scripts/static_file_server.mjs`
 - `scripts/run_fastify.sh`
 - `scripts/rollup.config.cdn.js`

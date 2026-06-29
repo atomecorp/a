@@ -12,13 +12,20 @@ SCRIPT_DIR="$(cd -P "$(dirname "$SOURCE")" >/dev/null 2>&1 && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." >/dev/null 2>&1 && pwd)"
 SCRIPTS_DIR="$PROJECT_ROOT/scripts"
 ENTRYPOINT_DISPLAY="${RUN_ENTRYPOINT_OVERRIDE:-$0}"
+SERVICE_NAME="squirrel"
+DEFAULT_SQLITE_PATH="database_storage/adole.db"
+
+service_commands="$SCRIPTS_DIR/setup/service_commands.sh"
+if [[ ! -f "$service_commands" ]]; then
+    echo "ERROR: Missing service command helper: $service_commands"
+    exit 1
+fi
+
+# shellcheck disable=SC1090
+source "$service_commands"
+dispatch_service_command_if_requested "${1:-}"
 
 run_bootstrap_if_needed() {
-    local first_arg="${1:-}"
-    if [[ "$first_arg" == "--help" || "$first_arg" == "-h" ]]; then
-        return 0
-    fi
-
     local bootstrap_script="$SCRIPTS_DIR/setup/bootstrap.sh"
     if [[ ! -f "$bootstrap_script" ]]; then
         echo "ERROR: Missing bootstrap script: $bootstrap_script"
@@ -65,9 +72,6 @@ if [[ "$(uname -s 2>/dev/null || true)" == "Darwin" ]]; then
 else
     DEFAULT_MONITORED_PATH="$PROJECT_ROOT/monitored"
 fi
-
-# --- Database defaults (SQLite/libSQL) ---------------------------------------
-DEFAULT_SQLITE_PATH="database_storage/adole.db"
 
 # =============================================================================
 # DATABASE SETUP FUNCTION (SQLite)
@@ -371,231 +375,6 @@ cleanup() {
     exit 0
 }
 
-# =============================================================================
-# SERVICE MANAGEMENT FUNCTIONS (for --https / production mode)
-# =============================================================================
-
-SERVICE_NAME="squirrel"
-
-# Detect OS for service commands
-detect_service_system() {
-    if [[ -f "/etc/systemd/system/$SERVICE_NAME.service" ]]; then
-        echo "systemd"
-    elif [[ -f "/usr/local/etc/rc.d/$SERVICE_NAME" ]]; then
-        echo "rcd"
-    else
-        echo "none"
-    fi
-}
-
-service_start() {
-    local svc_type
-    svc_type=$(detect_service_system)
-    
-    case "$svc_type" in
-        systemd)
-            echo "🚀 Démarrage du service $SERVICE_NAME (systemd)..."
-            sudo systemctl start "$SERVICE_NAME"
-            sudo systemctl status "$SERVICE_NAME" --no-pager
-            ;;
-        rcd)
-            echo "🚀 Démarrage du service $SERVICE_NAME (rc.d)..."
-            sudo service "$SERVICE_NAME" start
-            sudo service "$SERVICE_NAME" status
-            ;;
-        *)
-            echo "❌ Service '$SERVICE_NAME' non installé."
-            echo "   Exécutez d'abord: sudo ./install_server.sh"
-            exit 1
-            ;;
-    esac
-}
-
-service_stop() {
-    local svc_type
-    svc_type=$(detect_service_system)
-    
-    case "$svc_type" in
-        systemd)
-            echo "🛑 Arrêt du service $SERVICE_NAME..."
-            sudo systemctl stop "$SERVICE_NAME"
-            echo "✅ Service arrêté"
-            ;;
-        rcd)
-            echo "🛑 Arrêt du service $SERVICE_NAME..."
-            sudo service "$SERVICE_NAME" stop
-            echo "✅ Service arrêté"
-            ;;
-        *)
-            echo "❌ Service '$SERVICE_NAME' non installé."
-            exit 1
-            ;;
-    esac
-}
-
-service_restart() {
-    local svc_type
-    svc_type=$(detect_service_system)
-    
-    case "$svc_type" in
-        systemd)
-            echo "🔄 Redémarrage du service $SERVICE_NAME..."
-            sudo systemctl restart "$SERVICE_NAME"
-            sudo systemctl status "$SERVICE_NAME" --no-pager
-            ;;
-        rcd)
-            echo "🔄 Redémarrage du service $SERVICE_NAME..."
-            sudo service "$SERVICE_NAME" restart
-            sudo service "$SERVICE_NAME" status
-            ;;
-        *)
-            echo "❌ Service '$SERVICE_NAME' non installé."
-            exit 1
-            ;;
-    esac
-}
-
-service_status() {
-    local svc_type
-    svc_type=$(detect_service_system)
-    
-    case "$svc_type" in
-        systemd)
-            sudo systemctl status "$SERVICE_NAME" || true
-            
-            # Auto-diagnostic if service is not active
-            if ! systemctl is-active --quiet "$SERVICE_NAME"; then
-                echo ""
-                echo "⚠️  ALERTE : Le serveur plante ou redémarre en boucle."
-                echo "🔍 Analyse des logs récents (30 dernières lignes) :"
-                echo "----------------------------------------------------------------"
-                sudo journalctl -u "$SERVICE_NAME" -n 30 --no-pager
-                echo "----------------------------------------------------------------"
-                echo "👉 Astuce : Lancez './run.sh logs' pour voir le direct."
-            fi
-            ;;
-        rcd)
-            sudo service "$SERVICE_NAME" status || true
-            echo ""
-            echo "📋 Dernières lignes des logs:"
-            tail -20 /var/log/messages 2>/dev/null || tail -20 /var/log/syslog 2>/dev/null || true
-            ;;
-        *)
-            echo "❌ Service '$SERVICE_NAME' non installé."
-            echo "   Pour le mode développement, utilisez: ./run.sh --server"
-            exit 1
-            ;;
-    esac
-}
-
-service_logs() {
-    local svc_type
-    svc_type=$(detect_service_system)
-    
-    echo "📋 Logs en direct (Ctrl+C pour quitter)..."
-    
-    case "$svc_type" in
-        systemd)
-            sudo journalctl -u "$SERVICE_NAME" -f
-            ;;
-        rcd)
-            tail -f /var/log/messages 2>/dev/null || tail -f /var/log/syslog 2>/dev/null
-            ;;
-        *)
-            echo "❌ Service '$SERVICE_NAME' non installé."
-            exit 1
-            ;;
-    esac
-}
-
-service_check() {
-    echo "🔍 Vérifications système..."
-    echo ""
-    
-    # 1. Nginx
-    echo -n "1. Nginx: "
-    if command -v nginx &>/dev/null; then
-        if sudo nginx -t &>/dev/null; then
-            echo -e "✅ Configuration OK"
-        else
-            echo -e "❌ Erreur de configuration"
-            sudo nginx -t 2>&1 | head -5
-        fi
-    else
-        echo "⚠️  Non installé"
-    fi
-    
-    # 2. Service status
-    local svc_type
-    svc_type=$(detect_service_system)
-    echo -n "2. Service $SERVICE_NAME: "
-    case "$svc_type" in
-        systemd)
-            if systemctl is-active --quiet "$SERVICE_NAME"; then
-                echo -e "✅ ACTIF"
-            else
-                echo -e "❌ INACTIF"
-            fi
-            ;;
-        rcd)
-            if service "$SERVICE_NAME" status &>/dev/null; then
-                echo -e "✅ ACTIF"
-            else
-                echo -e "❌ INACTIF"
-            fi
-            ;;
-        *)
-            echo "⚠️  Non installé"
-            ;;
-    esac
-    
-    # 3. Port 3001
-    echo -n "3. Port 3001: "
-    if command -v lsof &>/dev/null && lsof -i :3001 &>/dev/null; then
-        if lsof -i :3001 | grep -q "127.0.0.1"; then
-            echo -e "✅ Écoute sur localhost uniquement (sécurisé)"
-        else
-            echo -e "⚠️  Exposé publiquement"
-        fi
-    else
-        echo -e "❌ Aucun processus"
-    fi
-    
-    # 4. SSL Certificate
-    echo -n "4. Certificat SSL: "
-    if [[ -d "/etc/letsencrypt/live" ]] && [[ -n "$(ls -A /etc/letsencrypt/live 2>/dev/null)" ]]; then
-        echo -e "✅ Let's Encrypt configuré"
-    else
-        echo -e "⚠️  Non configuré"
-    fi
-    
-    # 5. SQLite Database
-    echo -n "5. SQLite: "
-    if [[ -f "${SQLITE_PATH:-$PROJECT_ROOT/$DEFAULT_SQLITE_PATH}" ]]; then
-        echo -e "✅ Base de données présente"
-    else
-        echo -e "⚠️  Base de données non créée (sera créée au démarrage)"
-    fi
-    
-    echo ""
-}
-
-service_update() {
-    echo "🔄 Updating server code + dependencies (reproducible)"
-    local updater="$SCRIPTS_DIR/server_update.js"
-    if [[ ! -f "$updater" ]]; then
-        echo "❌ Missing updater script: $updater"
-        echo "   Pull the latest code and try again."
-        exit 1
-    fi
-
-    if [[ ${EUID:-$(id -u)} -eq 0 ]]; then
-        node "$updater"
-    else
-        sudo node "$updater"
-    fi
-}
-
 # Vérifier les arguments de ligne de commande
 FORCE_DEPS=false
 PROD_BUILD=false
@@ -626,81 +405,12 @@ while [[ $# -gt 0 ]]; do
             SERVER_ONLY=true
             shift
             ;;
-        --https)
-            # Production mode: start service directly without dev setup
-            echo "🔐 Mode production HTTPS (systemd/nginx)"
-            service_start
-            exit 0
-            ;;
         --fastify-url)
             FASTIFY_URL="$2"
             shift 2
             ;;
-        # Service management commands (shortcuts)
-        start)
-            service_start
-            exit 0
-            ;;
-        stop)
-            service_stop
-            exit 0
-            ;;
-        restart)
-            service_restart
-            exit 0
-            ;;
-        status)
-            service_status
-            exit 0
-            ;;
-        logs)
-            service_logs
-            exit 0
-            ;;
-        update)
-            service_update
-            exit 0
-            ;;
-        check)
-            service_check
-            exit 0
-            ;;
         --help|-h)
-            echo "Usage: $ENTRYPOINT_DISPLAY [OPTIONS|COMMAND]"
-            echo ""
-            echo "Development Options:"
-            echo "  -f, --force-deps      Force update all dependencies before starting"
-            echo "      --prod            Build a production Tauri bundle and exit"
-            echo "      --tauri           Launch only Tauri (no local Fastify server)"
-            echo "      --tauri-prod      Build and launch the production Tauri app bundle"
-            echo "      --server          Launch only Fastify server (HTTP, dev mode)"
-            echo "      --fastify-url URL Configure remote Fastify server URL for Tauri"
-            echo ""
-            echo "Production Options:"
-            echo "      --https           Start production server via systemd/nginx (HTTPS)"
-            echo ""
-            echo "Service Commands (production):"
-            echo "  start                 Start the production service"
-            echo "  stop                  Stop the production service"
-            echo "  restart               Restart the production service"
-            echo "  status                Show service status and recent logs"
-            echo "  logs                  Follow service logs (Ctrl+C to exit)"
-            echo "  update                Update code + reinstall deps + restart"
-            echo "  check                 Run system diagnostics (Nginx, SSL, ports)"
-            echo ""
-            echo "  -h, --help            Show this help message"
-            echo ""
-            echo "Examples:"
-            echo "  $ENTRYPOINT_DISPLAY                   # Dev: Start both Fastify + Tauri"
-            echo "  $ENTRYPOINT_DISPLAY --server          # Dev: Start only Fastify (HTTP)"
-            echo "  $ENTRYPOINT_DISPLAY --https           # Prod: Start via systemd/nginx (HTTPS)"
-            echo "  $ENTRYPOINT_DISPLAY status            # Prod: Check service status"
-            echo "  $ENTRYPOINT_DISPLAY logs              # Prod: View live logs"
-            echo "  $ENTRYPOINT_DISPLAY restart           # Prod: Restart after update"
-            echo "  $ENTRYPOINT_DISPLAY --prod            # Build Tauri production bundle"
-            echo "  $ENTRYPOINT_DISPLAY --tauri --prod     # Build + launch Tauri production bundle"
-            echo "  $ENTRYPOINT_DISPLAY --tauri-prod       # Same as above"
-            echo ""
+            print_usage
             exit 0
             ;;
         *)
