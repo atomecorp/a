@@ -73,6 +73,18 @@ test('RenderAtom normalization keeps render data disposable and cacheable', () =
     });
     assert.deepEqual(croppedVideo.content.uvRect, { x: 0.25, y: 0.125, width: 0.5, height: 0.75 });
     assert.deepEqual(croppedVideo.content.sourceRect, { x: 160, y: 90, width: 320, height: 180 });
+    const fittedImage = normalizeRenderAtom({
+        ...makeRecord('image_fit', 'image', 7),
+        properties: {
+            ...makeRecord('image_fit', 'image', 7).properties,
+            source: '/media/fitted.png',
+            media_fit: 'contain'
+        }
+    });
+    assert.equal(fittedImage.content.mediaFit, 'contain');
+    assert.equal(fittedImage.content.media_fit, 'contain');
+    assert.equal(fittedImage.content.objectFit, 'contain');
+    assert.equal(fittedImage.content.object_fit, 'contain');
     assert.match(buildTextCacheKey(text), /^text:eve\.renderatom\.v1:text_a:/);
     assert.match(buildTextureCacheKey(image), /^texture:eve\.renderatom\.v1:image:/);
     assert.match(buildTextureCacheKey(video), /^texture:eve\.renderatom\.v1:video:/);

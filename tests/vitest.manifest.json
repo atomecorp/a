@@ -5,6 +5,7 @@
   "tests/eve/atome_property_sanitizer_ownership.test.mjs",
   "tests/eve/atome_record_projection_project_id.test.mjs",
   "tests/eve/bevy_external_image_source_runtime.test.mjs",
+  "tests/eve/bevy_media_texture_image_fit.test.mjs",
   "tests/eve/bevy_native_media_texture_contract.test.mjs",
   "tests/eve/bevy_native_renderer_runtime.test.mjs",
   "tests/eve/bevy_project_renderer_guards.test.mjs",

@@ -3,7 +3,9 @@ import path from 'node:path';
 import { chromium } from 'playwright';
 import { analyzeDashboardOverviewVisual, analyzeDashboardVisual } from './dashboard_bevy_runtime/visual_support.mjs';
 import {
+    analyzeDashboardContactPhotoVisual,
     analyzeDashboardProjectPreviewVisual,
+    ensureContactPhotoFixture,
     ensureProjectPreviewFixture,
     projectPreviewMediaRecord
 } from './dashboard_bevy_runtime/project_preview_support.mjs';
@@ -16,6 +18,7 @@ import {
     waitFor,
     waitForPresentationFrames
 } from './dashboard_bevy_runtime/runtime_support.mjs';
+import { dashboardSnapshot } from './dashboard_bevy_runtime/snapshot_support.mjs';
 
 const APP_URL = process.env.ADOLE_TEST_URL || 'http://127.0.0.1:3001';
 const OUT_DIR = path.resolve('temp/probe_reports/dashboard_bevy_runtime');
@@ -27,109 +30,6 @@ const DASHBOARD_PROJECTS_SCREENSHOT = path.join(OUT_DIR, 'dashboard_projects.png
 fs.mkdirSync(OUT_DIR, { recursive: true });
 
 const writeReport = (report) => fs.writeFileSync(REPORT_FILE, `${JSON.stringify(report, null, 2)}\n`, 'utf8');
-
-const dashboardSnapshot = async (page) => page.evaluate(async () => {
-    const runtime = window.eveDashboardRuntime || null;
-    const state = runtime?.state || null;
-    const projectId = window.__currentProject?.id || null;
-    const scene = projectId ? window.eveToolBase?.getProjectSceneState?.(projectId) : null;
-    const records = Array.isArray(scene?.records) ? scene.records : [];
-    const dashboardRecords = records.filter((record) => String(record?.id || '').startsWith('__eve_dashboard_'));
-    const visibleDashboardRecords = dashboardRecords.filter((record) => record?.properties?.visible !== false);
-    const editorRecord = dashboardRecords.find((record) => record.id === '__eve_dashboard_editor') || null;
-    const layout = state?.layout || null;
-    const flower = document.getElementById('eve_intuitionx_flower');
-    const flowerStyle = flower ? getComputedStyle(flower) : null;
-    const flowerRect = flower?.getBoundingClientRect?.() || null;
-    const flowerOpen = !!flower
-        && flowerStyle?.display !== 'none'
-        && flowerStyle?.visibility !== 'hidden'
-        && Number(flowerRect?.width || 0) > 0
-        && Number(flowerRect?.height || 0) > 0;
-    const toolboxCandidates = [
-        document.querySelector('#eve_intuitionx_main_ribbon'),
-        document.querySelector('#eve_intuitionx_menu_layer #eve_intuitionx_main_ribbon'),
-        document.querySelector('#menu_container_v2 > .eve-toolbox-v2-row'),
-        document.querySelector('#menu_container_v2'),
-        document.querySelector('#toolbox'),
-        document.querySelector('#toolbox_support')
-    ].filter(Boolean);
-    const toolboxHeight = toolboxCandidates.reduce((height, element) => {
-        const rect = element.getBoundingClientRect();
-        return Math.max(height, Number(rect.height || 0));
-    }, 0);
-    const dashboardDomCount = document.querySelectorAll('[id^="__eve_dashboard_"], [data-dashboard]').length;
-    const canvas = document.getElementById('eve_surface_project');
-    const recordOverReservedBand = dashboardRecords.filter((record) => {
-        if (record.id === '__eve_dashboard_bottom_shadow') return false;
-        if (record.id === '__eve_dashboard_project_veil') return false;
-        if (record.id === '__eve_dashboard_reserved_band_fill') return false;
-        const props = record.properties || {};
-        const top = Number(props.top ?? props.y ?? 0);
-        const height = Number(props.height ?? 0);
-        return layout?.toolbox_reserved_rect && top + height > layout.toolbox_reserved_rect.y + 0.5;
-    }).map((record) => record.id);
-    return {
-        ok: !!runtime && !!state,
-        active: state?.active === true,
-        activeCategoryId: state?.activeCategoryId || null,
-        editorOpen: !!state?.editor,
-        editorItemId: state?.editor?.item?.id || null,
-        labelEditorOpen: !!state?.labelEditor,
-        labelEditorItemId: state?.labelEditor?.item_id || null,
-        labelEditorSelection: state?.labelEditor?.selection || null,
-        flowerOpen,
-        projectId,
-        canvas: canvas ? {
-            width: canvas.getBoundingClientRect().width,
-            height: canvas.getBoundingClientRect().height,
-            role: canvas.dataset?.role || null
-        } : null,
-        toolboxHeight,
-        layout: layout ? {
-            handedness: layout.handedness,
-            dashboard_rect: layout.dashboard_rect,
-            table_rect: layout.table_rect,
-            toolbox_reserved_rect: layout.toolbox_reserved_rect,
-            creation_fullscreen_rect: layout.creation_fullscreen_rect,
-            lanes: layout.lanes.map((lane) => ({
-                categoryId: lane.category.id,
-                lane_rect: lane.lane_rect,
-                header_rect: lane.header_rect,
-                plus_rect: lane.plus_rect,
-                active: lane.active,
-                visibleItemCount: lane.visible_item_rects.length,
-                items: lane.visible_item_rects.map((entry) => ({
-                    id: entry.item?.id || null,
-                    title: entry.item?.title || '',
-                    metadata: entry.item?.metadata || {},
-                    rect: entry.rect
-                }))
-            }))
-        } : null,
-        dashboardRecordIds: dashboardRecords.map((record) => record.id),
-        dashboardVisibleRecordIds: visibleDashboardRecords.map((record) => record.id),
-        dashboardTitleTexts: dashboardRecords
-            .filter((record) => String(record?.id || '').includes('card_title_'))
-            .map((record) => String(record?.properties?.text || '')),
-        dashboardMediaRecords: dashboardRecords
-            .filter((record) => String(record?.id || '').includes('card_media_'))
-            .map((record) => ({
-                id: String(record.id || ''),
-                source: String(record.properties?.source || ''),
-                media_fit: String(record.properties?.media_fit || record.properties?.object_fit || ''),
-                visible: record.properties?.visible !== false && Number(record.properties?.opacity ?? 1) > 0
-            })),
-        editorRect: editorRecord ? {
-            x: Number(editorRecord.properties?.left ?? editorRecord.properties?.x ?? 0),
-            y: Number(editorRecord.properties?.top ?? editorRecord.properties?.y ?? 0),
-            width: Number(editorRecord.properties?.width ?? 0),
-            height: Number(editorRecord.properties?.height ?? 0)
-        } : null,
-        dashboardDomCount,
-        recordOverReservedBand
-    };
-});
 
 const waitForDashboardSnapshot = async (page, predicate, timeoutMs = 30000, intervalMs = 250) => {
     const startedAt = Date.now();
@@ -220,6 +120,9 @@ const runScenario = async () => {
         const previewFixture = await ensureProjectPreviewFixture(page);
         if (!previewFixture.ok) throw new Error(`dashboard_project_preview_fixture_failed:${JSON.stringify(previewFixture)}`);
         report.checks.push({ name: 'project_preview_fixture_committed_through_atome', ok: true, snapshot: previewFixture });
+        const contactFixture = await ensureContactPhotoFixture(page);
+        if (!contactFixture.ok) throw new Error(`dashboard_contact_photo_fixture_failed:${JSON.stringify(contactFixture)}`);
+        report.checks.push({ name: 'contact_photo_fixture_committed_through_contacts_api', ok: true, snapshot: contactFixture });
 
         let atomHandle = await resolveAtomHandle(page);
         let opened = await waitForDashboardSnapshot(page, dashboardOpenReady, 12000);
@@ -250,6 +153,11 @@ const runScenario = async () => {
             name: 'visual_project_card_uses_renderer_capture_pixels',
             ok: true,
             visual: analyzeDashboardProjectPreviewVisual(DASHBOARD_PROJECTS_SCREENSHOT, openedWithProjectPreview.snapshot)
+        });
+        report.checks.push({
+            name: 'visual_contact_photo_is_clipped_to_card_radius',
+            ok: true,
+            visual: analyzeDashboardContactPhotoVisual(DASHBOARD_OPEN_SCREENSHOT, openedWithProjectPreview.snapshot)
         });
 
         const monitorLane = openedWithProjectPreview.snapshot.layout.lanes.find((lane) => lane.categoryId === 'monitor');
