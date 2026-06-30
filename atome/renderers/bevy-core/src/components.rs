@@ -56,6 +56,12 @@ impl AtomeLocalTransform {
 pub struct AtomeLayer(pub i32);
 
 #[derive(Clone, Copy, Debug, Component)]
+pub struct AtomeVisualColor(pub [f32; 4]);
+
+#[derive(Clone, Copy, Debug, Component)]
+pub struct AtomeVisualOpacity(pub f32);
+
+#[derive(Clone, Copy, Debug, Component)]
 pub struct AtomeCornerRadius(pub f32);
 
 #[derive(Clone, Debug, Component)]

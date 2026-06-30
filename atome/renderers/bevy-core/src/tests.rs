@@ -90,6 +90,14 @@ fn assert_fixed_projection_size(projection: &Projection, width: f32, height: f32
     assert!((actual_height - height).abs() < 0.01);
 }
 
+fn assert_alpha_near(color: Color, expected: f32) {
+    assert!(
+        (color.alpha() - expected).abs() < 0.001,
+        "alpha: {} != {expected}",
+        color.alpha()
+    );
+}
+
 #[test]
 fn plugin_spawns_projected_nodes_and_camera() {
     let scene = AtomeRenderScene {
@@ -122,6 +130,183 @@ fn plugin_spawns_projected_nodes_and_camera() {
     assert!(
         app.world().get::<AtomeShapeShadowOverlay>(entity).is_some(),
         "initial scene shape shadow should be spawned by the Bevy plugin"
+    );
+}
+
+#[test]
+fn shape_spawn_applies_initial_opacity_to_sprite() {
+    let mut world = World::new();
+    world.insert_resource(AtomeEntityTable::default());
+    world.insert_resource(AtomeBevyRendererConfig::empty(640.0, 480.0));
+    world.insert_resource(AtomeRendererDiagnostics::default());
+    world.insert_resource(Assets::<Image>::default());
+
+    let entity = apply_spawn(
+        &mut world,
+        AtomeRenderNode {
+            opacity: 0.25,
+            ..shape_node("transparent_shape")
+        },
+    )
+    .unwrap();
+
+    assert_alpha_near(world.get::<Sprite>(entity).unwrap().color, 0.25);
+    assert_eq!(world.get::<AtomeVisualOpacity>(entity).unwrap().0, 0.25);
+}
+
+#[test]
+fn style_opacity_patch_updates_shape_sprite_without_cumulative_alpha() {
+    let mut world = World::new();
+    world.insert_resource(AtomeEntityTable::default());
+    world.insert_resource(AtomeBevyRendererConfig::empty(640.0, 480.0));
+    world.insert_resource(AtomeRendererDiagnostics::default());
+    world.insert_resource(Assets::<Image>::default());
+
+    let entity = apply_spawn(&mut world, shape_node("fading_shape")).unwrap();
+    for opacity in [0.38, 0.7] {
+        apply_style(
+            &mut world,
+            AtomeStylePatch {
+                id: "fading_shape".to_string(),
+                color: None,
+                shadow: None,
+                selected: None,
+                opacity: Some(opacity),
+                playback_progress: None,
+                filters: None,
+                transition: None,
+            },
+        )
+        .unwrap();
+        assert_alpha_near(world.get::<Sprite>(entity).unwrap().color, opacity);
+        assert_eq!(world.get::<AtomeVisualOpacity>(entity).unwrap().0, opacity);
+    }
+}
+
+#[test]
+fn text_texture_spawn_and_opacity_patch_update_sprite_alpha() {
+    let mut world = World::new();
+    world.insert_resource(AtomeEntityTable::default());
+    world.insert_resource(AtomeBevyRendererConfig::empty(640.0, 480.0));
+    world.insert_resource(AtomeRendererDiagnostics::default());
+    world.insert_resource(Assets::<Image>::default());
+
+    let entity = apply_spawn(
+        &mut world,
+        AtomeRenderNode {
+            opacity: 0.4,
+            ..text_node_with_texture("fading_text_texture")
+        },
+    )
+    .unwrap();
+    assert_alpha_near(world.get::<Sprite>(entity).unwrap().color, 0.4);
+
+    apply_style(
+        &mut world,
+        AtomeStylePatch {
+            id: "fading_text_texture".to_string(),
+            color: None,
+            shadow: None,
+            selected: None,
+            opacity: Some(0.65),
+            playback_progress: None,
+            filters: None,
+            transition: None,
+        },
+    )
+    .unwrap();
+    assert_alpha_near(world.get::<Sprite>(entity).unwrap().color, 0.65);
+}
+
+#[test]
+fn text_color_spawn_and_opacity_patch_update_text_alpha() {
+    let mut world = World::new();
+    world.insert_resource(AtomeEntityTable::default());
+    world.insert_resource(AtomeBevyRendererConfig::empty(640.0, 480.0));
+    world.insert_resource(AtomeRendererDiagnostics::default());
+    world.insert_resource(Assets::<Image>::default());
+
+    let entity = apply_spawn(
+        &mut world,
+        AtomeRenderNode {
+            kind: "text".to_string(),
+            texture: None,
+            opacity: 0.3,
+            ..text_node_with_texture("fading_text_color")
+        },
+    )
+    .unwrap();
+    assert_alpha_near(world.get::<TextColor>(entity).unwrap().0, 0.3);
+
+    apply_style(
+        &mut world,
+        AtomeStylePatch {
+            id: "fading_text_color".to_string(),
+            color: None,
+            shadow: None,
+            selected: None,
+            opacity: Some(0.8),
+            playback_progress: None,
+            filters: None,
+            transition: None,
+        },
+    )
+    .unwrap();
+    assert_alpha_near(world.get::<TextColor>(entity).unwrap().0, 0.8);
+}
+
+#[test]
+fn shape_shadow_overlay_follows_owner_opacity() {
+    let mut world = World::new();
+    world.insert_resource(AtomeEntityTable::default());
+    world.insert_resource(AtomeBevyRendererConfig::empty(640.0, 480.0));
+    world.insert_resource(AtomeRendererDiagnostics::default());
+    world.insert_resource(Assets::<Image>::default());
+
+    let entity = apply_spawn(
+        &mut world,
+        AtomeRenderNode {
+            shadow: Some(AtomeShadowStyle {
+                color: [0.0, 0.0, 0.0, 0.3],
+                blur: 10.0,
+                offset_x: 0.0,
+                offset_y: 0.0,
+                spread: 0.0,
+            }),
+            opacity: 0.25,
+            ..shape_node("shadow_fade_shape")
+        },
+    )
+    .unwrap();
+
+    let overlay_entity = world
+        .get::<AtomeShapeShadowOverlay>(entity)
+        .unwrap()
+        .entities[0];
+    assert_alpha_near(world.get::<Sprite>(overlay_entity).unwrap().color, 0.25);
+
+    apply_style(
+        &mut world,
+        AtomeStylePatch {
+            id: "shadow_fade_shape".to_string(),
+            color: None,
+            shadow: None,
+            selected: None,
+            opacity: Some(0.6),
+            playback_progress: None,
+            filters: None,
+            transition: None,
+        },
+    )
+    .unwrap();
+
+    let updated_overlay_entity = world
+        .get::<AtomeShapeShadowOverlay>(entity)
+        .unwrap()
+        .entities[0];
+    assert_alpha_near(
+        world.get::<Sprite>(updated_overlay_entity).unwrap().color,
+        0.6,
     );
 }
 

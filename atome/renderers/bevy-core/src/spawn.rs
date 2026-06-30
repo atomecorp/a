@@ -16,6 +16,15 @@ fn color_for_node(node: &AtomeRenderNode) -> [f32; 4] {
     node.color.unwrap_or([0.24, 0.55, 0.92, 1.0])
 }
 
+fn color_with_opacity(mut color: [f32; 4], opacity: f32) -> [f32; 4] {
+    color[3] = color[3].clamp(0.0, 1.0) * normalize_opacity(opacity);
+    color
+}
+
+fn white_with_opacity(opacity: f32) -> Color {
+    color_from_rgba([1.0, 1.0, 1.0, normalize_opacity(opacity)])
+}
+
 fn node_base_components(
     node: &AtomeRenderNode,
     width: f32,
@@ -140,16 +149,17 @@ pub fn spawn_node_with_texture_handle(
     let width = node.logical_size[0].max(1.0);
     let height = node.logical_size[1].max(1.0);
     let color = color_for_node(&node);
+    let visible_color = color_with_opacity(color, node.opacity);
     let size = Vec2::new(width, height);
     let entity = match node.kind.as_str() {
         "shape" => {
             let sprite = if let Some(handle) = texture_handle {
                 let mut sprite = Sprite::from_image(handle);
                 sprite.custom_size = Some(size);
-                sprite.color = color_from_rgba(color);
+                sprite.color = color_from_rgba(visible_color);
                 sprite
             } else {
-                Sprite::from_color(color_from_rgba(color), size)
+                Sprite::from_color(color_from_rgba(visible_color), size)
             };
             world
                 .spawn((
@@ -162,7 +172,7 @@ pub fn spawn_node_with_texture_handle(
             if let Some(handle) = texture_handle {
                 let mut sprite = Sprite::from_image(handle);
                 sprite.custom_size = Some(size);
-                sprite.color = Color::WHITE;
+                sprite.color = white_with_opacity(node.opacity);
                 world
                     .spawn((
                         node_base_components(&node, width, height, surface_width, surface_height),
@@ -178,7 +188,7 @@ pub fn spawn_node_with_texture_handle(
                             font_size: height.min(32.0).max(12.0),
                             ..default()
                         },
-                        TextColor(color_from_rgba(color)),
+                        TextColor(color_from_rgba(visible_color)),
                         TextBounds::from(size),
                     ))
                     .id()
@@ -198,7 +208,9 @@ pub fn spawn_node_with_texture_handle(
             };
             sprite.custom_size = Some(size);
             if has_texture {
-                sprite.color = Color::WHITE;
+                sprite.color = white_with_opacity(node.opacity);
+            } else {
+                sprite.color = color_from_rgba(visible_color);
             }
             world
                 .spawn((
@@ -236,7 +248,9 @@ pub fn spawn_node_with_texture_handle(
             };
             sprite.custom_size = Some(size);
             if has_texture {
-                sprite.color = Color::WHITE;
+                sprite.color = white_with_opacity(node.opacity);
+            } else {
+                sprite.color = color_from_rgba(visible_color);
             }
             world
                 .spawn((
@@ -247,8 +261,10 @@ pub fn spawn_node_with_texture_handle(
         }
         other => return Err(format!("bevy_render_kind_unsupported:{other}")),
     };
-    world
-        .entity_mut(entity)
-        .insert(AtomeCornerRadius(node.corner_radius.max(0.0)));
+    world.entity_mut(entity).insert((
+        AtomeVisualColor(color),
+        AtomeVisualOpacity(normalize_opacity(node.opacity)),
+        AtomeCornerRadius(node.corner_radius.max(0.0)),
+    ));
     Ok(entity)
 }

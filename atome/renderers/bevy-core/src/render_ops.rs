@@ -7,7 +7,10 @@ use crate::{
         atome_camera_projection, atome_rect_transform_with_local, color_from_rgba, depth_for_layer,
     },
     selection_overlay::{rebuild_selection_overlay, remove_selection_overlay},
-    shape_shadow_overlay::{rebuild_shape_shadow_overlay, remove_shape_shadow_overlay},
+    shape_shadow_overlay::{
+        rebuild_shape_shadow_overlay, remove_shape_shadow_overlay,
+        sync_shape_shadow_overlay_opacity,
+    },
     spawn::spawn_node_in_world,
     texture::image_handle_from_texture,
     types::*,
@@ -214,11 +217,20 @@ pub fn apply_surface(world: &mut World, patch: AtomeSurfacePatch) -> Result<(), 
 pub fn apply_style(world: &mut World, patch: AtomeStylePatch) -> Result<(), String> {
     let entity = entity_for(world, &patch.id)?;
     if let Some(color) = patch.color {
+        if let Some(mut current) = world.get_mut::<AtomeVisualColor>(entity) {
+            current.0 = color;
+        }
+        let opacity = world
+            .get::<AtomeVisualOpacity>(entity)
+            .map(|value| value.0)
+            .unwrap_or_else(default_opacity);
+        let mut visual_color = color;
+        visual_color[3] = visual_color[3].clamp(0.0, 1.0) * normalize_opacity(opacity);
         if let Some(mut sprite) = world.get_mut::<Sprite>(entity) {
-            sprite.color = color_from_rgba(color);
+            sprite.color = color_from_rgba(visual_color);
         }
         if let Some(mut text_color) = world.get_mut::<TextColor>(entity) {
-            text_color.0 = color_from_rgba(color);
+            text_color.0 = color_from_rgba(visual_color);
         }
     }
     if let Some(shadow) = patch.shadow {
@@ -234,11 +246,28 @@ pub fn apply_style(world: &mut World, patch: AtomeStylePatch) -> Result<(), Stri
         rebuild_selection_overlay(world, entity)?;
     }
     if let Some(opacity) = patch.opacity {
+        let normalized_opacity = normalize_opacity(opacity);
+        if let Some(mut current) = world.get_mut::<AtomeVisualOpacity>(entity) {
+            current.0 = normalized_opacity;
+        }
+        let base_color = world
+            .get::<AtomeVisualColor>(entity)
+            .map(|value| value.0)
+            .unwrap_or([1.0, 1.0, 1.0, 1.0]);
+        let mut visual_color = base_color;
+        visual_color[3] = visual_color[3].clamp(0.0, 1.0) * normalized_opacity;
+        if let Some(mut sprite) = world.get_mut::<Sprite>(entity) {
+            sprite.color = color_from_rgba(visual_color);
+        }
+        if let Some(mut text_color) = world.get_mut::<TextColor>(entity) {
+            text_color.0 = color_from_rgba(visual_color);
+        }
         if let Some(mut video) =
             world.get_mut::<crate::video_external_texture::AtomeVideoExternalTexture>(entity)
         {
-            video.opacity = normalize_opacity(opacity);
+            video.opacity = normalized_opacity;
         }
+        sync_shape_shadow_overlay_opacity(world, entity, normalized_opacity);
     }
     if let Some(filters) = patch.filters {
         if let Some(mut video) =

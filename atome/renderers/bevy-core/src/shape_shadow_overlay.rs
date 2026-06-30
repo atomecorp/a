@@ -7,13 +7,15 @@ use bevy::{
 };
 
 use crate::{
-    components::{AtomeCornerRadius, AtomeShapeShadow, AtomeShapeShadowOverlay},
+    components::{
+        AtomeCornerRadius, AtomeShapeShadow, AtomeShapeShadowOverlay, AtomeVisualOpacity,
+    },
     render_math::{atome_rect_transform, depth_for_layer},
     selection_overlay::{channel_to_u8, shadow_alpha_for_distance},
     texture::rounded_rect_signed_distance,
     types::{
-        AtomeBevyRendererConfig, AtomeLayer, AtomeLogicalPosition, AtomeLogicalSize,
-        AtomeShadowStyle, SelectionVisualStyle,
+        normalize_opacity, AtomeBevyRendererConfig, AtomeLayer, AtomeLogicalPosition,
+        AtomeLogicalSize, AtomeShadowStyle, SelectionVisualStyle,
     },
 };
 
@@ -92,6 +94,19 @@ pub fn remove_shape_shadow_overlay(world: &mut World, entity: Entity) {
     }
 }
 
+pub fn sync_shape_shadow_overlay_opacity(world: &mut World, entity: Entity, opacity: f32) {
+    let normalized_opacity = normalize_opacity(opacity);
+    let overlay_entities = world
+        .get::<AtomeShapeShadowOverlay>(entity)
+        .map(|overlay| overlay.entities.clone())
+        .unwrap_or_default();
+    for overlay_entity in overlay_entities {
+        if let Some(mut sprite) = world.get_mut::<Sprite>(overlay_entity) {
+            sprite.color = Color::srgba(1.0, 1.0, 1.0, normalized_opacity);
+        }
+    }
+}
+
 pub fn rebuild_shape_shadow_overlay(world: &mut World, entity: Entity) -> Result<(), String> {
     remove_shape_shadow_overlay(world, entity);
     if world
@@ -118,6 +133,10 @@ pub fn rebuild_shape_shadow_overlay(world: &mut World, entity: Entity) -> Result
         .get::<AtomeLayer>(entity)
         .map(|value| value.0)
         .unwrap_or(0);
+    let opacity = world
+        .get::<AtomeVisualOpacity>(entity)
+        .map(|value| value.0)
+        .unwrap_or_else(|| normalize_opacity(1.0));
     let style = selection_style_from_shadow(shadow);
     let shadow_width = size.width.max(1.0) + shadow.spread * 2.0;
     let shadow_height = size.height.max(1.0) + shadow.spread * 2.0;
@@ -150,7 +169,7 @@ pub fn rebuild_shape_shadow_overlay(world: &mut World, entity: Entity) -> Result
     };
     let mut sprite = Sprite::from_image(handle.clone());
     sprite.custom_size = Some(Vec2::new(image_width as f32, image_height as f32));
-    sprite.color = Color::WHITE;
+    sprite.color = Color::srgba(1.0, 1.0, 1.0, opacity);
     let (surface_width, surface_height) = {
         let config = world.resource::<AtomeBevyRendererConfig>();
         (config.width, config.height)

@@ -68,6 +68,7 @@ Primary sources:
 - `eVe/domains/dashboard/dashboard_preferences.js`
 - `eVe/domains/dashboard/dashboard_lifecycle.js`
 - `eVe/domains/dashboard/dashboard_record_parking.js`
+- `eVe/domains/dashboard/dashboard_fade_runtime.js`
 - `eVe/domains/dashboard/dashboard_render_scheduler.js`
 - `eVe/domains/rendering/project_scene_runtime.js`
 - `eVe/domains/rendering/surface_runtime.js`
@@ -86,7 +87,7 @@ Boundary status: Semi-public closed eVe product runtime. Dashboard item lists ar
 
 Effect model:
 
-- Open/close/render are ephemeral Bevy projection operations over the current project surface. Opening includes project-veil, violet reserved-band-fill, and bottom-shadow records below the dashboard foreground; closing clears any dashboard scene effects and parks dashboard records as invisible, non-interactive, opacity-zero Bevy entities so the project returns to its normal presentation without DOM state, CSS filters, spawn/despawn churn, or a second renderer. Warmup-only parked records are additionally moved offscreen before first display. `backdrop_blur` remains an internal scene-effect contract for later renderer work but is disabled by default.
+- Open/close/render are ephemeral Bevy projection operations over the current project surface. Opening includes project-veil, violet reserved-band-fill, and bottom-shadow records below the dashboard foreground; open and close fade the existing Dashboard Bevy records through runtime `fadeOpacity`, using `transitions.dashboardFadeMs` from `dashboard_tokens.js` (`500` ms by default and overrideable through `mergeDashboardTokens()`). Closing then clears any dashboard scene effects and parks dashboard records as invisible, non-interactive, opacity-zero Bevy entities so the project returns to its normal presentation without DOM state, CSS filters, spawn/despawn churn, or a second renderer. Warmup-only parked records are additionally moved offscreen before first display. `backdrop_blur` remains an internal scene-effect contract for later renderer work but is disabled by default.
 - Dashboard render calls keep an internal record cache and use `dashboard_render_scheduler.js` to emit changed records plus removed ids to `updateProjectSceneOverlay(...)`; record removals when required, record updates, parked-record reuse, and scene effects are merged into one project-scene projection per logical dashboard render. Pointermove, wheel, and inertial scroll are coalesced through a cancellable `requestAnimationFrame` scheduler so close cannot be followed by a stale visible dashboard render; open/close and item-detail paths render immediately.
 - `dashboard_data_controller.js` owns per-`projectId` dashboard item cache, targeted category invalidation, visible-category hydration, and cache-first category activation. A missing focused-category cache loads that category before treating it as empty, while stale cached categories paint immediately and are refreshed only by explicit invalidation.
 - `dashboard_preferences.js` owns profile-driven category visibility. `preferences.dashboard.categories[categoryId] === false` hides a rubrique before data hydration, layout, hit-testing, record projection, and tool-handler activation; missing values keep default categories visible.
@@ -115,11 +116,13 @@ Primary sources:
 - `eVe/domains/rendering/bevy_projection_adapter.js`
 - `eVe/domains/rendering/bevy_projection_style.js`
 - `atome/renderers/bevy-core/src/types.rs`
+- `atome/renderers/bevy-core/src/components.rs`
+- `atome/renderers/bevy-core/src/render_ops.rs`
 - `atome/renderers/bevy-core/src/texture.rs`
 - `atome/renderers/bevy-core/src/shape_shadow_overlay.rs`
 - `atome/renderers/bevy-core/src/spawn.rs`
 
-Exposure: render records may set `corner_radius` / `cornerRadius` / `radius`; normalized virtual scene nodes expose `material.cornerRadius`; Bevy payloads expose `corner_radius`; Bevy core applies it to `shape` sprites by generating an alpha-mask texture. Render records may also set `material.shadow` with `{ color, blur, offsetX, offsetY, spread }`; normalized Bevy payloads expose `shadow` as `{ color, blur, offset_x, offset_y, spread }`; style patches may pass `material.shadow: null` to clear the shadow.
+Exposure: render records may set `corner_radius` / `cornerRadius` / `radius`; normalized virtual scene nodes expose `material.cornerRadius`; Bevy payloads expose `corner_radius`; Bevy core applies it to `shape` sprites by generating an alpha-mask texture. Render records and style patches may set `opacity`; Bevy core stores product-neutral base color and visual opacity separately through disposable `AtomeVisualColor` / `AtomeVisualOpacity` components, applies the effective alpha to `Sprite` output without cumulative multiplication, and propagates owner opacity to generated shape-shadow overlays. Render records may also set `material.shadow` with `{ color, blur, offsetX, offsetY, spread }`; normalized Bevy payloads expose `shadow` as `{ color, blur, offset_x, offset_y, spread }`; style patches may pass `material.shadow: null` to clear the shadow.
 
 Boundary status: Open product-neutral rendering style. eVe may consume it through render records, but the contract must not encode dashboard-specific behavior.
 
@@ -134,8 +137,11 @@ Primary sources:
 - `eVe/domains/rendering/bevy_media_texture_resolver.js`
 - `eVe/domains/rendering/bevy_media_texture_cache.js`
 - `eVe/domains/rendering/bevy_text_texture_pixels.js`
+- `atome/renderers/bevy-core/src/components.rs`
+- `atome/renderers/bevy-core/src/render_ops.rs`
+- `atome/renderers/bevy-core/src/spawn.rs`
 
-Exposure: text render records may set `text_style` / `textStyle` with font size, font weight, alignment, baseline, padding, stroke color/width, and shadow color/blur/offset, and `rich_text` / `richText` for editable selection/caret projection. `RenderAtom` and Virtual Scene carry the style and rich-text state as disposable text texture metadata, and the browser Bevy resolver rasterizes fill plus optional stroke, diffuse shadow, caret, and selection into one RGBA texture payload without using Canvas `maxWidth` glyph scaling.
+Exposure: text render records may set `text_style` / `textStyle` with font size, font weight, alignment, baseline, padding, stroke color/width, and shadow color/blur/offset, and `rich_text` / `richText` for editable selection/caret projection. `RenderAtom` and Virtual Scene carry the style and rich-text state as disposable text texture metadata, and the browser Bevy resolver rasterizes fill plus optional stroke, diffuse shadow, caret, and selection into one RGBA texture payload without using Canvas `maxWidth` glyph scaling. Text render records and style patches may set `opacity`; Bevy core applies the effective alpha to both texture-backed text sprites and non-texture-backed `TextColor` while preserving base color separately from opacity.
 
 Boundary status: Open product-neutral text rendering style. It must not create visible DOM text nodes, duplicate text shadow records, or a fallback renderer.
 
