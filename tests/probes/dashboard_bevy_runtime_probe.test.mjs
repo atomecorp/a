@@ -1,121 +1,32 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { chromium } from 'playwright';
-import { PNG } from 'pngjs';
+import { analyzeDashboardOverviewVisual, analyzeDashboardVisual } from './dashboard_bevy_runtime/visual_support.mjs';
+import {
+    analyzeDashboardProjectPreviewVisual,
+    ensureProjectPreviewFixture,
+    projectPreviewMediaRecord
+} from './dashboard_bevy_runtime/project_preview_support.mjs';
+import {
+    clickCanvasRectCenter,
+    enterGuestWorkspace,
+    longPressCanvasRectCenter,
+    resolveAtomHandle,
+    sleep,
+    waitFor,
+    waitForPresentationFrames
+} from './dashboard_bevy_runtime/runtime_support.mjs';
 
 const APP_URL = process.env.ADOLE_TEST_URL || 'http://127.0.0.1:3001';
 const OUT_DIR = path.resolve('temp/probe_reports/dashboard_bevy_runtime');
 const REPORT_FILE = path.join(OUT_DIR, 'report.json');
 const DASHBOARD_OPEN_SCREENSHOT = path.join(OUT_DIR, 'dashboard_open.png');
 const DASHBOARD_MONITOR_SCREENSHOT = path.join(OUT_DIR, 'dashboard_monitor.png');
+const DASHBOARD_PROJECTS_SCREENSHOT = path.join(OUT_DIR, 'dashboard_projects.png');
 
 fs.mkdirSync(OUT_DIR, { recursive: true });
 
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-
-const writeReport = (report) => {
-    fs.writeFileSync(REPORT_FILE, `${JSON.stringify(report, null, 2)}\n`, 'utf8');
-};
-
-const waitFor = async (page, predicate, timeoutMs = 30000, intervalMs = 250, arg = null) => {
-    const startedAt = Date.now();
-    let last = null;
-    while (Date.now() - startedAt < timeoutMs) {
-        try {
-            last = await page.evaluate(predicate, arg);
-            if (last === true || last?.ok === true) return { ok: true, last };
-        } catch (error) {
-            last = { ok: false, error: error?.message || String(error) };
-        }
-        await sleep(intervalMs);
-    }
-    return { ok: false, last };
-};
-
-const waitForRuntimeReady = async (page) => waitFor(page, () => ({
-    ok: !!window.__DEBUG__ || !!window.new_menu_v2 || !!document.getElementById('intuition'),
-    hasDebug: !!window.__DEBUG__,
-    hasMenu: !!window.new_menu_v2,
-    hasIntuition: !!document.getElementById('intuition')
-}), 45000);
-
-const waitForLoginSequenceInactive = async (page) => waitFor(page, () => {
-    const sequence = document.getElementById('eve_login_sequence');
-    if (!sequence) return { ok: true, state: 'missing' };
-    const style = getComputedStyle(sequence);
-    const rect = sequence.getBoundingClientRect();
-    const hidden = style.display === 'none'
-        || style.visibility === 'hidden'
-        || style.pointerEvents === 'none'
-        || rect.width <= 0
-        || rect.height <= 0;
-    return {
-        ok: hidden,
-        display: style.display,
-        visibility: style.visibility,
-        pointerEvents: style.pointerEvents,
-        opacity: style.opacity,
-        rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height }
-    };
-}, 45000, 250);
-
-const waitForGuestProject = async (page) => waitFor(page, async () => {
-    const api = window.AdoleAPI || null;
-    let current = null;
-    try {
-        current = api?.auth?.current ? await api.auth.current() : null;
-    } catch (error) {
-        current = { error: error?.message || String(error) };
-    }
-    const projectId = window.__currentProject?.id || null;
-    const canvas = document.getElementById('eve_surface_project');
-    const sequence = document.getElementById('eve_login_sequence');
-    const sequenceHidden = !sequence || getComputedStyle(sequence).display === 'none';
-    const isAnonymous = api?.security?.isAnonymous ? api.security.isAnonymous() : null;
-    return {
-        ok: current?.logged === true && isAnonymous === true && !!projectId && !!canvas,
-        current,
-        isAnonymous,
-        projectId,
-        hasCanvas: !!canvas,
-        sequenceHidden
-    };
-}, 60000, 300);
-
-const enterGuestWorkspace = async (page) => {
-    await waitForRuntimeReady(page);
-    const choice = page.locator('#eve_login_sequence__choice_without_account').first();
-    await choice.waitFor({ state: 'visible', timeout: 30000 });
-    await choice.click({ timeout: 10000 });
-    const ready = await waitForGuestProject(page);
-    if (!ready.ok) throw new Error('dashboard_probe_guest_project_missing');
-    const loginInactive = await waitForLoginSequenceInactive(page);
-    if (!loginInactive.ok) throw new Error(`dashboard_probe_login_sequence_still_interactive:${JSON.stringify(loginInactive.last)}`);
-    return ready.last;
-};
-
-const resolveAtomHandle = async (page) => {
-    await waitForRuntimeReady(page);
-    const handle = page.locator('button[data-role="eve_intuitionx-handle"]').first();
-    const visible = await handle.isVisible().catch(() => false);
-    if (!visible) await page.evaluate(() => window.new_menu_v2?.reveal?.());
-    await handle.waitFor({ state: 'visible', timeout: 15000 });
-    const hit = await handle.evaluate((button) => {
-        const rect = button.getBoundingClientRect();
-        const top = document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2);
-        return {
-            ok: rect.width > 0 && rect.height > 0,
-            topMatches: button === top || button.contains(top),
-            rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
-            topTag: top?.tagName || null,
-            topId: top?.id || null,
-            topRole: top?.getAttribute?.('data-role') || null,
-            topToolId: top?.getAttribute?.('data-tool-id') || null
-        };
-    });
-    if (!hit.ok) throw new Error(`dashboard_probe_atom_handle_not_visible:${JSON.stringify(hit)}`);
-    return handle;
-};
+const writeReport = (report) => fs.writeFileSync(REPORT_FILE, `${JSON.stringify(report, null, 2)}\n`, 'utf8');
 
 const dashboardSnapshot = async (page) => page.evaluate(async () => {
     const runtime = window.eveDashboardRuntime || null;
@@ -190,6 +101,8 @@ const dashboardSnapshot = async (page) => page.evaluate(async () => {
                 visibleItemCount: lane.visible_item_rects.length,
                 items: lane.visible_item_rects.map((entry) => ({
                     id: entry.item?.id || null,
+                    title: entry.item?.title || '',
+                    metadata: entry.item?.metadata || {},
                     rect: entry.rect
                 }))
             }))
@@ -199,6 +112,14 @@ const dashboardSnapshot = async (page) => page.evaluate(async () => {
         dashboardTitleTexts: dashboardRecords
             .filter((record) => String(record?.id || '').includes('card_title_'))
             .map((record) => String(record?.properties?.text || '')),
+        dashboardMediaRecords: dashboardRecords
+            .filter((record) => String(record?.id || '').includes('card_media_'))
+            .map((record) => ({
+                id: String(record.id || ''),
+                source: String(record.properties?.source || ''),
+                media_fit: String(record.properties?.media_fit || record.properties?.object_fit || ''),
+                visible: record.properties?.visible !== false && Number(record.properties?.opacity ?? 1) > 0
+            })),
         editorRect: editorRecord ? {
             x: Number(editorRecord.properties?.left ?? editorRecord.properties?.x ?? 0),
             y: Number(editorRecord.properties?.top ?? editorRecord.properties?.y ?? 0),
@@ -225,38 +146,18 @@ const waitForDashboardSnapshot = async (page, predicate, timeoutMs = 30000, inte
     return { ok: false, snapshot };
 };
 
-const waitForPresentationFrames = async (page, count = 2) => page.evaluate(async (frames) => {
-    const waitFrame = () => new Promise((resolve) => requestAnimationFrame(resolve));
-    for (let index = 0; index < frames; index += 1) await waitFrame();
-}, count);
-
-const clickCanvasRectCenter = async (page, rect) => {
-    const canvas = page.locator('#eve_surface_project').first();
-    await canvas.waitFor({ state: 'visible', timeout: 15000 });
-    await canvas.click({
-        position: {
-            x: Math.max(1, rect.x + rect.width / 2),
-            y: Math.max(1, rect.y + rect.height / 2)
-        },
-        timeout: 10000
-    });
-};
-
-const longPressCanvasRectCenter = async (page, rect, holdMs = 650) => {
-    const canvas = page.locator('#eve_surface_project').first();
-    await canvas.waitFor({ state: 'visible', timeout: 15000 });
-    const box = await canvas.boundingBox();
-    if (!box) throw new Error('dashboard_canvas_box_missing');
-    const x = box.x + Math.max(1, rect.x + rect.width / 2);
-    const y = box.y + Math.max(1, rect.y + rect.height / 2);
-    await page.mouse.move(x, y);
-    await page.mouse.down();
-    await sleep(holdMs);
-    await page.mouse.up();
-};
-
 const laneIsActive = (snapshot, categoryId) => (
     snapshot.layout?.lanes?.some((lane) => lane.categoryId === categoryId && lane.active === true) === true
+);
+
+const dashboardOpenReady = (snapshot) => (
+    snapshot.active
+    && snapshot.dashboardRecordIds.includes('__eve_dashboard_background')
+    && snapshot.dashboardRecordIds.includes('__eve_dashboard_table')
+    && snapshot.dashboardDomCount === 0
+    && snapshot.toolboxHeight > 0
+    && snapshot.layout?.toolbox_reserved_rect?.height >= snapshot.toolboxHeight
+    && snapshot.recordOverReservedBand.length === 0
 );
 
 const activateDashboardCategory = async (page, categoryId, snapshot = null) => {
@@ -275,166 +176,6 @@ const activateDashboardCategory = async (page, categoryId, snapshot = null) => {
     return { ok: false, snapshot: current };
 };
 
-const hexToRgb = (hex) => {
-    const value = String(hex || '').replace('#', '');
-    return [
-        Number.parseInt(value.slice(0, 2), 16),
-        Number.parseInt(value.slice(2, 4), 16),
-        Number.parseInt(value.slice(4, 6), 16)
-    ];
-};
-
-const pixelAt = (png, x, y) => {
-    const px = Math.max(0, Math.min(png.width - 1, Math.round(x)));
-    const py = Math.max(0, Math.min(png.height - 1, Math.round(y)));
-    const index = (py * png.width + px) * 4;
-    return [png.data[index], png.data[index + 1], png.data[index + 2], png.data[index + 3]];
-};
-
-const colorDistance = (left, right) => Math.max(
-    Math.abs(left[0] - right[0]),
-    Math.abs(left[1] - right[1]),
-    Math.abs(left[2] - right[2])
-);
-
-const countPixelsInRect = (png, rect, predicate, step = 4) => {
-    let count = 0;
-    const left = Math.max(0, Math.floor(Number(rect?.x || 0)));
-    const top = Math.max(0, Math.floor(Number(rect?.y || 0)));
-    const right = Math.min(png.width - 1, Math.ceil(left + Number(rect?.width || 0)));
-    const bottom = Math.min(png.height - 1, Math.ceil(top + Number(rect?.height || 0)));
-    for (let y = top; y <= bottom; y += step) {
-        for (let x = left; x <= right; x += step) {
-            if (predicate(pixelAt(png, x, y))) count += 1;
-        }
-    }
-    return count;
-};
-
-const brightPixel = (pixel) => pixel[0] > 205 && pixel[1] > 205 && pixel[2] > 205 && pixel[3] > 200;
-
-const assertBrightPixels = (png, rect, label, minimum = 4) => {
-    const count = countPixelsInRect(png, rect, brightPixel, 3);
-    if (count < minimum) throw new Error(`${label}_bright_pixels_missing:${JSON.stringify({ count, minimum, rect })}`);
-};
-
-const assertLaneHasCardContrast = (png, lane, expectedHex, label) => {
-    const sampleRect = {
-        x: lane.header_rect.x > lane.lane_rect.x ? lane.lane_rect.x + 8 : lane.plus_rect.x + lane.plus_rect.width + 8,
-        y: lane.lane_rect.y + Math.max(8, lane.lane_rect.height * 0.2),
-        width: Math.max(20, Math.min(80, lane.lane_rect.width - 16)),
-        height: Math.max(20, lane.lane_rect.height * 0.56)
-    };
-    const expected = hexToRgb(expectedHex);
-    const contrasted = countPixelsInRect(png, sampleRect, (pixel) => colorDistance(pixel, expected) > 28 && pixel[3] > 200, 4);
-    if (contrasted < 8) {
-        throw new Error(`${label}_card_contrast_missing:${JSON.stringify({ contrasted, sampleRect, expectedHex })}`);
-    }
-};
-
-const assertNearColor = (actual, expectedHex, label, tolerance = 12) => {
-    const expected = hexToRgb(expectedHex);
-    const distance = colorDistance(actual, expected);
-    if (distance > tolerance) {
-        throw new Error(`${label}_color_mismatch:${JSON.stringify({ actual, expected, distance, tolerance })}`);
-    }
-};
-
-const analyzeDashboardVisual = (screenshotPath, snapshot, expectedHex, label) => {
-    const png = PNG.sync.read(fs.readFileSync(screenshotPath));
-    const lane = snapshot.layout?.lanes?.find((entry) => entry.active) || snapshot.layout?.lanes?.[0];
-    if (!lane) throw new Error(`${label}_visual_lane_missing`);
-    const laneFillX = Math.min(
-        lane.lane_rect.x + lane.lane_rect.width - 12,
-        lane.lane_rect.x + lane.lane_rect.height + 12
-    );
-    assertNearColor(pixelAt(png, lane.header_rect.x + 7, lane.header_rect.y + 7), expectedHex, `${label}_active_header`);
-    assertNearColor(pixelAt(png, lane.plus_rect.x + lane.plus_rect.width / 2, lane.plus_rect.y + lane.plus_rect.height + 12), expectedHex, `${label}_plus_strip`);
-    assertNearColor(pixelAt(png, laneFillX, lane.header_rect.y + 12), expectedHex, `${label}_lane_fill`);
-    assertBrightPixels(png, lane.header_rect, `${label}_header_text_or_icon`);
-    const headerFlatness = assertHeaderInteriorIsFlat(png, lane, label);
-    assertBrightPixels(png, lane.plus_rect, `${label}_plus_symbol`, 2);
-    if (lane.visibleItemCount > 0) assertLaneHasCardContrast(png, lane, expectedHex, `${label}_lane`);
-    const reserved = snapshot.layout.toolbox_reserved_rect;
-    const reservedPixel = pixelAt(png, reserved.x + reserved.width / 2, reserved.y + Math.min(12, reserved.height - 1));
-    if (colorDistance(reservedPixel, hexToRgb(expectedHex)) < 18) {
-        throw new Error(`${label}_dashboard_leaks_into_toolbox_band:${JSON.stringify({ reservedPixel, expectedHex })}`);
-    }
-    return { label, expectedHex, width: png.width, height: png.height, headerFlatness };
-};
-
-const averageColumn = (png, x, y, height) => {
-    const sampleX = Math.max(0, Math.min(png.width - 1, Math.round(x)));
-    const y0 = Math.max(0, Math.min(png.height - 1, Math.round(y)));
-    const y1 = Math.max(y0 + 1, Math.min(png.height, Math.round(y + height)));
-    let red = 0;
-    let green = 0;
-    let blue = 0;
-    let count = 0;
-    for (let yy = y0; yy < y1; yy += 1) {
-        const index = (yy * png.width + sampleX) * 4;
-        red += png.data[index];
-        green += png.data[index + 1];
-        blue += png.data[index + 2];
-        count += 1;
-    }
-    return [red / count, green / count, blue / count];
-};
-
-const assertHeaderInteriorIsFlat = (png, lane, label) => {
-    const header = lane.header_rect;
-    const y = header.y + Math.max(5, Math.min(10, header.height * 0.08));
-    const height = Math.max(6, Math.min(12, header.height * 0.1));
-    const edgeX = header.x + Math.max(3, header.width * 0.04);
-    const cleanX = header.x + Math.max(12, header.width * 0.12);
-    const edge = averageColumn(png, edgeX, y, height);
-    const clean = averageColumn(png, cleanX, y, height);
-    const distance = colorDistance(edge, clean);
-    if (distance > 8) {
-        throw new Error(`${label}_header_internal_shadow_leak:${JSON.stringify({
-            categoryId: lane.categoryId,
-            distance,
-            edge,
-            clean,
-            sample: { y, height, edgeX, cleanX },
-            header
-        })}`);
-    }
-    return { categoryId: lane.categoryId, edgeDistance: distance };
-};
-
-const CATEGORY_COLORS = {
-    news: '#9f2f2f',
-    calendar: '#245f94',
-    projects: '#357245',
-    contacts: '#673071',
-    store: '#a65f1f',
-    monitor: '#2f6f78',
-    goals: '#6f5b24'
-};
-
-const analyzeDashboardOverviewVisual = (screenshotPath, snapshot) => {
-    const png = PNG.sync.read(fs.readFileSync(screenshotPath));
-    const headerFlatness = [];
-    for (const lane of snapshot.layout?.lanes || []) {
-        const expectedHex = CATEGORY_COLORS[lane.categoryId];
-        if (!expectedHex) continue;
-        assertNearColor(pixelAt(png, lane.header_rect.x - 24, lane.header_rect.y + 12), expectedHex, `dashboard_open_lane_${lane.categoryId}`, 18);
-        assertNearColor(pixelAt(png, lane.header_rect.x + 7, lane.header_rect.y + 7), expectedHex, `dashboard_open_header_${lane.categoryId}`);
-        assertBrightPixels(png, lane.header_rect, `dashboard_open_header_text_or_icon_${lane.categoryId}`);
-        if (lane.visibleItemCount > 0) assertLaneHasCardContrast(png, lane, expectedHex, `dashboard_open_lane_${lane.categoryId}`);
-        headerFlatness.push(assertHeaderInteriorIsFlat(png, lane, `dashboard_open_${lane.categoryId}`));
-    }
-    const reserved = snapshot.layout.toolbox_reserved_rect;
-    const reservedPixel = pixelAt(png, reserved.x + reserved.width / 2, reserved.y + Math.min(12, reserved.height - 1));
-    for (const expectedHex of Object.values(CATEGORY_COLORS)) {
-        if (colorDistance(reservedPixel, hexToRgb(expectedHex)) < 18) {
-            throw new Error(`dashboard_open_dashboard_leaks_into_toolbox_band:${JSON.stringify({ reservedPixel, expectedHex })}`);
-        }
-    }
-    return { label: 'dashboard_open_overview', width: png.width, height: png.height, headerFlatness };
-};
-
 const runScenario = async () => {
     const report = {
         ok: false,
@@ -442,7 +183,8 @@ const runScenario = async () => {
         checks: [],
         console: [],
         pageErrors: [],
-        requestFailures: []
+        requestFailures: [],
+        responseFailures: []
     };
     const browser = await chromium.launch({
         headless: process.env.ATOME_PLAYWRIGHT_HEADLESS === '0' ? false : process.env.HEADLESS !== '0',
@@ -451,7 +193,9 @@ const runScenario = async () => {
     const context = await browser.newContext({ viewport: { width: 1280, height: 820 } });
     const page = await context.newPage();
     page.on('console', (message) => {
-        if (message.type() === 'error') report.console.push(message.text());
+        if (message.type() === 'error') {
+            report.console.push({ text: message.text(), location: message.location?.() || null });
+        }
     });
     page.on('pageerror', (error) => {
         const message = error?.message || String(error);
@@ -462,39 +206,53 @@ const runScenario = async () => {
         if (/\/(?:favicon|apple-touch-icon)[^/]*\.(?:ico|png)$/i.test(url)) return;
         report.requestFailures.push({ url, failure: request.failure()?.errorText || null });
     });
+    page.on('response', (response) => {
+        const status = response.status();
+        if (status < 400) return;
+        const url = response.url();
+        if (/\/(?:favicon|apple-touch-icon)[^/]*\.(?:ico|png)$/i.test(url)) return;
+        report.responseFailures.push({ url, status });
+    });
 
     try {
         await page.goto(APP_URL, { waitUntil: 'domcontentloaded', timeout: 45000 });
         report.checks.push({ name: 'guest_project_ready', ok: true, snapshot: await enterGuestWorkspace(page) });
+        const previewFixture = await ensureProjectPreviewFixture(page);
+        if (!previewFixture.ok) throw new Error(`dashboard_project_preview_fixture_failed:${JSON.stringify(previewFixture)}`);
+        report.checks.push({ name: 'project_preview_fixture_committed_through_atome', ok: true, snapshot: previewFixture });
 
         let atomHandle = await resolveAtomHandle(page);
-        const alreadyOpen = await dashboardSnapshot(page);
-        if (alreadyOpen.active) {
-            await page.evaluate(() => window.eveDashboardRuntime?.close?.());
-            await waitForDashboardSnapshot(page, (snapshot) => !snapshot.active, 30000);
-            atomHandle = await resolveAtomHandle(page);
+        let opened = await waitForDashboardSnapshot(page, dashboardOpenReady, 12000);
+        if (!opened.ok) {
+            await atomHandle.click({ timeout: 10000 });
+            opened = await waitForDashboardSnapshot(page, dashboardOpenReady, 30000);
         }
-        await atomHandle.click({ timeout: 10000 });
-        const opened = await waitForDashboardSnapshot(page, (snapshot) => (
-            snapshot.active
-            && snapshot.dashboardRecordIds.includes('__eve_dashboard_background')
-            && snapshot.dashboardRecordIds.includes('__eve_dashboard_table')
-            && snapshot.dashboardDomCount === 0
-            && snapshot.toolboxHeight > 0
-            && snapshot.layout?.toolbox_reserved_rect?.height >= snapshot.toolboxHeight
-            && snapshot.recordOverReservedBand.length === 0
-        ), 30000);
         if (!opened.ok) throw new Error('dashboard_open_failed');
-        report.checks.push({ name: 'atom_opens_dashboard_without_dom_renderer', ok: true, snapshot: opened.snapshot });
+        const openedWithProjectPreview = await waitForDashboardSnapshot(page, (snapshot) => (
+            snapshot.active
+            && snapshot.dashboardDomCount === 0
+            && !!snapshot.layout?.lanes?.find((lane) => lane.categoryId === 'projects')?.items?.[0]?.rect
+            && !!projectPreviewMediaRecord(snapshot)
+        ), 60000);
+        if (!openedWithProjectPreview.ok) {
+            throw new Error(`dashboard_project_preview_media_missing:${JSON.stringify(openedWithProjectPreview.snapshot?.dashboardMediaRecords || [])}`);
+        }
+        report.checks.push({ name: 'atom_opens_dashboard_without_dom_renderer', ok: true, snapshot: openedWithProjectPreview.snapshot });
         await waitForPresentationFrames(page, 12);
         await page.screenshot({ path: DASHBOARD_OPEN_SCREENSHOT, fullPage: true });
+        await page.screenshot({ path: DASHBOARD_PROJECTS_SCREENSHOT, fullPage: true });
         report.checks.push({
             name: 'visual_open_matches_mockup_category_bands_and_toolbox_exclusion',
             ok: true,
-            visual: analyzeDashboardOverviewVisual(DASHBOARD_OPEN_SCREENSHOT, opened.snapshot)
+            visual: analyzeDashboardOverviewVisual(DASHBOARD_OPEN_SCREENSHOT, openedWithProjectPreview.snapshot)
+        });
+        report.checks.push({
+            name: 'visual_project_card_uses_renderer_capture_pixels',
+            ok: true,
+            visual: analyzeDashboardProjectPreviewVisual(DASHBOARD_PROJECTS_SCREENSHOT, openedWithProjectPreview.snapshot)
         });
 
-        const monitorLane = opened.snapshot.layout.lanes.find((lane) => lane.categoryId === 'monitor');
+        const monitorLane = openedWithProjectPreview.snapshot.layout.lanes.find((lane) => lane.categoryId === 'monitor');
         if (!monitorLane) throw new Error('dashboard_monitor_lane_missing');
         await clickCanvasRectCenter(page, monitorLane.header_rect);
         const monitorActive = await waitForDashboardSnapshot(page, (snapshot) => (
@@ -707,12 +465,13 @@ const runScenario = async () => {
             }));
         });
 
-        if (report.console.length || report.pageErrors.length || report.requestFailures.length) {
+        if (report.console.length || report.pageErrors.length || report.requestFailures.length || report.responseFailures.length) {
             throw new Error('dashboard_probe_browser_errors_detected');
         }
         report.screenshots = {
             open: DASHBOARD_OPEN_SCREENSHOT,
-            monitor: DASHBOARD_MONITOR_SCREENSHOT
+            monitor: DASHBOARD_MONITOR_SCREENSHOT,
+            projects: DASHBOARD_PROJECTS_SCREENSHOT
         };
         report.ok = true;
     } catch (error) {

@@ -13,17 +13,37 @@ pub fn run_atome_bevy_renderer(
     height: f32,
     initial_scene: JsValue,
 ) -> Result<(), JsValue> {
+    run_atome_bevy_renderer_with_transparency(canvas_selector, width, height, initial_scene, false)
+}
+
+#[wasm_bindgen]
+pub fn run_atome_bevy_preview_renderer(
+    canvas_selector: String,
+    width: f32,
+    height: f32,
+    initial_scene: JsValue,
+) -> Result<(), JsValue> {
+    run_atome_bevy_renderer_with_transparency(canvas_selector, width, height, initial_scene, true)
+}
+
+fn run_atome_bevy_renderer_with_transparency(
+    canvas_selector: String,
+    width: f32,
+    height: f32,
+    initial_scene: JsValue,
+    transparent: bool,
+) -> Result<(), JsValue> {
     if canvas_selector.trim().is_empty() {
         return Err(JsValue::from_str("bevy_canvas_selector_required"));
     }
     let scene: AtomeRenderScene = serde_wasm_bindgen::from_value(initial_scene)
         .map_err(|error| JsValue::from_str(&format!("bevy_projection_decode_failed:{error}")))?;
-    let mut app = build_web_bevy_app(WebBevyRendererConfig::new(
-        canvas_selector,
-        width,
-        height,
-        scene,
-    ));
+    let config = if transparent {
+        WebBevyRendererConfig::with_transparency(canvas_selector, width, height, scene, true)
+    } else {
+        WebBevyRendererConfig::new(canvas_selector, width, height, scene)
+    };
+    let mut app = build_web_bevy_app(config);
     app.run();
     Ok(())
 }

@@ -79,6 +79,30 @@ test('RenderAtom normalization keeps render data disposable and cacheable', () =
     assert.match(buildWaveformCacheKey(audio), /^waveform:eve\.renderatom\.v1:/);
 });
 
+test('RenderAtom normalizes CSS-sized text records for shared Bevy projections', () => {
+    const text = normalizeRenderAtom({
+        id: 'legacy_text',
+        type: 'text',
+        properties: {
+            kind: 'text',
+            text: 'Welcome.',
+            left: '60px',
+            top: '130px',
+            width: '560px',
+            fontSize: '28px',
+            fontWeight: '600',
+            padding: '12px'
+        }
+    });
+
+    assert.equal(text.bounds.x, 60);
+    assert.equal(text.bounds.y, 130);
+    assert.equal(text.bounds.width, 560);
+    assert.ok(text.bounds.height >= 57);
+    assert.equal(text.style.text.font_size, 28);
+    assert.equal(text.style.text.font_weight, '600');
+});
+
 test('Scene graph hit testing replaces per-Atome DOM routing', () => {
     const atoms = normalizeRenderAtoms([
         makeRecord('low', 'image', 1),

@@ -9,10 +9,11 @@ use bevy::{
         CompositeAlphaMode, PresentMode, RequestRedraw, Window, WindowPlugin, WindowResized,
         WindowResolution,
     },
-    winit::{EventLoopProxy, EventLoopProxyWrapper, WinitSettings, WinitUserEvent},
+    winit::{EventLoopProxy, EventLoopProxyWrapper, UpdateMode, WinitSettings, WinitUserEvent},
 };
 use serde::Serialize;
 use std::cell::RefCell;
+use std::time::Duration;
 
 mod exports;
 
@@ -197,6 +198,7 @@ fn wake_web_renderer() {
 struct WebBevyRendererConfig {
     canvas_selector: String,
     core: AtomeBevyRendererConfig,
+    transparent: bool,
 }
 
 impl WebBevyRendererConfig {
@@ -206,9 +208,20 @@ impl WebBevyRendererConfig {
         height: f32,
         initial_scene: AtomeRenderScene,
     ) -> Self {
+        Self::with_transparency(canvas_selector, width, height, initial_scene, false)
+    }
+
+    fn with_transparency(
+        canvas_selector: String,
+        width: f32,
+        height: f32,
+        initial_scene: AtomeRenderScene,
+        transparent: bool,
+    ) -> Self {
         Self {
             canvas_selector,
             core: AtomeBevyRendererConfig::new(width, height, initial_scene),
+            transparent,
         }
     }
 }
@@ -218,14 +231,21 @@ struct WebBevyRendererPlugin {
 }
 
 fn web_winit_settings() -> WinitSettings {
-    WinitSettings::desktop_app()
+    WinitSettings {
+        focused_mode: UpdateMode::reactive(Duration::from_millis(16)),
+        unfocused_mode: UpdateMode::reactive(Duration::from_millis(16)),
+    }
 }
 
 impl Plugin for WebBevyRendererPlugin {
     fn build(&self, app: &mut App) {
         app.add_message::<RequestRedraw>()
             .add_message::<WindowResized>()
-            .insert_resource(ClearColor(Color::BLACK))
+            .insert_resource(ClearColor(if self.config.transparent {
+                Color::srgba(0.0, 0.0, 0.0, 0.0)
+            } else {
+                Color::BLACK
+            }))
             .insert_resource(web_winit_settings())
             .add_plugins(AtomeBevyRendererPlugin::new(self.config.core.clone()))
             .add_systems(
@@ -356,10 +376,14 @@ fn web_window_for_config(config: &WebBevyRendererConfig) -> Window {
         fit_canvas_to_parent: false,
         prevent_default_event_handling: false,
         resolution,
-        composite_alpha_mode: CompositeAlphaMode::Opaque,
+        composite_alpha_mode: if config.transparent {
+            CompositeAlphaMode::PreMultiplied
+        } else {
+            CompositeAlphaMode::Opaque
+        },
         present_mode: PresentMode::AutoNoVsync,
         title: "Atome Bevy Renderer".to_string(),
-        transparent: false,
+        transparent: config.transparent,
         visible: true,
         ..default()
     }

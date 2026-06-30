@@ -61,6 +61,27 @@ fn web_window_targets_canvas_and_opaque_surface() {
 }
 
 #[test]
+fn web_preview_window_uses_transparent_surface() {
+    let config = WebBevyRendererConfig::with_transparency(
+        "#atome-bevy-preview".to_string(),
+        320.0,
+        200.0,
+        AtomeRenderScene {
+            nodes: vec![shape_node("shape_1")],
+            effects: Vec::new(),
+            selection_style: None,
+        },
+        true,
+    );
+    let window = web_window_for_config(&config);
+
+    assert_eq!(window.canvas, Some("#atome-bevy-preview".to_string()));
+    assert!(window.transparent);
+    assert_eq!(window.composite_alpha_mode, CompositeAlphaMode::PreMultiplied);
+    assert!(!window.fit_canvas_to_parent);
+}
+
+#[test]
 fn web_surface_resolution_keeps_browser_scale_factor_logical_units() {
     let mut resolution = WindowResolution::new(1280, 960);
     resolution.set_scale_factor(2.0);
@@ -485,6 +506,6 @@ fn web_renderer_uses_reactive_winit_updates_with_explicit_redraw_wakes() {
     app.add_plugins(WebBevyRendererPlugin { config });
 
     let settings = app.world().resource::<bevy::winit::WinitSettings>();
-    assert_reactive_mode(settings.focused_mode, Duration::from_secs(5));
-    assert_reactive_mode(settings.unfocused_mode, Duration::from_secs(60));
+    assert_reactive_mode(settings.focused_mode, Duration::from_millis(16));
+    assert_reactive_mode(settings.unfocused_mode, Duration::from_millis(16));
 }
