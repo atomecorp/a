@@ -87,25 +87,29 @@ const assertDashboardFocusedColors = async (page, categoryId) => page.evaluate(a
     expect('plus_strip_active', readColor('plus_strip_active'), activeColor);
     for (const lane of state.layout?.lanes || []) {
         const laneId = String(lane.category?.id || '');
-        expect(`lane_${laneId}`, readColor(`lane_${laneId}`), activeColor);
+        const headerColor = laneId === id ? activeColor : shadeHex(activeColor, -18);
+        expect(`lane_${laneId}`, readColor(`lane_${laneId}`), shadeHex(headerColor, DASHBOARD_VISUAL_TOKENS.laneShadePercent));
         expect(
             `header_bg_${laneId}`,
             readColor(`header_bg_${laneId}`),
-            laneId === id ? activeColor : shadeHex(activeColor, -18)
+            headerColor
         );
     }
-    const cardShade = shadeHex(activeColor, -26);
     const isVisible = (record) => record?.properties?.visible !== false && Number(record?.properties?.opacity ?? 1) > 0;
     const cards = records.filter((record) => (
         record.type === 'shape'
         && String(record.id || '').startsWith('__eve_dashboard_card_')
         && isVisible(record)
     ));
-    for (const card of cards) expect(card.id, card.properties?.color, cardShade);
+    for (const card of cards) {
+        const laneId = String(card.id || '').match(/__eve_dashboard_card_([^_]+)_slot_/)?.[1] || '';
+        expect(card.id, card.properties?.color, readColor(`header_bg_${laneId}`));
+        if (!card.properties?.material?.shadow) failures.push({ name: `${card.id}:shadow`, actual: card.properties?.material?.shadow, expected: 'material.shadow' });
+    }
     return {
         ok: !!activeColor && failures.length === 0,
         activeColor,
-        cardShade,
+        cardColors: cards.map((card) => card.properties?.color),
         cardCount: cards.length,
         failures,
         tokenBackground: DASHBOARD_VISUAL_TOKENS.background
@@ -129,7 +133,7 @@ const assertDashboardOverviewColors = async (page) => page.evaluate(async () => 
     for (const lane of state.layout?.lanes || []) {
         const laneId = String(lane.category?.id || '');
         const laneColor = lane.category?.color || '';
-        expect(`lane_${laneId}`, readColor(`lane_${laneId}`), laneColor);
+        expect(`lane_${laneId}`, readColor(`lane_${laneId}`), shadeHex(laneColor, DASHBOARD_VISUAL_TOKENS.laneShadePercent));
         expect(`header_bg_${laneId}`, readColor(`header_bg_${laneId}`), laneColor);
     }
     return { ok: failures.length === 0 && !state.activeCategoryId, failures };

@@ -3,8 +3,8 @@ use std::collections::HashMap;
 
 use crate::types::{
     default_transform_origin, default_transform_scale, normalize_transform_origin,
-    normalize_transform_rotation, normalize_transform_scale, AtomeRenderScene,
-    AtomeSceneEffect, AtomeShadowStyle, SelectionVisualStyle,
+    normalize_transform_rotation, normalize_transform_scale, AtomeRenderScene, AtomeSceneEffect,
+    AtomeShadowStyle, SelectionVisualStyle,
 };
 
 #[derive(Clone, Debug, Component)]
@@ -54,6 +54,9 @@ impl AtomeLocalTransform {
 
 #[derive(Clone, Copy, Debug, Component)]
 pub struct AtomeLayer(pub i32);
+
+#[derive(Clone, Copy, Debug, Component)]
+pub struct AtomeCornerRadius(pub f32);
 
 #[derive(Clone, Debug, Component)]
 pub struct AtomeTextMetadata(pub Option<String>);

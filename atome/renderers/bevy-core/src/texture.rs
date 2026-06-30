@@ -41,31 +41,33 @@ pub fn image_handle_from_texture(
     Ok(images.add(image_from_texture(texture, id)?))
 }
 
+pub(crate) fn rounded_rect_signed_distance(
+    x: f32,
+    y: f32,
+    width: f32,
+    height: f32,
+    radius: f32,
+) -> f32 {
+    let width = width.max(1.0);
+    let height = height.max(1.0);
+    let radius = radius.max(0.0).min(width / 2.0).min(height / 2.0);
+    let half_width = width / 2.0;
+    let half_height = height / 2.0;
+    let dx = (x - half_width).abs() - (half_width - radius);
+    let dy = (y - half_height).abs() - (half_height - radius);
+    let outside_x = dx.max(0.0);
+    let outside_y = dy.max(0.0);
+    let outside = (outside_x.powi(2) + outside_y.powi(2)).sqrt();
+    outside + dx.max(dy).min(0.0) - radius
+}
+
 fn rounded_rect_alpha(x: u32, y: u32, width: u32, height: u32, radius: f32) -> u8 {
     if radius <= 0.0 {
         return 255;
     }
-    let width_f = width as f32;
-    let height_f = height as f32;
-    let radius = radius.min(width_f / 2.0).min(height_f / 2.0);
     let px = x as f32 + 0.5;
     let py = y as f32 + 0.5;
-    let cx = if px < radius {
-        radius
-    } else if px > width_f - radius {
-        width_f - radius
-    } else {
-        px
-    };
-    let cy = if py < radius {
-        radius
-    } else if py > height_f - radius {
-        height_f - radius
-    } else {
-        py
-    };
-    let distance = ((px - cx).powi(2) + (py - cy).powi(2)).sqrt();
-    let edge = radius - distance;
+    let edge = -rounded_rect_signed_distance(px, py, width as f32, height as f32, radius);
     if edge >= 0.5 {
         255
     } else if edge <= -0.5 {

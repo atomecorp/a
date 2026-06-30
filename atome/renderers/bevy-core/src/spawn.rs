@@ -72,32 +72,39 @@ fn node_base_components(
     )
 }
 
+pub(crate) fn texture_handle_for_node(
+    images: &mut Assets<Image>,
+    node: &AtomeRenderNode,
+) -> Result<Option<Handle<Image>>, String> {
+    if node.kind == "video" {
+        return Ok(None);
+    }
+    if node.texture.is_some() {
+        return Ok(Some(image_handle_from_texture(
+            images,
+            &node.texture,
+            &node.id,
+        )?));
+    }
+    if node.kind == "shape" && node.corner_radius > 0.0 {
+        return Ok(Some(image_handle_from_rounded_rect_mask(
+            images,
+            node.logical_size[0],
+            node.logical_size[1],
+            node.corner_radius,
+            &node.id,
+        )?));
+    }
+    Ok(None)
+}
+
 pub fn spawn_node_in_world(world: &mut World, node: AtomeRenderNode) -> Result<Entity, String> {
     let entity = {
-        let texture_handle = if node.kind == "video" {
-            None
-        } else if node.texture.is_some() {
+        let texture_handle = {
             let mut images = world
                 .get_resource_mut::<Assets<Image>>()
                 .ok_or_else(|| "bevy_image_assets_required".to_string())?;
-            Some(image_handle_from_texture(
-                &mut images,
-                &node.texture,
-                &node.id,
-            )?)
-        } else if node.kind == "shape" && node.corner_radius > 0.0 {
-            let mut images = world
-                .get_resource_mut::<Assets<Image>>()
-                .ok_or_else(|| "bevy_image_assets_required".to_string())?;
-            Some(image_handle_from_rounded_rect_mask(
-                &mut images,
-                node.logical_size[0],
-                node.logical_size[1],
-                node.corner_radius,
-                &node.id,
-            )?)
-        } else {
-            None
+            texture_handle_for_node(&mut images, &node)?
         };
         let (surface_width, surface_height) = {
             let config = world.resource::<AtomeBevyRendererConfig>();
@@ -240,5 +247,8 @@ pub fn spawn_node_with_texture_handle(
         }
         other => return Err(format!("bevy_render_kind_unsupported:{other}")),
     };
+    world
+        .entity_mut(entity)
+        .insert(AtomeCornerRadius(node.corner_radius.max(0.0)));
     Ok(entity)
 }

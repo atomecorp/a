@@ -84,11 +84,11 @@ fn spawn_dashed_axis(
     }
 }
 
-fn channel_to_u8(value: f32) -> u8 {
+pub(crate) fn channel_to_u8(value: f32) -> u8 {
     (value.clamp(0.0, 1.0) * 255.0).round() as u8
 }
 
-fn shadow_alpha_for_distance(distance: f32, radius: f32, base_alpha: f32) -> u8 {
+pub(crate) fn shadow_alpha_for_distance(distance: f32, radius: f32, base_alpha: f32) -> u8 {
     if radius <= 0.0 || distance > radius {
         return 0;
     }

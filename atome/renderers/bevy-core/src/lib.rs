@@ -1,5 +1,5 @@
-pub mod background;
 pub mod backdrop_blur;
+pub mod background;
 pub mod components;
 pub mod plugin;
 pub mod render_math;
@@ -21,6 +21,10 @@ pub use render_ops::*;
 pub use types::*;
 pub use video_diagnostics::*;
 
+#[cfg(test)]
+mod backdrop_blur_tests;
+#[cfg(test)]
+mod shape_shadow_overlay_tests;
 #[cfg(test)]
 mod tests;
 #[cfg(test)]

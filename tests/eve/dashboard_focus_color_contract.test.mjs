@@ -58,38 +58,44 @@ test('dashboard overview keeps each rubrique color', () => {
         tokens: DASHBOARD_VISUAL_TOKENS
     });
 
+    assert.equal(DASHBOARD_VISUAL_TOKENS.laneShadePercent, -10);
+    assert.equal(DASHBOARD_VISUAL_TOKENS.cardShadow.offsetY, 0);
     assert.equal(dashboardRecord(records, 'background').properties.color, DASHBOARD_VISUAL_TOKENS.background);
     assert.equal(dashboardRecord(records, 'table').properties.color, DASHBOARD_VISUAL_TOKENS.table);
     for (const category of categories) {
-        assert.equal(dashboardRecord(records, `lane_${category.id}`).properties.color, category.color);
+        assert.equal(dashboardRecord(records, `lane_${category.id}`).properties.color, shadeHex(category.color, DASHBOARD_VISUAL_TOKENS.laneShadePercent));
         assert.equal(dashboardRecord(records, `header_bg_${category.id}`).properties.color, category.color);
     }
-    assert.equal(dashboardRecord(records, 'card_news_slot_0').properties.color, shadeHex(categories[0].color, -26));
-    assert.equal(dashboardRecord(records, 'card_contacts_slot_0').properties.color, shadeHex(categories[1].color, -26));
+    assert.equal(dashboardRecord(records, 'card_news_slot_0').properties.color, categories[0].color);
+    assert.equal(dashboardRecord(records, 'card_contacts_slot_0').properties.color, categories[1].color);
+    assert.deepEqual(dashboardRecord(records, 'card_news_slot_0').properties.material.shadow, DASHBOARD_VISUAL_TOKENS.cardShadow);
+    assert.equal(dashboardRecord(records, 'card_news_slot_0').properties.material.shadow.offsetX, 0);
 });
 
-test('focused rubrique color floods dashboard chrome and cards', () => {
+test('focused rubrique color floods chrome while lane cards match their headers', () => {
     const active = categories[1];
     const records = buildDashboardRecords({
         layout: layoutFor(active.id, itemsForRender(categories, active.id, items)),
         tokens: DASHBOARD_VISUAL_TOKENS
     });
-    const activeShade = shadeHex(active.color, -26);
     const inactiveHeader = shadeHex(active.color, -18);
 
     assert.equal(dashboardRecord(records, 'background').properties.color, active.color);
     assert.equal(dashboardRecord(records, 'table').properties.color, active.color);
     assert.equal(dashboardRecord(records, 'plus_strip_active').properties.color, active.color);
     for (const category of categories) {
-        assert.equal(dashboardRecord(records, `lane_${category.id}`).properties.color, active.color);
-        assert.equal(
-            dashboardRecord(records, `header_bg_${category.id}`).properties.color,
-            category.id === active.id ? active.color : inactiveHeader
-        );
+        const headerColor = category.id === active.id ? active.color : inactiveHeader;
+        assert.equal(dashboardRecord(records, `lane_${category.id}`).properties.color, shadeHex(headerColor, DASHBOARD_VISUAL_TOKENS.laneShadePercent));
+        assert.equal(dashboardRecord(records, `header_bg_${category.id}`).properties.color, headerColor);
     }
     const cards = records.filter((record) => record.type === 'shape' && record.id.includes('__eve_dashboard_card_'));
     assert.ok(cards.length >= 3);
-    assert.equal(cards.every((record) => record.properties.color === activeShade), true);
+    assert.equal(cards.every((record) => {
+        const laneId = String(record.id || '').match(/__eve_dashboard_card_([^_]+)_slot_/)?.[1];
+        return record.properties.color === dashboardRecord(records, `header_bg_${laneId}`).properties.color;
+    }), true);
+    assert.equal(cards.every((record) => record.properties.material?.shadow), true);
+    assert.equal(cards.every((record) => record.properties.material.shadow.offsetY === 0), true);
     assert.equal(dashboardRecord(records, 'header_news').properties.opacity, DASHBOARD_VISUAL_TOKENS.inactiveHeaderOpacity);
     assert.equal(dashboardRecord(records, 'header_contacts').properties.opacity, 1);
 });

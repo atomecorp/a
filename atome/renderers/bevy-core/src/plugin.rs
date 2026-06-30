@@ -6,8 +6,7 @@ use crate::{
     render_ops::apply_render_op,
     selection_overlay::rebuild_selection_overlay,
     shape_shadow_overlay::rebuild_shape_shadow_overlay,
-    spawn::spawn_node_with_texture_handle,
-    texture::image_handle_from_texture,
+    spawn::{spawn_node_with_texture_handle, texture_handle_for_node},
     types::*,
     video_external_texture::{
         insert_video_external_texture_component_for_node, AtomeVideoExternalTexturePlugin,
@@ -49,16 +48,8 @@ fn spawn_atome_bevy_scene(
     ));
     for node in &config.initial_scene.nodes {
         let node_id = node.id.clone();
-        let texture_handle = if node.kind == "video" {
-            None
-        } else if node.texture.is_some() {
-            Some(
-                image_handle_from_texture(&mut images, &node.texture, &node.id)
-                    .unwrap_or_else(|error| panic!("{error}")),
-            )
-        } else {
-            None
-        };
+        let texture_handle =
+            texture_handle_for_node(&mut images, node).unwrap_or_else(|error| panic!("{error}"));
         let node_for_world = node.clone();
         let surface_width = config.width;
         let surface_height = config.height;
@@ -98,7 +89,11 @@ fn spawn_atome_bevy_scene(
         });
     }
     commands.queue(|world: &mut World| {
-        let effects = world.resource::<AtomeBevyRendererConfig>().initial_scene.effects.clone();
+        let effects = world
+            .resource::<AtomeBevyRendererConfig>()
+            .initial_scene
+            .effects
+            .clone();
         if let Err(error) = apply_scene_effects(world, AtomeSceneEffectsPatch { effects }) {
             world.resource_mut::<AtomeRendererDiagnostics>().last_error = Some(error);
         }

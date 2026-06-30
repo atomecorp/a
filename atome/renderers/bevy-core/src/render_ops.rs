@@ -1,8 +1,8 @@
 use bevy::{image::Image, prelude::*, text::TextBounds};
 
 use crate::{
-    background::{apply_surface_background, resize_surface_background},
     backdrop_blur::apply_scene_effects,
+    background::{apply_surface_background, resize_surface_background},
     render_math::{
         atome_camera_projection, atome_rect_transform_with_local, color_from_rgba, depth_for_layer,
     },

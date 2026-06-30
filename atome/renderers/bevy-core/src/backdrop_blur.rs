@@ -29,7 +29,11 @@ const SAMPLE_OFFSETS: &[(f32, f32, f32)] = &[
     (0.36, 0.36, 0.055),
 ];
 
-fn intersects(effect: &AtomeSceneEffect, position: &AtomeLogicalPosition, size: &AtomeLogicalSize) -> bool {
+fn intersects(
+    effect: &AtomeSceneEffect,
+    position: &AtomeLogicalPosition,
+    size: &AtomeLogicalSize,
+) -> bool {
     let [x, y, width, height] = effect.bounds;
     position.x < x + width
         && position.x + size.width > x
@@ -65,8 +69,16 @@ fn clear_blur_visuals(world: &mut World) {
     restore_originals(world, originals);
 }
 
-fn collect_sources(world: &mut World, effect: &AtomeSceneEffect) -> Vec<(Entity, Transform, Sprite)> {
-    let table_ids: Vec<Entity> = world.resource::<AtomeEntityTable>().by_id.values().copied().collect();
+fn collect_sources(
+    world: &mut World,
+    effect: &AtomeSceneEffect,
+) -> Vec<(Entity, Transform, Sprite)> {
+    let table_ids: Vec<Entity> = world
+        .resource::<AtomeEntityTable>()
+        .by_id
+        .values()
+        .copied()
+        .collect();
     table_ids
         .into_iter()
         .filter_map(|entity| {
