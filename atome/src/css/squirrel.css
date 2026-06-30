@@ -3,13 +3,17 @@
     -webkit-tap-highlight-color: transparent;
 }
 
+:root {
+    --eve-default-surface-background: #3d0347;
+}
+
 html,
 body {
     font-family: system-ui, -apple-system, 'Segoe UI', 'Roboto', sans-serif;
     font-size: 12px;
     margin: 0;
     padding: 0;
-    background: #3d0347;
+    background: var(--eve-default-surface-background);
     color: var(--system-text-color);
     overflow: hidden;
     -webkit-overflow-scrolling: touch;

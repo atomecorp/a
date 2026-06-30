@@ -271,6 +271,120 @@ test('surface background resize path coalesces and avoids repeated image emissio
     assert.match(source, /pendingImageSignature === signature/);
 });
 
+test('default surface background color is shared by HTML and generated Bevy background payloads', async () => {
+    const cssSource = fs.readFileSync(path.join(repoRoot, 'atome/src/css/squirrel.css'), 'utf8');
+    assert.match(cssSource, /--eve-default-surface-background:\s*#3d0347;/);
+    assert.match(cssSource, /background:\s*var\(--eve-default-surface-background\);/);
+
+    const defaultsUrl = `${pathToFileUrl(path.join(repoRoot, 'eVe/domains/rendering/user_background_pattern_renderer.js'))}?default_color=${Date.now()}`;
+    const { DEFAULT_USER_BACKGROUND_PARAMS } = await import(defaultsUrl);
+    assert.equal(DEFAULT_USER_BACKGROUND_PARAMS.backgroundColorR, 61);
+    assert.equal(DEFAULT_USER_BACKGROUND_PARAMS.backgroundColorG, 3);
+    assert.equal(DEFAULT_USER_BACKGROUND_PARAMS.backgroundColorB, 71);
+
+    const previousWindow = globalThis.window;
+    const previousDocument = globalThis.document;
+    const previousCustomEvent = globalThis.CustomEvent;
+    const previousGetComputedStyle = globalThis.getComputedStyle;
+    let emittedDetail = null;
+
+    class TestCustomEvent {
+        constructor(type, init = {}) {
+            this.type = type;
+            this.detail = init.detail;
+        }
+    }
+
+    const createContext = () => ({
+        clearRect() {},
+        fillRect() {},
+        createLinearGradient() {
+            return { addColorStop() {} };
+        },
+        createPattern() {
+            throw new Error('solid default background must not request a generated pattern texture');
+        },
+        getImageData() {
+            throw new Error('solid default background must not read transparent texture pixels');
+        }
+    });
+
+    const view = {
+        clientWidth: 2,
+        scrollWidth: 2,
+        clientHeight: 2,
+        scrollHeight: 2,
+        style: {}
+    };
+
+    try {
+        globalThis.CustomEvent = TestCustomEvent;
+        globalThis.document = {
+            documentElement: {},
+            createElement(tagName) {
+                if (tagName !== 'canvas') throw new Error(`unexpected element:${tagName}`);
+                return {
+                    width: 0,
+                    height: 0,
+                    getContext: () => createContext()
+                };
+            }
+        };
+        const getComputedStyle = (target) => ({
+            position: target === view ? 'relative' : '',
+            getPropertyValue: (name) => (name === '--eve-default-surface-background' ? '#3d0347' : '')
+        });
+        globalThis.getComputedStyle = getComputedStyle;
+        globalThis.window = {
+            innerWidth: 2,
+            innerHeight: 2,
+            getComputedStyle,
+            addEventListener() {},
+            removeEventListener() {},
+            dispatchEvent(event) {
+                emittedDetail = event.detail;
+            }
+        };
+
+        const runtimeUrl = `${pathToFileUrl(path.join(repoRoot, 'eVe/domains/rendering/user_surface_background_texture_runtime.js'))}?solid_default=${Date.now()}`;
+        const { createUserSurfaceBackgroundTextureRuntime } = await import(runtimeUrl);
+        const runtime = createUserSurfaceBackgroundTextureRuntime({
+            view,
+            params: { ...DEFAULT_USER_BACKGROUND_PARAMS },
+            resolveBackgroundMediaUrl: (value) => value,
+            isProtectedMediaUrl: () => false,
+            resolveProtectedBackgroundObjectUrl: async () => '',
+            clearBackgroundObjectUrl: () => {}
+        });
+
+        runtime.start();
+
+        assert.deepEqual(emittedDetail.color, [61 / 255, 3 / 255, 71 / 255, 1]);
+        assert.equal(Object.hasOwn(emittedDetail, 'texture'), false);
+    } finally {
+        if (previousWindow === undefined) {
+            delete globalThis.window;
+        } else {
+            globalThis.window = previousWindow;
+        }
+        if (previousDocument === undefined) {
+            delete globalThis.document;
+        } else {
+            globalThis.document = previousDocument;
+        }
+        if (previousCustomEvent === undefined) {
+            delete globalThis.CustomEvent;
+        } else {
+            globalThis.CustomEvent = previousCustomEvent;
+        }
+        if (previousGetComputedStyle === undefined) {
+            delete globalThis.getComputedStyle;
+        } else {
+            globalThis.getComputedStyle = previousGetComputedStyle;
+        }
+    }
+});
+
 test('Bevy background runtime skips duplicate surface signatures', () => {
     const source = fs.readFileSync(path.join(repoRoot, 'eVe/domains/rendering/bevy_surface_background_runtime.js'), 'utf8');
     assert.match(source, /SURFACE_SIGNATURES = new WeakMap/);
