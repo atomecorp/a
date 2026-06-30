@@ -2,6 +2,7 @@ use bevy::{
     asset::RenderAssetUsages,
     image::Image,
     prelude::*,
+    render::batching::NoAutomaticBatching,
     render::render_resource::{Extent3d, TextureDimension, TextureFormat},
 };
 
@@ -159,6 +160,7 @@ pub fn rebuild_shape_shadow_overlay(world: &mut World, entity: Entity) -> Result
     let shadow_entity = world
         .spawn((
             sprite,
+            NoAutomaticBatching,
             atome_rect_transform(
                 shadow_x,
                 shadow_y,

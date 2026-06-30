@@ -107,6 +107,8 @@ test('Bevy project renderer guards lock canvas ownership, drag, and video playba
     assert.match(webRenderer, /opsNeedPresentationRedrawPrime/);
     assert.match(webRenderer, /createBevyMediaResourceRuntime/);
     assert.match(webRenderer, /attachBevyWasmDiagnosticsReaders/);
+    assert.match(webRenderer, /BEVY_WASM_MODULE_PATH = '\/wasm\/squirrel_bevy_renderer\.js'/);
+    assert.match(webRenderer, /BEVY_WASM_BINARY_PATH = '\/wasm\/squirrel_bevy_renderer_bg\.wasm'/);
     assert.match(mediaResourceRuntime, /createBrowserBevyMediaTextureResolver/);
     assert.match(mediaResourceRuntime, /resumeDeferredTextureQueue/);
     assert.match(presentationRuntime, /requestBevyPresentationRedraw/);

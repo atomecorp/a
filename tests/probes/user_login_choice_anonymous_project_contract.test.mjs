@@ -62,7 +62,7 @@ const dashboardOpens = [];
 const sceneRecordsByProject = new Map();
 
 window.new_menu_v2 = {
-    reveal: () => {
+    showFully: () => {
         menuReveals.push(Date.now());
         return true;
     }
@@ -70,7 +70,10 @@ window.new_menu_v2 = {
 window.eveDashboardRuntime = {
     open: async (payload = {}) => {
         dashboardOpens.push(payload);
-        sceneRecordsByProject.set(payload.projectId, [{ id: '__eve_dashboard_background', properties: {} }]);
+        sceneRecordsByProject.set(payload.projectId, [
+            { id: '__eve_dashboard_background', properties: { visible: true, opacity: 1 } },
+            { id: '__eve_dashboard_header_news', properties: { text: 'News', visible: true, opacity: 1 } }
+        ]);
         return { ok: true, active: true };
     }
 };
@@ -91,12 +94,14 @@ window.eveToolBase = {
             canvas.id = 'eve_surface_project';
             canvas.width = 800;
             canvas.height = 600;
+            canvas.getBoundingClientRect = () => ({ x: 0, y: 0, width: 800, height: 600 });
             view.appendChild(canvas);
         }
         return { ok: true };
     },
     getProjectSceneState: (projectId) => ({
-        records: sceneRecordsByProject.get(projectId) || []
+        records: sceneRecordsByProject.get(projectId) || [],
+        projection: sceneRecordsByProject.has(projectId) ? { ok: true } : null
     })
 };
 

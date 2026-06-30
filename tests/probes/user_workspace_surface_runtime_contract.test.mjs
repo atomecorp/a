@@ -11,6 +11,12 @@ document.body.appendChild(view);
 const calls = [];
 const sceneRecordsByProject = new Map();
 
+const dashboardReadyRecords = ({ visible = true } = {}) => [
+    { id: '__eve_dashboard_background', properties: { visible, opacity: visible ? 1 : 0 } },
+    { id: '__eve_dashboard_header_news', properties: { text: 'News', visible, opacity: visible ? 1 : 0 } },
+    { id: '__eve_dashboard_header_calendar', properties: { text: 'Calendar', visible, opacity: visible ? 1 : 0 } }
+];
+
 window.eveToolBase = {
     loadProjectAtomes: async (projectId, options = {}) => {
         calls.push({ name: 'loadProjectAtomes', projectId, options });
@@ -24,6 +30,7 @@ window.eveToolBase = {
         canvas.id = 'eve_surface_project';
         canvas.width = 900;
         canvas.height = 600;
+        canvas.getBoundingClientRect = () => ({ x: 0, y: 0, width: 900, height: 600 });
         if (canvas.parentElement !== projectView) projectView.appendChild(canvas);
         return { ok: true };
     },
@@ -43,7 +50,7 @@ window.new_menu_v2 = {
 window.eveDashboardRuntime = {
     open: async (payload = {}) => {
         calls.push({ name: 'dashboardOpen', ...payload });
-        sceneRecordsByProject.set(payload.projectId, [{ id: '__eve_dashboard_background', properties: {} }]);
+        sceneRecordsByProject.set(payload.projectId, dashboardReadyRecords());
         return { ok: true, active: true };
     }
 };
@@ -127,7 +134,7 @@ sceneRecordsByProject.delete('project_valid_2');
 window.eveDashboardRuntime.open = async (payload = {}) => {
     calls.push({ name: 'dashboardOpen', ...payload });
     await new Promise((resolve) => window.setTimeout(resolve, 20));
-    sceneRecordsByProject.set(payload.projectId, [{ id: '__eve_dashboard_background', properties: {} }]);
+    sceneRecordsByProject.set(payload.projectId, dashboardReadyRecords());
     return { ok: true, active: true, source: payload.source };
 };
 
@@ -165,7 +172,7 @@ assert.equal(
 calls.length = 0;
 window.eveDashboardRuntime.open = async (payload = {}) => {
     calls.push({ name: 'dashboardOpen', ...payload });
-    sceneRecordsByProject.set(payload.projectId, [{ id: '__eve_dashboard_background', properties: {} }]);
+    sceneRecordsByProject.set(payload.projectId, dashboardReadyRecords());
     return { ok: true, active: true };
 };
 window.AdoleAPI = { projects: { getCurrentId: () => 'project_from_api' } };
@@ -184,5 +191,30 @@ assert.deepEqual(
     'workspace opener must pass the API-resolved project id to dashboard boot open'
 );
 delete window.AdoleAPI;
+
+calls.length = 0;
+sceneRecordsByProject.delete('project_slow_headers');
+window.__currentProject = { id: 'project_slow_headers' };
+window.eveDashboardRuntime.state = {};
+window.eveDashboardRuntime.open = async (payload = {}) => {
+    calls.push({ name: 'dashboardOpen', ...payload });
+    sceneRecordsByProject.set(payload.projectId, [{ id: '__eve_dashboard_background', properties: { visible: true, opacity: 1 } }]);
+    window.setTimeout(() => {
+        sceneRecordsByProject.set(payload.projectId, dashboardReadyRecords());
+    }, 30);
+    return { ok: true, active: true };
+};
+const slowHeaderResult = await openWorkspaceDashboardAndMainMenu({
+    source: 'slow_headers',
+    projectId: 'project_slow_headers'
+});
+assert.deepEqual(slowHeaderResult, { ok: true, active: true }, 'workspace opener must return after delayed dashboard headers become presentable');
+assert.deepEqual(
+    (sceneRecordsByProject.get('project_slow_headers') || [])
+        .filter((record) => /^__eve_dashboard_header_(?!bg|icon|side)/.test(String(record.id || '')))
+        .map((record) => record.properties.text),
+    ['News', 'Calendar'],
+    'workspace opener must wait for visible dashboard header text records, not only the background record'
+);
 
 console.log('user_workspace_surface_runtime_contract.test: PASS');

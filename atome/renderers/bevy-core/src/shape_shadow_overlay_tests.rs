@@ -92,6 +92,7 @@ fn shape_shadow_uses_bevy_overlay_without_changing_logical_size() {
     let shadow_size = shadow_sprite.custom_size.expect("shadow sprite size");
     assert!(shadow_size.x > 120.0);
     assert!(shadow_size.y > 50.0);
+    assert!(world.get::<bevy::render::batching::NoAutomaticBatching>(shadow_entity).is_some());
     let shape_z = world.get::<Transform>(entity).unwrap().translation.z;
     let shadow_z = world.get::<Transform>(shadow_entity).unwrap().translation.z;
     assert_eq!(shadow_z, depth_for_layer(3) - 0.25);

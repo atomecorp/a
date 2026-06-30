@@ -12,6 +12,7 @@ import {
 } from '../../eVe/domains/rendering/bevy_web_renderer_runtime.js';
 import {
     clearProjectScene,
+    reconcileProjectSceneRecordsByPrefix,
     renderProjectScene
 } from '../../eVe/domains/rendering/project_scene_runtime.js';
 import {
@@ -315,6 +316,63 @@ test('Bevy web runtime rejects a second canvas after the web event loop is owned
     assert.equal(calls.filter((call) => call.type === 'run').length, 1);
     assert.equal(calls.filter((call) => call.type === 'ops').length, 0);
     assert.equal(readBevyWebRendererState(secondSurface), null);
+});
+
+test('Project reconcile restarts Bevy after a failed projection instead of diffing against an invalid baseline', async () => {
+    const dom = new JSDOM('<!doctype html><html><body><div id="project_view_failed_projection"></div></body></html>');
+    const host = dom.window.document.getElementById('project_view_failed_projection');
+    host.getBoundingClientRect = () => ({
+        left: 0,
+        top: 0,
+        width: 1681,
+        height: 960,
+        right: 1681,
+        bottom: 960
+    });
+    let failRun = true;
+    const calls = [];
+    const wasmModule = {
+        default: async () => undefined,
+        run_atome_bevy_renderer: (_selector, _width, _height, initialScene) => {
+            calls.push({ type: 'run', ids: initialScene.nodes.map((node) => node.id) });
+            if (failRun) throw new Error('bevy_safari_initial_projection_failed');
+        },
+        apply_atome_bevy_spawn: (node) => calls.push({ type: 'spawn', id: node.id }),
+        apply_atome_bevy_surface: (payload) => calls.push({ type: 'surface', payload })
+    };
+    const records = [
+        record('__eve_dashboard_header_news', { zIndex: 10 }),
+        record('__eve_dashboard_card_projects_slot_0', { left: 20, top: 120, zIndex: 20 })
+    ];
+
+    const failed = await renderProjectScene({
+        projectId: 'failed_projection',
+        records,
+        host,
+        documentRef: dom.window.document,
+        bevyWasmModule: wasmModule
+    });
+
+    assert.equal(failed.ok, false);
+    assert.equal(readBevyWebRendererState(host.querySelector('#eve_surface_project'))?.started, false);
+
+    failRun = false;
+    const recovered = await reconcileProjectSceneRecordsByPrefix({
+        projectId: 'failed_projection',
+        prefix: '__eve_dashboard_',
+        records,
+        changedRecords: [records[1]],
+        host,
+        documentRef: dom.window.document
+    });
+
+    assert.equal(recovered.ok, true);
+    assert.deepEqual(calls.filter((call) => call.type === 'run').at(-1).ids, [
+        '__eve_dashboard_header_news',
+        '__eve_dashboard_card_projects_slot_0'
+    ]);
+    assert.equal(calls.some((call) => call.type === 'surface'), false);
+    clearProjectScene('failed_projection');
 });
 
 test('Bevy web runtime coalesces concurrent starts on the same canvas', async () => {

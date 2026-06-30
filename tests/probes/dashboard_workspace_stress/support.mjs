@@ -256,7 +256,7 @@ export const clickCanvasRect = async (page, rect) => {
 };
 
 export const enterGuestWorkspace = async (page) => {
-    await page.goto(APP_URL, { waitUntil: 'domcontentloaded', timeout: 45000 });
+    await page.goto(APP_URL, { timeout: 45000 });
     await page.waitForFunction(() => !!window.__DEBUG__ || !!window.new_menu_v2 || !!document.getElementById('intuition'), null, { timeout: 45000 });
     const readyBefore = await waitFor(page, async () => {
         const current = await window.AdoleAPI?.auth?.current?.().catch(() => null);
