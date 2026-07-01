@@ -28,4 +28,6 @@ mod shape_shadow_overlay_tests;
 #[cfg(test)]
 mod tests;
 #[cfg(test)]
+mod texture_sprite_color_tests;
+#[cfg(test)]
 mod video_external_texture_tests;

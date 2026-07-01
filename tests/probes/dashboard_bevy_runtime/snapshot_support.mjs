@@ -89,6 +89,7 @@ export const dashboardSnapshot = async (page) => page.evaluate(async () => {
                 source: String(record.properties?.source || ''),
                 media_fit: String(record.properties?.media_fit || record.properties?.object_fit || ''),
                 corner_radius: Number(record.properties?.corner_radius || record.properties?.cornerRadius || 0),
+                z_index: Number(record.properties?.z_index ?? record.properties?.zIndex ?? 0),
                 rect: {
                     x: Number(record.properties?.left ?? record.properties?.x ?? 0),
                     y: Number(record.properties?.top ?? record.properties?.y ?? 0),
@@ -109,6 +110,21 @@ export const dashboardSnapshot = async (page) => page.evaluate(async () => {
                     width: Number(record.properties?.width ?? 0),
                     height: Number(record.properties?.height ?? 0)
                 }
+            })),
+        dashboardLabelBackdropRecords: dashboardRecords
+            .filter((record) => String(record?.id || '').includes('card_label_backdrop_'))
+            .map((record) => ({
+                id: String(record.id || ''),
+                source: String(record.properties?.source || ''),
+                opacity: Number(record.properties?.opacity ?? 1),
+                z_index: Number(record.properties?.z_index ?? record.properties?.zIndex ?? 0),
+                rect: {
+                    x: Number(record.properties?.left ?? record.properties?.x ?? 0),
+                    y: Number(record.properties?.top ?? record.properties?.y ?? 0),
+                    width: Number(record.properties?.width ?? 0),
+                    height: Number(record.properties?.height ?? 0)
+                },
+                visible: record.properties?.visible !== false && Number(record.properties?.opacity ?? 1) > 0
             })),
         editorRect: editorRecord ? {
             x: Number(editorRecord.properties?.left ?? editorRecord.properties?.x ?? 0),

@@ -25,6 +25,18 @@ fn white_with_opacity(opacity: f32) -> Color {
     color_from_rgba([1.0, 1.0, 1.0, normalize_opacity(opacity)])
 }
 
+fn texture_owns_sprite_color(kind: &str, has_texture: bool) -> bool {
+    has_texture && matches!(kind, "image" | "text" | "audio_waveform")
+}
+
+fn visual_color_for_node(node: &AtomeRenderNode, has_texture: bool) -> [f32; 4] {
+    if texture_owns_sprite_color(&node.kind, has_texture) {
+        [1.0, 1.0, 1.0, 1.0]
+    } else {
+        color_for_node(node)
+    }
+}
+
 fn node_base_components(
     node: &AtomeRenderNode,
     width: f32,
@@ -149,6 +161,8 @@ pub fn spawn_node_with_texture_handle(
     let width = node.logical_size[0].max(1.0);
     let height = node.logical_size[1].max(1.0);
     let color = color_for_node(&node);
+    let has_texture = texture_handle.is_some();
+    let visual_color = visual_color_for_node(&node, has_texture);
     let visible_color = color_with_opacity(color, node.opacity);
     let size = Vec2::new(width, height);
     let entity = match node.kind.as_str() {
@@ -200,7 +214,6 @@ pub fn spawn_node_with_texture_handle(
                 .clone()
                 .filter(|value| !value.trim().is_empty())
                 .ok_or_else(|| format!("bevy_media_source_required:{}", node.id))?;
-            let has_texture = texture_handle.is_some();
             let mut sprite = if let Some(handle) = texture_handle {
                 Sprite::from_image(handle)
             } else {
@@ -240,7 +253,6 @@ pub fn spawn_node_with_texture_handle(
             entity
         }
         "audio_waveform" => {
-            let has_texture = texture_handle.is_some();
             let mut sprite = if let Some(handle) = texture_handle {
                 Sprite::from_image(handle)
             } else {
@@ -262,7 +274,7 @@ pub fn spawn_node_with_texture_handle(
         other => return Err(format!("bevy_render_kind_unsupported:{other}")),
     };
     world.entity_mut(entity).insert((
-        AtomeVisualColor(color),
+        AtomeVisualColor(visual_color),
         AtomeVisualOpacity(normalize_opacity(node.opacity)),
         AtomeCornerRadius(node.corner_radius.max(0.0)),
     ));

@@ -61,6 +61,17 @@ fn transform_for_rect(
     )
 }
 
+fn texture_sprite_color(world: &mut World, entity: Entity) -> Color {
+    let opacity = world
+        .get::<AtomeVisualOpacity>(entity)
+        .map(|value| value.0)
+        .unwrap_or_else(default_opacity);
+    if let Some(mut current) = world.get_mut::<AtomeVisualColor>(entity) {
+        current.0 = [1.0, 1.0, 1.0, 1.0];
+    }
+    color_from_rgba([1.0, 1.0, 1.0, normalize_opacity(opacity)])
+}
+
 pub fn apply_spawn(world: &mut World, node: AtomeRenderNode) -> Result<Entity, String> {
     if node.id.trim().is_empty() {
         return Err("bevy_spawn_id_required".to_string());
@@ -169,12 +180,7 @@ pub fn apply_surface(world: &mut World, patch: AtomeSurfacePatch) -> Result<(), 
     {
         *projection = atome_camera_projection(width, height);
     }
-    let ids: Vec<String> = world
-        .resource::<AtomeEntityTable>()
-        .by_id
-        .keys()
-        .cloned()
-        .collect();
+    let ids: Vec<String> = world.resource::<AtomeEntityTable>().by_id.keys().cloned().collect();
     for id in ids {
         let entity = entity_for(world, &id)?;
         let position = *world
@@ -362,9 +368,10 @@ pub fn apply_text(world: &mut World, patch: AtomeTextPatch) -> Result<(), String
                 .ok_or_else(|| "bevy_image_assets_required".to_string())?;
             image_handle_from_texture(&mut images, &patch.texture, &patch.id)?
         };
+        let color = texture_sprite_color(world, entity);
         if let Some(mut sprite) = world.get_mut::<Sprite>(entity) {
             sprite.image = handle;
-            sprite.color = Color::WHITE;
+            sprite.color = color;
         }
     }
     Ok(())
@@ -462,11 +469,12 @@ pub fn apply_resource(world: &mut World, patch: AtomeResourcePatch) -> Result<()
                 .ok_or_else(|| "bevy_image_assets_required".to_string())?;
             image_handle_from_texture(&mut images, &patch.texture, &patch.id)?
         };
+        let color = texture_sprite_color(world, entity);
         let mut sprite = world
             .get_mut::<Sprite>(entity)
             .ok_or_else(|| format!("bevy_resource_sprite_missing:{}", patch.id))?;
         sprite.image = handle;
-        sprite.color = Color::WHITE;
+        sprite.color = color;
     }
     Ok(())
 }

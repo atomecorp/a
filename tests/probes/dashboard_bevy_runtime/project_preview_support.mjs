@@ -142,6 +142,42 @@ const cardRecordForMedia = (snapshot, media) => {
     return snapshot.dashboardCardRecords?.find((record) => record.id === cardId) || null;
 };
 
+const labelBackdropRecordForMedia = (snapshot, media) => {
+    const backdropId = String(media?.id || '').replace('__eve_dashboard_card_media_', '__eve_dashboard_card_label_backdrop_');
+    return snapshot.dashboardLabelBackdropRecords?.find((record) => record.id === backdropId) || null;
+};
+
+const assertLabelBackdropRecord = (snapshot, media, card, label) => {
+    const backdrop = labelBackdropRecordForMedia(snapshot, media);
+    if (!backdrop?.visible || !backdrop.rect) throw new Error(`${label}_label_backdrop_missing`);
+    const expectedHeight = Math.max(1, Math.round(Number(card?.rect?.height || 0) / 5));
+    const expectedTop = Number(card?.rect?.y || 0) + Number(card?.rect?.height || 0) - expectedHeight;
+    if (
+        Math.round(backdrop.rect.x) !== Math.round(card.rect.x)
+        || Math.round(backdrop.rect.width) !== Math.round(card.rect.width)
+        || Math.round(backdrop.rect.height) !== expectedHeight
+        || Math.round(backdrop.rect.y) !== Math.round(expectedTop)
+    ) {
+        throw new Error(`${label}_label_backdrop_geometry_invalid:${JSON.stringify({ backdrop, card, expectedHeight, expectedTop })}`);
+    }
+    if (Number(backdrop.opacity) !== 0.6) throw new Error(`${label}_label_backdrop_opacity_invalid:${backdrop.opacity}`);
+    if (Number(backdrop.z_index) <= Number(media.z_index)) throw new Error(`${label}_label_backdrop_layer_invalid:${JSON.stringify({ media, backdrop })}`);
+    return backdrop;
+};
+
+const assertLabelBackdropPixels = (png, backdrop, card, label) => {
+    const fill = hexToRgb(card.color);
+    const rect = backdrop.rect;
+    const samples = [
+        pixelAt(png, rect.x + rect.width / 2, rect.y + rect.height / 2),
+        pixelAt(png, rect.x + Math.max(3, rect.width * 0.12), rect.y + rect.height - 3),
+        pixelAt(png, rect.x + rect.width - Math.max(3, rect.width * 0.12), rect.y + rect.height - 3)
+    ];
+    const present = samples.some((pixel) => pixel[3] > 200 && colorDistance(pixel, fill) < 90);
+    if (!present) throw new Error(`${label}_label_backdrop_pixels_missing:${JSON.stringify({ backdrop, card, samples })}`);
+    return { samples };
+};
+
 const assertMediaCornersClipped = (png, media, card, label) => {
     if (!media?.rect || !card?.color) throw new Error(`${label}_clip_record_missing`);
     const fill = hexToRgb(card.color);
@@ -192,9 +228,12 @@ export const analyzeDashboardProjectPreviewVisual = (screenshotPath, snapshot) =
     const media = projectPreviewMediaRecord(snapshot);
     if (!media) throw new Error(`dashboard_projects_preview_media_record_missing:${JSON.stringify(snapshot.dashboardMediaRecords || [])}`);
     const card = cardRecordForMedia(snapshot, media);
+    const backdrop = assertLabelBackdropRecord(snapshot, media, card, 'dashboard_project_preview');
     return {
         label: 'dashboard_projects_preview',
         media,
+        backdrop,
+        backdropPixels: assertLabelBackdropPixels(png, backdrop, card, 'dashboard_project_preview'),
         clipping: assertMediaCornersClipped(png, media, card, 'dashboard_project_preview'),
         pixels: assertProjectPreviewPixels(png, item.rect)
     };
@@ -205,9 +244,12 @@ export const analyzeDashboardContactPhotoVisual = (screenshotPath, snapshot) => 
     const media = contactPhotoMediaRecord(snapshot);
     if (!media) throw new Error(`dashboard_contacts_photo_media_record_missing:${JSON.stringify(snapshot.dashboardMediaRecords || [])}`);
     const card = cardRecordForMedia(snapshot, media);
+    const backdrop = assertLabelBackdropRecord(snapshot, media, card, 'dashboard_contacts_photo');
     return {
         label: 'dashboard_contacts_photo',
         media,
+        backdrop,
+        backdropPixels: assertLabelBackdropPixels(png, backdrop, card, 'dashboard_contacts_photo'),
         clipping: assertMediaCornersClipped(png, media, card, 'dashboard_contacts_photo')
     };
 };
