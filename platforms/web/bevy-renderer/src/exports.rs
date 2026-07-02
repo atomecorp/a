@@ -4,16 +4,70 @@ use atome_bevy_renderer_core::{
     AtomeResourcePatch, AtomeSceneEffectsPatch, AtomeStylePatch, AtomeSurfaceBackgroundPatch,
     AtomeSurfacePatch, AtomeTextPatch, AtomeTransformPatch, AtomeVisibilityPatch,
 };
+use serde::Deserialize;
 use wasm_bindgen::prelude::*;
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct WebSurfaceMetrics {
+    pub pixel_width: f32,
+    pub pixel_height: f32,
+    pub device_pixel_ratio: f32,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+enum WebAtomeRenderOp {
+    Spawn { node: AtomeRenderNode },
+    Despawn { id: String },
+    Transform { patch: AtomeTransformPatch },
+    Style { patch: AtomeStylePatch },
+    Reparent { patch: AtomeParentPatch },
+    Layer { patch: AtomeLayerPatch },
+    Visibility { patch: AtomeVisibilityPatch },
+    Text { patch: AtomeTextPatch },
+    Resource { patch: AtomeResourcePatch },
+    Surface { patch: AtomeSurfacePatch },
+    SurfaceBackground { patch: AtomeSurfaceBackgroundPatch },
+    SceneEffects { patch: AtomeSceneEffectsPatch },
+}
+
+impl From<WebAtomeRenderOp> for AtomeRenderOp {
+    fn from(op: WebAtomeRenderOp) -> Self {
+        match op {
+            WebAtomeRenderOp::Spawn { node } => AtomeRenderOp::Spawn(node),
+            WebAtomeRenderOp::Despawn { id } => AtomeRenderOp::Despawn(id),
+            WebAtomeRenderOp::Transform { patch } => AtomeRenderOp::Transform(patch),
+            WebAtomeRenderOp::Style { patch } => AtomeRenderOp::Style(patch),
+            WebAtomeRenderOp::Reparent { patch } => AtomeRenderOp::Reparent(patch),
+            WebAtomeRenderOp::Layer { patch } => AtomeRenderOp::Layer(patch),
+            WebAtomeRenderOp::Visibility { patch } => AtomeRenderOp::Visibility(patch),
+            WebAtomeRenderOp::Text { patch } => AtomeRenderOp::Text(patch),
+            WebAtomeRenderOp::Resource { patch } => AtomeRenderOp::Resource(patch),
+            WebAtomeRenderOp::Surface { patch } => AtomeRenderOp::Surface(patch),
+            WebAtomeRenderOp::SurfaceBackground { patch } => {
+                AtomeRenderOp::SurfaceBackground(patch)
+            }
+            WebAtomeRenderOp::SceneEffects { patch } => AtomeRenderOp::SceneEffects(patch),
+        }
+    }
+}
 
 #[wasm_bindgen]
 pub fn run_atome_bevy_renderer(
     canvas_selector: String,
     width: f32,
     height: f32,
+    surface_metrics: JsValue,
     initial_scene: JsValue,
 ) -> Result<(), JsValue> {
-    run_atome_bevy_renderer_with_transparency(canvas_selector, width, height, initial_scene, false)
+    run_atome_bevy_renderer_with_transparency(
+        canvas_selector,
+        width,
+        height,
+        surface_metrics,
+        initial_scene,
+        false,
+    )
 }
 
 #[wasm_bindgen]
@@ -21,15 +75,24 @@ pub fn run_atome_bevy_preview_renderer(
     canvas_selector: String,
     width: f32,
     height: f32,
+    surface_metrics: JsValue,
     initial_scene: JsValue,
 ) -> Result<(), JsValue> {
-    run_atome_bevy_renderer_with_transparency(canvas_selector, width, height, initial_scene, true)
+    run_atome_bevy_renderer_with_transparency(
+        canvas_selector,
+        width,
+        height,
+        surface_metrics,
+        initial_scene,
+        true,
+    )
 }
 
 fn run_atome_bevy_renderer_with_transparency(
     canvas_selector: String,
     width: f32,
     height: f32,
+    surface_metrics: JsValue,
     initial_scene: JsValue,
     transparent: bool,
 ) -> Result<(), JsValue> {
@@ -38,13 +101,41 @@ fn run_atome_bevy_renderer_with_transparency(
     }
     let scene: AtomeRenderScene = serde_wasm_bindgen::from_value(initial_scene)
         .map_err(|error| JsValue::from_str(&format!("bevy_projection_decode_failed:{error}")))?;
+    let metrics: WebSurfaceMetrics = serde_wasm_bindgen::from_value(surface_metrics)
+        .map_err(|error| JsValue::from_str(&format!("bevy_surface_metrics_decode_failed:{error}")))?;
     let config = if transparent {
-        WebBevyRendererConfig::with_transparency(canvas_selector, width, height, scene, true)
+        WebBevyRendererConfig::with_transparency(
+            canvas_selector,
+            width,
+            height,
+            metrics.pixel_width,
+            metrics.pixel_height,
+            metrics.device_pixel_ratio,
+            scene,
+            true,
+        )
     } else {
-        WebBevyRendererConfig::new(canvas_selector, width, height, scene)
+        WebBevyRendererConfig::with_transparency(
+            canvas_selector,
+            width,
+            height,
+            metrics.pixel_width,
+            metrics.pixel_height,
+            metrics.device_pixel_ratio,
+            scene,
+            false,
+        )
     };
     let mut app = build_web_bevy_app(config);
     app.run();
+    Ok(())
+}
+
+#[wasm_bindgen]
+pub fn apply_atome_bevy_ops(ops: JsValue) -> Result<(), JsValue> {
+    let parsed: Vec<WebAtomeRenderOp> = serde_wasm_bindgen::from_value(ops)
+        .map_err(|error| JsValue::from_str(&format!("bevy_ops_decode_failed:{error}")))?;
+    queue_web_ops(parsed.into_iter().map(AtomeRenderOp::from).collect());
     Ok(())
 }
 

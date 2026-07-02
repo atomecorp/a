@@ -1045,6 +1045,7 @@ const server = fastify({
 
 const PORT = process.env.PORT || 3001;
 const HOST = process.env.HOST || (process.env.NODE_ENV === 'production' ? '127.0.0.1' : '0.0.0.0');
+const AUTH_OTP_BYPASS_ENABLED = process.env.NODE_ENV !== 'production' && process.env.SQUIRREL_AUTH_OTP_BYPASS === '1';
 const DATABASE_ENABLED = DB_CONFIGURED;
 const DB_REQUIRED_MESSAGE = 'Database not configured. Set SQLITE_PATH or LIBSQL_URL/LIBSQL_AUTH_TOKEN.';
 
@@ -1326,28 +1327,34 @@ async function startServer() {
     // ===========================
 
     // Serve framework and product roots explicitly; the main app still boots from atome/src.
+    // preCompressed serves a sibling .br/.gz when the client accepts it (e.g. the renderer
+    // WASM), and transparently falls back to the plain file when no variant exists.
     await server.register(fastifyStatic, {
       root: atomeStaticRoot,
       prefix: '/atome/',
-      decorateReply: false
+      decorateReply: false,
+      preCompressed: true
     });
 
     await server.register(fastifyStatic, {
       root: eveStaticRoot,
       prefix: '/eVe/',
-      decorateReply: false
+      decorateReply: false,
+      preCompressed: true
     });
 
     await server.register(fastifyStatic, {
       root: staticRoot,
       prefix: '/src/',
-      decorateReply: false
+      decorateReply: false,
+      preCompressed: true
     });
 
     // Servir les fichiers statiques depuis staticRoot (../atome/src en dev)
     await server.register(fastifyStatic, {
       root: staticRoot,
-      prefix: '/'
+      prefix: '/',
+      preCompressed: true
     });
 
     // WebSocket natif Fastify v5
@@ -3692,6 +3699,17 @@ async function startServer() {
                     ok: false,
                     retryAfterSeconds: rate.retryAfterSeconds,
                     error: 'Too many verification requests'
+                  });
+                  return;
+                }
+                if (AUTH_OTP_BYPASS_ENABLED) {
+                  safeSend({
+                    type: 'auth-response',
+                    requestId,
+                    success: true,
+                    ok: true,
+                    context: data.context || 'login_demo',
+                    otpBypassed: true
                   });
                   return;
                 }

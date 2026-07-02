@@ -80,21 +80,33 @@ fn read_web_video_backend_capabilities() -> WebVideoBackendCapabilities {
 }
 
 fn queue_web_op(op: AtomeRenderOp) {
-    let is_transform = matches!(op, AtomeRenderOp::Transform(_));
+    queue_web_ops(vec![op]);
+}
+
+fn queue_web_ops(ops: Vec<AtomeRenderOp>) {
+    if ops.is_empty() {
+        return;
+    }
+    let op_count = ops.len() as u32;
+    let transform_count = ops
+        .iter()
+        .filter(|op| matches!(op, AtomeRenderOp::Transform(_)))
+        .count() as u32;
     WEB_PENDING_OPS.with(|cell| {
-        let mut ops = cell.borrow_mut();
-        if let Some(id) = progress_only_style_id(&op) {
-            ops.retain(|pending| progress_only_style_id(pending).as_deref() != Some(id.as_str()));
+        let mut pending_ops = cell.borrow_mut();
+        for op in ops {
+            if let Some(id) = progress_only_style_id(&op) {
+                pending_ops
+                    .retain(|pending| progress_only_style_id(pending).as_deref() != Some(id.as_str()));
+            }
+            pending_ops.push(op);
         }
-        ops.push(op);
     });
     let queue_depth = WEB_PENDING_OPS.with(|cell| cell.borrow().len() as u32);
     WEB_DIAGNOSTICS.with(|cell| {
         let mut diagnostics = cell.borrow_mut();
-        diagnostics.queued_ops += 1;
-        if is_transform {
-            diagnostics.transform_ops += 1;
-        }
+        diagnostics.queued_ops += op_count;
+        diagnostics.transform_ops += transform_count;
         diagnostics.max_queue_depth = diagnostics.max_queue_depth.max(queue_depth);
     });
     wake_web_renderer();
@@ -202,25 +214,36 @@ struct WebBevyRendererConfig {
 }
 
 impl WebBevyRendererConfig {
+    #[cfg(test)]
     fn new(
         canvas_selector: String,
         width: f32,
         height: f32,
         initial_scene: AtomeRenderScene,
     ) -> Self {
-        Self::with_transparency(canvas_selector, width, height, initial_scene, false)
+        Self::with_transparency(canvas_selector, width, height, width, height, 1.0, initial_scene, false)
     }
 
     fn with_transparency(
         canvas_selector: String,
         width: f32,
         height: f32,
+        pixel_width: f32,
+        pixel_height: f32,
+        device_pixel_ratio: f32,
         initial_scene: AtomeRenderScene,
         transparent: bool,
     ) -> Self {
         Self {
             canvas_selector,
-            core: AtomeBevyRendererConfig::new(width, height, initial_scene),
+            core: AtomeBevyRendererConfig::with_surface_metrics(
+                width,
+                height,
+                pixel_width,
+                pixel_height,
+                device_pixel_ratio,
+                initial_scene,
+            ),
             transparent,
         }
     }
@@ -322,7 +345,36 @@ fn apply_browser_window_resize_to_surface(world: &mut World) {
     {
         return;
     }
-    if let Err(error) = apply_surface(world, AtomeSurfacePatch { width, height }) {
+    let (pixel_width, pixel_height, device_pixel_ratio) = world
+        .query::<&Window>()
+        .iter(world)
+        .next()
+        .map(|window| {
+            let device_pixel_ratio = window.resolution.scale_factor();
+            (
+                width * device_pixel_ratio,
+                height * device_pixel_ratio,
+                device_pixel_ratio,
+            )
+        })
+        .unwrap_or_else(|| {
+            let current = world.resource::<AtomeBevyRendererConfig>();
+            (
+                current.pixel_width as f32,
+                current.pixel_height as f32,
+                current.device_pixel_ratio,
+            )
+        });
+    if let Err(error) = apply_surface(
+        world,
+        AtomeSurfacePatch {
+            width,
+            height,
+            pixel_width: Some(pixel_width),
+            pixel_height: Some(pixel_height),
+            device_pixel_ratio: Some(device_pixel_ratio),
+        },
+    ) {
         world.resource_mut::<AtomeRendererDiagnostics>().last_error = Some(error);
         return;
     }
@@ -366,11 +418,8 @@ fn reset_web_renderer_diagnostics() -> WebRendererDiagnostics {
 }
 
 fn web_window_for_config(config: &WebBevyRendererConfig) -> Window {
-    let resolution = WindowResolution::new(
-        config.core.width.round() as u32,
-        config.core.height.round() as u32,
-    )
-    .with_scale_factor_override(1.0);
+    let mut resolution = WindowResolution::new(config.core.pixel_width, config.core.pixel_height);
+    resolution.set_scale_factor(config.core.device_pixel_ratio);
     Window {
         canvas: Some(config.canvas_selector.clone()),
         fit_canvas_to_parent: false,

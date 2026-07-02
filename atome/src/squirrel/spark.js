@@ -10,8 +10,13 @@ import {
   perfNowMs
 } from '../utils/perf_runtime.js';
 import { isIOSDevice, waitForIOSLocalServerReady } from '../utils/ios_runtime.js';
-import { loadModulesSequentially } from '../utils/module_loader_runtime.js';
+import { loadModulesConcurrently, loadModulesSequentially } from '../utils/module_loader_runtime.js';
 import { exposeSparkGlobals } from '../utils/spark_exposure_runtime.js';
+import { startPerfCollector } from '../utils/perf_collector_runtime.js';
+
+// Enable and buffer perf events only when the operator opts in (?perf=1). Must run
+// before the first emitPerfEvent call so boot stages are captured on window.__squirrelPerf.
+startPerfCollector();
 
 const loadSparkServerConfig = async (loadServerConfigOnce) => {
   const start = perfNowMs();
@@ -84,7 +89,9 @@ const startSparkApplicationLoad = ({
 
 const sparkBootstrapStartMs = perfNowMs();
 
-const sparkBootModules = [
+// Core/bootstrap modules keep sequential ordering because several install runtime
+// side effects on import and later reads depend on that deterministic order.
+const sparkCoreModules = [
   { id: 'atome.atome', path: './atome/atome.js' },
   { id: 'atome.mcp', path: './atome/mcp.js' },
   { id: 'ai.agent_gateway', path: './ai/agent_gateway.js' },
@@ -103,7 +110,13 @@ const sparkBootModules = [
   { id: 'apis.adole_apis', path: './apis/unified/adole_apis.js' },
   { id: 'apis.loadServerConfig', path: './apis/loadServerConfig.js' },
   { id: 'apis.dragdrop', path: './apis/dragdrop.js' },
-  { id: 'squirrel.core', path: './squirrel.js' },
+  { id: 'squirrel.core', path: './squirrel.js' }
+];
+
+// Pure component/builder modules are order-independent: they are only read through
+// their default export after the batch resolves, so their fetch/compile can run
+// concurrently instead of as a serial waterfall.
+const sparkComponentModules = [
   { id: 'components.button', path: './components/button_builder.js' },
   { id: 'components.slider', path: './components/slider_builder.js' },
   { id: 'components.toolSlider', path: './components/tool_slider_builder.js' },
@@ -156,13 +169,23 @@ const trackModuleError = (stage) => ({ moduleId, modulePath, totalMs, error }) =
 // Legacy overlay layer removed.
 
 const bootstrapSpark = async () => {
-  const loadedModules = await loadModulesSequentially({
-    modules: sparkBootModules,
+  const coreModules = await loadModulesSequentially({
+    modules: sparkCoreModules,
     baseUrl: import.meta.url,
     logPrefix: '[Squirrel]',
     onModuleLoaded: trackModuleLoad('boot_module'),
     onModuleError: trackModuleError('boot_module')
   });
+
+  const componentModules = await loadModulesConcurrently({
+    modules: sparkComponentModules,
+    baseUrl: import.meta.url,
+    logPrefix: '[Squirrel]',
+    onModuleLoaded: trackModuleLoad('boot_module'),
+    onModuleError: trackModuleError('boot_module')
+  });
+
+  const loadedModules = { ...coreModules, ...componentModules };
 
   const { bootstrapAiModelCatalogRefresh } = loadedModules['ai.model_catalog_refresh'];
   const { AdoleAPI } = loadedModules['apis.adole_apis'];

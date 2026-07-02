@@ -74,6 +74,13 @@ fn is_production_runtime() -> bool {
         .unwrap_or(false)
 }
 
+fn auth_otp_bypass_enabled() -> bool {
+    !is_production_runtime()
+        && env::var("SQUIRREL_AUTH_OTP_BYPASS")
+            .map(|value| value.trim() == "1")
+            .unwrap_or(false)
+}
+
 fn generate_otp_code() -> String {
     let value = (Uuid::new_v4().as_u128() % 900000) + 100000;
     value.to_string()
@@ -138,6 +145,8 @@ pub struct AuthResponse {
     pub token: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub code: Option<String>,
+    #[serde(rename = "otpBypassed", skip_serializing_if = "Option::is_none")]
+    pub otp_bypassed: Option<bool>,
 }
 
 #[derive(Debug, Serialize)]
@@ -363,6 +372,7 @@ async fn handle_bootstrap(
             }),
             token: Some(token),
             code: None,
+            otp_bypassed: None,
         };
     }
 
@@ -445,6 +455,7 @@ async fn handle_bootstrap(
         }),
         token: Some(token),
         code: None,
+        otp_bypassed: None,
     }
 }
 
@@ -555,6 +566,7 @@ async fn handle_register(
                 }),
                 token: Some(token),
                 code: None,
+                otp_bypassed: None,
             };
         }
 
@@ -605,6 +617,7 @@ async fn handle_register(
                 }),
                 token: Some(token),
                 code: None,
+                otp_bypassed: None,
             };
         }
 
@@ -626,6 +639,7 @@ async fn handle_register(
             }),
             token: None,
             code: None,
+            otp_bypassed: None,
         };
     }
 
@@ -713,6 +727,7 @@ async fn handle_register(
         }),
         token: Some(token),
         code: None,
+        otp_bypassed: None,
     }
 }
 
@@ -838,6 +853,7 @@ async fn handle_login(
         }),
         token: Some(token),
         code: None,
+        otp_bypassed: None,
     }
 }
 
@@ -851,6 +867,19 @@ async fn handle_request_phone_verification(
     };
     if let Err(error) = enforce_local_auth_attempt_limit("phone_verification_request", &phone) {
         return error_response(request_id, &error);
+    }
+    if auth_otp_bypass_enabled() {
+        return AuthResponse {
+            msg_type: "auth-response".into(),
+            request_id,
+            success: true,
+            already_exists: None,
+            error: None,
+            user: None,
+            token: None,
+            code: None,
+            otp_bypassed: Some(true),
+        };
     }
     let code = generate_otp_code();
     if let Err(error) = store_phone_verification(&phone, &code) {
@@ -873,6 +902,7 @@ async fn handle_request_phone_verification(
         } else {
             None
         },
+        otp_bypassed: None,
     }
 }
 
@@ -903,6 +933,7 @@ async fn handle_verify_phone_verification(
         user: None,
         token: None,
         code: None,
+        otp_bypassed: None,
     }
 }
 
@@ -952,6 +983,7 @@ async fn handle_lookup_phone(
         }),
         token: None,
         code: None,
+        otp_bypassed: None,
     }
 }
 
@@ -1018,6 +1050,7 @@ async fn handle_me(
         }),
         token: None,
         code: None,
+        otp_bypassed: None,
     }
 }
 
@@ -1032,6 +1065,7 @@ fn handle_logout(request_id: Option<String>) -> AuthResponse {
         user: None,
         token: None,
         code: None,
+        otp_bypassed: None,
     }
 }
 
@@ -1109,6 +1143,7 @@ async fn handle_change_password(
         user: None,
         token: None,
         code: None,
+        otp_bypassed: None,
     }
 }
 
@@ -1166,6 +1201,7 @@ async fn handle_delete(
         user: None,
         token: None,
         code: None,
+        otp_bypassed: None,
     }
 }
 
@@ -1531,6 +1567,7 @@ fn error_response(request_id: Option<String>, error: &str) -> AuthResponse {
         user: None,
         token: None,
         code: None,
+        otp_bypassed: None,
     }
 }
 
@@ -1599,6 +1636,7 @@ async fn handle_delete_fastify_token(
                 user: None,
                 token: None,
                 code: None,
+                otp_bypassed: None,
             }
         }
         Err(e) => error_response(request_id, &e.to_string()),

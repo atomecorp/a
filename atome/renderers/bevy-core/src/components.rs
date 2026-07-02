@@ -137,16 +137,36 @@ pub struct AtomeRendererDiagnostics {
 pub struct AtomeBevyRendererConfig {
     pub width: f32,
     pub height: f32,
+    pub pixel_width: u32,
+    pub pixel_height: u32,
+    pub device_pixel_ratio: f32,
     pub initial_scene: AtomeRenderScene,
     pub selection_style: SelectionVisualStyle,
 }
 
 impl AtomeBevyRendererConfig {
     pub fn new(width: f32, height: f32, initial_scene: AtomeRenderScene) -> Self {
+        Self::with_surface_metrics(width, height, width, height, 1.0, initial_scene)
+    }
+
+    pub fn with_surface_metrics(
+        width: f32,
+        height: f32,
+        pixel_width: f32,
+        pixel_height: f32,
+        device_pixel_ratio: f32,
+        initial_scene: AtomeRenderScene,
+    ) -> Self {
         let selection_style = initial_scene.selection_style();
+        let width = normalize_surface_logical(width);
+        let height = normalize_surface_logical(height);
+        let device_pixel_ratio = normalize_surface_dpr(device_pixel_ratio);
         Self {
-            width: width.max(1.0),
-            height: height.max(1.0),
+            width,
+            height,
+            pixel_width: normalize_surface_pixel(pixel_width, width * device_pixel_ratio),
+            pixel_height: normalize_surface_pixel(pixel_height, height * device_pixel_ratio),
+            device_pixel_ratio,
             initial_scene,
             selection_style,
         }
@@ -155,4 +175,29 @@ impl AtomeBevyRendererConfig {
     pub fn empty(width: f32, height: f32) -> Self {
         Self::new(width, height, AtomeRenderScene::default())
     }
+}
+
+pub fn normalize_surface_logical(value: f32) -> f32 {
+    if value.is_finite() && value > 0.0 {
+        value
+    } else {
+        1.0
+    }
+}
+
+pub fn normalize_surface_dpr(value: f32) -> f32 {
+    if value.is_finite() && value > 0.0 {
+        value.max(0.1)
+    } else {
+        1.0
+    }
+}
+
+pub fn normalize_surface_pixel(value: f32, fallback: f32) -> u32 {
+    let candidate = if value.is_finite() && value > 0.0 {
+        value
+    } else {
+        fallback
+    };
+    candidate.max(1.0).round() as u32
 }

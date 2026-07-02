@@ -332,6 +332,9 @@ fn transform_and_surface_patches_reproject_nodes() {
         AtomeSurfacePatch {
             width: 320.0,
             height: 240.0,
+            pixel_width: None,
+            pixel_height: None,
+            device_pixel_ratio: None,
         },
     )
     .unwrap();
@@ -454,6 +457,9 @@ fn surface_background_cover_size_tracks_surface_resize() {
         AtomeSurfacePatch {
             width: 300.0,
             height: 300.0,
+            pixel_width: None,
+            pixel_height: None,
+            device_pixel_ratio: None,
         },
     )
     .unwrap();

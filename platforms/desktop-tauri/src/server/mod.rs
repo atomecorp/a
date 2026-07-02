@@ -5466,7 +5466,13 @@ pub async fn start_server(static_dir: PathBuf, uploads_dir: PathBuf, data_dir: P
             .to_path_buf()
     };
 
-    let serve_dir_root = ServeDir::new(base_dir.clone()).append_index_html_on_directories(true);
+    // precompressed_br/gzip serve the sibling .br/.gz variants (e.g. the renderer WASM)
+    // when the client accepts them, and fall back to the plain file otherwise. This mirrors
+    // the fastify preCompressed behaviour so native/iOS and web share one compression path.
+    let serve_dir_root = ServeDir::new(base_dir.clone())
+        .append_index_html_on_directories(true)
+        .precompressed_br()
+        .precompressed_gzip();
     let root_service = get_service(serve_dir_root).handle_error(|error| async move {
         println!("Erreur serveur statique: {:?}", error);
         (
@@ -5475,13 +5481,17 @@ pub async fn start_server(static_dir: PathBuf, uploads_dir: PathBuf, data_dir: P
         )
     });
 
-    let serve_dir_src = ServeDir::new(base_dir.clone());
+    let serve_dir_src = ServeDir::new(base_dir.clone())
+        .precompressed_br()
+        .precompressed_gzip();
     let src_service = get_service(serve_dir_src).handle_error(|error| async move {
         println!("Erreur /src: {:?}", error);
         (axum::http::StatusCode::INTERNAL_SERVER_ERROR, "Erreur src")
     });
 
-    let serve_dir_atome = ServeDir::new(project_root.join("atome"));
+    let serve_dir_atome = ServeDir::new(project_root.join("atome"))
+        .precompressed_br()
+        .precompressed_gzip();
     let atome_service = get_service(serve_dir_atome).handle_error(|error| async move {
         println!("Erreur /atome: {:?}", error);
         (
@@ -5490,7 +5500,9 @@ pub async fn start_server(static_dir: PathBuf, uploads_dir: PathBuf, data_dir: P
         )
     });
 
-    let serve_dir_eve = ServeDir::new(project_root.join("eVe"));
+    let serve_dir_eve = ServeDir::new(project_root.join("eVe"))
+        .precompressed_br()
+        .precompressed_gzip();
     let eve_service = get_service(serve_dir_eve).handle_error(|error| async move {
         println!("Erreur /eVe: {:?}", error);
         (axum::http::StatusCode::INTERNAL_SERVER_ERROR, "Erreur eVe")

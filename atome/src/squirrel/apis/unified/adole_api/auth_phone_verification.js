@@ -25,6 +25,7 @@ const getActiveBackend = (preferred = null) => {
 };
 
 const extractOtpCode = (result) => (result && result.code ? result.code : null);
+const isOtpBypassed = (result) => result?.otpBypassed === true || result?.otp_bypassed === true;
 
 const requestPhoneVerificationBackend = async (backend, { phone, context, exposeForTest }) => {
     const adapter = adapters[backend];
@@ -36,6 +37,7 @@ const requestPhoneVerificationBackend = async (backend, { phone, context, expose
     return {
         ok,
         code: extractOtpCode(result),
+        otpBypassed: isOtpBypassed(result),
         raw: result,
         error: ok ? null : String(result && result.error ? result.error : 'phone_verification_request_failed')
     };
@@ -71,6 +73,7 @@ const requestPhoneVerification = async (phone, context = 'login_demo', options =
             success: true,
             backend,
             code: result.code,
+            otpBypassed: result.otpBypassed === true,
             raw: result.raw
         };
     }

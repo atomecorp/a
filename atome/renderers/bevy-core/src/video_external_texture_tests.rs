@@ -207,6 +207,9 @@ fn video_transform_applies_scale_rotation_and_preserves_them_on_surface_resize()
         crate::types::AtomeSurfacePatch {
             width: 800.0,
             height: 600.0,
+            pixel_width: None,
+            pixel_height: None,
+            device_pixel_ratio: None,
         },
     )
     .unwrap();

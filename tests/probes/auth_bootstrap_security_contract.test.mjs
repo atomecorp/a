@@ -41,6 +41,9 @@ assert.match(authLoginMethods, /hasAuthenticatedToken\(activeBackend, activeResu
 const authPhoneVerification = readSource('atome/src/squirrel/apis/unified/adole_api/auth_phone_verification.js');
 assert.match(authPhoneVerification, /requestPhoneVerificationBackend/, 'Unified auth API must route pre-auth phone verification through backend adapters');
 assert.match(authPhoneVerification, /verifyPhoneVerificationBackend/, 'Unified auth API must route pre-auth phone verification checks through backend adapters');
+assert.match(authPhoneVerification, /otpBypassed: isOtpBypassed\(result\)/, 'Unified phone verification must preserve explicit OTP bypass responses from the backend adapter');
+const adoleWebSocketMessage = readSource('atome/src/squirrel/apis/unified/adole_websocket_message.js');
+assert.match(adoleWebSocketMessage, /otpBypassed: message\.otpBypassed/, 'Unified WebSocket auth response normalization must preserve OTP bypass responses');
 const sessionAccountMethods = readSource('atome/src/squirrel/apis/unified/adole_api/auth_methods_session_account.js');
 const lookupPhoneMethod = sliceBetween(sessionAccountMethods, 'async lookupPhone(phone)', 'getCurrentInfo()');
 assert.match(lookupPhoneMethod, /const backend = getPrimaryBackend\(\)/, 'Unified lookupPhone must resolve the active auth backend');
@@ -57,10 +60,16 @@ assert.doesNotMatch(fastifyHttpAuth, /\/api\/auth\/verify-phone-verification/, '
 assert.match(fastifyHttpAuth, /export function enforceAuthIdentityRateLimit/, 'Fastify auth must expose a shared identity rate limiter for WS phone verification');
 assert.match(fastifyServer, /action === 'request-phone-verification'/, 'Fastify WS auth must expose phone verification request');
 assert.match(fastifyServer, /data\.exposeForTest === true && process\.env\.NODE_ENV !== 'production'[\s\S]*response\.code = code/, 'Fastify WS auth must return OTP code only in non-production test mode');
+assert.match(fastifyServer, /const AUTH_OTP_BYPASS_ENABLED = process\.env\.NODE_ENV !== 'production' && process\.env\.SQUIRREL_AUTH_OTP_BYPASS === '1'/, 'Fastify OTP bypass must be explicitly gated outside production');
+assert.match(fastifyServer, /if \(AUTH_OTP_BYPASS_ENABLED\)[\s\S]*otpBypassed: true[\s\S]*return;/, 'Fastify test mode must return an explicit OTP bypass response');
+assert.match(fastifyServer, /if \(AUTH_OTP_BYPASS_ENABLED\)[\s\S]*return;[\s\S]*const code = generateOTP\(\)/, 'Fastify test mode must bypass OTP generation only after request validation and rate limiting');
 assert.match(fastifyServer, /enforceAuthIdentityRateLimit\('phone_verification_request', cleanPhone, 3\)/, 'Fastify WS auth must rate-limit phone verification requests');
 assert.match(fastifyServer, /enforceAuthIdentityRateLimit\('phone_verification_verify', cleanPhone, 5\)/, 'Fastify WS auth must rate-limit phone verification checks');
 assert.match(localAuth, /"request-phone-verification" =>[\s\S]*handle_request_phone_verification/, 'Tauri local auth must expose phone verification request');
 assert.match(localAuth, /expose_for_test && !is_production_runtime\(\)/, 'Tauri local auth must return OTP code only in non-production test mode');
+assert.match(localAuth, /fn auth_otp_bypass_enabled\(\) -> bool[\s\S]*!is_production_runtime\(\)[\s\S]*SQUIRREL_AUTH_OTP_BYPASS/, 'Tauri OTP bypass must be explicitly gated outside production');
+assert.match(localAuth, /#\[serde\(rename = "otpBypassed", skip_serializing_if = "Option::is_none"\)\][\s\S]*pub otp_bypassed: Option<bool>/, 'Tauri auth responses must expose the camelCase OTP bypass contract');
+assert.match(localAuth, /if auth_otp_bypass_enabled\(\)[\s\S]*return AuthResponse[\s\S]*otp_bypassed: Some\(true\)/, 'Tauri test mode must return an explicit OTP bypass response');
 
 const userTool = readSource('eVe/intuition/tools/user_auth_flow_runtime.js');
 const executeLoginFlow = sliceBetween(userTool, 'const executeLoginFlow = async', 'return {');

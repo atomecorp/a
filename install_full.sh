@@ -595,8 +595,6 @@ run_stable_updates() {
     "event-calendar.css|https://unpkg.com/event-calendar@0.8.1/dist/event-calendar.css"
     "event-calendar.min.map.json|https://unpkg.com/event-calendar@0.8.1/dist/event-calendar.min.map.json"
     "event-calendar.css.map|https://unpkg.com/event-calendar@0.8.1/dist/event-calendar.css.map"
-    "three.min.js|https://cdnjs.cloudflare.com/ajax/libs/three.js/0.179.1/three.module.min.js"
-    "three.core.min.js|https://cdnjs.cloudflare.com/ajax/libs/three.js/0.179.1/three.core.min.js"
     # Opal Ruby runtime
     "opal.min.js|https://cdn.opalrb.com/opal/1.8.2/opal.min.js"
     "opal-parser.min.js|https://cdn.opalrb.com/opal/1.8.2/opal-parser.min.js"
@@ -620,13 +618,11 @@ run_latest_updates() {
   local GSAP_VERSION
   local TONE_VERSION
   local LEAFLET_VERSION
-  local THREE_VERSION
   local EVENT_CALENDAR_VERSION
 
   GSAP_VERSION=$(get_latest_version "gsap") || return 1
   TONE_VERSION=$(get_latest_version "tone") || return 1
   LEAFLET_VERSION=$(get_latest_version "leaflet") || return 1
-  THREE_VERSION=$(get_latest_version "three") || return 1
   EVENT_CALENDAR_VERSION=$(get_latest_version "event-calendar") || return 1
 
   log_info "📦 Latest versions:"
@@ -634,7 +630,6 @@ run_latest_updates() {
   log_info "   • Tone.js:     $TONE_VERSION"
   log_info "   • Leaflet:     $LEAFLET_VERSION"
   log_info "   • EventCalendar: $EVENT_CALENDAR_VERSION"
-  log_info "   • Three.js:    $THREE_VERSION"
 
   local success=0
   local total=0
@@ -682,16 +677,6 @@ run_latest_updates() {
 
   total=$((total + 1))
   if download_latest_asset "event-calendar.css.map" "https://unpkg.com/event-calendar@$EVENT_CALENDAR_VERSION/dist/event-calendar.css.map" "event-calendar" "$EVENT_CALENDAR_VERSION"; then
-    success=$((success + 1))
-  fi
-
-  total=$((total + 1))
-  if download_latest_asset "three.min.js" "https://cdnjs.cloudflare.com/ajax/libs/three.js/$THREE_VERSION/three.module.min.js" "three" "$THREE_VERSION"; then
-    success=$((success + 1))
-  fi
-
-  total=$((total + 1))
-  if download_latest_asset "three.core.min.js" "https://cdnjs.cloudflare.com/ajax/libs/three.js/$THREE_VERSION/three.core.min.js" "three" "$THREE_VERSION"; then
     success=$((success + 1))
   fi
 

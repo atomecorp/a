@@ -66,13 +66,13 @@ test('dashboard overview keeps each rubrique color', () => {
         assert.equal(dashboardRecord(records, `lane_${category.id}`).properties.color, shadeHex(category.color, DASHBOARD_VISUAL_TOKENS.laneShadePercent));
         assert.equal(dashboardRecord(records, `header_bg_${category.id}`).properties.color, category.color);
     }
-    assert.equal(dashboardRecord(records, 'card_news_slot_0').properties.color, categories[0].color);
-    assert.equal(dashboardRecord(records, 'card_contacts_slot_0').properties.color, categories[1].color);
+    assert.equal(dashboardRecord(records, 'card_news_slot_0').properties.color, shadeHex(categories[0].color, 3));
+    assert.equal(dashboardRecord(records, 'card_contacts_slot_0').properties.color, shadeHex(categories[1].color, 3));
     assert.deepEqual(dashboardRecord(records, 'card_news_slot_0').properties.material.shadow, DASHBOARD_VISUAL_TOKENS.cardShadow);
     assert.equal(dashboardRecord(records, 'card_news_slot_0').properties.material.shadow.offsetX, 0);
 });
 
-test('focused rubrique color floods chrome while lane cards match their headers', () => {
+test('focused rubrique color floods chrome while lane cards derive from their headers', () => {
     const active = categories[1];
     const records = buildDashboardRecords({
         layout: layoutFor(active.id, itemsForRender(categories, active.id, items)),
@@ -92,12 +92,41 @@ test('focused rubrique color floods chrome while lane cards match their headers'
     assert.ok(cards.length >= 3);
     assert.equal(cards.every((record) => {
         const laneId = String(record.id || '').match(/__eve_dashboard_card_([^_]+)_slot_/)?.[1];
-        return record.properties.color === dashboardRecord(records, `header_bg_${laneId}`).properties.color;
+        return record.properties.color === shadeHex(dashboardRecord(records, `header_bg_${laneId}`).properties.color, 3);
     }), true);
     assert.equal(cards.every((record) => record.properties.material?.shadow), true);
     assert.equal(cards.every((record) => record.properties.material.shadow.offsetY === 0), true);
     assert.equal(dashboardRecord(records, 'header_news').properties.opacity, DASHBOARD_VISUAL_TOKENS.inactiveHeaderOpacity);
     assert.equal(dashboardRecord(records, 'header_contacts').properties.opacity, 1);
+});
+
+test('dashboard detailed media uses the shared high-density Bevy texture contract', () => {
+    const mediaItems = new Map([
+        ...items,
+        ['contacts', [
+            { id: 'contact_a', category_id: 'contacts', title: 'Contact A', metadata: { user_face: 'data:image/png;base64,contact' } }
+        ]],
+        ['projects', [{
+            id: 'project_a',
+            category_id: 'projects',
+            title: 'Project A',
+            metadata: {
+                project_preview_source: 'data:image/png;base64,project',
+                project_preview_width: 900,
+                project_preview_height: 540
+            }
+        }]]
+    ]);
+    const records = buildDashboardRecords({
+        layout: layoutFor('', mediaItems),
+        tokens: DASHBOARD_VISUAL_TOKENS
+    });
+
+    assert.equal(dashboardRecord(records, 'header_icon_projects').properties.texture_scale, 4);
+    assert.equal(dashboardRecord(records, 'card_media_projects_slot_0').properties.texture_scale, 4);
+    assert.equal(dashboardRecord(records, 'card_media_projects_slot_0').properties.media_width, 900);
+    assert.equal(dashboardRecord(records, 'card_media_projects_slot_0').properties.media_height, 540);
+    assert.equal(dashboardRecord(records, 'card_media_contacts_slot_0').properties.texture_scale, 4);
 });
 
 test('clicking the focused rubrique again restores overview state', async () => {

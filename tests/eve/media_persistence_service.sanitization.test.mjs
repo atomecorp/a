@@ -11,6 +11,7 @@ const createTestCompositor = () => ({
         rgba: [255, 0, 0, 255]
     }),
     run_atome_bevy_renderer: () => {},
+    apply_atome_bevy_ops: () => {},
     apply_atome_bevy_spawn: () => {},
     apply_atome_bevy_despawn: () => {},
     apply_atome_bevy_transform: () => {},

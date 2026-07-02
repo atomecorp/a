@@ -164,15 +164,34 @@ pub fn apply_transform(world: &mut World, patch: AtomeTransformPatch) -> Result<
 }
 
 pub fn apply_surface(world: &mut World, patch: AtomeSurfacePatch) -> Result<(), String> {
-    let width = patch.width.max(1.0);
-    let height = patch.height.max(1.0);
+    let width = normalize_surface_logical(patch.width);
+    let height = normalize_surface_logical(patch.height);
+    let current_dpr = world
+        .get_resource::<AtomeBevyRendererConfig>()
+        .map(|config| config.device_pixel_ratio)
+        .unwrap_or(1.0);
+    let device_pixel_ratio = normalize_surface_dpr(patch.device_pixel_ratio.unwrap_or(current_dpr));
+    let pixel_width = normalize_surface_pixel(
+        patch.pixel_width.unwrap_or(width * device_pixel_ratio),
+        width * device_pixel_ratio,
+    );
+    let pixel_height = normalize_surface_pixel(
+        patch.pixel_height.unwrap_or(height * device_pixel_ratio),
+        height * device_pixel_ratio,
+    );
     {
         let mut config = world.resource_mut::<AtomeBevyRendererConfig>();
         config.width = width;
         config.height = height;
+        config.pixel_width = pixel_width;
+        config.pixel_height = pixel_height;
+        config.device_pixel_ratio = device_pixel_ratio;
     }
     if let Some(mut window) = world.query::<&mut Window>().iter_mut(world).next() {
-        window.resolution.set(width, height);
+        window.resolution.set_scale_factor(device_pixel_ratio);
+        window
+            .resolution
+            .set_physical_resolution(pixel_width, pixel_height);
     }
     for mut projection in world
         .query_filtered::<&mut Projection, With<Camera2d>>()

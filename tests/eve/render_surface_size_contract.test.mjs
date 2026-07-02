@@ -49,18 +49,19 @@ const createTestCompositor = (calls = []) => ({
         height: 1,
         rgba: [255, 0, 0, 255]
     }),
-    run_atome_bevy_renderer: (canvasSelector, width, height, initialNodes) => {
+    run_atome_bevy_renderer: (canvasSelector, width, height, surfaceMetrics, initialNodes) => {
         const surface = globalThis.document?.querySelector?.(canvasSelector) || null;
         const dpr = globalThis.window?.devicePixelRatio || 1;
         if (surface) {
-            surface.width = Math.round(width * dpr);
-            surface.height = Math.round(height * dpr);
+            surface.width = surfaceMetrics.pixel_width;
+            surface.height = surfaceMetrics.pixel_height;
         }
         calls.push({
             type: 'run',
             canvasSelector,
             width,
             height,
+            surfaceMetrics,
             initialNodes,
             target: {
                 width,
@@ -79,6 +80,7 @@ const createTestCompositor = (calls = []) => ({
             })) }
         });
     },
+    apply_atome_bevy_ops: (ops) => calls.push({ type: 'ops', ops }),
     apply_atome_bevy_spawn: (payload) => calls.push({ type: 'spawn', payload }),
     apply_atome_bevy_despawn: (id) => calls.push({ type: 'despawn', id }),
     apply_atome_bevy_transform: (payload) => calls.push({ type: 'transform', payload }),
@@ -92,8 +94,8 @@ const createTestCompositor = (calls = []) => ({
         const surface = globalThis.document?.querySelector?.('#eve_surface_project') || null;
         const dpr = globalThis.window?.devicePixelRatio || 1;
         if (surface) {
-            surface.width = Math.round(payload.width * dpr);
-            surface.height = Math.round(payload.height * dpr);
+            surface.width = payload.pixel_width || Math.round(payload.width * dpr);
+            surface.height = payload.pixel_height || Math.round(payload.height * dpr);
         }
         calls.push({ type: 'surface', payload });
     }
@@ -235,7 +237,16 @@ test('Project scene surface follows host resize without changing Atome logical b
     assert.equal(canvas.style.height, '720px');
 
     assert.equal(calls.length, 2);
-    assert.deepEqual(calls.at(-1), { type: 'surface', payload: { width: 1280, height: 720 } });
+    assert.deepEqual(calls.at(-1), {
+        type: 'surface',
+        payload: {
+            width: 1280,
+            height: 720,
+            pixel_width: 2560,
+            pixel_height: 1440,
+            device_pixel_ratio: 2
+        }
+    });
     assert.equal(canvas.width, 2560);
     assert.equal(canvas.height, 1440);
     assert.equal(canvas.style.width, '1280px');
@@ -310,7 +321,16 @@ test('Project scene resize rendering is serialized and the latest surface size w
     assert.equal(calls[0].target.surface.style.height, '810px');
     await flushFrames();
     assert.equal(calls.length, 2);
-    assert.deepEqual(calls.at(-1), { type: 'surface', payload: { width: 1440, height: 810 } });
+    assert.deepEqual(calls.at(-1), {
+        type: 'surface',
+        payload: {
+            width: 1440,
+            height: 810,
+            pixel_width: 1440,
+            pixel_height: 810,
+            device_pixel_ratio: 1
+        }
+    });
     assert.equal(calls[0].target.surface.width, 1440);
     assert.equal(calls[0].target.surface.height, 810);
 

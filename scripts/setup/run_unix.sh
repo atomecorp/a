@@ -385,10 +385,15 @@ FORCE_DEPS=false
 PROD_BUILD=false
 TAURI_ONLY=false
 SERVER_ONLY=false
+TEST_MODE=false
 FASTIFY_URL=""
 
 while [[ $# -gt 0 ]]; do
     case $1 in
+        --test)
+            TEST_MODE=true
+            shift
+            ;;
         --force-deps|-f)
             FORCE_DEPS=true
             shift
@@ -426,6 +431,21 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+if [ "$TEST_MODE" = true ]; then
+    if [[ "${NODE_ENV:-}" == "production" ]]; then
+        echo "ERROR: --test cannot run with NODE_ENV=production."
+        exit 1
+    fi
+    if [ "$PROD_BUILD" = true ]; then
+        echo "ERROR: --test cannot be combined with production build mode."
+        exit 1
+    fi
+    export NODE_ENV=test
+    export SQUIRREL_AUTH_TEST_MODE=1
+    export SQUIRREL_AUTH_OTP_BYPASS=1
+    echo "🧪 Test mode enabled: pre-auth OTP verification bypass is active."
+fi
+
 # Export Fastify URL for Tauri to use
 if [[ -n "$FASTIFY_URL" ]]; then
     export SQUIRREL_FASTIFY_URL="$FASTIFY_URL"
@@ -458,9 +478,17 @@ if [ "$SERVER_ONLY" = true ]; then
     
     echo "📡 Démarrage du serveur Fastify..."
     if [ "$FORCE_DEPS" = true ]; then
-        "$SCRIPTS_DIR/run_fastify.sh" --force-deps
+        if [ "$TEST_MODE" = true ]; then
+            "$SCRIPTS_DIR/run_fastify.sh" --test --force-deps
+        else
+            "$SCRIPTS_DIR/run_fastify.sh" --force-deps
+        fi
     else
-        "$SCRIPTS_DIR/run_fastify.sh"
+        if [ "$TEST_MODE" = true ]; then
+            "$SCRIPTS_DIR/run_fastify.sh" --test
+        else
+            "$SCRIPTS_DIR/run_fastify.sh"
+        fi
     fi
     exit 0
 fi
@@ -533,9 +561,17 @@ if [ "$TAURI_ONLY" = true ]; then
     
     echo "🖥️  Démarrage de Tauri (Axum sur port 3000)..."
     if [ "$FORCE_DEPS" = true ]; then
-        "$SCRIPTS_DIR/run_tauri.sh" --force-deps
+        if [ "$TEST_MODE" = true ]; then
+            "$SCRIPTS_DIR/run_tauri.sh" --test --force-deps
+        else
+            "$SCRIPTS_DIR/run_tauri.sh" --force-deps
+        fi
     else
-        "$SCRIPTS_DIR/run_tauri.sh"
+        if [ "$TEST_MODE" = true ]; then
+            "$SCRIPTS_DIR/run_tauri.sh" --test
+        else
+            "$SCRIPTS_DIR/run_tauri.sh"
+        fi
     fi
     exit 0
 fi
@@ -633,9 +669,17 @@ trap cleanup SIGINT SIGTERM EXIT
 # Lancer Fastify en arrière-plan via le script
 echo "📡 Démarrage du serveur Fastify..."
 if [ "$FORCE_DEPS" = true ]; then
-    "$SCRIPTS_DIR/run_fastify.sh" --force-deps &
+    if [ "$TEST_MODE" = true ]; then
+        "$SCRIPTS_DIR/run_fastify.sh" --test --force-deps &
+    else
+        "$SCRIPTS_DIR/run_fastify.sh" --force-deps &
+    fi
 else
-    "$SCRIPTS_DIR/run_fastify.sh" &
+    if [ "$TEST_MODE" = true ]; then
+        "$SCRIPTS_DIR/run_fastify.sh" --test &
+    else
+        "$SCRIPTS_DIR/run_fastify.sh" &
+    fi
 fi
 FASTIFY_PID=$!
 
@@ -645,9 +689,17 @@ sleep 2
 # Lancer Tauri en arrière-plan via le script
 echo "🖥️  Démarrage de Tauri..."
 if [ "$FORCE_DEPS" = true ]; then
-    "$SCRIPTS_DIR/run_tauri.sh" --force-deps &
+    if [ "$TEST_MODE" = true ]; then
+        "$SCRIPTS_DIR/run_tauri.sh" --test --force-deps &
+    else
+        "$SCRIPTS_DIR/run_tauri.sh" --force-deps &
+    fi
 else
-    "$SCRIPTS_DIR/run_tauri.sh" &
+    if [ "$TEST_MODE" = true ]; then
+        "$SCRIPTS_DIR/run_tauri.sh" --test &
+    else
+        "$SCRIPTS_DIR/run_tauri.sh" &
+    fi
 fi
 TAURI_PID=$!
 

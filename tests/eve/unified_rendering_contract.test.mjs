@@ -30,6 +30,7 @@ import {
     makeMixedRecords,
     makeRecord
 } from './unified_rendering_test_helpers.mjs';
+import { createProjectPreviewRuntime } from '../../eVe/domains/rendering/project_preview_runtime.js';
 
 test('RenderAtom normalization keeps render data disposable and cacheable', () => {
     const text = normalizeRenderAtom(makeRecord('text_a', 'text', 1));
@@ -78,13 +79,16 @@ test('RenderAtom normalization keeps render data disposable and cacheable', () =
         properties: {
             ...makeRecord('image_fit', 'image', 7).properties,
             source: '/media/fitted.png',
-            media_fit: 'contain'
+            media_fit: 'contain',
+            texture_scale: 3
         }
     });
     assert.equal(fittedImage.content.mediaFit, 'contain');
     assert.equal(fittedImage.content.media_fit, 'contain');
     assert.equal(fittedImage.content.objectFit, 'contain');
     assert.equal(fittedImage.content.object_fit, 'contain');
+    assert.equal(fittedImage.content.textureScale, 3);
+    assert.equal(fittedImage.content.texture_scale, 3);
     assert.match(buildTextCacheKey(text), /^text:eve\.renderatom\.v1:text_a:/);
     assert.match(buildTextureCacheKey(image), /^texture:eve\.renderatom\.v1:image:/);
     assert.match(buildTextureCacheKey(video), /^texture:eve\.renderatom\.v1:video:/);
@@ -113,6 +117,31 @@ test('RenderAtom normalizes CSS-sized text records for shared Bevy projections',
     assert.ok(text.bounds.height >= 57);
     assert.equal(text.style.text.font_size, 28);
     assert.equal(text.style.text.font_weight, '600');
+});
+
+test('project preview runtime defaults to a high-density Bevy capture source', async () => {
+    const targets = [];
+    const runtime = createProjectPreviewRuntime({
+        compositor: {
+            renderAtTime: async ({ target }) => {
+                targets.push(target);
+                return {
+                    dataUrl: 'data:image/png;base64,preview',
+                    width: target.width,
+                    height: target.height
+                };
+            }
+        },
+        projectRecordLoader: async () => []
+    });
+
+    await runtime.renderProjectPreview({
+        projectId: 'preview_project',
+        records: [makeRecord('preview_image', 'image', 1)]
+    });
+
+    assert.equal(targets[0].width, 640);
+    assert.equal(targets[0].height, 400);
 });
 
 test('Scene graph hit testing replaces per-Atome DOM routing', () => {

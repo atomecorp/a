@@ -21,6 +21,7 @@ import {
     shouldRecordBevyPerfEvent
 } from '../../eVe/domains/rendering/bevy_perf_diagnostics_runtime.js';
 import { createBrowserBevyMediaTextureResolver } from '../../eVe/domains/rendering/bevy_media_texture_resolver.js';
+import { clearBevyMediaTextureCache } from '../../eVe/domains/rendering/bevy_media_texture_cache.js';
 import { VIRTUAL_SCENE_DIFF_TYPES } from '../../eVe/domains/rendering/virtual_scene_contract.js';
 
 const repoRoot = dirname(dirname(dirname(fileURLToPath(import.meta.url))));
@@ -301,8 +302,7 @@ test('transform-only Bevy diffs request one redraw without delayed redraw primes
     const wasmModule = {
         default: async () => {},
         run_atome_bevy_renderer: () => calls.push({ type: 'run' }),
-        apply_atome_bevy_transform: (payload) => calls.push({ type: 'transform', payload }),
-        apply_atome_bevy_text_metadata: (payload) => calls.push({ type: 'text', payload }),
+        apply_atome_bevy_ops: (ops) => calls.push({ type: 'ops', ops }),
         request_atome_bevy_redraw: () => calls.push({ type: 'redraw' })
     };
     const node = {
@@ -368,8 +368,9 @@ test('transform-only Bevy diffs request one redraw without delayed redraw primes
         dom.window.setTimeout = originalSetTimeout;
     }
     assert.equal(delayedPrimeCount, 0);
-    assert.equal(calls.filter((call) => call.type === 'transform').length, 1);
-    assert.equal(calls.filter((call) => call.type === 'text').length, 0);
+    const ops = calls.filter((call) => call.type === 'ops').flatMap((call) => call.ops);
+    assert.equal(ops.filter((op) => op.type === 'transform').length, 1);
+    assert.equal(ops.filter((op) => op.type === 'text').length, 0);
     assert.equal(calls.filter((call) => call.type === 'redraw').length, 1);
 });
 
@@ -397,8 +398,7 @@ test('text transform diffs rasterize texture only when text bounds change', asyn
     const wasmModule = {
         default: async () => {},
         run_atome_bevy_renderer: () => calls.push({ type: 'run' }),
-        apply_atome_bevy_transform: (payload) => calls.push({ type: 'transform', payload }),
-        apply_atome_bevy_text_metadata: (payload) => calls.push({ type: 'text', payload }),
+        apply_atome_bevy_ops: (ops) => calls.push({ type: 'ops', ops }),
         request_atome_bevy_redraw: () => calls.push({ type: 'redraw' })
     };
     await startBevyWebRenderer({
@@ -432,7 +432,7 @@ test('text transform diffs rasterize texture only when text bounds change', asyn
         }],
         virtualScene: null
     });
-    assert.equal(calls.filter((call) => call.type === 'text').length, 0);
+    assert.equal(calls.flatMap((call) => call.ops || []).filter((op) => op.type === 'text').length, 0);
     await applyBevyWebRendererDiffs({
         surface: canvas,
         ops: [{
@@ -449,7 +449,7 @@ test('text transform diffs rasterize texture only when text bounds change', asyn
         }],
         virtualScene: null
     });
-    assert.equal(calls.filter((call) => call.type === 'text').length, 1);
+    assert.equal(calls.flatMap((call) => call.ops || []).filter((op) => op.type === 'text').length, 1);
 });
 
 test('video frame dispatcher coalesces same-tick video frames into one WASM wake', async () => {
@@ -481,7 +481,7 @@ test('Bevy style diffs forward opacity to the WASM style export', async () => {
     const wasmModule = {
         default: async () => {},
         run_atome_bevy_renderer: () => calls.push({ type: 'run' }),
-        apply_atome_bevy_style: (payload) => calls.push({ type: 'style', payload }),
+        apply_atome_bevy_ops: (ops) => calls.push({ type: 'ops', ops }),
         request_atome_bevy_redraw: () => calls.push({ type: 'redraw' })
     };
     const node = {
@@ -523,7 +523,7 @@ test('Bevy style diffs forward opacity to the WASM style export', async () => {
         virtualScene: null
     });
 
-    assert.deepEqual(calls.find((call) => call.type === 'style')?.payload, {
+    assert.deepEqual(calls.flatMap((call) => call.ops || []).find((op) => op.type === 'style')?.patch, {
         id: 'opacity_atom',
         color: null,
         selected: undefined,
@@ -556,6 +556,66 @@ test('live project video without poster cannot enter the RGBA media resolver pat
         /bevy_media_texture_video_gpu_source_only:live_video_rgba_forbidden/
     );
     assert.equal(canvasReadbacks, 0);
+});
+
+test('Bevy media texture resolver honors per-node image texture scale', async () => {
+    clearBevyMediaTextureCache();
+    const canvases = [];
+    const documentRef = {
+        defaultView: { devicePixelRatio: 1 },
+        createElement: (tagName) => {
+            if (tagName === 'img') {
+                return {
+                    complete: true,
+                    naturalWidth: 40,
+                    naturalHeight: 20,
+                    decode: async () => {},
+                    addEventListener: () => {},
+                    removeEventListener: () => {}
+                };
+            }
+            if (tagName === 'canvas') {
+                const canvas = {
+                    width: 0,
+                    height: 0,
+                    getContext: () => ({
+                        clearRect: () => null,
+                        scale: () => null,
+                        drawImage: () => null,
+                        getImageData: (_x, _y, width, height) => ({ data: new Uint8ClampedArray(width * height * 4) })
+                    })
+                };
+                canvases.push(canvas);
+                return canvas;
+            }
+            throw new Error(`unexpected_element:${tagName}`);
+        }
+    };
+    const resolver = createBrowserBevyMediaTextureResolver({
+        documentRef,
+        imageTextureScale: 1,
+        maxTextureSize: 1024
+    });
+    const node = {
+        id: 'scaled_image',
+        kind: 'image',
+        bounds: { x: 0, y: 0, width: 40, height: 20 },
+        content: { source: 'data:image/png;base64,shared', texture_scale: 3 }
+    };
+
+    const dense = await resolver(node);
+    const cachedDense = await resolver(node);
+    const normal = await resolver({
+        ...node,
+        content: { source: 'data:image/png;base64,shared', texture_scale: 1 }
+    });
+
+    assert.equal(dense.width, 120);
+    assert.equal(dense.height, 60);
+    assert.deepEqual(cachedDense, dense);
+    assert.equal(normal.width, 40);
+    assert.equal(normal.height, 20);
+    assert.equal(canvases.length, 2);
 });
 
 test('Bevy external-video shader linearizes the sampled frame before the sRGB target', () => {

@@ -35,5 +35,15 @@ wgpu = { path = "../../../atome/renderers/wgpu-web-external-texture/wgpu-27.0.1"
 wgpu-types = { path = "../../../atome/renderers/wgpu-web-external-texture/wgpu-types-27.0.1" }
 
 [profile.release]
-opt-level = "s"
+opt-level = "z"
 lto = true
+codegen-units = 1
+panic = "abort"
+strip = true
+
+# wasm-pack post-processes the release artifact with wasm-opt; -Oz targets size,
+# which dominates cold project/Dashboard open cost for this renderer. --all-features
+# lets wasm-opt accept the post-MVP opcodes Rust emits (nontrapping float-to-int,
+# bulk-memory, sign-ext, ...); without it wasm-opt validation aborts the build.
+[package.metadata.wasm-pack.profile.release]
+wasm-opt = ['-Oz', '--all-features']

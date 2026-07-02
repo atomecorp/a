@@ -218,9 +218,8 @@ self.addEventListener('fetch', event => {
   <link rel="icon" href="data:,">
   <link rel="stylesheet" href="css/squirrel.css">
   <link rel="stylesheet" href="js/leaflet.min.css">
-  <script src="js/gsap.min.js"></script>
-  <script src="js/leaflet.min.js"></script>
-  <script type="module" src="js/three.min.js"></script>
+  <script defer src="js/gsap.min.js"></script>
+  <script defer src="js/leaflet.min.js"></script>
   <script type="module" src="squirrel/spark.js"></script>
   <script type="module">
     let __appImported = false;

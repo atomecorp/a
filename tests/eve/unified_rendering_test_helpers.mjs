@@ -26,8 +26,8 @@ export const makeMixedRecords = (count, prefix = 'atom') => (
 export const createTestCompositor = (calls = []) => ({
     default: async () => calls.push({ type: 'init' }),
     resolve_bevy_media_texture: async () => ({ width: 1, height: 1, rgba: [255, 0, 0, 255] }),
-    run_atome_bevy_renderer: (canvasSelector, width, height, initialNodes) => {
-        calls.push({ type: 'run', canvasSelector, width, height, initialNodes });
+    run_atome_bevy_renderer: (canvasSelector, width, height, surfaceMetrics, initialNodes) => {
+        calls.push({ type: 'run', canvasSelector, width, height, surfaceMetrics, initialNodes });
     },
     apply_atome_bevy_ops: (ops) => calls.push({ type: 'ops', ops }),
     apply_atome_bevy_spawn: (payload) => calls.push({ type: 'spawn', payload }),

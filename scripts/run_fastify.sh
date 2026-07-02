@@ -37,9 +37,14 @@ fi
 
 # Vérifier les arguments de ligne de commande
 FORCE_DEPS=false
+TEST_MODE=false
 
 while [[ $# -gt 0 ]]; do
     case $1 in
+        --test)
+            TEST_MODE=true
+            shift
+            ;;
         --force-deps|-f)
             FORCE_DEPS=true
             shift
@@ -49,6 +54,7 @@ while [[ $# -gt 0 ]]; do
             echo ""
             echo "Options:"
             echo "  -f, --force-deps      Force update all dependencies before starting"
+            echo "      --test            Start with local test mode and pre-auth OTP bypass"
             echo "  -h, --help           Show this help message"
             echo ""
             echo "Examples:"
@@ -64,6 +70,17 @@ while [[ $# -gt 0 ]]; do
             ;;
     esac
 done
+
+if [ "$TEST_MODE" = true ]; then
+    if [[ "${NODE_ENV:-}" == "production" ]]; then
+        echo "ERROR: --test cannot run with NODE_ENV=production."
+        exit 1
+    fi
+    export NODE_ENV=test
+    export SQUIRREL_AUTH_TEST_MODE=1
+    export SQUIRREL_AUTH_OTP_BYPASS=1
+    echo "🧪 Test mode enabled: pre-auth OTP verification bypass is active."
+fi
 
 echo "🚀 Démarrage du serveur Fastify v5..."
 echo "📂 Répertoire: $(pwd)"

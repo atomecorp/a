@@ -56,7 +56,9 @@ fn web_window_targets_canvas_and_opaque_surface() {
     assert!(!window.transparent);
     assert_eq!(window.composite_alpha_mode, CompositeAlphaMode::Opaque);
     assert!(!window.fit_canvas_to_parent);
-    assert_eq!(window.resolution.scale_factor_override(), Some(1.0));
+    assert_eq!(window.resolution.scale_factor_override(), None);
+    assert_eq!(window.resolution.physical_width(), 640);
+    assert_eq!(window.resolution.physical_height(), 480);
     assert_eq!(window.present_mode, PresentMode::AutoNoVsync);
 }
 
@@ -66,6 +68,9 @@ fn web_preview_window_uses_transparent_surface() {
         "#atome-bevy-preview".to_string(),
         320.0,
         200.0,
+        640.0,
+        400.0,
+        2.0,
         AtomeRenderScene {
             nodes: vec![shape_node("shape_1")],
             effects: Vec::new(),
@@ -79,6 +84,10 @@ fn web_preview_window_uses_transparent_surface() {
     assert!(window.transparent);
     assert_eq!(window.composite_alpha_mode, CompositeAlphaMode::PreMultiplied);
     assert!(!window.fit_canvas_to_parent);
+    assert_eq!(window.resolution.physical_width(), 640);
+    assert_eq!(window.resolution.physical_height(), 400);
+    assert_eq!(window.resolution.width(), 320.0);
+    assert_eq!(window.resolution.height(), 200.0);
 }
 
 #[test]
@@ -208,10 +217,16 @@ fn browser_backing_store_resize_event_keeps_configured_logical_surface() {
     let window = app
         .world_mut()
         .spawn(Window {
-            resolution: WindowResolution::new(2560, 1640).with_scale_factor_override(1.0),
+            resolution: WindowResolution::new(2560, 1640),
             ..default()
         })
         .id();
+    app.world_mut()
+        .entity_mut(window)
+        .get_mut::<Window>()
+        .unwrap()
+        .resolution
+        .set_scale_factor(2.0);
 
     app.world_mut().write_message(WindowResized {
         window,

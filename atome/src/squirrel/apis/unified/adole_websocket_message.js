@@ -187,6 +187,7 @@ export const messageHandlerMixin = {
                         token: message.token,
                         userId: message.userId,
                         code: message.code,
+                        otpBypassed: message.otpBypassed,
                         context: message.context
                     });
                 }

@@ -183,7 +183,7 @@ mod native {
             }
             apply_render_ops(
                 state.app.world_mut(),
-                vec![AtomeRenderOp::Surface(AtomeSurfacePatch { width, height })],
+                vec![AtomeRenderOp::Surface(AtomeSurfacePatch::logical(width, height))],
             );
             Ok(renderer_summary(state))
         })

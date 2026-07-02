@@ -5,6 +5,7 @@ print_usage() {
     echo ""
     echo "Development Options:"
     echo "  -f, --force-deps      Force update all dependencies before starting"
+    echo "      --test            Launch local test mode and bypass pre-auth OTP verification"
     echo "      --prod            Build a production Tauri bundle and exit"
     echo "      --tauri           Launch only Tauri (no local Fastify server)"
     echo "      --tauri-prod      Build and launch the production Tauri app bundle"

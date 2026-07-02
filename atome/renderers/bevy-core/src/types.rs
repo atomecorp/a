@@ -381,6 +381,24 @@ pub struct AtomeTransformPatch {
 pub struct AtomeSurfacePatch {
     pub width: f32,
     pub height: f32,
+    #[serde(default)]
+    pub pixel_width: Option<f32>,
+    #[serde(default)]
+    pub pixel_height: Option<f32>,
+    #[serde(default)]
+    pub device_pixel_ratio: Option<f32>,
+}
+
+impl AtomeSurfacePatch {
+    pub fn logical(width: f32, height: f32) -> Self {
+        Self {
+            width,
+            height,
+            pixel_width: None,
+            pixel_height: None,
+            device_pixel_ratio: None,
+        }
+    }
 }
 
 #[derive(Clone, Debug, Deserialize)]

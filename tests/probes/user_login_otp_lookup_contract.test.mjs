@@ -58,7 +58,7 @@ const submitPhone = (phone) => {
     input.dispatchEvent(new window.Event('input', { bubbles: true }));
     input.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
 };
-const runPhoneStep = async ({ lookupResult, lookupError = null } = {}) => {
+const runPhoneStep = async ({ lookupResult, lookupError = null, verificationResult = { ok: true, code: '5273' } } = {}) => {
     let otpRequests = 0;
     const lookups = [];
     window.AdoleAPI.auth.lookupPhone = async (phone) => {
@@ -68,7 +68,7 @@ const runPhoneStep = async ({ lookupResult, lookupError = null } = {}) => {
     };
     window.AdoleAPI.auth.requestPhoneVerification = async () => {
         otpRequests += 1;
-        return { ok: true, code: '5273' };
+        return verificationResult;
     };
     window.AdoleAPI.auth.verifyPhoneVerification = async (_phone, code) => ({ ok: code === '5273' });
     const sequence = createUserLoginSequence({
@@ -95,6 +95,16 @@ result = await runPhoneStep({ lookupResult: { ok: false, success: false, error: 
 await waitForCondition(() => document.getElementById('eve_login_sequence__otp_input')?.style?.display === 'block');
 assert.equal(result.otpRequests, 1, 'new local account must request OTP');
 assert.equal(document.getElementById('eve_login_sequence__instruction')?.textContent, 'O.T.P: 5273', 'new local account must show the OTP step');
+result.sequence.destroy();
+
+result = await runPhoneStep({
+    lookupResult: { ok: false, success: false, error: 'User not found' },
+    verificationResult: { ok: true, otpBypassed: true }
+});
+await waitForCondition(() => document.getElementById('eve_login_sequence__password_field__input')?.style?.display === 'block');
+assert.equal(result.otpRequests, 1, 'test mode new account must still request backend OTP authorization');
+assert.equal(document.getElementById('eve_login_sequence__otp_input')?.style?.display, 'none', 'test mode OTP bypass must skip the OTP input');
+assert.equal(document.getElementById('eve_login_sequence__instruction')?.textContent, 'Saisissez votre mot de passe', 'test mode OTP bypass must continue to password');
 result.sequence.destroy();
 
 result = await runPhoneStep({ lookupResult: { ok: false, success: false, error: 'backend_unavailable' } });
