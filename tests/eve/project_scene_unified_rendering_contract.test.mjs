@@ -16,6 +16,7 @@ import {
     updateProjectSceneRecord,
     updateProjectSceneRecords
 } from '../../eVe/domains/rendering/project_scene_runtime.js';
+import { sceneState } from '../../eVe/domains/rendering/project_scene_state.js';
 import { createRenderScene, hitTestRenderScene } from '../../eVe/domains/rendering/scene_graph.js';
 import { createVirtualSceneTree } from '../../eVe/domains/rendering/virtual_scene_contract.js';
 import {
@@ -29,6 +30,12 @@ import {
 } from './unified_rendering_test_helpers.mjs';
 
 const projectDom = () => installDom('<!doctype html><html><body><main id="project"></main></body></html>');
+
+const bevyOpsFromCalls = (calls = []) => calls.flatMap((call) => (
+    call.type === 'ops'
+        ? (Array.isArray(call.ops) ? call.ops : [])
+        : [{ type: call.type, id: call.id, payload: call.payload }]
+));
 
 const dashboardCategories = Object.freeze([
     { id: 'news', label_key: 'eve.dashboard.news', color: '#ff5252', icon_id: 'news' },
@@ -222,12 +229,88 @@ test('Dashboard prefix reconciliation removes orphan records from runtime and Be
         effects: []
     });
     const ids = new Set(getProjectSceneState('project_dashboard_reconcile').records.map((record) => record.id));
-    const despawned = calls.filter((call) => call.type === 'despawn').map((call) => call.id);
+    const despawned = bevyOpsFromCalls(calls).filter((op) => op.type === 'despawn').map((op) => op.id);
 
     assert.equal(ids.has('__eve_dashboard_orphan_card'), false);
     assert.equal(ids.has('project_atom'), true);
     assert.equal(ids.has('mol:playhead'), true);
     assert.deepEqual(despawned, ['__eve_dashboard_orphan_card']);
+});
+
+test('Neutral Dashboard prefix reconciliation claims the shared canvas foreground', async () => {
+    clearAllProjectScenes();
+    const dom = projectDom();
+    const host = dom.window.document.getElementById('project');
+    const calls = [];
+    await renderProjectScene({
+        projectId: 'previous_user_project',
+        records: [makeRecord('previous_project_atom', 'shape', 1)],
+        host,
+        compositor: createTestCompositor(calls)
+    });
+    calls.length = 0;
+    await reconcileProjectSceneRecordsByPrefix({
+        projectId: '__eve_dashboard_workspace__',
+        prefix: '__eve_dashboard_',
+        records: [{
+            id: '__eve_dashboard_header_projects',
+            type: 'text',
+            properties: { left: 10, top: 10, width: 200, height: 60, text: 'Projects' }
+        }],
+        changedRecords: null,
+        host,
+        effects: [],
+        keepForeground: false
+    });
+
+    assert.equal(sceneState.foregroundProjectId, '__eve_dashboard_workspace__');
+    assert.equal(sceneState.surfaceOwnerProjectId, '__eve_dashboard_workspace__');
+
+    calls.length = 0;
+    await clearProjectSceneVisuals('previous_user_project');
+    const despawned = bevyOpsFromCalls(calls).filter((op) => op.type === 'despawn').map((op) => op.id);
+    assert.equal(despawned.includes('__eve_dashboard_header_projects'), false);
+    assert.equal(getProjectSceneState('__eve_dashboard_workspace__').record_count, 1);
+});
+
+test('User project renders cannot steal foreground while workspace mode is Dashboard', async () => {
+    clearAllProjectScenes();
+    const dom = projectDom();
+    const host = dom.window.document.getElementById('project');
+    dom.window.__eveWorkspaceMode = {
+        mode: 'dashboard',
+        projectId: '__eve_dashboard_workspace__',
+        transitioning: false,
+        targetMode: ''
+    };
+    await reconcileProjectSceneRecordsByPrefix({
+        projectId: '__eve_dashboard_workspace__',
+        prefix: '__eve_dashboard_',
+        records: [{
+            id: '__eve_dashboard_header_projects',
+            type: 'text',
+            properties: { left: 10, top: 10, width: 200, height: 60, text: 'Projects' }
+        }],
+        host,
+        effects: [],
+        keepForeground: false
+    });
+    assert.equal(sceneState.foregroundProjectId, '__eve_dashboard_workspace__');
+    assert.equal(host.contains(dom.window.document.getElementById('eve_surface_project')), true);
+
+    const projectHost = dom.window.document.createElement('section');
+    projectHost.id = 'project_view_late_project';
+    dom.window.document.body.appendChild(projectHost);
+    await renderProjectScene({
+        projectId: 'late_project',
+        records: [makeRecord('late_project_atom', 'shape', 1)],
+        host: projectHost,
+        compositor: createTestCompositor()
+    });
+
+    assert.equal(sceneState.foregroundProjectId, '__eve_dashboard_workspace__');
+    assert.equal(sceneState.surfaceOwnerProjectId, '__eve_dashboard_workspace__');
+    assert.equal(host.contains(dom.window.document.getElementById('eve_surface_project')), true);
 });
 
 test('Project scene visual clear despawns previous Bevy nodes before dropping the baseline', async () => {
@@ -243,7 +326,7 @@ test('Project scene visual clear despawns previous Bevy nodes before dropping th
     });
     calls.length = 0;
     const cleared = await clearProjectSceneVisuals('project_clear_visuals');
-    const despawned = calls.filter((call) => call.type === 'despawn').map((call) => call.id).sort();
+    const despawned = bevyOpsFromCalls(calls).filter((op) => op.type === 'despawn').map((op) => op.id).sort();
 
     assert.equal(cleared, true);
     assert.deepEqual(despawned, ['clear_shape', 'clear_text']);
@@ -461,9 +544,9 @@ test('Project scene selection invalidation redraws selected canvas state without
     await nextTick();
 
     assert.equal(getProjectSceneState('project_selection_projection').scene.atoms[0].visual.selected, true);
-    const selectedStylePayload = calls
-        .filter((call) => call.type === 'style')
-        .map((call) => call.payload)
+    const selectedStylePayload = bevyOpsFromCalls(calls)
+        .filter((op) => op.type === 'style')
+        .map((op) => op.payload || op.patch)
         .find((payload) => payload?.selected === true);
     assert.equal(!!selectedStylePayload, true);
     assert.equal(dom.window.document.querySelectorAll('.eve-atome,.eve-atome-text,img,video,audio,svg').length, 0);

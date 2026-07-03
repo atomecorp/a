@@ -13,6 +13,8 @@ import { VIRTUAL_SCENE_DIFF_TYPES } from '../../eVe/domains/rendering/virtual_sc
 
 const flushBevyRun = () => new Promise((resolve) => setTimeout(resolve, 0));
 
+const latestRunCall = (calls = []) => calls.find((call) => call.type === 'run');
+
 const createTextTextureDocument = ({ devicePixelRatio = 2 } = {}) => {
     const canvas = {
         width: 0,
@@ -84,8 +86,8 @@ test('Bevy web runtime keeps broken initial deferred media present without block
         },
         wasmModule: {
             default: async () => calls.push({ type: 'init' }),
-            run_atome_bevy_renderer: (canvasSelector, width, height, initialNodes) => {
-                calls.push({ type: 'run', canvasSelector, width, height, initialNodes });
+            run_atome_bevy_renderer: (canvasSelector, width, height, surfaceMetrics, initialScene) => {
+                calls.push({ type: 'run', canvasSelector, width, height, surfaceMetrics, initialScene });
             }
         }
     });
@@ -95,8 +97,8 @@ test('Bevy web runtime keeps broken initial deferred media present without block
     assert.equal(result.ok, true);
     assert.equal(result.node_count, 2);
     assert.deepEqual(result.skipped_nodes, []);
-    assert.equal(calls[1].initialNodes.nodes.length, 2);
-    assert.deepEqual(calls[1].initialNodes.nodes.map((node) => node.id), ['broken_video', 'shape_ok']);
+    assert.equal(latestRunCall(calls).initialScene.nodes.length, 2);
+    assert.deepEqual(latestRunCall(calls).initialScene.nodes.map((node) => node.id), ['broken_video', 'shape_ok']);
     assert.equal(readBevyWebRendererState(surface).node_count, 2);
     assert.equal(readBevyWebRendererState(surface).deferred_nodes.length, 1);
     assert.equal(readBevyWebRendererState(surface).skipped_nodes.length, 0);
@@ -131,8 +133,8 @@ test('Bevy web runtime resolves persisted video posters during initial scene pro
         }),
         wasmModule: {
             default: async () => calls.push({ type: 'init' }),
-            run_atome_bevy_renderer: (canvasSelector, width, height, initialNodes) => {
-                calls.push({ type: 'run', canvasSelector, width, height, initialNodes });
+            run_atome_bevy_renderer: (canvasSelector, width, height, surfaceMetrics, initialScene) => {
+                calls.push({ type: 'run', canvasSelector, width, height, surfaceMetrics, initialScene });
             }
         }
     });
@@ -141,8 +143,8 @@ test('Bevy web runtime resolves persisted video posters during initial scene pro
     assert.equal(result.ok, true);
     assert.equal(result.node_count, 1);
     assert.equal(result.deferred_nodes.length, 0);
-    assert.equal(calls[1].initialNodes.nodes[0].id, 'video_with_poster');
-    assert.deepEqual(calls[1].initialNodes.nodes[0].texture, {
+    assert.equal(latestRunCall(calls).initialScene.nodes[0].id, 'video_with_poster');
+    assert.deepEqual(latestRunCall(calls).initialScene.nodes[0].texture, {
         width: 1,
         height: 1,
         rgba: [255, 0, 0, 255]
@@ -177,8 +179,8 @@ test('Bevy web runtime keeps source-backed uncached videos present after initial
         }),
         wasmModule: {
             default: async () => calls.push({ type: 'init' }),
-            run_atome_bevy_renderer: (canvasSelector, width, height, initialNodes) => {
-                calls.push({ type: 'run', canvasSelector, width, height, initialNodes });
+            run_atome_bevy_renderer: (canvasSelector, width, height, surfaceMetrics, initialScene) => {
+                calls.push({ type: 'run', canvasSelector, width, height, surfaceMetrics, initialScene });
             },
             apply_atome_bevy_resource: (payload) => calls.push({ type: 'resource', payload })
         }
@@ -188,8 +190,8 @@ test('Bevy web runtime keeps source-backed uncached videos present after initial
 
     assert.equal(result.ok, true);
     assert.equal(result.node_count, 1);
-    assert.equal(calls[1].initialNodes.nodes[0].id, 'pending_video');
-    assert.equal(calls[1].initialNodes.nodes[0].texture, undefined);
+    assert.equal(latestRunCall(calls).initialScene.nodes[0].id, 'pending_video');
+    assert.equal(latestRunCall(calls).initialScene.nodes[0].texture, undefined);
     assert.equal(calls.some((call) => call.type === 'resource'), false);
     assert.equal(readBevyWebRendererState(surface).deferred_nodes.length, 1);
     assert.deepEqual(readBevyWebRendererState(surface).resolved_deferred_nodes, []);
@@ -225,11 +227,10 @@ test('Bevy web runtime refreshes text texture when a transform changes text boun
     const calls = [];
     const wasmModule = {
         default: async () => calls.push({ type: 'init' }),
-        run_atome_bevy_renderer: (canvasSelector, width, height, initialNodes) => {
-            calls.push({ type: 'run', canvasSelector, width, height, initialNodes });
+        run_atome_bevy_renderer: (canvasSelector, width, height, surfaceMetrics, initialScene) => {
+            calls.push({ type: 'run', canvasSelector, width, height, surfaceMetrics, initialScene });
         },
-        apply_atome_bevy_transform: (payload) => calls.push({ type: 'transform', payload }),
-        apply_atome_bevy_text_metadata: (payload) => calls.push({ type: 'text', payload }),
+        apply_atome_bevy_ops: (ops) => calls.push({ type: 'ops', ops }),
         request_atome_bevy_redraw: () => calls.push({ type: 'redraw' })
     };
     const textNode = {
@@ -271,6 +272,7 @@ test('Bevy web runtime refreshes text texture when a transform changes text boun
             id: 'resized_text',
             localTransform: { ...textNode.localTransform },
             bounds: { x: 0, y: 0, width: 120, height: 36 },
+            sizeChanged: true,
             node: {
                 ...textNode,
                 bounds: { x: 0, y: 0, width: 120, height: 36 }
@@ -278,7 +280,8 @@ test('Bevy web runtime refreshes text texture when a transform changes text boun
         }]
     });
 
-    assert.deepEqual(calls.find((call) => call.type === 'transform')?.payload, {
+    const appliedOps = calls.filter((call) => call.type === 'ops').flatMap((call) => call.ops);
+    assert.deepEqual(appliedOps.find((op) => op.type === 'transform')?.patch, {
         id: 'resized_text',
         logical_position: [0, 0],
         logical_size: [120, 36],
@@ -286,6 +289,6 @@ test('Bevy web runtime refreshes text texture when a transform changes text boun
         rotation: 0,
         origin: [0, 0]
     });
-    assert.deepEqual(calls.find((call) => call.type === 'text')?.payload?.texture?.width, 240);
-    assert.deepEqual(calls.find((call) => call.type === 'text')?.payload?.texture?.height, 72);
+    assert.deepEqual(appliedOps.find((op) => op.type === 'text')?.patch?.texture?.width, 240);
+    assert.deepEqual(appliedOps.find((op) => op.type === 'text')?.patch?.texture?.height, 72);
 });

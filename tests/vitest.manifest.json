@@ -1,7 +1,5 @@
 [
-  "atome/src/squirrel/apis/unified/adole_api/session.current_project.test.mjs",
-  "eVe/intuition/projection/button.slider_contract.test.mjs",
-  "eVe/intuition/tools/ui/tool_button_factory.slider_contract.test.mjs",
+  "tests/atome/src/squirrel/apis/unified/adole_api/session.current_project.test.mjs",
   "tests/eve/atome_property_sanitizer_ownership.test.mjs",
   "tests/eve/atome_record_projection_project_id.test.mjs",
   "tests/eve/bevy_external_image_source_runtime.test.mjs",
@@ -25,6 +23,8 @@
   "tests/eve/debug_runtime_webgpu_probe.test.mjs",
   "tests/eve/imported_media_durability_contract.test.mjs",
   "tests/eve/inline_edit_session_contract.test.mjs",
+  "tests/eve/intuition/projection/button.slider_contract.test.mjs",
+  "tests/eve/intuition/tools/ui/tool_button_factory.slider_contract.test.mjs",
   "tests/eve/media_asset_box.sanitization.test.mjs",
   "tests/eve/media_persistence_service.sanitization.test.mjs",
   "tests/eve/media_video_poster_runtime.test.mjs",

@@ -7,66 +7,10 @@
  * All operations via WebSocket.
  */
 
-import path from 'path';
 import db from '../database/adole.js';
 import { getABoxEventBus } from './aBoxServer.js';
 import { checkPermission, PERMISSION } from './sharing.js';
-
-const FILE_ATOME_TYPES = Object.freeze([
-    'file', 'image', 'video', 'sound',
-    'audio_recording', 'video_recording',
-    'text', 'shape', 'raw'
-]);
-const FILE_ATOME_TYPES_SQL = FILE_ATOME_TYPES.map(() => '?').join(', ');
-const FILE_ATOME_TYPES_SET = new Set(FILE_ATOME_TYPES);
-
-const IMAGE_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.tiff', '.tif', '.ico']);
-const SHAPE_EXTENSIONS = new Set(['.svg']);
-const VIDEO_EXTENSIONS = new Set(['.mp4', '.mov', '.webm', '.mkv', '.avi', '.mpeg', '.mpg', '.m4v']);
-const SOUND_EXTENSIONS = new Set(['.mp3', '.wav', '.ogg', '.flac', '.aac', '.m4a', '.aiff', '.aif', '.opus', '.weba']);
-const TEXT_EXTENSIONS = new Set(['.txt', '.md', '.markdown', '.csv', '.tsv', '.log']);
-const TEXT_MIME_TYPES = new Set(['text/plain', 'text/markdown', 'text/csv', 'text/tab-separated-values']);
-
-function normalizeMimeType(mimeType) {
-    return typeof mimeType === 'string' ? mimeType.trim().toLowerCase() : '';
-}
-
-function normalizeExtension(fileName) {
-    return typeof fileName === 'string' ? path.extname(fileName).toLowerCase() : '';
-}
-
-function normalizeFileAtomeType(value) {
-    const normalized = typeof value === 'string' ? value.trim().toLowerCase() : '';
-    return FILE_ATOME_TYPES_SET.has(normalized) ? normalized : null;
-}
-
-function inferFileAtomeType(fileName, mimeType) {
-    const ext = normalizeExtension(fileName);
-    const mime = normalizeMimeType(mimeType);
-
-    if (SHAPE_EXTENSIONS.has(ext) || mime === 'image/svg+xml') return 'shape';
-    if (IMAGE_EXTENSIONS.has(ext) || (mime.startsWith('image/') && mime !== 'image/svg+xml')) return 'image';
-    if (VIDEO_EXTENSIONS.has(ext) || mime.startsWith('video/')) return 'video';
-    if (SOUND_EXTENSIONS.has(ext) || mime.startsWith('audio/')) return 'sound';
-    if (TEXT_EXTENSIONS.has(ext) || TEXT_MIME_TYPES.has(mime)) return 'text';
-    return 'raw';
-}
-
-function resolveFileAtomeType(fileName, options = {}) {
-    const explicit = normalizeFileAtomeType(options.atome_type || options.atomeType);
-    if (explicit) return explicit;
-    const sourceName = typeof options.original_name === 'string' && options.original_name.trim()
-        ? options.original_name
-        : (typeof options.originalName === 'string' && options.originalName.trim()
-            ? options.originalName
-            : fileName);
-    const inferred = inferFileAtomeType(sourceName, options.mimeType || options.mime_type || options.mime);
-    return normalizeFileAtomeType(inferred) || 'raw';
-}
-
-function fileTypeWhere(alias = 'a') {
-    return `${alias}.atome_type IN (${FILE_ATOME_TYPES_SQL})`;
-}
+import { FILE_ATOME_TYPES, resolveFileAtomeType, fileTypeWhere } from './file_types.js';
 
 export async function registerFileUpload(fileName, userId, options = {}) {
     const now = new Date().toISOString();
@@ -379,37 +323,6 @@ export async function setFilePublic(atomeId, ownerId, isPublic) {
     return { success: true };
 }
 
-function normalizeFileSharePermissions(permissions) {
-    if (typeof permissions === 'number') {
-        return permissions;
-    }
-
-    if (typeof permissions === 'string') {
-        const value = permissions.toLowerCase();
-        if (value === 'write') {
-            return { can_read: true, can_write: true, can_delete: false, can_share: false, can_create: false };
-        }
-        if (value === 'delete') {
-            return { can_read: true, can_write: true, can_delete: true, can_share: false, can_create: false };
-        }
-        if (value === 'admin') {
-            return { can_read: true, can_write: true, can_delete: true, can_share: true, can_create: true };
-        }
-        return { can_read: true, can_write: false, can_delete: false, can_share: false, can_create: false };
-    }
-
-    if (permissions && typeof permissions === 'object') {
-        const read = permissions.can_read ?? permissions.canRead ?? permissions.read ?? false;
-        const write = permissions.can_write ?? permissions.canWrite ?? permissions.write ?? false;
-        const del = permissions.can_delete ?? permissions.canDelete ?? permissions.delete ?? false;
-        const share = permissions.can_share ?? permissions.canShare ?? permissions.share ?? false;
-        const create = permissions.can_create ?? permissions.canCreate ?? permissions.create ?? false;
-        return { can_read: !!read, can_write: !!write, can_delete: !!del, can_share: !!share, can_create: !!create };
-    }
-
-    return { can_read: true, can_write: false, can_delete: false, can_share: false, can_create: false };
-}
-
 /**
  * Delete file (soft delete)
  */
@@ -489,148 +402,7 @@ function emitFileEvent(action, data) {
     }
 }
 
-/**
- * Handle file WebSocket messages
- */
-export async function handleFileMessage(message, userId) {
-    const { action, requestId } = message;
-
-    if (!userId) {
-        return { requestId, success: false, error: 'Unauthorized' };
-    }
-
-    try {
-        switch (action) {
-            case 'list': {
-                const files = await getUserFiles(userId);
-                return { requestId, success: true, data: files };
-            }
-
-            case 'accessible': {
-                const files = await getAccessibleFiles(userId);
-                return { requestId, success: true, data: files };
-            }
-
-            case 'get': {
-                const { atome_id, file_name } = message;
-                const meta = await getFileMetadata(atome_id || file_name, { userId });
-                if (!meta) {
-                    return { requestId, success: false, error: 'File not found' };
-                }
-                const canAccess = await canAccessFile(meta.atome_id, userId);
-                if (!canAccess) {
-                    return { requestId, success: false, error: 'Access denied' };
-                }
-                return { requestId, success: true, data: meta };
-            }
-
-            case 'set-public': {
-                const { atome_id, is_public } = message;
-                const result = await setFilePublic(atome_id, userId, is_public);
-                return { requestId, ...result };
-            }
-
-            case 'delete': {
-                const { atome_id } = message;
-                const result = await deleteFile(atome_id, userId);
-                return { requestId, ...result };
-            }
-
-            case 'stats': {
-                const stats = await getFileStats();
-                return { requestId, success: true, data: stats };
-            }
-
-            default:
-                return { requestId, success: false, error: `Unknown action: ${action}` };
-        }
-    } catch (error) {
-        console.error('File message error:', error.message);
-        return { requestId, success: false, error: error.message };
-    }
-}
-
-/**
- * Register file WebSocket handler
- */
-export function registerFileWebSocket() {
-    const eventBus = getABoxEventBus();
-    if (!eventBus) {
-        console.warn('EventBus not available, file WebSocket handler not registered');
-        return;
-    }
-
-    eventBus.on('file', async (message, socket) => {
-        const userId = socket?.userId || message.userId;
-        const response = await handleFileMessage(message, userId);
-
-        if (socket && typeof socket.send === 'function') {
-            socket.send(JSON.stringify({ type: 'file-response', ...response }));
-        }
-    });
-
-    console.log('File WebSocket handler registered (ADOLE v3.0)');
-}
-
-/**
- * Initialize user files system (backward compatibility)
- * In ADOLE v3.0, initialization is handled by the database module
- */
-export async function initUserFiles(uploadsDir) {
-    console.log('User files system initialized (ADOLE v3.0) - uploads:', uploadsDir);
-    // Register WebSocket handler
-    registerFileWebSocket();
-    return true;
-}
-
-/**
- * Share a file with another user (backward compatibility wrapper)
- */
-export async function shareFile(fileIdentifier, granterId, targetUserId, permissions) {
-    const { createShare } = await import('./sharing.js');
-    const meta = await getFileMetadata(fileIdentifier, { ownerId: granterId });
-    if (!meta) {
-        return { success: false, error: 'File not found' };
-    }
-    const payload = normalizeFileSharePermissions(permissions);
-    const result = await createShare(granterId, meta.atome_id, targetUserId, payload);
-    if (result?.success) {
-        return { ...result, file: meta };
-    }
-    return result;
-}
-
-/**
- * Revoke file sharing (backward compatibility wrapper)
- */
-export async function unshareFile(fileIdentifier, granterId, targetUserId) {
-    const { revokeShare } = await import('./sharing.js');
-    const meta = await getFileMetadata(fileIdentifier, { ownerId: granterId });
-    if (!meta) {
-        return { success: false, error: 'File not found' };
-    }
-
-    const permission = await db.query('get', `
-        SELECT permission_id
-        FROM permissions
-        WHERE atome_id = ? AND principal_id = ?
-        ORDER BY permission_id DESC
-        LIMIT 1
-    `, [meta.atome_id, targetUserId]);
-
-    if (!permission?.permission_id) {
-        return { success: false, error: 'Permission not found' };
-    }
-
-    const result = await revokeShare(granterId, permission.permission_id);
-    if (result?.success) {
-        return { ...result, file: meta };
-    }
-    return result;
-}
-
 export default {
-    initUserFiles,
     registerFileUpload,
     getFileMetadata,
     getUserFiles,
@@ -638,9 +410,5 @@ export default {
     canAccessFile,
     setFilePublic,
     deleteFile,
-    getFileStats,
-    shareFile,
-    unshareFile,
-    handleFileMessage,
-    registerFileWebSocket
+    getFileStats
 };

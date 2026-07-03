@@ -126,8 +126,7 @@ fn run_atome_bevy_renderer_with_transparency(
             false,
         )
     };
-    let mut app = build_web_bevy_app(config);
-    app.run();
+    run_web_bevy_app(config);
     Ok(())
 }
 

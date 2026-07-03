@@ -15,7 +15,7 @@ import {
     waitForAuthCheck
 } from './session.js';
 import { adapters, normalizePhone, getPrimaryBackend, getSecondaryBackend, hasToken } from './auth_core.js';
-import { loginBackend, registerBackend, meBackend, createAnonymousCredentials, ensureBackendAvailability } from './auth_backends.js';
+import { loginBackend, bootstrapBackend, meBackend, createAnonymousCredentials, ensureBackendAvailability } from './auth_backends.js';
 import { loadFastifyLoginCache, ensureFastifyToken } from './auth_fastify_token.js';
 import { migratePreviousWorkspace, migrateAnonymousWorkspace } from './auth_workspace.js';
 import { requireAuth, normalizeSessionUser } from './auth_state.js';
@@ -199,37 +199,34 @@ export const sessionAccountMethods = {
             }
         }
 
-        // Try login first
-        const loginResult = await loginBackend(backend, {
-            phone: creds.phone,
-            password: creds.password
-        });
-        if (loginResult.ok && loginResult.user) {
-            setSessionState({
-                mode: 'anonymous',
-                user: loginResult.user,
-                backend
-            });
-            return { ok: true, user: loginResult.user, source: backend };
-        }
-
-        // Register then login
-        const registerResult = await registerBackend(backend, {
+        let bootstrapResult = await bootstrapBackend(backend, {
             phone: creds.phone,
             password: creds.password,
             username: creds.username,
             visibility: 'private'
         });
-        if (registerResult.ok && registerResult.user) {
-            setSessionState({
-                mode: 'anonymous',
-                user: registerResult.user,
-                backend
+
+        if (!bootstrapResult.ok && bootstrapResult.error === 'Invalid credentials') {
+            creds = createAnonymousCredentials();
+            setAnonymousCredentials(creds);
+            bootstrapResult = await bootstrapBackend(backend, {
+                phone: creds.phone,
+                password: creds.password,
+                username: creds.username,
+                visibility: 'private'
             });
-            return { ok: true, user: registerResult.user, source: backend };
         }
 
-        return { ok: false, reason: registerResult.error || 'anonymous_failed', user: null };
+        if (bootstrapResult.ok && bootstrapResult.user) {
+            setSessionState({
+                mode: 'anonymous',
+                user: bootstrapResult.user,
+                backend
+            });
+            return { ok: true, user: bootstrapResult.user, source: backend };
+        }
+
+        return { ok: false, reason: bootstrapResult.error || 'anonymous_failed', user: null };
     },
 
     async ensureFastifyToken() {

@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { installMockBrowserEnv } from '../strangler_v2/_env.mjs';
+import { DASHBOARD_WORKSPACE_PROJECT_ID } from '../../eVe/domains/dashboard/dashboard_workspace_mode.js';
 
 const { window, document } = installMockBrowserEnv();
 
@@ -179,17 +180,20 @@ assert.equal(
     1,
     'without-account choice must rely on the canonical auth-check signal only once'
 );
-assert.deepEqual(createdProjects, ['welcome'], 'anonymous bootstrap must create the canonical welcome project');
-assert.equal(currentProjects[0]?.projectId, 'anon_project_valid', 'anonymous project must become current');
-assert.equal(loadedProjects[0]?.projectId, 'anon_project_valid', 'anonymous project atomes must load');
-assert.ok(document.getElementById('project_view_anon_project_valid'), 'anonymous project view must be mounted');
-assert.ok(document.getElementById('project_view_anon_project_valid')?.contains(document.getElementById('eve_surface_project')), 'anonymous workspace must mount the canonical project canvas before dashboard open');
+assert.deepEqual(createdProjects, [], 'anonymous dashboard boot must not create a project');
+assert.deepEqual(currentProjects, [], 'anonymous dashboard boot must not set a current project');
+assert.deepEqual(loadedProjects, [], 'anonymous dashboard boot must not load project atomes');
+assert.equal(document.getElementById('project_view_anon_project_valid'), null, 'anonymous dashboard boot must not mount a user project view');
+assert.ok(
+    document.getElementById(`project_view_${DASHBOARD_WORKSPACE_PROJECT_ID}`)?.contains(document.getElementById('eve_surface_project')),
+    'anonymous dashboard boot must mount the canonical canvas in the neutral dashboard host'
+);
 assert.equal(document.getElementById('eve_login_sequence')?.style?.display, 'none', 'choice screen must close after anonymous workspace opens');
 assert.equal(menuReveals.length, 1, 'anonymous workspace must reveal the main menu once');
 assert.deepEqual(
     dashboardOpens,
-    [{ source: 'anonymous', projectId: 'anon_project_valid' }],
-    'anonymous workspace must open the dashboard after project activation'
+    [{ source: 'anonymous', projectId: DASHBOARD_WORKSPACE_PROJECT_ID, dataProjectId: DASHBOARD_WORKSPACE_PROJECT_ID }],
+    'anonymous workspace must open the dashboard on the neutral scene'
 );
 
 console.log('user_login_choice_anonymous_project_contract.test: PASS');

@@ -1,0 +1,45 @@
+{
+  "suite_name": "phase9_voice_interrupt",
+  "generated_at": "2026-07-02T07:27:51.009Z",
+  "passed": true,
+  "total": 5,
+  "passed_count": 5,
+  "failed_count": 0,
+  "tests": [
+    {
+      "test": "tests/atome/src/squirrel/voice/session_runtime.test.mjs",
+      "ok": true,
+      "status": 0,
+      "stdout": "voice_session_runtime: ok",
+      "stderr": ""
+    },
+    {
+      "test": "tests/atome/src/squirrel/voice/service.test.mjs",
+      "ok": true,
+      "status": 0,
+      "stdout": "voice_service: ok",
+      "stderr": ""
+    },
+    {
+      "test": "tests/atome/src/squirrel/voice/interrupt_integration.test.mjs",
+      "ok": true,
+      "status": 0,
+      "stdout": "voice_interrupt_integration: ok",
+      "stderr": ""
+    },
+    {
+      "test": "tests/atome/src/squirrel/voice/panel_interrupt_real_path.test.mjs",
+      "ok": true,
+      "status": 0,
+      "stdout": "voice_panel_interrupt_real_path: ok",
+      "stderr": ""
+    },
+    {
+      "test": "tests/atome/src/squirrel/voice/priority_flows.test.mjs",
+      "ok": true,
+      "status": 0,
+      "stdout": "priority_flows.test: PASS",
+      "stderr": ""
+    }
+  ]
+}

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { installMockBrowserEnv } from '../strangler_v2/_env.mjs';
+import { DASHBOARD_WORKSPACE_PROJECT_ID } from '../../eVe/domains/dashboard/dashboard_workspace_mode.js';
 
 const { window, document } = installMockBrowserEnv();
 
@@ -69,6 +70,8 @@ const intuitionSource = readFileSync(new URL('../../eVe/intuition/eVeIntuition.j
 assert.match(kickstartSource, /background:\s*'transparent'/, '#view must stay transparent during boot and cannot emit the gray #272727 frame');
 assert.doesNotMatch(kickstartSource, /background:\s*'#272727'/, '#view must not restore the boot gray background');
 assert.match(intuitionSource, /createIntuitionXMenu\(\{[\s\S]*?open:\s*false/, 'main ribbon must be created closed so no toolbox frame appears before login choice');
+assert.match(intuitionSource, /toggleWorkspaceDashboardAndMainMenu\(\{\s*source:\s*'main_handle'\s*\}\)/, 'main handle must use the workspace dashboard toggle so missing Dashboard projection is repaired');
+assert.doesNotMatch(intuitionSource, /void\s+toggleDashboardRuntime\(\)/, 'main handle must not call the low-level dashboard toggle directly');
 
 const runtime = createMainMenuAuthRuntime({
     intuitionContent: {
@@ -109,6 +112,38 @@ assert.equal(
     'a visible current project surface must be treated as an active workspace even before auth state catches up'
 );
 visibleProjectLayer.remove();
+delete window.__currentProject;
+
+const dashboardLayer = document.createElement('div');
+dashboardLayer.id = `project_view_${DASHBOARD_WORKSPACE_PROJECT_ID}`;
+dashboardLayer.getBoundingClientRect = () => ({ x: 0, y: 0, width: 1200, height: 800 });
+const dashboardCanvas = document.createElement('canvas');
+dashboardCanvas.id = 'eve_surface_project';
+dashboardCanvas.getBoundingClientRect = () => ({ x: 0, y: 0, width: 1200, height: 800 });
+dashboardLayer.appendChild(dashboardCanvas);
+document.body.appendChild(dashboardLayer);
+window.__eveWorkspaceMode = {
+    mode: 'dashboard',
+    projectId: DASHBOARD_WORKSPACE_PROJECT_ID,
+    transitioning: false,
+    targetMode: ''
+};
+window.eveDashboardRuntime = {
+    state: {
+        active: true,
+        projectId: DASHBOARD_WORKSPACE_PROJECT_ID
+    }
+};
+window.__authCheckComplete = false;
+window.__authCheckResult = { complete: false, authenticated: false, anonymous: false };
+assert.equal(
+    runtime.isWorkspaceActiveForMainMenu(),
+    true,
+    'the neutral Dashboard workspace must be active for the main handle even before auth state catches up'
+);
+dashboardLayer.remove();
+delete window.eveDashboardRuntime;
+delete window.__eveWorkspaceMode;
 
 const workspaceOpenCalls = [];
 window.__eveWorkspaceWarmupsStarted = false;
@@ -219,18 +254,16 @@ installEveIntuitionBootRuntime({
     syncToolLatchedState() {},
     warmupToolGatewayRuntime() {}
 });
-assert.deepEqual(workspaceOpenCalls, [], 'workspace boot must wait for a current project before opening menu/dashboard');
-window.__currentProject = { id: 'boot_project_valid' };
 await new Promise((resolve) => setTimeout(resolve, 120));
 assert.deepEqual(workspaceOpenCalls, [
-    { source: 'boot_workspace', projectId: 'boot_project_valid' }
-], 'workspace boot must retry after auth when the current project is published after the first boot signal');
+    { source: 'boot_workspace' }
+], 'workspace boot must open the default dashboard without waiting for a current project');
 window.dispatchEvent(new window.CustomEvent('squirrel:project-changed', {
     detail: { id: 'boot_project_valid' }
 }));
 await new Promise((resolve) => setTimeout(resolve, 0));
 assert.deepEqual(workspaceOpenCalls, [
-    { source: 'boot_workspace', projectId: 'boot_project_valid' }
-], 'workspace boot must open the canonical dashboard/menu path once after project activation');
+    { source: 'boot_workspace' }
+], 'workspace boot must not reopen the dashboard when a project id is published later');
 
 console.log('user_login_boot_order_contract.test: PASS');

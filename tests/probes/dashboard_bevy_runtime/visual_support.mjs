@@ -27,6 +27,13 @@ const pixelAt = (png, x, y) => {
     return [png.data[index], png.data[index + 1], png.data[index + 2], png.data[index + 3]];
 };
 
+const sampleYInRect = (png, rect, offset = 12) => {
+    const top = Number(rect?.y || 0);
+    const height = Math.max(1, Number(rect?.height || 1));
+    const localY = Math.min(Math.max(1, Number(offset) || 1), Math.max(1, height - 1));
+    return Math.max(0, Math.min(png.height - 1, top + localY));
+};
+
 const colorDistance = (left, right) => Math.max(
     Math.abs(left[0] - right[0]),
     Math.abs(left[1] - right[1]),
@@ -115,7 +122,7 @@ const averageColumn = (png, x, y, height) => {
 
 const assertHeaderInteriorIsFlat = (png, lane, label) => {
     const header = lane.header_rect;
-    const y = header.y + Math.max(5, Math.min(10, header.height * 0.08));
+    const y = sampleYInRect(png, header, Math.max(5, Math.min(10, header.height * 0.08)));
     const height = Math.max(6, Math.min(12, header.height * 0.1));
     const edgeX = header.x + Math.max(3, header.width * 0.04);
     const cleanX = header.x + Math.max(12, header.width * 0.12);
@@ -132,9 +139,9 @@ export const analyzeDashboardVisual = (screenshotPath, snapshot, expectedHex, la
     if (!lane) throw new Error(`${label}_visual_lane_missing`);
     const expectedLaneHex = shadeHex(expectedHex, -10);
     const laneFillX = Math.min(lane.lane_rect.x + lane.lane_rect.width - 12, lane.lane_rect.x + lane.lane_rect.height + 12);
-    assertNearColor(pixelAt(png, lane.header_rect.x + 7, lane.header_rect.y + 7), expectedHex, `${label}_active_header`);
+    assertNearColor(pixelAt(png, lane.header_rect.x + 7, sampleYInRect(png, lane.header_rect, 7)), expectedHex, `${label}_active_header`);
     assertNearColor(pixelAt(png, lane.plus_rect.x + lane.plus_rect.width / 2, lane.plus_rect.y + lane.plus_rect.height + 12), expectedHex, `${label}_plus_strip`);
-    assertNearColor(pixelAt(png, laneFillX, lane.header_rect.y + 12), expectedLaneHex, `${label}_lane_fill`);
+    assertNearColor(pixelAt(png, laneFillX, sampleYInRect(png, lane.lane_rect, 12)), expectedLaneHex, `${label}_lane_fill`);
     assertBrightPixels(png, lane.header_rect, `${label}_header_text_or_icon`);
     const headerFlatness = assertHeaderInteriorIsFlat(png, lane, label);
     assertBrightPixels(png, lane.plus_rect, `${label}_plus_symbol`, 2);
@@ -152,8 +159,8 @@ export const analyzeDashboardOverviewVisual = (screenshotPath, snapshot) => {
         const expectedHex = CATEGORY_COLORS[lane.categoryId];
         if (!expectedHex) continue;
         const expectedLaneHex = shadeHex(expectedHex, -10);
-        assertNearColor(pixelAt(png, laneFillSampleX(lane), lane.header_rect.y + 12), expectedLaneHex, `dashboard_open_lane_${lane.categoryId}`, 18);
-        assertNearColor(pixelAt(png, lane.header_rect.x + 7, lane.header_rect.y + 7), expectedHex, `dashboard_open_header_${lane.categoryId}`);
+        assertNearColor(pixelAt(png, laneFillSampleX(lane), sampleYInRect(png, lane.lane_rect, 12)), expectedLaneHex, `dashboard_open_lane_${lane.categoryId}`, 18);
+        assertNearColor(pixelAt(png, lane.header_rect.x + 7, sampleYInRect(png, lane.header_rect, 7)), expectedHex, `dashboard_open_header_${lane.categoryId}`);
         assertBrightPixels(png, lane.header_rect, `dashboard_open_header_text_or_icon_${lane.categoryId}`);
         if (lane.visibleItemCount > 0) assertLaneHasCardContrast(png, lane, expectedLaneHex, `dashboard_open_lane_${lane.categoryId}`);
         headerFlatness.push(assertHeaderInteriorIsFlat(png, lane, `dashboard_open_${lane.categoryId}`));

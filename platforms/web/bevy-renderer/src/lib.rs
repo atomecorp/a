@@ -24,6 +24,7 @@ thread_local! {
     static WEB_WAKE_PENDING: RefCell<bool> = const { RefCell::new(false) };
     static WEB_REDRAW_PENDING: RefCell<bool> = const { RefCell::new(false) };
     static WEB_DIAGNOSTICS: RefCell<WebRendererDiagnostics> = RefCell::new(WebRendererDiagnostics::default());
+    static WEB_RUNNING_APPS: RefCell<Vec<App>> = const { RefCell::new(Vec::new()) };
 }
 
 #[derive(Clone, Debug, Default, Serialize)]
@@ -291,7 +292,6 @@ impl Plugin for WebBevyRendererPlugin {
 
 fn request_initial_web_redraw(world: &mut World) {
     world.write_message(RequestRedraw);
-    wake_web_renderer();
 }
 
 fn apply_pending_web_ops(world: &mut World) {
@@ -301,7 +301,6 @@ fn apply_pending_web_ops(world: &mut World) {
     }
     apply_render_ops(world, ops);
     world.write_message(RequestRedraw);
-    wake_web_renderer();
 }
 
 fn window_resize_event_logical_size(world: &World, event: &WindowResized) -> (f32, f32) {
@@ -379,7 +378,6 @@ fn apply_browser_window_resize_to_surface(world: &mut World) {
         return;
     }
     world.write_message(RequestRedraw);
-    wake_web_renderer();
 }
 
 fn apply_pending_web_redraw(world: &mut World) {
@@ -390,7 +388,6 @@ fn apply_pending_web_redraw(world: &mut World) {
         cell.borrow_mut().redraw_applied += 1;
     });
     world.write_message(RequestRedraw);
-    wake_web_renderer();
 }
 
 fn apply_pending_video_frame_notifications(world: &mut World) {
@@ -457,5 +454,15 @@ fn build_web_bevy_app(config: WebBevyRendererConfig) -> App {
     app
 }
 
+fn run_web_bevy_app(config: WebBevyRendererConfig) {
+    let mut app = build_web_bevy_app(config);
+    app.run();
+    WEB_RUNNING_APPS.with(|cell| {
+        cell.borrow_mut().push(app);
+    });
+}
+
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod web_wake_tests;

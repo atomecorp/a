@@ -1,6 +1,9 @@
 import { sceneSnapshot, sleep, waitFor } from './support.mjs';
 
 export const ensureProject = async (page, name) => page.evaluate(async (projectName) => {
+    const workspaceMode = await import('/eVe/domains/dashboard/dashboard_workspace_mode.js');
+    workspaceMode.beginDashboardWorkspaceTransition?.('project');
+    await window.eveDashboardRuntime?.close?.({ honorLabelEditorKeyboardGuard: false });
     const loadProjectWithTimeout = (projectId, options = {}, timeoutMs = 20000) => Promise.race([
         Promise.resolve(window.eveToolBase?.loadProjectAtomes?.(projectId, options)).then((result) => ({ ok: result?.ok !== false, result })),
         new Promise((resolve) => setTimeout(() => resolve({ ok: false, timeout: true, error: 'load_project_atomes_timeout' }), timeoutMs))
@@ -24,6 +27,7 @@ export const ensureProject = async (page, name) => page.evaluate(async (projectN
     window.eveToolBase?.ensureProjectLayer?.(projectId);
     const loaded = await loadProjectWithTimeout(projectId, { force: true, staleFirst: false });
     if (!loaded.ok) return { ok: false, error: 'project_initial_load_failed', loaded, id: String(projectId), name: projectName };
+    workspaceMode.markProjectWorkspaceMode?.(String(projectId));
     return { ok: true, id: String(projectId), name: projectName };
 }, name);
 

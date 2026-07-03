@@ -343,7 +343,7 @@ const runScenario = async () => {
             !snapshot.active && snapshot.dashboardVisibleRecordIds.length === 0
         ), 30000);
         if (!closed.ok) throw new Error('dashboard_close_failed');
-        report.checks.push({ name: 'atom_click_closes_dashboard_and_parks_records', ok: true, snapshot: closed.snapshot });
+        report.checks.push({ name: 'atom_click_closes_dashboard_and_removes_records', ok: true, snapshot: closed.snapshot });
         await (await resolveAtomHandle(page)).click({ timeout: 10000 });
         const leftOpened = await waitForDashboardSnapshot(page, (snapshot) => {
             const lane = snapshot.layout?.lanes?.[0];

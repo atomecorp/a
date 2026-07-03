@@ -62,6 +62,25 @@ async function pathExists(targetPath) {
     }
 }
 
+// Artifacts a browser/PWA runtime never loads: build sources, dev maps, docs,
+// tests, VCS/tooling dirs. Excluding them from packages strips the vendored
+// Rust renderer tree, 7.5 MB of sourcemaps, colocated tests, and documentation
+// without touching any runtime-loaded js/css/wasm/asset. Source tree untouched.
+const SKIP_DIR_NAMES = new Set(['node_modules', 'target', '.git']);
+const SKIP_FILE_EXTS = new Set(['.map', '.rs', '.md', '.orig', '.lock']);
+const shouldSkipEntry = (entry) => {
+    if (entry.isDirectory()) {
+        return SKIP_DIR_NAMES.has(entry.name);
+    }
+    if (entry.name === '.DS_Store') {
+        return true;
+    }
+    if (/\.test\.mjs$/.test(entry.name)) {
+        return true;
+    }
+    return SKIP_FILE_EXTS.has(path.extname(entry.name));
+};
+
 async function copyDirectory(src, dest) {
     if (!(await pathExists(src))) {
         return;
@@ -71,6 +90,9 @@ async function copyDirectory(src, dest) {
     const entries = await readdir(src, { withFileTypes: true });
 
     for (const entry of entries) {
+        if (shouldSkipEntry(entry)) {
+            continue;
+        }
         const srcPath = path.join(src, entry.name);
         const destPath = path.join(dest, entry.name);
 

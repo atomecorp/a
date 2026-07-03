@@ -20,10 +20,14 @@
 
 import { v4 as uuidv4 } from 'uuid';
 import {
-    connect,
-    getDatabase as getDriverDb,
-    closeDatabase as closeDriver
-} from './driver.js';
+    initDatabase,
+    query,
+    safeParseJson,
+    serializeJson,
+    withTransaction,
+    getDatabase,
+    closeDatabase
+} from './adole_db_core.js';
 import {
     assertCanonicalPropertyKey,
     normalizeCanonicalAtome,
@@ -33,8 +37,9 @@ import {
     projectStoredAtome,
     projectStoredStateCurrent
 } from './adole_storage_projection.js';
-import { runAdoleSchemaMigrations } from './adole_schema_migrations.js';
 import { createAdolePermissionApi } from './adole_permissions.js';
+import { createAdoleSyncApi } from './adole_sync.js';
+import { createAdoleSnapshotsApi } from './adole_snapshots.js';
 import {
     HISTORY_EVENT_CLASS,
     HISTORY_REDO_RULE,
@@ -59,68 +64,19 @@ export {
     selectUndoTransaction
 };
 
-let db = null;
-let isAsync = false;
+// Public DB foundation, re-exported from the canonical db-core module.
+export {
+    initDatabase,
+    withTransaction,
+    getDatabase,
+    closeDatabase
+} from './adole_db_core.js';
+
 const permissions = createAdolePermissionApi({
     query,
     getAtome,
     getEffectiveOwnerId
 });
-
-// ============================================================================
-// DATABASE INITIALIZATION
-// ============================================================================
-
-export async function initDatabase(config = {}) {
-    if (db) return db;
-
-    console.log('[ADOLE v3.0] Initializing unified database...');
-    db = await connect(config);
-    isAsync = db.type === 'libsql';
-
-    // Run schema from file
-    const fs = await import('fs');
-    const path = await import('path');
-    const { fileURLToPath } = await import('url');
-    const __dirname = path.dirname(fileURLToPath(import.meta.url));
-    const schemaPath = path.join(__dirname, 'schema.sql');
-
-    try {
-        const schema = fs.readFileSync(schemaPath, 'utf8');
-        await query('exec', schema);
-        console.log('[ADOLE v3.0] Unified schema applied successfully');
-    } catch (e) {
-        console.log('[ADOLE v3.0] Schema already exists or error:', e.message);
-    }
-
-    await runAdoleSchemaMigrations(query);
-
-    return db;
-}
-
-async function query(method, sql, params = []) {
-    if (!db) await initDatabase();
-    if (isAsync) {
-        return await db[method](sql, params);
-    }
-    return db[method](sql, params);
-}
-
-function safeParseJson(value) {
-    if (!value) return null;
-    if (typeof value === 'object') return value;
-    try {
-        return JSON.parse(value);
-    } catch {
-        return null;
-    }
-}
-
-function serializeJson(value) {
-    if (value === null || value === undefined) return null;
-    if (typeof value === 'string') return value;
-    return JSON.stringify(value);
-}
 
 function resolveEventPayload(event) {
     if (!event || typeof event !== 'object') return null;
@@ -348,34 +304,6 @@ async function upsertAtomeFromEvent({
 
     if (writeParticles && properties && Object.keys(properties).length > 0) {
         await setParticles(atomeId, properties, ownerId || null);
-    }
-}
-
-export async function withTransaction(work) {
-    if (!db) await initDatabase();
-    try {
-        await db.beginTransaction();
-        const result = await work();
-        await db.commit();
-        return result;
-    } catch (error) {
-        try {
-            await db.rollback();
-        } catch (rollbackError) {
-            error.rollback_error = rollbackError.message;
-        }
-        throw error;
-    }
-}
-
-export function getDatabase() {
-    return db;
-}
-
-export async function closeDatabase() {
-    if (db) {
-        await closeDriver();
-        db = null;
     }
 }
 
@@ -1248,135 +1176,20 @@ export async function getChangesSince(sinceTimestamp = null) {
 }
 
 // ============================================================================
-// SNAPSHOTS
+// SNAPSHOTS — owned by adole_snapshots.js (restore via canonical appendEvent)
 // ============================================================================
 
-function parseSnapshotData(snapshotData) {
-    const data = safeParseJson(snapshotData);
-    if (!data || typeof data !== 'object') {
-        throw new Error('Invalid snapshot data');
-    }
-    return data;
-}
+const {
+    createSnapshot,
+    getSnapshots,
+    restoreSnapshot
+} = createAdoleSnapshotsApi({ getAtome, appendEvent });
 
-function resolveSnapshotRestoreActor(author, snapshot) {
-    if (author && typeof author === 'object') return author;
-    if (typeof author === 'string' && author.trim()) return { id: author };
-    const snapshotActor = safeParseJson(snapshot?.actor);
-    if (snapshotActor && typeof snapshotActor === 'object') return snapshotActor;
-    if (snapshot?.created_by) return { id: snapshot.created_by };
-    return null;
-}
-
-function selectSnapshotProperties(data) {
-    const candidates = [data?.properties, data?.data, data?.particles];
-    for (const candidate of candidates) {
-        if (candidate && typeof candidate === 'object' && !Array.isArray(candidate)) {
-            return candidate;
-        }
-    }
-    return {};
-}
-
-function buildSnapshotRestorePatch(snapshot, data) {
-    const properties = selectSnapshotProperties(data);
-    const meta = data?.meta && typeof data.meta === 'object' ? data.meta : {};
-    const patch = { ...properties };
-    const atomeType = data.type || data.atome_type || null;
-    const parentId =
-        meta.parent_id ||
-        meta.parentId ||
-        data.parent_id ||
-        data.parentId ||
-        properties.parent_id ||
-        properties.parentId ||
-        null;
-    const projectId =
-        meta.project_id ||
-        meta.projectId ||
-        data.project_id ||
-        data.projectId ||
-        properties.project_id ||
-        properties.projectId ||
-        snapshot.project_id ||
-        null;
-    const ownerId =
-        meta.owner_id ||
-        meta.ownerId ||
-        data.owner_id ||
-        data.ownerId ||
-        properties.owner_id ||
-        properties.ownerId ||
-        snapshot.created_by ||
-        null;
-
-    if (atomeType) patch.type = atomeType;
-    if (parentId) patch.parent_id = parentId;
-    if (projectId) patch.project_id = projectId;
-    if (ownerId) patch.owner_id = ownerId;
-
-    return { patch, projectId };
-}
-
-/**
- * Create a snapshot of an atome's current state
- */
-export async function createSnapshot(atomeId, createdBy = null) {
-    const atome = await getAtome(atomeId);
-    if (!atome) throw new Error('Atome not found');
-
-    const snapshotData = JSON.stringify(atome);
-    const now = new Date().toISOString();
-
-    await query('run', `
-		INSERT INTO snapshots (atome_id, snapshot_data, snapshot_type, created_by, created_at)
-		VALUES (?, ?, 'manual', ?, ?)
-	`, [atomeId, snapshotData, createdBy, now]);
-
-    // Get the auto-generated snapshot_id
-    const inserted = await query('get',
-        'SELECT snapshot_id FROM snapshots WHERE atome_id = ? ORDER BY created_at DESC LIMIT 1',
-        [atomeId]
-    );
-
-    return inserted?.snapshot_id;
-}
-
-/**
- * Get snapshots for an atome
- */
-export async function getSnapshots(atomeId, limit = 10) {
-    return await query('all', `
-		SELECT * FROM snapshots WHERE atome_id = ? ORDER BY created_at DESC LIMIT ?
-	`, [atomeId, limit]);
-}
-
-/**
- * Restore an atome from a snapshot
- */
-export async function restoreSnapshot(snapshotId, author = null, options = {}) {
-    const snap = await query('get',
-        'SELECT * FROM snapshots WHERE snapshot_id = ?',
-        [snapshotId]
-    );
-    if (!snap) throw new Error('Snapshot not found');
-
-    const data = parseSnapshotData(snap.snapshot_data);
-    const actor = resolveSnapshotRestoreActor(author, snap);
-    const txId = options.tx_id || options.txId || `legacy_snapshot_restore_${snapshotId}`;
-    const { patch, projectId } = buildSnapshotRestorePatch(snap, data);
-    await appendEvent({
-        kind: 'set',
-        atome_id: snap.atome_id,
-        project_id: projectId,
-        actor,
-        payload: {
-            props: patch
-        }
-    }, { txId });
-
-    return data;
-}
+export {
+    createSnapshot,
+    getSnapshots,
+    restoreSnapshot
+};
 
 // ============================================================================
 // EVENT LOG + STATE CURRENT (Projection)
@@ -1983,133 +1796,32 @@ export async function canCreate(atomeId, principalId, particleKey = null) {
 }
 
 // ============================================================================
-// SYNC STATE
+// SYNC STATE + SYNC QUEUE — owned by adole_sync.js (durable sync surface)
 // ============================================================================
 
-/**
- * Get sync state for an atome
- */
-export async function getSyncState(atomeId) {
-    return await query('get', 'SELECT * FROM sync_state WHERE atome_id = ?', [atomeId]);
-}
+const {
+    getSyncState,
+    updateSyncState,
+    enqueueSyncOperation,
+    listSyncQueue,
+    markSyncQueueSyncing,
+    markSyncQueueError,
+    markSyncQueueDone,
+    getPendingForSync,
+    markAsSynced
+} = createAdoleSyncApi({ getAtome });
 
-/**
- * Update sync state after successful sync
- */
-export async function updateSyncState(atomeId, localHash = null, remoteHash = null, syncStatus = 'synced') {
-    const now = new Date().toISOString();
-    await query('run', `
-		INSERT INTO sync_state (atome_id, local_hash, remote_hash, last_sync_at, sync_status)
-		VALUES (?, ?, ?, ?, ?)
-		ON CONFLICT(atome_id) DO UPDATE SET 
-			local_hash = ?, 
-			remote_hash = ?, 
-			last_sync_at = ?, 
-			sync_status = ?
-	`, [atomeId, localHash, remoteHash, now, syncStatus, localHash, remoteHash, now, syncStatus]);
-}
-
-// ============================================================================
-// SYNC QUEUE (durable)
-// ============================================================================
-
-export async function enqueueSyncOperation({ atome_id, operation, payload, target_server }) {
-    if (!target_server) return null;
-    const now = new Date().toISOString();
-    const payloadJson = serializeJson(payload);
-    const result = await query(
-        'run',
-        `INSERT INTO sync_queue (atome_id, operation, payload, target_server, status, attempts, max_attempts, created_at)
-         VALUES (?, ?, ?, ?, 'pending', 0, 5, ?)`,
-        [atome_id || null, operation || 'events:commit', payloadJson, target_server, now]
-    );
-    return result;
-}
-
-export async function listSyncQueue({ target_server, limit = 50 } = {}) {
-    const now = new Date().toISOString();
-    return await query(
-        'all',
-        `SELECT * FROM sync_queue
-         WHERE status IN ('pending', 'error')
-           AND (next_retry_at IS NULL OR next_retry_at <= ?)
-           AND (? IS NULL OR target_server = ?)
-         ORDER BY created_at ASC
-         LIMIT ?`,
-        [now, target_server || null, target_server || null, limit]
-    );
-}
-
-export async function markSyncQueueSyncing(queueId, attempts) {
-    const now = new Date().toISOString();
-    await query(
-        'run',
-        `UPDATE sync_queue
-         SET status = 'syncing', attempts = ?, last_attempt_at = ?
-         WHERE queue_id = ?`,
-        [attempts, now, queueId]
-    );
-}
-
-export async function markSyncQueueError(queueId, attempts, errorMessage, nextRetryAt, final = false) {
-    const status = final ? 'failed' : 'error';
-    await query(
-        'run',
-        `UPDATE sync_queue
-         SET status = ?, attempts = ?, error_message = ?, next_retry_at = ?
-         WHERE queue_id = ?`,
-        [status, attempts, errorMessage || null, nextRetryAt || null, queueId]
-    );
-}
-
-export async function markSyncQueueDone(queueId) {
-    await query('run', 'DELETE FROM sync_queue WHERE queue_id = ?', [queueId]);
-}
-
-/**
- * Get pending atomes for sync
- */
-export async function getPendingForSync(ownerId) {
-    const atomes = await query('all', `
-				SELECT DISTINCT a.*
-				FROM atomes a
-				LEFT JOIN particles po
-					ON po.atome_id = a.atome_id
-				 AND po.particle_key = '_pending_owner_id'
-				WHERE a.sync_status = 'pending'
-					AND a.deleted_at IS NULL
-					AND (
-						a.owner_id = ?
-						OR json_extract(po.particle_value, '$') = ?
-					)
-				ORDER BY a.updated_at ASC
-		`, [ownerId, ownerId]);
-
-    const result = [];
-    for (const atome of atomes) {
-        const fullAtome = await getAtome(atome.atome_id);
-        if (fullAtome) {
-            result.push({
-                ...fullAtome,
-                deleted: atome.deleted_at !== null
-            });
-        }
-    }
-    return result;
-}
-
-/**
- * Mark atomes as synced
- */
-export async function markAsSynced(atomeIds) {
-    const now = new Date().toISOString();
-    for (const id of atomeIds) {
-        await query('run',
-            'UPDATE atomes SET sync_status = ?, last_sync = ? WHERE atome_id = ?',
-            ['synced', now, id]
-        );
-    }
-}
+export {
+    getSyncState,
+    updateSyncState,
+    enqueueSyncOperation,
+    listSyncQueue,
+    markSyncQueueSyncing,
+    markSyncQueueError,
+    markSyncQueueDone,
+    getPendingForSync,
+    markAsSynced
+};
 
 // ============================================================================
 // LEGACY COMPATIBILITY (objects/properties API)
@@ -2141,7 +1853,7 @@ export const restorePropertyVersion = restoreParticleVersion;
  * Provides a dataSource.query() interface for raw SQL
  */
 export function getDataSourceAdapter() {
-    if (!db) {
+    if (!getDatabase()) {
         throw new Error('[ADOLE v3.0] Database not initialized. Call initDatabase() first.');
     }
 

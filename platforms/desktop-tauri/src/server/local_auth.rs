@@ -6,7 +6,7 @@
 // All operations via WebSocket messages, no HTTP routes
 // =============================================================================
 
-use bcrypt::{hash, verify, DEFAULT_COST};
+use bcrypt::{hash, verify};
 use chrono::{Duration, Utc};
 use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, Validation};
 use rusqlite::{Connection, OptionalExtension};
@@ -38,6 +38,7 @@ use super::local_atome::LocalAtomeState;
 const SQUIRREL_USER_NAMESPACE: Uuid = Uuid::from_bytes([
     0x6b, 0xa7, 0xb8, 0x10, 0x9d, 0xad, 0x11, 0xd1, 0x80, 0xb4, 0x00, 0xc0, 0x4f, 0xd4, 0x30, 0xc8,
 ]);
+const AUTH_BCRYPT_COST: u32 = 10;
 
 /// Default Fastify server URL for sync (port 3001 in dev mode)
 const DEFAULT_FASTIFY_URL: &str = "http://localhost:3001";
@@ -376,7 +377,7 @@ async fn handle_bootstrap(
         };
     }
 
-    let password_hash = match hash(password, DEFAULT_COST) {
+    let password_hash = match hash(password, AUTH_BCRYPT_COST) {
         Ok(h) => h,
         Err(e) => return error_response(request_id, &e.to_string()),
     };
@@ -499,7 +500,7 @@ async fn handle_register(
         .or_else(|| find_user_record_by_id(&db, &generate_user_id(&phone)));
 
     // Hash password
-    let password_hash = match hash(password, DEFAULT_COST) {
+    let password_hash = match hash(password, AUTH_BCRYPT_COST) {
         Ok(h) => h,
         Err(e) => return error_response(request_id, &e.to_string()),
     };
@@ -793,7 +794,7 @@ async fn handle_login(
     let (username, password_hash, created_at) = match get_user_particles(&db, &user_id) {
         Ok(p) => p,
         Err(_) => {
-            let repaired_hash = match hash(password, DEFAULT_COST) {
+            let repaired_hash = match hash(password, AUTH_BCRYPT_COST) {
                 Ok(h) => h,
                 Err(e) => return error_response(request_id, &e.to_string()),
             };
@@ -1111,7 +1112,7 @@ async fn handle_change_password(
     }
 
     // Hash new password
-    let new_hash = match hash(new_password, DEFAULT_COST) {
+    let new_hash = match hash(new_password, AUTH_BCRYPT_COST) {
         Ok(h) => h,
         Err(e) => return error_response(request_id, &e.to_string()),
     };

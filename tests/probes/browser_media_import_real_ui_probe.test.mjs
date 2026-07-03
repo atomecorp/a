@@ -8,6 +8,7 @@ import {
     waitFor,
     waitFrames
 } from './dashboard_workspace_stress/support.mjs';
+import { ensureProject } from './dashboard_workspace_stress/product_actions.mjs';
 
 const MEDIA_FILE = path.resolve('tests/fixtures/media/0000.png');
 const OUT_DIR = path.resolve('temp/probe_reports/browser_media_import_real_ui');
@@ -118,7 +119,10 @@ const run = async () => {
     });
     try {
         await waitForWorkspace(page);
-        const before = await closeDashboardAndVerifyClean(page);
+        await closeDashboardAndVerifyClean(page);
+        const project = await ensureProject(page, `browser media import real UI ${Date.now()}`);
+        if (!project?.ok) throw new Error(`browser_import_project_unavailable:${JSON.stringify(project)}`);
+        const before = await readScene(page);
         report.steps.push({ label: 'workspace_ready', projectId: before.projectId, recordCount: before.records.length, toolIds: before.toolIds });
         await page.evaluate(() => {
             try { window.showOpenFilePicker = undefined; } catch (_) { }

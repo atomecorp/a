@@ -100,6 +100,7 @@ test('Bevy project renderer guards lock canvas ownership, drag, and video playba
     assert.deepEqual(setBevyCallers, ['eVe/intuition/runtime/eve_intuition/media_reader_tool_runtime.js']);
 
     const webRenderer = readSource('eVe/domains/rendering/bevy_web_renderer_runtime.js');
+    const webRendererModuleLoader = readSource('eVe/domains/rendering/bevy_web_renderer_module_loader.js');
     const mediaResourceRuntime = readSource('eVe/domains/rendering/bevy_media_resource_runtime.js');
     const presentationRuntime = readSource('eVe/domains/rendering/bevy_web_presentation_runtime.js');
     const wasmDiagnosticsRuntime = readSource('eVe/domains/rendering/bevy_wasm_diagnostics_runtime.js');
@@ -108,8 +109,8 @@ test('Bevy project renderer guards lock canvas ownership, drag, and video playba
     assert.match(webRenderer, /opsNeedPresentationRedrawPrime/);
     assert.match(webRenderer, /createBevyMediaResourceRuntime/);
     assert.match(webRenderer, /attachBevyWasmDiagnosticsReaders/);
-    assert.match(webRenderer, /BEVY_WASM_MODULE_PATH = '\/wasm\/squirrel_bevy_renderer\.js'/);
-    assert.match(webRenderer, /BEVY_WASM_BINARY_PATH = '\/wasm\/squirrel_bevy_renderer_bg\.wasm'/);
+    assert.match(webRendererModuleLoader, /BEVY_WASM_MODULE_PATH = '\/wasm\/squirrel_bevy_renderer\.js'/);
+    assert.match(webRendererModuleLoader, /BEVY_WASM_BINARY_PATH = '\/wasm\/squirrel_bevy_renderer_bg\.wasm'/);
     assert.match(mediaResourceRuntime, /createBrowserBevyMediaTextureResolver/);
     assert.match(mediaResourceRuntime, /resumeDeferredTextureQueue/);
     assert.match(presentationRuntime, /requestBevyPresentationRedraw/);

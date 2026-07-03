@@ -16,7 +16,7 @@ const tauriBootstrap = sliceBetween(localAuth, 'async fn handle_bootstrap', 'asy
 const tauriExistingBranch = sliceBetween(
     tauriBootstrap,
     'if let Some((existing_id, existing_type, deleted_at)) = existing_user',
-    'let password_hash = match hash(password, DEFAULT_COST)'
+    'let password_hash = match hash(password, AUTH_BCRYPT_COST)'
 );
 assert.match(tauriExistingBranch, /get_user_particles\(&db, &existing_id\)/, 'Tauri bootstrap must read the stored password hash for an existing phone');
 assert.match(tauriExistingBranch, /verify\(password, &password_hash\)/, 'Tauri bootstrap must verify the submitted password for an existing phone');
@@ -49,6 +49,14 @@ const lookupPhoneMethod = sliceBetween(sessionAccountMethods, 'async lookupPhone
 assert.match(lookupPhoneMethod, /const backend = getPrimaryBackend\(\)/, 'Unified lookupPhone must resolve the active auth backend');
 assert.match(lookupPhoneMethod, /const adapter = adapters\[backend\]/, 'Unified lookupPhone must use the active adapter map');
 assert.doesNotMatch(lookupPhoneMethod, /FastifyAdapter\.auth\.lookupPhone/, 'Unified lookupPhone must not force Fastify when Tauri is active');
+assert.match(sessionAccountMethods, /import \{[^}]*loginBackend[^}]*bootstrapBackend/s, 'Session account methods must keep loginBackend available for authenticated auto-login while anonymous entry uses bootstrap');
+const anonymousEnsureMethod = sliceBetween(sessionAccountMethods, 'async ensureAnonymousUser', 'async lookupPhone');
+assert.match(anonymousEnsureMethod, /bootstrapBackend\(backend/, 'Anonymous workspace entry must use the atomic bootstrap backend flow');
+assert.doesNotMatch(anonymousEnsureMethod, /loginBackend\(backend/, 'Anonymous workspace entry must not split bootstrap into a separate login request');
+assert.doesNotMatch(anonymousEnsureMethod, /registerBackend\(backend/, 'Anonymous workspace entry must not split bootstrap into a separate register request');
+assert.match(anonymousEnsureMethod, /bootstrapResult\.error === 'Invalid credentials'[\s\S]*createAnonymousCredentials\(\)/, 'Anonymous workspace entry must rotate invalid persisted anonymous credentials explicitly');
+assert.match(localAuth, /const AUTH_BCRYPT_COST: u32 = 10;/, 'Tauri local auth bcrypt cost must match the Fastify auth cost so local bootstrap fits the workspace-open budget');
+assert.doesNotMatch(localAuth, /DEFAULT_COST/, 'Tauri local auth must not use bcrypt DEFAULT_COST because it is slower than the Fastify contract');
 
 const adoleApis = readSource('atome/src/squirrel/apis/unified/adole_apis.js');
 assert.match(adoleApis, /bootstrap: auth\.bootstrap/, 'AdoleAPI.auth must expose bootstrap');

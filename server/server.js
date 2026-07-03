@@ -3,6 +3,7 @@ import fastify from 'fastify';
 import fastifyStatic from '@fastify/static';
 import fastifyWebsocket from '@fastify/websocket';
 import fastifyCors from '@fastify/cors';
+import fastifyCompress from '@fastify/compress';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { promises as fs, createReadStream, createWriteStream, readFileSync, existsSync, mkdirSync, watchFile } from 'fs';
@@ -66,21 +67,20 @@ import {
   registerAtomeRoutes,
   syncAtomeViaWebSocket
 } from './atomeRoutes.orm.js';
-import { registerSharingRoutes, handleShareMessage } from './sharing.js';
+import { registerSharingRoutes, handleShareMessage } from './sharing_message_api.js';
 import { buildUserExportZip, inspectUserExportZip, importUserExportZip } from './userExportImport.js';
 import { registerMailRoutes } from './mailRoutes.js';
 import {
-  initUserFiles,
   registerFileUpload,
   getFileMetadata,
   getUserFiles,
   getAccessibleFiles,
   canAccessFile,
-  shareFile,
-  unshareFile,
   setFilePublic,
   getFileStats
 } from './userFiles.js';
+import { shareFile, unshareFile } from './user_files_sharing.js';
+import { initUserFiles } from './user_files_message_api.js';
 import {
   startPolling as startGitHubPolling,
   stopPolling as stopGitHubPolling,
@@ -120,6 +120,12 @@ import {
   ensureSharedFileLink,
   removeSharedFileLink
 } from './fileStorage.js';
+import { lowerFileExtension, replaceFileExtension, shouldServeWebmVideoAsMp4, resolveVideoCacheTarget, transcodeVideoToMp4, ensureVideoPlaybackCache, resolveVideoPlaybackTarget } from './server_media.js';
+import { sanitizeUploadId, coerceWsChunkSize, looksLikeRecordingName, looksLikeRecordingType, getAdminSecret, isAdminPasswordValid, getAdminPasswordFromRequest, resolveUserId, pickDisplayName } from './server_utils.js';
+import { SERVER_VERSION, EVE_VERSION, loadServerVersion, loadEveVersion, refreshVersionCache, startVersionWatchers } from './server_version.js';
+import { logger, logStructured, setLogServer, MINIMAL_LOGS } from './server_logger.js';
+import { recentErrors, recordRecentError, isDuplicateWsRequest, isDuplicateAtomeCreate } from './server_dedup.js';
+import { uploadsDir, resolveUploadsDir, listUserDownloadsSnapshot, listAnonymousUploads, listUserDownloads, listUploadsForUser, resolveDownloadTarget } from './server_uploads.js';
 
 // Database imports - Using SQLite/libSQL (ADOLE data layer)
 import db from '../database/adole.js';
@@ -135,7 +141,6 @@ const atomeStaticRoot = path.join(projectRoot, 'atome');
 const eveStaticRoot = path.join(projectRoot, 'eVe');
 const SERVER_CONFIG_FILE = path.join(projectRoot, 'server_config.json');
 const LOG_DIR = path.join(projectRoot, 'logs');
-const FASTIFY_LOG_FILE = path.join(LOG_DIR, 'fastify.log');
 const UPLOADS_TMP_DIR = path.join(projectRoot, 'data', 'uploads_tmp');
 const BROWSER_LOG_FILE = path.join(LOG_DIR, 'browser.log');
 const RANDOM_WALLPAPER_URL = 'https://picsum.photos/1920/1080';
@@ -289,671 +294,9 @@ try {
   console.warn('WARN: Unable to prepare log directories:', error?.message || error);
 }
 
-async function listUserDownloadsSnapshot(userId) {
-  if (!userId) {
-    return { ok: false, error: 'Missing userId', downloadsDir: null, files: [] };
-  }
-
-  try {
-    const { downloadsDir } = await ensureUserDownloadsDir(projectRoot, { id: userId });
-    const entries = await fs.readdir(downloadsDir, { withFileTypes: true });
-    const files = [];
-    for (const entry of entries.slice(0, 50)) {
-      const name = entry.name;
-      if (!name) continue;
-      if (entry.isFile()) {
-        let size = null;
-        try {
-          const stats = await fs.stat(path.join(downloadsDir, name));
-          size = stats?.size ?? null;
-        } catch (error) {
-          console.warn('[Downloads] unable to stat entry', { name, error: error?.message || String(error) });
-        }
-        files.push({ name, size });
-      } else if (entry.isDirectory()) {
-        files.push({ name: `${name}/`, size: null });
-      }
-    }
-    return { ok: true, downloadsDir, files };
-  } catch (error) {
-    return {
-      ok: false,
-      error: error?.message || String(error),
-      downloadsDir: null,
-      files: []
-    };
-  }
-}
-const uploadsDir = (() => {
-  try {
-    return resolveUploadsDir();
-  } catch (error) {
-    const message = error?.message || error;
-    console.warn('⚠️ Unable to resolve uploads directory:', message);
-    return null;
-  }
-})();
-const VERSION_FILE = path.join(projectRoot, 'version.txt');
-const EVE_VERSION_FILE = path.join(eveStaticRoot, 'version.txt');
-const VERSION_FILE_WATCH_INTERVAL_MS = 1500;
-let SERVER_VERSION = 'unknown';
-let EVE_VERSION = 'unknown';
-let versionWatchersStarted = false;
 const SERVER_TYPE = 'Fastify';
 const getSyncEventBus = () => getABoxEventBus();
 let fileSyncWatcherHandle = null;
-const recentErrors = [];
-const MAX_RECENT_ERRORS = 100;
-const WS_FILE_CHUNK_DEFAULT = 256 * 1024;
-const WS_FILE_CHUNK_MAX = 1024 * 1024;
-const WS_FILE_CHUNK_MIN = 8 * 1024;
-
-function recordRecentError(payload) {
-  if (!payload) return;
-  recentErrors.push(payload);
-  if (recentErrors.length > MAX_RECENT_ERRORS) {
-    recentErrors.splice(0, recentErrors.length - MAX_RECENT_ERRORS);
-  }
-}
-
-function sanitizeUploadId(raw) {
-  const value = String(raw || '').trim();
-  if (!value) return null;
-  if (!/^[a-zA-Z0-9_-]+$/.test(value)) return null;
-  return value;
-}
-
-function coerceWsChunkSize(raw) {
-  const parsed = Number(raw);
-  if (!Number.isFinite(parsed) || parsed <= 0) return WS_FILE_CHUNK_DEFAULT;
-  if (parsed < WS_FILE_CHUNK_MIN) return WS_FILE_CHUNK_MIN;
-  return Math.min(parsed, WS_FILE_CHUNK_MAX);
-}
-
-const RECORDING_NAME_PREFIXES = [
-  'audio_',
-  'video_',
-  'recording_',
-  'audio_recording_',
-  'video_recording_'
-];
-const RECORDING_ATOME_TYPES = new Set(['audio_recording', 'video_recording']);
-const WS_DEDUPE_TTL_MS = 3000;
-const WS_ATOME_CREATE_DEDUPE_MS = 2000;
-const wsRecentRequestIds = new WeakMap();
-const wsRecentAtomeCreates = new Map();
-
-function looksLikeRecordingName(name) {
-  const raw = typeof name === 'string' ? name.trim().toLowerCase() : '';
-  if (!raw) return false;
-  return RECORDING_NAME_PREFIXES.some((prefix) => raw.startsWith(prefix));
-}
-
-function looksLikeRecordingType(atomeType) {
-  const type = typeof atomeType === 'string' ? atomeType.trim().toLowerCase() : '';
-  return type && RECORDING_ATOME_TYPES.has(type);
-}
-
-function logStructured(level, { source = 'fastify', component = 'server', request_id = null, session_id = null, message = '', data = null } = {}) {
-  const payload = {
-    source,
-    component,
-    request_id,
-    session_id,
-    app_version: SERVER_VERSION,
-    eve_version: EVE_VERSION,
-    data
-  };
-  if (typeof server?.log?.[level] === 'function') {
-    server.log[level](payload, message);
-  } else {
-    const logLine = { ...payload, level, timestamp: new Date().toISOString(), message };
-    process.stdout.write(`${JSON.stringify(logLine)}\n`);
-  }
-}
-
-function isDuplicateWsRequest(connection, requestId) {
-  if (!connection || !requestId) return false;
-  const now = Date.now();
-  let cache = wsRecentRequestIds.get(connection);
-  if (!cache) {
-    cache = new Map();
-    wsRecentRequestIds.set(connection, cache);
-  }
-  const last = cache.get(requestId);
-  if (last && now - last < WS_DEDUPE_TTL_MS) return true;
-  cache.set(requestId, now);
-  if (cache.size > 200) {
-    for (const [id, ts] of cache) {
-      if (now - ts > WS_DEDUPE_TTL_MS) cache.delete(id);
-    }
-  }
-  return false;
-}
-
-function isDuplicateAtomeCreate(atomeId) {
-  if (!atomeId) return false;
-  const now = Date.now();
-  const last = wsRecentAtomeCreates.get(atomeId);
-  if (last && now - last < WS_ATOME_CREATE_DEDUPE_MS) return true;
-  wsRecentAtomeCreates.set(atomeId, now);
-  if (wsRecentAtomeCreates.size > 2000) {
-    for (const [id, ts] of wsRecentAtomeCreates) {
-      if (now - ts > WS_ATOME_CREATE_DEDUPE_MS * 2) {
-        wsRecentAtomeCreates.delete(id);
-      }
-    }
-  }
-  return false;
-}
-
-async function loadVersionFile(filePath, label) {
-  try {
-    const raw = await fs.readFile(filePath, 'utf8');
-    const trimmed = raw.trim();
-    return trimmed || 'unknown';
-  } catch (error) {
-    const details = error && typeof error === 'object' && 'message' in error
-      ? error.message
-      : String(error);
-    console.warn(`[Version] Failed to read ${label}:`, details);
-    return 'unknown';
-  }
-}
-
-async function loadServerVersion() {
-  return loadVersionFile(VERSION_FILE, 'version.txt');
-}
-
-async function loadEveVersion() {
-  return loadVersionFile(EVE_VERSION_FILE, 'eVe/version.txt');
-}
-
-async function refreshVersionCache() {
-  const [nextServerVersion, nextEveVersion] = await Promise.all([
-    loadServerVersion(),
-    loadEveVersion()
-  ]);
-  const changed = nextServerVersion !== SERVER_VERSION || nextEveVersion !== EVE_VERSION;
-  SERVER_VERSION = nextServerVersion;
-  EVE_VERSION = nextEveVersion;
-  if (changed) {
-    console.info(`[Version] Runtime versions updated: Atome ${SERVER_VERSION}, eVe ${EVE_VERSION}`);
-  }
-  return {
-    atomeVersion: SERVER_VERSION,
-    eveVersion: EVE_VERSION
-  };
-}
-
-function startVersionWatchers() {
-  if (versionWatchersStarted) return;
-  versionWatchersStarted = true;
-  const refresh = () => {
-    void refreshVersionCache().catch(() => null);
-  };
-  const watch = (filePath) => {
-    watchFile(filePath, { interval: VERSION_FILE_WATCH_INTERVAL_MS }, (current, previous) => {
-      if (!current || !previous) {
-        refresh();
-        return;
-      }
-      if (current.mtimeMs !== previous.mtimeMs || current.size !== previous.size) {
-        refresh();
-      }
-    });
-  };
-
-  watch(VERSION_FILE);
-  watch(EVE_VERSION_FILE);
-}
-
-function resolveUploadsDir() {
-  const customDir = typeof process.env.SQUIRREL_UPLOADS_DIR === 'string'
-    ? process.env.SQUIRREL_UPLOADS_DIR.trim()
-    : '';
-
-  if (!customDir) {
-    return null;
-  }
-
-  const absolute = path.isAbsolute(customDir)
-    ? customDir
-    : path.join(projectRoot, customDir);
-  return path.resolve(absolute);
-}
-
-async function listAnonymousUploads() {
-  if (!uploadsDir) return [];
-  const entries = await fs.readdir(uploadsDir, { withFileTypes: true });
-  const files = [];
-
-  for (const entry of entries) {
-    if (!entry.isFile()) continue;
-    const safeName = sanitizeFileName(entry.name);
-    const absolutePath = path.join(uploadsDir, safeName);
-    try {
-      const stats = await fs.stat(absolutePath);
-      files.push({
-        name: safeName,
-        size: stats.size,
-        modified: stats.mtime.toISOString(),
-        origin: 'previous'
-      });
-    } catch (error) {
-      console.warn('⚠️ Impossible de lire les métadonnées pour', absolutePath, error);
-    }
-  }
-
-  files.sort((a, b) => b.modified.localeCompare(a.modified));
-  return files;
-}
-
-function resolveUserId(user) {
-  const direct = user?.id || user?.userId || user?.user_id || user?.sub;
-  if (direct !== undefined && direct !== null) {
-    const text = String(direct).trim();
-    if (text) return text;
-  }
-
-  const phone = user?.phone || user?.user_phone || user?.userPhone;
-  if (phone !== undefined && phone !== null) {
-    const text = String(phone).trim();
-    if (text) return generateDeterministicUserId(text);
-  }
-
-  const logLine = user?.username || user?.name;
-  if (logLine !== undefined && logLine !== null) {
-    const text = String(logLine).trim();
-    if (text) return text;
-  }
-
-  return 'anonymous';
-}
-
-function getAdminSecret() {
-  return process.env.EVE_ADMIN_PASSWORD
-    || process.env.SQUIRREL_ADMIN_PASSWORD
-    || '';
-}
-
-function isAdminPasswordValid(value) {
-  const secret = getAdminSecret();
-  if (!secret || !value) return false;
-  const secretBuf = Buffer.from(String(secret));
-  const valueBuf = Buffer.from(String(value));
-  if (secretBuf.length !== valueBuf.length) return false;
-  return crypto.timingSafeEqual(secretBuf, valueBuf);
-}
-
-function getAdminPasswordFromRequest(request) {
-  const header = request.headers?.['x-admin-password'];
-  if (Array.isArray(header)) return header[0];
-  if (typeof header === 'string') return header;
-  return request.body?.admin_password || request.body?.adminPassword || null;
-}
-
-function pickDisplayName(file, safeRequestedName) {
-  if (typeof file?.original_name === 'string' && file.original_name.trim()) {
-    return file.original_name;
-  }
-  if (typeof file?.file_name === 'string' && file.file_name.trim()) {
-    return file.file_name;
-  }
-  if (typeof file?.name === 'string' && file.name.trim()) {
-    return file.name;
-  }
-  return safeRequestedName;
-}
-
-async function listUserDownloads(userId) {
-  const { downloadsDir } = await ensureUserDownloadsDir(projectRoot, { id: userId });
-  const entries = await fs.readdir(downloadsDir, { withFileTypes: true });
-  const files = [];
-
-  for (const entry of entries) {
-    if (!entry.isFile()) continue;
-    const safeName = sanitizeFileName(entry.name);
-    const absolutePath = path.join(downloadsDir, safeName);
-    try {
-      const stats = await fs.stat(absolutePath);
-      files.push({
-        name: safeName,
-        file_name: safeName,
-        size: stats.size,
-        modified: stats.mtime.toISOString(),
-        owner_id: userId,
-        access: 'owner',
-        shared: false
-      });
-    } catch (error) {
-      console.warn('⚠️ Impossible de lire les métadonnées pour', absolutePath, error);
-    }
-  }
-
-  files.sort((a, b) => b.modified.localeCompare(a.modified));
-  return files;
-}
-
-async function listUploadsForUser(userId) {
-  if (!DATABASE_ENABLED) {
-    return listUserDownloads(userId);
-  }
-
-  const accessible = await getAccessibleFiles(userId);
-  const files = [];
-
-  for (const entry of (accessible || [])) {
-    const ownerId = entry.owner_id || userId;
-    const safeName = typeof entry.file_name === 'string' && entry.file_name.trim()
-      ? entry.file_name
-      : sanitizeFileName(entry.original_name || entry.name || 'upload.bin');
-    let stats = null;
-    const rawPath = entry.file_path || entry.filePath || null;
-    if (rawPath) {
-      const normalizedRelative = normalizeUserRelativePath(rawPath, ownerId);
-      if (normalizedRelative) {
-        const resolved = await resolveUserAssetPath(
-          projectRoot,
-          { id: ownerId },
-          normalizedRelative
-        );
-        stats = await fs.stat(resolved.filePath);
-      }
-    }
-
-    if (!stats) {
-      const filePath = await resolveUserFilePath(projectRoot, ownerId, safeName);
-      stats = await fs.stat(filePath);
-    }
-
-    const parsedSize = typeof entry.size === 'number' ? entry.size : Number(entry.size);
-    files.push({
-      id: entry.atome_id,
-      name: pickDisplayName(entry, safeName),
-      file_name: safeName,
-      size: Number.isFinite(parsedSize) ? parsedSize : (stats?.size || 0),
-      modified: stats?.mtime?.toISOString() || entry.updated_at || entry.created_at || null,
-      owner_id: ownerId,
-      access: entry.access || (ownerId === userId ? 'owner' : 'read'),
-      shared: ownerId !== userId
-    });
-  }
-
-  if (userId === 'anonymous') {
-    const previous = await listAnonymousUploads();
-    const mapped = previous.map((file) => ({
-      id: null,
-      name: file.name,
-      file_name: file.name,
-      size: file.size || 0,
-      modified: file.modified || null,
-      owner_id: userId,
-      access: 'owner',
-      shared: false,
-      previous: true
-    }));
-    files.push(...mapped);
-  }
-
-  const toTimestamp = (value) => {
-    if (!value) return 0;
-    const parsed = Date.parse(value);
-    return Number.isNaN(parsed) ? 0 : parsed;
-  };
-  files.sort((a, b) => toTimestamp(b.modified) - toTimestamp(a.modified));
-  return files;
-}
-
-async function resolveDownloadTarget(fileParam, userId) {
-  const raw = typeof fileParam === 'string' ? fileParam : String(fileParam || '');
-  const safeParam = raw.trim();
-
-  const resolveLegacyOwnerlessTarget = async () => {
-    if (!DATABASE_ENABLED || !safeParam || userId !== 'anonymous') return null;
-    try {
-      const rows = await db.query('all', `
-        SELECT a.atome_id, a.atome_type, a.owner_id, a.created_at, a.updated_at
-        FROM atomes a
-        JOIN particles p ON a.atome_id = p.atome_id
-        WHERE p.particle_key IN ('file_name', 'original_name')
-          AND p.particle_value = ?
-          AND a.deleted_at IS NULL
-        ORDER BY COALESCE(a.updated_at, a.created_at) DESC
-        LIMIT 12
-      `, [JSON.stringify(safeParam)]);
-      for (const row of (rows || [])) {
-        const particles = await db.query('all', `
-          SELECT particle_key, particle_value FROM particles WHERE atome_id = ?
-        `, [row.atome_id]);
-        const meta = {
-          atome_id: row.atome_id,
-          atome_type: row.atome_type,
-          owner_id: row.owner_id,
-          created_at: row.created_at,
-          updated_at: row.updated_at
-        };
-        for (const particle of (particles || [])) {
-          try {
-            meta[particle.particle_key] = JSON.parse(particle.particle_value);
-          } catch (_) {
-            meta[particle.particle_key] = particle.particle_value;
-          }
-        }
-        const safeName = typeof meta.file_name === 'string' && meta.file_name.trim()
-          ? meta.file_name
-          : sanitizeFileName(meta.original_name || safeParam);
-        const downloadName = typeof meta.original_name === 'string' && meta.original_name.trim()
-          ? meta.original_name
-          : safeName;
-        const rawPath = meta.file_path || meta.filePath || null;
-        try {
-          if (rawPath) {
-            const normalizedRelative = normalizeUserRelativePath(rawPath, meta.owner_id || userId);
-            if (normalizedRelative) {
-              const resolved = await resolveUserAssetPath(
-                projectRoot,
-                { id: meta.owner_id || userId },
-                normalizedRelative
-              );
-              await fs.access(resolved.filePath);
-              return { filePath: resolved.filePath, downloadName, meta };
-            }
-          }
-          const filePath = await resolveUserFilePath(projectRoot, meta.owner_id || userId, safeName);
-          await fs.access(filePath);
-          return { filePath, downloadName, meta };
-        } catch (_) {
-          // Try the next legacy metadata candidate.
-        }
-      }
-    } catch (error) {
-      console.warn('[Uploads] Legacy ownerless media fallback failed', {
-        userId,
-        fileParam: safeParam,
-        error: error?.message || String(error || '')
-      });
-    }
-    return null;
-  };
-
-  if (DATABASE_ENABLED && safeParam) {
-    let meta = await getFileMetadata(safeParam);
-    if (meta && meta.atome_id !== safeParam) {
-      meta = null;
-    }
-
-    if (!meta) {
-      meta = await getFileMetadata(safeParam, { userId });
-    }
-
-    if (meta) {
-      const canRead = await canAccessFile(meta.atome_id, userId);
-      if (!canRead) {
-        console.warn('[Uploads] Access denied', {
-          userId,
-          fileParam: safeParam,
-          atomeId: meta.atome_id,
-          ownerId: meta.owner_id,
-          fileName: meta.file_name || meta.original_name || null
-        });
-        return { error: 'Access denied', status: 403 };
-      }
-      const safeName = typeof meta.file_name === 'string' && meta.file_name.trim()
-        ? meta.file_name
-        : sanitizeFileName(meta.original_name || safeParam);
-      const downloadName = typeof meta.original_name === 'string' && meta.original_name.trim()
-        ? meta.original_name
-        : safeName;
-      const rawPath = meta.file_path || meta.filePath || null;
-      if (rawPath) {
-        const normalizedRelative = normalizeUserRelativePath(rawPath, meta.owner_id || userId);
-        if (normalizedRelative) {
-          const resolved = await resolveUserAssetPath(
-            projectRoot,
-            { id: meta.owner_id || userId },
-            normalizedRelative
-          );
-          await fs.access(resolved.filePath);
-          return { filePath: resolved.filePath, downloadName, meta };
-        }
-      }
-
-      const filePath = await resolveUserFilePath(projectRoot, meta.owner_id || userId, safeName);
-      await fs.access(filePath);
-      return { filePath, downloadName, meta };
-    }
-  }
-
-  const legacyTarget = await resolveLegacyOwnerlessTarget();
-  if (legacyTarget?.filePath) return legacyTarget;
-
-  const safeRequestedName = sanitizeFileName(safeParam);
-  const userPath = await resolveUserFilePath(projectRoot, userId, safeRequestedName);
-  try {
-    await fs.access(userPath);
-    return { filePath: userPath, downloadName: safeRequestedName, meta: null };
-  } catch (error) {
-    const fallbackRoots = ['recordings', 'captures'];
-    for (const rootName of fallbackRoots) {
-      try {
-        const target = await resolveUserAssetPath(
-          projectRoot,
-          { id: userId },
-          path.join(rootName, safeRequestedName)
-        );
-        await fs.access(target.filePath);
-        return { filePath: target.filePath, downloadName: safeRequestedName, meta: null };
-      } catch (_) {
-        // Try the next media storage root.
-      }
-    }
-    throw error;
-  }
-
-  return null;
-}
-
-function lowerFileExtension(fileName) {
-  return path.extname(String(fileName || '')).replace(/^\./, '').trim().toLowerCase();
-}
-
-function replaceFileExtension(fileName, extension) {
-  const cleanExtension = String(extension || '').trim().replace(/^\./, '');
-  const stem = path.basename(String(fileName || ''), path.extname(String(fileName || '')));
-  return sanitizeFileName(`${stem}.${cleanExtension}`);
-}
-
-function shouldServeWebmVideoAsMp4(fileName, mimeType = '') {
-  const lowerName = String(fileName || '').trim().toLowerCase();
-  const lowerMime = String(mimeType || '').trim().toLowerCase();
-  return lowerFileExtension(fileName) === 'webm'
-    && !lowerName.startsWith('audio_')
-    && !lowerName.startsWith('audio_recording_')
-    && !lowerMime.startsWith('audio/');
-}
-
-function resolveVideoCacheTarget(sourcePath, fileName) {
-  const parent = path.dirname(sourcePath);
-  const cacheDir = path.join(parent, '.video_cache');
-  const cachedName = replaceFileExtension(fileName, 'mp4');
-  return {
-    cacheDir,
-    cachedName,
-    cachedPath: path.join(cacheDir, cachedName)
-  };
-}
-
-async function transcodeVideoToMp4(sourcePath, outputPath) {
-  await fs.mkdir(path.dirname(outputPath), { recursive: true });
-  await new Promise((resolve, reject) => {
-    execFile('ffmpeg', [
-      '-y',
-      '-hide_banner',
-      '-loglevel',
-      'error',
-      '-i',
-      sourcePath,
-      '-map',
-      '0:v:0',
-      '-map',
-      '0:a?',
-      '-c:v',
-      'libx264',
-      '-pix_fmt',
-      'yuv420p',
-      '-profile:v',
-      'baseline',
-      '-level',
-      '3.1',
-      '-movflags',
-      '+faststart',
-      '-c:a',
-      'aac',
-      '-b:a',
-      '128k',
-      outputPath
-    ], { timeout: 120000 }, (error, _stdout, stderr) => {
-      if (error) {
-        const message = String(stderr || error.message || 'ffmpeg exited without details').trim();
-        reject(new Error(`recording_transcode_failed: ${message}`));
-        return;
-      }
-      resolve();
-    });
-  });
-}
-
-async function ensureVideoPlaybackCache(sourcePath, fileName, mimeType = '') {
-  if (!shouldServeWebmVideoAsMp4(fileName, mimeType)) return null;
-  const target = resolveVideoCacheTarget(sourcePath, fileName);
-  try {
-    await fs.access(target.cachedPath);
-  } catch (_) {
-    await transcodeVideoToMp4(sourcePath, target.cachedPath);
-  }
-  return target;
-}
-
-async function resolveVideoPlaybackTarget(target) {
-  const sourcePath = target.filePath;
-  const sourceName = path.basename(sourcePath);
-  const downloadName = target.downloadName || sourceName;
-  const sourceMimeType = target.meta?.mime_type || '';
-  const cache = await ensureVideoPlaybackCache(sourcePath, sourceName, sourceMimeType);
-  if (!cache) {
-    return {
-      filePath: sourcePath,
-      downloadName,
-      mimeType: null
-    };
-  }
-  return {
-    filePath: cache.cachedPath,
-    downloadName: cache.cachedName,
-    mimeType: 'video/mp4'
-  };
-}
 
 // HTTPS Configuration
 let httpsOptions = null;
@@ -1005,30 +348,6 @@ if (process.env.USE_HTTPS === 'true') {
   }
 }
 
-const logLevel = process.env.LOG_LEVEL || 'info';
-const MINIMAL_LOGS =
-  process.env.SQUIRREL_MINIMAL_LOGS !== '0'
-  && process.env.SQUIRREL_MINIMAL_LOGS !== 'false';
-const logStreams = pino.multistream([
-  { stream: process.stdout },
-  { stream: pino.destination({ dest: FASTIFY_LOG_FILE, sync: false }) }
-]);
-
-const logger = pino(
-  {
-    level: logLevel,
-    messageKey: 'message',
-    timestamp: () => `,"timestamp":"${new Date().toISOString()}"`,
-    formatters: {
-      level(label) {
-        return { level: label };
-      }
-    },
-    base: { source: 'fastify', component: 'http' }
-  },
-  logStreams
-);
-
 // Créer l'instance Fastify
 const server = fastify({
   https: httpsOptions,
@@ -1042,6 +361,7 @@ const server = fastify({
   },
   requestIdLogLabel: 'request_id'
 });
+setLogServer(server);
 
 const PORT = process.env.PORT || 3001;
 const HOST = process.env.HOST || (process.env.NODE_ENV === 'production' ? '127.0.0.1' : '0.0.0.0');
@@ -1101,6 +421,16 @@ async function startServer() {
       exposedHeaders: ['X-Request-Id'],
       maxAge: 86400,
       strictPreflight: false
+    });
+
+    // Compress dynamic responses (JSON API, etc.). Static assets are already
+    // shipped pre-compressed by @fastify/static (preCompressed), so the 1 KB
+    // threshold keeps small payloads untouched and only large dynamic bodies
+    // are encoded. Brotli preferred, gzip fallback.
+    await server.register(fastifyCompress, {
+      global: true,
+      threshold: 1024,
+      encodings: ['br', 'gzip']
     });
 
     server.addHook('onSend', async (request, reply, payload) => {
@@ -2530,7 +1860,6 @@ async function startServer() {
         return { success: false, error: error?.message || 'Audio extraction failed' };
       }
     });
-
 
     // ===========================
     // 3. DATABASE API ROUTES (ADOLE v3.0)

@@ -1,0 +1,38 @@
+{
+  "suite_name": "phase9_mcp_runtime_alignment",
+  "generated_at": "2026-07-02T07:27:44.828Z",
+  "passed": true,
+  "total": 4,
+  "passed_count": 4,
+  "failed_count": 0,
+  "tests": [
+    {
+      "test": "tests/atome/src/squirrel/atome/mcp.runtime_bridge.test.mjs",
+      "ok": true,
+      "status": 0,
+      "stdout": "mcp.runtime_bridge.test: PASS",
+      "stderr": ""
+    },
+    {
+      "test": "tests/atome/src/squirrel/atome/mcp.platform_surface.test.mjs",
+      "ok": true,
+      "status": 0,
+      "stdout": "mcp.platform_surface.test: PASS",
+      "stderr": ""
+    },
+    {
+      "test": "tests/atome/src/squirrel/atome/mcp.security_surface.test.mjs",
+      "ok": true,
+      "status": 0,
+      "stdout": "mcp.security_surface.test: PASS",
+      "stderr": ""
+    },
+    {
+      "test": "tests/atome/src/squirrel/ai/default_tools.runtime_bridge.test.mjs",
+      "ok": true,
+      "status": 0,
+      "stdout": "default_tools.runtime_bridge.test: PASS",
+      "stderr": ""
+    }
+  ]
+}

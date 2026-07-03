@@ -258,24 +258,25 @@ export const clickCanvasRect = async (page, rect) => {
 export const enterGuestWorkspace = async (page) => {
     await page.goto(APP_URL, { timeout: 45000 });
     await page.waitForFunction(() => !!window.__DEBUG__ || !!window.new_menu_v2 || !!document.getElementById('intuition'), null, { timeout: 45000 });
-    const readyBefore = await waitFor(page, async () => {
+    const workspaceReadyPredicate = async () => {
         const current = await window.AdoleAPI?.auth?.current?.().catch(() => null);
-        return { ok: current?.logged === true && !!window.__currentProject?.id && !!document.getElementById('eve_surface_project') };
-    }, 2000, 100);
+        const projectId = window.__currentProject?.id || null;
+        const dashboard = window.eveDashboardRuntime?.state || {};
+        const dashboardActive = dashboard.active === true && String(dashboard.projectId || '') === '__eve_dashboard_workspace__';
+        return {
+            ok: current?.logged === true && !!document.getElementById('eve_surface_project') && (!!projectId || dashboardActive),
+            projectId,
+            dashboardActive,
+            anonymous: window.AdoleAPI?.security?.isAnonymous?.() ?? null
+        };
+    };
+    const readyBefore = await waitFor(page, workspaceReadyPredicate, 2000, 100);
     if (!readyBefore.ok) {
         const choice = page.locator('#eve_login_sequence__choice_without_account').first();
         await choice.waitFor({ state: 'visible', timeout: 30000 });
         await choice.click({ timeout: 10000 });
     }
-    const ready = await waitFor(page, async () => {
-        const api = window.AdoleAPI || null;
-        const current = await api?.auth?.current?.().catch(() => null);
-        return {
-            ok: current?.logged === true && !!window.__currentProject?.id && !!document.getElementById('eve_surface_project'),
-            projectId: window.__currentProject?.id || null,
-            anonymous: api?.security?.isAnonymous?.() ?? null
-        };
-    }, 60000, 150);
+    const ready = await waitFor(page, workspaceReadyPredicate, 60000, 150);
     if (!ready.ok) throw new Error(`workspace_not_ready:${JSON.stringify(ready.last)}`);
     return ready.last;
 };
