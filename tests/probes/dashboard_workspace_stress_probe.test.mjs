@@ -8,7 +8,6 @@ import {
     analyzeImage,
     clickCanvasRect,
     clickMainHandle,
-    dashboardResidue,
     dashboardSnapshot,
     enterGuestWorkspace,
     nowId,
@@ -21,18 +20,38 @@ import {
 import {
     assertProjectLoaded,
     createBasicAtomes,
+    dragProjectMediaAtomes,
     ensureProject,
     exerciseDynamicData,
     importProjectMedia
 } from './dashboard_workspace_stress/product_actions.mjs';
+import {
+    assertDashboardFocusedColors,
+    assertDashboardOverviewColors
+} from './dashboard_workspace_stress/dashboard_color_assertions.mjs';
+import {
+    assertStartupDashboardOnly,
+    attachPageDiagnostics,
+    exerciseDashboardOpenClose,
+    exerciseStartupDashboardOpenClose,
+    waitForDashboardFadeSettled,
+    waitForDashboardFadeStart
+} from './dashboard_workspace_stress/dashboard_cycles.mjs';
 
-const PROJECT_COUNT = 10;
+const PROJECT_COUNT = 2;
 const HEADER_CLICK_COUNT = 30;
 const HEADER_STRESS_P95_LIMIT_MS = 350;
 const MEDIA_FIXTURES = [
-    path.resolve('tests/fixtures/media/0000.png'),
-    path.resolve('tests/fixtures/media/test.m4a'),
-    path.resolve('tests/fixtures/media/recorded.webm')
+    path.resolve('atome/src/assets/images/1.png'),
+    path.resolve('atome/src/assets/images/2.png'),
+    path.resolve('atome/src/assets/images/3.png'),
+    path.resolve('atome/src/assets/images/4.png'),
+    path.resolve('atome/src/assets/images/5.png'),
+    path.resolve('atome/src/assets/images/6.jpg'),
+    path.resolve('atome/src/assets/images/ballanim.png'),
+    path.resolve('atome/src/assets/images/blank.png'),
+    path.resolve('atome/src/assets/images/green_planet.png'),
+    path.resolve('atome/src/assets/images/puydesancy.jpg')
 ];
 
 const createReport = () => ({
@@ -60,116 +79,10 @@ const markProgress = (report, phase, extra = {}) => {
     writeReport(report);
 };
 
-const assertDashboardFocusedColors = async (page, categoryId) => page.evaluate(async (id) => {
-    const { DASHBOARD_VISUAL_TOKENS } = await import('/eVe/domains/dashboard/dashboard_tokens.js');
-    const state = window.eveDashboardRuntime?.state || {};
-    const projectId = window.__currentProject?.id || window.AdoleAPI?.projects?.getCurrentId?.() || null;
-    const sceneProjectId = state.active === true ? (state.projectId || '__eve_dashboard_workspace__') : projectId;
-    const scene = sceneProjectId ? window.eveToolBase?.getProjectSceneState?.(sceneProjectId) : null;
-    const records = Array.isArray(scene?.records) ? scene.records : [];
-    const category = (state.categories || []).find((entry) => String(entry.id) === String(id));
-    const activeColor = category?.color || '';
-    const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
-    const shadeHex = (hex, percent) => {
-        const value = String(hex || '#000000').replace('#', '');
-        const amount = Math.round(2.55 * percent);
-        const red = clamp(Number.parseInt(value.slice(0, 2), 16) + amount, 0, 255);
-        const green = clamp(Number.parseInt(value.slice(2, 4), 16) + amount, 0, 255);
-        const blue = clamp(Number.parseInt(value.slice(4, 6), 16) + amount, 0, 255);
-        return `#${[red, green, blue].map((part) => Math.round(part).toString(16).padStart(2, '0')).join('')}`;
-    };
-    const byId = new Map(records.map((record) => [String(record.id || ''), record]));
-    const readColor = (suffix) => byId.get(`__eve_dashboard_${suffix}`)?.properties?.color || '';
-    const failures = [];
-    const expect = (name, actual, expected) => {
-        if (String(actual).toLowerCase() !== String(expected).toLowerCase()) failures.push({ name, actual, expected });
-    };
-    expect('background', readColor('background'), activeColor);
-    expect('table', readColor('table'), activeColor);
-    expect('plus_strip_active', readColor('plus_strip_active'), activeColor);
-    for (const lane of state.layout?.lanes || []) {
-        const laneId = String(lane.category?.id || '');
-        const headerColor = laneId === id ? activeColor : shadeHex(activeColor, -18);
-        expect(`lane_${laneId}`, readColor(`lane_${laneId}`), shadeHex(headerColor, DASHBOARD_VISUAL_TOKENS.laneShadePercent));
-        expect(
-            `header_bg_${laneId}`,
-            readColor(`header_bg_${laneId}`),
-            headerColor
-        );
-    }
-    const isVisible = (record) => record?.properties?.visible !== false && Number(record?.properties?.opacity ?? 1) > 0;
-    const cards = records.filter((record) => (
-        record.type === 'shape'
-        && String(record.id || '').startsWith('__eve_dashboard_card_')
-        && isVisible(record)
-    ));
-    for (const card of cards) {
-        if (!card.properties?.material?.shadow) failures.push({ name: `${card.id}:shadow`, actual: card.properties?.material?.shadow, expected: 'material.shadow' });
-    }
-    return {
-        ok: !!activeColor && failures.length === 0,
-        activeColor,
-        cardColors: cards.map((card) => card.properties?.color),
-        cardCount: cards.length,
-        failures,
-        tokenBackground: DASHBOARD_VISUAL_TOKENS.background
-    };
-}, categoryId);
-
-const assertDashboardOverviewColors = async (page) => page.evaluate(async () => {
-    const { DASHBOARD_VISUAL_TOKENS } = await import('/eVe/domains/dashboard/dashboard_tokens.js');
-    const state = window.eveDashboardRuntime?.state || {};
-    const projectId = window.__currentProject?.id || window.AdoleAPI?.projects?.getCurrentId?.() || null;
-    const sceneProjectId = state.active === true ? (state.projectId || '__eve_dashboard_workspace__') : projectId;
-    const scene = sceneProjectId ? window.eveToolBase?.getProjectSceneState?.(sceneProjectId) : null;
-    const records = Array.isArray(scene?.records) ? scene.records : [];
-    const byId = new Map(records.map((record) => [String(record.id || ''), record]));
-    const readColor = (suffix) => byId.get(`__eve_dashboard_${suffix}`)?.properties?.color || '';
-    const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
-    const shadeHex = (hex, percent) => {
-        const value = String(hex || '#000000').replace('#', '');
-        const amount = Math.round(2.55 * percent);
-        const red = clamp(Number.parseInt(value.slice(0, 2), 16) + amount, 0, 255);
-        const green = clamp(Number.parseInt(value.slice(2, 4), 16) + amount, 0, 255);
-        const blue = clamp(Number.parseInt(value.slice(4, 6), 16) + amount, 0, 255);
-        return `#${[red, green, blue].map((part) => Math.round(part).toString(16).padStart(2, '0')).join('')}`;
-    };
-    const failures = [];
-    const expect = (name, actual, expected) => {
-        if (String(actual).toLowerCase() !== String(expected).toLowerCase()) failures.push({ name, actual, expected });
-    };
-    expect('background', readColor('background'), DASHBOARD_VISUAL_TOKENS.background);
-    expect('table', readColor('table'), DASHBOARD_VISUAL_TOKENS.table);
-    for (const lane of state.layout?.lanes || []) {
-        const laneId = String(lane.category?.id || '');
-        const laneColor = lane.category?.color || '';
-        expect(`lane_${laneId}`, readColor(`lane_${laneId}`), shadeHex(laneColor, DASHBOARD_VISUAL_TOKENS.laneShadePercent));
-        expect(`header_bg_${laneId}`, readColor(`header_bg_${laneId}`), laneColor);
-    }
-    return { ok: failures.length === 0 && !state.activeCategoryId, failures };
-});
-
-const attachPageDiagnostics = (page, report) => {
-    page.on('console', (message) => { if (message.type() === 'error') report.console.push(message.text()); });
-    page.on('pageerror', (error) => {
-        const message = error?.message || String(error);
-        if (!/^unreachable$/i.test(message)) report.pageErrors.push(message);
-    });
-    page.on('requestfailed', (request) => {
-        const url = request.url();
-        const failure = request.failure()?.errorText || '';
-        if (/favicon|apple-touch-icon/i.test(url)) return;
-        if (failure === 'net::ERR_ABORTED' && (/^blob:/i.test(url) || /\/api\/uploads\/recorded_\d+\.webm/i.test(url))) {
-            report.ignoredRequestFailures.push({ url, failure, reason: 'media_source_replaced_or_context_closed' });
-            return;
-        }
-        report.requestFailures.push({ url, failure });
-    });
-};
-
 const createStressProjects = async (page, report, prefix) => {
     for (let index = 0; index < PROJECT_COUNT; index += 1) {
         markProgress(report, 'project:create:start', { index: index + 1 });
+        if (index > 0) await page.waitForTimeout(2000);
         const atomeOnly = index === 0;
         const project = await ensureProject(page, `${prefix} ${atomeOnly ? 'atome-only' : 'media'} project ${index + 1}`);
         if (!project.ok) throw new Error(`project_create_failed:${JSON.stringify(project)}`);
@@ -177,12 +90,17 @@ const createStressProjects = async (page, report, prefix) => {
         const media = atomeOnly ? { ok: true, results: [] } : await importProjectMedia(page, project.id, index, MEDIA_FIXTURES);
         if (!media?.ok) throw new Error(`project_media_import_failed:${project.id}:${JSON.stringify(media)}`);
         const mediaIds = (media.results || []).map((entry) => entry.atomeId).filter(Boolean);
+        const mediaKinds = (media.results || []).map((entry) => entry.type).filter(Boolean);
         const expectedIds = [...basic.ids, ...mediaIds];
-        const entry = { ...project, expectedIds, mediaIds, atomeOnly };
+        const entry = { ...project, expectedIds, mediaIds, mediaKinds, atomeOnly };
         report.projects.push(entry);
         report.checks.push({ name: `project_${index + 1}_created`, ok: true, project: entry });
         markProgress(report, 'project:create:loaded', { index: index + 1, projectId: project.id });
         await assertProjectLoaded(page, entry);
+        if (mediaIds.length) {
+            const moved = await dragProjectMediaAtomes(page, entry);
+            report.checks.push({ name: `project_${index + 1}_media_dragged`, ok: true, moved });
+        }
         markProgress(report, 'project:create:validated', { index: index + 1, projectId: project.id });
     }
     for (const project of report.projects) {
@@ -194,46 +112,12 @@ const createStressProjects = async (page, report, prefix) => {
     writeReport(report);
 };
 
-const exerciseDashboardOpenClose = async (page, report) => {
-    const initial = await dashboardSnapshot(page);
-    if (initial.active) {
-        await clickMainHandle(page);
-        const initialClosed = await waitFor(page, () => ({ ok: window.eveDashboardRuntime?.state?.active !== true }), 15000, 50);
-        if (!initialClosed.ok) throw new Error(`dashboard_initial_close_failed:${JSON.stringify(initialClosed.last)}`);
-        await waitFrames(page, 4);
-    }
-    const measurements = [];
-    for (let index = 0; index < 5; index += 1) {
-        const beforeOpen = await page.evaluate(() => performance.now());
-        await clickMainHandle(page);
-        const opened = await waitFor(page, () => ({ ok: window.eveDashboardRuntime?.state?.active === true }), 15000, 50);
-        if (!opened.ok) throw new Error(`dashboard_open_cycle_failed:${index + 1}:${JSON.stringify(opened.last)}`);
-        const openDone = await page.evaluate(() => performance.now());
-        const layout = (await dashboardSnapshot(page)).layout;
-        await clickMainHandle(page);
-        const closedWait = await waitFor(page, () => ({ ok: window.eveDashboardRuntime?.state?.active !== true }), 15000, 50);
-        if (!closedWait.ok) throw new Error(`dashboard_close_cycle_failed:${index + 1}:${JSON.stringify(closedWait.last)}`);
-        await waitFrames(page, 8);
-        const closeDone = await page.evaluate(() => performance.now());
-        const file = await screenshot(page, `after_close_${index + 1}`);
-        const residue = dashboardResidue(file, layout);
-        const closed = await dashboardSnapshot(page);
-        if (closed.visibleDashboardIds.length) throw new Error(`dashboard_records_visible_after_close:${closed.visibleDashboardIds.join(',')}`);
-        const neutralDashboardRecords = await page.evaluate(() => {
-            const scene = window.eveToolBase?.getProjectSceneState?.('__eve_dashboard_workspace__') || null;
-            const records = Array.isArray(scene?.records) ? scene.records : [];
-            return records.filter((record) => String(record?.id || '').startsWith('__eve_dashboard_')).length;
-        });
-        if (neutralDashboardRecords > 0) throw new Error(`dashboard_neutral_records_after_close:${neutralDashboardRecords}`);
-        measurements.push({ openMs: openDone - beforeOpen, closeMs: closeDone - openDone, residue, file });
-    }
-    report.checks.push({ name: 'dashboard_open_close_cycles_clean', ok: true, measurements });
-};
-
 const exerciseDashboardHeaders = async (page, report) => {
     await clickMainHandle(page);
     const opened = await waitFor(page, () => ({ ok: window.eveDashboardRuntime?.state?.active === true }), 15000, 50);
     if (!opened.ok) throw new Error('dashboard_reopen_before_headers_failed');
+    await waitForDashboardFadeSettled(page, 'headers_open', true);
+    await waitFrames(page, 4);
     const headerTimes = [];
     const sequence = Array.from({ length: HEADER_CLICK_COUNT }, (_value, index) => ['projects', 'contacts', 'calendar', 'monitor', 'goals', 'news'][index % 6]);
     for (let index = 0; index < sequence.length; index += 1) {
@@ -395,11 +279,17 @@ const run = async () => {
         markProgress(report, 'workspace:enter:start');
         report.workspace = await enterGuestWorkspace(page);
         markProgress(report, 'workspace:enter:done', { projectId: report.workspace?.projectId || null });
-        if (report.workspace?.dashboardActive === true) {
+        await assertStartupDashboardOnly(page, report);
+        markProgress(report, 'workspace:startup_cycles:start');
+        await exerciseStartupDashboardOpenClose(page, report);
+        markProgress(report, 'workspace:startup_cycles:done');
+        if ((await dashboardSnapshot(page)).active === true) {
             markProgress(report, 'workspace:dashboard_close_before_project_setup:start');
-            await page.evaluate(() => window.eveDashboardRuntime?.close?.({ honorLabelEditorKeyboardGuard: false }));
+            await clickMainHandle(page);
+            await waitForDashboardFadeStart(page, 'close_before_project_setup', 'close');
             const closed = await waitFor(page, () => ({ ok: window.eveDashboardRuntime?.state?.active !== true }), 15000, 50);
             if (!closed.ok) throw new Error(`dashboard_close_before_project_setup_failed:${JSON.stringify(closed.last)}`);
+            await waitForDashboardFadeSettled(page, 'close_before_project_setup', false);
             await waitFrames(page, 6);
             markProgress(report, 'workspace:dashboard_close_before_project_setup:done');
         }

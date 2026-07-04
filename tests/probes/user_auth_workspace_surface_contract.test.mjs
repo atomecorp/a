@@ -39,7 +39,7 @@ const runtime = createUserAuthFlowRuntime({
     restoreUserProfile: async (force) => calls.push({ name: 'restoreUserProfile', force }),
     ensureCurrentProject: async ({ force } = {}) => {
         calls.push({ name: 'ensureCurrentProject', force });
-        return 'project_auth_valid';
+        throw new Error('ensureCurrentProject_must_not_run_for_dashboard_workspace_entry');
     },
     isProjectBootstrapManaged: () => false,
     afterWorkspaceOpen: async (payload = {}) => {
@@ -80,13 +80,13 @@ await authenticatedVisualFinished;
 assert.equal(ok, true, 'authenticated login must succeed');
 assert.deepEqual(
     calls.filter((entry) => entry.name === 'afterWorkspaceOpen'),
-    [{ name: 'afterWorkspaceOpen', source: 'authenticated', projectId: 'project_auth_valid' }],
-    'authenticated login must open the workspace dashboard/menu after project activation'
+    [{ name: 'afterWorkspaceOpen', source: 'authenticated', projectId: null }],
+    'authenticated login must open the neutral workspace dashboard without activating a project'
 );
-assert.ok(
-    calls.findIndex((entry) => entry.name === 'ensureCurrentProject')
-    < calls.findIndex((entry) => entry.name === 'afterWorkspaceOpen'),
-    'dashboard/menu opening must wait for the current project'
+assert.equal(
+    calls.some((entry) => entry.name === 'ensureCurrentProject'),
+    false,
+    'authenticated dashboard boot must not request or load a current project'
 );
 assert.ok(
     calls.findIndex((entry) => entry.name === 'onAuthenticating')

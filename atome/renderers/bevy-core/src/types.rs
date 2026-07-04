@@ -361,6 +361,7 @@ pub struct AtomeRenderNode {
 pub struct AtomeTexture {
     pub width: u32,
     pub height: u32,
+    #[serde(with = "serde_bytes")]
     pub rgba: Vec<u8>,
 }
 

@@ -51,6 +51,10 @@ let fastifyTokenEnsurePromise = null;
 let fastifyReloginBlockedUntil = 0;
 let fastifyReloginBlockedReason = null;
 
+const markFastifyAuthValid = () => {
+    if (typeof window !== 'undefined') window.__SQUIRREL_FASTIFY_AUTH_INVALID__ = false;
+};
+
 const readNow = () => Date.now();
 
 const blockFastifyRelogin = (reason, durationMs) => {
@@ -88,7 +92,7 @@ const ensureFastifyTokenLocal = async () => {
         const expectedUserId = state?.user?.id ? String(state.user.id) : null;
         const resolvedUserId = cookieSession?.user?.id ? String(cookieSession.user.id) : null;
         if (cookieSession?.ok && resolvedUserId && (!expectedUserId || resolvedUserId === expectedUserId)) {
-            if (typeof window !== 'undefined') window.__SQUIRREL_FASTIFY_AUTH_INVALID__ = false;
+            markFastifyAuthValid();
             return { ok: true, reason: 'cookie_session' };
         }
     } catch (_) {
@@ -106,9 +110,7 @@ const ensureFastifyTokenLocal = async () => {
                 const expectedUserId = state?.user?.id ? String(state.user.id) : null;
                 const resolvedUserId = me?.user?.id ? String(me.user.id) : null;
                 if (me?.ok && resolvedUserId && (!expectedUserId || resolvedUserId === expectedUserId)) {
-                    
-                        if (typeof window !== 'undefined') window.__SQUIRREL_FASTIFY_AUTH_INVALID__ = false;
-                    
+                    markFastifyAuthValid();
                     return { ok: true, reason: 'tauri_token_bridge' };
                 }
             } catch (_) {
@@ -151,9 +153,7 @@ const ensureFastifyTokenLocal = async () => {
     }
     fastifyReloginBlockedUntil = 0;
     fastifyReloginBlockedReason = null;
-    
-        if (typeof window !== 'undefined') window.__SQUIRREL_FASTIFY_AUTH_INVALID__ = false;
-    
+    markFastifyAuthValid();
     return { ok: true, reason: 'cache_login_success' };
 };
 
@@ -164,7 +164,7 @@ const ensureFastifyToken = async () => {
         if (token) {
             const me = await meBackend('fastify');
             if (me?.ok) {
-                if (typeof window !== 'undefined') window.__SQUIRREL_FASTIFY_AUTH_INVALID__ = false;
+                markFastifyAuthValid();
                 return { ok: true, reason: 'token_valid' };
             }
             FastifyAdapter?.clearToken?.();
@@ -192,4 +192,4 @@ const ensureFastifyToken = async () => {
 };
 
 
-export { loadFastifyLoginCache, persistFastifyLoginCache, ensureFastifyTokenLocal, ensureFastifyToken };
+export { loadFastifyLoginCache, persistFastifyLoginCache, ensureFastifyTokenLocal, ensureFastifyToken, markFastifyAuthValid };

@@ -5,5 +5,6 @@ import { runLargeReloadProbe } from './project_surface_reload_support.mjs';
 await runLargeReloadProbe({
     browserType: chromium,
     browserName: 'chromium',
-    reportDir: path.resolve('temp/probe_reports/project_surface_resize')
+    reportDir: path.resolve('temp/probe_reports/project_surface_resize'),
+    headless: process.env.ATOME_PLAYWRIGHT_HEADLESS === '1'
 });

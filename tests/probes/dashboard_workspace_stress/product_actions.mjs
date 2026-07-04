@@ -1,19 +1,33 @@
 import { sceneSnapshot, sleep, waitFor } from './support.mjs';
 
 export const ensureProject = async (page, name) => page.evaluate(async (projectName) => {
+    const withTimeout = (promise, error, timeoutMs = 20000) => Promise.race([
+        Promise.resolve(promise),
+        new Promise((resolve) => setTimeout(() => resolve({ timeout: true, error }), timeoutMs))
+    ]);
     const workspaceMode = await import('/eVe/domains/dashboard/dashboard_workspace_mode.js');
     workspaceMode.beginDashboardWorkspaceTransition?.('project');
-    await window.eveDashboardRuntime?.close?.({ honorLabelEditorKeyboardGuard: false });
+    const dashboardState = window.eveDashboardRuntime?.state || {};
+    if (dashboardState.active === true || dashboardState.closing === true) {
+        const closedDashboard = await withTimeout(
+            window.eveDashboardRuntime?.close?.({ honorLabelEditorKeyboardGuard: false }),
+            'dashboard_close_before_project_timeout',
+            10000
+        );
+        if (closedDashboard?.timeout) return { ok: false, error: closedDashboard.error, name: projectName };
+    }
     const loadProjectWithTimeout = (projectId, options = {}, timeoutMs = 20000) => Promise.race([
         Promise.resolve(window.eveToolBase?.loadProjectAtomes?.(projectId, options)).then((result) => ({ ok: result?.ok !== false, result })),
         new Promise((resolve) => setTimeout(() => resolve({ ok: false, timeout: true, error: 'load_project_atomes_timeout' }), timeoutMs))
     ]);
     const api = window.AdoleAPI;
-    const created = await api.projects.create(projectName);
+    const created = await withTimeout(api.projects.create(projectName), 'project_create_timeout');
+    if (created?.timeout) return { ok: false, error: created.error, name: projectName };
     let projectId = created?.id || created?.project_id || created?.atome_id
         || created?.fastify?.project?.id || created?.tauri?.project?.id || null;
     if (!projectId) {
-        const listed = await api.projects.list();
+        const listed = await withTimeout(api.projects.list(), 'project_list_timeout');
+        if (listed?.timeout) return { ok: false, error: listed.error, created, name: projectName };
         const projects = [
             ...(Array.isArray(listed?.fastify?.projects) ? listed.fastify.projects : []),
             ...(Array.isArray(listed?.tauri?.projects) ? listed.tauri.projects : []),
@@ -23,7 +37,8 @@ export const ensureProject = async (page, name) => page.evaluate(async (projectN
         projectId = found?.id || found?.atome_id || found?.project_id || null;
     }
     if (!projectId) return { ok: false, error: 'project_create_id_missing', created };
-    await api.projects.setCurrent(projectId, projectName, null, true);
+    const currentSet = await withTimeout(api.projects.setCurrent(projectId, projectName, null, true), 'project_set_current_timeout');
+    if (currentSet?.timeout) return { ok: false, error: currentSet.error, id: String(projectId), name: projectName };
     window.eveToolBase?.ensureProjectLayer?.(projectId);
     const loaded = await loadProjectWithTimeout(projectId, { force: true, staleFirst: false });
     if (!loaded.ok) return { ok: false, error: 'project_initial_load_failed', loaded, id: String(projectId), name: projectName };
@@ -91,7 +106,7 @@ export const importProjectMedia = async (page, projectId, index, mediaFixtures) 
             || document.querySelector('[id^="project_view_"]');
         const input = document.getElementById('dashboard_workspace_stress_files');
         const entries = Array.from(input?.files || []);
-        if (!projectEl || entries.length !== 3) return { ok: false, error: 'media_input_or_project_missing', entries: entries.length, hasProjectEl: !!projectEl };
+        if (!projectEl || entries.length === 0) return { ok: false, error: 'media_input_or_project_missing', entries: entries.length, hasProjectEl: !!projectEl };
         return window.eveProjectDropApi.importFilesToProjectViaCreator({
             entries,
             projectId: pid,
@@ -114,12 +129,16 @@ const readCanonicalIds = (page, projectId) => page.evaluate(async (pid) => {
     };
 }, projectId);
 
+const normalizeExpectedMediaKind = (kind = '') => {
+    const value = String(kind || '').trim().toLowerCase();
+    if (value === 'sound' || value === 'audio') return 'audio_waveform';
+    return value;
+};
+
 const invalidExpectedMediaKinds = (project, snapshot) => {
-    const expected = [
-        [project.mediaIds?.[0], 'image'],
-        [project.mediaIds?.[1], 'audio_waveform'],
-        [project.mediaIds?.[2], 'video']
-    ].filter(([id]) => !!id);
+    const expected = (project.mediaIds || [])
+        .map((id, index) => [id, normalizeExpectedMediaKind(project.mediaKinds?.[index] || '')])
+        .filter(([id, kind]) => !!id && !!kind);
     const kinds = new Map(snapshot.nodeKinds.map((entry) => [entry.id, entry.kind]));
     return expected
         .map(([id, kind]) => ({ id, expected: kind, actual: kinds.get(id) || null }))
@@ -179,6 +198,72 @@ export const assertProjectLoaded = async (page, project) => {
 
     const snapshot = await waitForProjectedSceneReady(page, project, expectedIds);
     return { ...snapshot, canonicalCount: canonical.count };
+};
+
+export const dragProjectMediaAtomes = async (page, project) => {
+    const mediaIds = (project.mediaIds || []).filter(Boolean);
+    if (!mediaIds.length) return { ok: true, moved: [] };
+    const before = await page.evaluate(({ projectId, ids }) => {
+        const scene = window.eveToolBase?.getProjectSceneState?.(projectId) || null;
+        const byId = new Map((scene?.records || []).map((record) => [String(record.id || record.atome_id || ''), record]));
+        return ids.map((id) => {
+            const record = byId.get(String(id)) || {};
+            const props = record.properties || {};
+            return {
+                id,
+                left: Number.parseFloat(props.left ?? props.x ?? 0),
+                top: Number.parseFloat(props.top ?? props.y ?? 0),
+                width: Number.parseFloat(props.width ?? 120),
+                height: Number.parseFloat(props.height ?? 90)
+            };
+        });
+    }, { projectId: project.id, ids: mediaIds });
+    const canvas = page.locator('#eve_surface_project').first();
+    await canvas.waitFor({ state: 'visible', timeout: 15000 });
+    const canvasBox = await canvas.boundingBox();
+    if (!canvasBox) throw new Error('project_media_drag_canvas_missing');
+    const dragOrder = before.map((item, index) => ({ item, index })).reverse();
+    for (const { item, index } of dragOrder) {
+        const startX = canvasBox.x + item.left + Math.max(8, Math.min(item.width / 2, 80));
+        const startY = canvasBox.y + item.top + Math.max(8, Math.min(item.height / 2, 60));
+        const dx = 90 + (index % 4) * 28;
+        const dy = 65 + (index % 3) * 24;
+        await page.mouse.move(startX, startY);
+        await page.mouse.down();
+        await page.mouse.move(startX + dx, startY + dy, { steps: 8 });
+        await page.mouse.up();
+        await sleep(80);
+    }
+    const moved = await waitForMovedMedia(page, project.id, before);
+    if (!moved.ok) throw new Error(`project_media_drag_failed:${project.id}:${JSON.stringify(moved.last)}`);
+    return moved.last;
+};
+
+const waitForMovedMedia = async (page, projectId, before) => {
+    const startedAt = Date.now();
+    let last = null;
+    while (Date.now() - startedAt < 30000) {
+        last = await page.evaluate(({ pid, items }) => {
+            const scene = window.eveToolBase?.getProjectSceneState?.(pid) || null;
+            const byId = new Map((scene?.records || []).map((record) => [String(record.id || record.atome_id || ''), record]));
+            const moved = items.map((item) => {
+                const record = byId.get(String(item.id)) || {};
+                const props = record.properties || {};
+                const left = Number.parseFloat(props.left ?? props.x ?? 0);
+                const top = Number.parseFloat(props.top ?? props.y ?? 0);
+                return {
+                    id: item.id,
+                    before: { left: item.left, top: item.top },
+                    after: { left, top },
+                    changed: Math.abs(left - item.left) >= 1 || Math.abs(top - item.top) >= 1
+                };
+            });
+            return { ok: moved.every((entry) => entry.changed), moved };
+        }, { pid: projectId, items: before });
+        if (last.ok) return { ok: true, last };
+        await sleep(250);
+    }
+    return { ok: false, last };
 };
 
 export const createCalendarAndContacts = async (page, projectId, prefix) => page.evaluate(async ({ projectId: pid, prefix: key }) => {

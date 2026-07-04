@@ -23,7 +23,7 @@ import {
 const texture = {
     width: 1,
     height: 1,
-    rgba: [255, 255, 255, 255]
+    rgba: new Uint8ClampedArray([255, 255, 255, 255])
 };
 
 const projectionFixtures = Object.freeze([
@@ -145,6 +145,7 @@ test('Bevy renderer adapter registry keeps existing node projections identical',
         'video',
         'audio_waveform'
     ]);
+    assert.ok(defaultPayloads.find((payload) => payload.texture)?.texture.rgba instanceof Uint8Array);
 });
 
 test('Bevy projection delegates kind-specific node and resource mapping to registered adapters', () => {

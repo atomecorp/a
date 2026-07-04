@@ -38,17 +38,14 @@ const readHeaderPixels = (file, snapshot) => {
                 samples += 1;
             }
         }
-        return {
-            id: entry.id,
-            text: entry.text,
-            brightRatio: Number((bright / Math.max(1, samples)).toFixed(6)),
-            samples
-        };
+        return { id: entry.id, text: entry.text, brightRatio: Number((bright / Math.max(1, samples)).toFixed(6)), samples };
     });
 };
 
 const classifyDashboardFailure = ({ snapshot = null, headerPixels = [] } = {}) => {
     if (!snapshot?.canvas) return 'project_canvas_missing';
+    if (snapshot.bevyStartError) return snapshot.bevyStartError;
+    if (snapshot.projectionError) return snapshot.projectionError;
     if (snapshot.dashboardActive !== true || !snapshot.visibleDashboardIds?.length) return 'dashboard_records_absent';
     if (!snapshot.visibleDashboardHeaderTexts?.length) return 'dashboard_header_records_absent';
     if (snapshot.projectionOk !== true) return 'dashboard_projection_not_ok';
@@ -175,8 +172,10 @@ export const surfaceSnapshot = async (page, label) => page.evaluate(async (snaps
     const { readRenderSurfaceSize } = await import('/eVe/domains/rendering/surface_runtime.js');
     const { readBevyWebRendererState } = await import('/eVe/domains/rendering/bevy_web_renderer_runtime.js');
     const currentProjectId = window.__currentProject?.id || window.AdoleAPI?.projects?.getCurrentId?.() || '';
+    const dashboardState = window.eveDashboardRuntime?.state || {};
+    const sceneProjectId = dashboardState.active === true ? (dashboardState.projectId || '__eve_dashboard_workspace__') : currentProjectId;
     const canvas = document.getElementById('eve_surface_project');
-    const scene = currentProjectId ? window.eveToolBase?.getProjectSceneState?.(currentProjectId) : null;
+    const scene = sceneProjectId ? window.eveToolBase?.getProjectSceneState?.(sceneProjectId) : null;
     const records = Array.isArray(scene?.records) ? scene.records : [];
     const bevy = canvas ? readBevyWebRendererState(canvas) : null;
     const nodes = Array.isArray(bevy?.virtual_scene?.nodes) ? bevy.virtual_scene.nodes : [];
@@ -185,17 +184,9 @@ export const surfaceSnapshot = async (page, label) => page.evaluate(async (snaps
     const text = (record) => String(record?.properties?.text || '').trim();
     const rectOf = (node) => {
         const rect = node?.getBoundingClientRect?.();
-        return rect ? {
-            x: Number(rect.x || 0),
-            y: Number(rect.y || 0),
-            width: Number(rect.width || 0),
-            height: Number(rect.height || 0)
-        } : null;
+        return rect ? { x: Number(rect.x || 0), y: Number(rect.y || 0), width: Number(rect.width || 0), height: Number(rect.height || 0) } : null;
     };
-    const viewport = {
-        width: Number(window.visualViewport?.width || window.innerWidth || 0),
-        height: Number(window.visualViewport?.height || window.innerHeight || 0)
-    };
+    const viewport = { width: Number(window.visualViewport?.width || window.innerWidth || 0), height: Number(window.visualViewport?.height || window.innerHeight || 0) };
     const surface = canvas ? readRenderSurfaceSize(canvas) : null;
     const canvasRect = rectOf(canvas);
     const backingOk = !!canvas
@@ -223,9 +214,10 @@ export const surfaceSnapshot = async (page, label) => page.evaluate(async (snaps
         sizeOk,
         label: snapshotLabel,
         currentProjectId,
+        sceneProjectId,
         viewport,
         view: rectOf(document.getElementById('view')),
-        layer: rectOf(currentProjectId ? document.getElementById(`project_view_${currentProjectId}`) : null),
+        layer: rectOf(sceneProjectId ? document.getElementById(`project_view_${sceneProjectId}`) : null),
         canvas: canvasRect,
         backing: canvas ? { width: canvas.width, height: canvas.height } : null,
         surface,
@@ -249,12 +241,7 @@ export const surfaceSnapshot = async (page, label) => page.evaluate(async (snaps
         visibleDashboardHeaderRects: headerRecords.filter(visible).map((record) => ({
             id: String(record?.id || ''),
             text: text(record),
-            rect: {
-                x: Number(record?.properties?.left ?? record?.properties?.x ?? 0),
-                y: Number(record?.properties?.top ?? record?.properties?.y ?? 0),
-                width: Number(record?.properties?.width ?? 0),
-                height: Number(record?.properties?.height ?? 0)
-            }
+            rect: { x: Number(record?.properties?.left ?? record?.properties?.x ?? 0), y: Number(record?.properties?.top ?? record?.properties?.y ?? 0), width: Number(record?.properties?.width ?? 0), height: Number(record?.properties?.height ?? 0) }
         })),
         headerVirtualIds: nodes.map((node) => String(node?.id || '')).filter((id) => headerIds.has(id)),
         bevyHeaderDeferred: bevyPending(bevy?.deferred_nodes || []),
@@ -279,9 +266,16 @@ export const assertDashboardOpen = (snapshot, reason) => {
         || !snapshot.visibleDashboardCardCount
         || !snapshot.visibleDashboardTitleTexts?.length
         || !snapshot.visibleDashboardHeaderTexts?.length
+        || snapshot.projectionOk !== true
+        || snapshot.bevyStarted !== true
     ) {
         throw new Error(`dashboard_not_open_after_boot:${reason}:${JSON.stringify({
             active: snapshot.dashboardActive,
+            sceneProjectId: snapshot.sceneProjectId,
+            projectionOk: snapshot.projectionOk,
+            bevyStarted: snapshot.bevyStarted,
+            bevyStartError: snapshot.bevyStartError,
+            projectionError: snapshot.projectionError,
             visibleDashboardIds: snapshot.visibleDashboardIds,
             visibleDashboardCardCount: snapshot.visibleDashboardCardCount,
             visibleDashboardTitleTexts: snapshot.visibleDashboardTitleTexts || [],
@@ -303,7 +297,10 @@ export const captureHeaderPixels = async ({ page, report, save, screenshot, snap
 export const waitForDashboardOpen = async ({ page, report, save, screenshot, label }) => {
     const ready = await waitFor(page, () => {
         const currentProjectId = window.__currentProject?.id || window.AdoleAPI?.projects?.getCurrentId?.() || '';
-        const records = Array.from(window.eveToolBase?.getProjectSceneState?.(currentProjectId)?.records || []);
+        const dashboardState = window.eveDashboardRuntime?.state || {};
+        const sceneProjectId = dashboardState.active === true ? (dashboardState.projectId || '__eve_dashboard_workspace__') : currentProjectId;
+        const scene = window.eveToolBase?.getProjectSceneState?.(sceneProjectId) || null;
+        const records = Array.from(scene?.records || []);
         const visibleDashboardIds = records
             .filter((record) => String(record?.id || '').startsWith('__eve_dashboard_'))
             .filter((record) => record?.properties?.visible !== false && Number(record?.properties?.opacity ?? 1) > 0);
@@ -320,11 +317,15 @@ export const waitForDashboardOpen = async ({ page, report, save, screenshot, lab
             && visibleDashboardIds.length > 0
             && visibleCards.length > 0
             && visibleTitles.length > 0
-            && visibleHeaders.length > 0;
+            && visibleHeaders.length > 0
+            && scene?.projection?.ok === true;
         return {
             ok,
             active: window.eveDashboardRuntime?.state?.active === true,
             currentProjectId,
+            sceneProjectId,
+            projectionOk: scene?.projection?.ok === true,
+            projectionError: scene?.projection?.render_result?.error || '',
             visibleDashboardCount: visibleDashboardIds.length,
             visibleCardCount: visibleCards.length,
             visibleTitles,

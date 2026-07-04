@@ -6,21 +6,24 @@ use crate::{
     render_math::{
         atome_camera_projection, atome_rect_transform_with_local, color_from_rgba, depth_for_layer,
     },
+    resource_ops::texture_sprite_color,
     selection_overlay::{rebuild_selection_overlay, remove_selection_overlay},
     shape_shadow_overlay::{
         rebuild_shape_shadow_overlay, remove_shape_shadow_overlay,
-        sync_shape_shadow_overlay_opacity,
+        sync_shape_shadow_overlay_opacity, sync_shape_shadow_overlay_transform,
     },
     spawn::spawn_node_in_world,
     texture::image_handle_from_texture,
     types::*,
     video_external_texture::{
-        insert_video_external_texture_component_for_node, insert_video_quad_mesh,
+        insert_video_quad_mesh,
     },
     waveform_playback_overlay::{
         rebuild_waveform_playback_overlay, remove_waveform_playback_overlay,
     },
 };
+
+pub use crate::resource_ops::apply_resource;
 
 fn entity_for(world: &World, id: &str) -> Result<Entity, String> {
     world
@@ -61,17 +64,6 @@ fn transform_for_rect(
     )
 }
 
-fn texture_sprite_color(world: &mut World, entity: Entity) -> Color {
-    let opacity = world
-        .get::<AtomeVisualOpacity>(entity)
-        .map(|value| value.0)
-        .unwrap_or_else(default_opacity);
-    if let Some(mut current) = world.get_mut::<AtomeVisualColor>(entity) {
-        current.0 = [1.0, 1.0, 1.0, 1.0];
-    }
-    color_from_rgba([1.0, 1.0, 1.0, normalize_opacity(opacity)])
-}
-
 pub fn apply_spawn(world: &mut World, node: AtomeRenderNode) -> Result<Entity, String> {
     if node.id.trim().is_empty() {
         return Err("bevy_spawn_id_required".to_string());
@@ -103,6 +95,13 @@ pub fn apply_transform(world: &mut World, patch: AtomeTransformPatch) -> Result<
     let entity = entity_for(world, &patch.id)?;
     let width = patch.logical_size[0].max(1.0);
     let height = patch.logical_size[1].max(1.0);
+    let previous_size = *world
+        .get::<AtomeLogicalSize>(entity)
+        .ok_or_else(|| format!("bevy_transform_size_missing:{}", patch.id))?;
+    let previous_local_transform = world
+        .get::<AtomeLocalTransform>(entity)
+        .copied()
+        .ok_or_else(|| format!("bevy_transform_local_missing:{}", patch.id))?;
     let layer = world
         .get::<AtomeLayer>(entity)
         .map(|value| value.0)
@@ -157,9 +156,22 @@ pub fn apply_transform(world: &mut World, patch: AtomeTransformPatch) -> Result<
     if let Some(mut bounds) = world.get_mut::<TextBounds>(entity) {
         *bounds = TextBounds::from(Vec2::new(width, height));
     }
-    rebuild_selection_overlay(world, entity)?;
-    rebuild_shape_shadow_overlay(world, entity)?;
-    rebuild_waveform_playback_overlay(world, entity)?;
+    let size_changed = (previous_size.width - width).abs() > 0.01
+        || (previous_size.height - height).abs() > 0.01
+        || previous_local_transform != local_transform;
+    if size_changed {
+        rebuild_selection_overlay(world, entity)?;
+        rebuild_shape_shadow_overlay(world, entity)?;
+        rebuild_waveform_playback_overlay(world, entity)?;
+    } else {
+        if world.get::<AtomeSelectionOverlay>(entity).is_some() {
+            rebuild_selection_overlay(world, entity)?;
+        }
+        sync_shape_shadow_overlay_transform(world, entity)?;
+        if world.get::<AtomeWaveformPlaybackOverlay>(entity).is_some() {
+            rebuild_waveform_playback_overlay(world, entity)?;
+        }
+    }
     Ok(())
 }
 
@@ -231,9 +243,13 @@ pub fn apply_surface(world: &mut World, patch: AtomeSurfacePatch) -> Result<(), 
         }
         world.entity_mut(entity).insert(next_transform);
         sync_global_transform(world, entity, next_transform);
-        rebuild_selection_overlay(world, entity)?;
-        rebuild_shape_shadow_overlay(world, entity)?;
-        rebuild_waveform_playback_overlay(world, entity)?;
+        if world.get::<AtomeSelectionOverlay>(entity).is_some() {
+            rebuild_selection_overlay(world, entity)?;
+        }
+        sync_shape_shadow_overlay_transform(world, entity)?;
+        if world.get::<AtomeWaveformPlaybackOverlay>(entity).is_some() {
+            rebuild_waveform_playback_overlay(world, entity)?;
+        }
     }
     resize_surface_background(world);
     Ok(())
@@ -343,9 +359,13 @@ pub fn apply_layer(world: &mut World, patch: AtomeLayerPatch) -> Result<(), Stri
     {
         video.layer = patch.layer;
     }
-    rebuild_selection_overlay(world, entity)?;
-    rebuild_shape_shadow_overlay(world, entity)?;
-    rebuild_waveform_playback_overlay(world, entity)?;
+    if world.get::<AtomeSelectionOverlay>(entity).is_some() {
+        rebuild_selection_overlay(world, entity)?;
+    }
+    sync_shape_shadow_overlay_transform(world, entity)?;
+    if world.get::<AtomeWaveformPlaybackOverlay>(entity).is_some() {
+        rebuild_waveform_playback_overlay(world, entity)?;
+    }
     Ok(())
 }
 
@@ -392,108 +412,6 @@ pub fn apply_text(world: &mut World, patch: AtomeTextPatch) -> Result<(), String
             sprite.image = handle;
             sprite.color = color;
         }
-    }
-    Ok(())
-}
-
-pub fn apply_resource(world: &mut World, patch: AtomeResourcePatch) -> Result<(), String> {
-    let entity = entity_for(world, &patch.id)?;
-    let source = patch
-        .source
-        .clone()
-        .filter(|value| !value.trim().is_empty());
-    if let Some(mut media_source) = world.get_mut::<AtomeMediaSource>(entity) {
-        media_source.0 = source.clone();
-    }
-    if let Some(peaks) = patch.peaks {
-        if let Some(mut waveform) = world.get_mut::<AtomeWaveformPeaks>(entity) {
-            waveform.0 = peaks;
-        }
-    }
-    let kind = world
-        .get::<AtomeRenderKind>(entity)
-        .map(|value| value.0.clone())
-        .unwrap_or_default();
-    if kind == "video" {
-        let _source = source
-            .as_ref()
-            .ok_or_else(|| format!("bevy_media_source_required:{}", patch.id))?;
-        let layer = world
-            .get::<AtomeLayer>(entity)
-            .map(|value| value.0)
-            .unwrap_or(0);
-        let opacity = world
-            .get::<crate::video_external_texture::AtomeVideoExternalTexture>(entity)
-            .map(|value| value.opacity)
-            .unwrap_or_else(default_opacity);
-        let current_uv_rect = world
-            .get::<crate::video_external_texture::AtomeVideoExternalTexture>(entity)
-            .map(|value| value.uv_rect)
-            .unwrap_or_else(default_uv_rect);
-        let current_filters = world
-            .get::<crate::video_external_texture::AtomeVideoExternalTexture>(entity)
-            .map(|value| value.filters);
-        let current_transition = world
-            .get::<crate::video_external_texture::AtomeVideoExternalTexture>(entity)
-            .map(|value| value.transition);
-        let local_transform = world
-            .get::<AtomeLocalTransform>(entity)
-            .copied()
-            .unwrap_or_default();
-        let uv_rect = match patch.uv_rect {
-            Some(value) => normalize_uv_rect(value),
-            None => current_uv_rect,
-        };
-        let size = world
-            .get::<AtomeLogicalSize>(entity)
-            .map(|value| [value.width, value.height])
-            .unwrap_or([1.0, 1.0]);
-        let node = AtomeRenderNode {
-            id: patch.id,
-            kind,
-            parent_id: None,
-            logical_position: [0.0, 0.0],
-            logical_size: [1.0, 1.0],
-            scale: local_transform.scale,
-            rotation: local_transform.rotation,
-            origin: local_transform.origin,
-            layer,
-            opacity,
-            corner_radius: 0.0,
-            shadow: None,
-            color: None,
-            text: None,
-            source,
-            texture_size: patch.texture_size,
-            uv_rect: Some(uv_rect),
-            texture: None,
-            peaks: None,
-            playback_progress: None,
-            selected: None,
-            filters: current_filters,
-            transition: current_transition,
-        };
-        insert_video_external_texture_component_for_node(world, entity, &node);
-        insert_video_quad_mesh(world, entity, size, uv_rect)?;
-        return Ok(());
-    }
-    if kind == "image" || kind == "audio_waveform" {
-        if kind == "image" {
-            let _source =
-                source.ok_or_else(|| format!("bevy_media_source_required:{}", patch.id))?;
-        }
-        let handle = {
-            let mut images = world
-                .get_resource_mut::<Assets<Image>>()
-                .ok_or_else(|| "bevy_image_assets_required".to_string())?;
-            image_handle_from_texture(&mut images, &patch.texture, &patch.id)?
-        };
-        let color = texture_sprite_color(world, entity);
-        let mut sprite = world
-            .get_mut::<Sprite>(entity)
-            .ok_or_else(|| format!("bevy_resource_sprite_missing:{}", patch.id))?;
-        sprite.image = handle;
-        sprite.color = color;
     }
     Ok(())
 }

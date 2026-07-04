@@ -116,7 +116,92 @@ fn shape_shadow_uses_bevy_overlay_without_changing_logical_size() {
     .unwrap();
 
     assert!(world.get::<AtomeShapeShadowOverlay>(entity).is_none());
-    assert_eq!(world.resource::<Assets<Image>>().len(), 0);
+    assert_eq!(world.resource::<Assets<Image>>().len(), 1);
+    assert_eq!(world.resource::<AtomeShapeShadowTextureCache>().handles.len(), 1);
+}
+
+#[test]
+fn shape_shadow_translation_reuses_existing_texture() {
+    let mut world = test_world();
+    let entity = apply_spawn(
+        &mut world,
+        AtomeRenderNode {
+            shadow: Some(AtomeShadowStyle {
+                color: [0.0, 0.0, 0.0, 0.42],
+                blur: 8.0,
+                offset_x: 3.0,
+                offset_y: 4.0,
+                spread: 2.0,
+            }),
+            ..shape_node("translated_shadow")
+        },
+    )
+    .unwrap();
+    let first_overlay = world.get::<AtomeShapeShadowOverlay>(entity).unwrap().clone();
+    let first_shadow_entity = first_overlay.entities[0];
+    let first_handle = first_overlay.image_handles[0].clone();
+    let first_assets_len = world.resource::<Assets<Image>>().len();
+
+    apply_transform(
+        &mut world,
+        AtomeTransformPatch {
+            id: "translated_shadow".to_string(),
+            logical_position: [72.0, 84.0],
+            logical_size: [120.0, 50.0],
+            scale: [1.0, 1.0],
+            rotation: 0.0,
+            origin: [0.0, 0.0],
+        },
+    )
+    .unwrap();
+
+    let overlay = world.get::<AtomeShapeShadowOverlay>(entity).unwrap();
+    assert_eq!(overlay.entities[0], first_shadow_entity);
+    assert_eq!(overlay.image_handles[0], first_handle);
+    assert_eq!(world.resource::<Assets<Image>>().len(), first_assets_len);
+    assert_eq!(world.resource::<AtomeShapeShadowTextureCache>().handles.len(), 1);
+    assert_ne!(
+        world.get::<Transform>(first_shadow_entity).unwrap().translation,
+        Vec3::ZERO
+    );
+}
+
+#[test]
+fn equivalent_shape_shadows_share_one_texture_asset() {
+    let mut world = test_world();
+    let shadow = Some(AtomeShadowStyle {
+        color: [0.0, 0.0, 0.0, 0.42],
+        blur: 8.0,
+        offset_x: 0.0,
+        offset_y: 0.0,
+        spread: 0.0,
+    });
+
+    let first = apply_spawn(
+        &mut world,
+        AtomeRenderNode {
+            shadow,
+            ..shape_node("shared_shadow_a")
+        },
+    )
+    .unwrap();
+    let second = apply_spawn(
+        &mut world,
+        AtomeRenderNode {
+            id: "shared_shadow_b".to_string(),
+            logical_position: [220.0, 24.0],
+            shadow,
+            ..shape_node("shared_shadow_b")
+        },
+    )
+    .unwrap();
+
+    assert_eq!(world.resource::<Assets<Image>>().len(), 1);
+    assert_eq!(world.resource::<AtomeShapeShadowTextureCache>().handles.len(), 1);
+    assert_eq!(
+        world.get::<AtomeShapeShadowOverlay>(first).unwrap().image_handles[0],
+        world.get::<AtomeShapeShadowOverlay>(second).unwrap().image_handles[0]
+    );
 }
 
 #[test]

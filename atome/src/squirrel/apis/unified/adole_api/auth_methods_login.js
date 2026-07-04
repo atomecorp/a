@@ -9,8 +9,12 @@ import {
 } from './session.js';
 import { normalizePhone, normalizeUsername, getPrimaryBackend, getSecondaryBackend, hasAuthenticatedToken } from './auth_core.js';
 import { loginBackend, registerBackend, bootstrapBackend, ensureBackendAvailability } from './auth_backends.js';
-import { persistFastifyLoginCache } from './auth_fastify_token.js';
+import { persistFastifyLoginCache, markFastifyAuthValid } from './auth_fastify_token.js';
 import { migratePreviousWorkspace } from './auth_workspace.js';
+
+const markValidFastifySession = (backend, result) => {
+    if (backend === 'fastify' && hasAuthenticatedToken('fastify', result)) markFastifyAuthValid();
+};
 
 export const loginMethods = {
     async bootstrap(phone, password, username, visibility = 'public') {
@@ -97,6 +101,8 @@ export const loginMethods = {
             return response;
         }
 
+        markValidFastifySession(primary, primaryResult);
+        markValidFastifySession(secondary, secondaryResult);
         persistFastifyLoginCache({ phone: cleanPhone, password });
         setSessionState({
             mode: 'authenticated',
@@ -143,6 +149,7 @@ export const loginMethods = {
         });
 
         let fallbackResult = null;
+        let secondaryResult = null;
         let activeBackend = primary;
 
         const response = {
@@ -185,7 +192,7 @@ export const loginMethods = {
         };
 
         if (activeBackend === primary && primaryResult.ok && availability[secondary] && !fallbackResult) {
-            const secondaryResult = await registerBackend(secondary, {
+            secondaryResult = await registerBackend(secondary, {
                 phone: cleanPhone,
                 password,
                 username: cleanName,
@@ -200,6 +207,9 @@ export const loginMethods = {
 
         const authenticated = !!(activeResult?.ok && activeResult.user && hasAuthenticatedToken(activeBackend, activeResult));
         if (authenticated) {
+            markValidFastifySession(primary, primaryResult);
+            markValidFastifySession(secondary, fallbackResult);
+            markValidFastifySession(secondary, secondaryResult);
             persistFastifyLoginCache({ phone: cleanPhone, password });
             setSessionState({
                 mode: 'authenticated',
@@ -290,6 +300,8 @@ export const loginMethods = {
         }
 
         if (activeResult.ok && loggedUser?.id) {
+            markValidFastifySession(primary, primaryResult);
+            markValidFastifySession(secondary, secondaryResult);
             persistFastifyLoginCache({ phone: cleanPhone, password });
             setSessionState({
                 mode: 'authenticated',

@@ -111,7 +111,10 @@ export const dashboardSnapshot = (page) => page.evaluate(() => {
     const projectId = window.__currentProject?.id || window.AdoleAPI?.projects?.getCurrentId?.() || null;
     const runtime = window.eveDashboardRuntime || null;
     const state = runtime?.state || {};
-    const scene = projectId ? window.eveToolBase?.getProjectSceneState?.(projectId) : null;
+    const sceneProjectId = state.active === true
+        ? (state.projectId || '__eve_dashboard_workspace__')
+        : projectId;
+    const scene = sceneProjectId ? window.eveToolBase?.getProjectSceneState?.(sceneProjectId) : null;
     const records = Array.isArray(scene?.records) ? scene.records : [];
     const dashboard = records.filter((record) => String(record?.id || '').startsWith('__eve_dashboard_'));
     const visible = dashboard.filter((record) => {
@@ -137,11 +140,20 @@ export const dashboardSnapshot = (page) => page.evaluate(() => {
     return {
         ok: true,
         active: state.active === true,
+        closing: state.closing === true,
+        opening: state.opening === true,
         activeCategoryId: state.activeCategoryId || '',
         projectId,
+        sceneProjectId,
         runtimeProjectId: state.projectId || '',
+        fadeOpacity: Number(state.fadeOpacity ?? 1),
         dashboardIds: dashboard.map((record) => record.id),
         visibleDashboardIds: visible.map((record) => record.id),
+        canvasCount: document.querySelectorAll('canvas#eve_surface_project').length,
+        currentProjectHostIds: Array.from(document.querySelectorAll('[id^="project_view_"]'))
+            .map((node) => String(node.id || ''))
+            .filter((id) => id !== 'project_view___eve_dashboard_workspace__'),
+        workspaceMode: window.__eveWorkspaceMode || null,
         layout,
         perf: window.__EVE_BEVY_PERF__?.summary?.() || null
     };

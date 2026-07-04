@@ -1,5 +1,5 @@
 use bevy::{image::Image, prelude::*};
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 
 use crate::types::{
     default_transform_origin, default_transform_scale, normalize_transform_origin,
@@ -95,6 +95,35 @@ pub struct AtomeShapeShadow(pub Option<AtomeShadowStyle>);
 pub struct AtomeShapeShadowOverlay {
     pub entities: Vec<Entity>,
     pub image_handles: Vec<Handle<Image>>,
+}
+
+#[derive(Clone, Debug, Hash, PartialEq, Eq)]
+pub struct AtomeShapeShadowCacheKey {
+    pub width: u32,
+    pub height: u32,
+    pub corner_radius: u32,
+    pub blur: u32,
+    pub spread: u32,
+    pub offset_x: i32,
+    pub offset_y: i32,
+    pub color: [u8; 4],
+}
+
+#[derive(Clone, Debug, Resource)]
+pub struct AtomeShapeShadowTextureCache {
+    pub max_entries: usize,
+    pub order: VecDeque<AtomeShapeShadowCacheKey>,
+    pub handles: HashMap<AtomeShapeShadowCacheKey, Handle<Image>>,
+}
+
+impl Default for AtomeShapeShadowTextureCache {
+    fn default() -> Self {
+        Self {
+            max_entries: 128,
+            order: VecDeque::new(),
+            handles: HashMap::new(),
+        }
+    }
 }
 
 #[derive(Clone, Debug, Component)]

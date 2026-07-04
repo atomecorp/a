@@ -14,9 +14,9 @@ import {
     resetWorkspaceForNextUser,
     waitForAuthCheck
 } from './session.js';
-import { adapters, normalizePhone, getPrimaryBackend, getSecondaryBackend, hasToken } from './auth_core.js';
+import { adapters, normalizePhone, getPrimaryBackend, getSecondaryBackend, hasToken, hasAuthenticatedToken } from './auth_core.js';
 import { loginBackend, bootstrapBackend, meBackend, createAnonymousCredentials, ensureBackendAvailability } from './auth_backends.js';
-import { loadFastifyLoginCache, ensureFastifyToken } from './auth_fastify_token.js';
+import { loadFastifyLoginCache, ensureFastifyToken, markFastifyAuthValid } from './auth_fastify_token.js';
 import { migratePreviousWorkspace, migrateAnonymousWorkspace } from './auth_workspace.js';
 import { requireAuth, normalizeSessionUser } from './auth_state.js';
 import { auth } from './auth.js';
@@ -190,6 +190,7 @@ export const sessionAccountMethods = {
         if (adapter?.getToken?.()) {
             const me = await meBackend(backend);
             if (me.ok && me.user) {
+                if (backend === 'fastify') markFastifyAuthValid();
                 setSessionState({
                     mode: 'anonymous',
                     user: me.user,
@@ -217,13 +218,17 @@ export const sessionAccountMethods = {
             });
         }
 
-        if (bootstrapResult.ok && bootstrapResult.user) {
+        if (bootstrapResult.ok && bootstrapResult.user && hasAuthenticatedToken(backend, bootstrapResult)) {
+            if (backend === 'fastify') markFastifyAuthValid();
             setSessionState({
                 mode: 'anonymous',
                 user: bootstrapResult.user,
                 backend
             });
             return { ok: true, user: bootstrapResult.user, source: backend };
+        }
+        if (bootstrapResult.ok && bootstrapResult.user) {
+            return { ok: false, reason: 'missing_authenticated_session', user: null };
         }
 
         return { ok: false, reason: bootstrapResult.error || 'anonymous_failed', user: null };
