@@ -363,6 +363,10 @@ Primary sources:
 
 - `eVe/intuition/ribbon/tokens.js`
 - `eVe/intuition/ribbon/menu.js`
+- `eVe/intuition/ribbon/bevy_ui_main_menu_model.js`
+- `eVe/intuition/ribbon/bevy_ui_main_menu_runtime.js`
+- `eVe/intuition/ribbon/main_menu_bridge_runtime.js`
+- `eVe/domains/rendering/bevy_ui_runtime.js`
 - `eVe/intuition/menu/visual/toolbox_styles.js`
 - `eVe/intuition/menu/visual/toolbox_runtime_visual.js`
 - `eVe/intuition/flower/menu.js`
@@ -376,11 +380,13 @@ Primary sources:
 Role:
 
 - Ribbon tokens define handle icons, tool sizes, flower metrics, drag thresholds, and animation timing.
-- The main ribbon is the primary product surface that materializes the shared tool visual contract used by the user tool, the Atome handle, and the main toolbar tool buttons.
+- The visible main menu is now the BevyUI runtime mounted on the shared project WebGPU canvas. `window.new_menu_v2` resolves to the BevyUI menu facade, while the previous DOM ribbon is created only as a private manual legacy surface toggled by the last BevyUI item; it must never reappear automatically.
+- BevyUI is the rendering target for the main menu and the foundation for later panels, mounted through `eVe/domains/rendering/bevy_ui_runtime.js`. The visible product route is the shared project WebGPU overlay path; native BevyUI WASM ops remain opt-in until a native BevyUI surface owns visible rendering directly. Squirrel/toolbox definitions remain the canonical UI source; BevyUI trees are disposable render targets and must not create DOM nodes per component. SVG icon sources are resolved to RGBA textures by the shared WebGPU texture resolver and rendered as BevyUI image nodes, not as DOM `img` or inline SVG elements.
+- The minimal BevyUI component vocabulary covers layout roots/panels/rows/columns/stacks/spacers/scroll areas/dividers, controls such as buttons/icon buttons/toggles/checkboxes/radios/segmented controls, panel navigation such as tabs/accordions/collapsible groups, forms including text/search/number/password inputs and selects, value controls such as sliders/steppers/color swatches, data views such as lists/tables/property grids, and runtime interaction states for hover, pressed, selected, disabled, focused, scroll, drag/resize handles, and tooltips.
 - Runtime-specific ribbon behavior is split out of `menu.js`: shell creation lives in `menu_shell_runtime.js`, layout/scroll/placement/visibility live in `menu_layout_runtime.js`, `menu_scroll_runtime.js`, `menu_placement_runtime.js`, and `menu_visibility_runtime.js`, tool/palette rendering lives in `menu_tool_render_runtime.js`, delete visual/routing lives in `menu_delete_visual_runtime.js` and `menu_drag_delete_runtime.js`, the public facade lives in `menu_public_api_runtime.js`, auth dock animation lives in `menu_auth_dock_runtime.js`, external-open width animation lives in `menu_external_open_runtime.js`, and Quick Capture overlay/reveal/fullscreen behavior lives in `menu_quick_capture_runtime.js`.
-- The authenticated main ribbon currently exposes `home`, `ai`, `find`, `capture`, `time`, `communicate`, `mode`, and `view` in that order; `ai` reveals a Finder-style inline prompt inside the ribbon instead of a floating IA dialog, `capture` reveals the product capture palette including browser media import, `time` reveals the calendar panel child, `mode` reveals `perform`, `edit`, and `consume` mode tools, and `view` reveals the `list`, `table`, and `natural` view-mode tools through the existing palette child projection contract.
+- The authenticated main menu is read from the handedness edge: the Dashboard grid `3 x 3` toggle is first, followed by the passive Atome logo item, then `home`, `ai`, `find`, `capture`, `time`, `communicate`, `mode`, and `view` from `toolbox.children`, with the manual legacy-menu item on the opposite edge. Right-handed placement reverses the row visually so Dashboard remains nearest the right edge, and active resize observation keeps that edge-aligned row glued to the bottom of the WebGPU surface. Each 60 px block renders one uniformly sized, centered canonical SVG icon using the same hydrated `lightgray` (`#d3d3d3`) tint above a localized label lowered within the BevyUI column; the prehydrated RGBA texture is preserved through the Virtual Scene and must not be replaced by re-decoding the original SVG source. Tool items reuse the same normalized definitions and invocation handlers as the ribbon.
 - Main ribbon tool roots must carry the shared `.eve-intuitionx-projection-tool` visual class so the browser-native button border is reset by the existing projection tool style contract.
-- The main ribbon container is visually transparent; the Atome handle remains docked directly against the WebView bottom-right edge in right-handed mode and bottom-left edge in left-handed mode, matching the Dashboard header side.
+- Dashboard reserved-band measurement reads the active BevyUI main-menu reserved height before measuring legacy DOM ribbon/toolbox geometry. DOM measurement is used only when the BevyUI menu is inactive or absent.
 - Toolbox styles inject runtime CSS variables and rules for menu V2.
 - Flower menu visuals keep DOM orchestration in `menu.js`, radial placement in `menu_layout.js`, and icon/item visual normalization in `menu_items.js`; active-selection compatibility is owned by `context_selection.js`, with mixed-kind multi-selection constrained to the `info` tool until compatible batch-tool policy is expanded.
 - Lasso action menu visuals are owned by `eVe/shared/lasso_context_zone_runtime.js`: the selected lasso rectangle remains a passive overlay, the action menu opens from a long press inside the runtime selection bounds, and no separate bottom `+` trigger is rendered. `eVe/intuition/flower/context_target.js` must block flower long press by consulting that runtime lasso point blocker while the lasso context is active.
@@ -389,7 +395,7 @@ Role:
 - Matrix visual grids use logical slot virtualization: empty background capacity is represented by grid sizing and slot math, while DOM nodes are reserved for project tiles and the first actionable empty creation tile.
 - Matrix project-view fixed geometry is owned by the generated `.eve-project-view` visual rule in `eVe/intuition/matrix/visual/matrix_visual_tokens.js`; `ensureProjectView()` may set only dynamic projection state and runtime interaction styles.
 
-Design rule: menu/ribbon/flower/Matrix changes must preserve shared tool visual semantics and layer ordering.
+Design rule: menu/ribbon/flower/Matrix changes must preserve shared tool visual semantics, BevyUI-as-render-target ownership, and layer ordering.
 
 Current ownership note:
 

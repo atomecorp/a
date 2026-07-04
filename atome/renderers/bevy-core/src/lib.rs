@@ -10,6 +10,7 @@ pub mod shape_shadow_overlay;
 pub mod spawn;
 pub mod texture;
 pub mod types;
+pub mod ui;
 pub mod video_diagnostics;
 pub mod video_external_texture;
 #[cfg(target_arch = "wasm32")]
@@ -20,6 +21,7 @@ pub use plugin::{apply_render_ops, AtomeBevyRendererPlugin};
 pub use render_math::{atome_rect_transform, color_from_rgba, depth_for_layer};
 pub use render_ops::*;
 pub use types::*;
+pub use ui::*;
 pub use video_diagnostics::*;
 
 #[cfg(test)]

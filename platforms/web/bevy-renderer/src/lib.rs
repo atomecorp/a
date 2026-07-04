@@ -1,6 +1,7 @@
 use atome_bevy_renderer_core::{
-    apply_render_ops, apply_surface, AtomeBevyRendererConfig, AtomeBevyRendererPlugin,
-    AtomeRenderOp, AtomeRenderScene, AtomeRendererDiagnostics, AtomeSurfacePatch,
+    apply_render_ops, apply_surface, apply_ui_ops, AtomeBevyRendererConfig,
+    AtomeBevyRendererPlugin, AtomeRenderOp, AtomeRenderScene, AtomeRendererDiagnostics,
+    AtomeSurfacePatch, AtomeUiDiagnostics, AtomeUiEvent, AtomeUiOp,
 };
 use bevy::{
     log::{Level, LogPlugin},
@@ -12,13 +13,16 @@ use bevy::{
     winit::{EventLoopProxy, EventLoopProxyWrapper, UpdateMode, WinitSettings, WinitUserEvent},
 };
 use serde::Serialize;
-use std::cell::RefCell;
 use std::time::Duration;
+use std::cell::RefCell;
 
 mod exports;
 
 thread_local! {
     static WEB_PENDING_OPS: RefCell<Vec<AtomeRenderOp>> = RefCell::new(Vec::new());
+    static WEB_PENDING_UI_OPS: RefCell<Vec<AtomeUiOp>> = RefCell::new(Vec::new());
+    static WEB_LAST_UI_DIAGNOSTICS: RefCell<AtomeUiDiagnostics> = RefCell::new(AtomeUiDiagnostics::default());
+    static WEB_DRAINED_UI_EVENTS: RefCell<Vec<AtomeUiEvent>> = const { RefCell::new(Vec::new()) };
     static WEB_PENDING_VIDEO_FRAMES: RefCell<u32> = const { RefCell::new(0) };
     static WEB_EVENT_LOOP_PROXY: RefCell<Option<EventLoopProxy<WinitUserEvent>>> = const { RefCell::new(None) };
     static WEB_WAKE_PENDING: RefCell<bool> = const { RefCell::new(false) };
@@ -39,6 +43,11 @@ struct WebRendererDiagnostics {
     wake_calls: u32,
     video_frame_notifications: u32,
     video_frame_redraws: u32,
+    queued_ui_ops: u32,
+    drained_ui_ops: u32,
+    ui_batches: u32,
+    running_apps: u32,
+    manual_update_calls: u32,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -97,8 +106,9 @@ fn queue_web_ops(ops: Vec<AtomeRenderOp>) {
         let mut pending_ops = cell.borrow_mut();
         for op in ops {
             if let Some(id) = progress_only_style_id(&op) {
-                pending_ops
-                    .retain(|pending| progress_only_style_id(pending).as_deref() != Some(id.as_str()));
+                pending_ops.retain(|pending| {
+                    progress_only_style_id(pending).as_deref() != Some(id.as_str())
+                });
             }
             pending_ops.push(op);
         }
@@ -111,6 +121,22 @@ fn queue_web_ops(ops: Vec<AtomeRenderOp>) {
         diagnostics.max_queue_depth = diagnostics.max_queue_depth.max(queue_depth);
     });
     wake_web_renderer();
+}
+
+fn queue_web_ui_ops(ops: Vec<AtomeUiOp>) {
+    if ops.is_empty() {
+        return;
+    }
+    let op_count = ops.len() as u32;
+    WEB_PENDING_UI_OPS.with(|cell| {
+        cell.borrow_mut().extend(ops);
+    });
+    WEB_DIAGNOSTICS.with(|cell| {
+        let mut diagnostics = cell.borrow_mut();
+        diagnostics.queued_ui_ops += op_count;
+    });
+    request_web_redraw();
+    drive_registered_web_app_update();
 }
 
 fn progress_only_style_id(op: &AtomeRenderOp) -> Option<String> {
@@ -139,6 +165,18 @@ fn drain_web_ops() -> Vec<AtomeRenderOp> {
             let mut diagnostics = cell.borrow_mut();
             diagnostics.drained_ops += ops.len() as u32;
             diagnostics.drain_batches += 1;
+        });
+    }
+    ops
+}
+
+fn drain_web_ui_ops() -> Vec<AtomeUiOp> {
+    let ops: Vec<AtomeUiOp> = WEB_PENDING_UI_OPS.with(|cell| cell.borrow_mut().drain(..).collect());
+    if !ops.is_empty() {
+        WEB_DIAGNOSTICS.with(|cell| {
+            let mut diagnostics = cell.borrow_mut();
+            diagnostics.drained_ui_ops += ops.len() as u32;
+            diagnostics.ui_batches += 1;
         });
     }
     ops
@@ -176,6 +214,28 @@ fn drain_web_redraw_request() -> bool {
     WEB_REDRAW_PENDING.with(|cell| cell.replace(false))
 }
 
+fn read_web_ui_diagnostics() -> AtomeUiDiagnostics {
+    let app_diagnostics = WEB_RUNNING_APPS.with(|cell| {
+        let apps = cell.borrow();
+        apps.last()
+            .and_then(|app| app.world().get_resource::<AtomeUiDiagnostics>().cloned())
+            .unwrap_or_default()
+    });
+    if app_diagnostics.mounted_trees > 0
+        || app_diagnostics.mounted_nodes > 0
+        || app_diagnostics.applied_ops > 0
+        || app_diagnostics.queued_events > 0
+        || app_diagnostics.last_error.is_some()
+    {
+        return app_diagnostics;
+    }
+    WEB_LAST_UI_DIAGNOSTICS.with(|cell| cell.borrow().clone())
+}
+
+fn drain_web_ui_events() -> Vec<AtomeUiEvent> {
+    WEB_DRAINED_UI_EVENTS.with(|cell| cell.borrow_mut().drain(..).collect())
+}
+
 fn remember_event_loop_proxy(proxy: Option<Res<EventLoopProxyWrapper>>) {
     let Some(proxy) = proxy else {
         return;
@@ -207,6 +267,19 @@ fn wake_web_renderer() {
     });
 }
 
+fn drive_registered_web_app_update() {
+    WEB_RUNNING_APPS.with(|cell| {
+        let mut apps = cell.borrow_mut();
+        if let Some(app) = apps.last_mut() {
+            WEB_DIAGNOSTICS.with(|diagnostics_cell| {
+                diagnostics_cell.borrow_mut().manual_update_calls += 1;
+            });
+            apply_pending_web_ui_ops(app.world_mut());
+            apply_pending_web_redraw(app.world_mut());
+        }
+    });
+}
+
 #[derive(Clone, Debug)]
 struct WebBevyRendererConfig {
     canvas_selector: String,
@@ -222,7 +295,16 @@ impl WebBevyRendererConfig {
         height: f32,
         initial_scene: AtomeRenderScene,
     ) -> Self {
-        Self::with_transparency(canvas_selector, width, height, width, height, 1.0, initial_scene, false)
+        Self::with_transparency(
+            canvas_selector,
+            width,
+            height,
+            width,
+            height,
+            1.0,
+            initial_scene,
+            false,
+        )
     }
 
     fn with_transparency(
@@ -282,6 +364,8 @@ impl Plugin for WebBevyRendererPlugin {
                     remember_event_loop_proxy,
                     apply_browser_window_resize_to_surface,
                     apply_pending_web_ops,
+                    apply_pending_web_ui_ops,
+                    drain_ui_events_for_web,
                     apply_pending_video_frame_notifications,
                     apply_pending_web_redraw,
                 )
@@ -301,6 +385,31 @@ fn apply_pending_web_ops(world: &mut World) {
     }
     apply_render_ops(world, ops);
     world.write_message(RequestRedraw);
+}
+
+fn apply_pending_web_ui_ops(world: &mut World) {
+    let ops = drain_web_ui_ops();
+    if ops.is_empty() {
+        return;
+    }
+    apply_ui_ops(world, ops);
+    let diagnostics = atome_bevy_renderer_core::read_ui_diagnostics(world);
+    WEB_LAST_UI_DIAGNOSTICS.with(|cell| {
+        *cell.borrow_mut() = diagnostics;
+    });
+    let drained = atome_bevy_renderer_core::drain_ui_events(world);
+    if !drained.is_empty() {
+        WEB_DRAINED_UI_EVENTS.with(|cell| cell.borrow_mut().extend(drained));
+    }
+    world.write_message(RequestRedraw);
+}
+
+fn drain_ui_events_for_web(world: &mut World) {
+    let drained = atome_bevy_renderer_core::drain_ui_events(world);
+    if drained.is_empty() {
+        return;
+    }
+    WEB_DRAINED_UI_EVENTS.with(|cell| cell.borrow_mut().extend(drained));
 }
 
 fn window_resize_event_logical_size(world: &World, event: &WindowResized) -> (f32, f32) {
@@ -403,7 +512,11 @@ fn apply_pending_video_frame_notifications(world: &mut World) {
 }
 
 fn read_web_renderer_diagnostics() -> WebRendererDiagnostics {
-    WEB_DIAGNOSTICS.with(|cell| cell.borrow().clone())
+    WEB_DIAGNOSTICS.with(|cell| {
+        let mut diagnostics = cell.borrow().clone();
+        diagnostics.running_apps = WEB_RUNNING_APPS.with(|apps_cell| apps_cell.borrow().len() as u32);
+        diagnostics
+    })
 }
 
 fn reset_web_renderer_diagnostics() -> WebRendererDiagnostics {

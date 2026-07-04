@@ -1,7 +1,6 @@
 use super::*;
 use atome_bevy_renderer_core::{
-    AtomeRenderNode, AtomeRenderOp, AtomeRenderScene, AtomeRendererDiagnostics,
-    AtomeTransformPatch,
+    AtomeRenderNode, AtomeRenderOp, AtomeRenderScene, AtomeRendererDiagnostics, AtomeTransformPatch,
 };
 use bevy::window::RequestRedraw;
 

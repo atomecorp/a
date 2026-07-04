@@ -79,5 +79,8 @@ fn textured_image_opacity_patch_keeps_white_sprite_modulation() {
     )
     .unwrap();
 
-    assert_srgba_near(world.get::<Sprite>(entity).unwrap().color, [1.0, 1.0, 1.0, 0.42]);
+    assert_srgba_near(
+        world.get::<Sprite>(entity).unwrap().color,
+        [1.0, 1.0, 1.0, 0.42],
+    );
 }

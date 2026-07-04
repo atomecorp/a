@@ -2,7 +2,7 @@ use super::*;
 use atome_bevy_renderer_core::{
     AtomeLayerPatch, AtomeParentPatch, AtomeRenderNode, AtomeRenderOp, AtomeRenderScene,
     AtomeResourcePatch, AtomeSceneEffectsPatch, AtomeStylePatch, AtomeSurfaceBackgroundPatch,
-    AtomeSurfacePatch, AtomeTextPatch, AtomeTransformPatch, AtomeVisibilityPatch,
+    AtomeSurfacePatch, AtomeTextPatch, AtomeTransformPatch, AtomeUiOp, AtomeVisibilityPatch,
 };
 use serde::Deserialize;
 use wasm_bindgen::prelude::*;
@@ -101,8 +101,10 @@ fn run_atome_bevy_renderer_with_transparency(
     }
     let scene: AtomeRenderScene = serde_wasm_bindgen::from_value(initial_scene)
         .map_err(|error| JsValue::from_str(&format!("bevy_projection_decode_failed:{error}")))?;
-    let metrics: WebSurfaceMetrics = serde_wasm_bindgen::from_value(surface_metrics)
-        .map_err(|error| JsValue::from_str(&format!("bevy_surface_metrics_decode_failed:{error}")))?;
+    let metrics: WebSurfaceMetrics =
+        serde_wasm_bindgen::from_value(surface_metrics).map_err(|error| {
+            JsValue::from_str(&format!("bevy_surface_metrics_decode_failed:{error}"))
+        })?;
     let config = if transparent {
         WebBevyRendererConfig::with_transparency(
             canvas_selector,
@@ -136,6 +138,26 @@ pub fn apply_atome_bevy_ops(ops: JsValue) -> Result<(), JsValue> {
         .map_err(|error| JsValue::from_str(&format!("bevy_ops_decode_failed:{error}")))?;
     queue_web_ops(parsed.into_iter().map(AtomeRenderOp::from).collect());
     Ok(())
+}
+
+#[wasm_bindgen]
+pub fn apply_atome_bevy_ui_ops(ops: JsValue) -> Result<(), JsValue> {
+    let parsed: Vec<AtomeUiOp> = serde_wasm_bindgen::from_value(ops)
+        .map_err(|error| JsValue::from_str(&format!("bevy_ui_ops_decode_failed:{error}")))?;
+    queue_web_ui_ops(parsed);
+    Ok(())
+}
+
+#[wasm_bindgen]
+pub fn read_atome_bevy_ui_diagnostics() -> Result<JsValue, JsValue> {
+    serde_wasm_bindgen::to_value(&read_web_ui_diagnostics())
+        .map_err(|error| JsValue::from_str(&format!("bevy_ui_diagnostics_encode_failed:{error}")))
+}
+
+#[wasm_bindgen]
+pub fn drain_atome_bevy_ui_events() -> Result<JsValue, JsValue> {
+    serde_wasm_bindgen::to_value(&drain_web_ui_events())
+        .map_err(|error| JsValue::from_str(&format!("bevy_ui_events_encode_failed:{error}")))
 }
 
 #[wasm_bindgen]

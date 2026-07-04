@@ -8,8 +8,8 @@ use bevy::{
 
 use crate::{
     components::{
-        AtomeCornerRadius, AtomeShapeShadow, AtomeShapeShadowCacheKey,
-        AtomeShapeShadowOverlay, AtomeShapeShadowTextureCache, AtomeVisualOpacity,
+        AtomeCornerRadius, AtomeShapeShadow, AtomeShapeShadowCacheKey, AtomeShapeShadowOverlay,
+        AtomeShapeShadowTextureCache, AtomeVisualOpacity,
     },
     render_math::{atome_rect_transform, depth_for_layer},
     selection_overlay::{channel_to_u8, shadow_alpha_for_distance},
@@ -118,7 +118,10 @@ fn cached_shape_shadow_handle(
             .ok_or_else(|| "bevy_shape_shadow_image_assets_required".to_string())?;
         images.add(image)
     };
-    if world.get_resource::<AtomeShapeShadowTextureCache>().is_none() {
+    if world
+        .get_resource::<AtomeShapeShadowTextureCache>()
+        .is_none()
+    {
         world.insert_resource(AtomeShapeShadowTextureCache::default());
     }
     let mut cache = world.resource_mut::<AtomeShapeShadowTextureCache>();
@@ -188,7 +191,10 @@ pub fn remove_shape_shadow_overlay(world: &mut World, entity: Entity) {
     }
 }
 
-pub fn sync_shape_shadow_overlay_transform(world: &mut World, entity: Entity) -> Result<(), String> {
+pub fn sync_shape_shadow_overlay_transform(
+    world: &mut World,
+    entity: Entity,
+) -> Result<(), String> {
     let Some(overlay) = world.get::<AtomeShapeShadowOverlay>(entity).cloned() else {
         if world
             .get::<AtomeShapeShadow>(entity)
@@ -230,15 +236,17 @@ pub fn sync_shape_shadow_overlay_transform(world: &mut World, entity: Entity) ->
     let shadow_y = position.y + shadow.offset_y - shadow.spread - shadow.blur;
     for overlay_entity in overlay.entities {
         if world.get_entity(overlay_entity).is_ok() {
-            world.entity_mut(overlay_entity).insert(atome_rect_transform(
-                shadow_x,
-                shadow_y,
-                image_width,
-                image_height,
-                surface_width,
-                surface_height,
-                shadow_depth_for_layer(layer),
-            ));
+            world
+                .entity_mut(overlay_entity)
+                .insert(atome_rect_transform(
+                    shadow_x,
+                    shadow_y,
+                    image_width,
+                    image_height,
+                    surface_width,
+                    surface_height,
+                    shadow_depth_for_layer(layer),
+                ));
         }
     }
     Ok(())

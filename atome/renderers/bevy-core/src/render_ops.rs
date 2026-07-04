@@ -15,9 +15,7 @@ use crate::{
     spawn::spawn_node_in_world,
     texture::image_handle_from_texture,
     types::*,
-    video_external_texture::{
-        insert_video_quad_mesh,
-    },
+    video_external_texture::insert_video_quad_mesh,
     waveform_playback_overlay::{
         rebuild_waveform_playback_overlay, remove_waveform_playback_overlay,
     },
@@ -211,7 +209,12 @@ pub fn apply_surface(world: &mut World, patch: AtomeSurfacePatch) -> Result<(), 
     {
         *projection = atome_camera_projection(width, height);
     }
-    let ids: Vec<String> = world.resource::<AtomeEntityTable>().by_id.keys().cloned().collect();
+    let ids: Vec<String> = world
+        .resource::<AtomeEntityTable>()
+        .by_id
+        .keys()
+        .cloned()
+        .collect();
     for id in ids {
         let entity = entity_for(world, &id)?;
         let position = *world

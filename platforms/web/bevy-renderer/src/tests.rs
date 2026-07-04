@@ -82,7 +82,10 @@ fn web_preview_window_uses_transparent_surface() {
 
     assert_eq!(window.canvas, Some("#atome-bevy-preview".to_string()));
     assert!(window.transparent);
-    assert_eq!(window.composite_alpha_mode, CompositeAlphaMode::PreMultiplied);
+    assert_eq!(
+        window.composite_alpha_mode,
+        CompositeAlphaMode::PreMultiplied
+    );
     assert!(!window.fit_canvas_to_parent);
     assert_eq!(window.resolution.physical_width(), 640);
     assert_eq!(window.resolution.physical_height(), 400);

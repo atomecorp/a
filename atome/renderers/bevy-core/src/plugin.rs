@@ -1,4 +1,4 @@
-use bevy::{image::Image, mesh::Mesh, prelude::*};
+use bevy::{image::Image, mesh::Mesh, prelude::*, ui::IsDefaultUiCamera};
 
 use crate::{
     backdrop_blur::{apply_scene_effects, refresh_scene_effects},
@@ -8,6 +8,7 @@ use crate::{
     shape_shadow_overlay::rebuild_shape_shadow_overlay,
     spawn::{spawn_node_with_texture_handle, texture_handle_for_node},
     types::*,
+    ui::AtomeBevyUiPlugin,
     video_external_texture::{
         insert_video_external_texture_component_for_node, AtomeVideoExternalTexturePlugin,
     },
@@ -28,6 +29,7 @@ impl Plugin for AtomeBevyRendererPlugin {
     fn build(&self, app: &mut App) {
         app.insert_resource(self.config.clone())
             .add_plugins(AtomeVideoExternalTexturePlugin)
+            .add_plugins(AtomeBevyUiPlugin)
             .init_resource::<AtomeEntityTable>()
             .init_resource::<AtomeBackdropBlurState>()
             .init_resource::<AtomeRendererDiagnostics>()
@@ -44,6 +46,7 @@ fn spawn_atome_bevy_scene(
 ) {
     commands.spawn((
         Camera2d,
+        IsDefaultUiCamera,
         atome_camera_projection(config.width, config.height),
     ));
     for node in &config.initial_scene.nodes {

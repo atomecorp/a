@@ -117,7 +117,13 @@ fn shape_shadow_uses_bevy_overlay_without_changing_logical_size() {
 
     assert!(world.get::<AtomeShapeShadowOverlay>(entity).is_none());
     assert_eq!(world.resource::<Assets<Image>>().len(), 1);
-    assert_eq!(world.resource::<AtomeShapeShadowTextureCache>().handles.len(), 1);
+    assert_eq!(
+        world
+            .resource::<AtomeShapeShadowTextureCache>()
+            .handles
+            .len(),
+        1
+    );
 }
 
 #[test]
@@ -137,7 +143,10 @@ fn shape_shadow_translation_reuses_existing_texture() {
         },
     )
     .unwrap();
-    let first_overlay = world.get::<AtomeShapeShadowOverlay>(entity).unwrap().clone();
+    let first_overlay = world
+        .get::<AtomeShapeShadowOverlay>(entity)
+        .unwrap()
+        .clone();
     let first_shadow_entity = first_overlay.entities[0];
     let first_handle = first_overlay.image_handles[0].clone();
     let first_assets_len = world.resource::<Assets<Image>>().len();
@@ -159,9 +168,18 @@ fn shape_shadow_translation_reuses_existing_texture() {
     assert_eq!(overlay.entities[0], first_shadow_entity);
     assert_eq!(overlay.image_handles[0], first_handle);
     assert_eq!(world.resource::<Assets<Image>>().len(), first_assets_len);
-    assert_eq!(world.resource::<AtomeShapeShadowTextureCache>().handles.len(), 1);
+    assert_eq!(
+        world
+            .resource::<AtomeShapeShadowTextureCache>()
+            .handles
+            .len(),
+        1
+    );
     assert_ne!(
-        world.get::<Transform>(first_shadow_entity).unwrap().translation,
+        world
+            .get::<Transform>(first_shadow_entity)
+            .unwrap()
+            .translation,
         Vec3::ZERO
     );
 }
@@ -197,10 +215,22 @@ fn equivalent_shape_shadows_share_one_texture_asset() {
     .unwrap();
 
     assert_eq!(world.resource::<Assets<Image>>().len(), 1);
-    assert_eq!(world.resource::<AtomeShapeShadowTextureCache>().handles.len(), 1);
     assert_eq!(
-        world.get::<AtomeShapeShadowOverlay>(first).unwrap().image_handles[0],
-        world.get::<AtomeShapeShadowOverlay>(second).unwrap().image_handles[0]
+        world
+            .resource::<AtomeShapeShadowTextureCache>()
+            .handles
+            .len(),
+        1
+    );
+    assert_eq!(
+        world
+            .get::<AtomeShapeShadowOverlay>(first)
+            .unwrap()
+            .image_handles[0],
+        world
+            .get::<AtomeShapeShadowOverlay>(second)
+            .unwrap()
+            .image_handles[0]
     );
 }
 

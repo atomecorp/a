@@ -31,6 +31,8 @@ bevy_renderer_core = [
     "bevy/bevy_image",
     "bevy/bevy_sprite",
     "bevy/bevy_sprite_render",
+    "bevy/bevy_ui",
+    "bevy/bevy_ui_render",
     "bevy/png",
     "bevy/webgpu",
 ]
