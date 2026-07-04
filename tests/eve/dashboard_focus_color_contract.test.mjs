@@ -138,7 +138,6 @@ test('focused rubrique color floods chrome while lane cards derive from their he
         layout,
         tokens: DASHBOARD_VISUAL_TOKENS
     });
-    const inactiveHeader = shadeHex(active.color, -18);
     const laneByCardId = new Map();
     for (const lane of layout.lanes) {
         for (const entry of lane.visible_item_rects) {
@@ -148,11 +147,10 @@ test('focused rubrique color floods chrome while lane cards derive from their he
 
     assert.equal(dashboardRecord(records, 'background').properties.color, active.color);
     assert.equal(dashboardRecord(records, 'table').properties.color, active.color);
-    assert.equal(dashboardRecord(records, 'plus_strip_active').properties.color, active.color);
+    assert.equal(records.some((record) => String(record.id || '').includes('plus')), false);
     for (const category of categories) {
-        const headerColor = category.id === active.id ? active.color : inactiveHeader;
-        assert.equal(dashboardRecord(records, `lane_${category.id}`).properties.color, shadeHex(headerColor, DASHBOARD_VISUAL_TOKENS.laneShadePercent));
-        assert.equal(dashboardRecord(records, `header_bg_${category.id}`).properties.color, headerColor);
+        assert.equal(dashboardRecord(records, `lane_${category.id}`).properties.color, active.color);
+        assert.equal(dashboardRecord(records, `header_bg_${category.id}`).properties.color, active.color);
     }
     const cards = records.filter((record) => record.type === 'shape' && record.id.includes('__eve_dashboard_card_'));
     assert.ok(cards.length >= 3);

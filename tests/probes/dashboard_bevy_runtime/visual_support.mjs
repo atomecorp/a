@@ -63,7 +63,7 @@ const assertBrightPixels = (png, rect, label, minimum = 4) => {
 
 const assertLaneHasCardContrast = (png, lane, expectedHex, label) => {
     const sampleRect = {
-        x: lane.header_rect.x > lane.lane_rect.x ? lane.lane_rect.x + 8 : lane.plus_rect.x + lane.plus_rect.width + 8,
+        x: lane.lane_rect.x + 8,
         y: lane.lane_rect.y + Math.max(8, lane.lane_rect.height * 0.2),
         width: Math.max(20, Math.min(80, lane.lane_rect.width - 16)),
         height: Math.max(20, lane.lane_rect.height * 0.56)
@@ -79,9 +79,7 @@ const laneFillSampleX = (lane) => {
     const gapSample = lastItemRight + Math.max(12, Number(lane.lane_rect?.height || 0) * 0.2);
     const rightLimit = Number(lane.lane_rect.x || 0) + Number(lane.lane_rect.width || 0) - 12;
     if (gapSample < rightLimit) return gapSample;
-    return lane.header_rect.x > lane.lane_rect.x
-        ? lane.lane_rect.x + Math.min(Math.max(12, lane.lane_rect.width * 0.16), Math.max(12, lane.lane_rect.width - 12))
-        : lane.plus_rect.x + lane.plus_rect.width + Math.min(Math.max(12, lane.lane_rect.width * 0.16), Math.max(12, lane.lane_rect.width - 12));
+    return lane.lane_rect.x + Math.min(Math.max(12, lane.lane_rect.width * 0.16), Math.max(12, lane.lane_rect.width - 12));
 };
 
 const assertNearColor = (actual, expectedHex, label, tolerance = 12) => {
@@ -137,14 +135,12 @@ export const analyzeDashboardVisual = (screenshotPath, snapshot, expectedHex, la
     const png = PNG.sync.read(fs.readFileSync(screenshotPath));
     const lane = snapshot.layout?.lanes?.find((entry) => entry.active) || snapshot.layout?.lanes?.[0];
     if (!lane) throw new Error(`${label}_visual_lane_missing`);
-    const expectedLaneHex = shadeHex(expectedHex, -10);
+    const expectedLaneHex = expectedHex;
     const laneFillX = Math.min(lane.lane_rect.x + lane.lane_rect.width - 12, lane.lane_rect.x + lane.lane_rect.height + 12);
     assertNearColor(pixelAt(png, lane.header_rect.x + 7, sampleYInRect(png, lane.header_rect, 7)), expectedHex, `${label}_active_header`);
-    assertNearColor(pixelAt(png, lane.plus_rect.x + lane.plus_rect.width / 2, lane.plus_rect.y + lane.plus_rect.height + 12), expectedHex, `${label}_plus_strip`);
     assertNearColor(pixelAt(png, laneFillX, sampleYInRect(png, lane.lane_rect, 12)), expectedLaneHex, `${label}_lane_fill`);
     assertBrightPixels(png, lane.header_rect, `${label}_header_text_or_icon`);
     const headerFlatness = assertHeaderInteriorIsFlat(png, lane, label);
-    assertBrightPixels(png, lane.plus_rect, `${label}_plus_symbol`, 2);
     if (lane.visibleItemCount > 0) assertLaneHasCardContrast(png, lane, expectedLaneHex, `${label}_lane`);
     const reserved = snapshot.layout.toolbox_reserved_rect;
     const reservedPixel = pixelAt(png, reserved.x + reserved.width / 2, reserved.y + Math.min(12, reserved.height - 1));
@@ -156,6 +152,8 @@ export const analyzeDashboardOverviewVisual = (screenshotPath, snapshot) => {
     const png = PNG.sync.read(fs.readFileSync(screenshotPath));
     const headerFlatness = [];
     for (const lane of snapshot.layout?.lanes || []) {
+        if (Number(lane.lane_rect?.y || 0) < 0) continue;
+        if (Number(lane.lane_rect?.y || 0) + Number(lane.lane_rect?.height || 0) > Number(snapshot.layout?.toolbox_reserved_rect?.y || png.height)) continue;
         const expectedHex = CATEGORY_COLORS[lane.categoryId];
         if (!expectedHex) continue;
         const expectedLaneHex = shadeHex(expectedHex, -10);

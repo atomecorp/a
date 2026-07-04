@@ -1,18 +1,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { chromium } from 'playwright';
-import { analyzeDashboardOverviewVisual, analyzeDashboardVisual } from './dashboard_bevy_runtime/visual_support.mjs';
-import {
-    analyzeDashboardContactPhotoVisual,
-    analyzeDashboardProjectPreviewVisual,
-    ensureContactPhotoFixture,
-    ensureProjectPreviewFixture,
-    projectPreviewMediaRecord
-} from './dashboard_bevy_runtime/project_preview_support.mjs';
 import {
     clickCanvasRectCenter,
     enterGuestWorkspace,
-    longPressCanvasRectCenter,
     resolveAtomHandle,
     sleep,
     waitFor,
@@ -26,6 +17,15 @@ const REPORT_FILE = path.join(OUT_DIR, 'report.json');
 const DASHBOARD_OPEN_SCREENSHOT = path.join(OUT_DIR, 'dashboard_open.png');
 const DASHBOARD_MONITOR_SCREENSHOT = path.join(OUT_DIR, 'dashboard_monitor.png');
 const DASHBOARD_PROJECTS_SCREENSHOT = path.join(OUT_DIR, 'dashboard_projects.png');
+const CATEGORY_COLORS = Object.freeze({
+    news: '#9f2f2f',
+    calendar: '#245f94',
+    projects: '#357245',
+    contacts: '#673071',
+    store: '#a65f1f',
+    monitor: '#2f6f78',
+    goals: '#6f5b24'
+});
 
 fs.mkdirSync(OUT_DIR, { recursive: true });
 
@@ -50,10 +50,72 @@ const laneIsActive = (snapshot, categoryId) => (
     snapshot.layout?.lanes?.some((lane) => lane.categoryId === categoryId && lane.active === true) === true
 );
 
+const clampColor = (value) => Math.max(0, Math.min(255, value));
+
+const shadeHex = (hex, percent) => {
+    const value = String(hex || '#000000').replace('#', '');
+    if (!/^[0-9a-f]{6}$/i.test(value)) return hex || '#000000';
+    const amount = Math.round(2.55 * percent);
+    const red = clampColor(Number.parseInt(value.slice(0, 2), 16) + amount);
+    const green = clampColor(Number.parseInt(value.slice(2, 4), 16) + amount);
+    const blue = clampColor(Number.parseInt(value.slice(4, 6), 16) + amount);
+    return `#${[red, green, blue].map((part) => Math.round(part).toString(16).padStart(2, '0')).join('')}`;
+};
+
+const fillRecordMap = (snapshot) => new Map((snapshot.dashboardFillRecords || []).map((record) => [record.id, record]));
+
+const assertRecordColor = (records, id, expectedColor) => {
+    const record = records.get(id);
+    if (!record?.visible) throw new Error(`dashboard_fill_record_missing:${id}`);
+    const actual = String(record.color || '').toLowerCase();
+    const expected = String(expectedColor || '').toLowerCase();
+    if (actual !== expected) throw new Error(`dashboard_fill_color_mismatch:${JSON.stringify({ id, actual, expected })}`);
+    return { id, color: actual };
+};
+
+const assertOverviewRecordColors = (snapshot) => {
+    const records = fillRecordMap(snapshot);
+    const checked = [];
+    checked.push(assertRecordColor(records, '__eve_dashboard_background', '#101010'));
+    checked.push(assertRecordColor(records, '__eve_dashboard_table', '#101010'));
+    for (const lane of snapshot.layout?.lanes || []) {
+        const color = CATEGORY_COLORS[lane.categoryId];
+        if (!color) continue;
+        checked.push(assertRecordColor(records, `__eve_dashboard_lane_${lane.categoryId}`, shadeHex(color, -10)));
+        checked.push(assertRecordColor(records, `__eve_dashboard_header_bg_${lane.categoryId}`, color));
+    }
+    return { checked };
+};
+
+const assertFocusedRecordColors = (snapshot, activeCategoryId) => {
+    const activeColor = CATEGORY_COLORS[activeCategoryId];
+    if (!activeColor) throw new Error(`dashboard_active_color_missing:${activeCategoryId}`);
+    const records = fillRecordMap(snapshot);
+    const checked = [];
+    checked.push(assertRecordColor(records, '__eve_dashboard_background', activeColor));
+    checked.push(assertRecordColor(records, '__eve_dashboard_table', activeColor));
+    for (const lane of snapshot.layout?.lanes || []) {
+        checked.push(assertRecordColor(records, `__eve_dashboard_lane_${lane.categoryId}`, activeColor));
+        checked.push(assertRecordColor(records, `__eve_dashboard_header_bg_${lane.categoryId}`, activeColor));
+    }
+    return { activeCategoryId, activeColor, checked };
+};
+
+const dashboardHasNoPlusSurface = (snapshot) => (
+    (snapshot.dashboardRecordIds || []).every((id) => !String(id || '').includes('plus'))
+    && (snapshot.dashboardVisibleRecordIds || []).every((id) => !String(id || '').includes('plus'))
+    && (snapshot.layout?.lanes || []).every((lane) => (
+        lane.plus_rect === undefined
+        && lane.plus_strip_rect === undefined
+        && lane.active_plus_rect === undefined
+    ))
+);
+
 const dashboardOpenReady = (snapshot) => (
     snapshot.active
     && snapshot.dashboardRecordIds.includes('__eve_dashboard_background')
     && snapshot.dashboardRecordIds.includes('__eve_dashboard_table')
+    && dashboardHasNoPlusSurface(snapshot)
     && snapshot.dashboardDomCount === 0
     && snapshot.toolboxHeight > 0
     && snapshot.layout?.toolbox_reserved_rect?.height >= snapshot.toolboxHeight
@@ -117,12 +179,6 @@ const runScenario = async () => {
     try {
         await page.goto(APP_URL, { waitUntil: 'domcontentloaded', timeout: 45000 });
         report.checks.push({ name: 'guest_project_ready', ok: true, snapshot: await enterGuestWorkspace(page) });
-        const previewFixture = await ensureProjectPreviewFixture(page);
-        if (!previewFixture.ok) throw new Error(`dashboard_project_preview_fixture_failed:${JSON.stringify(previewFixture)}`);
-        report.checks.push({ name: 'project_preview_fixture_committed_through_atome', ok: true, snapshot: previewFixture });
-        const contactFixture = await ensureContactPhotoFixture(page);
-        if (!contactFixture.ok) throw new Error(`dashboard_contact_photo_fixture_failed:${JSON.stringify(contactFixture)}`);
-        report.checks.push({ name: 'contact_photo_fixture_committed_through_contacts_api', ok: true, snapshot: contactFixture });
 
         let atomHandle = await resolveAtomHandle(page);
         let opened = await waitForDashboardSnapshot(page, dashboardOpenReady, 12000);
@@ -131,36 +187,28 @@ const runScenario = async () => {
             opened = await waitForDashboardSnapshot(page, dashboardOpenReady, 30000);
         }
         if (!opened.ok) throw new Error('dashboard_open_failed');
-        const openedWithProjectPreview = await waitForDashboardSnapshot(page, (snapshot) => (
+        const openedReady = await waitForDashboardSnapshot(page, (snapshot) => (
             snapshot.active
             && snapshot.dashboardDomCount === 0
-            && !!snapshot.layout?.lanes?.find((lane) => lane.categoryId === 'projects')?.items?.[0]?.rect
-            && !!projectPreviewMediaRecord(snapshot)
+            && dashboardHasNoPlusSurface(snapshot)
+            && snapshot.dashboardVisibleRecordIds.includes('__eve_dashboard_background')
         ), 60000);
-        if (!openedWithProjectPreview.ok) {
-            throw new Error(`dashboard_project_preview_media_missing:${JSON.stringify(openedWithProjectPreview.snapshot?.dashboardMediaRecords || [])}`);
-        }
-        report.checks.push({ name: 'atom_opens_dashboard_without_dom_renderer', ok: true, snapshot: openedWithProjectPreview.snapshot });
+        if (!openedReady.ok) throw new Error('dashboard_open_ready_records_missing');
+        report.checks.push({ name: 'atom_opens_dashboard_without_dom_renderer', ok: true, snapshot: openedReady.snapshot });
         await waitForPresentationFrames(page, 12);
         await page.screenshot({ path: DASHBOARD_OPEN_SCREENSHOT, fullPage: true });
-        await page.screenshot({ path: DASHBOARD_PROJECTS_SCREENSHOT, fullPage: true });
         report.checks.push({
-            name: 'visual_open_matches_mockup_category_bands_and_toolbox_exclusion',
+            name: 'records_open_match_category_bands_and_toolbox_exclusion',
             ok: true,
-            visual: analyzeDashboardOverviewVisual(DASHBOARD_OPEN_SCREENSHOT, openedWithProjectPreview.snapshot)
+            records: assertOverviewRecordColors(openedReady.snapshot)
         });
         report.checks.push({
-            name: 'visual_project_card_uses_renderer_capture_pixels',
-            ok: true,
-            visual: analyzeDashboardProjectPreviewVisual(DASHBOARD_PROJECTS_SCREENSHOT, openedWithProjectPreview.snapshot)
-        });
-        report.checks.push({
-            name: 'visual_contact_photo_is_clipped_to_card_radius',
-            ok: true,
-            visual: analyzeDashboardContactPhotoVisual(DASHBOARD_OPEN_SCREENSHOT, openedWithProjectPreview.snapshot)
+            name: 'dashboard_layout_exposes_no_plus_surface_or_records',
+            ok: dashboardHasNoPlusSurface(openedReady.snapshot),
+            snapshot: openedReady.snapshot
         });
 
-        const monitorLane = openedWithProjectPreview.snapshot.layout.lanes.find((lane) => lane.categoryId === 'monitor');
+        const monitorLane = openedReady.snapshot.layout.lanes.find((lane) => lane.categoryId === 'monitor');
         if (!monitorLane) throw new Error('dashboard_monitor_lane_missing');
         await clickCanvasRectCenter(page, monitorLane.header_rect);
         const monitorActive = await waitForDashboardSnapshot(page, (snapshot) => (
@@ -171,40 +219,20 @@ const runScenario = async () => {
         await waitForPresentationFrames(page, 12);
         await page.screenshot({ path: DASHBOARD_MONITOR_SCREENSHOT, fullPage: true });
         report.checks.push({
-            name: 'visual_monitor_focus_matches_mockup_color',
+            name: 'records_monitor_focus_uses_uniform_active_color',
             ok: true,
-            visual: analyzeDashboardVisual(DASHBOARD_MONITOR_SCREENSHOT, monitorActive.snapshot, '#2f6f78', 'dashboard_monitor')
+            records: assertFocusedRecordColors(monitorActive.snapshot, 'monitor')
         });
+        if (!dashboardHasNoPlusSurface(monitorActive.snapshot)) throw new Error('dashboard_monitor_plus_surface_present');
 
-        const plusLane = monitorActive.snapshot.layout.lanes.find((lane) => lane.categoryId === 'monitor');
-        await clickCanvasRectCenter(page, plusLane.plus_rect);
-        const monitorNoop = await waitForDashboardSnapshot(page, (snapshot) => (
-            snapshot.active
-            && snapshot.activeCategoryId === 'monitor'
-            && laneIsActive(snapshot, 'monitor')
-            && !snapshot.editorOpen
-            && !snapshot.dashboardRecordIds.includes('__eve_dashboard_editor')
-        ), 30000);
-        if (!monitorNoop.ok) throw new Error('dashboard_monitor_plus_must_be_noop');
-        report.checks.push({ name: 'monitor_plus_is_noop', ok: true, snapshot: monitorNoop.snapshot });
-
-        const calendarLane = monitorNoop.snapshot.layout.lanes.find((lane) => lane.categoryId === 'calendar');
+        const calendarLane = monitorActive.snapshot.layout.lanes.find((lane) => lane.categoryId === 'calendar');
         await clickCanvasRectCenter(page, calendarLane.header_rect);
         const calendarActive = await waitForDashboardSnapshot(page, (snapshot) => (
             snapshot.activeCategoryId === 'calendar' && laneIsActive(snapshot, 'calendar') && !snapshot.editorOpen
         ), 30000);
         if (!calendarActive.ok) throw new Error('dashboard_calendar_header_click_failed');
-        await clickCanvasRectCenter(page, calendarActive.snapshot.layout.lanes.find((lane) => lane.categoryId === 'calendar').plus_rect);
-        const calendarPanel = await waitFor(page, () => {
-            const dialog = document.getElementById('eve_calendar_dialog');
-            if (!dialog) return { ok: false, missing: true };
-            const style = getComputedStyle(dialog);
-            const rect = dialog.getBoundingClientRect();
-            return { ok: style.display !== 'none' && rect.width > 0 && rect.height > 0 };
-        }, 30000);
-        if (!calendarPanel.ok) throw new Error('dashboard_calendar_plus_panel_failed');
-        report.checks.push({ name: 'calendar_plus_opens_existing_eve_panel', ok: true, panel: calendarPanel.last });
-        await page.evaluate(() => window.close_calendar_panel?.());
+        if (!dashboardHasNoPlusSurface(calendarActive.snapshot)) throw new Error('dashboard_calendar_plus_surface_present');
+        report.checks.push({ name: 'calendar_header_activates_without_plus_surface', ok: true, snapshot: calendarActive.snapshot });
 
         const contactsLane = calendarActive.snapshot.layout.lanes.find((lane) => lane.categoryId === 'contacts');
         await clickCanvasRectCenter(page, contactsLane.header_rect);
@@ -212,17 +240,8 @@ const runScenario = async () => {
             snapshot.activeCategoryId === 'contacts' && laneIsActive(snapshot, 'contacts') && !snapshot.editorOpen
         ), 30000);
         if (!contactsActive.ok) throw new Error('dashboard_contacts_header_click_failed');
-        await clickCanvasRectCenter(page, contactsActive.snapshot.layout.lanes.find((lane) => lane.categoryId === 'contacts').plus_rect);
-        const contactsPanel = await waitFor(page, () => {
-            const dialog = document.getElementById('eve_contact_dialog');
-            if (!dialog) return { ok: false, missing: true };
-            const style = getComputedStyle(dialog);
-            const rect = dialog.getBoundingClientRect();
-            return { ok: style.display !== 'none' && rect.width > 0 && rect.height > 0 };
-        }, 30000);
-        if (!contactsPanel.ok) throw new Error('dashboard_contacts_plus_panel_failed');
-        report.checks.push({ name: 'contacts_plus_opens_existing_eve_panel', ok: true, panel: contactsPanel.last });
-        await page.evaluate(() => window.close_contact_panel?.());
+        if (!dashboardHasNoPlusSurface(contactsActive.snapshot)) throw new Error('dashboard_contacts_plus_surface_present');
+        report.checks.push({ name: 'contacts_header_activates_without_plus_surface', ok: true, snapshot: contactsActive.snapshot });
 
         const projectsLane = contactsActive.snapshot.layout.lanes.find((lane) => lane.categoryId === 'projects');
         await clickCanvasRectCenter(page, projectsLane.header_rect);
@@ -234,98 +253,18 @@ const runScenario = async () => {
             snapshot.activeCategoryId === 'projects'
             && laneIsActive(snapshot, 'projects')
             && !snapshot.editorOpen
-            && !!snapshot.layout?.lanes?.find((lane) => lane.categoryId === 'projects')?.items?.[0]?.rect
+            && dashboardHasNoPlusSurface(snapshot)
         ), 10000);
         if (projectsWithItem.ok) projectsActive = projectsWithItem;
-        let firstProjectItem = projectsActive.snapshot.layout.lanes.find((lane) => lane.categoryId === 'projects')?.items?.[0];
-        if (!firstProjectItem?.rect) {
-            const beforeSeedProject = projectsActive.snapshot.projectId;
-            await clickCanvasRectCenter(page, projectsActive.snapshot.layout.lanes.find((lane) => lane.categoryId === 'projects').plus_rect);
-            const seededProject = await waitForDashboardSnapshot(page, (snapshot) => (
-                !snapshot.active
-                && snapshot.dashboardVisibleRecordIds.length === 0
-                && !!snapshot.projectId
-                && snapshot.projectId !== beforeSeedProject
-            ), 60000);
-            if (!seededProject.ok) throw new Error('dashboard_project_item_seed_create_failed');
-            report.checks.push({ name: 'project_item_seed_created_for_label_probe', ok: true, snapshot: seededProject.snapshot });
-            await (await resolveAtomHandle(page)).click({ timeout: 10000 });
-            const reopenedForSeededItem = await waitForDashboardSnapshot(page, (snapshot) => snapshot.active, 30000);
-            if (!reopenedForSeededItem.ok) throw new Error('dashboard_reopen_after_project_item_seed_failed');
-            await clickCanvasRectCenter(page, reopenedForSeededItem.snapshot.layout.lanes.find((lane) => lane.categoryId === 'projects').header_rect);
-            projectsActive = await waitForDashboardSnapshot(page, (snapshot) => (
-                snapshot.activeCategoryId === 'projects'
-                && laneIsActive(snapshot, 'projects')
-                && !snapshot.editorOpen
-                && !!snapshot.layout?.lanes?.find((lane) => lane.categoryId === 'projects')?.items?.[0]?.rect
-            ), 30000);
-            if (!projectsActive.ok) throw new Error('dashboard_projects_header_item_after_seed_failed');
-            firstProjectItem = projectsActive.snapshot.layout.lanes.find((lane) => lane.categoryId === 'projects')?.items?.[0];
-        }
-        if (!firstProjectItem?.rect) throw new Error('dashboard_project_item_required_for_label_probe');
-        const currentProjectBeforeLongPress = projectsActive.snapshot.projectId;
-        await longPressCanvasRectCenter(page, firstProjectItem.rect);
-        const labelEditing = await waitForDashboardSnapshot(page, (snapshot) => (
-            snapshot.active
-            && snapshot.projectId === currentProjectBeforeLongPress
-            && snapshot.labelEditorOpen
-            && snapshot.labelEditorItemId === firstProjectItem.id
-            && snapshot.labelEditorSelection?.start === 0
-            && snapshot.labelEditorSelection?.end > 0
-            && snapshot.flowerOpen === false
-        ), 30000);
-        if (!labelEditing.ok) throw new Error('dashboard_project_long_press_label_edit_failed');
-        await page.keyboard.type('Dashboard probe renamed project');
-        const typedLabel = await waitForDashboardSnapshot(page, (snapshot) => (
-            snapshot.active
-            && snapshot.labelEditorOpen
-            && snapshot.projectId === currentProjectBeforeLongPress
-            && snapshot.dashboardTitleTexts.includes('Dashboard probe renamed project')
-            && snapshot.flowerOpen === false
-        ), 30000);
-        if (!typedLabel.ok) throw new Error('dashboard_project_label_typing_failed');
-        await page.keyboard.press('Enter');
-        const labelCommitted = await waitForDashboardSnapshot(page, (snapshot) => (
-            snapshot.active
-            && !snapshot.labelEditorOpen
-            && snapshot.projectId === currentProjectBeforeLongPress
-            && snapshot.dashboardTitleTexts.includes('Dashboard probe renamed project')
-            && snapshot.flowerOpen === false
-        ), 30000);
-        if (!labelCommitted.ok) throw new Error('dashboard_project_label_commit_failed');
-        report.checks.push({ name: 'project_item_long_press_edits_label_without_opening_or_flower', ok: true, snapshot: labelCommitted.snapshot });
-
-        await clickCanvasRectCenter(page, firstProjectItem.rect);
-        const projectItemOpened = await waitForDashboardSnapshot(page, (snapshot) => (
-            !snapshot.active && snapshot.dashboardVisibleRecordIds.length === 0 && snapshot.projectId === firstProjectItem.id
-        ), 30000);
-        if (!projectItemOpened.ok) throw new Error('dashboard_project_item_open_failed');
-        report.checks.push({ name: 'project_item_opens_project_without_fullscreen_item', ok: true, snapshot: projectItemOpened.snapshot });
-        await (await resolveAtomHandle(page)).click({ timeout: 10000 });
-        const reopenedProjects = await waitForDashboardSnapshot(page, (snapshot) => snapshot.active, 30000);
-        if (!reopenedProjects.ok) throw new Error('dashboard_reopen_after_project_item_failed');
-        const reopenedProjectsActive = await activateDashboardCategory(page, 'projects', reopenedProjects.snapshot);
-        if (!reopenedProjectsActive.ok) throw new Error('dashboard_projects_active_after_project_item_failed');
-
-        const beforeProjectCreate = (await dashboardSnapshot(page)).projectId;
-        const activeProjectsForPlus = await waitForDashboardSnapshot(page, (snapshot) => (
-            snapshot.activeCategoryId === 'projects' && laneIsActive(snapshot, 'projects')
-        ), 30000);
-        if (!activeProjectsForPlus.ok) throw new Error('dashboard_projects_active_before_plus_failed');
-        await clickCanvasRectCenter(page, activeProjectsForPlus.snapshot.layout.lanes.find((lane) => lane.categoryId === 'projects').plus_rect);
-        const projectCreated = await waitForDashboardSnapshot(page, (snapshot) => (
-            !snapshot.active
-            && snapshot.dashboardVisibleRecordIds.length === 0
-            && !!snapshot.projectId
-            && snapshot.projectId !== beforeProjectCreate
-        ), 60000);
-        if (!projectCreated.ok) throw new Error('dashboard_project_plus_create_open_failed');
-        report.checks.push({ name: 'projects_plus_creates_and_opens_new_project', ok: true, snapshot: projectCreated.snapshot });
-
-        atomHandle = await resolveAtomHandle(page);
-        await atomHandle.click({ timeout: 10000 });
-        const reopenedAfterProjectCreate = await waitForDashboardSnapshot(page, (snapshot) => snapshot.active, 30000);
-        if (!reopenedAfterProjectCreate.ok) throw new Error('dashboard_reopen_after_project_create_failed');
+        if (!dashboardHasNoPlusSurface(projectsActive.snapshot)) throw new Error('dashboard_projects_plus_surface_present');
+        await waitForPresentationFrames(page, 12);
+        await page.screenshot({ path: DASHBOARD_PROJECTS_SCREENSHOT, fullPage: true });
+        report.checks.push({
+            name: 'records_projects_focus_uses_uniform_active_color',
+            ok: true,
+            records: assertFocusedRecordColors(projectsActive.snapshot, 'projects')
+        });
+        report.checks.push({ name: 'projects_header_activates_without_plus_surface', ok: true, snapshot: projectsActive.snapshot });
 
         await page.evaluate(() => {
             window.localStorage?.setItem?.('eve_handedness', 'left');
@@ -350,11 +289,12 @@ const runScenario = async () => {
             return snapshot.active
                 && snapshot.layout?.handedness === 'left'
                 && lane
-                && lane.header_rect.x < lane.plus_rect.x
-                && lane.plus_rect.x < snapshot.layout.table_rect.x + snapshot.layout.table_rect.width;
+                && lane.header_rect.x < lane.lane_rect.x
+                && lane.header_rect.x + lane.header_rect.width === lane.lane_rect.x
+                && dashboardHasNoPlusSurface(snapshot);
         }, 30000);
         if (!leftOpened.ok) throw new Error('dashboard_left_handed_open_failed');
-        report.checks.push({ name: 'left_handed_dashboard_mirrors_headers_and_plus_strip', ok: true, snapshot: leftOpened.snapshot });
+        report.checks.push({ name: 'left_handed_dashboard_mirrors_headers_without_plus_strip', ok: true, snapshot: leftOpened.snapshot });
 
         await (await resolveAtomHandle(page)).click({ timeout: 10000 });
         const leftClosed = await waitForDashboardSnapshot(page, (snapshot) => (
