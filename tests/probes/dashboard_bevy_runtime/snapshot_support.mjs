@@ -43,6 +43,8 @@ export const dashboardSnapshot = async (page) => page.evaluate(async () => {
         ok: !!runtime && !!state,
         active: state?.active === true,
         activeCategoryId: state?.activeCategoryId || null,
+        focusTransitionActive: !!state?.focusTransition,
+        focusTransitionProgress: Number(state?.focusTransition?.progress ?? 1),
         editorOpen: !!state?.editor,
         editorItemId: state?.editor?.item?.id || null,
         labelEditorOpen: !!state?.labelEditor,
@@ -79,7 +81,7 @@ export const dashboardSnapshot = async (page) => page.evaluate(async () => {
         dashboardRecordIds: dashboardRecords.map((record) => record.id),
         dashboardVisibleRecordIds: visibleDashboardRecords.map((record) => record.id),
         dashboardFillRecords: dashboardRecords
-            .filter((record) => /^__eve_dashboard_(background|table|lane_|header_bg_)/.test(String(record?.id || '')))
+            .filter((record) => /^__eve_dashboard_(background|table|lane_|header_bg_|focus_spread_)/.test(String(record?.id || '')))
             .map((record) => ({
                 id: String(record.id || ''),
                 color: String(record.properties?.color || record.properties?.background || record.properties?.backgroundColor || ''),

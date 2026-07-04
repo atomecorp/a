@@ -50,6 +50,11 @@ const laneIsActive = (snapshot, categoryId) => (
     snapshot.layout?.lanes?.some((lane) => lane.categoryId === categoryId && lane.active === true) === true
 );
 
+const dashboardFocusSettled = (snapshot) => (
+    !snapshot.focusTransitionActive
+    && !(snapshot.dashboardRecordIds || []).some((id) => String(id || '').includes('focus_spread'))
+);
+
 const clampColor = (value) => Math.max(0, Math.min(255, value));
 
 const shadeHex = (hex, percent) => {
@@ -125,12 +130,12 @@ const dashboardOpenReady = (snapshot) => (
 const activateDashboardCategory = async (page, categoryId, snapshot = null) => {
     let current = snapshot || await dashboardSnapshot(page);
     for (let attempt = 0; attempt < 3; attempt += 1) {
-        if (current.activeCategoryId === categoryId && laneIsActive(current, categoryId)) return { ok: true, snapshot: current };
+        if (current.activeCategoryId === categoryId && laneIsActive(current, categoryId) && dashboardFocusSettled(current)) return { ok: true, snapshot: current };
         const lane = current.layout?.lanes?.find((entry) => entry.categoryId === categoryId);
         if (!lane?.header_rect) return { ok: false, snapshot: current };
         await clickCanvasRectCenter(page, lane.header_rect);
         const active = await waitForDashboardSnapshot(page, (candidate) => (
-            candidate.activeCategoryId === categoryId && laneIsActive(candidate, categoryId) && !candidate.editorOpen
+            candidate.activeCategoryId === categoryId && laneIsActive(candidate, categoryId) && !candidate.editorOpen && dashboardFocusSettled(candidate)
         ), 8000);
         if (active.ok) return active;
         current = active.snapshot || await dashboardSnapshot(page);
@@ -212,7 +217,7 @@ const runScenario = async () => {
         if (!monitorLane) throw new Error('dashboard_monitor_lane_missing');
         await clickCanvasRectCenter(page, monitorLane.header_rect);
         const monitorActive = await waitForDashboardSnapshot(page, (snapshot) => (
-            snapshot.activeCategoryId === 'monitor' && laneIsActive(snapshot, 'monitor') && !snapshot.editorOpen
+            snapshot.activeCategoryId === 'monitor' && laneIsActive(snapshot, 'monitor') && !snapshot.editorOpen && dashboardFocusSettled(snapshot)
         ), 30000);
         if (!monitorActive.ok) throw new Error('dashboard_monitor_header_click_failed');
         report.checks.push({ name: 'canvas_header_click_activates_monitor', ok: true, snapshot: monitorActive.snapshot });
@@ -228,7 +233,7 @@ const runScenario = async () => {
         const calendarLane = monitorActive.snapshot.layout.lanes.find((lane) => lane.categoryId === 'calendar');
         await clickCanvasRectCenter(page, calendarLane.header_rect);
         const calendarActive = await waitForDashboardSnapshot(page, (snapshot) => (
-            snapshot.activeCategoryId === 'calendar' && laneIsActive(snapshot, 'calendar') && !snapshot.editorOpen
+            snapshot.activeCategoryId === 'calendar' && laneIsActive(snapshot, 'calendar') && !snapshot.editorOpen && dashboardFocusSettled(snapshot)
         ), 30000);
         if (!calendarActive.ok) throw new Error('dashboard_calendar_header_click_failed');
         if (!dashboardHasNoPlusSurface(calendarActive.snapshot)) throw new Error('dashboard_calendar_plus_surface_present');
@@ -237,7 +242,7 @@ const runScenario = async () => {
         const contactsLane = calendarActive.snapshot.layout.lanes.find((lane) => lane.categoryId === 'contacts');
         await clickCanvasRectCenter(page, contactsLane.header_rect);
         const contactsActive = await waitForDashboardSnapshot(page, (snapshot) => (
-            snapshot.activeCategoryId === 'contacts' && laneIsActive(snapshot, 'contacts') && !snapshot.editorOpen
+            snapshot.activeCategoryId === 'contacts' && laneIsActive(snapshot, 'contacts') && !snapshot.editorOpen && dashboardFocusSettled(snapshot)
         ), 30000);
         if (!contactsActive.ok) throw new Error('dashboard_contacts_header_click_failed');
         if (!dashboardHasNoPlusSurface(contactsActive.snapshot)) throw new Error('dashboard_contacts_plus_surface_present');
@@ -246,13 +251,14 @@ const runScenario = async () => {
         const projectsLane = contactsActive.snapshot.layout.lanes.find((lane) => lane.categoryId === 'projects');
         await clickCanvasRectCenter(page, projectsLane.header_rect);
         let projectsActive = await waitForDashboardSnapshot(page, (snapshot) => (
-            snapshot.activeCategoryId === 'projects' && laneIsActive(snapshot, 'projects') && !snapshot.editorOpen
+            snapshot.activeCategoryId === 'projects' && laneIsActive(snapshot, 'projects') && !snapshot.editorOpen && dashboardFocusSettled(snapshot)
         ), 30000);
         if (!projectsActive.ok) throw new Error('dashboard_projects_header_click_failed');
         const projectsWithItem = await waitForDashboardSnapshot(page, (snapshot) => (
             snapshot.activeCategoryId === 'projects'
             && laneIsActive(snapshot, 'projects')
             && !snapshot.editorOpen
+            && dashboardFocusSettled(snapshot)
             && dashboardHasNoPlusSurface(snapshot)
         ), 10000);
         if (projectsWithItem.ok) projectsActive = projectsWithItem;

@@ -117,6 +117,7 @@ test('dashboard overview keeps each rubrique color', () => {
         tokens: DASHBOARD_VISUAL_TOKENS
     });
 
+    assert.equal(DASHBOARD_VISUAL_TOKENS.transitions.categoryFocusMs, 500);
     assert.equal(DASHBOARD_VISUAL_TOKENS.laneShadePercent, -10);
     assert.equal(DASHBOARD_VISUAL_TOKENS.cardShadow.offsetY, 0);
     assert.equal(dashboardRecord(records, 'background').properties.color, DASHBOARD_VISUAL_TOKENS.background);
@@ -162,6 +163,58 @@ test('focused rubrique color floods chrome while lane cards derive from their he
     assert.equal(cards.every((record) => record.properties.material.shadow.offsetY === 0), true);
     assert.equal(dashboardRecord(records, 'header_news').properties.opacity, DASHBOARD_VISUAL_TOKENS.inactiveHeaderOpacity);
     assert.equal(dashboardRecord(records, 'header_contacts').properties.opacity, 1);
+});
+
+test('focused rubrique transition expands the clicked row color through Bevy records', () => {
+    const active = categories[1];
+    const overviewLayout = layoutFor();
+    const sourceLane = overviewLayout.lanes.find((lane) => lane.category.id === active.id);
+    const focusedLayout = layoutFor(active.id, itemsForRender(categories, active.id, items));
+    const transition = {
+        categoryId: active.id,
+        color: active.color,
+        fromColor: '',
+        progress: 0,
+        contentSourceRect: sourceLane.lane_rect,
+        headerSourceRect: sourceLane.header_rect
+    };
+    const startRecords = buildDashboardRecords({
+        layout: focusedLayout,
+        tokens: DASHBOARD_VISUAL_TOKENS,
+        focusTransition: transition
+    });
+    const startContent = dashboardRecord(startRecords, 'focus_spread_content');
+    const startHeader = dashboardRecord(startRecords, 'focus_spread_header');
+
+    assert.equal(dashboardRecord(startRecords, 'background').properties.color, DASHBOARD_VISUAL_TOKENS.background);
+    assert.equal(dashboardRecord(startRecords, 'table').properties.color, DASHBOARD_VISUAL_TOKENS.table);
+    assert.equal(startContent.properties.color, active.color);
+    assert.equal(startContent.properties.left, sourceLane.lane_rect.x);
+    assert.equal(startContent.properties.top, sourceLane.lane_rect.y);
+    assert.equal(startContent.properties.width, sourceLane.lane_rect.width);
+    assert.equal(startContent.properties.height, sourceLane.lane_rect.height);
+    assert.equal(startHeader.properties.left, sourceLane.header_rect.x);
+    assert.equal(startHeader.properties.top, sourceLane.header_rect.y);
+    assert.equal(startHeader.properties.width, sourceLane.header_rect.width);
+    assert.equal(startHeader.properties.height, sourceLane.header_rect.height);
+
+    const midRecords = buildDashboardRecords({
+        layout: focusedLayout,
+        tokens: DASHBOARD_VISUAL_TOKENS,
+        focusTransition: { ...transition, progress: 0.5 }
+    });
+    const midContent = dashboardRecord(midRecords, 'focus_spread_content');
+    const midHeader = dashboardRecord(midRecords, 'focus_spread_header');
+    assert.ok(midContent.properties.top < startContent.properties.top);
+    assert.ok(midContent.properties.height > startContent.properties.height);
+    assert.ok(midContent.properties.height < focusedLayout.table_rect.height);
+    assert.ok(midHeader.properties.top < startHeader.properties.top);
+    assert.ok(midHeader.properties.height > startHeader.properties.height);
+    assert.ok(midHeader.properties.height < focusedLayout.table_rect.height);
+    assert.equal(recordsById(buildDashboardRecords({
+        layout: focusedLayout,
+        tokens: DASHBOARD_VISUAL_TOKENS
+    })).has('__eve_dashboard_focus_spread_content'), false);
 });
 
 test('dashboard detailed media uses the shared high-density Bevy texture contract', () => {
@@ -253,14 +306,21 @@ test('activating a cached rubrique projects its items without an empty intermedi
         state,
         data,
         loadCategories: async () => categories,
-        render: () => {
+        startFocusTransition: async ({ categoryId, sourceLane }) => {
+            assert.equal(categoryId, 'contacts');
+            assert.equal(sourceLane.category.id, 'contacts');
             const rendered = itemsForRender(state.categories, state.activeCategoryId, state.itemsByCategory);
             renderedItemIds.push([...rendered.values()].flat().map((item) => item.id));
             return { ok: true };
+        },
+        render: () => {
+            throw new Error('cached_dashboard_category_must_project_through_focus_transition');
         }
     });
 
-    const result = await activator.activateCategory('contacts');
+    const result = await activator.activateCategory('contacts', {
+        lane: { category: categories[1], lane_rect: { x: 0, y: 10, width: 100, height: 20 }, header_rect: { x: 100, y: 10, width: 20, height: 20 } }
+    });
 
     assert.deepEqual(result, { ok: true });
     assert.equal(state.activeCategoryId, 'contacts');
