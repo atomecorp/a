@@ -128,7 +128,8 @@ test('Bevy project renderer guards lock canvas ownership, drag, and video playba
         /;\s*$/
     );
     assert.match(applyDiffsBody, /opsNeedMediaSourceSync\(ops\)/);
-    assert.match(applyDiffsBody, /!opsNeedPresentationRedrawPrime\(ops\)/);
+    assert.match(applyDiffsBody, /needsPresentationPrime = effectsChanged \|\| opsNeedPresentationRedrawPrime\(ops\)/);
+    assert.match(applyDiffsBody, /if\s*\(\s*!needsPresentationPrime\s*\)/);
     assert.doesNotMatch(applyDiffsBody, /if\s*\(\s*virtualScene\s*\)\s*\{\s*syncBevyVideoDecodeSources/);
     const videoResourceBody = sourceSlice(
         mediaResourceRuntime,
@@ -269,6 +270,14 @@ test('Bevy perf diagnostics keep high-frequency video events opt-in', () => {
 
     diagnostics.reset({ externalRenderEvents: true });
     assert.equal(diagnostics.summary().external_render_events, true);
+    assert.equal(diagnostics.summary().enabled, false);
+    assert.equal(typeof dom.window.__EVE_BEVY_PERF_RECORD__, 'undefined');
+    assert.equal(recordBevyPerfEvent('bevy.video.external.draw', { id: 'video_1' }), null);
+    assert.equal(diagnostics.summary().counters['bevy.video.external.draw'], undefined);
+
+    diagnostics.reset({ enabled: true, externalRenderEvents: true });
+    assert.equal(diagnostics.summary().enabled, true);
+    assert.equal(diagnostics.summary().external_render_events, true);
     assert.equal(typeof dom.window.__EVE_BEVY_PERF_RECORD__, 'function');
     dom.window.__EVE_BEVY_PERF_RECORD__('bevy.video.external.draw', { id: 'video_1' });
     assert.equal(diagnostics.summary().counters['bevy.video.external.draw'], 1);
@@ -277,7 +286,7 @@ test('Bevy perf diagnostics keep high-frequency video events opt-in', () => {
     assert.equal(diagnostics.summary().external_render_events, false);
     assert.equal(typeof dom.window.__EVE_BEVY_PERF_RECORD__, 'undefined');
 
-    diagnostics.reset({ videoFrameEvents: true });
+    diagnostics.reset({ enabled: true, videoFrameEvents: true });
     assert.equal(diagnostics.summary().video_frame_events, true);
     assert.equal(diagnostics.summary().video_decode_frame_events, true);
     assert.equal(shouldRecordBevyPerfEvent('video.decode.frame'), true);
@@ -292,6 +301,13 @@ test('Bevy perf diagnostics keep high-frequency video events opt-in', () => {
     assert.equal(diagnostics.summary().video_decode_frame_events, false);
     assert.equal(shouldRecordBevyPerfEvent('video.decode.frame'), false);
     assert.equal(shouldRecordBevyPerfEvent('bevy.video.frame_notify.request'), false);
+
+    const optInDom = new JSDOM('<!doctype html><html><body></body></html>', { url: 'https://example.test/?perf=1' });
+    globalThis.window = optInDom.window;
+    globalThis.document = optInDom.window.document;
+    delete optInDom.window.__EVE_BEVY_PERF__;
+    const optInDiagnostics = ensureBevyPerfDiagnostics();
+    assert.equal(optInDiagnostics.summary().enabled, true);
 });
 
 test('transform-only Bevy diffs request one redraw without delayed redraw primes', async () => {

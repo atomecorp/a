@@ -33,6 +33,7 @@
   "tests/eve/project_layer_visibility_contract.test.mjs",
   "tests/eve/project_media_atome_renderer_pending.test.mjs",
   "tests/eve/project_preview_runtime.test.mjs",
+  "tests/eve/project_scene_direct_transform_contract.test.mjs",
   "tests/eve/project_scene_gesture_performance.test.mjs",
   "tests/eve/project_scene_hit_order_contract.test.mjs",
   "tests/eve/project_scene_media_projection_filter.test.mjs",

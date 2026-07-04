@@ -3,8 +3,10 @@ import { test } from 'vitest';
 
 import { createDashboardCategoryActivator } from '../../eVe/domains/dashboard/dashboard_category_activation.js';
 import { itemsForRender } from '../../eVe/domains/dashboard/dashboard_environment.js';
+import { createDashboardInteractionRuntime } from '../../eVe/domains/dashboard/dashboard_interaction_runtime.js';
 import { createDashboardLayout } from '../../eVe/domains/dashboard/dashboard_layout.js';
 import { buildDashboardRecords } from '../../eVe/domains/dashboard/dashboard_records.js';
+import { normalizeDashboardScrollState } from '../../eVe/domains/dashboard/dashboard_scroll_state.js';
 import { DASHBOARD_VISUAL_TOKENS } from '../../eVe/domains/dashboard/dashboard_tokens.js';
 
 const categories = Object.freeze([
@@ -44,6 +46,63 @@ const layoutFor = (activeCategoryId = '', renderedItems = items) => createDashbo
     tokens: DASHBOARD_VISUAL_TOKENS
 });
 
+const interactionLayoutFor = (state) => createDashboardLayout({
+    width: 360,
+    height: 360,
+    toolboxHeight: 96,
+    categories: state.categories,
+    activeCategoryId: state.activeCategoryId,
+    itemsByCategory: state.itemsByCategory,
+    scrollByLane: state.scrollByLane,
+    verticalScrollOffset: state.verticalScrollOffset,
+    allowPartialItems: state.allowPartialItems,
+    allowPartialLanes: state.allowPartialLanes,
+    tokens: DASHBOARD_VISUAL_TOKENS
+});
+
+const makeInteractionState = () => {
+    const state = {
+        active: true,
+        categories: [...categories],
+        activeCategoryId: '',
+        itemsByCategory: items,
+        scrollByLane: {},
+        scrollSnapTimers: new Map(),
+        scrollAnimationFrames: new Map(),
+        verticalScrollOffset: 0,
+        verticalScrollSnapTimer: 0,
+        verticalScrollAnimationFrame: 0,
+        allowPartialItems: false,
+        allowPartialLanes: false,
+        tokens: DASHBOARD_VISUAL_TOKENS,
+        pointer: null,
+        labelEditor: null
+    };
+    state.layout = interactionLayoutFor(state);
+    return state;
+};
+
+const inactiveLabelEdit = Object.freeze({
+    begin: () => null, cancel: () => null, commit: () => null, isActive: () => false, matchesHit: () => false, setPointerSelection: () => null
+});
+
+const makeInteractionRuntime = (state, actOnHit) => createDashboardInteractionRuntime({
+    state,
+    render: () => {
+        state.layout = interactionLayoutFor(state);
+        normalizeDashboardScrollState(state, state.layout);
+        return state.layout;
+    },
+    requestRender: () => null,
+    actOnHit,
+    labelEdit: inactiveLabelEdit
+});
+
+const pointInHeader = (layout) => {
+    const rect = layout.lanes.at(-1).header_rect;
+    return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 };
+};
+
 const recordsById = (records) => new Map(records.map((record) => [record.id, record]));
 
 const dashboardRecord = (records, suffix) => {
@@ -66,19 +125,26 @@ test('dashboard overview keeps each rubrique color', () => {
         assert.equal(dashboardRecord(records, `lane_${category.id}`).properties.color, shadeHex(category.color, DASHBOARD_VISUAL_TOKENS.laneShadePercent));
         assert.equal(dashboardRecord(records, `header_bg_${category.id}`).properties.color, category.color);
     }
-    assert.equal(dashboardRecord(records, 'card_news_slot_0').properties.color, shadeHex(categories[0].color, 3));
-    assert.equal(dashboardRecord(records, 'card_contacts_slot_0').properties.color, shadeHex(categories[1].color, 3));
-    assert.deepEqual(dashboardRecord(records, 'card_news_slot_0').properties.material.shadow, DASHBOARD_VISUAL_TOKENS.cardShadow);
-    assert.equal(dashboardRecord(records, 'card_news_slot_0').properties.material.shadow.offsetX, 0);
+    assert.equal(dashboardRecord(records, 'card_news_news_a').properties.color, shadeHex(categories[0].color, 3));
+    assert.equal(dashboardRecord(records, 'card_contacts_contact_a').properties.color, shadeHex(categories[1].color, 3));
+    assert.deepEqual(dashboardRecord(records, 'card_news_news_a').properties.material.shadow, DASHBOARD_VISUAL_TOKENS.cardShadow);
+    assert.equal(dashboardRecord(records, 'card_news_news_a').properties.material.shadow.offsetX, 0);
 });
 
 test('focused rubrique color floods chrome while lane cards derive from their headers', () => {
     const active = categories[1];
+    const layout = layoutFor(active.id, itemsForRender(categories, active.id, items));
     const records = buildDashboardRecords({
-        layout: layoutFor(active.id, itemsForRender(categories, active.id, items)),
+        layout,
         tokens: DASHBOARD_VISUAL_TOKENS
     });
     const inactiveHeader = shadeHex(active.color, -18);
+    const laneByCardId = new Map();
+    for (const lane of layout.lanes) {
+        for (const entry of lane.visible_item_rects) {
+            laneByCardId.set(`__eve_dashboard_card_${entry.category.id}_${entry.item.id}`, lane.category.id);
+        }
+    }
 
     assert.equal(dashboardRecord(records, 'background').properties.color, active.color);
     assert.equal(dashboardRecord(records, 'table').properties.color, active.color);
@@ -91,7 +157,7 @@ test('focused rubrique color floods chrome while lane cards derive from their he
     const cards = records.filter((record) => record.type === 'shape' && record.id.includes('__eve_dashboard_card_'));
     assert.ok(cards.length >= 3);
     assert.equal(cards.every((record) => {
-        const laneId = String(record.id || '').match(/__eve_dashboard_card_([^_]+)_slot_/)?.[1];
+        const laneId = laneByCardId.get(record.id);
         return record.properties.color === shadeHex(dashboardRecord(records, `header_bg_${laneId}`).properties.color, 3);
     }), true);
     assert.equal(cards.every((record) => record.properties.material?.shadow), true);
@@ -123,10 +189,86 @@ test('dashboard detailed media uses the shared high-density Bevy texture contrac
     });
 
     assert.equal(dashboardRecord(records, 'header_icon_projects').properties.texture_scale, 4);
-    assert.equal(dashboardRecord(records, 'card_media_projects_slot_0').properties.texture_scale, 4);
-    assert.equal(dashboardRecord(records, 'card_media_projects_slot_0').properties.media_width, 900);
-    assert.equal(dashboardRecord(records, 'card_media_projects_slot_0').properties.media_height, 540);
-    assert.equal(dashboardRecord(records, 'card_media_contacts_slot_0').properties.texture_scale, 4);
+    assert.equal(dashboardRecord(records, 'card_media_projects_project_a').properties.texture_scale, 2);
+    assert.equal(dashboardRecord(records, 'card_media_projects_project_a').properties.media_width, 900);
+    assert.equal(dashboardRecord(records, 'card_media_projects_project_a').properties.media_height, 540);
+    assert.equal(dashboardRecord(records, 'card_media_contacts_contact_a').properties.texture_scale, 2);
+});
+
+test('dashboard entête activation waits for release and ignores vertical scroll gestures', () => {
+    const clickState = makeInteractionState();
+    const clickCalls = [];
+    const clickRuntime = makeInteractionRuntime(clickState, (hit) => clickCalls.push(`${hit.kind}:${hit.category.id}`));
+    const clickPoint = pointInHeader(clickState.layout);
+    clickRuntime.intercept({ phase: 'pointerdown', point: clickPoint, event: { pointerType: 'mouse' } });
+    assert.deepEqual(clickCalls, []);
+    clickRuntime.intercept({ phase: 'pointerup', point: clickPoint, event: { pointerType: 'mouse' } });
+    assert.deepEqual(clickCalls, [`header:${clickState.layout.lanes.at(-1).category.id}`]);
+
+    const dragState = makeInteractionState();
+    const dragCalls = [];
+    const dragRuntime = makeInteractionRuntime(dragState, (hit) => dragCalls.push(`${hit.kind}:${hit.category.id}`));
+    const dragStart = pointInHeader(dragState.layout);
+    dragRuntime.intercept({ phase: 'pointerdown', point: dragStart, event: { pointerType: 'touch' } });
+    dragRuntime.intercept({
+        phase: 'pointermove',
+        point: { x: dragStart.x + 2, y: dragStart.y + 43 },
+        event: { pointerType: 'touch' }
+    });
+    assert.equal(dragState.verticalScrollOffset, 43);
+    assert.equal(dragState.pointer.axis, 'vertical');
+    dragRuntime.intercept({
+        phase: 'pointerup',
+        point: { x: dragStart.x + 2, y: dragStart.y + 43 },
+        event: { pointerType: 'touch' }
+    });
+    assert.deepEqual(dragCalls, []);
+    dragRuntime.cancel();
+});
+
+test('activating a cached rubrique projects its items without an empty intermediate frame', async () => {
+    const state = {
+        active: true,
+        activeCategoryId: '',
+        editor: null,
+        hydrationSerial: 0,
+        categories: [...categories],
+        itemsByCategory: new Map([
+            ['news', items.get('news')],
+            ['projects', items.get('projects')]
+        ])
+    };
+    const renderedItemIds = [];
+    let seedCount = 0;
+    let hydrateCount = 0;
+    const data = {
+        hasCategoryCache: (categoryId) => categoryId === 'contacts',
+        seedVisibleItemsFromCache: (_, options = {}) => {
+            seedCount += 1;
+            assert.deepEqual(options, { categoryIds: ['contacts'], emptyMissing: false });
+            state.itemsByCategory.set('contacts', items.get('contacts'));
+        },
+        loadVisibleItems: async () => { throw new Error('cached_dashboard_category_must_not_reload_before_projection'); },
+        hydrateVisibleItems: async () => { hydrateCount += 1; }
+    };
+    const activator = createDashboardCategoryActivator({
+        state,
+        data,
+        loadCategories: async () => categories,
+        render: () => {
+            const rendered = itemsForRender(state.categories, state.activeCategoryId, state.itemsByCategory);
+            renderedItemIds.push([...rendered.values()].flat().map((item) => item.id));
+            return { ok: true };
+        }
+    });
+
+    const result = await activator.activateCategory('contacts');
+
+    assert.deepEqual(result, { ok: true });
+    assert.equal(state.activeCategoryId, 'contacts');
+    assert.equal(seedCount, 1);
+    assert.equal(hydrateCount, 0);
+    assert.deepEqual(renderedItemIds.map((ids) => [...ids].sort()), [['contact_a', 'contact_b', 'contact_c']]);
 });
 
 test('clicking the focused rubrique again restores overview state', async () => {
