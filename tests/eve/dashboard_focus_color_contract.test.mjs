@@ -217,6 +217,89 @@ test('focused rubrique transition expands the clicked row color through Bevy rec
     })).has('__eve_dashboard_focus_spread_content'), false);
 });
 
+test('focused rubrique collapse retracts the active color back to its row', () => {
+    const active = categories[1];
+    const focusedLayout = layoutFor(active.id, itemsForRender(categories, active.id, items));
+    const sourceLane = focusedLayout.lanes.find((lane) => lane.category.id === active.id);
+    const collapse = {
+        categoryId: active.id,
+        color: active.color,
+        fromColor: '',
+        direction: 'collapse',
+        progress: 0,
+        contentSourceRect: sourceLane.lane_rect,
+        headerSourceRect: sourceLane.header_rect
+    };
+    const startRecords = buildDashboardRecords({
+        layout: focusedLayout,
+        tokens: DASHBOARD_VISUAL_TOKENS,
+        focusTransition: collapse
+    });
+    const startContent = dashboardRecord(startRecords, 'focus_spread_content');
+    assert.equal(dashboardRecord(startRecords, 'background').properties.color, DASHBOARD_VISUAL_TOKENS.background);
+    assert.equal(startContent.properties.color, active.color);
+    assert.equal(startContent.properties.top, focusedLayout.table_rect.y);
+    assert.equal(startContent.properties.height, focusedLayout.table_rect.height);
+
+    const midRecords = buildDashboardRecords({
+        layout: focusedLayout,
+        tokens: DASHBOARD_VISUAL_TOKENS,
+        focusTransition: { ...collapse, progress: 0.5 }
+    });
+    const midContent = dashboardRecord(midRecords, 'focus_spread_content');
+    assert.ok(midContent.properties.top > startContent.properties.top);
+    assert.ok(midContent.properties.height < startContent.properties.height);
+    assert.ok(midContent.properties.height > sourceLane.lane_rect.height);
+});
+
+test('switching focused rubrique fades the new source row before expanding it', () => {
+    const previous = categories[1];
+    const active = categories[2];
+    const focusedLayout = layoutFor(active.id, itemsForRender(categories, active.id, items));
+    const sourceLane = focusedLayout.lanes.find((lane) => lane.category.id === active.id);
+    const transition = {
+        categoryId: active.id,
+        color: active.color,
+        fromColor: previous.color,
+        direction: 'switch',
+        progress: 0,
+        contentSourceRect: sourceLane.lane_rect,
+        headerSourceRect: sourceLane.header_rect
+    };
+    const startRecords = buildDashboardRecords({
+        layout: focusedLayout,
+        tokens: DASHBOARD_VISUAL_TOKENS,
+        focusTransition: transition
+    });
+    const startContent = dashboardRecord(startRecords, 'focus_spread_content');
+    assert.equal(dashboardRecord(startRecords, 'background').properties.color, previous.color);
+    assert.equal(startContent.properties.color, active.color);
+    assert.equal(startContent.properties.opacity, 0);
+    assert.equal(startContent.properties.top, sourceLane.lane_rect.y);
+    assert.equal(startContent.properties.height, sourceLane.lane_rect.height);
+
+    const fadeRecords = buildDashboardRecords({
+        layout: focusedLayout,
+        tokens: DASHBOARD_VISUAL_TOKENS,
+        focusTransition: { ...transition, progress: 0.175 }
+    });
+    const fadeContent = dashboardRecord(fadeRecords, 'focus_spread_content');
+    assert.ok(fadeContent.properties.opacity > 0);
+    assert.ok(fadeContent.properties.opacity < 1);
+    assert.equal(fadeContent.properties.top, sourceLane.lane_rect.y);
+    assert.equal(fadeContent.properties.height, sourceLane.lane_rect.height);
+
+    const spreadRecords = buildDashboardRecords({
+        layout: focusedLayout,
+        tokens: DASHBOARD_VISUAL_TOKENS,
+        focusTransition: { ...transition, progress: 0.7 }
+    });
+    const spreadContent = dashboardRecord(spreadRecords, 'focus_spread_content');
+    assert.equal(spreadContent.properties.opacity, 1);
+    assert.ok(spreadContent.properties.top < sourceLane.lane_rect.y);
+    assert.ok(spreadContent.properties.height > sourceLane.lane_rect.height);
+});
+
 test('dashboard detailed media uses the shared high-density Bevy texture contract', () => {
     const mediaItems = new Map([
         ...items,
@@ -347,13 +430,21 @@ test('clicking the focused rubrique again restores overview state', async () => 
         state,
         data,
         loadCategories: async () => categories,
+        startFocusTransition: async ({ direction, categoryId }) => {
+            assert.equal(direction, 'collapse');
+            assert.equal(categoryId, 'contacts');
+            assert.equal(state.activeCategoryId, 'contacts');
+            return { ok: true };
+        },
         render: () => {
             renderCount += 1;
             return { ok: true };
         }
     });
 
-    const result = await activator.activateCategory('contacts');
+    const result = await activator.activateCategory('contacts', {
+        lane: { category: categories[1], lane_rect: { x: 0, y: 10, width: 100, height: 20 }, header_rect: { x: 100, y: 10, width: 20, height: 20 } }
+    });
     assert.deepEqual(result, { ok: true });
     assert.equal(state.activeCategoryId, '');
     assert.equal(renderCount, 1);

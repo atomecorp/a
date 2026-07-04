@@ -230,7 +230,19 @@ const runScenario = async () => {
         });
         if (!dashboardHasNoPlusSurface(monitorActive.snapshot)) throw new Error('dashboard_monitor_plus_surface_present');
 
-        const calendarLane = monitorActive.snapshot.layout.lanes.find((lane) => lane.categoryId === 'calendar');
+        const monitorActiveLane = monitorActive.snapshot.layout.lanes.find((lane) => lane.categoryId === 'monitor');
+        await clickCanvasRectCenter(page, monitorActiveLane.header_rect);
+        const monitorCollapsed = await waitForDashboardSnapshot(page, (snapshot) => (
+            !snapshot.activeCategoryId && dashboardFocusSettled(snapshot) && !snapshot.editorOpen
+        ), 30000);
+        if (!monitorCollapsed.ok) throw new Error('dashboard_monitor_collapse_failed');
+        report.checks.push({
+            name: 'monitor_header_click_collapses_with_settled_overview',
+            ok: true,
+            records: assertOverviewRecordColors(monitorCollapsed.snapshot)
+        });
+
+        const calendarLane = monitorCollapsed.snapshot.layout.lanes.find((lane) => lane.categoryId === 'calendar');
         await clickCanvasRectCenter(page, calendarLane.header_rect);
         const calendarActive = await waitForDashboardSnapshot(page, (snapshot) => (
             snapshot.activeCategoryId === 'calendar' && laneIsActive(snapshot, 'calendar') && !snapshot.editorOpen && dashboardFocusSettled(snapshot)
