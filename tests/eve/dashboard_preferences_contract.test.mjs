@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 
-import { createDashboardCategoryActivator } from '../../eVe/domains/dashboard/dashboard_category_activation.js';
+import { createDashboardBevyUiRuntime } from '../../eVe/domains/dashboard/dashboard_bevy_ui_runtime.js';
 import { createDashboardDataController } from '../../eVe/domains/dashboard/dashboard_data_controller.js';
 import {
     filterDashboardCategoriesByPreferences,
@@ -72,34 +72,30 @@ test('dashboard data controller does not hydrate hidden preference categories', 
 });
 
 test('dashboard hidden preference categories cannot be activated by tool handlers', async () => {
-    const state = {
-        active: true,
-        activeCategoryId: 'news',
-        editor: null,
-        hydrationSerial: 0
-    };
-    let resetCount = 0;
-    let renderCount = 0;
-    const activator = createDashboardCategoryActivator({
-        state,
-        data: {
-            resetVisibleItems: () => { resetCount += 1; },
-            seedVisibleItemsFromCache: () => null,
-            hydrateVisibleItems: async () => null,
-            hasCategoryCache: () => false
-        },
-        loadCategories: async () => [{ id: 'calendar', label_key: 'eve.dashboard.category.calendar' }],
-        render: () => {
-            renderCount += 1;
-            return { ok: true };
-        }
-    });
+    await withGlobals({
+        window: { __eveProfilePreferences: { dashboard: { categories: { news: false } } } }
+    }, async () => {
+        const runtime = createDashboardBevyUiRuntime({
+            constants: { dashboard: { categories: dashboardPreferenceCategories } },
+            adapters: {
+                listMany: async () => new Map()
+            },
+            uiRuntime: {
+                state: { trees: new Map() },
+                mountTree: async () => ({ ok: true }),
+                unmountTree: async () => ({ ok: true }),
+                setTreeOpacity: async () => ({ ok: true }),
+                readDiagnostics: () => ({ mounted_nodes: 1 })
+            }
+        });
+        runtime.state.active = true;
 
-    const result = await activator.activateCategory('news');
-    assert.equal(result.ignored, 'dashboard_category_hidden');
-    assert.equal(state.activeCategoryId, '');
-    assert.equal(resetCount, 1);
-    assert.equal(renderCount, 1);
+        const result = await runtime.activateCategory('news');
+
+        assert.equal(result.ignored, 'dashboard_category_hidden');
+        assert.equal(runtime.state.activeCategoryId, '');
+        assert.deepEqual(runtime.state.categories.map((category) => category.id), ['calendar']);
+    });
 });
 
 test('user preferences cache publishes dashboard rubrique preferences', async () => {

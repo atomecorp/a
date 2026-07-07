@@ -21,7 +21,7 @@ window.new_menu_v2 = {
     setToolLatchedState: () => true
 };
 const sceneRecordsByProject = new Map();
-window.eveDashboardRuntime = {
+window.eveDashboardBevyUiRuntime = {
     open: async ({ projectId } = {}) => {
         sceneRecordsByProject.set(projectId, [{ id: '__eve_dashboard_background', properties: {} }]);
         return { ok: true, active: true };

@@ -24,7 +24,7 @@ const userProjectHost = document.createElement('div');
 userProjectHost.id = 'project_view_user_project';
 view.appendChild(userProjectHost);
 
-window.eveDashboardRuntime = {
+window.eveDashboardBevyUiRuntime = {
     state: {
         active: true,
         projectId: DASHBOARD_WORKSPACE_PROJECT_ID

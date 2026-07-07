@@ -109,7 +109,7 @@ export const screenshot = async (page, name, fullPage = true) => {
 
 export const dashboardSnapshot = (page) => page.evaluate(() => {
     const projectId = window.__currentProject?.id || window.AdoleAPI?.projects?.getCurrentId?.() || null;
-    const runtime = window.eveDashboardRuntime || null;
+    const runtime = window.eveDashboardBevyUiRuntime || null;
     const state = runtime?.state || {};
     const sceneProjectId = state.active === true
         ? (state.projectId || '__eve_dashboard_workspace__')
@@ -201,7 +201,49 @@ export const clickMainHandle = async (page) => {
         await page.evaluate(() => window.new_menu_v2?.reveal?.());
     }
     if (!(await handle.isVisible().catch(() => false))) {
-        handle = page.locator('button[data-role="eve_intuitionx-handle"]').first();
+        const handles = page.locator('button[data-role="eve_intuitionx-handle"]');
+        const count = await handles.count();
+        for (let index = 0; index < count; index += 1) {
+            const candidate = handles.nth(index);
+            if (await candidate.isVisible().catch(() => false)) {
+                handle = candidate;
+                break;
+            }
+        }
+    }
+    if (!(await handle.isVisible().catch(() => false))) {
+        const target = await page.evaluate(async () => {
+            const menu = window.new_menu_v2 || null;
+            const surface = document.getElementById('eve_surface_project');
+            if (!menu?.reveal || !surface) return { ok: false, error: 'bevy_menu_or_surface_missing' };
+            await menu.reveal();
+            await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+            const measure = typeof menu.measure === 'function' ? menu.measure() : null;
+            const rect = surface.getBoundingClientRect();
+            const itemSize = Math.max(1, Number(measure?.reservedHeight || 0));
+            const itemCount = Math.max(1, Number(measure?.itemCount || 0));
+            if (!measure?.active || !itemSize || !itemCount || rect.width <= 0 || rect.height <= 0) {
+                return { ok: false, error: 'bevy_menu_not_clickable', measure, rect: { width: rect.width, height: rect.height } };
+            }
+            const handedness = String(menu.handedness || 'right') === 'left' ? 'left' : 'right';
+            const localX = handedness === 'left'
+                ? itemSize / 2
+                : rect.width - (itemSize / 2);
+            const localY = rect.height - (itemSize / 2);
+            return {
+                ok: true,
+                kind: 'bevy_ui_main_menu_atome',
+                clientX: rect.left + localX,
+                clientY: rect.top + localY,
+                localX,
+                localY,
+                measure,
+                handedness
+            };
+        });
+        if (!target.ok) throw new Error(`main_handle_bevy_target_failed:${JSON.stringify(target)}`);
+        await page.mouse.click(target.clientX, target.clientY);
+        return target;
     }
     await handle.waitFor({ state: 'visible', timeout: 15000 });
     const hit = await handle.evaluate((button) => {
@@ -273,7 +315,7 @@ export const enterGuestWorkspace = async (page) => {
     const workspaceReadyPredicate = async () => {
         const current = await window.AdoleAPI?.auth?.current?.().catch(() => null);
         const projectId = window.__currentProject?.id || null;
-        const dashboard = window.eveDashboardRuntime?.state || {};
+        const dashboard = window.eveDashboardBevyUiRuntime?.state || {};
         const dashboardActive = dashboard.active === true && String(dashboard.projectId || '') === '__eve_dashboard_workspace__';
         return {
             ok: current?.logged === true && !!document.getElementById('eve_surface_project') && (!!projectId || dashboardActive),

@@ -161,6 +161,14 @@ pub fn drain_atome_bevy_ui_events() -> Result<JsValue, JsValue> {
 }
 
 #[wasm_bindgen]
+pub fn queue_atome_bevy_ui_events(events: JsValue) -> Result<(), JsValue> {
+    let parsed: Vec<AtomeUiEvent> = serde_wasm_bindgen::from_value(events)
+        .map_err(|error| JsValue::from_str(&format!("bevy_ui_events_decode_failed:{error}")))?;
+    queue_web_ui_events(parsed);
+    Ok(())
+}
+
+#[wasm_bindgen]
 pub fn apply_atome_bevy_spawn(node: JsValue) -> Result<(), JsValue> {
     let parsed: AtomeRenderNode = serde_wasm_bindgen::from_value(node)
         .map_err(|error| JsValue::from_str(&format!("bevy_spawn_decode_failed:{error}")))?;
@@ -262,6 +270,11 @@ pub fn apply_atome_bevy_scene_effects(patch: JsValue) -> Result<(), JsValue> {
 #[wasm_bindgen]
 pub fn request_atome_bevy_redraw() {
     request_web_redraw();
+}
+
+#[wasm_bindgen]
+pub fn register_atome_bevy_font(weight: u16, bytes: Vec<u8>) {
+    queue_web_ui_font(weight, bytes);
 }
 
 #[wasm_bindgen]

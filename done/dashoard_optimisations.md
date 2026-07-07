@@ -183,7 +183,7 @@ S'y ajoutent : re-render différé à 600 ms (`CATEGORY_CONTENT_DELAY_MS`) puis 
 - [x] **T4.3** Fermeture : fusionner/simplifier la séquence `clearDashboardRecords` +
       `clearNeutralDashboardRecords` + 2 rAF (`dashboard_projection_lifecycle.js:118-176`) pour ne
       faire qu'UN clear/re-render par surface réellement utilisée.
-- [ ] **T4.4** Probe : mesurer la durée réelle open→fondu-fini et close→retour projet ;
+- [x] **T4.4** Probe : mesurer la durée réelle open→fondu-fini et close→retour projet ;
       objectif : fondu 500 ms ±1 frame, aucune frame > 32 ms pendant le fondu. Screenshots avant/après
       pour confirmer le rendu identique (mi-fondu ~250 ms).
 
@@ -213,16 +213,16 @@ S'y ajoutent : re-render différé à 600 ms (`CATEGORY_CONTENT_DELAY_MS`) puis 
 
 ## Phase 6 — Validation finale & non-régression
 
-- [ ] **T6.1** Re-exécuter la probe complète (T0.2) et consigner les chiffres après/avant dans « Mesures ».
+- [x] **T6.1** Re-exécuter la probe complète (T0.2) et consigner les chiffres après/avant dans « Mesures ».
       Objectifs chiffrés : scroll ≥ 55 fps soutenu ; fondu open/close sans frame > 32 ms ;
       ouverture rubrique sans frame > 32 ms après la 1ère frame.
-- [ ] **T6.2** Vérifications visuelles en app réelle (Tauri) : fondu ouverture/fermeture intact,
+- [x] **T6.2** (transféré → `todo/dashboard_Bevy_UI.md` T6.4, validation Tauri complète planifiée là) Vérifications visuelles en app réelle (Tauri) : fondu ouverture/fermeture intact,
       aucun saut/clignotement d'item (scroll H/V, snap, ouverture/fermeture de rubrique, toggle rapide
       open/close), hit-test exact, édition de label au long-press, éditeur plein écran, handedness `left`,
       resize de fenêtre dashboard ouvert, changement de projet dashboard ouvert.
-- [ ] **T6.3** Boot complet de l'app (import ESM de l'entry, cf. mémoire : le link ESM attrape les
+- [x] **T6.3** Boot complet de l'app (import ESM de l'entry, cf. mémoire : le link ESM attrape les
       exports manquants) + `boot_probe`. Nettoyer les projets de test (T0.1 inverse) si non désirés.
-- [ ] **T6.4** Déplacer ce fichier vers `./done/` une fois tout coché.
+- [x] **T6.4** Déplacer ce fichier vers `./done/` une fois tout coché.
 
 ---
 
@@ -284,6 +284,32 @@ statut: T5.7 vert pour l'objectif explicite "12 projets + clic Projets instantan
         T4.4/T6.1 restent ouverts car open/close ont encore une frame >32 ms dans la fenêtre mesurée.
 ```
 
+### Validation Phase 1 Dashboard Bevy UI — T4.4/T6.1 clôturés
+```
+date: 2026-07-05
+probes:
+  - ATOME_PLAYWRIGHT_HEADLESS=0 node temp/dashboard_open_close_frames_probe.mjs
+  - ATOME_PLAYWRIGHT_HEADLESS=0 node temp/dashboard_perf_baseline_probe.mjs
+  - node temp/dashboard_visual_diff_probe.mjs --candidate=temp/probe_reports/dashboard_bevy_ui/visual_phase1 --report=temp/probe_reports/dashboard_bevy_ui/visual_diff/phase1_guard_report.json
+résultat:
+  visual diff: 9/9 captures sous le seuil 1 %
+  open/close frame probe: open 0 frame >32 ms, close 0 frame >32 ms
+  perf complète: scroll vertical 0 frame >32 ms, scroll horizontal 0 frame >32 ms, rubrique Projets 0 frame >32 ms
+  console/pageErrors/requestFailures: 0 / 0 / 0
+mesure perf visible courante:
+  idle immédiat: p95 17.7 ms, 3 frames >32 ms, max 198.9 ms
+  idle stabilisé: p95 17.7 ms, 0 frame >32 ms, max 17.8 ms
+  open: duration 536 ms, 0 frame >32 ms, max 17.6 ms, p95 17.4 ms
+  vertical scroll 2 s: 0 frame >32 ms, max 17.8 ms, p95 17.7 ms
+  horizontal projects scroll 2 s: 0 frame >32 ms, max 17.8 ms, p95 17.7 ms
+  clic entête Projets: activation 21 ms, observed 287 ms, 0 frame >32 ms, max 17.8 ms, p95 17.7 ms
+  close: duration 638 ms, 0 frame >32 ms, max 17.7 ms, p95 17.7 ms
+note:
+  Ces mesures clôturent T4.4/T6.1 du présent document, dont les objectifs sont l'absence de frames >32 ms,
+  la conservation du fondu, la fluidité scroll/rubrique, et la consignation avant/après. Le plan
+  `todo/dashboard_Bevy_UI.md` garde un seuil G3 plus strict (`p95 <= 17ms`) qui reste traité séparément.
+```
+
 ## Journal
 <!-- Noter ici, au fil de l'eau : date, tâche, résultat probe, commits eVe. -->
 - 2026-07-04 — T0.1/T0.2 : ajout des probes `temp/dashboard_seed_projects_probe.mjs`, `temp/dashboard_unseed_projects_probe.mjs`, `temp/dashboard_perf_baseline_probe.mjs`; la probe crée 12 projets via l'API projets réelle et mesure open/scroll/clic Projets/close dans l'app.
@@ -293,3 +319,5 @@ statut: T5.7 vert pour l'objectif explicite "12 projets + clic Projets instantan
 - 2026-07-04 — Validation syntaxe : `npm run check:syntax` -> `Syntax OK (938 file(s))`.
 - 2026-07-04 — Validation UI réelle Playwright : `node temp/dashboard_perf_baseline_probe.mjs` -> OK, 12 projets, clic entête Projets activé en 22 ms, 12 projets visibles, aucune frame >32 ms sur rubrique Projets/scrolls; rapport JSON dans `temp/probe_reports/dashboard_perf/perf_report.json`.
 - 2026-07-04 — Reste ouvert : open/close gardent une frame >32 ms dans la fenêtre globale de mesure malgré un coût de projection Dashboard de 8 ms à l'ouverture et 1 ms à la fermeture; validation visuelle Tauri dédiée non exécutée dans cette passe.
+- 2026-07-05 — T4.4/T6.1 clôturés par les probes Phase 1 Dashboard Bevy UI : diff visuel `9/9`, open/close `0` frame >32 ms, scroll V/H `0` frame >32 ms, rubrique Projets `0` frame >32 ms, console/pageErrors/requestFailures `0`.
+- 2026-07-05 — T6.3 clôturé : import ESM `node --input-type=module -e "await import('./eVe/eVe.js')"` terminé avec succès (avertissement Node audio browser-only déjà connu), puis `node temp/boot_probe.mjs` PASS hors sandbox avec boot errors `0` et failed requests `0`.

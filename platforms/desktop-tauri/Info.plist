@@ -6,5 +6,7 @@
     <string>eVe a besoin du microphone pour t ecouter et transcrire ta voix.</string>
     <key>NSSpeechRecognitionUsageDescription</key>
     <string>eVe a besoin de la reconnaissance vocale pour comprendre tes commandes en francais.</string>
+    <key>NSCameraUsageDescription</key>
+    <string>eVe a besoin de la camera pour capturer photos et videos dans tes projets.</string>
 </dict>
 </plist>

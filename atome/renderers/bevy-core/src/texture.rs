@@ -5,6 +5,7 @@ use bevy::{
     render::render_resource::{Extent3d, TextureDimension, TextureFormat},
 };
 
+use crate::components::{AtomeRoundedRectMaskCache, AtomeRoundedRectMaskCacheKey};
 use crate::types::AtomeTexture;
 
 fn image_from_texture(texture: &AtomeTexture, id: &str) -> Result<Image, String> {
@@ -75,6 +76,60 @@ fn rounded_rect_alpha(x: u32, y: u32, width: u32, height: u32, radius: f32) -> u
     } else {
         ((edge + 0.5) * 255.0).round().clamp(0.0, 255.0) as u8
     }
+}
+
+// World-level wrapper caching the generated mask by (width, height, radius):
+// the pixel loop below is O(width*height) on the CPU and full-surface shapes
+// (dashboard background/table) would otherwise pay ~9ms on EVERY spawn.
+pub fn cached_image_handle_from_rounded_rect_mask(
+    world: &mut World,
+    width: f32,
+    height: f32,
+    radius: f32,
+    id: &str,
+) -> Result<Handle<Image>, String> {
+    if world
+        .get_resource::<AtomeRoundedRectMaskCache>()
+        .is_none()
+    {
+        world.insert_resource(AtomeRoundedRectMaskCache::default());
+    }
+    let key = AtomeRoundedRectMaskCacheKey {
+        width: width.ceil().max(1.0) as u32,
+        height: height.ceil().max(1.0) as u32,
+        radius: (radius.max(0.0) * 100.0).round() as u32,
+    };
+    let cached = world
+        .resource::<AtomeRoundedRectMaskCache>()
+        .handles
+        .get(&key)
+        .cloned();
+    if let Some(handle) = cached {
+        let exists = world
+            .get_resource::<Assets<Image>>()
+            .map(|images| images.contains(&handle))
+            .unwrap_or(false);
+        if exists {
+            return Ok(handle);
+        }
+    }
+    let handle = {
+        let mut images = world
+            .get_resource_mut::<Assets<Image>>()
+            .ok_or_else(|| "bevy_image_assets_required".to_string())?;
+        image_handle_from_rounded_rect_mask(&mut images, width, height, radius, id)?
+    };
+    let mut cache = world.resource_mut::<AtomeRoundedRectMaskCache>();
+    if !cache.handles.contains_key(&key) {
+        cache.order.push_back(key.clone());
+    }
+    cache.handles.insert(key, handle.clone());
+    while cache.order.len() > cache.max_entries {
+        if let Some(evicted) = cache.order.pop_front() {
+            cache.handles.remove(&evicted);
+        }
+    }
+    Ok(handle)
 }
 
 pub fn image_handle_from_rounded_rect_mask(

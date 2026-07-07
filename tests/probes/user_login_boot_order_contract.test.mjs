@@ -128,7 +128,7 @@ window.__eveWorkspaceMode = {
     transitioning: false,
     targetMode: ''
 };
-window.eveDashboardRuntime = {
+window.eveDashboardBevyUiRuntime = {
     state: {
         active: true,
         projectId: DASHBOARD_WORKSPACE_PROJECT_ID
@@ -142,7 +142,7 @@ assert.equal(
     'the neutral Dashboard workspace must be active for the main handle even before auth state catches up'
 );
 dashboardLayer.remove();
-delete window.eveDashboardRuntime;
+delete window.eveDashboardBevyUiRuntime;
 delete window.__eveWorkspaceMode;
 
 const workspaceOpenCalls = [];

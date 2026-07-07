@@ -4,7 +4,10 @@ use crate::{
     render_math::{atome_rect_transform_with_local, color_from_rgba, depth_for_layer},
     selection_overlay::rebuild_selection_overlay,
     shape_shadow_overlay::rebuild_shape_shadow_overlay,
-    texture::{image_handle_from_rounded_rect_mask, image_handle_from_texture},
+    texture::{
+        cached_image_handle_from_rounded_rect_mask, image_handle_from_rounded_rect_mask,
+        image_handle_from_texture,
+    },
     types::*,
     video_external_texture::{
         insert_video_external_texture_component_for_node, insert_video_quad_mesh,
@@ -119,14 +122,28 @@ pub(crate) fn texture_handle_for_node(
     Ok(None)
 }
 
+pub(crate) fn texture_handle_for_node_in_world(
+    world: &mut World,
+    node: &AtomeRenderNode,
+) -> Result<Option<Handle<Image>>, String> {
+    if node.kind == "shape" && node.texture.is_none() && node.corner_radius > 0.0 {
+        return Ok(Some(cached_image_handle_from_rounded_rect_mask(
+            world,
+            node.logical_size[0],
+            node.logical_size[1],
+            node.corner_radius,
+            &node.id,
+        )?));
+    }
+    let mut images = world
+        .get_resource_mut::<Assets<Image>>()
+        .ok_or_else(|| "bevy_image_assets_required".to_string())?;
+    texture_handle_for_node(&mut images, node)
+}
+
 pub fn spawn_node_in_world(world: &mut World, node: AtomeRenderNode) -> Result<Entity, String> {
     let entity = {
-        let texture_handle = {
-            let mut images = world
-                .get_resource_mut::<Assets<Image>>()
-                .ok_or_else(|| "bevy_image_assets_required".to_string())?;
-            texture_handle_for_node(&mut images, &node)?
-        };
+        let texture_handle = texture_handle_for_node_in_world(world, &node)?;
         let (surface_width, surface_height) = {
             let config = world.resource::<AtomeBevyRendererConfig>();
             (config.width, config.height)

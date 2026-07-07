@@ -114,7 +114,7 @@ const createStressProjects = async (page, report, prefix) => {
 
 const exerciseDashboardHeaders = async (page, report) => {
     await clickMainHandle(page);
-    const opened = await waitFor(page, () => ({ ok: window.eveDashboardRuntime?.state?.active === true }), 15000, 50);
+    const opened = await waitFor(page, () => ({ ok: window.eveDashboardBevyUiRuntime?.state?.active === true }), 15000, 50);
     if (!opened.ok) throw new Error('dashboard_reopen_before_headers_failed');
     await waitForDashboardFadeSettled(page, 'headers_open', true);
     await waitFrames(page, 4);
@@ -127,7 +127,7 @@ const exerciseDashboardHeaders = async (page, report) => {
         const lane = snap.layout?.lanes?.find((entry) => entry.categoryId === categoryId);
         const before = await page.evaluate(() => performance.now());
         const clickTarget = await clickCanvasRect(page, lane?.header_rect);
-        const activated = await waitFor(page, (id) => ({ ok: window.eveDashboardRuntime?.state?.activeCategoryId === id }), 15000, 16, categoryId);
+        const activated = await waitFor(page, (id) => ({ ok: window.eveDashboardBevyUiRuntime?.state?.activeCategoryId === id }), 15000, 16, categoryId);
         if (!activated.ok) throw new Error(`dashboard_header_activate_failed:${categoryId}:${JSON.stringify({ last: activated.last, clickTarget })}`);
         const after = await page.evaluate(() => performance.now());
         const colorProjection = await assertDashboardFocusedColors(page, categoryId);
@@ -141,7 +141,7 @@ const exerciseDashboardHeaders = async (page, report) => {
     const current = await dashboardSnapshot(page);
     const activeLane = current.layout?.lanes?.find((entry) => entry.categoryId === current.activeCategoryId);
     await clickCanvasRect(page, activeLane?.header_rect);
-    const restored = await waitFor(page, () => ({ ok: window.eveDashboardRuntime?.state?.activeCategoryId === '' }), 15000, 50);
+    const restored = await waitFor(page, () => ({ ok: window.eveDashboardBevyUiRuntime?.state?.activeCategoryId === '' }), 15000, 50);
     if (!restored.ok) throw new Error(`dashboard_overview_restore_failed:${JSON.stringify(restored.last)}`);
     await waitFrames(page, 3);
     const overviewColors = await assertDashboardOverviewColors(page);
@@ -186,7 +186,7 @@ const assertDashboardReopensAfterProjectSwitch = async (page, report, project) =
     await clickMainHandle(page);
     const reopened = await waitFor(page, (projectId) => {
         const currentProjectId = window.__currentProject?.id || window.AdoleAPI?.projects?.getCurrentId?.() || null;
-        const runtime = window.eveDashboardRuntime || null;
+        const runtime = window.eveDashboardBevyUiRuntime || null;
         const state = runtime?.state || {};
         const sceneProjectId = state.active === true ? (state.projectId || '__eve_dashboard_workspace__') : currentProjectId;
         const scene = sceneProjectId ? window.eveToolBase?.getProjectSceneState?.(sceneProjectId) : null;
@@ -205,7 +205,7 @@ const assertDashboardReopensAfterProjectSwitch = async (page, report, project) =
     if (!reopened.ok) throw new Error(`dashboard_reopen_after_project_switch_failed:${JSON.stringify(reopened.last)}`);
     const reopenShot = await screenshot(page, 'after_project_switch_dashboard_reopen');
     await clickMainHandle(page);
-    const closedAgain = await waitFor(page, () => ({ ok: window.eveDashboardRuntime?.state?.active !== true }), 15000, 50);
+    const closedAgain = await waitFor(page, () => ({ ok: window.eveDashboardBevyUiRuntime?.state?.active !== true }), 15000, 50);
     if (!closedAgain.ok) throw new Error(`dashboard_close_after_reopen_failed:${JSON.stringify(closedAgain.last)}`);
     await waitFrames(page, 8);
     const finalClosed = await dashboardSnapshot(page);
@@ -221,14 +221,14 @@ const assertDashboardReopensAfterProjectSwitch = async (page, report, project) =
 };
 
 const switchProjectFromDashboard = async (page, report, preferredTarget = null) => {
-    await page.evaluate(() => window.eveDashboardRuntime?.activateCategory?.('projects'));
-    await waitFor(page, () => ({ ok: window.eveDashboardRuntime?.state?.activeCategoryId === 'projects' }), 15000, 50);
+    await page.evaluate(() => window.eveDashboardBevyUiRuntime?.activateCategory?.('projects'));
+    await waitFor(page, () => ({ ok: window.eveDashboardBevyUiRuntime?.state?.activeCategoryId === 'projects' }), 15000, 50);
     const projectSnap = await dashboardSnapshot(page);
     const target = preferredTarget?.id !== projectSnap.projectId
         ? preferredTarget
         : report.projects.find((project) => project.id !== projectSnap.projectId);
     const card = await waitFor(page, (projectId) => {
-        const lanes = window.eveDashboardRuntime?.state?.layout?.lanes || [];
+        const lanes = window.eveDashboardBevyUiRuntime?.state?.layout?.lanes || [];
         const item = lanes.flatMap((lane) => lane.visible_item_rects || [])
             .find((entry) => String(entry?.item?.id || '') === String(projectId));
         return { ok: !!item?.rect, rect: item?.rect || null };
@@ -236,7 +236,7 @@ const switchProjectFromDashboard = async (page, report, preferredTarget = null) 
     if (!card.ok) throw new Error(`project_dashboard_card_not_visible:${target?.id}:${JSON.stringify(card.last)}`);
     await clickCanvasRect(page, card.last.rect);
     const switched = await waitFor(page, (id) => ({
-        ok: window.__currentProject?.id === id && window.eveDashboardRuntime?.state?.active !== true
+        ok: window.__currentProject?.id === id && window.eveDashboardBevyUiRuntime?.state?.active !== true
     }), 30000, 100, target.id);
     if (!switched.ok) throw new Error(`project_switch_from_dashboard_failed:${JSON.stringify(switched.last)}`);
     await assertProjectLoaded(page, target);
@@ -287,7 +287,7 @@ const run = async () => {
             markProgress(report, 'workspace:dashboard_close_before_project_setup:start');
             await clickMainHandle(page);
             await waitForDashboardFadeStart(page, 'close_before_project_setup', 'close');
-            const closed = await waitFor(page, () => ({ ok: window.eveDashboardRuntime?.state?.active !== true }), 15000, 50);
+            const closed = await waitFor(page, () => ({ ok: window.eveDashboardBevyUiRuntime?.state?.active !== true }), 15000, 50);
             if (!closed.ok) throw new Error(`dashboard_close_before_project_setup_failed:${JSON.stringify(closed.last)}`);
             await waitForDashboardFadeSettled(page, 'close_before_project_setup', false);
             await waitFrames(page, 6);
@@ -304,12 +304,12 @@ const run = async () => {
         await assertProjectLoaded(page, activeProject);
         markProgress(report, 'active_project:set:done', { projectId: activeProject.id });
         markProgress(report, 'dashboard:prewarm_close:start', { projectId: activeProject.id });
-        await page.evaluate(() => window.eveDashboardRuntime?.close?.());
-        await waitFor(page, () => ({ ok: window.eveDashboardRuntime?.state?.active !== true }), 15000, 50);
+        await page.evaluate(() => window.eveDashboardBevyUiRuntime?.close?.());
+        await waitFor(page, () => ({ ok: window.eveDashboardBevyUiRuntime?.state?.active !== true }), 15000, 50);
         await waitFrames(page, 6);
         markProgress(report, 'dashboard:prewarm_close:done', { projectId: activeProject.id });
         markProgress(report, 'dashboard:warmup:start', { projectId: activeProject.id });
-        const warmup = await page.evaluate((projectId) => window.eveDashboardRuntime?.warmup?.({ projectId }), activeProject.id);
+        const warmup = await page.evaluate((projectId) => window.eveDashboardBevyUiRuntime?.warmup?.({ projectId }), activeProject.id);
         if (warmup?.ok !== true) throw new Error(`dashboard_warmup_failed:${JSON.stringify(warmup)}`);
         await page.evaluate(() => window.__EVE_BEVY_PERF__?.reset?.());
         markProgress(report, 'dashboard:warmup:done', { projectId: activeProject.id, warmed: warmup.warmed || 0 });
@@ -325,8 +325,8 @@ const run = async () => {
         markProgress(report, 'dynamic_data:start', { projectId: switchedProject.id });
         await exerciseDynamicData(page, switchedProject.id, prefix);
         markProgress(report, 'dynamic_data:done', { projectId: switchedProject.id });
-        await page.evaluate(() => window.eveDashboardRuntime?.close?.());
-        await waitFor(page, () => ({ ok: window.eveDashboardRuntime?.state?.active !== true }), 15000, 50);
+        await page.evaluate(() => window.eveDashboardBevyUiRuntime?.close?.());
+        await waitFor(page, () => ({ ok: window.eveDashboardBevyUiRuntime?.state?.active !== true }), 15000, 50);
         await waitFrames(page, 10);
         const finalSnap = await dashboardSnapshot(page);
         if (finalSnap.visibleDashboardIds.length) throw new Error(`dashboard_visible_after_dynamic_close:${finalSnap.visibleDashboardIds.join(',')}`);

@@ -33,6 +33,8 @@ export function drain_atome_bevy_ui_events(): any;
 
 export function notify_atome_bevy_video_frame(id: string, frame_version: number): void;
 
+export function queue_atome_bevy_ui_events(events: any): void;
+
 export function read_atome_bevy_ui_diagnostics(): any;
 
 export function read_atome_bevy_video_backend_capabilities(): any;
@@ -40,6 +42,8 @@ export function read_atome_bevy_video_backend_capabilities(): any;
 export function read_atome_bevy_video_copy_diagnostics(): any;
 
 export function read_atome_bevy_web_diagnostics(): any;
+
+export function register_atome_bevy_font(weight: number, bytes: Uint8Array): void;
 
 export function request_atome_bevy_redraw(): void;
 
@@ -71,22 +75,24 @@ export interface InitOutput {
   readonly apply_atome_bevy_visibility: (a: number, b: number) => void;
   readonly drain_atome_bevy_ui_events: (a: number) => void;
   readonly notify_atome_bevy_video_frame: (a: number, b: number, c: number) => void;
+  readonly queue_atome_bevy_ui_events: (a: number, b: number) => void;
   readonly read_atome_bevy_ui_diagnostics: (a: number) => void;
   readonly read_atome_bevy_video_backend_capabilities: (a: number) => void;
   readonly read_atome_bevy_video_copy_diagnostics: (a: number) => void;
   readonly read_atome_bevy_web_diagnostics: (a: number) => void;
+  readonly register_atome_bevy_font: (a: number, b: number, c: number) => void;
   readonly request_atome_bevy_redraw: () => void;
   readonly reset_atome_bevy_video_copy_diagnostics: (a: number) => void;
   readonly reset_atome_bevy_web_diagnostics: (a: number) => void;
   readonly run_atome_bevy_preview_renderer: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => void;
   readonly run_atome_bevy_renderer: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => void;
-  readonly __wasm_bindgen_func_elem_5471: (a: number, b: number, c: number) => void;
-  readonly __wasm_bindgen_func_elem_5228: (a: number, b: number) => void;
-  readonly __wasm_bindgen_func_elem_116021: (a: number, b: number, c: number) => void;
-  readonly __wasm_bindgen_func_elem_116005: (a: number, b: number) => void;
-  readonly __wasm_bindgen_func_elem_5474: (a: number, b: number, c: number, d: number) => void;
-  readonly __wasm_bindgen_func_elem_5470: (a: number, b: number) => void;
-  readonly __wasm_bindgen_func_elem_5472: (a: number, b: number, c: number) => void;
+  readonly __wasm_bindgen_func_elem_5792: (a: number, b: number, c: number) => void;
+  readonly __wasm_bindgen_func_elem_5549: (a: number, b: number) => void;
+  readonly __wasm_bindgen_func_elem_116358: (a: number, b: number, c: number) => void;
+  readonly __wasm_bindgen_func_elem_116342: (a: number, b: number) => void;
+  readonly __wasm_bindgen_func_elem_5795: (a: number, b: number, c: number, d: number) => void;
+  readonly __wasm_bindgen_func_elem_5793: (a: number, b: number, c: number) => void;
+  readonly __wasm_bindgen_func_elem_5791: (a: number, b: number) => void;
   readonly __wbindgen_export: (a: number, b: number) => number;
   readonly __wbindgen_export2: (a: number, b: number, c: number, d: number) => number;
   readonly __wbindgen_export3: (a: number) => void;

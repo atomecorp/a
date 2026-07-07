@@ -1,7 +1,7 @@
 use atome_bevy_renderer_core::{
     render_math::atome_camera_projection, AtomeBevyRendererConfig, AtomeEntityTable,
     AtomeRenderNode, AtomeRenderOp, AtomeRenderScene, AtomeRendererDiagnostics, AtomeStylePatch,
-    AtomeSurfaceBackgroundPatch, AtomeTransformPatch,
+    AtomeSurfaceBackgroundPatch, AtomeTransformPatch, AtomeTransition,
 };
 use bevy::prelude::*;
 use bevy::window::{CompositeAlphaMode, RequestRedraw, WindowResized, WindowResolution};
@@ -350,12 +350,12 @@ fn queued_audio_progress_styles_are_coalesced_per_atome() {
 }
 
 #[test]
-fn queued_opacity_styles_are_not_coalesced_as_audio_progress_only() {
+fn queued_opacity_styles_are_merged_per_atome() {
     let _ = drain_web_ops();
 
     queue_web_op(AtomeRenderOp::Style(AtomeStylePatch {
         id: "video_1".to_string(),
-        color: None,
+        color: Some([0.5, 0.5, 0.5, 1.0]),
         selected: None,
         opacity: Some(0.4),
         playback_progress: None,
@@ -371,6 +371,70 @@ fn queued_opacity_styles_are_not_coalesced_as_audio_progress_only() {
         playback_progress: None,
         filters: None,
         transition: None,
+        shadow: None,
+    }));
+
+    let ops = drain_web_ops();
+    assert_eq!(ops.len(), 1);
+    let AtomeRenderOp::Style(patch) = &ops[0] else {
+        panic!("expected merged style op");
+    };
+    assert_eq!(patch.opacity, Some(0.8));
+    assert_eq!(patch.color, Some([0.5, 0.5, 0.5, 1.0]));
+}
+
+#[test]
+fn queued_styles_are_not_merged_across_non_style_ops_for_same_atome() {
+    let _ = drain_web_ops();
+
+    queue_web_op(AtomeRenderOp::Style(AtomeStylePatch {
+        id: "atom_1".to_string(),
+        color: None,
+        selected: None,
+        opacity: Some(0.4),
+        playback_progress: None,
+        filters: None,
+        transition: None,
+        shadow: None,
+    }));
+    queue_web_op(AtomeRenderOp::Despawn("atom_1".to_string()));
+    queue_web_op(AtomeRenderOp::Style(AtomeStylePatch {
+        id: "atom_1".to_string(),
+        color: None,
+        selected: None,
+        opacity: Some(0.8),
+        playback_progress: None,
+        filters: None,
+        transition: None,
+        shadow: None,
+    }));
+
+    let ops = drain_web_ops();
+    assert_eq!(ops.len(), 3);
+}
+
+#[test]
+fn queued_styles_with_transition_are_not_merged() {
+    let _ = drain_web_ops();
+
+    queue_web_op(AtomeRenderOp::Style(AtomeStylePatch {
+        id: "atom_t".to_string(),
+        color: None,
+        selected: None,
+        opacity: Some(0.4),
+        playback_progress: None,
+        filters: None,
+        transition: None,
+        shadow: None,
+    }));
+    queue_web_op(AtomeRenderOp::Style(AtomeStylePatch {
+        id: "atom_t".to_string(),
+        color: None,
+        selected: None,
+        opacity: Some(0.8),
+        playback_progress: None,
+        filters: None,
+        transition: Some(AtomeTransition::none()),
         shadow: None,
     }));
 

@@ -1,5 +1,6 @@
 use crate::types::AtomeTexture;
 use bevy::prelude::*;
+use bevy::text::Font;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -8,6 +9,27 @@ pub struct AtomeUiNodeId {
     pub tree_id: String,
     pub node_id: String,
     pub kind: String,
+}
+
+// Registered UI font faces by weight (static TTFs: one handle per weight).
+#[derive(Clone, Debug, Default, Resource)]
+pub struct AtomeUiFontTable {
+    pub by_weight: Vec<(u16, Handle<Font>)>,
+}
+
+impl AtomeUiFontTable {
+    pub fn insert(&mut self, weight: u16, handle: Handle<Font>) {
+        self.by_weight.retain(|(existing, _)| *existing != weight);
+        self.by_weight.push((weight, handle));
+        self.by_weight.sort_by_key(|(existing, _)| *existing);
+    }
+
+    pub fn handle_for_weight(&self, weight: u16) -> Option<Handle<Font>> {
+        self.by_weight
+            .iter()
+            .min_by_key(|(existing, _)| existing.abs_diff(weight))
+            .map(|(_, handle)| handle.clone())
+    }
 }
 
 #[derive(Clone, Debug, Default, Resource)]
@@ -22,6 +44,10 @@ pub struct AtomeUiDiagnostics {
     pub mounted_nodes: usize,
     pub applied_ops: usize,
     pub queued_events: usize,
+    pub viewport_width: u32,
+    pub viewport_height: u32,
+    pub cursor_position: Option<[f32; 2]>,
+    pub hovered_node_ids: Vec<String>,
     pub last_error: Option<String>,
 }
 
@@ -30,12 +56,20 @@ pub struct AtomeUiEventQueue {
     pub events: Vec<AtomeUiEvent>,
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct AtomeUiEvent {
     pub tree_id: String,
     pub node_id: String,
     pub kind: String,
     pub event: String,
+    /// Cursor position in node-local logical pixels (origin top-left of the
+    /// node), valid for press/release/hover/blur/drag/wheel.
+    pub x: f32,
+    pub y: f32,
+    /// Movement/scroll delta since the previous frame; zero for
+    /// press/release/hover/blur, populated for drag and wheel.
+    pub delta_x: f32,
+    pub delta_y: f32,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -112,6 +146,31 @@ pub struct AtomeUiStyle {
     pub overflow: Option<String>,
     #[serde(default)]
     pub font_size: Option<f32>,
+    #[serde(default)]
+    pub opacity: Option<f32>,
+    #[serde(default)]
+    pub radius_corners: Option<[f32; 4]>,
+    #[serde(default)]
+    pub shadow: Option<AtomeUiShadow>,
+    #[serde(default)]
+    pub scroll: Option<[f32; 2]>,
+    #[serde(default)]
+    pub text_align: Option<String>,
+    #[serde(default)]
+    pub line_height: Option<f32>,
+    #[serde(default)]
+    pub font_weight: Option<f32>,
+}
+
+#[derive(Clone, Debug, Default, Deserialize)]
+pub struct AtomeUiShadow {
+    pub color: [f32; 4],
+    #[serde(default)]
+    pub blur: f32,
+    #[serde(default)]
+    pub spread: f32,
+    #[serde(default)]
+    pub offset: [f32; 2],
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -120,4 +179,6 @@ pub enum AtomeUiOp {
     MountTree { tree: AtomeUiTree },
     UpdateTree { tree: AtomeUiTree },
     UnmountTree { id: String },
+    UpdateNodeStyle { id: String, style: AtomeUiStyle },
+    SetSubtreeOpacity { id: String, opacity: f32 },
 }

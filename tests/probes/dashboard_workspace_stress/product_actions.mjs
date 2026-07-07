@@ -7,10 +7,10 @@ export const ensureProject = async (page, name) => page.evaluate(async (projectN
     ]);
     const workspaceMode = await import('/eVe/domains/dashboard/dashboard_workspace_mode.js');
     workspaceMode.beginDashboardWorkspaceTransition?.('project');
-    const dashboardState = window.eveDashboardRuntime?.state || {};
+    const dashboardState = window.eveDashboardBevyUiRuntime?.state || {};
     if (dashboardState.active === true || dashboardState.closing === true) {
         const closedDashboard = await withTimeout(
-            window.eveDashboardRuntime?.close?.({ honorLabelEditorKeyboardGuard: false }),
+            window.eveDashboardBevyUiRuntime?.close?.({ honorLabelEditorKeyboardGuard: false }),
             'dashboard_close_before_project_timeout',
             10000
         );
@@ -291,27 +291,27 @@ export const createCalendarAndContacts = async (page, projectId, prefix) => page
 }, { projectId, prefix });
 
 export const dashboardHasItem = (page, itemId) => waitFor(page, (id) => {
-    const state = window.eveDashboardRuntime?.state || {};
+    const state = window.eveDashboardBevyUiRuntime?.state || {};
     const items = Array.from(state.itemsByCategory?.values?.() || []).flat();
     return { ok: items.some((item) => String(item.id || '') === String(id)), items: items.map((item) => item.id) };
 }, 15000, 100, itemId);
 
 export const exerciseDynamicData = async (page, projectId, prefix) => {
-    await page.evaluate((pid) => window.eveDashboardRuntime?.open?.({ projectId: pid }), projectId);
-    await waitFor(page, () => ({ ok: window.eveDashboardRuntime?.state?.active === true }), 15000, 100);
+    await page.evaluate((pid) => window.eveDashboardBevyUiRuntime?.open?.({ projectId: pid }), projectId);
+    await waitFor(page, () => ({ ok: window.eveDashboardBevyUiRuntime?.state?.active === true }), 15000, 100);
     const created = await createCalendarAndContacts(page, projectId, prefix);
     if (!created.ok) throw new Error(`dynamic_create_failed:${JSON.stringify(created)}`);
-    await page.evaluate(() => window.eveDashboardRuntime?.activateCategory?.('calendar'));
+    await page.evaluate(() => window.eveDashboardBevyUiRuntime?.activateCategory?.('calendar'));
     if (!(await dashboardHasItem(page, `${prefix}_calendar_a`)).ok) throw new Error('calendar_item_not_rendered');
     await page.evaluate((id) => window.CalendarAPI.updateEvent(id, { title: 'Updated calendar title' }), `${prefix}_calendar_a`);
     if (!(await dashboardHasItem(page, `${prefix}_calendar_a`)).ok) throw new Error('calendar_item_lost_after_update');
     await page.evaluate((id) => window.CalendarAPI.deleteEvent(id), `${prefix}_calendar_b`);
     const deletedGone = await waitFor(page, (id) => {
-        const items = Array.from(window.eveDashboardRuntime?.state?.itemsByCategory?.values?.() || []).flat();
+        const items = Array.from(window.eveDashboardBevyUiRuntime?.state?.itemsByCategory?.values?.() || []).flat();
         return { ok: !items.some((item) => String(item.id || '') === String(id)), items: items.map((item) => item.id) };
     }, 15000, 100, `${prefix}_calendar_b`);
     if (!deletedGone.ok) throw new Error(`calendar_deleted_item_still_visible:${JSON.stringify(deletedGone.last)}`);
-    await page.evaluate(() => window.eveDashboardRuntime?.activateCategory?.('contacts'));
+    await page.evaluate(() => window.eveDashboardBevyUiRuntime?.activateCategory?.('contacts'));
     if (!(await dashboardHasItem(page, `${prefix}_contact`)).ok) throw new Error('contact_item_not_rendered');
     await page.evaluate((id) => window.atome.contacts.updateLocalContact(id, { name: 'Updated Stress Contact' }), `${prefix}_contact`);
     if (!(await dashboardHasItem(page, `${prefix}_contact`)).ok) throw new Error('contact_item_lost_after_update');

@@ -661,3 +661,26 @@ fn audio_waveform_progress_spawns_and_moves_bevy_playhead_overlay() {
 
     assert!(world.get::<AtomeWaveformPlaybackOverlay>(entity).is_none());
 }
+
+#[test]
+fn rounded_rect_mask_handles_are_cached_per_dimensions() {
+    let mut world = World::new();
+    world.insert_resource(Assets::<Image>::default());
+
+    let first = crate::texture::cached_image_handle_from_rounded_rect_mask(
+        &mut world, 1440.0, 920.0, 12.0, "bg_1",
+    )
+    .unwrap();
+    let second = crate::texture::cached_image_handle_from_rounded_rect_mask(
+        &mut world, 1440.0, 920.0, 12.0, "bg_2",
+    )
+    .unwrap();
+    let different = crate::texture::cached_image_handle_from_rounded_rect_mask(
+        &mut world, 1440.0, 920.0, 8.0, "bg_3",
+    )
+    .unwrap();
+
+    assert_eq!(first, second);
+    assert_ne!(first, different);
+    assert_eq!(world.resource::<Assets<Image>>().iter().count(), 2);
+}

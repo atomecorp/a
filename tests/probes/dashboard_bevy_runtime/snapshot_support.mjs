@@ -1,5 +1,5 @@
 export const dashboardSnapshot = async (page) => page.evaluate(async () => {
-    const runtime = window.eveDashboardRuntime || null;
+    const runtime = window.eveDashboardBevyUiRuntime || null;
     const state = runtime?.state || null;
     const projectId = window.__currentProject?.id || state?.projectId || null;
     const scene = projectId ? window.eveToolBase?.getProjectSceneState?.(projectId) : null;

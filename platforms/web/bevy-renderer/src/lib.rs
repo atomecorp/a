@@ -1,7 +1,8 @@
 use atome_bevy_renderer_core::{
-    apply_render_ops, apply_surface, apply_ui_ops, AtomeBevyRendererConfig,
-    AtomeBevyRendererPlugin, AtomeRenderOp, AtomeRenderScene, AtomeRendererDiagnostics,
-    AtomeSurfacePatch, AtomeUiDiagnostics, AtomeUiEvent, AtomeUiOp,
+    apply_render_ops, apply_surface, apply_ui_ops, register_ui_font,
+    AtomeBevyRendererConfig, AtomeBevyRendererPlugin, AtomeRenderOp, AtomeRenderScene,
+    AtomeRendererDiagnostics, AtomeStylePatch, AtomeSurfacePatch, AtomeUiDiagnostics,
+    AtomeUiEvent, AtomeUiOp,
 };
 use bevy::{
     log::{Level, LogPlugin},
@@ -12,6 +13,7 @@ use bevy::{
     },
     winit::{EventLoopProxy, EventLoopProxyWrapper, UpdateMode, WinitSettings, WinitUserEvent},
 };
+use bevy::platform::time::Instant;
 use serde::Serialize;
 use std::time::Duration;
 use std::cell::RefCell;
@@ -21,6 +23,7 @@ mod exports;
 thread_local! {
     static WEB_PENDING_OPS: RefCell<Vec<AtomeRenderOp>> = RefCell::new(Vec::new());
     static WEB_PENDING_UI_OPS: RefCell<Vec<AtomeUiOp>> = RefCell::new(Vec::new());
+    static WEB_PENDING_UI_FONTS: RefCell<Vec<(u16, Vec<u8>)>> = const { RefCell::new(Vec::new()) };
     static WEB_LAST_UI_DIAGNOSTICS: RefCell<AtomeUiDiagnostics> = RefCell::new(AtomeUiDiagnostics::default());
     static WEB_DRAINED_UI_EVENTS: RefCell<Vec<AtomeUiEvent>> = const { RefCell::new(Vec::new()) };
     static WEB_PENDING_VIDEO_FRAMES: RefCell<u32> = const { RefCell::new(0) };
@@ -29,6 +32,79 @@ thread_local! {
     static WEB_REDRAW_PENDING: RefCell<bool> = const { RefCell::new(false) };
     static WEB_DIAGNOSTICS: RefCell<WebRendererDiagnostics> = RefCell::new(WebRendererDiagnostics::default());
     static WEB_RUNNING_APPS: RefCell<Vec<App>> = const { RefCell::new(Vec::new()) };
+    static WEB_LAST_TICK_AT: RefCell<Option<Instant>> = const { RefCell::new(None) };
+    static WEB_LAST_WAKE_AT: RefCell<Option<Instant>> = const { RefCell::new(None) };
+    static WEB_FRAME_PROBE: RefCell<WebFrameProbe> = RefCell::new(WebFrameProbe::default());
+}
+
+const WEB_SLOW_FRAME_THRESHOLD_MS: f32 = 8.0;
+const WEB_SLOW_FRAME_HISTORY: usize = 12;
+
+#[derive(Clone, Debug, Default, Serialize)]
+struct WebFrameTiming {
+    main_ms: f32,
+    ui_ops: u32,
+    apply_ui_ops_ms: f32,
+}
+
+#[derive(Debug, Default)]
+struct WebFrameProbe {
+    started_at: Option<Instant>,
+    current: WebFrameTiming,
+}
+
+fn web_frame_probe_begin(_world: &mut World) {
+    WEB_LAST_TICK_AT.with(|cell| {
+        *cell.borrow_mut() = Some(Instant::now());
+    });
+    WEB_DIAGNOSTICS.with(|cell| {
+        cell.borrow_mut().update_ticks += 1;
+    });
+    WEB_FRAME_PROBE.with(|cell| {
+        let mut probe = cell.borrow_mut();
+        probe.started_at = Some(Instant::now());
+        probe.current = WebFrameTiming::default();
+    });
+}
+
+fn web_frame_probe_end(world: &mut World) {
+    // The UI pass renders into the camera's physical viewport; the JS UI
+    // runtime needs the effective size to pre-scale logical trees exactly.
+    let ui_viewport = {
+        let mut query = world.query::<&Camera>();
+        query
+            .iter(world)
+            .find_map(|camera| camera.physical_viewport_size())
+    };
+    if let Some(size) = ui_viewport {
+        WEB_DIAGNOSTICS.with(|cell| {
+            let mut diagnostics = cell.borrow_mut();
+            diagnostics.ui_viewport_width = size.x;
+            diagnostics.ui_viewport_height = size.y;
+        });
+    }
+    WEB_FRAME_PROBE.with(|cell| {
+        let mut probe = cell.borrow_mut();
+        let Some(started_at) = probe.started_at.take() else {
+            return;
+        };
+        probe.current.main_ms = started_at.elapsed().as_secs_f32() * 1000.0;
+        let timing = probe.current.clone();
+        WEB_DIAGNOSTICS.with(|diagnostics_cell| {
+            let mut diagnostics = diagnostics_cell.borrow_mut();
+            if timing.main_ms > WEB_SLOW_FRAME_THRESHOLD_MS {
+                diagnostics.recent_slow_frames.push(timing.clone());
+                let excess = diagnostics
+                    .recent_slow_frames
+                    .len()
+                    .saturating_sub(WEB_SLOW_FRAME_HISTORY);
+                if excess > 0 {
+                    diagnostics.recent_slow_frames.drain(..excess);
+                }
+            }
+            diagnostics.last_frame = timing;
+        });
+    });
 }
 
 #[derive(Clone, Debug, Default, Serialize)]
@@ -37,17 +113,23 @@ struct WebRendererDiagnostics {
     transform_ops: u32,
     drained_ops: u32,
     drain_batches: u32,
+    merged_style_ops: u32,
     max_queue_depth: u32,
     redraw_requests: u32,
     redraw_applied: u32,
     wake_calls: u32,
+    wake_send_failures: u32,
     video_frame_notifications: u32,
     video_frame_redraws: u32,
     queued_ui_ops: u32,
     drained_ui_ops: u32,
     ui_batches: u32,
     running_apps: u32,
-    manual_update_calls: u32,
+    update_ticks: u32,
+    ui_viewport_width: u32,
+    ui_viewport_height: u32,
+    last_frame: WebFrameTiming,
+    recent_slow_frames: Vec<WebFrameTiming>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -102,13 +184,17 @@ fn queue_web_ops(ops: Vec<AtomeRenderOp>) {
         .iter()
         .filter(|op| matches!(op, AtomeRenderOp::Transform(_)))
         .count() as u32;
+    let mut merged_ops = 0u32;
     WEB_PENDING_OPS.with(|cell| {
         let mut pending_ops = cell.borrow_mut();
         for op in ops {
-            if let Some(id) = progress_only_style_id(&op) {
-                pending_ops.retain(|pending| {
-                    progress_only_style_id(pending).as_deref() != Some(id.as_str())
-                });
+            if let AtomeRenderOp::Style(patch) = op {
+                if try_merge_pending_style_patch(&mut pending_ops, &patch) {
+                    merged_ops += 1;
+                    continue;
+                }
+                pending_ops.push(AtomeRenderOp::Style(patch));
+                continue;
             }
             pending_ops.push(op);
         }
@@ -118,6 +204,12 @@ fn queue_web_ops(ops: Vec<AtomeRenderOp>) {
         let mut diagnostics = cell.borrow_mut();
         diagnostics.queued_ops += op_count;
         diagnostics.transform_ops += transform_count;
+        // A merged style patch is absorbed by its pending host patch and will
+        // never be drained itself: account for it immediately so the JS-side
+        // presentation waiter (drained_ops >= queued_ops watermark) still
+        // completes once the host patch applies.
+        diagnostics.drained_ops += merged_ops;
+        diagnostics.merged_style_ops += merged_ops;
         diagnostics.max_queue_depth = diagnostics.max_queue_depth.max(queue_depth);
     });
     wake_web_renderer();
@@ -136,25 +228,75 @@ fn queue_web_ui_ops(ops: Vec<AtomeUiOp>) {
         diagnostics.queued_ui_ops += op_count;
     });
     request_web_redraw();
-    drive_registered_web_app_update();
 }
 
-fn progress_only_style_id(op: &AtomeRenderOp) -> Option<String> {
-    let AtomeRenderOp::Style(patch) = op else {
-        return None;
+fn op_targets_id(op: &AtomeRenderOp, id: &str) -> bool {
+    match op {
+        AtomeRenderOp::Spawn(node) => node.id == id,
+        AtomeRenderOp::Despawn(target) => target == id,
+        AtomeRenderOp::Transform(patch) => patch.id == id,
+        AtomeRenderOp::Style(patch) => patch.id == id,
+        AtomeRenderOp::Reparent(patch) => patch.id == id,
+        AtomeRenderOp::Layer(patch) => patch.id == id,
+        AtomeRenderOp::Visibility(patch) => patch.id == id,
+        AtomeRenderOp::Text(patch) => patch.id == id,
+        AtomeRenderOp::Resource(patch) => patch.id == id,
+        AtomeRenderOp::Surface(_)
+        | AtomeRenderOp::SurfaceBackground(_)
+        | AtomeRenderOp::SceneEffects(_) => false,
+    }
+}
+
+fn merge_style_patch_fields(existing: &mut AtomeStylePatch, next: &AtomeStylePatch) {
+    if next.color.is_some() {
+        existing.color = next.color;
+    }
+    if next.shadow.is_some() {
+        existing.shadow = next.shadow.clone();
+    }
+    if next.selected.is_some() {
+        existing.selected = next.selected;
+    }
+    if next.opacity.is_some() {
+        existing.opacity = next.opacity;
+    }
+    if next.playback_progress.is_some() {
+        existing.playback_progress = next.playback_progress;
+    }
+    if next.filters.is_some() {
+        existing.filters = next.filters.clone();
+    }
+}
+
+// Coalesce per-atome style patches while they wait in the queue: applying
+// {opacity: 0.4} then {opacity: 0.8} within one drained batch is visually
+// identical to applying the merged patch once, and fade animations otherwise
+// flood a single Bevy frame with hundreds of stale patches when drains lag
+// behind rAF (measured 1240 style ops / 28ms in one close frame). Patches
+// carrying a transition keep sequential semantics, and any non-style op for
+// the same id (spawn/despawn/text/...) acts as a merge barrier.
+fn try_merge_pending_style_patch(
+    pending_ops: &mut [AtomeRenderOp],
+    patch: &AtomeStylePatch,
+) -> bool {
+    if patch.id.trim().is_empty() || patch.transition.is_some() {
+        return false;
+    }
+    let Some(pending) = pending_ops
+        .iter_mut()
+        .rev()
+        .find(|pending| op_targets_id(pending, &patch.id))
+    else {
+        return false;
     };
-    if patch.color.is_some()
-        || patch.selected.is_some()
-        || patch.opacity.is_some()
-        || patch.playback_progress.is_none()
-    {
-        return None;
+    let AtomeRenderOp::Style(existing) = pending else {
+        return false;
+    };
+    if existing.transition.is_some() {
+        return false;
     }
-    let id = patch.id.trim();
-    if id.is_empty() {
-        return None;
-    }
-    Some(id.to_string())
+    merge_style_patch_fields(existing, patch);
+    true
 }
 
 fn drain_web_ops() -> Vec<AtomeRenderOp> {
@@ -236,6 +378,13 @@ fn drain_web_ui_events() -> Vec<AtomeUiEvent> {
     WEB_DRAINED_UI_EVENTS.with(|cell| cell.borrow_mut().drain(..).collect())
 }
 
+fn queue_web_ui_events(events: Vec<AtomeUiEvent>) {
+    if events.is_empty() {
+        return;
+    }
+    WEB_DRAINED_UI_EVENTS.with(|cell| cell.borrow_mut().extend(events));
+}
+
 fn remember_event_loop_proxy(proxy: Option<Res<EventLoopProxyWrapper>>) {
     let Some(proxy) = proxy else {
         return;
@@ -252,30 +401,45 @@ fn remember_event_loop_proxy(proxy: Option<Res<EventLoopProxyWrapper>>) {
     });
 }
 
+// Every WakeUp user event makes the reactive winit runner recompute its
+// wait deadline; at rAF cadence (one wake per queued op batch) the 16ms
+// deadline never expires and the loop stops ticking entirely (measured:
+// a pure-wake flood at 60/s drops update ticks from ~58/s to 0). The loop
+// already self-ticks every 16ms, so a wake is only useful when it has been
+// genuinely silent; emission is throttled so wakes can never re-starve it.
+const WEB_WAKE_SILENCE_THRESHOLD_MS: u128 = 50;
+
 fn wake_web_renderer() {
     WEB_DIAGNOSTICS.with(|cell| {
         cell.borrow_mut().wake_calls += 1;
     });
+    let loop_silent = WEB_LAST_TICK_AT.with(|cell| {
+        cell.borrow()
+            .map(|at| at.elapsed().as_millis() > WEB_WAKE_SILENCE_THRESHOLD_MS)
+            .unwrap_or(true)
+    });
+    let wake_recent = WEB_LAST_WAKE_AT.with(|cell| {
+        cell.borrow()
+            .map(|at| at.elapsed().as_millis() <= WEB_WAKE_SILENCE_THRESHOLD_MS)
+            .unwrap_or(false)
+    });
+    if !loop_silent || wake_recent {
+        return;
+    }
+    WEB_LAST_WAKE_AT.with(|cell| {
+        *cell.borrow_mut() = Some(Instant::now());
+    });
     WEB_EVENT_LOOP_PROXY.with(|cell| {
         if let Some(proxy) = cell.borrow().as_ref() {
-            let _ = proxy.send_event(WinitUserEvent::WakeUp);
+            if proxy.send_event(WinitUserEvent::WakeUp).is_err() {
+                WEB_DIAGNOSTICS.with(|diagnostics| {
+                    diagnostics.borrow_mut().wake_send_failures += 1;
+                });
+            }
         } else {
             WEB_WAKE_PENDING.with(|pending| {
                 *pending.borrow_mut() = true;
             });
-        }
-    });
-}
-
-fn drive_registered_web_app_update() {
-    WEB_RUNNING_APPS.with(|cell| {
-        let mut apps = cell.borrow_mut();
-        if let Some(app) = apps.last_mut() {
-            WEB_DIAGNOSTICS.with(|diagnostics_cell| {
-                diagnostics_cell.borrow_mut().manual_update_calls += 1;
-            });
-            apply_pending_web_ui_ops(app.world_mut());
-            apply_pending_web_redraw(app.world_mut());
         }
     });
 }
@@ -358,6 +522,7 @@ impl Plugin for WebBevyRendererPlugin {
                 Startup,
                 (remember_event_loop_proxy, request_initial_web_redraw).chain(),
             )
+            .add_systems(First, web_frame_probe_begin)
             .add_systems(
                 Update,
                 (
@@ -370,7 +535,8 @@ impl Plugin for WebBevyRendererPlugin {
                     apply_pending_web_redraw,
                 )
                     .chain(),
-            );
+            )
+            .add_systems(Last, web_frame_probe_end);
     }
 }
 
@@ -387,12 +553,36 @@ fn apply_pending_web_ops(world: &mut World) {
     world.write_message(RequestRedraw);
 }
 
+fn queue_web_ui_font(weight: u16, bytes: Vec<u8>) {
+    WEB_PENDING_UI_FONTS.with(|cell| cell.borrow_mut().push((weight, bytes)));
+    request_web_redraw();
+}
+
+fn apply_pending_web_ui_fonts(world: &mut World) {
+    let fonts: Vec<(u16, Vec<u8>)> =
+        WEB_PENDING_UI_FONTS.with(|cell| cell.borrow_mut().drain(..).collect());
+    for (weight, bytes) in fonts {
+        if let Err(error) = register_ui_font(world, weight, bytes) {
+            world.resource_mut::<AtomeRendererDiagnostics>().last_error = Some(error);
+        }
+    }
+}
+
 fn apply_pending_web_ui_ops(world: &mut World) {
+    apply_pending_web_ui_fonts(world);
     let ops = drain_web_ui_ops();
     if ops.is_empty() {
         return;
     }
+    let apply_started_at = Instant::now();
+    WEB_FRAME_PROBE.with(|cell| {
+        cell.borrow_mut().current.ui_ops += ops.len() as u32;
+    });
     apply_ui_ops(world, ops);
+    WEB_FRAME_PROBE.with(|cell| {
+        cell.borrow_mut().current.apply_ui_ops_ms +=
+            apply_started_at.elapsed().as_secs_f32() * 1000.0;
+    });
     let diagnostics = atome_bevy_renderer_core::read_ui_diagnostics(world);
     WEB_LAST_UI_DIAGNOSTICS.with(|cell| {
         *cell.borrow_mut() = diagnostics;

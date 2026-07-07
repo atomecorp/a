@@ -52,7 +52,7 @@ const waitForGuestProject = async (page) => waitFor(page, async () => {
     }
     const projectId = window.__currentProject?.id || null;
     const canvas = document.getElementById('eve_surface_project');
-    const dashboardActive = window.eveDashboardRuntime?.state?.active === true;
+    const dashboardActive = window.eveDashboardBevyUiRuntime?.state?.active === true;
     const sequence = document.getElementById('eve_login_sequence');
     const sequenceHidden = !sequence || getComputedStyle(sequence).display === 'none';
     const isAnonymous = api?.security?.isAnonymous ? api.security.isAnonymous() : null;

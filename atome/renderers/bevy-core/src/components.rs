@@ -126,6 +126,33 @@ impl Default for AtomeShapeShadowTextureCache {
     }
 }
 
+#[derive(Clone, Debug, Hash, PartialEq, Eq)]
+pub struct AtomeRoundedRectMaskCacheKey {
+    pub width: u32,
+    pub height: u32,
+    pub radius: u32,
+}
+
+// CPU-generated rounded-rect alpha masks are expensive at full-surface sizes
+// (a 1440x920 background mask costs ~9ms per spawn); identical shapes reuse
+// one texture. Small LRU: entries can weigh several MB each.
+#[derive(Clone, Debug, Resource)]
+pub struct AtomeRoundedRectMaskCache {
+    pub max_entries: usize,
+    pub order: VecDeque<AtomeRoundedRectMaskCacheKey>,
+    pub handles: HashMap<AtomeRoundedRectMaskCacheKey, Handle<Image>>,
+}
+
+impl Default for AtomeRoundedRectMaskCache {
+    fn default() -> Self {
+        Self {
+            max_entries: 32,
+            order: VecDeque::new(),
+            handles: HashMap::new(),
+        }
+    }
+}
+
 #[derive(Clone, Debug, Component)]
 pub struct AtomeWaveformPlaybackOverlay {
     pub entities: Vec<Entity>,

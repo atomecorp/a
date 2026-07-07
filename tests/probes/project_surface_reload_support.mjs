@@ -133,7 +133,7 @@ export const waitWorkspaceOverlayGone = async (page) => {
             pointerEvents: style.pointerEvents,
             className: login.className || '',
             currentProjectId: window.__currentProject?.id || '',
-            dashboardActive: window.eveDashboardRuntime?.state?.active === true
+            dashboardActive: window.eveDashboardBevyUiRuntime?.state?.active === true
         };
     }, 30000, 150);
     return state;
@@ -172,7 +172,7 @@ export const surfaceSnapshot = async (page, label) => page.evaluate(async (snaps
     const { readRenderSurfaceSize } = await import('/eVe/domains/rendering/surface_runtime.js');
     const { readBevyWebRendererState } = await import('/eVe/domains/rendering/bevy_web_renderer_runtime.js');
     const currentProjectId = window.__currentProject?.id || window.AdoleAPI?.projects?.getCurrentId?.() || '';
-    const dashboardState = window.eveDashboardRuntime?.state || {};
+    const dashboardState = window.eveDashboardBevyUiRuntime?.state || {};
     const sceneProjectId = dashboardState.active === true ? (dashboardState.projectId || '__eve_dashboard_workspace__') : currentProjectId;
     const canvas = document.getElementById('eve_surface_project');
     const scene = sceneProjectId ? window.eveToolBase?.getProjectSceneState?.(sceneProjectId) : null;
@@ -230,7 +230,7 @@ export const surfaceSnapshot = async (page, label) => page.evaluate(async (snaps
         backingOk,
         bevyOk,
         canvasCount: document.querySelectorAll('canvas#eve_surface_project').length,
-        dashboardActive: window.eveDashboardRuntime?.state?.active === true,
+        dashboardActive: window.eveDashboardBevyUiRuntime?.state?.active === true,
         visibleDashboardIds: visibleDashboard.map((record) => record.id),
         visibleDashboardCardCount: visibleDashboard.filter((record) => String(record?.id || '').startsWith('__eve_dashboard_card_')).length,
         visibleDashboardTitleTexts: visibleDashboard
@@ -297,7 +297,7 @@ export const captureHeaderPixels = async ({ page, report, save, screenshot, snap
 export const waitForDashboardOpen = async ({ page, report, save, screenshot, label }) => {
     const ready = await waitFor(page, () => {
         const currentProjectId = window.__currentProject?.id || window.AdoleAPI?.projects?.getCurrentId?.() || '';
-        const dashboardState = window.eveDashboardRuntime?.state || {};
+        const dashboardState = window.eveDashboardBevyUiRuntime?.state || {};
         const sceneProjectId = dashboardState.active === true ? (dashboardState.projectId || '__eve_dashboard_workspace__') : currentProjectId;
         const scene = window.eveToolBase?.getProjectSceneState?.(sceneProjectId) || null;
         const records = Array.from(scene?.records || []);
@@ -313,7 +313,7 @@ export const waitForDashboardOpen = async ({ page, report, save, screenshot, lab
             .filter((record) => /^__eve_dashboard_header_(?!bg|icon|side)/.test(String(record?.id || '')))
             .map((record) => String(record?.properties?.text || '').trim())
             .filter(Boolean);
-        const ok = window.eveDashboardRuntime?.state?.active === true
+        const ok = window.eveDashboardBevyUiRuntime?.state?.active === true
             && visibleDashboardIds.length > 0
             && visibleCards.length > 0
             && visibleTitles.length > 0
@@ -321,7 +321,7 @@ export const waitForDashboardOpen = async ({ page, report, save, screenshot, lab
             && scene?.projection?.ok === true;
         return {
             ok,
-            active: window.eveDashboardRuntime?.state?.active === true,
+            active: window.eveDashboardBevyUiRuntime?.state?.active === true,
             currentProjectId,
             sceneProjectId,
             projectionOk: scene?.projection?.ok === true,

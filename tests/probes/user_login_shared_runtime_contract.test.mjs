@@ -86,7 +86,7 @@ window.__eveWorkspaceMode = {
     transitioning: false,
     targetMode: ''
 };
-window.eveDashboardRuntime = {
+window.eveDashboardBevyUiRuntime = {
     state: {
         active: true,
         projectId: '__eve_dashboard_workspace__'

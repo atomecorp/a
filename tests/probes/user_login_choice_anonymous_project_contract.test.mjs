@@ -68,7 +68,7 @@ window.new_menu_v2 = {
         return true;
     }
 };
-window.eveDashboardRuntime = {
+window.eveDashboardBevyUiRuntime = {
     open: async (payload = {}) => {
         dashboardOpens.push(payload);
         sceneRecordsByProject.set(payload.projectId, [

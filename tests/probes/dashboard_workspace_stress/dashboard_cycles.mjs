@@ -71,7 +71,7 @@ const assertClosedNeutralDesktopEmpty = async (page, cycle) => {
 export const waitForDashboardFadeStart = async (page, label, direction = 'open') => {
     const before = await page.evaluate(() => performance.now());
     const started = await waitFor(page, (mode) => {
-        const state = window.eveDashboardRuntime?.state || {};
+        const state = window.eveDashboardBevyUiRuntime?.state || {};
         const opacity = Number(state.fadeOpacity ?? 1);
         const closing = state.closing === true || state.active !== true;
         return {
@@ -91,7 +91,7 @@ export const waitForDashboardFadeStart = async (page, label, direction = 'open')
 
 export const waitForDashboardFadeSettled = async (page, label, active) => {
     const settled = await waitFor(page, (expectedActive) => {
-        const state = window.eveDashboardRuntime?.state || {};
+        const state = window.eveDashboardBevyUiRuntime?.state || {};
         const opacity = Number(state.fadeOpacity ?? 1);
         return {
             ok: state.active === expectedActive
@@ -115,7 +115,7 @@ export const exerciseStartupDashboardOpenClose = async (page, report) => {
     for (let index = 0; index < DASHBOARD_TOGGLE_CYCLES; index += 1) {
         await clickMainHandle(page);
         const closeFade = await waitForDashboardFadeStart(page, `startup_close_${index + 1}`, 'close');
-        const closed = await waitFor(page, () => ({ ok: window.eveDashboardRuntime?.state?.active !== true }), 15000, 50);
+        const closed = await waitFor(page, () => ({ ok: window.eveDashboardBevyUiRuntime?.state?.active !== true }), 15000, 50);
         if (!closed.ok) throw new Error(`startup_dashboard_close_failed:${index + 1}:${JSON.stringify(closed.last)}`);
         await waitForDashboardFadeSettled(page, `startup_close_${index + 1}`, false);
         await waitFrames(page, 4);
@@ -125,7 +125,7 @@ export const exerciseStartupDashboardOpenClose = async (page, report) => {
         await clickMainHandle(page);
         const openFade = await waitForDashboardFadeStart(page, `startup_open_${index + 1}`);
         const opened = await waitFor(page, () => {
-            const state = window.eveDashboardRuntime?.state || {};
+            const state = window.eveDashboardBevyUiRuntime?.state || {};
             const scene = window.eveToolBase?.getProjectSceneState?.('__eve_dashboard_workspace__') || null;
             const records = Array.isArray(scene?.records) ? scene.records : [];
             const visibleRecords = records
@@ -152,7 +152,7 @@ export const exerciseDashboardOpenClose = async (page, report) => {
     const initial = await dashboardSnapshot(page);
     if (initial.active) {
         await clickMainHandle(page);
-        const initialClosed = await waitFor(page, () => ({ ok: window.eveDashboardRuntime?.state?.active !== true }), 15000, 50);
+        const initialClosed = await waitFor(page, () => ({ ok: window.eveDashboardBevyUiRuntime?.state?.active !== true }), 15000, 50);
         if (!initialClosed.ok) throw new Error(`dashboard_initial_close_failed:${JSON.stringify(initialClosed.last)}`);
         await waitFrames(page, 4);
     }
@@ -161,14 +161,14 @@ export const exerciseDashboardOpenClose = async (page, report) => {
         const beforeOpen = await page.evaluate(() => performance.now());
         await clickMainHandle(page);
         const openFade = await waitForDashboardFadeStart(page, `project_open_${index + 1}`);
-        const opened = await waitFor(page, () => ({ ok: window.eveDashboardRuntime?.state?.active === true }), 15000, 50);
+        const opened = await waitFor(page, () => ({ ok: window.eveDashboardBevyUiRuntime?.state?.active === true }), 15000, 50);
         if (!opened.ok) throw new Error(`dashboard_open_cycle_failed:${index + 1}:${JSON.stringify(opened.last)}`);
         await waitForDashboardFadeSettled(page, `project_open_${index + 1}`, true);
         const openDone = await page.evaluate(() => performance.now());
         const layout = (await dashboardSnapshot(page)).layout;
         await clickMainHandle(page);
         const closeFade = await waitForDashboardFadeStart(page, `project_close_${index + 1}`, 'close');
-        const closedWait = await waitFor(page, () => ({ ok: window.eveDashboardRuntime?.state?.active !== true }), 15000, 50);
+        const closedWait = await waitFor(page, () => ({ ok: window.eveDashboardBevyUiRuntime?.state?.active !== true }), 15000, 50);
         if (!closedWait.ok) throw new Error(`dashboard_close_cycle_failed:${index + 1}:${JSON.stringify(closedWait.last)}`);
         await waitForDashboardFadeSettled(page, `project_close_${index + 1}`, false);
         await waitFrames(page, 8);

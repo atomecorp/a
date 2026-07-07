@@ -77,7 +77,7 @@ const waitForWorkspace = async (page) => {
 
 const closeDashboardAndVerifyClean = async (page) => {
     await page.evaluate(async () => {
-        await window.eveDashboardRuntime?.close?.();
+        await window.eveDashboardBevyUiRuntime?.close?.();
         window.new_menu_v2?.reveal?.();
     });
     await waitFrames(page, 8);

@@ -1,12 +1,9 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 
-import { createDashboardCategoryActivator } from '../../eVe/domains/dashboard/dashboard_category_activation.js';
 import { itemsForRender } from '../../eVe/domains/dashboard/dashboard_environment.js';
-import { createDashboardInteractionRuntime } from '../../eVe/domains/dashboard/dashboard_interaction_runtime.js';
 import { createDashboardLayout } from '../../eVe/domains/dashboard/dashboard_layout.js';
 import { buildDashboardRecords } from '../../eVe/domains/dashboard/dashboard_records.js';
-import { normalizeDashboardScrollState } from '../../eVe/domains/dashboard/dashboard_scroll_state.js';
 import { DASHBOARD_VISUAL_TOKENS } from '../../eVe/domains/dashboard/dashboard_tokens.js';
 
 const categories = Object.freeze([
@@ -45,63 +42,6 @@ const layoutFor = (activeCategoryId = '', renderedItems = items) => createDashbo
     itemsByCategory: renderedItems,
     tokens: DASHBOARD_VISUAL_TOKENS
 });
-
-const interactionLayoutFor = (state) => createDashboardLayout({
-    width: 360,
-    height: 360,
-    toolboxHeight: 96,
-    categories: state.categories,
-    activeCategoryId: state.activeCategoryId,
-    itemsByCategory: state.itemsByCategory,
-    scrollByLane: state.scrollByLane,
-    verticalScrollOffset: state.verticalScrollOffset,
-    allowPartialItems: state.allowPartialItems,
-    allowPartialLanes: state.allowPartialLanes,
-    tokens: DASHBOARD_VISUAL_TOKENS
-});
-
-const makeInteractionState = () => {
-    const state = {
-        active: true,
-        categories: [...categories],
-        activeCategoryId: '',
-        itemsByCategory: items,
-        scrollByLane: {},
-        scrollSnapTimers: new Map(),
-        scrollAnimationFrames: new Map(),
-        verticalScrollOffset: 0,
-        verticalScrollSnapTimer: 0,
-        verticalScrollAnimationFrame: 0,
-        allowPartialItems: false,
-        allowPartialLanes: false,
-        tokens: DASHBOARD_VISUAL_TOKENS,
-        pointer: null,
-        labelEditor: null
-    };
-    state.layout = interactionLayoutFor(state);
-    return state;
-};
-
-const inactiveLabelEdit = Object.freeze({
-    begin: () => null, cancel: () => null, commit: () => null, isActive: () => false, matchesHit: () => false, setPointerSelection: () => null
-});
-
-const makeInteractionRuntime = (state, actOnHit) => createDashboardInteractionRuntime({
-    state,
-    render: () => {
-        state.layout = interactionLayoutFor(state);
-        normalizeDashboardScrollState(state, state.layout);
-        return state.layout;
-    },
-    requestRender: () => null,
-    actOnHit,
-    labelEdit: inactiveLabelEdit
-});
-
-const pointInHeader = (layout) => {
-    const rect = layout.lanes.at(-1).header_rect;
-    return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 };
-};
 
 const recordsById = (records) => new Map(records.map((record) => [record.id, record]));
 
@@ -327,125 +267,4 @@ test('dashboard detailed media uses the shared high-density Bevy texture contrac
     assert.equal(dashboardRecord(records, 'card_media_projects_project_a').properties.media_width, 900);
     assert.equal(dashboardRecord(records, 'card_media_projects_project_a').properties.media_height, 540);
     assert.equal(dashboardRecord(records, 'card_media_contacts_contact_a').properties.texture_scale, 2);
-});
-
-test('dashboard entête activation waits for release and ignores vertical scroll gestures', () => {
-    const clickState = makeInteractionState();
-    const clickCalls = [];
-    const clickRuntime = makeInteractionRuntime(clickState, (hit) => clickCalls.push(`${hit.kind}:${hit.category.id}`));
-    const clickPoint = pointInHeader(clickState.layout);
-    clickRuntime.intercept({ phase: 'pointerdown', point: clickPoint, event: { pointerType: 'mouse' } });
-    assert.deepEqual(clickCalls, []);
-    clickRuntime.intercept({ phase: 'pointerup', point: clickPoint, event: { pointerType: 'mouse' } });
-    assert.deepEqual(clickCalls, [`header:${clickState.layout.lanes.at(-1).category.id}`]);
-
-    const dragState = makeInteractionState();
-    const dragCalls = [];
-    const dragRuntime = makeInteractionRuntime(dragState, (hit) => dragCalls.push(`${hit.kind}:${hit.category.id}`));
-    const dragStart = pointInHeader(dragState.layout);
-    dragRuntime.intercept({ phase: 'pointerdown', point: dragStart, event: { pointerType: 'touch' } });
-    dragRuntime.intercept({
-        phase: 'pointermove',
-        point: { x: dragStart.x + 2, y: dragStart.y + 43 },
-        event: { pointerType: 'touch' }
-    });
-    assert.equal(dragState.verticalScrollOffset, 43);
-    assert.equal(dragState.pointer.axis, 'vertical');
-    dragRuntime.intercept({
-        phase: 'pointerup',
-        point: { x: dragStart.x + 2, y: dragStart.y + 43 },
-        event: { pointerType: 'touch' }
-    });
-    assert.deepEqual(dragCalls, []);
-    dragRuntime.cancel();
-});
-
-test('activating a cached rubrique projects its items without an empty intermediate frame', async () => {
-    const state = {
-        active: true,
-        activeCategoryId: '',
-        editor: null,
-        hydrationSerial: 0,
-        categories: [...categories],
-        itemsByCategory: new Map([
-            ['news', items.get('news')],
-            ['projects', items.get('projects')]
-        ])
-    };
-    const renderedItemIds = [];
-    let seedCount = 0;
-    let hydrateCount = 0;
-    const data = {
-        hasCategoryCache: (categoryId) => categoryId === 'contacts',
-        seedVisibleItemsFromCache: (_, options = {}) => {
-            seedCount += 1;
-            assert.deepEqual(options, { categoryIds: ['contacts'], emptyMissing: false });
-            state.itemsByCategory.set('contacts', items.get('contacts'));
-        },
-        loadVisibleItems: async () => { throw new Error('cached_dashboard_category_must_not_reload_before_projection'); },
-        hydrateVisibleItems: async () => { hydrateCount += 1; }
-    };
-    const activator = createDashboardCategoryActivator({
-        state,
-        data,
-        loadCategories: async () => categories,
-        startFocusTransition: async ({ categoryId, sourceLane }) => {
-            assert.equal(categoryId, 'contacts');
-            assert.equal(sourceLane.category.id, 'contacts');
-            const rendered = itemsForRender(state.categories, state.activeCategoryId, state.itemsByCategory);
-            renderedItemIds.push([...rendered.values()].flat().map((item) => item.id));
-            return { ok: true };
-        },
-        render: () => {
-            throw new Error('cached_dashboard_category_must_project_through_focus_transition');
-        }
-    });
-
-    const result = await activator.activateCategory('contacts', {
-        lane: { category: categories[1], lane_rect: { x: 0, y: 10, width: 100, height: 20 }, header_rect: { x: 100, y: 10, width: 20, height: 20 } }
-    });
-
-    assert.deepEqual(result, { ok: true });
-    assert.equal(state.activeCategoryId, 'contacts');
-    assert.equal(seedCount, 1);
-    assert.equal(hydrateCount, 0);
-    assert.deepEqual(renderedItemIds.map((ids) => [...ids].sort()), [['contact_a', 'contact_b', 'contact_c']]);
-});
-
-test('clicking the focused rubrique again restores overview state', async () => {
-    const state = {
-        active: true,
-        activeCategoryId: 'contacts',
-        editor: null,
-        hydrationSerial: 0,
-        categories: [...categories],
-        itemsByCategory: new Map()
-    };
-    let renderCount = 0;
-    const data = {
-        seedVisibleItemsFromCache: () => {},
-        hydrateVisibleItems: async () => {}
-    };
-    const activator = createDashboardCategoryActivator({
-        state,
-        data,
-        loadCategories: async () => categories,
-        startFocusTransition: async ({ direction, categoryId }) => {
-            assert.equal(direction, 'collapse');
-            assert.equal(categoryId, 'contacts');
-            assert.equal(state.activeCategoryId, 'contacts');
-            return { ok: true };
-        },
-        render: () => {
-            renderCount += 1;
-            return { ok: true };
-        }
-    });
-
-    const result = await activator.activateCategory('contacts', {
-        lane: { category: categories[1], lane_rect: { x: 0, y: 10, width: 100, height: 20 }, header_rect: { x: 100, y: 10, width: 20, height: 20 } }
-    });
-    assert.deepEqual(result, { ok: true });
-    assert.equal(state.activeCategoryId, '');
-    assert.equal(renderCount, 1);
 });

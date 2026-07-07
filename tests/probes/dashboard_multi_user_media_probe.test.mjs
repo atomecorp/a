@@ -68,8 +68,8 @@ const loginOrCreateUser = async (page, prefix, index) => page.evaluate(async ({ 
 }, { key: prefix, order: index });
 
 const ensureDashboardClosed = async (page) => {
-    await page.evaluate(() => window.eveDashboardRuntime?.close?.({ honorLabelEditorKeyboardGuard: false }));
-    const closed = await waitFor(page, () => ({ ok: window.eveDashboardRuntime?.state?.active !== true }), 15000, 50);
+    await page.evaluate(() => window.eveDashboardBevyUiRuntime?.close?.({ honorLabelEditorKeyboardGuard: false }));
+    const closed = await waitFor(page, () => ({ ok: window.eveDashboardBevyUiRuntime?.state?.active !== true }), 15000, 50);
     if (!closed.ok) throw new Error(`dashboard_close_failed:${JSON.stringify(closed.last)}`);
     await waitFrames(page, 6);
 };
@@ -102,7 +102,7 @@ const exerciseUserWorkspace = async ({ browser, report, prefix, userIndex }) => 
         userReport.login = { phone: login.phone, username: login.username };
         await page.reload({ waitUntil: 'domcontentloaded', timeout: 45000 });
         const boot = await waitFor(page, () => ({
-            ok: !!window.AdoleAPI && window.__authCheckComplete === true && !!window.eveDashboardRuntime
+            ok: !!window.AdoleAPI && window.__authCheckComplete === true && !!window.eveDashboardBevyUiRuntime
         }), 45000, 100);
         if (!boot.ok) throw new Error(`post_login_boot_failed:${JSON.stringify(boot.last)}`);
         await ensureDashboardClosed(page);
@@ -131,9 +131,9 @@ const exerciseUserWorkspace = async ({ browser, report, prefix, userIndex }) => 
             .map((project) => project.id)
             .filter((id) => !userReport.listedProjectIds.includes(id));
         if (missingOwnProjects.length) throw new Error(`own_projects_missing_from_list:${missingOwnProjects.join(',')}`);
-        await page.evaluate(() => window.eveDashboardRuntime?.open?.({ projectId: '__eve_dashboard_workspace__', dataProjectId: '__eve_dashboard_workspace__' }));
+        await page.evaluate(() => window.eveDashboardBevyUiRuntime?.open?.({ projectId: '__eve_dashboard_workspace__', dataProjectId: '__eve_dashboard_workspace__' }));
         const dashboardOpen = await waitFor(page, () => {
-            const state = window.eveDashboardRuntime?.state || {};
+            const state = window.eveDashboardBevyUiRuntime?.state || {};
             return { ok: state.active === true && state.projectId === '__eve_dashboard_workspace__' };
         }, 20000, 50);
         if (!dashboardOpen.ok) throw new Error(`dashboard_neutral_open_failed:${JSON.stringify(dashboardOpen.last)}`);

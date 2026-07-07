@@ -109,7 +109,8 @@ test('Project scene runtime renders heterogeneous Atomes through one project can
     assertHiddenDecodeVideoContract(dom.window.document, videoNodeCount);
     assert.equal(calls.some((call) => call.type === 'resource' && call.payload?.texture), false);
     await nextTick(70);
-    assert.equal(calls.some((call) => call.type === 'resource' && call.payload?.texture), false);
+    assert.equal(calls.some((call) => call.type === 'resource' && call.payload?.texture), true);
+    assert.equal(dom.window.document.querySelectorAll('.eve-atome-text,img,audio,svg').length, 0);
     assert.equal(getProjectSceneState('project_scene_a').record_count, 100);
 });
 
@@ -139,7 +140,7 @@ test('Late project renders preserve Molecule overlays and active same-project da
     clearAllProjectScenes();
     const dom = projectDom();
     const host = dom.window.document.getElementById('project');
-    const previousDashboardRuntime = dom.window.eveDashboardRuntime;
+    const previousDashboardRuntime = dom.window.eveDashboardBevyUiRuntime;
     await renderProjectScene({
         projectId: 'project_ephemeral_overlay',
         records: [makeRecord('project_atom', 'shape', 1)],
@@ -172,7 +173,7 @@ test('Late project renders preserve Molecule overlays and active same-project da
     assert.equal(ids.has('project_atom'), true);
     assert.equal(ids.has('__eve_dashboard_background'), false);
     assert.equal(ids.has('mol:playhead'), true);
-    dom.window.eveDashboardRuntime = { state: { active: true, projectId: 'project_ephemeral_overlay' } };
+    dom.window.eveDashboardBevyUiRuntime = { state: { active: true, projectId: 'project_ephemeral_overlay' } };
     await updateProjectSceneRecords({
         projectId: 'project_ephemeral_overlay',
         records: [{
@@ -189,8 +190,8 @@ test('Late project renders preserve Molecule overlays and active same-project da
     });
     const activeIds = new Set(getProjectSceneState('project_ephemeral_overlay').records.map((record) => record.id));
     assert.equal(activeIds.has('__eve_dashboard_background'), true);
-    if (previousDashboardRuntime === undefined) delete dom.window.eveDashboardRuntime;
-    else dom.window.eveDashboardRuntime = previousDashboardRuntime;
+    if (previousDashboardRuntime === undefined) delete dom.window.eveDashboardBevyUiRuntime;
+    else dom.window.eveDashboardBevyUiRuntime = previousDashboardRuntime;
 });
 
 test('Dashboard prefix reconciliation removes orphan records from runtime and Bevy projection', async () => {
