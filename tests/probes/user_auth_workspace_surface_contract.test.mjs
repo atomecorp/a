@@ -41,6 +41,10 @@ const runtime = createUserAuthFlowRuntime({
         calls.push({ name: 'ensureCurrentProject', force });
         throw new Error('ensureCurrentProject_must_not_run_for_dashboard_workspace_entry');
     },
+    ensureDashboardProjectRecord: async () => {
+        calls.push({ name: 'ensureDashboardProjectRecord' });
+        return { ok: true, created: true, projectId: 'project_one' };
+    },
     isProjectBootstrapManaged: () => false,
     afterWorkspaceOpen: async (payload = {}) => {
         calls.push({ name: 'afterWorkspaceOpen', ...payload });
@@ -87,6 +91,11 @@ assert.equal(
     calls.some((entry) => entry.name === 'ensureCurrentProject'),
     false,
     'authenticated dashboard boot must not request or load a current project'
+);
+assert.deepEqual(
+    calls.filter((entry) => entry.name === 'ensureDashboardProjectRecord'),
+    [{ name: 'ensureDashboardProjectRecord' }],
+    'authenticated dashboard boot must ensure a durable project record without activating it'
 );
 assert.ok(
     calls.findIndex((entry) => entry.name === 'onAuthenticating')

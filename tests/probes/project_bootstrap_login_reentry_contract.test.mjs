@@ -12,6 +12,7 @@ document.body.appendChild(view);
 
 window.__authCheckComplete = false;
 window.__authCheckResult = { authenticated: false, userId: null, anonymous: false };
+window.__eveStartupView = 'project';
 
 let loggedIn = false;
 const authWaiters = [];

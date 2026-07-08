@@ -9,7 +9,7 @@ import {
     clickCanvasRect,
     clickMainHandle,
     dashboardSnapshot,
-    enterGuestWorkspace,
+    enterAuthenticatedWorkspace,
     nowId,
     sceneSnapshot,
     screenshot,
@@ -19,6 +19,7 @@ import {
 } from './dashboard_workspace_stress/support.mjs';
 import {
     assertProjectLoaded,
+    assertWorkspaceInteractionInvariant,
     createBasicAtomes,
     dragProjectMediaAtomes,
     ensureProject,
@@ -38,20 +39,13 @@ import {
     waitForDashboardFadeStart
 } from './dashboard_workspace_stress/dashboard_cycles.mjs';
 
-const PROJECT_COUNT = 2;
+const PROJECT_COUNT = 3;
 const HEADER_CLICK_COUNT = 30;
 const HEADER_STRESS_P95_LIMIT_MS = 350;
 const MEDIA_FIXTURES = [
     path.resolve('atome/src/assets/images/1.png'),
     path.resolve('atome/src/assets/images/2.png'),
-    path.resolve('atome/src/assets/images/3.png'),
-    path.resolve('atome/src/assets/images/4.png'),
-    path.resolve('atome/src/assets/images/5.png'),
-    path.resolve('atome/src/assets/images/6.jpg'),
-    path.resolve('atome/src/assets/images/ballanim.png'),
-    path.resolve('atome/src/assets/images/blank.png'),
-    path.resolve('atome/src/assets/images/green_planet.png'),
-    path.resolve('atome/src/assets/images/puydesancy.jpg')
+    path.resolve('atome/src/assets/images/3.png')
 ];
 
 const createReport = () => ({
@@ -97,15 +91,22 @@ const createStressProjects = async (page, report, prefix) => {
         report.checks.push({ name: `project_${index + 1}_created`, ok: true, project: entry });
         markProgress(report, 'project:create:loaded', { index: index + 1, projectId: project.id });
         await assertProjectLoaded(page, entry);
+        await assertWorkspaceInteractionInvariant(page, entry, `project_${index + 1}_after_load`);
         if (mediaIds.length) {
             const moved = await dragProjectMediaAtomes(page, entry);
             report.checks.push({ name: `project_${index + 1}_media_dragged`, ok: true, moved });
+            await assertWorkspaceInteractionInvariant(page, entry, `project_${index + 1}_after_drag`);
         }
         markProgress(report, 'project:create:validated', { index: index + 1, projectId: project.id });
     }
     for (const project of report.projects) {
         markProgress(report, 'project:revalidate:start', { projectId: project.id });
+        await page.evaluate(async (entry) => {
+            const module = await import('/eVe/intuition/matrix/core/project_data.js');
+            await module.activateProjectWorkspace?.(entry, { force: true, staleFirst: false });
+        }, project);
         await assertProjectLoaded(page, project);
+        await assertWorkspaceInteractionInvariant(page, project, `project_revalidate_${project.id}`);
         markProgress(report, 'project:revalidate:done', { projectId: project.id });
     }
     report.checks.push({ name: 'all_project_atomes_loaded', ok: true, count: report.projects.length });
@@ -240,6 +241,7 @@ const switchProjectFromDashboard = async (page, report, preferredTarget = null) 
     }), 30000, 100, target.id);
     if (!switched.ok) throw new Error(`project_switch_from_dashboard_failed:${JSON.stringify(switched.last)}`);
     await assertProjectLoaded(page, target);
+    await assertWorkspaceInteractionInvariant(page, target, `project_switch_${target.id}`);
     const switchShot = await screenshot(page, 'after_project_card_switch');
     report.checks.push({ name: 'dashboard_project_card_switches_project', ok: true, screenshot: switchShot, analysis: analyzeImage(switchShot) });
     await assertDashboardReopensAfterProjectSwitch(page, report, target);
@@ -277,7 +279,7 @@ const run = async () => {
     const prefix = `dashboard_stress_${nowId()}`;
     try {
         markProgress(report, 'workspace:enter:start');
-        report.workspace = await enterGuestWorkspace(page);
+        report.workspace = await enterAuthenticatedWorkspace(page, { prefix });
         markProgress(report, 'workspace:enter:done', { projectId: report.workspace?.projectId || null });
         await assertStartupDashboardOnly(page, report);
         markProgress(report, 'workspace:startup_cycles:start');

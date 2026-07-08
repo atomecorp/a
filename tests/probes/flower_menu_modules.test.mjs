@@ -21,6 +21,7 @@ const {
     setFlowerContextLongPressActive,
     setFlowerPointerLock
 } = await import('../../eVe/intuition/flower/context_pointer_lock.js');
+const { closeFlowerMenu } = await import('../../eVe/intuition/flower/index.js');
 const {
     isBlockedTarget,
     resolveContextFromTarget
@@ -206,6 +207,13 @@ assert.equal(window.__EVE_FLOWER_CONTEXT_LONG_PRESS_ACTIVE__.preserveSelection, 
 assert.equal(window.__EVE_FLOWER_CONTEXT_LONG_PRESS_ACTIVE__.surfaceInteraction, true);
 assert.equal(clearFlowerContextLongPressActive(9), true);
 assert.equal(window.__EVE_FLOWER_CONTEXT_LONG_PRESS_ACTIVE__, undefined);
+assert.equal(setFlowerPointerLock(11, { phase: 'contextmenu_hold' }), true);
+assert.equal(setFlowerContextHoldCandidate(11, { contextType: 'atome', atomeId: 'shape_c' }), true);
+assert.equal(setFlowerContextLongPressActive(11, { contextType: 'atome', atomeId: 'shape_c', kind: 'shape' }), true);
+closeFlowerMenu();
+assert.equal(window.__EVE_FLOWER_POINTER_LOCK__['11'], undefined);
+assert.equal(window.__EVE_FLOWER_CONTEXT_HOLD_CANDIDATE__, undefined);
+assert.equal(window.__EVE_FLOWER_CONTEXT_LONG_PRESS_ACTIVE__, undefined);
 
 const item = normalizeItem({
     key: 'import',
@@ -229,14 +237,14 @@ const submenu = computeFlowerSubmenuLayout({ childCount: 4, radius: 80 });
 assert.equal(submenu.childPositions.length, 4);
 assert.equal(Number.isFinite(submenu.backPosition.tx), true);
 
-const intuitionSource = await readFile(new URL('../../eVe/intuition/eVeIntuition.js', import.meta.url), 'utf8');
+const flowerContextItemsSource = await readFile(new URL('../../eVe/intuition/runtime/eve_intuition/flower_context_items_runtime.js', import.meta.url), 'utf8');
 const performSource = await readFile(new URL('../../eVe/intuition/tools/perform.js', import.meta.url), 'utf8');
 const flowerMenuSource = await readFile(new URL('../../eVe/intuition/flower/menu.js', import.meta.url), 'utf8');
 assert.ok(
-    intuitionSource.includes("type === 'project' && !hasAtomeTarget")
-        && intuitionSource.includes('selectedIds: contextSelectionIds')
-        && intuitionSource.includes('selectionIds,')
-        && intuitionSource.includes('resolveFlowerTransportSelectionIds'),
+    flowerContextItemsSource.includes("type === 'project' && !hasAtomeTarget")
+        && flowerContextItemsSource.includes('selectedIds: contextSelectionIds')
+        && flowerContextItemsSource.includes('selectionIds,')
+        && flowerContextItemsSource.includes('resolveFlowerTransportSelectionIds'),
     'flower context must preserve project-only selection hygiene and pass multi-selection ids into transport tools'
 );
 assert.ok(
@@ -246,7 +254,8 @@ assert.ok(
     'perform flower activation must request a canonical perform runtime exit when active'
 );
 assert.ok(
-    performSource.includes("const PERFORM_FLOWER_EXIT_EVENT = 'eve:perform-flower-exit';")
+    performSource.includes('PERFORM_FLOWER_EXIT_EVENT')
+        && performSource.includes("from './perform_state.js';")
         && performSource.includes('const bindPerformFlowerExitEvent = () => {')
         && performSource.includes("runPerformToolAction({ action: 'state.off', event: 'inactive' });")
         && performSource.includes('bindPerformFlowerExitEvent();'),

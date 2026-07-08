@@ -4,7 +4,7 @@ import { chromium } from 'playwright';
 import {
     APP_URL,
     analyzeImage,
-    enterGuestWorkspace,
+    enterAuthenticatedWorkspace,
     waitFor,
     waitFrames
 } from './dashboard_workspace_stress/support.mjs';
@@ -67,7 +67,7 @@ const readScene = async (page) => page.evaluate(() => {
 });
 
 const waitForWorkspace = async (page) => {
-    await enterGuestWorkspace(page);
+    await enterAuthenticatedWorkspace(page, { prefix: 'browser_media_import_real_ui' });
     await page.waitForFunction(() => (
         (!!window.__DEBUG__ || !!window.new_menu_v2 || !!document.getElementById('intuition'))
         && !!document.getElementById('eve_surface_project')

@@ -79,6 +79,8 @@ export const enterGuestWorkspace = async (page) => {
     return ready.last;
 };
 
+const BEVY_MAIN_MENU_ATOME_RECORD_ID = '__eve_bevy_ui_eve_bevy_ui_main_menu_eve_bevy_ui_main_menu_tool_atome';
+
 export const resolveAtomHandle = async (page) => {
     await waitForRuntimeReady(page);
     const handle = page.locator('button[data-role="eve_intuitionx-handle"]').first();
@@ -102,6 +104,41 @@ export const resolveAtomHandle = async (page) => {
     return handle;
 };
 
+export const clickAtomeMenuItem = async (page) => {
+    await waitForRuntimeReady(page);
+    const rect = await waitFor(page, async (recordId) => {
+        const menu = window.new_menu_v2 || null;
+        if (typeof menu?.showFully === 'function') await Promise.resolve(menu.showFully());
+        else if (typeof menu?.reveal === 'function') await Promise.resolve(menu.reveal());
+        const projectId = window.__currentProject?.id
+            || window.eveDashboardBevyUiRuntime?.state?.projectId
+            || '__eve_dashboard_workspace__';
+        const records = window.eveToolBase?.getProjectSceneState?.(projectId)?.records || [];
+        const record = records.find((entry) => String(entry?.id || '') === recordId);
+        const props = record?.properties || null;
+        const visible = props?.visible !== false;
+        const width = Number(props?.width || 0);
+        const height = Number(props?.height || 0);
+        return {
+            ok: !!record && visible && width > 1 && height > 1,
+            rect: props ? {
+                x: Number(props.left || 0),
+                y: Number(props.top || 0),
+                width,
+                height
+            } : null,
+            projectId,
+            recordId: record?.id || null
+        };
+    }, 15000, 250, BEVY_MAIN_MENU_ATOME_RECORD_ID);
+    if (!rect.ok || !rect.last?.rect) {
+        const handle = await resolveAtomHandle(page);
+        await handle.click({ timeout: 10000 });
+        return;
+    }
+    await clickCanvasRectCenter(page, rect.last.rect);
+};
+
 export const waitForPresentationFrames = async (page, count = 2) => page.evaluate(async (frames) => {
     const waitFrame = () => new Promise((resolve) => requestAnimationFrame(resolve));
     for (let index = 0; index < frames; index += 1) await waitFrame();
@@ -110,13 +147,22 @@ export const waitForPresentationFrames = async (page, count = 2) => page.evaluat
 export const clickCanvasRectCenter = async (page, rect) => {
     const canvas = page.locator('#eve_surface_project').first();
     await canvas.waitFor({ state: 'visible', timeout: 15000 });
-    await canvas.click({
-        position: {
-            x: Math.max(1, rect.x + rect.width / 2),
-            y: Math.max(1, rect.y + rect.height / 2)
-        },
-        timeout: 10000
-    });
+    const box = await canvas.boundingBox();
+    if (!box) throw new Error('dashboard_canvas_box_missing');
+    const x = box.x + Math.max(1, Math.min(box.width - 1, rect.x + rect.width / 2));
+    const y = box.y + Math.max(1, Math.min(box.height - 1, rect.y + rect.height / 2));
+    const hit = await page.evaluate((point) => {
+        const canvasElement = document.getElementById('eve_surface_project');
+        const top = document.elementFromPoint(point.x, point.y);
+        return {
+            ok: !!canvasElement && (top === canvasElement || canvasElement.contains(top)),
+            topId: top?.id || null,
+            topTag: top?.tagName || null,
+            topRole: top?.getAttribute?.('data-role') || null
+        };
+    }, { x, y });
+    if (!hit.ok) throw new Error(`dashboard_canvas_click_target_blocked:${JSON.stringify(hit)}`);
+    await page.mouse.click(x, y);
 };
 
 export const longPressCanvasRectCenter = async (page, rect, holdMs = 650) => {

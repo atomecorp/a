@@ -1,13 +1,25 @@
 export const dashboardSnapshot = async (page) => page.evaluate(async () => {
+    const dashboardRecordId = (record = {}) => String(record?.id || '');
+    const normalizeDashboardRecordId = (id = '') => {
+        const value = String(id || '');
+        if (value.startsWith('__eve_dashboard_')) return value;
+        const index = value.indexOf('___eve_dashboard_');
+        return index >= 0 ? value.slice(index + 1) : value;
+    };
+    const isDashboardRecord = (record = {}) => {
+        const id = dashboardRecordId(record);
+        return id.startsWith('__eve_dashboard_') || id.includes('___eve_dashboard_');
+    };
     const runtime = window.eveDashboardBevyUiRuntime || null;
     const state = runtime?.state || null;
     const projectId = window.__currentProject?.id || state?.projectId || null;
     const scene = projectId ? window.eveToolBase?.getProjectSceneState?.(projectId) : null;
     const records = Array.isArray(scene?.records) ? scene.records : [];
-    const dashboardRecords = records.filter((record) => String(record?.id || '').startsWith('__eve_dashboard_'));
+    const dashboardRecords = records.filter(isDashboardRecord);
     const visibleDashboardRecords = dashboardRecords.filter((record) => record?.properties?.visible !== false);
-    const editorRecord = dashboardRecords.find((record) => record.id === '__eve_dashboard_editor') || null;
+    const editorRecord = dashboardRecords.find((record) => normalizeDashboardRecordId(record.id) === '__eve_dashboard_editor') || null;
     const layout = state?.layout || null;
+    const canvas = document.getElementById('eve_surface_project');
     const flower = document.getElementById('eve_intuitionx_flower');
     const flowerStyle = flower ? getComputedStyle(flower) : null;
     const flowerRect = flower?.getBoundingClientRect?.() || null;
@@ -24,21 +36,27 @@ export const dashboardSnapshot = async (page) => page.evaluate(async () => {
         document.querySelector('#toolbox'),
         document.querySelector('#toolbox_support')
     ].filter(Boolean);
-    const toolboxHeight = toolboxCandidates.reduce((height, element) => {
+    const domToolboxHeight = toolboxCandidates.reduce((height, element) => {
         const rect = element.getBoundingClientRect();
         return Math.max(height, Number(rect.height || 0));
     }, 0);
+    const menuMeasure = typeof window.new_menu_v2?.measure === 'function' ? window.new_menu_v2.measure() : null;
+    const menuReservedHeight = typeof window.new_menu_v2?.getReservedHeight === 'function'
+        ? Number(window.new_menu_v2.getReservedHeight(canvas) || 0)
+        : 0;
+    const menuOverlay = window.eveBevyUiRuntime?.readOverlayDiagnostics?.()?.trees
+        ?.find?.((entry) => entry?.id === 'eve_bevy_ui_main_menu') || null;
+    const toolboxHeight = Math.max(domToolboxHeight, menuReservedHeight);
     const dashboardDomCount = document.querySelectorAll('[id^="__eve_dashboard_"], [data-dashboard]').length;
-    const canvas = document.getElementById('eve_surface_project');
     const recordOverReservedBand = dashboardRecords.filter((record) => {
-        if (record.id === '__eve_dashboard_bottom_shadow') return false;
-        if (record.id === '__eve_dashboard_project_veil') return false;
-        if (record.id === '__eve_dashboard_reserved_band_fill') return false;
+        const id = normalizeDashboardRecordId(record.id);
+        if (id === '__eve_dashboard_bottom_shadow') return false;
+        if (id === '__eve_dashboard_project_veil') return false;
         const props = record.properties || {};
         const top = Number(props.top ?? props.y ?? 0);
         const height = Number(props.height ?? 0);
         return layout?.toolbox_reserved_rect && top + height > layout.toolbox_reserved_rect.y + 0.5;
-    }).map((record) => record.id);
+    }).map((record) => normalizeDashboardRecordId(record.id));
     return {
         ok: !!runtime && !!state,
         active: state?.active === true,
@@ -58,6 +76,14 @@ export const dashboardSnapshot = async (page) => page.evaluate(async () => {
             role: canvas.dataset?.role || null
         } : null,
         toolboxHeight,
+        menu: {
+            active: menuMeasure?.active === true,
+            treeMounted: menuMeasure?.treeMounted === true,
+            reservedHeight: menuReservedHeight,
+            overlayRecordCount: Number(menuOverlay?.overlayRecordCount || 0),
+            interactiveNodeCount: Number(menuOverlay?.interactiveNodeCount || 0),
+            legacyDomHeight: domToolboxHeight
+        },
         layout: layout ? {
             handedness: layout.handedness,
             dashboard_rect: layout.dashboard_rect,
@@ -78,12 +104,12 @@ export const dashboardSnapshot = async (page) => page.evaluate(async () => {
                 }))
             }))
         } : null,
-        dashboardRecordIds: dashboardRecords.map((record) => record.id),
-        dashboardVisibleRecordIds: visibleDashboardRecords.map((record) => record.id),
+        dashboardRecordIds: dashboardRecords.map((record) => normalizeDashboardRecordId(record.id)),
+        dashboardVisibleRecordIds: visibleDashboardRecords.map((record) => normalizeDashboardRecordId(record.id)),
         dashboardFillRecords: dashboardRecords
-            .filter((record) => /^__eve_dashboard_(background|table|lane_|header_bg_|focus_spread_)/.test(String(record?.id || '')))
+            .filter((record) => /^__eve_dashboard_(background|table|lane_|header_bg_|focus_spread_)/.test(normalizeDashboardRecordId(record?.id)))
             .map((record) => ({
-                id: String(record.id || ''),
+                id: normalizeDashboardRecordId(record.id),
                 color: String(record.properties?.color || record.properties?.background || record.properties?.backgroundColor || ''),
                 rect: {
                     x: Number(record.properties?.left ?? record.properties?.x ?? 0),
@@ -94,12 +120,12 @@ export const dashboardSnapshot = async (page) => page.evaluate(async () => {
                 visible: record.properties?.visible !== false && Number(record.properties?.opacity ?? 1) > 0
             })),
         dashboardTitleTexts: dashboardRecords
-            .filter((record) => String(record?.id || '').includes('card_title_'))
+            .filter((record) => normalizeDashboardRecordId(record?.id).includes('card_title_'))
             .map((record) => String(record?.properties?.text || '')),
         dashboardMediaRecords: dashboardRecords
-            .filter((record) => String(record?.id || '').includes('card_media_'))
+            .filter((record) => normalizeDashboardRecordId(record?.id).includes('card_media_'))
             .map((record) => ({
-                id: String(record.id || ''),
+                id: normalizeDashboardRecordId(record.id),
                 source: String(record.properties?.source || ''),
                 media_fit: String(record.properties?.media_fit || record.properties?.object_fit || ''),
                 corner_radius: Number(record.properties?.corner_radius || record.properties?.cornerRadius || 0),
@@ -113,9 +139,9 @@ export const dashboardSnapshot = async (page) => page.evaluate(async () => {
                 visible: record.properties?.visible !== false && Number(record.properties?.opacity ?? 1) > 0
             })),
         dashboardCardRecords: dashboardRecords
-            .filter((record) => /^__eve_dashboard_card_(?!media_|title_|date_)/.test(String(record?.id || '')))
+            .filter((record) => /^__eve_dashboard_card_(?!media_|title_|date_)/.test(normalizeDashboardRecordId(record?.id)))
             .map((record) => ({
-                id: String(record.id || ''),
+                id: normalizeDashboardRecordId(record.id),
                 color: String(record.properties?.color || ''),
                 corner_radius: Number(record.properties?.corner_radius || record.properties?.cornerRadius || 0),
                 rect: {
@@ -126,9 +152,9 @@ export const dashboardSnapshot = async (page) => page.evaluate(async () => {
                 }
             })),
         dashboardLabelBackdropRecords: dashboardRecords
-            .filter((record) => String(record?.id || '').includes('card_label_backdrop_'))
+            .filter((record) => normalizeDashboardRecordId(record?.id).includes('card_label_backdrop_'))
             .map((record) => ({
-                id: String(record.id || ''),
+                id: normalizeDashboardRecordId(record.id),
                 source: String(record.properties?.source || ''),
                 opacity: Number(record.properties?.opacity ?? 1),
                 z_index: Number(record.properties?.z_index ?? record.properties?.zIndex ?? 0),

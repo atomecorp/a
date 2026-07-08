@@ -3,8 +3,8 @@ import path from 'node:path';
 import { chromium } from 'playwright';
 import {
     clickCanvasRectCenter,
+    clickAtomeMenuItem,
     enterGuestWorkspace,
-    resolveAtomHandle,
     sleep,
     waitFor,
     waitForPresentationFrames
@@ -30,6 +30,17 @@ const CATEGORY_COLORS = Object.freeze({
 fs.mkdirSync(OUT_DIR, { recursive: true });
 
 const writeReport = (report) => fs.writeFileSync(REPORT_FILE, `${JSON.stringify(report, null, 2)}\n`, 'utf8');
+
+const captureProbeScreenshot = async (page, file, report, name) => {
+    try {
+        await page.screenshot({ path: file, fullPage: false, timeout: 10000 });
+        return { ok: true, file };
+    } catch (error) {
+        report.screenshotErrors = report.screenshotErrors || [];
+        report.screenshotErrors.push({ name, file, error: error?.message || String(error) });
+        return { ok: false, file };
+    }
+};
 
 const waitForDashboardSnapshot = async (page, predicate, timeoutMs = 30000, intervalMs = 250) => {
     const startedAt = Date.now();
@@ -123,6 +134,15 @@ const dashboardOpenReady = (snapshot) => (
     && dashboardHasNoPlusSurface(snapshot)
     && snapshot.dashboardDomCount === 0
     && snapshot.toolboxHeight > 0
+    && snapshot.menu?.active === true
+    && snapshot.menu?.treeMounted === true
+    && snapshot.menu?.reservedHeight > 0
+    && snapshot.menu?.overlayRecordCount > 0
+    && snapshot.menu?.interactiveNodeCount > 0
+    && (
+        (snapshot.layout?.lanes || []).every((lane) => Number(lane.visibleItemCount || 0) === 0)
+        || snapshot.dashboardTitleTexts.length > 0
+    )
     && snapshot.layout?.toolbox_reserved_rect?.height >= snapshot.toolboxHeight
     && snapshot.recordOverReservedBand.length === 0
 );
@@ -185,10 +205,9 @@ const runScenario = async () => {
         await page.goto(APP_URL, { waitUntil: 'domcontentloaded', timeout: 45000 });
         report.checks.push({ name: 'guest_project_ready', ok: true, snapshot: await enterGuestWorkspace(page) });
 
-        let atomHandle = await resolveAtomHandle(page);
         let opened = await waitForDashboardSnapshot(page, dashboardOpenReady, 12000);
         if (!opened.ok) {
-            await atomHandle.click({ timeout: 10000 });
+            await clickAtomeMenuItem(page);
             opened = await waitForDashboardSnapshot(page, dashboardOpenReady, 30000);
         }
         if (!opened.ok) throw new Error('dashboard_open_failed');
@@ -201,7 +220,7 @@ const runScenario = async () => {
         if (!openedReady.ok) throw new Error('dashboard_open_ready_records_missing');
         report.checks.push({ name: 'atom_opens_dashboard_without_dom_renderer', ok: true, snapshot: openedReady.snapshot });
         await waitForPresentationFrames(page, 12);
-        await page.screenshot({ path: DASHBOARD_OPEN_SCREENSHOT, fullPage: true });
+        await captureProbeScreenshot(page, DASHBOARD_OPEN_SCREENSHOT, report, 'dashboard_open');
         report.checks.push({
             name: 'records_open_match_category_bands_and_toolbox_exclusion',
             ok: true,
@@ -222,7 +241,7 @@ const runScenario = async () => {
         if (!monitorActive.ok) throw new Error('dashboard_monitor_header_click_failed');
         report.checks.push({ name: 'canvas_header_click_activates_monitor', ok: true, snapshot: monitorActive.snapshot });
         await waitForPresentationFrames(page, 12);
-        await page.screenshot({ path: DASHBOARD_MONITOR_SCREENSHOT, fullPage: true });
+        await captureProbeScreenshot(page, DASHBOARD_MONITOR_SCREENSHOT, report, 'dashboard_monitor');
         report.checks.push({
             name: 'records_monitor_focus_uses_uniform_active_color',
             ok: true,
@@ -276,7 +295,7 @@ const runScenario = async () => {
         if (projectsWithItem.ok) projectsActive = projectsWithItem;
         if (!dashboardHasNoPlusSurface(projectsActive.snapshot)) throw new Error('dashboard_projects_plus_surface_present');
         await waitForPresentationFrames(page, 12);
-        await page.screenshot({ path: DASHBOARD_PROJECTS_SCREENSHOT, fullPage: true });
+        await captureProbeScreenshot(page, DASHBOARD_PROJECTS_SCREENSHOT, report, 'dashboard_projects');
         report.checks.push({
             name: 'records_projects_focus_uses_uniform_active_color',
             ok: true,
@@ -295,16 +314,46 @@ const runScenario = async () => {
                 detail: { preferences: window.__eveProfilePreferences }
             }));
         });
-        await (await resolveAtomHandle(page)).click({ timeout: 10000 });
+        const leftReadyBeforeClose = await waitForDashboardSnapshot(page, (snapshot) => (
+            snapshot.active
+            && snapshot.layout?.handedness === 'left'
+            && dashboardFocusSettled(snapshot)
+            && snapshot.dashboardVisibleRecordIds.includes('__eve_dashboard_background')
+            && snapshot.menu?.treeMounted === true
+        ), 30000);
+        if (!leftReadyBeforeClose.ok) throw new Error('dashboard_left_handed_ready_before_close_failed');
+        await clickAtomeMenuItem(page);
         const closed = await waitForDashboardSnapshot(page, (snapshot) => (
             !snapshot.active && snapshot.dashboardVisibleRecordIds.length === 0
         ), 30000);
         if (!closed.ok) throw new Error('dashboard_close_failed');
         report.checks.push({ name: 'atom_click_closes_dashboard_and_removes_records', ok: true, snapshot: closed.snapshot });
-        await (await resolveAtomHandle(page)).click({ timeout: 10000 });
+        await waitForPresentationFrames(page, 12);
+        const leftMenuReadyAfterClose = await waitFor(page, async () => {
+            const menu = window.new_menu_v2 || null;
+            if (typeof menu?.showFully === 'function') await Promise.resolve(menu.showFully());
+            const projectId = window.eveDashboardBevyUiRuntime?.state?.projectId || '__eve_dashboard_workspace__';
+            const records = window.eveToolBase?.getProjectSceneState?.(projectId)?.records || [];
+            const atome = records.find((record) => record?.id === '__eve_bevy_ui_eve_bevy_ui_main_menu_eve_bevy_ui_main_menu_tool_atome');
+            const props = atome?.properties || {};
+            return {
+                ok: menu?.measure?.()?.treeMounted === true
+                    && Number(props.left || 0) <= 2
+                    && Number(props.width || 0) > 1
+                    && Number(props.height || 0) > 1,
+                left: props.left,
+                top: props.top,
+                width: props.width,
+                height: props.height
+            };
+        }, 15000, 250);
+        if (!leftMenuReadyAfterClose.ok) throw new Error('dashboard_left_menu_ready_after_close_failed');
+        await clickAtomeMenuItem(page);
         const leftOpened = await waitForDashboardSnapshot(page, (snapshot) => {
             const lane = snapshot.layout?.lanes?.[0];
             return snapshot.active
+                && snapshot.dashboardVisibleRecordIds.includes('__eve_dashboard_background')
+                && snapshot.dashboardVisibleRecordIds.includes('__eve_dashboard_table')
                 && snapshot.layout?.handedness === 'left'
                 && lane
                 && lane.header_rect.x < lane.lane_rect.x
@@ -314,7 +363,7 @@ const runScenario = async () => {
         if (!leftOpened.ok) throw new Error('dashboard_left_handed_open_failed');
         report.checks.push({ name: 'left_handed_dashboard_mirrors_headers_without_plus_strip', ok: true, snapshot: leftOpened.snapshot });
 
-        await (await resolveAtomHandle(page)).click({ timeout: 10000 });
+        await clickAtomeMenuItem(page);
         const leftClosed = await waitForDashboardSnapshot(page, (snapshot) => (
             !snapshot.active && snapshot.dashboardVisibleRecordIds.length === 0
         ), 30000);

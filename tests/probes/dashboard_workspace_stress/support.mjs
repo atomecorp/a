@@ -117,6 +117,7 @@ export const dashboardSnapshot = (page) => page.evaluate(() => {
     const scene = sceneProjectId ? window.eveToolBase?.getProjectSceneState?.(sceneProjectId) : null;
     const records = Array.isArray(scene?.records) ? scene.records : [];
     const dashboard = records.filter((record) => String(record?.id || '').startsWith('__eve_dashboard_'));
+    const diagnostics = runtime?.readDiagnostics?.() || {};
     const visible = dashboard.filter((record) => {
         const props = record?.properties || {};
         return props.visible !== false && Number(props.opacity ?? 1) > 0;
@@ -149,6 +150,8 @@ export const dashboardSnapshot = (page) => page.evaluate(() => {
         fadeOpacity: Number(state.fadeOpacity ?? 1),
         dashboardIds: dashboard.map((record) => record.id),
         visibleDashboardIds: visible.map((record) => record.id),
+        bevyUiMountedNodes: Number(diagnostics.mounted_nodes || 0),
+        bevyUiMountedTrees: Number(diagnostics.mounted_trees || 0),
         canvasCount: document.querySelectorAll('canvas#eve_surface_project').length,
         currentProjectHostIds: Array.from(document.querySelectorAll('[id^="project_view_"]'))
             .map((node) => String(node.id || ''))
@@ -184,6 +187,9 @@ export const sceneSnapshot = (page, projectId) => page.evaluate(async (id) => {
             .filter((record) => String(record?.id || '').startsWith('__eve_dashboard_'))
             .filter((record) => record?.properties?.visible !== false && Number(record?.properties?.opacity ?? 1) > 0)
             .map((record) => record.id),
+        bevyUiMenuIds: records
+            .map((record) => String(record?.id || ''))
+            .filter((id) => id.startsWith('__eve_bevy_ui_eve_bevy_ui_main_menu_')),
         virtualIds: nodes.map((node) => String(node.id || '')),
         nodeKinds: nodes.map((node) => ({ id: String(node.id || ''), kind: String(node.kind || '') })),
         bevySkipped: (bevy?.skipped_nodes || []).map((node) => ({ id: String(node.id || ''), error: node.error || '' })),
@@ -196,6 +202,40 @@ export const sceneSnapshot = (page, projectId) => page.evaluate(async (id) => {
 
 export const clickMainHandle = async (page) => {
     await page.waitForFunction(() => !!window.__DEBUG__ || !!window.new_menu_v2 || !!document.getElementById('intuition'), null, { timeout: 45000 });
+    const bevyTarget = await page.evaluate(async () => {
+        const menu = window.new_menu_v2 || null;
+        const surface = document.getElementById('eve_surface_project');
+        if (!menu?.reveal || !surface) return { ok: false, error: 'bevy_menu_or_surface_missing' };
+        const measureBefore = typeof menu.measure === 'function' ? menu.measure() : null;
+        if (!measureBefore?.active || measureBefore.treeMounted === false) await menu.reveal();
+        await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+        const measure = typeof menu.measure === 'function' ? menu.measure() : null;
+        const rect = surface.getBoundingClientRect();
+        const itemSize = Math.max(1, Number(measure?.reservedHeight || 0));
+        const itemCount = Math.max(1, Number(measure?.itemCount || 0));
+        if (!measure?.active || measure.treeMounted === false || !itemSize || !itemCount || rect.width <= 0 || rect.height <= 0) {
+            return { ok: false, error: 'bevy_menu_not_clickable', measure, rect: { width: rect.width, height: rect.height } };
+        }
+        const handedness = String(menu.handedness || 'right') === 'left' ? 'left' : 'right';
+        const localX = handedness === 'left'
+            ? itemSize / 2
+            : rect.width - (itemSize / 2);
+        const localY = rect.height - (itemSize / 2);
+        return {
+            ok: true,
+            kind: 'bevy_ui_main_menu_atome',
+            clientX: rect.left + localX,
+            clientY: rect.top + localY,
+            localX,
+            localY,
+            measure,
+            handedness
+        };
+    });
+    if (bevyTarget.ok) {
+        await page.mouse.click(bevyTarget.clientX, bevyTarget.clientY);
+        return bevyTarget;
+    }
     let handle = page.locator('#eve_intuitionx_main_ribbon button[data-role="eve_intuitionx-handle"]').first();
     if (!(await handle.isVisible().catch(() => false))) {
         await page.evaluate(() => window.new_menu_v2?.reveal?.());
@@ -333,4 +373,59 @@ export const enterGuestWorkspace = async (page) => {
     const ready = await waitFor(page, workspaceReadyPredicate, 60000, 150);
     if (!ready.ok) throw new Error(`workspace_not_ready:${JSON.stringify(ready.last)}`);
     return ready.last;
+};
+
+export const enterAuthenticatedWorkspace = async (page, { prefix = 'dashboard_workspace_stress' } = {}) => {
+    await page.goto(APP_URL, { timeout: 45000 });
+    await page.waitForFunction(() => !!window.AdoleAPI && window.__authCheckComplete === true, null, { timeout: 45000 });
+    const credentials = await page.evaluate(async ({ seed }) => {
+        const suffix = `${Date.now()}${Math.floor(Math.random() * 10000)}`.replace(/\D+/g, '').slice(-10);
+        const phone = `+1555${suffix}`;
+        const username = `${seed}_${suffix}`;
+        const password = `${seed}_${suffix}_password`;
+        const api = window.AdoleAPI || null;
+        if (!api?.auth?.create || !api?.auth?.login) return { ok: false, error: 'auth_api_missing' };
+        const created = await api.auth.create(phone, password, username, { autoLogin: true });
+        const createOk = !!(
+            created?.fastify?.success
+            || created?.tauri?.success
+            || created?.login?.fastify?.success
+            || created?.login?.tauri?.success
+        );
+        if (!createOk) {
+            const logged = await api.auth.login(phone, password, username);
+            const loginOk = !!(logged?.fastify?.success || logged?.tauri?.success);
+            if (!loginOk) return { ok: false, phone, username, created, logged };
+        }
+        return { ok: true, phone, username };
+    }, { seed: safeName(prefix).slice(0, 32) });
+    if (!credentials?.ok) throw new Error(`authenticated_workspace_login_failed:${JSON.stringify(credentials)}`);
+    await page.reload({ waitUntil: 'domcontentloaded', timeout: 45000 });
+    const ready = await waitFor(page, async () => {
+        const current = await window.AdoleAPI?.auth?.current?.().catch(() => null);
+        const dashboard = window.eveDashboardBevyUiRuntime?.state || {};
+        const dashboardActive = dashboard.active === true && String(dashboard.projectId || '') === '__eve_dashboard_workspace__';
+        const menuMeasure = window.new_menu_v2?.measure?.() || null;
+        const overlayDiagnostics = window.eveBevyUiRuntime?.readOverlayDiagnostics?.() || null;
+        const menuOverlay = overlayDiagnostics?.trees?.find?.((tree) => tree?.id === 'eve_bevy_ui_main_menu') || null;
+        return {
+            ok: current?.logged === true
+                && (window.AdoleAPI?.security?.isAnonymous?.() === false)
+                && dashboardActive
+                && !!document.getElementById('eve_surface_project')
+                && menuMeasure?.active === true
+                && menuMeasure?.treeMounted !== false
+                && Number(menuOverlay?.overlayRecordCount || 0) > 0
+                && !overlayDiagnostics?.lastOverlayError,
+            userId: current?.user?.id || current?.id || null,
+            dashboardActive,
+            hasCanvas: !!document.getElementById('eve_surface_project'),
+            menuMeasure,
+            menuOverlayRecordCount: Number(menuOverlay?.overlayRecordCount || 0),
+            menuOverlayError: overlayDiagnostics?.lastOverlayError || null,
+            anonymous: window.AdoleAPI?.security?.isAnonymous?.() ?? null
+        };
+    }, 60000, 150);
+    if (!ready.ok) throw new Error(`authenticated_workspace_not_ready:${JSON.stringify(ready.last)}`);
+    return { ...ready.last, credentials };
 };

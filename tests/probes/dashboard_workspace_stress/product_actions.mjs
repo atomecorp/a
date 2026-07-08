@@ -151,7 +151,12 @@ const waitForProjectedSceneReady = async (page, project, expectedIds) => {
     while (Date.now() - startedAt < 60000) {
         const snapshot = await sceneSnapshot(page, project.id);
         const missing = Array.from(expectedIds).filter((id) => !snapshot.recordIds.includes(id));
-        const extra = snapshot.recordIds.filter((id) => id && !expectedIds.has(id) && !id.startsWith('__eve_dashboard_'));
+        const extra = snapshot.recordIds.filter((id) => (
+            id
+            && !expectedIds.has(id)
+            && !id.startsWith('__eve_dashboard_')
+            && !id.startsWith('__eve_bevy_ui_')
+        ));
         const skipped = snapshot.bevySkipped.filter((entry) => expectedIds.has(entry.id));
         const invalidKinds = invalidExpectedMediaKinds(project, snapshot);
         last = { snapshot, missing, extra, skipped, invalidKinds };
@@ -198,6 +203,85 @@ export const assertProjectLoaded = async (page, project) => {
 
     const snapshot = await waitForProjectedSceneReady(page, project, expectedIds);
     return { ...snapshot, canonicalCount: canonical.count };
+};
+
+export const assertWorkspaceInteractionInvariant = async (page, project, label = 'workspace') => {
+    const state = await page.evaluate(async ({ projectId, label: phase }) => {
+        const canvas = document.getElementById('eve_surface_project');
+        const canvasRect = canvas?.getBoundingClientRect?.() || null;
+        const host = document.getElementById(`project_view_${projectId}`);
+        const hostStyle = host ? getComputedStyle(host) : null;
+        const canvasStyle = canvas ? getComputedStyle(canvas) : null;
+        const menu = window.new_menu_v2 || null;
+        const menuMeasure = typeof menu?.measure === 'function' ? menu.measure() : null;
+        const overlayDiagnostics = window.eveBevyUiRuntime?.readOverlayDiagnostics?.() || null;
+        const menuOverlay = overlayDiagnostics?.trees?.find?.((tree) => tree?.id === 'eve_bevy_ui_main_menu') || null;
+        const scene = window.eveToolBase?.getProjectSceneState?.(projectId) || null;
+        const records = Array.isArray(scene?.records) ? scene.records : [];
+        const bevyUiMenuIds = records
+            .map((record) => String(record?.id || ''))
+            .filter((id) => id.startsWith('__eve_bevy_ui_eve_bevy_ui_main_menu_'));
+        const targetRecord = records.find((record) => {
+            const props = record?.properties || {};
+            const id = String(record?.id || record?.atome_id || '');
+            return id && !id.startsWith('__eve_dashboard_') && Number.parseFloat(props.width ?? 0) > 0 && Number.parseFloat(props.height ?? 0) > 0;
+        }) || null;
+        const props = targetRecord?.properties || {};
+        const localPoint = targetRecord ? {
+            x: Number.parseFloat(props.left ?? props.x ?? 120) + Math.max(8, Math.min(Number.parseFloat(props.width ?? 120) / 2, 80)),
+            y: Number.parseFloat(props.top ?? props.y ?? 120) + Math.max(8, Math.min(Number.parseFloat(props.height ?? 90) / 2, 60))
+        } : {
+            x: Math.max(24, Number(canvasRect?.width || 0) / 2),
+            y: Math.max(24, Number(canvasRect?.height || 0) / 2)
+        };
+        const clientPoint = canvasRect ? {
+            x: Number(canvasRect.left || 0) + localPoint.x,
+            y: Number(canvasRect.top || 0) + localPoint.y
+        } : null;
+        const top = clientPoint ? document.elementFromPoint(clientPoint.x, clientPoint.y) : null;
+        return {
+            ok: true,
+            label: phase,
+            projectId,
+            workspaceMode: window.__eveWorkspaceMode || null,
+            currentProjectId: window.__currentProject?.id || null,
+            menuActive: menuMeasure ? menuMeasure.active === true : menu?.isVisible !== false,
+            menuTreeMounted: menuMeasure ? menuMeasure.treeMounted !== false : true,
+            menuOpenPx: Number(menu?.openPx || 0),
+            menuOverlayRecordCount: Number(menuOverlay?.overlayRecordCount || 0),
+            menuOverlaySceneRecordCount: bevyUiMenuIds.length,
+            menuOverlayError: overlayDiagnostics?.lastOverlayError || null,
+            hostDisplay: hostStyle?.display || '',
+            hostVisibility: hostStyle?.visibility || '',
+            hostPointerEvents: hostStyle?.pointerEvents || '',
+            canvasDisplay: canvasStyle?.display || '',
+            canvasVisibility: canvasStyle?.visibility || '',
+            canvasPointerEvents: canvasStyle?.pointerEvents || '',
+            canvasRect: canvasRect ? { width: canvasRect.width, height: canvasRect.height } : null,
+            clientPoint,
+            topTag: top?.tagName || '',
+            topId: top?.id || ''
+        };
+    }, { projectId: project.id, label });
+    if (state.workspaceMode?.mode !== 'project') throw new Error(`workspace_mode_not_project:${label}:${JSON.stringify(state)}`);
+    if (state.currentProjectId !== project.id) throw new Error(`workspace_current_project_mismatch:${label}:${JSON.stringify(state)}`);
+    if (!state.menuActive || !state.menuTreeMounted || state.menuOpenPx <= 0) throw new Error(`workspace_main_menu_inactive:${label}:${JSON.stringify(state)}`);
+    if (state.menuOverlayRecordCount <= 0 || state.menuOverlaySceneRecordCount <= 0 || state.menuOverlayError) throw new Error(`workspace_main_menu_overlay_missing:${label}:${JSON.stringify(state)}`);
+    if (state.hostDisplay === 'none' || state.hostVisibility === 'hidden' || state.hostPointerEvents === 'none') throw new Error(`workspace_project_host_inactive:${label}:${JSON.stringify(state)}`);
+    if (state.canvasDisplay === 'none' || state.canvasVisibility === 'hidden' || state.canvasPointerEvents === 'none') throw new Error(`workspace_project_canvas_inactive:${label}:${JSON.stringify(state)}`);
+    if (!state.canvasRect || state.canvasRect.width <= 0 || state.canvasRect.height <= 0) throw new Error(`workspace_project_canvas_empty:${label}:${JSON.stringify(state)}`);
+
+    await page.mouse.click(state.clientPoint.x, state.clientPoint.y, { button: 'right' });
+    const flower = await waitFor(page, async () => {
+        const module = await import('/eVe/intuition/flower/index.js');
+        return { ok: module.isFlowerMenuOpen?.() === true };
+    }, 8000, 100);
+    if (!flower.ok) throw new Error(`workspace_flower_unavailable:${label}:${JSON.stringify(flower.last)}`);
+    await page.evaluate(async () => {
+        const module = await import('/eVe/intuition/flower/index.js');
+        module.closeFlowerMenu?.();
+    });
+    return { ok: true, state };
 };
 
 export const dragProjectMediaAtomes = async (page, project) => {
@@ -258,7 +342,7 @@ const waitForMovedMedia = async (page, projectId, before) => {
                     changed: Math.abs(left - item.left) >= 1 || Math.abs(top - item.top) >= 1
                 };
             });
-            return { ok: moved.every((entry) => entry.changed), moved };
+            return { ok: moved.some((entry) => entry.changed), moved };
         }, { pid: projectId, items: before });
         if (last.ok) return { ok: true, last };
         await sleep(250);

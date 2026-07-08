@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'vitest';
 
 import { itemsForRender } from '../../eVe/domains/dashboard/dashboard_environment.js';
+import { createDashboardFocusTransitionController } from '../../eVe/domains/dashboard/dashboard_focus_transition.js';
 import { createDashboardLayout } from '../../eVe/domains/dashboard/dashboard_layout.js';
 import { buildDashboardRecords } from '../../eVe/domains/dashboard/dashboard_records.js';
 import { DASHBOARD_VISUAL_TOKENS } from '../../eVe/domains/dashboard/dashboard_tokens.js';
@@ -190,6 +191,54 @@ test('focused rubrique collapse retracts the active color back to its row', () =
     assert.ok(midContent.properties.top > startContent.properties.top);
     assert.ok(midContent.properties.height < startContent.properties.height);
     assert.ok(midContent.properties.height > sourceLane.lane_rect.height);
+});
+
+test('dashboard focus transition renders once after clearing collapse records', async () => {
+    const previousWindow = globalThis.window;
+    const callbacks = [];
+    let now = 1;
+    globalThis.window = {
+        requestAnimationFrame: (callback) => {
+            callbacks.push(callback);
+            return callbacks.length;
+        },
+        cancelAnimationFrame: () => {},
+        performance: { now: () => now }
+    };
+    try {
+        const state = {
+            tokens: { transitions: { categoryFocusMs: 100 } },
+            focusAnimationSerial: 0,
+            focusAnimationFrame: 0,
+            focusTransition: null
+        };
+        const renderStates = [];
+        const controller = createDashboardFocusTransitionController({
+            state,
+            render: async () => {
+                renderStates.push(state.focusTransition ? 'transition' : 'cleared');
+            }
+        });
+        const promise = controller.start({
+            categoryId: 'contacts',
+            color: '#673071',
+            direction: 'collapse',
+            sourceLane: {
+                lane_rect: { x: 0, y: 100, width: 900, height: 120 },
+                header_rect: { x: 900, y: 100, width: 120, height: 120 }
+            }
+        });
+        await Promise.resolve();
+        now = 120;
+        callbacks.shift()();
+        await promise;
+        assert.equal(state.focusTransition, null);
+        assert.equal(renderStates.at(-1), 'cleared');
+        assert.ok(renderStates.includes('transition'));
+    } finally {
+        if (previousWindow === undefined) delete globalThis.window;
+        else globalThis.window = previousWindow;
+    }
 });
 
 test('switching focused rubrique fades the new source row before expanding it', () => {

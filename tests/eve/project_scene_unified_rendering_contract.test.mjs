@@ -63,6 +63,25 @@ const buildDashboardHitScene = () => {
     return { layout, records, scene };
 };
 
+test('Foreground project render claims the canonical project layer when host is omitted', async () => {
+    clearAllProjectScenes();
+    const dom = installDom('<!doctype html><html><body><main id="view"><canvas id="eve_surface_project"></canvas><section id="project_view_project_hostless"></section></main></body></html>');
+    sceneState.foregroundProjectId = 'project_hostless';
+    const calls = [];
+
+    await renderProjectScene({
+        projectId: 'project_hostless',
+        records: [makeRecord('hostless_atom', 'shape', 1)],
+        compositor: createTestCompositor(calls)
+    });
+
+    const layer = dom.window.document.getElementById('project_view_project_hostless');
+    const canvas = dom.window.document.getElementById('eve_surface_project');
+    assert.equal(canvas.parentElement, layer);
+    assert.equal(dom.window.document.querySelectorAll('canvas#eve_surface_project').length, 1);
+    assert.equal(calls.length > 0, true);
+});
+
 const assertHiddenDecodeVideoContract = (documentRef, expectedCount) => {
     const root = documentRef.getElementById('eve_bevy_video_decode_root');
     assert.ok(root, 'source-backed project video must use the hidden Bevy decode root');
