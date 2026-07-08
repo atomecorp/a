@@ -2,7 +2,7 @@ use bevy::{
     core_pipeline::core_2d::{Transparent2d, CORE_2D_DEPTH_FORMAT},
     ecs::system::lifetimeless::{Read, SRes},
     math::FloatOrd,
-    mesh::VertexBufferLayout,
+    mesh::{Mesh2d, VertexBufferLayout},
     prelude::*,
     render::{
         mesh::RenderMesh,
@@ -18,11 +18,11 @@ use bevy::{
             Face, FragmentState, MultisampleState, PipelineCache, PrimitiveState,
             RenderPipelineDescriptor, Sampler, SamplerBindingType, SamplerDescriptor, ShaderStages,
             SpecializedRenderPipeline, SpecializedRenderPipelines, StencilFaceState, StencilState,
-            TextureFormat, VertexFormat, VertexState, VertexStepMode,
+            VertexFormat, VertexState, VertexStepMode,
         },
         renderer::RenderDevice,
         sync_world::{MainEntity, MainEntityHashMap},
-        view::{ExtractedView, RenderVisibleEntities, ViewTarget},
+        view::{ExtractedView, RenderVisibleEntities},
         Render, RenderApp, RenderStartup, RenderSystems,
     },
     sprite_render::{
@@ -30,6 +30,7 @@ use bevy::{
         RenderMesh2dInstances, SetMesh2dBindGroup, SetMesh2dViewBindGroup,
     },
 };
+use std::any::TypeId;
 use wasm_bindgen::{JsCast, JsValue};
 
 use crate::{
@@ -190,10 +191,7 @@ impl SpecializedRenderPipeline for VideoExternalTexturePipeline {
             VertexStepMode::Vertex,
             vec![VertexFormat::Float32x3, VertexFormat::Float32x2],
         );
-        let format = match key.contains(Mesh2dPipelineKey::HDR) {
-            true => ViewTarget::TEXTURE_FORMAT_HDR,
-            false => TextureFormat::bevy_default(),
-        };
+        let format = key.target_format();
 
         RenderPipelineDescriptor {
             vertex: VertexState {
@@ -222,8 +220,8 @@ impl SpecializedRenderPipeline for VideoExternalTexturePipeline {
             },
             depth_stencil: Some(DepthStencilState {
                 format: CORE_2D_DEPTH_FORMAT,
-                depth_write_enabled: false,
-                depth_compare: CompareFunction::GreaterEqual,
+                depth_write_enabled: Some(false),
+                depth_compare: Some(CompareFunction::GreaterEqual),
                 stencil: StencilState {
                     front: StencilFaceState::IGNORE,
                     back: StencilFaceState::IGNORE,
@@ -339,23 +337,41 @@ fn queue_video_external_textures(
         else {
             continue;
         };
-        for (render_entity, visible_entity) in visible_entities.iter::<Mesh2d>() {
-            let Ok(video) = videos.get(*render_entity) else {
+        let Some(mesh2d_visible_entities) = visible_entities.classes.get(&TypeId::of::<Mesh2d>())
+        else {
+            continue;
+        };
+        let mesh2d_visible_entities = mesh2d_visible_entities
+            .entities_cpu_culling
+            .iter()
+            .copied()
+            .chain(
+                mesh2d_visible_entities
+                    .entities_gpu_culling
+                    .iter()
+                    .map(|(visible_entity, render_entity)| (*render_entity, *visible_entity)),
+            );
+
+        for (render_entity, visible_entity) in mesh2d_visible_entities {
+            let Ok(video) = videos.get(render_entity) else {
                 continue;
             };
-            let Some(mesh_instance) = render_mesh_instances.get(visible_entity) else {
+            let Some(mesh_instance) = render_mesh_instances.get(&visible_entity) else {
                 continue;
             };
             let Some(mesh) = render_meshes.get(mesh_instance.mesh_asset_id) else {
                 continue;
             };
             let key = Mesh2dPipelineKey::from_msaa_samples(msaa.samples())
-                | Mesh2dPipelineKey::from_hdr(view.hdr)
-                | Mesh2dPipelineKey::from_primitive_topology(mesh.primitive_topology());
+                | Mesh2dPipelineKey::from_target_format(view.target_format)
+                | Mesh2dPipelineKey::from_primitive_topology_and_strip_index(
+                    mesh.primitive_topology(),
+                    mesh.index_format(),
+                );
             let pipeline_id = pipelines.specialize(&pipeline_cache, &pipeline, key);
             let mesh_z = depth_for_layer(video.layer);
-            transparent_phase.add(Transparent2d {
-                entity: (*render_entity, *visible_entity),
+            transparent_phase.add_retained(Transparent2d {
+                entity: (render_entity, visible_entity.into()),
                 draw_function: draw_video,
                 pipeline: pipeline_id,
                 sort_key: FloatOrd(mesh_z),

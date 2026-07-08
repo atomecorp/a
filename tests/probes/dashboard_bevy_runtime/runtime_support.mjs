@@ -110,7 +110,11 @@ export const clickAtomeMenuItem = async (page) => {
         const menu = window.new_menu_v2 || null;
         if (typeof menu?.showFully === 'function') await Promise.resolve(menu.showFully());
         else if (typeof menu?.reveal === 'function') await Promise.resolve(menu.reveal());
-        const projectId = window.__currentProject?.id
+        const dashboardProjectId = window.eveDashboardBevyUiRuntime?.state?.active === true
+            ? window.eveDashboardBevyUiRuntime?.state?.projectId
+            : '';
+        const projectId = dashboardProjectId
+            || window.__currentProject?.id
             || window.eveDashboardBevyUiRuntime?.state?.projectId
             || '__eve_dashboard_workspace__';
         const records = window.eveToolBase?.getProjectSceneState?.(projectId)?.records || [];

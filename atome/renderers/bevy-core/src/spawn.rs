@@ -1,4 +1,9 @@
-use bevy::{image::Image, prelude::*, render::batching::NoAutomaticBatching, text::TextBounds};
+use bevy::{
+    image::Image,
+    prelude::*,
+    render::batching::NoAutomaticBatching,
+    text::{FontSize, TextBounds},
+};
 
 use crate::{
     render_math::{atome_rect_transform_with_local, color_from_rgba, depth_for_layer},
@@ -216,7 +221,7 @@ pub fn spawn_node_with_texture_handle(
                         node_base_components(&node, width, height, surface_width, surface_height),
                         Text2d::new(node.text.clone().unwrap_or_default()),
                         TextFont {
-                            font_size: height.min(32.0).max(12.0),
+                            font_size: FontSize::Px(height.min(32.0).max(12.0)),
                             ..default()
                         },
                         TextColor(color_from_rgba(visible_color)),

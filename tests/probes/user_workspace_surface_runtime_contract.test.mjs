@@ -54,6 +54,13 @@ window.new_menu_v2 = {
         menuActive = true;
         menuTreeMounted = true;
         menuOverlayRecordCount = 1;
+        const projectId = window.__eveBevyUiOverlayProjectIdOverride
+            || window.__eveWorkspaceMode?.projectId
+            || DASHBOARD_WORKSPACE_PROJECT_ID;
+        sceneRecordsByProject.set(projectId, [{
+            id: '__eve_bevy_ui_eve_bevy_ui_main_menu_test',
+            properties: {}
+        }]);
         calls.push({ name: 'showFully' });
         return true;
     },
@@ -129,8 +136,8 @@ const opened = await openWorkspaceDashboardAndMainMenu({
 assert.deepEqual(opened, { ok: true, active: true, mode: 'bevy-ui' });
 assert.deepEqual(
     calls.map((entry) => entry.name),
-    ['bevyUiWarmup', 'showFully', 'bevyUiOpen'],
-    'workspace opener must warm, show the menu, and open only the Bevy UI runtime'
+    ['bevyUiWarmup', 'showFully', 'bevyUiOpen', 'showFully'],
+    'workspace opener must warm, project the menu, open the dashboard, and verify the menu scene records'
 );
 assert.equal(calls.some((entry) => entry.name === 'loadProjectAtomes'), false);
 assert.deepEqual(
@@ -162,7 +169,7 @@ sceneRecordsByProject.set(DASHBOARD_WORKSPACE_PROJECT_ID, [{
 window.__eveWorkspaceMode = { mode: 'dashboard', projectId: DASHBOARD_WORKSPACE_PROJECT_ID };
 const visibleFromSceneRecords = await ensureWorkspaceMainMenuVisible();
 assert.deepEqual(visibleFromSceneRecords, { ok: true, visible: true });
-assert.deepEqual(calls, [{ name: 'showFully' }]);
+assert.deepEqual(calls, []);
 
 calls.length = 0;
 const warmedReopen = await openWorkspaceDashboardAndMainMenu({
@@ -170,12 +177,15 @@ const warmedReopen = await openWorkspaceDashboardAndMainMenu({
     projectId: 'project_valid'
 });
 assert.deepEqual(warmedReopen, { ok: true, active: true, mode: 'bevy-ui' });
-assert.deepEqual(calls.map((entry) => entry.name), ['bevyUiOpen']);
+assert.deepEqual(calls.map((entry) => entry.name), ['bevyUiOpen', 'showFully']);
 
 calls.length = 0;
 const closedFromToggle = await toggleWorkspaceDashboardAndMainMenu({ source: 'main_handle' });
 assert.deepEqual(closedFromToggle, { ok: true, active: false, mode: 'bevy-ui' });
-assert.deepEqual(calls, [{ name: 'bevyUiClose', honorLabelEditorKeyboardGuard: false }]);
+assert.deepEqual(calls, [
+    { name: 'bevyUiClose', honorLabelEditorKeyboardGuard: false },
+    { name: 'showFully' }
+]);
 
 calls.length = 0;
 window.__currentProject = { id: 'project_valid', name: 'Project valid' };
@@ -185,7 +195,7 @@ const openedFromBevyAtome = await openWorkspaceDashboardAndMainMenu({
     projectId: 'project_valid'
 });
 assert.deepEqual(openedFromBevyAtome, { ok: true, active: true, mode: 'bevy-ui' });
-assert.deepEqual(calls.map((entry) => entry.name), ['bevyUiOpen']);
+assert.deepEqual(calls.map((entry) => entry.name), ['showFully', 'bevyUiOpen']);
 
 calls.length = 0;
 window.eveDashboardBevyUiRuntime.state.active = true;

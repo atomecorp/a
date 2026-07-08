@@ -58,66 +58,69 @@ export function run_atome_bevy_renderer(canvas_selector: string, width: number, 
 export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembly.Module;
 
 export interface InitOutput {
-  readonly memory: WebAssembly.Memory;
-  readonly apply_atome_bevy_despawn: (a: number, b: number, c: number) => void;
-  readonly apply_atome_bevy_layer: (a: number, b: number) => void;
-  readonly apply_atome_bevy_ops: (a: number, b: number) => void;
-  readonly apply_atome_bevy_reparent: (a: number, b: number) => void;
-  readonly apply_atome_bevy_resource: (a: number, b: number) => void;
-  readonly apply_atome_bevy_scene_effects: (a: number, b: number) => void;
-  readonly apply_atome_bevy_spawn: (a: number, b: number) => void;
-  readonly apply_atome_bevy_style: (a: number, b: number) => void;
-  readonly apply_atome_bevy_surface: (a: number, b: number) => void;
-  readonly apply_atome_bevy_surface_background: (a: number, b: number) => void;
-  readonly apply_atome_bevy_text_metadata: (a: number, b: number) => void;
-  readonly apply_atome_bevy_transform: (a: number, b: number) => void;
-  readonly apply_atome_bevy_ui_ops: (a: number, b: number) => void;
-  readonly apply_atome_bevy_visibility: (a: number, b: number) => void;
-  readonly drain_atome_bevy_ui_events: (a: number) => void;
-  readonly notify_atome_bevy_video_frame: (a: number, b: number, c: number) => void;
-  readonly queue_atome_bevy_ui_events: (a: number, b: number) => void;
-  readonly read_atome_bevy_ui_diagnostics: (a: number) => void;
-  readonly read_atome_bevy_video_backend_capabilities: (a: number) => void;
-  readonly read_atome_bevy_video_copy_diagnostics: (a: number) => void;
-  readonly read_atome_bevy_web_diagnostics: (a: number) => void;
-  readonly register_atome_bevy_font: (a: number, b: number, c: number) => void;
-  readonly request_atome_bevy_redraw: () => void;
-  readonly reset_atome_bevy_video_copy_diagnostics: (a: number) => void;
-  readonly reset_atome_bevy_web_diagnostics: (a: number) => void;
-  readonly run_atome_bevy_preview_renderer: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => void;
-  readonly run_atome_bevy_renderer: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => void;
-  readonly __wasm_bindgen_func_elem_5792: (a: number, b: number, c: number) => void;
-  readonly __wasm_bindgen_func_elem_5549: (a: number, b: number) => void;
-  readonly __wasm_bindgen_func_elem_116358: (a: number, b: number, c: number) => void;
-  readonly __wasm_bindgen_func_elem_116342: (a: number, b: number) => void;
-  readonly __wasm_bindgen_func_elem_5795: (a: number, b: number, c: number, d: number) => void;
-  readonly __wasm_bindgen_func_elem_5793: (a: number, b: number, c: number) => void;
-  readonly __wasm_bindgen_func_elem_5791: (a: number, b: number) => void;
-  readonly __wbindgen_export: (a: number, b: number) => number;
-  readonly __wbindgen_export2: (a: number, b: number, c: number, d: number) => number;
-  readonly __wbindgen_export3: (a: number) => void;
-  readonly __wbindgen_export4: (a: number, b: number, c: number) => void;
-  readonly __wbindgen_add_to_stack_pointer: (a: number) => number;
+    readonly memory: WebAssembly.Memory;
+    readonly apply_atome_bevy_despawn: (a: number, b: number, c: number) => void;
+    readonly apply_atome_bevy_layer: (a: number, b: number) => void;
+    readonly apply_atome_bevy_ops: (a: number, b: number) => void;
+    readonly apply_atome_bevy_reparent: (a: number, b: number) => void;
+    readonly apply_atome_bevy_resource: (a: number, b: number) => void;
+    readonly apply_atome_bevy_scene_effects: (a: number, b: number) => void;
+    readonly apply_atome_bevy_spawn: (a: number, b: number) => void;
+    readonly apply_atome_bevy_style: (a: number, b: number) => void;
+    readonly apply_atome_bevy_surface: (a: number, b: number) => void;
+    readonly apply_atome_bevy_surface_background: (a: number, b: number) => void;
+    readonly apply_atome_bevy_text_metadata: (a: number, b: number) => void;
+    readonly apply_atome_bevy_transform: (a: number, b: number) => void;
+    readonly apply_atome_bevy_ui_ops: (a: number, b: number) => void;
+    readonly apply_atome_bevy_visibility: (a: number, b: number) => void;
+    readonly drain_atome_bevy_ui_events: (a: number) => void;
+    readonly notify_atome_bevy_video_frame: (a: number, b: number, c: number) => void;
+    readonly queue_atome_bevy_ui_events: (a: number, b: number) => void;
+    readonly read_atome_bevy_ui_diagnostics: (a: number) => void;
+    readonly read_atome_bevy_video_backend_capabilities: (a: number) => void;
+    readonly read_atome_bevy_video_copy_diagnostics: (a: number) => void;
+    readonly read_atome_bevy_web_diagnostics: (a: number) => void;
+    readonly register_atome_bevy_font: (a: number, b: number, c: number) => void;
+    readonly request_atome_bevy_redraw: () => void;
+    readonly reset_atome_bevy_video_copy_diagnostics: (a: number) => void;
+    readonly reset_atome_bevy_web_diagnostics: (a: number) => void;
+    readonly run_atome_bevy_preview_renderer: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => void;
+    readonly run_atome_bevy_renderer: (a: number, b: number, c: number, d: number, e: number, f: number, g: number) => void;
+    readonly __wasm_bindgen_func_elem_5836: (a: number, b: number) => void;
+    readonly __wasm_bindgen_func_elem_62770: (a: number, b: number) => void;
+    readonly __wasm_bindgen_func_elem_124429: (a: number, b: number) => void;
+    readonly __wasm_bindgen_func_elem_138385: (a: number, b: number) => void;
+    readonly __wasm_bindgen_func_elem_6051: (a: number, b: number, c: number, d: number) => void;
+    readonly __wasm_bindgen_func_elem_6050: (a: number, b: number, c: number) => void;
+    readonly __wasm_bindgen_func_elem_62831: (a: number, b: number, c: number) => void;
+    readonly __wasm_bindgen_func_elem_124434: (a: number, b: number, c: number) => void;
+    readonly __wasm_bindgen_func_elem_138400: (a: number, b: number, c: number) => void;
+    readonly __wasm_bindgen_func_elem_6049: (a: number, b: number) => void;
+    readonly __wbindgen_export: (a: number, b: number) => number;
+    readonly __wbindgen_export2: (a: number, b: number, c: number, d: number) => number;
+    readonly __wbindgen_export3: (a: number) => void;
+    readonly __wbindgen_export4: (a: number, b: number, c: number) => void;
+    readonly __wbindgen_add_to_stack_pointer: (a: number) => number;
 }
 
 export type SyncInitInput = BufferSource | WebAssembly.Module;
 
 /**
-* Instantiates the given `module`, which can either be bytes or
-* a precompiled `WebAssembly.Module`.
-*
-* @param {{ module: SyncInitInput }} module - Passing `SyncInitInput` directly is deprecated.
-*
-* @returns {InitOutput}
-*/
+ * Instantiates the given `module`, which can either be bytes or
+ * a precompiled `WebAssembly.Module`.
+ *
+ * @param {{ module: SyncInitInput }} module - Passing `SyncInitInput` directly is deprecated.
+ *
+ * @returns {InitOutput}
+ */
 export function initSync(module: { module: SyncInitInput } | SyncInitInput): InitOutput;
 
 /**
-* If `module_or_path` is {RequestInfo} or {URL}, makes a request and
-* for everything else, calls `WebAssembly.instantiate` directly.
-*
-* @param {{ module_or_path: InitInput | Promise<InitInput> }} module_or_path - Passing `InitInput` directly is deprecated.
-*
-* @returns {Promise<InitOutput>}
-*/
+ * If `module_or_path` is {RequestInfo} or {URL}, makes a request and
+ * for everything else, calls `WebAssembly.instantiate` directly.
+ *
+ * @param {{ module_or_path: InitInput | Promise<InitInput> }} module_or_path - Passing `InitInput` directly is deprecated.
+ *
+ * @returns {Promise<InitOutput>}
+ */
 export default function __wbg_init (module_or_path?: { module_or_path: InitInput | Promise<InitInput> } | InitInput | Promise<InitInput>): Promise<InitOutput>;

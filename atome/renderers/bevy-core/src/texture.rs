@@ -88,10 +88,7 @@ pub fn cached_image_handle_from_rounded_rect_mask(
     radius: f32,
     id: &str,
 ) -> Result<Handle<Image>, String> {
-    if world
-        .get_resource::<AtomeRoundedRectMaskCache>()
-        .is_none()
-    {
+    if world.get_resource::<AtomeRoundedRectMaskCache>().is_none() {
         world.insert_resource(AtomeRoundedRectMaskCache::default());
     }
     let key = AtomeRoundedRectMaskCacheKey {

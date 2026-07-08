@@ -1,6 +1,8 @@
 use super::*;
 use crate::types::AtomeTexture;
+use bevy::input::touch::TouchPhase;
 use bevy::prelude::*;
+use bevy::text::FontSource;
 use bevy::ui::widget::ImageNode;
 
 fn sample_tree() -> AtomeUiTree {
@@ -50,8 +52,7 @@ fn image_tree() -> AtomeUiTree {
                         width: 2,
                         height: 2,
                         rgba: vec![
-                            255, 255, 255, 255, 0, 0, 0, 0, 255, 255, 255, 255, 0, 0, 0,
-                            0,
+                            255, 255, 255, 255, 0, 0, 0, 0, 255, 255, 255, 255, 0, 0, 0, 0,
                         ],
                     }),
                 }),
@@ -390,8 +391,8 @@ fn mount_time_style_opacity_applies_to_subtree() {
 fn registered_roboto_weights_map_to_nearest_font_handle() {
     let mut world = World::new();
     world.init_resource::<Assets<Font>>();
-    let base = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../src/assets/fonts/Roboto");
+    let base =
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../src/assets/fonts/Roboto");
     let regular = std::fs::read(base.join("Roboto-Regular.ttf")).unwrap();
     let bold = std::fs::read(base.join("Roboto-Bold.ttf")).unwrap();
     register_ui_font(&mut world, 400, regular).unwrap();
@@ -416,7 +417,10 @@ fn registered_roboto_weights_map_to_nearest_font_handle() {
         )],
     );
     let entity = entity_for(&world, "ui_bold_label");
-    assert_eq!(world.get::<TextFont>(entity).unwrap().font, bold_handle);
+    assert_eq!(
+        world.get::<TextFont>(entity).unwrap().font,
+        FontSource::Handle(bold_handle)
+    );
 }
 
 fn button_node(id: &str) -> AtomeUiNode {
@@ -434,7 +438,12 @@ fn button_node(id: &str) -> AtomeUiNode {
     }
 }
 
-fn set_interaction_and_cursor(world: &mut World, id: &str, interaction: Interaction, normalized: Option<Vec2>) {
+fn set_interaction_and_cursor(
+    world: &mut World,
+    id: &str,
+    interaction: Interaction,
+    normalized: Option<Vec2>,
+) {
     let entity = entity_for(world, id);
     // Unit tests spawn entities directly (no `App`/UI layout schedule), so
     // `ComputedNode` never gets its real size from `ui_layout_system`; pin it
@@ -467,16 +476,34 @@ fn hover_press_release_activate_sequence_carries_node_local_position() {
     mount_styled_tree(&mut world, vec![button_node("ui_btn")]);
     world.insert_resource(Messages::<MouseWheel>::default());
 
-    set_interaction_and_cursor(&mut world, "ui_btn", Interaction::Hovered, Some(Vec2::new(0.25, 0.5)));
+    set_interaction_and_cursor(
+        &mut world,
+        "ui_btn",
+        Interaction::Hovered,
+        Some(Vec2::new(0.25, 0.5)),
+    );
     run_interaction_collection(&mut world);
     let hover = drained_kinds(&mut world);
     assert_eq!(hover, vec![("hover".to_string(), 30.0, 20.0, 0.0, 0.0)]);
 
-    set_interaction_and_cursor(&mut world, "ui_btn", Interaction::Pressed, Some(Vec2::new(0.25, 0.5)));
+    set_interaction_and_cursor(
+        &mut world,
+        "ui_btn",
+        Interaction::Pressed,
+        Some(Vec2::new(0.25, 0.5)),
+    );
     run_interaction_collection(&mut world);
-    assert_eq!(drained_kinds(&mut world), vec![("press".to_string(), 30.0, 20.0, 0.0, 0.0)]);
+    assert_eq!(
+        drained_kinds(&mut world),
+        vec![("press".to_string(), 30.0, 20.0, 0.0, 0.0)]
+    );
 
-    set_interaction_and_cursor(&mut world, "ui_btn", Interaction::Hovered, Some(Vec2::new(0.25, 0.5)));
+    set_interaction_and_cursor(
+        &mut world,
+        "ui_btn",
+        Interaction::Hovered,
+        Some(Vec2::new(0.25, 0.5)),
+    );
     run_interaction_collection(&mut world);
     assert_eq!(
         drained_kinds(&mut world),
@@ -486,9 +513,17 @@ fn hover_press_release_activate_sequence_carries_node_local_position() {
         ]
     );
 
-    set_interaction_and_cursor(&mut world, "ui_btn", Interaction::None, Some(Vec2::new(0.25, 0.5)));
+    set_interaction_and_cursor(
+        &mut world,
+        "ui_btn",
+        Interaction::None,
+        Some(Vec2::new(0.25, 0.5)),
+    );
     run_interaction_collection(&mut world);
-    assert_eq!(drained_kinds(&mut world), vec![("blur".to_string(), 30.0, 20.0, 0.0, 0.0)]);
+    assert_eq!(
+        drained_kinds(&mut world),
+        vec![("blur".to_string(), 30.0, 20.0, 0.0, 0.0)]
+    );
 }
 
 #[test]
@@ -497,13 +532,26 @@ fn press_then_release_outside_emits_release_without_activate() {
     mount_styled_tree(&mut world, vec![button_node("ui_btn_cancel")]);
     world.insert_resource(Messages::<MouseWheel>::default());
 
-    set_interaction_and_cursor(&mut world, "ui_btn_cancel", Interaction::Pressed, Some(Vec2::new(0.5, 0.5)));
+    set_interaction_and_cursor(
+        &mut world,
+        "ui_btn_cancel",
+        Interaction::Pressed,
+        Some(Vec2::new(0.5, 0.5)),
+    );
     run_interaction_collection(&mut world);
     drain_ui_events(&mut world);
 
-    set_interaction_and_cursor(&mut world, "ui_btn_cancel", Interaction::None, Some(Vec2::new(0.5, 0.5)));
+    set_interaction_and_cursor(
+        &mut world,
+        "ui_btn_cancel",
+        Interaction::None,
+        Some(Vec2::new(0.5, 0.5)),
+    );
     run_interaction_collection(&mut world);
-    assert_eq!(drained_kinds(&mut world), vec![("release".to_string(), 60.0, 20.0, 0.0, 0.0)]);
+    assert_eq!(
+        drained_kinds(&mut world),
+        vec![("release".to_string(), 60.0, 20.0, 0.0, 0.0)]
+    );
 }
 
 #[test]
@@ -512,7 +560,12 @@ fn drag_emits_delta_every_frame_while_pressed_even_without_interaction_change() 
     mount_styled_tree(&mut world, vec![button_node("ui_btn_drag")]);
     world.insert_resource(Messages::<MouseWheel>::default());
 
-    set_interaction_and_cursor(&mut world, "ui_btn_drag", Interaction::Pressed, Some(Vec2::new(0.0, 0.5)));
+    set_interaction_and_cursor(
+        &mut world,
+        "ui_btn_drag",
+        Interaction::Pressed,
+        Some(Vec2::new(0.0, 0.5)),
+    );
     run_interaction_collection(&mut world);
     drain_ui_events(&mut world); // consume the initial "press"
 
@@ -526,7 +579,11 @@ fn drag_emits_delta_every_frame_while_pressed_even_without_interaction_change() 
     let dragged = drained_kinds(&mut world);
     assert_eq!(dragged.len(), 1);
     assert_eq!(dragged[0].0, "drag");
-    assert!((dragged[0].3 - 60.0).abs() < 1e-4, "delta_x should be 60px: {:?}", dragged[0]);
+    assert!(
+        (dragged[0].3 - 60.0).abs() < 1e-4,
+        "delta_x should be 60px: {:?}",
+        dragged[0]
+    );
     assert_eq!(dragged[0].4, 0.0);
 
     // No further cursor movement → no spurious drag event.
@@ -539,23 +596,34 @@ fn wheel_event_reaches_hovered_node_with_summed_delta() {
     let mut world = World::new();
     mount_styled_tree(&mut world, vec![button_node("ui_btn_wheel")]);
     world.insert_resource(Messages::<MouseWheel>::default());
-    set_interaction_and_cursor(&mut world, "ui_btn_wheel", Interaction::Hovered, Some(Vec2::new(0.5, 0.5)));
+    set_interaction_and_cursor(
+        &mut world,
+        "ui_btn_wheel",
+        Interaction::Hovered,
+        Some(Vec2::new(0.5, 0.5)),
+    );
     run_interaction_collection(&mut world);
     drain_ui_events(&mut world); // consume "hover"
 
     let window = world.spawn_empty().id();
-    world.resource_mut::<Messages<MouseWheel>>().write(MouseWheel {
-        unit: bevy::input::mouse::MouseScrollUnit::Pixel,
-        x: 0.0,
-        y: -12.0,
-        window,
-    });
-    world.resource_mut::<Messages<MouseWheel>>().write(MouseWheel {
-        unit: bevy::input::mouse::MouseScrollUnit::Pixel,
-        x: 0.0,
-        y: -8.0,
-        window,
-    });
+    world
+        .resource_mut::<Messages<MouseWheel>>()
+        .write(MouseWheel {
+            unit: bevy::input::mouse::MouseScrollUnit::Pixel,
+            x: 0.0,
+            y: -12.0,
+            window,
+            phase: TouchPhase::Moved,
+        });
+    world
+        .resource_mut::<Messages<MouseWheel>>()
+        .write(MouseWheel {
+            unit: bevy::input::mouse::MouseScrollUnit::Pixel,
+            x: 0.0,
+            y: -8.0,
+            window,
+            phase: TouchPhase::Moved,
+        });
     run_interaction_collection(&mut world);
     let events = drained_kinds(&mut world);
     assert_eq!(events.len(), 1);
@@ -569,12 +637,15 @@ fn wheel_event_ignored_when_node_not_hovered_or_pressed() {
     mount_styled_tree(&mut world, vec![button_node("ui_btn_idle")]);
     world.insert_resource(Messages::<MouseWheel>::default());
     let window = world.spawn_empty().id();
-    world.resource_mut::<Messages<MouseWheel>>().write(MouseWheel {
-        unit: bevy::input::mouse::MouseScrollUnit::Pixel,
-        x: 0.0,
-        y: -12.0,
-        window,
-    });
+    world
+        .resource_mut::<Messages<MouseWheel>>()
+        .write(MouseWheel {
+            unit: bevy::input::mouse::MouseScrollUnit::Pixel,
+            x: 0.0,
+            y: -12.0,
+            window,
+            phase: TouchPhase::Moved,
+        });
     run_interaction_collection(&mut world);
     assert!(drained_kinds(&mut world).is_empty());
 }

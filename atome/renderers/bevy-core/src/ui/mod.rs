@@ -1,14 +1,17 @@
-mod types;
 #[cfg(test)]
 mod tests;
+mod types;
 
 pub use types::*;
 
 use crate::texture::image_handle_from_texture;
-use bevy::prelude::*;
-use bevy::text::Font;
 use bevy::input::mouse::MouseWheel;
-use bevy::ui::{percent, px, widget::ImageNode, BoxShadow, GlobalZIndex, RelativeCursorPosition, ScrollPosition, ShadowStyle};
+use bevy::prelude::*;
+use bevy::text::{Font, FontSize, FontSource};
+use bevy::ui::{
+    percent, px, widget::ImageNode, BoxShadow, GlobalZIndex, RelativeCursorPosition,
+    ScrollPosition, ShadowStyle,
+};
 
 // Tracks the previous frame's Interaction + node-local cursor position so
 // press/release/drag can be derived without an entity-keyed Local<HashMap>
@@ -276,7 +279,7 @@ fn is_button_kind(kind: &str) -> bool {
 
 fn text_font(world: &World, style: &AtomeUiStyle) -> TextFont {
     let mut font = TextFont {
-        font_size: finite(style.font_size.unwrap_or(12.0), 12.0).max(1.0),
+        font_size: FontSize::Px(finite(style.font_size.unwrap_or(12.0), 12.0).max(1.0)),
         ..default()
     };
     // Only an explicit weight opts a node into the registered font table: the
@@ -289,7 +292,7 @@ fn text_font(world: &World, style: &AtomeUiStyle) -> TextFont {
             .get_resource::<AtomeUiFontTable>()
             .and_then(|table| table.handle_for_weight(clamped))
         {
-            font.font = handle;
+            font.font = FontSource::Handle(handle);
             font.weight = bevy::text::FontWeight(clamped);
         }
     }
@@ -299,8 +302,7 @@ fn text_font(world: &World, style: &AtomeUiStyle) -> TextFont {
 // Registers an embedded TTF (bytes come from a local same-origin asset, never
 // a network fetch) as the UI face for `weight`.
 pub fn register_ui_font(world: &mut World, weight: u16, bytes: Vec<u8>) -> Result<(), String> {
-    let font = Font::try_from_bytes(bytes)
-        .map_err(|error| format!("bevy_ui_font_invalid:{weight}:{error:?}"))?;
+    let font = Font::from_bytes(bytes);
     world.init_resource::<AtomeUiFontTable>();
     let handle = {
         let mut fonts = world
@@ -316,9 +318,9 @@ pub fn register_ui_font(world: &mut World, weight: u16, bytes: Vec<u8>) -> Resul
 
 fn insert_text_extras(world: &mut World, entity: Entity, style: &AtomeUiStyle) {
     if let Some(line_height) = style.line_height {
-        world
-            .entity_mut(entity)
-            .insert(bevy::text::LineHeight::Px(finite(line_height, 0.0).max(1.0)));
+        world.entity_mut(entity).insert(bevy::text::LineHeight::Px(
+            finite(line_height, 0.0).max(1.0),
+        ));
     }
 }
 
@@ -369,7 +371,11 @@ fn spawn_image_node(
         .as_ref()
         .and_then(|image| image.texture.clone())
         .ok_or_else(|| format!("bevy_ui_image_texture_required:{}", node.id))?;
-    let tint = node.image.as_ref().and_then(|image| image.tint).or(node.style.color);
+    let tint = node
+        .image
+        .as_ref()
+        .and_then(|image| image.tint)
+        .or(node.style.color);
     let opacity = node
         .image
         .as_ref()
@@ -670,9 +676,7 @@ fn set_subtree_opacity(world: &mut World, id: &str, opacity: f32) -> Result<(), 
             Some(base) => base.clone(),
             None => {
                 let captured = AtomeUiBaseColors {
-                    background: entity_mut
-                        .get::<BackgroundColor>()
-                        .map(|value| value.0),
+                    background: entity_mut.get::<BackgroundColor>().map(|value| value.0),
                     text: entity_mut.get::<TextColor>().map(|value| value.0),
                     image: entity_mut.get::<ImageNode>().map(|value| value.color),
                     shadows: entity_mut

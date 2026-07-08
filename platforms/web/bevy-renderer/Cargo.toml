@@ -9,7 +9,7 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 atome-bevy-renderer-core = { path = "../../../atome/renderers/bevy-core" }
-bevy = { version = "0.18.1", default-features = false, features = [
+bevy = { version = "0.19.0", default-features = false, features = [
     "default_app",
     "bevy_window",
     "bevy_winit",
@@ -30,11 +30,11 @@ bevy = { version = "0.18.1", default-features = false, features = [
 ] }
 serde = { version = "1", features = ["derive"] }
 serde-wasm-bindgen = "0.6"
-wasm-bindgen = "=0.2.106"
+wasm-bindgen = "=0.2.108"
 
 [patch.crates-io]
-wgpu = { path = "../../../atome/renderers/wgpu-web-external-texture/wgpu-27.0.1" }
-wgpu-types = { path = "../../../atome/renderers/wgpu-web-external-texture/wgpu-types-27.0.1" }
+wgpu = { path = "../../../atome/renderers/wgpu-web-external-texture/wgpu-29.0.4" }
+wgpu-types = { path = "../../../atome/renderers/wgpu-web-external-texture/wgpu-types-29.0.4" }
 
 [profile.release]
 opt-level = "z"

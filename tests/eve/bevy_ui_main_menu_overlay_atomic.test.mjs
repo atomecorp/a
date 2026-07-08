@@ -190,3 +190,48 @@ test('BevyUI main menu overlay follows the foreground project instead of the das
         false
     );
 });
+
+test('BevyUI main menu overlay projects into the target project during workspace transition', async () => {
+    clearAllProjectScenes();
+    const dom = projectDom();
+    const host = dom.window.document.getElementById('project');
+    await renderProjectScene({
+        projectId: 'project_left',
+        records: [{ id: 'left_atom', type: 'shape', properties: { left: 4, top: 4, width: 20, height: 20, color: '#ff0000' } }],
+        host,
+        compositor: createTestCompositor()
+    });
+    dom.window.__eveWorkspaceMode = {
+        mode: 'transition',
+        projectId: 'project_right',
+        transitioning: true,
+        targetMode: 'project'
+    };
+    const surface = getProjectSceneState('project_left').surface;
+    surface.getBoundingClientRect = () => ({
+        left: 0,
+        top: 0,
+        right: 1124,
+        bottom: 853,
+        width: 1124,
+        height: 853
+    });
+    const tree = buildBevyMainMenuTree({
+        content: menuContent(),
+        surface,
+        itemSize: 70,
+        state: { latchedByToolId: new Map(), externalOpenByToolId: new Map() },
+        handlers: {}
+    });
+    const ids = await projectBevyUiTreeOverlay({ tree, documentRef: dom.window.document, previousIds: [] });
+
+    assert.equal(ids.length, 27);
+    assert.equal(
+        getProjectSceneState('project_right').records.some((record) => String(record.id || '').startsWith('__eve_bevy_ui_eve_bevy_ui_main_menu_')),
+        true
+    );
+    assert.equal(
+        getProjectSceneState('project_left').records.some((record) => String(record.id || '').startsWith('__eve_bevy_ui_eve_bevy_ui_main_menu_')),
+        false
+    );
+});
