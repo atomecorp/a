@@ -2,7 +2,7 @@ use bevy::{camera::ScalingMode, prelude::*};
 
 use crate::types::{default_transform_origin, default_transform_scale};
 
-pub const BEVY_LAYER_DEPTH_LIMIT: f32 = 900.0;
+pub const BEVY_LAYER_DEPTH_LIMIT: f32 = 5_000.0;
 pub const BEVY_CAMERA_DEPTH_LIMIT: f32 = 10_000.0;
 
 pub fn color_from_rgba(color: [f32; 4]) -> Color {

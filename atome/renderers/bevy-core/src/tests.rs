@@ -382,6 +382,16 @@ fn rounded_shape_nodes_use_alpha_mask_texture_without_resizing() {
 }
 
 #[test]
+fn workspace_dashboard_layers_keep_text_above_cards() {
+    let dashboard_card_layer = 600 + 804;
+    let dashboard_text_layer = 600 + 807;
+
+    assert_eq!(depth_for_layer(dashboard_card_layer), dashboard_card_layer as f32);
+    assert_eq!(depth_for_layer(dashboard_text_layer), dashboard_text_layer as f32);
+    assert!(depth_for_layer(dashboard_text_layer) > depth_for_layer(dashboard_card_layer));
+}
+
+#[test]
 fn surface_background_stays_behind_atomes_and_outside_entity_table() {
     let mut world = World::new();
     world.insert_resource(AtomeEntityTable::default());
