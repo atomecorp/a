@@ -12,6 +12,7 @@ const sliceBetween = (source, startMarker, endMarker) => {
 };
 
 const localAuth = readSource('platforms/desktop-tauri/src/server/local_auth.rs');
+const iosLocalServer = readSource('platforms/ios/atome-auv3/Common/LocalHTTPServer.swift');
 const tauriBootstrap = sliceBetween(localAuth, 'async fn handle_bootstrap', 'async fn handle_register');
 const tauriExistingBranch = sliceBetween(
     tauriBootstrap,
@@ -65,7 +66,7 @@ assert.match(adoleApis, /requestPhoneVerification,[\s\S]*verifyPhoneVerification
 const fastifyHttpAuth = readSource('server/auth.js');
 assert.doesNotMatch(fastifyHttpAuth, /\/api\/auth\/request-phone-verification/, 'Fastify auth must not add HTTP phone verification routes');
 assert.doesNotMatch(fastifyHttpAuth, /\/api\/auth\/verify-phone-verification/, 'Fastify auth must not add HTTP phone verification routes');
-assert.match(fastifyHttpAuth, /export function enforceAuthIdentityRateLimit/, 'Fastify auth must expose a shared identity rate limiter for WS phone verification');
+assert.match(fastifyHttpAuth, /export \{[^}]*enforceAuthIdentityRateLimit[^}]*\} from '\.\/auth_otp\.js'/, 'Fastify auth must expose a shared identity rate limiter for WS phone verification');
 assert.match(fastifyServer, /action === 'request-phone-verification'/, 'Fastify WS auth must expose phone verification request');
 assert.match(fastifyServer, /data\.exposeForTest === true && process\.env\.NODE_ENV !== 'production'[\s\S]*response\.code = code/, 'Fastify WS auth must return OTP code only in non-production test mode');
 assert.match(fastifyServer, /const AUTH_OTP_BYPASS_ENABLED = process\.env\.NODE_ENV !== 'production' && process\.env\.SQUIRREL_AUTH_OTP_BYPASS === '1'/, 'Fastify OTP bypass must be explicitly gated outside production');
@@ -78,6 +79,11 @@ assert.match(localAuth, /expose_for_test && !is_production_runtime\(\)/, 'Tauri 
 assert.match(localAuth, /fn auth_otp_bypass_enabled\(\) -> bool[\s\S]*!is_production_runtime\(\)[\s\S]*SQUIRREL_AUTH_OTP_BYPASS/, 'Tauri OTP bypass must be explicitly gated outside production');
 assert.match(localAuth, /#\[serde\(rename = "otpBypassed", skip_serializing_if = "Option::is_none"\)\][\s\S]*pub otp_bypassed: Option<bool>/, 'Tauri auth responses must expose the camelCase OTP bypass contract');
 assert.match(localAuth, /if auth_otp_bypass_enabled\(\)[\s\S]*return AuthResponse[\s\S]*otp_bypassed: Some\(true\)/, 'Tauri test mode must return an explicit OTP bypass response');
+assert.match(iosLocalServer, /case "request-phone-verification":[\s\S]*handleRequestPhoneVerification/, 'iOS local auth must expose phone verification request');
+assert.match(iosLocalServer, /case "verify-phone-verification":[\s\S]*handleVerifyPhoneVerification/, 'iOS local auth must expose phone verification verification');
+assert.match(iosLocalServer, /exposeForTest && !isProductionRuntime\(\)/, 'iOS local auth must return OTP code only in non-production test mode');
+assert.match(iosLocalServer, /ProcessInfo\.processInfo\.environment\["SQUIRREL_AUTH_OTP_BYPASS"\]/, 'iOS OTP bypass must be explicitly environment gated');
+assert.match(iosLocalServer, /if let otpBypassed \{ response\["otpBypassed"\] = otpBypassed \}/, 'iOS auth responses must expose the camelCase OTP bypass contract');
 
 const userTool = readSource('eVe/intuition/tools/user_auth_flow_runtime.js');
 const executeLoginFlow = sliceBetween(userTool, 'const executeLoginFlow = async', 'return {');

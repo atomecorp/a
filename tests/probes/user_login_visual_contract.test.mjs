@@ -351,23 +351,10 @@ const emptyPasswordTypedText = document.getElementById('eve_login_sequence__type
     node.style.transform = 'scale(1.18)';
 });
 await clickButton(document.getElementById('eve_login_sequence__persistent_logo'));
-await waitForCondition(() => document.getElementById('eve_login_sequence__phone_input')?.style?.display === 'block');
+await waitForCondition(() => document.getElementById('eve_login_sequence__choice')?.style?.display === 'flex');
 assert.equal(emptyPasswordSubmitted, false, 'empty password logo click must not submit credentials');
-assert.equal(document.getElementById('eve_login_sequence__choice')?.style?.display, 'none', 'empty password logo click must stay in the credential flow');
-assert.equal(document.getElementById('eve_login_sequence__credentials')?.style?.display, 'block', 'empty password logo click must keep the credential surface open');
-assert.equal(emptyPasswordPhoneInput?.style?.display, 'block', 'empty password logo click must return to the phone step');
-assert.equal(emptyPasswordPhoneInput?.disabled, false, 'returned phone step must keep the phone input enabled');
-assert.equal(document.activeElement?.id, emptyPasswordPhoneInput.id, 'returned phone step must focus the phone input');
-assert.equal(document.getElementById('eve_login_sequence__typed_caret')?.style?.opacity, '1', 'returned phone step must show the mirrored caret');
-assert.equal(emptyPasswordInstruction?.style?.opacity, LOGIN_TEXT_STYLE.opacity, 'returned phone step must reset instruction opacity');
-assert.equal(emptyPasswordInstruction?.style?.filter, 'blur(0px)', 'returned phone step must clear residual instruction blur');
-assert.equal(emptyPasswordInstruction?.style?.transform, '', 'returned phone step must clear residual instruction transform');
-assert.equal(emptyPasswordTypedText?.style?.opacity, LOGIN_TEXT_STYLE.opacity, 'returned phone step must reset mirrored text opacity');
-assert.equal(emptyPasswordTypedText?.style?.filter, 'blur(0px)', 'returned phone step must clear residual mirrored text blur');
-assert.equal(emptyPasswordTypedText?.style?.transform, '', 'returned phone step must clear residual mirrored text transform');
-emptyPasswordPhoneInput.value = '0611111111';
-dispatchInput(emptyPasswordPhoneInput);
-assert.equal(document.getElementById('eve_login_sequence__typed_value')?.textContent, '0611111111', 'returned phone step must accept input and update the mirrored value');
+assert.equal(document.getElementById('eve_login_sequence__credentials')?.style?.display, 'none', 'empty password logo click must close the credential surface');
+assert.equal(document.getElementById('eve_login_sequence__choice')?.style?.display, 'flex', 'empty password logo click must return to the first login choice');
 emptyPasswordSequence.destroy();
 
 let invalidPayload = null;

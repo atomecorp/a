@@ -1730,8 +1730,13 @@ extension LocalHTTPServer {
 fileprivate enum AiSRuntime {
     private static let queue = DispatchQueue(label: "ais.runtime.queue")
     private static var db: OpaquePointer?
+    private static var phoneVerificationStore: [String: (code: String, expiresAt: Date)] = [:]
+    private static var authAttemptStore: [String: (count: Int, resetAt: Date)] = [:]
     private static let sqliteTransient = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
     private static let tokenSecret = "ais-local-auth-v1"
+    private static let authAttemptWindow: TimeInterval = 15 * 60
+    private static let authAttemptLimit = 8
+    private static let otpExpiry: TimeInterval = 10 * 60
     private static let userNamespace: [UInt8] = [
         0x6b, 0xa7, 0xb8, 0x10, 0x9d, 0xad, 0x11, 0xd1,
         0x80, 0xb4, 0x00, 0xc0, 0x4f, 0xd4, 0x30, 0xc8
@@ -1839,6 +1844,10 @@ fileprivate enum AiSRuntime {
                     response = try handleMe(message, db: db, requestId: requestId)
                 case "lookup-phone":
                     response = try handleLookupPhone(message, db: db, requestId: requestId)
+                case "request-phone-verification":
+                    response = handleRequestPhoneVerification(message, requestId: requestId)
+                case "verify-phone-verification":
+                    response = handleVerifyPhoneVerification(message, requestId: requestId)
                 case "logout":
                     response = authResponse(requestId: requestId, success: true)
                 case "change-password":
@@ -2074,6 +2083,53 @@ fileprivate enum AiSRuntime {
         }
         let user = try loadUserInfo(db, userId: existing.userId)
         return authResponse(requestId: requestId, success: true, user: user)
+    }
+
+    private static func handleRequestPhoneVerification(_ message: [String: Any], requestId: String?) -> [String: Any] {
+        let phone = normalizePhone(stringValue(message["phone"]))
+        if phone.count < 6 {
+            return authResponse(requestId: requestId, success: false, error: "Phone must be at least 6 characters")
+        }
+        if let error = enforceAuthAttemptLimit(bucket: "phone_verification_request", identity: phone) {
+            return authResponse(requestId: requestId, success: false, error: error)
+        }
+        if authOtpBypassEnabled() {
+            return authResponse(requestId: requestId, success: true, otpBypassed: true)
+        }
+        let code = generateOtpCode()
+        phoneVerificationStore[phone] = (code: code, expiresAt: Date().addingTimeInterval(otpExpiry))
+        let exposeForTest = boolValue(message["exposeForTest"])
+        return authResponse(
+            requestId: requestId,
+            success: true,
+            code: exposeForTest && !isProductionRuntime() ? code : nil
+        )
+    }
+
+    private static func handleVerifyPhoneVerification(_ message: [String: Any], requestId: String?) -> [String: Any] {
+        let phone = normalizePhone(stringValue(message["phone"]))
+        if phone.count < 6 {
+            return authResponse(requestId: requestId, success: false, error: "Phone must be at least 6 characters")
+        }
+        let code = stringValue(message["code"]).trimmingCharacters(in: .whitespacesAndNewlines)
+        if code.isEmpty {
+            return authResponse(requestId: requestId, success: false, error: "Code is required")
+        }
+        if let error = enforceAuthAttemptLimit(bucket: "phone_verification_verify", identity: phone) {
+            return authResponse(requestId: requestId, success: false, error: error)
+        }
+        guard let pending = phoneVerificationStore[phone] else {
+            return authResponse(requestId: requestId, success: false, error: "No pending OTP request for this phone number")
+        }
+        if Date() > pending.expiresAt {
+            phoneVerificationStore.removeValue(forKey: phone)
+            return authResponse(requestId: requestId, success: false, error: "OTP has expired")
+        }
+        if pending.code != code {
+            return authResponse(requestId: requestId, success: false, error: "Invalid OTP code")
+        }
+        phoneVerificationStore.removeValue(forKey: phone)
+        return authResponse(requestId: requestId, success: true)
     }
 
     private static func handleChangePassword(_ message: [String: Any], db: OpaquePointer?, requestId: String?) throws -> [String: Any] {
@@ -3053,7 +3109,7 @@ fileprivate enum AiSRuntime {
         }
     }
 
-    private static func authResponse(requestId: String?, success: Bool, error: String? = nil, user: [String: Any]? = nil, token: String? = nil, alreadyExists: Bool? = nil) -> [String: Any] {
+    private static func authResponse(requestId: String?, success: Bool, error: String? = nil, user: [String: Any]? = nil, token: String? = nil, alreadyExists: Bool? = nil, code: String? = nil, otpBypassed: Bool? = nil) -> [String: Any] {
         var response: [String: Any] = [
             "type": "auth-response",
             "success": success
@@ -3063,6 +3119,8 @@ fileprivate enum AiSRuntime {
         if let user { response["user"] = user }
         if let token { response["token"] = token }
         if let alreadyExists { response["already_exists"] = alreadyExists }
+        if let code { response["code"] = code }
+        if let otpBypassed { response["otpBypassed"] = otpBypassed }
         return response
     }
 
@@ -3123,6 +3181,31 @@ fileprivate enum AiSRuntime {
             return "+" + cleaned.dropFirst().replacingOccurrences(of: "+", with: "")
         }
         return cleaned.replacingOccurrences(of: "+", with: "")
+    }
+
+    private static func isProductionRuntime() -> Bool {
+        ProcessInfo.processInfo.environment["NODE_ENV"]?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "production"
+    }
+
+    private static func authOtpBypassEnabled() -> Bool {
+        !isProductionRuntime()
+            && ProcessInfo.processInfo.environment["SQUIRREL_AUTH_OTP_BYPASS"]?.trimmingCharacters(in: .whitespacesAndNewlines) == "1"
+    }
+
+    private static func enforceAuthAttemptLimit(bucket: String, identity: String) -> String? {
+        let now = Date()
+        let key = "\(bucket):\(identity.trimmingCharacters(in: .whitespacesAndNewlines).lowercased())"
+        if let current = authAttemptStore[key], now < current.resetAt {
+            let count = current.count + 1
+            authAttemptStore[key] = (count: count, resetAt: current.resetAt)
+            return count > authAttemptLimit ? "Too many authentication attempts" : nil
+        }
+        authAttemptStore[key] = (count: 1, resetAt: now.addingTimeInterval(authAttemptWindow))
+        return nil
+    }
+
+    private static func generateOtpCode() -> String {
+        String(Int.random(in: 100000...999999))
     }
 
     private static func normalizeVisibility(_ value: String) -> String {

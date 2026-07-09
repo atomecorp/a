@@ -113,3 +113,13 @@ assert.equal(result.otpRequests, 0, 'hard lookup failure must not request OTP');
 assert.equal(document.getElementById('eve_login_sequence__phone_input')?.style?.display, 'block', 'hard lookup failure must stay on phone');
 assert.equal(document.getElementById('eve_login_sequence__otp_input')?.style?.display, 'none', 'hard lookup failure must not show OTP');
 result.sequence.destroy();
+
+result = await runPhoneStep({
+    lookupResult: { ok: false, success: false, error: 'User not found' },
+    verificationResult: { ok: false, success: false, error: 'invalid_phone_verification_request' }
+});
+await waitForCondition(() => document.getElementById('eve_login_sequence__instruction')?.textContent === 'Validation du numéro impossible');
+assert.equal(result.otpRequests, 1, 'OTP request failure must still be observed once');
+assert.equal(document.getElementById('eve_login_sequence__phone_input')?.style?.display, 'block', 'OTP request failure must stay on phone');
+assert.equal(document.getElementById('eve_login_sequence__otp_input')?.style?.display, 'none', 'OTP request failure must not show OTP');
+result.sequence.destroy();
