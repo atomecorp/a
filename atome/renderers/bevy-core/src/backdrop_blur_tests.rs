@@ -27,6 +27,7 @@ fn shape_node(id: &str) -> AtomeRenderNode {
         selected: None,
         filters: None,
         transition: None,
+        procedural: None,
     }
 }
 

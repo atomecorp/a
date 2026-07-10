@@ -92,6 +92,25 @@ public class AudioUnitViewController: AUViewController, AUAudioUnitFactory, Audi
             ], nil)
         } else if command == "audio_load_clip_from_bytes" {
             self.handleAudioLoadClipFromBytes(payload: payload, completion: completion)
+        } else if command == "audio_play" || command == "audio_play_instance" {
+            guard let au = self.audioUnit as? auv3Utils else {
+                completion(["success": false], "AUv3 audio unit unavailable")
+                return
+            }
+            au.setPlayActive(true)
+            completion(["success": true], nil)
+        } else if command == "audio_stop" || command == "audio_stop_instance" {
+            guard let au = self.audioUnit as? auv3Utils else {
+                completion(["success": false], "AUv3 audio unit unavailable")
+                return
+            }
+            au.setPlayActive(false)
+            completion(["success": true], nil)
+        } else if command == "audio_destroy_clip" {
+            if let au = self.audioUnit as? auv3Utils {
+                au.setPlayActive(false)
+            }
+            completion(["success": true], nil)
         } else {
             completion(["success": false], "Unsupported native invoke command in AUv3: \(command)")
         }

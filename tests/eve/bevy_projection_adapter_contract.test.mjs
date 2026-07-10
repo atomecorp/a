@@ -70,6 +70,15 @@ const projectionFixtures = Object.freeze([
         content: { peaks: [0.2, -0.4, 1.4] },
         playbackProgress: 0.25,
         bevyTexture: texture
+    }),
+    Object.freeze({
+        id: 'procedural_sdf_registry',
+        kind: 'procedural_sdf',
+        bounds: { x: 20, y: 20, width: 320, height: 320 },
+        renderLayer: 8,
+        material: {
+            procedural: { morph: [1, 1, 0, 0], phase: 2, pulse: 0.01, time: 1.5, intensity: 0.4 }
+        }
     })
 ]);
 
@@ -124,7 +133,7 @@ test('Bevy projection maps backdrop blur scene effects to Rust payloads', () => 
 test('Default Bevy renderer adapter registry declares the currently supported kinds', () => {
     assert.deepEqual(
         BEVY_RENDERER_ADAPTER_DEFINITIONS.map((adapter) => adapter.kind),
-        ['shape', 'text', 'image', 'video', 'audio_waveform']
+        ['shape', 'text', 'image', 'video', 'audio_waveform', 'procedural_sdf']
     );
     assert.deepEqual(
         createDefaultBevyRendererAdapterRegistry().list().map((adapter) => adapter.kind),
@@ -143,7 +152,8 @@ test('Bevy renderer adapter registry keeps existing node projections identical',
         'text',
         'image',
         'video',
-        'audio_waveform'
+        'audio_waveform',
+        'procedural_sdf'
     ]);
     assert.ok(defaultPayloads.find((payload) => payload.texture)?.texture.rgba instanceof Uint8Array);
 });

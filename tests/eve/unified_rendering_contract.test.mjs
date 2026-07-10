@@ -31,6 +31,7 @@ import {
     makeRecord
 } from './unified_rendering_test_helpers.mjs';
 import { createProjectPreviewRuntime } from '../../eVe/domains/rendering/project_preview_runtime.js';
+import { resolveProjectPreviewCaptureGeometry } from '../../eVe/domains/rendering/bevy_project_preview_capture_frame.js';
 
 test('RenderAtom normalization keeps render data disposable and cacheable', () => {
     const text = normalizeRenderAtom(makeRecord('text_a', 'text', 1));
@@ -120,28 +121,49 @@ test('RenderAtom normalizes CSS-sized text records for shared Bevy projections',
 });
 
 test('project preview runtime defaults to a high-density Bevy capture source', async () => {
-    const targets = [];
-    const runtime = createProjectPreviewRuntime({
-        compositor: {
-            renderAtTime: async ({ target }) => {
-                targets.push(target);
-                return {
-                    dataUrl: 'data:image/png;base64,preview',
-                    width: target.width,
-                    height: target.height
-                };
-            }
-        },
-        projectRecordLoader: async () => []
-    });
+    const previousWindow = globalThis.window;
+    globalThis.window = { devicePixelRatio: 2 };
+    const frames = [];
+    try {
+        const runtime = createProjectPreviewRuntime({
+            compositor: {
+                renderAtTime: async (frame) => {
+                    frames.push(frame);
+                    return {
+                        dataUrl: 'data:image/png;base64,preview',
+                        width: frame.target.pixelWidth,
+                        height: frame.target.pixelHeight
+                    };
+                }
+            },
+            projectRecordLoader: async () => []
+        });
 
-    await runtime.renderProjectPreview({
-        projectId: 'preview_project',
-        records: [makeRecord('preview_image', 'image', 1)]
-    });
+        await runtime.renderProjectPreview({
+            projectId: 'preview_project',
+            records: [makeRecord('preview_image', 'image', 1)],
+            viewport: { width: 1280, height: 720 }
+        });
 
-    assert.equal(targets[0].width, 640);
-    assert.equal(targets[0].height, 400);
+        assert.equal(frames[0].target.width, 640);
+        assert.equal(frames[0].target.height, 400);
+        assert.equal(frames[0].target.devicePixelRatio, 2);
+        assert.equal(frames[0].target.pixelWidth, 1280);
+        assert.equal(frames[0].target.pixelHeight, 800);
+        assert.deepEqual(frames[0].sourceViewport, { width: 1280, height: 720 });
+        assert.deepEqual(frames[0].sourceBackground.color, [61 / 255, 3 / 255, 71 / 255, 1]);
+        assert.deepEqual(
+            resolveProjectPreviewCaptureGeometry({
+                viewport: frames[0].sourceViewport,
+                width: frames[0].target.pixelWidth,
+                height: frames[0].target.pixelHeight
+            }).size,
+            { width: 1280, height: 720, sourceWidth: 1280, sourceHeight: 720 }
+        );
+    } finally {
+        if (previousWindow === undefined) delete globalThis.window;
+        else globalThis.window = previousWindow;
+    }
 });
 
 test('Scene graph hit testing replaces per-Atome DOM routing', () => {

@@ -3,6 +3,7 @@ use bevy::{image::Image, prelude::*, text::TextBounds};
 use crate::{
     backdrop_blur::apply_scene_effects,
     background::{apply_surface_background, resize_surface_background},
+    procedural_sdf::{patch_procedural_sdf, resize_procedural_sdf},
     render_math::{
         atome_camera_projection, atome_rect_transform_with_local, color_from_rgba, depth_for_layer,
     },
@@ -151,6 +152,7 @@ pub fn apply_transform(world: &mut World, patch: AtomeTransformPatch) -> Result<
             .unwrap_or_else(default_uv_rect);
         insert_video_quad_mesh(world, entity, [width, height], uv_rect)?;
     }
+    resize_procedural_sdf(world, entity, [width, height])?;
     if let Some(mut bounds) = world.get_mut::<TextBounds>(entity) {
         *bounds = TextBounds::from(Vec2::new(width, height));
     }
@@ -326,6 +328,9 @@ pub fn apply_style(world: &mut World, patch: AtomeStylePatch) -> Result<(), Stri
         {
             video.transition = transition.normalized();
         }
+    }
+    if let Some(procedural) = patch.procedural {
+        patch_procedural_sdf(world, entity, procedural)?;
     }
     if let Some(progress) = patch.playback_progress {
         if let Some(mut current) = world.get_mut::<AtomeWaveformPlaybackProgress>(entity) {

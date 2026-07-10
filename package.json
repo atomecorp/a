@@ -145,6 +145,7 @@
     "leaflet": "^1.9.4",
     "mediasoup": "^3.13.0",
     "mediasoup-client": "^3.13.0",
+    "onnxruntime-web": "^1.27.0",
     "pino": "^9.5.0",
     "pino-pretty": "^13.0.0",
     "three": "^0.181.2",

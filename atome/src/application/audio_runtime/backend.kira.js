@@ -234,14 +234,6 @@ import {
           });
         }
         if ((mode === 'tauri' || mode === 'wasm') && bytes) {
-          if (mode === 'tauri' && isIosHostAppRuntime(window)) {
-            return rejectIosHostAppBytesLoad('load_clip_from_bytes(' + id + ')');
-          }
-          if (mode === 'tauri' && isAuv3NativeRuntime()) {
-            var auv3BytesError = new Error('[backend.kira] AUv3 native playback does not support byte-loaded clips');
-            emitError('load_clip_from_bytes(' + id + ')', auv3BytesError);
-            return Promise.reject(auv3BytesError);
-          }
           if (mode === 'wasm' && wasm && typeof wasm.audio_load_clip_from_bytes === 'function') {
             try { wasm.audio_load_clip_from_bytes(id, bytes); return true; }
             catch (e) { emitError('wasm load(' + id + ')', e); throw e; }

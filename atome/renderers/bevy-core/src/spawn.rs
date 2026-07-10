@@ -6,6 +6,7 @@ use bevy::{
 };
 
 use crate::{
+    procedural_sdf::insert_procedural_sdf,
     render_math::{atome_rect_transform_with_local, color_from_rgba, depth_for_layer},
     selection_overlay::rebuild_selection_overlay,
     shape_shadow_overlay::rebuild_shape_shadow_overlay,
@@ -292,6 +293,22 @@ pub fn spawn_node_with_texture_handle(
                     sprite,
                 ))
                 .id()
+        }
+        "procedural_sdf" => {
+            let contract = node
+                .procedural
+                .ok_or_else(|| format!("bevy_procedural_sdf_contract_required:{}", node.id))?;
+            let entity = world
+                .spawn(node_base_components(
+                    &node,
+                    width,
+                    height,
+                    surface_width,
+                    surface_height,
+                ))
+                .id();
+            insert_procedural_sdf(world, entity, [width, height], contract)?;
+            entity
         }
         other => return Err(format!("bevy_render_kind_unsupported:{other}")),
     };

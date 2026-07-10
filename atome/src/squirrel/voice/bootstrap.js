@@ -1,5 +1,4 @@
 import { createVoiceService } from './service.js';
-import { bootstrapMainHandleVoiceEntry } from './main_handle_bridge.js';
 import { bootstrapVoicePanel, shouldEnableVoicePanel } from './panel.js';
 
 const READY_PROMISE_KEY = '__SQUIRREL_VOICE_READY_PROMISE__';
@@ -191,6 +190,21 @@ export const createGlobalVoiceApi = ({
             const service = await ensureReady();
             return service.tts.speak(text, options);
         },
+        async preloadLocalTts() {
+            const service = await ensureReady();
+            return service.tts.preloadLocal();
+        },
+        subscribeTtsFrames(listener) {
+            let unsubscribe = () => { };
+            let cancelled = false;
+            ensureReady().then((service) => {
+                if (!cancelled) unsubscribe = service.tts.subscribeFrames(listener);
+            });
+            return () => {
+                cancelled = true;
+                unsubscribe();
+            };
+        },
         async stopSpeaking(sessionId, options = {}) {
             const service = await ensureReady();
             return service.tts.stop(sessionId, options);
@@ -250,11 +264,12 @@ export const bootstrapGlobalVoice = ({
     importModule = defaultImportModule
 } = {}) => {
     const api = createGlobalVoiceApi({ env, importModule });
-    bootstrapMainHandleVoiceEntry({ env, importModule });
     if (env?.document && shouldEnableVoicePanel(env)) {
         bootstrapVoicePanel({ env, voiceApi: api });
     }
-    api.ensureReady().catch(() => { });
+    api.ensureReady().catch((error) => {
+        env.console?.error?.('voice_service_preload_failed', error);
+    });
     return api;
 };
 

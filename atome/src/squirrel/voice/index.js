@@ -15,7 +15,6 @@ export {
     createGlobalVoiceApi,
     ensureVoiceBridgeModules
 } from './bootstrap.js';
-export { bootstrapMainHandleVoiceEntry } from './main_handle_bridge.js';
 export {
     createVoiceOrchestrator,
     resolveVoiceExecutionBridge,
@@ -37,3 +36,4 @@ export {
 } from './intent_schema.js';
 export { createVoiceLatencyTelemetry } from './telemetry.js';
 export { createVoiceActivityDetector } from './vad.js';
+export { createVoiceAssistantSessionController } from './assistant_session_controller.js';

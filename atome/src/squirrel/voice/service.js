@@ -20,6 +20,7 @@ import { resolveVoiceProviders } from './service_providers.js';
 import { startBrowserRecognition } from './service_browser_stt.js';
 import { startTauriRecognition } from './service_tauri_stt.js';
 import { settleTtsStop, startSpeechSynthesis } from './service_tts_runtime.js';
+import { createLocalTtsRuntime } from './local_tts_runtime.js';
 
 export { VOICE_V1_PROVIDER_DECISION, resolveVoiceProviders } from './service_providers.js';
 
@@ -55,6 +56,7 @@ export const createVoiceService = ({
         sttSessions,
         ttsSessions
     };
+    const localTts = createLocalTtsRuntime({ env });
 
     // Prefer already-registered connectors and avoid importing heavy business
     // bootstraps in headless or incomplete hosts.
@@ -104,8 +106,8 @@ export const createVoiceService = ({
                 lang: resolveResponseLocale(response, options)
             });
             await (started?.promise || Promise.resolve(started));
-        } catch (_) {
-            // Keep the orchestration result even if the reply could not be spoken.
+        } catch (error) {
+            if (options?.engine === 'local_onnx') throw error;
         }
         return response;
     };
@@ -239,6 +241,16 @@ export const createVoiceService = ({
 
     const tts = {
         async speak(text, options = {}) {
+            if (options.engine === 'local_onnx') {
+                const session = ensureSession(options);
+                sessionRuntime.startSpeaking(session.session_id, { text, voice_id: 'fr_FR-siwis-medium' });
+                const started = await localTts.speak(session.session_id, text);
+                started.promise.then(
+                    () => sessionRuntime.finishSpeaking(session.session_id, { reason: 'done' }),
+                    (error) => sessionRuntime.interrupt(session.session_id, { reason: `tts_error:${error?.message || error}` })
+                );
+                return started;
+            }
             ensureSupported('tts', providers.tts.selected);
             const session = ensureSession(options);
             if (providers.tts.selected === 'browser_speech_synthesis') {
@@ -247,11 +259,20 @@ export const createVoiceService = ({
             throw new Error(`Unsupported TTS provider bridge: ${providers.tts.selected}`);
         },
         async stop(sessionId, { reason = 'tts_stop' } = {}) {
+            if (ttsSessions.has(String(sessionId)) === false) {
+                const stopped = await localTts.stop(sessionId, reason);
+                if (stopped.stopped) {
+                    sessionRuntime.finishSpeaking(sessionId, { reason: 'interrupted' });
+                    return stopped;
+                }
+            }
             return settleTtsStop(runtimeContext, sessionId, {
                 reason,
                 interruptRuntime: true
             });
-        }
+        },
+        preloadLocal: () => localTts.preload(),
+        subscribeFrames: (listener) => localTts.subscribeFrames(listener)
     };
 
     return {

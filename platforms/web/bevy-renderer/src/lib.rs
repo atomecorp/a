@@ -266,6 +266,12 @@ fn merge_style_patch_fields(existing: &mut AtomeStylePatch, next: &AtomeStylePat
     if next.filters.is_some() {
         existing.filters = next.filters.clone();
     }
+    if next.transition.is_some() {
+        existing.transition = next.transition;
+    }
+    if next.procedural.is_some() {
+        existing.procedural = next.procedural;
+    }
 }
 
 // Coalesce per-atome style patches while they wait in the queue: applying

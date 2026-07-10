@@ -2,6 +2,7 @@ use bevy::{image::Image, mesh::Mesh, prelude::*, ui::IsDefaultUiCamera};
 
 use crate::{
     backdrop_blur::{apply_scene_effects, refresh_scene_effects},
+    procedural_sdf::ProceduralSdfPlugin,
     render_math::atome_camera_projection,
     render_ops::apply_render_op,
     selection_overlay::rebuild_selection_overlay,
@@ -29,6 +30,7 @@ impl Plugin for AtomeBevyRendererPlugin {
     fn build(&self, app: &mut App) {
         app.insert_resource(self.config.clone())
             .add_plugins(AtomeVideoExternalTexturePlugin)
+            .add_plugins(ProceduralSdfPlugin)
             .add_plugins(AtomeBevyUiPlugin)
             .init_resource::<AtomeEntityTable>()
             .init_resource::<AtomeBackdropBlurState>()

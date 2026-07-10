@@ -90,6 +90,7 @@ import { loadModulesSequentially } from '../utils/module_loader_runtime.js';
 		logPrefix: '[Application]'
 	});
 })().catch((error) => {
+    console.error('[Application] eve_module_load_failed', error);
 });
 
 // import('./examples/AI.js');

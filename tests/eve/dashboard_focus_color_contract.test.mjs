@@ -3,6 +3,7 @@ import { test } from 'vitest';
 
 import { itemsForRender } from '../../eVe/domains/dashboard/dashboard_environment.js';
 import { createDashboardFocusTransitionController } from '../../eVe/domains/dashboard/dashboard_focus_transition.js';
+import { createDashboardBevyUiScrollRuntime } from '../../eVe/domains/dashboard/dashboard_bevy_ui_scroll_runtime.js';
 import { createDashboardLayout } from '../../eVe/domains/dashboard/dashboard_layout.js';
 import { buildDashboardRecords } from '../../eVe/domains/dashboard/dashboard_records.js';
 import { DASHBOARD_VISUAL_TOKENS } from '../../eVe/domains/dashboard/dashboard_tokens.js';
@@ -315,5 +316,47 @@ test('dashboard detailed media uses the shared high-density Bevy texture contrac
     assert.equal(dashboardRecord(records, 'card_media_projects_project_a').properties.texture_scale, 2);
     assert.equal(dashboardRecord(records, 'card_media_projects_project_a').properties.media_width, 900);
     assert.equal(dashboardRecord(records, 'card_media_projects_project_a').properties.media_height, 540);
+    const projectCard = dashboardRecord(records, 'card_projects_project_a').properties;
+    const projectMedia = dashboardRecord(records, 'card_media_projects_project_a').properties;
+    assert.equal(projectMedia.width / projectMedia.height, 900 / 540);
+    assert.equal(projectMedia.left + projectMedia.width / 2, projectCard.left + projectCard.width / 2);
+    assert.equal(projectMedia.top + projectMedia.height / 2, projectCard.top + projectCard.height / 2);
+    assert.ok(projectMedia.width <= projectCard.width);
+    assert.ok(projectMedia.height <= projectCard.height);
+    assert.ok(dashboardRecord(records, 'card_title_projects_project_a').properties.text_style.min_font_size <= 7);
     assert.equal(dashboardRecord(records, 'card_media_contacts_contact_a').properties.texture_scale, 2);
+});
+
+test('wheel over an overflowing project lane scrolls projects horizontally', () => {
+    const state = {
+        active: true,
+        layout: {
+            vertical_scroll_max: 200,
+            lanes: [{
+                category: { id: 'projects' },
+                horizontal_scroll_max: 160,
+                lane_rect: { width: 100 }
+            }]
+        },
+        scrollByLane: {},
+        verticalScrollOffset: 0,
+        scrollSnapTimers: new Map(),
+        scrollAnimationFrames: new Map(),
+        verticalScrollSnapTimer: 0,
+        verticalScrollAnimationFrame: 0,
+        wheelRenderScheduled: false,
+        tokens: DASHBOARD_VISUAL_TOKENS
+    };
+    const runtime = createDashboardBevyUiScrollRuntime({
+        state,
+        render: () => null,
+        readItemsForRender: () => new Map([['projects', []]])
+    });
+
+    const result = runtime.handleWheelNode('__eve_dashboard_lane_projects', { deltaY: 40 });
+
+    assert.equal(result.axis, 'horizontal');
+    assert.equal(state.scrollByLane.projects, 40);
+    assert.equal(state.verticalScrollOffset, 0);
+    runtime.cancel();
 });

@@ -1,5 +1,6 @@
 [
   "tests/atome/src/squirrel/apis/unified/adole_api/session.current_project.test.mjs",
+  "tests/eve/assistant_session_controller.test.mjs",
   "tests/eve/atome_property_sanitizer_ownership.test.mjs",
   "tests/eve/atome_record_projection_project_id.test.mjs",
   "tests/eve/bevy_dashboard_deferred_texture_budget.test.mjs",

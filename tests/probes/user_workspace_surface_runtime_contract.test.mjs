@@ -196,6 +196,7 @@ const openedFromBevyAtome = await openWorkspaceDashboardAndMainMenu({
 });
 assert.deepEqual(openedFromBevyAtome, { ok: true, active: true, mode: 'bevy-ui' });
 assert.deepEqual(calls.map((entry) => entry.name), ['showFully', 'bevyUiOpen']);
+assert.equal(calls[1].refreshCurrentProjectPreview, true);
 
 calls.length = 0;
 window.eveDashboardBevyUiRuntime.state.active = true;

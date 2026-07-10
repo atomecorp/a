@@ -903,7 +903,33 @@ final class AppNativeAudioController: NSObject {
                     self.complete(completion, payload: ["success": true])
 
                 case "audio_load_clip_from_bytes":
-                    self.complete(completion, payload: ["success": false], error: "audio_load_clip_from_bytes is unsupported in ios_app native playback")
+                    try self.configureAudioSessionIfNeeded()
+                    let id = self.resolveString(payload, ["id"])
+                    guard !id.isEmpty else {
+                        self.complete(completion, payload: ["success": false], error: "Missing clip id")
+                        return
+                    }
+                    let numbers = payload["bytes"] as? [NSNumber] ?? []
+                    guard !numbers.isEmpty else {
+                        self.complete(completion, payload: ["success": false, "id": id], error: "Missing audio bytes")
+                        return
+                    }
+                    let data = Data(numbers.map { UInt8(truncating: $0) })
+                    let directory = FileManager.default.temporaryDirectory
+                        .appendingPathComponent("atome-transient-audio", isDirectory: true)
+                    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+                    let url = directory.appendingPathComponent("\(id).wav")
+                    try data.write(to: url, options: [.atomic])
+                    self.stopVoicesForAssetLocked(id)
+                    let clip = try self.loadClipEntry(url: url, id: id)
+                    self.clips[id] = clip
+                    self.complete(completion, payload: [
+                        "success": true,
+                        "id": id,
+                        "bytes": data.count,
+                        "sample_rate": clip.sampleRate,
+                        "duration_seconds": clip.durationSeconds
+                    ])
 
                 default:
                     self.complete(completion, payload: ["success": false], error: "Unsupported native audio command: \(normalizedCommand)")

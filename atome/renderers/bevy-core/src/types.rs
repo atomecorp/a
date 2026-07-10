@@ -151,6 +151,36 @@ impl AtomeTransition {
     }
 }
 
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq)]
+pub struct AtomeProceduralSdf {
+    pub morph: [f32; 4],
+    #[serde(default)]
+    pub phase: f32,
+    #[serde(default)]
+    pub pulse: f32,
+    #[serde(default)]
+    pub time: f32,
+    #[serde(default)]
+    pub intensity: f32,
+}
+
+impl AtomeProceduralSdf {
+    pub fn normalized(self) -> Self {
+        Self {
+            morph: [
+                finite_or(self.morph[0], 1.0).clamp(0.55, 1.45),
+                finite_or(self.morph[1], 1.0).clamp(0.55, 1.45),
+                finite_or(self.morph[2], 0.0).clamp(-1.0, 1.0),
+                finite_or(self.morph[3], 0.0).clamp(-1.0, 1.0),
+            ],
+            phase: finite_or(self.phase, 0.0).clamp(0.0, 5.0),
+            pulse: finite_or(self.pulse, 0.0).clamp(-0.06, 0.06),
+            time: finite_or(self.time, 0.0).max(0.0),
+            intensity: finite_or(self.intensity, 0.0).clamp(0.0, 1.0),
+        }
+    }
+}
+
 pub fn default_transform_scale() -> [f32; 2] {
     [1.0, 1.0]
 }
@@ -355,6 +385,8 @@ pub struct AtomeRenderNode {
     pub filters: Option<AtomeColorFilters>,
     #[serde(default)]
     pub transition: Option<AtomeTransition>,
+    #[serde(default)]
+    pub procedural: Option<AtomeProceduralSdf>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -432,6 +464,8 @@ pub struct AtomeStylePatch {
     pub filters: Option<AtomeColorFilters>,
     #[serde(default)]
     pub transition: Option<AtomeTransition>,
+    #[serde(default)]
+    pub procedural: Option<AtomeProceduralSdf>,
 }
 
 #[derive(Clone, Debug, Deserialize)]

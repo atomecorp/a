@@ -130,6 +130,73 @@ test('BevyUI main menu overlay projects the 70px menu atomically without droppin
     assert.equal(recordsById.has('__eve_bevy_ui_eve_bevy_ui_main_menu_eve_bevy_ui_main_menu_tool_atome_icon_image'), true);
 });
 
+test('BevyUI progressive overlay keeps mounted structure while adding detail records', async () => {
+    clearAllProjectScenes();
+    const dom = projectDom();
+    const host = dom.window.document.getElementById('project');
+    await renderProjectScene({
+        projectId: '__eve_dashboard_workspace__',
+        records: [],
+        host,
+        compositor: createTestCompositor()
+    });
+    const shapeRecord = (color) => ({
+        id: '__eve_dashboard_background',
+        type: 'shape',
+        properties: { left: 0, top: 0, width: 400, height: 200, color }
+    });
+    const structuralTree = {
+        id: 'dashboard_bevy_ui',
+        root: {
+            id: 'root',
+            kind: 'root',
+            style: { size: [400, 200] },
+            children: [{
+                id: '__eve_dashboard_background',
+                kind: 'panel',
+                style: { size: [400, 200] },
+                overlayRecord: shapeRecord('#ff0000')
+            }]
+        }
+    };
+    const firstIds = await projectBevyUiTreeOverlay({
+        tree: structuralTree,
+        documentRef: dom.window.document,
+        previousIds: []
+    });
+    const completeTree = {
+        ...structuralTree,
+        preserveMountedOverlayRecords: true,
+        root: {
+            ...structuralTree.root,
+            children: [...structuralTree.root.children.map((node) => ({
+                ...node,
+                overlayRecord: shapeRecord('#0000ff')
+            })), {
+                id: '__eve_dashboard_header_projects',
+                kind: 'text',
+                style: { position: [8, 8], size: [120, 24] },
+                text: 'Projects',
+                overlayRecord: {
+                    id: '__eve_dashboard_header_projects',
+                    type: 'text',
+                    properties: { left: 8, top: 8, width: 120, height: 24, text: 'Projects', color: '#ffffff' }
+                }
+            }]
+        }
+    };
+    const secondIds = await projectBevyUiTreeOverlay({
+        tree: completeTree,
+        documentRef: dom.window.document,
+        previousIds: firstIds
+    });
+    const records = new Map(getProjectSceneState('__eve_dashboard_workspace__').records.map((record) => [record.id, record]));
+
+    assert.equal(records.get('__eve_bevy_ui_dashboard_bevy_ui___eve_dashboard_background')?.properties?.color, '#ff0000');
+    assert.equal(records.get('__eve_bevy_ui_dashboard_bevy_ui___eve_dashboard_header_projects')?.properties?.text, 'Projects');
+    assert.equal(secondIds.length, 2);
+});
+
 test('BevyUI main menu overlay follows the foreground project instead of the dashboard workspace', async () => {
     clearAllProjectScenes();
     const dom = projectDom();

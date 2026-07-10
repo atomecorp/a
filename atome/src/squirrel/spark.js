@@ -321,4 +321,6 @@ const bootstrapSpark = async () => {
   });
 };
 
-bootstrapSpark().catch(() => { });
+bootstrapSpark().catch((error) => {
+  console.error('[Squirrel] bootstrap_failed', error);
+});

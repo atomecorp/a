@@ -2,6 +2,7 @@ pub mod backdrop_blur;
 pub mod background;
 pub mod components;
 pub mod plugin;
+pub mod procedural_sdf;
 pub mod render_math;
 pub mod render_ops;
 pub mod resource_ops;
@@ -26,6 +27,8 @@ pub use video_diagnostics::*;
 
 #[cfg(test)]
 mod backdrop_blur_tests;
+#[cfg(test)]
+mod procedural_sdf_tests;
 #[cfg(test)]
 mod shape_shadow_overlay_tests;
 #[cfg(test)]

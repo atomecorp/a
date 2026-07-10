@@ -28,6 +28,7 @@ fn shape_node(id: &str) -> AtomeRenderNode {
         selected: None,
         filters: None,
         transition: None,
+        procedural: None,
     }
 }
 
@@ -111,6 +112,7 @@ fn shape_shadow_uses_bevy_overlay_without_changing_logical_size() {
             playback_progress: None,
             filters: None,
             transition: None,
+            procedural: None,
         },
     )
     .unwrap();

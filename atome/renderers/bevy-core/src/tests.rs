@@ -28,6 +28,7 @@ fn shape_node(id: &str) -> AtomeRenderNode {
         selected: None,
         filters: None,
         transition: None,
+        procedural: None,
     }
 }
 
@@ -60,6 +61,7 @@ fn text_node_with_texture(id: &str) -> AtomeRenderNode {
         selected: None,
         filters: None,
         transition: None,
+        procedural: None,
     }
 }
 
@@ -175,6 +177,7 @@ fn style_opacity_patch_updates_shape_sprite_without_cumulative_alpha() {
                 playback_progress: None,
                 filters: None,
                 transition: None,
+                procedural: None,
             },
         )
         .unwrap();
@@ -212,6 +215,7 @@ fn text_texture_spawn_and_opacity_patch_update_sprite_alpha() {
             playback_progress: None,
             filters: None,
             transition: None,
+            procedural: None,
         },
     )
     .unwrap();
@@ -249,6 +253,7 @@ fn text_color_spawn_and_opacity_patch_update_text_alpha() {
             playback_progress: None,
             filters: None,
             transition: None,
+            procedural: None,
         },
     )
     .unwrap();
@@ -296,6 +301,7 @@ fn shape_shadow_overlay_follows_owner_opacity() {
             playback_progress: None,
             filters: None,
             transition: None,
+            procedural: None,
         },
     )
     .unwrap();
@@ -386,8 +392,14 @@ fn workspace_dashboard_layers_keep_text_above_cards() {
     let dashboard_card_layer = 600 + 804;
     let dashboard_text_layer = 600 + 807;
 
-    assert_eq!(depth_for_layer(dashboard_card_layer), dashboard_card_layer as f32);
-    assert_eq!(depth_for_layer(dashboard_text_layer), dashboard_text_layer as f32);
+    assert_eq!(
+        depth_for_layer(dashboard_card_layer),
+        dashboard_card_layer as f32
+    );
+    assert_eq!(
+        depth_for_layer(dashboard_text_layer),
+        dashboard_text_layer as f32
+    );
     assert!(depth_for_layer(dashboard_text_layer) > depth_for_layer(dashboard_card_layer));
 }
 
@@ -551,6 +563,7 @@ fn selected_nodes_create_overlay_from_configured_visual_style() {
             playback_progress: None,
             filters: None,
             transition: None,
+            procedural: None,
         },
     )
     .unwrap();
@@ -615,6 +628,7 @@ fn audio_waveform_progress_spawns_and_moves_bevy_playhead_overlay() {
             selected: None,
             filters: None,
             transition: None,
+            procedural: None,
         },
     )
     .unwrap();
@@ -640,6 +654,7 @@ fn audio_waveform_progress_spawns_and_moves_bevy_playhead_overlay() {
             playback_progress: Some(Some(0.75)),
             filters: None,
             transition: None,
+            procedural: None,
         },
     )
     .unwrap();
@@ -665,6 +680,7 @@ fn audio_waveform_progress_spawns_and_moves_bevy_playhead_overlay() {
             playback_progress: Some(None),
             filters: None,
             transition: None,
+            procedural: None,
         },
     )
     .unwrap();

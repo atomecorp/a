@@ -78,6 +78,8 @@ tests/eve/*
 !tests/eve/project_drop_tool_instance_contract.test.mjs
 !tests/eve/project_scene_gesture_performance.test.mjs
 !tests/eve/bevy_projection_adapter_contract.test.mjs
+!tests/eve/bevy_ui_main_menu_contract.test.mjs
+!tests/eve/assistant_session_controller.test.mjs
 !tests/eve/bevy_project_renderer_guards.test.mjs
 !tests/eve/bevy_panel_contract.test.mjs
 !tests/eve/bevy_ui_main_menu_overlay_atomic.test.mjs

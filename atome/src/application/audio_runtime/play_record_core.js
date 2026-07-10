@@ -256,6 +256,40 @@ export class PlayRecordCore {
         return { ok: true, assetId, media, result };
     }
 
+    async loadTransientAsset(input = {}) {
+        const assetId = safeString(input.assetId || input.asset_id || input.id);
+        const bytes = input.bytes;
+        if (!assetId) throw new Error('play_record_asset_id_required');
+        if (!(bytes instanceof Uint8Array) || bytes.byteLength === 0) {
+            throw new Error('play_record_transient_bytes_required');
+        }
+        this.dispatchIntent('loadTransientAsset', { assetId, source_layer: input.source_layer });
+        await this.init();
+        const runtime = this.runtime();
+        if (runtime.playback === 'tauri_native_kira' || runtime.playback === 'ios_native_kira') {
+            const result = await this.invoke()('audio_load_clip_from_bytes', {
+                id: assetId,
+                bytes: Array.from(bytes)
+            });
+            if (result?.success === false) {
+                throw new Error(safeString(result?.error) || 'play_record_native_transient_load_failed');
+            }
+            this.assetCache.set(assetId, `transient:${bytes.byteLength}`);
+            return { ok: true, assetId, result };
+        }
+        const facade = this.facade();
+        if (typeof facade.__call_backend_method !== 'function') {
+            throw new Error('play_record_facade_backend_call_unavailable');
+        }
+        const result = await Promise.resolve(facade.__call_backend_method('create_clip', {
+            id: assetId,
+            bytes
+        }));
+        if (result === false) throw new Error('play_record_facade_transient_load_failed');
+        this.assetCache.set(assetId, `transient:${bytes.byteLength}`);
+        return { ok: true, assetId, result };
+    }
+
     async playAsset(input = {}) {
         const id = safeString(
             typeof input === 'string'
@@ -414,6 +448,24 @@ export class PlayRecordCore {
         if (typeof facade.__call_backend_method === 'function') {
             await Promise.resolve(facade.__call_backend_method('destroy_clip', { id }));
         }
+        return { ok: true };
+    }
+
+    async releaseTransientAsset(assetId = '') {
+        const id = safeString(typeof assetId === 'string' ? assetId : assetId?.assetId || assetId?.asset_id || assetId?.id);
+        if (!id) return { ok: true, skipped: true };
+        this.dispatchIntent('releaseTransientAsset', { assetId: id }, { targetId: id });
+        await this.init();
+        this.assetCache.delete(id);
+        const runtime = this.runtime();
+        if (runtime.playback === 'tauri_native_kira' || runtime.playback === 'ios_native_kira') {
+            return { ok: true, result: await this.invoke()('audio_destroy_clip', { id }) };
+        }
+        const facade = this.facade();
+        if (typeof facade.__call_backend_method !== 'function') {
+            throw new Error('play_record_facade_backend_call_unavailable');
+        }
+        await Promise.resolve(facade.__call_backend_method('destroy_clip', { id }));
         return { ok: true };
     }
 

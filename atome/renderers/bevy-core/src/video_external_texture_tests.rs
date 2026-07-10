@@ -37,6 +37,7 @@ fn video_node(id: &str) -> AtomeRenderNode {
         selected: None,
         filters: None,
         transition: None,
+        procedural: None,
     }
 }
 
@@ -341,6 +342,7 @@ fn video_style_patch_updates_external_texture_opacity() {
             playback_progress: None,
             filters: None,
             transition: None,
+            procedural: None,
         },
     )
     .unwrap();
@@ -364,6 +366,7 @@ fn video_style_patch_updates_external_texture_opacity() {
             playback_progress: None,
             filters: None,
             transition: None,
+            procedural: None,
         },
     )
     .unwrap();
@@ -479,6 +482,7 @@ fn video_style_patch_updates_color_filters() {
                 ..AtomeColorFilters::identity()
             }),
             transition: None,
+            procedural: None,
         },
     )
     .unwrap();
@@ -554,6 +558,7 @@ fn video_node_and_style_carry_normalized_transition() {
                 role: 1.0,
                 softness: 0.0,
             }),
+            procedural: None,
         },
     )
     .unwrap();

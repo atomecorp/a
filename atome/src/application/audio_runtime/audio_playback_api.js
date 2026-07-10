@@ -12,8 +12,16 @@ export class AudioPlaybackAPI {
         return this.core.loadAsset(input);
     }
 
+    loadTransientAsset(input = {}) {
+        return this.core.loadTransientAsset(input);
+    }
+
     unloadAsset(input = {}) {
         return this.core.destroyAsset(input);
+    }
+
+    releaseTransientAsset(input = {}) {
+        return this.core.releaseTransientAsset(input);
     }
 
     prepareAsset(input = {}) {

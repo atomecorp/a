@@ -31,6 +31,7 @@ fn textured_image_node(id: &str) -> AtomeRenderNode {
         selected: None,
         filters: None,
         transition: None,
+        procedural: None,
     }
 }
 
@@ -75,6 +76,7 @@ fn textured_image_opacity_patch_keeps_white_sprite_modulation() {
             playback_progress: None,
             filters: None,
             transition: None,
+            procedural: None,
         },
     )
     .unwrap();
