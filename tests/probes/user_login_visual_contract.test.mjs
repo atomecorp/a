@@ -357,6 +357,113 @@ assert.equal(document.getElementById('eve_login_sequence__credentials')?.style?.
 assert.equal(document.getElementById('eve_login_sequence__choice')?.style?.display, 'flex', 'empty password logo click must return to the first login choice');
 emptyPasswordSequence.destroy();
 
+const immediateAnimate = window.Element.prototype.animate;
+const pendingReentryAnimations = [];
+const pendingReentryAnimationEntries = [];
+window.Element.prototype.animate = function animate(frames, options) {
+    const isChoiceExit = this.id === 'eve_login_sequence__choice'
+        && options?.duration === ANIMATION_MS.enterCredentials
+        && frames?.at?.(-1)?.opacity === 0;
+    if (options?.duration !== ANIMATION_MS.returnHome && !isChoiceExit) {
+        return immediateAnimate.call(this, frames, options);
+    }
+    const entry = { element: this, frames, options };
+    entry.cancelled = false;
+    capturedAnimations.push(entry);
+    pendingReentryAnimationEntries.push(entry);
+    let finishAnimation = () => {};
+    const finished = new Promise((resolve) => {
+        finishAnimation = resolve;
+    });
+    pendingReentryAnimations.push(finishAnimation);
+    return {
+        cancel() {
+            entry.cancelled = true;
+            finishAnimation();
+        },
+        finished
+    };
+};
+try {
+    const finishPendingReentryAnimations = async () => {
+        pendingReentryAnimations.splice(0).forEach((finishAnimation) => finishAnimation());
+        await new Promise((resolve) => setTimeout(resolve, 0));
+    };
+    const assertReopenedPhoneStep = (context, typedPhone) => {
+        const reentryCredentials = document.getElementById('eve_login_sequence__credentials');
+        const reentryPhoneInput = document.getElementById('eve_login_sequence__phone_input');
+        const reentryCaret = document.getElementById('eve_login_sequence__typed_caret');
+        const reentryTypedValue = document.getElementById('eve_login_sequence__typed_value');
+        const reentryPasswordField = document.getElementById('eve_login_sequence__password_field');
+        const reentryOtpInput = document.getElementById('eve_login_sequence__otp_input');
+        const reentryPasswordInput = document.getElementById('eve_login_sequence__password_field__input');
+        assert.equal(reentryCredentials?.style?.display, 'block', `${context}: late animations must not hide the reopened credential surface`);
+        assert.equal(reentryPhoneInput?.disabled, false, `${context}: late animations must not disable the reopened phone input`);
+        assert.deepEqual({
+            phone: reentryPhoneInput?.style?.display,
+            otp: reentryOtpInput?.style?.display,
+            password: reentryPasswordInput?.style?.display
+        }, {
+            phone: 'block',
+            otp: 'none',
+            password: 'none'
+        }, `${context}: reopening must restore the phone step exclusively`);
+        assert.equal(reentryPhoneInput?.style?.pointerEvents, 'auto', `${context}: reopened phone input must remain the native hit target`);
+        assert.ok(Number(reentryPhoneInput?.style?.zIndex) > Number(reentryPasswordField?.style?.zIndex), `${context}: reopened phone input must stay above the inactive password wrapper`);
+        assert.equal(reentryPasswordField?.style?.pointerEvents, 'none', `${context}: inactive password wrapper must not intercept phone input taps`);
+        assert.equal(reentryCaret?.style?.opacity, '1', `${context}: reopened mirrored caret must stay visible`);
+        reentryPhoneInput.value = typedPhone;
+        dispatchInput(reentryPhoneInput);
+        assert.equal(reentryTypedValue?.textContent, typedPhone, `${context}: reopened phone input must keep updating the mirrored text`);
+    };
+    const reentrySequence = createUserLoginSequence({
+        onSubmit: async () => ({ ok: true }),
+        onWithoutAccount: async () => ({ ok: true })
+    });
+    reentrySequence.open();
+    await clickButton(document.getElementById('eve_login_sequence__choice_authenticate'));
+    assert.equal(document.getElementById('eve_login_sequence__phone_input')?.style?.display, 'block', 'reentry regression must start on the phone step');
+    await clickButton(document.getElementById('eve_login_sequence__persistent_logo'));
+    await waitForCondition(() => document.getElementById('eve_login_sequence__choice')?.style?.display === 'flex');
+    assert.equal(document.getElementById('eve_login_sequence__credentials')?.style?.pointerEvents, 'none', 'returning credential surface must let the visible choice receive the next click');
+    assert.equal(document.getElementById('eve_login_sequence__phone_input')?.style?.pointerEvents, 'none', 'returning phone input must not intercept the visible choice');
+    await clickButton(document.getElementById('eve_login_sequence__choice_authenticate'));
+    await waitForCondition(() => document.getElementById('eve_login_sequence__phone_input')?.style?.display === 'block');
+    const cancelledSurfaceReturn = pendingReentryAnimationEntries.find((entry) => entry.element?.id === 'eve_login_sequence__credentials');
+    assert.equal(cancelledSurfaceReturn?.cancelled, true, 'reopening credentials must cancel the stale surface opacity animation');
+    await finishPendingReentryAnimations();
+    assertReopenedPhoneStep('empty phone return and reentry', '0600000099');
+
+    const passwordReentryPhone = document.getElementById('eve_login_sequence__phone_input');
+    dispatchEnter(passwordReentryPhone);
+    assert.equal(await waitForCondition(() => (
+        document.getElementById('eve_login_sequence__otp_input')?.style?.display === 'block'
+        && document.activeElement?.id === 'eve_login_sequence__otp_input'
+    )), true, 'password reentry regression must reach an interactive OTP step');
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const passwordReentryOtp = document.getElementById('eve_login_sequence__otp_input');
+    passwordReentryOtp.value = '5273';
+    dispatchInput(passwordReentryOtp);
+    dispatchEnter(passwordReentryOtp);
+    assert.equal(await waitForCondition(() => (
+        document.getElementById('eve_login_sequence__password_field__input')?.style?.display === 'block'
+        && document.activeElement?.id === 'eve_login_sequence__password_field__input'
+    )), true, 'password reentry regression must reach an interactive password step');
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.equal(document.getElementById('eve_login_sequence__password_field__input')?.value, '', 'password reentry regression must start with an empty password input');
+    await new Promise((resolve) => setTimeout(resolve, 380));
+    await clickButton(document.getElementById('eve_login_sequence__persistent_logo'));
+    await waitForCondition(() => document.getElementById('eve_login_sequence__choice')?.style?.display === 'flex');
+    await clickButton(document.getElementById('eve_login_sequence__choice_authenticate'));
+    await waitForCondition(() => document.getElementById('eve_login_sequence__phone_input')?.style?.display === 'block');
+    await finishPendingReentryAnimations();
+    assertReopenedPhoneStep('empty password return and reentry', '0600000088');
+    reentrySequence.destroy();
+} finally {
+    window.Element.prototype.animate = immediateAnimate;
+    pendingReentryAnimations.splice(0).forEach((finishAnimation) => finishAnimation());
+}
+
 let invalidPayload = null;
 let invalidAuthenticatingSnapshot = null;
 let invalidAuthenticatedCallbackAvailable = false;

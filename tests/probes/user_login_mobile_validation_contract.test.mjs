@@ -84,8 +84,18 @@ const fillPhone = (value = '0600000000') => {
     dispatchInput(input);
     return input;
 };
+const assertNoAutoSelectOnFocusOrClick = (input, context) => {
+    let selectCount = 0;
+    input.select = () => { selectCount += 1; };
+    input.dispatchEvent(new window.FocusEvent('focus', { bubbles: true }));
+    input.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+    assert.equal(selectCount, 0, `${context}: login input focus/click must not call select on iOS`);
+};
 
 await createSequenceAtPhoneStep();
+assertNoAutoSelectOnFocusOrClick(document.getElementById('eve_login_sequence__phone_input'), 'phone input');
+assert.equal(document.getElementById('eve_login_sequence__phone_input')?.style?.pointerEvents, 'auto', 'phone step must keep the native phone input hit-testable');
+assert.equal(document.getElementById('eve_login_sequence__password_field')?.style?.pointerEvents, 'none', 'phone step must not let the password wrapper intercept native phone input taps');
 dispatchPointerUp(document.getElementById('eve_login_sequence__persistent_logo'));
 await waitForCondition(() => (
     document.getElementById('eve_login_sequence__choice')?.style?.display === 'flex'
@@ -104,6 +114,7 @@ await createSequenceAtPhoneStep({ onSubmit: async () => { emptyPasswordSubmitted
 fillPhone('0600000002');
 dispatchPointerUp(document.getElementById('eve_login_sequence__persistent_logo'));
 await waitForCondition(() => document.getElementById('eve_login_sequence__password_field__input')?.style?.display === 'block');
+assertNoAutoSelectOnFocusOrClick(document.getElementById('eve_login_sequence__password_field__input'), 'password input');
 await waitGestureBoundary();
 dispatchPointerUp(document.getElementById('eve_login_sequence__persistent_logo'));
 await waitForCondition(() => (
@@ -133,6 +144,15 @@ dispatchPointerUp(document.getElementById('eve_login_sequence__persistent_logo')
 await waitForCondition(() => document.getElementById('eve_login_sequence__password_field__input')?.style?.display === 'block');
 await waitGestureBoundary();
 const passwordInput = document.getElementById('eve_login_sequence__password_field__input');
+const passwordField = document.getElementById('eve_login_sequence__password_field');
+assert.equal(passwordField?.style?.pointerEvents, 'auto', 'password wrapper must keep native iOS input hit-testing enabled');
+assert.equal(passwordInput?.style?.pointerEvents, 'auto', 'password input must be the native touch target on iOS');
+passwordInput.blur();
+dispatchPointerDown(passwordInput);
+passwordInput.focus();
+assert.equal(document.activeElement?.id, passwordInput.id, 'direct password input pointerdown must keep native focus');
+dispatchPointerUp(passwordInput);
+assert.equal(document.activeElement?.id, passwordInput.id, 'direct password input pointerup must not blur');
 passwordInput.blur();
 dispatchPointerDown(document.getElementById('eve_login_sequence__center'));
 assert.equal(document.activeElement?.id, passwordInput.id, 'password surface pointerdown must focus the password input');
@@ -149,6 +169,16 @@ const enterPhoneInput = fillPhone('0600000004');
 dispatchKey(enterPhoneInput, 'Enter');
 await waitForCondition(() => document.getElementById('eve_login_sequence__password_field__input')?.style?.display === 'block');
 assert.equal(document.getElementById('eve_login_sequence__password_field__input')?.style?.display, 'block', 'Enter must validate the active phone input');
+
+await createSequenceAtPhoneStep({
+    lookupPhone: async (phone) => ({ ok: true, success: false, missing: true, phone })
+});
+fillPhone('0600000008');
+dispatchPointerUp(document.getElementById('eve_login_sequence__persistent_logo'));
+await waitForCondition(() => document.getElementById('eve_login_sequence__otp_input')?.style?.display === 'block');
+assertNoAutoSelectOnFocusOrClick(document.getElementById('eve_login_sequence__otp_input'), 'otp input');
+assert.equal(document.getElementById('eve_login_sequence__otp_input')?.style?.pointerEvents, 'auto', 'OTP step must keep the native OTP input hit-testable');
+assert.equal(document.getElementById('eve_login_sequence__password_field')?.style?.pointerEvents, 'none', 'OTP step must not let the password wrapper intercept native OTP input taps');
 
 await createSequenceAtPhoneStep();
 const numpadPhoneInput = fillPhone('0600000005');
