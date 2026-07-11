@@ -16,6 +16,10 @@ fn contract() -> AtomeProceduralSdf {
         pulse: 0.03,
         time: 1.25,
         intensity: 0.6,
+        glow_reveal: 1.0,
+        core_reveal: 1.0,
+        shell_reveal: 1.0,
+        disappearing: 0.0,
     }
 }
 

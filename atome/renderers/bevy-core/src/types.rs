@@ -162,7 +162,17 @@ pub struct AtomeProceduralSdf {
     pub time: f32,
     #[serde(default)]
     pub intensity: f32,
+    #[serde(default = "default_procedural_reveal")]
+    pub glow_reveal: f32,
+    #[serde(default = "default_procedural_reveal")]
+    pub core_reveal: f32,
+    #[serde(default = "default_procedural_reveal")]
+    pub shell_reveal: f32,
+    #[serde(default)]
+    pub disappearing: f32,
 }
+
+fn default_procedural_reveal() -> f32 { 1.0 }
 
 impl AtomeProceduralSdf {
     pub fn normalized(self) -> Self {
@@ -177,6 +187,10 @@ impl AtomeProceduralSdf {
             pulse: finite_or(self.pulse, 0.0).clamp(-0.06, 0.06),
             time: finite_or(self.time, 0.0).max(0.0),
             intensity: finite_or(self.intensity, 0.0).clamp(0.0, 1.0),
+            glow_reveal: finite_or(self.glow_reveal, 1.0).clamp(0.0, 1.0),
+            core_reveal: finite_or(self.core_reveal, 1.0).clamp(0.0, 1.0),
+            shell_reveal: finite_or(self.shell_reveal, 1.0).clamp(0.0, 1.015),
+            disappearing: finite_or(self.disappearing, 0.0).clamp(0.0, 1.0),
         }
     }
 }

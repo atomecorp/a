@@ -19,6 +19,7 @@ const PROCEDURAL_SDF_SHADER_HANDLE: Handle<Shader> =
 pub struct ProceduralSdfUniform {
     pub morph: Vec4,
     pub dynamics: Vec4,
+    pub transition: Vec4,
 }
 
 #[derive(Asset, TypePath, AsBindGroup, Debug, Clone)]
@@ -65,6 +66,12 @@ fn material_from_contract(contract: AtomeProceduralSdf) -> ProceduralSdfMaterial
                 normalized.pulse,
                 normalized.time,
                 normalized.intensity,
+            ),
+            transition: Vec4::new(
+                normalized.glow_reveal,
+                normalized.core_reveal,
+                normalized.shell_reveal,
+                normalized.disappearing,
             ),
         },
     }

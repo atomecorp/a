@@ -572,10 +572,12 @@ Design rule: this surface must remain minimal and must not reintroduce the legac
 Primary sources: `eVe/voice/assistant/assistant_visual_contract.js`, `eVe/voice/assistant/assistant_scene.js`, and `atome/renderers/bevy-core/src/assets/shaders/procedural_sdf.wgsl`.
 
 - The assistant is one centered `procedural_sdf` quad on the workspace `panel` band, after project content and before `mainMenu`; it never creates a visible DOM node, renderer, or second canvas.
+- A compositor-owned full-surface shape immediately behind that quad applies at most 8% neutral dimming from the same visibility progression; it is ephemeral and removed with the assistant records.
 - Its local panel order is 400 (normalized workspace order 1500), immediately above the normalized Dashboard token range and below panel/menu surfaces while the Atome tool remains available. Idle shell wobble, core drift and breathing run continuously; PCM/vowel frames add bounded speech pulse and morphing.
 - Size is `clamp(240px, 38vmin, 420px)`. The outer cyan/rose translucent shell keeps its silhouette while breathing over 3.2 seconds at ±1.5%; real PCM RMS adds at most ±4%.
 - The inner core owns neutral/A/E/I/O/U deterministic shapes. Runtime interpolation uses 45 ms attack and 90 ms release. Listening, processing, speaking, and error states are shader tints rather than extra UI surfaces.
 - The assistant record carries a localized accessibility status label; an unavailable local model/runtime exposes the localized error state and never switches to browser speech synthesis.
+- Appearance prewarms invisibly, then reveals the central glow over 0–140 ms, inflates the core over 70–330 ms, and brings the shell from 92% to 100% over 150–420 ms. A 180 ms settle is bounded to 1.5%; disappearance freezes each current reveal and contracts it over 320 ms. The shader never switches hue variants during these transitions, preventing color flicker while preserving the cyan/rose identity.
 
 ## Validation Expectations
 

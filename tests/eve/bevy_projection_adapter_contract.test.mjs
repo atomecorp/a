@@ -77,7 +77,10 @@ const projectionFixtures = Object.freeze([
         bounds: { x: 20, y: 20, width: 320, height: 320 },
         renderLayer: 8,
         material: {
-            procedural: { morph: [1, 1, 0, 0], phase: 2, pulse: 0.01, time: 1.5, intensity: 0.4 }
+            procedural: {
+                morph: [1, 1, 0, 0], phase: 2, pulse: 0.01, time: 1.5, intensity: 0.4,
+                glow_reveal: 1, core_reveal: 0.8, shell_reveal: 0.75, disappearing: 1
+            }
         }
     })
 ]);

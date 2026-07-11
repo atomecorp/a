@@ -7,8 +7,11 @@ import { encodeFrenchPhonemes, normalizeFrenchTtsText } from '../../atome/src/sq
 import { analyzePcmWindow, pcm16WavBytes, vowelFamilyForPhoneme } from '../../atome/src/squirrel/voice/tts_pcm_analysis.js';
 import {
     assistantMorphForVowel,
+    assistantRevealAt,
     assistantSizeForSurface,
+    assistantTransitionAt,
     assistantUniforms,
+    buildAssistantDimRecord,
     buildAssistantVisualRecord
 } from '../../eVe/voice/assistant/assistant_visual_contract.js';
 import { createEveAssistantRuntime } from '../../eVe/voice/assistant/assistant_runtime.js';
@@ -127,6 +130,44 @@ test('assistant visual contract clamps size and defines all deterministic vowel 
     assert.notDeepEqual(idleStart.morph, idleLater.morph);
 });
 
+test('assistant visibility transitions are continuous at every timing boundary', () => {
+    assert.equal(assistantTransitionAt({ transition: 'appearing', elapsedMs: 0 }), 0);
+    assert.ok(assistantTransitionAt({ transition: 'appearing', elapsedMs: 419 }) < 1);
+    assert.equal(assistantTransitionAt({ transition: 'appearing', elapsedMs: 420 }), 1);
+    assert.ok(assistantTransitionAt({ transition: 'settling', elapsedMs: 90 }) <= 1.015);
+    assert.equal(assistantTransitionAt({ transition: 'settling', elapsedMs: 180 }), 1);
+    assert.ok(assistantTransitionAt({ transition: 'disappearing', elapsedMs: 319 }) > 0);
+    assert.equal(assistantTransitionAt({ transition: 'disappearing', elapsedMs: 320 }), 0);
+});
+
+test('assistant reveal choreography orders glow, core and shell at exact boundaries', () => {
+    assert.deepEqual(assistantRevealAt({ transition: 'appearing', elapsedMs: 0 }), { glow: 0, core: 0, shell: 0 });
+    assert.ok(assistantRevealAt({ transition: 'appearing', elapsedMs: 70 }).glow > 0);
+    assert.equal(assistantRevealAt({ transition: 'appearing', elapsedMs: 70 }).core, 0);
+    assert.equal(assistantRevealAt({ transition: 'appearing', elapsedMs: 140 }).glow, 1);
+    assert.equal(assistantRevealAt({ transition: 'appearing', elapsedMs: 140 }).shell, 0);
+    assert.ok(assistantRevealAt({ transition: 'appearing', elapsedMs: 150 }).core > 0);
+    assert.equal(assistantRevealAt({ transition: 'appearing', elapsedMs: 150 }).shell, 0);
+    assert.equal(assistantRevealAt({ transition: 'appearing', elapsedMs: 330 }).core, 1);
+    assert.ok(assistantRevealAt({ transition: 'appearing', elapsedMs: 419 }).shell < 1);
+    assert.deepEqual(assistantRevealAt({ transition: 'appearing', elapsedMs: 420 }), { glow: 1, core: 1, shell: 1 });
+});
+
+test('assistant global transition boundaries map 0, 419, 420, 599, 600 and 920 ms deterministically', () => {
+    const at = (elapsedMs) => {
+        if (elapsedMs < 420) return assistantTransitionAt({ transition: 'appearing', elapsedMs });
+        if (elapsedMs < 600) return assistantTransitionAt({ transition: 'settling', elapsedMs: elapsedMs - 420 });
+        if (elapsedMs < 920) return assistantTransitionAt({ transition: 'disappearing', elapsedMs: elapsedMs - 600 });
+        return 0;
+    };
+    assert.equal(at(0), 0);
+    assert.ok(at(419) < 1);
+    assert.equal(at(420), 1);
+    assert.ok(at(599) > 1);
+    assert.equal(at(600), 1);
+    assert.equal(at(920), 0);
+});
+
 test('assistant visual stays above Dashboard and remains ephemeral across workspace reconciliations', () => {
     const record = buildAssistantVisualRecord({ surfaceSize: { width: 1280, height: 720 }, phase: 'listening' });
     const normalized = normalizeWorkspaceSceneRecord(record);
@@ -134,6 +175,11 @@ test('assistant visual stays above Dashboard and remains ephemeral across worksp
     assert.ok(normalized.properties.renderLayer > 1420);
     assert.ok(normalized.properties.renderLayer < 2350);
     assert.equal(isEphemeralProjectSceneRecord(record), true);
+    const dim = buildAssistantDimRecord({ surfaceSize: { width: 1280, height: 720 }, visibility: 0.5 });
+    assert.equal(dim.properties.width, 1280);
+    assert.equal(dim.properties.height, 720);
+    assert.equal(dim.properties.opacity, 0.04);
+    assert.ok(normalizeWorkspaceSceneRecord(dim).properties.renderLayer < normalized.properties.renderLayer);
 });
 
 test('assistant public API owns modal lifecycle, trace command, render teardown and clean reopen', async () => {
@@ -142,6 +188,16 @@ test('assistant public API owns modal lifecycle, trace command, render teardown 
     const interactions = [];
     const commands = [];
     let sessionSequence = 0;
+    let clock = 0;
+    let frameCallback = null;
+    const advance = async (milliseconds) => {
+        clock += milliseconds;
+        const callback = frameCallback;
+        frameCallback = null;
+        callback?.();
+        await Promise.resolve();
+        await Promise.resolve();
+    };
     const pendingListen = () => new Promise(() => { });
     const voiceApi = {
         ensureReady: async () => true,
@@ -158,12 +214,13 @@ test('assistant public API owns modal lifecycle, trace command, render teardown 
     const runtime = createEveAssistantRuntime({
         env: {
             addEventListener: (type, listener) => { listeners[type] = listener; },
-            requestAnimationFrame: () => 1,
+            requestAnimationFrame: (callback) => { frameCallback = callback; return 1; },
             cancelAnimationFrame: () => { },
-            performance: { now: () => 1000 }
+            performance: { now: () => clock }
         },
         voiceApiResolver: () => voiceApi,
-        requestFrame: () => 1,
+        now: () => clock,
+        requestFrame: (callback) => { frameCallback = callback; return 1; },
         cancelFrame: () => { },
         renderScene: async (payload) => renders.push(payload),
         clearScene: async () => renders.push({ clear: true }),
@@ -173,25 +230,186 @@ test('assistant public API owns modal lifecycle, trace command, render teardown 
     });
     await runtime.toggle({ source: 'bevy_ui_main_menu_atome' });
     assert.equal(runtime.getState().active, true);
+    assert.equal(runtime.getState().transition, 'appearing');
+    await advance(419);
+    assert.equal(runtime.getState().sessionId, null);
+    await advance(1);
     assert.equal(runtime.getState().sessionId, 'session-1');
     assert.equal(commands[0].command, 'voice.assistant.toggle');
     assert.equal(commands[0].source, 'bevy_ui_main_menu_atome');
     assert.equal(interactions[0][0], 'project');
     assert.equal(renders[0].phase, 'opening');
-    await runtime.toggle({ source: 'bevy_ui_main_menu_atome' });
+    const firstClose = runtime.toggle({ source: 'bevy_ui_main_menu_atome' });
+    const duplicateClose = runtime.close({ source: 'bevy_ui_main_menu_atome' });
+    await advance(320);
+    await Promise.all([firstClose, duplicateClose]);
     assert.equal(runtime.getState().phase, 'closed');
     assert.deepEqual(renders.at(-1), { clear: true });
     await runtime.open();
+    await advance(420);
     assert.equal(runtime.getState().sessionId, 'session-2');
     listeners.keydown({ key: 'Escape' });
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await advance(320);
     assert.equal(runtime.getState().phase, 'closed');
+});
+
+test('closing during appearance removes the scene without starting a late greeting', async () => {
+    let clock = 0;
+    let frameCallback = null;
+    let greetingCount = 0;
+    const voiceApi = {
+        subscribeTtsFrames: () => () => { },
+        subscribe: () => () => { },
+        ensureReady: async () => true,
+        createSession: async () => ({ session_id: 'cancelled-opening' }),
+        speak: async () => { greetingCount += 1; return { promise: Promise.resolve({}) }; },
+        startListening: async () => ({ promise: new Promise(() => { }) }),
+        executeUtterance: async () => ({ ok: true }),
+        cancelListening: async () => ({ ok: true }),
+        stopSpeaking: async () => ({ ok: true }),
+        interrupt: async () => ({ ok: true })
+    };
+    const runtime = createEveAssistantRuntime({
+        env: { addEventListener: () => { } },
+        voiceApiResolver: () => voiceApi,
+        requestFrame: (callback) => { frameCallback = callback; return 1; },
+        cancelFrame: () => { },
+        now: () => clock,
+        renderScene: async () => ({ ok: true }),
+        clearScene: async () => ({ ok: true }),
+        setInteractionLayer: () => { },
+        commandBus: { append: () => { } },
+        translate: () => 'Salut, que veux-tu ?'
+    });
+    await runtime.open();
+    clock = 200;
+    frameCallback?.();
+    const close = runtime.close();
+    clock = 520;
+    frameCallback?.();
+    await close;
+    assert.equal(greetingCount, 0);
+    assert.deepEqual(runtime.getState(), {
+        active: false,
+        error: '',
+        phase: 'closed',
+        sessionId: null,
+        transition: 'hidden'
+    });
+});
+
+test('a delayed native voice teardown cannot keep the invisible assistant active or block reopening', async () => {
+    let clock = 0;
+    let frameCallback = null;
+    let sessionSequence = 0;
+    const nativeStop = deferred();
+    const voiceApi = {
+        subscribeTtsFrames: () => () => { },
+        subscribe: () => () => { },
+        ensureReady: async () => true,
+        createSession: async () => ({ session_id: `native-session-${++sessionSequence}` }),
+        speak: async () => ({ promise: Promise.resolve({}) }),
+        startListening: async () => ({ promise: new Promise(() => { }) }),
+        executeUtterance: async () => ({ ok: true }),
+        cancelListening: async () => ({ ok: true }),
+        stopSpeaking: async () => nativeStop.promise,
+        interrupt: async () => ({ ok: true })
+    };
+    const runtime = createEveAssistantRuntime({
+        env: { addEventListener: () => { } },
+        voiceApiResolver: () => voiceApi,
+        requestFrame: (callback) => { frameCallback = callback; return 1; },
+        cancelFrame: () => { },
+        now: () => clock,
+        renderScene: async () => ({ ok: true }),
+        clearScene: async () => ({ ok: true }),
+        setInteractionLayer: () => { },
+        commandBus: { append: () => { } },
+        translate: () => 'Salut, que veux-tu ?'
+    });
+    await runtime.open();
+    clock = 420;
+    frameCallback?.();
+    await Promise.resolve();
+    const firstClose = runtime.close();
+    clock = 740;
+    frameCallback?.();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.equal(runtime.getState().active, false);
+    assert.equal(runtime.getState().transition, 'hidden');
+    await runtime.open();
+    clock = 1160;
+    frameCallback?.();
+    await Promise.resolve();
+    assert.equal(runtime.getState().active, true);
+    assert.equal(sessionSequence, 2);
+    nativeStop.resolve({ ok: true });
+    await firstClose;
+});
+
+test('renderer warmup time is excluded from the 420 ms reveal clock', async () => {
+    let clock = 0;
+    let frameCallback = null;
+    let renderCount = 0;
+    let sessionCount = 0;
+    const warmup = deferred();
+    const voiceApi = {
+        subscribeTtsFrames: () => () => { },
+        subscribe: () => () => { },
+        ensureReady: async () => true,
+        createSession: async () => { sessionCount += 1; return { session_id: 'warm-session' }; },
+        speak: async () => ({ promise: Promise.resolve({}) }),
+        startListening: async () => ({ promise: new Promise(() => { }) }),
+        executeUtterance: async () => ({ ok: true }),
+        cancelListening: async () => ({ ok: true }),
+        stopSpeaking: async () => ({ ok: true }),
+        interrupt: async () => ({ ok: true })
+    };
+    const runtime = createEveAssistantRuntime({
+        env: { addEventListener: () => { } },
+        voiceApiResolver: () => voiceApi,
+        requestFrame: (callback) => { frameCallback = callback; return 1; },
+        cancelFrame: () => { },
+        now: () => clock,
+        renderScene: async () => {
+            renderCount += 1;
+            if (renderCount === 2) await warmup.promise;
+            return { ok: true };
+        },
+        clearScene: async () => ({ ok: true }),
+        setInteractionLayer: () => { },
+        commandBus: { append: () => { } },
+        translate: () => 'Salut, que veux-tu ?'
+    });
+    const opening = runtime.open();
+    clock = 500;
+    warmup.resolve();
+    await opening;
+    clock = 919;
+    frameCallback?.();
+    await Promise.resolve();
+    assert.equal(sessionCount, 0);
+    clock = 920;
+    frameCallback?.();
+    await Promise.resolve();
+    await Promise.resolve();
+    assert.equal(sessionCount, 1);
 });
 
 test('assistant runtime survives five complete open, greeting and close cycles', async () => {
     let sessionSequence = 0;
     let greetingCount = 0;
     let clearCount = 0;
+    let clock = 0;
+    let frameCallback = null;
+    const advance = async (milliseconds) => {
+        clock += milliseconds;
+        const callback = frameCallback;
+        frameCallback = null;
+        callback?.();
+        await Promise.resolve();
+        await Promise.resolve();
+    };
     const voiceApi = {
         ensureReady: async () => true,
         createSession: async () => ({ session_id: `stress-session-${++sessionSequence}` }),
@@ -208,9 +426,10 @@ test('assistant runtime survives five complete open, greeting and close cycles',
         interrupt: async () => ({ ok: true })
     };
     const runtime = createEveAssistantRuntime({
-        env: { addEventListener: () => { }, console: { error: () => { } } },
+        env: { addEventListener: () => { }, console: { error: () => { } }, performance: { now: () => clock } },
         voiceApiResolver: () => voiceApi,
-        requestFrame: () => 1,
+        now: () => clock,
+        requestFrame: (callback) => { frameCallback = callback; return 1; },
         cancelFrame: () => { },
         renderScene: async () => ({ ok: true }),
         clearScene: async () => { clearCount += 1; },
@@ -221,7 +440,10 @@ test('assistant runtime survives five complete open, greeting and close cycles',
     for (let index = 0; index < 5; index += 1) {
         await runtime.open({ source: 'stress' });
         assert.equal(runtime.getState().active, true);
-        await runtime.close({ source: 'stress' });
+        await advance(420);
+        const close = runtime.close({ source: 'stress' });
+        await advance(320);
+        await close;
         assert.equal(runtime.getState().phase, 'closed');
     }
     assert.equal(sessionSequence, 5);
