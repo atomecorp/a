@@ -989,7 +989,7 @@ Path: `eVe/voice/assistant/`
 Owner: eVe closed product layer for assistant lifecycle composition and visual identity.
 
 - `assistant_runtime.js` exposes the singleton public API, traces `voice.assistant.toggle`, blocks project interaction, owns Escape/teardown, and coalesces TTS signal state into animation frames.
-- `assistant_scene.js` projects and removes the assistant through the existing project-scene overlay owner.
+- `assistant_scene.js` mounts the assistant once through the existing project-scene overlay owner, then patches only its procedural uniforms through the canonical direct-style route. Its panel-local order normalizes to 1500, above the Dashboard token range ending at 1420 and below panel/menu surfaces; its ephemeral record survives reconciliation until explicit teardown.
 - `assistant_visual_contract.js` owns bounded sizing, phase colors, breathing/pulse limits, five deterministic vowel morphs, and 45/90 ms morph interpolation targets.
 - `atome/renderers/bevy-core/src/procedural_sdf.rs` and `assets/shaders/procedural_sdf.wgsl` are the generic Bevy renderer owner for one bounded material quad. `bevy_projection_adapter.js` and `bevy_renderer_adapter_registry.js` carry its strict uniforms; no assistant canvas or visible DOM surface exists.
 - `eVe/intuition/ribbon/bevy_ui_main_menu_hold_runtime.js` owns the canonical 520 ms Atome hold gesture, 10 px movement cancellation, single-pointer trigger, and short-activation suppression.

@@ -108,6 +108,7 @@ test('BevyUI main menu overlay projects the 70px menu atomically without droppin
     const state = getProjectSceneState('__eve_dashboard_workspace__');
     const recordsById = new Map(state.records.map((record) => [record.id, record]));
     const menuRecords = state.records.filter((record) => String(record.id || '').startsWith('__eve_bevy_ui_eve_bevy_ui_main_menu_'));
+    const projectedDashboardRecords = state.records.filter((record) => record.properties?.layer === 'dashboard');
     const iconRecords = menuRecords.filter((record) => String(record.id || '').endsWith('_icon_image'));
 
     assert.deepEqual(state.effects, dashboardEffects);
@@ -119,6 +120,8 @@ test('BevyUI main menu overlay projects the 70px menu atomically without droppin
     assert.equal(menuRecords.every((record) => record.parent_id || record.properties?.parent_id), true);
     assert.equal(menuRecords.every((record) => record.properties?.layer === 'mainMenu'), true);
     assert.equal(menuRecords.every((record) => Number(record.properties?.renderLayer) >= 1200), true);
+    assert.equal(menuRecords.every((record) => Number(record.properties?.renderLayer) < 1800), true);
+    assert.equal(projectedDashboardRecords.every((record) => Number(record.properties?.renderLayer) >= 600 && Number(record.properties?.renderLayer) < 1100), true);
     assert.equal(
         menuRecords.some((record) => record.parent_id === WORKSPACE_SCENE_LAYER_IDS.mainMenu || record.properties?.parent_id === WORKSPACE_SCENE_LAYER_IDS.mainMenu),
         true,

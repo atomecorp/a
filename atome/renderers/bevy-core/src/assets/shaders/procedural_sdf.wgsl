@@ -13,10 +13,11 @@ fn sd_ellipse(point: vec2<f32>, radius: vec2<f32>) -> f32 {
 }
 
 fn organic_core(point: vec2<f32>, morph: vec4<f32>, time: f32) -> f32 {
-    let shifted = point - vec2(0.0, 0.09 + morph.w * 0.16);
+    let drift = vec2(sin(time * 0.71) * 0.014, cos(time * 0.53) * 0.010);
+    let shifted = point - vec2(drift.x, 0.09 + morph.w * 0.16 + drift.y);
     let angle = atan2(shifted.y, shifted.x);
-    let ripple = sin(angle * 3.0 + time * 0.42) * 0.018
-        + cos(angle * 2.0 - time * 0.31) * 0.012;
+    let ripple = sin(angle * 3.0 + time * 0.72) * 0.022
+        + cos(angle * 2.0 - time * 0.47) * 0.016;
     let radius = vec2(0.31 * morph.x, 0.34 * morph.y);
     return sd_ellipse(shifted, radius) - ripple - morph.z * 0.025;
 }
@@ -40,7 +41,10 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
     let intensity = material.dynamics.w;
 
     let shell_point = point / (1.0 + pulse);
-    let shell_distance = length(shell_point) - 0.84;
+    let shell_angle = atan2(shell_point.y, shell_point.x);
+    let shell_wobble = sin(shell_angle * 3.0 + time * 0.38) * 0.006
+        + cos(shell_angle * 2.0 - time * 0.29) * 0.004;
+    let shell_distance = length(shell_point) - (0.84 + shell_wobble);
     let shell_mask = 1.0 - smoothstep(-0.018, 0.025, shell_distance);
     let shell_inner = smoothstep(-0.18, -0.025, shell_distance);
     let rim = pow(clamp(1.0 - sqrt(max(0.0, 1.0 - dot(shell_point, shell_point))), 0.0, 1.0), 2.2);

@@ -5,8 +5,15 @@ import { createVoiceAssistantSessionController } from '../../atome/src/squirrel/
 import { createLocalTtsRuntime } from '../../atome/src/squirrel/voice/local_tts_runtime.js';
 import { encodeFrenchPhonemes, normalizeFrenchTtsText } from '../../atome/src/squirrel/voice/french_phoneme_encoder.js';
 import { analyzePcmWindow, pcm16WavBytes, vowelFamilyForPhoneme } from '../../atome/src/squirrel/voice/tts_pcm_analysis.js';
-import { assistantMorphForVowel, assistantSizeForSurface, assistantUniforms } from '../../eVe/voice/assistant/assistant_visual_contract.js';
+import {
+    assistantMorphForVowel,
+    assistantSizeForSurface,
+    assistantUniforms,
+    buildAssistantVisualRecord
+} from '../../eVe/voice/assistant/assistant_visual_contract.js';
 import { createEveAssistantRuntime } from '../../eVe/voice/assistant/assistant_runtime.js';
+import { isEphemeralProjectSceneRecord } from '../../eVe/domains/rendering/project_scene_record_projection.js';
+import { normalizeWorkspaceSceneRecord } from '../../eVe/domains/rendering/workspace_scene_layers.js';
 import voiceConfig from '../../atome/src/assets/voice/fr_FR-siwis-medium/fr_FR-siwis-medium.onnx.json' with { type: 'json' };
 import { PlayRecordCore } from '../../atome/src/application/audio_runtime/play_record_core.js';
 
@@ -114,6 +121,19 @@ test('assistant visual contract clamps size and defines all deterministic vowel 
     assert.equal(speaking.phase, 4);
     assert.equal(speaking.intensity, 1);
     assert.ok(speaking.pulse <= 0.055);
+    const idleStart = assistantUniforms({ morph: [1, 1, 0, 0], elapsedMs: 0 });
+    const idleLater = assistantUniforms({ morph: [1, 1, 0, 0], elapsedMs: 800 });
+    assert.notStrictEqual(idleStart.morph, idleLater.morph);
+    assert.notDeepEqual(idleStart.morph, idleLater.morph);
+});
+
+test('assistant visual stays above Dashboard and remains ephemeral across workspace reconciliations', () => {
+    const record = buildAssistantVisualRecord({ surfaceSize: { width: 1280, height: 720 }, phase: 'listening' });
+    const normalized = normalizeWorkspaceSceneRecord(record);
+    assert.equal(normalized.properties.layer, 'panel');
+    assert.ok(normalized.properties.renderLayer > 1420);
+    assert.ok(normalized.properties.renderLayer < 2350);
+    assert.equal(isEphemeralProjectSceneRecord(record), true);
 });
 
 test('assistant public API owns modal lifecycle, trace command, render teardown and clean reopen', async () => {
@@ -166,6 +186,47 @@ test('assistant public API owns modal lifecycle, trace command, render teardown 
     listeners.keydown({ key: 'Escape' });
     await new Promise((resolve) => setTimeout(resolve, 0));
     assert.equal(runtime.getState().phase, 'closed');
+});
+
+test('assistant runtime survives five complete open, greeting and close cycles', async () => {
+    let sessionSequence = 0;
+    let greetingCount = 0;
+    let clearCount = 0;
+    const voiceApi = {
+        ensureReady: async () => true,
+        createSession: async () => ({ session_id: `stress-session-${++sessionSequence}` }),
+        subscribe: () => () => { },
+        subscribeTtsFrames: () => () => { },
+        speak: async () => {
+            greetingCount += 1;
+            return { promise: Promise.resolve({}) };
+        },
+        startListening: async () => ({ promise: new Promise(() => { }) }),
+        executeUtterance: async () => ({ ok: true }),
+        cancelListening: async () => ({ ok: true }),
+        stopSpeaking: async () => ({ ok: true }),
+        interrupt: async () => ({ ok: true })
+    };
+    const runtime = createEveAssistantRuntime({
+        env: { addEventListener: () => { }, console: { error: () => { } } },
+        voiceApiResolver: () => voiceApi,
+        requestFrame: () => 1,
+        cancelFrame: () => { },
+        renderScene: async () => ({ ok: true }),
+        clearScene: async () => { clearCount += 1; },
+        setInteractionLayer: () => { },
+        commandBus: { append: () => { } },
+        translate: (key) => key.endsWith('greeting') ? 'Salut, que veux-tu ?' : 'Assistant vocal eVe'
+    });
+    for (let index = 0; index < 5; index += 1) {
+        await runtime.open({ source: 'stress' });
+        assert.equal(runtime.getState().active, true);
+        await runtime.close({ source: 'stress' });
+        assert.equal(runtime.getState().phase, 'closed');
+    }
+    assert.equal(sessionSequence, 5);
+    assert.equal(greetingCount, 5);
+    assert.equal(clearCount, 5);
 });
 
 test('transient PCM assets stay ephemeral while using the existing Kira facade authority', async () => {
@@ -235,4 +296,46 @@ test('local TTS publishes monotone 20 ms frames from the PCM handed to Kira', as
     assert.ok(audioCalls[0][1].bytes.byteLength > 44);
     assert.deepEqual(frames.map((frame) => frame.playback_sample), [...frames.map((frame) => frame.playback_sample)].sort((a, b) => a - b));
     assert.ok(frames.some((frame) => frame.rms > 0));
+});
+
+test('local TTS fully tears down and replays five sequential utterances', async () => {
+    const audioCalls = [];
+    const endCallbacks = [];
+    const worker = {
+        onmessage: null,
+        onerror: null,
+        postMessage(message) {
+            queueMicrotask(() => this.onmessage({ data: {
+                id: message.id,
+                type: 'result',
+                pcm: Float32Array.from({ length: 441 }, (_, index) => Math.sin(index / 3) * 0.2),
+                phonemes: ['^', 'a', '$'],
+                sampleRate: 22050
+            } }));
+        }
+    };
+    const runtime = createLocalTtsRuntime({
+        env: {},
+        audio: {
+            loadTransientAsset: async ({ assetId }) => audioCalls.push(['load', assetId]),
+            startVoice: async ({ voiceId }) => audioCalls.push(['play', voiceId]),
+            stopVoice: async ({ voiceId }) => audioCalls.push(['stop', voiceId]),
+            releaseTransientAsset: async (assetId) => audioCalls.push(['release', assetId])
+        },
+        workerFactory: () => worker,
+        now: () => 0,
+        setTimer: () => 1,
+        clearTimer: () => { },
+        setDelay: (callback) => { endCallbacks.push(callback); return endCallbacks.length; },
+        clearDelay: () => { }
+    });
+    for (let index = 0; index < 5; index += 1) {
+        const started = await runtime.speak(`session-${index}`, `lecture ${index}`);
+        endCallbacks.shift()();
+        await started.promise;
+    }
+    assert.equal(audioCalls.filter(([kind]) => kind === 'load').length, 5);
+    assert.equal(audioCalls.filter(([kind]) => kind === 'play').length, 5);
+    assert.equal(audioCalls.filter(([kind]) => kind === 'stop').length, 5);
+    assert.equal(audioCalls.filter(([kind]) => kind === 'release').length, 5);
 });

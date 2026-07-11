@@ -609,7 +609,7 @@ After implementation:
 2. `eveAssistantApi` traces the toggle command, installs the project interaction interceptor, and delegates the DOM-free session lifecycle to Squirrel Voice.
 3. The local worker converts French text to model phoneme ids and runs the bundled `fr_FR-siwis-medium` ONNX model off the UI/audio render threads. ONNX Runtime Web is MIT; the specified Siwis model card records its training dataset as CC-BY 4.0 and is shipped beside the model for attribution.
 4. PCM is encoded once for the existing Kira playback authority through an ephemeral transient-asset contract. Twenty-millisecond analysis windows publish only ephemeral TTS frames.
-5. eVe coalesces the latest frame into one assistant visual record; the generic Bevy `procedural_sdf` material updates the shared WebGPU compositor. Teardown removes the record, session, timers, subscriptions, buffers, and interaction claim.
+5. eVe coalesces the latest frame into one ephemeral assistant visual record. The record mounts once in the panel band and subsequent frames use direct procedural-uniform style patches in the shared WebGPU compositor; Dashboard/project reconciliations preserve it. Teardown explicitly stops the Kira voice before releasing its transient clip and removes every mounted record, session, timer, subscription, buffer, and interaction claim.
 
 The removed `aVa_panel` and main-handle DOM bridge are not architectural fallbacks. Browser `speechSynthesis`, extra canvases, visible assistant DOM, durable audio-frame commits, and renderer-private state are forbidden on this path.
 

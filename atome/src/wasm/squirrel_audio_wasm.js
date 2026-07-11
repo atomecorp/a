@@ -218,13 +218,9 @@ function takeFromExternrefTable0(idx) {
     wasm.__externref_table_dealloc(idx);
     return value;
 }
-/**
- * @param {string} id
- */
-export function audio_stop(id) {
-    const ptr0 = passStringToWasm0(id, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-    const len0 = WASM_VECTOR_LEN;
-    const ret = wasm.audio_stop(ptr0, len0);
+
+export function audio_shutdown() {
+    const ret = wasm.audio_shutdown();
     if (ret[1]) {
         throw takeFromExternrefTable0(ret[0]);
     }
@@ -267,12 +263,12 @@ export function audio_play(id) {
 
 /**
  * @param {string} id
- * @param {number} rate
+ * @param {number} db
  */
-export function audio_set_playback_rate(id, rate) {
+export function audio_set_volume(id, db) {
     const ptr0 = passStringToWasm0(id, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
     const len0 = WASM_VECTOR_LEN;
-    const ret = wasm.audio_set_playback_rate(ptr0, len0, rate);
+    const ret = wasm.audio_set_volume(ptr0, len0, db);
     if (ret[1]) {
         throw takeFromExternrefTable0(ret[0]);
     }
@@ -280,6 +276,19 @@ export function audio_set_playback_rate(id, rate) {
 
 export function audio_init() {
     const ret = wasm.audio_init();
+    if (ret[1]) {
+        throw takeFromExternrefTable0(ret[0]);
+    }
+}
+
+/**
+ * @param {string} id
+ * @param {number} rate
+ */
+export function audio_set_playback_rate(id, rate) {
+    const ptr0 = passStringToWasm0(id, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.audio_set_playback_rate(ptr0, len0, rate);
     if (ret[1]) {
         throw takeFromExternrefTable0(ret[0]);
     }
@@ -309,13 +318,6 @@ export function audio_stop_instance(voice_id) {
     }
 }
 
-export function audio_shutdown() {
-    const ret = wasm.audio_shutdown();
-    if (ret[1]) {
-        throw takeFromExternrefTable0(ret[0]);
-    }
-}
-
 /**
  * @param {string} asset_id
  * @param {string} voice_id
@@ -339,19 +341,18 @@ export function audio_play_instance(asset_id, voice_id, start_seconds, duration_
 
 /**
  * @param {string} id
- * @param {number} db
  */
-export function audio_set_volume(id, db) {
+export function audio_stop(id) {
     const ptr0 = passStringToWasm0(id, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
     const len0 = WASM_VECTOR_LEN;
-    const ret = wasm.audio_set_volume(ptr0, len0, db);
+    const ret = wasm.audio_stop(ptr0, len0);
     if (ret[1]) {
         throw takeFromExternrefTable0(ret[0]);
     }
 }
 
 function __wbg_adapter_20(arg0, arg1) {
-    wasm._dyn_core__ops__function__FnMut_____Output___R_as_wasm_bindgen__closure__WasmClosure___describe__invoke__h4ff3ffd6dbd846ba(arg0, arg1);
+    wasm._dyn_core__ops__function__FnMut_____Output___R_as_wasm_bindgen__closure__WasmClosure___describe__invoke__h25c28f08f9b1bfe7(arg0, arg1);
 }
 
 /**
@@ -638,8 +639,8 @@ function __wbg_get_imports() {
         const ret = false;
         return ret;
     };
-    imports.wbg.__wbindgen_closure_wrapper918 = function(arg0, arg1, arg2) {
-        const ret = makeMutClosure(arg0, arg1, 31, __wbg_adapter_20);
+    imports.wbg.__wbindgen_closure_wrapper917 = function(arg0, arg1, arg2) {
+        const ret = makeMutClosure(arg0, arg1, 30, __wbg_adapter_20);
         return ret;
     };
     imports.wbg.__wbindgen_debug_string = function(arg0, arg1) {

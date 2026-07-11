@@ -6,6 +6,7 @@ const CONFIG_URL = new URL('../../assets/voice/fr_FR-siwis-medium/fr_FR-siwis-me
 const WASM_ROOT = new URL('../../assets/vendor/onnxruntime-web/', import.meta.url).href;
 
 let configPromise;
+let modelPromise;
 let sessionPromise;
 
 const ensureEngine = async () => {
@@ -13,13 +14,16 @@ const ensureEngine = async () => {
         if (!response.ok) throw new Error(`local_tts_config_load_failed:${response.status}`);
         return response.json();
     });
+    modelPromise ||= fetch(MODEL_URL).then(async (response) => {
+        if (!response.ok) throw new Error(`local_tts_model_load_failed:${response.status}`);
+        return new Uint8Array(await response.arrayBuffer());
+    });
     ort.env.wasm.numThreads = 1;
     ort.env.wasm.proxy = false;
     ort.env.wasm.wasmPaths = WASM_ROOT;
-    sessionPromise ||= ort.InferenceSession.create(MODEL_URL, {
-        executionProviders: ['wasm'],
-        graphOptimizationLevel: 'all'
-    });
+    sessionPromise ||= modelPromise.then((model) => ort.InferenceSession.create(model, {
+        executionProviders: ['wasm'], graphOptimizationLevel: 'all'
+    }));
     const [config, session] = await Promise.all([configPromise, sessionPromise]);
     return { config, session };
 };

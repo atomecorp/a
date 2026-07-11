@@ -40,6 +40,20 @@ test('BevyUI Atome hold triggers at exactly 520 ms, never at 519 ms, and only on
     assert.equal(hold.consumeActivation('atome'), false);
 });
 
+test('BevyUI Atome hold suppression expires when its release emits no activation', async () => {
+    let scheduled = null;
+    const hold = createBevyMainMenuHoldRuntime({
+        onHold: () => { },
+        schedule: (callback) => { scheduled = callback; return 1; },
+        cancelSchedule: () => { }
+    });
+    hold.press(BEVY_MAIN_MENU_ATOME_ID, { x: 4, y: 4 });
+    scheduled();
+    hold.release(BEVY_MAIN_MENU_ATOME_ID);
+    await Promise.resolve();
+    assert.equal(hold.consumeActivation(BEVY_MAIN_MENU_ATOME_ID), false);
+});
+
 const menuContent = () => ({
     toolbox: { children: [...TOOL_KEYS] },
     ...Object.fromEntries(TOOL_KEYS.map((key) => [key, {
@@ -379,6 +393,40 @@ test('BevyUI main menu Atome hold toggles the assistant and suppresses Dashboard
         await currentAtome.on.activate();
         assert.deepEqual(assistantToggles, [{ source: 'bevy_ui_main_menu_atome' }]);
         assert.deepEqual(toggles, []);
+    } finally {
+        harness.runtime.destroy();
+        harness.restore();
+    }
+});
+
+test('active assistant survives ten Dashboard toggles before a second hold closes it', async () => {
+    let assistantActive = false;
+    let dashboardToggles = 0;
+    const harness = createRuntimeHarness({
+        toggleDashboard: () => { dashboardToggles += 1; },
+        toggleAssistant: () => { assistantActive = !assistantActive; }
+    });
+    const holdAtome = async () => {
+        const atome = findNode(harness.calls.at(-1).payload.tree.root, BEVY_MAIN_MENU_ATOME_ID);
+        atome.on.press({ x: 30, y: 30 });
+        await waitMs(540);
+        const current = findNode(harness.calls.at(-1).payload.tree.root, BEVY_MAIN_MENU_ATOME_ID);
+        current.on.release({ x: 30, y: 30 });
+        await current.on.activate();
+    };
+    try {
+        await harness.runtime.showFully();
+        await holdAtome();
+        assert.equal(assistantActive, true);
+        for (let index = 0; index < 10; index += 1) {
+            const atome = findNode(harness.calls.at(-1).payload.tree.root, BEVY_MAIN_MENU_ATOME_ID);
+            await atome.on.activate();
+        }
+        assert.equal(dashboardToggles, 10);
+        assert.equal(assistantActive, true);
+        await holdAtome();
+        assert.equal(assistantActive, false);
+        assert.equal(dashboardToggles, 10);
     } finally {
         harness.runtime.destroy();
         harness.restore();

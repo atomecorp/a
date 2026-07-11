@@ -78,7 +78,11 @@ export const createLocalTtsRuntime = ({
         const durationMs = pcm.length / sampleRate * 1000;
         const phonemes = audiblePhonemes(generated.phonemes || []);
         let resolvePlayback;
-        const promise = new Promise((resolve) => { resolvePlayback = resolve; });
+        let rejectPlayback;
+        const promise = new Promise((resolve, reject) => {
+            resolvePlayback = resolve;
+            rejectPlayback = reject;
+        });
         const publishCurrentFrame = () => {
             const playbackSample = Math.min(pcm.length, Math.max(0, Math.floor((now() - startedAt) * sampleRate / 1000)));
             const windowSamples = Math.max(1, Math.round(sampleRate * FRAME_MS / 1000));
@@ -102,8 +106,13 @@ export const createLocalTtsRuntime = ({
             sessions.delete(id);
             clearTimer(state.frameTimer);
             publishCurrentFrame();
-            await audio.releaseTransientAsset(assetId);
-            resolvePlayback({ session_id: id, provider: 'local_onnx', text });
+            try {
+                await audio.stopVoice({ voiceId, source_layer: 'voice_local_tts' });
+                await audio.releaseTransientAsset(assetId);
+                resolvePlayback({ session_id: id, provider: 'local_onnx', text });
+            } catch (error) {
+                rejectPlayback(error);
+            }
         };
         const state = {
             assetId,

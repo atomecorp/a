@@ -113,10 +113,18 @@ import {
     if (!wasmModulePromise) {
       wasmModulePromise = import('/wasm/squirrel_audio_wasm.js')
         .then(function (mod) {
-          return Promise.resolve(mod.default()).then(function () {
+          return fetch('/wasm/squirrel_audio_wasm_bg.wasm')
+            .then(function (response) {
+              if (!response.ok) throw new Error('kira_wasm_load_failed:' + response.status);
+              return response.arrayBuffer();
+            })
+            .then(function (bytes) {
+              mod.initSync({ module: bytes });
+            })
+            .then(function () {
             wasm = mod;
             return mod;
-          });
+            });
         });
     }
     return wasmModulePromise;

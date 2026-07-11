@@ -1,19 +1,19 @@
 /* tslint:disable */
 /* eslint-disable */
-export function audio_stop(id: string): void;
+export function audio_shutdown(): void;
 /**
  * Load an audio clip from raw bytes (WAV, MP3, OGG).
  * In WASM, we cannot read files from disk so JS must pass the bytes.
  */
 export function audio_load_clip_from_bytes(id: string, data: Uint8Array): void;
 export function audio_play(id: string): void;
-export function audio_set_playback_rate(id: string, rate: number): void;
+export function audio_set_volume(id: string, db: number): void;
 export function audio_init(): void;
+export function audio_set_playback_rate(id: string, rate: number): void;
 export function audio_destroy_clip(id: string): void;
 export function audio_stop_instance(voice_id: string): void;
-export function audio_shutdown(): void;
 export function audio_play_instance(asset_id: string, voice_id: string, start_seconds: number, duration_seconds: number | null | undefined, gain: number, rate: number, loop_start_seconds?: number | null, loop_end_seconds?: number | null): void;
-export function audio_set_volume(id: string, db: number): void;
+export function audio_stop(id: string): void;
 /**
  * Format that each sample has. Usually, this corresponds to the sampling
  * depth of the audio source. For example, 16 bit quantized samples can be
@@ -130,7 +130,7 @@ export interface InitOutput {
   readonly __wbindgen_malloc: (a: number, b: number) => number;
   readonly __wbindgen_realloc: (a: number, b: number, c: number, d: number) => number;
   readonly __externref_table_dealloc: (a: number) => void;
-  readonly _dyn_core__ops__function__FnMut_____Output___R_as_wasm_bindgen__closure__WasmClosure___describe__invoke__h4ff3ffd6dbd846ba: (a: number, b: number) => void;
+  readonly _dyn_core__ops__function__FnMut_____Output___R_as_wasm_bindgen__closure__WasmClosure___describe__invoke__h25c28f08f9b1bfe7: (a: number, b: number) => void;
   readonly __wbindgen_start: () => void;
 }
 
