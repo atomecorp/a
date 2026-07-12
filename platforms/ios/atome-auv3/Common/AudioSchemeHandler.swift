@@ -9,14 +9,8 @@ class AudioSchemeHandler: NSObject, WKURLSchemeHandler {
     
     func webView(_ webView: WKWebView, start urlSchemeTask: WKURLSchemeTask) {
         guard let url = urlSchemeTask.request.url else { return }
-        let (path, host, hadQuery) = normalize(url: url)
+        let (path, host) = normalize(url: url)
         print("[AudioSchemeHandler] start request url=\(url.absoluteString) sanitizedPath=\(path) range=\(urlSchemeTask.request.value(forHTTPHeaderField: "Range") ?? "<none>")")
-
-        if hadQuery {
-            let redirect = buildCleanURLString(path: path, host: host)
-            respondRedirect(location: redirect, task: urlSchemeTask)
-            return
-        }
 
         if path == "/" || path == "/index.html" {
             print("[AudioSchemeHandler] Serving index.html")
@@ -258,9 +252,8 @@ document.getElementById('player').addEventListener('error', e => {
         task.didFinish()
     }
 
-    private func normalize(url: URL) -> (path: String, host: String?, hasQuery: Bool) {
+    private func normalize(url: URL) -> (path: String, host: String?) {
         var components = URLComponents(url: url, resolvingAgainstBaseURL: false)
-        let hadQuery = (components?.query != nil)
         components?.query = nil
         components?.percentEncodedQuery = nil
         var path = components?.percentEncodedPath ?? url.path
@@ -271,24 +264,6 @@ document.getElementById('player').addEventListener('error', e => {
             if adjusted == "/" { adjusted = "/" + host }
             else if !host.contains(".") && !adjusted.hasPrefix("/audio/") { adjusted = "/" + host + adjusted }
         }
-        return (adjusted, components?.host ?? url.host, hadQuery)
-    }
-
-    private func buildCleanURLString(path: String, host: String?) -> String {
-        let targetHost = host ?? ""
-        if targetHost.isEmpty {
-            return "\(scheme)://\(path)"
-        }
-        return "\(scheme)://\(targetHost)\(path)"
-    }
-
-    private func respondRedirect(location: String, task: WKURLSchemeTask) {
-        let headers = [
-            "Location": location,
-            "Cache-Control": "no-store"
-        ]
-        let response = HTTPURLResponse(url: task.request.url!, statusCode: 308, httpVersion: "HTTP/1.1", headerFields: headers)!
-        task.didReceive(response)
-        task.didFinish()
+        return (adjusted, components?.host ?? url.host)
     }
 }

@@ -26,5 +26,13 @@ test('BevyUI canvas binding owns touch gestures for mobile pointer scroll', asyn
     });
 
     assert.equal(surface.style.touchAction, 'none');
+    surface.getBoundingClientRect = () => ({ left: 20, top: 30, width: 120, height: 80 });
+    assert.deepEqual(runtime.hitTestAtClientPoint({ surface, clientX: 40, clientY: 50 }), {
+        treeId: 'touch_tree',
+        nodeId: 'scroll_target',
+        kind: 'scroll_area',
+        box: { x: 0, y: 0, width: 120, height: 80 }
+    });
+    assert.equal(runtime.hitTestAtClientPoint({ surface, clientX: 200, clientY: 200 }), null);
     assert.equal(dom.window.document.querySelectorAll('button, input, [data-bevy-ui]').length, 0);
 });

@@ -123,15 +123,57 @@ fn plugin_spawns_projected_nodes_and_camera() {
     app.update();
 
     let mut camera_query = app.world_mut().query::<&Camera2d>();
-    assert_eq!(camera_query.iter(app.world()).count(), 1);
+    assert_eq!(camera_query.iter(app.world()).count(), 4);
     let mut projection_query = app.world_mut().query::<&Projection>();
-    let projection = projection_query.single(app.world()).unwrap();
-    assert_fixed_projection_size(projection, 640.0, 480.0);
+    for projection in projection_query.iter(app.world()) {
+        assert_fixed_projection_size(projection, 640.0, 480.0);
+    }
     assert_eq!(app.world().resource::<AtomeEntityTable>().by_id.len(), 1);
     let entity = app.world().resource::<AtomeEntityTable>().by_id["shape_1"];
     assert!(
         app.world().get::<AtomeShapeShadowOverlay>(entity).is_some(),
         "initial scene shape shadow should be spawned by the Bevy plugin"
+    );
+}
+
+#[test]
+fn workspace_backdrop_reuses_its_image_handle_across_surface_resize() {
+    let mut app = App::new();
+    app.add_plugins(AtomeBevyRendererPlugin::new(
+        AtomeBevyRendererConfig::empty(640.0, 480.0),
+    ));
+    app.update();
+    let original = app
+        .world()
+        .resource::<workspace_backdrop::AtomeWorkspaceBackdrop>()
+        .clone();
+    apply_surface(
+        app.world_mut(),
+        AtomeSurfacePatch {
+            width: 320.0,
+            height: 240.0,
+            pixel_width: Some(800.0),
+            pixel_height: Some(600.0),
+            device_pixel_ratio: Some(2.0),
+        },
+    )
+    .unwrap();
+    let resized = app
+        .world()
+        .resource::<workspace_backdrop::AtomeWorkspaceBackdrop>();
+    assert_eq!(resized.image, original.image);
+    assert_eq!(
+        resized.blur.horizontal_image,
+        original.blur.horizontal_image
+    );
+    assert_eq!(resized.blur.vertical_image, original.blur.vertical_image);
+    assert_eq!(resized.pixel_size, UVec2::new(800, 600));
+    assert_eq!(
+        app.world()
+            .get::<Sprite>(resized.visual)
+            .unwrap()
+            .custom_size,
+        Some(Vec2::new(320.0, 240.0))
     );
 }
 

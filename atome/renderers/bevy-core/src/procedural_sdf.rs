@@ -10,6 +10,10 @@ use bevy::{
     sprite_render::{AlphaMode2d, Material2d, Material2dPlugin},
 };
 
+use crate::workspace_backdrop::{
+    set_workspace_backdrop_enabled, AtomeWorkspaceBackdrop, PRESENTATION_LAYER,
+};
+use crate::workspace_blur::AssistantOpticsSettings;
 use crate::{types::AtomeProceduralSdf, video_external_texture::video_quad_mesh_handle_from_size};
 
 const PROCEDURAL_SDF_SHADER_HANDLE: Handle<Shader> =
@@ -20,12 +24,19 @@ pub struct ProceduralSdfUniform {
     pub morph: Vec4,
     pub dynamics: Vec4,
     pub transition: Vec4,
+    pub optics: Vec4,
 }
 
 #[derive(Asset, TypePath, AsBindGroup, Debug, Clone)]
 pub struct ProceduralSdfMaterial {
     #[uniform(0)]
     pub uniform: ProceduralSdfUniform,
+    #[texture(1)]
+    #[sampler(2)]
+    pub original_backdrop: Handle<Image>,
+    #[texture(3)]
+    #[sampler(4)]
+    pub blurred_backdrop: Handle<Image>,
 }
 
 impl Material2d for ProceduralSdfMaterial {
@@ -56,7 +67,12 @@ impl Plugin for ProceduralSdfPlugin {
     }
 }
 
-fn material_from_contract(contract: AtomeProceduralSdf) -> ProceduralSdfMaterial {
+fn material_from_contract(
+    contract: AtomeProceduralSdf,
+    original_backdrop: Handle<Image>,
+    blurred_backdrop: Handle<Image>,
+    optics: Vec4,
+) -> ProceduralSdfMaterial {
     let normalized = contract.normalized();
     ProceduralSdfMaterial {
         uniform: ProceduralSdfUniform {
@@ -73,7 +89,10 @@ fn material_from_contract(contract: AtomeProceduralSdf) -> ProceduralSdfMaterial
                 normalized.shell_reveal,
                 normalized.disappearing,
             ),
+            optics,
         },
+        original_backdrop,
+        blurred_backdrop,
     }
 }
 
@@ -83,6 +102,20 @@ pub fn insert_procedural_sdf(
     logical_size: [f32; 2],
     contract: AtomeProceduralSdf,
 ) -> Result<(), String> {
+    let (original_backdrop, blurred_backdrop) = world
+        .get_resource::<AtomeWorkspaceBackdrop>()
+        .map(|state| (state.image.clone(), state.blur.vertical_image.clone()))
+        .ok_or_else(|| "bevy_workspace_backdrop_required".to_string())?;
+    let optics = world
+        .get_resource::<AssistantOpticsSettings>()
+        .copied()
+        .unwrap_or_default()
+        .sdf_uniform(
+            world
+                .get_resource::<crate::types::AtomeBevyRendererConfig>()
+                .map(|config| config.device_pixel_ratio)
+                .unwrap_or(1.0),
+        );
     let mesh = {
         let mut meshes = world
             .get_resource_mut::<Assets<Mesh>>()
@@ -93,11 +126,19 @@ pub fn insert_procedural_sdf(
         let mut materials = world
             .get_resource_mut::<Assets<ProceduralSdfMaterial>>()
             .ok_or_else(|| "bevy_procedural_sdf_assets_required".to_string())?;
-        materials.add(material_from_contract(contract))
+        materials.add(material_from_contract(
+            contract,
+            original_backdrop,
+            blurred_backdrop,
+            optics,
+        ))
     };
-    world
-        .entity_mut(entity)
-        .insert((Mesh2d(mesh), MeshMaterial2d(material)));
+    world.entity_mut(entity).insert((
+        Mesh2d(mesh),
+        MeshMaterial2d(material),
+        bevy::camera::visibility::RenderLayers::layer(PRESENTATION_LAYER),
+    ));
+    set_workspace_backdrop_enabled(world, true)?;
     Ok(())
 }
 
@@ -137,6 +178,9 @@ pub fn patch_procedural_sdf(
     let mut material = materials
         .get_mut(&handle)
         .ok_or_else(|| "bevy_procedural_sdf_material_missing".to_string())?;
-    *material = material_from_contract(contract);
+    let original_backdrop = material.original_backdrop.clone();
+    let blurred_backdrop = material.blurred_backdrop.clone();
+    let optics = material.uniform.optics;
+    *material = material_from_contract(contract, original_backdrop, blurred_backdrop, optics);
     Ok(())
 }

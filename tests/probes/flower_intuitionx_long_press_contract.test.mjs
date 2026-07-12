@@ -253,6 +253,26 @@ document.dispatchEvent(makePointerEvent('pointerup', { pointerId: 62, buttons: 0
 assert.equal(isFlowerMenuOpen(), false, 'a long press on a matrix tile label must not open the IntuitionX flower (the inline rename editor owns that gesture)');
 assert.equal(opens.length, opensBeforeMatrixLabel, 'a blocked matrix tile label must not resolve flower items');
 
+const projectCanvas = document.createElement('canvas');
+projectCanvas.id = 'eve_surface_project';
+document.body.appendChild(projectCanvas);
+window.eveBevyUiRuntime = {
+    hitTestAtClientPoint: ({ surface, clientX, clientY }) => (
+        surface === projectCanvas && clientX === 180 && clientY === 180
+            ? { treeId: 'eve_bevy_ui_main_menu', nodeId: 'eve_bevy_ui_main_menu_atome' }
+            : null
+    )
+};
+document.elementFromPoint = () => projectCanvas;
+document.elementsFromPoint = () => [projectCanvas, document.body];
+const opensBeforeSystemUiHold = opens.length;
+projectCanvas.dispatchEvent(makePointerEvent('pointerdown', { pointerId: 65 }));
+await delay(8);
+document.dispatchEvent(makePointerEvent('pointerup', { pointerId: 65, buttons: 0 }));
+assert.equal(isFlowerMenuOpen(), false, 'a long press on a BevyUI system element must never open the IntuitionX flower');
+assert.equal(opens.length, opensBeforeSystemUiHold, 'a BevyUI system hold must not resolve flower items');
+delete window.eveBevyUiRuntime;
+
 closeFlowerMenu();
 await delay(20);
 document.elementFromPoint = () => host;

@@ -298,7 +298,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "set -eu\nRESOURCE_ROOT=\"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/atome_open\"\nrm -rf \"$RESOURCE_ROOT\"\nmkdir -p \"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH\"\ncp -R \"$SRCROOT/../../../atome\" \"$RESOURCE_ROOT\"\nfind \"$RESOURCE_ROOT\" -type d -name target -prune -exec rm -rf {} +\n";
+			shellScript = "set -eu\nRESOURCE_ROOT=\"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/atome_open\"\nrm -rf \"$RESOURCE_ROOT\"\nmkdir -p \"$RESOURCE_ROOT\"\nrsync -a --exclude target --exclude .git \"$SRCROOT/../../../atome/\" \"$RESOURCE_ROOT/\"\n";
 		};
 		6BARCH020000000000000002 /* Copy Atome Resource Root */ = {
 			isa = PBXShellScriptBuildPhase;
@@ -315,7 +315,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "set -eu\nRESOURCE_ROOT=\"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/atome_open\"\nrm -rf \"$RESOURCE_ROOT\"\nmkdir -p \"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH\"\ncp -R \"$SRCROOT/../../../atome\" \"$RESOURCE_ROOT\"\nfind \"$RESOURCE_ROOT\" -type d -name target -prune -exec rm -rf {} +\n";
+			shellScript = "set -eu\nRESOURCE_ROOT=\"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/atome_open\"\nrm -rf \"$RESOURCE_ROOT\"\nmkdir -p \"$RESOURCE_ROOT\"\nrsync -a --exclude target --exclude .git \"$SRCROOT/../../../atome/\" \"$RESOURCE_ROOT/\"\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 

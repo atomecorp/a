@@ -1,0 +1,1 @@
+export const BEVY_RENDERER_VERSION="9895694a2fc43d24";

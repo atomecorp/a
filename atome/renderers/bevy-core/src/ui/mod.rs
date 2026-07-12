@@ -6,12 +6,14 @@ pub use types::*;
 
 use crate::texture::image_handle_from_texture;
 use bevy::input::mouse::MouseWheel;
+use bevy::camera::visibility::RenderLayers;
 use bevy::prelude::*;
 use bevy::text::{Font, FontSize, FontSource};
 use bevy::ui::{
     percent, px, widget::ImageNode, BoxShadow, GlobalZIndex, RelativeCursorPosition,
     ScrollPosition, ShadowStyle,
 };
+use crate::workspace_backdrop::PRESENTATION_LAYER;
 
 // Tracks the previous frame's Interaction + node-local cursor position so
 // press/release/drag can be derived without an entity-keyed Local<HashMap>
@@ -357,6 +359,9 @@ fn spawn_text_child(world: &mut World, parent: Entity, node: &AtomeUiNode) {
         ))
         .id();
     insert_text_extras(world, text_entity, &node.style);
+    world
+        .entity_mut(text_entity)
+        .insert(RenderLayers::layer(PRESENTATION_LAYER));
     world.entity_mut(parent).add_child(text_entity);
 }
 
@@ -456,6 +461,9 @@ fn spawn_ui_node(
         entity.id()
     };
     insert_style_extras(world, entity, &node.style);
+    world
+        .entity_mut(entity)
+        .insert(RenderLayers::layer(PRESENTATION_LAYER));
     if is_text_kind(&kind) {
         insert_text_extras(world, entity, &node.style);
     }

@@ -4,9 +4,14 @@ struct ProceduralSdfUniform {
     morph: vec4<f32>,
     dynamics: vec4<f32>,
     transition: vec4<f32>,
+    optics: vec4<f32>,
 }
 
 @group(#{MATERIAL_BIND_GROUP}) @binding(0) var<uniform> material: ProceduralSdfUniform;
+@group(#{MATERIAL_BIND_GROUP}) @binding(1) var original_texture: texture_2d<f32>;
+@group(#{MATERIAL_BIND_GROUP}) @binding(2) var original_sampler: sampler;
+@group(#{MATERIAL_BIND_GROUP}) @binding(3) var blurred_texture: texture_2d<f32>;
+@group(#{MATERIAL_BIND_GROUP}) @binding(4) var blurred_sampler: sampler;
 
 fn sd_ellipse(point: vec2<f32>, radius: vec2<f32>) -> f32 {
     let scaled = point / radius;
@@ -47,39 +52,66 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
     let shell_distance = length(shell_point) - (0.84 + shell_wobble);
     let shell_mask = 1.0 - smoothstep(-0.018, 0.025, shell_distance);
     let shell_inner = smoothstep(-0.18, -0.025, shell_distance);
+    let shell_edge = 1.0 - smoothstep(0.0, 0.065, abs(shell_distance));
     let rim = pow(clamp(1.0 - sqrt(max(0.0, 1.0 - dot(shell_point, shell_point))), 0.0, 1.0), 2.2);
 
     let light_vector = normalize(vec2(-0.72, 0.69));
     let directional = clamp(dot(normalize(shell_point + vec2(0.0001)), light_vector) * 0.5 + 0.5, 0.0, 1.0);
-    let cyan = vec3(0.46, 0.82, 0.85);
-    let rose = vec3(1.0, 0.64, 0.72);
-    var shell_color = mix(cyan, rose, smoothstep(0.12, 0.94, uv.x + directional * 0.2));
-    shell_color += vec3(0.26, 0.20, 0.28) * rim;
-    shell_color += vec3(0.05, 0.04, 0.08) * (0.28 + intensity * 0.32);
-    let shell_alpha = shell_mask * (0.14 + rim * 0.45 + shell_inner * 0.09) * shell_shape_reveal;
+    let cyan = vec3(0.28, 0.80, 0.88);
+    let rose = vec3(1.0, 0.50, 0.68);
+    let pearl = vec3(1.0, 0.93, 0.91);
+    let shell_mix = smoothstep(0.18, 0.86, uv.x + directional * 0.16);
+    var shell_color = mix(cyan, rose, shell_mix);
+    shell_color = mix(shell_color, pearl, rim * 0.48 + shell_edge * 0.18);
+    shell_color += mix(vec3(0.02, 0.14, 0.18), vec3(0.22, 0.04, 0.12), shell_mix) * shell_inner * 0.22;
+    shell_color += vec3(0.08, 0.04, 0.10) * intensity * 0.16;
+    let shell_alpha = shell_mask * (0.16 + rim * 0.48 + shell_inner * 0.12 + shell_edge * 0.20) * shell_shape_reveal;
+    let screen_dimensions = vec2<f32>(textureDimensions(blurred_texture));
+    let screen_uv = clamp(mesh.position.xy / max(screen_dimensions, vec2(1.0)), vec2(0.0), vec2(1.0));
+    let refraction_direction = normalize(shell_point + vec2(0.0001));
+    let shell_radius = clamp(length(shell_point) / 0.84, 0.0, 1.0);
+    let refraction_band = smoothstep(material.optics.z, 0.78, shell_radius)
+        * (1.0 - smoothstep(0.97, 1.0, shell_radius));
+    let refraction_uv = refraction_direction
+        * material.optics.x
+        * refraction_band
+        / max(screen_dimensions, vec2(1.0));
+    let safe_margin = vec2(material.optics.x + material.optics.x) / max(screen_dimensions, vec2(1.0));
+    let refracted_uv = clamp(screen_uv + refraction_uv, safe_margin, vec2(1.0) - safe_margin);
+    let original_color = textureSample(original_texture, original_sampler, refracted_uv).rgb;
+    let blurred_color = textureSample(blurred_texture, blurred_sampler, refracted_uv).rgb;
+    let glass_color = mix(original_color, blurred_color, material.optics.y);
+    let glass_alpha = shell_mask * shell_shape_reveal;
 
     let core_point = (point - vec2(0.0, -core_drop)) / ((1.0 + pulse * 0.72 * core_reveal) * core_scale);
     let core_distance = organic_core(core_point, material.morph, time);
     let core_mask = 1.0 - smoothstep(-0.012, 0.018, core_distance);
     let core_edge = 1.0 - smoothstep(0.0, 0.11, abs(core_distance));
-    let core_light = clamp(0.58 + point.x * -0.16 + point.y * 0.19, 0.0, 1.0);
-    var core_color = mix(vec3(0.96, 0.48, 0.50), vec3(1.0, 0.82, 0.72), core_light);
-    core_color += vec3(0.24, 0.12, 0.18) * core_edge;
-    core_color += vec3(0.05, 0.04, 0.08) * intensity * 0.35;
+    let core_light = clamp(0.54 + core_point.x * -0.24 + core_point.y * 0.25, 0.0, 1.0);
+    var core_color = mix(vec3(0.91, 0.34, 0.47), vec3(1.0, 0.82, 0.70), core_light);
+    core_color = mix(core_color, vec3(1.0, 0.95, 0.88), core_edge * 0.42);
+    core_color += vec3(0.10, 0.03, 0.08) * intensity * 0.22;
     let core_alpha = core_mask * (0.80 + core_edge * 0.17) * core_reveal;
 
     let shadow_point = (point - vec2(0.0, -0.76)) / vec2(0.64, 0.11);
     let contact_shadow = exp(-dot(shadow_point, shadow_point) * 2.4) * 0.20 * shell_shape_reveal;
     let highlight_point = (point - vec2(-0.36, 0.43)) / vec2(0.11, 0.28);
     let highlight = exp(-dot(highlight_point, highlight_point) * 4.0) * shell_mask * shell_shape_reveal;
+    let core_highlight_point = (core_point - vec2(-0.16, 0.20)) / vec2(0.18, 0.24);
+    let core_highlight = exp(-dot(core_highlight_point, core_highlight_point) * 3.8) * core_mask * core_reveal;
     let glow_point = (point - vec2(0.0, 0.08)) / vec2(0.42, 0.46);
     let glow_alpha = exp(-dot(glow_point, glow_point) * 3.2) * glow_reveal * 0.16;
 
-    let base_alpha = max(max(shell_alpha, core_alpha), glow_alpha);
-    var color = vec3(1.0, 0.55, 0.58) * glow_alpha;
+    let halo_distance = abs(shell_distance);
+    let halo_alpha = (1.0 - smoothstep(0.02, 0.12, halo_distance)) * (1.0 - shell_mask) * shell_shape_reveal * material.optics.w;
+    let base_alpha = max(max(max(shell_alpha, core_alpha), glow_alpha), max(glass_alpha, halo_alpha));
+    var color = glass_color * glass_alpha;
+    color = mix(color, vec3(1.0, 0.55, 0.58), glow_alpha);
+    color += mix(cyan, rose, shell_mix) * halo_alpha;
     color = mix(color, shell_color, shell_alpha);
     color = mix(color, core_color, core_alpha);
-    color += vec3(1.0, 0.98, 0.96) * highlight * 0.34;
+    color += vec3(0.94, 1.0, 1.0) * highlight * 0.62;
+    color += vec3(1.0, 0.97, 0.88) * core_highlight * 0.28;
     color -= vec3(contact_shadow * (1.0 - base_alpha));
     let alpha = clamp(max(base_alpha, contact_shadow * 0.42), 0.0, 1.0);
     if alpha < 0.002 { discard; }

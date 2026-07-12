@@ -21,6 +21,7 @@ use crate::{
         rebuild_waveform_playback_overlay, remove_waveform_playback_overlay,
     },
 };
+use crate::workspace_backdrop::{resize_workspace_backdrop, set_workspace_backdrop_enabled};
 
 pub use crate::resource_ops::apply_resource;
 
@@ -86,7 +87,19 @@ pub fn apply_despawn(world: &mut World, id: &str) -> Result<(), String> {
     remove_selection_overlay(world, entity);
     remove_shape_shadow_overlay(world, entity);
     remove_waveform_playback_overlay(world, entity);
+    let removed_backdrop_consumer = world
+        .get::<MeshMaterial2d<crate::procedural_sdf::ProceduralSdfMaterial>>(entity)
+        .is_some();
     world.despawn(entity);
+    if removed_backdrop_consumer {
+        let remaining = world
+            .query::<&MeshMaterial2d<crate::procedural_sdf::ProceduralSdfMaterial>>()
+            .iter(world)
+            .count();
+        if remaining == 0 {
+            set_workspace_backdrop_enabled(world, false)?;
+        }
+    }
     Ok(())
 }
 
@@ -211,6 +224,11 @@ pub fn apply_surface(world: &mut World, patch: AtomeSurfacePatch) -> Result<(), 
     {
         *projection = atome_camera_projection(width, height);
     }
+    resize_workspace_backdrop(
+        world,
+        Vec2::new(width, height),
+        UVec2::new(pixel_width, pixel_height),
+    )?;
     let ids: Vec<String> = world
         .resource::<AtomeEntityTable>()
         .by_id

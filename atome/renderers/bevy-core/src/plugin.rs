@@ -14,6 +14,10 @@ use crate::{
         insert_video_external_texture_component_for_node, AtomeVideoExternalTexturePlugin,
     },
     waveform_playback_overlay::rebuild_waveform_playback_overlay,
+    workspace_backdrop::{
+        spawn_workspace_backdrop, AtomePresentationCamera, PRESENTATION_LAYER, WORKSPACE_LAYER,
+    },
+    workspace_blur::{AssistantOpticsSettings, WorkspaceBlurMaterial, WorkspaceBlurPlugin},
 };
 
 pub struct AtomeBevyRendererPlugin {
@@ -31,6 +35,7 @@ impl Plugin for AtomeBevyRendererPlugin {
         app.insert_resource(self.config.clone())
             .add_plugins(AtomeVideoExternalTexturePlugin)
             .add_plugins(ProceduralSdfPlugin)
+            .add_plugins(WorkspaceBlurPlugin)
             .add_plugins(AtomeBevyUiPlugin)
             .init_resource::<AtomeEntityTable>()
             .init_resource::<AtomeBackdropBlurState>()
@@ -45,11 +50,25 @@ fn spawn_atome_bevy_scene(
     mut commands: Commands,
     config: Res<AtomeBevyRendererConfig>,
     mut images: ResMut<Assets<Image>>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut blur_materials: ResMut<Assets<WorkspaceBlurMaterial>>,
+    optics: Res<AssistantOpticsSettings>,
 ) {
+    let backdrop = spawn_workspace_backdrop(
+        &mut commands,
+        &mut images,
+        &mut meshes,
+        &mut blur_materials,
+        &config,
+        *optics,
+    );
+    commands.insert_resource(backdrop);
     commands.spawn((
         Camera2d,
         IsDefaultUiCamera,
         atome_camera_projection(config.width, config.height),
+        bevy::camera::visibility::RenderLayers::layer(WORKSPACE_LAYER).with(PRESENTATION_LAYER),
+        AtomePresentationCamera,
     ));
     for node in &config.initial_scene.nodes {
         let node_id = node.id.clone();

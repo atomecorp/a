@@ -17,6 +17,8 @@ pub mod video_external_texture;
 #[cfg(target_arch = "wasm32")]
 pub mod video_external_web;
 pub mod waveform_playback_overlay;
+pub mod workspace_backdrop;
+pub mod workspace_blur;
 
 pub use plugin::{apply_render_ops, AtomeBevyRendererPlugin};
 pub use render_math::{atome_rect_transform, color_from_rgba, depth_for_layer};
@@ -37,3 +39,5 @@ mod tests;
 mod texture_sprite_color_tests;
 #[cfg(test)]
 mod video_external_texture_tests;
+#[cfg(test)]
+mod workspace_blur_tests;

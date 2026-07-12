@@ -192,6 +192,25 @@ document.body.appendChild(panel);
 assert.equal(isBlockedTarget(panel), true);
 assert.equal(isBlockedTarget(child), false);
 
+window.eveBevyUiRuntime = {
+    hitTestAtClientPoint: ({ surface, clientX, clientY }) => (
+        surface === projectCanvas && clientX === 30 && clientY === 40
+            ? { treeId: 'eve_bevy_ui_main_menu', nodeId: 'eve_bevy_ui_main_menu_atome' }
+            : null
+    )
+};
+assert.equal(isBlockedTarget(projectCanvas, {
+    clientX: 30,
+    clientY: 40,
+    type: 'pointerdown'
+}), true);
+assert.equal(isBlockedTarget(projectCanvas, {
+    clientX: 140,
+    clientY: 120,
+    type: 'pointerdown'
+}), false);
+delete window.eveBevyUiRuntime;
+
 assert.equal(setFlowerPointerLock(7, { phase: 'test' }), true);
 assert.equal(window.__EVE_FLOWER_POINTER_LOCK__['7'].phase, 'test');
 assert.equal(scheduleFlowerPointerUnlock(7, 0), true);

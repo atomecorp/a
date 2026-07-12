@@ -277,6 +277,15 @@ test('iOS custom scheme serves Bevy WASM and project file media', () => {
         audioSchemeHandlerSource.includes('case "wasm": return "application/wasm"'),
         'iOS scheme must serve Bevy WASM with the application/wasm MIME type'
     );
+    assert.ok(
+        audioSchemeHandlerSource.includes('components?.query = nil'),
+        'iOS scheme routing must ignore cache-version queries when resolving bundled assets'
+    );
+    assert.equal(
+        audioSchemeHandlerSource.includes('respondRedirect'),
+        false,
+        'iOS scheme must serve versioned ES modules and WASM directly because WebKit module loading rejects custom-scheme redirects'
+    );
 });
 
 test('Xcode synchronized Common group includes the iOS Bevy controller', () => {
@@ -286,5 +295,17 @@ test('Xcode synchronized Common group includes the iOS Bevy controller', () => {
         projectSource.includes('AppNativeBevyRendererController.swift'),
         false,
         'synchronized Common files should not require a manual PBXFileReference entry'
+    );
+});
+
+test('iOS resource packaging excludes build artifacts before copying', () => {
+    assert.equal(
+        projectSource.includes('cp -R \\"$SRCROOT/../../../atome\\"'),
+        false,
+        'iOS packaging must not copy Rust target directories into the app before pruning them'
+    );
+    assert.ok(
+        projectSource.includes('rsync -a --exclude target --exclude .git'),
+        'iOS app and AUv3 packaging must exclude build and repository metadata at the copy boundary'
     );
 });

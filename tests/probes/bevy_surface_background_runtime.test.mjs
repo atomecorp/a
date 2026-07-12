@@ -8,7 +8,7 @@ const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
 
-const createWindowHarness = () => {
+const createWindowHarness = ({ createImage } = {}) => {
     const listeners = new Map();
     const surfaces = [];
     let drawImageCalls = 0;
@@ -23,6 +23,7 @@ const createWindowHarness = () => {
     const documentRef = {
         createElement(tagName) {
             if (tagName === 'img') {
+                if (createImage) return createImage();
                 return {
                     naturalWidth: 2,
                     naturalHeight: 1,
@@ -99,7 +100,7 @@ test('Bevy surface background runtime applies generated texture payloads', async
     harness.dispatch({
         signature: 'generated:test',
         color: [0.2, 0.3, 0.4, 1],
-        texture: { width: 1, height: 1, rgba: [8, 9, 10, 255] }
+        texture: { width: 1, height: 1, rgba: new Uint8ClampedArray([8, 9, 10, 255]) }
     });
     await tick();
 
@@ -107,7 +108,7 @@ test('Bevy surface background runtime applies generated texture payloads', async
     assert.deepEqual(calls[0], {
         signature: 'generated:test',
         color: [0.2, 0.3, 0.4, 1],
-        texture: { width: 1, height: 1, rgba: [8, 9, 10, 255] }
+        texture: { width: 1, height: 1, rgba: new Uint8Array([8, 9, 10, 255]) }
     });
     assert.deepEqual(calls[1], { redraw: true });
     assert.equal(readLatestBevySurfaceBackground().signature, 'generated:test');
@@ -136,7 +137,81 @@ test('Bevy surface background runtime caches decoded image textures by source UR
 
     assert.equal(harness.drawImageCalls(), 1);
     assert.equal(calls.length, 1);
-    assert.deepEqual(calls[0].texture, { width: 2, height: 1, rgba: [1, 2, 3, 255, 4, 5, 6, 255] });
+    assert.deepEqual(calls[0].texture, { width: 2, height: 1, rgba: new Uint8Array([1, 2, 3, 255, 4, 5, 6, 255]) });
+});
+
+test('Bevy surface background runtime survives WebKit decode rejection after synchronous load', async () => {
+    const imageListeners = new Map();
+    const harness = createWindowHarness({
+        createImage: () => ({
+            naturalWidth: 2,
+            naturalHeight: 1,
+            width: 2,
+            height: 1,
+            addEventListener(type, callback) {
+                imageListeners.set(type, callback);
+            },
+            removeEventListener(type) {
+                imageListeners.delete(type);
+            },
+            set src(_value) {
+                imageListeners.get('load')?.();
+            },
+            decode: async () => {
+                throw new Error('webkit_decode_rejected_after_load');
+            }
+        })
+    });
+    const moduleUrl = `${pathToFileUrl(path.join(repoRoot, 'eVe/domains/rendering/bevy_surface_background_runtime.js'))}?webkit=${Date.now()}`;
+    const { registerBevySurfaceBackgroundRuntime } = await import(moduleUrl);
+    const calls = [];
+    const surface = { ownerDocument: harness.documentRef };
+    harness.surfaces.push(surface);
+    registerBevySurfaceBackgroundRuntime(surface, {
+        started: true,
+        wasmModule: {
+            apply_atome_bevy_surface_background: (payload) => calls.push(payload),
+            request_atome_bevy_redraw() {}
+        }
+    });
+
+    harness.dispatch({ signature: 'image:webkit', sourceUrl: 'blob:webkit-image' });
+    await tick();
+
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].signature, 'image:webkit');
+    assert.equal(calls[0].texture.rgba.constructor, Uint8Array);
+});
+
+test('Bevy surface background runtime reapplies the current background to a replacement renderer on the same surface', async () => {
+    const harness = createWindowHarness();
+    window.__eveSurfaceBackground = {
+        signature: 'generated:replacement',
+        color: [0.9, 0.1, 0.2, 1]
+    };
+    const moduleUrl = `${pathToFileUrl(path.join(repoRoot, 'eVe/domains/rendering/bevy_surface_background_runtime.js'))}?replacement=${Date.now()}`;
+    const { registerBevySurfaceBackgroundRuntime } = await import(moduleUrl);
+    const calls = [];
+    const surface = { ownerDocument: harness.documentRef };
+    harness.surfaces.push(surface);
+    const wasmModule = {
+        apply_atome_bevy_surface_background: (payload) => calls.push(payload),
+        request_atome_bevy_redraw() {}
+    };
+
+    registerBevySurfaceBackgroundRuntime(surface, {
+        started: true,
+        wasmModule
+    });
+    await tick();
+    registerBevySurfaceBackgroundRuntime(surface, {
+        started: true,
+        wasmModule
+    });
+    await tick();
+
+    assert.equal(calls.length, 2);
+    assert.equal(calls[1].signature, 'generated:replacement');
 });
 
 test('Bevy surface background runtime applies payload emitted before surface registration', async () => {
@@ -221,7 +296,7 @@ test('user background restore waits for async auth identity after refresh', () =
 });
 
 test('saved background selection persists as the current wallpaper', () => {
-    const source = fs.readFileSync(path.join(repoRoot, 'eVe/intuition/tools/background.js'), 'utf8');
+    const source = fs.readFileSync(path.join(repoRoot, 'eVe/intuition/tools/background_panel_view.js'), 'utf8');
     const applySavedStart = source.indexOf('const applySavedBackground =');
     const deleteStart = source.indexOf('const deleteSavedBackground =');
     assert.ok(applySavedStart > 0);
@@ -231,9 +306,10 @@ test('saved background selection persists as the current wallpaper', () => {
 });
 
 test('image background choices persist immediately instead of depending on debounce', () => {
-    const source = fs.readFileSync(path.join(repoRoot, 'eVe/intuition/tools/background.js'), 'utf8');
-    assert.match(source, /schedulePreferenceSave\(\{ immediate: true \}\);/);
-    assert.match(source, /const schedulePreferenceSave = \(\{ immediate = false \} = \{\}\)/);
+    const imageSource = fs.readFileSync(path.join(repoRoot, 'eVe/intuition/tools/background_image.js'), 'utf8');
+    const prefsSource = fs.readFileSync(path.join(repoRoot, 'eVe/intuition/tools/background_prefs.js'), 'utf8');
+    assert.match(imageSource, /schedulePreferenceSave\(\{ immediate: true \}\);/);
+    assert.match(prefsSource, /const schedulePreferenceSave = \(\{ immediate = false \} = \{\}\)/);
 });
 
 test('local wallpaper choice is not overwritten by stale profile polling', () => {
@@ -336,6 +412,7 @@ test('default surface background color is shared by HTML and generated Bevy back
         });
         globalThis.getComputedStyle = getComputedStyle;
         globalThis.window = {
+            CustomEvent: TestCustomEvent,
             innerWidth: 2,
             innerHeight: 2,
             getComputedStyle,
@@ -387,8 +464,8 @@ test('default surface background color is shared by HTML and generated Bevy back
 
 test('Bevy background runtime skips duplicate surface signatures', () => {
     const source = fs.readFileSync(path.join(repoRoot, 'eVe/domains/rendering/bevy_surface_background_runtime.js'), 'utf8');
-    assert.match(source, /SURFACE_SIGNATURES = new WeakMap/);
-    assert.match(source, /SURFACE_SIGNATURES\.get\(surface\) === signature/);
+    assert.match(source, /SURFACE_APPLICATIONS = new WeakMap/);
+    assert.match(source, /previous\?\.signature === signature && previous\?\.rendererState === state/);
     assert.match(source, /IMAGE_TEXTURE_CACHE\.set\(sourceUrl, pending\)/);
 });
 
