@@ -273,6 +273,15 @@ assert.equal(isFlowerMenuOpen(), false, 'a long press on a BevyUI system element
 assert.equal(opens.length, opensBeforeSystemUiHold, 'a BevyUI system hold must not resolve flower items');
 delete window.eveBevyUiRuntime;
 
+window.eveAssistantApi = { getState: () => ({ active: true }) };
+const opensBeforeAssistantHold = opens.length;
+projectCanvas.dispatchEvent(makePointerEvent('pointerdown', { pointerId: 66 }));
+await delay(8);
+document.dispatchEvent(makePointerEvent('pointerup', { pointerId: 66, buttons: 0 }));
+assert.equal(isFlowerMenuOpen(), false, 'a long press on the active system assistant must never open the IntuitionX flower');
+assert.equal(opens.length, opensBeforeAssistantHold, 'an active assistant hold must not resolve flower items');
+delete window.eveAssistantApi;
+
 closeFlowerMenu();
 await delay(20);
 document.elementFromPoint = () => host;

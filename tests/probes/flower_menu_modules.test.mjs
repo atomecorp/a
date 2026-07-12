@@ -211,6 +211,20 @@ assert.equal(isBlockedTarget(projectCanvas, {
 }), false);
 delete window.eveBevyUiRuntime;
 
+window.eveAssistantApi = { getState: () => ({ active: true }) };
+assert.equal(isBlockedTarget(projectCanvas, {
+    clientX: 140,
+    clientY: 120,
+    type: 'pointerdown'
+}), true);
+window.eveAssistantApi = { getState: () => ({ active: false }) };
+assert.equal(isBlockedTarget(projectCanvas, {
+    clientX: 140,
+    clientY: 120,
+    type: 'pointerdown'
+}), false);
+delete window.eveAssistantApi;
+
 assert.equal(setFlowerPointerLock(7, { phase: 'test' }), true);
 assert.equal(window.__EVE_FLOWER_POINTER_LOCK__['7'].phase, 'test');
 assert.equal(scheduleFlowerPointerUnlock(7, 0), true);
