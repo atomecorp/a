@@ -2,7 +2,7 @@
 
 Status: planning document  
 Reference prototype: `eVe/R&D/dashboard_design.html`  
-Initial prompt source: `todo/prompt_dashboard_bevy_design.md`  
+Initial prompt source: `todo/ui_bevy/prompt_dashboard_bevy_design.md`  
 Target implementation: Bevy/Rust visual surface integrated into the existing eVe UI architecture
 
 ## Purpose

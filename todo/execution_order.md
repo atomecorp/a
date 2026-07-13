@@ -12,6 +12,8 @@ If any instruction in this file conflicts with ./.codex/AGENTS.md, ./.codex/AGEN
 
 Ce fichier est l'ordre d'execution autoritatif des taches actives de ./todo.
 
+Status: Canonical execution order. This file is the authoritative sequencing and scope registry for every active todo document.
+
 Il ne doit plus etre interprete comme une simple liste indicative.
 
 Regle de perimetre:
@@ -19,6 +21,33 @@ Regle de perimetre:
 - Seuls les fichiers todo explicitement cites dans ce document peuvent etre executes.
 - Tout fichier present dans ./todo mais absent de ce document est hors ordre actif.
 - Un fichier absent ne doit pas etre traite tant qu'il n'a pas ete ajoute ici avec sa phase, ses dependances, ses criteres de sortie, et sa validation utilisateur.
+
+Rendering decision locked by the product owner:
+
+- Bevy/WebGPU is the only supported product renderer.
+- The project uses one shared rendering pipeline and one visible canvas per active rendering zone.
+- No alternate renderer, parallel media compositor, compatibility renderer, or silent runtime substitution may be added.
+
+Document status vocabulary:
+
+- `Specification`: target contract or design decision.
+- `Current status`: verified description of the maintained implementation.
+- `Active backlog`: executable unfinished work.
+- `Obsolete`: retained only as a migration record and never used as an implementation authority.
+
+### Phase 0 - Documentation and architecture normalization
+
+Status:
+
+- [x] Completed in the current documentation pass.
+
+Scope completed:
+
+- [x] Retire the obsolete pre-Bevy media-editor specification from the active architecture.
+- [x] Remove audio/video fallback language and describe browser capture as an explicit backend where it is supported.
+- [x] Mark timeline, AV, recording, and export documents with explicit status semantics.
+- [x] Add the professional export contract: editable project package, open archival master, delivery export, deterministic rendering, checkpointed resume, atomic publication, and final validation.
+- [x] Register the relevant timeline, media, rendering, AI, sharing, test, and product todo families in the phase sources below.
 
 ## Regles de pilotage
 
@@ -44,6 +73,8 @@ Regle de perimetre:
 6. Produire le rapport d'avancement avec X/Y et Z%.
 7. Si le fichier source todo est entierement solde, le deplacer vers done/.
 
+Baseline after the 2026-07-13 priority restructuring: 59/144 checked tasks (40.97%). Historical progress reports below retain the totals recorded at their original completion date.
+
 ## Gardes-fous transverses obligatoires
 
 Sources principales:
@@ -68,7 +99,7 @@ Ces regles s'appliquent a toutes les phases restantes ci-dessous:
 
 Source principale:
 
-- todo/urgent_priorities.md
+- done/urgent_task.md (historical source; no active work)
 
 - [x] Remplacer tout require() dans module ES, notamment tools/communication.js.
 - [x] Deplacer mtraxCloseInFlightGuard avant toute utilisation dans eVeIntuition.js.
@@ -81,7 +112,7 @@ Source principale:
 
 Source principale:
 
-- todo/urgent_priorities.md
+- done/urgent_task.md (historical source; no active work)
 
 - [x] Creer shared/utils.js et migrer progressivement les utilitaires communs.
 - [x] Creer shared/media_types.js et supprimer les duplications de types media.
@@ -128,7 +159,7 @@ Les points Molecule non termines sont repris plus bas dans l'ordre obligatoire r
 
 ## Ordre obligatoire des phases restantes
 
-### Phase 3 bis - Analyse prioritaire Bevy / Kira / CPAL / WebAssembly / MIDI
+### Phase 3 bis - Kira / CPAL / WebAssembly / MIDI contract validation
 
 Statut:
 
@@ -148,7 +179,7 @@ Sources principales:
 
 Objectif:
 
-- Verifier l'etat reel du couple Kira/CPAL dans le framework et produire une analyse prioritaire sur l'interet et la faisabilite d'une direction Bevy pour audio, video, timeline, tracks et MIDI, y compris la piste WebAssembly et les implications energetiques.
+- Verifier l'etat reel du couple Kira/CPAL dans le framework et produire une analyse prioritaire sur les contrats audio, WebAssembly et MIDI. La decision Bevy/WebGPU est deja validee et ne constitue plus une decision ouverte.
 
 Taches:
 
@@ -160,7 +191,43 @@ Taches:
 
 Contrainte de blocage:
 
-- Aucun remplacement structurel base sur Bevy pour timeline, tracks, audio, video ou MIDI ne doit commencer avant la cloture de cette phase et validation explicite de sa recommandation.
+- Aucun nouveau choix de renderer ne peut etre introduit. La cloture de cette phase reste necessaire avant les changements structurels natifs Kira/CPAL/MIDI et avant de figer les contrats de scheduling et d'energie.
+
+### Phase 3 ter - Product UI Bevy migration and DOM retirement
+
+Statut:
+
+- [ ] Non commencee
+
+Depend de:
+
+- Phase 3 bis terminee
+
+Sources principales:
+
+- todo/ui_bevy/
+- todo/cleanup_architecture/system_ui_component_ssot.md
+- todo/cleanup_architecture/v2_full_migration_framework.md
+- todo/eve_features/menu_interactions.md
+- todo/eve_features/calendar_todos.md
+- todo/eve_features/map_localization.md
+
+Objectif:
+
+- Construire le socle UI Bevy unique, migrer les surfaces produit visibles, puis supprimer leurs routes HTML/DOM, Intuition/View et bridges devenus inutiles. Le navigateur ne conserve que le shell minimal et les services caches autorises pour texte/accessibilite/IME.
+
+Taches:
+
+- [ ] Valider les primitives Bevy UI partagees et leurs interactions reelles avant toute migration de surface.
+- [ ] Migrate the bottom Bevy main menu interaction model: direct actions, expandable palettes, latch state, dedicated hold actions, hold-to-palette, drag cancellation, and removal of the flattened legacy projection.
+- [ ] Migrate the Flower hold contract: held-pointer palette opening, immediate Back navigation, leaf preview followed by activation on release, and cancellation safety.
+- [ ] Delete Flower/menu/toolbox DOM bridges, aliases, factories, and browser-only state once the complete Bevy interaction contract is verified and no canonical consumer remains.
+- [ ] Finaliser la parite Dashboard Bevy, migrer le dashboard, puis supprimer tout chemin HTML/DOM restant.
+- [ ] Migrer les panels/dialogs et leur infrastructure commune, puis supprimer les factories, observateurs layout et lectures de geometrie DOM devenus inutiles; le chrome Molecule reste execute en Phase 4 apres sa stabilisation fonctionnelle.
+- [ ] Realiser l'audit calendrier et implementer sa projection Bevy sans dupliquer CalendarAPI, recurrence, alarmes, todos ou fuseaux horaires.
+- [ ] Realiser l'audit map/localisation, valider le provider et la confidentialite, puis implementer la scene Bevy sans Leaflet ni widget DOM embarque.
+- [ ] Inventorier puis supprimer toutes les couches visibles Intuition/View/DOM devenues sans consommateurs apres migration.
+- [ ] Valider Web, Tauri et iOS sur le meme contrat scene/diff/interactions, avec erreurs typees pour les capacites indisponibles.
 
 ### Phase 1 - Gouvernance architecture Atome/eVe
 
@@ -286,7 +353,7 @@ Sources principales:
 - todo/communication_social/apple_mail_security.md
 - todo/sharing_search_monitoring/Share_tool.md
 - todo/ai_voice/MCP_voice_control.md
-- todo/ai_voice/Full_vocal_AI_integration.md
+- done/ai_voice/Full_vocal_AI_integration.md
 
 Objectif:
 
@@ -315,15 +382,7 @@ Taches:
 
 Rapports d'avancement Phase 3:
 
-- Security surface inventory: updated todo/planning_audit/framework_security_audit_and_vulnerability_remediation.md with a structured attack-surface inventory covering filesystem, uploads, user data separation, HTTP routes, WebSocket and sync channels, CORS, native commands, shell/process execution, JavaScript/native bridges, tokens, secrets, credentials, permissions, storage, MCP, AI, voice, command pipeline, sandbox boundaries, runtime modes, dynamic imports, debug paths, fallbacks, and generated artifacts; validation by targeted rg over maintained source paths plus source inspection of server/auth.js, server/server.js, server/fileStorage.js, atome/src/squirrel/security/token_vault.js, atome/src/squirrel/atome/mcp.js, atome/src/squirrel/ai/agent_gateway.js, server/shell.js, platforms/desktop-tauri native/server files, and iOS bridge files; result passed; progress 44/118, 37.29%.
-- Deep security risk verification: updated todo/planning_audit/framework_security_audit_and_vulnerability_remediation.md with verified open risk candidates covering default JWT/cookie secrets, localStorage sync credentials, media query tokens, WebSocket internal request injection, client-supplied file identity fallback, broad iOS filesystem bridge exposure, shell policy misconfiguration risk, path traversal controls and gaps, and inconsistent WebSocket payload validation; validation by targeted rg plus source inspection of server/auth.js, server/server.js, server/shell.js, server/fileStorage.js, server/userExportImport.js, atome/security/syncQueue.js, platforms/desktop-tauri/src/server/mod.rs, platforms/ios/atome-auv3/Common/WebViewManager.swift, platforms/ios/atome-auv3/Common/FileSystemBridge.swift, and atome/src/squirrel/atome/mcp.js; result passed; progress 45/118, 38.14%.
-- Auth/token/user-data audit: updated todo/planning_audit/framework_security_audit_and_vulnerability_remediation.md with verified findings for missing auth rate limits, OTP leakage in logs, browser-readable bearer token storage, expired-token refresh behavior, mail password persistence, Tauri Fastify token particle storage, unauthenticated debug user directory exposure, and token/secret diagnostic leakage; validation by targeted rg and source inspection of server/auth.js, server/server.js, platforms/desktop-tauri/src/server/local_auth.rs, atome/security/syncQueue.js, atome/security/cloudSync.js, atome/src/squirrel/security/token_vault.js, atome/src/squirrel/apis/unified/adole.js, atome/src/squirrel/mail/runtime_preferences.js, eVe/intuition/tools/user.js, eVe/domains/user/profile_api.js, and eVe/domains/media/api/media_api_shared.js; result passed; progress 46/118, 38.98%.
-- MCP/AI/tool/command-bus audit: updated todo/planning_audit/framework_security_audit_and_vulnerability_remediation.md with verified findings for AtomeAI capability metadata not being enforced at call time, raw confirmed-boolean confirmation bypass, MCP ai.tools.call requiring only ai.execute instead of target tool capabilities, voice connector mutations bypassing AtomeAI/MCP/command-bus gates, voice mail auto-send using internal confirmed:true, offline voice mutation replay outside canonical audit/idempotency path, and pattern-based runtime sensitivity coverage; validation by targeted rg and source inspection of atome/src/squirrel/atome/mcp.js, atome/src/squirrel/ai/agent_gateway.js, atome/src/squirrel/ai/default_tools.js, atome/src/squirrel/ai/offline_mutation_queue.js, atome/src/squirrel/atome/runtime_tool_resolution.js, atome/src/squirrel/voice/orchestrator.js, atome/src/squirrel/voice/tool_router.js, atome/src/squirrel/voice/ai_planner.js, eVe/intuition/tools/core/tool_runtime.js, eVe/intuition/runtime/command_bus.js, and eVe/core/atome_commit.js; result passed; progress 47/118, 39.83%.
-- Security severity prioritization: updated todo/planning_audit/framework_security_audit_and_vulnerability_remediation.md with severity criteria, a complete classification for SEC-FIND-001 through SEC-FIND-024, remediation decisions, owners, phase-blocking status, remediation order, and Phase 3 blocking decision; validation by targeted rg checks for every SEC-FIND entry, severity totals, checklist status, and global checkbox recount; result passed; progress 48/118, 40.68%.
-- Critical/high remediation completion: hardened the remaining Phase 3 blockers by adding canonical WebSocket `api-request` schema gating, Tauri local auth attempt limits, server-side rotating refresh sessions, and durable confirmation/audit/idempotency metadata for effectful voice/AI connector mutations. Updated maps for `server/ws_api_schema.js`. Validations passed: targeted `node --check` runs, `node tests/server/ws_api_schema.test.mjs`, `node tests/server/auth_refresh_sessions.test.mjs`, voice/router/orchestrator/agent/mail tests, `npm run check:syntax`, `cargo check` in `platforms/desktop-tauri`, `git diff --check`, and targeted `rg` security checks. Result: critical/high security remediation task complete; remaining Phase 3 work is documentation of medium/residual risks and final audit validation. Progress 49/118, 41.53%.
-- Residual medium-risk documentation: updated todo/planning_audit/framework_security_audit_and_vulnerability_remediation.md with explicit owner, impact, current mitigation, priority, remediation plan, and immediate-deferral justification for SEC-FIND-007, SEC-FIND-008, and SEC-FIND-017. Validation passed by targeted rg checks for residual finding coverage, required documentation fields, source checklist status, and global checkbox recount. Result: residual risk documentation task complete; remaining Phase 3 work is targeted security validation and final audit report. Progress 50/118, 42.37%.
-- Targeted security validation: added/tightened tests for refresh responses without JSON bearer tokens, sync queue password non-persistence, isolated voice router storage, orchestrator environment propagation, and runtime mail preference storage isolation. Validations passed: WebSocket schema, refresh sessions, sync queue credentials, AI gateway capability and toolchain policy, MCP security surface, voice router mail/offline queue, voice orchestrator, mail service, media auth playback, token vault, auth access Vitest, targeted `node --check`, `npm run check:syntax`, `cargo check` in `platforms/desktop-tauri`, `git diff --check`, and targeted `rg` checks. Result: targeted security validation task complete; SEC-FIND-017 diagnostic-redaction candidates remain explicitly carried to the final Phase 3 audit report. Progress 51/118, 43.22%.
-- Final Phase 3 audit report: updated done/planning_audit/framework_security_audit_and_vulnerability_remediation.md with the final security audit and remediation report covering scope, all resolved critical/high findings, residual medium risks SEC-FIND-007, SEC-FIND-008, and SEC-FIND-017, validation summary, and closure decision, then moved the completed source todo file to done/planning_audit. Validation passed by targeted rg checks for final report sections, residual finding coverage, source checklist status, global checkbox recount, and git diff whitespace check. Result: Phase 3 complete; dependent phases may proceed with residual security debt explicitly tracked. Progress 53/118, 44.92%.
+- Phase 3 security audit and remediation are complete; the authoritative final report is `done/planning_audit/framework_security_audit_and_vulnerability_remediation.md`. Historical implementation details remain in that completed report.
 
 ### Phase 4 - Finalisation Molecule / MTraX
 
@@ -333,12 +392,13 @@ Statut:
 
 Depend de:
 
-- Phase 3 terminee
+- Phase 3 ter terminee
 
 Sources principales:
 
 - todo/molecule/molecule_sanitizer.md
 - todo/media_handling/MTraX_edition.md
+- todo/molecule/NewMolecules.md
 - todo/molecule/molecule_tests.md
 - todo/molecule/molecule_trouble_solving.md
 - todo/molecule/molecule_rename_mtrack_to_molecule.md
@@ -350,6 +410,8 @@ Taches:
 - [ ] Inventorier les noms mtrack, mtrax, mtracks, hmtracks.
 - [ ] Lancer le renommage progressif Molecule seulement apres stabilisation fonctionnelle.
 - [ ] Garder les aliases legacy uniquement aux frontieres publiques documentees.
+- [ ] Migrer le chrome visible Molecule vers Bevy et supprimer son panel DOM selon V2.12 apres la phase 3 ter.
+- [ ] Restaurer le contrat canonique marqueurs -> sections -> Cells par piste de V2.13, puis supprimer toute implementation Cells DOM ou etat parallele restant.
 
 Rapports d'avancement Phase 4:
 
@@ -370,7 +432,10 @@ Sources principales:
 
 - todo/media_handling/AV_APIS.md
 - todo/media_handling/video_recording_and_preview.md
-- todo/media_handling/Mtracks_engine.md
+- todo/media_handling/RECORDING_INTEGRATION_PLAN.md
+- todo/media_handling/RUNNING_VIDEO_AUDIO_SYNC_PLAN.md
+- todo/media_handling/debug_ios_media_recorder.md
+- todo/molecule/NewMolecules.md
 
 Taches:
 
@@ -380,6 +445,8 @@ Taches:
 - [ ] Encadrer ou supprimer les chemins debug Swift en production.
 - [ ] Remplacer progressivement l'ancien chemin recorder C FFI AUv3.
 - [ ] Stabiliser les frontieres publiques audio/video playback/recording/preview.
+- [ ] Implementer le contrat d'export professionnel et la decision des profils ouverts, archivage et livraison.
+- [ ] Supprimer les anciennes routes HTMLMediaElement et no-op media renderer; les capacites indisponibles doivent retourner une erreur typee explicite.
 
 ### Phase 6 - Partage / sync / Finder
 
@@ -494,9 +561,10 @@ Sources principales:
 - todo/ai_voice/AI_Integration.md
 - todo/ai_voice/eVe_AI.md
 - todo/ai_voice/eVe_code_editor.md
-- todo/ai_voice/Full_vocal_AI_integration.md
+- done/ai_voice/Full_vocal_AI_integration.md (historical completed source)
 - todo/ai_voice/MCP_voice_control.md
 - todo/ai_voice/voice_recognition.md
+- todo/ai_voice/eVe_MCP_APIS_Tools.md
 
 Taches:
 
@@ -537,7 +605,7 @@ Sources principales:
 
 Taches:
 
-- [ ] Ne pas lancer l'implementation MIDI ni un remplacement structurel des timelines/tracks par Bevy avant la cloture de la Phase 3 bis.
+- [ ] Conserver Bevy/WebGPU comme renderer unique; la Phase 3 bis ne peut pas revalider ou remplacer ce choix.
 - [ ] MIDI.
 - [ ] Vector editing layer.
 - [ ] Universal canvas, including verification that Squirrel and preferably the open-source Squirrel + Atome engine remain correctly exported through the CDN and still produce a viable functional PWA.
@@ -549,20 +617,21 @@ Taches:
 - [ ] Website publishing.
 - [ ] Ace Step integration in eVe.
 
-## Fichiers de todo hors ordre actif
+## Todo scope registry
 
-Les fichiers suivants existent dans ./todo mais ne doivent pas etre traites tant qu'ils ne sont pas rattaches explicitement a une phase ci-dessus:
+Every maintained todo family is assigned to an execution phase. A file may not be executed outside its assigned phase.
 
-- todo/eve_features/eve_accessibility.md
-- todo/eve_features/menu_interactions.md
-- todo/planning_audit/eve_intuition_technical_audit.md
-- todo/cleanup_architecture/eVe_optiisations.md
-- todo/sharing_search_monitoring/Share_tool.md
-- todo/sharing_search_monitoring/tool_monitor.md
-- todo/sharing_search_monitoring/tools_monitoring.md
-- todo/communication_social/mail.md
-- todo/communication_social/matrix.md
-- todo/dev_ops/developer-experience.md
+- Phase 3 bis: `todo/planning_audit/bevy_kira_cpal_wasm_midi_feasibility.md`, `todo/midi/`.
+- Phase 3 ter: `todo/ui_bevy/`, `todo/eve_features/menu_interactions.md`, `todo/eve_features/calendar_todos.md`, `todo/eve_features/map_localization.md`, `todo/cleanup_architecture/system_ui_component_ssot.md`, `todo/cleanup_architecture/v2_full_migration_framework.md`.
+- Phase 4: `todo/molecule/`, `todo/media_handling/MTraX_edition.md`, `todo/media_handling/RUNNING_VIDEO_AUDIO_SYNC_PLAN.md`.
+- Phase 5: `todo/media_handling/`.
+- Phase 6: `todo/sharing_search_monitoring/`, `todo/communication_social/mail.md`, `todo/communication_social/matrix.md`, `todo/communication_social/matrix_flower_context_menu.md`, `todo/communication_social/social_network_tool.md`.
+- Phase 7: remaining `todo/cleanup_architecture/` files excluding `system_ui_component_ssot.md` and `v2_full_migration_framework.md`, `todo/rendering_graphics/`, `todo/tools/`.
+- Phase 8: `todo/communication_social/user_auth.md`, `todo/eve_features/Notification_tool.md`, `todo/eve_features/eve_accessibility.md`.
+- Phase 9: `todo/ai_voice/`.
+- Phase 10: `todo/dev_ops/`, `todo/communication_social/apple_mail_security.md`, `todo/eve_features/prompt_modification_menu_mvp_v146_ios_touch_tests.md`, `todo/tests/`, `todo/execution_order.md` follow-up documentation work.
+
+The registry is intentionally directory-based only for families that are fully governed by the corresponding phase. Any newly created todo file must be assigned here before execution.
 
 Si un de ces fichiers devient necessaire, il doit etre ajoute ici avant execution.
 

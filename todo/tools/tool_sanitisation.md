@@ -31,10 +31,8 @@ Documentation normative:
 - documentations/code&tools.md
 - documentations/atome_object.md
 - documentations/tools_api_and_coding.md
-- eVe/documentations/tools.md
-- eVe/documentations/atome_concepts.md
+- atome/documentations/atome_structur_to_respect.md
 - eVe/documentations/runtime_ai_mcp_entrypoints.md
-- eVe/documentations/int8.md
 
 Implementation actuellement inspectee pour le volet audio/capture:
 

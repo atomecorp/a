@@ -1,5 +1,7 @@
 # Projet Molécule - Debug, renommage et évolution MTRX
 
+Status: Historical audit and active cleanup record. References to former alternate routes describe defects to remove, never approved architecture.
+
 Date: 2026-04-30
 
 ## Décision de départ
@@ -62,7 +64,7 @@ Hypothèses à vérifier:
 - URL média temporaire ou token expiré/non réhydraté.
 - Preview host détruit trop tôt ou rattaché au mauvais parent DOM.
 - Race condition entre import, preview, persistance et rendu.
-- Fallback image/video non stable selon runtime Fastify/Axum/Tauri/browser.
+- La résolution image/video n'était pas stable selon le runtime Fastify/Axum/Tauri/browser.
 
 ### P1 - Ouverture graphique confuse
 
@@ -183,12 +185,12 @@ Statut: correction 2 appliquée, validation OK.
 Constat:
 
 - `eVe/domains/mtrax/tests/clip_loop_model.test.mjs` échouait avant correction: `buildClipPlaybackSegments` retournait `[]` dans le scénario de lecture aplatie d'une boucle/crop.
-- Le test passait `fallbackSource`, mais `buildClipPlaybackSegments` ne lisait que `defaultSource`.
-- Effet runtime probable: certains chemins historiques ou tests qui fournissent `fallbackSource` peuvent produire zéro segment lisible, donc un média peut sembler perdu dans les cas de boucle, split, duplication ou playback aplati.
+- Le test passait un alias de source historique, mais `buildClipPlaybackSegments` ne lisait que `defaultSource`.
+- Effet runtime probable: certains chemins historiques ou tests qui fournissent cet alias peuvent produire zéro segment lisible, donc un média peut sembler perdu dans les cas de boucle, split, duplication ou playback aplati.
 
 Correction:
 
-- [fait] `buildClipPlaybackSegments` accepte maintenant `fallbackSource` comme alias de `defaultSource`.
+- [fait] `buildClipPlaybackSegments` accepte maintenant l'ancien alias de source comme alias de `defaultSource`; cette compatibilité doit être supprimée lors de la normalisation du contrat source unique.
 
 Validation prévue:
 
@@ -258,7 +260,7 @@ Corrections appliquées:
 
 - [fait] `hmtracks_audio_engine_v1.js` ne crée plus de processeur AudioWorklet ni de thread audio local pour la lecture. Il devient un pont transport/horloge `kira_bridge_only`.
 - [fait] Le pont de lecture n'expose plus de `targetNode` WebAudio ni de route `web_audio`.
-- [fait] Les fallbacks de lecture `AudioBufferSourceNode/createBufferSource` ont été retirés de `hmtracks_native_playback_runtime.js`.
+- [fait] Les routes de lecture `AudioBufferSourceNode/createBufferSource` ont été retirées de `hmtracks_native_playback_runtime.js`.
 - [fait] Les diagnostics MTrack parlent maintenant de pont Kira au lieu de `audio_worklet_required`.
 - [fait] Le test `hmtracks_audio_engine_v1.test.mjs` vérifie que le backend browser lecture est `web_wasm_kira`, route `kira`, sans noeud WebAudio de sortie.
 - [fait] Le chemin `AudioWorklet` d'enregistrement browser a été restauré après clarification: l'interdiction concerne la lecture.
@@ -281,10 +283,10 @@ Constats principaux:
 - [confirmé] Le runtime MTrack/Molécule reste organisé autour d'un gros état singleton dans `eVe/domains/mtrax/core/state_factory.js`. Il mélange session, timeline, preview, rendu, audio, recording, sélection, drag, diagnostics et état projet.
 - [confirmé] Le modèle actif/dormant (`activeGroupId`, `dormantGroupId`, timeline active, preview actif) explique bien la contamination possible entre deux atomes ouverts successivement. Ce n'est pas encore un vrai modèle multi-instance.
 - [confirmé] Plusieurs fichiers dépassent 900 à 2000 lignes (`loop_cells_runtime.js`, `hmtracks_native_playback_runtime.js`, `record_capture_runtime.js`, `window_api_runtime.js`, `transport_gestures_runtime.js`, `styles.js`, `group_timeline_load_runtime.js`, `play_runtime.js`). Ce sont des zones à risque élevé pour les régressions et les effets de bord.
-- [confirmé] Le renderer WebGPU a un fallback noop. C'est préférable à un crash, mais dangereux si le résultat utilisateur devient un preview vide silencieux.
+- [confirmé] Le renderer WebGPU possède encore une route no-op. Elle doit être remplacée par une erreur explicite et testable; un preview vide silencieux est interdit.
 - [confirmé] Le vocabulaire technique `mtrax` est encore omniprésent dans les ids, schemas, datasets et routes. Il ne faut pas le renommer globalement maintenant, car il sert de contrat interne.
 - [confirmé] Les libellés utilisateur principaux pouvaient encore afficher `Mtrack`/`MTraX`.
-- [confirmé] La lecture audio locale ne doit plus avoir de fallback WebAudio; la seule route de lecture valide est Kira natif/WASM.
+- [confirmé] La lecture audio locale ne doit plus avoir de route WebAudio; la seule route de lecture valide est Kira natif/WASM.
 
 Corrections de nettoyage appliquées:
 
@@ -312,15 +314,15 @@ Régression rapportée:
 Cause probable:
 
 - Le cleanup audio a rendu le routage trop strict: le runtime essayait de piloter aussi les timelines vidéo pures via le moteur audio Kira/clock bridge.
-- En browser, `resolveAudioRuntime()` annonçait `web_wasm_kira` dès que `WebAssembly` existe, mais la façade `Squirrel.av.audio` peut ne pas être chargée. Le runtime tentait alors Kira au lieu de retomber sur `HTMLMediaElement`.
+- En browser, `resolveAudioRuntime()` annonçait `web_wasm_kira` dès que `WebAssembly` existe, mais la façade `Squirrel.av.audio` peut ne pas être chargée. Le runtime tentait alors Kira sans vérifier la capacité réelle et devait maintenant échouer explicitement.
 - Les clips audio browser étaient mutés/pausés si le moteur natif ne prenait pas réellement la sortie, donc silence.
 
 Corrections:
 
-- [fait] Tauri/browser vidéo pure: ne plus forcer Kira; revenir à l'horloge visuelle et à `HTMLMediaElement`.
+- [fait] Tauri/browser vidéo pure: ne plus forcer Kira audio sur une source vidéo sans piste audio; la vidéo reste pilotée par l'horloge visuelle et son backend vidéo explicite.
 - [fait] Tauri audio: continuer à utiliser Kira natif.
-- [fait] Browser audio: utiliser Kira WASM seulement si la façade `Squirrel.av.audio` expose réellement `create_clip` et `play_instance`; sinon fallback `HTMLMediaElement`.
-- [fait] Audio browser fallback: si Kira ne possède pas la sortie, l'élément audio est démuté, positionné et lancé via `media.play()`.
+- [fait] Ancienne route browser: utiliser Kira WASM seulement si la façade `Squirrel.av.audio` expose réellement `create_clip` et `play_instance`; la route HTMLMediaElement est désormais identifiée comme une dette à supprimer, pas comme une architecture valide.
+- [fait] Ancienne route browser: lorsque Kira ne possédait pas la sortie, l'élément audio était démuté, positionné et lancé via `media.play()`; ce comportement doit être supprimé du runtime final.
 - [fait] Aucun retour d'`AudioWorklet` pour la lecture.
 
 Validation:
@@ -336,7 +338,7 @@ Tâches ajoutées après audit:
 4. [à faire][P0] Formaliser le contrat d'enregistrement unique: API JS commune, backends natifs Tauri/iOS/AUv3, backend browser séparé avec `AudioWorklet` seulement pour recording browser.
 5. [à faire][P1] Découper `state_factory.js` en sous-états par domaine: session, timeline, preview, audio, recording, UI, diagnostics.
 6. [en cours][P1] Découper les fichiers runtime les plus gros en modules testables, en commençant par `loop_cells_runtime.js`, `hmtracks_native_playback_runtime.js`, `record_capture_runtime.js`, `window_api_runtime.js`.
-7. [à faire][P1] Remplacer les fallbacks WebGPU noop silencieux par un état d'erreur explicite visible dans le diagnostic et testable.
+7. [à faire][P1] Remplacer la route WebGPU no-op silencieuse par un état d'erreur explicite visible dans le diagnostic et testable.
 8. [à faire][P1] Séparer clairement UI de panel et lifecycle média: drag/resize/close ne doivent pas écrire la timeline ou le média hors action explicite.
 9. [à faire][P1] Continuer le renommage UI vers Molécule sans toucher aux ids techniques `mtrax` tant que les probes P0 ne sont pas vertes.
 10. [à faire][P2] Préparer une migration technique `mtrax` -> `molecule` seulement après stabilisation, avec compatibilité des anciennes timelines.
@@ -344,6 +346,8 @@ Tâches ajoutées après audit:
 ### 2026-04-30 - Audit cellules / loop cells / record cells
 
 Statut: nettoyage ciblé appliqué, première découpe modèle/sections/preview terminée, tests automatisés OK. Le découpage UI complet reste à faire.
+
+Important migration clarification: the former Cells behavior is not optional legacy UI. The rebuilt Molecule contract is marker-defined sections projected as one Cell per track. Marker changes must deterministically update affected sections/Cells; Cell operations must act on real track content and recording targets, never on a DOM-owned copy. The authoritative restoration plan is `todo/molecule/NewMolecules.md` §3G / V2.13.
 
 Constats:
 
@@ -362,7 +366,7 @@ Corrections:
 - [fait] Duplication/clone de cellule: copie des couleurs et configs d'enregistrement scoped par cellule.
 - [fait] Suppression d'entrée cellule: nettoyage de la sélection, des configs et de l'état playback associé.
 - [fait] Batch record cells: une seule persistance/footer event pour une sélection multi-cellules.
-- [fait] Normalisation des clones invalides: fallback sur le marker source si possible, sinon rejet.
+- [fait] Normalisation des clones invalides: utiliser le marker source s'il est valide, sinon rejeter explicitement.
 - [fait] Suppression du code mort `previewRendered`.
 - [fait] Extraction de `timeline/loop_cells_model.js`: règles d'état, clés, maps, pruning, duplication scoped, normalisation follow/repeat.
 - [fait] Extraction de `timeline/loop_cells_sections.js`: résolution des sections visibles et navigation section suivante.

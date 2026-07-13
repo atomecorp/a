@@ -1,6 +1,6 @@
 # eVe / Atome Unified AI Coding & Architecture Guideline — Modular Entry Point
 
-Version: 3.0-modular-entry
+Version: 3.1-modular-entry
 Status: Active – Strict Enforcement
 Scope: Root routing file for the modular .codex rule set used by AI coding agents working on Atome/eVe.
 
@@ -81,5 +81,8 @@ Minimum mandatory takeaways:
 - Keep WebGPU as the primary rendering route.
 - Use the canonical mutation pipeline.
 - Reuse existing architecture before creating new modules or helpers.
+- Prefer the simplest architecture-compliant solution: fewer concepts, fewer layers, fewer dependencies, and one canonical owner.
+- Do not add speculative abstractions, caches, adapters, registries, wrappers, or execution paths.
+- Remove dead, duplicated, obsolete, temporary, and unnecessary code from the touched scope when dependency checks make removal safe.
 - Update maps when ownership, API, design, rendering, or structure changes.
 - Validate with the narrowest relevant executable check first, then widen only when needed.

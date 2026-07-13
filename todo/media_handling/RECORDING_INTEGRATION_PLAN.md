@@ -1,5 +1,7 @@
 # Recording Integration Plan
 
+Status: Specification and implementation backlog. Completed items are marked explicitly; remaining items are active work.
+
 ## Goal
 
 Build one coherent recording pipeline for browser, Tauri, iOS/AUv3, Node V3, and the future multitrack recorder.
@@ -53,7 +55,7 @@ The canonical stop payload must include:
 
 Browser:
 
-- Keep WebAudio capture as fallback.
+- Use the browser capture backend explicitly when the browser runtime is selected.
 - Use AudioWorklet only for PCM capture.
 - Validate that chunks are non-empty and generate a playable WAV before creating atomes.
 

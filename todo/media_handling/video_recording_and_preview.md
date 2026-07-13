@@ -21,7 +21,7 @@ La cible est stricte :
 - un enregistrement iOS natif uniquement responsable de produire le fichier video ;
 - une seule source de verite pour le cycle de vie start/stop/state ;
 - aucun rendu natif iOS superpose au DOM pour les previews d'outils ;
-- aucun fallback silencieux, aucun patch opportuniste, aucune duplication de logique.
+- aucune route de remplacement silencieuse, aucun patch opportuniste, aucune duplication de logique.
 - suppression immediate de tout code deprecated ou devenu inutilise rencontre pendant l'implementation.
 
 ## Probleme Actuel
@@ -273,7 +273,7 @@ Checks automatises :
 - Le rendu preview cible est WebGPU.
 - Le record iOS reste natif pour produire un fichier fiable.
 - Une seule source de verite pour l'etat video.
-- Aucun fallback silencieux.
+- Aucune route de remplacement silencieuse.
 - Aucun patch local dans un outil.
 - Aucun rendu natif superpose au DOM pour les outils.
 - Aucun transfert frame par frame Swift vers JS.

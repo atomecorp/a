@@ -8,8 +8,8 @@ This file is normative for every module that creates, validates, mutates, persis
 
 Reference sources:
 
-- [eVe/documentations/atome_object.md](../../eVe/documentations/atome_object.md)
 - [eVe/documentations/atome_persistence_contract.md](../../eVe/documentations/atome_persistence_contract.md)
+- [eVe/documentations/eVe_canvas.md](../../eVe/documentations/eVe_canvas.md)
 - [atome/documentations/ADOLE.md](./ADOLE.md)
 - [database/schema.sql](../../database/schema.sql)
 
@@ -82,8 +82,8 @@ Every Atome must be representable with this envelope:
 
 `renderer`
 
-- Optional renderer hint only.
-- It may select a projection backend such as `dom`, `webgl`, `webgpu`, or `native`.
+- Optional non-authoritative projection metadata.
+- The visible product renderer is the shared Bevy/WebGPU route; it must not select DOM, WebGL, native compatibility, or another parallel backend.
 - It must never change logical identity, permissions, or canonical state semantics.
 
 `meta`

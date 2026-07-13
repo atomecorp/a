@@ -63,7 +63,7 @@ Architecture and design references:
 Unavailable or renamed references:
 
 - `ui_project_system_specification_v146_MVP_consolidated.md` was referenced by prompts but was not found in the workspace.
-- `prompt_modification_menu_mvp_v146_ios_touch_tests(1).md` was not found. The available equivalent `todo/prompt_modification_menu_mvp_v146_ios_touch_tests.md` was inspected.
+- `prompt_modification_menu_mvp_v146_ios_touch_tests(1).md` was not found. The available equivalent `todo/eve_features/prompt_modification_menu_mvp_v146_ios_touch_tests.md` was inspected.
 
 Code areas reviewed:
 

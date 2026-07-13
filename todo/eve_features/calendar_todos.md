@@ -8,7 +8,9 @@ Read and strictly apply:
 
 If any instruction in this file conflicts with ./.codex/AGENTS.md, ./.codex/AGENTS.md has absolute precedence.
 
-# Calendar Todos (Phase 1 now, Phase 2 later)
+# Calendar Todos And Bevy Calendar Migration
+
+Status: Active data specification and migration backlog. The current DOM calendar panel is a legacy implementation to retire under `todo/ui_bevy/ui_bevy_migration.md`; no new visible DOM calendar work is allowed.
 
 This document specifies how to support **simple todos** ("due date + reminder") inside the existing Calendar feature, and how to evolve into a richer task system later **without changing the core storage model**.
 
@@ -18,6 +20,29 @@ Scope constraints for this spec:
 - Use existing `CalendarAPI` and atome storage (`AdoleAPI.atomes`).
 - Keep everything compatible with existing `calendar_event` items.
 - Phase 1 should be minimal: due date + reminder + completion.
+- Preserve the canonical Calendar API and data model while replacing only the visible panel with Bevy UI.
+- Do not create a second calendar store, a view-owned recurrence engine, or platform-specific calendar UI logic.
+
+## Bevy migration and feasibility gate
+
+Current audit finding: the repository contains an eVe `CalendarAPI`/panel path, older Atome example documentation, and a newer `atome/src/squirrel/calendar/` service family. Before UI work, identify one canonical writable CalendarAPI and one calendar-record projection; update or retire the stale documentation and example paths. A Bevy renderer must never reconcile competing calendar stores.
+
+Before deleting the current calendar panel, audit and validate on Web, Tauri, and iOS:
+
+- month, week, day, and agenda layouts; locale-first weekday/week-number rules; timezone and daylight-saving transitions;
+- virtualized range rendering and bounded recurrence expansion for large calendars;
+- event hit-testing, overlap layout, all-day events, drag/reschedule, resize, selection, and touch/pointer input;
+- recurrence editing, alarms, todos, sharing, Webcal/ICS, and existing CalendarAPI/MCP actions;
+- text entry, copy/paste, focus, IME, accessibility, and keyboard navigation through the canonical hidden text service;
+- lifecycle cleanup for timers, subscriptions, UI nodes, textures, and native platform resources.
+
+Migration tasks:
+
+1. Define a renderer-neutral calendar projection from canonical CalendarAPI records.
+2. Implement shared Bevy calendar primitives before the panel: time grid, event rectangles, all-day lane, range header, scroll/zoom, overlap layout, and event hit-testing.
+3. Wire all edits through the canonical CalendarAPI/Atome mutation path and expose missing actions through API/MCP.
+4. Validate deterministic timezone and recurrence behavior with fixtures, then validate Web, Tauri, and iOS interaction parity.
+5. Delete `eVe/intuition/tools/calendar_panel_dom.js`, DOM form construction, DOM layout logic, and associated legacy tests/imports only after the Bevy panel is complete.
 
 ---
 

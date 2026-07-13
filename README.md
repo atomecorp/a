@@ -151,7 +151,7 @@ deploy/
 dev/
 ├── certs/                  # Local self-signed HTTPS certificates
 documentations/
-├── audits/                 # Audit notes, experiments, benchmark reports
+├── archive/audits/         # Historical audit notes, experiments, benchmark reports
 ```
 
 ## DSL ⇄ Rust ⇄ JavaScript pipeline
@@ -176,13 +176,12 @@ The generated JS is still plain ES modules and ends up calling helpers like `cre
 - The root `CMakeLists.txt` builds shared targets: `dsp_core`, `ring_buffer`, `disk_reader`.
 - `platforms/web/audio-wasm` exposes the browser audio engine source, and `platforms/ios/atome-auv3` renders the Squirrel UI via WKWebView while routing audio through the Swift native AUv3 engine.
 - `auv3.sh`, `build_PWA_app.sh`, and `scripts/run_fastify.sh`/`run_tauri.sh` automate packaging for each runtime.
-- Known limitations (see `Problems solving/`): disk streaming is a placeholder, time-stretch hooks exist but need concrete implementations, and the WAM glue is still minimal.
+- Historical incident records are retained under `atome/documentations/archive/problem-solving/`; they are not current architecture contracts.
 
 ## Documentation & references
 
 - `documentations/auv3_deployment.md` – steps to package and notarize the AUv3 build.
 - `documentations/auv3_webview_audio_injection.md` – explains audio injection between WKWebView and the DSP core.
-- `documentations/button_usage.md`, `components.md` – showcase the Squirrel component DSL.
-- `documentations/tempo_regression_fix.md`, `Problems solving/*.md` – recent fixes and investigation logs.
+- `documentations/README.md` – active documentation index and archive boundary.
 
 Keep the README in sync with these guides when the build, runtime ports, or upload behavior change.

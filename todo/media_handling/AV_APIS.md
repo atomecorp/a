@@ -12,6 +12,8 @@ If any instruction in this file conflicts with ./.codex/AGENTS.md, ./.codex/AGEN
 
 Date: 2026-05-17
 
+Status: Current-state audit plus target implementation plan. The target architecture is normative; status sections describe remaining migration work.
+
 ## Scope
 
 This audit covers the current audio/video subsystem across:
@@ -45,7 +47,7 @@ Current blockers:
 - Tauri `bridge.rs` performs video-container audio extraction with `ffmpeg`, which mixes transport/API command handling with codec/container management.
 - AUv3 `utils.swift` still contains playback rendering, decoding, recording, transport polling, and debug capture in one realtime-sensitive class.
 - Browser/WebMedia recording paths still duplicate audio/video capture behavior outside the unified AV contract.
-- Several "fallback", "legacy", and "shim" paths remain and should be treated as architectural debt, not as final architecture.
+- Several legacy and shim paths remain and must be removed or replaced by explicit, typed runtime backends; none is a valid silent alternate path.
 
 ## Current Public API Surface
 
@@ -89,7 +91,7 @@ Existing entry points:
 - `record_audio()` in `eVe/domains/media/api/audio_api.js`
 - Tauri commands: `audio_record_start`, `audio_record_stop`
 - AUv3 `recordStart` / `recordStop` in `platforms/ios/atome-auv3/auv3/utils.swift`
-- Browser fallback recording through WebAudio/AudioWorklet in `audio_api.js`
+- Explicit browser recording backend through WebAudio/AudioWorklet in `audio_api.js`
 
 Current capabilities:
 
@@ -1077,7 +1079,7 @@ Remaining:
 - No bridge module may own codec, persistence, preview UI, or transport policy after its phase is complete.
 - No realtime audio callback may lock, allocate, touch disk, spawn processes, or call JS.
 - Legacy aliases may remain temporarily, but they must delegate into the split AV APIs.
-- Missing backend behavior must return typed capability errors, not silent fallbacks or missing API fields.
+- Missing backend behavior must return typed capability errors, not silent alternate routes or missing API fields.
 - Every phase must include targeted tests plus the global syntax/build check appropriate to the touched runtime.
 
 ### P0: Remove Structural Regressions and Realtime Risks
@@ -1152,9 +1154,9 @@ APIs to create:
 - AUv3 file decoding and playback are operational but still embedded in the audio unit class.
 - Video preview frame dispatch uses base64 JPEG through JS evaluation and may become a bottleneck.
 - MTrack native audio clip generation duplicates knowledge that should live in an audio graph/sync service.
-- Browser capture remains a separate implementation path; it is acceptable only if represented as a formal backend, not as a fallback.
+- Browser capture remains a separate first-class web backend with an explicit capability contract and no silent substitution.
 - Existing silent catches and empty diagnostic functions can hide failures and violate governance if they mask real errors.
-- Current docs still describe browser/WebAudio fallback language that conflicts with strict no-fallback governance unless explicitly reclassified as a first-class web backend.
+- The web backend must be described as a first-class runtime backend everywhere; silent substitution language is forbidden.
 - The current audit must be enforced as an audio/video parity contract; otherwise the project risks building a professional audio API and a weaker video API with incompatible markers, regions, scheduling, and automation semantics.
 
 ## Acceptance Criteria for a Professional Refactor
@@ -1170,4 +1172,62 @@ APIs to create:
 - All effectful API calls pass through command bus intent validation.
 - All marker, region, loop, and sampler metadata is persisted by ID and survives backend replacement.
 - Every audio playback feature has a video API equivalent when technically applicable, and every video playback feature has an audio API equivalent when technically applicable.
-- Missing backend support is represented by typed capability errors, not by missing API fields, hidden fallbacks, or media-specific API forks.
+- Missing backend support is represented by typed capability errors, not by missing API fields, hidden alternate routes, or media-specific API forks.
+
+## Professional Export Pipeline
+
+Status: Specification to be decided and implemented during the AV completion phase.
+
+Export must consume canonical Atome/Molecule state and the shared Bevy/WebGPU render path. Screen capture, DOM playback, and a second renderer are forbidden.
+
+### Required output families
+
+1. Non-destructive project package
+
+- Preserve the Atome/Molecule project manifest, timeline, automation, effects, markers, source references, media metadata, schema versions, and edit history.
+- Preserve original source files without baking edits into them.
+- Include deterministic asset identity, checksums, relative paths, missing-media records, and relink information.
+- The package is the authoritative editable deliverable; it is not a rendered movie.
+- Open interchange candidates such as OpenTimelineIO may be evaluated as an additional interchange manifest, but must not replace the canonical Atome/Molecule model without an explicit decision.
+
+2. Open archival master
+
+- Evaluate an open, lossless or mathematically reversible video/container combination, such as Matroska with FFV1 or an equivalent approved profile.
+- Evaluate an open lossless audio master such as WAV/BWF PCM or FLAC according to editing, metadata, and interoperability requirements.
+- Record codec, container, color, pixel format, frame rate, sample rate, channel layout, timebase, and software/schema versions in the export manifest.
+
+3. Delivery export
+
+- Support a deliberately selected delivery profile such as MP4 with H.264/H.265 video and AAC audio, subject to licensing, platform, and distribution requirements.
+- Keep delivery encoding separate from the canonical project and archival master.
+- Expose profile selection through a typed API and MCP tool with deterministic parameters.
+
+### Export job contract
+
+- Create an immutable export job record.
+- Pin the exact project snapshot, asset versions, schema versions, render settings, codec profile, and time range before rendering.
+- Render in deterministic frame/sample order through the shared transport and clock contract.
+- Persist progress by frame/sample checkpoint and write outputs atomically through temporary job-owned files.
+- On interruption, resume only from a verified checkpoint or restart the affected segment deterministically.
+- Never publish a partial output as a completed export.
+- Preserve the source project and history when an export fails.
+
+### Final validation contract
+
+An export is complete only after:
+
+- container and codec metadata are readable;
+- expected frame count and duration match the pinned timeline;
+- audio sample count, channel layout, and sample rate match the export contract;
+- decoded audio/video timestamps remain synchronized within the declared tolerance;
+- checksums and file sizes are recorded;
+- the output can be reopened and decoded by supported target runtimes;
+- the export manifest records success or a typed failure with the exact failed stage.
+
+### Open decisions
+
+- Select the archival video profile after testing FFV1/Matroska and alternatives for quality, size, decode speed, metadata, WASM/native support, and licensing.
+- Select the archival audio profile after testing WAV/BWF versus FLAC for editing, metadata, and interoperability.
+- Select delivery profiles and licensing boundaries for MP4 and audio-only exports.
+- Decide whether OpenTimelineIO is an export/interchange adapter only or also a supported import contract.
+- Define checkpoint granularity, retry limits, cancellation semantics, and cleanup rules for failed jobs.

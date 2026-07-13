@@ -69,6 +69,26 @@ Constraints
 - Do not allow MainToolBox to move or be deleted.
 - Keep behaviors deterministic and consistent.
 
+Mandatory Bevy Main Menu and Flower Hold Contract
+
+This is a behavioral migration, not a request to reproduce the historical DOM implementation. Bevy is the sole visible product path.
+
+Main bottom menu
+
+- Tool definitions must expose their children and explicit interaction metadata, including expandable/palette, latch, and long-press behavior. Bevy consumes this canonical definition directly.
+- A normal leaf invokes its declared action once. An expandable item opens or toggles its palette and never implicitly invokes a child action.
+- A tool may define a dedicated hold action or request palette opening on hold. The configured hold delay and drag-cancellation threshold apply consistently to mouse, pen, and touch.
+- A press converted into drag, scroll, or pointer cancellation cannot invoke a long-press action. Visual active state remains a projection of canonical tool state.
+- The Bevy menu must replace the current flattened projection and remove the legacy menu entry/bridge after parity is verified.
+
+Flower
+
+- Long press opens the Flower while retaining the pointer session. A stationary release does not invoke a tool.
+- After deliberate radial movement, palette and Back items activate immediately on hover while the press is still held. Back returns one level; at root it closes the Flower.
+- Leaf items only preview on hover. The selected leaf invokes exactly once when the pointer is released over it.
+- Palette/Back navigation cannot cause an additional leaf action on release. Cancellation clears the temporary selection without changing a tool.
+- These rules are implemented through Bevy hit testing and canonical commands, with no DOM event proxy, browser-side state authority, or legacy fallback.
+
 Deliverables
 
 - Implement the interaction logic described above.

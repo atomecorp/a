@@ -73,6 +73,23 @@ You must:
 12. After implementation, remove obsolete, redundant, unused, temporary, duplicated, or legacy transitional code introduced or discovered during the task.
 13. Never leave test code, debug code, probes, traces, temporary logs, or experimental logic in the final result.
 
+Mandatory simplicity gate before creating new code:
+
+1. Can the canonical owner be extended with a smaller direct change?
+2. Have existing code, configuration, and dependencies been checked for deletion, merging, or simplification before adding scope, and simplified where safe and relevant?
+3. Does the proposed boundary represent a real independent responsibility rather than a speculative future need?
+4. Does the change minimize and avoid any unnecessary increase in concepts, writable states, dependencies, branches, or runtime paths?
+5. Is every cache, registry, adapter, worker, pool, or dependency justified by measured need or an unavoidable runtime boundary?
+
+If any answer is no, do not add the proposed layer. Continue the inspection and simplify the owning architecture first.
+
+Capacity recovery is mandatory in the touched scope:
+
+- remove unused imports, dependencies, exports, code paths, feature flags, configuration, comments, and documentation claims when they no longer serve a verified purpose;
+- collapse duplicated conditionals, aliases, conversions, and indirection into the canonical implementation;
+- release resources, subscriptions, timers, listeners, caches, and retained media or GPU objects at their explicit lifecycle boundary;
+- do not preserve dead code as a backup, example, dormant option, or historical copy; use version control and documentation for history instead.
+
 Before coding, provide a short implementation plan stating:
 
 - what existing files or modules were inspected;

@@ -10,6 +10,8 @@ If any instruction in this file conflicts with ./.codex/AGENTS.md, ./.codex/AGEN
 
 # Audit Technique — eVe Intuition
 
+Status: Historical audit (2026-02-22). It is archived for traceability only and is not an implementation authority; its fallback and coexistence recommendations are superseded by the active Codex rules and todo/execution_order.md.
+
 **Date :** 22 février 2026
 **Périmètre :** `eVe/intuition/**`
 **Volume total :** ~70 000 lignes, ~65 fichiers JS

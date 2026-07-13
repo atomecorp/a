@@ -27,6 +27,39 @@ You must:
 - optimize realtime performance;
 - avoid unnecessary abstractions.
 
+## MANDATORY SIMPLICITY AND RESOURCE EFFICIENCY POLICY
+
+Simplicity is a mandatory architectural constraint, not a stylistic preference.
+
+At equal correctness, determinism, security, and validation, choose the solution with:
+
+- fewer concepts to understand;
+- fewer writable state holders;
+- fewer modules, branches, and execution paths;
+- fewer dependencies, allocations, and retained resources;
+- less code and less configuration;
+- one explicit canonical owner for every responsibility.
+
+Before adding a module, abstraction, adapter, cache, registry, wrapper, service, state layer, compatibility path, or new dependency, prove that the existing canonical architecture cannot correctly own the responsibility.
+
+Strictly forbidden:
+
+- speculative abstractions created for imagined future use;
+- generalized helpers with only one real caller when direct cohesive code is clearer;
+- caches, memoization, pooling, background work, or indexes without measured evidence of a real bottleneck;
+- new configuration switches that only preserve obsolete behavior or compensate for unclear ownership;
+- adding code to avoid reading, understanding, simplifying, or correctly repairing the owning path.
+
+Required decision rules:
+
+1. Extend the existing canonical owner when it can own the behavior cleanly.
+2. Create a new boundary only for a proven independent responsibility, lifecycle, runtime boundary, or reusable contract.
+3. Remove an abstraction when it no longer reduces total complexity.
+4. Prefer deletion, convergence, and direct composition over another compatibility layer.
+5. Measure performance before adding a performance mechanism; remove the mechanism if the evidence no longer justifies its cost.
+
+Every substantive change must leave the touched scope no more complex than before. When safe and relevant, it must reduce code size, duplicate logic, allocation pressure, dependency surface, or runtime work.
+
 ## MANDATORY FILE SIZE AND CODING STANDARDS
 
 The codebase MUST respect explicit file-size, module-boundary, and cleanup rules.

@@ -5,9 +5,9 @@ Cette spec remplace les comportements divergents (main toolbox, bureau, panneaux
 et impose une seule source de verite pour creation, chargement, execution et historique.
 
 References:
-- `eVe/documentations/tools.md`
+- eVe/documentations/runtime_ai_mcp_entrypoints.md
 - `atome/documentations/ADOLE.md`
-- `atome/documentations/Adole Time Machine.md`
+- eVe/documentations/Atome Time Machine.md
 
 ## 1) Principes non negociables
 
@@ -250,4 +250,3 @@ Recommendation:
 6. Snapshots explicites et immutables.
 7. MCP branche sur les memes APIs runtime.
 8. Aucun doublon de tool (pas de prefixes redondants type `mtrack transport play`).
-

@@ -379,7 +379,7 @@ Path: `atome/documentations/`
 
 Owner: Atome open layer.
 
-Purpose: Existing Atome-specific documentation, API notes, audio documentation, server setup, sync protocol, security architecture, and historical troubleshooting notes.
+Purpose: Active Atome-specific documentation, API notes, audio documentation, server setup, sync protocol, and security architecture. Historical material is isolated under atome/documentations/archive/ and is not implementation authority.
 
 Main files:
 
@@ -1377,11 +1377,11 @@ Status: Verified.
 
 ### eVe Documentation
 
-Path: `eve/documentations/`
+Path: `eVe/documentations/`
 
 Owner: eVe closed layer.
 
-Purpose: Product documentation, persistence contracts, security/sharing notes, realtime sync architecture, runtime AI/MCP entrypoints, and product manual validation checklists.
+Purpose: Active product documentation, persistence contracts, security/sharing notes, realtime sync architecture, runtime AI/MCP entrypoints, and product manual validation checklists. Historical material is isolated under eVe/documentations/archive/ and is not implementation authority.
 
 Main files:
 
@@ -1389,9 +1389,8 @@ Main files:
 - `atome_persistence_contract.md`
 - `realtime_sync_architecture.md`
 - `Security_and_sharing.md`
-- `tools.md`
-- `tools_cahier_des_charges.md`
-- `eve_structure_audit.md`
+- `eVe_canvas.md`
+- `Atome Time Machine.md`
 
 Reusable logic exposed: No runtime logic. Use as source material only after validating against code.
 

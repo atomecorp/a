@@ -1,39 +1,24 @@
-# AGENTS.md Coverage Summary
+# .codex Rule Set Coverage Summary
 
-This summary is based on [.codex/AGENTS.md](AGENTS.md).
+This is a navigation aid only. The active authority is [AGENTS.md](AGENTS.md) and its mandatory modules.
 
-## Main Topics
+| Concern | Canonical module |
+|---|---|
+| Constitutional authority, DOM ownership, architectural role | `modules/01-root-constitution.md` |
+| Code quality, simplicity, size, dead-code removal, language, fallbacks, Git, i18n | `modules/02-coding-standards-and-prohibitions.md` |
+| Debugging, tests, evidence, UI validation | `modules/03-debugging-testing-and-ui-validation.md` |
+| Reuse, legacy removal, map maintenance, capacity recovery | `modules/04-feature-work-cleanup-and-framework-reuse.md` |
+| APIs, MCP, communication, rendering, UI components | `modules/05-api-rendering-and-ui.md` |
+| Atome model, commits, history, sync, runtimes, ACL | `modules/06-atome-state-sync-and-runtime-modes.md` |
+| Mandatory pre-flight, anti-regression gates, validation, completion lock | `modules/07-future-code-guardrails.md` |
 
-| Topic | Status | Evidence |
-|---|---|---|
-| Mobile iOS | Explicitly present | [iOS MODE](AGENTS.md#L600) |
-| Desktop Tauri / Axum | Explicitly present | [TAURI MODE](AGENTS.md#L581) |
-| Web Browser / Fastify | Explicitly present | [WEB BROWSER MODE](AGENTS.md#L570) |
-| Synchronization | Explicitly present | [OFFLINE AND SYNCHRONIZATION POLICY](AGENTS.md#L531) |
-| Source of truth for synchronization | Explicitly present | [Fastify is the canonical source of truth for all user accounts and synchronized data](AGENTS.md#L534) |
-| Internationalization | Explicitly present | [INTERNATIONALIZATION POLICY](AGENTS.md#L746) |
-| Source of truth for internationalization | Not explicitly stated | The file requires [eveT()](AGENTS.md#L751) and the existing Atome/eVe internationalization system, but it does not define an i18n canonical source of truth in the same way it does for Fastify and synchronization |
-| APIs | Explicitly present | [Every new feature MUST be exposed through a properly defined API](AGENTS.md#L355) |
-| MCP | Explicitly present | [be MCP-compatible](AGENTS.md#L362) |
-| "Everything is historized" | Strongly implicit | [Event logs are append-only](AGENTS.md#L510), [immutable history](AGENTS.md#L522), and [state derives from snapshots and deterministic replay](AGENTS.md#L512) |
+## Cross-cutting invariants
 
-## Other Important Contexts Covered
-
-| Other important context | Status | Evidence |
-|---|---|---|
-| AUv3 | Explicitly present | [AUv3 MODE](AGENTS.md#L619) |
-| FreeBSD Pure OS | Explicitly present | [PURE OS FREEBSD MODE](AGENTS.md#L638) |
-| Realtime communication architecture | Explicitly present | [COMMUNICATION ARCHITECTURE](AGENTS.md#L382) |
-| Command Bus | Explicitly present | [All effectful operations must pass through](AGENTS.md#L371) |
-| WebGPU rendering pipeline | Explicitly present | [RENDERING PIPELINE](AGENTS.md#L398) |
-| Squirrel-only UI policy | Explicitly present | [UI AND COMPONENT POLICY](AGENTS.md#L425) |
-| Canonical Atome object model | Explicitly present | [ATOME MODEL POLICY](AGENTS.md#L475) |
-| Sharing and ACL rules | Explicitly present | [SHARING AND ACL POLICY](AGENTS.md#L787) |
-| Fallback rules | Explicitly present | [FALLBACK POLICY](AGENTS.md#L724) |
-| Execution environment as an architecture constraint | Explicitly present | [FINAL OPERATIONAL RULE](AGENTS.md#L799) |
-
-## Bottom Line
-
-Yes, [.codex/AGENTS.md](AGENTS.md) clearly covers the requested topics: execution modes, synchronization, API and MCP policy, and the history model.
-
-The only meaningful nuance is that a canonical source of truth is stated explicitly for synchronization data through Fastify, but not stated with the same wording for internationalization.
+- Canonical state remains outside the DOM.
+- WebGPU is the product rendering route; the DOM is disposable projection only.
+- All durable mutations use the canonical commit pipeline.
+- Existing canonical code must be reused before new code is created.
+- Simplicity is mandatory: prefer fewer concepts, layers, dependencies, writable states, and execution paths.
+- No fallback architecture, compatibility shim, duplicate ownership, or speculative abstraction.
+- Remove dead, duplicate, obsolete, temporary, and unnecessary code when safe.
+- Validate the smallest relevant executable path first, then widen when required.

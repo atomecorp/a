@@ -300,6 +300,17 @@ You must reuse the existing architecture before creating new modules.
 
 Do not create a new module, helper, adapter, service, renderer, UI control, or API until you have proven that no existing canonical owner should receive the responsibility.
 
+Before adding any new layer, apply the simplicity test:
+
+```text
+Can the canonical owner absorb this responsibility directly?
+Has existing code been checked for removal or merging first, and simplified where safe and relevant?
+Is the layer required by a real lifecycle, runtime, security, or reuse boundary?
+Is its cost justified by measured evidence rather than anticipated complexity?
+```
+
+If the answer does not justify the layer, do not create it. Prefer deletion, convergence, and direct composition.
+
 ---
 
 ## 7. Mandatory implementation gate
@@ -318,6 +329,8 @@ DOM risk: <none / precise risk>
 Rendering risk: <none / precise risk>
 State mutation risk: <none / precise risk>
 Legacy risk: <none / precise risk>
+Complexity delta: <reduced / unchanged with justification / prohibited increase>
+Capacity recovery: <code, dependency, resource, or configuration removed / none with reason>
 Decision: <proceed / blocked>
 ```
 
@@ -343,6 +356,9 @@ During implementation, after each substantive edit, verify:
 12. The change keeps comments, logs, warnings, errors, documentation, and developer-facing messages in English.
 13. The change keeps user-visible strings inside the existing internationalization system.
 14. The change remains compatible with deterministic replay, persistence, sync, and rendering.
+15. The change does not add speculative abstraction, configuration, cache, registry, adapter, dependency, or execution path.
+16. The change removes dead, duplicate, obsolete, temporary, or unnecessary code discovered in the touched scope when safe.
+17. The change does not retain listeners, timers, subscriptions, media resources, GPU resources, caches, or workers beyond their explicit lifecycle.
 
 If any check fails, repair the source immediately before moving forward.
 
@@ -514,6 +530,9 @@ Do not declare the task complete until all of the following are true:
 - No fallback renderer was introduced.
 - No legacy renderer path remains active in the touched route.
 - No duplicated renderer, adapter, API, state owner, or UI component was introduced.
+- No speculative abstraction, cache, registry, adapter, dependency, or execution path was introduced.
+- Dead, duplicate, obsolete, temporary, and unnecessary code in the touched scope was removed when safe.
+- Resources introduced or touched have an explicit release and ownership lifecycle.
 - Text, if touched, remains routed through WebGPU with hidden HTML only for valid text-service reasons.
 - Matrix preview, if touched, remains renderer-owned and does not clone DOM.
 - Image, video, or waveform rendering, if touched, remains on the unified WebGPU route.
@@ -566,6 +585,8 @@ Does this change avoid direct state mutation?
 Does this change avoid cloned DOM previews?
 Does this change keep text service bounded and non-authoritative?
 Does this change preserve deterministic replay, persistence, sync, and rendering?
+Does this change reduce or at least not increase total conceptual and runtime complexity?
+Did this change remove safe dead code, duplicate logic, obsolete configuration, or retained resources from the touched scope?
 Does this change update tests and maps when required?
 ```
 
@@ -578,7 +599,7 @@ If any answer is `no`, the change is not allowed until the architecture is corre
 For very small future tasks, this shorter block may be pasted before the task, but it does not replace the full pre-prompt above:
 
 ```text
-Before acting, read and apply .codex/AGENTS.md. Preserve the Atome/eVe cleaned architecture: canonical state outside DOM, WebGPU-first rendering, one visible canvas per rendering zone, no visible DOM subtree per Atome, no visible canvas per Atome, no fallback renderer, no duplicated renderer, no DOM-owned state, no direct mutation outside window.Atome.commit / commitBatch, no TypeScript, no Python, no Git write operations, no temporary files outside ./temp, no persistent tests outside ./tests. Reuse existing architecture, update maps when ownership/API/design/rendering contracts change, and validate with tests or guardrails. If the request conflicts with these rules, stop with the exact blocking rule and the smallest compliant next action. Do not simplify, skip, postpone, or mark complete without proof.
+Before acting, read and apply .codex/AGENTS.md. Preserve the Atome/eVe cleaned architecture: canonical state outside DOM, WebGPU-first rendering, one visible canvas per rendering zone, no visible DOM subtree per Atome, no visible canvas per Atome, no fallback renderer, no duplicated renderer, no DOM-owned state, no direct mutation outside window.Atome.commit / commitBatch, no TypeScript, no Python, no Git write operations, no temporary files outside ./temp, no persistent tests outside ./tests. Reuse existing architecture and prefer the simplest architecture-compliant change: do not add speculative abstractions, caches, adapters, registries, dependencies, or execution paths; remove safe dead and duplicate code in the touched scope. Update maps when ownership/API/design/rendering contracts change, and validate with tests or guardrails. If the request conflicts with these rules, stop with the exact blocking rule and the smallest compliant next action. Do not simplify, skip, postpone, or mark complete without proof.
 ```
 
 ---

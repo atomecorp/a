@@ -15,7 +15,7 @@ Active remaining cleanup and gated validation work was moved to [`todo/full_bevy
 
 ## Scope Moved Elsewhere
 
-- Molecule editor reintegration is tracked in [`todo/NewMolecules.md`](./NewMolecules.md).
+- Molecule editor reintegration is tracked in [`todo/molecule/NewMolecules.md`](../todo/molecule/NewMolecules.md).
 - Remaining P0 cleanup and M7.1/M7.2 validation are tracked in [`todo/full_bevy_renderer_remaining.md`](./full_bevy_renderer_remaining.md).
 
 ## Completed And Validated

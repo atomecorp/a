@@ -1,6 +1,8 @@
 # NewMolecules — Cahier des charges: the Molecule timeline editor, rebuilt on Bevy/WebGPU
 
-Sibling spec of [`full_bevy_renderer.md`](./full_bevy_renderer.md). This document is the work backlog for reintegrating the **Molecule timeline editor** (the system formerly known as MTrax) entirely on the single Bevy/WebGPU project canvas `#eve_surface_project`, by **reusing** the already-present, mtrax-free building blocks rather than rewriting from zero.
+Status: Active specification and implementation backlog. V1 items marked `DONE` describe verified implementation; unchecked V2/V3 items remain active work.
+
+Historical companion: [`full_bevy_renderer.md`](../../done/full_bevy_renderer.md). This document is the active work backlog for reintegrating the **Molecule timeline editor** (the system formerly known as MTrax) entirely on the single Bevy/WebGPU project canvas `#eve_surface_project`, by **reusing** the already-present, mtrax-free building blocks rather than rewriting from zero.
 
 Legend: `- [ ]` todo · `- [x]` done · `- [~]` in progress.
 
@@ -20,9 +22,9 @@ These came out of the post-deletion audit + a two-round scoping study. They are 
 | D7 | **Phasing** | **v1 → v2** (ship a usable, fully-scriptable core editor first; advanced track types after). |
 
 ## 1. Non-negotiable invariants (inherited from `full_bevy_renderer.md` + `.codex/AGENTS.md`)
-- **ONE renderer (Bevy/WebGPU), ONE canvas** `#eve_surface_project`. Every track/clip/overlay/handle renders there. No second surface, no DOM compositor beside Bevy, no offscreen→readback. (Menu/UI chrome is the only DOM exception.)
+- **ONE renderer (Bevy/WebGPU), ONE canvas** `#eve_surface_project`. Every track/clip/overlay/handle and the visible editor chrome render through the shared Bevy UI route. No second surface, no DOM compositor beside Bevy, no offscreen→readback. The only browser exceptions are the minimal application shell and documented hidden text/accessibility services.
 - **Kira is the sole audio engine + master clock**; video follows via `setBevyVideoDecodePlayback` seeks. No rate loop, no unmute.
-- **No fallback, no patch/bricolage.** Clean, factored, modular code. Delete anything that can be deleted; reuse existing functions before writing new ones.
+- **No alternate route, no patch/bricolage.** Clean, factored, modular code. Delete anything that can be deleted; reuse existing functions before writing new ones.
 - **API/MCP parity**: anything the UI can do, the API + MCP can do, and vice-versa.
 - Comments/docs in English; temp probes only under `./temp`; persistent tests only under `./tests`; Git read-only.
 
@@ -102,6 +104,43 @@ All driven from kernel state → `virtual_scene_contract.js` diff → Bevy nodes
 ### F. History (D6)
 - Each kernel mutation emits a **reversible command** on eVe's Time Machine deterministic log (replayable identically). A `batch` wraps its ops into one atomic, single-undo entry. This is the contract that makes AI/script batch manipulation safe.
 
+### G. Marker-defined sections and track Cells (restored product invariant)
+
+The former production Molecule editor had a `loop_cells` system. Its product behavior is mandatory for the rebuilt editor and must be restored as canonical model logic, not recreated as DOM state.
+
+```text
+ordered timeline markers
+  -> marker-defined sections (the intervals between adjacent boundaries)
+    -> one Cell per section × track
+      -> operations on the real clips, automation, recording targets, and playback state in that interval
+```
+
+Rules:
+
+- Markers are the canonical temporal boundaries. A timeline start boundary and end boundary complete the partition when no explicit marker exists at either edge.
+- A section is derived from adjacent ordered marker identities, never from a DOM position, local layout cache, or copied clip list.
+- A Cell is the projection of one section on one track. Its stable identity derives from the section boundary marker ids and `track_id`; it has no independent start/end authority.
+- Creating, deleting, reordering, moving, or renaming a marker recomputes the affected sections and Cells in one deterministic mutation. Moving a marker changes the temporal extent of its neighbouring Cells immediately.
+- Renaming a marker updates the labels of the affected section/Cells. Marker labels are presentation and navigation names; their ids remain stable references.
+- Activating, disabling, coloring, arming, selecting, or assigning a recording behavior to a Cell is persisted against its canonical Cell identity. Stale Cell configuration is pruned when its boundary markers or track disappear.
+- A Cell always acts on the real content of its track interval. Editing a Cell must atomically modify the actual clips, automation, media regions, record target, or playback behavior in that interval; it must never create a shadow Cell-owned copy of track content.
+- Recording into one or many armed Cells writes to their explicit track/section targets through the canonical recording pipeline. Multi-Cell operations are one atomic history entry.
+- Playback, follow/repeat, launching, and future sampler behavior may target a Cell, but their runtime state remains derived from the canonical marker/section/Cell model.
+- API/MCP parity is mandatory: marker and Cell operations are available programmatically and batchable; no Cell behavior is UI-only.
+
+The old `entryId::trackId` convention is evidence of the former behavior, not the target schema. The rebuilt model must expose explicit `marker_id`, derived `section_id`, and `cell_id` semantics so ownership, migration, replay, and validation remain unambiguous.
+
+Required operations:
+
+- `marker.create/update/move/rename/delete`
+- `section.list/read`
+- `cell.list/read/select/activate/deactivate/arm/unarm/color/record.configure`
+- `cell.content.split/clear/duplicate/move/transform`
+- `cell.play/stop/follow/repeat`
+- `cell.record.start/stop`
+
+All operations that change boundaries or content must update the marker/section/Cell projection and the affected real track content in the same canonical transaction.
+
 ## 4. Phase v1 — Core editor on Bevy (usable + fully scriptable)
 - [x] **V1.0 Finish the deletion (pre-work cleanup). DONE 2026-06-19.** Removed only the deleted-file contracts + the 2 orphaned `mtrack_perf_*` scripts + stale selectors + 249 build artifacts; kept the legitimate molecule-purity / anti-reintroduction guards. The audit had found stale tooling referencing deleted mtrax files that **broke governance**:
   - `scripts/check_molecule_guardrails.mjs` (l.13-14, 95-98) requires deleted `domains/mtrax/ui/{styles,preview_styles}.js` → `check:molecule-guardrails` **FAILS**. Re-point the contract at the new molecule surface (or drop it).
@@ -130,6 +169,9 @@ All driven from kernel state → `virtual_scene_contract.js` diff → Bevy nodes
 - [ ] **V2.8** **Tablature track** — fret/string notation on musical time.
 - [ ] **V2.9** Validate each plug-in: API/MCP verbs + Bevy render + musical-time quantization; registry stays the only touch-point.
 - [ ] **V2.10 Time-stretch** — integrate the chosen external library (§7) as a stretch/speed stage feeding Kira (no pitch artifacts, stretch-to-tempo); expose `clip.timestretch` / `clip.set_speed` over API + MCP; validate quality + A/V sync + latency on web (WASM) and native (Rust/Tauri/iOS).
+- [ ] **V2.11 Professional export** — pin the canonical timeline snapshot, render deterministically through Bevy/WebGPU, support an editable project package, an open archival master, and delivery profiles such as MP4; add checkpointed resume, atomic output publication, typed failures, and post-export frame/sample/A/V validation. The codec/container decision remains open until the AV audit evaluates quality, metadata, licensing, WASM/native support, and interoperability.
+- [ ] **V2.12 Bevy editor chrome and DOM retirement** — migrate the Molecule panel, controls, tool bands, inspector, transport chrome, resize/drag affordances, and panel-local interaction state to the shared Bevy UI contract; delete `tools/molecule/panel/` DOM rendering, DOM geometry/layout observers, and obsolete panel lifecycle routes only after Web/Tauri/iOS parity passes.
+- [ ] **V2.13 Marker-defined Cells** — restore the former production `loop_cells` behavior as the canonical marker → section → Cell model in §3G: deterministic Cell projection per track, marker-driven recomputation, Cell activation/selection/color/arming/recording, real-content batch operations, follow/repeat/playback hooks, API/MCP parity, migration of valid legacy Cell configuration, and removal of the old DOM-only Cells implementation.
 
 ## 6. Phase v3 — Cross-platform validation (M7)
 - [ ] Web (:3001), Tauri (:3000), iOS/AUv3 parity: compositing + filters + transitions + selection + scrub + A/V sync on a looping molecule; Kira sample-accurate (`feedback_validate_real_mechanism`). _Absorbs the extracted validation tasks from the (cleanup) `full_bevy_renderer_remaining.md`: **R40** "Validate Web M7.1 on :3001 (montage compositing, filters, transitions, selection, scrub, A/V sync on the project canvas)" — the Web part is satisfied by the V1.9 full-session validation except live montage A/V sync; **R41** "Validate Tauri/iOS/AUv3 M7.2 (same scenario, Kira A/V sync on a looping montage)" — this V3 line. Both are editor validation, not cleanup, so they live here with the editor work._
@@ -138,7 +180,7 @@ All driven from kernel state → `virtual_scene_contract.js` diff → Bevy nodes
 - **Chord notation model**: chord symbols vs MIDI vs both? Rendering (text glyphs vs Bevy-drawn)?
 - **Tablature model**: instrument tuning / string count / fret representation.
 - **Script-launch security**: which scripts, what capabilities/sandbox — map to existing MCP risk tiers + ACL.
-- **Panel UI**: reuse `tools/molecule/panel/` (DOM) for editor chrome, or rebuild as Bevy overlay? (UI chrome may legitimately stay DOM per the menu/UI exception; timeline *content* must be Bevy.)
+- **Panel UI**: resolved. The complete editor chrome migrates to the shared Bevy UI route in V2.12; the former DOM panel is deleted after parity validation.
 - **Effect rack** beyond M1/M2: scope of `eve.timeline.effect`.
 - **Time-stretch library (V2.10)**: decide between **Signalsmith Stretch**, **Bungee**, **Rubber Band** after a **complete audit** — current preference **Signalsmith**. Audit criteria: stretch + pitch/formant quality, latency, **license** (Rubber Band = GPL / commercial dual-license — check compatibility; Bungee = Apache-2.0; Signalsmith = MIT-style), **WASM + native build** feasibility (Rust/Tauri/iOS targets), and the **Kira integration** path (processing node vs pre-roll).
 
@@ -157,4 +199,4 @@ All driven from kernel state → `virtual_scene_contract.js` diff → Bevy nodes
 
 ---
 
-*Status: spec drafted 2026-06-19 from the post-deletion audit + owner study. No code written yet — implementation starts at V1.0 on approval.*
+*This document supersedes the former pre-Bevy media-editor proposal. Its V1 implementation is partially complete as recorded above; V2/V3 remain active backlog.*

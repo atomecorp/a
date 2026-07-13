@@ -532,6 +532,78 @@ The AI coding pre-prompt must require:
 
 ⸻
 
+Phase 6 — Close the Remaining Normalization and AI-Control Gaps
+
+Objective
+
+Make the architecture fully AI-controllable in practice, not only by design, while preserving one canonical state, mutation, security, history, and synchronization model.
+
+This phase consolidates the remaining cross-cutting risks identified during the architecture review. It must be completed before claiming that the framework is fully normalized and universally pilotable through MCP.
+
+Mandatory Workstreams
+
+1. Source-of-truth and runtime authority
+
+* Document and enforce the precise authority model:
+  * local Tauri/iOS runtime is the operational authority while offline;
+  * Fastify/cloud is the shared synchronization authority;
+  * synchronization is deterministic, append-only, lossless, and conflict-aware.
+* Remove contradictory documentation and implementation paths that describe Fastify as the only immediate writer while also requiring local-first execution.
+* Add contract tests for offline commit, delayed synchronization, reconnect, replay, and cross-device convergence.
+
+2. Single mutation gateway
+
+* Inventory every public, internal, legacy, and runtime mutation API.
+* Route every durable mutation through ToolRuntime and CommandBus/ADOLE.
+* Remove or formally deprecate direct domain APIs, direct property assignment, DOM mutation, renderer-owned state, and hidden shortcuts that bypass the canonical gateway.
+* Reject new bypasses through CI/static checks and targeted integration tests.
+* Any convenience syntax such as `A.color = 'red'` must compile to a canonical intention and must never perform an untracked direct mutation.
+
+3. Strict Atome type and property contracts
+
+* Enforce one canonical Atome envelope and one versioned type registry.
+* Validate `type`, `kind`, `traits`, and `properties` at creation and mutation boundaries.
+* Reject unknown properties unless an explicit schema extension allows them.
+* Keep renderer, DOM, cache, debug, and transport details out of canonical Atome data.
+* Add schema compatibility, migration, and rejection tests for every AI-facing type family.
+
+4. Secure AI-created tools and code
+
+* Treat every AI-created tool, script, connector, and automation as untrusted input.
+* Require schema validation, capability declarations, policy evaluation, sandboxed execution, idempotency, audit, versioning, and explicit ownership before activation.
+* Forbid raw filesystem, network, process, secret, or native access from generic AI code unless an explicit approved connector exposes it.
+* Require confirmation tokens for high-risk, destructive, external, financial, publication, sharing, and privilege-changing actions.
+* Add tests proving denied, confirmation-required, replayed, expired, and unauthorized calls cannot execute.
+
+5. Complete MCP coverage and parity
+
+* Generate or co-locate MCP definitions with the canonical ToolRuntime/API implementation.
+* Produce a coverage report for every capability: registry entry, runtime tool, MCP exposure, schema, ACL, risk metadata, audit, history policy, supported runtimes, and tests.
+* Eliminate undocumented direct-domain exceptions; if a capability has no ToolRuntime surface, register it as a blocking migration item.
+* Verify behavioral parity across UI, API, script, batch, voice, and MCP for the same tool.
+* Verify that MCP is an adapter to the canonical runtime, never a second execution engine.
+
+6. Legacy and exception closure
+
+* Inventory legacy bridges, fallback paths, duplicate APIs, and unregistered capabilities.
+* Assign each one a canonical replacement, owner, migration test, and removal condition.
+* Do not claim full normalization while an active production path remains outside the canonical registry and mutation gateway.
+
+Definition of Done
+
+The phase is complete only when:
+
+* every supported business capability is discoverable as a canonical tool and MCP capability;
+* every mutation has one auditable write gateway;
+* Atome schemas are enforced at all boundaries;
+* AI-created code is capability-gated and sandboxed;
+* local/offline and cloud authority rules are documented and tested;
+* UI, API, script, batch, voice, and MCP produce equivalent validated effects;
+* coverage, bypass, legacy, and normalization reports pass with no unexplained exceptions;
+* the relevant architecture, API, and code maps are updated in the same task.
+
+⸻
+
 Final Objective
 
 Build a professional-grade unified architecture where:

@@ -304,6 +304,7 @@ You must fully understand the Atome/eVe architecture before generating, modifyin
 You must always prioritize:
 
 - architectural integrity;
+- simplicity and low conceptual load;
 - deterministic behavior;
 - maintainability;
 - scalability;
@@ -322,6 +323,8 @@ Operationally:
 - If uncertainty exists, stop, explain the uncertainty, request clarification, and never guess.
 - Never patch, never bypass architecture, and never sacrifice determinism for convenience.
 - For every modification, repair, refactor, or cleanup, maximize factorization, remove unnecessary complexity, keep the implementation clean and coherent, and perform a targeted security verification.
+- Prefer the smallest architecture-compliant change. Do not add a layer, abstraction, cache, registry, adapter, dependency, or execution path unless a real ownership, lifecycle, runtime, security, or measured performance requirement proves it necessary.
+- Treat deletion, convergence, and resource release as first-class engineering outcomes: remove dead code, duplicate logic, unused dependencies, obsolete configuration, and retained resources from the touched scope whenever dependency checks make removal safe.
 - Remove unsuccessful attempts, abandoned experiments, invalid probes, and superseded debug edits as soon as they are no longer needed.
 - Delete every non-essential file only after verifying direct usages, indirect usages, runtime dependencies, synchronization dependencies, rendering dependencies, and API, MCP, history, and replay dependencies.
 - Any fallback, patch, workaround, compatibility shim, bypass, temporary adapter, duplicated compatibility layer, or proxy layer discovered during the work MUST be removed and replaced with clean, professional, source-level, architecture-compliant code, except for the explicit fallback exceptions defined in this document.
