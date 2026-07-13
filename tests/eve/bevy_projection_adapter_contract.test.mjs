@@ -79,7 +79,11 @@ const projectionFixtures = Object.freeze([
         material: {
             procedural: {
                 morph: [1, 1, 0, 0], phase: 2, pulse: 0.01, time: 1.5, intensity: 0.4,
-                glow_reveal: 1, core_reveal: 0.8, shell_reveal: 0.75, disappearing: 1
+                glow_reveal: 1, core_reveal: 0.8, shell_reveal: 0.75, disappearing: 1,
+                contact: [0.4, -0.2], attraction: 0.5, stretch: 0.6, gesture_velocity: 0.7,
+                destructive_direction: [1, 0], destructive_mode: 2, destructive_progress: 0.4,
+                cut_path: [-1.2, 0, -0.4, 0.08, 0.4, -0.06, 1.2, 0],
+                surface_size: [1280, 720], assistant_center: [640, 360], assistant_size: 320
             }
         }
     })
@@ -159,6 +163,12 @@ test('Bevy renderer adapter registry keeps existing node projections identical',
         'procedural_sdf'
     ]);
     assert.ok(defaultPayloads.find((payload) => payload.texture)?.texture.rgba instanceof Uint8Array);
+    const procedural = defaultPayloads.find((payload) => payload.kind === 'procedural_sdf').procedural;
+    assert.deepEqual(procedural.contact, [0.4, -0.2]);
+    assert.deepEqual(procedural.destructive_direction, [1, 0]);
+    assert.equal(procedural.destructive_mode, 2);
+    assert.deepEqual(procedural.cut_path, [-1.2, 0, -0.4, 0.08, 0.4, -0.06, 1.2, 0]);
+    assert.deepEqual(procedural.surface_size, [1280, 720]);
 });
 
 test('Bevy projection delegates kind-specific node and resource mapping to registered adapters', () => {

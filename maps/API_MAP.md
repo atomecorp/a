@@ -1288,7 +1288,7 @@ Public singleton: `window.eveAssistantApi`
 - `getState()`
 - `subscribe(listener)`
 
-Open/close/toggle trace the declared `voice.assistant.toggle` command. Animation uniforms and TTS frames remain runtime-ephemeral and never become Atome commits or history entries.
+Open/close/toggle trace the declared `voice.assistant.toggle` command. `getState()` and subscriptions may expose `ejecting` and `bursting`. The internal session controller requires distinct opening, touch-response and closing texts: open greets before listening, touch release responds before listening, and every user close speaks farewell in parallel with visual exit. Forced technical cancellation passes `speakFarewell: false`. Gesture paths, animation uniforms and TTS frames remain runtime-ephemeral and never become Atome commits or history entries.
 
 #### Public Audio and AV Runtime API Details
 

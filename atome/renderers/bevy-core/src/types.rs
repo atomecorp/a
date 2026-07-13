@@ -1,6 +1,7 @@
 use serde::Deserialize;
 
 pub use crate::components::*;
+pub use crate::types_procedural::AtomeProceduralSdf;
 
 pub fn default_opacity() -> f32 {
     1.0
@@ -147,50 +148,6 @@ impl AtomeTransition {
             progress: finite_or(self.progress, 0.0).clamp(0.0, 1.0),
             role: if self.role >= 0.5 { 1.0 } else { 0.0 },
             softness: finite_or(self.softness, 0.0).clamp(0.0, 1.0),
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug, Deserialize, PartialEq)]
-pub struct AtomeProceduralSdf {
-    pub morph: [f32; 4],
-    #[serde(default)]
-    pub phase: f32,
-    #[serde(default)]
-    pub pulse: f32,
-    #[serde(default)]
-    pub time: f32,
-    #[serde(default)]
-    pub intensity: f32,
-    #[serde(default = "default_procedural_reveal")]
-    pub glow_reveal: f32,
-    #[serde(default = "default_procedural_reveal")]
-    pub core_reveal: f32,
-    #[serde(default = "default_procedural_reveal")]
-    pub shell_reveal: f32,
-    #[serde(default)]
-    pub disappearing: f32,
-}
-
-fn default_procedural_reveal() -> f32 { 1.0 }
-
-impl AtomeProceduralSdf {
-    pub fn normalized(self) -> Self {
-        Self {
-            morph: [
-                finite_or(self.morph[0], 1.0).clamp(0.55, 1.45),
-                finite_or(self.morph[1], 1.0).clamp(0.55, 1.45),
-                finite_or(self.morph[2], 0.0).clamp(-1.0, 1.0),
-                finite_or(self.morph[3], 0.0).clamp(-1.0, 1.0),
-            ],
-            phase: finite_or(self.phase, 0.0).clamp(0.0, 5.0),
-            pulse: finite_or(self.pulse, 0.0).clamp(-0.06, 0.06),
-            time: finite_or(self.time, 0.0).max(0.0),
-            intensity: finite_or(self.intensity, 0.0).clamp(0.0, 1.0),
-            glow_reveal: finite_or(self.glow_reveal, 1.0).clamp(0.0, 1.0),
-            core_reveal: finite_or(self.core_reveal, 1.0).clamp(0.0, 1.0),
-            shell_reveal: finite_or(self.shell_reveal, 1.0).clamp(0.0, 1.015),
-            disappearing: finite_or(self.disappearing, 0.0).clamp(0.0, 1.0),
         }
     }
 }

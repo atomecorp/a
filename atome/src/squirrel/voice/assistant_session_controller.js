@@ -12,7 +12,9 @@ const awaitOperation = async (operation) => {
 
 export const createVoiceAssistantSessionController = ({
     voiceApi,
-    greeting,
+    openingGreeting,
+    touchResponse,
+    closingGreeting,
     locale = 'fr-FR',
     actorId = 'eve_voice_assistant'
 } = {}) => {
@@ -25,14 +27,18 @@ export const createVoiceAssistantSessionController = ({
     ].forEach((method) => {
         if (typeof voiceApi[method] !== 'function') throw new Error(`voice_assistant_api_method_required:${method}`);
     });
-    if (!String(greeting || '').trim()) throw new Error('voice_assistant_greeting_required');
+    if (!String(openingGreeting || '').trim()) throw new Error('voice_assistant_opening_greeting_required');
+    if (!String(touchResponse || '').trim()) throw new Error('voice_assistant_touch_response_required');
+    if (!String(closingGreeting || '').trim()) throw new Error('voice_assistant_closing_greeting_required');
     const listeners = new Set();
+    let openPromise = null;
     const state = {
         active: false,
         error: '',
         generation: 0,
         phase: 'closed',
         sessionId: null,
+        closePromise: null,
         unsubscribe: () => { }
     };
 
@@ -97,49 +103,79 @@ export const createVoiceAssistantSessionController = ({
         });
     };
 
-    const open = async () => {
-        if (state.active) return cloneState(state);
-        state.active = true;
-        const generation = ++state.generation;
-        setPhase('opening');
-        try {
-            await voiceApi.ensureReady();
-            const session = await voiceApi.createSession({
-                locale,
-                actor: { id: actorId },
-                source_layer: 'eve_voice_assistant'
-            });
-            if (!state.active || state.generation !== generation) return cloneState(state);
-            state.sessionId = session.session_id;
-            bindVoiceEvents();
-            setPhase('speaking');
-            await awaitOperation(voiceApi.speak(String(greeting || ''), {
-                session_id: state.sessionId,
-                lang: locale,
-                engine: 'local_onnx'
-            }));
-            if (!state.active || state.generation !== generation) return cloneState(state);
-            void listenLoop(generation).catch((error) => {
-                if (!state.active || state.generation !== generation) return;
-                setPhase('error', error?.message || String(error));
-            });
-            return cloneState(state);
-        } catch (error) {
-            state.active = false;
-            setPhase('error', error?.message || String(error));
-            throw error;
-        }
+    const speak = async (text, generation) => {
+        setPhase('speaking');
+        await awaitOperation(voiceApi.speak(String(text), {
+            session_id: state.sessionId,
+            lang: locale,
+            engine: 'local_onnx'
+        }));
+        return state.active && state.generation === generation;
     };
 
-    const close = async ({ reason = 'assistant_closed' } = {}) => {
+    const startListenLoop = (generation) => {
+        void listenLoop(generation).catch((error) => {
+            if (!state.active || state.generation !== generation) return;
+            setPhase('error', error?.message || String(error));
+        });
+    };
+
+    const open = () => {
+        if (openPromise) return openPromise;
+        if (state.active) return cloneState(state);
+        openPromise = (async () => {
+            state.active = true;
+            const generation = ++state.generation;
+            setPhase('opening');
+            try {
+                await voiceApi.ensureReady();
+                const session = await voiceApi.createSession({
+                    locale,
+                    actor: { id: actorId },
+                    source_layer: 'eve_voice_assistant'
+                });
+                if (!state.active || state.generation !== generation) return cloneState(state);
+                state.sessionId = session.session_id;
+                bindVoiceEvents();
+                if (!await speak(openingGreeting, generation)) return cloneState(state);
+                startListenLoop(generation);
+                return cloneState(state);
+            } catch (error) {
+                state.active = false;
+                setPhase('error', error?.message || String(error));
+                throw error;
+            }
+        })().finally(() => { openPromise = null; });
+        return openPromise;
+    };
+
+    const respond = async () => {
+        if (!state.active || !state.sessionId) throw new Error('voice_assistant_session_not_ready');
+        const generation = ++state.generation;
+        await stopActiveChannels('assistant_touch_response');
+        if (!state.active || state.generation !== generation) return cloneState(state);
+        if (!await speak(touchResponse, generation)) return cloneState(state);
+        startListenLoop(generation);
+        return cloneState(state);
+    };
+
+    const close = async ({ reason = 'assistant_closed', speakFarewell = true } = {}) => {
         if (!state.active && state.phase === 'closed') return cloneState(state);
-        state.active = false;
-        state.generation += 1;
-        state.unsubscribe();
-        state.unsubscribe = () => { };
-        await stopActiveChannels(reason);
-        state.sessionId = null;
-        return setPhase('closed');
+        if (state.closePromise) return state.closePromise;
+        state.closePromise = (async () => {
+            if (openPromise && !state.sessionId) await openPromise;
+            const generation = ++state.generation;
+            await stopActiveChannels(reason);
+            if (speakFarewell && state.active && state.sessionId) {
+                await speak(closingGreeting, generation);
+            }
+            state.active = false;
+            state.unsubscribe();
+            state.unsubscribe = () => { };
+            state.sessionId = null;
+            return setPhase('closed');
+        })().finally(() => { state.closePromise = null; });
+        return state.closePromise;
     };
 
     const subscribe = (listener) => {
@@ -149,5 +185,5 @@ export const createVoiceAssistantSessionController = ({
         return () => listeners.delete(listener);
     };
 
-    return Object.freeze({ close, getState: () => cloneState(state), open, subscribe });
+    return Object.freeze({ close, getState: () => cloneState(state), open, respond, subscribe });
 };

@@ -5,6 +5,13 @@ struct ProceduralSdfUniform {
     dynamics: vec4<f32>,
     transition: vec4<f32>,
     optics: vec4<f32>,
+    contact: vec4<f32>,
+    destructive: vec4<f32>,
+    gesture: vec4<f32>,
+    geometry: vec4<f32>,
+    shape: vec4<f32>,
+    cut_path_a: vec4<f32>,
+    cut_path_b: vec4<f32>,
 }
 
 @group(#{MATERIAL_BIND_GROUP}) @binding(0) var<uniform> material: ProceduralSdfUniform;
@@ -28,11 +35,25 @@ fn organic_core(point: vec2<f32>, morph: vec4<f32>, time: f32) -> f32 {
     return sd_ellipse(shifted, radius) - ripple - morph.z * 0.025;
 }
 
+fn cut_segment_metric(point: vec2<f32>, start: vec2<f32>, end: vec2<f32>, segment: f32) -> vec4<f32> {
+    let delta = end - start;
+    let length_squared = max(dot(delta, delta), 0.00001);
+    let progress = clamp(dot(point - start, delta) / length_squared, 0.0, 1.0);
+    let tangent = normalize(delta + vec2(0.0001));
+    let nearest = start + delta * progress;
+    let signed_distance = tangent.x * (point.y - nearest.y) - tangent.y * (point.x - nearest.x);
+    return vec4(signed_distance, tangent.x, tangent.y, (segment + progress) / 3.0);
+}
+
 @fragment
 fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
     let uv = mesh.uv;
-    var point = (uv - vec2(0.5)) * 2.0;
-    point.y = -point.y;
+    let surface_size = max(material.geometry.xy, vec2(1.0));
+    let assistant_center = material.geometry.zw;
+    let assistant_size = max(material.shape.x, 1.0);
+    let pixel_position = vec2(uv.x * surface_size.x, (1.0 - uv.y) * surface_size.y);
+    var point = (pixel_position - assistant_center) / (assistant_size * 0.5);
+    let original_point = point;
     let time = material.dynamics.z;
     let pulse = material.dynamics.y;
     let intensity = material.dynamics.w;
@@ -40,6 +61,46 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
     let core_reveal = clamp(material.transition.y, 0.0, 1.0);
     let shell_reveal = clamp(material.transition.z, 0.0, 1.015);
     let disappearing = clamp(material.transition.w, 0.0, 1.0);
+    let contact_point = material.contact.xy;
+    let attraction = clamp(material.contact.z, 0.0, 0.8);
+    let stretch = clamp(material.contact.w, 0.0, 1.0);
+    let gesture_velocity = clamp(material.gesture.x, 0.0, 1.0);
+    let destructive_direction = material.destructive.xy;
+    let destructive_mode = material.destructive.z;
+    let destructive_progress = clamp(material.destructive.w, 0.0, 1.0);
+    let contact_delta = point - contact_point;
+    let contact_falloff = exp(-dot(contact_delta, contact_delta) * 2.6);
+    let contact_direction = normalize(contact_point + vec2(0.0001));
+    point -= contact_direction * attraction * contact_falloff * (0.18 + stretch * 0.28);
+    let directional_position = dot(point, contact_direction);
+    point -= contact_direction * directional_position * stretch * 0.16;
+    if destructive_mode > 0.5 && destructive_mode < 1.5 {
+        let exit_distance = length(surface_size) / assistant_size * 2.0 + 2.0;
+        point -= destructive_direction * destructive_progress * exit_distance * (1.0 + gesture_velocity * 0.24);
+    }
+    var burst_crack = 1.0;
+    if destructive_mode >= 1.5 {
+        let path_0 = material.cut_path_a.xy;
+        let path_1 = material.cut_path_a.zw;
+        let path_2 = material.cut_path_b.xy;
+        let path_3 = material.cut_path_b.zw;
+        let metric_0 = cut_segment_metric(original_point, path_0, path_1, 0.0);
+        let metric_1 = cut_segment_metric(original_point, path_1, path_2, 1.0);
+        let metric_2 = cut_segment_metric(original_point, path_2, path_3, 2.0);
+        var cut_metric = metric_0;
+        if abs(metric_1.x) < abs(cut_metric.x) { cut_metric = metric_1; }
+        if abs(metric_2.x) < abs(cut_metric.x) { cut_metric = metric_2; }
+        let propagation = 1.0 - smoothstep(destructive_progress - 0.05, destructive_progress + 0.12, cut_metric.w);
+        let irregularity = sin(cut_metric.w * 23.0 + time * 0.8) * 0.012
+            + sin(cut_metric.w * 41.0 - time * 0.37) * 0.006;
+        let cut_distance = abs(cut_metric.x + irregularity);
+        let cut_width = 0.014 + destructive_progress * (0.07 + gesture_velocity * 0.035)
+            * (0.88 + sin(cut_metric.w * 29.0) * 0.12);
+        burst_crack = mix(1.0, smoothstep(cut_width * 0.42, cut_width, cut_distance), propagation);
+        let cut_normal = vec2(-cut_metric.z, cut_metric.y);
+        let cut_side = select(-1.0, 1.0, cut_metric.x >= 0.0);
+        point -= cut_normal * cut_side * destructive_progress * propagation * 0.36;
+    }
     let shell_shape_reveal = min(shell_reveal, 1.0);
     let shell_scale = mix(0.92, 1.0, shell_shape_reveal) * max(shell_reveal, 0.001);
     let core_scale = mix(0.35, 1.0, core_reveal);
@@ -60,7 +121,7 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
     let cyan = vec3(0.28, 0.80, 0.88);
     let rose = vec3(1.0, 0.50, 0.68);
     let pearl = vec3(1.0, 0.93, 0.91);
-    let shell_mix = smoothstep(0.18, 0.86, uv.x + directional * 0.16);
+    let shell_mix = smoothstep(0.18, 0.86, clamp(original_point.x * 0.5 + 0.5, 0.0, 1.0) + directional * 0.16);
     var shell_color = mix(cyan, rose, shell_mix);
     shell_color = mix(shell_color, pearl, rim * 0.48 + shell_edge * 0.18);
     shell_color += mix(vec3(0.02, 0.14, 0.18), vec3(0.22, 0.04, 0.12), shell_mix) * shell_inner * 0.22;
@@ -104,7 +165,8 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
 
     let halo_distance = abs(shell_distance);
     let halo_alpha = (1.0 - smoothstep(0.02, 0.12, halo_distance)) * (1.0 - shell_mask) * shell_shape_reveal * material.optics.w;
-    let base_alpha = max(max(max(shell_alpha, core_alpha), glow_alpha), max(glass_alpha, halo_alpha));
+    let destructive_alpha = select(1.0, 1.0 - smoothstep(0.62, 1.0, destructive_progress), destructive_mode > 0.5);
+    let base_alpha = max(max(max(shell_alpha, core_alpha), glow_alpha), max(glass_alpha, halo_alpha)) * burst_crack * destructive_alpha;
     var color = glass_color * glass_alpha;
     color = mix(color, vec3(1.0, 0.55, 0.58), glow_alpha);
     color += mix(cyan, rose, shell_mix) * halo_alpha;
@@ -113,7 +175,8 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
     color += vec3(0.94, 1.0, 1.0) * highlight * 0.62;
     color += vec3(1.0, 0.97, 0.88) * core_highlight * 0.28;
     color -= vec3(contact_shadow * (1.0 - base_alpha));
-    let alpha = clamp(max(base_alpha, contact_shadow * 0.42), 0.0, 1.0);
+    color += pearl * (1.0 - burst_crack) * (1.0 - destructive_progress) * 0.8;
+    let alpha = clamp(max(base_alpha, contact_shadow * 0.42 * destructive_alpha), 0.0, 1.0);
     if alpha < 0.002 { discard; }
     return vec4(color / max(alpha, 0.001), alpha);
 }

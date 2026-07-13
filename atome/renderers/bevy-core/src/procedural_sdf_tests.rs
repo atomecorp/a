@@ -22,6 +22,17 @@ fn contract() -> AtomeProceduralSdf {
         core_reveal: 1.0,
         shell_reveal: 1.0,
         disappearing: 0.0,
+        contact: [0.25, -0.1],
+        attraction: 0.4,
+        stretch: 0.5,
+        gesture_velocity: 0.6,
+        destructive_direction: [1.0, 0.0],
+        destructive_mode: 0.0,
+        destructive_progress: 0.0,
+        cut_path: [-1.2, 0.1, -0.4, 0.08, 0.4, -0.06, 1.2, -0.1],
+        surface_size: [1280.0, 720.0],
+        assistant_center: [640.0, 360.0],
+        assistant_size: 420.0,
     }
 }
 
@@ -66,7 +77,7 @@ fn world() -> World {
 }
 
 #[test]
-fn procedural_sdf_spawns_and_patches_one_bounded_material_quad() {
+fn procedural_sdf_spawns_and_patches_one_full_surface_material_quad() {
     let mut world = world();
     let entity = apply_spawn(
         &mut world,
@@ -182,6 +193,9 @@ fn procedural_sdf_spawns_and_patches_one_bounded_material_quad() {
         .uniform;
     assert_eq!(uniform.dynamics.x, 2.0);
     assert_eq!(uniform.dynamics.w, 0.25);
+    assert_eq!(uniform.geometry.to_array(), [1280.0, 720.0, 640.0, 360.0]);
+    assert_eq!(uniform.shape.x, 420.0);
+    assert_eq!(uniform.cut_path_a.to_array(), [-1.2, 0.1, -0.4, 0.08]);
     apply_despawn(&mut world, "assistant_sdf").unwrap();
     assert!(!world.resource::<AtomeWorkspaceBackdrop>().enabled);
     assert!(

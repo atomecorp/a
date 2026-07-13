@@ -25,10 +25,16 @@ const deferred = () => {
     const promise = new Promise((next) => { resolve = next; });
     return { promise, resolve };
 };
+const voiceTexts = {
+    openingGreeting: 'Salut, que veux-tu ?',
+    touchResponse: 'Oui, je suis toujours là. Comment puis-je t’aider ?',
+    closingGreeting: 'Salut, à plus tard.'
+};
 
-test('voice assistant greets once, then listens and executes the resolved utterance', async () => {
+test('voice assistant speaks distinct opening, touch and closing phrases in order', async () => {
     const listening = deferred();
     const nextListening = deferred();
+    const finalListening = deferred();
     let listenCount = 0;
     const calls = [];
     const api = {
@@ -42,7 +48,13 @@ test('voice assistant greets once, then listens and executes the resolved uttera
         startListening: async () => {
             calls.push('listen');
             listenCount += 1;
-            return { promise: listenCount === 1 ? listening.promise : nextListening.promise };
+            return {
+                promise: listenCount === 1
+                    ? listening.promise
+                    : listenCount === 2
+                        ? nextListening.promise
+                        : finalListening.promise
+            };
         },
         executeUtterance: async (text) => {
             calls.push(['execute', text]);
@@ -54,18 +66,21 @@ test('voice assistant greets once, then listens and executes the resolved uttera
     };
     const controller = createVoiceAssistantSessionController({
         voiceApi: api,
-        greeting: 'Salut, que veux-tu ?'
+        ...voiceTexts
     });
     await controller.open();
     assert.deepEqual(calls.slice(0, 3), [
         'ready',
-        ['speak', 'Salut, que veux-tu ?'],
+        ['speak', voiceTexts.openingGreeting],
         'listen'
     ]);
-    listening.resolve({ text: 'Dessine un cercle' });
+    await controller.respond();
+    assert.deepEqual(calls.findLast((entry) => Array.isArray(entry) && entry[0] === 'speak'), ['speak', voiceTexts.touchResponse]);
+    nextListening.resolve({ text: 'Dessine un cercle' });
     await new Promise((resolve) => setTimeout(resolve, 0));
     assert.deepEqual(calls.find((entry) => Array.isArray(entry) && entry[0] === 'execute'), ['execute', 'Dessine un cercle']);
     await controller.close();
+    assert.deepEqual(calls.findLast((entry) => Array.isArray(entry) && entry[0] === 'speak'), ['speak', voiceTexts.closingGreeting]);
     assert.equal(controller.getState().phase, 'closed');
 });
 
@@ -83,7 +98,7 @@ test('closing the voice assistant cancels listening, speech and processing owner
         stopSpeaking: async (id) => stopped.push(['speak', id]),
         interrupt: async (id) => stopped.push(['interrupt', id])
     };
-    const controller = createVoiceAssistantSessionController({ voiceApi: api, greeting: 'Salut' });
+    const controller = createVoiceAssistantSessionController({ voiceApi: api, ...voiceTexts });
     await controller.open();
     await controller.close({ reason: 'test' });
     assert.deepEqual(stopped, [
@@ -175,6 +190,12 @@ test('assistant visual stays above Dashboard and remains ephemeral across worksp
     assert.ok(normalized.properties.renderLayer > 1420);
     assert.ok(normalized.properties.renderLayer < 2350);
     assert.equal(isEphemeralProjectSceneRecord(record), true);
+    assert.equal(record.properties.left, 0);
+    assert.equal(record.properties.top, 0);
+    assert.equal(record.properties.width, 1280);
+    assert.equal(record.properties.height, 720);
+    assert.deepEqual(record.properties.material.procedural.surface_size, [1280, 720]);
+    assert.equal(record.properties.material.procedural.assistant_size, 273.6);
     const dim = buildAssistantDimRecord({ surfaceSize: { width: 1280, height: 720 }, visibility: 0.5 });
     assert.equal(dim.properties.width, 1280);
     assert.equal(dim.properties.height, 720);
@@ -238,6 +259,7 @@ test('assistant public API owns modal lifecycle, trace command, render teardown 
     assert.equal(commands[0].command, 'voice.assistant.toggle');
     assert.equal(commands[0].source, 'bevy_ui_main_menu_atome');
     assert.equal(interactions[0][0], 'project');
+    assert.equal(interactions[0][3].priority, 1100);
     assert.equal(renders[0].phase, 'opening');
     const firstClose = runtime.toggle({ source: 'bevy_ui_main_menu_atome' });
     const duplicateClose = runtime.close({ source: 'bevy_ui_main_menu_atome' });
@@ -250,6 +272,7 @@ test('assistant public API owns modal lifecycle, trace command, render teardown 
     assert.equal(runtime.getState().sessionId, 'session-2');
     listeners.keydown({ key: 'Escape' });
     await advance(320);
+    await new Promise((resolve) => setTimeout(resolve, 0));
     assert.equal(runtime.getState().phase, 'closed');
 });
 
@@ -298,7 +321,7 @@ test('closing during appearance removes the scene without starting a late greeti
     });
 });
 
-test('a delayed native voice teardown cannot keep the invisible assistant active or block reopening', async () => {
+test('assistant keeps interaction ownership until farewell and animation both finish', async () => {
     let clock = 0;
     let frameCallback = null;
     let sessionSequence = 0;
@@ -335,6 +358,10 @@ test('a delayed native voice teardown cannot keep the invisible assistant active
     clock = 740;
     frameCallback?.();
     await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.equal(runtime.getState().active, true);
+    assert.equal(runtime.getState().transition, 'disappearing');
+    nativeStop.resolve({ ok: true });
+    await firstClose;
     assert.equal(runtime.getState().active, false);
     assert.equal(runtime.getState().transition, 'hidden');
     await runtime.open();
@@ -343,8 +370,6 @@ test('a delayed native voice teardown cannot keep the invisible assistant active
     await Promise.resolve();
     assert.equal(runtime.getState().active, true);
     assert.equal(sessionSequence, 2);
-    nativeStop.resolve({ ok: true });
-    await firstClose;
 });
 
 test('renderer warmup time is excluded from the 420 ms reveal clock', async () => {
@@ -396,7 +421,7 @@ test('renderer warmup time is excluded from the 420 ms reveal clock', async () =
     assert.equal(sessionCount, 1);
 });
 
-test('assistant runtime survives five complete open, greeting and close cycles', async () => {
+test('assistant runtime survives five complete voiced open and close cycles', async () => {
     let sessionSequence = 0;
     let greetingCount = 0;
     let clearCount = 0;
@@ -447,7 +472,7 @@ test('assistant runtime survives five complete open, greeting and close cycles',
         assert.equal(runtime.getState().phase, 'closed');
     }
     assert.equal(sessionSequence, 5);
-    assert.equal(greetingCount, 5);
+    assert.equal(greetingCount, 10);
     assert.equal(clearCount, 5);
 });
 

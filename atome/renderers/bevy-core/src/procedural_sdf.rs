@@ -25,6 +25,13 @@ pub struct ProceduralSdfUniform {
     pub dynamics: Vec4,
     pub transition: Vec4,
     pub optics: Vec4,
+    pub contact: Vec4,
+    pub destructive: Vec4,
+    pub gesture: Vec4,
+    pub geometry: Vec4,
+    pub shape: Vec4,
+    pub cut_path_a: Vec4,
+    pub cut_path_b: Vec4,
 }
 
 #[derive(Asset, TypePath, AsBindGroup, Debug, Clone)]
@@ -90,6 +97,34 @@ fn material_from_contract(
                 normalized.disappearing,
             ),
             optics,
+            contact: Vec4::new(
+                normalized.contact[0],
+                normalized.contact[1],
+                normalized.attraction,
+                normalized.stretch,
+            ),
+            destructive: Vec4::new(
+                normalized.destructive_direction[0],
+                normalized.destructive_direction[1],
+                normalized.destructive_mode,
+                normalized.destructive_progress,
+            ),
+            gesture: Vec4::new(normalized.gesture_velocity, 0.0, 0.0, 0.0),
+            geometry: Vec4::new(
+                normalized.surface_size[0],
+                normalized.surface_size[1],
+                normalized.assistant_center[0],
+                normalized.assistant_center[1],
+            ),
+            shape: Vec4::new(normalized.assistant_size, 0.0, 0.0, 0.0),
+            cut_path_a: Vec4::new(
+                normalized.cut_path[0], normalized.cut_path[1],
+                normalized.cut_path[2], normalized.cut_path[3],
+            ),
+            cut_path_b: Vec4::new(
+                normalized.cut_path[4], normalized.cut_path[5],
+                normalized.cut_path[6], normalized.cut_path[7],
+            ),
         },
         original_backdrop,
         blurred_backdrop,
