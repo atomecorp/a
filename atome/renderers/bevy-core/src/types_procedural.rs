@@ -33,8 +33,6 @@ pub struct AtomeProceduralSdf {
     pub destructive_mode: f32,
     #[serde(default)]
     pub destructive_progress: f32,
-    #[serde(default)]
-    pub cut_path: [f32; 8],
     #[serde(default = "default_surface_size")]
     pub surface_size: [f32; 2],
     #[serde(default)]
@@ -80,7 +78,6 @@ impl AtomeProceduralSdf {
             ],
             destructive_mode: finite_or(self.destructive_mode, 0.0).clamp(0.0, 2.0),
             destructive_progress: finite_or(self.destructive_progress, 0.0).clamp(0.0, 1.0),
-            cut_path: self.cut_path.map(|value| finite_or(value, 0.0).clamp(-2.0, 2.0)),
             surface_size: [
                 finite_or(self.surface_size[0], 1.0).max(1.0),
                 finite_or(self.surface_size[1], 1.0).max(1.0),

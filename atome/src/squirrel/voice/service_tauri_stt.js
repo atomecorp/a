@@ -71,6 +71,7 @@ export const startTauriRecognition = async (context, sessionId, options = {}, {
             confidence: null,
             latest_text: '',
             inactivityTimer: null,
+            settleCancelled: null,
             speechHints
         };
 
@@ -189,6 +190,7 @@ export const startTauriRecognition = async (context, sessionId, options = {}, {
                 text: ''
             });
         };
+        state.settleCancelled = settleStopped;
 
         const settleError = async (error) => {
             if (state.settled) return;

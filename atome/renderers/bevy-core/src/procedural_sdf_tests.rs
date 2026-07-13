@@ -29,7 +29,6 @@ fn contract() -> AtomeProceduralSdf {
         destructive_direction: [1.0, 0.0],
         destructive_mode: 0.0,
         destructive_progress: 0.0,
-        cut_path: [-1.2, 0.1, -0.4, 0.08, 0.4, -0.06, 1.2, -0.1],
         surface_size: [1280.0, 720.0],
         assistant_center: [640.0, 360.0],
         assistant_size: 420.0,
@@ -195,7 +194,6 @@ fn procedural_sdf_spawns_and_patches_one_full_surface_material_quad() {
     assert_eq!(uniform.dynamics.w, 0.25);
     assert_eq!(uniform.geometry.to_array(), [1280.0, 720.0, 640.0, 360.0]);
     assert_eq!(uniform.shape.x, 420.0);
-    assert_eq!(uniform.cut_path_a.to_array(), [-1.2, 0.1, -0.4, 0.08]);
     apply_despawn(&mut world, "assistant_sdf").unwrap();
     assert!(!world.resource::<AtomeWorkspaceBackdrop>().enabled);
     assert!(
@@ -220,4 +218,29 @@ fn procedural_sdf_spawns_and_patches_one_full_surface_material_quad() {
     ] {
         assert_eq!(world.get::<Visibility>(quad), Some(&Visibility::Hidden));
     }
+}
+
+#[test]
+fn procedural_sdf_has_one_directional_ejection_mode() {
+    let shader = include_str!("assets/shaders/procedural_sdf.wgsl");
+    assert!(shader.contains("let inertial_progress = 1.0 - pow("));
+    assert!(shader.contains("length(surface_size) / assistant_size + 1.10"));
+    assert!(shader.contains("let axial_scale = 1.0 + destructive_pull"));
+    assert!(shader.contains("let transverse_scale = 1.0 - destructive_pull * 0.12"));
+    assert!(shader.contains("let core_inertia = select"));
+    assert!(shader.contains("smoothstep(0.85, 1.0, destructive_progress)"));
+    assert!(!shader.contains("cut_path"));
+    assert!(!shader.contains("burst"));
+    assert!(!shader.contains("membrane"));
+}
+
+#[test]
+fn procedural_sdf_keeps_clear_glass_and_a_continuous_shadow_free_aura() {
+    let shader = include_str!("assets/shaders/procedural_sdf.wgsl");
+    assert!(shader.contains("let glass_color = mix(original_color, blurred_color, material.optics.y)"));
+    assert!(shader.contains("let halo_near = 1.0 - smoothstep"));
+    assert!(shader.contains("let halo_diffuse = 1.0 - smoothstep"));
+    assert!(shader.contains("0.05 + rim * 0.46 + shell_edge * 0.18"));
+    assert!(!shader.contains("contact_shadow"));
+    assert!(!shader.contains("let halo_distance = abs(shell_distance)"));
 }

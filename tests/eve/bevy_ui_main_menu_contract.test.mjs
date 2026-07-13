@@ -41,16 +41,26 @@ test('BevyUI Atome hold triggers at exactly 520 ms, never at 519 ms, and only on
 });
 
 test('BevyUI Atome hold suppression expires when its release emits no activation', async () => {
-    let scheduled = null;
+    const scheduled = [];
     const hold = createBevyMainMenuHoldRuntime({
         onHold: () => { },
-        schedule: (callback) => { scheduled = callback; return 1; },
+        schedule: (callback, delay) => {
+            scheduled.push({ callback, delay });
+            return scheduled.length;
+        },
         cancelSchedule: () => { }
     });
     hold.press(BEVY_MAIN_MENU_ATOME_ID, { x: 4, y: 4 });
-    scheduled();
+    scheduled[0].callback();
     hold.release(BEVY_MAIN_MENU_ATOME_ID);
     await Promise.resolve();
+    assert.equal(hold.consumeActivation(BEVY_MAIN_MENU_ATOME_ID), true);
+
+    hold.press(BEVY_MAIN_MENU_ATOME_ID, { x: 4, y: 4 });
+    scheduled[2].callback();
+    hold.release(BEVY_MAIN_MENU_ATOME_ID);
+    assert.equal(scheduled[3].delay, 420);
+    scheduled[3].callback();
     assert.equal(hold.consumeActivation(BEVY_MAIN_MENU_ATOME_ID), false);
 });
 

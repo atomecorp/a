@@ -33,9 +33,9 @@ pub struct AssistantOpticsSettings {
 impl Default for AssistantOpticsSettings {
     fn default() -> Self {
         Self {
-            blur_radius_px: 24.0,
+            blur_radius_px: 16.0,
             refraction_px: 24.0,
-            glass_mix: 0.94,
+            glass_mix: 0.48,
             rim_refraction_start: 0.20,
             halo_opacity: 0.10,
         }

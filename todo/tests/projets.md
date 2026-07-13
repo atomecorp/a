@@ -1,0 +1,40 @@
+# Projets, objets et thumbnails
+
+- [ ] [Fonctionnel][Projet] Créer plusieurs projets.
+- [ ] [Fonctionnel][Navigation] Passer d’un projet à l’autre.
+- [ ] [Fonctionnel][Objet] Créer des objets dans les projets.
+- [ ] [Fonctionnel][Objet] Créer des objets différents dans chaque projet.
+- [ ] [Fonctionnel][Objet] Bouger les objets dans les projets.
+- [ ] [Fonctionnel][Objet] Vérifier que les objets se déplacent correctement.
+- [ ] [Fonctionnel][Isolation] Vérifier que chaque objet reste dans le bon projet.
+- [ ] [Fonctionnel][Isolation] Vérifier que les modifications restent dans le bon projet.
+- [ ] [Fonctionnel][Isolation] Vérifier que les projets ne sont pas altérés lors du passage d’un projet à l’autre.
+- [ ] [Fonctionnel][Comptage] Vérifier que le nombre de projets reste cohérent.
+- [ ] [Fonctionnel][Comptage] Vérifier que le nombre de projets ne change pas sans action explicite.
+- [ ] [Fonctionnel][Isolation] Vérifier l’absence de confusion entre les projets.
+- [ ] [Fonctionnel][Isolation] Vérifier l’absence de mélange entre les objets de différents projets.
+- [ ] [Fonctionnel][Persistance] Vérifier que chaque projet conserve bien ses propres objets.
+- [ ] [Fonctionnel][Persistance] Vérifier que chaque projet conserve bien ses propres modifications.
+- [ ] [Fonctionnel][Ouverture] Ouvrir un projet.
+- [ ] [Fonctionnel][Fermeture] Fermer un projet.
+- [ ] [Fonctionnel][Ouverture] Vérifier que l’ouverture d’un projet est fluide.
+- [ ] [Fonctionnel][Fermeture] Vérifier que la fermeture d’un projet est fluide.
+- [ ] [Fonctionnel][Ouverture] Vérifier que les projets s’ouvrent de manière fluide.
+- [ ] [Fonctionnel][Fermeture] Vérifier que les projets se ferment de manière fluide.
+- [ ] [Fonctionnel][Thumbnail] Vérifier qu’un thumbnail est créé à chaque ouverture de projet.
+- [ ] [Visuel][Thumbnail] Vérifier que le thumbnail correspond bien au projet ouvert.
+- [ ] [Visuel][Thumbnail] Vérifier que le thumbnail contient les éléments du projet.
+- [ ] [Visuel][Thumbnail] Vérifier que le thumbnail contient les atomes visibles à l’écran.
+- [ ] [Visuel][Thumbnail] Vérifier que le thumbnail ne contient pas le fond d’écran.
+- [ ] [Visuel][Thumbnail] Vérifier que le fond d’écran n’est jamais intégré au thumbnail.
+- [ ] [Fonctionnel][Renommage] Renommer un projet.
+- [ ] [Fonctionnel][Renommage] Vérifier que le renommage du projet fonctionne correctement.
+- [ ] [Visuel][Renommage] Vérifier que le nouveau nom du projet est bien affiché.
+- [ ] [Fonctionnel][Renommage] Vérifier que le renommage ne crée pas de confusion entre projets.
+- [ ] [Fonctionnel][Renommage] Vérifier que le renommage ne modifie pas le contenu du projet.
+- [ ] [Fonctionnel][Renommage] Vérifier que le renommage ne modifie pas les autres projets.
+- [ ] [Fonctionnel][Renommage] Vérifier que le projet renommé conserve ses objets.
+- [ ] [Fonctionnel][Renommage] Vérifier que le projet renommé conserve ses modifications.
+- [ ] [Fonctionnel][Rechargement] Vérifier que le rechargement ne casse pas les projets.
+- [ ] [Fonctionnel][Rechargement] Vérifier que le rechargement ne casse pas les objets.
+

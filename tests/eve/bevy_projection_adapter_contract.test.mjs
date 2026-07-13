@@ -19,12 +19,47 @@ import {
     getRendererAdapter,
     registerRendererAdapter
 } from '../../eVe/domains/rendering/renderer_adapter_registry.js';
+import {
+    assistantDestructiveVisual,
+    createAssistantGestureSession,
+    finishAssistantGesture,
+    updateAssistantGestureSession
+} from '../../eVe/voice/assistant/assistant_gesture_runtime.js';
 
 const texture = {
     width: 1,
     height: 1,
     rgba: new Uint8ClampedArray([255, 255, 255, 255])
 };
+
+test.each([
+    ['up-right', { x: 320, y: 480 }, { x: 680, y: 120 }, Math.SQRT1_2, -Math.SQRT1_2],
+    ['down-right', { x: 320, y: 120 }, { x: 680, y: 480 }, Math.SQRT1_2, Math.SQRT1_2],
+    ['up-left', { x: 680, y: 480 }, { x: 320, y: 120 }, -Math.SQRT1_2, -Math.SQRT1_2],
+    ['down-left', { x: 680, y: 120 }, { x: 320, y: 480 }, -Math.SQRT1_2, Math.SQRT1_2]
+])('assistant %s sweeps preserve the pointer direction through SDF projection', (_name, outsideStart, end, expectedX, expectedY) => {
+    const bounds = { left: 300, top: 100, size: 400 };
+    const start = { x: 500, y: 300 };
+    const insideSession = updateAssistantGestureSession(
+        createAssistantGestureSession({ pointerId: 1, point: start, at: 0, bounds }),
+        { point: end, at: 80 }
+    );
+    const outsideSession = updateAssistantGestureSession(
+        createAssistantGestureSession({ pointerId: 2, point: outsideStart, at: 0, bounds }),
+        { point: end, at: 80 }
+    );
+    const result = finishAssistantGesture(insideSession);
+    const outsideResult = finishAssistantGesture(outsideSession);
+    const visual = assistantDestructiveVisual({ direction: result.direction });
+    assert.equal(result.action, 'eject');
+    assert.equal(outsideResult.action, 'eject');
+    assert.ok(Math.abs(result.direction.x - expectedX) < 0.0001);
+    assert.ok(Math.abs(result.direction.y - expectedY) < 0.0001);
+    assert.ok(Math.abs(outsideResult.direction.x - expectedX) < 0.0001);
+    assert.ok(Math.abs(outsideResult.direction.y - expectedY) < 0.0001);
+    assert.ok(Math.abs(visual.direction[0] - expectedX) < 0.0001);
+    assert.ok(Math.abs(visual.direction[1] + expectedY) < 0.0001);
+});
 
 const projectionFixtures = Object.freeze([
     Object.freeze({
@@ -81,8 +116,7 @@ const projectionFixtures = Object.freeze([
                 morph: [1, 1, 0, 0], phase: 2, pulse: 0.01, time: 1.5, intensity: 0.4,
                 glow_reveal: 1, core_reveal: 0.8, shell_reveal: 0.75, disappearing: 1,
                 contact: [0.4, -0.2], attraction: 0.5, stretch: 0.6, gesture_velocity: 0.7,
-                destructive_direction: [1, 0], destructive_mode: 2, destructive_progress: 0.4,
-                cut_path: [-1.2, 0, -0.4, 0.08, 0.4, -0.06, 1.2, 0],
+                destructive_direction: [1, 0], destructive_mode: 1, destructive_progress: 0.4,
                 surface_size: [1280, 720], assistant_center: [640, 360], assistant_size: 320
             }
         }
@@ -166,8 +200,7 @@ test('Bevy renderer adapter registry keeps existing node projections identical',
     const procedural = defaultPayloads.find((payload) => payload.kind === 'procedural_sdf').procedural;
     assert.deepEqual(procedural.contact, [0.4, -0.2]);
     assert.deepEqual(procedural.destructive_direction, [1, 0]);
-    assert.equal(procedural.destructive_mode, 2);
-    assert.deepEqual(procedural.cut_path, [-1.2, 0, -0.4, 0.08, 0.4, -0.06, 1.2, 0]);
+    assert.equal(procedural.destructive_mode, 1);
     assert.deepEqual(procedural.surface_size, [1280, 720]);
 });
 

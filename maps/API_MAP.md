@@ -1288,7 +1288,7 @@ Public singleton: `window.eveAssistantApi`
 - `getState()`
 - `subscribe(listener)`
 
-Open/close/toggle trace the declared `voice.assistant.toggle` command. `getState()` and subscriptions may expose `ejecting` and `bursting`. The internal session controller requires distinct opening, touch-response and closing texts: open greets before listening, touch release responds before listening, and every user close speaks farewell in parallel with visual exit. Forced technical cancellation passes `speakFarewell: false`. Gesture paths, animation uniforms and TTS frames remain runtime-ephemeral and never become Atome commits or history entries.
+Open/close/toggle trace the declared `voice.assistant.toggle` command. `getState()` and subscriptions may expose `ejecting`; `bursting` and the internal `cut_path` contract are removed. Pointer movement updates only organic deformation. On `pointerup`, a position inside the shell cancels ejection and responds, while a position outside after shell entry ejects along the normalized start-to-release direction. The Atome hold bridge bootstraps this API on demand and calls its sole `toggle()`: closed opens and active closes. While active, the assistant yields canonical main-toolbox pointer sequences without changing this API. The single undimmed assistant projection follows the foreground WebGPU scene and clears every stale occupied scene on teardown. Open greets before listening, touch release responds before listening, and every user close speaks farewell in parallel with visual exit. Visual teardown marks the assistant closed without awaiting native farewell completion, so voice latency cannot block the next opening.
 
 #### Public Audio and AV Runtime API Details
 

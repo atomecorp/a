@@ -11,10 +11,10 @@ import {
     assistantSizeForSurface,
     assistantTransitionAt,
     assistantUniforms,
-    buildAssistantDimRecord,
     buildAssistantVisualRecord
 } from '../../eVe/voice/assistant/assistant_visual_contract.js';
 import { createEveAssistantRuntime } from '../../eVe/voice/assistant/assistant_runtime.js';
+import { createBevyMainMenuHoldRuntime } from '../../eVe/intuition/ribbon/bevy_ui_main_menu_hold_runtime.js';
 import { isEphemeralProjectSceneRecord } from '../../eVe/domains/rendering/project_scene_record_projection.js';
 import { normalizeWorkspaceSceneRecord } from '../../eVe/domains/rendering/workspace_scene_layers.js';
 import voiceConfig from '../../atome/src/assets/voice/fr_FR-siwis-medium/fr_FR-siwis-medium.onnx.json' with { type: 'json' };
@@ -29,6 +29,12 @@ const voiceTexts = {
     openingGreeting: 'Salut, que veux-tu ?',
     touchResponse: 'Oui, je suis toujours là. Comment puis-je t’aider ?',
     closingGreeting: 'Salut, à plus tard.'
+};
+const translateVoiceKey = (key) => {
+    if (key.endsWith('opening_greeting')) return voiceTexts.openingGreeting;
+    if (key.endsWith('touch_response')) return voiceTexts.touchResponse;
+    if (key.endsWith('closing_greeting')) return voiceTexts.closingGreeting;
+    return 'Assistant vocal eVe';
 };
 
 test('voice assistant speaks distinct opening, touch and closing phrases in order', async () => {
@@ -183,7 +189,7 @@ test('assistant global transition boundaries map 0, 419, 420, 599, 600 and 920 m
     assert.equal(at(920), 0);
 });
 
-test('assistant visual stays above Dashboard and remains ephemeral across workspace reconciliations', () => {
+test('assistant uses one undimmed full-surface visual above Dashboard', () => {
     const record = buildAssistantVisualRecord({ surfaceSize: { width: 1280, height: 720 }, phase: 'listening' });
     const normalized = normalizeWorkspaceSceneRecord(record);
     assert.equal(normalized.properties.layer, 'panel');
@@ -196,11 +202,94 @@ test('assistant visual stays above Dashboard and remains ephemeral across worksp
     assert.equal(record.properties.height, 720);
     assert.deepEqual(record.properties.material.procedural.surface_size, [1280, 720]);
     assert.equal(record.properties.material.procedural.assistant_size, 273.6);
-    const dim = buildAssistantDimRecord({ surfaceSize: { width: 1280, height: 720 }, visibility: 0.5 });
-    assert.equal(dim.properties.width, 1280);
-    assert.equal(dim.properties.height, 720);
-    assert.equal(dim.properties.opacity, 0.04);
-    assert.ok(normalizeWorkspaceSceneRecord(dim).properties.renderLayer < normalized.properties.renderLayer);
+});
+
+test('a real BevyUI long hold reopens after visual close even while the farewell is finishing', async () => {
+    let clock = 0;
+    let frameCallback = null;
+    let sessionSequence = 0;
+    const farewell = deferred();
+    const spoken = [];
+    const scheduled = [];
+    const voiceApi = {
+        ensureReady: async () => true,
+        createSession: async () => ({ session_id: `hold-session-${++sessionSequence}` }),
+        subscribe: () => () => { },
+        subscribeTtsFrames: () => () => { },
+        speak: async (text) => {
+            spoken.push(text);
+            return { promise: text === voiceTexts.closingGreeting ? farewell.promise : Promise.resolve({}) };
+        },
+        startListening: async () => ({ promise: new Promise(() => { }) }),
+        executeUtterance: async () => ({ ok: true }),
+        cancelListening: async () => ({ ok: true }),
+        stopSpeaking: async () => ({ ok: true }),
+        interrupt: async () => ({ ok: true })
+    };
+    const runtime = createEveAssistantRuntime({
+        env: { addEventListener: () => { }, performance: { now: () => clock } },
+        voiceApiResolver: () => voiceApi,
+        now: () => clock,
+        requestFrame: (callback) => { frameCallback = callback; return 1; },
+        cancelFrame: () => { },
+        renderScene: async () => ({ ok: true }),
+        clearScene: async () => ({ ok: true }),
+        setInteractionLayer: () => { },
+        commandBus: { append: () => { } },
+        translate: translateVoiceKey
+    });
+    const hold = createBevyMainMenuHoldRuntime({
+        onHold: (payload) => runtime.toggle(payload),
+        schedule: (callback, delay) => {
+            const timer = { callback, delay, cancelled: false };
+            scheduled.push(timer);
+            return timer;
+        },
+        cancelSchedule: (timer) => { timer.cancelled = true; }
+    });
+    const flush = async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+        await new Promise((resolve) => setTimeout(resolve, 0));
+    };
+    const advance = async (milliseconds) => {
+        clock += milliseconds;
+        const callback = frameCallback;
+        frameCallback = null;
+        callback?.();
+        await flush();
+    };
+    const longHold = async () => {
+        hold.press('main_menu_atome', { x: 10, y: 10 });
+        const timer = scheduled.findLast((candidate) => candidate.delay === 520 && !candidate.cancelled);
+        assert.ok(timer);
+        timer.callback();
+        hold.release('main_menu_atome');
+        await flush();
+    };
+
+    await longHold();
+    await advance(420);
+    assert.equal(runtime.getState().active, true);
+    assert.equal(runtime.getState().sessionId, 'hold-session-1');
+
+    await longHold();
+    await advance(320);
+    assert.equal(runtime.getState().active, false);
+    assert.equal(runtime.getState().transition, 'hidden');
+    await longHold();
+    await flush();
+    assert.equal(runtime.getState().active, true);
+    assert.equal(runtime.getState().transition, 'appearing');
+    await advance(420);
+    assert.equal(runtime.getState().sessionId, 'hold-session-2');
+    assert.deepEqual(spoken, [
+        voiceTexts.openingGreeting,
+        voiceTexts.closingGreeting,
+        voiceTexts.openingGreeting
+    ]);
+    farewell.resolve({ ok: true });
+    await flush();
 });
 
 test('assistant public API owns modal lifecycle, trace command, render teardown and clean reopen', async () => {
@@ -218,6 +307,7 @@ test('assistant public API owns modal lifecycle, trace command, render teardown 
         callback?.();
         await Promise.resolve();
         await Promise.resolve();
+        await new Promise((resolve) => setTimeout(resolve, 0));
     };
     const pendingListen = () => new Promise(() => { });
     const voiceApi = {
@@ -237,7 +327,12 @@ test('assistant public API owns modal lifecycle, trace command, render teardown 
             addEventListener: (type, listener) => { listeners[type] = listener; },
             requestAnimationFrame: (callback) => { frameCallback = callback; return 1; },
             cancelAnimationFrame: () => { },
-            performance: { now: () => clock }
+            performance: { now: () => clock },
+            eveBevyUiRuntime: {
+                hitTestAtClientPoint: ({ clientY }) => Number(clientY) >= 700
+                    ? { treeId: 'eve_bevy_ui_main_menu', nodeId: 'main_menu_atome' }
+                    : { treeId: 'eve_dashboard_tree', nodeId: 'dashboard_card' }
+            }
         },
         voiceApiResolver: () => voiceApi,
         now: () => clock,
@@ -261,8 +356,24 @@ test('assistant public API owns modal lifecycle, trace command, render teardown 
     assert.equal(interactions[0][0], 'project');
     assert.equal(interactions[0][3].priority, 1100);
     assert.equal(renders[0].phase, 'opening');
+    const assistantInterceptor = interactions[0][2];
+    const pointerPayload = (phase, clientX, clientY, pointerId = 9) => ({
+        canvas: {},
+        event: { clientX, clientY, pointerId },
+        phase,
+        point: { x: clientX, y: clientY },
+        surface_size: { width: 1000, height: 800 }
+    });
+    assert.equal(assistantInterceptor(pointerPayload('pointerdown', 940, 760)).handled, false);
+    assert.equal(assistantInterceptor(pointerPayload('pointermove', 500, 300)).handled, false);
+    assert.equal(assistantInterceptor(pointerPayload('pointerup', 500, 300)).handled, false);
+    assert.equal(assistantInterceptor(pointerPayload('pointerup', 940, 760, 10)).handled, false);
+    assert.equal(assistantInterceptor(pointerPayload('pointerdown', 200, 200, 11)).handled, true);
+    assert.equal(assistantInterceptor(pointerPayload('pointercancel', 200, 200, 11)).handled, true);
     const firstClose = runtime.toggle({ source: 'bevy_ui_main_menu_atome' });
     const duplicateClose = runtime.close({ source: 'bevy_ui_main_menu_atome' });
+    assert.equal(assistantInterceptor(pointerPayload('pointerdown', 940, 760, 12)).handled, false);
+    assert.equal(assistantInterceptor(pointerPayload('pointerup', 940, 760, 12)).handled, false);
     await advance(320);
     await Promise.all([firstClose, duplicateClose]);
     assert.equal(runtime.getState().phase, 'closed');
@@ -276,16 +387,16 @@ test('assistant public API owns modal lifecycle, trace command, render teardown 
     assert.equal(runtime.getState().phase, 'closed');
 });
 
-test('closing during appearance removes the scene without starting a late greeting', async () => {
+test('closing during appearance speaks only the farewell and remains reopenable', async () => {
     let clock = 0;
     let frameCallback = null;
-    let greetingCount = 0;
+    const spokenTexts = [];
     const voiceApi = {
         subscribeTtsFrames: () => () => { },
         subscribe: () => () => { },
         ensureReady: async () => true,
         createSession: async () => ({ session_id: 'cancelled-opening' }),
-        speak: async () => { greetingCount += 1; return { promise: Promise.resolve({}) }; },
+        speak: async (text) => { spokenTexts.push(text); return { promise: Promise.resolve({}) }; },
         startListening: async () => ({ promise: new Promise(() => { }) }),
         executeUtterance: async () => ({ ok: true }),
         cancelListening: async () => ({ ok: true }),
@@ -302,7 +413,7 @@ test('closing during appearance removes the scene without starting a late greeti
         clearScene: async () => ({ ok: true }),
         setInteractionLayer: () => { },
         commandBus: { append: () => { } },
-        translate: () => 'Salut, que veux-tu ?'
+        translate: translateVoiceKey
     });
     await runtime.open();
     clock = 200;
@@ -311,7 +422,7 @@ test('closing during appearance removes the scene without starting a late greeti
     clock = 520;
     frameCallback?.();
     await close;
-    assert.equal(greetingCount, 0);
+    assert.deepEqual(spokenTexts, [voiceTexts.closingGreeting]);
     assert.deepEqual(runtime.getState(), {
         active: false,
         error: '',
@@ -319,9 +430,18 @@ test('closing during appearance removes the scene without starting a late greeti
         sessionId: null,
         transition: 'hidden'
     });
+    await runtime.open();
+    clock = 940;
+    frameCallback?.();
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.equal(runtime.getState().active, true);
+    assert.deepEqual(spokenTexts, [voiceTexts.closingGreeting, voiceTexts.openingGreeting]);
 });
 
-test('assistant keeps interaction ownership until farewell and animation both finish', async () => {
+test('assistant releases visual interaction after animation without waiting for native voice cleanup', async () => {
     let clock = 0;
     let frameCallback = null;
     let sessionSequence = 0;
@@ -358,18 +478,16 @@ test('assistant keeps interaction ownership until farewell and animation both fi
     clock = 740;
     frameCallback?.();
     await new Promise((resolve) => setTimeout(resolve, 0));
-    assert.equal(runtime.getState().active, true);
-    assert.equal(runtime.getState().transition, 'disappearing');
-    nativeStop.resolve({ ok: true });
-    await firstClose;
     assert.equal(runtime.getState().active, false);
     assert.equal(runtime.getState().transition, 'hidden');
+    await firstClose;
     await runtime.open();
     clock = 1160;
     frameCallback?.();
     await Promise.resolve();
     assert.equal(runtime.getState().active, true);
     assert.equal(sessionSequence, 2);
+    nativeStop.resolve({ ok: true });
 });
 
 test('renderer warmup time is excluded from the 420 ms reveal clock', async () => {
@@ -421,9 +539,9 @@ test('renderer warmup time is excluded from the 420 ms reveal clock', async () =
     assert.equal(sessionCount, 1);
 });
 
-test('assistant runtime survives five complete voiced open and close cycles', async () => {
+test('assistant runtime survives ten complete voiced open and close cycles with exact phrases', async () => {
     let sessionSequence = 0;
-    let greetingCount = 0;
+    const spokenTexts = [];
     let clearCount = 0;
     let clock = 0;
     let frameCallback = null;
@@ -434,14 +552,15 @@ test('assistant runtime survives five complete voiced open and close cycles', as
         callback?.();
         await Promise.resolve();
         await Promise.resolve();
+        await new Promise((resolve) => setTimeout(resolve, 0));
     };
     const voiceApi = {
         ensureReady: async () => true,
         createSession: async () => ({ session_id: `stress-session-${++sessionSequence}` }),
         subscribe: () => () => { },
         subscribeTtsFrames: () => () => { },
-        speak: async () => {
-            greetingCount += 1;
+        speak: async (text) => {
+            spokenTexts.push(text);
             return { promise: Promise.resolve({}) };
         },
         startListening: async () => ({ promise: new Promise(() => { }) }),
@@ -460,9 +579,9 @@ test('assistant runtime survives five complete voiced open and close cycles', as
         clearScene: async () => { clearCount += 1; },
         setInteractionLayer: () => { },
         commandBus: { append: () => { } },
-        translate: (key) => key.endsWith('greeting') ? 'Salut, que veux-tu ?' : 'Assistant vocal eVe'
+        translate: translateVoiceKey
     });
-    for (let index = 0; index < 5; index += 1) {
+    for (let index = 0; index < 10; index += 1) {
         await runtime.open({ source: 'stress' });
         assert.equal(runtime.getState().active, true);
         await advance(420);
@@ -471,9 +590,75 @@ test('assistant runtime survives five complete voiced open and close cycles', as
         await close;
         assert.equal(runtime.getState().phase, 'closed');
     }
-    assert.equal(sessionSequence, 5);
-    assert.equal(greetingCount, 10);
-    assert.equal(clearCount, 5);
+    assert.equal(sessionSequence, 10);
+    assert.deepEqual(spokenTexts, Array.from({ length: 10 }, () => [
+        voiceTexts.openingGreeting,
+        voiceTexts.closingGreeting
+    ]).flat());
+    assert.equal(clearCount, 10);
+});
+
+test('a native farewell failure cannot strand the assistant or block reopening', async () => {
+    let clock = 0;
+    let frameCallback = null;
+    let sessionSequence = 0;
+    let voiceUnsubscribeCount = 0;
+    const closeErrors = [];
+    const advance = async (milliseconds) => {
+        clock += milliseconds;
+        const callback = frameCallback;
+        frameCallback = null;
+        callback?.();
+        await Promise.resolve();
+        await Promise.resolve();
+        await Promise.resolve();
+        await new Promise((resolve) => setTimeout(resolve, 0));
+    };
+    const voiceApi = {
+        ensureReady: async () => true,
+        createSession: async () => ({ session_id: `failure-session-${++sessionSequence}` }),
+        subscribe: () => () => { voiceUnsubscribeCount += 1; },
+        subscribeTtsFrames: () => () => { },
+        speak: async (text) => {
+            if (text === voiceTexts.closingGreeting) throw new Error('native_farewell_failed');
+            return { promise: Promise.resolve({}) };
+        },
+        startListening: async () => ({ promise: new Promise(() => { }) }),
+        executeUtterance: async () => ({ ok: true }),
+        cancelListening: async () => ({ ok: true }),
+        stopSpeaking: async () => ({ ok: true }),
+        interrupt: async () => ({ ok: true })
+    };
+    const runtime = createEveAssistantRuntime({
+        env: {
+            addEventListener: () => { },
+            console: { error: (...args) => closeErrors.push(args) },
+            performance: { now: () => clock }
+        },
+        voiceApiResolver: () => voiceApi,
+        now: () => clock,
+        requestFrame: (callback) => { frameCallback = callback; return 1; },
+        cancelFrame: () => { },
+        renderScene: async () => ({ ok: true }),
+        clearScene: async () => ({ ok: true }),
+        setInteractionLayer: () => { },
+        commandBus: { append: () => { } },
+        translate: translateVoiceKey
+    });
+    await runtime.open();
+    await advance(420);
+    const closing = runtime.close({ source: 'test' });
+    await advance(320);
+    await closing;
+    assert.equal(runtime.getState().active, false);
+    assert.equal(runtime.getState().transition, 'hidden');
+    assert.equal(closeErrors.length, 1);
+    assert.equal(closeErrors[0][0], 'eve_voice_assistant_close_voice_failed');
+    assert.equal(voiceUnsubscribeCount, 1);
+    await runtime.open();
+    await advance(420);
+    assert.equal(runtime.getState().active, true);
+    assert.equal(runtime.getState().sessionId, 'failure-session-2');
 });
 
 test('transient PCM assets stay ephemeral while using the existing Kira facade authority', async () => {

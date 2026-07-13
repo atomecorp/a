@@ -1,0 +1,239 @@
+- [ ] [Unitaire][Cycle de vie] Vérifier que `open()` crée exactement une session assistant lorsque l’état initial est inactif.
+- [ ] [Unitaire][Cycle de vie] Vérifier que deux appels concurrents à `open()` ne créent qu’une seule session assistant.
+- [ ] [Unitaire][Cycle de vie] Vérifier que `close()` ferme exactement une fois une session active.
+- [ ] [Unitaire][Cycle de vie] Vérifier que deux appels concurrents à `close()` partagent la même fermeture canonique.
+- [ ] [Unitaire][Cycle de vie] Vérifier que `toggle()` ouvre l’assistant lorsqu’il est inactif.
+- [ ] [Unitaire][Cycle de vie] Vérifier que `toggle()` ferme l’assistant lorsqu’il est actif.
+- [ ] [Unitaire][Cycle de vie] Vérifier qu’une demande d’ouverture reçue pendant `disappearing` est mémorisée puis exécutée après le nettoyage.
+- [ ] [Unitaire][Cycle de vie] Vérifier qu’une demande d’ouverture reçue pendant `ejecting` est mémorisée puis exécutée après le nettoyage.
+- [ ] [Unitaire][Cycle de vie] Vérifier qu’une ouverture après disparition visuelle démarre même si l’au revoir natif se termine encore.
+- [ ] [Unitaire][Cycle de vie] Vérifier qu’une ancienne fin asynchrone ne modifie jamais une nouvelle génération de session.
+- [ ] [Unitaire][Cycle de vie] Vérifier que l’état final après fermeture contient `active: false` et une transition inactive.
+- [ ] [Unitaire][Cycle de vie] Vérifier que les promesses, abonnements, interceptions et références vocales sont remis à zéro après fermeture.
+- [ ] [Unitaire][Cycle de vie] Vérifier que la fermeture technique forcée est immédiate et ne prononce aucune phrase.
+- [ ] [Unitaire][Cycle de vie] Vérifier qu’une erreur d’ouverture laisse le runtime dans un état propre et de nouveau ouvrable.
+- [ ] [Unitaire][Cycle de vie] Vérifier qu’une erreur vocale de fermeture n’empêche pas le nettoyage visuel et interactif.
+- [ ] [Unitaire][Voix] Vérifier que l’ouverture prononce exactement « Salut, que veux-tu ? » une seule fois.
+- [ ] [Unitaire][Voix] Vérifier que le relâchement organique prononce exactement « Oui, je suis toujours là. Comment puis-je t’aider ? » une seule fois.
+- [ ] [Unitaire][Voix] Vérifier que toute fermeture utilisateur prononce exactement « Salut, à plus tard. » une seule fois.
+- [ ] [Unitaire][Voix] Vérifier que l’écoute commence après la salutation d’ouverture.
+- [ ] [Unitaire][Voix] Vérifier que l’écoute est interrompue avant la réponse tactile.
+- [ ] [Unitaire][Voix] Vérifier que l’écoute reprend après la réponse tactile.
+- [ ] [Unitaire][Voix] Vérifier que parole, écoute et traitement précédents sont interrompus avant la salutation de fermeture.
+- [ ] [Unitaire][Voix] Vérifier que la voix de fermeture termine sur sa session sans bloquer le cycle de vie visuel.
+- [ ] [Unitaire][Voix] Vérifier que l’absence d’API vocale produit l’erreur canonique sans fallback.
+- [ ] [Unitaire][Voix] Vérifier que les frames TTS pilotent le morphing vocal uniquement pour la génération active.
+- [ ] [Unitaire][Voix] Vérifier que les voyelles A, E, I, O et U produisent des morphologies finies, bornées et distinctes.
+- [ ] [Unitaire][Voix] Vérifier que le niveau RMS module l’impulsion visuelle sans dépasser les bornes du shader.
+- [ ] [Unitaire][Voix] Vérifier que les trois clés i18n existent et retournent les phrases françaises exactes.
+- [ ] [Unitaire][Geste] Vérifier qu’un tap bref commencé dans la silhouette reste non destructif.
+- [ ] [Unitaire][Geste] Vérifier qu’un tap bref relâché déclenche exactement une réponse tactile.
+- [ ] [Unitaire][Geste] Vérifier qu’un contact actif pendant 320 ms verrouille `organic_hold`.
+- [ ] [Unitaire][Geste] Vérifier qu’aucun déplacement ne déclenche une éjection avant `pointerup`.
+- [ ] [Unitaire][Geste] Vérifier qu’un mouvement extérieur continue à déformer l’assistant tant que le pointeur reste enfoncé.
+- [ ] [Unitaire][Geste] Vérifier que `pointercancel` ramène silencieusement l’assistant au repos sans voix ni fermeture.
+- [ ] [Unitaire][Geste] Vérifier que les positions coalescées ne provoquent qu’une mise à jour visuelle maximale par frame.
+- [ ] [Unitaire][Geste] Vérifier que la vitesse filtrée est indépendante de la fréquence des événements pointeur.
+- [ ] [Unitaire][Geste] Vérifier que les seuils de distance et de vitesse sont normalisés par le diamètre de l’assistant.
+- [ ] [Unitaire][Geste] Vérifier que les seuils restent identiques pour souris, stylet et toucher.
+- [ ] [Unitaire][Coordonnées] Vérifier que le vecteur navigateur droite devient le vecteur SDF droite.
+- [ ] [Unitaire][Coordonnées] Vérifier que le vecteur navigateur gauche devient le vecteur SDF gauche.
+- [ ] [Unitaire][Coordonnées] Vérifier que le vecteur navigateur haut devient le vecteur SDF haut.
+- [ ] [Unitaire][Coordonnées] Vérifier que le vecteur navigateur bas devient le vecteur SDF bas.
+- [ ] [Unitaire][Coordonnées] Vérifier les quatre conversions diagonales navigateur vers SDF.
+- [ ] [Unitaire][Coordonnées] Vérifier que l’inversion de Y n’est appliquée qu’une seule fois dans toute la chaîne JavaScript–Rust–WGSL.
+- [ ] [Unitaire][Déformation] Vérifier que le point proche du doigt s’allonge vers le doigt pour les huit directions cardinales et diagonales.
+- [ ] [Unitaire][Déformation] Vérifier que le côté opposé se comprime sans s’allonger en sens inverse.
+- [ ] [Unitaire][Déformation] Vérifier que le noyau suit le contact avec un retard borné.
+- [ ] [Unitaire][Déformation] Vérifier que l’étirement longitudinal reste sous sa limite maximale.
+- [ ] [Unitaire][Déformation] Vérifier que la compression transversale conserve une sensation de volume.
+- [ ] [Unitaire][Déformation] Vérifier que des trajectoires courbes traversant le centre restent continues et sans inversion.
+- [ ] [Unitaire][Déformation] Vérifier que le relâchement produit un retour amorti continu sans dépassement excessif.
+- [ ] [Unitaire][Éjection] Vérifier qu’un glissement commencé dans la silhouette déclenche `ejecting` uniquement au relâchement extérieur.
+- [ ] [Unitaire][Éjection] Vérifier qu’un glissement commencé à l’extérieur et traversant la silhouette déclenche la même éjection uniquement au relâchement extérieur.
+- [ ] [Unitaire][Éjection] Vérifier qu’une entrée extérieure partielle ne déclenche aucune éjection.
+- [ ] [Unitaire][Éjection] Vérifier qu’un passage extérieur trop lent ne déclenche aucune éjection.
+- [ ] [Unitaire][Éjection] Vérifier que l’éjection suit exactement la direction droite du doigt.
+- [ ] [Unitaire][Éjection] Vérifier que l’éjection suit exactement la direction gauche du doigt.
+- [ ] [Unitaire][Éjection] Vérifier que l’éjection suit exactement la direction haute du doigt.
+- [ ] [Unitaire][Éjection] Vérifier que l’éjection suit exactement la direction basse du doigt.
+- [ ] [Unitaire][Éjection] Vérifier les quatre directions diagonales d’éjection.
+- [ ] [Unitaire][Éjection] Vérifier que la vitesse initiale module l’inertie sans changer la direction.
+- [ ] [Unitaire][Éjection] Vérifier que l’assistant reste formé et étiré pendant les premiers 85 % de l’éjection.
+- [ ] [Unitaire][Éjection] Vérifier que la disparition visuelle ne commence que dans les derniers 15 % de l’éjection.
+- [ ] [Unitaire][Éjection] Vérifier que coque, noyau, réfraction, halo et lumières partagent la même déformation inertielle.
+- [ ] [Unitaire][Rendu] Vérifier que l’assistant utilise un seul record SDF plein écran.
+- [ ] [Unitaire][Rendu] Vérifier qu’aucun voile d’assombrissement plein écran n’est créé.
+- [ ] [Unitaire][Rendu] Vérifier qu’aucun canvas, DOM visible ou renderer parallèle n’est créé.
+- [ ] [Unitaire][Rendu] Vérifier que le diamètre de l’assistant est borné pour les petites et grandes surfaces.
+- [ ] [Unitaire][Rendu] Vérifier que le centre et la taille transmis au shader sont finis et cohérents avec la surface logique.
+- [ ] [Unitaire][Rendu] Vérifier que le quad plein écran empêche tout cropping pendant déformation et éjection.
+- [ ] [Unitaire][Rendu] Vérifier que le flou dynamique vaut 16 px dans le contrat par défaut.
+- [ ] [Unitaire][Rendu] Vérifier que le mélange du verre vaut 0,48 dans le contrat par défaut.
+- [ ] [Unitaire][Rendu] Vérifier que la réfraction vaut 24 px dans le contrat par défaut.
+- [ ] [Unitaire][Rendu] Vérifier que la teinte intérieure de coque reste proche de 5 %.
+- [ ] [Unitaire][Rendu] Vérifier que le shader ne contient plus d’ombre de contact créant une rupture à la base.
+- [ ] [Unitaire][Rendu] Vérifier que le halo proche et la diffusion large sont continus et bornés.
+- [ ] [Unitaire][Rendu] Vérifier que les variations du halo restent à basse fréquence et sans anneau régulier brutal.
+- [ ] [Unitaire][Rendu] Vérifier que les paramètres envoyés au shader sont toujours finis, normalisés et bornés côté Rust.
+- [ ] [Unitaire][Scène] Vérifier que l’assistant se monte dans la scène WebGPU actuellement au premier plan.
+- [ ] [Unitaire][Scène] Vérifier que le passage Dashboard vers projet migre le record assistant vers la nouvelle scène.
+- [ ] [Unitaire][Scène] Vérifier que le passage projet vers Dashboard migre le record assistant vers la nouvelle scène.
+- [ ] [Unitaire][Scène] Vérifier que l’ancienne scène ne conserve aucun record assistant après migration.
+- [ ] [Unitaire][Scène] Vérifier que la fermeture nettoie le préfixe assistant dans toutes les scènes occupées.
+- [ ] [Unitaire][Interaction] Vérifier que l’intercepteur assistant possède les gestes commencés hors de la boîte à outils.
+- [ ] [Unitaire][Interaction] Vérifier que l’intercepteur cède les gestes commencés sur la boîte à outils canonique.
+- [ ] [Unitaire][Interaction] Vérifier que la cession à la boîte à outils reste verrouillée par `pointerId` jusqu’au relâchement.
+- [ ] [Unitaire][Interaction] Vérifier qu’un autre `pointerId` ne récupère pas abusivement une séquence déjà cédée.
+- [ ] [Unitaire][Interaction] Vérifier que l’intercepteur est retiré immédiatement après la fermeture complète.
+- [ ] [Fonctionnel][Cycle réel] Ouvrir l’assistant par un vrai appui long Atome et vérifier sa salutation d’ouverture.
+- [ ] [Fonctionnel][Cycle réel] Fermer l’assistant par un vrai second appui long Atome et vérifier sa salutation de fermeture.
+- [ ] [Fonctionnel][Cycle réel] Réouvrir l’assistant après la fermeture complète et vérifier qu’une nouvelle session fonctionne.
+- [ ] [Fonctionnel][Cycle réel] Répéter dix cycles réels ouverture–fermeture–réouverture sans échec.
+- [ ] [Fonctionnel][Cycle réel] Demander la réouverture après disparition visuelle et vérifier qu’elle démarre même si l’au revoir se termine encore.
+- [ ] [Fonctionnel][Cycle réel] Demander la réouverture pendant « Salut, à plus tard. » et vérifier qu’elle est différée puis exécutée.
+- [ ] [Fonctionnel][Cycle réel] Demander la réouverture juste après la fin de la voix et vérifier qu’elle est immédiate.
+- [ ] [Fonctionnel][Cycle réel] Vérifier exactement une salutation d’ouverture et un au revoir par cycle.
+- [ ] [Fonctionnel][Voix] Vérifier dans Tauri que la voix native prononce les trois phrases sans doublon ni chevauchement incohérent.
+- [ ] [Fonctionnel][Voix] Vérifier qu’un geste organique interrompt l’écoute, parle au relâchement puis reprend l’écoute.
+- [ ] [Fonctionnel][Voix] Vérifier qu’une éjection interrompt immédiatement l’écoute et démarre simultanément l’au revoir.
+- [ ] [Fonctionnel][Voix] Vérifier qu’Escape ferme avec un unique au revoir.
+- [ ] [Fonctionnel][Voix] Vérifier que la fermeture API utilisateur ferme avec un unique au revoir.
+- [ ] [Fonctionnel][Voix] Vérifier qu’un arrêt technique du runtime ne prononce aucun au revoir.
+- [ ] [Fonctionnel][Gestes] Effectuer un tap bref au centre et vérifier la déformation impulsive puis la réponse tactile.
+- [ ] [Fonctionnel][Gestes] Maintenir immobile plus de 320 ms et vérifier l’approfondissement progressif de l’empreinte.
+- [ ] [Fonctionnel][Gestes] Maintenir puis glisser vers le haut et vérifier que la matière suit le doigt jusqu’au relâchement.
+- [ ] [Fonctionnel][Gestes] Maintenir puis glisser vers le bas et vérifier que la matière suit le doigt jusqu’au relâchement.
+- [ ] [Fonctionnel][Gestes] Maintenir puis glisser vers la gauche et vérifier que la matière suit le doigt jusqu’au relâchement.
+- [ ] [Fonctionnel][Gestes] Maintenir puis glisser vers la droite et vérifier que la matière suit le doigt jusqu’au relâchement.
+- [ ] [Fonctionnel][Gestes] Maintenir puis glisser dans chacune des quatre diagonales et vérifier la direction de l’étirement.
+- [ ] [Fonctionnel][Gestes] Maintenir puis suivre une trajectoire courbe et vérifier la continuité de la déformation.
+- [ ] [Fonctionnel][Gestes] Maintenir puis accélérer brutalement et vérifier que le geste reste organique.
+- [ ] [Fonctionnel][Gestes] Maintenir puis sortir largement de la silhouette et vérifier que la matière continue à suivre le doigt.
+- [ ] [Fonctionnel][Gestes] Annuler le pointeur pendant un appui et vérifier le retour silencieux au repos.
+- [ ] [Fonctionnel][Éjection] Éjecter depuis le centre vers la droite et vérifier une sortie inertielle vers la droite.
+- [ ] [Fonctionnel][Éjection] Éjecter depuis le centre vers la gauche et vérifier une sortie inertielle vers la gauche.
+- [ ] [Fonctionnel][Éjection] Éjecter depuis le centre vers le haut et vérifier une sortie inertielle vers le haut.
+- [ ] [Fonctionnel][Éjection] Éjecter depuis le centre vers le bas et vérifier une sortie inertielle vers le bas.
+- [ ] [Fonctionnel][Éjection] Éjecter depuis le centre dans chacune des quatre diagonales et vérifier la direction exacte.
+- [ ] [Fonctionnel][Éjection] Balayer rapidement depuis l’extérieur à travers l’assistant et vérifier la même éjection directionnelle.
+- [ ] [Fonctionnel][Éjection] Répéter les éjections avec plusieurs vitesses et vérifier une inertie proportionnelle mais stable.
+- [ ] [Fonctionnel][Éjection] Vérifier qu’un passage extérieur lent ne ferme pas l’assistant.
+- [ ] [Fonctionnel][Éjection] Vérifier qu’un passage extérieur partiel ne ferme pas l’assistant.
+- [ ] [Fonctionnel][Dashboard] Ouvrir l’assistant avec le Dashboard visible et vérifier que le Dashboard reste visible derrière.
+- [ ] [Fonctionnel][Dashboard] Vérifier que les cartes Dashboard ne reçoivent aucun geste destiné à l’assistant.
+- [ ] [Fonctionnel][Dashboard] Vérifier que le projet ne reçoit aucun geste destiné à l’assistant.
+- [ ] [Fonctionnel][Dashboard] Vérifier que Dashboard et projet redeviennent immédiatement interactifs après fermeture.
+- [ ] [Fonctionnel][Scène] Ouvrir l’assistant sur le Dashboard puis passer au projet et vérifier qu’il reste visible.
+- [ ] [Fonctionnel][Scène] Ouvrir l’assistant sur un projet puis passer au Dashboard et vérifier qu’il reste visible.
+- [ ] [Fonctionnel][Scène] Fermer après plusieurs changements de workspace puis vérifier qu’aucune ancienne scène ne le fait réapparaître.
+- [ ] [Fonctionnel][API] Vérifier que `window.eveAssistantApi` reste stable pendant plusieurs cycles.
+- [ ] [Fonctionnel][API] Vérifier les transitions observables `appearing`, `visible`, `disappearing` et `ejecting` dans leur ordre réel.
+- [ ] [Fonctionnel][API] Vérifier que la commande `voice.assistant.toggle` est tracée une seule fois par intention utilisateur.
+- [ ] [Fonctionnel][Robustesse] Vérifier le comportement avec deux pointeurs concurrents sans double voix ni double fermeture.
+- [ ] [Fonctionnel][Robustesse] Vérifier le comportement après perte puis reprise du focus de la fenêtre.
+- [ ] [Fonctionnel][Robustesse] Vérifier le comportement après redimensionnement de la fenêtre pendant que l’assistant est ouvert.
+- [ ] [Fonctionnel][Robustesse] Vérifier le comportement après changement de DPR pendant que l’assistant est ouvert.
+- [ ] [Fonctionnel][Robustesse] Vérifier qu’aucune erreur WebGPU ou WGSL ne survient après cinquante ouvertures et fermetures.
+- [ ] [Visuel][Ouverture] Capturer le début, le milieu et la fin de l’apparition et vérifier l’ordre halo–noyau–coque.
+- [ ] [Visuel][Ouverture] Vérifier que l’apparition est continue sans flash, saut de taille ni frame noire.
+- [ ] [Visuel][Verre] Vérifier sur Dashboard multicolore que le fond reste identifiable à travers la coque.
+- [ ] [Visuel][Verre] Vérifier sur projet pastel que le flou reste modéré et que la réfraction reste visible.
+- [ ] [Visuel][Verre] Vérifier sur fond clair que l’assistant n’assombrit pas la surface extérieure.
+- [ ] [Visuel][Verre] Vérifier sur fond sombre que la coque conserve ses détails et son volume.
+- [ ] [Visuel][Verre] Vérifier que le fond capturé change dynamiquement avec le workspace courant.
+- [ ] [Visuel][Couleurs] Vérifier que les teintes cyan, rose et nacre restent concentrées sur les bords.
+- [ ] [Visuel][Couleurs] Vérifier que le centre de la coque ne présente aucun voile bleu-noir opaque.
+- [ ] [Visuel][Aura] Vérifier la continuité du halo à gauche de l’ovoïde.
+- [ ] [Visuel][Aura] Vérifier la continuité du halo à droite de l’ovoïde.
+- [ ] [Visuel][Aura] Vérifier la continuité du halo autour de la base de l’ovoïde.
+- [ ] [Visuel][Aura] Vérifier que le halo se diffuse progressivement sans limite circulaire brutale.
+- [ ] [Visuel][Aura] Vérifier que le halo présente une variation organique douce sans anneau trop régulier.
+- [ ] [Visuel][Aura] Vérifier l’absence de rupture, bande sombre ou ombre de contact sous la coque.
+- [ ] [Visuel][Déformation] Capturer l’étirement vers le haut et vérifier que l’extrémité haute est la plus avancée.
+- [ ] [Visuel][Déformation] Capturer l’étirement vers le bas et vérifier que l’extrémité basse est la plus avancée.
+- [ ] [Visuel][Déformation] Capturer l’étirement vers la gauche et vérifier que l’extrémité gauche est la plus avancée.
+- [ ] [Visuel][Déformation] Capturer l’étirement vers la droite et vérifier que l’extrémité droite est la plus avancée.
+- [ ] [Visuel][Déformation] Capturer les quatre étirements diagonaux et vérifier l’absence d’inversion verticale ou horizontale.
+- [ ] [Visuel][Déformation] Capturer une trajectoire courbe et vérifier une forme continue sans angle cassé.
+- [ ] [Visuel][Déformation] Vérifier que le noyau reste cohérent avec la coque pendant tout déplacement.
+- [ ] [Visuel][Déformation] Vérifier que le rebond de relâchement est organique et revient proprement au repos.
+- [ ] [Visuel][Éjection] Capturer le départ de l’éjection et vérifier l’attraction du bord avant vers le doigt.
+- [ ] [Visuel][Éjection] Capturer l’étirement maximal et vérifier la compression transversale sans aplatissement excessif.
+- [ ] [Visuel][Éjection] Capturer la phase inertielle et vérifier que la masse arrière suit avec retard.
+- [ ] [Visuel][Éjection] Capturer la fin de l’éjection et vérifier une disparition tardive sans changement arbitraire de direction.
+- [ ] [Visuel][Éjection] Vérifier les huit directions d’éjection sur le véritable canvas WebGPU.
+- [ ] [Visuel][Cropping] Étirer dans les huit directions jusqu’aux limites de l’écran et vérifier l’absence totale de bounding box visible.
+- [ ] [Visuel][Cropping] Éjecter dans les huit directions et vérifier que la forme n’est jamais coupée avant de sortir de l’écran.
+- [ ] [Visuel][Fermeture] Vérifier que voix et animation de fermeture commencent visuellement et auditivement ensemble.
+- [ ] [Visuel][Fermeture] Vérifier qu’aucun pixel, halo, voile, noyau ou fragment ne reste après une fermeture classique.
+- [ ] [Visuel][Fermeture] Vérifier qu’aucun pixel, halo, voile, noyau ou fragment ne reste après une éjection.
+- [ ] [Visuel][Fermeture] Vérifier l’absence de réapparition après fermeture puis changement Dashboard–projet.
+- [ ] [Visuel][Responsive] Vérifier formes, halo, hit-test et absence de cropping en fenêtre étroite.
+- [ ] [Visuel][Responsive] Vérifier formes, halo, hit-test et absence de cropping en fenêtre large.
+- [ ] [Visuel][Responsive] Vérifier le rendu à DPR 1 et DPR 2.
+- [ ] [Visuel][Qualité] Rejeter toute frame présentant inversion, pointe, angle cassé, scintillement, dédoublement ou couche désolidarisée.
+- [ ] [Visuel][Qualité] Rejeter toute frame présentant assombrissement global, halo interrompu, contour brutal ou couleur sale.
+- [ ] [Visuel][Qualité] Rejeter toute fermeture laissant un résidu même temporairement après la fin canonique.
+- [ ] [Validation][Navigateur] Exécuter les scénarios dans Chromium visible sur le véritable canvas WebGPU avec des clics et gestes réels.
+- [ ] [Validation][Tauri] Exécuter les scénarios dans Tauri visible avec de vrais appuis longs et la voix native.
+- [ ] [Validation][Console] Vérifier l’absence d’erreur inexpliquée dans la console navigateur.
+- [ ] [Validation][Console] Vérifier l’absence d’erreur inexpliquée dans la WebView Tauri.
+- [ ] [Validation][Console] Vérifier l’absence d’erreur inexpliquée dans le renderer WebGPU.
+- [ ] [Validation][Console] Vérifier l’absence d’erreur inexpliquée dans les logs Rust et Tauri.
+- [ ] [Validation][Console] Vérifier l’absence d’erreur inexpliquée dans les logs Fastify.
+- [ ] [Validation][Architecture] Vérifier qu’un seul canvas WebGPU et un seul record assistant sont présents.
+- [ ] [Validation][Architecture] Vérifier qu’aucun fallback vocal, DOM ou renderer n’a été introduit.
+- [ ] [Validation][Architecture] Vérifier que les cartes DESIGN, CODE, ARCHITECTURE et API reflètent les contrats réellement livrés.
+- [ ] [Validation][Build] Reconstruire le WASM Bevy canonique et vérifier que les artefacts chargés correspondent à la nouvelle version.
+- [ ] [Validation][Build] Exécuter tous les tests JS ciblés de l’assistant.
+- [ ] [Validation][Build] Exécuter tous les tests Rust ciblés du SDF et du flou workspace.
+- [ ] [Validation][Build] Exécuter la validation syntaxique complète.
+- [ ] [Validation][Build] Exécuter les garde-fous M0 et M1.
+- [ ] [Validation][Nettoyage] Vérifier après chaque scénario que l’API est inactive et que l’intercepteur est retiré.
+- [ ] [Validation][Nettoyage] Vérifier après chaque scénario que la session vocale et les abonnements TTS sont libérés.
+- [ ] [Validation][Nettoyage] Vérifier après chaque scénario qu’aucun record assistant ne subsiste dans aucune scène.
+- [ ] [Validation][Nettoyage] Supprimer toutes les captures, pilotes et traces temporaires produits par la campagne de test.
+- [ ] [Fonctionnel][Dashboard] Ouvrir l’assistant depuis le Dashboard.
+- [ ] [Fonctionnel][Dashboard] Vérifier que l’assistant s’ouvre correctement depuis le Dashboard.
+- [ ] [Fonctionnel][Projet] Ouvrir l’assistant depuis un projet.
+- [ ] [Fonctionnel][Projet] Vérifier que l’assistant s’ouvre correctement depuis un projet.
+- [ ] [Fonctionnel][Navigation] Passer du Dashboard au projet avec l’assistant ouvert.
+- [ ] [Fonctionnel][Navigation] Passer du projet au Dashboard avec l’assistant ouvert.
+- [ ] [Fonctionnel][Navigation] Vérifier que l’assistant reste ouvert pendant la navigation.
+- [ ] [Fonctionnel][Navigation] Vérifier que l’assistant reste fonctionnel pendant la navigation.
+- [ ] [Fonctionnel][Rechargement] Recharger depuis le Dashboard avec l’assistant ouvert.
+- [ ] [Fonctionnel][Rechargement] Recharger depuis un projet avec l’assistant ouvert.
+- [ ] [Fonctionnel][Rechargement] Vérifier que le rechargement ne casse pas l’assistant.
+- [ ] [Fonctionnel][Navigation] Vérifier que la navigation ne casse pas l’assistant.
+- [ ] [Fonctionnel][Isolation] Vérifier que l’assistant n’altère pas les projets sans action explicite.
+- [ ] [Fonctionnel][Isolation] Vérifier que l’assistant n’altère pas les objets sans action explicite.
+- [ ] [Fonctionnel][Isolation] Vérifier que l’assistant ne crée pas de confusion entre Dashboard et projet.
+- [ ] [Fonctionnel][Isolation] Vérifier que l’assistant ne crée pas de confusion entre les projets.
+- [ ] [Non-régression bloquante][Cycle] Après toute modification, réussir dix cycles réels appui long Atome–ouverture–appui long Atome–fermeture–réouverture.
+- [ ] [Non-régression bloquante][Cycle] Après toute modification, vérifier qu’une réouverture demandée pendant la voix de fermeture n’est jamais perdue.
+- [ ] [Non-régression bloquante][Cycle] Après toute modification, vérifier qu’une réouverture demandée pendant l’animation de fermeture n’est jamais perdue.
+- [ ] [Non-régression bloquante][Cycle] Après toute modification, vérifier qu’aucune ancienne promesse de fermeture ne ferme une session nouvellement ouverte.
+- [ ] [Non-régression bloquante][Voix] Après toute modification, vérifier exactement une phrase d’ouverture, une réponse tactile par relâchement et une phrase de fermeture par session.
+- [ ] [Non-régression bloquante][Voix] Après toute modification, vérifier que l’appui long Atome de fermeture prononce toujours « Salut, à plus tard. ».
+- [ ] [Non-régression bloquante][Voix] Après toute modification, vérifier que l’éjection prononce toujours « Salut, à plus tard. » sans doublon.
+- [ ] [Non-régression bloquante][Gestes] Après toute modification, vérifier les huit directions d’étirement avec un appui maintenu supérieur à 320 ms.
+- [ ] [Non-régression bloquante][Gestes] Après toute modification, vérifier qu’aucune direction verticale ou diagonale n’est inversée entre navigateur et SDF.
+- [ ] [Non-régression bloquante][Gestes] Après toute modification, vérifier qu’un retour au centre avant relâchement annule toujours l’éjection.
+- [ ] [Non-régression bloquante][Éjection] Après toute modification, vérifier les huit directions d’éjection intérieure et extérieure sur le véritable canvas WebGPU.
+- [ ] [Non-régression bloquante][Éjection] Après toute modification, vérifier que la trajectoire inertielle reste colinéaire au déplacement réel du doigt.
+- [ ] [Non-régression bloquante][Interaction] Après toute modification, vérifier que Dashboard et projet ne reçoivent aucun geste appartenant à l’assistant.
+- [ ] [Non-régression bloquante][Scène] Après toute modification, vérifier que l’assistant reste visible lors des basculements Dashboard–projet dans les deux sens.
+- [ ] [Non-régression bloquante][Scène] Après toute modification, vérifier qu’une fermeture nettoie toutes les scènes précédemment occupées.
+- [ ] [Non-régression bloquante][Rendu] Après toute modification, comparer visuellement le rendu sur Dashboard multicolore, projet pastel, fond clair et fond sombre.
+- [ ] [Non-régression bloquante][Rendu] Après toute modification, vérifier que l’extérieur de l’assistant n’est jamais assombri par un voile plein écran.
+- [ ] [Non-régression bloquante][Rendu] Après toute modification, vérifier que le fond courant reste reconnaissable à travers le verre avec flou et réfraction visibles.
+- [ ] [Non-régression bloquante][Rendu] Après toute modification, vérifier que le halo reste diffus et continu à gauche, à droite et autour de la base.
+- [ ] [Non-régression bloquante][Rendu] Après toute modification, vérifier l’absence de cropping pendant les huit étirements et les huit éjections.
+- [ ] [Non-régression bloquante][Rendu] Après toute modification, vérifier l’absence de pointe, angle cassé, scintillement, inversion ou dédoublement de couche.
+- [ ] [Non-régression bloquante][Nettoyage] Après toute fermeture, vérifier qu’aucun pixel, halo, voile, record, intercepteur ou abonnement vocal ne subsiste.
+- [ ] [Non-régression bloquante][Nettoyage] Après fermeture, basculer Dashboard–projet et vérifier que l’assistant ne réapparaît jamais.
+- [ ] [Non-régression bloquante][Architecture] Après toute modification, vérifier qu’aucun fallback, canvas, DOM visible, renderer ou état parallèle n’a été ajouté.
+- [ ] [Non-régression bloquante][Automatisation] Rendre les tests unitaires de cycle, coordonnées, voix, projection et nettoyage obligatoires dans la validation continue.
+- [ ] [Non-régression bloquante][Automatisation] Rendre la reconstruction WASM et les garde-fous syntaxe, M0 et M1 obligatoires avant livraison.
+- [ ] [Non-régression bloquante][Visuel] Interdire toute livraison sans captures horodatées des états ouvert, étiré, éjecté et complètement fermé dans Chromium et Tauri visibles.

@@ -21,9 +21,7 @@ import { startBrowserRecognition } from './service_browser_stt.js';
 import { startTauriRecognition } from './service_tauri_stt.js';
 import { settleTtsStop, startSpeechSynthesis } from './service_tts_runtime.js';
 import { createLocalTtsRuntime } from './local_tts_runtime.js';
-
 export { VOICE_V1_PROVIDER_DECISION, resolveVoiceProviders } from './service_providers.js';
-
 export const createVoiceService = ({
     env = globalThis,
     sessionRuntime = createVoiceSessionRuntime(),
@@ -222,6 +220,7 @@ export const createVoiceService = ({
                 sessionRuntime.interrupt(sessionId, {
                     reason: 'stt_cancel'
                 });
+                await state.settleCancelled?.();
                 return state.deferred.promise;
             }
             if (typeof state.recognition.abort === 'function') {

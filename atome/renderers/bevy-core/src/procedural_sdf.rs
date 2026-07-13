@@ -30,8 +30,6 @@ pub struct ProceduralSdfUniform {
     pub gesture: Vec4,
     pub geometry: Vec4,
     pub shape: Vec4,
-    pub cut_path_a: Vec4,
-    pub cut_path_b: Vec4,
 }
 
 #[derive(Asset, TypePath, AsBindGroup, Debug, Clone)]
@@ -117,14 +115,6 @@ fn material_from_contract(
                 normalized.assistant_center[1],
             ),
             shape: Vec4::new(normalized.assistant_size, 0.0, 0.0, 0.0),
-            cut_path_a: Vec4::new(
-                normalized.cut_path[0], normalized.cut_path[1],
-                normalized.cut_path[2], normalized.cut_path[3],
-            ),
-            cut_path_b: Vec4::new(
-                normalized.cut_path[4], normalized.cut_path[5],
-                normalized.cut_path[6], normalized.cut_path[7],
-            ),
         },
         original_backdrop,
         blurred_backdrop,

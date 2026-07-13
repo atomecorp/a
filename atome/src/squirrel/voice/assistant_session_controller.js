@@ -32,6 +32,7 @@ export const createVoiceAssistantSessionController = ({
     if (!String(closingGreeting || '').trim()) throw new Error('voice_assistant_closing_greeting_required');
     const listeners = new Set();
     let openPromise = null;
+    let sessionPromise = null;
     const state = {
         active: false,
         error: '',
@@ -103,6 +104,28 @@ export const createVoiceAssistantSessionController = ({
         });
     };
 
+    const createSession = async (generation) => {
+        if (!sessionPromise) {
+            sessionPromise = (async () => {
+                await voiceApi.ensureReady();
+                return voiceApi.createSession({
+                    locale,
+                    actor: { id: actorId },
+                    source_layer: 'eve_voice_assistant'
+                });
+            })().catch((error) => {
+                sessionPromise = null;
+                throw error;
+            });
+        }
+        const session = await sessionPromise;
+        if (state.generation !== generation) return false;
+        sessionPromise = null;
+        state.sessionId = session.session_id;
+        bindVoiceEvents();
+        return true;
+    };
+
     const speak = async (text, generation) => {
         setPhase('speaking');
         await awaitOperation(voiceApi.speak(String(text), {
@@ -128,19 +151,12 @@ export const createVoiceAssistantSessionController = ({
             const generation = ++state.generation;
             setPhase('opening');
             try {
-                await voiceApi.ensureReady();
-                const session = await voiceApi.createSession({
-                    locale,
-                    actor: { id: actorId },
-                    source_layer: 'eve_voice_assistant'
-                });
-                if (!state.active || state.generation !== generation) return cloneState(state);
-                state.sessionId = session.session_id;
-                bindVoiceEvents();
+                if (!await createSession(generation) || !state.active) return cloneState(state);
                 if (!await speak(openingGreeting, generation)) return cloneState(state);
                 startListenLoop(generation);
                 return cloneState(state);
             } catch (error) {
+                if (state.generation !== generation) return cloneState(state);
                 state.active = false;
                 setPhase('error', error?.message || String(error));
                 throw error;
@@ -160,20 +176,31 @@ export const createVoiceAssistantSessionController = ({
     };
 
     const close = async ({ reason = 'assistant_closed', speakFarewell = true } = {}) => {
-        if (!state.active && state.phase === 'closed') return cloneState(state);
+        if (!state.active && state.phase === 'closed' && (state.generation > 0 || !speakFarewell)) {
+            return cloneState(state);
+        }
         if (state.closePromise) return state.closePromise;
         state.closePromise = (async () => {
-            if (openPromise && !state.sessionId) await openPromise;
             const generation = ++state.generation;
-            await stopActiveChannels(reason);
-            if (speakFarewell && state.active && state.sessionId) {
-                await speak(closingGreeting, generation);
+            state.active = true;
+            try {
+                if (openPromise) await openPromise;
+                if (speakFarewell && !state.sessionId && !await createSession(generation)) {
+                    return cloneState(state);
+                }
+                await stopActiveChannels(reason);
+                if (speakFarewell && state.active && state.sessionId) {
+                    await speak(closingGreeting, generation);
+                }
+            } finally {
+                state.active = false;
+                state.unsubscribe();
+                state.unsubscribe = () => { };
+                state.sessionId = null;
+                sessionPromise = null;
+                setPhase('closed');
             }
-            state.active = false;
-            state.unsubscribe();
-            state.unsubscribe = () => { };
-            state.sessionId = null;
-            return setPhase('closed');
+            return cloneState(state);
         })().finally(() => { state.closePromise = null; });
         return state.closePromise;
     };
