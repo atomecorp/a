@@ -59,6 +59,7 @@ macro_rules! eprintln {
 pub mod local_auth;
 // Local atome storage module
 pub mod local_atome;
+mod remote_control;
 
 #[derive(Clone)]
 struct AppState {
@@ -1080,30 +1081,6 @@ fn analyze_wav_file(path: &Path) -> Result<JsonValue, String> {
         "windows_truncated": frame_count > window_frames * 240,
         "windows": windows
     }))
-}
-
-async fn remote_status_handler(
-    headers: HeaderMap,
-    State(state): State<AppState>,
-) -> impl IntoResponse {
-    let auth = require_remote_control(&headers, &state);
-    let authorized = auth.is_ok();
-    let user_id = auth.ok().flatten();
-    (
-        if authorized {
-            StatusCode::OK
-        } else {
-            StatusCode::UNAUTHORIZED
-        },
-        Json(json!({
-            "success": authorized,
-            "runtime": "tauri",
-            "enabled": state.remote_control_enabled,
-            "token_required": state.remote_control_token.is_some(),
-            "user_id": user_id,
-            "error": if authorized { JsonValue::Null } else { JsonValue::String("remote_control_unauthorized".to_string()) }
-        })),
-    )
 }
 
 async fn remote_audio_record_start_handler(
@@ -5689,7 +5666,7 @@ pub async fn start_server(static_dir: PathBuf, uploads_dir: PathBuf, data_dir: P
         .route("/api/admin/apply-update", post(update_file_handler))
         .route("/api/admin/batch-update", post(batch_update_handler))
         .route("/api/admin/sync-from-zip", post(sync_from_zip_handler))
-        .route("/__tauri_remote/status", get(remote_status_handler))
+        .route("/__tauri_remote/status", get(remote_control::status))
         .route(
             "/__tauri_remote/audio/record/start",
             post(remote_audio_record_start_handler),

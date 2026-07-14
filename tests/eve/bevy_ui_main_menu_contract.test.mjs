@@ -4,7 +4,6 @@ import { JSDOM } from 'jsdom';
 
 import {
     BEVY_MAIN_MENU_ATOME_ID,
-    BEVY_MAIN_MENU_LEGACY_ID,
     buildBevyMainMenuItems,
     resolveBevyMainMenuItemSize
 } from '../../eVe/intuition/ribbon/bevy_ui_main_menu_model.js';
@@ -145,6 +144,7 @@ const waitFrame = () => new Promise((resolve) => setTimeout(resolve, 8));
 const waitMs = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const createRuntimeHarness = ({
+    content = menuContent(),
     onInvoke = () => null,
     toggleDashboard = () => null,
     toggleAssistant = () => null,
@@ -158,7 +158,7 @@ const createRuntimeHarness = ({
         unmountTree: async (id) => { calls.push({ type: 'unmount', id }); return { id }; }
     };
     const runtime = createBevyUiMainMenuRuntime({
-        content: menuContent(),
+        content,
         onInvoke,
         toggleDashboard,
         toggleAssistant,
@@ -174,18 +174,16 @@ test('BevyUI main menu model keeps the required item order and fixed dashboard h
     assert.equal(resolveBevyMainMenuItemSize(), Math.round(resolveDashboardBlockUnitSize() / 2));
     assert.deepEqual(items.map((item) => item.id), [
         BEVY_MAIN_MENU_ATOME_ID,
-        ...TOOL_KEYS.map((key) => `eve_bevy_ui_main_menu_tool_${key}`),
-        BEVY_MAIN_MENU_LEGACY_ID
+        ...TOOL_KEYS.map((key) => `eve_bevy_ui_main_menu_tool_${key}`)
     ]);
     assert.equal(items[0].type, 'tool');
     assert.equal(items[0].key, 'atome');
     assert.equal(items[0].passive, undefined);
     assert.equal(items[0].icon, MAIN_HANDLE_ICON);
-    assert.deepEqual(items.slice(1, -1).map((item) => item.key), menuContent().toolbox.children);
-    assert.deepEqual(items.slice(1, -1).map((item) => item.label), TOOL_KEYS);
-    assert.deepEqual(items.slice(1, -1).map((item) => item.icon), TOOL_KEYS.map((key) => `./assets/images/icons/${key}.svg`));
-    assert.equal(items.at(-1).type, 'legacy');
-    assert.equal(items.at(-1).icon, './assets/images/icons/menu.svg');
+    assert.deepEqual(items.slice(1).map((item) => item.key), menuContent().toolbox.children);
+    assert.deepEqual(items.slice(1).map((item) => item.label), TOOL_KEYS);
+    assert.deepEqual(items.slice(1).map((item) => item.icon), TOOL_KEYS.map((key) => `./assets/images/icons/${key}.svg`));
+    assert.equal(items.some((item) => item.key === 'legacy_menu'), false);
 });
 
 test('BevyUI main menu mounts only BevyUI nodes and preserves the public new_menu_v2 API', async () => {
@@ -197,11 +195,9 @@ test('BevyUI main menu mounts only BevyUI nodes and preserves the public new_men
         assert.equal(tree.layout.itemSize, expectedSize);
         assert.deepEqual(idsFromHandleEdge(tree, 'right'), [
             BEVY_MAIN_MENU_ATOME_ID,
-            ...TOOL_KEYS.map((key) => `eve_bevy_ui_main_menu_tool_${key}`),
-            BEVY_MAIN_MENU_LEGACY_ID
+            ...TOOL_KEYS.map((key) => `eve_bevy_ui_main_menu_tool_${key}`)
         ]);
         assert.equal(barChildren(tree).at(-1).id, BEVY_MAIN_MENU_ATOME_ID);
-        assert.equal(barChildren(tree)[0].id, BEVY_MAIN_MENU_LEGACY_ID);
         const iconSize = Math.round(expectedSize * 0.38);
         const atome = findNode(tree.root, BEVY_MAIN_MENU_ATOME_ID);
         assert.equal(childBySuffix(atome, '_icon').image.source, MAIN_HANDLE_ICON);
@@ -234,10 +230,7 @@ test('BevyUI main menu mounts only BevyUI nodes and preserves the public new_men
             assert.ok(item.style.padding[0] > item.style.padding[2]);
         }
         iconTints.push(childBySuffix(atome, '_icon').image.tint);
-        iconTints.push(childBySuffix(findNode(tree.root, BEVY_MAIN_MENU_LEGACY_ID), '_icon').image.tint);
         assert.equal(new Set(iconTints.map((tint) => JSON.stringify(tint))).size, 1);
-        assert.equal(childBySuffix(findNode(tree.root, BEVY_MAIN_MENU_LEGACY_ID), '_label').text, 'Menu');
-        assert.equal(childBySuffix(findNode(tree.root, BEVY_MAIN_MENU_LEGACY_ID), '_icon').image.source, './assets/images/icons/menu.svg');
         [
             'open', 'close', 'reveal', 'hide', 'hideCompletely', 'showFully',
             'getContent', 'updateContent', 'add', 'remove',
@@ -261,7 +254,7 @@ test('BevyUI main menu recomputes bottom placement after surface resize', async 
         await waitFrame();
         const nextTree = harness.calls.at(-1).payload.tree;
         assert.equal(harness.calls.at(-1).type, 'update');
-        assert.equal(nextTree.layout.x, 1200 - (itemSize * 9));
+        assert.equal(nextTree.layout.x, 1200 - (itemSize * 8));
         assert.equal(nextTree.layout.y, 840 - itemSize);
         assert.equal(nextTree.root.style.size[0], 1200);
         assert.equal(nextTree.root.style.size[1], 840);
@@ -269,10 +262,10 @@ test('BevyUI main menu recomputes bottom placement after surface resize', async 
         harness.window.dispatchEvent(new harness.window.Event('resize'));
         await waitFrame();
         const compactTree = harness.calls.at(-1).payload.tree;
-        assert.equal(compactTree.layout.x, 240 - (itemSize * 9));
+        assert.equal(compactTree.layout.x, 240 - (itemSize * 8));
         assert.equal(compactTree.layout.y, 240 - itemSize);
-        assert.equal(compactTree.layout.x + (itemSize * 8), 240 - itemSize);
-        assert.equal(compactTree.layout.x + (itemSize * 7), 240 - (itemSize * 2));
+        assert.equal(compactTree.layout.x + (itemSize * 7), 240 - itemSize);
+        assert.equal(compactTree.layout.x + (itemSize * 6), 240 - (itemSize * 2));
         assert.equal(barChildren(compactTree).at(-1).id, BEVY_MAIN_MENU_ATOME_ID);
         const iconIds = collectNodes(compactTree.root, (node) => String(node.id || '').endsWith('_icon')).map((node) => node.id);
         assert.equal(new Set(iconIds).size, iconIds.length);
@@ -294,7 +287,7 @@ test('BevyUI main menu keeps fixed-size tools and scrolls horizontally when the 
         await harness.runtime.showFully();
         const firstTree = harness.calls.at(-1).payload.tree;
         const itemSize = firstTree.layout.itemSize;
-        const naturalWidth = itemSize * 9;
+        const naturalWidth = itemSize * 8;
 
         assert.equal(firstTree.layout.overflowX, true);
         assert.equal(firstTree.layout.maxScrollLeft, naturalWidth - 240);
@@ -341,7 +334,7 @@ test('BevyUI main menu accelerates tiny vertical wheel deltas over horizontal ov
         await waitMs(120);
         const snappedTree = harness.calls.at(-1).payload.tree;
         assert.equal(snappedTree.layout.scrollLeftPx, maxScrollLeft - (itemSize * 2));
-        assert.equal(snappedTree.layout.x, 240 - (itemSize * 9) + (itemSize * 2));
+        assert.equal(snappedTree.layout.x, 240 - (itemSize * 8) + (itemSize * 2));
     } finally {
         harness.runtime.hideCompletely();
         harness.restore();
@@ -355,11 +348,9 @@ test('BevyUI main menu keeps Atome at the handle edge for left handed layout', a
         const tree = harness.calls[0].payload.tree;
         assert.deepEqual(idsFromHandleEdge(tree, 'left'), [
             BEVY_MAIN_MENU_ATOME_ID,
-            ...TOOL_KEYS.map((key) => `eve_bevy_ui_main_menu_tool_${key}`),
-            BEVY_MAIN_MENU_LEGACY_ID
+            ...TOOL_KEYS.map((key) => `eve_bevy_ui_main_menu_tool_${key}`)
         ]);
         assert.equal(barChildren(tree)[0].id, BEVY_MAIN_MENU_ATOME_ID);
-        assert.equal(barChildren(tree).at(-1).id, BEVY_MAIN_MENU_LEGACY_ID);
         harness.surface.setProbeRect({ width: 240, height: 240 });
         harness.window.dispatchEvent(new harness.window.Event('resize'));
         await waitFrame();
@@ -481,24 +472,18 @@ test('BevyUI main menu reserves dashboard height before legacy DOM measurement',
     }
 });
 
-test('BevyUI main menu keeps the legacy DOM ribbon hidden while it is canonical', async () => {
-    const legacyCalls = [];
+test('BevyUI main menu has no legacy menu bridge or legacy projection item', async () => {
     const harness = createRuntimeHarness();
     const runtime = createBevyUiMainMenuRuntime({
         content: menuContent(),
-        legacyMenu: {
-            hideCompletely: () => legacyCalls.push('hide'),
-            showFully: () => legacyCalls.push('show')
-        },
         surfaceResolver: () => harness.surface,
         runtimeResolver: () => harness.dom.window.eveBevyUiRuntime,
         handednessResolver: () => 'right'
     });
     try {
         await runtime.showFully();
-        runtime.hideCompletely();
-        assert.deepEqual(legacyCalls, ['hide', 'hide', 'hide', 'hide']);
-        assert.equal(runtime.measure().legacyVisible, false);
+        assert.equal(runtime.measure().activePaletteKey, '');
+        assert.equal(buildBevyMainMenuItems(menuContent()).some((item) => item.key === 'legacy_menu'), false);
     } finally {
         runtime.destroy();
         harness.restore();
@@ -516,6 +501,89 @@ test('BevyUI main menu tool activation reuses the normalized ribbon definition t
         await findNode(tree.root, 'eve_bevy_ui_main_menu_tool_capture').on.activate();
         assert.deepEqual(invoked, [{ toolId: 'tool.main.capture', eventName: 'bevy_ui.activate' }]);
     } finally {
+        harness.restore();
+    }
+});
+
+test('BevyUI main menu renders palette children only while their canonical palette is active', async () => {
+    const content = {
+        toolbox: { children: ['capture'] },
+        capture: {
+            atome_tool: true,
+            label: 'capture',
+            icon: 'capture',
+            tool_id: 'tool.main.capture',
+            type: 'palette',
+            children: ['import']
+        },
+        import: {
+            atome_tool: true,
+            label: 'import',
+            icon: 'import',
+            tool_id: 'ui.capture.import',
+            action: 'momentary'
+        }
+    };
+    const inactive = buildBevyMainMenuItems(content);
+    const active = buildBevyMainMenuItems(content, { activePaletteKey: 'capture' });
+    assert.equal(inactive.some((item) => item.key === 'import'), false);
+    assert.deepEqual(active.map((item) => item.key), ['atome', 'capture', 'import']);
+    assert.equal(active.at(-1).parentKey, 'capture');
+
+    const invoked = [];
+    const harness = createRuntimeHarness({
+        content,
+        onInvoke: (definition, eventName) => invoked.push({ toolId: definition.toolId, eventName })
+    });
+    try {
+        await harness.runtime.showFully();
+        const capture = findNode(harness.calls.at(-1).payload.tree.root, 'eve_bevy_ui_main_menu_tool_capture');
+        await capture.on.activate();
+        assert.deepEqual(invoked, []);
+        assert.equal(harness.runtime.measure().activePaletteKey, 'capture');
+        const expandedTree = harness.calls.at(-1).payload.tree;
+        const importNode = findNode(expandedTree.root, 'eve_bevy_ui_main_menu_tool_capture__import');
+        assert.ok(importNode);
+        await importNode.on.activate();
+        assert.deepEqual(invoked, [{ toolId: 'ui.capture.import', eventName: 'bevy_ui.activate' }]);
+    } finally {
+        harness.runtime.destroy();
+        harness.restore();
+    }
+});
+
+test('BevyUI main menu hold opens a palette and suppresses the matching activation', async () => {
+    const content = {
+        toolbox: { children: ['capture'] },
+        capture: {
+            atome_tool: true,
+            label: 'capture',
+            icon: 'capture',
+            tool_id: 'tool.main.capture',
+            type: 'palette',
+            children: ['import'],
+            childrenOnLongPress: true,
+            longPressDelay: 120
+        },
+        import: { atome_tool: true, label: 'import', icon: 'import', tool_id: 'ui.capture.import' }
+    };
+    const invoked = [];
+    const harness = createRuntimeHarness({
+        content,
+        onInvoke: (definition) => invoked.push(definition.toolId)
+    });
+    try {
+        await harness.runtime.showFully();
+        const capture = findNode(harness.calls.at(-1).payload.tree.root, 'eve_bevy_ui_main_menu_tool_capture');
+        capture.on.press({ x: 20, y: 20 });
+        await waitMs(130);
+        const currentCapture = findNode(harness.calls.at(-1).payload.tree.root, 'eve_bevy_ui_main_menu_tool_capture');
+        currentCapture.on.release({ x: 20, y: 20 });
+        await currentCapture.on.activate();
+        assert.equal(harness.runtime.measure().activePaletteKey, 'capture');
+        assert.deepEqual(invoked, []);
+    } finally {
+        harness.runtime.destroy();
         harness.restore();
     }
 });

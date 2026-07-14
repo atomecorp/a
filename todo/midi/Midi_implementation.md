@@ -21,7 +21,7 @@ Contraintes non négociables
  • Thread-safe, RT-friendly (pas d’allocations dans le callback temps réel).
  • Horodatage : tous les events MIDI ont un timestamp monotonic.
  • Routage et mapping déterministes (replay possible).
- • Project requirement: integrate the Rust midir library as the primary MIDI management library because it aligns with the WebAssembly target direction and fits the Kira-based audio stack.
+ • Project requirement: use platform-native MIDI ingress behind one canonical Atome event contract: midir on desktop, CoreMIDI on iOS, AMidi on Android, and the browser Web MIDI API on the web.
 
 ⸻
 
@@ -38,7 +38,7 @@ Contraintes non négociables
  • Clock / Timestamp normalisation
  2. atome-midi-backends (Rust + FFI)
  • Desktop : midir (Win/macOS/Linux)
- • WebAssembly direction: keep the Rust midir integration as the reference backend choice whenever the target runtime allows it, to preserve alignment with Kira.
+ • Browser: Web MIDI API adapter feeding the same normalized event contract.
  • iOS : CoreMIDI bridge (Swift/ObjC → Rust)
  • Android : AMidi (NDK) bridge (Kotlin/Java → Rust)
  • Option FreeBSD : backend dédié (voir section 9)
@@ -234,7 +234,7 @@ Convertir un flux MIDI en modifications de propriétés Atome déterministes.
 
 9.1 Desktop MVP (macOS/Windows/Linux)
  • Utiliser midir.
- • Treat midir as the required Rust integration baseline for MIDI management, including the WebAssembly-oriented architecture path and Kira interoperability.
+ • Treat midir as the required desktop Rust integration baseline.
  • Implémenter :
  • enumeration ports
  • open input + callback
@@ -310,7 +310,6 @@ Phase A — Core Rust (MVP)
 
 Phase B — Desktop backend (MVP)
  11. Créer crate atome-midi-backend-midir.
- 11b. Validate the midir-first integration path against the WebAssembly target direction and the Kira audio architecture before widening backend coverage.
  12. Lister ports inputs + construire MidiPortUID.
  13. Ouvrir input + callback → ring buffer.
  14. Thread core consume ring buffer → route.

@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const ROOT = process.cwd();
 const SOURCE_ROOTS = ['eVe', 'atome/src', 'server', 'database', 'scripts', 'tests'];
@@ -17,13 +18,15 @@ const ALLOWED_STATE_CURRENT_WRITERS = new Set([
 
 const ALLOWED_EVENT_COMMIT_CALLERS = new Set([
     'eVe/core/atome_commit.js',
+    'eVe/core/atome_commit_effects.js',
+    'eVe/core/atome_commit_url.js',
     'atome/src/squirrel/apis/unified/adole.js',
     'server/atomeRoutes.orm.js',
     'server/atomeEventRoutes.js',
     'server/server.js'
 ]);
 
-const toRelative = (filePath) => path.relative(ROOT, filePath).split(path.sep).join('/');
+const toRelative = (root, filePath) => path.relative(root, filePath).split(path.sep).join('/');
 
 const walk = (dir, files = []) => {
     if (!fs.existsSync(dir)) return files;
@@ -47,11 +50,11 @@ const readWindow = (lines, index, radius = 8) => {
     return lines.slice(start, end).join('\n');
 };
 
-const violations = [];
-
-for (const root of SOURCE_ROOTS) {
-    for (const file of walk(path.join(ROOT, root))) {
-        const rel = toRelative(file);
+export const scanMutationOwnership = ({ root = ROOT, sourceRoots = SOURCE_ROOTS } = {}) => {
+    const violations = [];
+    for (const sourceRoot of sourceRoots) {
+        for (const file of walk(path.join(root, sourceRoot))) {
+            const rel = toRelative(root, file);
         const text = fs.readFileSync(file, 'utf8');
         const lines = text.split(/\r?\n/);
         if (rel === 'eVe/core/atome_timeline.js' && TIMELINE_DOM_BASELINE_RE.test(text)) {
@@ -70,33 +73,40 @@ for (const root of SOURCE_ROOTS) {
                 message: 'Timeline preview/replay code must not combine DOM projection reads with backend commits; use ReplayState -> commands -> commitBatch.'
             });
         }
-        lines.forEach((line, index) => {
-            if (STATE_CURRENT_RE.test(line)) {
-                const context = readWindow(lines, index);
-                if (MUTATING_METHOD_RE.test(context) && !ALLOWED_STATE_CURRENT_WRITERS.has(rel)) {
+            lines.forEach((line, index) => {
+                if (STATE_CURRENT_RE.test(line)) {
+                    const context = readWindow(lines, index);
+                    if (MUTATING_METHOD_RE.test(context) && !ALLOWED_STATE_CURRENT_WRITERS.has(rel)) {
+                        violations.push({
+                            file: rel,
+                            line: index + 1,
+                            rule: 'state_current_write_bypass',
+                            message: 'state_current is a projection and must not be mutated directly; use window.Atome.commit or commitBatch.'
+                        });
+                    }
+                }
+                if (EVENTS_COMMIT_RE.test(line) && !ALLOWED_EVENT_COMMIT_CALLERS.has(rel)) {
                     violations.push({
                         file: rel,
                         line: index + 1,
-                        rule: 'state_current_write_bypass',
-                        message: 'state_current is a projection and must not be mutated directly; use window.Atome.commit or commitBatch.'
+                        rule: 'event_commit_owner_bypass',
+                        message: 'Direct event commit transport calls must stay inside the canonical atome commit owner.'
                     });
                 }
-            }
-            if (EVENTS_COMMIT_RE.test(line) && !ALLOWED_EVENT_COMMIT_CALLERS.has(rel)) {
-                violations.push({
-                    file: rel,
-                    line: index + 1,
-                    rule: 'event_commit_owner_bypass',
-                    message: 'Direct event commit transport calls must stay inside the canonical atome commit owner.'
-                });
-            }
-        });
+            });
+        }
     }
-}
+    return violations;
+};
 
-if (violations.length) {
-    console.error(JSON.stringify({ ok: false, violations }, null, 2));
-    process.exit(1);
-}
+const isCli = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
 
-console.log('mutation ownership guardrails: ok');
+if (isCli) {
+    const violations = scanMutationOwnership();
+    if (violations.length) {
+        console.error(JSON.stringify({ ok: false, violations }, null, 2));
+        process.exit(1);
+    }
+
+    console.log('mutation ownership guardrails: ok');
+}

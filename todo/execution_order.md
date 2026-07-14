@@ -73,7 +73,7 @@ Scope completed:
 6. Produire le rapport d'avancement avec X/Y et Z%.
 7. Si le fichier source todo est entierement solde, le deplacer vers done/.
 
-Baseline after the 2026-07-13 priority restructuring: 59/144 checked tasks (40.97%). Historical progress reports below retain the totals recorded at their original completion date.
+Baseline after the 2026-07-13 renderer-decision cleanup: 61/138 checked tasks (44.20%). Historical progress reports below retain the totals recorded at their original completion date.
 
 ## Gardes-fous transverses obligatoires
 
@@ -159,40 +159,6 @@ Les points Molecule non termines sont repris plus bas dans l'ordre obligatoire r
 
 ## Ordre obligatoire des phases restantes
 
-### Phase 3 bis - Kira / CPAL / WebAssembly / MIDI contract validation
-
-Statut:
-
-- [ ] Non commencee
-
-Depend de:
-
-- Phase 3 terminee
-
-Sources principales:
-
-- todo/planning_audit/bevy_kira_cpal_wasm_midi_feasibility.md
-- done/cpal_Kira_integration.md
-- todo/media_handling/AV_APIS.md
-- todo/midi/Midi_implementation.md
-- todo/midi/atome_midi_binding_system.md
-
-Objectif:
-
-- Verifier l'etat reel du couple Kira/CPAL dans le framework et produire une analyse prioritaire sur les contrats audio, WebAssembly et MIDI. La decision Bevy/WebGPU est deja validee et ne constitue plus une decision ouverte.
-
-Taches:
-
-- [ ] Verifier factuellement les chemins runtime actuels Kira et CPAL, y compris les contraintes WebAssembly deja connues.
-- [ ] Evaluer l'interet reel de Bevy comme moteur applicatif et non seulement jeu, y compris le mode idle et l'impact energie.
-- [ ] Evaluer la faisabilite d'un runtime Bevy/WebAssembly pour audio, video, timeline et remplacement complet des pistes actuelles.
-- [ ] Evaluer la faisabilite MIDI de bout en bout, y compris midir, tracks MIDI, grid editor, scheduling deterministe et interop avec Kira/CPAL.
-- [ ] Produire une recommandation go/no-go, les risques, les prerequis et les options de migration avant tout chantier structurel Bevy.
-
-Contrainte de blocage:
-
-- Aucun nouveau choix de renderer ne peut etre introduit. La cloture de cette phase reste necessaire avant les changements structurels natifs Kira/CPAL/MIDI et avant de figer les contrats de scheduling et d'energie.
-
 ### Phase 3 ter - Product UI Bevy migration and DOM retirement
 
 Statut:
@@ -201,7 +167,7 @@ Statut:
 
 Depend de:
 
-- Phase 3 bis terminee
+- Phase 3 terminee
 
 Sources principales:
 
@@ -218,9 +184,9 @@ Objectif:
 
 Taches:
 
-- [ ] Valider les primitives Bevy UI partagees et leurs interactions reelles avant toute migration de surface.
-- [ ] Migrate the bottom Bevy main menu interaction model: direct actions, expandable palettes, latch state, dedicated hold actions, hold-to-palette, drag cancellation, and removal of the flattened legacy projection.
-- [ ] Migrate the Flower hold contract: held-pointer palette opening, immediate Back navigation, leaf preview followed by activation on release, and cancellation safety.
+- [x] Completer et valider les primitives BevyUI partagees manquantes et leurs interactions reelles, sans remigrer le dashboard ni le menu direct deja rendus par Bevy.
+- [x] Migrate the bottom Bevy main menu interaction model: direct actions, expandable palettes, latch state, dedicated hold actions, hold-to-palette, drag cancellation, and removal of the flattened legacy projection.
+- [x] Migrate the Flower hold contract: held-pointer palette opening, immediate Back navigation, leaf preview followed by activation on release, and cancellation safety.
 - [ ] Delete Flower/menu/toolbox DOM bridges, aliases, factories, and browser-only state once the complete Bevy interaction contract is verified and no canonical consumer remains.
 - [ ] Finaliser la parite Dashboard Bevy, migrer le dashboard, puis supprimer tout chemin HTML/DOM restant.
 - [ ] Migrer les panels/dialogs et leur infrastructure commune, puis supprimer les factories, observateurs layout et lectures de geometrie DOM devenus inutiles; le chrome Molecule reste execute en Phase 4 apres sa stabilisation fonctionnelle.
@@ -228,6 +194,13 @@ Taches:
 - [ ] Realiser l'audit map/localisation, valider le provider et la confidentialite, puis implementer la scene Bevy sans Leaflet ni widget DOM embarque.
 - [ ] Inventorier puis supprimer toutes les couches visibles Intuition/View/DOM devenues sans consommateurs apres migration.
 - [ ] Valider Web, Tauri et iOS sur le meme contrat scene/diff/interactions, avec erreurs typees pour les capacites indisponibles.
+
+Progress report Phase 3 ter — Flower hold contract:
+
+- Completed the Bevy Flower tree and captured-pointer interaction contract. Stationary hold release is passive; palette and Back navigation occur during the held session; leaves activate once on release; cancellation clears the session without committing a tool action.
+- Retired the visible Flower DOM renderer and its direct production export. `new_menu_v2` remains active because verified consumers still use its menu API; its removal is a separate pending migration task.
+- Validation passed: focused Flower tests, main-menu BevyUI tests, `npm run check:syntax`, `npm run check:no-fallbacks`, and `npm run check:dom-projection-guardrails`.
+- Global progress: 62/138 checked tasks, 44.92%.
 
 ### Phase 1 - Gouvernance architecture Atome/eVe
 
@@ -605,7 +578,6 @@ Sources principales:
 
 Taches:
 
-- [ ] Conserver Bevy/WebGPU comme renderer unique; la Phase 3 bis ne peut pas revalider ou remplacer ce choix.
 - [ ] MIDI.
 - [ ] Vector editing layer.
 - [ ] Universal canvas, including verification that Squirrel and preferably the open-source Squirrel + Atome engine remain correctly exported through the CDN and still produce a viable functional PWA.
@@ -621,7 +593,6 @@ Taches:
 
 Every maintained todo family is assigned to an execution phase. A file may not be executed outside its assigned phase.
 
-- Phase 3 bis: `todo/planning_audit/bevy_kira_cpal_wasm_midi_feasibility.md`, `todo/midi/`.
 - Phase 3 ter: `todo/ui_bevy/`, `todo/eve_features/menu_interactions.md`, `todo/eve_features/calendar_todos.md`, `todo/eve_features/map_localization.md`, `todo/cleanup_architecture/system_ui_component_ssot.md`, `todo/cleanup_architecture/v2_full_migration_framework.md`.
 - Phase 4: `todo/molecule/`, `todo/media_handling/MTraX_edition.md`, `todo/media_handling/RUNNING_VIDEO_AUDIO_SYNC_PLAN.md`.
 - Phase 5: `todo/media_handling/`.
@@ -629,7 +600,7 @@ Every maintained todo family is assigned to an execution phase. A file may not b
 - Phase 7: remaining `todo/cleanup_architecture/` files excluding `system_ui_component_ssot.md` and `v2_full_migration_framework.md`, `todo/rendering_graphics/`, `todo/tools/`.
 - Phase 8: `todo/communication_social/user_auth.md`, `todo/eve_features/Notification_tool.md`, `todo/eve_features/eve_accessibility.md`.
 - Phase 9: `todo/ai_voice/`.
-- Phase 10: `todo/dev_ops/`, `todo/communication_social/apple_mail_security.md`, `todo/eve_features/prompt_modification_menu_mvp_v146_ios_touch_tests.md`, `todo/tests/`, `todo/execution_order.md` follow-up documentation work.
+- Phase 10: `todo/midi/`, `todo/dev_ops/`, `todo/communication_social/apple_mail_security.md`, `todo/eve_features/prompt_modification_menu_mvp_v146_ios_touch_tests.md`, `todo/tests/`, `todo/execution_order.md` follow-up documentation work.
 
 The registry is intentionally directory-based only for families that are fully governed by the corresponding phase. Any newly created todo file must be assigned here before execution.
 

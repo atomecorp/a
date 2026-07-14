@@ -28,6 +28,8 @@ Web may retain only the minimal application shell, one canvas per active renderi
 
 ## Mandatory foundation gate
 
+The dashboard and the direct main-menu tools already render through BevyUI. This gate completes only their missing shared primitives and interaction parity; it must not recreate either migrated surface. Palette navigation, hold-to-palette behavior, and deletion of the legacy menu bridge remain the dedicated next migration step.
+
 Before migrating a visible surface, verify on the real target canvas:
 
 - pointer press/release/move/drag, touch, wheel, focus, clipping, scroll, z-order, resize, and lifecycle disposal;
@@ -71,6 +73,11 @@ Missing primitives must be implemented in the shared Bevy UI owner before a prod
 - This gesture must use Bevy hit testing and the canonical command path. It must not depend on synthetic DOM events, DOM menu state, or a legacy Flower fallback. Touch and pointer cancellation must leave no stuck selection or tool state.
 - Automated interaction coverage must exercise: stationary hold, hold-to-palette, hold-to-Back, leaf activation on release, drag cancellation, and pointer cancellation.
 
+### Current implementation status
+
+- The Flower hold contract is implemented by `eVe/intuition/ribbon/bevy_ui_flower_runtime.js` and `bevy_ui_flower_model.js` on the shared BevyUI canvas tree. The runtime owns the held pointer session, radial hit testing, palette/Back navigation, leaf preview, single release activation, and cancellation cleanup.
+- The visible DOM Flower renderer has been retired. The remaining `new_menu_v2` alias is not a Flower renderer and must remain until its verified menu consumers are migrated.
+
 ### 3. Dashboard
 
 - Complete the Bevy UI parity gaps identified in `todo/ui_bevy/dashboard_bevy_ui_parity_matrix.md`.
@@ -86,7 +93,7 @@ Missing primitives must be implemented in the shared Bevy UI owner before a prod
 
 ### 5. Calendar
 
-- Perform the dedicated calendar migration and feasibility audit in `todo/eve_features/calendar_todos.md` before implementing the Bevy calendar panel.
+- Perform the dedicated calendar migration and canonical-data audit in `todo/eve_features/calendar_todos.md` before implementing the Bevy calendar panel.
 - Preserve calendar data, recurrence, alarms, todos, sharing, Webcal/ICS, timezones, and API/MCP ownership.
 - Implement month/week/day/agenda layout, range virtualization, event hit-testing, drag/reschedule, editing through the hidden text service, and timezone-safe rendering in Bevy.
 - Remove `calendar_panel_dom.js`, DOM form construction, and DOM layout/state only after equivalent Bevy interactions and native-target validation pass.

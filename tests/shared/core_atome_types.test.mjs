@@ -37,6 +37,7 @@ test('registerCoreAtomeTypes populates the shared type registry idempotently', (
     assert.equal(second.length, CORE_ATOME_TYPE_IDS.length);
     assert.equal(getAtomeType('text').type, 'text');
     assert.equal(getAtomeType('audio_waveform').traits.includes('waveform'), true);
+    assert.equal(getAtomeType('record').kind, 'data_model');
     const registeredCoreIds = listAtomeTypes()
         .filter((definition) => CORE_ATOME_TYPE_IDS.includes(definition.type))
         .map((definition) => definition.type)

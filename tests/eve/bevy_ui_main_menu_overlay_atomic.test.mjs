@@ -115,8 +115,8 @@ test('BevyUI main menu overlay projects the 70px menu atomically without droppin
     assert.equal(recordsById.has('__eve_dashboard_card_media_projects_alpha'), true);
     assert.equal(recordsById.has('__eve_dashboard_card_title_projects_alpha'), true);
     assert.equal(recordsById.get('__eve_dashboard_card_title_projects_alpha')?.properties?.text, 'Alpha Project');
-    assert.equal(menuRecords.length, 27);
-    assert.equal(iconRecords.length, 9);
+    assert.equal(menuRecords.length, 24);
+    assert.equal(iconRecords.length, 8);
     assert.equal(menuRecords.every((record) => record.parent_id || record.properties?.parent_id), true);
     assert.equal(menuRecords.every((record) => record.properties?.layer === 'mainMenu'), true);
     assert.equal(menuRecords.every((record) => Number(record.properties?.renderLayer) >= 1200), true);
@@ -295,7 +295,7 @@ test('BevyUI main menu overlay projects into the target project during workspace
     });
     const ids = await projectBevyUiTreeOverlay({ tree, documentRef: dom.window.document, previousIds: [] });
 
-    assert.equal(ids.length, 27);
+    assert.equal(ids.length, 24);
     assert.equal(
         getProjectSceneState('project_right').records.some((record) => String(record.id || '').startsWith('__eve_bevy_ui_eve_bevy_ui_main_menu_')),
         true

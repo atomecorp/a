@@ -176,7 +176,22 @@ Exposure:
 
 Boundary status: Semi-public closed eVe product runtime. Content operations mutate only the Squirrel/toolbox-backed menu content held by the menu facade and then remount/update the disposable BevyUI tree. Tool activation reuses the normalized ribbon definitions and the existing `invokeIntuitionXMainRibbonToolDefinition(...)` path; no duplicated tool handlers or DOM per item are allowed.
 
-Effect model: The menu renders on the shared `eve_surface_project` WebGPU canvas through `window.eveBevyUiRuntime`. From the handedness edge, the visible order is the interactive Atome dashboard tool, the canonical `toolbox.children` tools, then the manual legacy item on the opposite edge; right-handed placement reverses the row visually so Atome remains closest to the right edge. The active runtime observes window/surface resize and remounts the tree so the menu remains pinned to the canvas bottom edge. If the fixed-width row is wider than the surface, the menu keeps each block at its canonical size and exposes horizontal overflow through runtime `scrollLeftPx` / `scrollMaxPx`; right-handed overflow starts at the terminal scroll position so Atome is flush to the right edge, left-handed overflow starts at `0`, wheel/drag gestures scroll the row, and drag-scroll suppresses the following activation. Wheel gestures normalize pixel, line, and page deltas, map vertical wheel intent according to handedness, and coalesce scroll renders to animation frames so hover-wheel bursts do not queue stale BevyUI updates. Each block is a BevyUI column containing a uniformly sized canonical SVG icon hydrated to the same opaque `lightgray` (`#d3d3d3`) texture tint plus its opaque localized label over an opaque block background, with that texture carried to Bevy as `bevyTexture` instead of relying on the original SVG color; the Atome tool calls `toggleWorkspaceDashboardAndMainMenu({ source: "bevy_ui_main_menu_atome" })`. The legacy item is the only route that may call the private DOM ribbon `showFully()` / `hideCompletely()` methods; there is no automatic fallback to the DOM ribbon.
+Effect model: The menu renders on the shared `eve_surface_project` WebGPU canvas through `window.eveBevyUiRuntime`. From the handedness edge, the visible order is the interactive Atome dashboard tool followed by the canonical `toolbox.children` tools; no legacy projection item is rendered. The active runtime observes window/surface resize and remounts the tree so the menu remains pinned to the canvas bottom edge. If the fixed-width row is wider than the surface, the menu keeps each block at its canonical size and exposes horizontal overflow through runtime `scrollLeftPx` / `scrollMaxPx`; right-handed overflow starts at the terminal scroll position so Atome is flush to the right edge, left-handed overflow starts at `0`, wheel/drag gestures scroll the row, and drag-scroll suppresses the following activation. Wheel gestures normalize pixel, line, and page deltas, map vertical wheel intent according to handedness, and coalesce scroll renders to animation frames so hover-wheel bursts do not queue stale BevyUI updates. Each block is a BevyUI column containing a uniformly sized canonical SVG icon hydrated to the same opaque `lightgray` (`#d3d3d3`) texture tint plus its opaque localized label over an opaque block background, with that texture carried to Bevy as `bevyTexture` instead of relying on the original SVG color; the Atome tool calls `toggleWorkspaceDashboardAndMainMenu({ source: "bevy_ui_main_menu_atome" })`. The `new_menu_v2` and `new_menu` names remain temporary integration exposure only while verified non-rendering consumers are migrated; they are not renderer fallbacks.
+
+### eVe BevyUI Flower Runtime API
+
+Ownership: eVe closed contextual Flower interaction and visual tree.
+
+Primary sources:
+
+- `eVe/intuition/ribbon/bevy_ui_flower_model.js`
+- `eVe/intuition/ribbon/bevy_ui_flower_runtime.js`
+- `eVe/intuition/flower/context.js`
+- `eVe/intuition/runtime/eve_intuition/flower_context_items_runtime.js`
+
+Exposure: Internal runtime global `window.eveBevyFlowerRuntime`, reached through the Flower context facade. The tree is mounted on the shared `eve_surface_project` canvas under the `flower` workspace layer.
+
+Boundary rules: held-pointer navigation, Bevy hit testing, palette/Back navigation, leaf preview, single release activation, and cancellation are owned here. Leaf callbacks receive no DOM button and must dispatch only through injected canonical tool invokers. The retired DOM Flower factory is not an alternate implementation.
 
 ### Bevy Shape Projection Style API
 
@@ -329,6 +344,8 @@ Tauri Axum parity: local media write endpoints in `platforms/desktop-tauri/src/s
 
 Tauri Axum auth parity: `platforms/desktop-tauri/src/server/mod.rs` must expose `GET /api/auth/me` through local auth so project reload hydration can restore the active user before reading persisted Atome/project state from `/api/state_current`.
 
+Tauri remote-control status: `platforms/desktop-tauri/src/server/remote_control.rs` owns `GET /__tauri_remote/status`. It consumes the existing remote-control authorization boundary and exposes only enabled/token-required/user status; route composition remains in `server/mod.rs`.
+
 Tauri local ownership migration: `platforms/desktop-tauri/src/server/local_atome.rs` owns the server-side guard for `transfer-owner`. It permits authenticated migration only from explicit anonymous owners or local owners without login credentials (`phone` and `password_hash` absent), and rejects transfer from any credentialed user.
 
 Sharing API ownership: `server/sharing.js` owns WebSocket message orchestration and route registration, `server/sharingPermissionService.js` owns permission creation/revocation/check/list APIs, and `server/sharingAtomeAccessors.js` owns canonical Atome field reads used by sharing code.
@@ -399,7 +416,7 @@ Boundary rules:
 - `buildAccessibilityBridgeProjection` derives a disposable semantic bridge payload from `AccessibilityGraph`. It mirrors ids, labels, roles, actions, relations, and reading/focus order for future Browser/WebView/native consumers without creating DOM nodes, ARIA attributes, selectors, renderer state, or product UI state.
 - Accessible actions are declarative capabilities on `properties.accessibility.actions`; consumers may expose or route them through approved tool/runtime capability paths, but the graph and bridge do not execute actions, mutate Atomes, or imply a DOM event target.
 - Accessibility focus restoration is runtime session metadata, currently represented by `InlineEditSession.focus_origin` and `selection_snapshot`; it may reference graph or bridge ids, but must remain pure data and must not carry DOM nodes, selectors, browser elements, or product panel instances.
-- `registerCoreAtomeTypes` installs strict core type definitions into the shared Atome type registry for text, shape, image, video, audio, audio waveform, waveform, group, project, and tool instance Atomes. It is explicit and idempotent, and does not change renderer dispatch.
+- `registerCoreAtomeTypes` installs strict core type definitions into the shared Atome type registry for text, shape, image, video, audio, audio waveform, waveform, group, project, tool instance, and generic record Atomes. The record type uses the universal `data_model` kind. Registration is explicit and idempotent, and does not change renderer dispatch.
 - `listCoreAtomeTypeDefinitions` returns clone-safe definition data for inspection and tests.
 - `buildSemanticRenamePatch` is the canonical rename patch builder. It writes `properties.label` and synchronizes `properties.accessibility.label` while preserving existing accessibility metadata.
 - `buildSemanticRenameEvent` emits a persistent `set` event for rename operations and requires an explicit `tx_id` so HistoryTransaction grouping, undo, and redo do not depend on runtime memory.

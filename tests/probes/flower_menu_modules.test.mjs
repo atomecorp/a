@@ -272,7 +272,8 @@ assert.equal(Number.isFinite(submenu.backPosition.tx), true);
 
 const flowerContextItemsSource = await readFile(new URL('../../eVe/intuition/runtime/eve_intuition/flower_context_items_runtime.js', import.meta.url), 'utf8');
 const performSource = await readFile(new URL('../../eVe/intuition/tools/perform.js', import.meta.url), 'utf8');
-const flowerMenuSource = await readFile(new URL('../../eVe/intuition/flower/menu.js', import.meta.url), 'utf8');
+const flowerRuntimeSource = await readFile(new URL('../../eVe/intuition/ribbon/bevy_ui_flower_runtime.js', import.meta.url), 'utf8');
+const flowerModelSource = await readFile(new URL('../../eVe/intuition/ribbon/bevy_ui_flower_model.js', import.meta.url), 'utf8');
 assert.ok(
     flowerContextItemsSource.includes("type === 'project' && !hasAtomeTarget")
         && flowerContextItemsSource.includes('selectedIds: contextSelectionIds')
@@ -281,10 +282,10 @@ assert.ok(
     'flower context must preserve project-only selection hygiene and pass multi-selection ids into transport tools'
 );
 assert.ok(
-    flowerMenuSource.includes("const PERFORM_FLOWER_EXIT_EVENT = 'eve:perform-flower-exit';")
-        && flowerMenuSource.includes("document.body?.classList?.contains(PERFORM_CLASS)")
-        && flowerMenuSource.includes('window.dispatchEvent(event);'),
-    'perform flower activation must request a canonical perform runtime exit when active'
+    flowerModelSource.includes("BEVY_FLOWER_TREE_ID = 'eve_bevy_ui_flower'")
+        && flowerRuntimeSource.includes("source: 'bevy_flower_hold_release'")
+        && flowerRuntimeSource.includes('capturePointerSession'),
+    'Flower activation must use the Bevy tree and captured pointer session'
 );
 assert.ok(
     performSource.includes('PERFORM_FLOWER_EXIT_EVENT')

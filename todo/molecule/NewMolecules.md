@@ -41,7 +41,7 @@ These came out of the post-deletion audit + a two-round scoping study. They are 
 | `persistence/index.js` | 165 | Load/save of molecule state |
 | `recording/index.js` | 253 | Capture into the timeline |
 | `gestures/index.js` | 120 | Interaction logic |
-| `panel/index.js` | 264 | Legacy panel UI (evaluate vs Bevy overlay — see §7 open Q) |
+| `panel/index.js` | 264 | Legacy panel UI, scheduled for retirement in V2.12 |
 | `media/index.js` | 139 | Media clip handling (note: still references a `canvas_webgpu_preview` channel to re-point at Bevy) |
 | `nested/index.js`, `multi_instance/index.js` | 312 | Nested molecules + multiple instances |
 | `runtime.js` | 240 | Entry `installMoleculeGroupTimelineRuntime` + open group timeline API bridge |

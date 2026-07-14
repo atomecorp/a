@@ -18,8 +18,7 @@ The current tool does not request device location: it only geocodes text entered
 2. Decide whether map tiles/vector data are fetched by the canonical backend, packaged for offline use, or both. Do not let each UI runtime make uncontrolled provider requests.
 3. Define the canonical location schema: human label, normalized address, latitude, longitude, precision, provider/place identifier, timezone when relevant, consent/provenance, and update timestamp.
 4. Define permission and consent policy for device location, including denial, revocation, approximate location, and no-location states as typed outcomes rather than fallback UI paths.
-5. Evaluate Bevy-compatible rendering for the selected source: camera, tile/vector decoding, label placement, marker clustering, hit-testing, panning/zooming, texture cache bounds, attribution, and offline behavior.
-6. Verify native presentation and networking constraints in Tauri and iOS before selecting the provider.
+5. Verify native presentation and networking constraints in Tauri and iOS before selecting the provider.
 
 ## Migration tasks
 

@@ -187,7 +187,7 @@ assert.equal(
 assert.equal(toolboxPhases.includes('cancel'), true);
 
 const projectDropSource = await readFile(
-    new URL('../../eVe/intuition/tools/project_drop.js', import.meta.url),
+    new URL('../../eVe/intuition/tools/project_drop_projection_move_runtime.js', import.meta.url),
     'utf8'
 );
 assert.equal(

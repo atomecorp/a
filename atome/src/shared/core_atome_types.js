@@ -164,7 +164,7 @@ export const CORE_ATOME_TYPE_DEFINITIONS = Object.freeze([
     }),
     defineType({
         type: 'record',
-        kind: 'data',
+        kind: 'data_model',
         traits: ['data', 'editable', 'navigable'],
         schema: {
             ...orderSchema,

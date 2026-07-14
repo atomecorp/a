@@ -23,7 +23,7 @@ Scope constraints for this spec:
 - Preserve the canonical Calendar API and data model while replacing only the visible panel with Bevy UI.
 - Do not create a second calendar store, a view-owned recurrence engine, or platform-specific calendar UI logic.
 
-## Bevy migration and feasibility gate
+## Bevy migration gate
 
 Current audit finding: the repository contains an eVe `CalendarAPI`/panel path, older Atome example documentation, and a newer `atome/src/squirrel/calendar/` service family. Before UI work, identify one canonical writable CalendarAPI and one calendar-record projection; update or retire the stale documentation and example paths. A Bevy renderer must never reconcile competing calendar stores.
 
