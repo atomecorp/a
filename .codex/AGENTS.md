@@ -3,6 +3,78 @@
 Version: 3.1-modular-entry
 Status: Active – Strict Enforcement
 Scope: Root routing file for the modular .codex rule set used by AI coding agents working on Atome/eVe.
+## Mandatory implementation protocol
+
+For every implementation, bug fix, refactor, cleanup or feature work, the following protocol is mandatory.
+
+No code may be written before completing these steps.
+
+### 1. Understand before acting
+
+Do not solve a problem locally before identifying its architectural owner.
+
+Always determine:
+
+- the canonical owner;
+- the existing execution flow;
+- the existing responsibilities;
+- the source of truth.
+
+If the canonical owner cannot be identified with sufficient confidence, stop and ask instead of creating a parallel implementation.
+
+### 2. Mandatory Reuse Audit
+
+Before writing code, inspect the existing implementation.
+
+The audit must identify:
+
+- existing functions;
+- existing systems;
+- existing components;
+- existing abstractions;
+- existing APIs;
+- existing mutation paths;
+- existing rendering paths;
+- reusable mechanisms;
+- obsolete or duplicated implementations.
+
+The implementation must reuse or extend existing mechanisms whenever reasonably possible.
+
+Creating new code is the last resort.
+
+### 3. Minimal implementation
+
+Choose the implementation introducing:
+
+- the fewest new concepts;
+- the fewest new files;
+- the fewest new functions;
+- the fewest new dependencies;
+- the smallest architectural footprint.
+
+### 4. Cleanup obligation
+
+Any touched area must become cleaner than before.
+
+When dependency analysis proves removal is safe, remove:
+
+- duplicated code;
+- obsolete code;
+- dead code;
+- temporary code;
+- compatibility layers no longer needed.
+
+### 5. Completion report
+
+Before considering the task complete, report:
+
+- what was reused;
+- what was modified;
+- what was removed;
+- why any new code was unavoidable;
+- which validations were executed.
+
+Tasks are not complete until this report has been produced.
 
 ## Active modular rule set
 
