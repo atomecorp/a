@@ -258,10 +258,15 @@ window.eveBevyFlowerRuntime = {
     },
     openAt: () => {
         flowerInteraction.openCount += 1;
+        flowerInteraction.open = true;
     },
     resolveButtonFromPoint: () => flowerInteraction.button
 };
 const disposeFlowerContext = installIntuitionXFlowerContextRuntime({ longPressMs: 5 });
+let downstreamFlowerPointerCancelCount = 0;
+projectCanvas.addEventListener('pointercancel', () => {
+    downstreamFlowerPointerCancelCount += 1;
+});
 const makeFlowerPointerEvent = (type, properties = {}) => {
     const event = new window.Event(type, { bubbles: true, cancelable: true });
     Object.entries({
@@ -288,6 +293,123 @@ await delay(10);
 assert.equal(flowerInteraction.open, false, 'a second long press must close the open Flower menu');
 assert.equal(flowerInteraction.closeCount, 2);
 assert.equal(flowerInteraction.openCount, 0, 'closing an open Flower menu must not reopen it');
+
+flowerInteraction.open = false;
+flowerInteraction.button = null;
+const longPressPointerId = 73;
+projectCanvas.dispatchEvent(makeFlowerPointerEvent('pointerdown', {
+    pointerId: longPressPointerId,
+    pointerType: 'touch',
+    clientX: 154,
+    clientY: 126
+}));
+await delay(10);
+assert.equal(flowerInteraction.open, true, 'an immobile long press must open Flower');
+assert.equal(flowerInteraction.openCount, 1);
+const longPressPointerCancel = makeFlowerPointerEvent('pointercancel', {
+    pointerId: longPressPointerId,
+    pointerType: 'touch',
+    clientX: 154,
+    clientY: 126
+});
+projectCanvas.dispatchEvent(longPressPointerCancel);
+assert.equal(longPressPointerCancel.defaultPrevented, true, 'the long-press pointercancel must be consumed before BevyUI');
+assert.equal(downstreamFlowerPointerCancelCount, 0, 'the long-press pointercancel must not reach the Flower BevyUI cancel handler');
+assert.equal(flowerInteraction.open, true, 'the long-press pointercancel must not close Flower');
+const longPressContextMenu = makeFlowerPointerEvent('contextmenu', {
+    button: 2,
+    pointerId: longPressPointerId,
+    pointerType: 'touch',
+    clientX: 154,
+    clientY: 126
+});
+projectCanvas.dispatchEvent(longPressContextMenu);
+assert.equal(longPressContextMenu.defaultPrevented, true, 'the native contextmenu derived from the long press must be consumed');
+assert.equal(flowerInteraction.open, true, 'an immobile long press must keep Flower open after release');
+assert.equal(flowerInteraction.closeCount, 2, 'the derived contextmenu must not close Flower');
+assert.equal(flowerInteraction.button, null, 'an immobile long press must not select a Flower tool');
+const longPressCompatibilityClick = makeFlowerPointerEvent('click', {
+    pointerId: undefined,
+    pointerType: 'mouse',
+    clientX: 154,
+    clientY: 126
+});
+projectCanvas.dispatchEvent(longPressCompatibilityClick);
+assert.equal(longPressCompatibilityClick.defaultPrevented, false, 'the terminal compatibility click is harmless once Flower owns the canvas target');
+assert.equal(flowerInteraction.open, true, 'the terminal compatibility click must not close Flower');
+const secondLongPressCompatibilityClick = makeFlowerPointerEvent('click', {
+    pointerId: undefined,
+    pointerType: 'mouse',
+    clientX: 154,
+    clientY: 126
+});
+projectCanvas.dispatchEvent(secondLongPressCompatibilityClick);
+assert.equal(secondLongPressCompatibilityClick.defaultPrevented, false, 'a second terminal compatibility click remains harmless');
+assert.equal(flowerInteraction.open, true, 'a second terminal compatibility click must not close Flower');
+const duplicateLongPressPointerDown = makeFlowerPointerEvent('pointerdown', {
+    pointerId: undefined,
+    pointerType: 'mouse',
+    clientX: 154,
+    clientY: 126
+});
+projectCanvas.dispatchEvent(duplicateLongPressPointerDown);
+assert.equal(duplicateLongPressPointerDown.defaultPrevented, true, 'a new primary pointerdown is handled by the normal Flower dismissal path');
+assert.equal(flowerInteraction.open, false, 'a new primary pointerdown must close Flower even at the long-press release point');
+assert.equal(flowerInteraction.closeCount, 3);
+
+flowerInteraction.open = true;
+projectCanvas.dispatchEvent(makeFlowerPointerEvent('pointerdown', {
+    button: 2,
+    pointerId: longPressPointerId,
+    pointerType: 'mouse',
+    clientX: 230,
+    clientY: 160
+}));
+const laterRightClick = makeFlowerPointerEvent('contextmenu', {
+    button: 2,
+    pointerId: longPressPointerId,
+    pointerType: 'mouse',
+    clientX: 230,
+    clientY: 160
+});
+projectCanvas.dispatchEvent(laterRightClick);
+assert.equal(laterRightClick.defaultPrevented, true, 'a genuine right-click must still suppress the browser menu');
+assert.equal(flowerInteraction.open, false, 'a genuine right-click after a long press must still close Flower');
+assert.equal(flowerInteraction.closeCount, 4);
+
+flowerInteraction.open = false;
+const coordinateOnlyLongPressPointerId = 74;
+projectCanvas.dispatchEvent(makeFlowerPointerEvent('pointerdown', {
+    pointerId: coordinateOnlyLongPressPointerId,
+    pointerType: 'touch',
+    clientX: 178,
+    clientY: 132
+}));
+await delay(10);
+projectCanvas.dispatchEvent(makeFlowerPointerEvent('pointerup', {
+    pointerId: coordinateOnlyLongPressPointerId,
+    pointerType: 'touch',
+    clientX: 178,
+    clientY: 132
+}));
+const coordinateOnlyContextMenu = makeFlowerPointerEvent('contextmenu', {
+    button: 2,
+    pointerId: undefined,
+    pointerType: 'touch',
+    clientX: 178,
+    clientY: 132
+});
+projectCanvas.dispatchEvent(coordinateOnlyContextMenu);
+assert.equal(coordinateOnlyContextMenu.defaultPrevented, true, 'a pointerless derived contextmenu must match its release point');
+assert.equal(flowerInteraction.open, true, 'a pointerless derived contextmenu must leave Flower open');
+projectCanvas.dispatchEvent(makeFlowerPointerEvent('pointerdown', {
+    pointerId: coordinateOnlyLongPressPointerId,
+    pointerType: 'touch',
+    clientX: 260,
+    clientY: 176
+}));
+assert.equal(flowerInteraction.open, false, 'a later outside tap must retain the normal Flower-close behaviour');
+assert.equal(flowerInteraction.closeCount, 5);
 disposeFlowerContext();
 delete window.eveBevyFlowerRuntime;
 

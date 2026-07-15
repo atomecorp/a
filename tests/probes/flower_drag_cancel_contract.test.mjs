@@ -210,7 +210,7 @@ const surfaceRuntimeSource = await readFile(
     'utf8'
 );
 assert.equal(
-    surfaceRuntimeSource.includes('isFlowerPointerInteractionActive(session.pointer_id, ownerWindowFor(canvas))')
+    surfaceRuntimeSource.includes('isFlowerPointerInteractionActive(session.pointer_id)')
         && surfaceRuntimeSource.includes("endSurfacePointerSession(canvas, 'flower.active.pointermove', event)")
         && surfaceRuntimeSource.includes("endSurfacePointerSession(canvas, 'flower.active.pointerup', event)"),
     true,
