@@ -1,5 +1,5 @@
 use bevy::{
-    camera::{visibility::RenderLayers, RenderTarget},
+    camera::{visibility::RenderLayers, ClearColorConfig, RenderTarget},
     prelude::*,
     render::render_resource::TextureFormat,
 };
@@ -13,8 +13,13 @@ use crate::{
     },
 };
 
-pub const WORKSPACE_LAYER: usize = 0;
-pub const PRESENTATION_LAYER: usize = 1;
+/// The only layer sampled by the backdrop capture camera.
+///
+/// Presentation content must never be placed here: sampling it again from a
+/// backdrop surface would create a recursive, ghosted image.
+pub const WORKSPACE_CAPTURE_LAYER: usize = 0;
+/// Foreground UI which is rendered after the captured workspace.
+pub const FLOWER_PRESENTATION_LAYER: usize = 1;
 
 #[derive(Component)]
 pub struct AtomePresentationCamera;
@@ -70,11 +75,12 @@ pub fn spawn_workspace_backdrop(
             Camera {
                 order: -3,
                 is_active: false,
+                clear_color: ClearColorConfig::Custom(Color::NONE),
                 ..default()
             },
             RenderTarget::Image(image.clone().into()),
             atome_camera_projection(config.width, config.height),
-            RenderLayers::layer(WORKSPACE_LAYER),
+            RenderLayers::layer(WORKSPACE_CAPTURE_LAYER),
             AtomeWorkspaceCamera,
         ))
         .id();
@@ -85,7 +91,7 @@ pub fn spawn_workspace_backdrop(
             sprite,
             Transform::from_xyz(0.0, 0.0, -5_000.0),
             Visibility::Hidden,
-            RenderLayers::layer(PRESENTATION_LAYER),
+            RenderLayers::layer(FLOWER_PRESENTATION_LAYER),
             AtomeWorkspaceBackdropVisual,
         ))
         .id();
@@ -127,16 +133,9 @@ pub fn set_workspace_backdrop_enabled(world: &mut World, enabled: bool) -> Resul
     }
     *world
         .get_mut::<Visibility>(state.visual)
-        .ok_or_else(|| "bevy_workspace_backdrop_visual_missing".to_string())? = if enabled {
-        Visibility::Visible
-    } else {
-        Visibility::Hidden
-    };
-    let presentation = if enabled {
-        RenderLayers::layer(PRESENTATION_LAYER)
-    } else {
-        RenderLayers::layer(WORKSPACE_LAYER).with(PRESENTATION_LAYER)
-    };
+        .ok_or_else(|| "bevy_workspace_backdrop_visual_missing".to_string())? = Visibility::Hidden;
+    let presentation = RenderLayers::layer(WORKSPACE_CAPTURE_LAYER)
+        .with(FLOWER_PRESENTATION_LAYER);
     let presentation_camera = world
         .query_filtered::<Entity, With<AtomePresentationCamera>>()
         .iter(world)

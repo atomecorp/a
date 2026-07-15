@@ -328,8 +328,11 @@ const flowerStyleTree = buildBevyUiFlowerTree({
 assert.equal(flowerStyleTree.root.children[0].style.radius, 3, 'Flower palettes must use the compact palette radius');
 assert.equal(flowerStyleTree.root.children[1].style.radius, 29, 'Flower action tools must be circular');
 assert.deepEqual(flowerStyleTree.root.children[0].style.shadow, {
-    color: [0, 0, 0, 0.24], blur: 8, spread: 0, offset: [0, 3]
+    color: [0, 0, 0, 0.38], blur: 14, spread: 1, offset: [0, 5]
 }, 'Flower tool shadows must come from the centralized token');
+assert.deepEqual(flowerStyleTree.root.children[0].style.backdrop, {
+    blurPx: 12, tint: [0.32, 0.36, 0.42, 0.52]
+}, 'Flower palettes must carry the centralized glass blur contract');
 assert.ok(
     flowerContextItemsSource.includes("type === 'project' && !hasAtomeTarget")
         && flowerContextItemsSource.includes('selectedIds: contextSelectionIds')

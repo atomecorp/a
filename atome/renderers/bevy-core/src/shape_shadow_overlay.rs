@@ -297,6 +297,14 @@ pub fn rebuild_shape_shadow_overlay(world: &mut World, entity: Entity) -> Result
             ),
         ))
         .id();
+    if world
+        .get::<bevy::camera::visibility::RenderLayers>(entity)
+        .is_some_and(|layers| layers.intersects(&bevy::camera::visibility::RenderLayers::layer(crate::workspace_backdrop::FLOWER_PRESENTATION_LAYER)))
+    {
+        world.entity_mut(shadow_entity).insert(bevy::camera::visibility::RenderLayers::layer(
+            crate::workspace_backdrop::FLOWER_PRESENTATION_LAYER,
+        ));
+    }
     world.entity_mut(entity).insert(AtomeShapeShadowOverlay {
         entities: vec![shadow_entity],
         image_handles: vec![handle],

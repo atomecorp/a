@@ -1,6 +1,7 @@
 use bevy::{image::Image, prelude::*, text::TextBounds};
 
 use crate::{
+    backdrop_surface::{refresh_workspace_backdrop_enabled, resize_backdrop_surface},
     backdrop_blur::apply_scene_effects,
     background::{apply_surface_background, resize_surface_background},
     procedural_sdf::{patch_procedural_sdf, resize_procedural_sdf},
@@ -21,7 +22,7 @@ use crate::{
         rebuild_waveform_playback_overlay, remove_waveform_playback_overlay,
     },
 };
-use crate::workspace_backdrop::{resize_workspace_backdrop, set_workspace_backdrop_enabled};
+use crate::workspace_backdrop::resize_workspace_backdrop;
 
 pub use crate::resource_ops::apply_resource;
 
@@ -87,19 +88,8 @@ pub fn apply_despawn(world: &mut World, id: &str) -> Result<(), String> {
     remove_selection_overlay(world, entity);
     remove_shape_shadow_overlay(world, entity);
     remove_waveform_playback_overlay(world, entity);
-    let removed_backdrop_consumer = world
-        .get::<MeshMaterial2d<crate::procedural_sdf::ProceduralSdfMaterial>>(entity)
-        .is_some();
     world.despawn(entity);
-    if removed_backdrop_consumer {
-        let remaining = world
-            .query::<&MeshMaterial2d<crate::procedural_sdf::ProceduralSdfMaterial>>()
-            .iter(world)
-            .count();
-        if remaining == 0 {
-            set_workspace_backdrop_enabled(world, false)?;
-        }
-    }
+    refresh_workspace_backdrop_enabled(world)?;
     Ok(())
 }
 
@@ -166,6 +156,7 @@ pub fn apply_transform(world: &mut World, patch: AtomeTransformPatch) -> Result<
         insert_video_quad_mesh(world, entity, [width, height], uv_rect)?;
     }
     resize_procedural_sdf(world, entity, [width, height])?;
+    resize_backdrop_surface(world, entity, [width, height])?;
     if let Some(mut bounds) = world.get_mut::<TextBounds>(entity) {
         *bounds = TextBounds::from(Vec2::new(width, height));
     }

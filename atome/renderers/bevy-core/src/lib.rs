@@ -1,4 +1,5 @@
 pub mod backdrop_blur;
+pub mod backdrop_surface;
 pub mod background;
 pub mod components;
 pub mod plugin;

@@ -1,6 +1,6 @@
 use bevy::{
     asset::{load_internal_asset, uuid_handle},
-    camera::{visibility::RenderLayers, RenderTarget},
+    camera::{visibility::RenderLayers, ClearColorConfig, RenderTarget},
     prelude::*,
     reflect::TypePath,
     render::{
@@ -111,6 +111,8 @@ pub struct WorkspaceBlurPipeline {
     pub vertical_camera: Entity,
     pub horizontal_quad: Entity,
     pub vertical_quad: Entity,
+    pub horizontal_material: Handle<WorkspaceBlurMaterial>,
+    pub vertical_material: Handle<WorkspaceBlurMaterial>,
 }
 
 pub fn spawn_workspace_blur_pipeline(
@@ -146,7 +148,7 @@ pub fn spawn_workspace_blur_pipeline(
     let horizontal_quad = commands
         .spawn((
             Mesh2d(mesh.clone()),
-            MeshMaterial2d(horizontal_material),
+            MeshMaterial2d(horizontal_material.clone()),
             Visibility::Hidden,
             RenderLayers::layer(HORIZONTAL_BLUR_LAYER),
         ))
@@ -154,7 +156,7 @@ pub fn spawn_workspace_blur_pipeline(
     let vertical_quad = commands
         .spawn((
             Mesh2d(mesh),
-            MeshMaterial2d(vertical_material),
+            MeshMaterial2d(vertical_material.clone()),
             Visibility::Hidden,
             RenderLayers::layer(VERTICAL_BLUR_LAYER),
         ))
@@ -180,7 +182,35 @@ pub fn spawn_workspace_blur_pipeline(
         vertical_camera,
         horizontal_quad,
         vertical_quad,
+        horizontal_material,
+        vertical_material,
     }
+}
+
+pub fn set_workspace_blur_radius(
+    world: &mut World,
+    blur: &WorkspaceBlurPipeline,
+    logical_radius_px: f32,
+) -> Result<(), String> {
+    let device_pixel_ratio = world
+        .get_resource::<AtomeBevyRendererConfig>()
+        .map(|config| config.device_pixel_ratio)
+        .unwrap_or(1.0)
+        .max(1.0);
+    let radius = logical_radius_px.clamp(0.0, 32.0) * device_pixel_ratio;
+    let mut materials = world
+        .get_resource_mut::<Assets<WorkspaceBlurMaterial>>()
+        .ok_or_else(|| "bevy_workspace_blur_material_assets_required".to_string())?;
+    let mut horizontal = materials
+        .get_mut(&blur.horizontal_material)
+        .ok_or_else(|| "bevy_workspace_horizontal_blur_material_missing".to_string())?;
+    horizontal.uniform.direction_radius.z = radius;
+    drop(horizontal);
+    let mut vertical = materials
+        .get_mut(&blur.vertical_material)
+        .ok_or_else(|| "bevy_workspace_vertical_blur_material_missing".to_string())?;
+    vertical.uniform.direction_radius.z = radius;
+    Ok(())
 }
 
 fn spawn_blur_camera(
@@ -196,6 +226,7 @@ fn spawn_blur_camera(
             Camera {
                 order,
                 is_active: false,
+                clear_color: ClearColorConfig::Custom(Color::NONE),
                 ..default()
             },
             RenderTarget::Image(target.into()),

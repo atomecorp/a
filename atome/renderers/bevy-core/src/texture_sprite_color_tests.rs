@@ -16,6 +16,8 @@ fn textured_image_node(id: &str) -> AtomeRenderNode {
         opacity: 1.0,
         corner_radius: 0.0,
         shadow: None,
+        backdrop: None,
+        presentation: false,
         color: None,
         text: None,
         source: Some("data:image/png;base64,fixture".to_string()),
@@ -70,7 +72,8 @@ fn textured_image_opacity_patch_keeps_white_sprite_modulation() {
         AtomeStylePatch {
             id: "textured_image".to_string(),
             color: None,
-            shadow: None,
+                shadow: None,
+                backdrop: None,
             selected: None,
             opacity: Some(0.42),
             playback_progress: None,

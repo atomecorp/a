@@ -319,11 +319,12 @@ test('BevyUI overlay carries a petal shadow through to the projected shape mater
         compositor: createTestCompositor()
     });
     const shadow = {
-        color: [0, 0, 0, 0.24],
-        blur: 8,
-        spread: 0,
-        offset: [0, 3]
+        color: [0, 0, 0, 0.38],
+        blur: 14,
+        spread: 1,
+        offset: [0, 5]
     };
+    const backdrop = { blurPx: 12, tint: [0.36, 0.4, 0.47, 0.58] };
     await projectBevyUiTreeOverlay({
         tree: {
             id: 'eve_bevy_ui_flower',
@@ -339,7 +340,8 @@ test('BevyUI overlay carries a petal shadow through to the projected shape mater
                         size: [58, 58],
                         background: [0.2, 0.3, 0.4, 1],
                         radius: 3,
-                        shadow
+                        shadow,
+                        backdrop
                     }
                 }]
             }
@@ -352,20 +354,37 @@ test('BevyUI overlay carries a petal shadow through to the projected shape mater
     ));
 
     assert.deepEqual(record?.properties?.material?.shadow, {
-        color: [0, 0, 0, 0.24],
-        blur: 8,
-        spread: 0,
+        color: [0, 0, 0, 0.38],
+        blur: 14,
+        spread: 1,
         offsetX: 0,
-        offsetY: 3
+        offsetY: 5
     });
+    assert.deepEqual(record?.properties?.material?.backdrop, {
+        blur_px: 12,
+        tint: [0.36, 0.4, 0.47, 0.58]
+    });
+    assert.equal(record?.properties?.presentation, true);
+    const flowerRecords = getProjectSceneState('__eve_dashboard_workspace__').records.filter((entry) => (
+        entry.id.startsWith('__eve_bevy_ui_eve_bevy_ui_flower_')
+    ));
+    assert.ok(flowerRecords.length > 0);
+    assert.ok(
+        flowerRecords.every((entry) => entry.properties?.presentation === true),
+        'every Flower child must remain outside the workspace backdrop capture'
+    );
     assert.deepEqual(
         mapVirtualSceneNodeToBevyPayload(normalizeAtomeRenderNode(record)).shadow,
         {
-            color: [0, 0, 0, 0.24],
-            blur: 8,
-            spread: 0,
+            color: [0, 0, 0, 0.38],
+            blur: 14,
+            spread: 1,
             offset_x: 0,
-            offset_y: 3
+            offset_y: 5
         }
+    );
+    assert.deepEqual(
+        mapVirtualSceneNodeToBevyPayload(normalizeAtomeRenderNode(record)).backdrop,
+        { blur_px: 12, tint: [0.36, 0.4, 0.47, 0.58] }
     );
 });

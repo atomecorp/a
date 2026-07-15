@@ -1,6 +1,7 @@
 use bevy::{image::Image, mesh::Mesh, prelude::*, ui::IsDefaultUiCamera};
 
 use crate::{
+    backdrop_surface::BackdropSurfacePlugin,
     backdrop_blur::{apply_scene_effects, refresh_scene_effects},
     procedural_sdf::ProceduralSdfPlugin,
     render_math::atome_camera_projection,
@@ -15,7 +16,8 @@ use crate::{
     },
     waveform_playback_overlay::rebuild_waveform_playback_overlay,
     workspace_backdrop::{
-        spawn_workspace_backdrop, AtomePresentationCamera, PRESENTATION_LAYER, WORKSPACE_LAYER,
+        spawn_workspace_backdrop, AtomePresentationCamera, FLOWER_PRESENTATION_LAYER,
+        WORKSPACE_CAPTURE_LAYER,
     },
     workspace_blur::{AssistantOpticsSettings, WorkspaceBlurMaterial, WorkspaceBlurPlugin},
 };
@@ -35,6 +37,7 @@ impl Plugin for AtomeBevyRendererPlugin {
         app.insert_resource(self.config.clone())
             .add_plugins(AtomeVideoExternalTexturePlugin)
             .add_plugins(ProceduralSdfPlugin)
+            .add_plugins(BackdropSurfacePlugin)
             .add_plugins(WorkspaceBlurPlugin)
             .add_plugins(AtomeBevyUiPlugin)
             .init_resource::<AtomeEntityTable>()
@@ -67,7 +70,8 @@ fn spawn_atome_bevy_scene(
         Camera2d,
         IsDefaultUiCamera,
         atome_camera_projection(config.width, config.height),
-        bevy::camera::visibility::RenderLayers::layer(WORKSPACE_LAYER).with(PRESENTATION_LAYER),
+        bevy::camera::visibility::RenderLayers::layer(WORKSPACE_CAPTURE_LAYER)
+            .with(FLOWER_PRESENTATION_LAYER),
         AtomePresentationCamera,
     ));
     for node in &config.initial_scene.nodes {

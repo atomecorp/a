@@ -1,9 +1,17 @@
-use bevy::{prelude::*, sprite_render::MeshMaterial2d};
+use bevy::{
+    camera::{visibility::RenderLayers, ClearColorConfig},
+    prelude::*,
+    sprite_render::MeshMaterial2d,
+};
 
 use crate::{
+    backdrop_surface::BackdropSurfaceUniform,
     plugin::AtomeBevyRendererPlugin,
     types::AtomeBevyRendererConfig,
-    workspace_backdrop::{set_workspace_backdrop_enabled, AtomeWorkspaceBackdrop},
+    workspace_backdrop::{
+        set_workspace_backdrop_enabled, AtomePresentationCamera, AtomeWorkspaceBackdrop,
+        FLOWER_PRESENTATION_LAYER, WORKSPACE_CAPTURE_LAYER,
+    },
     workspace_blur::{AssistantOpticsSettings, WorkspaceBlurMaterial},
 };
 
@@ -37,6 +45,13 @@ fn workspace_blur_pipeline_has_ordered_reusable_passes() {
     app.update();
     let state = app.world().resource::<AtomeWorkspaceBackdrop>().clone();
     assert_eq!(app.world().get::<Camera>(state.camera).unwrap().order, -3);
+    assert!(
+        matches!(
+            app.world().get::<Camera>(state.camera).unwrap().clear_color,
+            ClearColorConfig::Custom(_)
+        ),
+        "the capture texture is cleared every frame before the workspace is rendered"
+    );
     assert_eq!(
         app.world()
             .get::<Camera>(state.blur.horizontal_camera)
@@ -96,4 +111,48 @@ fn workspace_blur_pipeline_has_ordered_reusable_passes() {
             assert!(!app.world().get::<Camera>(camera).unwrap().is_active);
         }
     }
+}
+
+#[test]
+fn workspace_capture_never_sees_presentation_content() {
+    let mut app = App::new();
+    app.add_plugins(AtomeBevyRendererPlugin::new(
+        AtomeBevyRendererConfig::empty(640.0, 480.0),
+    ));
+    app.update();
+    let capture_camera = app.world().resource::<AtomeWorkspaceBackdrop>().camera;
+    let capture_layers = app.world().get::<RenderLayers>(capture_camera).unwrap();
+    assert!(capture_layers.intersects(&RenderLayers::layer(WORKSPACE_CAPTURE_LAYER)));
+    assert!(!capture_layers.intersects(&RenderLayers::layer(FLOWER_PRESENTATION_LAYER)));
+
+    let presentation_camera = app
+        .world_mut()
+        .query_filtered::<Entity, With<AtomePresentationCamera>>()
+        .iter(app.world())
+        .next()
+        .unwrap();
+    let presentation_layers = app.world().get::<RenderLayers>(presentation_camera).unwrap();
+    assert!(presentation_layers.intersects(&RenderLayers::layer(WORKSPACE_CAPTURE_LAYER)));
+    assert!(presentation_layers.intersects(&RenderLayers::layer(FLOWER_PRESENTATION_LAYER)));
+}
+
+#[test]
+fn flower_backdrop_uses_screen_coordinates_for_gaussian_passes_and_logical_coordinates_for_composition() {
+    let blur_shader = include_str!("assets/shaders/workspace_blur.wgsl");
+    assert!(blur_shader.contains("fn gaussian_blur("));
+    assert!(blur_shader.contains("mesh.position,"));
+    assert!(blur_shader.contains("radius * (4.0 / 1.5)"));
+    assert!(!blur_shader.contains("3.2307692308"));
+
+    let shader = include_str!("assets/shaders/backdrop_surface.wgsl");
+    assert!(shader.contains("mesh.world_position.x / workspace_size.x + 0.5"));
+    assert!(shader.contains("0.5 - mesh.world_position.y / workspace_size.y"));
+    assert!(!shader.contains("mesh.position.xy / max(dimensions"));
+
+    let uniform = BackdropSurfaceUniform {
+        size_radius: Vec4::ZERO,
+        tint: Vec4::ZERO,
+        workspace_size: Vec4::new(1280.0, 720.0, 0.0, 0.0),
+    };
+    assert_eq!(uniform.workspace_size.xy(), Vec2::new(1280.0, 720.0));
 }

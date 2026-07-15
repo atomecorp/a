@@ -70,6 +70,8 @@ fn world() -> World {
             vertical_camera,
             horizontal_quad,
             vertical_quad,
+            horizontal_material: Handle::default(),
+            vertical_material: Handle::default(),
         },
     });
     world
@@ -93,6 +95,8 @@ fn procedural_sdf_spawns_and_patches_one_full_surface_material_quad() {
             opacity: 1.0,
             corner_radius: 0.0,
             shadow: None,
+            backdrop: None,
+            presentation: false,
             color: None,
             text: None,
             source: None,
@@ -124,7 +128,8 @@ fn procedural_sdf_spawns_and_patches_one_full_surface_material_quad() {
     );
     assert_eq!(
         world.get::<Visibility>(backdrop_state.visual),
-        Some(&Visibility::Visible)
+        Some(&Visibility::Hidden),
+        "the legacy backdrop sprite must stay hidden; only the isolated material samples the capture"
     );
     assert_eq!(
         world
@@ -176,6 +181,7 @@ fn procedural_sdf_spawns_and_patches_one_full_surface_material_quad() {
             id: "assistant_sdf".to_string(),
             color: None,
             shadow: None,
+            backdrop: None,
             selected: None,
             opacity: None,
             playback_progress: None,

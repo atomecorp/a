@@ -6,6 +6,7 @@ use bevy::{
 };
 
 use crate::{
+    backdrop_surface::insert_backdrop_surface,
     procedural_sdf::insert_procedural_sdf,
     render_math::{atome_rect_transform_with_local, color_from_rgba, depth_for_layer},
     selection_overlay::rebuild_selection_overlay,
@@ -190,6 +191,13 @@ pub fn spawn_node_with_texture_handle(
     let size = Vec2::new(width, height);
     let entity = match node.kind.as_str() {
         "shape" => {
+            if let Some(backdrop) = node.backdrop {
+                let entity = world
+                    .spawn(node_base_components(&node, width, height, surface_width, surface_height))
+                    .id();
+                insert_backdrop_surface(world, entity, [width, height], node.corner_radius, backdrop)?;
+                entity
+            } else {
             let sprite = if let Some(handle) = texture_handle {
                 let mut sprite = Sprite::from_image(handle);
                 sprite.custom_size = Some(size);
@@ -204,6 +212,7 @@ pub fn spawn_node_with_texture_handle(
                     sprite,
                 ))
                 .id()
+            }
         }
         "text" => {
             if let Some(handle) = texture_handle {
@@ -317,5 +326,10 @@ pub fn spawn_node_with_texture_handle(
         AtomeVisualOpacity(normalize_opacity(node.opacity)),
         AtomeCornerRadius(node.corner_radius.max(0.0)),
     ));
+    if node.presentation {
+        world.entity_mut(entity).insert(bevy::camera::visibility::RenderLayers::layer(
+            crate::workspace_backdrop::FLOWER_PRESENTATION_LAYER,
+        ));
+    }
     Ok(entity)
 }

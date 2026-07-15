@@ -343,6 +343,10 @@ pub struct AtomeRenderNode {
     pub corner_radius: f32,
     #[serde(default)]
     pub shadow: Option<AtomeShadowStyle>,
+    #[serde(default)]
+    pub backdrop: Option<AtomeBackdropStyle>,
+    #[serde(default)]
+    pub presentation: bool,
     pub color: Option<[f32; 4]>,
     pub text: Option<String>,
     pub source: Option<String>,
@@ -426,6 +430,8 @@ pub struct AtomeStylePatch {
     pub color: Option<[f32; 4]>,
     #[serde(default)]
     pub shadow: Option<Option<AtomeShadowStyle>>,
+    #[serde(default)]
+    pub backdrop: Option<Option<AtomeBackdropStyle>>,
     pub selected: Option<bool>,
     #[serde(default)]
     pub opacity: Option<f32>,
@@ -437,6 +443,24 @@ pub struct AtomeStylePatch {
     pub transition: Option<AtomeTransition>,
     #[serde(default)]
     pub procedural: Option<AtomeProceduralSdf>,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq)]
+pub struct AtomeBackdropStyle {
+    pub blur_px: f32,
+    pub tint: [f32; 4],
+}
+
+impl AtomeBackdropStyle {
+    pub fn normalized(self) -> Option<Self> {
+        if !self.blur_px.is_finite() || self.blur_px <= 0.0 || self.tint.iter().any(|value| !value.is_finite()) {
+            return None;
+        }
+        Some(Self {
+            blur_px: self.blur_px.clamp(0.0, 32.0),
+            tint: self.tint.map(|value| value.clamp(0.0, 1.0)),
+        })
+    }
 }
 
 #[derive(Clone, Debug, Deserialize)]

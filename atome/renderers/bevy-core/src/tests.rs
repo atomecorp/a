@@ -17,6 +17,8 @@ fn shape_node(id: &str) -> AtomeRenderNode {
         opacity: 1.0,
         corner_radius: 0.0,
         shadow: None,
+        backdrop: None,
+        presentation: false,
         color: Some([0.1, 0.2, 0.3, 1.0]),
         text: None,
         source: None,
@@ -46,6 +48,8 @@ fn text_node_with_texture(id: &str) -> AtomeRenderNode {
         opacity: 1.0,
         corner_radius: 0.0,
         shadow: None,
+        backdrop: None,
+        presentation: false,
         color: Some([1.0, 1.0, 1.0, 1.0]),
         text: Some("Sharp".to_string()),
         source: None,
@@ -137,6 +141,106 @@ fn plugin_spawns_projected_nodes_and_camera() {
 }
 
 #[test]
+fn backdrop_fixture_keeps_text_and_image_in_capture_and_large_glass_circle_in_presentation() {
+    let image = AtomeRenderNode {
+        id: "backdrop_fixture_image".to_string(),
+        kind: "image".to_string(),
+        parent_id: None,
+        logical_position: [70.0, 90.0],
+        logical_size: [360.0, 240.0],
+        scale: [1.0, 1.0],
+        rotation: 0.0,
+        origin: [0.0, 0.0],
+        layer: 2,
+        opacity: 1.0,
+        corner_radius: 0.0,
+        shadow: None,
+        backdrop: None,
+        presentation: false,
+        color: Some([1.0, 1.0, 1.0, 1.0]),
+        text: None,
+        source: Some("fixture://image".to_string()),
+        texture_size: None,
+        uv_rect: None,
+        texture: Some(AtomeTexture {
+            width: 4,
+            height: 4,
+            rgba: vec![255; 4 * 4 * 4],
+        }),
+        peaks: None,
+        playback_progress: None,
+        selected: None,
+        filters: None,
+        transition: None,
+        procedural: None,
+    };
+    let text = AtomeRenderNode {
+        logical_position: [130.0, 160.0],
+        logical_size: [220.0, 60.0],
+        layer: 3,
+        text: Some("Backdrop fixture text".to_string()),
+        texture: Some(AtomeTexture {
+            width: 220,
+            height: 60,
+            rgba: vec![255; 220 * 60 * 4],
+        }),
+        ..text_node_with_texture("backdrop_fixture_text")
+    };
+    let circle = AtomeRenderNode {
+        logical_position: [150.0, 120.0],
+        logical_size: [340.0, 340.0],
+        corner_radius: 170.0,
+        backdrop: Some(AtomeBackdropStyle {
+            blur_px: 12.0,
+            tint: [0.36, 0.4, 0.47, 0.58],
+        }),
+        presentation: true,
+        ..shape_node("backdrop_fixture_circle")
+    };
+    let scene = AtomeRenderScene {
+        nodes: vec![image, text, circle],
+        effects: Vec::new(),
+        selection_style: None,
+    };
+    let mut app = App::new();
+    app.add_plugins(AtomeBevyRendererPlugin::new(AtomeBevyRendererConfig::new(
+        640.0, 480.0, scene,
+    )));
+    app.update();
+
+    let table = app.world().resource::<AtomeEntityTable>();
+    let circle_entity = table.by_id["backdrop_fixture_circle"];
+    let material_handle = app
+        .world()
+        .get::<bevy::sprite_render::MeshMaterial2d<crate::backdrop_surface::BackdropSurfaceMaterial>>(circle_entity)
+        .unwrap()
+        .0
+        .clone();
+    let material = app
+        .world()
+        .resource::<Assets<crate::backdrop_surface::BackdropSurfaceMaterial>>()
+        .get(&material_handle)
+        .unwrap();
+    assert_eq!(material.uniform.workspace_size.xy(), Vec2::new(640.0, 480.0));
+    assert_eq!(material.uniform.size_radius.z, 170.0);
+    assert_eq!(material.uniform.size_radius.w, 12.0);
+    let circle_layers = app
+        .world()
+        .get::<bevy::camera::visibility::RenderLayers>(circle_entity)
+        .unwrap();
+    assert!(circle_layers.intersects(&bevy::camera::visibility::RenderLayers::layer(
+        crate::workspace_backdrop::FLOWER_PRESENTATION_LAYER,
+    )));
+    for id in ["backdrop_fixture_image", "backdrop_fixture_text"] {
+        let entity = table.by_id[id];
+        assert!(app
+            .world()
+            .get::<bevy::camera::visibility::RenderLayers>(entity)
+            .is_none());
+    }
+}
+
+#[test]
 fn workspace_backdrop_reuses_its_image_handle_across_surface_resize() {
     let mut app = App::new();
     app.add_plugins(AtomeBevyRendererPlugin::new(
@@ -214,6 +318,7 @@ fn style_opacity_patch_updates_shape_sprite_without_cumulative_alpha() {
                 id: "fading_shape".to_string(),
                 color: None,
                 shadow: None,
+                backdrop: None,
                 selected: None,
                 opacity: Some(opacity),
                 playback_progress: None,
@@ -252,6 +357,7 @@ fn text_texture_spawn_and_opacity_patch_update_sprite_alpha() {
             id: "fading_text_texture".to_string(),
             color: None,
             shadow: None,
+            backdrop: None,
             selected: None,
             opacity: Some(0.65),
             playback_progress: None,
@@ -290,6 +396,7 @@ fn text_color_spawn_and_opacity_patch_update_text_alpha() {
             id: "fading_text_color".to_string(),
             color: None,
             shadow: None,
+            backdrop: None,
             selected: None,
             opacity: Some(0.8),
             playback_progress: None,
@@ -338,6 +445,7 @@ fn shape_shadow_overlay_follows_owner_opacity() {
             id: "shadow_fade_shape".to_string(),
             color: None,
             shadow: None,
+            backdrop: None,
             selected: None,
             opacity: Some(0.6),
             playback_progress: None,
@@ -574,7 +682,7 @@ fn selected_nodes_create_overlay_from_configured_visual_style() {
     let alpha_at = |x: u32, y: u32| -> u8 {
         texture_rgba[(y as usize * texture_width as usize + x as usize) * 4 + 3]
     };
-    assert_eq!(alpha_at(12, 12), 0);
+    assert!(alpha_at(12, 12) > alpha_at(8, 12));
     assert!(alpha_at(8, 12) > alpha_at(1, 12));
     assert_eq!(alpha_at(0, 0), 0);
     let selected_depth = world.get::<Transform>(entity).unwrap().translation.z;
@@ -600,6 +708,7 @@ fn selected_nodes_create_overlay_from_configured_visual_style() {
             id: "selected_shape".to_string(),
             color: None,
             shadow: None,
+            backdrop: None,
             selected: Some(false),
             opacity: None,
             playback_progress: None,
@@ -659,6 +768,8 @@ fn audio_waveform_progress_spawns_and_moves_bevy_playhead_overlay() {
             opacity: 1.0,
             corner_radius: 0.0,
             shadow: None,
+            backdrop: None,
+            presentation: false,
             color: Some([0.2, 0.4, 0.6, 1.0]),
             text: None,
             source: None,
@@ -691,6 +802,7 @@ fn audio_waveform_progress_spawns_and_moves_bevy_playhead_overlay() {
             id: "waveform_progress".to_string(),
             color: None,
             shadow: None,
+            backdrop: None,
             selected: None,
             opacity: None,
             playback_progress: Some(Some(0.75)),
@@ -717,6 +829,7 @@ fn audio_waveform_progress_spawns_and_moves_bevy_playhead_overlay() {
             id: "waveform_progress".to_string(),
             color: None,
             shadow: None,
+            backdrop: None,
             selected: None,
             opacity: None,
             playback_progress: Some(None),

@@ -11,7 +11,7 @@ use bevy::{
 };
 
 use crate::workspace_backdrop::{
-    set_workspace_backdrop_enabled, AtomeWorkspaceBackdrop, PRESENTATION_LAYER,
+    set_workspace_backdrop_enabled, AtomeWorkspaceBackdrop, FLOWER_PRESENTATION_LAYER,
 };
 use crate::workspace_blur::AssistantOpticsSettings;
 use crate::{types::AtomeProceduralSdf, video_external_texture::video_quad_mesh_handle_from_size};
@@ -161,7 +161,7 @@ pub fn insert_procedural_sdf(
     world.entity_mut(entity).insert((
         Mesh2d(mesh),
         MeshMaterial2d(material),
-        bevy::camera::visibility::RenderLayers::layer(PRESENTATION_LAYER),
+        bevy::camera::visibility::RenderLayers::layer(FLOWER_PRESENTATION_LAYER),
     ));
     set_workspace_backdrop_enabled(world, true)?;
     Ok(())

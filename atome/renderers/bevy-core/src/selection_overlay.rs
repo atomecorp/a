@@ -12,7 +12,26 @@ use crate::{
         AtomeBevyRendererConfig, AtomeLayer, AtomeLogicalPosition, AtomeLogicalSize, AtomeSelected,
         AtomeSelectionOverlay, SelectionVisualStyle,
     },
+    workspace_backdrop::FLOWER_PRESENTATION_LAYER,
 };
+
+fn inherit_presentation_layer(world: &mut World, source: Entity, entities: &[Entity]) {
+    let is_presentation = world
+        .get::<bevy::camera::visibility::RenderLayers>(source)
+        .is_some_and(|layers| {
+            layers.intersects(&bevy::camera::visibility::RenderLayers::layer(
+                FLOWER_PRESENTATION_LAYER,
+            ))
+        });
+    if !is_presentation {
+        return;
+    }
+    for entity in entities {
+        world.entity_mut(*entity).insert(
+            bevy::camera::visibility::RenderLayers::layer(FLOWER_PRESENTATION_LAYER),
+        );
+    }
+}
 
 fn shadow_depth_for_layer(layer: i32) -> f32 {
     depth_for_layer(layer) - 0.5
@@ -225,6 +244,7 @@ pub fn rebuild_selection_overlay(world: &mut World, entity: Entity) -> Result<()
         false,
         outline_z,
     );
+    inherit_presentation_layer(world, entity, &entities);
     world.entity_mut(entity).insert(AtomeSelectionOverlay {
         entities,
         image_handles,
