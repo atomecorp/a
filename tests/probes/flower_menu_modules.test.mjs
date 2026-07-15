@@ -317,6 +317,19 @@ const flowerContextItemsSource = await readFile(new URL('../../eVe/intuition/run
 const performSource = await readFile(new URL('../../eVe/intuition/tools/perform.js', import.meta.url), 'utf8');
 const flowerRuntimeSource = await readFile(new URL('../../eVe/intuition/ribbon/bevy_ui_flower_runtime.js', import.meta.url), 'utf8');
 const flowerModelSource = await readFile(new URL('../../eVe/intuition/ribbon/bevy_ui_flower_model.js', import.meta.url), 'utf8');
+const { buildBevyUiFlowerTree } = await import('../../eVe/intuition/ribbon/bevy_ui_flower_model.js');
+const flowerStyleTree = buildBevyUiFlowerTree({
+    surface: projectCanvas,
+    items: [
+        { key: 'palette', type: 'palette' },
+        { key: 'action', type: 'tool' }
+    ]
+});
+assert.equal(flowerStyleTree.root.children[0].style.radius, 3, 'Flower palettes must use the compact palette radius');
+assert.equal(flowerStyleTree.root.children[1].style.radius, 29, 'Flower action tools must be circular');
+assert.deepEqual(flowerStyleTree.root.children[0].style.shadow, {
+    color: [0, 0, 0, 0.24], blur: 8, spread: 0, offset: [0, 3]
+}, 'Flower tool shadows must come from the centralized token');
 assert.ok(
     flowerContextItemsSource.includes("type === 'project' && !hasAtomeTarget")
         && flowerContextItemsSource.includes('selectedIds: contextSelectionIds')

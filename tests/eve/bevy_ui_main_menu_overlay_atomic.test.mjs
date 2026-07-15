@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'vitest';
 
 import { hydrateImageTree } from '../../eVe/domains/rendering/bevy_ui_image_runtime.js';
+import { mapVirtualSceneNodeToBevyPayload } from '../../eVe/domains/rendering/bevy_projection_adapter.js';
 import { projectBevyUiTreeOverlay } from '../../eVe/domains/rendering/bevy_ui_project_overlay_runtime.js';
 import { WORKSPACE_SCENE_LAYER_IDS } from '../../eVe/domains/rendering/workspace_scene_layers.js';
 import {
@@ -10,6 +11,7 @@ import {
     reconcileProjectSceneRecordsByPrefix,
     renderProjectScene
 } from '../../eVe/domains/rendering/project_scene_runtime.js';
+import { normalizeAtomeRenderNode } from '../../eVe/domains/rendering/virtual_scene_contract.js';
 import { buildBevyMainMenuTree } from '../../eVe/intuition/ribbon/bevy_ui_main_menu_model.js';
 import { createTestCompositor, installDom } from './unified_rendering_test_helpers.mjs';
 
@@ -303,5 +305,67 @@ test('BevyUI main menu overlay projects into the target project during workspace
     assert.equal(
         getProjectSceneState('project_left').records.some((record) => String(record.id || '').startsWith('__eve_bevy_ui_eve_bevy_ui_main_menu_')),
         false
+    );
+});
+
+test('BevyUI overlay carries a petal shadow through to the projected shape material', async () => {
+    clearAllProjectScenes();
+    const dom = projectDom();
+    const host = dom.window.document.getElementById('project');
+    await renderProjectScene({
+        projectId: '__eve_dashboard_workspace__',
+        records: [],
+        host,
+        compositor: createTestCompositor()
+    });
+    const shadow = {
+        color: [0, 0, 0, 0.24],
+        blur: 8,
+        spread: 0,
+        offset: [0, 3]
+    };
+    await projectBevyUiTreeOverlay({
+        tree: {
+            id: 'eve_bevy_ui_flower',
+            root: {
+                id: 'root',
+                kind: 'root',
+                style: { size: [200, 160] },
+                children: [{
+                    id: 'petal_palette',
+                    kind: 'button',
+                    style: {
+                        position: [20, 24],
+                        size: [58, 58],
+                        background: [0.2, 0.3, 0.4, 1],
+                        radius: 3,
+                        shadow
+                    }
+                }]
+            }
+        },
+        documentRef: dom.window.document,
+        previousIds: []
+    });
+    const record = getProjectSceneState('__eve_dashboard_workspace__').records.find((entry) => (
+        entry.id === '__eve_bevy_ui_eve_bevy_ui_flower_petal_palette'
+    ));
+
+    assert.deepEqual(record?.properties?.material?.shadow, {
+        color: [0, 0, 0, 0.24],
+        blur: 8,
+        spread: 0,
+        offsetX: 0,
+        offsetY: 3
+    });
+    assert.deepEqual(
+        mapVirtualSceneNodeToBevyPayload(normalizeAtomeRenderNode(record)).shadow,
+        {
+            color: [0, 0, 0, 0.24],
+            blur: 8,
+            spread: 0,
+            offset_x: 0,
+            offset_y: 3
+        }
     );
 });

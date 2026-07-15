@@ -7,6 +7,7 @@ pub mod render_math;
 pub mod render_ops;
 pub mod resource_ops;
 pub mod selection_overlay;
+pub mod shadow_texture;
 pub mod shape_shadow_overlay;
 pub mod spawn;
 pub mod texture;

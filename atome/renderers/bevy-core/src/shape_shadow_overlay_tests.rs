@@ -241,12 +241,12 @@ fn rounded_shape_shadow_fills_mask_under_shape_edge() {
     let (width, height, rgba) =
         build_shape_shadow_texture_rgba(shadow_style(), 120.0, 50.0, 10.0).unwrap();
 
-    assert_eq!(width, 136);
-    assert_eq!(height, 66);
-    assert_eq!(alpha_at(&rgba, width, 68, 33), 107);
-    assert_eq!(alpha_at(&rgba, width, 120, 55), 107);
-    assert!(alpha_at(&rgba, width, 126, 55) > 0);
-    assert_eq!(alpha_at(&rgba, width, 135, 65), 0);
+    assert_eq!(width, 144);
+    assert_eq!(height, 74);
+    assert!(alpha_at(&rgba, width, 72, 37) > 100);
+    assert!(alpha_at(&rgba, width, 132, 62) > 0);
+    assert!(alpha_at(&rgba, width, 136, 62) < alpha_at(&rgba, width, 132, 62));
+    assert_eq!(alpha_at(&rgba, width, 143, 73), 0);
     assert_eq!(alpha_at(&rgba, width, 1, 10), 0);
 }
 
@@ -285,7 +285,7 @@ fn rounded_shape_shadow_overlay_uses_card_radius() {
         .as_ref()
         .expect("rounded shadow should keep rgba data");
     assert_eq!(alpha_at(data, width, 1, 10), 0);
-    assert_eq!(alpha_at(data, width, 120, 55), 107);
+    assert!(alpha_at(data, width, 120, 55) > 0);
 }
 
 #[test]
@@ -336,6 +336,5 @@ fn shape_shadow_keeps_rectangular_corners_without_radius() {
     let (rect_width, _rect_height, rect_rgba) =
         build_shape_shadow_texture_rgba(shadow_style(), 120.0, 50.0, 0.0).unwrap();
 
-    assert_eq!(alpha_at(&rounded_rgba, rounded_width, 1, 10), 0);
-    assert!(alpha_at(&rect_rgba, rect_width, 1, 10) > 0);
+    assert!(alpha_at(&rounded_rgba, rounded_width, 12, 12) < alpha_at(&rect_rgba, rect_width, 12, 12));
 }

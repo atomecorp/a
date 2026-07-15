@@ -33,6 +33,11 @@ fn organic_core(point: vec2<f32>, morph: vec4<f32>, time: f32) -> f32 {
     return sd_ellipse(shifted, radius) - ripple - morph.z * 0.025;
 }
 
+fn gaussian_tail(distance: f32, sigma: f32) -> f32 {
+    let normalized = max(distance, 0.0) / max(sigma, 0.0001);
+    return exp(-0.5 * normalized * normalized);
+}
+
 @fragment
 fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
     let uv = mesh.uv;
@@ -150,8 +155,8 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
     let aura_variation = 0.92
         + sin(shell_angle - 0.35) * 0.045
         + sin(shell_angle * 2.0 + 0.70) * 0.035;
-    let halo_near = 1.0 - smoothstep(0.0, 0.09 * aura_variation, outside_distance);
-    let halo_diffuse = 1.0 - smoothstep(0.025, 0.28 * aura_variation, outside_distance);
+    let halo_near = gaussian_tail(outside_distance, 0.045 * aura_variation);
+    let halo_diffuse = gaussian_tail(outside_distance, 0.14 * aura_variation);
     let halo_alpha = (halo_near * 0.62 + halo_diffuse * 0.38)
         * (1.0 - shell_mask) * shell_shape_reveal * material.optics.w;
     let destructive_alpha = select(1.0, 1.0 - smoothstep(0.85, 1.0, destructive_progress), destructive_active);
