@@ -30,6 +30,9 @@ pub struct ProceduralSdfUniform {
     pub gesture: Vec4,
     pub geometry: Vec4,
     pub shape: Vec4,
+    pub flower: Vec4,
+    pub flower_tint: Vec4,
+    pub flower_petals: [Vec4; 8],
 }
 
 #[derive(Asset, TypePath, AsBindGroup, Debug, Clone)]
@@ -114,7 +117,25 @@ fn material_from_contract(
                 normalized.assistant_center[0],
                 normalized.assistant_center[1],
             ),
-            shape: Vec4::new(normalized.assistant_size, 0.0, 0.0, 0.0),
+            shape: Vec4::new(
+                normalized.assistant_size,
+                normalized.flower_edge_softness,
+                0.0,
+                0.0,
+            ),
+            flower: Vec4::new(
+                normalized.mode,
+                normalized.flower_count,
+                normalized.flower_core_radius,
+                normalized.flower_bridge_width,
+            ),
+            flower_tint: Vec4::new(
+                normalized.flower_tint[0],
+                normalized.flower_tint[1],
+                normalized.flower_tint[2],
+                normalized.flower_tint[3],
+            ),
+            flower_petals: normalized.flower_petals.map(Vec4::from_array),
         },
         original_backdrop,
         blurred_backdrop,

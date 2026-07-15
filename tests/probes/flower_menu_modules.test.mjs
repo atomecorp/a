@@ -318,6 +318,13 @@ const performSource = await readFile(new URL('../../eVe/intuition/tools/perform.
 const flowerRuntimeSource = await readFile(new URL('../../eVe/intuition/ribbon/bevy_ui_flower_runtime.js', import.meta.url), 'utf8');
 const flowerModelSource = await readFile(new URL('../../eVe/intuition/ribbon/bevy_ui_flower_model.js', import.meta.url), 'utf8');
 const { buildBevyUiFlowerTree } = await import('../../eVe/intuition/ribbon/bevy_ui_flower_model.js');
+const {
+    FLOWER_PHASE,
+    flowerLiquidProcedural,
+    flowerMotionTargets,
+    sampleFlowerMotion
+} = await import('../../eVe/intuition/ribbon/bevy_ui_flower_motion.js');
+const { RIBBON_TOKENS } = await import('../../eVe/intuition/ribbon/tokens.js');
 const flowerStyleTree = buildBevyUiFlowerTree({
     surface: projectCanvas,
     items: [
@@ -325,14 +332,64 @@ const flowerStyleTree = buildBevyUiFlowerTree({
         { key: 'action', type: 'tool' }
     ]
 });
-assert.equal(flowerStyleTree.root.children[0].style.radius, 3, 'Flower palettes must use the compact palette radius');
-assert.equal(flowerStyleTree.root.children[1].style.radius, 29, 'Flower action tools must be circular');
-assert.deepEqual(flowerStyleTree.root.children[0].style.shadow, {
+const flowerPaletteNode = flowerStyleTree.root.children.find((node) => node.id.includes('_palette_'));
+const flowerActionNode = flowerStyleTree.root.children.find((node) => node.id.includes('_action_'));
+const flowerLiquidNode = flowerStyleTree.root.children.find((node) => node.id.endsWith('_liquid'));
+assert.equal(flowerPaletteNode.style.radius, 3, 'Flower palettes must use the compact palette radius');
+assert.equal(flowerActionNode.style.radius, 29, 'Flower action tools must be circular');
+assert.deepEqual(flowerPaletteNode.style.shadow, {
     color: [0, 0, 0, 0.38], blur: 14, spread: 1, offset: [0, 5]
 }, 'Flower tool shadows must come from the centralized token');
-assert.deepEqual(flowerStyleTree.root.children[0].style.backdrop, {
-    blurPx: 12, tint: [0.32, 0.36, 0.42, 0.52]
+assert.deepEqual(flowerPaletteNode.style.backdrop, {
+    blurPx: RIBBON_TOKENS.flowerToolBackdropBlurPx,
+    tint: RIBBON_TOKENS.flowerPaletteGlassTint
 }, 'Flower palettes must carry the centralized glass blur contract');
+assert.equal(flowerLiquidNode.overlayRecord.properties.material.procedural.mode, 1, 'Flower must mount one shared liquid SDF record');
+const motionCenter = { x: 320, y: 240 };
+const motionTree = buildBevyUiFlowerTree({
+    surface: projectCanvas,
+    center: motionCenter,
+    items: Array.from({ length: 6 }, (_, index) => ({ key: `motion_${index}`, type: 'tool' }))
+});
+const motionTargets = flowerMotionTargets({ tree: motionTree, center: motionCenter });
+const openingMiddle = sampleFlowerMotion({ phase: FLOWER_PHASE.opening, elapsedMs: 104, targets: motionTargets });
+const openingEnd = sampleFlowerMotion({
+    phase: FLOWER_PHASE.opening,
+    elapsedMs: RIBBON_TOKENS.flowerMotion.openDurationMs,
+    targets: motionTargets
+});
+motionTargets.forEach((target) => {
+    const frame = openingEnd.frames.get(target.nodeId);
+    assert.deepEqual(frame.position, target.finalPosition, 'Flower motion must settle on canonical radial geometry');
+    assert.deepEqual(frame.scale, [1, 1], 'Flower motion must remove stretch after settling');
+});
+const interruptedClose = sampleFlowerMotion({
+    phase: FLOWER_PHASE.closing,
+    elapsedMs: 0,
+    targets: motionTargets,
+    fromFrames: openingMiddle.frames
+});
+motionTargets.forEach((target) => {
+    assert.deepEqual(
+        interruptedClose.frames.get(target.nodeId).position,
+        openingMiddle.frames.get(target.nodeId).position,
+        'closing must continue from the current opening frame without a jump'
+    );
+});
+const earlyLiquid = flowerLiquidProcedural({
+    sample: sampleFlowerMotion({ phase: FLOWER_PHASE.opening, elapsedMs: 35, targets: motionTargets }),
+    targets: motionTargets,
+    center: motionCenter,
+    surfaceSize: [640, 480]
+});
+const settledLiquid = flowerLiquidProcedural({
+    sample: openingEnd,
+    targets: motionTargets,
+    center: motionCenter,
+    surfaceSize: [640, 480]
+});
+assert.ok(earlyLiquid.flower_petals.some((petal) => petal[3] > 0), 'near-center petals must receive a temporary goo bridge');
+assert.equal(settledLiquid.flower_petals.every((petal) => petal[3] === 0), true, 'settled petals must leave no residual bridge');
 assert.ok(
     flowerContextItemsSource.includes("type === 'project' && !hasAtomeTarget")
         && flowerContextItemsSource.includes('selectedIds: contextSelectionIds')

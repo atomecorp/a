@@ -32,6 +32,7 @@ fn contract() -> AtomeProceduralSdf {
         surface_size: [1280.0, 720.0],
         assistant_center: [640.0, 360.0],
         assistant_size: 420.0,
+        ..Default::default()
     }
 }
 
@@ -250,4 +251,16 @@ fn procedural_sdf_keeps_clear_glass_and_a_continuous_shadow_free_aura() {
     assert!(shader.contains("0.05 + rim * 0.46 + shell_edge * 0.18"));
     assert!(!shader.contains("contact_shadow"));
     assert!(!shader.contains("let halo_distance = abs(shell_distance)"));
+}
+
+#[test]
+fn procedural_sdf_flower_mode_uses_one_antialiased_smooth_union_mask() {
+    let shader = include_str!("assets/shaders/procedural_sdf.wgsl");
+    assert!(shader.contains("fn sd_capsule"));
+    assert!(shader.contains("fn smooth_union"));
+    assert!(shader.contains("fn flower_liquid"));
+    assert!(shader.contains("material.flower_petals[index]"));
+    assert!(shader.contains("textureSample(blurred_texture, blurred_sampler, screen_uv)"));
+    assert!(shader.contains("smoothstep(-edge_softness, edge_softness, distance)"));
+    assert!(!shader.contains("flower_copy"));
 }

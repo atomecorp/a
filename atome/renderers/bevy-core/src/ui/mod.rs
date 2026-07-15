@@ -231,9 +231,35 @@ fn scroll_position(scroll: &[f32; 2]) -> ScrollPosition {
     ScrollPosition(Vec2::new(finite(scroll[0], 0.0), finite(scroll[1], 0.0)))
 }
 
+fn ui_transform(style: &AtomeUiStyle) -> UiTransform {
+    let translation = style.translation.unwrap_or([0.0, 0.0]);
+    let scale = style.scale.unwrap_or([1.0, 1.0]);
+    let origin = style.origin.unwrap_or([0.5, 0.5]);
+    let rotation = Rot2::degrees(finite(style.rotation.unwrap_or(0.0), 0.0));
+    let size = style.size.unwrap_or([0.0, 0.0]);
+    let pivot = Vec2::new(
+        (finite(origin[0], 0.5) - 0.5) * finite(size[0], 0.0),
+        (finite(origin[1], 0.5) - 0.5) * finite(size[1], 0.0),
+    );
+    let scaled_pivot = Vec2::new(
+        pivot.x * finite(scale[0], 1.0),
+        pivot.y * finite(scale[1], 1.0),
+    );
+    let origin_compensation = pivot - rotation * scaled_pivot;
+    UiTransform {
+        translation: Val2::px(
+            finite(translation[0], 0.0) + origin_compensation.x,
+            finite(translation[1], 0.0) + origin_compensation.y,
+        ),
+        scale: Vec2::new(finite(scale[0], 1.0), finite(scale[1], 1.0)),
+        rotation,
+    }
+}
+
 // Extras shared by every spawned node kind; applied after the base bundle so
 // one op = one code path (box shadow, programmatic scroll offset).
 fn insert_style_extras(world: &mut World, entity: Entity, style: &AtomeUiStyle) {
+    world.entity_mut(entity).insert(ui_transform(style));
     if let Some(shadow) = &style.shadow {
         world.entity_mut(entity).insert(box_shadow(shadow));
     }
@@ -653,6 +679,13 @@ fn update_node_style(world: &mut World, id: &str, style: AtomeUiStyle) -> Result
         }
         if let Some(scroll) = &style.scroll {
             entity_mut.insert(scroll_position(scroll));
+        }
+        if style.translation.is_some()
+            || style.scale.is_some()
+            || style.rotation.is_some()
+            || style.origin.is_some()
+        {
+            entity_mut.insert(ui_transform(&style));
         }
         if let Some(shadow) = &style.shadow {
             entity_mut.insert(box_shadow(shadow));

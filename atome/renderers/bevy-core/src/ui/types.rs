@@ -111,6 +111,14 @@ pub struct AtomeUiStyle {
     #[serde(default)]
     pub position: Option<[f32; 2]>,
     #[serde(default)]
+    pub translation: Option<[f32; 2]>,
+    #[serde(default)]
+    pub scale: Option<[f32; 2]>,
+    #[serde(default)]
+    pub rotation: Option<f32>,
+    #[serde(default)]
+    pub origin: Option<[f32; 2]>,
+    #[serde(default)]
     pub size: Option<[f32; 2]>,
     #[serde(default)]
     pub min_size: Option<[f32; 2]>,

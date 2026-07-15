@@ -210,6 +210,49 @@ fn update_node_style_patches_position_size_background_z_in_place() {
 }
 
 #[test]
+fn ui_visual_transform_mounts_and_updates_without_rebuilding_the_node() {
+    let mut world = World::new();
+    mount_styled_tree(
+        &mut world,
+        vec![styled_node(
+            "ui_motion_card",
+            "panel",
+            AtomeUiStyle {
+                size: Some([100.0, 50.0]),
+                translation: Some([4.0, 6.0]),
+                scale: Some([0.8, 1.1]),
+                rotation: Some(12.0),
+                origin: Some([0.5, 0.5]),
+                ..default()
+            },
+        )],
+    );
+    let entity = entity_for(&world, "ui_motion_card");
+    let mounted = *world.get::<UiTransform>(entity).unwrap();
+    assert_eq!(mounted.translation, Val2::px(4.0, 6.0));
+    assert_eq!(mounted.scale, Vec2::new(0.8, 1.1));
+
+    apply_ui_ops(
+        &mut world,
+        vec![AtomeUiOp::UpdateNodeStyle {
+            id: "ui_motion_card".to_string(),
+            style: AtomeUiStyle {
+                size: Some([100.0, 50.0]),
+                translation: Some([8.0, 9.0]),
+                scale: Some([1.0, 1.0]),
+                rotation: Some(0.0),
+                origin: Some([0.5, 0.5]),
+                ..default()
+            },
+        }],
+    );
+    let updated = world.get::<UiTransform>(entity).unwrap();
+    assert_eq!(updated.translation, Val2::px(8.0, 9.0));
+    assert_eq!(updated.scale, Vec2::ONE);
+    assert_eq!(updated.rotation, Rot2::IDENTITY);
+}
+
+#[test]
 fn set_subtree_opacity_scales_and_restores_all_color_alphas() {
     let mut world = World::new();
     mount_styled_tree(

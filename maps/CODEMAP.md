@@ -1688,7 +1688,8 @@ General risks:
 ## Flower BevyUI Ownership
 
 - `eVe/intuition/ribbon/bevy_ui_flower_model.js` owns the disposable Flower BevyUI tree shape, radial item placement, and the tokenized shadow/backdrop visual node contract. `atome/renderers/bevy-core/src/backdrop_surface.rs` owns its reusable WebGPU material, rounded SDF clipping, and shared workspace-capture consumption; it is not a DOM or second-canvas renderer.
-- `eVe/intuition/ribbon/bevy_ui_flower_runtime.js` owns the captured pointer session, hit testing, held navigation, preview state, release activation, and cancellation cleanup.
+- `eVe/intuition/ribbon/bevy_ui_flower_runtime.js` owns the captured pointer session, hit testing, held navigation, preview state, release activation, the four-phase lifecycle, one cancellable animation-frame scheduler, frame-timing diagnostics, and cancellation cleanup. `eVe/intuition/ribbon/bevy_ui_flower_motion.js` owns deterministic staggered transforms, elastic scale/settle, curved trajectories, reduced-motion sampling, interruption continuity, content reveal, and the temporary liquid procedural-SDF uniform payload. `eVe/domains/rendering/bevy_ui_tree_motion_runtime.js` carries transform/style patches through the existing BevyUI projection; it does not create a renderer.
+- `atome/renderers/bevy-core/src/procedural_sdf.rs` and `assets/shaders/procedural_sdf.wgsl` consume the Flower liquid payload in the shared procedural material. The Flower branch uses smooth-union circles plus proximity-bounded capsules, samples the compositor blur only inside that temporary silhouette, and becomes empty after the fusion window; the assistant branch remains independent.
 - `eVe/intuition/flower/context.js` remains the gesture/context entry facade and does not create visible Flower DOM.
 - The deleted `eVe/intuition/flower/menu.js` was a retired DOM renderer and must not be reintroduced.
 

@@ -10,6 +10,9 @@ struct ProceduralSdfUniform {
     gesture: vec4<f32>,
     geometry: vec4<f32>,
     shape: vec4<f32>,
+    flower: vec4<f32>,
+    flower_tint: vec4<f32>,
+    flower_petals: array<vec4<f32>, 8>,
 }
 
 @group(#{MATERIAL_BIND_GROUP}) @binding(0) var<uniform> material: ProceduralSdfUniform;
@@ -38,6 +41,52 @@ fn gaussian_tail(distance: f32, sigma: f32) -> f32 {
     return exp(-0.5 * normalized * normalized);
 }
 
+fn sd_capsule(point: vec2<f32>, start: vec2<f32>, end: vec2<f32>, radius: f32) -> f32 {
+    let segment = end - start;
+    let denominator = max(dot(segment, segment), 0.0001);
+    let projection = clamp(dot(point - start, segment) / denominator, 0.0, 1.0);
+    return length(point - (start + segment * projection)) - radius;
+}
+
+fn smooth_union(left: f32, right: f32, radius: f32) -> f32 {
+    let safe_radius = max(radius, 0.0001);
+    let blend = clamp(0.5 + 0.5 * (right - left) / safe_radius, 0.0, 1.0);
+    return mix(right, left, blend) - safe_radius * blend * (1.0 - blend);
+}
+
+fn flower_liquid(pixel_position: vec2<f32>, screen_uv: vec2<f32>) -> vec4<f32> {
+    let center = material.geometry.zw;
+    let core_radius = material.flower.z;
+    let bridge_width = material.flower.w;
+    let edge_softness = max(material.shape.y, 0.5);
+    var distance = 100000.0;
+    if core_radius > 0.01 {
+        distance = length(pixel_position - center) - core_radius;
+    }
+    for (var index = 0u; index < 8u; index = index + 1u) {
+        if f32(index) >= material.flower.y { break; }
+        let petal = material.flower_petals[index];
+        if petal.w <= 0.001 { continue; }
+        let direction = petal.xy - center;
+        let distance_to_petal = max(length(direction), 0.001);
+        let axis = direction / distance_to_petal;
+        let capsule_start = center + axis * min(core_radius * 0.35, distance_to_petal * 0.12);
+        let capsule_end = petal.xy - axis * max(petal.z * 0.55, 1.0);
+        let link_radius = bridge_width * clamp(petal.w * 2.4, 0.0, 1.0);
+        let capsule = sd_capsule(pixel_position, capsule_start, capsule_end, link_radius);
+        distance = smooth_union(distance, capsule, max(2.0, link_radius * 0.72));
+    }
+    let mask = 1.0 - smoothstep(-edge_softness, edge_softness, distance);
+    if mask < 0.002 { discard; }
+    let original_color = textureSample(original_texture, original_sampler, screen_uv).rgb;
+    let blurred_color = textureSample(blurred_texture, blurred_sampler, screen_uv).rgb;
+    let glass = mix(original_color, blurred_color, 0.88);
+    let tint_amount = clamp(material.flower_tint.a, 0.0, 1.0);
+    let color = mix(glass, material.flower_tint.rgb, tint_amount);
+    let alpha = mask * tint_amount;
+    return vec4(color, alpha);
+}
+
 @fragment
 fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
     let uv = mesh.uv;
@@ -45,6 +94,11 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
     let assistant_center = material.geometry.zw;
     let assistant_size = max(material.shape.x, 1.0);
     let pixel_position = vec2(uv.x * surface_size.x, (1.0 - uv.y) * surface_size.y);
+    let screen_dimensions = vec2<f32>(textureDimensions(blurred_texture));
+    let screen_uv = clamp(mesh.position.xy / max(screen_dimensions, vec2(1.0)), vec2(0.0), vec2(1.0));
+    if material.flower.x > 0.5 {
+        return flower_liquid(pixel_position, screen_uv);
+    }
     var point = (pixel_position - assistant_center) / (assistant_size * 0.5);
     let original_point = point;
     let time = material.dynamics.z;
@@ -115,8 +169,6 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
     shell_color += mix(vec3(0.02, 0.14, 0.18), vec3(0.22, 0.04, 0.12), shell_mix) * shell_edge * 0.12;
     shell_color += vec3(0.08, 0.04, 0.10) * intensity * 0.16;
     let shell_alpha = shell_mask * (0.05 + rim * 0.46 + shell_edge * 0.18) * shell_shape_reveal;
-    let screen_dimensions = vec2<f32>(textureDimensions(blurred_texture));
-    let screen_uv = clamp(mesh.position.xy / max(screen_dimensions, vec2(1.0)), vec2(0.0), vec2(1.0));
     let refraction_direction = normalize(shell_point + vec2(0.0001));
     let shell_radius = clamp(length(shell_point) / 0.84, 0.0, 1.0);
     let refraction_band = smoothstep(material.optics.z, 0.78, shell_radius)
