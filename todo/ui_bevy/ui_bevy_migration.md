@@ -76,7 +76,7 @@ Missing primitives must be implemented in the shared Bevy UI owner before a prod
 ### Current implementation status
 
 - The Flower hold contract is implemented by `eVe/intuition/ribbon/bevy_ui_flower_runtime.js` and `bevy_ui_flower_model.js` on the shared BevyUI canvas tree. The runtime owns the held pointer session, radial hit testing, palette/Back navigation, leaf preview, single release activation, and cancellation cleanup.
-- The visible DOM Flower renderer has been retired. The remaining `new_menu_v2` alias is not a Flower renderer and must remain until its verified menu consumers are migrated.
+- The visible DOM Flower renderer and the remaining menu aliases are retired. Menu consumers use the internal Bevy runtime registry; no visible DOM menu route remains.
 
 ### 3. Dashboard
 

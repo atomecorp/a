@@ -171,7 +171,7 @@ Primary sources:
 
 Exposure:
 
-- Runtime global: `window.new_menu_v2` and alias `window.new_menu`.
+- Internal runtime access: `getMainMenuRuntime()` from `eVe/intuition/ribbon/main_menu_bridge_runtime.js`.
 - Public methods preserved from the previous menu contract: `open`, `close`, `reveal`, `hide`, `hideCompletely`, `showFully`, `getContent`, `updateContent`, `add`, `remove`, `setToolLatchedState`, `getToolLatchedState`, `setToolExternalOpen`, `measure`, `place`, and `getReservedHeight`.
 
 Boundary status: Semi-public closed eVe product runtime. Content operations mutate only the Squirrel/toolbox-backed menu content held by the menu facade and then remount/update the disposable BevyUI tree. Tool activation reuses the normalized ribbon definitions and the existing `invokeIntuitionXMainRibbonToolDefinition(...)` path; no duplicated tool handlers or DOM per item are allowed.

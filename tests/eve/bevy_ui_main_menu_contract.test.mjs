@@ -8,6 +8,7 @@ import {
     resolveBevyMainMenuItemSize
 } from '../../eVe/intuition/ribbon/bevy_ui_main_menu_model.js';
 import { createBevyUiMainMenuRuntime } from '../../eVe/intuition/ribbon/bevy_ui_main_menu_runtime.js';
+import { setMainMenuRuntime } from '../../eVe/intuition/ribbon/main_menu_bridge_runtime.js';
 import { createBevyMainMenuHoldRuntime } from '../../eVe/intuition/ribbon/bevy_ui_main_menu_hold_runtime.js';
 import { resolveDashboardBlockUnitSize } from '../../eVe/domains/dashboard/dashboard_tokens.js';
 import { readToolboxReservedHeight } from '../../eVe/domains/dashboard/dashboard_environment.js';
@@ -462,12 +463,13 @@ test('BevyUI main menu reserves dashboard height before legacy DOM measurement',
         legacy.style.opacity = '1';
         legacy.getBoundingClientRect = () => ({ top: 620, bottom: 720, width: 200, height: 100 });
         harness.document.body.appendChild(legacy);
-        harness.window.new_menu_v2 = harness.runtime;
+        setMainMenuRuntime(harness.runtime);
         await harness.runtime.showFully();
         assert.equal(readToolboxReservedHeight(harness.surface), resolveBevyMainMenuItemSize());
         harness.runtime.hideCompletely();
         assert.equal(readToolboxReservedHeight(harness.surface), 100);
     } finally {
+        setMainMenuRuntime(null);
         harness.restore();
     }
 });

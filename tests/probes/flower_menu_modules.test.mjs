@@ -22,6 +22,7 @@ const {
     setFlowerPointerLock
 } = await import('../../eVe/intuition/flower/context_pointer_lock.js');
 const { closeFlowerMenu } = await import('../../eVe/intuition/flower/index.js');
+const { installIntuitionXFlowerContextRuntime } = await import('../../eVe/intuition/flower/context.js');
 const {
     isBlockedTarget,
     resolveContextFromTarget
@@ -247,6 +248,48 @@ closeFlowerMenu();
 assert.equal(window.__EVE_FLOWER_POINTER_LOCK__['11'], undefined);
 assert.equal(window.__EVE_FLOWER_CONTEXT_HOLD_CANDIDATE__, undefined);
 assert.equal(window.__EVE_FLOWER_CONTEXT_LONG_PRESS_ACTIVE__, undefined);
+
+const flowerInteraction = { closeCount: 0, open: true, openCount: 0, button: null };
+window.eveBevyFlowerRuntime = {
+    isOpen: () => flowerInteraction.open,
+    close: async () => {
+        flowerInteraction.closeCount += 1;
+        flowerInteraction.open = false;
+    },
+    openAt: () => {
+        flowerInteraction.openCount += 1;
+    },
+    resolveButtonFromPoint: () => flowerInteraction.button
+};
+const disposeFlowerContext = installIntuitionXFlowerContextRuntime({ longPressMs: 5 });
+const makeFlowerPointerEvent = (type, properties = {}) => {
+    const event = new window.Event(type, { bubbles: true, cancelable: true });
+    Object.entries({
+        button: 0,
+        pointerId: 71,
+        pointerType: 'touch',
+        isPrimary: true,
+        clientX: 140,
+        clientY: 120,
+        ...properties
+    }).forEach(([key, value]) => Object.defineProperty(event, key, { configurable: true, value }));
+    return event;
+};
+const rightClickWhileOpen = makeFlowerPointerEvent('contextmenu', { button: 2, pointerType: 'mouse' });
+projectCanvas.dispatchEvent(rightClickWhileOpen);
+assert.equal(rightClickWhileOpen.defaultPrevented, true, 'a right-click must suppress the browser context menu while Flower is open');
+assert.equal(flowerInteraction.closeCount, 1);
+assert.equal(flowerInteraction.openCount, 0);
+
+flowerInteraction.open = true;
+flowerInteraction.button = { key: 'info', type: 'tool' };
+projectCanvas.dispatchEvent(makeFlowerPointerEvent('pointerdown'));
+await delay(10);
+assert.equal(flowerInteraction.open, false, 'a second long press must close the open Flower menu');
+assert.equal(flowerInteraction.closeCount, 2);
+assert.equal(flowerInteraction.openCount, 0, 'closing an open Flower menu must not reopen it');
+disposeFlowerContext();
+delete window.eveBevyFlowerRuntime;
 
 const item = normalizeItem({
     key: 'import',
