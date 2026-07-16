@@ -2,6 +2,20 @@
 
 ---
 
+Status: Spécification conceptuelle
+
+This document is not a description of the currently implemented database schema or
+runtime API. The canonical maintained Atome envelope is defined by
+`atome/documentations/atome_structur_to_respect.md`; current persistence and transport
+are defined by the active persistence, CRUD and map documents.
+
+In particular, the branch/DAG schema and every statement that versions are branchable
+describe a future design space only. Historical branching is not implemented and must
+not be exposed before the model in
+`todo/ai_voice/time_machine_historical_branching.md` is explicitly validated. Original
+events remain immutable and the current runtime must not infer capability from the SQL
+examples below.
+
 #### 1. Global Objective
 
 ADOLE is a universal description and execution engine designed to describe, render, and manipulate any kind of object — visual, textual, audio, or conceptual — in a structured, declarative, and AI-friendly form. It forms the foundation of the **Atome** ecosystem and interacts closely with Atome’s system layers (distributed database, user jails, historization, and granular data sharing).
@@ -81,7 +95,8 @@ ADOLE is a universal description and execution engine designed to describe, rend
 
 * Each object is **automatically versioned** upon modification.
 * The history is **granular**: individual properties can be reverted or reapplied independently.
-* Versions are **branchable**: new variants can be derived from any past state.
+* Future versions may become **branchable** only after the registered Time Machine
+  branch model is validated and implemented.
 * ADOLE integrates with a **distributed PostgreSQL versioning engine** capable of reconstructing any object state at any point in time.
 
 ---
@@ -104,7 +119,9 @@ ADOLE is a universal description and execution engine designed to describe, rend
 * Sharing occurs **per property**: every object element can be independently exposed or protected.
 * Jails communicate through **secure channels**.
 * Public spaces may use shared databases, but architecture remains decentralized.
-* Version conflicts are automatically resolved using timestamps and configurable priority rules.
+* Offline version conflicts use last-write-wins over authorized events, ordered by
+  timestamp with a deterministic tie-breaker. Every concurrent event remains in the
+  append-only history; corrections and restorations create new events.
 
 ---
 
@@ -142,7 +159,8 @@ ADOLE is a universal description and execution engine designed to describe, rend
 4. **Persistence & Multi-Context Execution**:
 
    * Distributed PostgreSQL between jails.
-   * Execution contexts: DOM/Canvas, WebGL, AudioGraph, ConceptGraph.
+   * Visible product projection uses the single shared Bevy/WebGPU pipeline. Earlier DOM/Canvas and WebGL context names are historical design vocabulary and are not supported visible renderer choices.
+   * AudioGraph and ConceptGraph remain non-visual execution domains; they do not compete with or replace the visible Bevy/WebGPU projection.
    * ADOLE → runtime mapping via specific interpreters.
 
 ---
@@ -163,7 +181,7 @@ ADOLE is the foundation of the **Atome** ecosystem. Its purpose is to provide a 
 
 ---
 
-### PostgreSQL Schema
+### Proposed PostgreSQL branch schema — not implemented
 
 ```sql
 -- Tenants & identities
@@ -324,7 +342,9 @@ CREATE TABLE IF NOT EXISTS json_nodes (
 
 * Each jail (device) defines which objects or properties to synchronize.
 * Synchronization is based on deltas (changes), comparing hashes and timestamps.
-* Conflicts are resolved by priority rules (timestamp, author, or master device).
+* Conflicts use the same last-write-wins rule: authorized events are ordered by timestamp
+  with a deterministic tie-breaker. No configurable author or master-device priority
+  overrides this rule, and no losing event is removed from append-only history.
 
 #### 4. Multi-Device and Unified Identities
 

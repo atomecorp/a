@@ -1,5 +1,25 @@
 # Post-Quantum Cryptography Integration Plan for Atome / Squirrel
 
+Status: Specification
+
+This document is a deferred research and architecture specification. It is not an active implementation plan and its checkboxes do not authorize executable work.
+
+Activation requires a separate product decision and registration in `todo/execution_order.md` with:
+
+* a current threat model and protected-data classification;
+* selected standardized algorithms and migration formats;
+* verified Web, Tauri, native iOS/macOS, server, reverse-proxy, and deployment compatibility;
+* key lifecycle, recovery, rotation, revocation, backup, and multi-device ownership rules;
+* performance budgets and interoperability tests;
+* a no-downgrade policy that does not introduce a silent insecure fallback.
+
+Current runtime status:
+
+* Server identity verification uses RSA-PSS.
+* Network transport uses the deployment's current TLS stack.
+* No PQC engine, liboqs binding, hybrid key exchange, ADOLE PQC encryption hook, or PQC messaging protocol is implemented.
+* Cryptographic agility remains a mandatory design requirement so persisted identities and encrypted envelopes can be migrated explicitly later.
+
 ## Scope
 
 This document outlines the technical steps to integrate post-quantum cryptography (PQC) into the Atome/Squirrel ecosystem across three layers:
@@ -23,7 +43,8 @@ This document outlines the technical steps to integrate post-quantum cryptograph
 * [ ] Configure Nginx or other reverse proxy to enable hybrid PQC cipher suites.
 * [ ] Verify compatibility with: Web (Chrome/Safari), Tauri, native iOS/macOS TLS.
 * [ ] Update deployment scripts (install_server.sh, certbot config) to include PQC setup.
-* [ ] Document fallback paths for clients not supporting PQC.
+* [ ] Document explicit unsupported-client failure and a controlled migration/cutover
+  policy; do not introduce cryptographic fallback paths.
 
 ### Deliverables
 
@@ -155,6 +176,8 @@ Support PQC-ready E2E communications between users for future social/messaging f
 
 ## Next Steps
 
-* Choose PQC library (liboqs recommended baseline)
-* Prototype crypto_engine with hybrid scheme (Kyber + X25519)
-* Prepare staging server with PQC-enabled TLS for testing
+These steps remain non-executable until the activation requirements above are satisfied:
+
+* Select standardized algorithms and an implementation stack from current platform evidence.
+* Prototype a versioned crypto abstraction and migration envelope.
+* Prepare an isolated compatibility and performance test environment.

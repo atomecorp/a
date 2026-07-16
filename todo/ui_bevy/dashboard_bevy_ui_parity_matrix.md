@@ -1,10 +1,12 @@
 # Matrice de parité Dashboard records → Bevy UI (T2.1)
 
+Status: Partiel
+
 Source d'inventaire : `eVe/domains/dashboard/dashboard_records.js` + `dashboard_record_primitives.js`
 + `dashboard_scene_effects.js` (état 2026-07-05, post Phase 1).
 Cible : `atome/renderers/bevy-core/src/ui/` (`AtomeUiNode`/`AtomeUiStyle`/`AtomeUiImage`, plugin `AtomeBevyUiPlugin`).
 
-Statuts : ✅ = implementation covered by focused contracts · 🟡 = implementation requires a real-canvas acceptance run · ❌ = missing implementation.
+Statuts : ✅ = contrat produit fonctionnel couvert · 🟡 = reliquat actif avec critere de sortie · ◻️ = raffinement de specification non bloquant et non inscrit au backlog actif.
 
 Last contract review: 2026-07-13. The shared BevyUI core already provides subtree opacity,
 card shadows, rounded nodes, local Roboto weights, text alignment/line height, scroll state,
@@ -71,12 +73,12 @@ shared media-texture resolver before the texture enters the Bevy surface.
 | `align` left/center | headers, titres | `AtomeUiStyle.text_align` → `TextLayout.justify` | ✅ |
 | `baseline` alphabetic/middle | headers, titres | positionnement dans le nœud (align_items) ; à valider pixel-près vs rasterizer | 🟡 |
 | `padding_x/padding_y` | tous | `AtomeUiStyle.padding` | ✅ |
-| `stroke_color/stroke_width` (liseré léger) | headers, titres | ❌ pas de text-stroke bevy_text | ❌ |
-| `shadow_color/blur/offset_x/offset_y` | headers, titres | ❌ `TextShadow` (Bevy 0.18) non exposé | ❌ |
-| `text_fit: 'shrink'` + `min_font_size` | titres/dates | ❌ auto-shrink à la largeur (mesure + réduction) | ❌ |
+| `stroke_color/stroke_width` (liseré léger) | headers, titres | non projeté par l'arbre Dashboard actuel; compensation visuelle acceptée | ◻️ |
+| `shadow_color/blur/offset_x/offset_y` | headers, titres | non projeté par l'arbre Dashboard actuel; compensation visuelle acceptée | ◻️ |
+| `text_fit: 'shrink'` + `min_font_size` | titres/dates | le champ reste documentaire; les géométries courantes sont acceptées sans moteur générique auto-shrink | ◻️ |
 | `line_height` | resolver | `AtomeUiStyle.line_height` → `TextFont.line_height` | ✅ |
 | `texture_scale` (netteté 4×) | headers/titres | sans objet (texte vectoriel natif Bevy) | ✅ |
-| `rich_text` (spans bold/color, `editing`, `selection`, `caret`) | édition de label | ❌ sélection + caret + spans pour l'édition inline (T4.4) | ❌ |
+| `rich_text` (spans bold/color, `editing`, `selection`, `caret`) | édition de label | édition, sélection et caret fonctionnels via le service texte caché; les spans de style ne sont pas une exigence Dashboard active | ✅ |
 | `opacity` (0.82, inactifs 0.42, ×fade) | tous | `TextColor` alpha plus subtree opacity | ✅ |
 
 ## 5. Effet de scène
@@ -95,9 +97,9 @@ shared media-texture resolver before the texture enters the Bevy surface.
 | molette (scroll V + H) | wheel delta emitted for the hovered node | ✅ |
 | scroll natif `Overflow::scroll` + `ScrollPosition` pilotable | style mapping plus patchable `ScrollPosition` | ✅ |
 
-## 7. Synthèse « À implémenter » (alimente T2.2/T2.3)
+## 7. Etat fonctionnel reconcilie — 2026-07-16
 
-1. **Text stroke + text shadow** (or a documented visual compensation). — §4
-2. **Text-fit shrink + min_font_size** (measure then reduce). — §4
-3. **Rich-text editing** (spans, selection, caret), required only for T4.4. — §4
-4. **Real-canvas acceptance** for lane clipping, layer order, rounded media, scroll, drag, and wheel remains required before pixel-parity sign-off. — §§2–6
+- Le Dashboard est rendu par Bevy et son ouverture, sa fermeture, son scroll, son glissement et l'edition des libelles sont des acquis fonctionnels.
+- La selection et le caret de l'editeur sont synchronises par `dashboard_label_edit_runtime.js`; l'absence de spans styles ne constitue pas un manque fonctionnel du Dashboard.
+- Les raffinements text-stroke, text-shadow et auto-shrink generique restent des specifications non bloquantes. Ils ne doivent redevenir des taches que sur demande produit explicite.
+- Le seul reliquat executable observe pendant la reconciliation est l'ecart vertical de `0,5 px` du contrat de preview dans `tests/eve/dashboard_records.test.mjs`. Il est suivi separement dans `todo/execution_order.md` et ne bloque pas Flower Matrix.

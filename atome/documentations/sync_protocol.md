@@ -13,6 +13,23 @@ It is intentionally small and backward-compatible with existing payloads.
 
 - `ws://<host>:<port>/ws/sync`
 
+## Authentication and authorization
+
+Target contract:
+
+- `/ws/sync` requires an authenticated identity before the server sends `welcome`, capabilities, schema details, watcher information, or application events.
+- Authentication must be derived from a server-verified session, cookie, token, or runtime credential and must never trust a client-supplied principal id.
+- Each connection is bound to one principal and an explicit capability set.
+- Atome events are filtered by current read permission and real-time sharing mode.
+- Account events are limited to authorized directory consumers and private fields are redacted.
+- File events are limited to authorized roots and must not expose absolute server paths or unrelated host metadata.
+- `sync_request` and every other active message require their own authorization check.
+
+Current implementation status:
+
+- Fastify, Tauri, and iOS do not yet consistently enforce this contract.
+- The active remediation is tracked in `todo/cleanup_architecture/authenticated_permission_scoped_ws_sync.md`. Until it is complete and validated, this section is a target specification rather than proof of implementation.
+
 ## Envelope (shared)
 
 All messages are JSON objects. Recommended fields:
@@ -23,7 +40,7 @@ All messages are JSON objects. Recommended fields:
 
 ## Required Types (minimal set)
 
-### 1) register (client -> server)
+### 1) register (client -> server, after authenticated connection establishment)
 
 ```
 {
@@ -114,5 +131,5 @@ During migration, servers may still emit legacy types. Clients should map them t
 
 ## Notes
 
-- The protocol does not require auth at the sync layer. Auth is handled by `/ws/api`.
-- Servers may send `welcome` immediately on connect, but should still accept `register`.
+- Authentication is mandatory at the sync layer even though authenticated request/response business operations remain owned by `/ws/api`.
+- After remediation, servers must send `welcome` only after successful authentication and may then accept `register`.

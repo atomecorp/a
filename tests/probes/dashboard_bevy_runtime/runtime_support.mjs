@@ -16,9 +16,8 @@ export const waitFor = async (page, predicate, timeoutMs = 30000, intervalMs = 2
 };
 
 export const waitForRuntimeReady = async (page) => waitFor(page, () => ({
-    ok: !!window.__DEBUG__ || !!window.new_menu_v2 || !!document.getElementById('intuition'),
+    ok: !!window.__DEBUG__ || !!document.getElementById('intuition'),
     hasDebug: !!window.__DEBUG__,
-    hasMenu: !!window.new_menu_v2,
     hasIntuition: !!document.getElementById('intuition')
 }), 45000);
 
@@ -81,33 +80,11 @@ export const enterGuestWorkspace = async (page) => {
 
 const BEVY_MAIN_MENU_ATOME_RECORD_ID = '__eve_bevy_ui_eve_bevy_ui_main_menu_eve_bevy_ui_main_menu_tool_atome';
 
-export const resolveAtomHandle = async (page) => {
-    await waitForRuntimeReady(page);
-    const handle = page.locator('button[data-role="eve_intuitionx-handle"]').first();
-    const visible = await handle.isVisible().catch(() => false);
-    if (!visible) await page.evaluate(() => window.new_menu_v2?.reveal?.());
-    await handle.waitFor({ state: 'visible', timeout: 15000 });
-    const hit = await handle.evaluate((button) => {
-        const rect = button.getBoundingClientRect();
-        const top = document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2);
-        return {
-            ok: rect.width > 0 && rect.height > 0,
-            topMatches: button === top || button.contains(top),
-            rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
-            topTag: top?.tagName || null,
-            topId: top?.id || null,
-            topRole: top?.getAttribute?.('data-role') || null,
-            topToolId: top?.getAttribute?.('data-tool-id') || null
-        };
-    });
-    if (!hit.ok) throw new Error(`dashboard_probe_atom_handle_not_visible:${JSON.stringify(hit)}`);
-    return handle;
-};
-
 export const clickAtomeMenuItem = async (page) => {
     await waitForRuntimeReady(page);
     const rect = await waitFor(page, async (recordId) => {
-        const menu = window.new_menu_v2 || null;
+const { getMainMenuRuntime } = await import('/eVe/intuition/ribbon/bevy_ui_product_registry.js');
+        const menu = getMainMenuRuntime();
         if (typeof menu?.showFully === 'function') await Promise.resolve(menu.showFully());
         else if (typeof menu?.reveal === 'function') await Promise.resolve(menu.reveal());
         const dashboardProjectId = window.eveDashboardBevyUiRuntime?.state?.active === true
@@ -136,9 +113,7 @@ export const clickAtomeMenuItem = async (page) => {
         };
     }, 15000, 250, BEVY_MAIN_MENU_ATOME_RECORD_ID);
     if (!rect.ok || !rect.last?.rect) {
-        const handle = await resolveAtomHandle(page);
-        await handle.click({ timeout: 10000 });
-        return;
+        throw new Error(`dashboard_probe_atome_record_missing:${JSON.stringify(rect.last || null)}`);
     }
     await clickCanvasRectCenter(page, rect.last.rect);
 };

@@ -23,10 +23,6 @@ globalThis.$ = (tag, options = {}) => {
 
 const { createUserLoginSequence } = await import('../../eVe/intuition/tools/user_login_sequence.js');
 
-const mainHandle = document.createElement('button');
-mainHandle.setAttribute('data-role', 'eve_intuitionx-handle');
-document.body.appendChild(mainHandle);
-
 const waitForCondition = async (predicate, timeoutMs = 3000, intervalMs = 20) => {
     const startedAt = Date.now();
     while (Date.now() - startedAt < timeoutMs) {

@@ -32,9 +32,26 @@ Bypassing the Command Bus is forbidden.
 
 ## COMMUNICATION ARCHITECTURE
 
-All communications MUST exclusively use WebSockets.
+All application commands, signaling, synchronization, and durable data communications MUST exclusively use WebSockets.
 
-HTTP polling, REST fallbacks, hybrid transport layers, or duplicated communication systems are forbidden.
+Narrow exception: mediasoup real-time audio and video media streams MAY use WebRTC/RTP where required by the mediasoup protocol. This exception applies only to the media plane. Signaling, authorization, room control, application state, and durable data MUST continue to use the canonical WebSocket architecture.
+
+Narrow native-platform exception: an in-process or host-provided native bridge MAY be
+used only for capabilities that the operating system, application host, plugin host, or
+realtime media runtime exposes natively and cannot provide through the application
+WebSocket boundary without breaking the platform contract. Examples include AUv3 host
+tempo/transport callbacks, realtime audio/MIDI exchange, sandboxed native file pickers,
+native credential stores, device capabilities, and equivalent Tauri/iOS host calls.
+This bridge is a platform capability adapter, not an alternate application transport.
+It MUST NOT own or carry canonical Atome business state, durable mutations, account
+operations, sharing, application synchronization, or another command path that belongs
+to `/ws/api`.
+
+REST fallbacks, HTTP polling, duplicated application transports, and any other hybrid application communication paths remain forbidden.
+
+HTTP polling, REST fallbacks, duplicated application communication systems, and hybrid
+application transports outside the explicit mediasoup media-plane and bounded native
+platform exceptions are forbidden.
 
 Communication logic must:
 

@@ -15,7 +15,7 @@ If any instruction in this file conflicts with ./.codex/AGENTS.md, ./.codex/AGEN
 Le framework n est pas encore 100% V2.
 Les traces V1 encore actives sont principalement des bridges de compatibilite:
 
-1. API legacy menu encore referencee: `window.eveGoeyMenuApi`
+1. API legacy menu retired: `window.eveGoeyMenuApi`
 2. Alias menu legacy encore reference: `new_menu` / `window.new_menu`
 3. IDs DOM legacy encore utilises: `_intuition_*` (hors `_intuition_v2_*`)
 4. Contrats encore nommes V1: `TOOL_INSTANCE_CONTRACT_V1`, `TOOL_SKIN_CONTRACT_V1`
@@ -41,19 +41,19 @@ Les traces V1 encore actives sont principalement des bridges de compatibilite:
 
 ## Plan de finalisation V2 (a faire)
 
-## 1. Supprimer les bridges `eveGoeyMenuApi`
+## 1. Supprimer les bridges `eveGoeyMenuApi` — termine
 
-[ ] Remplacer tous les appels `window.eveGoeyMenuApi.*` par `window.new_menu_v2.*` ou par les events runtime V2.
-[ ] Supprimer les branches `if (window.eveGoeyMenuApi)` dans:
+[x] Remplacer tous les appels `window.eveGoeyMenuApi.*` par le registre runtime BevyUI interne ou par les events runtime V2.
+[x] Supprimer les branches `if (window.eveGoeyMenuApi)` dans:
 `eVeIntuition.js`, `user.js`, `infos.js`, `communication.js`, `matrix_runtime.js`, `tool_reveal_behavior.js`, `mtrack.js`, `activities.js`.
-[ ] Garder un unique point d acces menu: `new_menu_v2`.
+[x] Garder un unique point d acces menu: `getMainMenuRuntime()` dans `bevy_ui_product_registry.js`.
 
-## 2. Supprimer alias legacy `new_menu`
+## 2. Supprimer alias legacy `new_menu` — termine
 
-[ ] Arreter d exporter/consommer `new_menu` et garder uniquement `new_menu_v2`.
-[ ] Migrer les appels dans:
+[x] Arreter d exporter/consommer `new_menu` et `new_menu_v2`.
+[x] Migrer les appels dans:
 `perform.js`, `activities.js`, `capture.js`, `debug.js`, `project_drop.js`, `eVeIntuition.js`.
-[ ] Supprimer `window.new_menu = new_menu_v2` si plus aucun consommateur legacy.
+[x] Supprimer les deux aliases navigateur apres verification de tous les consommateurs.
 
 ## 3. Normaliser tous les IDs tools en `_intuition_v2_*`
 

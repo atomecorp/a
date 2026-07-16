@@ -139,10 +139,9 @@ When the task concerns eVe UI readiness, missing tool handles, Playwright click 
 Minimum mandatory takeaways:
 
 - do not use `domcontentloaded`, `networkidle`, or `document.readyState` alone as the UI readiness gate;
-- wait for `window.__DEBUG__`, `window.new_menu_v2`, or `#intuition` before clicking tools;
-- target the canonical handle `button[data-role="eve_intuitionx-handle"]`;
-- use real Playwright clicks first;
-- use coordinate clicks only as diagnostics;
+- wait for `window.__DEBUG__` or `#intuition`, then require the internal BevyUI main-menu runtime to report an active mounted tree;
+- resolve the expected BevyUI overlay record in the current foreground scene and use a real Playwright pointer action at its center;
+- use BevyUI overlay diagnostics and `hitTestAtClientPoint(...)` to classify hit-test failures;
 - do not add DOM proxies, test-only APIs, or `data-*` metadata for tests;
 - do not keep synthetic pointer sequences or forced clicks as the product solution.
 

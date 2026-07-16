@@ -351,7 +351,7 @@ const run = async () => {
     page.on('pageerror', (error) => report.pageerrors.push(error?.message || String(error)));
     try {
         await page.goto(APP_URL, { waitUntil: 'load' });
-        const ready = await waitFor(page, () => !!window.__DEBUG__ || !!window.new_menu_v2 || !!document.getElementById('intuition'), 30000);
+        const ready = await waitFor(page, () => !!window.__DEBUG__ || !!document.getElementById('intuition'), 30000);
         if (!ready.ok) throw new Error('eve_runtime_not_ready');
         await page.evaluate(() => window.__DEBUG__?.setDeterministicTestMode?.(true));
         report.project = await prepareProject(page);
@@ -425,7 +425,7 @@ const run = async () => {
         report.after_resize_scene = await readSceneRecord(page, report.project.projectId, atomeId);
         report.after_resize_pixels = await waitForRecordPixels(page, atomeId, 'after_resize');
         await page.reload({ waitUntil: 'load' });
-        const reloadReady = await waitFor(page, () => !!window.__DEBUG__ || !!window.new_menu_v2 || !!document.getElementById('intuition'), 30000);
+        const reloadReady = await waitFor(page, () => !!window.__DEBUG__ || !!document.getElementById('intuition'), 30000);
         if (!reloadReady.ok) throw new Error('reload_runtime_not_ready');
         await page.evaluate(() => window.__DEBUG__?.setDeterministicTestMode?.(true));
         report.reload_auth_state = await safeEval(page, async () => {

@@ -83,7 +83,8 @@ Every Atome must be representable with this envelope:
 `renderer`
 
 - Optional non-authoritative projection metadata.
-- The visible product renderer is the shared Bevy/WebGPU route; it must not select DOM, WebGL, native compatibility, or another parallel backend.
+- The visible product renderer is always the shared Bevy/WebGPU route.
+- This field may select a projection profile, material family, or capability inside the shared Bevy pipeline, but it must never select DOM, WebGL, a compatibility renderer, or another visible backend.
 - It must never change logical identity, permissions, or canonical state semantics.
 
 `meta`
@@ -123,7 +124,7 @@ DOM or canvas state -> canonical Atome state
 ### 3.2 What the renderer is allowed to do
 
 - Read a validated Atome description.
-- Resolve the renderer backend from the optional `renderer` hint.
+- Resolve an internal Bevy projection profile from the optional `renderer` hint.
 - Allocate visual resources.
 - Project geometry, media, text, and styling from `properties`.
 - Release and rebuild visual resources at any time.
@@ -307,7 +308,8 @@ Atome history is mandatory and append-only.
 ### 7.1 Required rules
 
 - Canonical history is never hard-deleted from the event stream.
-- Current state is reconstructed from a trusted snapshot plus deterministic replay.
+- Target architecture reconstructs current state from a trusted snapshot carrying a deterministic event cursor plus replay of subsequent events.
+- The current safe rebuild still replays the complete event scope; snapshot acceleration remains active work until equivalence with full replay is proven.
 - Property-level history must remain queryable independently of full-object replay.
 - Snapshots accelerate reconstruction but do not replace event truth.
 - Renderer output must never become a substitute for history.

@@ -242,10 +242,15 @@ To do this reliably, Finder needs a canonical share index. Two acceptable approa
 
 Minimum normalized share metadata:
 
-- `shares.targets`: array of user identifiers (phone/user id)
+- `shares.targets`: array of opaque immutable principal identifiers
 - `shares.permissions`: `{ read, alter, delete, create }`
 - `shares.share_type`: `linked|copy|...`
 - `shares.updated_at`
+
+A phone number may be submitted only to an explicitly authorized recipient-lookup
+operation. The server resolves it to the stable principal before creating or querying
+share metadata. Phone numbers must not be persisted as share targets or indexed as user
+identity.
 
 Security requirement:
 

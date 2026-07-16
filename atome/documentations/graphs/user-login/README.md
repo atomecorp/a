@@ -21,14 +21,18 @@ Ce dossier cartographie le bloc user-login pour faciliter le debug auth UI, sess
 
 ## Main entry points
 
+The HTTP entries below are historical code-path observations from the audited snapshot,
+not supported target transport. Canonical maintained authentication uses typed `/ws/api`
+actions.
+
 - `auth.login` - atome/src/squirrel/apis/unified/adole_api/auth.js:502
 - `auth.logout` - atome/src/squirrel/apis/unified/adole_api/auth.js:592
 - `auth.current` - atome/src/squirrel/apis/unified/adole_api/auth.js:606
 - `setSessionState` - atome/src/squirrel/apis/unified/adole_api/session.js:145
 - `waitForAuthCheck` - atome/src/squirrel/apis/unified/adole_api/session.js:236
 - `waitForAuthCheck` - eVe/intuition/tools/project_bootstrap.js:93
-- `POST /api/auth/register` - server/auth.js:1106
-- `POST /api/auth/login` - server/auth.js:1318
+- Historical `POST /api/auth/register` - server/auth.js:1106
+- Historical `POST /api/auth/login` - server/auth.js:1318
 
 ## Main risks found
 

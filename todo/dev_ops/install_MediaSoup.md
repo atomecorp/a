@@ -10,6 +10,16 @@ If any instruction in this file conflicts with ./.codex/AGENTS.md, ./.codex/AGEN
 
 # Atome + Matrix + mediasoup MVP (JS-only)
 
+Status: Actif
+
+## Validated communication boundary
+
+Application commands, signaling, authorization, synchronization and durable data use the
+canonical WebSocket architecture exclusively. The narrow constitutional exception allows
+mediasoup real-time audio and video media streams to use WebRTC/RTP only for the media
+plane. It does not authorize REST, HTTP polling, alternate signaling, duplicated
+application transports or another media exception.
+
 Goal: integrate **Matrix protocol** and **mediasoup** into the Atome core as first-class communication infrastructure, while keeping everything **minimal**:
 
 - **JS-only** (no TypeScript requirement).
@@ -17,7 +27,10 @@ Goal: integrate **Matrix protocol** and **mediasoup** into the Atome core as fir
 - **Recording (if possible)** via a simple server-side pipeline.
 - **Matrix-backed identity and rooms**: Atome account creation must provision or link a Matrix account; exchange rooms are Matrix rooms.
 - **Matrix call control, mediasoup media plane**: Matrix owns accounts, rooms, membership, invitations, chat/event history, call signaling, telephony, and video session orchestration. mediasoup owns the lower media transport layers for video/audio RTP/WebRTC routing.
-- **Phone-number identity remains an Atome onboarding input**: phone numbers can be used for local identity, contact discovery, and connection requests, but the canonical exchange surface must be Matrix-compatible.
+- **Phone remains an Atome onboarding credential and authorized lookup input**: it may be
+  used for verification, contact discovery, and connection requests, but canonical user
+  identity is an opaque immutable principal and the exchange surface must be
+  Matrix-compatible.
 
 Important naming note:
 
@@ -107,12 +120,15 @@ This refactor is part of the Matrix integration, not a separate optional cleanup
 
 ---
 
-## 2) Identity model (phone number)
+## 2) Identity and phone-alias model
 
 ### MVP assumptions
 
-- A user account is uniquely identified by `phone_e164` (e.g. `+33612345678`).
-- Authentication can be mocked for MVP (e.g. dev token) but the phone number must be present.
+- A user account is uniquely identified by an opaque immutable principal.
+- `phone_e164` is a unique verified, mutable credential/lookup alias where phone
+  onboarding is enabled; it must never be used to derive or persist the principal.
+- Authentication can be mocked for a development MVP, but maintained production
+  authentication must follow the active authentication backlog.
 
 ### Minimal user table fields (conceptual)
 
@@ -480,7 +496,8 @@ Everything required on the server must be installed and configured via **one scr
 
 ## 11) MVP acceptance checklist
 
-- [ ] User login identity includes `phone_e164` where phone onboarding is enabled.
+- [ ] User login accepts `phone_e164` as a verified credential alias where phone
+      onboarding is enabled, while persisted identity remains the opaque principal.
 - [ ] Atome account creation creates or links a Matrix account.
 - [ ] Atome user profile stores the Matrix user identifier.
 - [ ] Send + accept connection request.

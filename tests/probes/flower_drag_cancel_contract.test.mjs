@@ -192,14 +192,12 @@ const projectDropSource = await readFile(
 );
 assert.equal(
     projectDropSource.includes('isFlowerPointerInteractionActive(moveEvent.pointerId)')
-        && projectDropSource.includes("pushFlowerDragTrace('tool_projection.move_cancelled_by_flower'")
         && projectDropSource.includes('cancel(moveEvent);'),
     true,
     'tool projection move drag must cancel while the Flower pointer interaction is active'
 );
 assert.equal(
     projectDropSource.includes('isFlowerPointerInteractionActive(upEvent.pointerId)')
-        && projectDropSource.includes("pushFlowerDragTrace('tool_projection.stop_cancelled_by_flower'")
         && projectDropSource.includes('cancel(upEvent);'),
     true,
     'tool projection release must not commit a move while the Flower pointer interaction is active'

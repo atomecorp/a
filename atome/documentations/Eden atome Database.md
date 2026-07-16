@@ -1,5 +1,17 @@
 Atome Specification – Sync API + Database Schema (English Version)
 
+Status: Spécification conceptuelle
+
+This proposal is not the current database schema or supported runtime API. The canonical
+maintained contracts live in `database/schema.sql`,
+`atome/documentations/atome_structur_to_respect.md`, the active persistence
+documentation and the architecture maps.
+
+References to temporal branches describe a future capability only. Historical branching
+must not be implemented or exposed before explicit validation of
+`todo/ai_voice/time_machine_historical_branching.md`. The examples below must not be
+used to infer that branch tables or APIs currently exist.
+
 1. Validation of the API Syntax (client → server)
 
 Proposed syntax:
@@ -133,9 +145,9 @@ Flat storage enables fine ACL and time-travel.
  • meta
 
 Past is never modified.
-You can:
- • create a new temporal branch, or
- • bring a past state into the present by creating a new version.
+After the branch model is validated and implemented, a future system may create a new
+temporal branch. The currently valid restoration operation brings a past value into the
+present by appending a new event/version without modifying past history.
 
 ⸻
 
@@ -209,7 +221,7 @@ This architecture allows:
  • ultra-fine collaboration
  • precise ACL
  • full time-travel without altering history
- • temporal branching
+ • future temporal branching after explicit model validation and implementation
  • declarative reconstruction into Squirrel/ADOLE
  • OS-level abstraction (DOM-independent rendering)
 

@@ -1,5 +1,7 @@
 # Mandatory Execution Gate
 
+Status: Actif
+
 Before starting any implementation, refactor, verification, cleanup, or review work described in this file, fully read and strictly apply.
 
 Read and strictly apply:

@@ -393,7 +393,8 @@ This implies a shared, transport-agnostic tool layer and consistent security sem
 
 * Tauri can host:
 
-  * a local MCP server (stdio or local HTTP),
+  * a local MCP server whose application commands and data use the canonical
+    WebSocket transport exclusively,
   * a local Policy Engine (subset or full),
   * local storage (vault, SQLite/libSQL),
   * optional local connectors when permitted.

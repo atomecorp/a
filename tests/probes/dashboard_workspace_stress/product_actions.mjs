@@ -212,7 +212,8 @@ export const assertWorkspaceInteractionInvariant = async (page, project, label =
         const host = document.getElementById(`project_view_${projectId}`);
         const hostStyle = host ? getComputedStyle(host) : null;
         const canvasStyle = canvas ? getComputedStyle(canvas) : null;
-        const menu = window.new_menu_v2 || null;
+const { getMainMenuRuntime } = await import('/eVe/intuition/ribbon/bevy_ui_product_registry.js');
+        const menu = getMainMenuRuntime();
         const menuMeasure = typeof menu?.measure === 'function' ? menu.measure() : null;
         const overlayDiagnostics = window.eveBevyUiRuntime?.readOverlayDiagnostics?.() || null;
         const menuOverlay = overlayDiagnostics?.trees?.find?.((tree) => tree?.id === 'eve_bevy_ui_main_menu') || null;

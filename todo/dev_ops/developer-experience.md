@@ -1,5 +1,7 @@
 # 🚨 DEVELOPER EXPERIENCE - Clearer Errors
 
+Status: Actif
+
 ## Mandatory Execution Gate
 
 Before starting any implementation, refactor, verification, cleanup, or review work described in this file, fully read and strictly apply.
@@ -36,8 +38,8 @@ const element = $('box', {
 });
 // → Element created but not attached
 
-// Desired - fallback + warning
-// → Console: "⚠️ Parent '#nonexistent-container' not found. Falling back to document.body"
+// Desired - explicit typed error, without implicit reparenting
+// → Error: "Parent '#nonexistent-container' not found"
 ```
 
 ### 3. Invalid CSS Properties
@@ -70,7 +72,7 @@ const element = $('button', {
 ## TODO Implementation
 
 - [ ] Template registry validation with suggestions
-- [ ] Warning for invalid parent selectors + fallback
+- [ ] Typed error for invalid parent selectors without fallback
 - [ ] CSS property validation with typo detection
 - [ ] Type checking for event handlers
 - [ ] Dev vs prod mode (verbose vs silent)

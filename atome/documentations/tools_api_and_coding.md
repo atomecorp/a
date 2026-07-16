@@ -136,7 +136,8 @@ Immutabilite stricte:
 Snapshots:
 - Snapshot = point de validation explicite.
 - Le snapshot est immutable apres ecriture.
-- `state_current` est derive de `last_snapshot + replay(events)`.
+- Cible: `state_current` est derive d un snapshot de confiance avec curseur deterministe + replay des events posterieurs.
+- Etat actuel: le rebuild sur rejoue l historique complet; l acceleration snapshot est suivie dans `todo/cleanup_architecture/snapshot_accelerated_state_rebuild.md`.
 - Le replay doit etre deterministe.
 
 ## 8) Exposition MCP

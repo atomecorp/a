@@ -1,5 +1,7 @@
 # eVe Bevy Dashboard Specification
 
+Status: Specification
+
 Status: planning document  
 Reference prototype: `eVe/R&D/dashboard_design.html`  
 Initial prompt source: `todo/ui_bevy/prompt_dashboard_bevy_design.md`  

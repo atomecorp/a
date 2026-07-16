@@ -33,10 +33,6 @@ window.Element.prototype.animate = function animate() {
     return { cancel() {}, finished: Promise.resolve() };
 };
 
-const handle = document.createElement('button');
-handle.setAttribute('data-role', 'eve_intuitionx-handle');
-document.body.appendChild(handle);
-
 const { createUserLoginSequence } = await import('../../eVe/intuition/tools/user_login_sequence.js');
 
 const waitForCondition = async (predicate, timeoutMs = 2000) => {

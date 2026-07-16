@@ -1,6 +1,8 @@
 # Projet Molécule - Debug, renommage et évolution MTRX
 
-Status: Historical audit and active cleanup record. References to former alternate routes describe defects to remove, never approved architecture.
+Status: Partiel
+
+This is a historical audit and active cleanup record. References to former alternate routes describe defects to remove, never approved architecture.
 
 Date: 2026-04-30
 

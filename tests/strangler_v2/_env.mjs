@@ -19,17 +19,6 @@ const createMockFetch = () => async (input) => {
     };
 };
 const installRuntimeContractAugmenters = (window) => {
-    let menuApi = null;
-    Object.defineProperty(window, 'new_menu_v2', {
-        configurable: true,
-        get: () => menuApi,
-        set: (value) => {
-            if (value && typeof value === 'object' && typeof value.showFully !== 'function') {
-                value.showFully = () => true;
-            }
-            menuApi = value;
-        }
-    });
     let toolBase = null;
     Object.defineProperty(window, 'eveToolBase', {
         configurable: true,

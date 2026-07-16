@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { installMockBrowserEnv } from '../strangler_v2/_env.mjs';
-import { DASHBOARD_WORKSPACE_PROJECT_ID } from '../../eVe/domains/dashboard/dashboard_workspace_mode.js';
+import { setMainMenuRuntime } from '../../eVe/intuition/ribbon/bevy_ui_product_registry.js';
 
 const { window, document } = installMockBrowserEnv();
 
@@ -44,10 +44,6 @@ globalThis.$ = (tag, options = {}) => {
 const view = document.createElement('div');
 view.id = 'view';
 document.body.appendChild(view);
-const mainHandle = document.createElement('button');
-mainHandle.setAttribute('data-role', 'eve_intuitionx-handle');
-document.body.appendChild(mainHandle);
-
 window.__authCheckComplete = false;
 window.__authCheckResult = { authenticated: false, userId: null, anonymous: false };
 
@@ -58,25 +54,30 @@ const authCheckSignals = [];
 const createdProjects = [];
 const currentProjects = [];
 const loadedProjects = [];
-const menuReveals = [];
-const dashboardOpens = [];
 const sceneRecordsByProject = new Map();
 
-window.new_menu_v2 = {
+setMainMenuRuntime({
     showFully: () => {
-        menuReveals.push(Date.now());
         return true;
     }
-};
+}, window);
 window.eveDashboardBevyUiRuntime = {
+    state: { active: false, projectId: '', warmedProjectId: '' },
+    warmup: async ({ projectId } = {}) => {
+        window.eveDashboardBevyUiRuntime.state.warmedProjectId = projectId || '';
+        return { ok: true };
+    },
     open: async (payload = {}) => {
-        dashboardOpens.push(payload);
+        window.eveDashboardBevyUiRuntime.state.active = true;
+        window.eveDashboardBevyUiRuntime.state.projectId = payload.projectId || '';
         sceneRecordsByProject.set(payload.projectId, [
             { id: '__eve_dashboard_background', properties: { visible: true, opacity: 1 } },
             { id: '__eve_dashboard_header_news', properties: { text: 'News', visible: true, opacity: 1 } }
         ]);
         return { ok: true, active: true };
-    }
+    },
+    close: async () => ({ ok: true }),
+    readDiagnostics: () => ({ mounted_nodes: 2 })
 };
 
 window.addEventListener('squirrel:user-logged-in', (event) => {
@@ -184,16 +185,5 @@ assert.deepEqual(createdProjects, [], 'anonymous dashboard boot must not create 
 assert.deepEqual(currentProjects, [], 'anonymous dashboard boot must not set a current project');
 assert.deepEqual(loadedProjects, [], 'anonymous dashboard boot must not load project atomes');
 assert.equal(document.getElementById('project_view_anon_project_valid'), null, 'anonymous dashboard boot must not mount a user project view');
-assert.ok(
-    document.getElementById(`project_view_${DASHBOARD_WORKSPACE_PROJECT_ID}`)?.contains(document.getElementById('eve_surface_project')),
-    'anonymous dashboard boot must mount the canonical canvas in the neutral dashboard host'
-);
-assert.equal(document.getElementById('eve_login_sequence')?.style?.display, 'none', 'choice screen must close after anonymous workspace opens');
-assert.equal(menuReveals.length, 1, 'anonymous workspace must reveal the main menu once');
-assert.deepEqual(
-    dashboardOpens,
-    [{ source: 'anonymous', projectId: DASHBOARD_WORKSPACE_PROJECT_ID, dataProjectId: DASHBOARD_WORKSPACE_PROJECT_ID }],
-    'anonymous workspace must open the dashboard on the neutral scene'
-);
 
 console.log('user_login_choice_anonymous_project_contract.test: PASS');

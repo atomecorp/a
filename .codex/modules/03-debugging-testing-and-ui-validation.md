@@ -160,10 +160,9 @@ For eVe UI interaction debugging, Playwright tool activation failures, runtime r
 Mandatory takeaways from the validated procedure:
 
 - Do not use `domcontentloaded`, `networkidle`, or `document.readyState` alone as the UI readiness gate.
-- Before clicking eVe tools, wait for the eVe runtime surface through `window.__DEBUG__`, `window.new_menu_v2`, or `#intuition`.
-- Target the existing canonical handle with `button[data-role="eve_intuitionx-handle"]`.
-- Use real Playwright clicks first.
-- Use coordinate clicks only to classify hit-test or actionability failures.
+- Before clicking eVe tools, wait for the eVe shell through `window.__DEBUG__` or `#intuition`, then require the internal BevyUI main-menu runtime to report an active mounted tree.
+- Resolve the expected BevyUI overlay record in the current foreground scene and use a real Playwright pointer action at its center.
+- Use BevyUI overlay diagnostics and `hitTestAtClientPoint(...)` to classify hit-test failures.
 - Do not add DOM proxies above the canvas or tools.
 - Do not add `data-*` attributes to Atomes or rendered tool surfaces just for tests.
 - Do not use a test-only API that activates a tool directly.

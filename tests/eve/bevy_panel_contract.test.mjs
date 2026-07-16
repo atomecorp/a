@@ -6,6 +6,7 @@ import { dirname } from 'node:path';
 import { JSDOM } from 'jsdom';
 import { test } from 'vitest';
 import { WORKSPACE_SCENE_LAYER_IDS } from '../../eVe/domains/rendering/workspace_scene_layers.js';
+import { setMainMenuRuntime } from '../../eVe/intuition/ribbon/bevy_ui_product_registry.js';
 
 const repoRoot = dirname(dirname(dirname(fileURLToPath(import.meta.url))));
 
@@ -26,13 +27,13 @@ const installPanelDom = () => {
     });
     dom.window.__eveWorkspaceMode = { mode: 'project', projectId: 'panel_project', transitioning: false };
     let menuActive = false;
-    dom.window.new_menu_v2 = {
+    setMainMenuRuntime({
         showFully: async () => {
             menuActive = true;
             return true;
         },
         measure: () => ({ active: menuActive, treeMounted: menuActive })
-    };
+    }, dom.window);
     return { dom, surface };
 };
 

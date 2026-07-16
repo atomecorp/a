@@ -163,14 +163,8 @@ const inspectProjectBevyProjection = async (page, projectId, atomeId, kind) => s
 
 const revealCaptureSourceTool = async (page) => {
     await page.waitForFunction(() => (
-        !!window.__DEBUG__
-        || !!window.new_menu_v2
-        || !!document.getElementById('intuition')
+        !!window.__DEBUG__ || !!document.getElementById('intuition')
     ), null, { timeout: 30000 });
-    await safeEval(page, () => {
-        window.new_menu_v2?.reveal?.();
-        return { ok: true };
-    }, null, 10000);
     const captureButton = page.locator('button[data-tool-id="tool.main.capture"]').first();
     await captureButton.click({ timeout: 15000 });
     return waitFor(page, () => {

@@ -49,10 +49,6 @@ window.ResizeObserver = class {
 };
 globalThis.ResizeObserver = window.ResizeObserver;
 
-const mainHandle = document.createElement('button');
-mainHandle.setAttribute('data-role', 'eve_intuitionx-handle');
-document.body.appendChild(mainHandle);
-
 const setViewport = (width, height) => {
     Object.defineProperty(window, 'innerWidth', { configurable: true, value: width });
     Object.defineProperty(window, 'innerHeight', { configurable: true, value: height });

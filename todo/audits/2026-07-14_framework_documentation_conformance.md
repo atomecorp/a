@@ -1,7 +1,7 @@
 # Framework Documentation Conformance Remediation
 
 Date: 2026-07-14  
-Status: active — evidence-backed audit findings
+Status: Actif — evidence-backed audit findings
 
 ## Scope and authority
 

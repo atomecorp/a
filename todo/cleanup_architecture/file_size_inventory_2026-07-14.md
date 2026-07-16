@@ -1,6 +1,6 @@
 # Critical File-Size Inventory — 2026-07-14
 
-Status: active remediation register.  
+Status: Actif — remediation register.
 Authority: `todo/cleanup_architecture/file_size_and_coding_standards_remediation.md` and the active `.codex` coding standards.
 
 ## Measurement

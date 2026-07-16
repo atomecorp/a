@@ -246,9 +246,7 @@ const run = async () => {
 
   await page.reload({ waitUntil: 'domcontentloaded', timeout: 45000 });
   const reloadReady = await waitFor(page, () => (
-    !!window.__DEBUG__
-    || !!window.new_menu_v2
-    || !!document.getElementById('intuition')
+    !!window.__DEBUG__ || !!document.getElementById('intuition')
   ), 30000);
   writeJson('reload_ready.json', reloadReady);
   log('reload_ready', reloadReady);

@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { setMainMenuRuntime } from '../../eVe/intuition/ribbon/bevy_ui_product_registry.js';
 import { installMockBrowserEnv } from '../strangler_v2/_env.mjs';
 
 const { window, document } = installMockBrowserEnv();
@@ -8,18 +9,14 @@ globalThis.getComputedStyle = window.getComputedStyle.bind(window);
 globalThis.requestAnimationFrame = window.requestAnimationFrame;
 globalThis.cancelAnimationFrame = window.cancelAnimationFrame;
 
-const mainHandle = document.createElement('button');
-mainHandle.setAttribute('data-role', 'eve_intuitionx-handle');
-document.body.appendChild(mainHandle);
-
 const view = Object.assign(document.createElement('div'), { id: 'view' });
 document.body.appendChild(view);
 
-window.new_menu_v2 = {
+setMainMenuRuntime({
     reveal: () => true,
     showFully: () => true,
     setToolLatchedState: () => true
-};
+}, window);
 const sceneRecordsByProject = new Map();
 window.eveDashboardBevyUiRuntime = {
     open: async ({ projectId } = {}) => {
@@ -345,10 +342,29 @@ assert.equal(authFooter?.children?.length || 0, 0, 'old auth dialog footer must 
 });
 
 let createdSession = null;
+let createdProject = null;
 const authAttempts = [];
 const forbiddenAuthCalls = [];
 window.Atome.getStateCurrent = async () => null;
-window.AdoleAPI.projects = { loadSaved: async () => null, list: async () => ({ fastify: { projects: [] }, tauri: { projects: [] } }), create: async () => ({ fastify: { data: { atome_id: 'created_project' } } }), setCurrent: async () => ({ ok: true }) };
+window.AdoleAPI.projects = {
+    loadSaved: async () => null,
+    list: async () => ({
+        fastify: { projects: createdProject ? [createdProject] : [] },
+        tauri: { projects: [] }
+    }),
+    create: async (name) => {
+        createdProject = {
+            id: 'created_project',
+            atome_id: 'created_project',
+            type: 'project',
+            name,
+            owner_id: createdSession?.id,
+            properties: { type: 'project', name, owner_id: createdSession?.id }
+        };
+        return { fastify: { data: { atome_id: createdProject.id } } };
+    },
+    setCurrent: async () => ({ ok: true })
+};
 window.AdoleAPI.auth.bootstrap = async (phone, password, username, visibility) => {
     authAttempts.push({ action: 'bootstrap', phone, password, username, visibility });
     createdSession = { id: 'created_user', username, phone };

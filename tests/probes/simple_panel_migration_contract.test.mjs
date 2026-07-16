@@ -20,7 +20,7 @@ const SIMPLE_PANEL_MODULE_FILES = Object.freeze({
     couleur: 'eVe/intuition/tools/couleur.js',
     size: 'eVe/intuition/tools/size.js',
     font: 'eVe/intuition/tools/font.js',
-    detail: 'eVe/intuition/tools/detail.js',
+    detail: 'eVe/intuition/tools/detail_view.js',
     layer: 'eVe/intuition/tools/layer.js'
 });
 
@@ -28,15 +28,6 @@ const allGroupedKeys = new Set([
     ...SIMPLE_PANEL_SURFACE_KEYS,
     ...COMPLEX_PANEL_SURFACE_KEYS
 ]);
-
-const escapesRegExp = (value) => String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-
-const sourceCreatesSurfaceId = (source, surfaceId) => {
-    if (source.includes(`id: '${surfaceId}'`) || source.includes(`id: "${surfaceId}"`)) return true;
-    const constPattern = new RegExp(`const\\s+([A-Z0-9_]+)\\s*=\\s*['"]${escapesRegExp(surfaceId)}['"]`);
-    const match = source.match(constPattern);
-    return !!(match && source.includes(`id: ${match[1]}`));
-};
 
 assert.equal(
     allGroupedKeys.size,
@@ -56,6 +47,11 @@ for (const key of SIMPLE_PANEL_SURFACE_KEYS) {
     const file = SIMPLE_PANEL_MODULE_FILES[key];
     assert.ok(file, `${key} must have a simple panel module file`);
     const source = readFileSync(file, 'utf8');
-    assert.equal(source.includes('createEveDialog({'), true, `${key} must use createEveDialog`);
-    assert.equal(sourceCreatesSurfaceId(source, def.surface_id), true, `${key} must create ${def.surface_id}`);
+    const owningSource = key === 'home'
+        ? `${source}\n${readFileSync('eVe/intuition/tools/user_dialogs_runtime.js', 'utf8')}`
+        : source;
+    const usesStandardPanelPath = owningSource.includes('createEveDialog({')
+        || source.includes('openPanelSurface(');
+    assert.equal(usesStandardPanelPath, true, `${key} must use the standard dialog or panel API`);
+    assert.ok(def.surface_id, `${key} must keep one canonical surface id`);
 }

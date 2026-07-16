@@ -29,6 +29,28 @@ Primary objectives:
  • Maximum security at all layers
  • No implicit sharing, no accidental exposure
 
+Recipient approval contract:
+
+ • A first request from a sender requires an explicit recipient decision unless a valid prior sender policy exists.
+ • The acceptance surface includes `Automatically accept future shares from this sender`.
+ • This option is checked by default when the acceptance surface opens.
+ • The recipient may uncheck it before accepting.
+ • Accepting while checked stores the persistent `always` sender policy in addition to accepting the current request.
+ • Accepting while unchecked is one-shot approval for the current request only.
+ • The recipient can inspect and revoke the persistent sender authorization later.
+ • Auto-accept must be limited to the permissions, entity scope, duration, and share mode explicitly authorized; a broader request requires a new approval.
+ • `never` rejects future requests with notification behavior, while `block` rejects them without notifying the recipient.
+
+Offline conflict contract:
+
+ • Authorized concurrent changes use last-write-wins timestamps for the current projected value.
+ • All competing events remain durably stored in append-only history, including events that do not win the projection.
+ • No historical event may be edited, overwritten, compacted away, or deleted to resolve a conflict.
+ • Users can inspect and replay every event they are authorized to access.
+ • A correction or restoration is a new appended event.
+ • Editing from a historical point through a distinct branch depends on the registered Time Machine historical-branching work.
+ • Equal or invalid timestamps require a documented deterministic tie-breaker and must never depend on database row accident or arrival-order ambiguity.
+
 ⸻
 
 1. Default State (No Sharing)
@@ -78,6 +100,9 @@ Each share defines a synchronization mode:
  2. Persistent
  • Share remains active
  • Updates propagate only when explicitly refreshed
+ • This is a linked manual share, not a detached copy
+ • The system keeps a stable source/share identity and an accepted publication cursor
+ • Explicit publish transfers only authorized append-only changes since the preceding accepted publication
  3. Real-time (Live)
  • All changes propagate instantly
  • Visual and state updates must appear live
@@ -176,6 +201,9 @@ The User panel controls user visibility, not Atome permissions.
  • Phone number is never public by default
  • Making contact info visible is an explicit opt-in
  • Visibility of contact info is independent from user visibility
+ • The opt-in is revocable and must be enforced by directory queries, search, offline caches, synchronization events, and recipient discovery
+ • A public profile without contact opt-in exposes no phone number
+ • An authorized relationship may expose contact information only within the consented scope
 
 ⸻
 
@@ -188,7 +216,8 @@ When share type = Real-time:
  • Must support concurrent edits (subject to permissions)
 
 When not real-time:
- • No live propagation
+ • Manual linked shares propagate only through explicit publish
+ • Detached copies never propagate after creation
 
 ⸻
 

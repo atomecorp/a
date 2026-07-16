@@ -33,9 +33,13 @@ If any instruction in this file conflicts with ./.codex/AGENTS.md, ./.codex/AGEN
    }
    ```
 
-4. **Implemented "shadow user" creation** in server.js:
-   - If JWT is valid but user doesn't exist on Fastify, create a shadow user automatically
-   - Enables Tauri users to authenticate on Fastify without explicit registration
+4. **Historical "shadow user" creation** in server.js:
+   - The implementation creates a Fastify user when a valid JWT names an absent principal.
+   - This is no longer an accepted account-linking contract. It must be removed and
+     replaced by the explicit provisioning flow in
+     `todo/cleanup_architecture/explicit_cross_runtime_account_provisioning.md`.
+   - The first-screen `Try` guest mode remains a separate supported local/private mode
+     and must not create a Fastify shadow account.
 
 5. **Added diagnostic logging** in share.js and sharing.js to trace `receiverProjectId` flow
 
@@ -126,6 +130,14 @@ communication.js → RC.sendCommand('eve-comm-share', {..., requestAtomeId})
 
 ### Step 3: Receiver Accepts Share
 
+Target approval contract:
+
+- The acceptance UI exposes `Automatically accept future shares from this sender`, checked by default.
+- Accepting with the option checked persists the existing server-side `always` policy.
+- Accepting with it unchecked accepts only the current request and must not create or retain an `always` policy for that decision.
+- A stored `always` policy may auto-accept only requests compatible with the permissions, scope, duration, and mode that the recipient approved.
+- The recipient must be able to inspect and revoke the persistent authorization.
+
 ```
 communication.js (click 'accept') → ShareAPI.accept_request(requestAtomeId)
 → AdoleAPI.sharing.respond({requestAtomeId, status: 'accepted', receiverProjectId})
@@ -161,6 +173,34 @@ communication.js → window.loadProjectAtomes(currentProjectId)
 | `copy` | Creates a copy of the atome in receiver's project (parent_id = receiver's project) |
 | `linked` | Only grants permissions, no copy created (atome stays in sender's project) |
 
+Target mode contract:
+
+- `linked` + `real-time`: authorized append-only changes propagate immediately.
+- `linked` + `manual` / `validation-based`: the link remains active, but changes propagate only after explicit publish.
+- `copy`: creates a detached independent copy and never resynchronizes.
+
+Current mismatch:
+
+- `server/sharing_requests.js` currently forces every non-real-time acceptance to `copy`.
+- `server/sharing_message_api.js` currently sends only item identifiers on `publish`; it does not transport and apply the accumulated authorized changes.
+- This behavior must be replaced rather than documented as the manual linked implementation.
+
+## Offline conflict resolution contract
+
+Decision:
+
+- Use last-write-wins timestamps to choose the current projected value for concurrent authorized events.
+- Preserve every submitted event in append-only history, including losing concurrent events.
+- Never mutate or delete a past event to make the current projection agree with the winner.
+- Historical correction and restoration append new events.
+- Historical editing through a separate future line depends on `todo/ai_voice/time_machine_historical_branching.md`.
+- Define a deterministic tie-breaker for equal or invalid timestamps and expose the conflict decision in diagnostics.
+
+Current gap:
+
+- `server/githubSync.js` returns `offline_conflict_resolution_unavailable` for `offline_changes`.
+- No verified end-to-end implementation currently proves ordered offline replay, last-write-wins projection, preservation of losing events, permission enforcement, or cross-runtime parity.
+
 **Current default in ShareAPI.share_with():** `linked`  
 **Current override in communication.js:** `copy` (line 3199)
 
@@ -171,14 +211,16 @@ communication.js → window.loadProjectAtomes(currentProjectId)
 ### Problem 1: RC.start() Returning False on Tauri
 
 - **Root Cause:** `ensureCommandAuth()` couldn't authenticate because Tauri user didn't exist on Fastify
-- **Solution:** Added shadow user creation + Tauri token fallback
-- **Status:** ✅ Fixed
+- **Historical workaround:** shadow user creation + Tauri token fallback
+- **Current status:** Active architectural debt. Ordinary JWT validation must not create
+  an account; explicit cross-runtime provisioning is required.
 
 ### Problem 2: Notifications Not Delivered
 
 - **Root Cause:** `requestAtomeId` was null because share request failed with "User not found"
-- **Solution:** Shadow user creation ensures target user exists
-- **Status:** ✅ Fixed
+- **Historical workaround:** shadow user creation ensured that a predicted target existed.
+- **Current status:** Active architectural debt. The target must resolve to an existing
+  authorized stable principal; messaging or sharing must not fabricate an account.
 
 ### Problem 3: Shared Atomes Not Attached to Receiver's Project
 
@@ -350,7 +392,7 @@ console.log('[Share] Created copy result:', JSON.stringify(created));
 | File | Changes |
 |------|---------|
 | `src/squirrel/apis/unified/UnifiedSync.js` | Added Tauri token fallback in `ensureCommandAuth()` |
-| `server/server.js` | Added shadow user creation in WebSocket auth |
+| `server/server.js` | Historical shadow-user creation; scheduled for removal by the explicit provisioning task |
 | `src/application/examples/share.js` | Added diagnostic logging in `accept_request()` |
 | `server/sharing.js` | Added diagnostic logging in respond handler and createSharedCopies |
 

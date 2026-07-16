@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { setMainMenuRuntime } from '../../eVe/intuition/ribbon/bevy_ui_product_registry.js';
 import { installMockBrowserEnv } from '../strangler_v2/_env.mjs';
 
 const { window, document } = installMockBrowserEnv();
@@ -34,10 +35,10 @@ window.__authCheckResult = {
     complete: true,
     authenticated: false
 };
-window.new_menu_v2 = {
+setMainMenuRuntime({
     updateContent: () => {},
     hideCompletely: () => {}
-};
+}, window);
 
 const {
     closeSharedLoginSequence,

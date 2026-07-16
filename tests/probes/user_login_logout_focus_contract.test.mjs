@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { setMainMenuRuntime } from '../../eVe/intuition/ribbon/bevy_ui_product_registry.js';
 import { installMockBrowserEnv } from '../strangler_v2/_env.mjs';
 
 const { window, document } = installMockBrowserEnv();
@@ -7,10 +8,6 @@ globalThis.MutationObserver = window.MutationObserver;
 globalThis.getComputedStyle = window.getComputedStyle.bind(window);
 globalThis.requestAnimationFrame = window.requestAnimationFrame;
 globalThis.cancelAnimationFrame = window.cancelAnimationFrame;
-
-const mainHandle = document.createElement('button');
-mainHandle.setAttribute('data-role', 'eve_intuitionx-handle');
-document.body.appendChild(mainHandle);
 
 const view = Object.assign(document.createElement('div'), { id: 'view' });
 document.body.appendChild(view);
@@ -22,10 +19,10 @@ window.Squirrel = {
     ...(window.Squirrel || {}),
     voice: { speak: async () => ({ ok: true }) }
 };
-window.new_menu_v2 = {
+setMainMenuRuntime({
     reveal: () => true,
     setToolLatchedState: () => true
-};
+}, window);
 
 const sceneRecordsByProject = new Map();
 window.eveDashboardBevyUiRuntime = {

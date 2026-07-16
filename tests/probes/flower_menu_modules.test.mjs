@@ -16,11 +16,15 @@ const {
     clearFlowerContextHoldCandidate,
     clearFlowerContextLongPressActive,
     clearAllFlowerPointerLocks,
+    getFlowerContextHoldCandidate,
+    getFlowerContextLongPressActive,
+    getFlowerPointerLock,
     scheduleFlowerPointerUnlock,
     setFlowerContextHoldCandidate,
     setFlowerContextLongPressActive,
     setFlowerPointerLock
 } = await import('../../eVe/intuition/flower/context_pointer_lock.js');
+const { setFlowerRuntime } = await import('../../eVe/intuition/ribbon/bevy_ui_product_registry.js');
 const { closeFlowerMenu } = await import('../../eVe/intuition/flower/index.js');
 const { installIntuitionXFlowerContextRuntime } = await import('../../eVe/intuition/flower/context.js');
 const {
@@ -227,30 +231,30 @@ assert.equal(isBlockedTarget(projectCanvas, {
 delete window.eveAssistantApi;
 
 assert.equal(setFlowerPointerLock(7, { phase: 'test' }), true);
-assert.equal(window.__EVE_FLOWER_POINTER_LOCK__['7'].phase, 'test');
+assert.equal(getFlowerPointerLock(7).phase, 'test');
 assert.equal(scheduleFlowerPointerUnlock(7, 0), true);
 await delay(1);
-assert.equal(window.__EVE_FLOWER_POINTER_LOCK__['7'], undefined);
+assert.equal(getFlowerPointerLock(7), null);
 clearAllFlowerPointerLocks();
 assert.equal(setFlowerContextHoldCandidate(8, { contextType: 'atome', atomeId: 'shape_a' }), true);
-assert.equal(window.__EVE_FLOWER_CONTEXT_HOLD_CANDIDATE__.atomeId, 'shape_a');
+assert.equal(getFlowerContextHoldCandidate().atomeId, 'shape_a');
 assert.equal(clearFlowerContextHoldCandidate(8), true);
-assert.equal(window.__EVE_FLOWER_CONTEXT_HOLD_CANDIDATE__, undefined);
+assert.equal(getFlowerContextHoldCandidate(), null);
 assert.equal(setFlowerContextLongPressActive(9, { contextType: 'atome', atomeId: 'shape_b', kind: 'shape' }), true);
-assert.equal(window.__EVE_FLOWER_CONTEXT_LONG_PRESS_ACTIVE__.preserveSelection, true);
-assert.equal(window.__EVE_FLOWER_CONTEXT_LONG_PRESS_ACTIVE__.surfaceInteraction, true);
+assert.equal(getFlowerContextLongPressActive().preserveSelection, true);
+assert.equal(getFlowerContextLongPressActive().surfaceInteraction, true);
 assert.equal(clearFlowerContextLongPressActive(9), true);
-assert.equal(window.__EVE_FLOWER_CONTEXT_LONG_PRESS_ACTIVE__, undefined);
+assert.equal(getFlowerContextLongPressActive(), null);
 assert.equal(setFlowerPointerLock(11, { phase: 'contextmenu_hold' }), true);
 assert.equal(setFlowerContextHoldCandidate(11, { contextType: 'atome', atomeId: 'shape_c' }), true);
 assert.equal(setFlowerContextLongPressActive(11, { contextType: 'atome', atomeId: 'shape_c', kind: 'shape' }), true);
 closeFlowerMenu();
-assert.equal(window.__EVE_FLOWER_POINTER_LOCK__['11'], undefined);
-assert.equal(window.__EVE_FLOWER_CONTEXT_HOLD_CANDIDATE__, undefined);
-assert.equal(window.__EVE_FLOWER_CONTEXT_LONG_PRESS_ACTIVE__, undefined);
+assert.equal(getFlowerPointerLock(11), null);
+assert.equal(getFlowerContextHoldCandidate(), null);
+assert.equal(getFlowerContextLongPressActive(), null);
 
 const flowerInteraction = { closeCount: 0, open: true, openCount: 0, button: null };
-window.eveBevyFlowerRuntime = {
+setFlowerRuntime({
     isOpen: () => flowerInteraction.open,
     close: async () => {
         flowerInteraction.closeCount += 1;
@@ -261,7 +265,7 @@ window.eveBevyFlowerRuntime = {
         flowerInteraction.open = true;
     },
     resolveButtonFromPoint: () => flowerInteraction.button
-};
+});
 const disposeFlowerContext = installIntuitionXFlowerContextRuntime({ longPressMs: 5 });
 let downstreamFlowerPointerCancelCount = 0;
 projectCanvas.addEventListener('pointercancel', () => {
@@ -411,7 +415,7 @@ projectCanvas.dispatchEvent(makeFlowerPointerEvent('pointerdown', {
 assert.equal(flowerInteraction.open, false, 'a later outside tap must retain the normal Flower-close behaviour');
 assert.equal(flowerInteraction.closeCount, 5);
 disposeFlowerContext();
-delete window.eveBevyFlowerRuntime;
+setFlowerRuntime(null);
 
 const item = normalizeItem({
     key: 'import',

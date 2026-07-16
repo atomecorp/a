@@ -14,11 +14,15 @@ This document describes how to install and use Whisper inside the Squirrel stack
 
 * **Frontend (Squirrel UI)**
 
-  * Records audio from the microphone (WebAudio / MediaRecorder)
-  * Sends raw/encoded audio chunks to:
+  * Records audio through the canonical runtime media-capture adapter
+  * Sends the transcription command and state through the typed WebSocket API
+  * Transfers encoded audio bytes only through the explicitly documented media-byte
+    boundary when a separate binary transfer is required; this is not an HTTP business
+    operation or fallback
+  * Targets:
 
     * Tauri command (desktop), or
-    * Fastify / Axum HTTP endpoint (browser/server mode)
+    * Fastify / Axum WebSocket action (browser/server mode)
 
 * **Whisper engine (local)**
 
@@ -101,212 +105,40 @@ WHISPER_TASK=transcribe   # or "translate"
 
 ---
 
-## 4. Implementing a Tauri command for transcription
+## 4. Canonical transcription boundary
 
-Goal: expose a Tauri command like `whisper_transcribe` that accepts raw PCM or a WAV blob and returns text.
+Whisper is an internal runtime service. The frontend must not call a Tauri command,
+Fastify REST route, or Axum HTTP route directly for transcription.
 
-### 4.1. Basic Rust helper
+The maintained application contract is one typed `/ws/api` action, for example
+`voice.transcribe`, with the same request and response semantics on Tauri, Fastify, and
+supported mobile runtimes. The runtime WebSocket owner performs capability checks,
+authorization, request correlation, cancellation, and error normalization before
+delegating to the local Whisper engine.
 
-```rust
-use std::path::Path;
-use whisper_rs::{WhisperContext, FullParams, SamplingStrategy};
+When encoded audio is too large for the typed command envelope, the bytes may cross the
+explicit protected media-transfer boundary. The resulting opaque media reference is then
+submitted through `/ws/api`. That byte-transfer exception must not become an HTTP
+transcription operation or an alternate command path.
 
-pub struct WhisperEngine {
-    ctx: WhisperContext,
-}
+## 5. Frontend integration
 
-impl WhisperEngine {
-    pub fn new(model_path: &str) -> anyhow::Result<Self> {
-        let ctx = WhisperContext::new(Path::new(model_path))?;
-        Ok(Self { ctx })
-    }
+The Squirrel voice API records through the canonical runtime media-capture adapter and
+submits the transcription intention through the shared WebSocket adapter. Browser
+`MediaRecorder`, WebAudio conversion, native recording, and platform permission handling
+are runtime implementation details behind that adapter; they are not competing product
+APIs.
 
-    pub fn transcribe_pcm(&self, pcm_f32: &[f32], language: &str) -> anyhow::Result<String> {
-        let mut state = self.ctx.create_state()?;
+The frontend receives a typed result containing transcription text, language and
+diagnostics, or an explicit typed failure. It must not probe another transport when the
+canonical action fails.
 
-        let mut params = FullParams::new(SamplingStrategy::Greedy { best_of: 1 });
-        params.set_language(Some(language));
-        params.set_n_threads(num_cpus::get() as i32);
-        params.set_translate(false);
+## 6. Runtime integration
 
-        state.full(params, pcm_f32)?;
-
-        let num_segments = state.full_n_segments();
-        let mut result = String::new();
-        for i in 0..num_segments {
-            if let Ok(segment) = state.full_get_segment_text(i) {
-                result.push_str(&segment);
-            }
-        }
-        Ok(result.trim().to_string())
-    }
-}
-```
-
-### 4.2. Tauri command wrapper
-
-```rust
-use tauri::State;
-use serde::Deserialize;
-
-#[derive(Deserialize)]
-pub struct TranscriptionRequest {
-    // PCM 16‑bit mono, 16 kHz, base64 encoded from JS
-    pub pcm16_base64: String,
-}
-
-pub struct WhisperState {
-    pub engine: WhisperEngine,
-}
-
-#[tauri::command]
-pub async fn whisper_transcribe(
-    req: TranscriptionRequest,
-    whisper: State<'_, WhisperState>,
-) -> Result<String, String> {
-    let bytes = base64::decode(&req.pcm16_base64)
-        .map_err(|e| format!("base64 decode error: {e}"))?;
-
-    // convert i16 PCM -> f32
-    let mut pcm_f32 = Vec::with_capacity(bytes.len() / 2);
-    for chunk in bytes.chunks_exact(2) {
-        let sample = i16::from_le_bytes([chunk[0], chunk[1]]);
-        pcm_f32.push(sample as f32 / 32768.0);
-    }
-
-    whisper
-        .engine
-        .transcribe_pcm(&pcm_f32, "en")
-        .map_err(|e| format!("whisper error: {e}"))
-}
-```
-
-### 4.3. Tauri `main.rs` setup
-
-```rust
-fn main() {
-    let model_path = std::env::var("WHISPER_MODEL_PATH").expect("WHISPER_MODEL_PATH not set");
-    let engine = WhisperEngine::new(&model_path).expect("Failed to load Whisper model");
-
-    tauri::Builder::default()
-        .manage(WhisperState { engine })
-        .invoke_handler(tauri::generate_handler![whisper_transcribe])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
-}
-```
-
----
-
-## 5. Frontend integration (Squirrel UI)
-
-### 5.1. Recording audio in JS (browser or Tauri WebView)
-
-Example: record mono audio, 16 kHz, send to Tauri.
-
-```js
-async function startRecording() {
-  const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-  const mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
-  const chunks = [];
-
-  mediaRecorder.ondataavailable = (e) => {
-    if (e.data.size > 0) chunks.push(e.data);
-  };
-
-  mediaRecorder.onstop = async () => {
-    const blob = new Blob(chunks, { type: 'audio/webm' });
-    const arrayBuffer = await blob.arrayBuffer();
-    const pcm16 = await decodeToPCM16(arrayBuffer); // you implement this
-    const base64 = btoa(String.fromCharCode(...new Uint8Array(pcm16.buffer)));
-
-    const text = await window.__SQUIRREL_BRIDGE__.transcribeVoice(base64);
-    console.log('Whisper text:', text);
-  };
-
-  mediaRecorder.start();
-  return () => mediaRecorder.stop();
-}
-```
-
-`decodeToPCM16` can be implemented using WebAudio (decode audio, resample to 16 kHz mono, export Int16Array).
-
-### 5.2. Squirrel bridge to Tauri
-
-Expose a Squirrel‑style API that hides Tauri internals:
-
-```js
-// squirrel/voice/whisper_client.js
-
-export async function transcribeVoice(base64Pcm16) {
-  // In Tauri
-  if (window.__TAURI__) {
-    return await window.__TAURI__.invoke('whisper_transcribe', {
-      req: { pcm16Base64: base64Pcm16 },
-    });
-  }
-
-  // In browser mode (Fastify HTTP route)
-  const res = await fetch('/api/voice/transcribe', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ pcm16_base64: base64Pcm16 }),
-  });
-
-  if (!res.ok) throw new Error('Transcription failed');
-  const data = await res.json();
-  return data.text;
-}
-
-// Higher‑level helper
-export async function voiceToAI(provider, options = {}) {
-  const stop = await startRecording();
-  // stop() will be called by UI when the user releases a button, etc.
-}
-```
-
-(You can adapt this to Squirrel DSL conventions.)
-
----
-
-## 6. Axum server route (optional, shared Whisper on server)
-
-If you want a central server doing STT for browser clients:
-
-```rust
-use axum::{routing::post, Router, Json};
-use serde::{Deserialize, Serialize};
-
-#[derive(Deserialize)]
-struct ServerTranscriptionRequest {
-    pcm16_base64: String,
-}
-
-#[derive(Serialize)]
-struct ServerTranscriptionResponse {
-    text: String,
-}
-
-async fn transcribe_handler(
-    Json(req): Json<ServerTranscriptionRequest>,
-    State(whisper): State<WhisperState>,
-) -> Result<Json<ServerTranscriptionResponse>, StatusCode> {
-    // same PCM16 -> f32 conversion as Tauri command
-    // ...
-    let text = whisper
-        .engine
-        .transcribe_pcm(&pcm_f32, "en")
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-
-    Ok(Json(ServerTranscriptionResponse { text }))
-}
-
-fn app(whisper: WhisperState) -> Router {
-    Router::new()
-        .route("/api/voice/transcribe", post(transcribe_handler))
-        .with_state(whisper)
-}
-```
+Tauri/Axum and Fastify register the same `voice.transcribe` WebSocket action and delegate
+to their supported Whisper engine. Runtime-specific Rust or C/C++ helpers may own model
+loading and PCM conversion internally, but no direct `invoke`, REST endpoint or HTTP
+fallback is part of the application contract.
 
 ---
 
@@ -333,7 +165,7 @@ Once you have **transcribed text**, you can forward it to the existing AI router
 
 1. Receive transcription event (from Tauri or Axum/Fastify).
 2. Apply NLP / intent detection (LLM or custom rules).
-3. Dispatch to the right Atome/Squirrel tool (calendar, email, etc.).
+3. Dispatch to the right Atome/Squirrel tool.
 4. Optionally, ask for confirmation before executing destructive actions.
 
 ---
@@ -357,7 +189,7 @@ VOICE_AI_ALLOW_UNSAFE_ACTIONS=0
 Your server/app code should read these variables to:
 
 * Enable or disable local Whisper
-* Switch between local Whisper and a remote API if needed
+* Select the explicitly configured transcription provider behind the same WebSocket action
 * Control which AI provider to use by default
 
 ---

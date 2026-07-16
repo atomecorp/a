@@ -30,16 +30,47 @@ Rendering decision locked by the product owner:
 
 Document status vocabulary:
 
-- `Specification`: target contract or design decision.
-- `Current status`: verified description of the maintained implementation.
-- `Active backlog`: executable unfinished work.
+- `Termine verifie`: implemented behavior backed by current evidence.
+- `Actif`: executable unfinished work with an explicit exit criterion.
+- `Partiel`: a verified implemented subset plus a precise executable remainder.
+- `Bloque`: unfinished work whose stated validation cannot currently run or whose required external decision is unavailable.
 - `Obsolete`: retained only as a migration record and never used as an implementation authority.
+- `Specification`: target contract or design decision that is not executable until registered as active work.
+
+Checkboxes are reserved for executable work and final executable validation gates. Phase lifecycle labels are plain text derived from their child tasks and are not included in progress totals.
+
+### Reconciliation audit - original 138-entry snapshot
+
+Statut:
+
+Termine verifie
+
+Sources principales:
+
+- todo/execution_order.md
+- todo/audits/2026-07-14_framework_documentation_conformance.md
+- done/obsolete/eVe_optimisations.md
+- todo/cleanup_architecture/file_size_inventory_2026-07-14.md
+- todo/dev_ops/developer-experience.md
+- todo/molecule/PROJET_MOLECULE_DEBUG.md
+- done/molecule/molecule-status-2026-04-28.md
+- todo/rendering_graphics/robust_bevy_regression_fix_prompt_en.md
+- todo/sharing_search_monitoring/tool_monitor.md
+- done/obsolete/tools_monitoring.md
+- todo/tests/
+- todo/ui_bevy/
+
+- [x] Auditer et reconcilier le snapshot original des 138 entrees, classifier tous les documents todo, produire la preuve entree par entree et installer le controle permanent `npm run check:execution-order`.
+
+Critere de sortie:
+
+- Les 138 entrees originales ont une decision tracable, chaque document todo est enregistre ou explicitement classe, et le controle permanent reproduit le total et passe avec ses tests.
 
 ### Phase 0 - Documentation and architecture normalization
 
 Status:
 
-- [x] Completed in the current documentation pass.
+Termine verifie
 
 Scope completed:
 
@@ -53,12 +84,27 @@ Scope completed:
 
 - Cocher chaque tache terminee avec [x].
 - Ne pas commencer une phase dependante tant que ses prerequis ne sont pas totalement valides.
+- Avant chaque tache, effectuer un controle de coherence court et strictement limite aux
+  instructions, documentations, maps et todo directement applicables a cette tache.
+- Ne remonter a l'utilisateur que les conflits materiels qui modifieraient le
+  comportement produit, l'architecture, la securite, le perimetre ou le critere de
+  sortie. Les differences de formulation, raffinements non bloquants, details
+  d'implementation et questions pouvant etre resolues pendant l'analyse technique ne
+  doivent pas interrompre l'execution.
+- Regrouper les conflits materiels connus de la tache en une seule demande de decision,
+  avec une recommandation concise et au maximum les choix reellement necessaires. Apres
+  la decision, mettre les sources concernees en coherence puis executer la tache.
+- Ce controle prealable ne doit jamais devenir un nouvel audit exhaustif du depot. Il
+  s'arrete des que les sources directement applicables sont coherentes. Un conflit
+  decouvert plus tard n'interrompt la tache que s'il rend l'implementation en cours
+  incorrecte ou dangereuse.
 - Avant chaque nouvelle tache, dire explicitement a l'utilisateur ce qui doit etre fait sur cette tache, quels fichiers sources sont concernes, quelles dependances s'appliquent, quels tests ou verifications sont prevus, et quel est le pourcentage de taches accomplies sur le total.
 - Ce point d'etape doit etre donne avant l'execution de la tache.
 - Aucune nouvelle tache ne demarre sans validation explicite de l'utilisateur.
 - Chaque tache terminee doit etre suivie d'au moins un test, une verification, ou un controle cible adapte a la tache.
 - Chaque cloture de tache doit produire un rapport avec: tache realisee, validation executee, resultat, nombre de taches accomplies sur le total, et pourcentage d'avancement global.
 - Le pourcentage d'avancement global se calcule sur le total des cases a cocher de ce fichier.
+- Toute tache ouverte herite obligatoirement des criteres de sortie et de la Definition of Done de ses sources principales. Si la ligne fournit un critere plus precis, ce critere s'ajoute au contrat source. Une tache sans source verifiable, sans resultat observable ou sans validation ciblee ne peut pas etre cloturee.
 - Toute nouvelle sous-tache decouverte en cours de route doit etre ajoutee ici avant execution si elle modifie l'ordre ou le perimetre.
 - Une fois toutes les taches d'un fichier todo/*.md accomplies et verifiees, deplacer ce fichier vers done/ si ce n'est pas deja fait.
 - Apres la derniere tache terminee et verifiee, supprimer ce fichier: todo/execution_order.md.
@@ -66,14 +112,19 @@ Scope completed:
 ## Processus obligatoire par tache
 
 1. Identifier la prochaine tache non cochee la plus prioritaire dans l'ordre ci-dessous.
-2. Dire a l'utilisateur ce qui doit etre fait sur la tache, les fichiers sources concernes, les dependances, les tests prevus, et le pourcentage de taches accomplies sur le total.
-3. Attendre sa validation explicite.
-4. Executer la tache.
-5. Lancer le test ou la verification obligatoire.
-6. Produire le rapport d'avancement avec X/Y et Z%.
-7. Si le fichier source todo est entierement solde, le deplacer vers done/.
+2. Effectuer le controle de coherence cible des seules sources directement applicables.
+3. Si un conflit materiel existe, le regrouper et demander une decision concise avant
+   implementation; sinon ne pas interrompre le flux.
+4. Dire a l'utilisateur ce qui doit etre fait sur la tache, les fichiers sources concernes, les dependances, les tests prevus, et le pourcentage de taches accomplies sur le total.
+5. Attendre sa validation explicite.
+6. Executer la tache.
+7. Lancer le test ou la verification obligatoire.
+8. Produire le rapport d'avancement avec X/Y et Z%.
+9. Si le fichier source todo est entierement solde, le deplacer vers done/.
 
 Baseline after the 2026-07-13 renderer-decision cleanup: 61/138 checked tasks (44.20%). Historical progress reports below retain the totals recorded at their original completion date.
+
+Reconciled state after the 2026-07-16 audit and subsequent documentation decisions: 61/148 executable tasks checked (41.22%). The current denominator includes the completed reconciliation, the WebSocket-only transport decision, secure browser/native authentication-token storage remediation, the OVHcloud production SMS provider boundary, stable user identity independent of phone, explicit cross-runtime account provisioning with preserved isolated guest mode, Argon2id migration of legacy bcrypt password verifiers, trusted-device and Recovery-Kit account recovery, snapshot-accelerated rebuild, two ordered Time Machine historical-branching tasks, reopened `/ws/sync` security validation, persistent sender auto-accept UI, true manual-linked sharing, append-only last-write-wins offline conflict handling, and private-by-default directory contact data. The full original 138-entry decision ledger remains `done/planning_audit/execution_order_reconciliation_2026-07-16.md`.
 
 ## Gardes-fous transverses obligatoires
 
@@ -159,11 +210,105 @@ Les points Molecule non termines sont repris plus bas dans l'ordre obligatoire r
 
 ## Ordre obligatoire des phases restantes
 
+### Phase 2 bis - Migration exclusive du transport métier Atome vers WebSocket
+
+Statut:
+
+Actif
+
+Depend de:
+
+- Phase 2 terminee
+
+Sources principales:
+
+- todo/cleanup_architecture/websocket_only_atome_transport.md
+- todo/cleanup_architecture/authenticated_permission_scoped_ws_sync.md
+- todo/cleanup_architecture/stable_user_identity_independent_of_phone.md
+- todo/cleanup_architecture/explicit_cross_runtime_account_provisioning.md
+- todo/cleanup_architecture/argon2id_password_hash_migration.md
+- todo/cleanup_architecture/production_sms_provider_boundary.md
+- todo/cleanup_architecture/account_recovery_trusted_device_and_recovery_kit.md
+- todo/cleanup_architecture/secure_auth_token_storage.md
+- eVe/documentations/atome_persistence_contract.md
+- atome/documentations/CRUD_apis.md
+- maps/API_MAP.md
+- maps/ARCHITECTURE_MAP.md
+
+Objectif:
+
+- Faire de `/ws/api` l'unique transport des operations applicatives et métier Atome sur Fastify, Tauri et les plateformes supportees, sans fallback HTTP. HTTP reste limite au bootstrap/configuration/sante et au transfert de ressources ou fichiers binaires explicitement documente.
+
+Taches:
+
+- [ ] Migrer toutes les operations Atome métier vers `/ws/api`, securiser `/ws/sync` par authentification et filtrage des permissions, implementer les actions WebSocket manquantes, retirer les lectures/ecritures HTTP et leurs fallbacks, puis valider la parite Fastify/Tauri/iOS et installer des garde-fous permanents; critere de sortie: tous les criteres et tests de `todo/cleanup_architecture/websocket_only_atome_transport.md` et `todo/cleanup_architecture/authenticated_permission_scoped_ws_sync.md` passent.
+- [ ] Migrer l'identite utilisateur vers un principal opaque, immuable et independant du telephone: separer les alias de connexion/recherche, supprimer toute derivation ou prediction d'identifiant depuis un numero, migrer atomiquement les comptes existants et toutes leurs references, puis valider changement, suppression et reattribution du telephone sans perte ni transfert de donnees; critere de sortie: tous les criteres et tests de `todo/cleanup_architecture/stable_user_identity_independent_of_phone.md` passent.
+- [ ] Remplacer la creation implicite de shadow users par un provisionnement Tauri/Fastify explicite et securise, tout en conservant `Essayer` comme espace invite local/prive a principal opaque isole et avec adoption transactionnelle optionnelle lors de la creation ou liaison d'un compte; critere de sortie: tous les criteres et tests de `todo/cleanup_architecture/explicit_cross_runtime_account_provisioning.md` passent.
+- [ ] Migrer les verificateurs de mot de passe Fastify/Tauri/iOS vers Argon2id: ne creer que des hashes Argon2id, verifier les anciens bcrypt uniquement pour migration, les remplacer atomiquement apres connexion reussie, imposer 15 points de code Unicode minimum et au moins 64 acceptes avec espaces sans regles de composition, refuser les secrets compromis de facon respectueuse de la confidentialite, puis borner memoire/concurrence; critere de sortie: tous les criteres et tests de `todo/cleanup_architecture/argon2id_password_hash_migration.md` passent.
+- [ ] Implementer la frontiere OVHcloud SMS de production apres une requete `/ws/api`: raccorder le point d'extension `sendSMS()` a un compte OVHcloud restreint, conserver protocoles et secrets exclusivement dans l'adaptateur serveur, interdire tout fallback automatique, remplacer `Math.random()` et les stores process-locaux par un OTP cryptographiquement sur et un defi temporaire PostgreSQL consomme atomiquement, sans OTP persiste en clair ni entree Atome/historique/sync, appliquer des limitations progressives multidimensionnelles sans verrouillage global du compte, puis journaliser les evenements de securite avec references opaques, empreinte reseau HMAC rotative, client normalise et retention automatique de six mois sans IP/user-agent complets; critere de sortie: tous les criteres et tests de `todo/cleanup_architecture/production_sms_provider_boundary.md` passent.
+- [ ] Remplacer atomiquement la recuperation SMS seule par SMS plus cle d'appareil autorise, ou SMS plus Recovery Kit lorsque l'appareil est perdu, avec changement de telephone securise, delais/notifications, revocation complete et maintien du chemin actuel jusqu'a validation du remplacement; critere de sortie: tous les criteres et tests de `todo/cleanup_architecture/account_recovery_trusted_device_and_recovery_kit.md` passent.
+- [ ] Supprimer tout stockage ou chargement de bearer tokens lisibles depuis `localStorage` ou `sessionStorage`, conserver les sessions navigateur dans des cookies HttpOnly et les secrets natifs dans le credential store ou coffre chiffre approuve, nettoyer les anciennes cles sans les reutiliser, puis installer un garde-fou permanent; critere de sortie: tous les criteres et tests de `todo/cleanup_architecture/secure_auth_token_storage.md` passent.
+
+### Phase 2 ter - Reconstruction acceleree de state_current par snapshot
+
+Statut:
+
+Actif
+
+Depend de:
+
+- Phase 2 bis terminee pour exposer les operations et diagnostics par le transport canonique
+
+Sources principales:
+
+- todo/cleanup_architecture/snapshot_accelerated_state_rebuild.md
+- eVe/documentations/atome_persistence_contract.md
+- atome/documentations/database_architecture.md
+- eVe/documentations/Atome Time Machine.md
+- maps/API_MAP.md
+- maps/ARCHITECTURE_MAP.md
+
+Objectif:
+
+- Implementer une reconstruction sure et deterministe de `state_current` depuis un snapshot de confiance et le seul suffixe d'evenements posterieur, sans autoriser la suppression ou l'archivage destructif des evenements avant validation complete.
+
+Taches:
+
+- [ ] Implementer et valider la reconstruction acceleree snapshot + curseur d'evenements + replay du suffixe, avec comparaison au replay complet et garde-fou anti-suppression; critere de sortie: toutes les exigences et validations de `todo/cleanup_architecture/snapshot_accelerated_state_rebuild.md` passent.
+
+### Phase 2 quater - Time Machine historical branching
+
+Statut:
+
+Actif
+
+Depend de:
+
+- Phase 2 bis terminee pour disposer du transport canonique des branches, historiques, snapshots et restaurations
+- Phase 2 ter terminee pour disposer d'une reconstruction snapshot + suffixe fiable avant d'introduire les branches
+
+Sources principales:
+
+- todo/ai_voice/time_machine_historical_branching.md
+- todo/ai_voice/history_and_ai.md
+- eVe/documentations/Atome Time Machine.md
+- maps/API_MAP.md
+- maps/ARCHITECTURE_MAP.md
+
+Objectif:
+
+- Etendre le replay append-only existant avec une edition historique sur branche persistante, sans modifier l'historique original et sans commencer l'implementation avant validation explicite du modele de branches.
+
+Taches:
+
+- [ ] Definir puis faire valider par l'utilisateur le modele Time Machine de branches, divergence, recomputation, conflits, fusion, abandon, permissions, synchronisation, snapshots et presentation; critere de sortie: le contrat versionne satisfait la Task 1 de `todo/ai_voice/time_machine_historical_branching.md`.
+- [ ] Implementer l'edition historique avec branches et replay avant deterministe uniquement apres validation du modele; critere de sortie: toutes les exigences et validations de la Task 2 de `todo/ai_voice/time_machine_historical_branching.md` passent sur Fastify, Tauri et les plateformes supportees.
+
 ### Phase 3 ter - Product UI Bevy migration and DOM retirement
 
 Statut:
 
-- [ ] Non commencee
+Partiel
 
 Depend de:
 
@@ -177,6 +322,8 @@ Sources principales:
 - todo/eve_features/menu_interactions.md
 - todo/eve_features/calendar_todos.md
 - todo/eve_features/map_localization.md
+- todo/communication_social/matrix_flower_context_menu.md
+- todo/rendering_graphics/robust_bevy_regression_fix_prompt_en.md
 
 Objectif:
 
@@ -187,8 +334,12 @@ Taches:
 - [x] Completer et valider les primitives BevyUI partagees manquantes et leurs interactions reelles, sans remigrer le dashboard ni le menu direct deja rendus par Bevy.
 - [x] Migrate the bottom Bevy main menu interaction model: direct actions, expandable palettes, latch state, dedicated hold actions, hold-to-palette, drag cancellation, and removal of the flattened legacy projection.
 - [x] Migrate the Flower hold contract: held-pointer palette opening, immediate Back navigation, leaf preview followed by activation on release, and cancellation safety.
-- [ ] Delete Flower/menu/toolbox DOM bridges, aliases, factories, and browser-only state once the complete Bevy interaction contract is verified and no canonical consumer remains.
-- [ ] Finaliser la parite Dashboard Bevy, migrer le dashboard, puis supprimer tout chemin HTML/DOM restant.
+- [x] Delete Flower/menu/toolbox DOM bridges, aliases, factories, and browser-only state once the complete Bevy interaction contract is verified and no canonical consumer remains.
+- [x] Confirmer le Dashboard fonctionnel rendu par Bevy: ouverture, fermeture, scroll, glissement, edition des libelles et absence d'arbre Dashboard DOM visible.
+- [ ] Ajouter le contexte Flower Matrix avec la tuile cible ou selectionnee et exactement Copy, Paste, Duplicate, Delete et Rename; critere de sortie: clic droit et appui long ouvrent le Flower canonique sur la bonne tuile, sans proxy DOM.
+- [ ] Relier les cinq actions Flower Matrix aux vrais chemins runtime et desactiver visiblement toute action indisponible; critere de sortie: chaque commande modifie la cible attendue ou retourne un etat desactive explicite, avec tests cibles.
+- [ ] Corriger ou formaliser l'ecart vertical de 0,5 px des previews Dashboard; critere de sortie: le contrat `dashboard_records` et le rendu accepte utilisent la meme regle d'arrondi.
+- [ ] Clore les notes de regression drag/lasso encore ouvertes dans `robust_bevy_regression_fix_prompt_en.md`; critere de sortie: priorite des gestes et selection lasso passent leurs interactions reelles et contrats cibles.
 - [ ] Migrer les panels/dialogs et leur infrastructure commune, puis supprimer les factories, observateurs layout et lectures de geometrie DOM devenus inutiles; le chrome Molecule reste execute en Phase 4 apres sa stabilisation fonctionnelle.
 - [ ] Realiser l'audit calendrier et implementer sa projection Bevy sans dupliquer CalendarAPI, recurrence, alarmes, todos ou fuseaux horaires.
 - [ ] Realiser l'audit map/localisation, valider le provider et la confidentialite, puis implementer la scene Bevy sans Leaflet ni widget DOM embarque.
@@ -202,11 +353,19 @@ Progress report Phase 3 ter — Flower hold contract:
 - Validation passed: focused Flower tests, main-menu BevyUI tests, `npm run check:syntax`, `npm run check:no-fallbacks`, and `npm run check:dom-projection-guardrails`.
 - Global progress: 62/138 checked tasks, 44.92%.
 
+Progress report Phase 3 quater — BevyUI browser bridge retirement:
+
+- Replaced browser menu/Flower aliases and pointer-state globals with a lightweight internal per-window registry; the product compositor now registers BevyUI menu and Flower instances without exposing them on `window`.
+- Deleted the DOM main-menu/Flower factories and obsolete bridge/guard modules, migrated geometry and login docking consumers to BevyUI measurements, and removed the Dashboard DOM toolbox fallback.
+- Updated focused tests, Playwright guidance, architecture/API/design/code maps, and added a production-source regression scan against retired aliases and Flower browser state.
+- Validation passed: 29 focused Vitest contracts, Flower/selection/layer/capture/login probes, `npm run check:syntax`, `npm run check:no-fallbacks`, `npm run check:dom-projection-guardrails`, and both root/eVe diff checks.
+- Global progress: 63/138 checked tasks, 45.65%.
+
 ### Phase 1 - Gouvernance architecture Atome/eVe
 
 Statut:
 
-- [x] Terminee
+Termine verifie
 
 Depend de:
 
@@ -271,7 +430,7 @@ Execution structurelle en cours:
 
 Statut:
 
-- [x] Terminee
+Termine verifie
 
 Depend de:
 
@@ -312,7 +471,7 @@ Rapports d'avancement Phase 2:
 
 Statut:
 
-- [x] Terminee
+Partiel
 
 Depend de:
 
@@ -321,6 +480,7 @@ Depend de:
 Sources principales:
 
 - done/planning_audit/framework_security_audit_and_vulnerability_remediation.md
+- todo/cleanup_architecture/authenticated_permission_scoped_ws_sync.md
 - todo/cleanup_architecture/eve_atome_master_cleanup_plan.md
 - todo/communication_social/user_auth.md
 - todo/communication_social/apple_mail_security.md
@@ -352,16 +512,18 @@ Taches:
 - [x] Documenter clairement les failles restantes avec impact, proprietaire, plan de remediation, et justification si elles ne sont pas corrigees immediatement.
 - [x] Produire des tests et verifications de securite cibles apres chaque correction sensible.
 - [x] Produire un rapport d'audit et de resolution des failles avec avancement global avant cloture de phase.
+- [ ] Revalider la cloture securite apres authentification et cloisonnement de `/ws/sync`; critere de sortie: les connexions anonymes sont refusees avant `welcome`, les evenements Atome, comptes et fichiers sont limites aux permissions et capacites du principal, et tous les tests de `todo/cleanup_architecture/authenticated_permission_scoped_ws_sync.md` passent.
 
 Rapports d'avancement Phase 3:
 
-- Phase 3 security audit and remediation are complete; the authoritative final report is `done/planning_audit/framework_security_audit_and_vulnerability_remediation.md`. Historical implementation details remain in that completed report.
+- The original Phase 3 security audit and remediation report remains the historical record in `done/planning_audit/framework_security_audit_and_vulnerability_remediation.md`.
+- The 2026-07-16 documentation/code reconciliation found an unauthenticated and globally forwarded `/ws/sync` channel. Phase 3 is reopened only for remediation validation after the Phase 2 bis WebSocket work.
 
 ### Phase 4 - Finalisation Molecule / MTraX
 
 Statut:
 
-- [ ] Partiellement commencee
+Partiel
 
 Depend de:
 
@@ -375,6 +537,7 @@ Sources principales:
 - todo/molecule/molecule_tests.md
 - todo/molecule/molecule_trouble_solving.md
 - todo/molecule/molecule_rename_mtrack_to_molecule.md
+- todo/molecule/PROJET_MOLECULE_DEBUG.md
 
 Taches:
 
@@ -395,7 +558,7 @@ Rapports d'avancement Phase 4:
 
 Statut:
 
-- [ ] Non commencee
+Actif
 
 Depend de:
 
@@ -425,7 +588,7 @@ Taches:
 
 Statut:
 
-- [ ] Non commencee
+Actif
 
 Depend de:
 
@@ -434,9 +597,9 @@ Depend de:
 Sources principales:
 
 - todo/sharing_search_monitoring/sharing_to_code.md
+- todo/sharing_search_monitoring/Share_tool.md
 - todo/sharing_search_monitoring/finder.md
 - todo/sharing_search_monitoring/finder_UI.md
-- todo/communication_social/matrix_flower_context_menu.md
 
 Taches:
 
@@ -445,15 +608,17 @@ Taches:
 - [ ] Consolider getCurrentProjectId().
 - [ ] Supprimer les fallbacks qui masquent les erreurs.
 - [ ] Ajouter validation et erreurs claires pour les partages non lies.
+- [ ] Implementer et valider l'option d'acceptation persistante par expediteur: case `Accepter automatiquement les prochains partages de cet expediteur` cochee par defaut dans l'ecran d'acceptation, de-cochable avant validation, politique `always` limitee au perimetre explicitement autorise et revocable; critere de sortie: le partage courant, l'auto-accept compatible, le refus d'elargissement implicite et la revocation sont verifies.
+- [ ] Implementer le vrai mode manuel lie sans conversion en copie: conserver l'identite du lien et un curseur de publication accepte, accumuler les mutations append-only autorisees sans propagation de fond, puis publier et appliquer explicitement le delta par WebSocket; critere de sortie: temps reel lie, manuel lie et copie detachee ont trois comportements distincts, testes avec permissions, expiration, rejet, reconnexion et absence de fallback.
+- [ ] Implementer la resolution hors ligne last-write-wins sans perte historique: ordonner les evenements autorises par timestamp avec departage deterministe, projeter le gagnant courant, conserver tous les evenements concurrents dans le journal append-only et produire toute correction/restauration comme nouvel evenement; critere de sortie: replay hors ligne, conflits, egalites d'horodatage, permissions, diagnostics, relecture complete et parite Fastify/Tauri/iOS sont verifies sans mutation du passe.
+- [ ] Rendre le telephone et les coordonnees prives par defaut dans tout le repertoire: ajouter un consentement explicite et revocable independant de la visibilite du profil, supprimer les contacts et secrets des listes publiques, recherches, caches hors ligne et evenements de compte, puis n'exposer les champs consentis qu'au proprietaire ou aux relations autorisees; critere de sortie: profil public sans consentement, consentement actif/revoque, relations autorisees, `/ws/sync`, Fastify/Tauri/iOS et absence absolue de `password_hash` dans les payloads clients sont testes.
 - [ ] Stabiliser Finder apres correction du modele partage/projet.
-- [ ] Ajouter le menu Flower contextuel Matrix apres stabilisation selection/command path.
-- [ ] Verifier que Copy, Paste, Duplicate, Delete et Rename routent vers les vrais chemins runtime.
 
 ### Phase 7 - Migration V2 / cleanup large / performance
 
 Statut:
 
-- [ ] Non commencee
+Actif
 
 Depend de:
 
@@ -462,12 +627,15 @@ Depend de:
 Sources principales:
 
 - todo/cleanup_architecture/file_size_and_coding_standards_remediation.md
+- todo/cleanup_architecture/file_size_inventory_2026-07-14.md
+- todo/audits/2026-07-14_framework_documentation_conformance.md
 - todo/cleanup_architecture/system_ui_component_ssot.md
 - todo/cleanup_architecture/v2_full_migration_framework.md
 - todo/cleanup_architecture/framework_cleanup_and_ui_optimization_plan_2026-04-19.md
 - todo/cleanup_architecture/deep_ux_performance_and_ios_boot_compliance.md
 - todo/cleanup_architecture/ios_fullscreen_surface_compliance.md
 - todo/tools/tool_sanitisation.md
+- todo/dev_ops/developer-experience.md
 
 Regles obligatoires de cette phase:
 
@@ -489,12 +657,13 @@ Taches:
 - [ ] Nettoyer uniquement les artefacts generes confirmes comme jetables.
 - [ ] Corriger l'occupation plein ecran iOS sur iPhone pour supprimer les bandes noires haut/bas sans regression sur iPad.
 - [ ] Executer le plan deep UX/performance apres stabilisation des frontieres V2.
+- [ ] Remplacer les echecs silencieux des APIs de developpement par des erreurs typees et actionnables, sans fallback implicite; critere de sortie: templates, parents, styles et handlers invalides sont couverts par des contrats dev/prod explicites.
 
 ### Phase 8 - Auth, Apple Mail, notifications, calendar
 
 Statut:
 
-- [ ] Non commencee
+Actif
 
 Depend de:
 
@@ -514,12 +683,13 @@ Taches:
 - [ ] Valider les contraintes Apple Mail IMAP/CalDAV.
 - [ ] Stabiliser le systeme de notifications.
 - [ ] Ajouter vue semaine, recherche et preferences calendar.
+- [ ] Liberer le focus natif du champ mot de passe apres authentification avant de reveler le workspace; critere de sortie: `user_panel_content_contract` passe sans focus retenu dans la sequence masquee.
 
 ### Phase 9 - IA vocale / MCP / editor / runtime
 
 Statut:
 
-- [ ] Non commencee
+Actif
 
 Depend de:
 
@@ -554,7 +724,7 @@ Taches:
 
 Statut:
 
-- [ ] Non commences
+Actif
 
 Depend de:
 
@@ -575,29 +745,31 @@ Sources principales:
 - todo/dev_ops/rewrite_documentation.md
 - todo/dev_ops/eve_website_publishing.md
 - todo/ai_voice/ace_step_integration.md
+- todo/sharing_search_monitoring/tool_monitor.md
 
 Taches:
 
 - [ ] MIDI.
 - [ ] Vector editing layer.
 - [ ] Universal canvas, including verification that Squirrel and preferably the open-source Squirrel + Atome engine remain correctly exported through the CDN and still produce a viable functional PWA.
-- [ ] Matrix protocol + MediaSoup communication stack: Matrix accounts, exchange rooms, social/news wall, telephony/call state, and mediasoup media-plane integration.
+- [ ] Matrix protocol + MediaSoup communication stack: Matrix accounts, exchange rooms, social/news wall and telephony/call state use the canonical WebSocket architecture for commands, signaling and durable data; only mediasoup real-time audio/video streams use the explicitly authorized WebRTC/RTP media-plane exception; critere de sortie: tous les criteres de `todo/dev_ops/install_MediaSoup.md` passent sans REST, HTTP polling or alternate signaling transport.
 - [ ] Presets/skins.
 - [ ] API sugar.
 - [ ] Publication npm.
 - [ ] Documentation.
 - [ ] Website publishing.
 - [ ] Ace Step integration in eVe.
+- [ ] Integrer le monitoring reactif des tools dans l'Info Panel apres sanitisation des tools et migration Bevy des panels; critere de sortie: tools visibles, hidden et systeme refletent et pilotent le vrai runtime sans etat parallele.
 
 ## Todo scope registry
 
 Every maintained todo family is assigned to an execution phase. A file may not be executed outside its assigned phase.
 
-- Phase 3 ter: `todo/ui_bevy/`, `todo/eve_features/menu_interactions.md`, `todo/eve_features/calendar_todos.md`, `todo/eve_features/map_localization.md`, `todo/cleanup_architecture/system_ui_component_ssot.md`, `todo/cleanup_architecture/v2_full_migration_framework.md`.
+- Phase 3 ter: `todo/ui_bevy/`, `todo/eve_features/menu_interactions.md`, `todo/eve_features/calendar_todos.md`, `todo/eve_features/map_localization.md`, `todo/communication_social/matrix_flower_context_menu.md`, `todo/rendering_graphics/robust_bevy_regression_fix_prompt_en.md`, `todo/cleanup_architecture/system_ui_component_ssot.md`, `todo/cleanup_architecture/v2_full_migration_framework.md`.
 - Phase 4: `todo/molecule/`, `todo/media_handling/MTraX_edition.md`, `todo/media_handling/RUNNING_VIDEO_AUDIO_SYNC_PLAN.md`.
 - Phase 5: `todo/media_handling/`.
 - Phase 6: `todo/sharing_search_monitoring/`, `todo/communication_social/mail.md`, `todo/communication_social/matrix.md`, `todo/communication_social/matrix_flower_context_menu.md`, `todo/communication_social/social_network_tool.md`.
-- Phase 7: remaining `todo/cleanup_architecture/` files excluding `system_ui_component_ssot.md` and `v2_full_migration_framework.md`, `todo/rendering_graphics/`, `todo/tools/`.
+- Phase 7: remaining `todo/cleanup_architecture/` files excluding `system_ui_component_ssot.md` and `v2_full_migration_framework.md`, `todo/audits/`, `todo/rendering_graphics/`, `todo/tools/`, `todo/dev_ops/developer-experience.md`.
 - Phase 8: `todo/communication_social/user_auth.md`, `todo/eve_features/Notification_tool.md`, `todo/eve_features/eve_accessibility.md`.
 - Phase 9: `todo/ai_voice/`.
 - Phase 10: `todo/midi/`, `todo/dev_ops/`, `todo/communication_social/apple_mail_security.md`, `todo/eve_features/prompt_modification_menu_mvp_v146_ios_touch_tests.md`, `todo/tests/`, `todo/execution_order.md` follow-up documentation work.
@@ -610,5 +782,6 @@ Si un de ces fichiers devient necessaire, il doit etre ajoute ici avant executio
 
 - [ ] Toutes les phases ci-dessus sont terminees.
 - [ ] Toutes les validations finales sont passees.
+- [ ] Executer et reconcilier les registres `todo/tests/`; critere de sortie: chaque scenario est automatise, valide manuellement avec preuve, ou classe obsolète sans doublon.
 - [ ] Tous les fichiers todo soldes ont ete deplaces vers done/.
 - [ ] Supprimer ce fichier: todo/execution_order.md.

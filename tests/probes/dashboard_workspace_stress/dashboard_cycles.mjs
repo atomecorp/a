@@ -123,8 +123,9 @@ export const exerciseStartupDashboardOpenClose = async (page, report) => {
         await waitForDashboardFadeSettled(page, `startup_close_${index + 1}`, false);
         await waitFrames(page, 4);
         await assertClosedNeutralDesktopEmpty(page, index + 1);
-        const menuReady = await waitFor(page, () => {
-            const measure = window.new_menu_v2?.measure?.() || null;
+        const menuReady = await waitFor(page, async () => {
+const { getMainMenuRuntime } = await import('/eVe/intuition/ribbon/bevy_ui_product_registry.js');
+            const measure = getMainMenuRuntime()?.measure?.() || null;
             return { ok: measure?.active === true && measure.treeMounted !== false, measure };
         }, 5000, 50);
         if (!menuReady.ok) throw new Error(`startup_menu_not_ready_after_close:${index + 1}:${JSON.stringify(menuReady.last)}`);

@@ -6,6 +6,13 @@
 
 L'API AUv3 fournit un pont JavaScript/Swift pour les plugins Audio Unit v3, permettant l'interaction avec le système iOS, la gestion de fichiers, et l'accès aux données audio/MIDI en temps réel.
 
+Ce pont est une exception native strictement bornée à la plateforme. Il peut adapter les
+callbacks temps réel audio/MIDI, le tempo et le transport du host, les sélecteurs de
+fichiers sandboxés et les capacités natives équivalentes. Il ne constitue pas un
+transport applicatif alternatif : l'état métier Atome, les mutations durables,
+l'authentification, le partage et la synchronisation restent exclusivement sur les
+WebSockets canoniques.
+
 ---
 
 ## 📁 Gestion de Fichiers

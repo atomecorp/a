@@ -34,10 +34,10 @@ The rule going forward is simple:
 | macOS (Tauri) | Rust `CPAL + Kira` | native | native | existing foundation |
 | iOS app (Tauri shell) | native bridge / unified playback contract | native | native | aligned with new runtime contract |
 | iOS AUv3 | Swift native render + recorder bridge | native | native | sample-accurate validation now passing |
-| Web served by Fastify (FreeBSD) | WASM / Web capture fallback | WASM | Web-native capture adapter | required compatibility target |
+| Web served by Fastify (FreeBSD) | Kira WASM + canonical web capture adapter | WASM | canonical web capture adapter | required target |
 | FreeBSD / Tauri native host | native backend with system audio dependencies | native | native | runtime prerequisites must be provisioned |
 | Android (Tauri) | CPAL / native backend | native | native | planned through Rust path |
-| Web (browser) | WASM / Web Audio fallback | WASM | WASM | fallback / compatibility path |
+| Web (browser) | Kira WASM | WASM | canonical web capture adapter | required target |
 | Windows | WASAPI | native | native | Rust path |
 | Linux | ALSA / PipeWire | native | native | Rust path |
 
@@ -99,10 +99,10 @@ The new direction is:
 3. make sample-accurate verification part of the engine contract
 4. route both audio clips and video soundtrack playback through the same engine
 
-An important consequence is that "web mode" must be treated explicitly as two different concerns:
-
-- browser playback / routing through the unified engine contract
-- browser capture fallback, potentially still using `getUserMedia` + `AudioWorklet`, when the app is running through Fastify / FreeBSD in a real browser
+An important consequence is that web playback and capture remain two explicit
+responsibilities behind the same canonical public contract. Browser media acquisition
+may use platform capture primitives inside the approved adapter, but it must not create
+a WebAudio/AudioWorklet engine, alternate product path, or runtime fallback.
 
 ## Files
 
@@ -654,7 +654,8 @@ If a video is audible both through a DOM/native video element and through the un
 
 - Rust `CPAL + Kira` remains the primary native engine
 - feature code must call the JS facade or canonical media APIs, not runtime-specific internals
-- old HTML/Tone branches must remain fallback-only until removed
+- old HTML/Tone branches are migration debt and must be removed; they are not supported
+  runtime fallbacks and must not receive new feature dependencies
 - on FreeBSD / Tauri, required system audio dependencies must be provisioned explicitly; at minimum, `JACK` must be confirmed or rejected as a real prerequisite
 
 ### iOS App
@@ -671,9 +672,10 @@ If a video is audible both through a DOM/native video element and through the un
 
 ### Web
 
-- web may keep fallback behavior longer than native runtimes
-- however, the JS public contract must remain identical
-- the fallback path must not redefine media semantics differently from the native engine
+- web must converge on the same canonical engine contract without retaining a supported
+  fallback path
+- remaining legacy paths must not be invoked as runtime fallbacks and must be removed
+  after their owning features use the canonical engine
 - for browser mode served by Fastify / FreeBSD, playback ownership must still converge to the unified contract
 - if `AudioWorklet` remains necessary, it must be limited to browser recording and not retained as a general playback engine
 
@@ -685,7 +687,7 @@ Definition of done:
 
 - all public audio playback enters through `Squirrel.av.audio`
 - `backend.kira.js` or its successor is the preferred native route
-- `backend.legacy_auv3.js` is fallback-only
+- `backend.legacy_auv3.js` is removal-bound migration debt, not a supported fallback
 - no feature module calls raw media elements for production audio
 
 ### Subsystem 2: Audio Atomes
@@ -761,7 +763,7 @@ Status legend:
 |---------------|---------------|--------------|---------------------------|------------|--------|
 | `atome/src/application/audio_runtime/audio.facade.js` | public JS facade with backend switching | remains public facade | keep as the only public JS entry point; hide backend specifics from feature code | all clip playback still enters through facade | `target` |
 | `atome/src/application/audio_runtime/backend.kira.js` | native/Rust backend adapter | unified native engine adapter | extend until it becomes the preferred native path for clip playback and transport | clip load/play/stop/rate/gain pass on Tauri/native runtimes | `target` |
-| `atome/src/application/audio_runtime/backend.legacy_auv3.js` | legacy backend | fallback only | forbid new feature dependencies; progressively detach feature modules from it | no production-critical feature depends on it | `bridge` |
+| `atome/src/application/audio_runtime/backend.legacy_auv3.js` | legacy backend | removal-bound debt | forbid new feature dependencies; detach feature modules and delete it | no production-critical feature depends on it | `bridge` |
 | `atome/src/application/examples/user.js` media playback hooks | feature-local media creation/play behavior | facade + canonical media controller | route all audio/video audible playback commands to unified engine instead of local media ownership | `audio`, `sound`, `video` atomes play through unified transport | `current` |
 
 ### Recording and Persistence
@@ -852,7 +854,8 @@ Do not introduce new production playback through:
 - Tone.js-only playback paths
 - ad hoc Swift / Obj-C playback branches outside the unified contract
 
-UI helpers and temporary fallbacks may still exist during migration, but they must not become the long-term production path.
+Legacy UI helpers discovered during migration are removal debt. They must not be invoked
+as runtime fallbacks, extended, or treated as an allowed production path.
 
 ### 2. Video Audio Must Use the Same Engine as Audio Clips
 
@@ -936,7 +939,7 @@ Only after feature parity and validation:
 
 - remove dead playback branches
 - remove duplicate recording paths
-- reduce JS fallback code to compatibility-only cases
+- delete remaining JS fallback code after the owning feature uses the canonical path
 
 ## Practical Integration Checklist
 
@@ -996,11 +999,12 @@ The legacy audio system still exists in parts of the codebase, but it should now
 | direct HTML / video audio ownership | soundtrack routed through unified engine |
 | runtime-local debug heuristics | shared sample-accuracy suite and native timing metrics |
 
-The backend order may still contain fallbacks such as `kira`, `native_audio`, or `html`, but the product direction is no longer "keep all engines alive forever". The direction is:
+Backend selection is platform ownership, not runtime fallback ordering. Each supported
+runtime has one canonical backend contract:
 
-- converge on the unified engine
-- keep fallbacks only where strictly necessary
-- remove old paths after parity and validation
+- converge on the unified engine;
+- fail explicitly when the required backend is unavailable;
+- remove old paths after parity and validation.
 
 ## Decision Summary
 

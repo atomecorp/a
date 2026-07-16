@@ -1,5 +1,7 @@
 # Product UI Bevy Migration And DOM Retirement
 
+Status: Actif
+
 Status: Active architecture and implementation backlog.
 
 ## Objective
@@ -53,7 +55,7 @@ Missing primitives must be implemented in the shared Bevy UI owner before a prod
 
 - Migrate MainToolBox, contextual Flower, palettes, toolboxes, grips, tool states, and all pointer/touch/long-press interactions to Bevy.
 - Preserve deterministic tool actions, handedness, drag threshold, latch/momentary behavior, and API/MCP parity.
-- Delete `eveGoeyMenuApi`, `new_menu`, `new_menu_v2` aliases/bridges, DOM menu factories, and browser-specific menu state only when no canonical consumer remains.
+- [x] Delete `eveGoeyMenuApi`, `new_menu`, `new_menu_v2` aliases/bridges, the DOM main-menu and Flower factories, and browser-specific pointer/menu state after migrating canonical consumers to `bevy_ui_product_registry.js`.
 - Validate desktop pointer/trackpad, touch, iOS external pointer, and keyboard-independent operation.
 
 #### Main bottom menu interaction contract

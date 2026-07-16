@@ -162,7 +162,9 @@ Compatibilite pour lister les users (atomes avec `atome_type='user'`).
 ## 6.2 Journal d'operations (source de verite)
 
 - `events` est le **log canonique**.
-- `state_current` est une **projection** calculable a partir de `events` + `snapshots`.
+- `state_current` est une **projection** actuellement reconstruite de maniere sure depuis l'integralite de `events`.
+- La cible validee est une reconstruction depuis un snapshot de confiance portant un curseur d'evenement deterministe, puis le replay des seuls evenements posterieurs.
+- Cette cible est suivie dans `todo/cleanup_architecture/snapshot_accelerated_state_rebuild.md`.
 
 ## 6.3 Double ecriture local + remote
 
@@ -194,10 +196,10 @@ Compatibilite pour lister les users (atomes avec `atome_type='user'`).
 
 # 7. Strategie de compaction
 
-- **Snapshots periodiques** (par taille ou par temps).
-- **Retention** des `particles_versions` (ex: garder N versions ou fenetre temporelle).
-- **Archive des `events`** anciens dans un stockage froid.
-- **Rebuild** de `state_current` depuis le dernier snapshot + events restants.
+- **Snapshots periodiques** (par taille ou par temps) avec curseur d'evenement et integrite verifiables.
+- **Rebuild cible** de `state_current` depuis un snapshot valide + evenements posterieurs, avec comparaison au replay complet.
+- **Retention et archivage** restent interdits tant que la reconstruction acceleree, la continuite de l'historique et la recuperation ne sont pas validees.
+- Une future politique de stockage froid devra faire l'objet d'une tache et d'un arbitrage distincts; elle ne peut pas etre deduite de la seule existence des snapshots.
 
 ---
 

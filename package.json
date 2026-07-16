@@ -78,6 +78,7 @@
     "check:no-fallbacks": "node scripts/check_no_fallbacks.mjs",
     "check:tauri-fs-boundary": "node scripts/check_tauri_fs_boundary.mjs",
     "check:molecule-guardrails": "node scripts/check_molecule_guardrails.mjs",
+    "check:execution-order": "node scripts/check_execution_order.mjs",
     "check:master-cleanup": "vitest run tests/governance/master_cleanup_governance.test.mjs",
     "check:palette-ssot": "node tests/strangler_v2/palette_ssot_guard.test.mjs",
     "check:m0": "npm run check:no-fallbacks && npm run check:tauri-fs-boundary && npm run check:molecule-guardrails",

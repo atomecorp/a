@@ -1,5 +1,7 @@
 # Molecule Media Engine - Current Debug Status
 
+Status: Termine verifie — archived current-state report from 2026-04-28.
+
 **Date**: 28 avril 2026  
 **Current Goal**: keep both runtimes green after the Fastify and Axum protected-media fixes
 

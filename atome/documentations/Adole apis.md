@@ -2,9 +2,17 @@
 
 ## Overview
 
-`adole_apis.js` is the unified WebSocket API layer for the Squirrel framework. It provides a consistent interface for data operations that work across both **Tauri** (local SQLite) and **Fastify** (remote LibSQL) backends.
+`adole_apis.js` is the unified WebSocket API layer for the Squirrel framework. It
+provides a consistent interface across **Tauri** local persistence and **Fastify**
+remote persistence without binding an account to one permanent direction of use.
 
-All functions attempt operations on both backends and return combined results, ensuring data synchronization between local and remote storage.
+An operation is committed once through the canonical append-only path of the active
+runtime. For a linked account, synchronization then propagates it automatically and
+bidirectionally between Fastify, Tauri installations, browsers, and other supported
+runtimes. A user may therefore work Browser → Tauri, Tauri → Browser, or alternate
+between linked devices without changing the state model. The `Try` guest workspace
+remains local/private until the user explicitly creates or links an account and accepts
+any proposed workspace adoption.
 
 ---
 
@@ -55,8 +63,10 @@ const result = await AdoleAPI.auth.create('33333333', 'mypassword', 'john', { vi
 **Options:**
 
 - `visibility`: `'public'` or `'private'` (default: `'public'`)
-  - **public**: User appears in `AdoleAPI.auth.list()`, others can see phone and username (default)
-  - **private**: User is hidden, must be contacted by phone number directly
+  - **public**: User appears in `AdoleAPI.auth.list()` with safe public identity fields such as user id, username, and visibility.
+  - **private**: User is hidden from the public directory.
+- Profile visibility does not authorize disclosure of the phone number.
+- Phone and other contact fields require a separate explicit, revocable consent or an authorized relationship.
 
 ### `login(phone, password, username?, callback?)`
 
@@ -71,7 +81,10 @@ if (result.tauri.success || result.fastify.success) {
 
 ### `logout(callback?)`
 
-Log out the current user (clears tokens from localStorage).
+Log out the current user, revoke the active session where possible, and remove any
+legacy browser-storage token remnants. Browser authentication must use HttpOnly session
+cookies; native bearer material belongs in the approved credential store or encrypted
+vault.
 
 ```javascript
 await AdoleAPI.auth.logout();
@@ -123,7 +136,7 @@ const result = await AdoleAPI.auth.refreshToken();
 
 ### `list(callback?)`
 
-List all **public** users. Private users are hidden and must be contacted by phone number.
+List all **public** users with field-level redaction. Private users are hidden, and phone/contact information is absent unless the authenticated caller has a separate explicit authorization.
 
 ```javascript
 const result = await AdoleAPI.auth.list();
@@ -297,7 +310,14 @@ await AdoleAPI.atomes.alter('c9fd02eb...', {
 
 ## Sharing (`AdoleAPI.sharing`)
 
-### `share(phoneNumber, atomeIds, permissions, mode, overrides?, currentProjectId?, callback?)`
+### Historical `share(phoneNumber, ...)` wrapper
+
+This phone-oriented signature is migration debt, not the canonical sharing identity
+contract. Maintained sharing persists only opaque immutable principal identifiers. If a
+caller is authorized to search by phone, the server resolves the phone to the stable
+principal before applying the share; the phone must not become a share target.
+
+`share(phoneNumber, atomeIds, permissions, mode, overrides?, currentProjectId?, callback?)`
 
 Share atomes with another user.
 
@@ -354,7 +374,7 @@ console.log(result.tauri.tables, result.fastify.tables);
 
 ## Return Value Structure
 
-Most functions return a dual-result object:
+Some current compatibility methods still return a dual-result object:
 
 ```javascript
 {
@@ -371,7 +391,10 @@ Most functions return a dual-result object:
 }
 ```
 
-**Best practice:** Check both backends and use whichever succeeded:
+This shape reports compatibility/backend observations; it must not be used to perform
+two independent canonical writes or to select an arbitrary winner. Product code uses
+the canonical result of the active runtime, while the synchronization layer reconciles
+linked runtimes from append-only events.
 
 ```javascript
 const result = await AdoleAPI.atomes.list();
@@ -400,12 +423,12 @@ AdoleAPI.auth.current((result) => {
 
 ## Architecture Notes
 
-1. **Dual Backend**: Operations run on both Tauri (local) and Fastify (remote) for redundancy
+1. **Local-first and bidirectional**: one canonical commit occurs on the active runtime; linked runtimes synchronize automatically in either direction
 2. **User-Scoped Data**: Current project is stored per-user, not globally
-3. **Machine Identification**: Each device gets a unique ID stored in localStorage
+3. **Machine Identification**: Each device gets a persistent non-secret identifier; this identifier is not an authentication token
 4. **User-Machine Association**: Bidirectional relationship for session restoration
 5. **WebSocket Communication**: Uses WebSocket for real-time operations
-6. **Token Management**: Auth tokens stored in localStorage (`local_auth_token`, `cloud_auth_token`)
+6. **Token Management**: Browser sessions use HttpOnly cookies; native bearer material uses the approved credential store or encrypted vault. Remaining Web Storage token paths are active remediation debt in `todo/cleanup_architecture/secure_auth_token_storage.md`
 
 ---
 

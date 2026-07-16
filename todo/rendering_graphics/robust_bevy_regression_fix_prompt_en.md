@@ -1,5 +1,7 @@
 # Robust Bevy / Atome Regression Fix Prompt
 
+Status: Partiel
+
 Copy and paste this entire prompt into the development agent.
 
 ## Progress Notes

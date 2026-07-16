@@ -25,8 +25,10 @@ No message must ever be lost. Messages are always stored, regardless of user pre
 
 ### 3.1 Sending a Message
 
-* User A sends a message to User B using a phone number or an existing contact.
-* User A must have at least the phone number of User B.
+* User A addresses User B by opaque principal or by an existing authorized contact.
+* A phone number may be submitted only to the authorized recipient-lookup boundary; it
+  must resolve to the opaque principal before the message is persisted and must not
+  become the durable recipient identity.
 
 ### 3.2 Message Storage (Mandatory)
 

@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { setMainMenuRuntime } from '../../eVe/intuition/ribbon/bevy_ui_product_registry.js';
 import { installMockBrowserEnv } from '../strangler_v2/_env.mjs';
 import { DASHBOARD_WORKSPACE_PROJECT_ID } from '../../eVe/domains/dashboard/dashboard_workspace_mode.js';
 
@@ -49,7 +50,7 @@ window.eveToolBase = {
     })
 };
 
-window.new_menu_v2 = {
+setMainMenuRuntime({
     showFully: () => {
         menuActive = true;
         menuTreeMounted = true;
@@ -65,7 +66,7 @@ window.new_menu_v2 = {
         return true;
     },
     measure: () => ({ active: menuActive, treeMounted: menuActive })
-};
+}, window);
 
 window.eveBevyUiRuntime = {
     readOverlayDiagnostics: () => ({

@@ -330,7 +330,8 @@ const runScenario = async () => {
         report.checks.push({ name: 'atom_click_closes_dashboard_and_removes_records', ok: true, snapshot: closed.snapshot });
         await waitForPresentationFrames(page, 12);
         const leftMenuReadyAfterClose = await waitFor(page, async () => {
-            const menu = window.new_menu_v2 || null;
+const { getMainMenuRuntime } = await import('/eVe/intuition/ribbon/bevy_ui_product_registry.js');
+            const menu = getMainMenuRuntime();
             if (typeof menu?.showFully === 'function') await Promise.resolve(menu.showFully());
             const projectId = window.eveDashboardBevyUiRuntime?.state?.projectId || '__eve_dashboard_workspace__';
             const records = window.eveToolBase?.getProjectSceneState?.(projectId)?.records || [];

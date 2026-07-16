@@ -1,7 +1,7 @@
 [
   "tests/atome/src/squirrel/apis/unified/adole_api/session.current_project.test.mjs",
-  "tests/eve/assistant_session_controller.test.mjs",
   "tests/eve/assistant_gesture_runtime.test.mjs",
+  "tests/eve/assistant_session_controller.test.mjs",
   "tests/eve/atome_property_sanitizer_ownership.test.mjs",
   "tests/eve/atome_record_projection_project_id.test.mjs",
   "tests/eve/bevy_dashboard_deferred_texture_budget.test.mjs",
@@ -62,6 +62,7 @@
   "tests/eve/virtual_scene_phase1_contract.test.mjs",
   "tests/eve/webgpu_compositor_matrix_contract.test.mjs",
   "tests/eve/workspace_scene_layers_contract.test.mjs",
+  "tests/governance/execution_order_governance.test.mjs",
   "tests/governance/master_cleanup_governance.test.mjs",
   "tests/governance/vitest_manifest_guard.test.mjs",
   "tests/probes/bevy_web_renderer_runtime_media_failure.test.mjs",

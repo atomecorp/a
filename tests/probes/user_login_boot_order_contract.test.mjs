@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { installMockBrowserEnv } from '../strangler_v2/_env.mjs';
 import { DASHBOARD_WORKSPACE_PROJECT_ID } from '../../eVe/domains/dashboard/dashboard_workspace_mode.js';
+import { setMainMenuRuntime } from '../../eVe/intuition/ribbon/bevy_ui_product_registry.js';
 
 const { window, document } = installMockBrowserEnv();
 
@@ -31,23 +32,19 @@ globalThis.$ = (tag, options = {}) => {
     return node;
 };
 
-const mainHandle = document.createElement('button');
-mainHandle.setAttribute('data-role', 'eve_intuitionx-handle');
-document.body.appendChild(mainHandle);
-
 let homeModuleLoadCount = 0;
 const menuUpdates = [];
 let menuHiddenCount = 0;
 let loginVisibleEventCount = 0;
 let loginMountedEventCount = 0;
-window.new_menu_v2 = {
+setMainMenuRuntime({
     updateContent: (content) => {
         menuUpdates.push(content);
     },
     hideCompletely: () => {
         menuHiddenCount += 1;
     }
-};
+}, window);
 window.addEventListener('eve:login-choice-visible', () => {
     loginVisibleEventCount += 1;
 });
@@ -66,11 +63,13 @@ const { installEveIntuitionBootRuntime } = await import('../../eVe/intuition/run
 
 const kickstartSource = readFileSync(new URL('../../atome/src/squirrel/kickstart.js', import.meta.url), 'utf8');
 const intuitionSource = readFileSync(new URL('../../eVe/intuition/eVeIntuition.js', import.meta.url), 'utf8');
+const productRuntimeSource = readFileSync(new URL('../../eVe/intuition/ribbon/bevy_ui_product_runtime.js', import.meta.url), 'utf8');
 
 assert.match(kickstartSource, /background:\s*'transparent'/, '#view must stay transparent during boot and cannot emit the gray #272727 frame');
 assert.doesNotMatch(kickstartSource, /background:\s*'#272727'/, '#view must not restore the boot gray background');
-assert.match(intuitionSource, /createIntuitionXMenu\(\{[\s\S]*?open:\s*false/, 'main ribbon must be created closed so no toolbox frame appears before login choice');
-assert.match(intuitionSource, /toggleWorkspaceDashboardAndMainMenu\(\{\s*source:\s*'main_handle'\s*\}\)/, 'main handle must use the workspace dashboard toggle so missing Dashboard projection is repaired');
+assert.match(productRuntimeSource, /createBevyUiMainMenuRuntime\(\{[\s\S]*?open:\s*false/, 'BevyUI main menu must be created closed so no toolbox frame appears before login choice');
+assert.match(productRuntimeSource, /toggleDashboard:\s*toggleWorkspaceDashboardAndMainMenu/, 'the BevyUI Atome tool must use the workspace Dashboard toggle');
+assert.match(intuitionSource, /createBevyUiProductRuntime\(\{[\s\S]*?toggleWorkspaceDashboardAndMainMenu/, 'boot must inject the canonical workspace Dashboard toggle into the BevyUI product runtime');
 assert.doesNotMatch(intuitionSource, /void\s+toggleDashboardRuntime\(\)/, 'main handle must not call the low-level dashboard toggle directly');
 
 const runtime = createMainMenuAuthRuntime({

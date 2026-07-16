@@ -1,5 +1,7 @@
 # Mandatory Execution Gate
 
+Status: Obsolete — duplicate superseded by `todo/sharing_search_monitoring/tool_monitor.md`.
+
 Before starting any implementation, refactor, verification, cleanup, or review work described in this file, fully read and strictly apply.
 
 Read and strictly apply:

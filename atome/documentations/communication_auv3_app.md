@@ -70,32 +70,42 @@ Note: The repo already wires onOpenURL for `atomeapp://activate`. Add your own `
 
 ## Communicating after both are open
 
-Two main channels are supported; you can use both depending on context.
+Application commands, durable state and synchronization use the canonical WebSocket
+architecture. The native mechanisms below are restricted platform adapters and must not
+become a second application command bus.
 
-### 1) App Group + Darwin notifications (recommended control channel)
+### 1) App Group + Darwin notifications (activation and wake-up only)
 
-- App Group (e.g., `group.atome.one`) used to store small messages (inbox/queue) accessible by both processes.
-- Darwin notifications used to wake the other side to read new data promptly.
+- App Group (e.g., `group.atome.one`) may store a short-lived opaque reference or
+  activation envelope accessible by both processes.
+- Darwin notifications may wake the other side so it can resolve that reference through
+  the canonical owner.
 - Robust across foreground/activation transitions and doesn’t require network permissions.
 
 Typical pattern:
 
-- Writer: encode a small JSON payload, write to UserDefaults in the App Group (optionally mirror via CFPreferences), then post a Darwin notification.
-- Reader: observe notification, drain the inbox (process and clear), act.
+- Writer: write a bounded opaque reference or activation request, then post a Darwin
+  notification.
+- Reader: observe the notification, consume and clear the reference, then enter the
+  canonical WebSocket/application path when a business operation is required.
 
-Use this channel for control messages, triggers, preset changes, etc.
+Do not use this channel to carry Atome mutations, preset state, account operations,
+sharing, synchronization or another durable application command.
 
-### 2) Local HTTP servers on 127.0.0.1 (best-effort data channel)
+### 2) Local HTTP servers on 127.0.0.1 (binary resource transfer only)
 
 - AUv3 and the App can each expose a tiny HTTP server bound to 127.0.0.1 on different ports.
 - Publish discovered ports in the App Group so the peer can reach them (e.g., `app.http.port` and `auv3.http.port`).
-- Works well for on-device file serving or streaming while both sides are active.
+- This is limited to file/media bytes and range streaming while both sides are active.
+- It must not expose application commands, canonical state reads/writes, authentication,
+  sharing or synchronization.
 
 Caveats:
 
 - AUv3 UI may be suspended when not visible; its server stops accordingly.
 - The App may be suspended in background; avoid assuming continuous availability.
-- Always guard with timeouts and fallbacks.
+- Always guard with timeouts and explicit typed failures; do not substitute another
+  application transport.
 
 ### Other nudges and activation aids
 
@@ -111,8 +121,9 @@ Caveats:
 ## Quick checklist
 
 - AUv3 → App launch with params: custom scheme + query or base64url JSON.
-- Post-launch control: App Group + Darwin inbox (small, reliable).
-- Bulk/data path (optional): local HTTP on loopback with advertised ports.
+- Post-launch activation/wake-up: App Group + Darwin with opaque bounded references.
+- Binary resource path (optional): local HTTP on loopback with advertised ports.
+- Application commands and durable state: canonical WebSocket transport only.
 - Foregrounding: custom scheme or Universal Link when interaction is needed.
 
 ---

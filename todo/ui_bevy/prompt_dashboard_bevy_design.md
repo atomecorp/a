@@ -1,5 +1,7 @@
 Créer une interface dashboard en Bevy/Rust, sans toolbox inférieure et sans données de mockup.
 
+Status: Obsolete — prototype prompt retained only as a design record; the maintained Dashboard contract is `todo/ui_bevy/dashboard.md`.
+
 Objectif :
 Reproduire le design d’un tableau de rubriques interactives en lignes horizontales, avec entêtes latérales, lanes colorées, cellules scrollables, mode focus, expansion de cellule et zone d’ajout.
 

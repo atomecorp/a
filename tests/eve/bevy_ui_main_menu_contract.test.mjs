@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import { readFileSync, readdirSync } from 'node:fs';
+import { join, resolve } from 'node:path';
 import { test } from 'vitest';
 import { JSDOM } from 'jsdom';
 
@@ -8,7 +10,7 @@ import {
     resolveBevyMainMenuItemSize
 } from '../../eVe/intuition/ribbon/bevy_ui_main_menu_model.js';
 import { createBevyUiMainMenuRuntime } from '../../eVe/intuition/ribbon/bevy_ui_main_menu_runtime.js';
-import { setMainMenuRuntime } from '../../eVe/intuition/ribbon/main_menu_bridge_runtime.js';
+import { setMainMenuRuntime } from '../../eVe/intuition/ribbon/bevy_ui_product_registry.js';
 import { createBevyMainMenuHoldRuntime } from '../../eVe/intuition/ribbon/bevy_ui_main_menu_hold_runtime.js';
 import { resolveDashboardBlockUnitSize } from '../../eVe/domains/dashboard/dashboard_tokens.js';
 import { readToolboxReservedHeight } from '../../eVe/domains/dashboard/dashboard_environment.js';
@@ -18,6 +20,34 @@ const TOOL_KEYS = Object.freeze(['home', 'find', 'capture', 'time', 'communicate
 const LIGHTGRAY_ICON_TINT = Object.freeze([211 / 255, 211 / 255, 211 / 255, 1]);
 const STANDARD_ITEM_BACKGROUND = Object.freeze([0.17, 0.19, 0.22, 1]);
 const STANDARD_LABEL_TINT = Object.freeze([0.94, 0.96, 0.98, 1]);
+
+const collectJavaScriptSources = (directory) => readdirSync(directory, { withFileTypes: true })
+    .flatMap((entry) => {
+        const path = join(directory, entry.name);
+        if (entry.isDirectory()) return collectJavaScriptSources(path);
+        return entry.isFile() && entry.name.endsWith('.js') ? [path] : [];
+    });
+
+test('BevyUI product runtimes never restore legacy browser menu or Flower state', () => {
+    const forbidden = [
+        /window\.new_menu/,
+        /eveGoeyMenuApi/,
+        /eveBevyFlowerRuntime/,
+        /__EVE_FLOWER_POINTER_LOCK__/,
+        /__EVE_FLOWER_CONTEXT_HOLD__/,
+        /__EVE_FLOWER_CONTEXT_LONG_PRESS__/,
+        /__EVE_FLOWER_TRACE__/,
+        /__eveFlowerTrace/
+    ];
+    const violations = collectJavaScriptSources(resolve(process.cwd(), 'eVe'))
+        .flatMap((path) => {
+            const source = readFileSync(path, 'utf8');
+            return forbidden
+                .filter((pattern) => pattern.test(source))
+                .map((pattern) => `${path}:${pattern.source}`);
+        });
+    assert.deepEqual(violations, []);
+});
 
 test('BevyUI Atome hold triggers at exactly 520 ms, never at 519 ms, and only once', () => {
     let scheduled;
@@ -187,7 +217,7 @@ test('BevyUI main menu model keeps the required item order and fixed dashboard h
     assert.equal(items.some((item) => item.key === 'legacy_menu'), false);
 });
 
-test('BevyUI main menu mounts only BevyUI nodes and preserves the public new_menu_v2 API', async () => {
+test('BevyUI main menu mounts only BevyUI nodes and preserves the internal runtime API', async () => {
     const harness = createRuntimeHarness();
     try {
         await harness.runtime.showFully();
@@ -453,21 +483,14 @@ test('BevyUI main menu Atome movement cancels the assistant hold', async () => {
     }
 });
 
-test('BevyUI main menu reserves dashboard height before legacy DOM measurement', async () => {
+test('BevyUI main menu is the sole dashboard toolbox height authority', async () => {
     const harness = createRuntimeHarness();
     try {
-        const legacy = harness.document.createElement('div');
-        legacy.id = 'eve_intuitionx_main_ribbon';
-        legacy.style.display = 'block';
-        legacy.style.visibility = 'visible';
-        legacy.style.opacity = '1';
-        legacy.getBoundingClientRect = () => ({ top: 620, bottom: 720, width: 200, height: 100 });
-        harness.document.body.appendChild(legacy);
         setMainMenuRuntime(harness.runtime);
         await harness.runtime.showFully();
         assert.equal(readToolboxReservedHeight(harness.surface), resolveBevyMainMenuItemSize());
         harness.runtime.hideCompletely();
-        assert.equal(readToolboxReservedHeight(harness.surface), 100);
+        assert.equal(readToolboxReservedHeight(harness.surface), 0);
     } finally {
         setMainMenuRuntime(null);
         harness.restore();

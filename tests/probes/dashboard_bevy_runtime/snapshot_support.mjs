@@ -20,33 +20,16 @@ export const dashboardSnapshot = async (page) => page.evaluate(async () => {
     const editorRecord = dashboardRecords.find((record) => normalizeDashboardRecordId(record.id) === '__eve_dashboard_editor') || null;
     const layout = state?.layout || null;
     const canvas = document.getElementById('eve_surface_project');
-    const flower = document.getElementById('eve_intuitionx_flower');
-    const flowerStyle = flower ? getComputedStyle(flower) : null;
-    const flowerRect = flower?.getBoundingClientRect?.() || null;
-    const flowerOpen = !!flower
-        && flowerStyle?.display !== 'none'
-        && flowerStyle?.visibility !== 'hidden'
-        && Number(flowerRect?.width || 0) > 0
-        && Number(flowerRect?.height || 0) > 0;
-    const toolboxCandidates = [
-        document.querySelector('#eve_intuitionx_main_ribbon'),
-        document.querySelector('#eve_intuitionx_menu_layer #eve_intuitionx_main_ribbon'),
-        document.querySelector('#menu_container_v2 > .eve-toolbox-v2-row'),
-        document.querySelector('#menu_container_v2'),
-        document.querySelector('#toolbox'),
-        document.querySelector('#toolbox_support')
-    ].filter(Boolean);
-    const domToolboxHeight = toolboxCandidates.reduce((height, element) => {
-        const rect = element.getBoundingClientRect();
-        return Math.max(height, Number(rect.height || 0));
-    }, 0);
-    const menuMeasure = typeof window.new_menu_v2?.measure === 'function' ? window.new_menu_v2.measure() : null;
-    const menuReservedHeight = typeof window.new_menu_v2?.getReservedHeight === 'function'
-        ? Number(window.new_menu_v2.getReservedHeight(canvas) || 0)
+    const { getFlowerRuntime, getMainMenuRuntime } = await import('/eVe/intuition/ribbon/bevy_ui_product_registry.js');
+    const flowerOpen = getFlowerRuntime()?.isOpen?.() === true;
+    const menu = getMainMenuRuntime();
+    const menuMeasure = typeof menu?.measure === 'function' ? menu.measure() : null;
+    const menuReservedHeight = typeof menu?.getReservedHeight === 'function'
+        ? Number(menu.getReservedHeight(canvas) || 0)
         : 0;
     const menuOverlay = window.eveBevyUiRuntime?.readOverlayDiagnostics?.()?.trees
         ?.find?.((entry) => entry?.id === 'eve_bevy_ui_main_menu') || null;
-    const toolboxHeight = Math.max(domToolboxHeight, menuReservedHeight);
+    const toolboxHeight = menuReservedHeight;
     const dashboardDomCount = document.querySelectorAll('[id^="__eve_dashboard_"], [data-dashboard]').length;
     const recordOverReservedBand = dashboardRecords.filter((record) => {
         const id = normalizeDashboardRecordId(record.id);
@@ -81,8 +64,7 @@ export const dashboardSnapshot = async (page) => page.evaluate(async () => {
             treeMounted: menuMeasure?.treeMounted === true,
             reservedHeight: menuReservedHeight,
             overlayRecordCount: Number(menuOverlay?.overlayRecordCount || 0),
-            interactiveNodeCount: Number(menuOverlay?.interactiveNodeCount || 0),
-            legacyDomHeight: domToolboxHeight
+            interactiveNodeCount: Number(menuOverlay?.interactiveNodeCount || 0)
         },
         layout: layout ? {
             handedness: layout.handedness,

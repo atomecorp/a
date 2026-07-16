@@ -444,7 +444,7 @@ export const runLargeReloadProbe = async ({
         });
         await page.reload({ timeout: 45000 });
         await page.waitForFunction(() => (
-            (!!window.__DEBUG__ || !!window.new_menu_v2 || !!document.getElementById('intuition'))
+            (!!window.__DEBUG__ || !!document.getElementById('intuition'))
             && !!document.getElementById('eve_surface_project')
         ), null, { timeout: 45000 });
         const reload = await waitForDashboardOpen({ page, report, save, screenshot, label: 'large_reload_before_resize' });

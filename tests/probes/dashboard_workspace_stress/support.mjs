@@ -201,9 +201,10 @@ export const sceneSnapshot = (page, projectId) => page.evaluate(async (id) => {
 }, projectId);
 
 export const clickMainHandle = async (page) => {
-    await page.waitForFunction(() => !!window.__DEBUG__ || !!window.new_menu_v2 || !!document.getElementById('intuition'), null, { timeout: 45000 });
+    await page.waitForFunction(() => !!window.__DEBUG__ || !!document.getElementById('intuition'), null, { timeout: 45000 });
     const bevyTarget = await page.evaluate(async () => {
-        const menu = window.new_menu_v2 || null;
+const { getMainMenuRuntime } = await import('/eVe/intuition/ribbon/bevy_ui_product_registry.js');
+        const menu = getMainMenuRuntime();
         const surface = document.getElementById('eve_surface_project');
         if (!menu?.reveal || !surface) return { ok: false, error: 'bevy_menu_or_surface_missing' };
         const measureBefore = typeof menu.measure === 'function' ? menu.measure() : null;
@@ -236,72 +237,7 @@ export const clickMainHandle = async (page) => {
         await page.mouse.click(bevyTarget.clientX, bevyTarget.clientY);
         return bevyTarget;
     }
-    let handle = page.locator('#eve_intuitionx_main_ribbon button[data-role="eve_intuitionx-handle"]').first();
-    if (!(await handle.isVisible().catch(() => false))) {
-        await page.evaluate(() => window.new_menu_v2?.reveal?.());
-    }
-    if (!(await handle.isVisible().catch(() => false))) {
-        const handles = page.locator('button[data-role="eve_intuitionx-handle"]');
-        const count = await handles.count();
-        for (let index = 0; index < count; index += 1) {
-            const candidate = handles.nth(index);
-            if (await candidate.isVisible().catch(() => false)) {
-                handle = candidate;
-                break;
-            }
-        }
-    }
-    if (!(await handle.isVisible().catch(() => false))) {
-        const target = await page.evaluate(async () => {
-            const menu = window.new_menu_v2 || null;
-            const surface = document.getElementById('eve_surface_project');
-            if (!menu?.reveal || !surface) return { ok: false, error: 'bevy_menu_or_surface_missing' };
-            await menu.reveal();
-            await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-            const measure = typeof menu.measure === 'function' ? menu.measure() : null;
-            const rect = surface.getBoundingClientRect();
-            const itemSize = Math.max(1, Number(measure?.reservedHeight || 0));
-            const itemCount = Math.max(1, Number(measure?.itemCount || 0));
-            if (!measure?.active || !itemSize || !itemCount || rect.width <= 0 || rect.height <= 0) {
-                return { ok: false, error: 'bevy_menu_not_clickable', measure, rect: { width: rect.width, height: rect.height } };
-            }
-            const handedness = String(menu.handedness || 'right') === 'left' ? 'left' : 'right';
-            const localX = handedness === 'left'
-                ? itemSize / 2
-                : rect.width - (itemSize / 2);
-            const localY = rect.height - (itemSize / 2);
-            return {
-                ok: true,
-                kind: 'bevy_ui_main_menu_atome',
-                clientX: rect.left + localX,
-                clientY: rect.top + localY,
-                localX,
-                localY,
-                measure,
-                handedness
-            };
-        });
-        if (!target.ok) throw new Error(`main_handle_bevy_target_failed:${JSON.stringify(target)}`);
-        await page.mouse.click(target.clientX, target.clientY);
-        return target;
-    }
-    await handle.waitFor({ state: 'visible', timeout: 15000 });
-    const hit = await handle.evaluate((button) => {
-        const rect = button.getBoundingClientRect();
-        const top = document.elementFromPoint(rect.x + rect.width / 2, rect.y + rect.height / 2);
-        return {
-            ok: rect.width > 0 && rect.height > 0,
-            topMatches: button === top || button.contains(top),
-            rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
-            topId: top?.id || '',
-            topRole: top?.getAttribute?.('data-role') || '',
-            topToolId: top?.getAttribute?.('data-tool-id') || '',
-            topTag: top?.tagName || ''
-        };
-    });
-    if (!hit.ok) throw new Error(`main_handle_hit_test_failed:${JSON.stringify(hit)}`);
-    await handle.click({ timeout: 10000 });
-    return hit;
+    throw new Error(`main_handle_bevy_target_failed:${JSON.stringify(bevyTarget)}`);
 };
 
 export const clickCanvasRect = async (page, rect) => {
@@ -351,7 +287,7 @@ export const clickCanvasRect = async (page, rect) => {
 
 export const enterGuestWorkspace = async (page) => {
     await page.goto(APP_URL, { timeout: 45000 });
-    await page.waitForFunction(() => !!window.__DEBUG__ || !!window.new_menu_v2 || !!document.getElementById('intuition'), null, { timeout: 45000 });
+    await page.waitForFunction(() => !!window.__DEBUG__ || !!document.getElementById('intuition'), null, { timeout: 45000 });
     const workspaceReadyPredicate = async () => {
         const current = await window.AdoleAPI?.auth?.current?.().catch(() => null);
         const projectId = window.__currentProject?.id || null;
@@ -405,7 +341,8 @@ export const enterAuthenticatedWorkspace = async (page, { prefix = 'dashboard_wo
         const current = await window.AdoleAPI?.auth?.current?.().catch(() => null);
         const dashboard = window.eveDashboardBevyUiRuntime?.state || {};
         const dashboardActive = dashboard.active === true && String(dashboard.projectId || '') === '__eve_dashboard_workspace__';
-        const menuMeasure = window.new_menu_v2?.measure?.() || null;
+        const { getMainMenuRuntime } = await import('/eVe/intuition/ribbon/bevy_ui_product_registry.js');
+        const menuMeasure = getMainMenuRuntime()?.measure?.() || null;
         const overlayDiagnostics = window.eveBevyUiRuntime?.readOverlayDiagnostics?.() || null;
         const menuOverlay = overlayDiagnostics?.trees?.find?.((tree) => tree?.id === 'eve_bevy_ui_main_menu') || null;
         return {

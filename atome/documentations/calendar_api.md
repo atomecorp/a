@@ -202,7 +202,9 @@ Returns:
 
 ### `await CalendarAPI.shareCalendar(options)`
 
-Shares a calendar with another user (phone-based).
+Shares a calendar with another stable user principal. A phone number may be accepted
+only by an explicitly authorized lookup boundary and must be resolved to the opaque
+principal before the share is persisted.
 
 Inputs:
 

@@ -1,5 +1,7 @@
 # Pourquoi utiliser Bevy UI plutôt qu’un système UI maison
 
+Status: Specification
+
 ## Décision recommandée
 
 Pour ton application Bevy + Tauri, il est préférable d’utiliser **Bevy UI comme fondation principale** plutôt que de continuer à développer toute l’interface avec un code maison bas niveau.

@@ -1,5 +1,7 @@
 eVe / Atome — Post-Implementation Cleanup, Refactor, Optimization & Architecture Enforcement Prompt
 
+Status: Obsolete — the active `.codex` modules now own these mandatory cleanup rules. This document is retained only as a historical prompt and is not executable authority.
+
 Objective
 
 Perform a complete architecture-compliant cleanup, refactor, verification, optimization, and structural validation of the modified codebase after any:
