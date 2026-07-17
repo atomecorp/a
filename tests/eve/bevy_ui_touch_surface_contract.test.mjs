@@ -4,7 +4,10 @@ import { JSDOM } from 'jsdom';
 
 import { createEveBevyUiRuntime } from '../../eVe/domains/rendering/bevy_ui_runtime.js';
 import { clearAllProjectScenes, getProjectSceneState } from '../../eVe/domains/rendering/project_scene_runtime.js';
-import { buildAtomeContextualEditTree } from '../../eVe/intuition/runtime/eve_intuition/atome_contextual_edit_model.js';
+import {
+    buildAtomeContextualEditTree,
+    contextualGestureProps
+} from '../../eVe/intuition/runtime/eve_intuition/atome_contextual_edit_model.js';
 import { createAtomeContextualEditRuntime } from '../../eVe/intuition/runtime/eve_intuition/atome_contextual_edit_runtime.js';
 
 test('BevyUI canvas binding owns touch gestures for mobile pointer scroll', async () => {
@@ -60,11 +63,11 @@ test('Atome contextual edit stays on one clipped Bevy tree with handed rail and 
     };
     const right = buildAtomeContextualEditTree(input);
     const rail = findNode(right.root, 'eve_bevy_panel_atome_contextual_edit_rail');
-    assert.deepEqual(rail.style.position, [748, 392]);
+    assert.deepEqual(rail.style.position, [740, 360]);
     assert.equal(rail.children.length, 1);
-    assert.deepEqual(findNode(rail, 'atome_contextual_tool_size_background').style.size, [52, 156]);
+    assert.deepEqual(findNode(rail, 'atome_contextual_tool_size_background').style.size, [60, 180]);
     assert.equal(findNode(right.root, 'atome_contextual_edit_b_footer'), null);
-    assert.equal(findNode(rail, 'atome_contextual_tool_size').style.size[1], 156);
+    assert.equal(findNode(rail, 'atome_contextual_tool_size').style.size[1], 180);
     const left = buildAtomeContextualEditTree({ ...input, handedness: 'left' });
     assert.equal(findNode(left.root, 'eve_bevy_panel_atome_contextual_edit_rail').style.position[0], 0);
 });
@@ -82,7 +85,19 @@ test('Atome contextual footer follows projected media bounds and uses compact da
     assert.deepEqual(footer.style.position, [40, 470]);
     assert.deepEqual(footer.style.size, [310, 24]);
     assert.deepEqual(background.style.background, [0.12, 0.13, 0.17, 0.98]);
+    assert.deepEqual(findNode(tree.root, 'atome_contextual_edit_media_resize_left_icon').style.scale, [-1, 1]);
+    assert.deepEqual(findNode(tree.root, 'atome_contextual_edit_media_resize_right_icon').style.scale, [-1, 1]);
     assert.ok(findNode(tree.root, 'atome_contextual_tool_detail_background'));
+});
+
+test('Atome contextual drag and homothetic resize stay above the main toolbox', () => {
+    const limits = { viewportWidth: 800, viewportHeight: 600, mainMenuHeight: 52 };
+    assert.deepEqual(contextualGestureProps({
+        ...limits, gesture: { mode: 'drag', origin: { x: 40, y: 30, width: 200, height: 100 }, dx: 900, dy: 900 }
+    }), { left: 600, top: 424 });
+    assert.deepEqual(contextualGestureProps({
+        ...limits, gesture: { mode: 'resize', edge: 'right', origin: { x: 0, y: 30, width: 100, height: 100 }, dx: 900, dy: 900 }
+    }), { width: 494, height: 494 });
 });
 
 test('Atome contextual rail projects visible tool records inside the lateral rail', async () => {
@@ -108,7 +123,7 @@ test('Atome contextual rail projects visible tool records inside the lateral rai
     const toolLabel = projected.records.find((record) => record.id.includes('atome_contextual_tool_detail_label_text'));
     const footer = projected.records.find((record) => record.id.includes('atome_contextual_edit_a_footer_background'));
     const footerTitle = projected.records.find((record) => record.id.includes('atome_contextual_edit_a_title_text'));
-    assert.deepEqual([tool.properties.left, tool.properties.top, tool.properties.width, tool.properties.height], [748, 496, 52, 52]);
+    assert.deepEqual([tool.properties.left, tool.properties.top, tool.properties.width, tool.properties.height], [740, 480, 60, 60]);
     assert.deepEqual([footer.properties.left, footer.properties.top, footer.properties.width, footer.properties.height], [40, 170, 200, 24]);
     assert.ok(toolIcon.properties.renderLayer > tool.properties.renderLayer);
     assert.ok(toolLabel.properties.renderLayer > tool.properties.renderLayer);
@@ -144,6 +159,9 @@ test('Atome contextual runtime keeps local edits and emits one canonical homothe
     const grip = findNode(rendered.at(-1).root, 'atome_contextual_edit_a_resize_left');
     grip.on.press({ client_x: 40, client_y: 130 });
     grip.on.drag({ delta_x: 20, delta_y: 0 });
+    await runtime.render();
+    assert.deepEqual(findNode(rendered.at(-1).root, 'atome_contextual_edit_a_footer').style.position, [60, 120]);
+    assert.deepEqual(findNode(rendered.at(-1).root, 'atome_contextual_edit_a_footer').style.size, [180, 24]);
     grip.on.release();
     await Promise.resolve();
     assert.deepEqual(intents.map((intent) => intent.kind), ['resize.start', 'resize.move', 'resize.end']);
