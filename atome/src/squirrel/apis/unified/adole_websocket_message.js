@@ -1,9 +1,5 @@
 // Extracted from adole_websocket.js: TauriWebSocket#handleMessage — inbound WS message dispatch.
 // Applied as a prototype mixin so `this` stays bound to the socket instance.
-import {
-    MEDIA_PATCH_KIND_HINTS, hasMediaSourceHintsInPatch, mediaPatchHintsByAtomeId,
-    normalizeMediaPatchKindHint, rememberMediaPatchHint
-} from './adole_backend.js';
 import { shouldIgnoreRealtimePatch } from './realtime_dedupe.js';
 
 export const messageHandlerMixin = {
@@ -34,90 +30,6 @@ export const messageHandlerMixin = {
                                 phone: message.from?.phone || null,
                                 username: message.from?.username || null,
                                 timestamp: message.timestamp || null
-                            };
-
-                            const applyDomPatch = (atomeId, properties = {}) => {
-                                if (!atomeId || typeof document === 'undefined') return;
-                                const elements = new Set();
-                                const byId = document.getElementById(`eve-atome_${atomeId}`)
-                                    || document.getElementById(`atome_${atomeId}`)
-                                    || document.getElementById(String(atomeId));
-                                if (byId) elements.add(byId);
-                                if (!elements.size) return;
-                                const isMediaLikeElement = (el) => {
-                                    if (!el) return false;
-                                    return !!el.querySelector?.('video, audio, img');
-                                };
-                                const patchKind = normalizeMediaPatchKindHint(
-                                    properties?.kind
-                                    || properties?.type
-                                    || properties?.media_type
-                                    || properties?.mediaType
-                                    || ''
-                                );
-                                if (MEDIA_PATCH_KIND_HINTS.has(patchKind)) {
-                                    rememberMediaPatchHint(atomeId, patchKind);
-                                }
-                                let mediaLikePatch = !!(String(atomeId || '').trim() && mediaPatchHintsByAtomeId.has(String(atomeId).trim()));
-                                if (!mediaLikePatch && hasMediaSourceHintsInPatch(properties)) {
-                                    mediaLikePatch = true;
-                                }
-                                if (!mediaLikePatch) {
-                                    elements.forEach((el) => {
-                                        if (mediaLikePatch) return;
-                                        if (!isMediaLikeElement(el)) return;
-                                        mediaLikePatch = true;
-                                        const elKind = normalizeMediaPatchKindHint(el.dataset?.atomeKind || el.dataset?.kind || '');
-                                        if (MEDIA_PATCH_KIND_HINTS.has(elKind)) rememberMediaPatchHint(atomeId, elKind);
-                                    });
-                                }
-                                const cssProps = properties?.css && typeof properties.css === 'object' ? properties.css : null;
-                                if (cssProps) {
-                                    Object.entries(cssProps).forEach(([key, value]) => {
-                                        elements.forEach((el) => { el.style[key] = typeof value === 'number' ? `${value}px` : String(value); });
-                                    });
-                                }
-                                Object.entries(properties || {}).forEach(([key, value]) => {
-                                    if (value == null) return;
-                                    if (key === 'text' || key === 'textContent' || key === 'content') {
-                                        elements.forEach((el) => {
-                                            if (mediaLikePatch || isMediaLikeElement(el)) return;
-                                            const textTarget = el.querySelector?.('[data-role="atome-text"]') || null;
-                                            if (key === 'content') {
-                                                if (textTarget instanceof HTMLElement) {
-                                                    textTarget.innerHTML = String(value);
-                                                    return;
-                                                }
-                                                const hasStructuralChildren = !!el.querySelector?.('[data-role], video, audio, img, svg, canvas');
-                                                if (!hasStructuralChildren) el.innerHTML = String(value);
-                                                return;
-                                            }
-                                            if (textTarget instanceof HTMLElement) {
-                                                textTarget.textContent = String(value);
-                                                return;
-                                            }
-                                            const hasStructuralChildren = !!el.querySelector?.('[data-role], video, audio, img, svg, canvas');
-                                            if (!hasStructuralChildren) el.textContent = String(value);
-                                        });
-                                        return;
-                                    }
-                                    if (key.startsWith('css.')) {
-                                        const cssKey = key.slice(4);
-                                        elements.forEach((el) => { el.style[cssKey] = typeof value === 'number' ? `${value}px` : String(value); });
-                                        return;
-                                    }
-                                    if (key === 'rotation' || key === 'rotate') {
-                                        const next = String(value).includes('deg') || String(value).includes('rad')
-                                            ? String(value)
-                                            : `${value}deg`;
-                                        elements.forEach((el) => { el.style.transform = `rotate(${next})`; });
-                                        return;
-                                    }
-                                    if (['left', 'top', 'right', 'bottom', 'width', 'height', 'opacity', 'zIndex', 'background', 'backgroundColor', 'color']
-                                        .includes(key)) {
-                                        elements.forEach((el) => { el.style[key] = typeof value === 'number' ? `${value}px` : String(value); });
-                                    }
-                                });
                             };
 
                             if (commandName === 'share-create' && typeof window !== 'undefined') {
@@ -151,7 +63,6 @@ export const messageHandlerMixin = {
                                         window.dispatchEvent(new CustomEvent('squirrel:atome-updated', {
                                             detail: { id: atomeId, atome_id: atomeId, properties, source: 'realtime', origin: 'adole:share-sync' }
                                         }));
-                                        applyDomPatch(atomeId, properties);
                                     }
                                 }
                                 return;
@@ -207,9 +118,46 @@ export const messageHandlerMixin = {
                         error: message.error,
                         // Server may reply with { atome } for create/get
                         atome: message.atome,
-                        data: message.data ?? message.atome,
+                        data: message.data ?? message.atome ?? message,
                         atomes: message.atomes,
-                        count: message.count
+                        count: message.count,
+                        history: message.history,
+                        versions: message.versions,
+                        events: message.events
+                    });
+                }
+                return;
+            }
+
+            if (
+                ['events-response', 'state-current-response', 'snapshot-response', 'user-data-response', 'sync-response']
+                    .includes(message.type)
+                && (message.request_id || message.requestId)
+            ) {
+                const pending = this.pendingRequests.get(message.request_id || message.requestId);
+                if (pending) {
+                    this.pendingRequests.delete(message.request_id || message.requestId);
+                    clearTimeout(pending.timeout);
+                    const payload = message.data && typeof message.data === 'object'
+                        ? message.data
+                        : message;
+                    pending.resolve({
+                        ok: message.success,
+                        success: message.success,
+                        status: message.success ? 200 : 400,
+                        error: message.error,
+                        data: message,
+                        event: message.event ?? payload.event,
+                        events: message.events ?? payload.events,
+                        state: message.state ?? payload.state,
+                        states: message.states ?? payload.states,
+                        snapshot: message.snapshot ?? payload.snapshot,
+                        snapshots: message.snapshots ?? payload.snapshots,
+                        snapshot_id: message.snapshot_id ?? payload.snapshot_id,
+                        atomes: message.atomes ?? payload.atomes,
+                        changes: message.changes ?? payload.changes,
+                        deleted: message.deleted ?? payload.deleted,
+                        acknowledged: message.acknowledged ?? payload.acknowledged
                     });
                 }
                 return;

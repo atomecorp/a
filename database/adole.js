@@ -40,6 +40,7 @@ import {
 import { createAdolePermissionApi } from './adole_permissions.js';
 import { createAdoleSyncApi } from './adole_sync.js';
 import { createAdoleSnapshotsApi } from './adole_snapshots.js';
+import { buildStateSnapshotRestoreEvents } from './state_snapshot_restore.js';
 import {
     HISTORY_EVENT_CLASS,
     HISTORY_REDO_RULE,
@@ -1711,38 +1712,11 @@ export async function getStateSnapshot(snapshotId) {
     };
 }
 
-function normalizeStateSnapshotRecords(stateBlob) {
-    if (Array.isArray(stateBlob)) return stateBlob;
-    if (!stateBlob || typeof stateBlob !== 'object') return [];
-    if (Array.isArray(stateBlob.records)) return stateBlob.records;
-    if (Array.isArray(stateBlob.states)) return stateBlob.states;
-    if (Array.isArray(stateBlob.state_current)) return stateBlob.state_current;
-    return [];
-}
-
 export async function restoreStateSnapshot(snapshotId, options = {}) {
     const snapshot = await getStateSnapshot(snapshotId);
     if (!snapshot) throw new Error('Snapshot not found');
-    const records = normalizeStateSnapshotRecords(snapshot.state_blob);
-    const actor = options.actor ?? snapshot.actor ?? null;
     const txId = options.tx_id || options.txId || `snapshot_restore_${snapshotId}`;
-    const events = records
-        .map((record) => {
-            const atomeId = record?.atome_id || record?.atomeId || record?.id || null;
-            if (!atomeId) return null;
-            return {
-                kind: 'set',
-                atome_id: atomeId,
-                project_id: record?.project_id || record?.projectId || snapshot.project_id || null,
-                actor,
-                payload: {
-                    props: record?.properties && typeof record.properties === 'object'
-                        ? record.properties
-                        : {}
-                }
-            };
-        })
-        .filter(Boolean);
+    const events = buildStateSnapshotRestoreEvents(snapshot, options);
     if (!events.length) return [];
     return appendEvents(events, { txId });
 }

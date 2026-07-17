@@ -417,7 +417,6 @@ Purpose: Product-neutral security, cloud sync, server verification, trusted key 
 
 Main files:
 
-- `atome/security/cloudSync.js`
 - `atome/security/serverVerification.js`
 - `atome/security/serverVerificationCrypto.js`
 - `atome/security/serverVerificationState.js`
@@ -764,7 +763,7 @@ Reusable APIs:
 - ADOLE auth, session, projects, storage, sharing, activities, atomes, and runtime modules.
 - `adole_api/session.js`, `projects.js`, `auth_workspace.js`, and `auth.js` jointly own durable current-project restoration across WebView reloads: the cache is stored in `squirrel_current_project_v2` with `userId`, restored only for the same authenticated user, migrated or cleared by `auth_workspace.js` during login/register through the canonical `transferOwner` path, and only orchestrated by `auth.js`.
 - `eVe/intuition/tools/project_bootstrap.js` is now gated by the startup-view contract. Default `startup_view: "dashboard"` marks the authenticated/anonymous session ready without selecting, creating, setting current, or loading a project; the Dashboard neutral scene is the startup surface. The existing current-project recovery path remains available only when the future startup view is explicitly `"project"`: it may recover from a stale empty current project by selecting the single renderable `project_id` already owned by the authenticated user in `state_current`; it must not select from another owner or from DOM state. If project creation succeeds in project startup mode but the authoritative relist is not immediately visible, the bootstrap scheduler must still queue the bounded retry from the active bootstrap pass so the user does not remain logged in without a current project.
-- ADOLE atome project-state reads keep Tauri loopback state authoritative and avoid secondary cross-origin loopback Fastify `/api/state_current` fetches.
+- ADOLE Atome project-state reads use the active runtime's `/ws/api` connection exclusively; Tauri local state remains authoritative without a secondary HTTP read.
 - Realtime dedupe and text DOM contracts.
 
 Should be extended by:

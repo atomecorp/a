@@ -60,6 +60,7 @@ tracing-appender = "0.2"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 urlencoding = "2"
 futures-util = "0.3"
+tokio-tungstenite = { version = "0.24", features = ["rustls-tls-native-roots"] }
 base64 = "0.22"
 cpal = "0.15"
 hound = "3"

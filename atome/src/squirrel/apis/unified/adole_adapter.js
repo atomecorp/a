@@ -315,26 +315,62 @@ function createWebSocketAdapter(tokenKey, backend = 'tauri') {
         },
 
         userData: {
-            async deleteAll() {
-                return { ok: false, success: false, error: 'Not implemented' };
+            async deleteAll(data = {}) {
+                const token = getToken(tokenKey);
+                return getWs().send({
+                    type: 'user-data',
+                    action: 'delete-all',
+                    token,
+                    tx_id: data.tx_id || data.txId || null
+                });
             },
-            async export() {
-                return { ok: false, success: false, error: 'Not implemented' };
+            async export(data = {}) {
+                const token = getToken(tokenKey);
+                return getWs().send({
+                    type: 'user-data',
+                    action: 'export',
+                    token,
+                    limit: data.limit
+                });
             }
         },
 
         sync: {
             async getPending() {
-                return { ok: true, success: true, changes: [] };
+                const token = getToken(tokenKey);
+                return getWs().send({ type: 'sync', action: 'get-pending', token });
             },
-            async push(data) {
-                return { ok: true, success: true };
+            async push(data = {}) {
+                const token = getToken(tokenKey);
+                return getWs().send({
+                    type: 'sync',
+                    action: 'push',
+                    token,
+                    events: data.events || data.changes || [],
+                    tx_id: data.tx_id || data.txId || null,
+                    sync_source: data.sync_source || data.syncSource || null
+                });
             },
-            async pull() {
-                return { ok: true, success: true, changes: [] };
+            async pull(data = {}) {
+                const token = getToken(tokenKey);
+                return getWs().send({
+                    type: 'sync',
+                    action: 'pull',
+                    token,
+                    since: data.since || null,
+                    until: data.until || null,
+                    limit: data.limit,
+                    offset: data.offset
+                });
             },
-            async ack() {
-                return { ok: true, success: true };
+            async ack(data = {}) {
+                const token = getToken(tokenKey);
+                return getWs().send({
+                    type: 'sync',
+                    action: 'ack',
+                    token,
+                    atome_ids: data.atome_ids || data.atomeIds || []
+                });
             }
         }
     };

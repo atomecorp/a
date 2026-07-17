@@ -319,21 +319,22 @@ Atome browser projection owner: `atome/src/squirrel/apis/unified/adole_api/atome
 
 Current project restoration owner: `atome/src/squirrel/apis/unified/adole_api/session.js` persists `squirrel_current_project_v2` with an explicit `userId`, `projects.js` restores it only for that same authenticated user, and `auth_workspace.js` owns cached pre-auth/anonymous workspace migration through the canonical `transferOwner` adapter before clearing the cache. `auth.js` only orchestrates login flows that call that migration owner. Tauri reload/relogin must not fall back to a cross-user project cache or a DOM-derived project id.
 
-### Server HTTP and WebSocket APIs
+### Server resource HTTP and application WebSocket APIs
 
 Ownership: Atome open server layer.
 
-Primary sources: `server/server.js`, `server/auth.js`, `server/atomeRoutes.orm.js`, `server/atomeCrudRoutes.js`, `server/atomeEventRoutes.js`, `server/atomeRouteContract.js`, `server/atomeSyncRuntime.js`, `server/mailRoutes.js`, `server/sharing.js`, `server/userFiles.js`, `server/visio.js`, `server/wsApiState.js`, `server/wsSend.js`, `server/serverIdentity.js`.
+Primary sources: `server/server.js`, `server/auth.js`, `server/atomeRoutes.orm.js`, `server/wsAtomeOperations.js`, `server/wsApiIdentity.js`, `server/wsSyncSecurity.js`, `server/atomeSyncRuntime.js`, `server/mailRoutes.js`, `server/sharing.js`, `server/userFiles.js`, `server/visio.js`, `server/wsApiState.js`, `server/wsSend.js`, `server/serverIdentity.js`.
 
 Verified route families:
 
 - Health and diagnostics: `/health`, `/healthz`, `/__whoami`, `/dev/state`, `/dev/client-log`, `/client-log`, `/dev/snapshot`.
-- Authentication and identity: `/api/auth/*`, `/api/server/identity`, `/api/server/verify`, `/api/server/status`.
-- Atome object and state: `/api/atome/*`, `/api/events`, `/api/events/commit`, `/api/events/commit-batch`, `/api/state_current`, `/api/snapshots`.
+- Application operations: typed `/ws/api` families for authentication, Atome CRUD/history, events, `state-current`, snapshots/restoration, sharing, synchronization, and user data.
+- Authenticated notifications: `/ws/sync`, with principal binding before `welcome` and permission-scoped event delivery.
+- Server identity and operational discovery: `/api/server/identity`, `/api/server/verify`, `/api/server/status`.
 - Uploads and protected files: `/api/uploads`, `/api/uploads/chunk`, `/api/uploads/complete`, `/api/uploads/:file`, `/api/files/*`, `/api/recordings/:file`, `/api/extract-audio/:file`.
 - Mail gateway: `/api/eve/mail/sync`, `/api/eve/mail/send`, `/api/eve/mail/mark-read`, `/api/eve/mail/archive`, `/api/eve/mail/delete`.
 - Admin/database/visio: `/api/admin/users/export`, `/api/admin/users/import`, `/api/db/status`, `/api/db/stats`, `server/visio.js` routes, `/ws/visio`.
-- WebSocket APIs: `/ws/api`, `/ws/sync`.
+- WebSocket APIs: `/ws/api`, `/ws/sync`, `/ws/visio`; Tauri local development control uses `/ws/control`.
 
 Boundary status: Open server infrastructure. Route names containing `eve` currently exist for product mail integration and must be reviewed before being treated as stable open API names.
 
@@ -372,13 +373,13 @@ numbers, passwords, tokens and recovery/device secrets are forbidden. Access is
 role-restricted and audited. Automatic retention is initially six months except for an
 explicit narrowly scoped incident or legal hold.
 
-Atome route ownership: `server/atomeRoutes.orm.js` owns route orchestration, authentication, and event commit helpers; CRUD HTTP routes are owned by `server/atomeCrudRoutes.js`; event/state/snapshot routes are owned by `server/atomeEventRoutes.js`; boundary formatting lives in `server/atomeRouteContract.js`; WebSocket sync side effects live in `server/atomeSyncRuntime.js`.
+Atome operation ownership: `server/wsAtomeOperations.js` owns typed `/ws/api` event, state, snapshot, history, user-data, and sync request/response operations; `server/wsApiIdentity.js` owns verified principal resolution; `server/atomeRoutes.orm.js` retains the canonical event commit helpers; `server/wsSyncSecurity.js` owns authenticated permission-scoped notification filtering. Historical HTTP route modules are not composed into the maintained server.
 
 Tauri Axum parity: local media write endpoints in `platforms/desktop-tauri/src/server/mod.rs` that return uploaded media ownership must expose `owner`, `owner_id`, and `ownerId` together so browser-on-Axum and Tauri media URLs can preserve `media_user_id` for protected `/api/uploads/:file` and `/api/recordings/:file` reads.
 
-Tauri Axum auth parity: `platforms/desktop-tauri/src/server/mod.rs` must expose `GET /api/auth/me` through local auth so project reload hydration can restore the active user before reading persisted Atome/project state from `/api/state_current`.
+Tauri Axum parity: `platforms/desktop-tauri/src/server/mod.rs` exposes authentication and Atome application operations through `/ws/api`; reload hydration and current-state reads use the same WebSocket contract with no HTTP alternate.
 
-Tauri remote-control status: `platforms/desktop-tauri/src/server/remote_control.rs` owns `GET /__tauri_remote/status`. It consumes the existing remote-control authorization boundary and exposes only enabled/token-required/user status; route composition remains in `server/mod.rs`.
+Tauri remote-control status: `platforms/desktop-tauri/src/server/remote_control_ws.rs` owns the typed `/ws/control` dispatcher. The `status` action and six audio actions reuse the existing authorization and native handlers; no HTTP command route is composed.
 
 Tauri local ownership migration: `platforms/desktop-tauri/src/server/local_atome.rs` owns the server-side guard for `transfer-owner`. It permits authenticated migration only from explicit anonymous owners or local owners without login credentials (`phone` and `password_hash` absent), and rejects transfer from any credentialed user.
 
@@ -929,9 +930,9 @@ Boundary status: Closed product runtime API. Public promotion would require a pr
 
 Ownership: Atome open.
 
-Primary sources: `atome/security/trusted_keys.js`, `atome/security/serverVerification.js`, `atome/security/serverVerificationCrypto.js`, `atome/security/serverVerificationState.js`, `atome/security/cloudSync.js`, `atome/security/syncQueue.js`, `atome/security/sync_queue_constants.js`, `atome/security/sync_queue_storage.js`, `atome/security/sync_queue_items.js`, `atome/security/sync_queue_credentials.js`, `atome/src/squirrel/security/bootstrap.js`, `atome/src/squirrel/security/token_vault.js`.
+Primary sources: `atome/security/trusted_keys.js`, `atome/security/serverVerification.js`, `atome/security/serverVerificationCrypto.js`, `atome/security/serverVerificationState.js`, `atome/security/syncQueue.js`, `atome/security/sync_queue_constants.js`, `atome/security/sync_queue_storage.js`, `atome/security/sync_queue_items.js`, `atome/security/sync_queue_credentials.js`, `atome/src/squirrel/security/bootstrap.js`, `atome/src/squirrel/security/token_vault.js`.
 
-Verified responsibilities: trusted server metadata, fingerprint lookup, server verification, cloud sync status, sync queue behavior, token vault bootstrap, and token vault tests.
+Verified responsibilities: trusted server metadata, fingerprint lookup, server verification, sync queue behavior, token vault bootstrap, and token vault tests. The retired HTTP `cloudSync.js` API is unavailable; explicit cross-runtime provisioning remains a separate validated task.
 
 Boundary status: Open framework security. eVe may call these contracts but must not own product-specific bypasses.
 
@@ -1124,7 +1125,7 @@ Public namespaces:
 - `machine`
 - `security`
 
-Runtime rule: in Tauri, Adole `atomes` project-state reads must not issue secondary `/api/state_current` fetches to a loopback Fastify origin that differs from the page origin; local state remains authoritative and cloud/non-loopback Fastify reads remain explicit.
+Runtime rule: in Tauri, Adole `atomes` project-state reads use the active local `/ws/api` connection. They must not issue a secondary HTTP state read or silently switch to loopback Fastify.
 
 Owner: Atome open.
 
@@ -1155,7 +1156,7 @@ Owner: Canonical Atome mutation boundary installed from the eVe closed runtime b
 
 Use before creating: any durable Atome mutation, snapshot, current-state read, or event-list read from product runtime code.
 
-Runtime rule: Tauri/local-Axum commit and current-state requests must not target cross-origin loopback Fastify for `/api/events/commit*` or `/api/state_current*`; the fetch boundary rewrites those protected routes to the local backend to avoid Safari CORS timing races. The validated target remains exclusive `/ws/api` transport and is tracked separately in `todo/cleanup_architecture/websocket_only_atome_transport.md`.
+Runtime rule: Tauri/local-Axum commit, history, snapshot, synchronization, and current-state requests use the local `/ws/api` endpoint. Cross-origin loopback Fastify HTTP requests and transport rewriting are forbidden.
 
 Adole rule: detached WebSocket adapters expose `adapter.atome.commit` and `adapter.atome.commitBatch` for event writes. Profile, sharing, and Atome API synchronization code must use those event methods instead of direct `create` / `alter` adapter writes.
 
@@ -1163,28 +1164,26 @@ Do not duplicate in: UI components, panels, tools, import handlers, media runtim
 
 Status: Public runtime boundary; implementation ownership should be revisited during open/closed boundary cleanup because the installer currently lives under eVe.
 
-#### Server HTTP and WebSocket API
+#### Server resource HTTP and application WebSocket API
 
 Visibility: Public server API for runtime clients and infrastructure, except product-named route families marked to verify.
 
-Evidence: Fastify route declarations in `server/server.js`, `server/auth.js`, `server/atomeRoutes.orm.js`, `server/mailRoutes.js`, and `server/visio.js`.
+Evidence: Fastify route declarations and dispatch in `server/server.js`, `server/wsAtomeOperations.js`, `server/wsSyncSecurity.js`, `server/mailRoutes.js`, and `server/visio.js`.
 
 Public route families:
 
 - Health and config: `GET /health`, `GET /healthz`, `GET /__whoami`, `GET /server_config.json`, `GET /api/server-info`.
-- Authentication and account: `/api/auth/check-phone`, `/api/auth/users`, `/api/auth/register`, `/api/auth/sync-register`, `/api/auth/login`, `/api/auth/logout`, `/api/auth/me`, `/api/auth/update`, `/api/auth/request-otp`, `/api/auth/reset-password`, `/api/auth/change-password`, `/api/auth/request-phone-change`, `/api/auth/verify-phone-change`, `/api/auth/delete-account`, `/api/auth/refresh`.
 - Server identity and verification: `/api/server/identity`, `/api/server/verify`, `/api/server/status`.
-- Atome object routes: `/api/atome/create`, `/api/atome/list`, `/api/atome/:id`, `/api/atome/:id/alter`, `/api/atome/:id/history`, `/api/atome/:id/snapshot`.
-- Event and projection routes: `/api/events/commit`, `/api/events/commit-batch`, `/api/events`, `/api/state_current/:id`, `/api/state_current`, `/api/snapshots`, `/api/snapshots/:id`.
 - File and upload routes: `/api/uploads`, `/api/uploads/chunk`, `/api/uploads/complete`, `/api/uploads/:file`, `/api/files/my-files`, `/api/files/accessible`, `/api/files/share`, `/api/files/unshare`, `/api/files/visibility`, `/api/files/stats`, `/api/recordings/:file`, `/api/extract-audio/:file`.
-- Admin and database routes: `/api/admin/users/export`, `/api/admin/users/import`, `/api/admin/apply-update`, `/api/admin/batch-update`, `/api/admin/sync-from-zip`, `/api/admin/sync-clients`, `/api/db/status`, `/api/db/stats`.
-- WebSocket routes: `/ws/api`, `/ws/sync`, `/ws/visio`.
+- Admin binary archive and database diagnostics: `/api/admin/users/export`, `/api/admin/users/import`, `/api/admin/apply-update`, `/api/admin/batch-update`, `/api/admin/sync-from-zip`, `/api/admin/sync-clients`, `/api/db/status`, `/api/db/stats`. Export/import endpoints are explicit archive-byte transfer boundaries and must not become general Atome query/mutation APIs.
+- WebSocket routes: `/ws/api`, `/ws/sync`, `/ws/visio`; Tauri also exposes local-only `/ws/control`.
+- WebSocket `/ws/api` action families: auth/account, Atome CRUD/history, events, `state-current`, snapshot/restore, sharing/permissions, sync request/response, and user-data.
 - WebSocket auth actions on `/ws/api`: `request-phone-verification`, `verify-phone-verification`.
 - Visio routes: `/contacts/request`, `/contacts/respond`, `/contacts`, `/rooms`, `/rooms/:room_id`, `/rooms/:room_id/invite`, `/rooms/:room_id/join`.
 
 Owner: Atome open server infrastructure when product-neutral.
 
-Status: Public server surface. Exclusive `/ws/api` transport is the target tracked in `todo/cleanup_architecture/websocket_only_atome_transport.md`; the HTTP application routes listed above remain current migration debt. `/api/eve/mail/*` and route families with product naming remain `Status: To verify` before being declared stable open API names.
+Status: Public server surface. `/ws/api` is the exclusive maintained application-operation transport and `/ws/sync` is the authenticated permission-scoped notification transport. HTTP is restricted to operational discovery and explicit resource/file/archive transfer. `/api/eve/mail/*` and route families with product naming remain `Status: To verify` before being declared stable open API names.
 
 #### Database and Persistence API
 
@@ -1216,18 +1215,17 @@ Status: Public server/database module API; direct UI use is forbidden.
 
 Visibility: Public framework APIs.
 
-Evidence: exports in `atome/security/trusted_keys.js`, `atome/security/serverVerification.js`, `atome/security/cloudSync.js`, and `atome/security/syncQueue.js`.
+Evidence: exports in `atome/security/trusted_keys.js`, `atome/security/serverVerification.js`, and `atome/security/syncQueue.js`.
 
 Public entry points:
 
 - Trusted server lookup: `TRUSTED_SERVERS`, `VERIFICATION_SETTINGS`, `getTrustedServer`, `findServerByFingerprint`, `findServerByUrl`, `getServersByEnvironment`, `isDevelopmentMode`.
 - Verification: `verifyServer`, `getVerificationStatus`, `clearVerificationCache`, `requiresVerification`, `getStatusMessage`, `getStatusIcon`.
-- Cloud sync: `SyncState`, `SyncResult`, `syncToCloud`, `getSyncStatus`, `resolveConflict`.
 - Sync queue: `SyncAction`, `ActionStatus`, `getQueue`, `addToQueue`, `removeFromQueue`, `updateActionStatus`, `getPendingActionsForUser`, `getAllPendingActions`, `cleanupOldActions`, `storeCredentialsForSync`, `getCredentialsForUser`, `removeCredentials`, `isAutoSyncEnabled`, `getSyncConfig`, `saveSyncConfig`, `isCloudServerAvailable`, `processAction`, `processAllPendingActions`, `startAutoSync`, `stopAutoSync`, `initSyncQueue`.
 
 Owner: Atome open security/sync layer.
 
-Use before creating: trusted server, cloud sync, sync queue, or verification behavior.
+Use before creating: trusted server, sync queue, or verification behavior. Cross-runtime account provisioning must use its dedicated `/ws/api` task and must not recreate the removed API.
 
 Status: Public framework surface; security phase must audit credentials, storage, and bridge assumptions before expansion.
 
@@ -1400,8 +1398,11 @@ Evidence: module exports in server files.
 
 Entry points:
 
+- `handleWsAtomeOperation` in `server/wsAtomeOperations.js`.
+- `resolveWsApiPrincipal` in `server/wsApiIdentity.js`.
+- `authenticateWsSyncRequest`, `authenticateWsSyncMessage`, `filterWsSyncEventForPrincipal`, `handleWsSyncControlMessage` in `server/wsSyncSecurity.js`.
 - `commitAtomeEvent`, `commitAtomeEvents`, `syncAtomeViaWebSocket` in `server/atomeRoutes.orm.js`.
-- `registerSharingWebSocket`, `registerSharingRoutes` in `server/sharing.js`.
+- `registerSharingWebSocket` in `server/sharing.js`.
 - `registerFileUpload`, `getFileMetadata`, `getUserFiles`, `getAccessibleFiles`, `canAccessFile`, `setFilePublic`, `deleteFile`, `getFileStats`, `handleFileMessage`, `registerFileWebSocket`, `initUserFiles`, `shareFile`, `unshareFile` in `server/userFiles.js`.
 - `normalizeUserRelativePath`, `sanitizeFileName`, `ensureUserDownloadsDir`, `resolveUserUploadPath`, `resolveUserAssetPath`, `resolveUserFilePath`, `ensureSharedFileLink`, `removeSharedFileLink` in `server/fileStorage.js`.
 - `buildUserExportZip`, `inspectUserExportZip`, `importUserExportZip` in `server/userExportImport.js`.

@@ -13,9 +13,20 @@ import {
 } from '../../eVe/domains/rendering/project_scene_runtime.js';
 import { normalizeAtomeRenderNode } from '../../eVe/domains/rendering/virtual_scene_contract.js';
 import { buildBevyMainMenuTree } from '../../eVe/intuition/ribbon/bevy_ui_main_menu_model.js';
+import { RIBBON_TOKENS } from '../../eVe/intuition/ribbon/tokens.js';
 import { createTestCompositor, installDom } from './unified_rendering_test_helpers.mjs';
 
 const projectDom = () => installDom('<!doctype html><html><body><main id="project"></main></body></html>');
+
+const findTreeNode = (node, id) => {
+    if (!node) return null;
+    if (node.id === id) return node;
+    for (const child of node.children || []) {
+        const found = findTreeNode(child, id);
+        if (found) return found;
+    }
+    return null;
+};
 
 const menuContent = () => ({
     toolbox: { children: ['home', 'find', 'capture', 'time', 'communicate', 'mode', 'view'] },
@@ -200,6 +211,91 @@ test('BevyUI progressive overlay keeps mounted structure while adding detail rec
     assert.equal(records.get('__eve_bevy_ui_dashboard_bevy_ui___eve_dashboard_background')?.properties?.color, '#ff0000');
     assert.equal(records.get('__eve_bevy_ui_dashboard_bevy_ui___eve_dashboard_header_projects')?.properties?.text, 'Projects');
     assert.equal(secondIds.length, 2);
+});
+
+test('BevyUI main menu projects an inner accent across palette parents and visible children', async () => {
+    clearAllProjectScenes();
+    const dom = projectDom();
+    const host = dom.window.document.getElementById('project');
+    await renderProjectScene({
+        projectId: '__eve_dashboard_workspace__',
+        records: [],
+        host,
+        compositor: createTestCompositor()
+    });
+    const surface = getProjectSceneState('__eve_dashboard_workspace__').surface;
+    surface.getBoundingClientRect = () => ({ left: 0, top: 0, right: 600, bottom: 720, width: 600, height: 720 });
+    const content = {
+        toolbox: { children: ['capture', 'find'] },
+        capture: {
+            atome_tool: true,
+            label: 'capture',
+            icon: 'capture',
+            tool_id: 'tool.main.capture',
+            type: 'palette',
+            children: ['import']
+        },
+        import: { label: 'import', icon: 'import', tool_id: 'ui.capture.import', type: 'tool' },
+        find: { atome_tool: true, label: 'find', icon: 'find', tool_id: 'tool.main.find', type: 'tool' }
+    };
+    const baseState = { latchedByToolId: new Map(), externalOpenByToolId: new Map() };
+    const closedTree = buildBevyMainMenuTree({ content, surface, itemSize: 60, state: baseState });
+    const parentAccentId = 'eve_bevy_ui_main_menu_tool_capture_palette_accent';
+
+    assert.deepEqual(findTreeNode(closedTree.root, parentAccentId)?.style, {
+        position: [0, 0],
+        size: [60, RIBBON_TOKENS.mainMenuPaletteAccentHeightPx],
+        background: RIBBON_TOKENS.mainMenuPaletteAccentColor,
+        z_index: 3
+    });
+    assert.equal(findTreeNode(closedTree.root, 'eve_bevy_ui_main_menu_tool_capture__import_palette_accent'), null);
+    assert.equal(findTreeNode(closedTree.root, 'eve_bevy_ui_main_menu_tool_find_palette_accent'), null);
+    assert.equal(findTreeNode(closedTree.root, 'eve_bevy_ui_main_menu_tool_atome_palette_accent'), null);
+
+    const expandedTree = buildBevyMainMenuTree({
+        content,
+        surface,
+        itemSize: 60,
+        state: { ...baseState, activePaletteKey: 'capture' }
+    });
+    const childAccentId = 'eve_bevy_ui_main_menu_tool_capture__import_palette_accent';
+    assert.ok(findTreeNode(expandedTree.root, parentAccentId));
+    assert.ok(findTreeNode(expandedTree.root, childAccentId));
+    const paletteItemIds = new Set([
+        'eve_bevy_ui_main_menu_tool_capture',
+        'eve_bevy_ui_main_menu_tool_capture__import'
+    ]);
+    assert.deepEqual(
+        findTreeNode(expandedTree.root, 'eve_bevy_ui_main_menu_bar').children
+            .map((node) => node.id)
+            .filter((id) => paletteItemIds.has(id)),
+        ['eve_bevy_ui_main_menu_tool_capture__import', 'eve_bevy_ui_main_menu_tool_capture']
+    );
+    const leftExpandedTree = buildBevyMainMenuTree({
+        content,
+        surface,
+        handedness: 'left',
+        itemSize: 60,
+        state: { ...baseState, activePaletteKey: 'capture' }
+    });
+    assert.deepEqual(
+        findTreeNode(leftExpandedTree.root, 'eve_bevy_ui_main_menu_bar').children
+            .map((node) => node.id)
+            .filter((id) => paletteItemIds.has(id)),
+        ['eve_bevy_ui_main_menu_tool_capture', 'eve_bevy_ui_main_menu_tool_capture__import']
+    );
+
+    await projectBevyUiTreeOverlay({ tree: expandedTree, documentRef: dom.window.document, previousIds: [] });
+    const records = getProjectSceneState('__eve_dashboard_workspace__').records;
+    const projectedParent = records.find((record) => record.id.endsWith(`_${parentAccentId}`));
+    const projectedChild = records.find((record) => record.id.endsWith(`_${childAccentId}`));
+    assert.equal(projectedParent?.properties?.width, 60);
+    assert.equal(projectedParent?.properties?.height, 2);
+    assert.equal(projectedParent?.properties?.color, 'rgba(138,206,255,0.65)');
+    assert.equal(projectedChild?.properties?.height, 2);
+    assert.equal(projectedChild?.properties?.color, projectedParent?.properties?.color);
+    assert.equal(Math.abs(projectedParent.properties.left - projectedChild.properties.left), 60);
+    assert.equal(projectedParent.properties.top, projectedChild.properties.top);
 });
 
 test('BevyUI main menu overlay follows the foreground project instead of the dashboard workspace', async () => {

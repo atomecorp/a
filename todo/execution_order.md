@@ -222,7 +222,7 @@ Depend de:
 
 Sources principales:
 
-- todo/cleanup_architecture/websocket_only_atome_transport.md
+- done/websocket_only_atome_transport.md
 - todo/cleanup_architecture/authenticated_permission_scoped_ws_sync.md
 - todo/cleanup_architecture/stable_user_identity_independent_of_phone.md
 - todo/cleanup_architecture/explicit_cross_runtime_account_provisioning.md
@@ -241,7 +241,7 @@ Objectif:
 
 Taches:
 
-- [ ] Migrer toutes les operations Atome métier vers `/ws/api`, securiser `/ws/sync` par authentification et filtrage des permissions, implementer les actions WebSocket manquantes, retirer les lectures/ecritures HTTP et leurs fallbacks, puis valider la parite Fastify/Tauri/iOS et installer des garde-fous permanents; critere de sortie: tous les criteres et tests de `todo/cleanup_architecture/websocket_only_atome_transport.md` et `todo/cleanup_architecture/authenticated_permission_scoped_ws_sync.md` passent.
+- [x] Migrer toutes les operations Atome métier vers `/ws/api`, securiser `/ws/sync` par authentification et filtrage des permissions, implementer les actions WebSocket manquantes, retirer les lectures/ecritures HTTP et leurs fallbacks, puis valider la parite Fastify/Tauri/iOS et installer des garde-fous permanents; critere de sortie: tous les criteres et tests de `done/websocket_only_atome_transport.md` et `todo/cleanup_architecture/authenticated_permission_scoped_ws_sync.md` passent.
 - [ ] Migrer l'identite utilisateur vers un principal opaque, immuable et independant du telephone: separer les alias de connexion/recherche, supprimer toute derivation ou prediction d'identifiant depuis un numero, migrer atomiquement les comptes existants et toutes leurs references, puis valider changement, suppression et reattribution du telephone sans perte ni transfert de donnees; critere de sortie: tous les criteres et tests de `todo/cleanup_architecture/stable_user_identity_independent_of_phone.md` passent.
 - [ ] Remplacer la creation implicite de shadow users par un provisionnement Tauri/Fastify explicite et securise, tout en conservant `Essayer` comme espace invite local/prive a principal opaque isole et avec adoption transactionnelle optionnelle lors de la creation ou liaison d'un compte; critere de sortie: tous les criteres et tests de `todo/cleanup_architecture/explicit_cross_runtime_account_provisioning.md` passent.
 - [ ] Migrer les verificateurs de mot de passe Fastify/Tauri/iOS vers Argon2id: ne creer que des hashes Argon2id, verifier les anciens bcrypt uniquement pour migration, les remplacer atomiquement apres connexion reussie, imposer 15 points de code Unicode minimum et au moins 64 acceptes avec espaces sans regles de composition, refuser les secrets compromis de facon respectueuse de la confidentialite, puis borner memoire/concurrence; critere de sortie: tous les criteres et tests de `todo/cleanup_architecture/argon2id_password_hash_migration.md` passent.

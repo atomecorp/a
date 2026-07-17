@@ -107,19 +107,7 @@ async function silentPing(baseUrl) {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), CONFIG.PING_TIMEOUT);
 
-        // Choose endpoint based on server role (Tauri local Axum vs Fastify).
-        let isTauriServer = false;
-        try {
-            const parsed = new URL(String(baseUrl || '').trim());
-            const port = Number(parsed.port || (parsed.protocol === 'https:' ? 443 : 80));
-            const localPort = readLocalTauriHttpPort();
-            isTauriServer = !!(localPort && isLoopbackHostname(parsed.hostname) && port === localPort);
-        } catch (error) {
-            isTauriServer = false;
-        }
-        const pingEndpoint = isTauriServer ? '/api/auth/local/me' : '/api/auth/me';
-
-        const response = await fetch(`${baseUrl}${pingEndpoint}`, {
+        const response = await fetch(`${baseUrl}/health`, {
             method: 'GET',
             signal: controller.signal,
             // Don't include credentials to avoid CORS preflight complexity

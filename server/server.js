@@ -11,7 +11,16 @@ import crypto from 'crypto';
 import { execFile } from 'child_process';
 import pino from 'pino';
 import { coerceLogEnvelope, isValidLogEnvelope } from '../atome/shared/logging.js';
-import { normalizeWsApiRequest } from './ws_api_schema.js';
+import { handleWsAtomeOperation } from './wsAtomeOperations.js';
+import { sendWsApiRequest } from './wsApiClient.js';
+import {
+  authenticateWsSyncMessage,
+  authenticateWsSyncRequest,
+  buildWsSyncWelcome,
+  filterWsSyncEventForPrincipal,
+  handleWsSyncControlMessage,
+  validateWsSyncPrincipal
+} from './wsSyncSecurity.js';
 
 const SERVER_LOG_LEVEL = (process.env.SQUIRREL_LOG_LEVEL || 'warn').toLowerCase();
 const SERVER_INFO_ENABLED = SERVER_LOG_LEVEL === 'info' || SERVER_LOG_LEVEL === 'debug';
@@ -60,14 +69,13 @@ import {
   getABoxWatcherHandle,
   getABoxEventBus
 } from './aBoxServer.js';
-import { registerAuthRoutes, createUserAtome, findUserByPhone, findUserById, listAllUsers, updateUserParticle, deleteUserAtome, hashPassword, generateDeterministicUserId, normalizePhone, generateOTP, storeOTP, verifyOTP, sendSMS, enforceAuthIdentityRateLimit } from './auth.js';
+import { createUserAtome, findUserByPhone, findUserById, listAllUsers, updateUserParticle, deleteUserAtome, hashPassword, generateDeterministicUserId, normalizePhone, generateOTP, storeOTP, verifyOTP, sendSMS, enforceAuthIdentityRateLimit } from './auth.js';
 import {
   commitAtomeEvent,
   commitAtomeEvents,
-  registerAtomeRoutes,
   syncAtomeViaWebSocket
 } from './atomeRoutes.orm.js';
-import { registerSharingRoutes, handleShareMessage } from './sharing_message_api.js';
+import { handleShareMessage } from './sharing_message_api.js';
 import { buildUserExportZip, inspectUserExportZip, importUserExportZip } from './userExportImport.js';
 import { registerMailRoutes } from './mailRoutes.js';
 import {
@@ -86,7 +94,6 @@ import {
   stopPolling as stopGitHubPolling,
   registerClient,
   unregisterClient,
-  handleClientMessage,
   getConnectedClients,
   getLocalVersion
 } from './githubSync.js';
@@ -250,33 +257,29 @@ async function processSyncQueue() {
       continue;
     }
 
-    const actorId = payload?.actor?.id || payload?.actor?.user_id || payload?.actor?.userId || 'sync';
-    const headers = {
-      'content-type': 'application/json',
-      'x-sync-source': 'fastify',
-      'x-user-id': actorId
-    };
-    if (process.env.SQUIRREL_SYNC_TOKEN) {
-      headers['x-sync-token'] = process.env.SQUIRREL_SYNC_TOKEN;
-    }
-
     try {
-      const res = await fetch(`${TAURI_SYNC_URL}/api/events/commit`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(payload)
+      const response = await sendWsApiRequest(TAURI_SYNC_URL, {
+        type: 'events',
+        action: 'commit',
+        token: process.env.SQUIRREL_SYNC_TOKEN || '',
+        sync_source: 'fastify',
+        event: payload
       });
-
-      if (res.ok) {
+      if (response.success === true) {
         await db.markSyncQueueDone(item.queue_id);
         continue;
       }
 
-      const errorText = await res.text().catch(() => '');
       const maxAttempts = item.max_attempts || 5;
       const final = attempts >= maxAttempts;
       const retryAt = final ? null : new Date(Date.now() + computeBackoffMs(attempts)).toISOString();
-      await db.markSyncQueueError(item.queue_id, attempts, errorText || `HTTP ${res.status}`, retryAt, final);
+      await db.markSyncQueueError(
+        item.queue_id,
+        attempts,
+        response.error || 'WebSocket sync failed',
+        retryAt,
+        final
+      );
     } catch (error) {
       const maxAttempts = item.max_attempts || 5;
       const final = attempts >= maxAttempts;
@@ -870,33 +873,6 @@ async function startServer() {
       if (queryUserId) return { user: null, userId: queryUserId, source: 'media_query' };
       return identity;
     };
-
-    // Register authentication routes (login, register, logout, OTP, etc.)
-    if (DATABASE_ENABLED) {
-      // Get TypeORM-compatible adapter from Knex ORM
-      const dataSourceAdapter = db.getDataSourceAdapter();
-
-      await registerAuthRoutes(server, dataSourceAdapter, {
-        jwtSecret: process.env.JWT_SECRET,
-        cookieSecret: process.env.COOKIE_SECRET,
-        isProduction: process.env.NODE_ENV === 'production'
-      });
-
-      // Register Atome API routes (uses Knex directly, dataSource param is previous)
-      registerAtomeRoutes(server, dataSourceAdapter);
-
-      // Register Sharing routes
-      registerSharingRoutes(server, validateToken);
-    } else {
-      // Provide stub routes that return 503 when DB is not configured
-      server.post('/api/auth/register', async (req, reply) => replyJson(reply, 503, { success: false, error: DB_REQUIRED_MESSAGE }));
-      server.post('/api/auth/login', async (req, reply) => replyJson(reply, 503, { success: false, error: DB_REQUIRED_MESSAGE }));
-      server.post('/api/auth/logout', async (req, reply) => replyJson(reply, 503, { success: false, error: DB_REQUIRED_MESSAGE }));
-      server.get('/api/auth/me', async (req, reply) => replyJson(reply, 503, { success: false, error: DB_REQUIRED_MESSAGE }));
-      server.put('/api/auth/update', async (req, reply) => replyJson(reply, 503, { success: false, error: DB_REQUIRED_MESSAGE }));
-      server.post('/api/auth/request-otp', async (req, reply) => replyJson(reply, 503, { success: false, error: DB_REQUIRED_MESSAGE }));
-      server.post('/api/auth/reset-password', async (req, reply) => replyJson(reply, 503, { success: false, error: DB_REQUIRED_MESSAGE }));
-    }
 
     registerMailRoutes(server);
 
@@ -1650,7 +1626,7 @@ async function startServer() {
 
     console.warn('[Admin] Routes registered: POST /api/admin/users/export, POST /api/admin/users/import');
 
-    // NOTE: User management is now handled via /api/auth/* routes in auth.js
+    // User management is handled by typed auth actions on /ws/api.
     // which use the ADOLE v3.0 schema (atomes + particles tables)
 
     server.get('/api/uploads', async (request, reply) => {
@@ -2001,6 +1977,12 @@ async function startServer() {
             return;
           }
 
+          const atomeOperationResponse = await handleWsAtomeOperation(data, connection);
+          if (atomeOperationResponse) {
+            safeSend(atomeOperationResponse);
+            return;
+          }
+
           // Debug: broadcast probe (no auth) - echoes to ALL ws/api clients
           // if (data && data.type === 'broadcast-probe') {
           //   const nowIso = new Date().toISOString();
@@ -2026,75 +2008,6 @@ async function startServer() {
           //   });
           //   return;
           // }
-
-          // Handle incoming event commits over ws/api to allow low-latency client->server sync
-          if (data.type === 'events') {
-            const requestId = data.requestId || data.request_id;
-            const action = data.action || data.action_type || data.op || null;
-            const attachedSenderUserId = connection && connection._wsApiUserId ? String(connection._wsApiUserId) : null;
-            if (!attachedSenderUserId) {
-              safeSend({
-                type: 'events-response',
-                requestId,
-                success: false,
-                error: 'Unauthenticated ws/api connection (auth required)'
-              });
-              return;
-            }
-
-            try {
-              if (action === 'commit') {
-                const event = data.event || data.body || data.payload || null;
-                if (!event || typeof event !== 'object') {
-                  safeSend({ type: 'events-response', requestId, success: false, error: 'Invalid event payload' });
-                  return;
-                }
-                const syncSource = String(event.sync_source || data.sync_source || '').toLowerCase();
-                const result = await commitAtomeEvent({
-                  event,
-                  authenticatedUserId: attachedSenderUserId,
-                  syncSource
-                });
-                if (!result.ok) {
-                  safeSend({ type: 'events-response', requestId, success: false, error: result.error || 'commit_failed' });
-                  return;
-                }
-
-                safeSend({ type: 'events-response', requestId, success: true, event: result.event });
-                return;
-              }
-
-              if (action === 'commit-batch') {
-                const body = data.body || data || {};
-                const events = Array.isArray(body) ? body : (body.events || []);
-                if (!Array.isArray(events) || !events.length) {
-                  safeSend({ type: 'events-response', requestId, success: false, error: 'Missing events array' });
-                  return;
-                }
-
-                const syncSource = String(body.sync_source || '').toLowerCase();
-                const result = await commitAtomeEvents({
-                  events,
-                  authenticatedUserId: attachedSenderUserId,
-                  actor: body.actor || null,
-                  txId: body.tx_id || null,
-                  syncSource
-                });
-                if (!result.ok) {
-                  safeSend({ type: 'events-response', requestId, success: false, error: result.error || 'commit_batch_failed' });
-                  return;
-                }
-
-                safeSend({ type: 'events-response', requestId, success: true, events: result.events });
-                return;
-              }
-              safeSend({ type: 'events-response', requestId, success: false, error: `Unknown events action: ${action || 'missing'}` });
-              return;
-            } catch (error) {
-              safeSend({ type: 'events-response', requestId, success: false, error: error?.message || String(error) });
-              return;
-            }
-          }
 
           // Handle direct messages (targeted, console-only)
           if (data.type === 'direct-message') {
@@ -2736,37 +2649,6 @@ async function startServer() {
             }
 
             sendFileResponse({ success: false, error: `Unknown file action: ${action}` });
-            return;
-          }
-
-          // Handle API requests
-          if (data.type === 'api-request') {
-            try {
-              const attachedUserId = connection?._wsApiUserId ? String(connection._wsApiUserId) : '';
-              const apiRequest = normalizeWsApiRequest(data, attachedUserId);
-              const response = await server.inject({
-                method: apiRequest.method,
-                url: apiRequest.path,
-                payload: apiRequest.body,
-                headers: apiRequest.headers
-              });
-
-              safeSend({
-                type: 'api-response',
-                id: apiRequest.id,
-                response: {
-                  status: response.statusCode,
-                  headers: response.headers,
-                  body: response.json ? response.json() : response.payload
-                }
-              });
-            } catch (error) {
-              safeSend({
-                type: 'api-response',
-                id,
-                error: error.message || 'Internal server error'
-              });
-            }
             return;
           }
 
@@ -4446,119 +4328,92 @@ async function startServer() {
     // Route WebSocket unifiée pour sync (inclut file events, atome events, version sync)
     server.register(async function (fastify) {
       // Route WebSocket pour sync GitHub et gestion clients Tauri/Browser
-      fastify.get('/ws/sync', { websocket: true }, async (connection) => {
-        const clientId = `client_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-        if (process.env.WS_CONNECTION_DEBUG === '1') {
-          console.log('🔗 Nouvelle connexion sync:', clientId);
-        }
-
-        // Helper for safe sending
+      fastify.get('/ws/sync', { websocket: true }, async (connection, request) => {
+        const clientId = `client_${crypto.randomUUID()}`;
         const safeSend = (payload) => wsSendJson(connection, payload, { scope: 'ws/sync', op: 'send' });
-        const safeSendEvent = (eventType, payload, timestamp = null) => {
-          safeSend({
-            type: 'event',
-            eventType,
-            payload,
-            timestamp: timestamp || new Date().toISOString()
-          });
-        };
-
-        // Register client
-        registerClient(clientId, connection, 'unknown');
-
-        // Send initial version info + watcher status
-        const version = await getLocalVersion();
-        safeSend({
-          type: 'welcome',
-          clientId,
-          server: 'fastify',
-          version: version.version,
-          protectedPaths: version.protectedPaths || [],
-          schema: SCHEMA_TABLES,
-          schema_hash: getSchemaHash(),
-          timestamp: new Date().toISOString(),
-          watcherEnabled: Boolean(fileSyncWatcherHandle),
-          watcherConfig: fileSyncWatcherHandle?.config ?? null,
-          capabilities: ['events', 'sync_request', 'file-events', 'atome-events', 'account-events']
-        });
-
-        // Forward selected sync events to this client.
-        // IMPORTANT: do not depend on the file watcher being enabled.
-        // We also use the same event bus to broadcast account and other sync events.
-        let fileEventForwarder = null;
-        fileEventForwarder = (payload) => {
-          const type = payload && typeof payload.type === 'string' ? payload.type : '';
-          if (!type) return;
-
-          // File events (only meaningful if watcher is enabled)
-          if (type === 'sync:file-event' || type === 'file-event') {
-            if (fileSyncWatcherHandle) {
-              safeSendEvent('sync:file-event', payload, payload.timestamp);
-            }
-            return;
-          }
-
-          // Account events (always forward) + previous user aliases.
-          if (
-            type === 'sync:account-created' || type === 'sync:account-deleted'
-            || type === 'account-created' || type === 'account-deleted'
-            || type === 'sync:user-created' || type === 'sync:user-deleted'
-          ) {
-            let eventType = type.startsWith('sync:') ? type : `sync:${type}`;
-            if (eventType === 'sync:user-created') eventType = 'sync:account-created';
-            if (eventType === 'sync:user-deleted') eventType = 'sync:account-deleted';
-            safeSendEvent(eventType, payload, payload.timestamp);
-            return;
-          }
-
-          // Atome events (real-time sync)
-          if (type === 'atome-sync') {
-            const operation = String(payload.operation || 'update').toLowerCase();
-            const mapType = operation === 'create'
-              ? 'atome:created'
-              : operation === 'delete'
-                ? 'atome:deleted'
-                : 'atome:updated';
-            const atome = payload.atome || null;
-            const atomeId = atome?.atome_id || payload.atome_id || null;
-            safeSendEvent(mapType, payload, payload.timestamp);
-            return;
-          }
-        };
         const syncEventBus = getSyncEventBus();
-        if (syncEventBus) {
-          syncEventBus.on('event', fileEventForwarder);
-        } else if (process.env.WS_CONNECTION_DEBUG === '1') {
-          console.warn('⚠️ ws/sync event bus unavailable - realtime events disabled');
+        let authenticated = false;
+        let fileEventForwarder = null;
+        let authTimer = null;
+
+        const cleanup = () => {
+          if (authTimer) clearTimeout(authTimer);
+          authTimer = null;
+          if (fileEventForwarder && syncEventBus) {
+            syncEventBus.off('event', fileEventForwarder);
+          }
+          fileEventForwarder = null;
+          detachWsApiClient(connection);
+          unregisterClient(clientId);
+        };
+
+        const closeUnauthenticated = (code = 'authentication_required') => {
+          safeSend({ type: 'error', code });
+          cleanup();
+          connection.close?.(4401, code);
+        };
+
+        const activate = async (userId) => {
+          if (!userId || authenticated) return;
+          authenticated = true;
+          if (authTimer) clearTimeout(authTimer);
+          authTimer = null;
+          registerClient(clientId, connection, 'authenticated');
+          fileEventForwarder = async (payload) => {
+            try {
+              const principalId = validateWsSyncPrincipal(connection);
+              if (!principalId) {
+                closeUnauthenticated('authentication_expired');
+                return;
+              }
+              const event = await filterWsSyncEventForPrincipal(payload, principalId);
+              if (!event) return;
+              safeSend({
+                type: 'event',
+                eventType: event.eventType,
+                payload: event.payload,
+                timestamp: event.payload?.timestamp || new Date().toISOString()
+              });
+            } catch (error) {
+              closeUnauthenticated('authentication_invalid');
+            }
+          };
+          if (syncEventBus) syncEventBus.on('event', fileEventForwarder);
+          const version = await getLocalVersion();
+          safeSend(buildWsSyncWelcome(clientId, version));
+        };
+
+        try {
+          await activate(authenticateWsSyncRequest(connection, request));
+        } catch (error) {
+          closeUnauthenticated('authentication_invalid');
+          return;
         }
 
-        connection.on('message', async (message) => {
+        if (!authenticated) {
+          authTimer = setTimeout(() => closeUnauthenticated(), 5000);
+        }
+
+        connection.on('message', async (rawMessage) => {
           try {
-            const response = await handleClientMessage(clientId, message.toString());
-            if (response) {
-              safeSend(response);
+            const data = JSON.parse(rawMessage.toString());
+            if (!authenticated) {
+              const userId = authenticateWsSyncMessage(connection, data);
+              if (!userId) {
+                closeUnauthenticated('authentication_required');
+                return;
+              }
+              await activate(userId);
+              return;
             }
+            safeSend(handleWsSyncControlMessage(connection, data));
           } catch (error) {
-            safeSend({ type: 'error', message: error.message });
+            closeUnauthenticated('authentication_invalid');
           }
         });
 
-        connection.on('close', () => {
-          const syncEventBus = getSyncEventBus();
-          if (fileEventForwarder && syncEventBus) {
-            syncEventBus.off('event', fileEventForwarder);
-          }
-          unregisterClient(clientId);
-        });
-
-        connection.on('error', (error) => {
-          console.error('❌ Erreur WebSocket sync:', error);
-          const syncEventBus = getSyncEventBus();
-          if (fileEventForwarder && syncEventBus) {
-            syncEventBus.off('event', fileEventForwarder);
-          }
-          unregisterClient(clientId);
-        });
+        connection.on('close', cleanup);
+        connection.on('error', cleanup);
       });
     });
 

@@ -49,7 +49,7 @@ This decision does not remove or restrict the first-screen `Try` guest mode.
 ## Dependencies
 
 - `todo/cleanup_architecture/stable_user_identity_independent_of_phone.md`
-- `todo/cleanup_architecture/websocket_only_atome_transport.md`
+- `done/websocket_only_atome_transport.md`
 - `todo/cleanup_architecture/authenticated_permission_scoped_ws_sync.md`
 - Canonical append-only ownership transfer and permission checks
 

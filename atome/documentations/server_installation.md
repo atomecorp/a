@@ -210,7 +210,7 @@ window.__SQUIRREL_TAURI_FASTIFY_URL__ = 'https://your-staging-domain.example';
 
 ## 🧩 Fastify Server Overview (Runtime)
 
-The Fastify server runs from `server/server.js` and exposes REST + WebSocket endpoints.
+The Fastify server runs from `server/server.js`. WebSocket owns application operations; HTTP owns bootstrap, health/configuration discovery, diagnostics, and explicit file/media/archive resource transfer.
 
 ### Start Options (Advanced)
 
@@ -232,8 +232,16 @@ Assuming `PORT=3001` (default):
 
 * `GET http://localhost:3001/health` - basic health + uptime
 * `GET http://localhost:3001/api/server-info` - version + server type
-* `ws://localhost:3001/ws/api` - authenticated WebSocket API
-* `ws://localhost:3001/ws/sync` - sync events WebSocket
+* `ws://localhost:3001/ws/api` - authenticated request/response application API
+* `ws://localhost:3001/ws/sync` - authenticated, permission-scoped notification WebSocket
+
+Nginx must preserve WebSocket upgrade headers for both paths. A `/ws/sync` client must authenticate before receiving `welcome`; an HTTP application-operation fallback indicates a deployment or client defect.
+
+After installation or update, run:
+
+```bash
+npm run check:websocket-only-transport
+```
 
 For detailed API and WebSocket usage examples, see `server/README.md`.
 For the minimal shared `/ws/sync` protocol, see `atome/documentations/sync_protocol.md`.

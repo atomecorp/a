@@ -11,7 +11,7 @@ use chrono::{Duration, Utc};
 use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, Validation};
 use rusqlite::{Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Map as JsonMap, Value as JsonValue};
+use serde_json::{Map as JsonMap, Value as JsonValue};
 use std::{
     collections::HashMap,
     env,
@@ -40,8 +40,6 @@ const SQUIRREL_USER_NAMESPACE: Uuid = Uuid::from_bytes([
 ]);
 const AUTH_BCRYPT_COST: u32 = 10;
 
-/// Default Fastify server URL for sync (port 3001 in dev mode)
-const DEFAULT_FASTIFY_URL: &str = "http://localhost:3001";
 const AUTH_ATTEMPT_WINDOW_SECONDS: i64 = 15 * 60;
 const AUTH_ATTEMPT_LIMIT: u32 = 8;
 const OTP_EXPIRY_SECONDS: i64 = 10 * 60;
@@ -167,62 +165,6 @@ pub struct LocalAuthState {
 
 // =============================================================================
 // FASTIFY SYNC
-// =============================================================================
-
-/// Sync a newly created account to Fastify server (fire and forget)
-async fn sync_account_to_fastify(
-    user_id: &str,
-    username: &str,
-    phone: &str,
-    password_hash: &str,
-    visibility: &str,
-) {
-    let fastify_url = env::var("SQUIRREL_FASTIFY_URL")
-        .or_else(|_| env::var("FASTIFY_URL"))
-        .unwrap_or_else(|_| DEFAULT_FASTIFY_URL.to_string());
-
-    let sync_secret = env::var("SYNC_SECRET").unwrap_or_else(|_| "squirrel-sync-2024".to_string());
-
-    let url = format!("{}/api/auth/sync-register", fastify_url);
-
-    let payload = json!({
-        "username": username,
-        "phone": phone,
-        "passwordHash": password_hash,
-        "visibility": visibility,
-        "source": "tauri"
-    });
-
-    let client = reqwest::Client::new();
-
-    match client
-        .post(&url)
-        .header("Content-Type", "application/json")
-        .header("X-Sync-Secret", &sync_secret)
-        .json(&payload)
-        .timeout(std::time::Duration::from_secs(10))
-        .send()
-        .await
-    {
-        Ok(response) => {
-            if response.status().is_success() {
-                println!(
-                    "[Auth] Account synced to Fastify: {} ({})",
-                    username, user_id
-                );
-            } else {
-                let status = response.status();
-                let body = response.text().await.unwrap_or_default();
-                println!("[Auth] Fastify sync failed: {} - {}", status, body);
-            }
-        }
-        Err(e) => {
-            // Don't fail registration if Fastify is unreachable
-            println!("[Auth] Fastify sync error (will retry later): {}", e);
-        }
-    }
-}
-
 // =============================================================================
 // WEBSOCKET MESSAGE HANDLER
 // =============================================================================
@@ -418,24 +360,6 @@ async fn handle_bootstrap(
     ) {
         println!("[Auth Debug] state_current update failed: {}", err);
     }
-
-    // Sync account to Fastify (fire and forget - don't block bootstrap)
-    let user_id_clone = user_id.clone();
-    let username_clone = username.clone();
-    let phone_clone = phone.clone();
-    let password_hash_clone = password_hash.clone();
-    let visibility_clone = visibility.clone();
-
-    tokio::spawn(async move {
-        sync_account_to_fastify(
-            &user_id_clone,
-            &username_clone,
-            &phone_clone,
-            &password_hash_clone,
-            &visibility_clone,
-        )
-        .await;
-    });
 
     let token = match generate_token(&state.jwt_secret, &user_id, &username, &phone) {
         Ok(t) => t,
@@ -689,24 +613,6 @@ async fn handle_register(
     if let Err(e) = tx.commit() {
         return error_response(request_id, &e.to_string());
     }
-
-    // Sync account to Fastify (fire and forget - don't block registration)
-    let user_id_clone = user_id.clone();
-    let username_clone = username.clone();
-    let phone_clone = phone.clone();
-    let password_hash_clone = password_hash.clone();
-    let visibility_clone = visibility.clone();
-
-    tokio::spawn(async move {
-        sync_account_to_fastify(
-            &user_id_clone,
-            &username_clone,
-            &phone_clone,
-            &password_hash_clone,
-            &visibility_clone,
-        )
-        .await;
-    });
 
     // Generate JWT
     let token = match generate_token(&state.jwt_secret, &user_id, &username, &phone) {
@@ -1325,6 +1231,13 @@ pub fn extract_user_id_from_token(secret: &str, token: Option<&str>) -> String {
         },
         _ => "anonymous".to_string(),
     }
+}
+
+pub fn verified_user_id_from_token(secret: &str, token: Option<&str>) -> Option<String> {
+    token
+        .filter(|value| !value.trim().is_empty())
+        .and_then(|value| verify_token(secret, value).ok())
+        .map(|claims| claims.sub)
 }
 
 fn parse_json_map(raw: Option<&String>) -> JsonMap<String, JsonValue> {

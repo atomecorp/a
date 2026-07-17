@@ -42,6 +42,9 @@ final class LocalHTTPServer {
     private struct WebSocketState {
         var buffer = Data()
         var clientId: String
+        var route: String
+        var authenticatedUserId: String?
+        var authToken: String?
     }
 
     private struct HTTPRequestState {
@@ -194,84 +197,26 @@ final class LocalHTTPServer {
             return
         }
         if (routePath == "/ws/sync" || routePath == "/ws/api") && isWebSocketUpgrade(headers: headers) {
-            handleWebSocketUpgrade(connection, headers: headers)
+            handleWebSocketUpgrade(connection, headers: headers, route: routePath)
             return
         }
         if (routePath == "/ws/sync" || routePath == "/ws/api") && !isWebSocketUpgrade(headers: headers) {
             print("⚠️ WS path requested but upgrade headers missing; attempting upgrade anyway")
             // WKWebView may strip standard upgrade headers; try upgrading if sec-websocket-key is present
             if headers["sec-websocket-key"] != nil {
-                handleWebSocketUpgrade(connection, headers: headers)
+                handleWebSocketUpgrade(connection, headers: headers, route: routePath)
                 return
             }
             sendSimple(status: 400, reason: "Bad Request", body: "WebSocket upgrade headers missing", on: connection)
             return
         }
         if method == "POST" {
-            if routePath == "/api/events/commit",
-               let body = parseJsonObjectBody(from: bodyData) {
-                var message = body
-                message["type"] = "events"
-                message["action"] = "commit"
-                message["event"] = body
-                if let token = bearerToken(from: headers) { message["token"] = token }
-                let response = AiSRuntime.handleEventsMessage(message)
-                sendJsonResponse(response, status: responseSuccess(response) ? 200 : 400, on: connection)
-                return
-            }
-            if routePath == "/api/events/commit-batch",
-               let body = parseJsonObjectBody(from: bodyData) {
-                var message = body
-                message["type"] = "events"
-                message["action"] = "commit-batch"
-                if let token = bearerToken(from: headers) { message["token"] = token }
-                let response = AiSRuntime.handleEventsMessage(message)
-                sendJsonResponse(response, status: responseSuccess(response) ? 200 : 400, on: connection)
-                return
-            }
-            if routePath == "/api/snapshots",
-               let body = parseJsonObjectBody(from: bodyData) {
-                var message = body
-                message["type"] = "snapshot"
-                message["action"] = "create"
-                if let token = bearerToken(from: headers) { message["token"] = token }
-                let response = AiSRuntime.handleSnapshotMessage(message)
-                sendJsonResponse(response, status: responseSuccess(response) ? 200 : 400, on: connection)
-                return
-            }
             if routePath == "/api/uploads" {
                 handleUploadsPost(headers: headers, body: bodyData, on: connection)
                 return
             }
             if routePath == "/api/user-recordings" {
                 handleUserRecordingsPost(headers: headers, body: bodyData, on: connection)
-                return
-            }
-            if (routePath == "/api/auth/login" || routePath == "/api/auth/register" || routePath == "/api/auth/bootstrap"),
-               let body = parseJsonObjectBody(from: bodyData) {
-                var message = body
-                message["type"] = "auth"
-                let action: String
-                if routePath == "/api/auth/register" {
-                    action = "register"
-                } else if routePath == "/api/auth/bootstrap" {
-                    action = "bootstrap"
-                } else {
-                    action = "login"
-                }
-                message["action"] = action
-                let response = AiSRuntime.handleAuthMessage(message)
-                let success = (response["success"] as? Bool) == true || (response["ok"] as? Bool) == true
-                sendJsonResponse(response, status: success ? 200 : 401, on: connection)
-                return
-            }
-            if routePath == "/api/auth/me" {
-                let token = bearerToken(from: headers)
-                var message: [String: Any] = ["type": "auth", "action": "me"]
-                if let token { message["token"] = token }
-                let response = AiSRuntime.handleAuthMessage(message)
-                let success = (response["success"] as? Bool) == true || (response["ok"] as? Bool) == true
-                sendJsonResponse(response, status: success ? 200 : 401, on: connection)
                 return
             }
             sendSimple(status: 404, reason: "Not Found", body: "Not Found", on: connection)
@@ -310,34 +255,6 @@ final class LocalHTTPServer {
             serveSyncNow(on: connection)
         } else if routePath == "/api/server-info" {
             serveServerInfo(on: connection)
-        } else if routePath.hasPrefix("/api/state_current/") {
-            let atomeId = String(routePath.dropFirst("/api/state_current/".count)).removingPercentEncoding ?? String(routePath.dropFirst("/api/state_current/".count))
-            var message: [String: Any] = [
-                "type": "state-current",
-                "action": "get",
-                "atome_id": atomeId
-            ]
-            if let token = bearerToken(from: headers) { message["token"] = token }
-            let response = AiSRuntime.handleStateCurrentMessage(message)
-            sendJsonResponse(response, status: responseSuccess(response) ? 200 : 404, on: connection)
-        } else if routePath == "/api/state_current" {
-            var message: [String: Any] = [
-                "type": "state-current",
-                "action": "list"
-            ]
-            for (key, value) in queryItems { message[key] = value }
-            if let token = bearerToken(from: headers) { message["token"] = token }
-            let response = AiSRuntime.handleStateCurrentMessage(message)
-            sendJsonResponse(response, status: responseSuccess(response) ? 200 : 400, on: connection)
-        } else if routePath == "/api/events" {
-            var message: [String: Any] = [
-                "type": "events",
-                "action": "list"
-            ]
-            for (key, value) in queryItems { message[key] = value }
-            if let token = bearerToken(from: headers) { message["token"] = token }
-            let response = AiSRuntime.handleEventsMessage(message)
-            sendJsonResponse(response, status: responseSuccess(response) ? 200 : 400, on: connection)
         } else if routePath == "/api/uploads" {
             handleUploadsList(headers: headers, on: connection)
         } else if routePath.hasPrefix("/api/uploads/") {
@@ -348,12 +265,6 @@ final class LocalHTTPServer {
             let raw = String(routePath.dropFirst("/api/recordings/".count))
             let fileName = raw.removingPercentEncoding ?? raw
             handleRecordingGet(fileName: fileName, headers: headers, rangeHeader: rangeHeader, isHead: method == "HEAD", on: connection)
-        } else if routePath == "/api/auth/me" {
-            var message: [String: Any] = ["type": "auth", "action": "me"]
-            if let token = bearerToken(from: headers) { message["token"] = token }
-            let response = AiSRuntime.handleAuthMessage(message)
-            let success = (response["success"] as? Bool) == true || (response["ok"] as? Bool) == true
-            sendJsonResponse(response, status: success ? 200 : 401, on: connection)
         } else {
             sendSimple(status: 404, reason: "Not Found", body: "Not Found", on: connection)
         }
@@ -380,7 +291,7 @@ final class LocalHTTPServer {
         return Data(digest).base64EncodedString()
     }
 
-    private func handleWebSocketUpgrade(_ connection: NWConnection, headers: [String: String]) {
+    private func handleWebSocketUpgrade(_ connection: NWConnection, headers: [String: String], route: String) {
         guard let key = headers["sec-websocket-key"], let accept = websocketAcceptKey(key) else {
             print("❌ WS upgrade: missing sec-websocket-key")
             sendSimple(status: 400, reason: "Bad Request", body: "missing websocket key", on: connection)
@@ -398,16 +309,13 @@ final class LocalHTTPServer {
         let clientId = "ais_" + UUID().uuidString
         let id = ObjectIdentifier(connection)
         wsConnections[id] = connection
-        wsStates[id] = WebSocketState(buffer: Data(), clientId: clientId)
-
-        let payload: [String: Any] = [
-            "type": "welcome",
-            "clientId": clientId,
-            "server": "ais",
-            "version": "1.0.0",
-            "capabilities": ["events", "sync_request", "file-events", "atome-events", "account-events"],
-            "timestamp": ISO8601DateFormatter().string(from: Date())
-        ]
+        wsStates[id] = WebSocketState(
+            buffer: Data(),
+            clientId: clientId,
+            route: route,
+            authenticatedUserId: nil,
+            authToken: nil
+        )
 
         connection.send(content: Data(response.utf8), completion: .contentProcessed { [weak self] error in
             guard let self = self else { return }
@@ -415,8 +323,19 @@ final class LocalHTTPServer {
                 print("❌ WS upgrade: 101 send failed: \(error)")
                 return
             }
-            self.sendWebSocketJson(payload, on: connection)
             FastifySyncRelay.shared.connectIfConfigured()
+            if route == "/ws/sync" {
+                self.queue.asyncAfter(deadline: .now() + 5) { [weak self] in
+                    guard let self,
+                          self.wsStates[id]?.authenticatedUserId == nil else { return }
+                    self.sendWebSocketJson(
+                        ["type": "error", "code": "authentication_required"],
+                        on: connection
+                    )
+                    self.sendWebSocketClose(on: connection)
+                    self.requestCancel(connection)
+                }
+            }
         })
     }
 
@@ -490,6 +409,54 @@ final class LocalHTTPServer {
         guard let obj = try? JSONSerialization.jsonObject(with: data, options: []),
               let payload = obj as? [String: Any] else { print("❌ WS text: invalid JSON"); return }
         let type = (payload["type"] as? String) ?? ""
+        let connectionId = ObjectIdentifier(connection)
+        guard var connectionState = wsStates[connectionId] else { return }
+        if connectionState.route == "/ws/sync" {
+            if connectionState.authenticatedUserId == nil {
+                let token = payload["token"] as? String
+                let userId = type == "auth"
+                    ? AiSRuntime.resolveAuthenticatedUserId(token: token, userIdHint: nil, phoneHint: nil)
+                    : nil
+                guard let userId, let token, !token.isEmpty else {
+                    sendWebSocketJson(["type": "error", "code": "authentication_required"], on: connection)
+                    sendWebSocketClose(on: connection)
+                    requestCancel(connection)
+                    return
+                }
+                connectionState.authenticatedUserId = userId
+                connectionState.authToken = token
+                wsStates[connectionId] = connectionState
+                sendWebSocketJson([
+                    "type": "welcome",
+                    "clientId": connectionState.clientId,
+                    "server": "ais",
+                    "version": "1.0.0",
+                    "capabilities": ["ping"],
+                    "timestamp": ISO8601DateFormatter().string(from: Date())
+                ], on: connection)
+                return
+            }
+            guard AiSRuntime.resolveAuthenticatedUserId(
+                token: connectionState.authToken,
+                userIdHint: nil,
+                phoneHint: nil
+            ) == connectionState.authenticatedUserId else {
+                sendWebSocketJson(["type": "error", "code": "authentication_expired"], on: connection)
+                sendWebSocketClose(on: connection)
+                requestCancel(connection)
+                return
+            }
+            if type == "ping" {
+                sendWebSocketJson([
+                    "type": "pong",
+                    "timestamp": ISO8601DateFormatter().string(from: Date())
+                ], on: connection)
+            } else {
+                sendWebSocketJson(["type": "error", "code": "capability_unsupported"], on: connection)
+            }
+            return
+        }
+
         if type == "register" {
             if let provided = payload["clientId"] as? String {
                 let id = ObjectIdentifier(connection)
@@ -504,7 +471,7 @@ final class LocalHTTPServer {
                 "clientId": clientId,
                 "server": "ais",
                 "version": "1.0.0",
-                "capabilities": ["events", "sync_request", "file-events", "atome-events", "account-events"],
+                "capabilities": ["auth", "atome", "events", "state-current", "snapshot-create"],
                 "timestamp": ISO8601DateFormatter().string(from: Date())
             ]
             sendWebSocketJson(welcome, on: connection)
@@ -550,15 +517,13 @@ final class LocalHTTPServer {
             return
         }
 
-        if type == "sync_request" {
-            FileSyncCoordinator.shared.syncAll(force: true)
-            let response: [String: Any] = [
-                "type": "sync_started",
-                "mode": "local",
-                "timestamp": ISO8601DateFormatter().string(from: Date())
-            ]
-            sendWebSocketJson(response, on: connection)
-            FastifySyncRelay.shared.send(text: text)
+        if type == "user-data" || type == "sync" || type == "sync_request" {
+            sendWebSocketJson([
+                "type": "\(type)-response",
+                "requestId": payload["requestId"] ?? NSNull(),
+                "success": false,
+                "error": "capability_unsupported"
+            ], on: connection)
             return
         }
 
@@ -2311,26 +2276,27 @@ fileprivate enum AiSRuntime {
         return atomeResponse(requestId: requestId, success: true)
     }
 
-    private static func resolveEventUserId(_ message: [String: Any]) -> String {
+    private static func resolveEventUserId(_ message: [String: Any]) -> String? {
         let token = stringValue(message["token"])
         if !token.isEmpty, let claims = try? verifyToken(token) {
             let sub = normalizedOptionalString(claims["sub"])
             if let sub, !sub.isEmpty { return sub }
         }
-        if let userId = normalizedOptionalString(message["userId"] ?? message["user_id"] ?? message["ownerId"] ?? message["owner_id"]) {
-            return userId
-        }
-        if let event = message["event"] as? [String: Any],
-           let userId = normalizedOptionalString(event["owner_id"] ?? event["ownerId"]) {
-            return userId
-        }
-        return "anonymous"
+        return nil
     }
 
     private static func handleEventCommit(_ message: [String: Any], db: OpaquePointer?, requestId: String?) throws -> [String: Any] {
-        let actorId = resolveEventUserId(message)
+        guard let actorId = resolveEventUserId(message) else {
+            return eventsResponse(requestId: requestId, success: false, error: "Access denied")
+        }
         guard let rawEvent = message["event"] as? [String: Any] else {
             return eventsResponse(requestId: requestId, success: false, error: "Invalid event payload")
+        }
+        let atomeId = stringValue(rawEvent["atome_id"] ?? rawEvent["atomeId"])
+        if !atomeId.isEmpty,
+           let record = try findAtomeMeta(db, atomeId: atomeId),
+           !canWrite(record: record, userId: actorId) {
+            return eventsResponse(requestId: requestId, success: false, error: "Access denied")
         }
         let event = try normalizeEventInput(rawEvent, defaultActorId: actorId)
         try appendEvent(db, event: event)
@@ -2338,12 +2304,24 @@ fileprivate enum AiSRuntime {
     }
 
     private static func handleEventCommitBatch(_ message: [String: Any], db: OpaquePointer?, requestId: String?) throws -> [String: Any] {
-        let defaultActorId = resolveEventUserId(message)
+        guard let defaultActorId = resolveEventUserId(message) else {
+            return eventsResponse(requestId: requestId, success: false, error: "Access denied")
+        }
         let txId = stringValue(message["tx_id"] ?? message["txId"])
         guard let rawEvents = message["events"] as? [[String: Any]] else {
             return eventsResponse(requestId: requestId, success: false, error: "Missing events array")
         }
         let events = try rawEvents.map { raw -> [String: Any] in
+            let atomeId = stringValue(raw["atome_id"] ?? raw["atomeId"])
+            if !atomeId.isEmpty,
+               let record = try findAtomeMeta(db, atomeId: atomeId),
+               !canWrite(record: record, userId: defaultActorId) {
+                throw NSError(
+                    domain: "AiSRuntime",
+                    code: 403,
+                    userInfo: [NSLocalizedDescriptionKey: "Access denied"]
+                )
+            }
             var event = raw
             if !txId.isEmpty, event["tx_id"] == nil, event["txId"] == nil {
                 event["tx_id"] = txId

@@ -59,7 +59,9 @@ macro_rules! eprintln {
 pub mod local_auth;
 // Local atome storage module
 pub mod local_atome;
+mod local_atome_extended;
 mod remote_control;
+mod remote_control_ws;
 
 #[derive(Clone)]
 struct AppState {
@@ -90,27 +92,6 @@ struct MediaTokenQuery {
 #[derive(Deserialize)]
 struct LocalFileQuery {
     path: Option<String>,
-}
-
-#[derive(Deserialize)]
-struct EventsQuery {
-    project_id: Option<String>,
-    atome_id: Option<String>,
-    tx_id: Option<String>,
-    gesture_id: Option<String>,
-    since: Option<String>,
-    until: Option<String>,
-    limit: Option<i64>,
-    offset: Option<i64>,
-    order: Option<String>,
-}
-
-#[derive(Deserialize)]
-struct StateCurrentQuery {
-    project_id: Option<String>,
-    owner_id: Option<String>,
-    limit: Option<i64>,
-    offset: Option<i64>,
 }
 
 #[derive(Deserialize, Default)]
@@ -778,60 +759,6 @@ fn require_atome_state(
     })
 }
 
-async fn auth_me_handler(State(state): State<AppState>, headers: HeaderMap) -> impl IntoResponse {
-    let Some(auth_state) = state.auth_state.as_ref() else {
-        return (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({ "success": false, "error": "Auth state not initialized" })),
-        );
-    };
-
-    let token = extract_bearer_token(&headers);
-    let response = if let Some(token) = token {
-        local_auth::handle_auth_message(
-            json!({
-                "action": "me",
-                "token": token
-            }),
-            auth_state,
-        )
-        .await
-    } else if let Some(user_id) = extract_user_id_from_headers(&headers) {
-        let phone = headers
-            .get("x-phone")
-            .or_else(|| headers.get("x-user-phone"))
-            .and_then(|value| value.to_str().ok())
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-            .unwrap_or(user_id.as_str());
-        local_auth::handle_auth_message(
-            json!({
-                "action": "lookup-phone",
-                "phone": phone
-            }),
-            auth_state,
-        )
-        .await
-    } else {
-        return (
-            StatusCode::UNAUTHORIZED,
-            Json(json!({ "success": false, "error": "Unauthorized" })),
-        );
-    };
-
-    if response.success {
-        (StatusCode::OK, Json(json!(response)))
-    } else {
-        (
-            StatusCode::UNAUTHORIZED,
-            Json(json!({
-                "success": false,
-                "error": response.error.unwrap_or_else(|| "Unauthorized".to_string())
-            })),
-        )
-    }
-}
-
 fn clean_remote_segment(value: &str, fallback: &str) -> String {
     let sanitized = sanitize_file_name(value.trim());
     if sanitized.is_empty() || sanitized == "upload.bin" {
@@ -1346,63 +1273,6 @@ async fn remote_audio_playback_stop_handler(
         .into_response(),
         Err(error) => json_error(StatusCode::INTERNAL_SERVER_ERROR, &error).into_response(),
     }
-}
-
-fn ws_events_to_http(resp: local_atome::WsResponse) -> (StatusCode, Json<JsonValue>) {
-    if !resp.success {
-        return json_error(
-            StatusCode::BAD_REQUEST,
-            resp.error.as_deref().unwrap_or("Unknown error"),
-        );
-    }
-
-    let data = resp.data.unwrap_or_else(|| json!({}));
-    if let Some(event) = data.get("event") {
-        return (
-            StatusCode::OK,
-            Json(json!({ "success": true, "event": event })),
-        );
-    }
-    if let Some(events) = data.get("events") {
-        return (
-            StatusCode::OK,
-            Json(json!({ "success": true, "events": events })),
-        );
-    }
-
-    (
-        StatusCode::OK,
-        Json(json!({ "success": true, "data": data })),
-    )
-}
-
-fn ws_state_to_http(resp: local_atome::WsResponse) -> (StatusCode, Json<JsonValue>) {
-    if !resp.success {
-        return json_error(
-            StatusCode::BAD_REQUEST,
-            resp.error.as_deref().unwrap_or("Unknown error"),
-        );
-    }
-    let data = resp.data.unwrap_or_else(|| json!({}));
-    if let Some(state) = data.get("state") {
-        if state.is_null() {
-            return json_error(StatusCode::NOT_FOUND, "State not found");
-        }
-        return (
-            StatusCode::OK,
-            Json(json!({ "success": true, "state": state })),
-        );
-    }
-    if let Some(states) = data.get("states") {
-        return (
-            StatusCode::OK,
-            Json(json!({ "success": true, "states": states })),
-        );
-    }
-    (
-        StatusCode::OK,
-        Json(json!({ "success": true, "data": data })),
-    )
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -2541,199 +2411,6 @@ async fn eve_ai_provider_completion_handler(
         })),
     )
         .into_response()
-}
-
-async fn events_commit_handler(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-    Json(body): Json<JsonValue>,
-) -> impl IntoResponse {
-    let user_id = match require_auth_user(&headers, &state) {
-        Ok(id) => id,
-        Err(resp) => return resp.into_response(),
-    };
-    let atome_state = match require_atome_state(&state) {
-        Ok(s) => s,
-        Err(resp) => return resp.into_response(),
-    };
-
-    let sync_source = headers
-        .get("x-sync-source")
-        .and_then(|v| v.to_str().ok())
-        .map(|v| v.trim().to_string())
-        .filter(|v| !v.is_empty());
-    let mut message = json!({
-        "action": "commit",
-        "event": body
-    });
-    if let Some(source) = sync_source {
-        if let Some(obj) = message.as_object_mut() {
-            obj.insert("sync_source".to_string(), json!(source));
-        }
-    }
-    let response = local_atome::handle_events_message(message, &user_id, atome_state).await;
-    ws_events_to_http(response).into_response()
-}
-
-async fn events_commit_batch_handler(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-    Json(body): Json<JsonValue>,
-) -> impl IntoResponse {
-    let user_id = match require_auth_user(&headers, &state) {
-        Ok(id) => id,
-        Err(resp) => return resp.into_response(),
-    };
-    let atome_state = match require_atome_state(&state) {
-        Ok(s) => s,
-        Err(resp) => return resp.into_response(),
-    };
-
-    let mut payload = JsonMap::new();
-    payload.insert("action".to_string(), json!("commit-batch"));
-    if let Some(source) = headers
-        .get("x-sync-source")
-        .and_then(|v| v.to_str().ok())
-        .map(|v| v.trim().to_string())
-        .filter(|v| !v.is_empty())
-    {
-        payload.insert("sync_source".to_string(), json!(source));
-    }
-    match body {
-        JsonValue::Array(_) => {
-            payload.insert("events".to_string(), body);
-        }
-        JsonValue::Object(mut map) => {
-            for key in ["events", "event", "tx_id", "txId", "actor"] {
-                if let Some(value) = map.remove(key) {
-                    payload.insert(key.to_string(), value);
-                }
-            }
-        }
-        _ => {}
-    }
-
-    let response =
-        local_atome::handle_events_message(JsonValue::Object(payload), &user_id, atome_state).await;
-    ws_events_to_http(response).into_response()
-}
-
-async fn events_list_handler(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-    Query(query): Query<EventsQuery>,
-) -> impl IntoResponse {
-    let user_id = match require_auth_user(&headers, &state) {
-        Ok(id) => id,
-        Err(resp) => return resp.into_response(),
-    };
-    let atome_state = match require_atome_state(&state) {
-        Ok(s) => s,
-        Err(resp) => return resp.into_response(),
-    };
-
-    let mut payload = JsonMap::new();
-    payload.insert("action".to_string(), json!("list"));
-    let project_id = query.project_id;
-    let atome_id = query.atome_id;
-    let tx_id = query.tx_id;
-    let gesture_id = query.gesture_id;
-    if let Some(value) = project_id {
-        payload.insert("project_id".to_string(), json!(value));
-    }
-    if let Some(value) = atome_id {
-        payload.insert("atome_id".to_string(), json!(value));
-    }
-    if let Some(value) = tx_id {
-        payload.insert("tx_id".to_string(), json!(value));
-    }
-    if let Some(value) = gesture_id {
-        payload.insert("gesture_id".to_string(), json!(value));
-    }
-    if let Some(value) = query.since {
-        payload.insert("since".to_string(), json!(value));
-    }
-    if let Some(value) = query.until {
-        payload.insert("until".to_string(), json!(value));
-    }
-    if let Some(value) = query.limit {
-        payload.insert("limit".to_string(), json!(value));
-    }
-    if let Some(value) = query.offset {
-        payload.insert("offset".to_string(), json!(value));
-    }
-    if let Some(value) = query.order {
-        payload.insert("order".to_string(), json!(value));
-    }
-
-    let response =
-        local_atome::handle_events_message(JsonValue::Object(payload), &user_id, atome_state).await;
-    ws_events_to_http(response).into_response()
-}
-
-async fn state_current_get_handler(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-    AxumPath(id): AxumPath<String>,
-) -> impl IntoResponse {
-    let user_id = match require_auth_user(&headers, &state) {
-        Ok(id) => id,
-        Err(resp) => return resp.into_response(),
-    };
-    let atome_state = match require_atome_state(&state) {
-        Ok(s) => s,
-        Err(resp) => return resp.into_response(),
-    };
-
-    if id.trim().is_empty() {
-        return json_error(StatusCode::BAD_REQUEST, "Missing atome id").into_response();
-    }
-
-    let message = json!({
-        "action": "get",
-        "atome_id": id,
-        "owner_id": user_id
-    });
-    let response = local_atome::handle_state_current_message(message, &user_id, atome_state).await;
-    ws_state_to_http(response).into_response()
-}
-
-async fn state_current_list_handler(
-    State(state): State<AppState>,
-    headers: HeaderMap,
-    Query(query): Query<StateCurrentQuery>,
-) -> impl IntoResponse {
-    let user_id = match require_auth_user(&headers, &state) {
-        Ok(id) => id,
-        Err(resp) => return resp.into_response(),
-    };
-    let atome_state = match require_atome_state(&state) {
-        Ok(s) => s,
-        Err(resp) => return resp.into_response(),
-    };
-
-    let mut payload = JsonMap::new();
-    payload.insert("action".to_string(), json!("list"));
-    let project_id = query.project_id;
-    let owner_id = query.owner_id.unwrap_or(user_id.clone());
-    payload.insert("owner_id".to_string(), json!(owner_id));
-    if let Some(value) = project_id {
-        payload.insert("project_id".to_string(), json!(value));
-    }
-    if let Some(value) = query.limit {
-        payload.insert("limit".to_string(), json!(value));
-    }
-    if let Some(value) = query.offset {
-        payload.insert("offset".to_string(), json!(value));
-    }
-
-    let response = local_atome::handle_state_current_message(
-        JsonValue::Object(payload),
-        &user_id,
-        atome_state,
-    )
-    .await;
-    ws_state_to_http(response).into_response()
 }
 
 async fn upload_handler(
@@ -5065,6 +4742,16 @@ async fn ws_api_handler(ws: WebSocketUpgrade, State(state): State<AppState>) -> 
     ws.on_upgrade(move |socket| handle_ws_api(socket, state))
 }
 
+fn ws_authenticated_user(data: &JsonValue, state: &AppState) -> Result<String, JsonValue> {
+    let auth_state = state
+        .auth_state
+        .as_ref()
+        .ok_or_else(|| json!({"type": "error", "message": "Auth state not initialized"}))?;
+    let token = data.get("token").and_then(|value| value.as_str());
+    local_auth::verified_user_id_from_token(&auth_state.jwt_secret, token)
+        .ok_or_else(|| json!({"type": "error", "message": "Authentication required"}))
+}
+
 /// Handle WebSocket API connection (ADOLE v3.0)
 async fn handle_ws_api(mut socket: WebSocket, state: AppState) {
     println!("🔗 New WebSocket API connection");
@@ -5103,20 +4790,18 @@ async fn handle_ws_api(mut socket: WebSocket, state: AppState) {
                 // Route to atome handler
                 if msg_type == "atome" {
                     if let Some(ref atome_state) = state.atome_state {
-                        // Extract user_id from JWT token (secure - cannot be spoofed)
-                        // If no auth_state, fall back to anonymous (development mode)
-                        let user_id = if let Some(ref auth_state) = state.auth_state {
-                            let token = data.get("token").and_then(|v| v.as_str());
-                            local_auth::extract_user_id_from_token(&auth_state.jwt_secret, token)
-                        } else {
-                            // Secondary to userId from message (insecure, only for dev)
-                            data.get("userId")
-                                .and_then(|v| v.as_str())
-                                .unwrap_or("anonymous")
-                                .to_string()
+                        let user_id = match ws_authenticated_user(&data, &state) {
+                            Ok(user_id) => user_id,
+                            Err(response) => {
+                                let _ = socket.send(Message::Text(response.to_string())).await;
+                                continue;
+                            }
                         };
-                        let response =
-                            local_atome::handle_atome_message(data, &user_id, atome_state).await;
+                        let response = if data.get("action").and_then(|value| value.as_str()) == Some("history") {
+                            local_atome_extended::handle_history_message(data, &user_id, atome_state).await
+                        } else {
+                            local_atome::handle_atome_message(data, &user_id, atome_state).await
+                        };
                         let _ = socket
                             .send(Message::Text(
                                 serde_json::to_string(&response).unwrap_or_default(),
@@ -5136,14 +4821,12 @@ async fn handle_ws_api(mut socket: WebSocket, state: AppState) {
                 // Route to events handler (event log + state projection)
                 if msg_type == "events" {
                     if let Some(ref atome_state) = state.atome_state {
-                        let user_id = if let Some(ref auth_state) = state.auth_state {
-                            let token = data.get("token").and_then(|v| v.as_str());
-                            local_auth::extract_user_id_from_token(&auth_state.jwt_secret, token)
-                        } else {
-                            data.get("userId")
-                                .and_then(|v| v.as_str())
-                                .unwrap_or("anonymous")
-                                .to_string()
+                        let user_id = match ws_authenticated_user(&data, &state) {
+                            Ok(user_id) => user_id,
+                            Err(response) => {
+                                let _ = socket.send(Message::Text(response.to_string())).await;
+                                continue;
+                            }
                         };
                         let response =
                             local_atome::handle_events_message(data, &user_id, atome_state).await;
@@ -5166,14 +4849,12 @@ async fn handle_ws_api(mut socket: WebSocket, state: AppState) {
                 // Route to state-current handler (projection cache)
                 if msg_type == "state-current" {
                     if let Some(ref atome_state) = state.atome_state {
-                        let user_id = if let Some(ref auth_state) = state.auth_state {
-                            let token = data.get("token").and_then(|v| v.as_str());
-                            local_auth::extract_user_id_from_token(&auth_state.jwt_secret, token)
-                        } else {
-                            data.get("userId")
-                                .and_then(|v| v.as_str())
-                                .unwrap_or("anonymous")
-                                .to_string()
+                        let user_id = match ws_authenticated_user(&data, &state) {
+                            Ok(user_id) => user_id,
+                            Err(response) => {
+                                let _ = socket.send(Message::Text(response.to_string())).await;
+                                continue;
+                            }
                         };
                         let response =
                             local_atome::handle_state_current_message(data, &user_id, atome_state)
@@ -5189,6 +4870,27 @@ async fn handle_ws_api(mut socket: WebSocket, state: AppState) {
                                 json!({"type": "error", "message": "Atome state not initialized"})
                                     .to_string(),
                             ))
+                            .await;
+                    }
+                    continue;
+                }
+
+                if matches!(msg_type, "snapshot" | "user-data" | "sync") {
+                    if let Some(ref atome_state) = state.atome_state {
+                        let user_id = match ws_authenticated_user(&data, &state) {
+                            Ok(user_id) => user_id,
+                            Err(response) => {
+                                let _ = socket.send(Message::Text(response.to_string())).await;
+                                continue;
+                            }
+                        };
+                        let response = match msg_type {
+                            "snapshot" => local_atome_extended::handle_snapshot_message(data, &user_id, atome_state).await,
+                            "user-data" => local_atome_extended::handle_user_data_message(data, &user_id, atome_state).await,
+                            _ => local_atome_extended::handle_sync_message(data, &user_id, atome_state).await,
+                        };
+                        let _ = socket
+                            .send(Message::Text(serde_json::to_string(&response).unwrap_or_default()))
                             .await;
                     }
                     continue;
@@ -5216,31 +4918,6 @@ async fn handle_ws_api(mut socket: WebSocket, state: AppState) {
 
                 if msg_type == "file" {
                     let response = handle_ws_file_message(data, &state).await;
-                    let _ = socket.send(Message::Text(response.to_string())).await;
-                    continue;
-                }
-
-                // Handle previous API requests (for backward compatibility)
-                if msg_type == "api-request" {
-                    let id = data.get("id").and_then(|v| v.as_str()).unwrap_or("");
-                    let method = data.get("method").and_then(|v| v.as_str()).unwrap_or("GET");
-                    let path = data.get("path").and_then(|v| v.as_str()).unwrap_or("/");
-
-                    let response = json!({
-                        "type": "api-response",
-                        "id": id,
-                        "response": {
-                            "status": 200,
-                            "headers": {},
-                            "body": {
-                                "success": true,
-                                "method": method,
-                                "path": path,
-                                "server": "Tauri/Axum"
-                            }
-                        }
-                    });
-
                     let _ = socket.send(Message::Text(response.to_string())).await;
                     continue;
                 }
@@ -5273,64 +4950,63 @@ async fn handle_ws_sync(state: AppState, mut socket: WebSocket) {
     println!("🔗 New WebSocket sync connection");
 
     let now_iso = || chrono::Utc::now().to_rfc3339();
-    let server_version = state.version.as_str().to_string();
-    let build_welcome = |client_id: Option<String>| {
-        json!({
-            "type": "welcome",
-            "clientId": client_id.unwrap_or_else(|| "unknown".to_string()),
-            "server": "axum",
-            "version": server_version,
-            "schema": local_atome::schema_tables(),
-            "schema_hash": local_atome::schema_hash(),
-            "protectedPaths": [],
-            "watcherEnabled": false,
-            "watcherConfig": null,
-            "capabilities": ["events", "sync_request", "file-events", "atome-events", "account-events"],
-            "timestamp": now_iso()
-        })
-    };
-    let wrap_event_payload = |payload: &JsonValue| {
-        let event_type = payload.get("type").and_then(|v| v.as_str()).unwrap_or("");
-
-        if event_type == "event" {
-            return payload.clone();
+    let auth_state = match state.auth_state.as_ref() {
+        Some(auth_state) => auth_state,
+        None => {
+            let _ = socket
+                .send(Message::Text(
+                    json!({"type": "error", "code": "authentication_unavailable"}).to_string(),
+                ))
+                .await;
+            return;
         }
-
-        let mut mapped_event = event_type.to_string();
-        if event_type == "atome-sync" {
-            let op = payload
-                .get("operation")
-                .and_then(|v| v.as_str())
-                .unwrap_or("update")
-                .to_lowercase();
-            mapped_event = if op == "create" {
-                "atome:created".to_string()
-            } else if op == "delete" {
-                "atome:deleted".to_string()
-            } else {
-                "atome:updated".to_string()
-            };
-        } else if event_type == "file-event" {
-            mapped_event = "sync:file-event".to_string();
-        } else if event_type == "account-created" || event_type == "account-deleted" {
-            mapped_event = format!("sync:{}", event_type);
-        } else if event_type == "sync:user-created" {
-            mapped_event = "sync:account-created".to_string();
-        } else if event_type == "sync:user-deleted" {
-            mapped_event = "sync:account-deleted".to_string();
-        }
-
-        json!({
-            "type": "event",
-            "eventType": mapped_event,
-            "payload": payload,
-            "timestamp": payload.get("timestamp").cloned().unwrap_or_else(|| json!(now_iso()))
-        })
     };
-
-    // Send welcome message (immediate)
+    let first_message = match timeout(Duration::from_secs(5), socket.recv()).await {
+        Ok(Some(Ok(Message::Text(text)))) => text,
+        _ => {
+            let _ = socket
+                .send(Message::Text(
+                    json!({"type": "error", "code": "authentication_required"}).to_string(),
+                ))
+                .await;
+            return;
+        }
+    };
+    let auth_message: JsonValue = match serde_json::from_str(&first_message) {
+        Ok(value) => value,
+        Err(_) => return,
+    };
+    let token = auth_message
+        .get("token")
+        .and_then(|value| value.as_str())
+        .unwrap_or("")
+        .to_string();
+    let user_id = match local_auth::verified_user_id_from_token(&auth_state.jwt_secret, Some(&token))
+    {
+        Some(user_id) if auth_message.get("type").and_then(|value| value.as_str()) == Some("auth") => {
+            user_id
+        }
+        _ => {
+            let _ = socket
+                .send(Message::Text(
+                    json!({"type": "error", "code": "authentication_invalid"}).to_string(),
+                ))
+                .await;
+            return;
+        }
+    };
     let _ = socket
-        .send(Message::Text(build_welcome(None).to_string()))
+        .send(Message::Text(
+            json!({
+                "type": "welcome",
+                "clientId": format!("axum_{}", Uuid::new_v4()),
+                "server": "axum",
+                "version": state.version.as_str(),
+                "capabilities": ["events", "atome-events", "ping"],
+                "timestamp": now_iso()
+            })
+            .to_string(),
+        ))
         .await;
 
     let mut sync_rx = sync_event_sender().subscribe();
@@ -5349,52 +5025,29 @@ async fn handle_ws_sync(state: AppState, mut socket: WebSocket) {
                     Message::Text(text) => {
                         let data: serde_json::Value = match serde_json::from_str(&text) {
                             Ok(v) => v,
-                            Err(_) => continue,
+                            Err(_) => {
+                                let _ = ws_sender.send(Message::Text(json!({"type": "error", "code": "invalid_json"}).to_string())).await;
+                                continue;
+                            },
                         };
-
-                        // Handle ping
+                        if local_auth::verified_user_id_from_token(&auth_state.jwt_secret, Some(&token)).as_deref() != Some(user_id.as_str()) {
+                            let _ = ws_sender.send(Message::Text(json!({"type": "error", "code": "authentication_expired"}).to_string())).await;
+                            break;
+                        }
                         if data.get("type").and_then(|v| v.as_str()) == Some("ping") {
                             let _ = ws_sender
                                 .send(Message::Text(json!({"type": "pong", "timestamp": now_iso()}).to_string()))
                                 .await;
                             continue;
                         }
-
-                        // Handle heartbeat (previous)
-                        if data.get("type").and_then(|v| v.as_str()) == Some("heartbeat") {
-                            let _ = ws_sender
-                                .send(Message::Text(json!({"type": "heartbeat_ack"}).to_string()))
-                                .await;
-                            continue;
-                        }
-
-                        // Handle register (preferred)
                         if data.get("type").and_then(|v| v.as_str()) == Some("register") {
-                            let client_id = data
-                                .get("clientId")
-                                .and_then(|v| v.as_str())
-                                .map(|v| v.to_string());
                             let _ = ws_sender
-                                .send(Message::Text(build_welcome(client_id).to_string()))
+                                .send(Message::Text(json!({"type": "registered", "principal_id": user_id}).to_string()))
                                 .await;
                             continue;
                         }
-
-                        // Handle sync_request (offline/local)
-                        if data.get("type").and_then(|v| v.as_str()) == Some("sync_request") {
-                            let _ = ws_sender
-                                .send(Message::Text(json!({
-                                    "type": "sync_started",
-                                    "mode": "local",
-                                    "timestamp": now_iso()
-                                }).to_string()))
-                                .await;
-                            continue;
-                        }
-
-                        // Echo other messages for now (previous ack)
                         let _ = ws_sender
-                            .send(Message::Text(json!({"type": "ack", "received": data}).to_string()))
+                            .send(Message::Text(json!({"type": "error", "code": "operation_not_allowed"}).to_string()))
                             .await;
                     }
                     Message::Ping(data) => {
@@ -5407,9 +5060,17 @@ async fn handle_ws_sync(state: AppState, mut socket: WebSocket) {
             sync_msg = sync_rx.recv() => {
                 match sync_msg {
                     Ok(payload) => {
-                        let wrapped = wrap_event_payload(&payload);
-                        let _ = ws_sender.send(Message::Text(wrapped.to_string())).await;
-                        let _ = ws_sender.send(Message::Text(payload.to_string())).await;
+                        if local_auth::verified_user_id_from_token(&auth_state.jwt_secret, Some(&token)).as_deref() != Some(user_id.as_str()) {
+                            let _ = ws_sender.send(Message::Text(json!({"type": "error", "code": "authentication_expired"}).to_string())).await;
+                            break;
+                        }
+                        if let Some(filtered) = state
+                            .atome_state
+                            .as_ref()
+                            .and_then(|atome_state| local_atome::filter_sync_event_for_user(atome_state, &user_id, &payload))
+                        {
+                            let _ = ws_sender.send(Message::Text(filtered.to_string())).await;
+                        }
                     }
                     Err(broadcast::error::RecvError::Lagged(_)) => {
                         continue;
@@ -5628,7 +5289,6 @@ pub async fn start_server(static_dir: PathBuf, uploads_dir: PathBuf, data_dir: P
         .route("/api/server-info", get(server_info_handler))
         .route("/dev/state", get(dev_state_handler))
         .route("/api/fastify-status", get(fastify_status_handler))
-        .route("/api/auth/me", get(auth_me_handler))
         .route("/server_config.json", get(server_config_handler))
         .route("/api/debug-log", post(debug_log_handler))
         .route("/api/db/status", get(db_status_handler))
@@ -5641,14 +5301,6 @@ pub async fn start_server(static_dir: PathBuf, uploads_dir: PathBuf, data_dir: P
         .route("/api/eve/mail/mark-read", post(eve_mail_mark_read_handler))
         .route("/api/eve/mail/archive", post(eve_mail_archive_handler))
         .route("/api/eve/mail/delete", post(eve_mail_delete_handler))
-        .route("/api/events/commit", post(events_commit_handler))
-        .route(
-            "/api/events/commit-batch",
-            post(events_commit_batch_handler),
-        )
-        .route("/api/events", get(events_list_handler))
-        .route("/api/state_current/:id", get(state_current_get_handler))
-        .route("/api/state_current", get(state_current_list_handler))
         .route(
             "/api/local-files",
             get(local_file_read_handler).post(local_file_write_handler),
@@ -5666,34 +5318,10 @@ pub async fn start_server(static_dir: PathBuf, uploads_dir: PathBuf, data_dir: P
         .route("/api/admin/apply-update", post(update_file_handler))
         .route("/api/admin/batch-update", post(batch_update_handler))
         .route("/api/admin/sync-from-zip", post(sync_from_zip_handler))
-        .route("/__tauri_remote/status", get(remote_control::status))
-        .route(
-            "/__tauri_remote/audio/record/start",
-            post(remote_audio_record_start_handler),
-        )
-        .route(
-            "/__tauri_remote/audio/record/stop",
-            post(remote_audio_record_stop_handler),
-        )
-        .route(
-            "/__tauri_remote/audio/analyze",
-            post(remote_audio_analyze_handler),
-        )
-        .route(
-            "/__tauri_remote/audio/playback/load",
-            post(remote_audio_playback_load_handler),
-        )
-        .route(
-            "/__tauri_remote/audio/playback/play",
-            post(remote_audio_playback_play_handler),
-        )
-        .route(
-            "/__tauri_remote/audio/playback/stop",
-            post(remote_audio_playback_stop_handler),
-        )
         // WebSocket endpoints for API and sync (ADOLE v3.0)
         .route("/ws/api", get(ws_api_handler))
         .route("/ws/sync", get(ws_sync_handler))
+        .route("/ws/control", get(remote_control_ws::handler))
         .nest_service("/src", src_service)
         .nest_service("/atome", atome_service)
         .nest_service("/eVe", eve_service)

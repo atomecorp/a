@@ -1,6 +1,15 @@
 # Authenticated and permission-scoped `/ws/sync`
 
-Status: Actif
+Status: Implémenté et vérifié pour la migration de transport; revalidation formelle de clôture sécurité encore planifiée dans `todo/execution_order.md`
+
+Implementation evidence:
+
+- unauthenticated, malformed, and expired credentials fail closed before `welcome`;
+- Atome notifications require current read permission and a real-time sharing mode;
+- file notifications are permission-filtered and redact paths and hashes;
+- account-directory events are not exposed on the ordinary channel;
+- reconnect creates a fresh principal binding;
+- Fastify/Tauri/iOS contract tests and the permanent transport guard pass.
 
 ## Decision
 

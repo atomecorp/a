@@ -101,7 +101,7 @@ automatic fallback may be implemented.
 
 ## Dependencies
 
-- `todo/cleanup_architecture/websocket_only_atome_transport.md`
+- `done/websocket_only_atome_transport.md`
 - `todo/cleanup_architecture/stable_user_identity_independent_of_phone.md`
 - An OVHcloud SMS account with credits, approved sender configuration, narrowly scoped
   API credentials and required regulatory configuration

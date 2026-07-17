@@ -1,5 +1,4 @@
 import { sanitizeAtomeProperties } from '../../../../shared/atome_contract.js';
-import { isTauriRuntime } from './runtime.js';
 import { getSessionState } from './session.js';
 
 function normalizeAtomeRecord(record) {
@@ -146,48 +145,6 @@ function mapStateCurrentToAtome(state) {
     });
 }
 
-function resolveHttpBaseUrl(backend, adapter) {
-    let base = adapter?.baseUrl || '';
-    if (base.startsWith('ws://')) base = `http://${base.slice(5)}`;
-    if (base.startsWith('wss://')) base = `https://${base.slice(6)}`;
-    base = base.replace(/\/ws\/api\/?$/, '').replace(/\/$/, '');
-    if (base) return base;
-    if (typeof window === 'undefined') return '';
-    if (backend === 'fastify') {
-        return (window.__SQUIRREL_FASTIFY_URL__ || 'http://127.0.0.1:3001').replace(/\/$/, '');
-    }
-    const port = window.__ATOME_LOCAL_HTTP_PORT__ || window.ATOME_LOCAL_HTTP_PORT || 3000;
-    return `http://127.0.0.1:${port}`;
-}
-
-function isLoopbackHost(hostname = '') {
-    const host = String(hostname || '').trim().toLowerCase();
-    return host === 'localhost' || host === '127.0.0.1' || host === '0.0.0.0' || host === '::1' || host === '[::1]' || host === 'tauri.localhost';
-}
-
-function shouldSkipFastifyStateCurrentOnTauri(backend, baseUrl) {
-    if (backend !== 'fastify') return false;
-    if (!isTauriRuntime()) return false;
-    if (typeof window === 'undefined') return false;
-    try {
-        const parsed = new URL(baseUrl || '', window.location?.href || 'http://127.0.0.1/');
-        const pageOrigin = String(window.location?.origin || '').trim();
-        return isLoopbackHost(parsed.hostname) && pageOrigin && parsed.origin !== pageOrigin;
-    } catch (error) {
-        return false;
-    }
-}
-
-function buildBackendAuthHeaders(backend, token) {
-    const headers = {};
-    if (token) headers.Authorization = `Bearer ${token}`;
-    if (backend === 'tauri') {
-        const userId = getCurrentUserId();
-        if (userId) headers['X-User-Id'] = String(userId);
-    }
-    return headers;
-}
-
 async function listOnBackend(adapters, backend, options, currentUserId, skipOwner) {
     const adapter = adapters[backend];
     if (!adapter?.atome?.list) return { ok: false, list: [], error: 'backend_unavailable' };
@@ -208,27 +165,19 @@ async function listOnBackend(adapters, backend, options, currentUserId, skipOwne
 
 async function listStateCurrentOnBackend(adapters, backend, options) {
     const adapter = adapters[backend];
-    const baseUrl = resolveHttpBaseUrl(backend, adapter);
-    if (shouldSkipFastifyStateCurrentOnTauri(backend, baseUrl)) {
-        return { ok: false, list: [], error: 'fastify_state_current_cross_origin_loopback_blocked' };
+    if (!adapter?.atome?.listStateCurrent) {
+        return { ok: false, list: [], error: 'state_current_unavailable' };
     }
-    const token = adapter?.getToken?.();
-    if (!baseUrl || !token) return { ok: false, list: [], error: 'state_current_unavailable' };
-    const params = new URLSearchParams();
-    const projectId = options.project_id || options.projectId || options.parent_id || options.parentId || null;
-    if (projectId) params.set('project_id', projectId);
-    if (options.limit != null) params.set('limit', String(options.limit));
-    if (options.offset != null) params.set('offset', String(options.offset));
-    const url = `${baseUrl}/api/state_current${params.toString() ? `?${params.toString()}` : ''}`;
     try {
-        const response = await fetch(url, {
-            method: 'GET',
-            headers: buildBackendAuthHeaders(backend, token),
-            credentials: 'include'
-        });
-        if (!response.ok) return { ok: false, list: [], error: `state_current_http_${response.status}` };
-        const payload = await response.json().catch(() => null);
-        const listRaw = Array.isArray(payload?.states) ? payload.states : Array.isArray(payload?.state_current) ? payload.state_current : [];
+        const payload = await adapter.atome.listStateCurrent(options);
+        if (payload?.ok === false || payload?.success === false) {
+            return { ok: false, list: [], error: payload?.error || 'state_current_failed' };
+        }
+        const listRaw = Array.isArray(payload?.states)
+            ? payload.states
+            : Array.isArray(payload?.data?.states)
+                ? payload.data.states
+                : [];
         const list = listRaw.map(mapStateCurrentToAtome).filter(Boolean);
         return { ok: true, list, raw: payload };
     } catch (error) {
@@ -237,7 +186,6 @@ async function listStateCurrentOnBackend(adapters, backend, options) {
 }
 
 export {
-    buildBackendAuthHeaders,
     buildUpsertPayload,
     extractUserId,
     filterByOwner,
@@ -252,7 +200,5 @@ export {
     resolveAtomeParentId,
     resolveAtomeProjectId,
     resolveAtomeType,
-    resolveHttpBaseUrl,
-    shouldSkipFastifyStateCurrentOnTauri,
     topologicalSortByParent
 };

@@ -48,6 +48,14 @@ Si votre code ou vos déploiements définissaient auparavant d'autres flags (par
 - Activez le debug localement ou via un flag de build lors des tests.
 - Ne laissez pas `window.__CHECK_DEBUG__ = true` en production build par défaut — utilisez un build-time mapping ou un process d'environnement pour contrôler le comportement.
 
+## Diagnostic du transport applicatif
+
+- Les opérations métier Atome doivent apparaître sur `/ws/api`, jamais sur une route HTTP CRUD/event/state/snapshot/auth/sharing/sync/user-data.
+- `/ws/sync` ne doit produire aucun `welcome` ni événement avant authentification.
+- Une capacité native absente doit produire une erreur typée `unsupported` ou équivalente, sans tentative HTTP.
+- Le contrôle distant Tauri utilise uniquement `ws://127.0.0.1:3000/ws/control`.
+- Exécutez `npm run check:websocket-only-transport` pour détecter une réintroduction statique de transport interdit.
+
 ---
 
 Fichier créé : `atome/documentations/debu_mode.md`

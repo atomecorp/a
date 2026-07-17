@@ -190,11 +190,93 @@ export const buildAtomeApi = ({ getWs, tokenKey }) => ({
                 });
             },
             async history(id) {
-                // Not implemented in WebSocket version yet
-                return { ok: true, success: true, versions: [] };
+                const token = getToken(tokenKey);
+                return getWs().send({
+                    type: 'atome',
+                    action: 'history',
+                    token,
+                    atome_id: id
+                });
             },
             async restore(id, data) {
-                // Not implemented in WebSocket version yet
-                return { ok: false, success: false, error: 'Not implemented' };
+                const token = getToken(tokenKey);
+                return getWs().send({
+                    type: 'snapshot',
+                    action: 'restore',
+                    token,
+                    snapshot_id: data?.snapshot_id || data?.snapshotId || data?.id || id,
+                    tx_id: data?.tx_id || data?.txId || null
+                });
+            },
+            async getStateCurrent(id) {
+                const token = getToken(tokenKey);
+                return getWs().send({
+                    type: 'state-current',
+                    action: 'get',
+                    token,
+                    atome_id: id
+                });
+            },
+            async listStateCurrent(params = {}) {
+                const token = getToken(tokenKey);
+                return getWs().send({
+                    type: 'state-current',
+                    action: 'list',
+                    token,
+                    project_id: params.project_id || params.projectId || params.parent_id || params.parentId || null,
+                    include_shared: params.include_shared === true || params.includeShared === true,
+                    limit: params.limit,
+                    offset: params.offset
+                });
+            },
+            async listEvents(params = {}) {
+                const token = getToken(tokenKey);
+                return getWs().send({
+                    type: 'events',
+                    action: 'list',
+                    token,
+                    project_id: params.project_id || params.projectId || null,
+                    atome_id: params.atome_id || params.atomeId || null,
+                    tx_id: params.tx_id || params.txId || null,
+                    gesture_id: params.gesture_id || params.gestureId || null,
+                    since: params.since || null,
+                    until: params.until || null,
+                    order: params.order,
+                    limit: params.limit,
+                    offset: params.offset
+                });
+            },
+            async createSnapshot(params = {}) {
+                const token = getToken(tokenKey);
+                return getWs().send({
+                    type: 'snapshot',
+                    action: 'create',
+                    token,
+                    project_id: params.project_id || params.projectId || null,
+                    atome_id: params.atome_id || params.atomeId || null,
+                    label: params.label || null,
+                    state: params.state || params.state_blob || params.stateBlob || null,
+                    snapshot_type: params.snapshot_type || params.snapshotType || 'manual'
+                });
+            },
+            async listSnapshots(params = {}) {
+                const token = getToken(tokenKey);
+                return getWs().send({
+                    type: 'snapshot',
+                    action: 'list',
+                    token,
+                    project_id: params.project_id || params.projectId || null,
+                    limit: params.limit,
+                    offset: params.offset
+                });
+            },
+            async getSnapshot(id) {
+                const token = getToken(tokenKey);
+                return getWs().send({
+                    type: 'snapshot',
+                    action: 'get',
+                    token,
+                    snapshot_id: id
+                });
             }
 });

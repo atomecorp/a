@@ -77,7 +77,7 @@ The server and database layers are open infrastructure when they remain product-
 The core invariant is deterministic, tool-driven, append-only state:
 
 - User, AI, voice, MCP, script, and automation actions converge on the same tool/runtime path.
-- Target communication contract: all Atome application and business operations use the canonical `/ws/api` WebSocket transport on every supported runtime. HTTP is forbidden in the end state as an Atome CRUD, event, state, history, snapshot, restore, authentication, sharing, synchronization, or user-data fallback. Current HTTP application paths are migration debt tracked in `todo/cleanup_architecture/websocket_only_atome_transport.md`, not a supported long-term architecture. Static/bootstrap resources, health/configuration discovery, and explicit file/media byte transfers remain separate HTTP-capable infrastructure concerns and must not mutate or query canonical Atome business state outside `/ws/api`.
+- Communication contract: all Atome application and business operations use the canonical `/ws/api` WebSocket transport on every supported runtime. HTTP is forbidden as an Atome CRUD, event, state, history, snapshot, restore, authentication, sharing, synchronization, or user-data fallback. Static/bootstrap resources, health/configuration discovery, and explicit file/media/archive byte transfers remain separate HTTP-capable infrastructure concerns and must not mutate or query canonical Atome business state outside `/ws/api`.
 - The login choice voice-guidance prompt is a pre-auth UI side effect routed through the existing global voice API only. It does not create a second TTS provider, does not mutate profile state, and does not decide accessibility preferences until a later explicit user choice is implemented.
 - Durable mutation flows through `window.Atome.commit` or `window.Atome.commitBatch` on the client boundary.
 - Server writes flow through the event commit helpers and database persistence boundary.
@@ -311,7 +311,7 @@ Canonical extension points:
 
 - `server/atomeRoutes.orm.js` for server-side Atome event commit helpers.
 - `database/adole.js` and `database/driver.js` for SQL persistence and database driver concerns.
-- `server/wsApiState.js`, `server/wsSend.js`, and the Fastify WebSocket registration points for WebSocket runtime state.
+- `server/wsApiState.js`, `server/wsSend.js`, `server/wsApiIdentity.js`, `server/wsAtomeOperations.js`, and `server/wsSyncSecurity.js` for WebSocket runtime state, identity, operations, and notification authorization.
 - Existing route modules for their own families only, with size reduction required before feature growth in oversized files.
 - Login pre-auth account lookup and phone verification belong to the existing auth/WebSocket boundary: the eVe login shell first calls `AdoleAPI.auth.lookupPhone(...)` on the active auth backend. A found local account skips OTP and moves directly to password; an explicit `User not found` launches `AdoleAPI.auth.requestPhoneVerification(...)`, then `AdoleAPI.auth.verifyPhoneVerification(...)`, and only after a successful check may it call `AdoleAPI.auth.bootstrap(...)`. Lookup failures other than explicit absence are hard failures and must not request OTP. The OTP secret is a transient auth artifact; in test/demo mode it may be projected in the login shell instruction band, but it must not become Atome state, DOM-owned canonical state, durable project state, or a production response field. The explicit local test launcher `./run.sh --test` may set `SQUIRREL_AUTH_OTP_BYPASS=1`; Fastify and Tauri/Axum may then return `otpBypassed: true` only outside production, after request validation and rate limiting, so the login shell skips the OTP entry step without bypassing password/bootstrap. After local password validation, `user_auth_flow_runtime.js` may call the login shell's internal `onAuthenticating` callback before `bootstrap` so the user gets neutral immediate wait feedback; after successful `bootstrap`, it may call `onAuthenticated` before profile restoration, current-project creation, tool-catalog refresh, dashboard open, and menu reveal without awaiting that visual animation. These callbacks are disposable UI acknowledgements only and must not become auth/session authority.
 - The login shell owns only a transient visual choreography. Its persistent logo may dock to the Intuition handle during final reveal, and `menu_auth_dock_runtime.js` must suppress the older main-ribbon auth dock movement while that logo docking flag is active so there is never a second competing post-auth movement.
@@ -439,7 +439,7 @@ Rendering and identity:
   no DOM tick fallback is retained.
 - MTraX close orchestration must complete canonical teardown before the public close API resolves. Close may preserve dormant metadata for desktop restoration, but stale runtime clips, queued prewarm, close-time preview export, and post-commit verification must not block or repopulate a closed panel.
 - Mutation ownership is enforced by `scripts/check_mutation_ownership_guardrails.mjs`: `state_current` is a projection read surface outside server route owners, runtime durable writes must enter through the canonical event commit owner rather than ad hoc HTTP calls, timeline replay baselines must never be recovered from DOM projection state before backend apply, and timeline preview/replay code must never produce backend commits from DOM projection reads.
-- WebSocket-only transport ownership is an active migration requirement in `todo/cleanup_architecture/websocket_only_atome_transport.md`. Its permanent executable guard does not exist yet.
+- WebSocket-only transport ownership is enforced by `scripts/check_websocket_only_transport.mjs` through `npm run check:websocket-only-transport`. It rejects maintained HTTP Atome business calls, HTTP remote-control commands, generic WebSocket-to-HTTP tunnels, and unauthenticated `/ws/sync` composition.
 - New project Atomes created through `toolBase.createAtome` follow the command sequence `buildCreateAtomeCommand -> validateCreateAtomeCommand -> commitCreateAtome -> refreshCreatedAtomeState -> renderCreatedAtome`. DOM hosts and `renderedAtomes` / `renderedAtomeHosts` are render caches only and are populated after commit; `{ render: false }` keeps creation canonical without dispatching projection events.
 - Event projection invariants are enforced at `database/adole.js`: append-only events update `particles` and `state_current` in one transaction, duplicate event ids do not advance projection version, and reserved envelope fields are stripped from projected properties.
 - Durable undo/redo grouping is defined by `database/adole_history_transactions.js`: event rows are sorted deterministically, grouped by `tx_id`, continuous `gesture_start`/`gesture_frame` events stay replay-visible but not undo-visible, `gesture_end` closes an undo-visible transaction, audit/history-control events do not become undo targets, missing `tx_id` values become isolated `event:<id>` transactions, and redo is selected from append-only transactions after a durable cursor rather than client memory.
@@ -498,16 +498,16 @@ Storage:
 Sync:
 
 - Sync is event-based, append-only, and replayable.
-- WebSocket sync transports committed events, gesture envelopes, file/media changes, ACL changes, and version/project lifecycle events.
+- Authenticated `/ws/sync` transports only permission-scoped, redacted Atome, file/media, and ACL notifications. Account-directory broadcasts and private filesystem metadata are excluded from the ordinary channel.
 - Offline writes queue in `sync_queue` and replay in order with idempotency keys.
 
 Communication:
 
 - Framework communication must stay centralized and WebSocket-based.
-- REST-like route families that exist in the server are current implementation surfaces, but new communication architecture must not add polling, hidden REST fallbacks, or scattered duplicate transports.
+- HTTP remains a resource and operational boundary only; communication architecture must not add polling, hidden REST fallbacks, or scattered duplicate transports for application operations.
 - New login pre-auth OTP communication uses `/ws/api` auth actions only; adding matching REST endpoints would violate the current communication direction.
 
-Status: Target rules verified from authoritative docs. Existing route-level legacy and debug surfaces must be audited in the security and communication phases before being treated as final architecture.
+Status: Verified and guarded for the WebSocket-only application boundary. Product-named route families and unrelated debug surfaces remain separate review areas.
 
 ## Code Placement Rules
 
@@ -627,7 +627,7 @@ The removed `aVa_panel` and main-handle DOM bridge are not architectural fallbac
 
 - Exact product bootstrap boundaries still present from Atome browser shell into eVe product startup.
 - Server open/closed naming and route ownership for product-named route families.
-- Existing WebSocket-only target versus historical HTTP route implementation surfaces.
+- Product-named and operational HTTP surfaces outside the canonical Atome application boundary.
 - Runtime parity of all modes outside the documented contract.
 - Full public, semi-public, and internal API classification, which is the next Phase 2 task.
 - Complete MCP registry and automatic discovery system, which remains future architecture work.

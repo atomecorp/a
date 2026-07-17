@@ -1,6 +1,13 @@
 # WebSocket-only Atome transport migration
 
-Status: Actif
+Status: Terminé et vérifié
+
+Completion evidence:
+
+- Fastify, Tauri, and iOS use `/ws/api` for the maintained Atome application contract.
+- `/ws/sync` authenticates before `welcome` and filters notifications by verified principal and current permissions.
+- Tauri remote control uses the token-protected local `/ws/control` channel.
+- `npm run check:websocket-only-transport`, focused WebSocket tests, syntax checks, Rust compilation, and Swift parsing pass.
 
 ## Decision
 

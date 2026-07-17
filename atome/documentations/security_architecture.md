@@ -7,7 +7,7 @@ Status: Partiel
 - Authentication and account operations are canonical application operations and must use the unified `/ws/api` WebSocket endpoint.
 - `GET /api/server/identity` and `POST /api/server/verify` are limited pre-authentication bootstrap operations used to verify the remote server before credentials are sent. They do not read or mutate canonical Atome business state.
 - Fastify and Tauri currently expose WebSocket authentication handlers, and the unified Squirrel adapter already sends authentication actions through `/ws/api`.
-- Historical HTTP authentication routes still present in runtime code are migration surface, not an alternative supported contract. Their retirement is tracked by `todo/cleanup_architecture/websocket_only_atome_transport.md`.
+- Historical HTTP authentication route modules are not composed into maintained runtimes and are not an alternative supported contract. The completed transport migration is recorded in `done/websocket_only_atome_transport.md`.
 - Authentication parity, authorization boundaries, token lifecycle, and secure real-time notification scoping remain active work. This document must not be read as proof that the full security target is already complete.
 - Canonical user identity is an opaque immutable principal independent of phone. The current Fastify and Tauri phone-derived UUID v5 implementation must be migrated according to `todo/cleanup_architecture/stable_user_identity_independent_of_phone.md`; a phone is only a verified, mutable and permission-scoped credential/lookup alias.
 - Cross-runtime account creation/linking is explicit. Fastify must not create a shadow account from an ordinary Tauri JWT, session read, message, share, or sync operation. The supported `Try` guest mode remains local/private with an isolated opaque guest principal and optional explicit workspace adoption; migration is tracked by `todo/cleanup_architecture/explicit_cross_runtime_account_provisioning.md`.
@@ -45,8 +45,8 @@ contract.
 │                         Client (Browser/Tauri)                   │
 ├──────────────────────────────────────────────────────────────────┤
 │  ┌──────────────────┐          ┌──────────────────────────────┐  │
-│  │  Auth UI/API     │          │   Cloud Sync Module          │  │
-│  │  (Squirrel API)  │          │   (cloudSync.js)             │  │
+│  │  Auth UI/API     │          │ Server identity verification │  │
+│  │  (Squirrel API)  │          │ (serverVerification.js)      │  │
 │  └────────┬─────────┘          └─────────────┬────────────────┘  │
 │           │                                  │                   │
 │           │                    ┌─────────────┴────────────────┐  │
@@ -142,20 +142,11 @@ The client sends typed frames to `/ws/api`:
 Fastify and Tauri must expose equivalent typed semantics. Historical HTTP auth handlers
 must not be used as a fallback.
 
-### 5. Cloud Synchronization (`atome/security/cloudSync.js`)
+### 5. Cross-runtime account provisioning
 
-Handles local/cloud account coordination:
+The former `atome/security/cloudSync.js` module was removed because it implemented local/cloud account coordination through retired HTTP authentication routes and had no maintained caller.
 
-- Verifies server identity before sync
-- Uses `/ws/api` for authentication and account application operations
-- Checks whether an authorized account match exists
-- Creates or links the account through typed WebSocket operations
-- Handles credential conflicts
-- Updates local account with cloud ID
-
-The current `cloudSync.js` implementation and every maintained caller must be checked
-against this contract during the WebSocket-only migration. An HTTP authentication call
-found there is a gap to remove, not an approved compatibility route.
+Cross-runtime provisioning is intentionally unavailable until the explicit authenticated `/ws/api` protocol in `todo/cleanup_architecture/explicit_cross_runtime_account_provisioning.md` is implemented and validated. No implicit account creation, credential copying, or HTTP compatibility path replaces it.
 
 ## Security Best Practices
 
@@ -306,7 +297,6 @@ Client                                         Server
 │   │   ├── serverVerification.js           # Client verification orchestration
 │   │   ├── serverVerificationCrypto.js     # Client cryptographic verification
 │   │   ├── serverVerificationState.js      # Verification state
-│   │   ├── cloudSync.js                    # Account synchronization module
 │   │   └── trusted_keys.js                 # Trusted fingerprints
 │   └── src/squirrel/apis/unified/
 │       └── adole_adapter.js                # Canonical /ws/api auth client

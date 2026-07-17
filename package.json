@@ -73,6 +73,7 @@
     "check:eve-ai-guardrails": "node scripts/check_eve_ai_guardrails.mjs",
     "check:dom-projection-guardrails": "node scripts/check_dom_projection_guardrails.mjs",
     "check:mutation-ownership-guardrails": "node scripts/check_mutation_ownership_guardrails.mjs",
+    "check:websocket-only-transport": "node scripts/check_websocket_only_transport.mjs",
     "check:squirrel-dom-adapter-guardrails": "node scripts/check_squirrel_dom_adapter_guardrails.mjs",
     "check:browser-shared-contract-imports": "node scripts/check_browser_shared_contract_imports.mjs",
     "check:no-fallbacks": "node scripts/check_no_fallbacks.mjs",

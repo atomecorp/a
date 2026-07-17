@@ -2,7 +2,6 @@ import { TauriAdapter, FastifyAdapter, checkBackends, generateUUID } from '../ad
 import { isTauriRuntime } from './runtime.js';
 import { sanitizeAtomeProperties } from '../../../../shared/atome_contract.js';
 import {
-    buildBackendAuthHeaders,
     buildUpsertPayload,
     extractUserId,
     filterByOwner,
@@ -16,7 +15,6 @@ import {
     resolveAtomeParentId,
     resolveAtomeProjectId,
     resolveAtomeType,
-    shouldSkipFastifyStateCurrentOnTauri,
     topologicalSortByParent
 } from './atome_record_projection.js';
 
@@ -24,8 +22,6 @@ const adapters = {
     tauri: TauriAdapter,
     fastify: FastifyAdapter
 };
-
-export const __ATOMES_TEST_ONLY__ = { buildBackendAuthHeaders, shouldSkipFastifyStateCurrentOnTauri };
 
 const canUseFastify = async (currentUserId) => {
     if (!FastifyAdapter?.getToken?.()) return false;

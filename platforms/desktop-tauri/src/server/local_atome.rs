@@ -7,7 +7,7 @@
 
 use crate::server::broadcast_sync_event;
 use chrono::Utc;
-use reqwest::Client;
+use futures_util::{SinkExt, StreamExt};
 use rusqlite::{Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Map as JsonMap, Value as JsonValue};
@@ -17,7 +17,8 @@ use std::{
     path::PathBuf,
     sync::{Arc, Mutex},
 };
-use tokio::time::{sleep, Duration};
+use tokio::time::{sleep, timeout, Duration};
+use tokio_tungstenite::{connect_async, tungstenite::Message as TungsteniteMessage};
 use uuid::Uuid;
 
 macro_rules! println {
@@ -50,6 +51,60 @@ pub fn schema_hash() -> String {
 
 pub fn schema_tables() -> &'static str {
     ADOLE_SCHEMA_TABLES
+}
+
+pub fn filter_sync_event_for_user(
+    state: &LocalAtomeState,
+    user_id: &str,
+    payload: &JsonValue,
+) -> Option<JsonValue> {
+    let event_type = payload.get("type").and_then(|value| value.as_str())?;
+    if !event_type.starts_with("atome:") && event_type != "atome-sync" {
+        return None;
+    }
+    let atome_id = payload
+        .get("atome_id")
+        .or_else(|| payload.pointer("/atome/atome_id"))
+        .and_then(|value| value.as_str())?;
+    let db = state.db.lock().ok()?;
+    let owner_id = db
+        .query_row(
+            "SELECT owner_id FROM atomes WHERE atome_id = ?1",
+            [atome_id],
+            |row| row.get::<_, Option<String>>(0),
+        )
+        .optional()
+        .ok()
+        .flatten()
+        .flatten();
+    if owner_id.as_deref() != Some(user_id) {
+        let permission = db
+            .query_row(
+                "SELECT can_read, share_mode FROM permissions
+                 WHERE atome_id = ?1 AND principal_id = ?2
+                   AND can_read = 1
+                   AND (expires_at IS NULL OR expires_at > datetime('now'))
+                 LIMIT 1",
+                rusqlite::params![atome_id, user_id],
+                |row| Ok((row.get::<_, i64>(0)?, row.get::<_, Option<String>>(1)?)),
+            )
+            .optional()
+            .ok()
+            .flatten()?;
+        let mode = permission.1.unwrap_or_default().to_lowercase();
+        if permission.0 != 1 || !matches!(mode.as_str(), "" | "real-time" | "realtime") {
+            return None;
+        }
+    }
+    Some(json!({
+        "type": "event",
+        "eventType": event_type,
+        "payload": {
+            "atome_id": atome_id,
+            "atome": payload.get("atome").cloned().unwrap_or(JsonValue::Null)
+        },
+        "timestamp": Utc::now().to_rfc3339()
+    }))
 }
 
 // =============================================================================
@@ -89,6 +144,7 @@ pub struct AtomeData {
 pub struct WsResponse {
     #[serde(rename = "type")]
     pub msg_type: String,
+    #[serde(rename = "requestId")]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub request_id: Option<String>,
     pub success: bool,
@@ -3600,7 +3656,6 @@ pub async fn run_sync_worker(state: LocalAtomeState, remote_url: String) {
         return;
     }
 
-    let client = Client::new();
     let target = "fastify";
     let sync_token = std::env::var("SQUIRREL_SYNC_TOKEN").ok();
 
@@ -3652,33 +3707,50 @@ pub async fn run_sync_worker(state: LocalAtomeState, remote_url: String) {
                 continue;
             }
 
-            let actor_id = payload
-                .get("actor")
-                .and_then(|v| v.get("id"))
-                .and_then(|v| v.as_str())
-                .unwrap_or("sync");
-
-            let mut req = client
-                .post(format!("{}/api/events/commit", remote_url))
-                .header("content-type", "application/json")
-                .header("x-sync-source", "axum")
-                .header("x-user-id", actor_id)
-                .json(&payload);
-
-            if let Some(token) = sync_token.as_ref() {
-                if !token.trim().is_empty() {
-                    req = req.header("x-sync-token", token);
+            let request_id = Uuid::new_v4().to_string();
+            let ws_url = format!(
+                "{}/ws/api",
+                remote_url
+                    .trim_end_matches('/')
+                    .replacen("https://", "wss://", 1)
+                    .replacen("http://", "ws://", 1)
+            );
+            let request = json!({
+                "type": "events",
+                "action": "commit",
+                "requestId": request_id,
+                "token": sync_token.as_deref().unwrap_or(""),
+                "sync_source": "axum",
+                "event": payload
+            });
+            let result = timeout(Duration::from_secs(10), async {
+                let (mut socket, _) = connect_async(&ws_url).await.map_err(|error| error.to_string())?;
+                socket
+                    .send(TungsteniteMessage::Text(request.to_string()))
+                    .await
+                    .map_err(|error| error.to_string())?;
+                while let Some(message) = socket.next().await {
+                    let message = message.map_err(|error| error.to_string())?;
+                    let TungsteniteMessage::Text(text) = message else { continue };
+                    let response: JsonValue = serde_json::from_str(&text).map_err(|error| error.to_string())?;
+                    if response.get("requestId").and_then(|value| value.as_str()) == Some(request_id.as_str()) {
+                        return if response.get("success").and_then(|value| value.as_bool()) == Some(true) {
+                            Ok(())
+                        } else {
+                            Err(response.get("error").and_then(|value| value.as_str()).unwrap_or("WebSocket sync failed").to_string())
+                        };
+                    }
                 }
-            }
+                Err("WebSocket connection closed".to_string())
+            }).await;
 
-            match req.send().await {
-                Ok(resp) if resp.status().is_success() => {
+            match result {
+                Ok(Ok(())) => {
                     if let Ok(db) = state.db.lock() {
                         let _ = mark_sync_queue_done(&db, item.queue_id);
                     }
                 }
-                Ok(resp) => {
-                    let msg = resp.text().await.unwrap_or_default();
+                Ok(Err(msg)) => {
                     let final_fail = attempts >= item.max_attempts;
                     let retry_at = if final_fail {
                         None
