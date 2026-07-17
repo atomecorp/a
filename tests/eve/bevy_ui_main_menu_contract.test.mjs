@@ -577,6 +577,39 @@ test('BevyUI main menu renders palette children only while their canonical palet
     }
 });
 
+test('BevyUI main menu gives palette opening priority over queued cosmetic click renders', async () => {
+    const content = {
+        toolbox: { children: ['capture'] },
+        capture: {
+            atome_tool: true,
+            label: 'capture',
+            icon: 'capture',
+            tool_id: 'tool.main.capture',
+            type: 'palette',
+            children: ['import']
+        },
+        import: { atome_tool: true, label: 'import', icon: 'import', tool_id: 'ui.capture.import' }
+    };
+    const harness = createRuntimeHarness({ content });
+    try {
+        await harness.runtime.showFully();
+        const capture = findNode(harness.calls.at(-1).payload.tree.root, 'eve_bevy_ui_main_menu_tool_capture');
+        capture.on.hover();
+        capture.on.press({ x: 20, y: 20 });
+        capture.on.release({ x: 20, y: 20 });
+        await capture.on.activate();
+        await Promise.resolve();
+        await Promise.resolve();
+
+        assert.equal(harness.calls.length, 2, 'the click must produce one structural update, not a cosmetic render queue');
+        assert.equal(harness.runtime.measure().activePaletteKey, 'capture');
+        assert.ok(findNode(harness.calls.at(-1).payload.tree.root, 'eve_bevy_ui_main_menu_tool_capture__import'));
+    } finally {
+        harness.runtime.destroy();
+        harness.restore();
+    }
+});
+
 test('BevyUI main menu hold opens a palette and suppresses the matching activation', async () => {
     const content = {
         toolbox: { children: ['capture'] },
