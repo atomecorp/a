@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-
 import { hydrateImageTree } from '../../eVe/domains/rendering/bevy_ui_image_runtime.js';
 import { mapVirtualSceneNodeToBevyPayload } from '../../eVe/domains/rendering/bevy_projection_adapter.js';
 import { projectBevyUiTreeOverlay } from '../../eVe/domains/rendering/bevy_ui_project_overlay_runtime.js';
@@ -15,9 +14,7 @@ import { normalizeAtomeRenderNode } from '../../eVe/domains/rendering/virtual_sc
 import { buildBevyMainMenuTree } from '../../eVe/intuition/ribbon/bevy_ui_main_menu_model.js';
 import { RIBBON_TOKENS } from '../../eVe/intuition/ribbon/tokens.js';
 import { createTestCompositor, installDom } from './unified_rendering_test_helpers.mjs';
-
 const projectDom = () => installDom('<!doctype html><html><body><main id="project"></main></body></html>');
-
 const findTreeNode = (node, id) => {
     if (!node) return null;
     if (node.id === id) return node;
@@ -27,7 +24,6 @@ const findTreeNode = (node, id) => {
     }
     return null;
 };
-
 const menuContent = () => ({
     toolbox: { children: ['home', 'find', 'capture', 'time', 'communicate', 'mode', 'view'] },
     home: { atome_tool: true, label: 'accueil', icon: 'home', tool_id: 'tool.home' },
@@ -123,7 +119,6 @@ test('BevyUI main menu overlay projects the 70px menu atomically without droppin
     const menuRecords = state.records.filter((record) => String(record.id || '').startsWith('__eve_bevy_ui_eve_bevy_ui_main_menu_'));
     const projectedDashboardRecords = state.records.filter((record) => record.properties?.layer === 'dashboard');
     const iconRecords = menuRecords.filter((record) => String(record.id || '').endsWith('_icon_image'));
-
     assert.deepEqual(state.effects, dashboardEffects);
     assert.equal(recordsById.has('__eve_dashboard_card_media_projects_alpha'), true);
     assert.equal(recordsById.has('__eve_dashboard_card_title_projects_alpha'), true);
@@ -145,7 +140,6 @@ test('BevyUI main menu overlay projects the 70px menu atomically without droppin
     assert.equal(recordsById.has('__eve_bevy_ui_eve_bevy_ui_main_menu_eve_bevy_ui_main_menu_tool_capture_label_text'), true);
     assert.equal(recordsById.has('__eve_bevy_ui_eve_bevy_ui_main_menu_eve_bevy_ui_main_menu_tool_atome_icon_image'), true);
 });
-
 test('BevyUI progressive overlay keeps mounted structure while adding detail records', async () => {
     clearAllProjectScenes();
     const dom = projectDom();
@@ -207,13 +201,11 @@ test('BevyUI progressive overlay keeps mounted structure while adding detail rec
         previousIds: firstIds
     });
     const records = new Map(getProjectSceneState('__eve_dashboard_workspace__').records.map((record) => [record.id, record]));
-
     assert.equal(records.get('__eve_bevy_ui_dashboard_bevy_ui___eve_dashboard_background')?.properties?.color, '#ff0000');
     assert.equal(records.get('__eve_bevy_ui_dashboard_bevy_ui___eve_dashboard_header_projects')?.properties?.text, 'Projects');
     assert.equal(secondIds.length, 2);
 });
-
-test('BevyUI main menu projects an inner accent across palette parents and visible children', async () => {
+test('BevyUI main menu projects one semantic accent capsule per palette group', async () => {
     clearAllProjectScenes();
     const dom = projectDom();
     const host = dom.window.document.getElementById('project');
@@ -226,31 +218,38 @@ test('BevyUI main menu projects an inner accent across palette parents and visib
     const surface = getProjectSceneState('__eve_dashboard_workspace__').surface;
     surface.getBoundingClientRect = () => ({ left: 0, top: 0, right: 600, bottom: 720, width: 600, height: 720 });
     const content = {
-        toolbox: { children: ['capture', 'find'] },
+        toolbox: { children: ['capture', 'mode', 'view', 'find'] },
         capture: {
             atome_tool: true,
             label: 'capture',
             icon: 'capture',
             tool_id: 'tool.main.capture',
             type: 'palette',
-            children: ['import']
+            children: ['import', 'photo']
         },
         import: { label: 'import', icon: 'import', tool_id: 'ui.capture.import', type: 'tool' },
+        photo: { label: 'photo', icon: 'photo', tool_id: 'ui.capture.photo', type: 'tool' },
+        mode: { atome_tool: true, label: 'mode', icon: 'mode', tool_id: 'tool.main.mode', type: 'palette', children: [] },
+        view: { atome_tool: true, label: 'view', icon: 'view', tool_id: 'tool.main.view', type: 'palette', children: [] },
         find: { atome_tool: true, label: 'find', icon: 'find', tool_id: 'tool.main.find', type: 'tool' }
     };
     const baseState = { latchedByToolId: new Map(), externalOpenByToolId: new Map() };
     const closedTree = buildBevyMainMenuTree({ content, surface, itemSize: 60, state: baseState });
-    const parentAccentId = 'eve_bevy_ui_main_menu_tool_capture_palette_accent';
-
-    assert.deepEqual(findTreeNode(closedTree.root, parentAccentId)?.style, {
-        position: [0, 0],
-        size: [60, RIBBON_TOKENS.mainMenuPaletteAccentHeightPx],
-        background: RIBBON_TOKENS.mainMenuPaletteAccentColor,
-        z_index: 3
+    const captureAccentId = 'eve_bevy_ui_main_menu_palette_capture_accent';
+    const captureBackplateId = 'eve_bevy_ui_main_menu_palette_capture_backplate';
+    const modeAccent = findTreeNode(closedTree.root, 'eve_bevy_ui_main_menu_palette_mode_accent');
+    const viewAccent = findTreeNode(closedTree.root, 'eve_bevy_ui_main_menu_palette_view_accent');
+    const tokens = RIBBON_TOKENS.mainMenuPaletteAccent;
+    assert.deepEqual(findTreeNode(closedTree.root, captureAccentId)?.style.size, [54, tokens.heightPx]);
+    assert.deepEqual(findTreeNode(closedTree.root, captureBackplateId)?.style.shadow, {
+        ...tokens.backplate.shadow,
+        color: [0, 0, 0, 0.55]
     });
-    assert.equal(findTreeNode(closedTree.root, 'eve_bevy_ui_main_menu_tool_capture__import_palette_accent'), null);
-    assert.equal(findTreeNode(closedTree.root, 'eve_bevy_ui_main_menu_tool_find_palette_accent'), null);
-    assert.equal(findTreeNode(closedTree.root, 'eve_bevy_ui_main_menu_tool_atome_palette_accent'), null);
+    assert.deepEqual(viewAccent.style.background, [89 / 255, 199 / 255, 211 / 255, 1]);
+    assert.deepEqual(modeAccent.style.background, [210 / 255, 121 / 255, 223 / 255, 1]);
+    assert.equal(modeAccent.style.position[0] - (viewAccent.style.position[0] + viewAccent.style.size[0]), 6);
+    assert.equal(findTreeNode(closedTree.root, 'eve_bevy_ui_main_menu_palette_find_accent'), null);
+    assert.equal(findTreeNode(closedTree.root, 'eve_bevy_ui_main_menu_palette_atome_accent'), null);
 
     const expandedTree = buildBevyMainMenuTree({
         content,
@@ -258,18 +257,23 @@ test('BevyUI main menu projects an inner accent across palette parents and visib
         itemSize: 60,
         state: { ...baseState, activePaletteKey: 'capture' }
     });
-    const childAccentId = 'eve_bevy_ui_main_menu_tool_capture__import_palette_accent';
-    assert.ok(findTreeNode(expandedTree.root, parentAccentId));
-    assert.ok(findTreeNode(expandedTree.root, childAccentId));
+    assert.deepEqual(findTreeNode(expandedTree.root, captureAccentId)?.style.size, [174, tokens.heightPx]);
+    assert.equal(findTreeNode(expandedTree.root, captureBackplateId)?.style.size[0], 176);
+    assert.equal(findTreeNode(expandedTree.root, 'eve_bevy_ui_main_menu_tool_capture__import_palette_accent'), null);
     const paletteItemIds = new Set([
         'eve_bevy_ui_main_menu_tool_capture',
-        'eve_bevy_ui_main_menu_tool_capture__import'
+        'eve_bevy_ui_main_menu_tool_capture__import',
+        'eve_bevy_ui_main_menu_tool_capture__photo'
     ]);
     assert.deepEqual(
         findTreeNode(expandedTree.root, 'eve_bevy_ui_main_menu_bar').children
             .map((node) => node.id)
             .filter((id) => paletteItemIds.has(id)),
-        ['eve_bevy_ui_main_menu_tool_capture__import', 'eve_bevy_ui_main_menu_tool_capture']
+        [
+            'eve_bevy_ui_main_menu_tool_capture__photo',
+            'eve_bevy_ui_main_menu_tool_capture__import',
+            'eve_bevy_ui_main_menu_tool_capture'
+        ]
     );
     const leftExpandedTree = buildBevyMainMenuTree({
         content,
@@ -282,20 +286,30 @@ test('BevyUI main menu projects an inner accent across palette parents and visib
         findTreeNode(leftExpandedTree.root, 'eve_bevy_ui_main_menu_bar').children
             .map((node) => node.id)
             .filter((id) => paletteItemIds.has(id)),
-        ['eve_bevy_ui_main_menu_tool_capture', 'eve_bevy_ui_main_menu_tool_capture__import']
+        [
+            'eve_bevy_ui_main_menu_tool_capture',
+            'eve_bevy_ui_main_menu_tool_capture__import',
+            'eve_bevy_ui_main_menu_tool_capture__photo'
+        ]
     );
 
     await projectBevyUiTreeOverlay({ tree: expandedTree, documentRef: dom.window.document, previousIds: [] });
     const records = getProjectSceneState('__eve_dashboard_workspace__').records;
-    const projectedParent = records.find((record) => record.id.endsWith(`_${parentAccentId}`));
-    const projectedChild = records.find((record) => record.id.endsWith(`_${childAccentId}`));
-    assert.equal(projectedParent?.properties?.width, 60);
-    assert.equal(projectedParent?.properties?.height, 2);
-    assert.equal(projectedParent?.properties?.color, 'rgba(138,206,255,0.65)');
-    assert.equal(projectedChild?.properties?.height, 2);
-    assert.equal(projectedChild?.properties?.color, projectedParent?.properties?.color);
-    assert.equal(Math.abs(projectedParent.properties.left - projectedChild.properties.left), 60);
-    assert.equal(projectedParent.properties.top, projectedChild.properties.top);
+    const projectedAccent = records.find((record) => record.id.endsWith(`_${captureAccentId}`));
+    const projectedBackplate = records.find((record) => record.id.endsWith(`_${captureBackplateId}`));
+    assert.equal(projectedAccent?.properties?.width, 174);
+    assert.equal(projectedAccent?.properties?.height, 4);
+    assert.equal(projectedAccent?.properties?.corner_radius, 2);
+    assert.equal(projectedAccent?.properties?.color, 'rgba(255,107,107,1)');
+    assert.equal(projectedBackplate?.properties?.width, 176);
+    assert.equal(projectedBackplate?.properties?.height, 6);
+    assert.deepEqual(projectedBackplate?.properties?.material?.shadow, {
+        color: [0, 0, 0, 0.55],
+        blur: 2,
+        spread: 0,
+        offsetX: 0,
+        offsetY: 1
+    });
 });
 
 test('BevyUI main menu overlay follows the foreground project instead of the dashboard workspace', async () => {
@@ -448,7 +462,6 @@ test('BevyUI overlay carries a petal shadow through to the projected shape mater
     const record = getProjectSceneState('__eve_dashboard_workspace__').records.find((entry) => (
         entry.id === '__eve_bevy_ui_eve_bevy_ui_flower_petal_palette'
     ));
-
     assert.deepEqual(record?.properties?.material?.shadow, {
         color: [0, 0, 0, 0.38],
         blur: 14,
