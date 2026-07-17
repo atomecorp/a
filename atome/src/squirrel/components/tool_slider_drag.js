@@ -2,7 +2,8 @@
 const createDirectSliderDragController = ({
     input,
     hitzone,
-    expandedWidth,
+    expandedLength,
+    orientation = 'horizontal',
     step,
     min,
     max,
@@ -27,6 +28,7 @@ const createDirectSliderDragController = ({
         window.removeEventListener('pointermove', onPointerMove, true);
         window.removeEventListener('pointerup', onPointerUp, true);
         window.removeEventListener('pointercancel', onPointerCancel, true);
+        input.removeEventListener('lostpointercapture', onPointerCancel, true);
         try {
             if (Number.isFinite(dragSession.pointerId)) {
                 input.releasePointerCapture?.(dragSession.pointerId);
@@ -35,22 +37,25 @@ const createDirectSliderDragController = ({
         dragSession = null;
     };
 
-    const resolveTrackWidth = () => {
+    const vertical = orientation === 'vertical';
+    const resolveTrackLength = () => {
         const inputRect = input.getBoundingClientRect?.();
         const hitzoneRect = hitzone.getBoundingClientRect?.();
         return Math.max(
             1,
-            Number(inputRect?.width) || 0,
-            Number(hitzoneRect?.width) || 0,
-            expandedWidth
+            Number(vertical ? inputRect?.height : inputRect?.width) || 0,
+            Number(vertical ? hitzoneRect?.height : hitzoneRect?.width) || 0,
+            expandedLength
         );
     };
 
-    const readValue = (clientX) => {
+    const readValue = (clientX, clientY) => {
         if (!dragSession) return null;
-        const dx = Number(clientX) - Number(dragSession.startX || 0);
+        const delta = vertical
+            ? Number(dragSession.startY || 0) - Number(clientY)
+            : Number(clientX) - Number(dragSession.startX || 0);
         const range = Math.max(step, max - min);
-        const deltaRatio = dx / Math.max(1, dragSession.trackWidth || expandedWidth);
+        const deltaRatio = delta / Math.max(1, dragSession.trackLength || expandedLength);
         return quantizeSliderValue(Number(dragSession.startValue || initialValue) + (deltaRatio * range));
     };
 
@@ -61,8 +66,9 @@ const createDirectSliderDragController = ({
         dragSession = {
             pointerId: Number.isFinite(Number(event?.pointerId)) ? Number(event.pointerId) : null,
             startX: Number(event?.clientX) || 0,
+            startY: Number(event?.clientY) || 0,
             startValue: quantizeSliderValue(input.value),
-            trackWidth: resolveTrackWidth(),
+            trackLength: resolveTrackLength(),
             moved: false
         };
         if (typeof onStart === 'function') {
@@ -80,13 +86,14 @@ const createDirectSliderDragController = ({
             window.addEventListener('pointermove', onPointerMove, true);
             window.addEventListener('pointerup', onPointerUp, true);
             window.addEventListener('pointercancel', onPointerCancel, true);
+            input.addEventListener('lostpointercapture', onPointerCancel, true);
         }
     };
 
     function onPointerMove(event) {
         if (!dragSession) return;
         if (Number.isFinite(dragSession.pointerId) && Number(event?.pointerId) !== dragSession.pointerId) return;
-        const nextValue = readValue(event?.clientX);
+        const nextValue = readValue(event?.clientX, event?.clientY);
         if (!Number.isFinite(nextValue)) return;
         dragSession.moved = true;
         stopAndPrevent(event);
@@ -100,7 +107,7 @@ const createDirectSliderDragController = ({
         let finalValue = quantizeSliderValue(input.value);
         if (moved) {
             stopAndPrevent(event);
-            const nextValue = readValue(event?.clientX);
+            const nextValue = readValue(event?.clientX, event?.clientY);
             finalValue = commitInputValue(Number.isFinite(nextValue) ? nextValue : input.value, 'slider.direct.drag');
         }
         clear();

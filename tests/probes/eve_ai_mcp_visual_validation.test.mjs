@@ -442,11 +442,6 @@ const run = async () => {
             } catch (error) {
                 console.warn("[cleanup] operation failed", error);
             }
-            try {
-                window.eveAtomeEditFooterApi?.publishSelection?.(circleId);
-            } catch (error) {
-                console.warn("[cleanup] operation failed", error);
-            }
             const result = await invoke('ui.delete.selection', 'pointer.click', { atome_id: circleId, selection_ids: [circleId] });
             const state = await window.Atome.getStateCurrent(circleId).catch(() => null);
             return {

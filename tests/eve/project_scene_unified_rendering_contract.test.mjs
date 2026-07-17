@@ -13,6 +13,7 @@ import {
     getProjectSceneState,
     reconcileProjectSceneRecordsByPrefix,
     renderProjectScene,
+    setProjectSceneUiIntentHandler,
     updateProjectSceneRecord,
     updateProjectSceneRecords
 } from '../../eVe/domains/rendering/project_scene_runtime.js';
@@ -426,6 +427,36 @@ test('Project scene canvas click selects through the existing selection runtime'
     assert.deepEqual(dom.window.__selectedAtomeIds, ['canvas_select_atom']);
     assert.equal(getProjectSceneState('project_canvas_select').scene.atoms[0].visual.selected, true);
     assert.equal(dom.window.document.querySelectorAll('.eve-atome,.eve-atome-text,img,video,audio,svg').length, 0);
+});
+
+test('Project scene double-click enters contextual edit and preserves an included multi-selection', async () => {
+    clearAllProjectScenes();
+    const dom = projectDom();
+    const intents = [];
+    const record = makeRecord('contextual_edit_atom', 'image', 1);
+    record.properties.left = 10;
+    record.properties.top = 20;
+    dom.window.__selectedAtomeIds = ['contextual_edit_atom', 'selection_peer'];
+    dom.window.__selectedAtomeId = 'selection_peer';
+    setProjectSceneUiIntentHandler(async (intent) => {
+        intents.push(intent);
+        return { ok: true };
+    });
+    await renderProjectScene({
+        projectId: 'project_contextual_edit',
+        records: [record],
+        host: dom.window.document.getElementById('project'),
+        compositor: createTestCompositor()
+    });
+
+    dom.window.document.dispatchEvent(new dom.window.MouseEvent('dblclick', { clientX: 20, clientY: 30, bubbles: true }));
+    await nextTick();
+
+    assert.deepEqual(dom.window.__selectedAtomeIds, ['contextual_edit_atom', 'selection_peer']);
+    assert.equal(intents.length, 1);
+    assert.equal(intents[0].kind, 'atome.edit.enter');
+    assert.equal(intents[0].atome_id, 'contextual_edit_atom');
+    setProjectSceneUiIntentHandler(null);
 });
 
 test('Project surface resize gesture uses scene hit-test and commits canonical dimensions', async () => {

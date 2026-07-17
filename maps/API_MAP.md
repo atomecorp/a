@@ -87,10 +87,10 @@ Exposure:
 - Dashboard `open()` mounts a shape-only projection of the canonical BevyUI tree before it returns, then `postOpenHydrationPromise` completes data hydration and mounts the text/image details once. That one transition preserves already-mounted overlay record ids, so unchanged structural records are not replaced while detail resources spawn. Both phases share the same tree builder, runtime, overlay prefix, and WebGPU renderer; the first visible Dashboard structure cannot be blocked by texture resolution.
 - Internal rendering constant: `DEFERRED_TEXTURE_BATCH_SIZE` is exported by `eVe/domains/rendering/bevy_media_resource_runtime.js` and consumed by `bevy_ui_image_runtime.js` so Bevy UI `ImageNode` texture hydration and deferred media texture resolution share the same per-frame upload budget.
 - Surface interaction hook: `setRenderSurfaceInteractionInterceptor(zone, interceptor)` in `surface_runtime.js`.
-- Project scene UI-intent hook: `setProjectSceneUiIntentHandler(handler)` in `project_scene_runtime.js`, registered by eVe boot so canvas double-click footer open works across all project render/update paths.
+- Project scene UI-intent hook: `setProjectSceneUiIntentHandler(handler)` in `project_scene_runtime.js`, registered by eVe boot for `atome.edit.enter`, `atome.edit.activate`, `atome.edit.exit`, and `atome.edit.fullscreen.toggle` across all project render/update paths.
 - Tool ids: `tool.dashboard.news`, `tool.dashboard.monitor`, `tool.dashboard.goals`, and hidden future `tool.dashboard.store`.
 - Entry points: the visible BevyUI main-menu Atome tool opens/closes the Dashboard in active workspaces through `toggleWorkspaceDashboardAndMainMenu({ source: "bevy_ui_main_menu_atome" })`. Successful authenticated and anonymous workspace openings route through `eVe/intuition/tools/user_workspace_surface_runtime.js`, which attaches the shared canvas to the neutral Dashboard workspace, reasserts the internally registered menu through `workspace_main_menu_visibility.js`, opens the Dashboard runtime, and verifies readiness from mounted overlay records. No browser menu alias or private DOM ribbon handle participates in this route. An explicit project-to-Dashboard transition alone requests current-project preview refresh; boot/auth/anonymous entry never loads a user project. Direct `tool.main.home` remains the user/Home panel route.
-- Atome footer project-scene bridge: `window.eveAtomeEditFooterApi.openForProjectSceneAtome({ atomeId, kind, anchorRect })` opens the existing footer from Bevy canvas hit-test geometry without creating visible per-Atome DOM hosts.
+- Atome contextual-edit bridge: the module registry in `atome_contextual_edit_registry.js` exposes the closed runtime methods `enter`, `activate`, `exit`, `toggleFullscreen`, and `readState`; there is no window-global footer API.
 
 Boundary status: Semi-public closed eVe product runtime. Dashboard item lists are read-only projections; Calendar, Contacts, and Projects are reached through their existing APIs/adapters. Store is an explicit no-op until its domain is defined.
 
@@ -760,22 +760,22 @@ Boundary rules:
 
 Boundary status: Closed product runtime API. Public promotion would require a product-neutral inline-tool bridge contract.
 
-### eVe Atome Edit Footer Runtime APIs
+### eVe Atome Contextual Edit Runtime APIs
 
-Ownership: eVe closed Intuition Atome-edit footer model, rendering, drag, palette, slider, fullscreen, state, and invocation boundaries.
+Ownership: eVe closed Intuition runtime for multi-Atome edit state, Bevy footer/outline projection, fixed contextual rail, canonical gestures, fullscreen, and tool invocation.
 
-Primary sources: `eVe/intuition/runtime/eve_intuition/atome_edit_footer_runtime.js`, `atome_edit_footer_lifecycle_runtime.js`, `atome_edit_footer_model_runtime.js`, `atome_focus_fullscreen_runtime.js`, `atome_edit_footer_drag_runtime.js`, `atome_edit_footer_palette_runtime.js`, `atome_edit_footer_slider_runtime.js`, `atome_edit_footer_tool_state_runtime.js`, `atome_edit_footer_child_invocation_runtime.js`, `atome_edit_footer_definition_invocation_runtime.js`, and `atome_edit_footer_row_render_runtime.js`.
+Primary sources: `atome_contextual_edit_runtime.js`, `atome_contextual_edit_model.js`, `atome_contextual_edit_registry.js`, `atome_edit_footer_runtime.js`, `atome_edit_footer_model_runtime.js`, and the existing tool definition/invocation owners.
 
 Exposure: JavaScript module exports consumed by `eVe/intuition/eVeIntuition.js`; these are closed product runtime seams, not public Atome APIs.
 
-Verified entry points: `createAtomeEditFooterRuntime`, `createAtomeEditFooterLifecycleRuntime`, `createAtomeEditFooterModelRuntime`, `createAtomeFocusFullscreenRuntime`, `createAtomeEditFooterDragRuntime`, `createAtomeEditFooterPaletteRuntime`, `createAtomeEditFooterSliderRuntime`, `createAtomeEditFooterToolStateRuntime`, `createAtomeEditFooterChildInvocationRuntime`, `createAtomeEditFooterDefinitionInvocationRuntime`, and `createAtomeEditFooterRowRenderRuntime`.
+Verified entry points: `createAtomeContextualEditRuntime`, `buildAtomeContextualEditTree`, `setAtomeContextualEditApi`, `getAtomeContextualEditApi`, and the composite `createAtomeEditFooterRuntime` migration facade.
 
 Boundary rules:
 
-- Footer model/state policy, persisted footer tools, project-playback availability, and catalog definition projection live in `atome_edit_footer_model_runtime.js`.
-- The composite runtime is the only `eVeIntuition.js` footer entrypoint; footer row DOM rendering, palette children, sliders, drag payloads, focus/fullscreen layout, lifecycle/show/hide, and record-action visual state are split by responsibility and must not be re-inlined into `eVeIntuition.js`.
-- All footer invocations must go through the injected canonical tool invokers and selection guards; these runtimes must not create alternate tool buses, fallback invocation paths, or non-Bevy atom renderers.
-- Atome-editor footer drags continue to use the canonical `application/x-eve-finder-record` payload and active tool drag session only.
+- `atome_contextual_edit_runtime.js` owns the ephemeral editing registry and exposes `enter`, `activate`, `exit`, `toggleFullscreen`, and `readState`.
+- The visible footer, outlines, rail, palette expansion and vertical slider expansion are one BevyUI tree on the shared canvas; no DOM footer lifecycle, second canvas, or window-global state is allowed.
+- Footer move/resize uses canonical `drag.*` / `resize.*` intents and commits once at gesture end. Tool actions continue through the injected canonical tool invokers and selection guards.
+- `tool_slider_builder.js` accepts horizontal or vertical orientation; vertical movement is relative, upward-positive, and collapses on release/cancel.
 
 Boundary status: Closed product runtime API. Public promotion would require a product-neutral footer/tool-surface contract.
 
@@ -898,7 +898,7 @@ Verified entry point: `installEveIntuitionBootRuntime`.
 
 Boundary rules:
 
-- The runtime owns boot-time window menu exposure, auth sync, panel surface registration, Flower/footer/vector/draw installation, non-critical module warmup, UI tool registration, footer API exposure, and debug runtime installation.
+- The runtime owns boot-time window menu exposure, auth sync, panel surface registration, Flower/contextual-edit/vector/draw installation, non-critical module warmup, UI tool registration, the closed contextual-edit module registry, and debug runtime installation.
 - It opens the default Dashboard workspace without requiring a current project id; project restoration/loading is a later explicit project-mode path and must not be used as the Dashboard boot gate.
 - It must receive all product callbacks by injection and must not own Bevy/WebGPU rendering, durable Atome state, or tool implementation behavior.
 

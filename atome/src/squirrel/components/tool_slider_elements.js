@@ -10,16 +10,19 @@ const createSliderToolElements = ({
     step,
     initialValue,
     label,
+    orientation = 'horizontal',
     designTokens = {}
 } = {}) => {
     const host = contentHost instanceof HTMLElement ? contentHost : button;
     const colors = resolveDesignTokens(designTokens);
+    const vertical = orientation === 'vertical';
 
     const shell = createNode('div', {
         parent: host,
         attrs: { 'data-role': 'eve_intuitionx-slider-shell' },
         css: {
             width: '100%',
+            height: '100%',
             display: 'grid',
             gridTemplateRows: 'minmax(0, 1fr) auto',
             alignItems: 'stretch',
@@ -34,6 +37,7 @@ const createSliderToolElements = ({
         attrs: { 'data-role': 'eve_intuitionx-slider-hitzone' },
         css: {
             width: '100%',
+            height: '100%',
             minWidth: '0',
             display: 'flex',
             alignItems: 'center',
@@ -58,12 +62,15 @@ const createSliderToolElements = ({
             'aria-label': label
         },
         css: {
-            width: '100%',
+            width: vertical ? '18px' : '100%',
+            height: vertical ? '100%' : 'auto',
             minWidth: '0',
             margin: '0',
             accentColor: 'rgba(255, 255, 255, 0.92)',
             cursor: 'pointer',
-            pointerEvents: 'auto'
+            pointerEvents: 'auto',
+            writingMode: vertical ? 'vertical-lr' : '',
+            direction: vertical ? 'rtl' : ''
         }
     });
     addOptionalClassNames(input, classNames.input);

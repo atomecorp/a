@@ -16,6 +16,7 @@ const mountIntuitionXSliderToolContent = ({
     contentHost = null,
     classNames = {},
     definition = {},
+    orientation = 'horizontal',
     collapsedWidthPx = null,
     expandedWidthPx = null,
     onInput = null,
@@ -27,8 +28,12 @@ const mountIntuitionXSliderToolContent = ({
     designTokens = {}
 } = {}) => {
     if (!(button instanceof HTMLElement)) return null;
+    const resolvedOrientation = String(orientation || definition?.orientation || 'horizontal').trim().toLowerCase() === 'vertical'
+        ? 'vertical'
+        : 'horizontal';
+    const vertical = resolvedOrientation === 'vertical';
     const toolSizePx = Math.max(1, Math.round(toFiniteNumber(collapsedWidthPx, 57)));
-    const expandedWidth = Math.max(toolSizePx, Math.round(toFiniteNumber(expandedWidthPx, Math.round(toolSizePx * 3))));
+    const expandedLength = Math.max(toolSizePx, Math.round(toFiniteNumber(expandedWidthPx, Math.round(toolSizePx * 3))));
     const min = toFiniteNumber(definition.sliderMin, 0);
     const max = Math.max(min, toFiniteNumber(definition.sliderMax, 100));
     const step = Math.max(0.0001, toFiniteNumber(definition.sliderStep, 1));
@@ -46,7 +51,10 @@ const mountIntuitionXSliderToolContent = ({
     let valueClickSuppressUntil = 0;
     let directSliderDragController = null;
     button.dataset.sliderCollapsedWidthPx = String(toolSizePx);
-    button.dataset.sliderExpandedWidthPx = String(expandedWidth);
+    button.dataset.sliderExpandedWidthPx = String(vertical ? toolSizePx : expandedLength);
+    button.dataset.sliderCollapsedHeightPx = String(toolSizePx);
+    button.dataset.sliderExpandedHeightPx = String(vertical ? expandedLength : toolSizePx);
+    button.dataset.sliderOrientation = resolvedOrientation;
     button.dataset.sliderExpanded = 'false';
 
     const {
@@ -66,6 +74,7 @@ const mountIntuitionXSliderToolContent = ({
         step,
         initialValue,
         label,
+        orientation: resolvedOrientation,
         designTokens: colors
     });
     const { emitInput, emitChange, emitUnitChange } = createSliderEmitters({
@@ -114,9 +123,12 @@ const mountIntuitionXSliderToolContent = ({
         expanded = nextExpanded === true;
         button.dataset.sliderExpanded = expanded ? 'true' : 'false';
         setStyles(button, {
-            width: `${expanded ? expandedWidth : toolSizePx}px`,
-            minWidth: `${expanded ? expandedWidth : toolSizePx}px`,
-            maxWidth: `${expanded ? expandedWidth : toolSizePx}px`,
+            width: `${vertical ? toolSizePx : (expanded ? expandedLength : toolSizePx)}px`,
+            minWidth: `${vertical ? toolSizePx : (expanded ? expandedLength : toolSizePx)}px`,
+            maxWidth: `${vertical ? toolSizePx : (expanded ? expandedLength : toolSizePx)}px`,
+            height: `${vertical ? (expanded ? expandedLength : toolSizePx) : toolSizePx}px`,
+            minHeight: `${vertical ? (expanded ? expandedLength : toolSizePx) : toolSizePx}px`,
+            maxHeight: `${vertical ? (expanded ? expandedLength : toolSizePx) : toolSizePx}px`,
             zIndex: expanded ? '6' : ''
         });
         if (!expanded) {
@@ -161,7 +173,8 @@ const mountIntuitionXSliderToolContent = ({
     directSliderDragController = createDirectSliderDragController({
         input,
         hitzone,
-        expandedWidth,
+        expandedLength,
+        orientation: resolvedOrientation,
         step,
         min,
         max,
@@ -227,8 +240,8 @@ const mountIntuitionXSliderToolContent = ({
         const dx = Number(clientX) - Number(valueDragSession.startX || 0);
         const dy = Number(clientY) - Number(valueDragSession.startY || 0);
         const range = Math.max(step, max - min);
-        const pxForRange = Math.max(96, expandedWidth);
-        const deltaRatio = (dx - dy) / pxForRange;
+        const pxForRange = Math.max(96, expandedLength);
+        const deltaRatio = (vertical ? -dy : (dx - dy)) / pxForRange;
         return quantizeSliderValue(Number(valueDragSession.startValue || initialValue) + (deltaRatio * range));
     };
     function onValuePointerMove(event) {
