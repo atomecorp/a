@@ -9,6 +9,10 @@ import {
     contextualGestureProps
 } from '../../eVe/intuition/runtime/eve_intuition/atome_contextual_edit_model.js';
 import { createAtomeContextualEditRuntime } from '../../eVe/intuition/runtime/eve_intuition/atome_contextual_edit_runtime.js';
+import {
+    markDashboardWorkspaceMode,
+    markProjectWorkspaceMode
+} from '../../eVe/domains/dashboard/dashboard_workspace_mode.js';
 
 test('BevyUI canvas binding owns touch gestures for mobile pointer scroll', async () => {
     clearAllProjectScenes();
@@ -83,10 +87,12 @@ test('Atome contextual footer follows projected media bounds and uses compact da
     const footer = findNode(tree.root, 'atome_contextual_edit_media_footer');
     const background = findNode(tree.root, 'atome_contextual_edit_media_footer_background');
     assert.deepEqual(footer.style.position, [40, 470]);
-    assert.deepEqual(footer.style.size, [310, 24]);
+    assert.deepEqual(footer.style.size, [310, 20]);
     assert.deepEqual(background.style.background, [0.12, 0.13, 0.17, 0.98]);
     assert.deepEqual(findNode(tree.root, 'atome_contextual_edit_media_resize_left_icon').style.scale, [-1, 1]);
     assert.deepEqual(findNode(tree.root, 'atome_contextual_edit_media_resize_right_icon').style.scale, [-1, 1]);
+    assert.deepEqual(findNode(tree.root, 'atome_contextual_edit_media_resize_left_icon').style.position, [1, 0]);
+    assert.deepEqual(findNode(tree.root, 'atome_contextual_edit_media_resize_right_icon').style.position, [2, 0]);
     assert.ok(findNode(tree.root, 'atome_contextual_tool_detail_background'));
 });
 
@@ -94,10 +100,10 @@ test('Atome contextual drag and homothetic resize stay above the main toolbox', 
     const limits = { viewportWidth: 800, viewportHeight: 600, mainMenuHeight: 52 };
     assert.deepEqual(contextualGestureProps({
         ...limits, gesture: { mode: 'drag', origin: { x: 40, y: 30, width: 200, height: 100 }, dx: 900, dy: 900 }
-    }), { left: 600, top: 424 });
+    }), { left: 600, top: 431 });
     assert.deepEqual(contextualGestureProps({
         ...limits, gesture: { mode: 'resize', edge: 'right', origin: { x: 0, y: 30, width: 100, height: 100 }, dx: 900, dy: 900 }
-    }), { width: 494, height: 494 });
+    }), { width: 501, height: 501 });
 });
 
 test('Atome contextual rail projects visible tool records inside the lateral rail', async () => {
@@ -124,7 +130,7 @@ test('Atome contextual rail projects visible tool records inside the lateral rai
     const footer = projected.records.find((record) => record.id.includes('atome_contextual_edit_a_footer_background'));
     const footerTitle = projected.records.find((record) => record.id.includes('atome_contextual_edit_a_title_text'));
     assert.deepEqual([tool.properties.left, tool.properties.top, tool.properties.width, tool.properties.height], [740, 480, 60, 60]);
-    assert.deepEqual([footer.properties.left, footer.properties.top, footer.properties.width, footer.properties.height], [40, 170, 200, 24]);
+    assert.deepEqual([footer.properties.left, footer.properties.top, footer.properties.width, footer.properties.height], [40, 170, 200, 20]);
     assert.ok(toolIcon.properties.renderLayer > tool.properties.renderLayer);
     assert.ok(toolLabel.properties.renderLayer > tool.properties.renderLayer);
     assert.ok(footerTitle.properties.renderLayer > footer.properties.renderLayer);
@@ -161,12 +167,66 @@ test('Atome contextual runtime keeps local edits and emits one canonical homothe
     grip.on.drag({ delta_x: 20, delta_y: 0 });
     await runtime.render();
     assert.deepEqual(findNode(rendered.at(-1).root, 'atome_contextual_edit_a_footer').style.position, [60, 120]);
-    assert.deepEqual(findNode(rendered.at(-1).root, 'atome_contextual_edit_a_footer').style.size, [180, 24]);
+    assert.deepEqual(findNode(rendered.at(-1).root, 'atome_contextual_edit_a_footer').style.size, [180, 52 / 3]);
     grip.on.release();
     await Promise.resolve();
     assert.deepEqual(intents.map((intent) => intent.kind), ['resize.start', 'resize.move', 'resize.end']);
     assert.deepEqual(intents[2].props, { left: 60, width: 180, height: 90 });
     assert.equal(intents[2].commit, true);
+});
+
+test('Dashboard mode suspends contextual edit chrome and project return restores or clears its session', async () => {
+    const previousWindow = globalThis.window;
+    const previousDocument = globalThis.document;
+    const dom = new JSDOM('<!doctype html><canvas id="eve_surface_project"></canvas>');
+    const { window } = dom;
+    window.requestAnimationFrame = () => 1;
+    globalThis.window = window;
+    globalThis.document = window.document;
+    const records = [{ id: 'a', properties: { left: 20, top: 30, width: 100, height: 80 } }];
+    const scene = { project_id: 'project_a', records, text: null };
+    let mounts = 0;
+    let unmounts = 0;
+    try {
+        window.__eveWorkspaceMode = { mode: 'project', projectId: 'project_a', transitioning: false, targetMode: '' };
+        const runtime = createAtomeContextualEditRuntime({
+            legacyState: {}, resolveDefinitions: () => [], invokeDefinition: async () => ({ ok: true }),
+            surfaceResolver: () => window.document.getElementById('eve_surface_project'),
+            bevyRuntimeResolver: () => ({
+                mountTree: async () => { mounts += 1; }, updateTree: async () => null,
+                unmountTree: async () => { unmounts += 1; }
+            }),
+            findSceneByAtomeId: (id) => id === 'a' ? scene : null,
+            readSceneState: () => scene, hitTestScene: () => null, readMainMenuHeight: () => 52
+        });
+        runtime.install();
+        runtime.enter({ atomeId: 'a', kind: 'image' });
+        await runtime.render();
+        assert.equal(mounts, 1);
+
+        markDashboardWorkspaceMode();
+        await runtime.render();
+        assert.equal(runtime.readState().suspended, true);
+        assert.equal(runtime.readState().menuVisible, false);
+        assert.deepEqual(runtime.readState().editingAtomeIds, ['a']);
+        assert.equal(unmounts, 1);
+
+        markProjectWorkspaceMode('project_a');
+        await runtime.render();
+        assert.equal(runtime.readState().suspended, false);
+        assert.deepEqual(runtime.readState().editingAtomeIds, ['a']);
+        assert.equal(mounts, 2);
+
+        markDashboardWorkspaceMode();
+        markProjectWorkspaceMode('project_b');
+        await runtime.render();
+        assert.deepEqual(runtime.readState().editingAtomeIds, []);
+        assert.equal(runtime.readState().menuVisible, false);
+    } finally {
+        globalThis.window = previousWindow;
+        globalThis.document = previousDocument;
+        dom.window.close();
+    }
 });
 
 test('canonical vertical slider is relative for touch and collapses on mouse cancel or stylus capture loss', async () => {
