@@ -20,10 +20,7 @@ final class FileSyncCoordinator {
     private var syncing = false
     private(set) var lastSync: Date? = nil
     private var pending = false
-    private var timer: DispatchSourceTimer? = nil
     private var safeModeActive = false
-    private var shouldResumeAutoSync = false
-    private var configuredAutoInterval: TimeInterval = 10
     private var webViewStable = !FileSyncCoordinator.runningInExtension
     private var deferredSyncRequested = false
     private var pendingDeletionURLs: [URL] = []
@@ -127,41 +124,6 @@ final class FileSyncCoordinator {
         return (changed: changed, deleted: max(0, deleted), roots: rootsPaths)
     }
 
-    // MARK: - Auto Sync
-    func startAutoSync(every interval: TimeInterval = 10) {
-        queue.async { [weak self] in
-            guard let self = self else { return }
-            self.configuredAutoInterval = interval
-            if self.safeModeActive {
-                self.shouldResumeAutoSync = true
-                return
-            }
-            let effectiveInterval: TimeInterval
-            if self.lowTrafficModeEnabled {
-                effectiveInterval = max(interval, 8)
-            } else {
-                effectiveInterval = max(interval, 3)
-            }
-            self.timer?.cancel(); self.timer = nil
-            let t = DispatchSource.makeTimerSource(queue: self.queue)
-            t.schedule(deadline: .now() + effectiveInterval, repeating: effectiveInterval)
-            t.setEventHandler { [weak self] in self?.syncAll() }
-            t.resume()
-            self.timer = t
-        }
-    }
-
-    func stopAutoSync() {
-        queue.async { [weak self] in
-            self?.stopAutoSyncLocked(log: true)
-        }
-    }
-
-    private func stopAutoSyncLocked(log: Bool) {
-        timer?.cancel(); timer = nil
-        _ = log
-    }
-
     func setWebViewReady(_ ready: Bool) {
         queue.async { [weak self] in
             guard let self = self else { return }
@@ -177,8 +139,6 @@ final class FileSyncCoordinator {
         queue.async { [weak self] in
             guard let self = self, !self.safeModeActive else { return }
             self.safeModeActive = true
-            self.shouldResumeAutoSync = self.timer != nil
-            self.stopAutoSyncLocked(log: false)
             print("⚠️ FileSyncCoordinator safe mode enabled")
         }
     }
@@ -188,10 +148,6 @@ final class FileSyncCoordinator {
             guard let self = self, self.safeModeActive else { return }
             self.safeModeActive = false
             print("✅ FileSyncCoordinator safe mode cleared")
-            if self.shouldResumeAutoSync {
-                self.shouldResumeAutoSync = false
-                self.startAutoSync(every: self.configuredAutoInterval)
-            }
             if self.deferredSyncRequested {
                 self.deferredSyncRequested = false
                 self.syncAll(force: true)

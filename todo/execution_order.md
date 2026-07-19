@@ -333,6 +333,7 @@ Taches:
 
 - [x] Completer et valider les primitives BevyUI partagees manquantes et leurs interactions reelles, sans remigrer le dashboard ni le menu direct deja rendus par Bevy.
 - [x] Migrate the bottom Bevy main menu interaction model: direct actions, expandable palettes, latch state, dedicated hold actions, hold-to-palette, drag cancellation, and removal of the flattened legacy projection.
+- [x] Repair the bottom Bevy main-menu palette opening regression at its canonical direct-motion owner: restore immediate first-frame presentation, the historical 180/70/120 ms elastic rebound, shared icon/label/accent movement, and validate real WebGPU clicks frame by frame without reconciliation fallback or duplicate animation path.
 - [x] Migrate the Flower hold contract: held-pointer palette opening, immediate Back navigation, leaf preview followed by activation on release, and cancellation safety.
 - [x] Delete Flower/menu/toolbox DOM bridges, aliases, factories, and browser-only state once the complete Bevy interaction contract is verified and no canonical consumer remains.
 - [x] Confirmer le Dashboard fonctionnel rendu par Bevy: ouverture, fermeture, scroll, glissement, edition des libelles et absence d'arbre Dashboard DOM visible.

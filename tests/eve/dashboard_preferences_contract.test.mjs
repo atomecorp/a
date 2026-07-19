@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import { test } from 'vitest';
 import { JSDOM } from 'jsdom';
 
@@ -11,11 +12,78 @@ import {
     filterDashboardCategoriesByPreferences,
     normalizeDashboardPreferences
 } from '../../eVe/domains/dashboard/dashboard_preferences.js';
+import {
+    extractProjectOwnerId,
+    filterProjectsByOwner
+} from '../../eVe/core/project_security.js';
 
 const dashboardPreferenceCategories = Object.freeze([
-    { id: 'news', label_key: 'eve.dashboard.category.news', color: '#111111', order: 10, visible: true },
-    { id: 'calendar', label_key: 'eve.dashboard.category.calendar', color: '#222222', order: 20, visible: true }
+    { id: 'news', label_key: 'eve.dashboard.category.news', color_family: 'red', order: 10, visible: true },
+    { id: 'calendar', label_key: 'eve.dashboard.category.calendar', color_family: 'blue', order: 20, visible: true }
 ]);
+
+test('Project security accepts canonical ownership normalized into Atome meta', () => {
+    const project = {
+        id: 'project_meta_owner',
+        type: 'project',
+        meta: { owner_id: 'user_33333333' },
+        properties: { name: 'Visible project' }
+    };
+
+    assert.equal(extractProjectOwnerId(project), 'user_33333333');
+    assert.deepEqual(filterProjectsByOwner([project], 'user_33333333'), [project]);
+    assert.deepEqual(filterProjectsByOwner([project], 'another_user'), []);
+});
+
+test('project lists exclude heavy preview particles before backend serialization', () => {
+    const serverSource = fs.readFileSync('server/server.js', 'utf8');
+    const listBranch = serverSource.slice(
+        serverSource.indexOf("} else if (action === 'list')"),
+        serverSource.indexOf("} else if (action === 'set-particle')")
+    );
+    assert.ok(listBranch.length > 0, 'the canonical list branch must remain discoverable');
+    assert.match(listBranch, /LEFT JOIN particles p ON a\.atome_id = p\.atome_id \$\{excludedParticleJoinClause\}/);
+    assert.match(
+        listBranch,
+        /const params = sinceIso\s*\? \[\.\.\.excludedParticleKeyList, sinceIso, sinceIso, directoryLimit, directoryOffset\]/
+    );
+    assert.match(
+        listBranch,
+        /\? \[\.\.\.excludedParticleKeyList, effectiveOwner, effectiveOwner, pendingOwner, effectiveType, limit \|\| 100, offset \|\| 0\]/
+    );
+
+    const iosSource = fs.readFileSync('platforms/ios/atome-auv3/Common/LocalHTTPServer.swift', 'utf8');
+    const listHandler = iosSource.slice(
+        iosSource.indexOf('private static func handleAtomeList'),
+        iosSource.indexOf('private static func handleAtomeGet')
+    );
+    assert.match(listHandler, /let excludedParticleKeys = Set\(/);
+    assert.match(
+        listHandler,
+        /serializeAtome\(db, atomeId: atomeId, excludingParticleKeys: excludedParticleKeys\)/
+    );
+    assert.ok(iosSource.includes('particle_key NOT IN (\\(placeholders))'));
+});
+
+test('iOS file propagation has no periodic or per-resource whole-root scan', () => {
+    const coordinatorSource = fs.readFileSync(
+        'platforms/ios/atome-auv3/Common/FileSyncCoordinator.swift',
+        'utf8'
+    );
+    assert.doesNotMatch(coordinatorSource, /DispatchSource\.makeTimerSource/);
+    assert.doesNotMatch(coordinatorSource, /func startAutoSync\(/);
+
+    const serverSource = fs.readFileSync(
+        'platforms/ios/atome-auv3/Common/LocalHTTPServer.swift',
+        'utf8'
+    );
+    const getDispatch = serverSource.slice(
+        serverSource.indexOf('if method != "GET" && method != "HEAD"'),
+        serverSource.indexOf('if routePath.hasPrefix("/text/")')
+    );
+    assert.ok(getDispatch.length > 0, 'the local GET dispatcher must remain discoverable');
+    assert.doesNotMatch(getDispatch, /FileSyncCoordinator\.shared\.syncAll/);
+});
 
 const withGlobals = async (values, fn) => {
     const previous = new Map(Object.keys(values).map((key) => [key, globalThis[key]]));
@@ -89,6 +157,7 @@ test('dashboard hidden preference categories cannot be activated by tool handler
                 mountTree: async () => ({ ok: true }),
                 unmountTree: async () => ({ ok: true }),
                 setTreeOpacity: async () => ({ ok: true }),
+                setTreeSuspended: async () => ({ ok: true }),
                 readDiagnostics: () => ({ mounted_nodes: 1 })
             }
         });
@@ -110,7 +179,7 @@ test('dashboard opening does not wait for current-project preview regeneration',
     const openCategories = Object.freeze([{
         id: 'projects',
         label_key: 'eve.dashboard.category.projects',
-        color: '#357245',
+        color_family: 'green',
         order: 10,
         visible: true
     }]);
@@ -133,17 +202,17 @@ test('dashboard opening does not wait for current-project preview regeneration',
                     return new Map(categoriesToLoad.map((category) => [category.id, []]));
                 }
             },
-            tokens: { transitions: { dashboardFadeMs: 0 } },
             uiRuntime: {
                 state: { trees: new Map() },
                 mountTree: async () => ({ ok: true }),
                 unmountTree: async () => ({ ok: true }),
                 setTreeOpacity: async () => ({ ok: true }),
+                setTreeSuspended: async () => ({ ok: true }),
                 readDiagnostics: () => ({ mounted_nodes: 1 })
             }
         });
         const openPromise = runtime.open({
-            projectId: DASHBOARD_WORKSPACE_PROJECT_ID,
+            sceneProjectId: DASHBOARD_WORKSPACE_PROJECT_ID,
             dataProjectId: 'current_project',
             refreshCurrentProjectPreview: true
         });
@@ -168,8 +237,8 @@ test('dashboard starts current-project preview hydration before non-critical cat
     const nonCriticalGate = new Promise((resolve) => { releaseNonCritical = resolve; });
     const calls = [];
     const categories = Object.freeze([
-        { id: 'projects', label_key: 'eve.dashboard.category.projects', color: '#111111', order: 10, visible: true },
-        { id: 'calendar', label_key: 'eve.dashboard.category.calendar', color: '#222222', order: 20, visible: true }
+        { id: 'projects', label_key: 'eve.dashboard.category.projects', color_family: 'green', order: 10, visible: true },
+        { id: 'calendar', label_key: 'eve.dashboard.category.calendar', color_family: 'blue', order: 20, visible: true }
     ]);
     await withGlobals({
         window: dom.window,
@@ -190,18 +259,18 @@ test('dashboard starts current-project preview hydration before non-critical cat
                     return new Map(categories.map((category) => [category.id, []]));
                 }
             },
-            tokens: { transitions: { dashboardFadeMs: 0 } },
             uiRuntime: {
                 state: { trees: new Map() },
                 mountTree: async () => ({ ok: true }),
                 unmountTree: async () => ({ ok: true }),
                 setTreeOpacity: async () => ({ ok: true }),
+                setTreeSuspended: async () => ({ ok: true }),
                 readDiagnostics: () => ({ mounted_nodes: 1 })
             }
         });
 
         await runtime.open({
-            projectId: DASHBOARD_WORKSPACE_PROJECT_ID,
+            sceneProjectId: DASHBOARD_WORKSPACE_PROJECT_ID,
             dataProjectId: 'current_project',
             refreshCurrentProjectPreview: true
         });
@@ -214,6 +283,66 @@ test('dashboard starts current-project preview hydration before non-critical cat
 
         assert.ok(forcedIndex >= 0);
         assert.ok(nonCriticalIndex < 0 || forcedIndex < nonCriticalIndex);
+        await runtime.close();
+    });
+});
+
+test('dashboard hydrates only lanes visible in the mobile viewport and loads newly revealed lanes on scroll', async () => {
+    const dom = new JSDOM('<!doctype html><html><body><div id="view"></div></body></html>', { url: 'http://localhost/' });
+    const calls = [];
+    const families = ['red', 'blue', 'green', 'violet', 'orange', 'cyan', 'gold'];
+    const categoryIds = ['news', 'calendar', 'projects', 'contacts', 'store', 'monitor', 'goals'];
+    const categories = Object.freeze(families.map((colorFamily, index) => ({
+        id: categoryIds[index],
+        label_key: `eve.dashboard.category.${categoryIds[index]}`,
+        color_family: colorFamily,
+        order: index * 10,
+        visible: true
+    })));
+    await withGlobals({
+        window: dom.window,
+        document: dom.window.document,
+        HTMLElement: dom.window.HTMLElement,
+        CustomEvent: dom.window.CustomEvent,
+        innerWidth: 390,
+        innerHeight: 300
+    }, async () => {
+        const runtime = createDashboardBevyUiRuntime({
+            constants: { dashboard: { categories } },
+            adapters: {
+                listMany: async (categoriesToLoad) => {
+                    calls.push(categoriesToLoad.map((category) => category.id));
+                    return new Map(categoriesToLoad.map((category) => [category.id, []]));
+                }
+            },
+            uiRuntime: {
+                state: { trees: new Map() },
+                mountTree: async () => ({ ok: true }),
+                unmountTree: async () => ({ ok: true }),
+                setTreeOpacity: async () => ({ ok: true }),
+                setTreeSuspended: async () => ({ ok: true }),
+                readDiagnostics: () => ({ mounted_nodes: 1 })
+            }
+        });
+
+        await runtime.open({ sceneProjectId: DASHBOARD_WORKSPACE_PROJECT_ID });
+        await Promise.resolve();
+        if (runtime.state.postOpenHydrationPromise) await runtime.state.postOpenHydrationPromise;
+
+        const initiallyVisible = new Set(runtime.state.layout.lanes.map((lane) => lane.category.id));
+        const initiallyLoaded = new Set(calls.flat());
+        assert.ok(initiallyVisible.size > 0);
+        assert.ok(initiallyVisible.size < categories.length);
+        assert.deepEqual(initiallyLoaded, initiallyVisible);
+
+        runtime.state.verticalScrollOffset = runtime.state.layout.vertical_scroll_max;
+        await runtime.render();
+        await Promise.resolve();
+        if (runtime.state.postOpenHydrationPromise) await runtime.state.postOpenHydrationPromise;
+
+        const revealed = new Set(runtime.state.layout.lanes.map((lane) => lane.category.id));
+        assert.ok(Array.from(revealed).some((id) => !initiallyVisible.has(id)));
+        assert.ok(Array.from(revealed).every((id) => calls.flat().includes(id)));
         await runtime.close();
     });
 });
@@ -279,7 +408,7 @@ test('dashboard opening projects overlay records without duplicate BevyUI textur
                     categories: [{
                         id: 'projects',
                         label_key: 'eve.dashboard.category.projects',
-                        color: '#357245',
+                        color_family: 'green',
                         data_source: 'projects',
                         order: 10,
                         visible: true
@@ -298,11 +427,10 @@ test('dashboard opening projects overlay records without duplicate BevyUI textur
                     }
                 }]]])
             },
-            tokens: { transitions: { dashboardFadeMs: 0 } },
             uiRuntime
         });
 
-        const openPromise = runtime.open({ projectId: DASHBOARD_WORKSPACE_PROJECT_ID });
+        const openPromise = runtime.open({ sceneProjectId: DASHBOARD_WORKSPACE_PROJECT_ID });
         const outcome = await Promise.race([
             openPromise.then(() => 'opened'),
             new Promise((resolve) => setTimeout(() => resolve('blocked'), 25))
@@ -310,7 +438,7 @@ test('dashboard opening projects overlay records without duplicate BevyUI textur
 
         assert.equal(outcome, 'opened');
         assert.ok(projectedNodeKinds.length > 0);
-        assert.equal(projectedNodeKinds.some((kinds) => kinds.some((kind) => kind === 'image' || kind === 'text')), false);
+        assert.equal(projectedNodeKinds.some((kinds) => kinds.some((kind) => kind === 'text')), true);
         assert.equal(runtime.state.active, true);
         assert.ok(runtime.readDiagnostics().mounted_nodes > 0);
         releaseTextureResolution();

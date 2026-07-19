@@ -25,6 +25,8 @@ fn shape_node(id: &str) -> AtomeRenderNode {
         corner_radius: 0.0,
         color: Some([0.1, 0.2, 0.3, 1.0]),
         shadow: None,
+        backdrop: None,
+        presentation: false,
         procedural: None,
         text: None,
         source: None,
@@ -314,6 +316,7 @@ fn queued_audio_progress_styles_are_coalesced_per_atome() {
         filters: None,
         transition: None,
         shadow: None,
+        backdrop: None,
         procedural: None,
     }));
     queue_web_op(AtomeRenderOp::Style(AtomeStylePatch {
@@ -325,6 +328,7 @@ fn queued_audio_progress_styles_are_coalesced_per_atome() {
         filters: None,
         transition: None,
         shadow: None,
+        backdrop: None,
         procedural: None,
     }));
     queue_web_op(AtomeRenderOp::Style(AtomeStylePatch {
@@ -336,6 +340,7 @@ fn queued_audio_progress_styles_are_coalesced_per_atome() {
         filters: None,
         transition: None,
         shadow: None,
+        backdrop: None,
         procedural: None,
     }));
 
@@ -366,6 +371,7 @@ fn queued_opacity_styles_are_merged_per_atome() {
         filters: None,
         transition: None,
         shadow: None,
+        backdrop: None,
         procedural: None,
     }));
     queue_web_op(AtomeRenderOp::Style(AtomeStylePatch {
@@ -377,6 +383,7 @@ fn queued_opacity_styles_are_merged_per_atome() {
         filters: None,
         transition: None,
         shadow: None,
+        backdrop: None,
         procedural: None,
     }));
 
@@ -402,6 +409,7 @@ fn queued_styles_are_not_merged_across_non_style_ops_for_same_atome() {
         filters: None,
         transition: None,
         shadow: None,
+        backdrop: None,
         procedural: None,
     }));
     queue_web_op(AtomeRenderOp::Despawn("atom_1".to_string()));
@@ -414,6 +422,7 @@ fn queued_styles_are_not_merged_across_non_style_ops_for_same_atome() {
         filters: None,
         transition: None,
         shadow: None,
+        backdrop: None,
         procedural: None,
     }));
 
@@ -434,6 +443,7 @@ fn queued_styles_with_transition_are_not_merged() {
         filters: None,
         transition: None,
         shadow: None,
+        backdrop: None,
         procedural: None,
     }));
     queue_web_op(AtomeRenderOp::Style(AtomeStylePatch {
@@ -445,6 +455,7 @@ fn queued_styles_with_transition_are_not_merged() {
         filters: None,
         transition: Some(AtomeTransition::none()),
         shadow: None,
+        backdrop: None,
         procedural: None,
     }));
 

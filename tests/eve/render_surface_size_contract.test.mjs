@@ -215,24 +215,24 @@ test('Project scene surface follows host resize without changing Atome logical b
     assert.equal(calls.length, 1);
     assert.equal(widthWrites, 0);
     assert.equal(heightWrites, 0);
-    assert.equal(canvasWidth, 1280);
-    assert.equal(canvasHeight, 720);
+    assert.equal(canvasWidth, 960);
+    assert.equal(canvasHeight, 540);
 
     setBox(host, 1280, 720);
     resizeObservers.forEach((observer) => observer.callback([{ target: host }]));
     assert.equal(calls.length, 1);
     assert.equal(widthWrites, 0);
     assert.equal(heightWrites, 0);
-    assert.equal(canvasWidth, 1280);
-    assert.equal(canvasHeight, 720);
+    assert.equal(canvasWidth, 960);
+    assert.equal(canvasHeight, 540);
     assert.equal(canvas.style.width, '640px');
     assert.equal(canvas.style.height, '360px');
     await flushFrames();
 
     assert.equal(widthWrites, 2);
     assert.equal(heightWrites, 2);
-    assert.equal(canvasWidth, 2560);
-    assert.equal(canvasHeight, 1440);
+    assert.equal(canvasWidth, 1920);
+    assert.equal(canvasHeight, 1080);
     assert.equal(canvas.style.width, '1280px');
     assert.equal(canvas.style.height, '720px');
 
@@ -242,13 +242,13 @@ test('Project scene surface follows host resize without changing Atome logical b
         payload: {
             width: 1280,
             height: 720,
-            pixel_width: 2560,
-            pixel_height: 1440,
-            device_pixel_ratio: 2
+            pixel_width: 1920,
+            pixel_height: 1080,
+            device_pixel_ratio: 1.5
         }
     });
-    assert.equal(canvas.width, 2560);
-    assert.equal(canvas.height, 1440);
+    assert.equal(canvas.width, 1920);
+    assert.equal(canvas.height, 1080);
     assert.equal(canvas.style.width, '1280px');
     assert.equal(canvas.style.height, '720px');
     assert.equal(projection.scene.atoms[0].bounds.width, 320);

@@ -225,7 +225,7 @@ test('Project scene pointermove stays on direct Bevy transforms without commits,
         const callsAfterPointerDown = renders.length;
         const textureCallsAfterPointerDown = textureCalls.length;
         commits.length = 0;
-        ensureBevyPerfDiagnostics().reset();
+        ensureBevyPerfDiagnostics().reset({ enabled: true });
         guardArmed = true;
 
         [

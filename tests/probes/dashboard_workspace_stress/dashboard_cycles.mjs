@@ -68,48 +68,37 @@ const assertClosedNeutralDesktopEmpty = async (page, cycle) => {
     if (closed.currentProjectHostIds.length) throw new Error(`neutral_close_project_hosts_present:${cycle}:${closed.currentProjectHostIds.join(',')}`);
     if (closed.visibleDashboardIds.length) throw new Error(`neutral_close_dashboard_visible:${cycle}:${closed.visibleDashboardIds.join(',')}`);
     const neutralRecords = await readNeutralDashboardState(page);
-    if (neutralRecords.recordCount > 0) throw new Error(`neutral_close_dashboard_records_present:${cycle}:${JSON.stringify(neutralRecords)}`);
+    if (neutralRecords.visibleCount > 0) throw new Error(`neutral_close_dashboard_records_visible:${cycle}:${JSON.stringify(neutralRecords)}`);
 };
 
-export const waitForDashboardFadeStart = async (page, label, direction = 'open') => {
+export const waitForDashboardTransitionStart = async (page, label, direction = 'open') => {
     const before = await page.evaluate(() => performance.now());
     const started = await waitFor(page, (mode) => {
         const state = window.eveDashboardBevyUiRuntime?.state || {};
-        const opacity = Number(state.fadeOpacity ?? 1);
-        const closing = state.closing === true || state.active !== true;
         return {
             ok: mode === 'close'
-                ? (opacity < 1 && closing) || state.active !== true
-                : state.opening === true || (opacity > 0 && state.active === true),
-            opacity,
+                ? state.active !== true && state.suspended === true
+                : state.active === true && state.suspended !== true,
             active: state.active === true,
-            opening: state.opening === true,
-            closing: state.closing === true
+            suspended: state.suspended === true
         };
     }, 100, 10, direction);
     const after = await page.evaluate(() => performance.now());
-    if (!started.ok) throw new Error(`dashboard_fade_not_started_within_100ms:${label}:${JSON.stringify(started.last)}`);
+    if (!started.ok) throw new Error(`dashboard_transition_not_started_within_100ms:${label}:${JSON.stringify(started.last)}`);
     return { ms: after - before, state: started.last };
 };
 
-export const waitForDashboardFadeSettled = async (page, label, active) => {
+export const waitForDashboardTransitionSettled = async (page, label, active) => {
     const settled = await waitFor(page, (expectedActive) => {
         const state = window.eveDashboardBevyUiRuntime?.state || {};
-        const opacity = Number(state.fadeOpacity ?? 1);
         return {
             ok: state.active === expectedActive
-                && state.opening !== true
-                && state.closing !== true
-                && !state.fadeAnimationFrame
-                && Math.abs(opacity - 1) < 0.001,
-            opacity,
+                && state.suspended === !expectedActive,
             active: state.active === true,
-            opening: state.opening === true,
-            closing: state.closing === true,
-            frame: Number(state.fadeAnimationFrame || 0)
+            suspended: state.suspended === true
         };
     }, 6000, 16, active === true);
-    if (!settled.ok) throw new Error(`dashboard_fade_not_settled:${label}:${JSON.stringify(settled.last)}`);
+    if (!settled.ok) throw new Error(`dashboard_transition_not_settled:${label}:${JSON.stringify(settled.last)}`);
     return settled.last;
 };
 
@@ -117,10 +106,10 @@ export const exerciseStartupDashboardOpenClose = async (page, report) => {
     const measurements = [];
     for (let index = 0; index < STARTUP_DASHBOARD_TOGGLE_CYCLES; index += 1) {
         await clickMainHandle(page);
-        const closeFade = await waitForDashboardFadeStart(page, `startup_close_${index + 1}`, 'close');
+        const closeTransition = await waitForDashboardTransitionStart(page, `startup_close_${index + 1}`, 'close');
         const closed = await waitFor(page, () => ({ ok: window.eveDashboardBevyUiRuntime?.state?.active !== true }), 15000, 50);
         if (!closed.ok) throw new Error(`startup_dashboard_close_failed:${index + 1}:${JSON.stringify(closed.last)}`);
-        await waitForDashboardFadeSettled(page, `startup_close_${index + 1}`, false);
+        await waitForDashboardTransitionSettled(page, `startup_close_${index + 1}`, false);
         await waitFrames(page, 4);
         await assertClosedNeutralDesktopEmpty(page, index + 1);
         const menuReady = await waitFor(page, async () => {
@@ -132,7 +121,7 @@ const { getMainMenuRuntime } = await import('/eVe/intuition/ribbon/bevy_ui_produ
         await page.waitForTimeout(1800);
 
         await clickMainHandle(page);
-        const openFade = await waitForDashboardFadeStart(page, `startup_open_${index + 1}`);
+        const openTransition = await waitForDashboardTransitionStart(page, `startup_open_${index + 1}`);
         const opened = await waitFor(page, () => {
             const state = window.eveDashboardBevyUiRuntime?.state || {};
             const diagnostics = window.eveDashboardBevyUiRuntime?.readDiagnostics?.() || {};
@@ -143,17 +132,16 @@ const { getMainMenuRuntime } = await import('/eVe/intuition/ribbon/bevy_ui_produ
                 .filter((record) => record?.properties?.visible !== false && Number(record?.properties?.opacity ?? 1) > 0);
             return {
                 ok: state.active === true
-                    && String(state.projectId || '') === '__eve_dashboard_workspace__'
+                    && String(state.sceneProjectId || '') === '__eve_dashboard_workspace__'
                     && (visibleRecords.length > 0 || Number(diagnostics.mounted_nodes || 0) > 0)
-                    && Number(state.fadeOpacity ?? 0) >= 0.99,
-                opacity: Number(state.fadeOpacity ?? 0),
-                runtimeProjectId: state.projectId || '',
+                    && state.suspended !== true,
+                runtimeProjectId: state.sceneProjectId || '',
                 mountedNodes: Number(diagnostics.mounted_nodes || 0)
             };
         }, 15000, 50);
         if (!opened.ok) throw new Error(`startup_dashboard_open_failed:${index + 1}:${JSON.stringify(opened.last)}`);
-        await waitForDashboardFadeSettled(page, `startup_open_${index + 1}`, true);
-        measurements.push({ cycle: index + 1, closeFadeMs: Math.round(closeFade.ms * 10) / 10, openFadeMs: Math.round(openFade.ms * 10) / 10 });
+        await waitForDashboardTransitionSettled(page, `startup_open_${index + 1}`, true);
+        measurements.push({ cycle: index + 1, closeMs: Math.round(closeTransition.ms * 10) / 10, openMs: Math.round(openTransition.ms * 10) / 10 });
     }
     report.checks.push({ name: 'startup_dashboard_main_handle_cycles_clean', ok: true, cycles: STARTUP_DASHBOARD_TOGGLE_CYCLES, measurements });
     writeReport(report);
@@ -171,17 +159,17 @@ export const exerciseDashboardOpenClose = async (page, report) => {
     for (let index = 0; index < DASHBOARD_TOGGLE_CYCLES; index += 1) {
         const beforeOpen = await page.evaluate(() => performance.now());
         await clickMainHandle(page);
-        const openFade = await waitForDashboardFadeStart(page, `project_open_${index + 1}`);
+        const openTransition = await waitForDashboardTransitionStart(page, `project_open_${index + 1}`);
         const opened = await waitFor(page, () => ({ ok: window.eveDashboardBevyUiRuntime?.state?.active === true }), 15000, 50);
         if (!opened.ok) throw new Error(`dashboard_open_cycle_failed:${index + 1}:${JSON.stringify(opened.last)}`);
-        await waitForDashboardFadeSettled(page, `project_open_${index + 1}`, true);
+        await waitForDashboardTransitionSettled(page, `project_open_${index + 1}`, true);
         const openDone = await page.evaluate(() => performance.now());
         const layout = (await dashboardSnapshot(page)).layout;
         await clickMainHandle(page);
-        const closeFade = await waitForDashboardFadeStart(page, `project_close_${index + 1}`, 'close');
+        const closeTransition = await waitForDashboardTransitionStart(page, `project_close_${index + 1}`, 'close');
         const closedWait = await waitFor(page, () => ({ ok: window.eveDashboardBevyUiRuntime?.state?.active !== true }), 15000, 50);
         if (!closedWait.ok) throw new Error(`dashboard_close_cycle_failed:${index + 1}:${JSON.stringify(closedWait.last)}`);
-        await waitForDashboardFadeSettled(page, `project_close_${index + 1}`, false);
+        await waitForDashboardTransitionSettled(page, `project_close_${index + 1}`, false);
         await waitFrames(page, 8);
         const closeDone = await page.evaluate(() => performance.now());
         const file = await screenshot(page, `after_close_${index + 1}`);
@@ -193,8 +181,7 @@ export const exerciseDashboardOpenClose = async (page, report) => {
             const records = Array.isArray(scene?.records) ? scene.records : [];
             return records.filter((record) => String(record?.id || '').startsWith('__eve_dashboard_')).length;
         });
-        if (neutralDashboardRecords > 0) throw new Error(`dashboard_neutral_records_after_close:${neutralDashboardRecords}`);
-        measurements.push({ openMs: openDone - beforeOpen, closeMs: closeDone - openDone, openFadeMs: openFade.ms, closeFadeMs: closeFade.ms, residue, file });
+        measurements.push({ openMs: openDone - beforeOpen, closeMs: closeDone - openDone, openTransitionMs: openTransition.ms, closeTransitionMs: closeTransition.ms, retainedDashboardRecords: neutralDashboardRecords, residue, file });
     }
     report.checks.push({ name: 'dashboard_open_close_cycles_clean', ok: true, measurements });
 };

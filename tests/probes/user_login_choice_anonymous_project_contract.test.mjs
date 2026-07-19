@@ -62,15 +62,16 @@ setMainMenuRuntime({
     }
 }, window);
 window.eveDashboardBevyUiRuntime = {
-    state: { active: false, projectId: '', warmedProjectId: '' },
+    state: { active: false, sceneProjectId: '', dataProjectId: '', warmedProjectId: '' },
     warmup: async ({ projectId } = {}) => {
         window.eveDashboardBevyUiRuntime.state.warmedProjectId = projectId || '';
         return { ok: true };
     },
     open: async (payload = {}) => {
         window.eveDashboardBevyUiRuntime.state.active = true;
-        window.eveDashboardBevyUiRuntime.state.projectId = payload.projectId || '';
-        sceneRecordsByProject.set(payload.projectId, [
+        window.eveDashboardBevyUiRuntime.state.sceneProjectId = payload.sceneProjectId || '';
+        window.eveDashboardBevyUiRuntime.state.dataProjectId = payload.dataProjectId || '';
+        sceneRecordsByProject.set(payload.sceneProjectId, [
             { id: '__eve_dashboard_background', properties: { visible: true, opacity: 1 } },
             { id: '__eve_dashboard_header_news', properties: { text: 'News', visible: true, opacity: 1 } }
         ]);

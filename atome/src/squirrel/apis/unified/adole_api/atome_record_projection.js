@@ -155,6 +155,7 @@ async function listOnBackend(adapters, backend, options, currentUserId, skipOwne
         parent_id: options.project_id || options.projectId || options.parent_id || options.parentId || null,
         limit: options.limit,
         offset: options.offset,
+        exclude_particle_keys: options.excludeParticleKeys || options.exclude_particle_keys || [],
         include_deleted: options.include_deleted ?? options.includeDeleted
     };
     const result = await adapter.atome.list(query);

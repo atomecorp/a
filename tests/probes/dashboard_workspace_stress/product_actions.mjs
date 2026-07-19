@@ -10,7 +10,7 @@ export const ensureProject = async (page, name) => page.evaluate(async (projectN
     const dashboardState = window.eveDashboardBevyUiRuntime?.state || {};
     if (dashboardState.active === true || dashboardState.closing === true) {
         const closedDashboard = await withTimeout(
-            window.eveDashboardBevyUiRuntime?.close?.({ honorLabelEditorKeyboardGuard: false }),
+            window.eveDashboardBevyUiRuntime?.destroy?.(),
             'dashboard_close_before_project_timeout',
             10000
         );

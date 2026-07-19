@@ -131,10 +131,10 @@ const exerciseUserWorkspace = async ({ browser, report, prefix, userIndex }) => 
             .map((project) => project.id)
             .filter((id) => !userReport.listedProjectIds.includes(id));
         if (missingOwnProjects.length) throw new Error(`own_projects_missing_from_list:${missingOwnProjects.join(',')}`);
-        await page.evaluate(() => window.eveDashboardBevyUiRuntime?.open?.({ projectId: '__eve_dashboard_workspace__', dataProjectId: '__eve_dashboard_workspace__' }));
+        await page.evaluate(() => window.eveDashboardBevyUiRuntime?.open?.({ sceneProjectId: '__eve_dashboard_workspace__', dataProjectId: '__eve_dashboard_workspace__' }));
         const dashboardOpen = await waitFor(page, () => {
             const state = window.eveDashboardBevyUiRuntime?.state || {};
-            return { ok: state.active === true && state.projectId === '__eve_dashboard_workspace__' };
+            return { ok: state.active === true && state.sceneProjectId === '__eve_dashboard_workspace__' };
         }, 20000, 50);
         if (!dashboardOpen.ok) throw new Error(`dashboard_neutral_open_failed:${JSON.stringify(dashboardOpen.last)}`);
         const dashboard = await dashboardSnapshot(page);

@@ -30,3 +30,9 @@ assert.match(runUnix, /run_fastify\.sh" --test --force-deps/, 'run_unix must for
 assert.match(runUnix, /run_fastify\.sh" --test\s*&?/, 'run_unix must forward --test to Fastify');
 assert.match(runUnix, /run_tauri\.sh" --test --force-deps/, 'run_unix must forward --test with --force-deps to Tauri');
 assert.match(runUnix, /run_tauri\.sh" --test\s*&?/, 'run_unix must forward --test to Tauri');
+
+assert.doesNotMatch(
+    runUnix,
+    /lsof\s+-ti:3001\s*\|\s*xargs\s+kill/,
+    'run_unix cleanup must stop only its owned Fastify PID and never kill a newer server by port'
+);

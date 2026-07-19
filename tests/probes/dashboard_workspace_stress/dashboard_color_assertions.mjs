@@ -2,7 +2,7 @@ export const assertDashboardFocusedColors = async (page, categoryId) => page.eva
     const { DASHBOARD_VISUAL_TOKENS } = await import('/eVe/domains/dashboard/dashboard_tokens.js');
     const state = window.eveDashboardBevyUiRuntime?.state || {};
     const projectId = window.__currentProject?.id || window.AdoleAPI?.projects?.getCurrentId?.() || null;
-    const sceneProjectId = state.active === true ? (state.projectId || '__eve_dashboard_workspace__') : projectId;
+    const sceneProjectId = state.active === true ? (state.sceneProjectId || '__eve_dashboard_workspace__') : projectId;
     const scene = sceneProjectId ? window.eveToolBase?.getProjectSceneState?.(sceneProjectId) : null;
     const records = Array.isArray(scene?.records) ? scene.records : [];
     const category = (state.categories || []).find((entry) => String(entry.id) === String(id));
@@ -54,7 +54,7 @@ export const assertDashboardOverviewColors = async (page) => page.evaluate(async
     const { DASHBOARD_VISUAL_TOKENS } = await import('/eVe/domains/dashboard/dashboard_tokens.js');
     const state = window.eveDashboardBevyUiRuntime?.state || {};
     const projectId = window.__currentProject?.id || window.AdoleAPI?.projects?.getCurrentId?.() || null;
-    const sceneProjectId = state.active === true ? (state.projectId || '__eve_dashboard_workspace__') : projectId;
+    const sceneProjectId = state.active === true ? (state.sceneProjectId || '__eve_dashboard_workspace__') : projectId;
     const scene = sceneProjectId ? window.eveToolBase?.getProjectSceneState?.(sceneProjectId) : null;
     const records = Array.isArray(scene?.records) ? scene.records : [];
     const byId = new Map(records.map((record) => [String(record.id || ''), record]));

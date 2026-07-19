@@ -1,9 +1,9 @@
 use atome_bevy_renderer_core::{
-    apply_render_ops, apply_surface, apply_ui_ops, register_ui_font,
-    AtomeBevyRendererConfig, AtomeBevyRendererPlugin, AtomeRenderOp, AtomeRenderScene,
-    AtomeRendererDiagnostics, AtomeStylePatch, AtomeSurfacePatch, AtomeUiDiagnostics,
-    AtomeUiEvent, AtomeUiOp,
+    apply_render_ops, apply_surface, apply_ui_ops, register_ui_font, AtomeBevyRendererConfig,
+    AtomeBevyRendererPlugin, AtomeRenderOp, AtomeRenderScene, AtomeRendererDiagnostics,
+    AtomeStylePatch, AtomeSurfacePatch, AtomeUiDiagnostics, AtomeUiEvent, AtomeUiOp,
 };
+use bevy::platform::time::Instant;
 use bevy::{
     log::{Level, LogPlugin},
     prelude::*,
@@ -13,10 +13,9 @@ use bevy::{
     },
     winit::{EventLoopProxy, EventLoopProxyWrapper, UpdateMode, WinitSettings, WinitUserEvent},
 };
-use bevy::platform::time::Instant;
 use serde::Serialize;
-use std::time::Duration;
 use std::cell::RefCell;
+use std::time::Duration;
 
 mod exports;
 
@@ -710,7 +709,8 @@ fn apply_pending_video_frame_notifications(world: &mut World) {
 fn read_web_renderer_diagnostics() -> WebRendererDiagnostics {
     WEB_DIAGNOSTICS.with(|cell| {
         let mut diagnostics = cell.borrow().clone();
-        diagnostics.running_apps = WEB_RUNNING_APPS.with(|apps_cell| apps_cell.borrow().len() as u32);
+        diagnostics.running_apps =
+            WEB_RUNNING_APPS.with(|apps_cell| apps_cell.borrow().len() as u32);
         diagnostics
     })
 }

@@ -120,17 +120,9 @@ public class iCloudFileManager: ObservableObject {
             // Deuxième passe : Visible -> AppGroup (pour récupérer les fichiers déjà présents côté app)
             syncFromVisibleDocumentsToAppGroups()
         }
-        // Lancer sync globale après init (newest-wins sur les 2-3 racines)
+        // One explicit newest-wins pass after initialization. Later passes are driven by
+        // concrete file mutations, imports/captures, explicit sync, or list freshness.
         FileSyncCoordinator.shared.syncAll(force: true)
-        // Démarrer l'auto-sync:
-        // Avant: seulement côté app principale -> latence de propagation depuis l'extension.
-        // Maintenant: activer aussi dans l'extension AUv3 mais avec intervalle plus court pour réduire délai d'apparition.
-        if isApp {
-            FileSyncCoordinator.shared.startAutoSync(every: 8)
-        } else {
-            // Extension: intervalle un peu plus long pour limiter coût mais éviter longues attentes
-            FileSyncCoordinator.shared.startAutoSync(every: 12)
-        }
     }
     
     private func initializeLocalFileStructure() {

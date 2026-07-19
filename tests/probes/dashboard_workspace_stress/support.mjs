@@ -112,7 +112,7 @@ export const dashboardSnapshot = (page) => page.evaluate(() => {
     const runtime = window.eveDashboardBevyUiRuntime || null;
     const state = runtime?.state || {};
     const sceneProjectId = state.active === true
-        ? (state.projectId || '__eve_dashboard_workspace__')
+        ? (state.sceneProjectId || '__eve_dashboard_workspace__')
         : projectId;
     const scene = sceneProjectId ? window.eveToolBase?.getProjectSceneState?.(sceneProjectId) : null;
     const records = Array.isArray(scene?.records) ? scene.records : [];
@@ -146,8 +146,8 @@ export const dashboardSnapshot = (page) => page.evaluate(() => {
         activeCategoryId: state.activeCategoryId || '',
         projectId,
         sceneProjectId,
-        runtimeProjectId: state.projectId || '',
-        fadeOpacity: Number(state.fadeOpacity ?? 1),
+        runtimeProjectId: state.sceneProjectId || '',
+        suspended: state.suspended === true,
         dashboardIds: dashboard.map((record) => record.id),
         visibleDashboardIds: visible.map((record) => record.id),
         bevyUiMountedNodes: Number(diagnostics.mounted_nodes || 0),
@@ -292,7 +292,7 @@ export const enterGuestWorkspace = async (page) => {
         const current = await window.AdoleAPI?.auth?.current?.().catch(() => null);
         const projectId = window.__currentProject?.id || null;
         const dashboard = window.eveDashboardBevyUiRuntime?.state || {};
-        const dashboardActive = dashboard.active === true && String(dashboard.projectId || '') === '__eve_dashboard_workspace__';
+        const dashboardActive = dashboard.active === true && String(dashboard.sceneProjectId || '') === '__eve_dashboard_workspace__';
         return {
             ok: current?.logged === true && !!document.getElementById('eve_surface_project') && (!!projectId || dashboardActive),
             projectId,
@@ -340,7 +340,7 @@ export const enterAuthenticatedWorkspace = async (page, { prefix = 'dashboard_wo
     const ready = await waitFor(page, async () => {
         const current = await window.AdoleAPI?.auth?.current?.().catch(() => null);
         const dashboard = window.eveDashboardBevyUiRuntime?.state || {};
-        const dashboardActive = dashboard.active === true && String(dashboard.projectId || '') === '__eve_dashboard_workspace__';
+        const dashboardActive = dashboard.active === true && String(dashboard.sceneProjectId || '') === '__eve_dashboard_workspace__';
         const { getMainMenuRuntime } = await import('/eVe/intuition/ribbon/bevy_ui_product_registry.js');
         const menuMeasure = getMainMenuRuntime()?.measure?.() || null;
         const overlayDiagnostics = window.eveBevyUiRuntime?.readOverlayDiagnostics?.() || null;

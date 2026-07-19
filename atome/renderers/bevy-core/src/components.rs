@@ -112,16 +112,22 @@ pub struct AtomeShapeShadowCacheKey {
 #[derive(Clone, Debug, Resource)]
 pub struct AtomeShapeShadowTextureCache {
     pub max_entries: usize,
+    pub max_bytes: usize,
+    pub total_bytes: usize,
     pub order: VecDeque<AtomeShapeShadowCacheKey>,
     pub handles: HashMap<AtomeShapeShadowCacheKey, Handle<Image>>,
+    pub byte_sizes: HashMap<AtomeShapeShadowCacheKey, usize>,
 }
 
 impl Default for AtomeShapeShadowTextureCache {
     fn default() -> Self {
         Self {
             max_entries: 128,
+            max_bytes: 8 * 1024 * 1024,
+            total_bytes: 0,
             order: VecDeque::new(),
             handles: HashMap::new(),
+            byte_sizes: HashMap::new(),
         }
     }
 }
@@ -139,16 +145,22 @@ pub struct AtomeRoundedRectMaskCacheKey {
 #[derive(Clone, Debug, Resource)]
 pub struct AtomeRoundedRectMaskCache {
     pub max_entries: usize,
+    pub max_bytes: usize,
+    pub total_bytes: usize,
     pub order: VecDeque<AtomeRoundedRectMaskCacheKey>,
     pub handles: HashMap<AtomeRoundedRectMaskCacheKey, Handle<Image>>,
+    pub byte_sizes: HashMap<AtomeRoundedRectMaskCacheKey, usize>,
 }
 
 impl Default for AtomeRoundedRectMaskCache {
     fn default() -> Self {
         Self {
             max_entries: 32,
+            max_bytes: 8 * 1024 * 1024,
+            total_bytes: 0,
             order: VecDeque::new(),
             handles: HashMap::new(),
+            byte_sizes: HashMap::new(),
         }
     }
 }

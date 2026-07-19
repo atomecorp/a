@@ -71,17 +71,22 @@ fn cached_shape_shadow_handle(
         .and_then(|cache| cache.handles.get(&key))
         .cloned()
     {
-        let Some(image) = world
+        if let Some(image) = world
             .get_resource::<Assets<Image>>()
             .and_then(|images| images.get(&handle))
-        else {
-            return Ok(None);
-        };
-        return Ok(Some((
-            handle,
-            image.texture_descriptor.size.width,
-            image.texture_descriptor.size.height,
-        )));
+        {
+            return Ok(Some((
+                handle,
+                image.texture_descriptor.size.width,
+                image.texture_descriptor.size.height,
+            )));
+        }
+        let mut cache = world.resource_mut::<AtomeShapeShadowTextureCache>();
+        cache.handles.remove(&key);
+        cache.order.retain(|existing| existing != &key);
+        cache.total_bytes = cache
+            .total_bytes
+            .saturating_sub(cache.byte_sizes.remove(&key).unwrap_or(0));
     }
     let Some((image_width, image_height, rgba)) = build_gaussian_shadow_texture_rgba(
         shadow.color,
@@ -89,8 +94,7 @@ fn cached_shape_shadow_handle(
         shadow_height,
         corner_radius,
         shadow.blur,
-    )
-    else {
+    ) else {
         return Ok(None);
     };
     let image = Image::new(
@@ -117,12 +121,24 @@ fn cached_shape_shadow_handle(
         world.insert_resource(AtomeShapeShadowTextureCache::default());
     }
     let mut cache = world.resource_mut::<AtomeShapeShadowTextureCache>();
+    let byte_size = image_width as usize * image_height as usize * 4;
+    if byte_size > cache.max_bytes {
+        return Ok(Some((handle, image_width, image_height)));
+    }
     cache.order.retain(|existing| existing != &key);
+    if let Some(previous_size) = cache.byte_sizes.remove(&key) {
+        cache.total_bytes = cache.total_bytes.saturating_sub(previous_size);
+    }
     cache.order.push_back(key.clone());
-    cache.handles.insert(key, handle.clone());
-    while cache.order.len() > cache.max_entries {
+    cache.handles.insert(key.clone(), handle.clone());
+    cache.byte_sizes.insert(key.clone(), byte_size);
+    cache.total_bytes += byte_size;
+    while cache.order.len() > cache.max_entries || cache.total_bytes > cache.max_bytes {
         if let Some(oldest) = cache.order.pop_front() {
             cache.handles.remove(&oldest);
+            cache.total_bytes = cache
+                .total_bytes
+                .saturating_sub(cache.byte_sizes.remove(&oldest).unwrap_or(0));
         }
     }
     Ok(Some((handle, image_width, image_height)))

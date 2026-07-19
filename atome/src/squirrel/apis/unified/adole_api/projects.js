@@ -88,7 +88,13 @@ export async function create_project(projectName, callback) {
     return with_callback(normalized, callback);
 }
 
-export async function list_projects(callback) {
+const PROJECT_LIST_EXCLUDED_PARTICLES = Object.freeze(['preview_url']);
+
+export async function list_projects(options = {}, callback) {
+    if (typeof options === 'function') {
+        callback = options;
+        options = {};
+    }
     const currentUserId = getCurrentUserId();
     if (!currentUserId || isLoggedOut()) {
         const error = 'No user logged in. Cannot list projects.';
@@ -103,6 +109,7 @@ export async function list_projects(callback) {
     const listResult = await list_atomes({
         type: 'project',
         ownerId: currentUserId,
+        excludeParticleKeys: options.includePreviewSources === true ? [] : PROJECT_LIST_EXCLUDED_PARTICLES,
         includeShared: getSessionState().mode === 'authenticated'
     });
 

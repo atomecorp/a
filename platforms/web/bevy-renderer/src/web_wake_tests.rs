@@ -19,6 +19,8 @@ fn shape_node(id: &str) -> AtomeRenderNode {
         corner_radius: 0.0,
         color: Some([0.1, 0.2, 0.3, 1.0]),
         shadow: None,
+        backdrop: None,
+        presentation: false,
         procedural: None,
         text: None,
         source: None,

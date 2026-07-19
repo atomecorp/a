@@ -312,8 +312,8 @@ test('dashboard detailed media uses the shared high-density Bevy texture contrac
         tokens: DASHBOARD_VISUAL_TOKENS
     });
 
-    assert.equal(dashboardRecord(records, 'header_icon_projects').properties.texture_scale, 4);
-    assert.equal(dashboardRecord(records, 'card_media_projects_project_a').properties.texture_scale, 2);
+    assert.equal(dashboardRecord(records, 'header_icon_projects').properties.texture_scale, 2);
+    assert.equal(dashboardRecord(records, 'card_media_projects_project_a').properties.texture_scale, 1);
     assert.equal(dashboardRecord(records, 'card_media_projects_project_a').properties.media_width, 900);
     assert.equal(dashboardRecord(records, 'card_media_projects_project_a').properties.media_height, 540);
     const projectCard = dashboardRecord(records, 'card_projects_project_a').properties;
@@ -324,7 +324,7 @@ test('dashboard detailed media uses the shared high-density Bevy texture contrac
     assert.ok(projectMedia.width <= projectCard.width);
     assert.ok(projectMedia.height <= projectCard.height);
     assert.ok(dashboardRecord(records, 'card_title_projects_project_a').properties.text_style.min_font_size <= 7);
-    assert.equal(dashboardRecord(records, 'card_media_contacts_contact_a').properties.texture_scale, 2);
+    assert.equal(dashboardRecord(records, 'card_media_contacts_contact_a').properties.texture_scale, 1);
 });
 
 test('wheel over an overflowing project lane scrolls projects horizontally', () => {
@@ -358,5 +358,46 @@ test('wheel over an overflowing project lane scrolls projects horizontally', () 
     assert.equal(result.axis, 'horizontal');
     assert.equal(state.scrollByLane.projects, 40);
     assert.equal(state.verticalScrollOffset, 0);
+    runtime.cancel();
+});
+
+test('wheel and drag over a project header exclusively own vertical dashboard scrolling', () => {
+    const state = {
+        active: true,
+        layout: {
+            vertical_scroll_max: 200,
+            lanes: [{
+                category: { id: 'projects' },
+                horizontal_scroll_max: 160,
+                lane_rect: { width: 100 }
+            }]
+        },
+        scrollByLane: {},
+        verticalScrollOffset: 0,
+        scrollSnapTimers: new Map(),
+        scrollAnimationFrames: new Map(),
+        verticalScrollSnapTimer: 0,
+        verticalScrollAnimationFrame: 0,
+        wheelRenderScheduled: false,
+        tokens: DASHBOARD_VISUAL_TOKENS
+    };
+    const runtime = createDashboardBevyUiScrollRuntime({
+        state,
+        render: () => null,
+        readItemsForRender: () => new Map([['projects', []]])
+    });
+
+    const firstWheel = runtime.handleWheelNode('__eve_dashboard_header_bg_projects', { deltaY: -8 });
+    const secondWheel = runtime.handleWheelNode('__eve_dashboard_header_bg_projects', { deltaY: -8 });
+    assert.equal(firstWheel.axis, 'vertical');
+    assert.equal(secondWheel.axis, 'vertical');
+    assert.equal(state.verticalScrollOffset, 16, 'small trackpad deltas must accumulate before snap');
+    assert.equal(state.scrollByLane.projects, undefined, 'a header wheel must never move its item lane');
+
+    runtime.pressNode('__eve_dashboard_header_bg_projects', { x: 10, y: 10 });
+    const drag = runtime.dragNode('__eve_dashboard_header_bg_projects', { x: 90, y: 22 });
+    assert.equal(drag.axis, 'vertical');
+    assert.equal(state.scrollByLane.projects, undefined, 'a horizontally dominant header drag must never move its item lane');
+    runtime.releaseNode('__eve_dashboard_header_bg_projects');
     runtime.cancel();
 });

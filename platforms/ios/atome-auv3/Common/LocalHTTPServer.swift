@@ -226,9 +226,6 @@ final class LocalHTTPServer {
             sendSimple(status: 405, reason: "Method Not Allowed", body: "Method Not Allowed", on: connection)
             return
         }
-    // Opportunistic sync trigger (throttled inside coordinator)
-    FileSyncCoordinator.shared.syncAll()
-
     if routePath.hasPrefix("/text/") {
             let name = String(routePath.dropFirst("/text/".count))
             serveText(named: name, on: connection)
@@ -2195,6 +2192,11 @@ fileprivate enum AiSRuntime {
         let parentId = stringValue(message["parent_id"])
         let limit = intValue(message["limit"], defaultValue: 500)
         let offset = intValue(message["offset"], defaultValue: 0)
+        let excludedParticleKeys = Set(
+            (message["exclude_particle_keys"] as? [Any] ?? [])
+                .map(stringValue)
+                .filter { !$0.isEmpty }
+        )
         var sql = "SELECT atome_id, atome_type, parent_id, owner_id, creator_id, created_at, updated_at, created_source, sync_status FROM atomes WHERE deleted_at IS NULL"
         var bindings: [SQLiteBinding] = []
         if !atomeType.isEmpty {
@@ -2215,7 +2217,7 @@ fileprivate enum AiSRuntime {
         let rows = try query(db, sql, bindings)
         let atomes = try rows.map { row in
             let atomeId = stringValue(rowValue(row, "atome_id"))
-            return try serializeAtome(db, atomeId: atomeId)
+            return try serializeAtome(db, atomeId: atomeId, excludingParticleKeys: excludedParticleKeys)
         }
         return atomeResponse(requestId: requestId, success: true, atomes: atomes, count: Int64(atomes.count))
     }
@@ -2436,11 +2438,15 @@ fileprivate enum AiSRuntime {
         return opened
     }
 
-    private static func serializeAtome(_ db: OpaquePointer?, atomeId: String) throws -> [String: Any] {
+    private static func serializeAtome(
+        _ db: OpaquePointer?,
+        atomeId: String,
+        excludingParticleKeys: Set<String> = []
+    ) throws -> [String: Any] {
         guard let meta = try findAtomeMeta(db, atomeId: atomeId) else {
             throw AiSError("Atome not found")
         }
-        let particles = try loadParticles(db, atomeId: atomeId)
+        let particles = try loadParticles(db, atomeId: atomeId, excluding: excludingParticleKeys)
         var payload: [String: Any] = [
             "atome_id": meta.atomeId,
             "id": meta.atomeId,
@@ -2588,8 +2594,17 @@ fileprivate enum AiSRuntime {
         }
     }
 
-    private static func loadParticles(_ db: OpaquePointer?, atomeId: String) throws -> [String: Any] {
-        let rows = try query(db, "SELECT particle_key, particle_value FROM particles WHERE atome_id = ?", [.text(atomeId)])
+    private static func loadParticles(
+        _ db: OpaquePointer?,
+        atomeId: String,
+        excluding excludedParticleKeys: Set<String> = []
+    ) throws -> [String: Any] {
+        let sortedExcludedKeys = excludedParticleKeys.sorted()
+        let placeholders = Array(repeating: "?", count: sortedExcludedKeys.count).joined(separator: ",")
+        let exclusionClause = sortedExcludedKeys.isEmpty ? "" : " AND particle_key NOT IN (\(placeholders))"
+        let sql = "SELECT particle_key, particle_value FROM particles WHERE atome_id = ?\(exclusionClause)"
+        let bindings: [SQLiteBinding] = [.text(atomeId)] + sortedExcludedKeys.map(SQLiteBinding.text)
+        let rows = try query(db, sql, bindings)
         var out: [String: Any] = [:]
         for row in rows {
             let key = stringValue(row["particle_key"])

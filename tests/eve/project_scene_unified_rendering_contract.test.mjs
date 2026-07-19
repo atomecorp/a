@@ -193,7 +193,7 @@ test('Late project renders preserve Molecule overlays and active same-project da
     assert.equal(ids.has('project_atom'), true);
     assert.equal(ids.has('__eve_dashboard_background'), false);
     assert.equal(ids.has('mol:playhead'), true);
-    dom.window.eveDashboardBevyUiRuntime = { state: { active: true, projectId: 'project_ephemeral_overlay' } };
+    dom.window.eveDashboardBevyUiRuntime = { state: { active: true, sceneProjectId: 'project_ephemeral_overlay' } };
     await updateProjectSceneRecords({
         projectId: 'project_ephemeral_overlay',
         records: [{

@@ -113,6 +113,9 @@ export const buildAtomeApi = ({ getWs, tokenKey }) => ({
                     parent_id: parentId,
                     owner_id: ownerId,
                     since: params.since || params.updated_since || params.updatedSince || null,
+                    exclude_particle_keys: Array.isArray(params.excludeParticleKeys || params.exclude_particle_keys)
+                        ? (params.excludeParticleKeys || params.exclude_particle_keys)
+                        : [],
                     include_deleted: includeDeleted,
                     limit: params.limit,
                     offset: params.offset || ((params.page || 0) * (params.limit || 50))

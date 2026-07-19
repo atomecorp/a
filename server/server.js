@@ -3943,6 +3943,15 @@ async function startServer() {
                 });
               } else if (action === 'list') {
                 const { owner_id, user_id, atome_type, limit, offset, include_deleted, since } = data;
+                const excludedParticleKeys = new Set(
+                  Array.isArray(data.exclude_particle_keys)
+                    ? data.exclude_particle_keys.map((key) => String(key || '').trim()).filter(Boolean)
+                    : []
+                );
+                const excludedParticleKeyList = Array.from(excludedParticleKeys);
+                const excludedParticleJoinClause = excludedParticleKeyList.length
+                  ? `AND p.particle_key NOT IN (${excludedParticleKeyList.map(() => '?').join(', ')})`
+                  : '';
                 const effectiveType = atome_type;
                 const requestedOwner = (owner_id === '*' || owner_id === 'all') ? null : (owner_id || user_id);
                 const effectiveOwner = requesterId || requestedOwner;
@@ -3982,8 +3991,8 @@ async function startServer() {
 
                   const sinceClause = sinceIso ? "AND (a.updated_at > ? OR a.created_at > ?)" : '';
                   const params = sinceIso
-                    ? [sinceIso, sinceIso, directoryLimit, directoryOffset]
-                    : [directoryLimit, directoryOffset];
+                    ? [...excludedParticleKeyList, sinceIso, sinceIso, directoryLimit, directoryOffset]
+                    : [...excludedParticleKeyList, directoryLimit, directoryOffset];
 
                   const rows = await dataSource.query(
                     `SELECT a.atome_id, a.atome_type, a.parent_id, a.owner_id, a.creator_id, a.created_at, a.updated_at, a.deleted_at,
@@ -3991,7 +4000,7 @@ async function startServer() {
                             MAX(CASE WHEN p.particle_key = 'username' THEN p.particle_value END) AS username,
                             MAX(CASE WHEN p.particle_key = 'visibility' THEN p.particle_value END) AS visibility
                      FROM atomes a
-                     LEFT JOIN particles p ON a.atome_id = p.atome_id
+                     LEFT JOIN particles p ON a.atome_id = p.atome_id ${excludedParticleJoinClause}
                      WHERE a.atome_type = 'user'
                        ${deletedClause}
                        ${sinceClause}
@@ -4036,7 +4045,7 @@ async function startServer() {
                     `SELECT a.*, 
                             GROUP_CONCAT(p.particle_key || ':' || p.particle_value, '||') as particles_raw
                      FROM atomes a
-                     LEFT JOIN particles p ON a.atome_id = p.atome_id
+                     LEFT JOIN particles p ON a.atome_id = p.atome_id ${excludedParticleJoinClause}
                      LEFT JOIN permissions perm
                        ON perm.atome_id = a.atome_id
                       AND perm.principal_id = ?
@@ -4055,8 +4064,8 @@ async function startServer() {
                      ORDER BY a.created_at DESC
                      LIMIT ? OFFSET ?`,
                     effectiveType
-                      ? [effectiveOwner, effectiveOwner, pendingOwner, effectiveType, limit || 100, offset || 0]
-                      : [effectiveOwner, effectiveOwner, pendingOwner, limit || 100, offset || 0]
+                      ? [...excludedParticleKeyList, effectiveOwner, effectiveOwner, pendingOwner, effectiveType, limit || 100, offset || 0]
+                      : [...excludedParticleKeyList, effectiveOwner, effectiveOwner, pendingOwner, limit || 100, offset || 0]
                   );
 
                   // Parse particles
@@ -4109,12 +4118,12 @@ async function startServer() {
                     `SELECT a.*, 
                             GROUP_CONCAT(p.particle_key || ':' || p.particle_value, '||') as particles_raw
                      FROM atomes a
-                     LEFT JOIN particles p ON a.atome_id = p.atome_id
+                     LEFT JOIN particles p ON a.atome_id = p.atome_id ${excludedParticleJoinClause}
                      WHERE a.atome_type = ? ${deletedClause}
                      GROUP BY a.atome_id
                      ORDER BY a.created_at DESC
                      LIMIT ? OFFSET ?`,
-                    [effectiveType, limit || 100, offset || 0]
+                    [...excludedParticleKeyList, effectiveType, limit || 100, offset || 0]
                   );
 
                   // Parse particles
@@ -4152,6 +4161,16 @@ async function startServer() {
                   atomes = [];
                 }
 
+                if (excludedParticleKeys.size) {
+                  atomes.forEach((atome) => {
+                    excludedParticleKeys.forEach((key) => {
+                      delete atome[key];
+                      if (atome.data && typeof atome.data === 'object') delete atome.data[key];
+                      if (atome.properties && typeof atome.properties === 'object') delete atome.properties[key];
+                      if (atome.particles && typeof atome.particles === 'object') delete atome.particles[key];
+                    });
+                  });
+                }
                 safeSend({
                   type: 'atome-response',
                   requestId,

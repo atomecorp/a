@@ -1,8 +1,13 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { hydrateImageTree } from '../../eVe/domains/rendering/bevy_ui_image_runtime.js';
+import { clearBevyMediaTextureCache } from '../../eVe/domains/rendering/bevy_media_texture_cache.js';
+import { createEveBevyUiRuntime } from '../../eVe/domains/rendering/bevy_ui_runtime.js';
 import { mapVirtualSceneNodeToBevyPayload } from '../../eVe/domains/rendering/bevy_projection_adapter.js';
-import { projectBevyUiTreeOverlay } from '../../eVe/domains/rendering/bevy_ui_project_overlay_runtime.js';
+import {
+    patchBevyUiTreeMotion,
+    projectBevyUiTreeOverlay
+} from '../../eVe/domains/rendering/bevy_ui_project_overlay_runtime.js';
 import { WORKSPACE_SCENE_LAYER_IDS } from '../../eVe/domains/rendering/workspace_scene_layers.js';
 import {
     clearAllProjectScenes,
@@ -13,6 +18,185 @@ import {
 import { normalizeAtomeRenderNode } from '../../eVe/domains/rendering/virtual_scene_contract.js';
 import { buildBevyMainMenuTree } from '../../eVe/intuition/ribbon/bevy_ui_main_menu_model.js';
 import { RIBBON_TOKENS } from '../../eVe/intuition/ribbon/tokens.js';
+
+test('BevyUI palette updates reuse unchanged hydrated icon textures and invalidate visual changes', async () => {
+    clearBevyMediaTextureCache();
+    const dom = projectDom();
+    const surface = dom.window.document.getElementById('project');
+    let resolveCount = 0;
+    const tree = {
+        id: 'menu_root',
+        kind: 'root',
+        children: [{
+            id: 'palette_icon',
+            kind: 'image',
+            image: { source: 'palette.svg', tint: [0.8, 0.8, 0.8, 1] },
+            style: { position: [0, 0], size: [24, 24] }
+        }]
+    };
+    const imageResolverFactory = () => async () => {
+        resolveCount += 1;
+        return { width: 2, height: 2, rgba: new Uint8ClampedArray(16).fill(255) };
+    };
+    const first = await hydrateImageTree({ tree, surface, imageResolverFactory });
+    const moved = await hydrateImageTree({
+        tree: {
+            ...tree,
+            children: [{ ...tree.children[0], style: { ...tree.children[0].style, position: [120, 0] } }]
+        },
+        surface,
+        imageResolverFactory,
+        previousTree: first
+    });
+
+    assert.equal(resolveCount, 1);
+    assert.equal(moved.children[0].image, first.children[0].image);
+    assert.deepEqual(moved.children[0].style.position, [120, 0]);
+
+    let previous = await hydrateImageTree({
+        tree: {
+            ...tree,
+            children: [{ ...tree.children[0], image: { ...tree.children[0].image, tint: [1, 0, 0, 1] } }]
+        },
+        surface,
+        imageResolverFactory,
+        previousTree: moved
+    });
+    assert.equal(resolveCount, 2);
+
+    previous = await hydrateImageTree({
+        tree: {
+            ...tree,
+            children: [{ ...tree.children[0], image: { ...tree.children[0].image, source: 'palette-next.svg' } }]
+        },
+        surface,
+        imageResolverFactory,
+        previousTree: previous
+    });
+    assert.equal(resolveCount, 3);
+
+    previous = await hydrateImageTree({
+        tree: {
+            ...tree,
+            children: [{ ...tree.children[0], style: { ...tree.children[0].style, size: [32, 24] } }]
+        },
+        surface,
+        imageResolverFactory,
+        previousTree: previous
+    });
+    assert.equal(resolveCount, 4);
+
+    previous = await hydrateImageTree({
+        tree: {
+            ...tree,
+            children: [{
+                ...tree.children[0],
+                image: { source: 'bevy-ui-label:palette_icon', text: 'Palette' },
+                style: { ...tree.children[0].style, font_size: 8 }
+            }]
+        },
+        surface,
+        imageResolverFactory,
+        previousTree: previous
+    });
+    assert.equal(resolveCount, 5);
+
+    await hydrateImageTree({
+        tree: {
+            ...tree,
+            children: [{ ...tree.children[0], style: { ...tree.children[0].style, radius: 6 } }]
+        },
+        surface,
+        imageResolverFactory,
+        previousTree: previous
+    });
+    assert.equal(resolveCount, 6);
+});
+
+test('BevyUI palette prewarming hydrates through the shared route without mounting or projecting', async () => {
+    const dom = installDom('<!doctype html><canvas id="project"></canvas>');
+    const surface = dom.window.document.getElementById('project');
+    let resolutions = 0;
+    const runtime = createEveBevyUiRuntime({
+        imageResolverFactory: () => async () => {
+            resolutions += 1;
+            return { width: 1, height: 1, rgba: [255, 255, 255, 255] };
+        },
+        requestFrame: () => 0
+    });
+    const hydrated = await runtime.prewarmTreeImages({
+        surface,
+        tree: {
+            id: 'prewarm_palette',
+            root: {
+                id: 'prewarm_palette_root',
+                kind: 'root',
+                children: [{
+                    id: 'prewarm_palette_icon',
+                    kind: 'image',
+                    image: { source: 'palette.svg' },
+                    style: { size: [24, 24] }
+                }]
+            }
+        }
+    });
+
+    assert.equal(resolutions, 1);
+    assert.equal(hydrated.root.children[0].image.texture.rgba.length, 4);
+    assert.equal(runtime.state.trees.size, 0);
+    assert.equal(runtime.state.sourceTrees.size, 0);
+    assert.equal(runtime.readOverlayDiagnostics().treeCount, 0);
+});
+
+test('BevyUI palette prewarming reuses the resident menu and resolves only new children', async () => {
+    clearBevyMediaTextureCache();
+    const dom = installDom('<!doctype html><canvas id="project"></canvas>');
+    const surface = dom.window.document.getElementById('project');
+    let resolutions = 0;
+    const runtime = createEveBevyUiRuntime({
+        imageResolverFactory: () => async () => {
+            resolutions += 1;
+            return { width: 1, height: 1, rgba: [255, 255, 255, 255] };
+        },
+        overlayProjector: {
+            project: async () => [],
+            clear: async () => true
+        },
+        requestFrame: () => 0
+    });
+    const root = (children) => ({
+        id: 'resident_menu',
+        root: {
+            id: 'resident_menu_root',
+            kind: 'root',
+            children
+        }
+    });
+    const icon = (id, source) => ({
+        id,
+        kind: 'image',
+        image: { source },
+        style: { size: [24, 24] }
+    });
+
+    await runtime.mountTree({
+        id: 'resident_menu',
+        surface,
+        tree: root([icon('resident_icon', 'resident.svg')])
+    });
+    assert.equal(resolutions, 1);
+
+    await runtime.prewarmTreeImages({
+        surface,
+        tree: root([
+            icon('resident_icon', 'resident.svg'),
+            icon('new_palette_icon', 'palette.svg')
+        ])
+    });
+
+    assert.equal(resolutions, 2, 'the resident icon must not be decoded or copied again');
+    assert.equal(runtime.state.trees.size, 1, 'prewarming must not project a second tree');
+});
 import { createTestCompositor, installDom } from './unified_rendering_test_helpers.mjs';
 const projectDom = () => installDom('<!doctype html><html><body><main id="project"></main></body></html>');
 const findTreeNode = (node, id) => {
@@ -209,11 +393,16 @@ test('BevyUI main menu projects one semantic accent capsule per palette group', 
     clearAllProjectScenes();
     const dom = projectDom();
     const host = dom.window.document.getElementById('project');
+    const compositorCalls = [];
     await renderProjectScene({
         projectId: '__eve_dashboard_workspace__',
-        records: [],
+        records: [{
+            id: '__eve_dashboard_sentinel',
+            type: 'shape',
+            properties: { left: 8, top: 8, width: 20, height: 20, color: '#123456' }
+        }],
         host,
-        compositor: createTestCompositor()
+        compositor: createTestCompositor(compositorCalls)
     });
     const surface = getProjectSceneState('__eve_dashboard_workspace__').surface;
     surface.getBoundingClientRect = () => ({ left: 0, top: 0, right: 600, bottom: 720, width: 600, height: 720 });
@@ -293,8 +482,43 @@ test('BevyUI main menu projects one semantic accent capsule per palette group', 
         ]
     );
 
-    await projectBevyUiTreeOverlay({ tree: expandedTree, documentRef: dom.window.document, previousIds: [] });
-    const records = getProjectSceneState('__eve_dashboard_workspace__').records;
+    const closedIds = await projectBevyUiTreeOverlay({ tree: closedTree, documentRef: dom.window.document, previousIds: [] });
+    const pressedTree = buildBevyMainMenuTree({
+        content,
+        surface,
+        itemSize: 60,
+        state: { ...baseState, pressedId: 'eve_bevy_ui_main_menu_tool_capture' }
+    });
+    compositorCalls.length = 0;
+    const pressedIds = await projectBevyUiTreeOverlay({
+        tree: pressedTree,
+        documentRef: dom.window.document,
+        previousIds: closedIds
+    });
+    const pressedBatches = compositorCalls.filter((call) => Array.isArray(call.ops));
+    assert.equal(pressedBatches.length, 1, 'same-id pressed feedback must stay on the prefix batch');
+    assert.equal(compositorCalls.some((call) => call.type === 'run'), false, 'pressed feedback must not rebuild the Dashboard');
+    assert.equal(getProjectSceneState('__eve_dashboard_workspace__').projection?.render_result?.direct_prefix, true);
+    compositorCalls.length = 0;
+    const expandedIds = await projectBevyUiTreeOverlay({
+        tree: expandedTree,
+        documentRef: dom.window.document,
+        previousIds: pressedIds
+    });
+    assert.equal(closedIds.every((id) => expandedIds.includes(id)), true);
+    assert.equal(expandedIds.length, closedIds.length + 6, 'only the two new palette controls may spawn');
+    const openingBatches = compositorCalls.filter((call) => Array.isArray(call.ops));
+    const openingOps = openingBatches.flatMap((call) => call.ops);
+    assert.equal(openingBatches.length, 1, 'moving records and new palette records must share one renderer batch');
+    assert.equal(openingOps.some((operation) => operation.type === 'spawn'), true);
+    assert.equal(openingOps.some((operation) => operation.type === 'transform' || operation.type === 'style'), true);
+    const projectedState = getProjectSceneState('__eve_dashboard_workspace__');
+    assert.equal(
+        projectedState.projection?.render_result?.direct_prefix,
+        true,
+        'palette opening must add and move only the main-menu prefix instead of rebuilding the Dashboard scene'
+    );
+    const records = projectedState.records;
     const projectedAccent = records.find((record) => record.id.endsWith(`_${captureAccentId}`));
     const projectedBackplate = records.find((record) => record.id.endsWith(`_${captureBackplateId}`));
     assert.equal(projectedAccent?.properties?.width, 174);
@@ -310,6 +534,40 @@ test('BevyUI main menu projects one semantic accent capsule per palette group', 
         offsetX: 0,
         offsetY: 1
     });
+
+    compositorCalls.length = 0;
+    const motionResult = await patchBevyUiTreeMotion({
+        treeId: 'eve_bevy_ui_main_menu',
+        documentRef: dom.window.document,
+        updates: [{
+            nodeId: 'eve_bevy_ui_main_menu_tool_capture__import',
+            position: [12, 640],
+            opacity: 1
+        }]
+    });
+    assert.equal(motionResult.ok, true);
+    assert.equal(motionResult.batched, true, 'palette frames must stay on the direct GPU motion path');
+    assert.equal(
+        compositorCalls.filter((call) => Array.isArray(call.ops)).length,
+        1,
+        'one motion sample must produce one renderer batch without structural reconciliation'
+    );
+
+    compositorCalls.length = 0;
+    const restoredIds = await projectBevyUiTreeOverlay({
+        tree: closedTree,
+        documentRef: dom.window.document,
+        previousIds: expandedIds
+    });
+    const closingBatches = compositorCalls.filter((call) => Array.isArray(call.ops));
+    const closingOps = closingBatches.flatMap((call) => call.ops);
+    const restoredState = getProjectSceneState('__eve_dashboard_workspace__');
+    assert.equal(closingBatches.length, 1, 'palette closing must stay one atomic renderer batch');
+    assert.equal(closingOps.filter((operation) => operation.type === 'despawn').length, 6);
+    assert.equal(closingOps.some((operation) => String(operation.id || operation.payload?.id || '').includes('__eve_dashboard_sentinel')), false);
+    assert.equal(restoredState.projection?.render_result?.direct_prefix, true);
+    assert.equal(restoredState.records.some((record) => record.id === '__eve_dashboard_sentinel'), true);
+    assert.deepEqual(restoredIds, closedIds);
 });
 
 test('BevyUI main menu overlay follows the foreground project instead of the dashboard workspace', async () => {
@@ -341,11 +599,11 @@ test('BevyUI main menu overlay follows the foreground project instead of the das
     const hydrated = await hydrateImageTree({
         tree,
         surface,
-        imageResolverFactory: () => async (node) => ({
-            width: Math.max(1, Math.round(node.bounds.width * 2)),
-            height: Math.max(1, Math.round(node.bounds.height * 2)),
-            rgba: [211, 211, 211, 255]
-        })
+        imageResolverFactory: () => async (node) => {
+            const width = Math.max(1, Math.round(node.bounds.width * 2));
+            const height = Math.max(1, Math.round(node.bounds.height * 2));
+            return { width, height, rgba: new Array(width * height * 4).fill(211) };
+        }
     });
     const firstIds = await projectBevyUiTreeOverlay({ tree: hydrated, documentRef: dom.window.document, previousIds: [] });
     assert.equal(firstIds.length > 0, true);

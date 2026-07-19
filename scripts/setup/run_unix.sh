@@ -372,11 +372,6 @@ cleanup() {
         fi
     fi
 
-    # Tuer tous les processus sur le port 3001 (sécurité)
-    if command -v lsof >/dev/null 2>&1; then
-        lsof -ti:3001 | xargs kill -9 2>/dev/null || true
-    fi
-
     exit 0
 }
 

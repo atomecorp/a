@@ -864,4 +864,7 @@ fn rounded_rect_mask_handles_are_cached_per_dimensions() {
     assert_eq!(first, second);
     assert_ne!(first, different);
     assert_eq!(world.resource::<Assets<Image>>().iter().count(), 2);
+    let cache = world.resource::<crate::components::AtomeRoundedRectMaskCache>();
+    assert!(cache.total_bytes <= cache.max_bytes);
+    assert_eq!(cache.max_bytes, 8 * 1024 * 1024);
 }

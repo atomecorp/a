@@ -32,6 +32,75 @@ import {
 } from './unified_rendering_test_helpers.mjs';
 import { createProjectPreviewRuntime } from '../../eVe/domains/rendering/project_preview_runtime.js';
 import { resolveProjectPreviewCaptureGeometry } from '../../eVe/domains/rendering/bevy_project_preview_capture_frame.js';
+import {
+    clearBevyMediaTextureCache,
+    readBevyMediaTextureCache,
+    readBevyMediaTextureCacheDiagnostics,
+    resolveBevyMediaTextureCache,
+    writeBevyMediaTextureCache
+} from '../../eVe/domains/rendering/bevy_media_texture_cache.js';
+import { normalizeTexturePayload } from '../../eVe/domains/rendering/bevy_ui_image_runtime.js';
+import { LOGIN_AMBIENT_ITERATIONS } from '../../eVe/intuition/tools/user_login_visual_contract.js';
+
+test('mobile login ambience stops after its entrance pass', () => {
+    assert.equal(LOGIN_AMBIENT_ITERATIONS, 1);
+});
+
+test('Bevy media texture cache evicts by retained bytes and rejects oversized entries', () => {
+    clearBevyMediaTextureCache();
+    const texture = (bytes) => ({ width: bytes / 4, height: 1, rgba: new Uint8Array(bytes) });
+
+    writeBevyMediaTextureCache('first', texture(12), { maxEntries: 10, maxBytes: 20 });
+    writeBevyMediaTextureCache('second', texture(12), { maxEntries: 10, maxBytes: 20 });
+    assert.equal(readBevyMediaTextureCache('first'), null);
+    assert.equal(readBevyMediaTextureCacheDiagnostics().bytes, 12);
+
+    writeBevyMediaTextureCache('oversized', texture(24), { maxEntries: 10, maxBytes: 20 });
+    assert.equal(readBevyMediaTextureCache('oversized'), null);
+    assert.equal(readBevyMediaTextureCacheDiagnostics().bytes, 12);
+    clearBevyMediaTextureCache();
+});
+
+test('Bevy media texture cache deduplicates in-flight work and cannot resurrect entries after clear', async () => {
+    clearBevyMediaTextureCache();
+    let resolveLate;
+    let resolutions = 0;
+    const lateTexture = { width: 1, height: 1, rgba: new Uint8ClampedArray([1, 2, 3, 4]) };
+    const first = resolveBevyMediaTextureCache('shared', () => {
+        resolutions += 1;
+        return new Promise((resolve) => { resolveLate = resolve; });
+    });
+    const duplicate = resolveBevyMediaTextureCache('shared', () => {
+        resolutions += 1;
+        return lateTexture;
+    });
+    await Promise.resolve();
+    assert.equal(resolutions, 1);
+    assert.equal(readBevyMediaTextureCacheDiagnostics().in_flight, 1);
+    clearBevyMediaTextureCache();
+    resolveLate(lateTexture);
+    assert.equal(await first, lateTexture);
+    assert.equal(await duplicate, lateTexture);
+    assert.equal(readBevyMediaTextureCache('shared'), null, 'a cleared in-flight resolution must not repopulate the cache');
+    assert.equal(readBevyMediaTextureCacheDiagnostics().in_flight, 0);
+
+    const retry = await resolveBevyMediaTextureCache('shared', () => {
+        resolutions += 1;
+        return lateTexture;
+    });
+    assert.equal(retry.rgba instanceof Uint8ClampedArray, true);
+    assert.equal(resolutions, 2);
+    assert.equal(readBevyMediaTextureCache('shared'), retry);
+    clearBevyMediaTextureCache();
+});
+
+test('BevyUI texture normalization keeps compact byte arrays on mobile', () => {
+    const source = new Uint8ClampedArray([1, 2, 3, 4, 5, 6, 7, 8]);
+    const normalized = normalizeTexturePayload({ width: 2, height: 1, rgba: source });
+    assert.equal(normalized.rgba, source);
+    assert.equal(normalized.rgba.byteLength, 8);
+    assert.equal(Array.isArray(normalized.rgba), false);
+});
 
 test('RenderAtom normalization keeps render data disposable and cacheable', () => {
     const text = normalizeRenderAtom(makeRecord('text_a', 'text', 1));
@@ -120,7 +189,7 @@ test('RenderAtom normalizes CSS-sized text records for shared Bevy projections',
     assert.equal(text.style.text.font_weight, '600');
 });
 
-test('project preview runtime defaults to a high-density Bevy capture source', async () => {
+test('project preview runtime bounds thumbnail density independently from the project surface DPR', async () => {
     const previousWindow = globalThis.window;
     globalThis.window = { devicePixelRatio: 2 };
     const frames = [];
@@ -147,9 +216,9 @@ test('project preview runtime defaults to a high-density Bevy capture source', a
 
         assert.equal(frames[0].target.width, 640);
         assert.equal(frames[0].target.height, 400);
-        assert.equal(frames[0].target.devicePixelRatio, 2);
-        assert.equal(frames[0].target.pixelWidth, 1280);
-        assert.equal(frames[0].target.pixelHeight, 800);
+        assert.equal(frames[0].target.devicePixelRatio, 1);
+        assert.equal(frames[0].target.pixelWidth, 640);
+        assert.equal(frames[0].target.pixelHeight, 400);
         assert.deepEqual(frames[0].sourceViewport, { width: 1280, height: 720 });
         assert.deepEqual(frames[0].sourceBackground.color, [61 / 255, 3 / 255, 71 / 255, 1]);
         assert.deepEqual(
@@ -158,7 +227,7 @@ test('project preview runtime defaults to a high-density Bevy capture source', a
                 width: frames[0].target.pixelWidth,
                 height: frames[0].target.pixelHeight
             }).size,
-            { width: 1280, height: 720, sourceWidth: 1280, sourceHeight: 720 }
+            { width: 640, height: 360, sourceWidth: 1280, sourceHeight: 720 }
         );
     } finally {
         if (previousWindow === undefined) delete globalThis.window;

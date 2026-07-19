@@ -273,16 +273,10 @@ class FileSystemBridge: NSObject, WKScriptMessageHandler {
             sendErrorResponse(to: webView, error: "Invalid path")
             return
         }
-        // Pause autosync to avoid resurrection during the operation
-        FileSyncCoordinator.shared.stopAutoSync()
         defer {
-            // Mark tombstone and resume sync
+            // Persist the tombstone and propagate this explicit mutation once.
             FileSyncCoordinator.shared.markDeleted(url: fileURL)
             FileSyncCoordinator.shared.syncAll(force: true)
-            // Resume after a short delay allowing UI quiescence
-            DispatchQueue.global().asyncAfter(deadline: .now() + 0.6) {
-                FileSyncCoordinator.shared.startAutoSync()
-            }
         }
         do {
             try deleteCoordinated(at: fileURL, isDirectory: false)
@@ -301,13 +295,9 @@ class FileSystemBridge: NSObject, WKScriptMessageHandler {
             sendErrorResponse(to: webView, error: "Invalid path")
             return
         }
-        FileSyncCoordinator.shared.stopAutoSync()
         defer {
             FileSyncCoordinator.shared.markDeleted(url: dirURL)
             FileSyncCoordinator.shared.syncAll(force: true)
-            DispatchQueue.global().asyncAfter(deadline: .now() + 0.6) {
-                FileSyncCoordinator.shared.startAutoSync()
-            }
         }
         do {
             try deleteCoordinated(at: dirURL, isDirectory: true)
@@ -341,11 +331,9 @@ class FileSystemBridge: NSObject, WKScriptMessageHandler {
             sendSuccessResponse(to: webView, data: ["message": "Nothing to delete"])
             return
         }
-        FileSyncCoordinator.shared.stopAutoSync()
         defer {
             for it in items { FileSyncCoordinator.shared.markDeleted(url: it.url) }
             FileSyncCoordinator.shared.syncAll(force: true)
-            DispatchQueue.global().asyncAfter(deadline: .now() + 0.6) { FileSyncCoordinator.shared.startAutoSync() }
         }
         var failures: [String] = []
         for it in items {

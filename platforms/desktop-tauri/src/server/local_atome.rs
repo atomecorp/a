@@ -1098,6 +1098,17 @@ async fn handle_list(
         .get("include_deleted")
         .and_then(|v| v.as_bool())
         .unwrap_or(false);
+    let excluded_particle_keys: HashSet<String> = message
+        .get("exclude_particle_keys")
+        .and_then(|value| value.as_array())
+        .map(|values| {
+            values
+                .iter()
+                .filter_map(|value| value.as_str())
+                .map(str::to_string)
+                .collect()
+        })
+        .unwrap_or_default();
     let limit = message.get("limit").and_then(|v| v.as_i64()).unwrap_or(100);
     let offset = message.get("offset").and_then(|v| v.as_i64()).unwrap_or(0);
 
@@ -1250,7 +1261,13 @@ async fn handle_list(
                 continue;
             }
         }
-        if let Ok(atome) = load_atome_with_deleted(&db, &id, None, include_deleted) {
+        if let Ok(atome) = load_atome_with_deleted_excluding(
+            &db,
+            &id,
+            None,
+            include_deleted,
+            &excluded_particle_keys,
+        ) {
             atomes.push(atome);
         }
     }
@@ -2613,6 +2630,46 @@ mod state_current_owner_tests {
 
         assert!(!is_anonymous_user(&db, "real_owner_1"));
     }
+
+    #[test]
+    fn list_projection_can_exclude_heavy_preview_particles_before_serialization() {
+        let db = Connection::open_in_memory().expect("memory db");
+        db.execute_batch(ADOLE_SCHEMA_SQL).expect("schema");
+        db.execute(
+            "INSERT INTO atomes (atome_id, atome_type, created_at, updated_at) VALUES (?1, 'user', ?2, ?2)",
+            rusqlite::params!["user_test_1", "2026-07-17T00:00:00Z"],
+        )
+        .expect("insert owner");
+        db.execute(
+            "INSERT INTO atomes (atome_id, atome_type, owner_id, created_at, updated_at) VALUES (?1, 'project', ?2, ?3, ?3)",
+            rusqlite::params!["project_preview_test", "user_test_1", "2026-07-17T00:00:00Z"],
+        )
+        .expect("insert project");
+        db.execute(
+            "INSERT INTO particles (atome_id, particle_key, particle_value) VALUES (?1, 'name', ?2)",
+            rusqlite::params!["project_preview_test", "\"Visible project\""],
+        )
+        .expect("insert name");
+        db.execute(
+            "INSERT INTO particles (atome_id, particle_key, particle_value) VALUES (?1, 'preview_url', ?2)",
+            rusqlite::params!["project_preview_test", "\"data:image/webp;base64,heavy\""],
+        )
+        .expect("insert preview");
+
+        let excluded = HashSet::from(["preview_url".to_string()]);
+        let project = load_atome_with_deleted_excluding(
+            &db,
+            "project_preview_test",
+            Some("user_test_1"),
+            false,
+            &excluded,
+        )
+        .expect("load lightweight project");
+        let data = project.data.as_object().expect("project data");
+
+        assert_eq!(data.get("name"), Some(&json!("Visible project")));
+        assert!(!data.contains_key("preview_url"));
+    }
 }
 
 fn apply_event_to_atomes(
@@ -2835,6 +2892,22 @@ fn load_atome_with_deleted(
     owner_filter: Option<&str>,
     include_deleted: bool,
 ) -> Result<AtomeData, String> {
+    load_atome_with_deleted_excluding(
+        db,
+        atome_id,
+        owner_filter,
+        include_deleted,
+        &HashSet::new(),
+    )
+}
+
+fn load_atome_with_deleted_excluding(
+    db: &Connection,
+    atome_id: &str,
+    owner_filter: Option<&str>,
+    include_deleted: bool,
+    excluded_particle_keys: &HashSet<String>,
+) -> Result<AtomeData, String> {
     let deleted_clause = if include_deleted {
         ""
     } else {
@@ -2904,12 +2977,30 @@ fn load_atome_with_deleted(
 
     // Load particles
     let mut data_map = serde_json::Map::new();
+    let mut particle_query = String::from(
+        "SELECT particle_key, particle_value FROM particles WHERE atome_id = ?1",
+    );
+    let mut particle_params: Vec<Box<dyn rusqlite::ToSql>> =
+        vec![Box::new(atome_id.to_string())];
+    if !excluded_particle_keys.is_empty() {
+        let placeholders = excluded_particle_keys
+            .iter()
+            .map(|_| "?")
+            .collect::<Vec<_>>()
+            .join(",");
+        particle_query.push_str(&format!(" AND particle_key NOT IN ({})", placeholders));
+        for key in excluded_particle_keys {
+            particle_params.push(Box::new(key.clone()));
+        }
+    }
     let mut stmt = db
-        .prepare("SELECT particle_key, particle_value FROM particles WHERE atome_id = ?1")
+        .prepare(&particle_query)
         .map_err(|e| e.to_string())?;
+    let particle_param_refs: Vec<&dyn rusqlite::ToSql> =
+        particle_params.iter().map(|param| param.as_ref()).collect();
 
     let particles = stmt
-        .query_map(rusqlite::params![atome_id], |row| {
+        .query_map(particle_param_refs.as_slice(), |row| {
             Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
         })
         .map_err(|e| e.to_string())?;

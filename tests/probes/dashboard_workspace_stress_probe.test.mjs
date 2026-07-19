@@ -35,8 +35,8 @@ import {
     attachPageDiagnostics,
     exerciseDashboardOpenClose,
     exerciseStartupDashboardOpenClose,
-    waitForDashboardFadeSettled,
-    waitForDashboardFadeStart
+    waitForDashboardTransitionSettled,
+    waitForDashboardTransitionStart
 } from './dashboard_workspace_stress/dashboard_cycles.mjs';
 
 const PROJECT_COUNT = 3;
@@ -117,7 +117,7 @@ const exerciseDashboardHeaders = async (page, report) => {
     await clickMainHandle(page);
     const opened = await waitFor(page, () => ({ ok: window.eveDashboardBevyUiRuntime?.state?.active === true }), 15000, 50);
     if (!opened.ok) throw new Error('dashboard_reopen_before_headers_failed');
-    await waitForDashboardFadeSettled(page, 'headers_open', true);
+    await waitForDashboardTransitionSettled(page, 'headers_open', true);
     await waitFrames(page, 4);
     const headerTimes = [];
     const sequence = Array.from({ length: HEADER_CLICK_COUNT }, (_value, index) => ['projects', 'contacts', 'calendar', 'monitor', 'goals', 'news'][index % 6]);
@@ -189,16 +189,16 @@ const assertDashboardReopensAfterProjectSwitch = async (page, report, project) =
         const currentProjectId = window.__currentProject?.id || window.AdoleAPI?.projects?.getCurrentId?.() || null;
         const runtime = window.eveDashboardBevyUiRuntime || null;
         const state = runtime?.state || {};
-        const sceneProjectId = state.active === true ? (state.projectId || '__eve_dashboard_workspace__') : currentProjectId;
+        const sceneProjectId = state.active === true ? (state.sceneProjectId || '__eve_dashboard_workspace__') : currentProjectId;
         const scene = sceneProjectId ? window.eveToolBase?.getProjectSceneState?.(sceneProjectId) : null;
         const visible = (scene?.records || [])
             .filter((record) => String(record?.id || '').startsWith('__eve_dashboard_'))
             .filter((record) => record?.properties?.visible !== false && Number(record?.properties?.opacity ?? 1) > 0)
             .map((record) => record.id);
         return {
-            ok: currentProjectId === projectId && state.active === true && state.projectId === '__eve_dashboard_workspace__' && visible.length > 0,
+            ok: currentProjectId === projectId && state.active === true && state.sceneProjectId === projectId && visible.length > 0,
             currentProjectId,
-            runtimeProjectId: state.projectId || '',
+            runtimeProjectId: state.sceneProjectId || '',
             active: state.active === true,
             visibleCount: visible.length
         };
@@ -288,10 +288,10 @@ const run = async () => {
         if ((await dashboardSnapshot(page)).active === true) {
             markProgress(report, 'workspace:dashboard_close_before_project_setup:start');
             await clickMainHandle(page);
-            await waitForDashboardFadeStart(page, 'close_before_project_setup', 'close');
+            await waitForDashboardTransitionStart(page, 'close_before_project_setup', 'close');
             const closed = await waitFor(page, () => ({ ok: window.eveDashboardBevyUiRuntime?.state?.active !== true }), 15000, 50);
             if (!closed.ok) throw new Error(`dashboard_close_before_project_setup_failed:${JSON.stringify(closed.last)}`);
-            await waitForDashboardFadeSettled(page, 'close_before_project_setup', false);
+            await waitForDashboardTransitionSettled(page, 'close_before_project_setup', false);
             await waitFrames(page, 6);
             markProgress(report, 'workspace:dashboard_close_before_project_setup:done');
         }

@@ -7,8 +7,16 @@ import { JSDOM } from 'jsdom';
 import {
     BEVY_MAIN_MENU_ATOME_ID,
     buildBevyMainMenuItems,
+    buildBevyMainMenuTree,
     resolveBevyMainMenuItemSize
 } from '../../eVe/intuition/ribbon/bevy_ui_main_menu_model.js';
+import {
+    applyBevyMainMenuPaletteMotion,
+    bevyMainMenuPaletteMotionUpdates,
+    createBevyMainMenuPaletteMotion,
+    createBevyMainMenuPaletteMotionController,
+    sampleBevyMainMenuPaletteMotion
+} from '../../eVe/intuition/ribbon/bevy_ui_main_menu_palette_motion.js';
 import { createBevyUiMainMenuRuntime } from '../../eVe/intuition/ribbon/bevy_ui_main_menu_runtime.js';
 import { setMainMenuRuntime } from '../../eVe/intuition/ribbon/bevy_ui_product_registry.js';
 import { createBevyMainMenuHoldRuntime } from '../../eVe/intuition/ribbon/bevy_ui_main_menu_hold_runtime.js';
@@ -27,6 +35,20 @@ const collectJavaScriptSources = (directory) => readdirSync(directory, { withFil
         if (entry.isDirectory()) return collectJavaScriptSources(path);
         return entry.isFile() && entry.name.endsWith('.js') ? [path] : [];
     });
+
+test('Capture screen icon is canonical before and after its lazy module loads', () => {
+    const initialContentSource = readFileSync(
+        resolve(process.cwd(), 'eVe/intuition/runtime/eve_intuition/main_menu_content_runtime.js'),
+        'utf8'
+    );
+    const lazyCaptureSource = readFileSync(
+        resolve(process.cwd(), 'eVe/intuition/tools/capture.js'),
+        'utf8'
+    );
+    assert.match(initialContentSource, /screen:\s*\{[^\n]*icon:\s*'screen_capturesvg'[^\n]*tool_id:\s*'ui\.capture\.screen'/);
+    assert.match(lazyCaptureSource, /tool_id:\s*'ui\.capture\.screen'[^\n]*icon:\s*'screen_capturesvg'/);
+    assert.doesNotMatch(initialContentSource, /tool_id:\s*'ui\.capture\.screen',\s*icon:\s*'screen'/);
+});
 
 test('BevyUI product runtimes never restore legacy browser menu or Flower state', () => {
     const forbidden = [
@@ -530,7 +552,7 @@ test('BevyUI main menu tool activation reuses the normalized ribbon definition t
     }
 });
 
-test('BevyUI main menu renders palette children only while their canonical palette is active', async () => {
+test('BevyUI main menu removes closed palette children so reopening starts from the canonical parent edge', async () => {
     const content = {
         toolbox: { children: ['capture'] },
         capture: {
@@ -562,19 +584,345 @@ test('BevyUI main menu renders palette children only while their canonical palet
     });
     try {
         await harness.runtime.showFully();
-        const capture = findNode(harness.calls.at(-1).payload.tree.root, 'eve_bevy_ui_main_menu_tool_capture');
+        const closedTree = harness.calls.at(-1).payload.tree;
+        assert.equal(findNode(closedTree.root, 'eve_bevy_ui_main_menu_tool_capture__import'), null);
+        const capture = findNode(closedTree.root, 'eve_bevy_ui_main_menu_tool_capture');
         await capture.on.activate();
         assert.deepEqual(invoked, []);
         assert.equal(harness.runtime.measure().activePaletteKey, 'capture');
         const expandedTree = harness.calls.at(-1).payload.tree;
         const importNode = findNode(expandedTree.root, 'eve_bevy_ui_main_menu_tool_capture__import');
         assert.ok(importNode);
+        assert.ok(importNode.style.opacity > 0, 'the first moving frame presents the tool without a delayed icon');
+        assert.equal(typeof importNode.on.activate, 'function');
         await importNode.on.activate();
         assert.deepEqual(invoked, [{ toolId: 'ui.capture.import', eventName: 'bevy_ui.activate' }]);
+        harness.runtime.dismissPalettes();
+        await Promise.resolve();
+        await Promise.resolve();
+        const closedAgain = harness.calls.at(-1).payload.tree;
+        assert.equal(findNode(closedAgain.root, 'eve_bevy_ui_main_menu_tool_capture__import'), null);
     } finally {
         harness.runtime.destroy();
         harness.restore();
     }
+});
+
+test('BevyUI palette first moving frame contains the complete tool and overshoots every target by 6 to 14 px', () => {
+    const content = {
+        toolbox: { children: ['capture', 'time'] },
+        capture: {
+            atome_tool: true,
+            label: 'capture',
+            icon: 'capture',
+            tool_id: 'tool.main.capture',
+            type: 'palette',
+            children: ['import']
+        },
+        import: { atome_tool: true, label: 'import', icon: 'import', tool_id: 'ui.capture.import' },
+        time: { atome_tool: true, label: 'time', icon: 'time', tool_id: 'tool.main.time' }
+    };
+    const surface = {
+        getBoundingClientRect: () => ({ width: 960, height: 720 })
+    };
+    const treeState = (activePaletteKey = '') => ({
+        activePaletteKey,
+        externalOpenByToolId: new Map(),
+        hoveredId: '',
+        latchedByToolId: new Map(),
+        pressedId: ''
+    });
+    const closedTree = buildBevyMainMenuTree({ content, surface, handedness: 'right', itemSize: 60, state: treeState() });
+    const openTree = buildBevyMainMenuTree({ content, surface, handedness: 'right', itemSize: 60, state: treeState('capture') });
+    const motion = createBevyMainMenuPaletteMotion({ closedTree, openTree, paletteKey: 'capture' });
+    const childId = 'eve_bevy_ui_main_menu_tool_capture__import';
+    const initial = sampleBevyMainMenuPaletteMotion({ motion, elapsedMs: 0 });
+    const firstMoving = sampleBevyMainMenuPaletteMotion({ motion, elapsedMs: 16 });
+    const arrival = sampleBevyMainMenuPaletteMotion({ motion, elapsedMs: 180 });
+    const recoil = sampleBevyMainMenuPaletteMotion({ motion, elapsedMs: 250 });
+    const final = sampleBevyMainMenuPaletteMotion({ motion, elapsedMs: 370 });
+    const initialTree = applyBevyMainMenuPaletteMotion(openTree, initial, motion);
+    const initialChild = findNode(initialTree.root, childId);
+    const paletteParent = findNode(initialTree.root, 'eve_bevy_ui_main_menu_tool_capture');
+    const initialFrame = initial.frames.get(childId);
+    const movingUpdates = bevyMainMenuPaletteMotionUpdates(firstMoving, motion);
+
+    assert.deepEqual(initialChild.style.position, initialFrame.position);
+    assert.equal(findNode(initialChild, `${childId}_icon`).style.position, undefined);
+    assert.equal(findNode(initialChild, `${childId}_label`).style.position, undefined);
+    assert.ok(paletteParent.style.z_index > initialChild.style.z_index, 'the child must emerge from behind its palette parent');
+    assert.equal(findNode(initialChild, `${childId}_icon`).style.z_index, initialChild.style.z_index + 1);
+    assert.equal(findNode(initialChild, `${childId}_label`).style.z_index, initialChild.style.z_index + 1);
+    assert.equal(initialChild.style.opacity, 1);
+    assert.equal(Object.hasOwn(movingUpdates.find((update) => update.nodeId === childId), 'opacity'), false);
+    assert.equal(Object.hasOwn(movingUpdates.find((update) => update.nodeId === `${childId}_icon`), 'opacity'), false);
+    assert.equal(Object.hasOwn(movingUpdates.find((update) => update.nodeId === `${childId}_label`), 'opacity'), false);
+    assert.notDeepEqual(firstMoving.frames.get(childId).position, initialFrame.position);
+    assert.equal(arrival.extent, 1);
+    assert.ok(recoil.extent > 1);
+    motion.targets.forEach((target) => {
+        const arrived = arrival.frames.get(target.id).position;
+        const overshot = recoil.frames.get(target.id).position;
+        const overshootPx = Math.hypot(overshot[0] - arrived[0], overshot[1] - arrived[1]);
+        const travel = [
+            target.finalPosition[0] - target.fromPosition[0],
+            target.finalPosition[1] - target.fromPosition[1]
+        ];
+        const overshoot = [overshot[0] - arrived[0], overshot[1] - arrived[1]];
+        assert.ok((travel[0] * overshoot[0]) + (travel[1] * overshoot[1]) > 0, `${target.id} must overshoot outward`);
+        assert.ok(overshootPx >= 6 && overshootPx <= 14, `${target.id} overshoot must stay within the visual token`);
+    });
+    assert.equal(final.extent, 1);
+    assert.equal(final.done, true);
+    assert.equal(motion.durationMs, 370);
+});
+
+test('BevyUI palette samples exact outward overshoot and settlement in both handedness modes', () => {
+    const content = {
+        toolbox: { children: ['capture', 'time'] },
+        capture: {
+            atome_tool: true,
+            label: 'capture',
+            icon: 'capture',
+            tool_id: 'tool.main.capture',
+            type: 'palette',
+            children: ['import', 'photo']
+        },
+        import: { atome_tool: true, label: 'import', icon: 'import', tool_id: 'ui.capture.import' },
+        photo: { atome_tool: true, label: 'photo', icon: 'photo', tool_id: 'ui.capture.photo' },
+        time: { atome_tool: true, label: 'time', icon: 'time', tool_id: 'tool.main.time' }
+    };
+    const surface = { getBoundingClientRect: () => ({ width: 960, height: 720 }) };
+    const stateFor = (activePaletteKey = '') => ({
+        activePaletteKey,
+        externalOpenByToolId: new Map(),
+        hoveredId: '',
+        latchedByToolId: new Map(),
+        pressedId: ''
+    });
+    for (const handedness of ['left', 'right']) {
+        const closedTree = buildBevyMainMenuTree({ content, surface, handedness, itemSize: 60, state: stateFor() });
+        const openTree = buildBevyMainMenuTree({ content, surface, handedness, itemSize: 60, state: stateFor('capture') });
+        const motion = createBevyMainMenuPaletteMotion({ closedTree, openTree, paletteKey: 'capture' });
+        const initial = sampleBevyMainMenuPaletteMotion({ motion, elapsedMs: 0 });
+        const arrival = sampleBevyMainMenuPaletteMotion({ motion, elapsedMs: 180 });
+        const overshoot = sampleBevyMainMenuPaletteMotion({ motion, elapsedMs: 250 });
+        const final = sampleBevyMainMenuPaletteMotion({ motion, elapsedMs: 370 });
+        motion.targets.forEach((target) => {
+            assert.deepEqual(initial.frames.get(target.id).position, target.fromPosition);
+            assert.deepEqual(arrival.frames.get(target.id).position, target.finalPosition);
+            const arrived = arrival.frames.get(target.id).position;
+            const exceeded = overshoot.frames.get(target.id).position;
+            const distance = Math.hypot(exceeded[0] - arrived[0], exceeded[1] - arrived[1]);
+            const travel = [target.finalPosition[0] - target.fromPosition[0], target.finalPosition[1] - target.fromPosition[1]];
+            const extra = [exceeded[0] - arrived[0], exceeded[1] - arrived[1]];
+            assert.ok((travel[0] * extra[0]) + (travel[1] * extra[1]) > 0, `${handedness}:${target.id}`);
+            assert.ok(distance >= 6 && distance <= 14, `${handedness}:${target.id}`);
+            assert.deepEqual(final.frames.get(target.id).position, target.finalPosition);
+        });
+    }
+});
+
+test('BevyUI palette projects complete content before motion and coalesces GPU backpressure to the latest frame', async () => {
+    const content = {
+        toolbox: { children: ['capture', 'time'] },
+        capture: {
+            atome_tool: true,
+            label: 'capture',
+            icon: 'capture',
+            tool_id: 'tool.main.capture',
+            type: 'palette',
+            children: ['import']
+        },
+        import: { atome_tool: true, label: 'import', icon: 'import', tool_id: 'ui.capture.import' },
+        time: { atome_tool: true, label: 'time', icon: 'time', tool_id: 'tool.main.time' }
+    };
+    const surface = { getBoundingClientRect: () => ({ width: 960, height: 720 }) };
+    const state = {
+        active: true,
+        activePaletteKey: '',
+        externalOpenByToolId: new Map(),
+        hoveredId: '',
+        latchedByToolId: new Map(),
+        pressedId: ''
+    };
+    const scheduledFrames = [];
+    const pendingMotions = [];
+    const submitted = [];
+    const requestFrame = (callback) => {
+        scheduledFrames.push(callback);
+        return scheduledFrames.length;
+    };
+    let controller;
+    let structuralTree = null;
+    controller = createBevyMainMenuPaletteMotionController({
+        state,
+        buildTree: () => buildBevyMainMenuTree({ content, surface, handedness: 'right', itemSize: 60, state }),
+        render: async () => {
+            structuralTree = controller.decorateTree(buildBevyMainMenuTree({
+                content, surface, handedness: 'right', itemSize: 60, state
+            }));
+            return true;
+        },
+        runtimeResolver: () => ({
+            updateTreeMotion: ({ updates }) => new Promise((resolveMotion) => {
+                submitted.push(updates);
+                pendingMotions.push(resolveMotion);
+            })
+        }),
+        requestFrame,
+        cancelFrame: () => {},
+        reducedMotionResolver: () => false
+    });
+    const flush = async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+        await Promise.resolve();
+    };
+    const runFrame = async (timestamp) => {
+        const callback = scheduledFrames.shift();
+        assert.equal(typeof callback, 'function');
+        callback(timestamp);
+        await flush();
+    };
+    const childId = 'eve_bevy_ui_main_menu_tool_capture__import';
+    const childPosition = (updates) => updates.find((update) => update.nodeId === childId)?.position;
+
+    controller.open('capture');
+    await flush();
+    await runFrame(1000);
+    const closedTree = buildBevyMainMenuTree({ content, surface, handedness: 'right', itemSize: 60, state: { ...state, activePaletteKey: '' } });
+    const openTree = buildBevyMainMenuTree({ content, surface, handedness: 'right', itemSize: 60, state: { ...state, activePaletteKey: 'capture' } });
+    const motion = createBevyMainMenuPaletteMotion({ closedTree, openTree, paletteKey: 'capture' });
+    assert.deepEqual(
+        findNode(structuralTree.root, childId).style.position,
+        sampleBevyMainMenuPaletteMotion({ motion, elapsedMs: 0 }).frames.get(childId).position,
+        'the structural hot path must create the complete palette before its first movement'
+    );
+    assert.ok(findNode(structuralTree.root, `${childId}_icon`));
+    assert.ok(findNode(structuralTree.root, `${childId}_label`));
+    assert.equal(findNode(structuralTree.root, childId).style.opacity, 1);
+    assert.equal(submitted.length, 1, 'the first requestAnimationFrame must already submit movement');
+    assert.ok(childPosition(submitted[0])[0] !== motion.targets.find((target) => target.id === childId).fromPosition[0]);
+    await runFrame(1016);
+    await runFrame(1050);
+    await runFrame(1100);
+    await runFrame(1390);
+    assert.equal(submitted.length, 1, 'the first slow GPU submission remains in flight');
+    assert.equal(scheduledFrames.length, 1, 'the animation clock must continue while a GPU submission is in flight');
+
+    pendingMotions.shift()();
+    await flush();
+    await runFrame(1400);
+    assert.equal(submitted.length, 2, 'all obsolete intermediate samples must collapse into one final submission');
+    assert.deepEqual(
+        childPosition(submitted[1]),
+        childPosition(bevyMainMenuPaletteMotionUpdates(sampleBevyMainMenuPaletteMotion({ motion, elapsedMs: 370 }), motion)),
+        'the next available GPU presentation must catch up directly to wall-clock final geometry'
+    );
+    pendingMotions.shift()();
+    await flush();
+    assert.equal(controller.active, false);
+    controller.cancel();
+});
+
+test('BevyUI palette ignores late GPU completion after replacement and close', async () => {
+    const content = {
+        toolbox: { children: ['capture', 'time'] },
+        capture: {
+            atome_tool: true,
+            label: 'capture',
+            icon: 'capture',
+            tool_id: 'tool.main.capture',
+            type: 'palette',
+            children: ['import']
+        },
+        import: { atome_tool: true, label: 'import', icon: 'import', tool_id: 'ui.capture.import' },
+        time: {
+            atome_tool: true,
+            label: 'time',
+            icon: 'time',
+            tool_id: 'tool.main.time',
+            type: 'palette',
+            children: ['timer']
+        },
+        timer: { atome_tool: true, label: 'timer', icon: 'timer', tool_id: 'ui.time.timer' }
+    };
+    const surface = { getBoundingClientRect: () => ({ width: 960, height: 720 }) };
+    const state = {
+        active: true,
+        activePaletteKey: '',
+        externalOpenByToolId: new Map(),
+        hoveredId: '',
+        latchedByToolId: new Map(),
+        pressedId: ''
+    };
+    const scheduled = new Map();
+    const submissions = [];
+    const renders = [];
+    let nextFrameId = 1;
+    let controller;
+    const buildTree = () => buildBevyMainMenuTree({ content, surface, handedness: 'right', itemSize: 60, state });
+    controller = createBevyMainMenuPaletteMotionController({
+        state,
+        buildTree,
+        render: async () => { renders.push(controller.decorateTree(buildTree())); },
+        runtimeResolver: () => ({
+            updateTreeMotion: ({ updates }) => new Promise((resolveMotion) => {
+                submissions.push({ paletteKey: state.activePaletteKey, resolveMotion, updates });
+            })
+        }),
+        requestFrame: (callback) => {
+            const id = nextFrameId++;
+            scheduled.set(id, callback);
+            return id;
+        },
+        cancelFrame: (id) => { scheduled.delete(id); },
+        reducedMotionResolver: () => false
+    });
+    const flush = async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+        await Promise.resolve();
+    };
+    const runNextFrame = async (timestamp) => {
+        const next = scheduled.entries().next().value;
+        assert.ok(next, 'one current animation frame must exist');
+        scheduled.delete(next[0]);
+        next[1](timestamp);
+        await flush();
+    };
+
+    controller.open('capture');
+    await flush();
+    await runNextFrame(1000);
+    assert.equal(submissions.length, 1);
+    assert.equal(submissions[0].paletteKey, 'capture');
+    assert.ok(submissions[0].updates.some((update) => update.nodeId.includes('capture__import')));
+
+    controller.open('time');
+    await flush();
+    assert.equal(state.activePaletteKey, 'time');
+    await runNextFrame(1100);
+    assert.equal(submissions.length, 2);
+    assert.equal(submissions[1].paletteKey, 'time');
+    assert.ok(submissions[1].updates.some((update) => update.nodeId.includes('time__timer')));
+
+    const scheduledForTime = [...scheduled.keys()];
+    submissions[0].resolveMotion();
+    await flush();
+    assert.deepEqual([...scheduled.keys()], scheduledForTime, 'late Capture completion must not schedule or replace Time motion');
+    assert.equal(state.activePaletteKey, 'time');
+
+    controller.close();
+    await flush();
+    submissions[1].resolveMotion();
+    await flush();
+    assert.equal(controller.active, false);
+    assert.equal(state.activePaletteKey, '');
+    assert.equal(scheduled.size, 0, 'late Time completion must not resurrect a requestAnimationFrame');
+    assert.equal(submissions.length, 2, 'no late GPU completion may submit orphan palette motion');
+    assert.equal(renders.at(-1).motionLayout.items.some((item) => item.parentKey), false);
 });
 
 test('BevyUI main menu gives palette opening priority over queued cosmetic click renders', async () => {
@@ -604,6 +952,53 @@ test('BevyUI main menu gives palette opening priority over queued cosmetic click
         assert.equal(harness.calls.length, 2, 'the click must produce one structural update, not a cosmetic render queue');
         assert.equal(harness.runtime.measure().activePaletteKey, 'capture');
         assert.ok(findNode(harness.calls.at(-1).payload.tree.root, 'eve_bevy_ui_main_menu_tool_capture__import'));
+    } finally {
+        harness.runtime.destroy();
+        harness.restore();
+    }
+});
+
+test('BevyUI main menu prewarms closed palette images without projecting palette children', async () => {
+    const content = {
+        toolbox: { children: ['capture', 'time'] },
+        capture: {
+            atome_tool: true,
+            label: 'capture',
+            icon: 'capture',
+            tool_id: 'tool.main.capture',
+            type: 'palette',
+            children: ['import']
+        },
+        import: { atome_tool: true, label: 'import', icon: 'import', tool_id: 'ui.capture.import' },
+        time: {
+            atome_tool: true,
+            label: 'time',
+            icon: 'time',
+            tool_id: 'tool.main.time',
+            type: 'palette',
+            children: ['clock']
+        },
+        clock: { atome_tool: true, label: 'clock', icon: 'time', tool_id: 'ui.clock.set' }
+    };
+    const harness = createRuntimeHarness({ content });
+    const prewarmed = [];
+    harness.window.eveBevyUiRuntime.prewarmTreeImages = async ({ tree }) => {
+        prewarmed.push([...new Set(tree.motionLayout.items.map((item) => item.parentKey).filter(Boolean))]);
+        return tree;
+    };
+    try {
+        await harness.runtime.showFully();
+        await waitMs(20);
+        assert.deepEqual(prewarmed, [['capture'], ['time']]);
+        assert.equal(harness.calls.filter((call) => call.type === 'mount').length, 1);
+        assert.equal(harness.calls.filter((call) => call.type === 'update').length, 0);
+        assert.equal(findNode(harness.calls[0].payload.tree.root, 'eve_bevy_ui_main_menu_tool_capture__import'), null);
+        assert.equal(findNode(harness.calls[0].payload.tree.root, 'eve_bevy_ui_main_menu_tool_time__clock'), null);
+
+        harness.runtime.updateContent({ capture: { label: 'Capture updated' } });
+        harness.runtime.hideCompletely();
+        await waitMs(20);
+        assert.deepEqual(prewarmed, [['capture'], ['time']], 'hidden menu must cancel replacement hydration work');
     } finally {
         harness.runtime.destroy();
         harness.restore();

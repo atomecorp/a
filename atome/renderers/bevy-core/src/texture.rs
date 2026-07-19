@@ -109,6 +109,12 @@ pub fn cached_image_handle_from_rounded_rect_mask(
         if exists {
             return Ok(handle);
         }
+        let mut cache = world.resource_mut::<AtomeRoundedRectMaskCache>();
+        cache.handles.remove(&key);
+        cache.order.retain(|existing| existing != &key);
+        cache.total_bytes = cache
+            .total_bytes
+            .saturating_sub(cache.byte_sizes.remove(&key).unwrap_or(0));
     }
     let handle = {
         let mut images = world
@@ -117,13 +123,22 @@ pub fn cached_image_handle_from_rounded_rect_mask(
         image_handle_from_rounded_rect_mask(&mut images, width, height, radius, id)?
     };
     let mut cache = world.resource_mut::<AtomeRoundedRectMaskCache>();
+    let byte_size = key.width as usize * key.height as usize * 4;
+    if byte_size > cache.max_bytes {
+        return Ok(handle);
+    }
     if !cache.handles.contains_key(&key) {
         cache.order.push_back(key.clone());
     }
-    cache.handles.insert(key, handle.clone());
-    while cache.order.len() > cache.max_entries {
+    cache.handles.insert(key.clone(), handle.clone());
+    cache.byte_sizes.insert(key.clone(), byte_size);
+    cache.total_bytes += byte_size;
+    while cache.order.len() > cache.max_entries || cache.total_bytes > cache.max_bytes {
         if let Some(evicted) = cache.order.pop_front() {
             cache.handles.remove(&evicted);
+            cache.total_bytes = cache
+                .total_bytes
+                .saturating_sub(cache.byte_sizes.remove(&evicted).unwrap_or(0));
         }
     }
     Ok(handle)

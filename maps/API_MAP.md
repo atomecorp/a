@@ -2,6 +2,13 @@
 
 Status: Initial API map after the Atome open / eVe closed boundary validation.
 
+Current mobile performance API contract (2026-07-17; supersedes older preview/warmup details below wherever they conflict):
+
+- `AdoleAPI.projects.list(options?, callback?)` omits the heavy `preview_url` particle by default and accepts `{ includePreviewSources: true }` only as an explicit compatibility opt-in. The unified list request carries `exclude_particle_keys`; Tauri SQLite, the iOS local SQLite server, and Fastify/PostgreSQL exclude those keys before record serialization.
+- Dashboard adapters do not convert a missing preview into permission to capture every project. Only `forceCurrentProjectPreview:true` captures the active project and publishes the result after canonical persistence. Backend/list failures are observable rather than normalized to `[]`.
+- The browser renderer surface DPR is capped at 1.5; preview DPR is capped at 1. Hidden decode video sources suspend on Dashboard workspace mode and resume only remembered requested playback. Reactive Winit redraw is strictly event-driven through explicit wake messages and has no idle cadence.
+- iOS `FileSyncCoordinator.syncAll(force:)` remains the internal explicit propagation boundary. The periodic `startAutoSync`/`stopAutoSync` surface is removed; ordinary local HTTP GET delivery cannot invoke filesystem synchronization.
+
 Purpose:
 
 - Identify verified API families, ownership, and stable entry points.
@@ -36,6 +43,8 @@ Atome must not contain eVe UI, private product workflows, or product-only tool c
 
 ## Explicit Open / Closed API Contract
 
+The renderer cadence, `WakeUp` throttle, page-scoped version-manifest refresh, and palette direct-motion batch are internal rendering contracts. They add no browser public API, DOM proxy, canvas, mutation authority, or alternate renderer; consumers continue through the existing BevyUI `updateTreeMotion` and shared project-scene projection APIs.
+
 API classification is mandatory before an API is reused, exposed, moved, or extended:
 
 - Public open APIs are product-neutral Atome, server, or database contracts intended for framework use, AI/MCP access, durable state mutation, synchronization, or platform runtime behavior.
@@ -67,11 +76,9 @@ Primary sources:
 - `eVe/domains/dashboard/dashboard_data_controller.js`
 - `eVe/domains/dashboard/dashboard_environment.js`
 - `eVe/domains/dashboard/dashboard_environment_watcher.js`
-- `eVe/domains/dashboard/dashboard_projection_lifecycle.js`
 - `eVe/domains/dashboard/dashboard_focus_transition.js`
 - `eVe/domains/dashboard/dashboard_bevy_ui_runtime.js`
 - `eVe/domains/dashboard/dashboard_preferences.js`
-- `eVe/domains/dashboard/dashboard_projection_lifecycle.js`
 - `eVe/domains/dashboard/dashboard_bevy_ui_runtime.js`
 - `eVe/domains/dashboard/dashboard_record_primitives.js`
 - `eVe/domains/dashboard/dashboard_bevy_ui_runtime.js`
@@ -135,7 +142,7 @@ Ownership: Internal eVe rendering target over the shared Atome Bevy renderer.
 Exposure:
 
 - Runtime global: `window.eveBevyUiRuntime`, installed by `eVe/domains/rendering/bevy_ui_runtime.js` during eVe boot.
-- Public internal methods: `mountTree({ id, surface, tree })`, `updateTree({ id, patches })`, `unmountTree(id)`, `hitTestAtClientPoint({ surface, clientX, clientY })`, and `readDiagnostics()`.
+- Public internal methods: `mountTree({ id, surface, tree })`, `updateTree({ id, patches })`, `updateTreeMotion({ id, updates })`, `prewarmTreeImages({ surface, tree })`, `unmountTree(id)`, `hitTestAtClientPoint({ surface, clientX, clientY })`, and `readDiagnostics()`. `prewarmTreeImages` hydrates through the shared bounded cache without mounting, projecting, or storing a second tree; the main menu invokes it outside the click path one palette per idle frame. `updateTreeMotion` first applies the canonical direct WebGPU operation batch and retains the established structural overlay fallback when a record cannot be patched directly.
 - WASM exports: `apply_atome_bevy_ui_ops(...)`, `read_atome_bevy_ui_diagnostics()`, `drain_atome_bevy_ui_events()`, and the internal browser input bridge `queue_atome_bevy_ui_events(...)`.
 
 Boundary status: Squirrel UI definitions remain the canonical source of UI structure and handlers. BevyUI receives normalized disposable trees, hydrates standalone `icon` / `image` sources into WebGPU texture payloads through the shared browser texture resolver before renderer submission, while Dashboard card-media overlay nodes explicitly defer generic hydration so project previews cannot block the structural Dashboard mount and are resolved once by the shared WebGPU deferred-media path, stores the interaction tree in logical CSS pixels, versions and queues overlay renders per tree so only the latest requested render may update the shared project scene and failed operations remain caller-owned without orphan queue rejections, projects the visible product path through non-selectable WebGPU project overlay records under the centralized `__eve_bevy_ui_` prefix, and returns UI intentions such as `activate`, `change`, `input`, `focus`, `blur`, `open`, `close`, `select`, `hover`, `press`, `release`, `drag`, and `wheel`; any durable mutation must still route through existing handlers and then `window.Atome.commit` / `commitBatch` when canonical state changes. Browser canvas input is translated by `bevy_ui_runtime.js` through its normalized interaction tree and submitted to the WASM event queue with `queue_atome_bevy_ui_events(...)`, so `drain_atome_bevy_ui_events()` remains the single web drain surface for native BevyUI events. Native BevyUI WASM op submission is opt-in; the default product path must not call `apply_atome_bevy_ui_ops(...)` while the visible route is the project overlay. Prehydrated overlay textures must remain attached through Virtual Scene projection and must not be replaced by re-resolving the original source. BevyUI overlay records are ephemeral, excluded from project preview captures, and overlay updates must not clear existing Dashboard/project scene effects unless an explicit `effects` array is supplied. Overlay projection targets the current foreground workspace scene and removes that tree's stale overlay ids from inactive scenes, so a main-menu remount after a project switch cannot leave records attached to a previous project. The main menu tree is reconciled atomically by prefix so its icon/label records cannot be committed as a stable partial batch. After a geometry remount clears overlay records, bookkeeping is updated immediately and `bevy_ui_overlay_reconciliation.js` schedules one queued reconciliation from an empty overlay baseline if projection fails, while keeping the error observable in runtime diagnostics. The runtime must not create a DOM node per component; hidden HTML text editing/accessibility bridges are allowed only for active text-entry cases.
@@ -177,7 +184,7 @@ Exposure:
 
 Boundary status: Semi-public closed eVe product runtime. Content operations mutate only the Squirrel/toolbox-backed menu content held by the menu facade and then remount/update the disposable BevyUI tree. Tool activation reuses the normalized ribbon definitions and the existing `invokeIntuitionXMainRibbonToolDefinition(...)` path; no duplicated tool handlers or DOM per item are allowed.
 
-Effect model: The menu renders on the shared `eve_surface_project` WebGPU canvas through `window.eveBevyUiRuntime`. From the handedness edge, the visible order is the interactive Atome dashboard tool followed by the canonical `toolbox.children` tools; no legacy projection item is rendered. The active runtime owns resize remounting, fixed-size horizontal overflow, handedness-aware wheel/drag input, activation suppression, hydrated SVG textures, palette state, and the Atome Dashboard toggle. Product consumers reach it only through the internal per-window registry; `new_menu_v2`, `new_menu`, and `eveGoeyMenuApi` are deleted aliases, not compatibility routes.
+Effect model: The menu renders on the shared `eve_surface_project` WebGPU canvas through `window.eveBevyUiRuntime`. From the handedness edge, the visible order is the interactive Atome dashboard tool followed by the canonical `toolbox.children` tools; no legacy projection item is rendered. The active runtime owns resize remounting, fixed-size horizontal overflow, handedness-aware wheel/drag input, activation suppression, hydrated SVG textures, palette state, and the Atome Dashboard toggle. Closed palette children are absent. Opening submits one complete opaque structural frame through the guarded direct-prefix owner, then applies the overshoot/settlement through direct motion: a single rAF sampler permits at most one renderer submission in flight and coalesces backpressure to the latest pending sample. Structure and motion share the scene direct-mutation queue so a full render or interrupted palette cannot overwrite them. Product consumers reach the menu only through the internal per-window registry; `new_menu_v2`, `new_menu`, and `eveGoeyMenuApi` are deleted aliases, not compatibility routes.
 
 ### eVe BevyUI Flower Runtime API
 
@@ -244,9 +251,10 @@ Primary sources:
 - `eVe/domains/rendering/virtual_scene_contract.js`
 - `eVe/domains/rendering/bevy_media_texture_resolver.js`
 - `eVe/domains/rendering/bevy_media_texture_cache.js`
+- `eVe/domains/rendering/bevy_ui_image_runtime.js`
 - `eVe/domains/rendering/bevy_media_texture_image_fit.js`
 
-Exposure: image, video-poster, and audio/texture-capable render records may set `texture_scale` / `textureScale` / `media_texture_scale` / `mediaTextureScale`; `RenderAtom` carries the positive value into disposable media content as `textureScale` / `texture_scale`. The browser Bevy media texture resolver combines that per-node request with DPR and max texture bounds, includes the resolved requested scale in the media texture cache key, and rasterizes the shared RGBA texture at the higher physical density before handing it to the existing Bevy payload path.
+Exposure: image, video-poster, and audio/texture-capable render records may set `texture_scale` / `textureScale` / `media_texture_scale` / `mediaTextureScale`; `RenderAtom` carries the positive value into disposable media content as `textureScale` / `texture_scale`. The browser Bevy media texture resolver combines that per-node request with DPR and max texture bounds, includes the resolved requested scale in the media texture cache key, and rasterizes the shared RGBA texture at the higher physical density before handing it to the existing Bevy payload path. Concurrent requests for the same key share one in-flight resolution. Cache clearing increments its generation so completions from the preceding generation cannot resurrect entries; diagnostics report current in-flight work. BevyUI image hydration retains the final tinted result in this shared bounded cache as typed RGBA bytes rather than expanding pixels into JavaScript number arrays or repeating unchanged tint work.
 
 Boundary status: Open product-neutral media rendering density. eVe Dashboard may request higher density for small header SVG icons, project previews, and contact faces, but it must not create a Dashboard-only rasterizer, DOM image fallback, per-item canvas, or pre-scaled logical geometry.
 
@@ -1642,3 +1650,16 @@ The next execution tasks must refine this map by:
 
 - Making map consultation mandatory before future implementation.
 - Adding automated validation for map/source consistency where practical.
+# Resident Dashboard internal contracts (2026-07-17, authoritative)
+
+- `eveBevyUiRuntime.setTreeSuspended({ id, suspended })` is an internal runtime operation. Suspension preserves the source tree and overlay ids, projects opacity `0`, clears captured/hovered pointers, removes the tree from hit-testing and event dispatch, and exposes `suspended` through diagnostics. Resume restores opacity and interaction without remounting.
+- `eveDashboardBevyUiRuntime.open({ sceneProjectId, dataProjectId, refresh })` distinguishes projection ownership from data context. Its state exposes `active`, `suspended`, `sceneProjectId`, and `dataProjectId`.
+- `eveDashboardBevyUiRuntime.close()` suspends the resident tree. `destroy()` is reserved for real project changes, logout, reload, and workspace destruction.
+- `toggleWorkspaceDashboardAndMainMenu()` returns to the same project by mode/suspension only. It must not invoke any project data, persistence, preview, or loading API.
+- The removed fade controller, `dashboardFadeMs`, and `restoreProjectWorkspaceAfterDashboardClose()` are not valid contracts.
+
+# Dashboard/palette performance contracts (2026-07-18, authoritative)
+
+- Main-menu palette controls are absent while closed. A real opening atomically projects every opaque child, icon, label, accent, and displaced tool at the expansion origin through the internal direct-prefix route, then uses direct motion for the complete 180 ms expansion, bounded 6–14 px / 70 ms outward overshoot, and exact 120 ms settlement. Prefix and motion share one direct-mutation queue; the rAF producer allows one renderer submission in flight and retains only the latest pending sample. No hidden resident subtree, browser API, persisted Atome state, RGBA re-hash, or full Dashboard/toolbox rebuild is created by the motion path.
+- Dashboard post-open hydration failure is observable through runtime diagnostics and cannot self-schedule an unbounded retry loop.
+- Dashboard header wheel/drag input is vertical-only. Lane horizontal offsets cannot change from an event targeted at the header column.
