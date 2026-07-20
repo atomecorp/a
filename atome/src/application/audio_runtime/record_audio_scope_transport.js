@@ -20,6 +20,25 @@ const normalizeScope = (payload = {}, sessionId = '') => {
     };
 };
 
+const latestScopeBySessionId = new Map();
+
+export const rememberRecordingScopeFrame = (payload = {}, sessionId = '') => {
+    const id = String(sessionId || payload?.session_id || payload?.sessionId || '').trim();
+    const frame = normalizeScope({ ...payload, available: payload?.available !== false }, id);
+    if (!frame) return null;
+    const previous = latestScopeBySessionId.get(id);
+    if (!previous || frame.sequence > previous.sequence) latestScopeBySessionId.set(id, frame);
+    return latestScopeBySessionId.get(id) || null;
+};
+
+export const readLatestRecordingScopeFrame = (sessionId) => (
+    latestScopeBySessionId.get(String(sessionId || '').trim()) || null
+);
+
+export const clearLatestRecordingScopeFrame = (sessionId) => (
+    latestScopeBySessionId.delete(String(sessionId || '').trim())
+);
+
 export const createTauriRecordingScopePoller = ({
     windowRef = globalThis.window,
     invoke,
@@ -42,6 +61,7 @@ export const createTauriRecordingScopePoller = ({
             const frame = normalizeScope(await invoke('audio_get_scope'), String(sessionId));
             if (frame && frame.sequence > lastSequence) {
                 lastSequence = frame.sequence;
+                rememberRecordingScopeFrame(frame, sessionId);
                 const EventCtor = windowRef.CustomEvent || globalThis.CustomEvent;
                 if (typeof EventCtor === 'function') {
                     windowRef.dispatchEvent?.(new EventCtor('native_audio_scope', { detail: frame }));

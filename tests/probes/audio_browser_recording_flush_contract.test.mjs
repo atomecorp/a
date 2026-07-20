@@ -3,6 +3,10 @@ import vm from 'node:vm';
 import { afterEach, test, vi } from 'vitest';
 import { createAudioRecord } from '../../eVe/domains/media/api/audio_core_record.js';
 import { createAudioStorage } from '../../eVe/domains/media/api/audio_core_storage.js';
+import {
+    clearLatestRecordingScopeFrame,
+    rememberRecordingScopeFrame
+} from '../../atome/src/application/audio_runtime/record_audio_scope_transport.js';
 
 const createApiContext = () => ({
     getFastifyBaseUrl: () => '',
@@ -342,4 +346,42 @@ test('native exact terminal result stays owned until its physical cleanup succee
     assert.equal((await controller.stop({ discard: true })).discarded, true);
     assert.equal(deletedPath, 'data/users/u/recordings/invalid.wav');
     assert.equal(stopCalls, 1);
+});
+
+test('native scope produced before subscription is replayed once and stale frames are rejected', async () => {
+    const eventTarget = new EventTarget();
+    const fakeWindow = {
+        __AUV3_MODE__: true,
+        webkit: { messageHandlers: { swiftBridge: {} } },
+        record_start: () => {},
+        record_stop: () => {},
+        addEventListener: eventTarget.addEventListener.bind(eventTarget),
+        removeEventListener: eventTarget.removeEventListener.bind(eventTarget),
+        dispatchEvent: eventTarget.dispatchEvent.bind(eventTarget)
+    };
+    Object.defineProperty(fakeWindow, '__SQUIRREL_PLAY_RECORD_CORE__', {
+        value: {
+            recordStart: async () => 'early_scope_session',
+            recordStop: async () => ({ file_path: 'data/users/u/recordings/early.wav' })
+        }
+    });
+    rememberRecordingScopeFrame({
+        type: 'audio_scope', sequence: 9, sample_rate: 48_000, channels: 1,
+        pairs: Array.from({ length: 64 }, () => [-0.25, 0.25]), rms: 0.1, peak: 0.25
+    }, 'early_scope_session');
+    vi.stubGlobal('window', fakeWindow);
+    const controller = await createAudioRecord(createApiContext()).record_audio('early.wav');
+    const received = [];
+    const unsubscribe = controller.subscribeScope((frame) => received.push(frame.sequence));
+    assert.deepEqual(received, [9]);
+    const stale = new Event('native_audio_scope');
+    Object.defineProperty(stale, 'detail', { value: {
+        type: 'audio_scope', session_id: 'early_scope_session', sequence: 8,
+        sample_rate: 48_000, channels: 1,
+        pairs: Array.from({ length: 64 }, () => [-1, 1]), rms: 1, peak: 1
+    } });
+    fakeWindow.dispatchEvent(stale);
+    assert.deepEqual(received, [9]);
+    unsubscribe();
+    clearLatestRecordingScopeFrame('early_scope_session');
 });

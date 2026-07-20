@@ -21,6 +21,10 @@ import { sceneState } from '../../eVe/domains/rendering/project_scene_state.js';
 import { createRenderScene, hitTestRenderScene } from '../../eVe/domains/rendering/scene_graph.js';
 import { createVirtualSceneTree } from '../../eVe/domains/rendering/virtual_scene_contract.js';
 import {
+    startProjectAudioPlaybackProgress,
+    stopProjectAudioPlaybackProgress
+} from '../../eVe/domains/media/project_audio_playback_progress_runtime.js';
+import {
     createTestCompositor,
     finalSetCommit,
     installDom,
@@ -37,6 +41,7 @@ const bevyOpsFromCalls = (calls = []) => calls.flatMap((call) => (
         ? (Array.isArray(call.ops) ? call.ops : [])
         : [{ type: call.type, id: call.id, payload: call.payload }]
 ));
+const bevyOpId = (op = {}) => op.id || op.payload?.id || op.patch?.id || '';
 
 const dashboardCategories = Object.freeze([
     { id: 'news', label_key: 'eve.dashboard.news', color: '#ff5252', icon_id: 'news' },
@@ -426,7 +431,8 @@ test('Project scene canvas click selects through the existing selection runtime'
 
     assert.deepEqual(dom.window.__selectedAtomeIds, ['canvas_select_atom']);
     assert.equal(getProjectSceneState('project_canvas_select').scene.atoms[0].visual.selected, true);
-    assert.equal(dom.window.document.querySelectorAll('.eve-atome,.eve-atome-text,img,video,audio,svg').length, 0);
+    assert.equal(dom.window.document.querySelectorAll('.eve-atome,.eve-atome-text,img,audio,svg').length, 0);
+    assert.equal(visibleProjectVideos(dom.window.document).length, 0);
 });
 
 test('Project scene double-click enters contextual edit and preserves an included multi-selection', async () => {
@@ -581,12 +587,17 @@ test('Project scene selection invalidation redraws selected canvas state without
     const calls = [];
     await renderProjectScene({
         projectId: 'project_selection_projection',
-        records: [makeRecord('selectable_canvas_atom', 'image', 1)],
+        records: [
+            makeRecord('recent_video_a', 'video', 1),
+            makeRecord('recent_video_b', 'video', 2),
+            makeRecord('selectable_canvas_atom', 'audio_recording', 3)
+        ],
         host: dom.window.document.getElementById('project'),
         compositor: createTestCompositor(calls)
     });
+    await nextTick(70);
 
-    assert.equal(getProjectSceneState('project_selection_projection').scene.atoms[0].visual.selected, undefined);
+    const callsBeforeSelection = calls.length;
     dom.window.__selectedAtomeIds = ['selectable_canvas_atom'];
     dom.window.dispatchEvent(new dom.window.CustomEvent('adole-atome-selected', {
         detail: { selected: ['selectable_canvas_atom'] }
@@ -594,12 +605,50 @@ test('Project scene selection invalidation redraws selected canvas state without
     await nextTick();
     await nextTick();
 
-    assert.equal(getProjectSceneState('project_selection_projection').scene.atoms[0].visual.selected, true);
+    assert.equal(
+        getProjectSceneState('project_selection_projection').scene.byId.get('selectable_canvas_atom').visual.selected,
+        true
+    );
     const selectedStylePayload = bevyOpsFromCalls(calls)
         .filter((op) => op.type === 'style')
         .map((op) => op.payload || op.patch)
         .find((payload) => payload?.selected === true);
     assert.equal(!!selectedStylePayload, true);
-    assert.equal(dom.window.document.querySelectorAll('.eve-atome,.eve-atome-text,img,video,audio,svg').length, 0);
+    const selectionOps = bevyOpsFromCalls(calls.slice(callsBeforeSelection));
+    assert.deepEqual([...new Set(selectionOps.map((op) => op.type))], ['style']);
+    assert.equal(selectionOps.some((op) => ['recent_video_a', 'recent_video_b'].includes(bevyOpId(op))), false);
+
+    const callsBeforeProgress = calls.length;
+    assert.equal(startProjectAudioPlaybackProgress({
+        windowRef: dom.window,
+        atomeId: 'selectable_canvas_atom',
+        durationSeconds: 10
+    }), true);
+    await nextTick();
+    stopProjectAudioPlaybackProgress({ windowRef: dom.window, atomeId: 'selectable_canvas_atom' });
+    await nextTick();
+    const progressOps = bevyOpsFromCalls(calls.slice(callsBeforeProgress));
+    assert.equal(progressOps.length > 0, true);
+    assert.deepEqual([...new Set(progressOps.map((op) => op.type))], ['style']);
+    const playbackOps = progressOps.filter((op) => (
+        Object.prototype.hasOwnProperty.call(op.payload || op.patch || {}, 'playback_progress')
+    ));
+    assert.equal(playbackOps.length > 0, true);
+    assert.equal(playbackOps.every((op) => bevyOpId(op) === 'selectable_canvas_atom'), true);
+    assert.equal(progressOps.some((op) => ['spawn', 'despawn', 'resource'].includes(op.type)), false);
+    const callsBeforeSelectionStress = calls.length;
+    for (let index = 0; index < 50; index += 1) {
+        const selected = index % 2 === 0 ? ['selectable_canvas_atom'] : [];
+        dom.window.__selectedAtomeIds = selected;
+        dom.window.dispatchEvent(new dom.window.CustomEvent('adole-atome-selected', { detail: { selected } }));
+    }
+    await nextTick();
+    await nextTick();
+    const stressOps = bevyOpsFromCalls(calls.slice(callsBeforeSelectionStress));
+    assert.equal(stressOps.every((op) => op.type === 'style'), true);
+    assert.equal(stressOps.some((op) => ['recent_video_a', 'recent_video_b'].includes(bevyOpId(op))), false);
+    assert.equal(dom.window.document.querySelectorAll('.eve-atome,.eve-atome-text,img,audio,svg').length, 0);
+    assert.equal(visibleProjectVideos(dom.window.document).length, 0);
+    assert.equal(dom.window.document.querySelectorAll('#eve_bevy_video_decode_root video').length, 2);
     assert.equal(dom.window.document.querySelectorAll('canvas#eve_surface_project').length, 1);
 });

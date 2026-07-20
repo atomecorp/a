@@ -63,7 +63,7 @@ test('main menu projects audio scope, video thumbnail and photo flash inside the
     const tree = buildBevyMainMenuTree({
         content,
         surface,
-        itemSize: 70,
+        itemSize: 60,
         state: treeState(visuals),
         handlers: {}
     });
@@ -75,16 +75,18 @@ test('main menu projects audio scope, video thumbnail and photo flash inside the
     assert.ok(videoItem);
     assert.ok(photoItem);
     assert.equal(audioItem.children.some((node) => node.id.endsWith('_icon')), false);
-    assert.equal(audioItem.children.filter((node) => node.id.includes('_recording_scope_bar_')).length, 32);
+    assert.equal(audioItem.children.some((node) => node.id.endsWith('_label')), false);
+    assert.equal(audioItem.children.filter((node) => node.id.includes('_recording_scope_bar_')).length, 64);
     const videoPreview = videoItem.children.find((node) => node.id.endsWith('_recording_video'));
     assert.equal(videoPreview.kind, 'image');
     assert.equal(videoPreview.overlayRecord.type, 'video');
     assert.equal(videoPreview.overlayRecord.properties.source, 'capture://video_1');
     assert.deepEqual(videoPreview.style.position, [0, 0]);
-    assert.deepEqual(videoPreview.style.size, [70, 70]);
-    assert.equal(videoPreview.overlayRecord.properties.width, 70);
-    assert.equal(videoPreview.overlayRecord.properties.height, 70);
+    assert.deepEqual(videoPreview.style.size, [60, 60]);
+    assert.equal(videoPreview.overlayRecord.properties.width, 60);
+    assert.equal(videoPreview.overlayRecord.properties.height, 60);
     assert.equal(videoPreview.overlayRecord.properties.fit, 'cover');
+    assert.equal(videoItem.children.some((node) => node.id.endsWith('_label')), false);
     assert.equal(
         videoPreview.overlayRecord.properties.left,
         videoItem.style.position[0] + videoPreview.style.position[0]
@@ -94,11 +96,36 @@ test('main menu projects audio scope, video thumbnail and photo flash inside the
         videoItem.style.position[1] + videoPreview.style.position[1]
     );
     assert.equal(photoItem.children.some((node) => node.id.endsWith('_icon')), true);
+    assert.equal(photoItem.children.some((node) => node.id.endsWith('_label')), true);
     const flash = photoItem.children.find((node) => node.id.endsWith('_recording_flash'));
     assert.equal(flash.overlayRecord.type, 'shape');
     assert.equal(flash.overlayRecord.properties.opacity, 0.9);
+    assert.equal(flash.style.z_index > photoItem.children.find((node) => node.id.endsWith('_label')).style.z_index, true);
 
     assert.doesNotThrow(() => normalizeBevyUiTree({ id: tree.id, tree }));
+});
+
+test('audio scope uses fixed logarithmic levels without fake silence movement', () => {
+    const heightsFor = (amplitude) => {
+        const tree = buildBevyMainMenuTree({
+            content,
+            surface,
+            itemSize: 60,
+            state: treeState(new Map([['ui.capture.audio', {
+                kind: 'audio_scope', phase: 'recording', sessionId: 'levels', sequence: 1,
+                scope: { pairs: Array.from({ length: 64 }, () => [-amplitude, amplitude]) }
+            }]])),
+            handlers: {}
+        });
+        const item = findNode(tree.root, (node) => node.id.endsWith('capture__audio'));
+        return item.children
+            .filter((node) => node.id.includes('_recording_scope_bar_'))
+            .map((node) => node.style.size[1]);
+    };
+    assert.deepEqual(new Set(heightsFor(0)), new Set([1]));
+    assert.equal(heightsFor(0.01)[0], 20);
+    assert.equal(heightsFor(0.25)[0] > heightsFor(0.01)[0], true);
+    assert.equal(heightsFor(1)[0], 60);
 });
 
 test('recording visual runtime rejects stale scope frames and stale cleanup', async () => {
@@ -131,6 +158,49 @@ test('recording visual runtime rejects stale scope frames and stale cleanup', as
         sampleRate: 48_000, channels: 1, pairs: [[-1, 1]]
     }), false);
     assert.equal(state.recordingVisualByToolId.get('ui.capture.audio').sequence, 4);
+});
+
+test('audio scope redraw is bounded to 30 Hz and skips an unchanged envelope', async () => {
+    const state = { activePaletteKey: '', recordingVisualByToolId: new Map() };
+    const render = vi.fn(async () => true);
+    let clock = 100;
+    let pending = null;
+    const runtime = createMainMenuRecordingVisualRuntime({
+        state,
+        render,
+        content: () => content,
+        items: () => [{ id: 'menu_audio', toolId: 'ui.capture.audio' }],
+        scheduleRender: render,
+        now: () => clock,
+        setTimer: (callback, delay) => {
+            pending = { callback, delay };
+            return 7;
+        },
+        clearTimer: () => { pending = null; }
+    });
+    await runtime.setToolRecordingVisual({
+        toolId: 'ui.capture.audio', sessionId: 'scope_session', kind: 'audio_scope', phase: 'recording'
+    });
+    render.mockClear();
+    const scope = Array.from({ length: 64 }, () => [-0.01, 0.01]);
+    assert.equal(runtime.pushToolAudioScope({
+        toolId: 'ui.capture.audio', sessionId: 'scope_session', sequence: 1, pairs: scope
+    }), true);
+    assert.equal(render.mock.calls.length, 1);
+    clock = 110;
+    assert.equal(runtime.pushToolAudioScope({
+        toolId: 'ui.capture.audio', sessionId: 'scope_session', sequence: 2, pairs: scope
+    }), true);
+    assert.equal(render.mock.calls.length, 1);
+    assert.equal(pending, null);
+    assert.equal(runtime.pushToolAudioScope({
+        toolId: 'ui.capture.audio', sessionId: 'scope_session', sequence: 3,
+        pairs: Array.from({ length: 64 }, () => [-0.5, 0.5])
+    }), true);
+    assert.equal(pending.delay, 24);
+    clock = 134;
+    pending.callback();
+    assert.equal(render.mock.calls.length, 2);
 });
 
 test('audio scope decimation is bounded, normalized and derived from the recorded PCM', () => {

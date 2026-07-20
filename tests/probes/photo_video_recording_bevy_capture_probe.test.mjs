@@ -288,6 +288,24 @@ const run = async () => {
             && preview.localPosition?.[1] === 0
             && preview.size?.[0] === preview.parentSize?.[0]
             && preview.size?.[1] === preview.parentSize?.[1];
+        const previewReplacesContent = await safeEval(page, () => {
+            const tree = window.eveBevyUiRuntime?.state?.trees?.get?.('eve_bevy_ui_main_menu')?.tree || null;
+            const visit = (node) => {
+                if (!node) return null;
+                if (node.id === 'eve_bevy_ui_main_menu_tool_capture__video') return node;
+                for (const child of node.children || []) {
+                    const found = visit(child);
+                    if (found) return found;
+                }
+                return null;
+            };
+            const item = visit(tree?.root);
+            return {
+                ok: !!item
+                    && !item.children.some((node) => node.id?.endsWith('_icon'))
+                    && !item.children.some((node) => node.id?.endsWith('_label'))
+            };
+        });
         const clip = {
             x: Math.max(0, preview.surfaceRect.left + preview.position[0]),
             y: Math.max(0, preview.surfaceRect.top + preview.position[1]),
@@ -373,9 +391,11 @@ const run = async () => {
         }
         const videoMedia = await readAtomeMedia(page, { projectId: project.id, atomeId: videoAtomeId });
         report.video = {
-            ok: videoMedia.ok && videoMedia.layerSafe && previewAnimated && previewFillsTool,
+            ok: videoMedia.ok && videoMedia.layerSafe && previewAnimated && previewFillsTool
+                && previewReplacesContent?.ok === true,
             preview,
             previewFillsTool,
+            previewReplacesContent,
             previewAnimated,
             previewScreenshotChanged: !frameA.equals(frameB),
             motionA,

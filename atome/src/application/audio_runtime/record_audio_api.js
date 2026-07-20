@@ -5,7 +5,11 @@ import {
 } from './runtime_audio_backend.js';
 import { installSharedAVContracts } from './av_contracts.js';
 import { resolveRecordingUserId } from './record_audio_user_identity.js';
-import { createTauriRecordingScopePoller } from './record_audio_scope_transport.js';
+import {
+    clearLatestRecordingScopeFrame,
+    createTauriRecordingScopePoller,
+    rememberRecordingScopeFrame
+} from './record_audio_scope_transport.js';
 import {
     SAMPLE_ACCURATE_RECORDING_ERROR_CODES,
     SampleAccurateRecordingError,
@@ -99,6 +103,9 @@ import {
         if (!type) return;
         const sessionId = detail.session_id || detail.sessionId || '';
         if (!sessionId) return;
+        if (['audio_scope', 'record_scope'].includes(type)) {
+            rememberRecordingScopeFrame(detail, sessionId);
+        }
         const entry = PENDING.get(sessionId);
         if (!entry) {
             return;
@@ -174,6 +181,7 @@ import {
                         resolved.sample_timing = normalizeSampleAccurateRecordingResult(entry.sampleAccurateRequest, resolved);
                     } catch (error) {
                         entry.stop.reject(terminalRecordingError(error, resolved));
+                        clearLatestRecordingScopeFrame(sessionId);
                         PENDING.delete(sessionId);
                         return;
                     }
@@ -182,6 +190,7 @@ import {
                 entry.stop.resolve(monitoring ? { ...resolved, monitoring } : resolved);
                 entry.stop = null;
             }
+            clearLatestRecordingScopeFrame(sessionId);
             PENDING.delete(sessionId);
             return;
         }
@@ -199,6 +208,7 @@ import {
             } else if (entry.start) {
                 entry.start.reject(recordingError);
             }
+            clearLatestRecordingScopeFrame(sessionId);
             PENDING.delete(sessionId);
         }
     }
@@ -274,6 +284,7 @@ import {
                 channels: requestedChannels,
                 disposeScope: null
             };
+            PENDING.set(sessionId, pendingEntry);
             if (context === 'tauri') {
                 pendingEntry.disposeScope = createTauriRecordingScopePoller({
                     windowRef: window,
@@ -281,7 +292,6 @@ import {
                     sessionId
                 });
             }
-            PENDING.set(sessionId, pendingEntry);
             window.__SQUIRREL_RECORD_PROVIDER__ = 'native_audio_recorder';
             return sessionId;
         }
@@ -360,6 +370,7 @@ import {
             const invoke = getTauriInvoke(window);
             if (typeof invoke !== 'function') {
                 entry.disposeScope?.();
+                clearLatestRecordingScopeFrame(sid);
                 PENDING.delete(sid);
                 throw new Error(entry.transport === 'ios_app'
                     ? 'iOS native audio recorder bridge is not available'
@@ -390,6 +401,7 @@ import {
                 return monitoring ? { ...resolved, monitoring } : resolved;
             } finally {
                 entry.disposeScope?.();
+                clearLatestRecordingScopeFrame(sid);
                 PENDING.delete(sid);
             }
         }

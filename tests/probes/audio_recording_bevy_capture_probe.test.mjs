@@ -115,6 +115,7 @@ const clickBevyMainMenuItem = async (page, nodeId) => {
 
 const readAudioScopeSnapshot = (page) => page.evaluate(() => {
     const tree = window.eveBevyUiRuntime?.state?.trees?.get?.('eve_bevy_ui_main_menu')?.tree || null;
+    const visual = window.eveBevyUiRuntime?.state?.recordingVisualByToolId?.get?.('ui.capture.audio') || null;
     const bars = [];
     const visit = (node) => {
         if (!node || typeof node !== 'object') return;
@@ -125,10 +126,16 @@ const readAudioScopeSnapshot = (page) => page.evaluate(() => {
     };
     visit(tree?.root);
     return {
-        ok: bars.length === 32,
+        ok: bars.length === 64,
         bars,
         min: bars.length ? Math.min(...bars) : 0,
-        max: bars.length ? Math.max(...bars) : 0
+        max: bars.length ? Math.max(...bars) : 0,
+        sequence: Number(visual?.sequence ?? -1),
+        rms: Number(visual?.scope?.rms || 0),
+        peak: Number(visual?.scope?.peak || 0),
+        pairPeak: Array.isArray(visual?.scope?.pairs)
+            ? Math.max(0, ...visual.scope.pairs.flat().map((value) => Math.abs(Number(value) || 0)))
+            : 0
     };
 });
 
