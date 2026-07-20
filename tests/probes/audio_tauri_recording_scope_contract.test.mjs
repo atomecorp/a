@@ -2,7 +2,13 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { afterEach, test, vi } from 'vitest';
 
-import { createTauriRecordingScopePoller } from '../../atome/src/application/audio_runtime/record_audio_scope_transport.js';
+import {
+    clearRecordingScopeSession,
+    createTauriRecordingScopePoller,
+    publishRecordingScopeFrame,
+    readRecordingScopeDiagnostic,
+    subscribeRecordingScopeFrame
+} from '../../atome/src/application/audio_runtime/record_audio_scope_transport.js';
 
 afterEach(() => {
     vi.useRealTimers();
@@ -55,6 +61,36 @@ test('Tauri scope polls the recorded CPAL stream at no more than 30 Hz', async (
     assert.equal(vi.getTimerCount(), 0);
 });
 
+test('native scope registry replays one early frame and rejects stale sequences', () => {
+    const received = [];
+    assert.equal(publishRecordingScopeFrame(scopePayload(2), 'early_take')?.sequence, 2);
+    const unsubscribe = subscribeRecordingScopeFrame({
+        sessionId: 'early_take',
+        listener: (frame) => received.push(frame.sequence)
+    });
+    assert.deepEqual(received, [2]);
+    assert.equal(publishRecordingScopeFrame(scopePayload(2), 'early_take'), null);
+    assert.equal(publishRecordingScopeFrame(scopePayload(1), 'early_take'), null);
+    assert.equal(publishRecordingScopeFrame(scopePayload(3), 'early_take')?.sequence, 3);
+    assert.deepEqual(received, [2, 3]);
+    assert.equal(unsubscribe(), true);
+    assert.equal(unsubscribe(), false);
+    clearRecordingScopeSession('early_take');
+});
+
+test('native scope registry cleanup detaches subscribers across fifty sessions', () => {
+    let calls = 0;
+    for (let index = 0; index < 50; index += 1) {
+        const sessionId = `registry_take_${index}`;
+        subscribeRecordingScopeFrame({ sessionId, listener: () => { calls += 1; } });
+        publishRecordingScopeFrame(scopePayload(1), sessionId);
+        clearRecordingScopeSession(sessionId);
+        publishRecordingScopeFrame(scopePayload(2), sessionId);
+        clearRecordingScopeSession(sessionId);
+    }
+    assert.equal(calls, 50);
+});
+
 test('fifty Tauri scope sessions leave no timer behind', async () => {
     vi.useFakeTimers();
     class ScopeEvent {
@@ -81,6 +117,54 @@ test('fifty Tauri scope sessions leave no timer behind', async () => {
         dispose();
     }
     assert.equal(vi.getTimerCount(), 0);
+});
+
+test('Tauri scope remembers only the first IPC error and resumes with real frames', async () => {
+    vi.useFakeTimers();
+    let attempt = 0;
+    const received = [];
+    const unsubscribe = subscribeRecordingScopeFrame({
+        sessionId: 'permission_take',
+        listener: (frame) => received.push(frame.sequence)
+    });
+    const dispose = createTauriRecordingScopePoller({
+        windowRef: { setTimeout, clearTimeout },
+        sessionId: 'permission_take',
+        invoke: vi.fn(async () => {
+            attempt += 1;
+            if (attempt === 1) throw new Error('command audio_get_scope not allowed');
+            if (attempt === 2) throw new Error('second error must not replace first');
+            return scopePayload(attempt - 2);
+        })
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+    assert.deepEqual(readRecordingScopeDiagnostic('permission_take'), {
+        type: 'audio_scope_poll_error',
+        session_id: 'permission_take',
+        message: 'command audio_get_scope not allowed'
+    });
+    await vi.advanceTimersByTimeAsync(68);
+    assert.deepEqual(received, [1]);
+    assert.match(readRecordingScopeDiagnostic('permission_take').message, /not allowed/);
+    dispose();
+    unsubscribe();
+    assert.equal(readRecordingScopeDiagnostic('permission_take'), null);
+    assert.equal(vi.getTimerCount(), 0);
+});
+
+test('Tauri capability authorizes the registered audio_get_scope command', async () => {
+    const [permissions, mainSource, libSource, capability] = await Promise.all([
+        readFile(new URL('../../platforms/desktop-tauri/permissions/audio-engine.toml', import.meta.url), 'utf8'),
+        readFile(new URL('../../platforms/desktop-tauri/src/main.rs', import.meta.url), 'utf8'),
+        readFile(new URL('../../platforms/desktop-tauri/src/lib.rs', import.meta.url), 'utf8'),
+        readFile(new URL('../../platforms/desktop-tauri/capabilities/default.json', import.meta.url), 'utf8')
+    ]);
+    assert.match(mainSource, /audio_engine::bridge::audio_get_scope/);
+    assert.match(libSource, /audio_engine::bridge::audio_get_scope/);
+    assert.match(permissions, /"allow-audio-get-scope"/);
+    assert.match(permissions, /identifier = "allow-audio-get-scope"[\s\S]*commands\.allow = \["audio_get_scope"\]/);
+    assert.equal(JSON.parse(capability).permissions.includes('audio-engine'), true);
 });
 
 test('Tauri callback scope publisher is fixed-size and lock-free', async () => {

@@ -18,6 +18,7 @@ permissions = [
   "allow-audio-record-start",
   "allow-audio-record-stop",
   "allow-audio-get-levels",
+  "allow-audio-get-scope",
   "allow-audio-shutdown",
 ]
 
@@ -90,6 +91,11 @@ commands.allow = ["audio_record_stop"]
 identifier = "allow-audio-get-levels"
 description = "Enables the audio_get_levels command."
 commands.allow = ["audio_get_levels"]
+
+[[permission]]
+identifier = "allow-audio-get-scope"
+description = "Enables the audio_get_scope command."
+commands.allow = ["audio_get_scope"]
 
 [[permission]]
 identifier = "allow-audio-shutdown"

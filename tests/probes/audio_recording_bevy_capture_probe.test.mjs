@@ -2,12 +2,14 @@ import { chromium } from 'playwright';
 import fs from 'node:fs';
 import path from 'node:path';
 import { ensureProject } from './dashboard_workspace_stress/product_actions.mjs';
+import { analyzeAudioToolPixels, captureAudioToolPixels, createDeterministicAudioFixture } from './audio_recording_visual_fixture.mjs';
 
 const APP_URL = process.env.ADOLE_TEST_URL || 'http://localhost:3001';
 const PHONE = process.env.ADOLE_TEST_PHONE || '55555555';
 const PASSWORD = process.env.ADOLE_TEST_PASSWORD || '55555555';
 const OUT_DIR = path.resolve('temp/probe_reports/audio_recording_bevy_capture_probe');
 const REPORT_FILE = path.join(OUT_DIR, 'report.json');
+const AUDIO_FIXTURE = createDeterministicAudioFixture(path.join(OUT_DIR, 'scope_fixture_48khz.wav'));
 
 fs.mkdirSync(OUT_DIR, { recursive: true });
 
@@ -156,6 +158,7 @@ const run = async () => {
         args: [
             '--use-fake-device-for-media-stream',
             '--use-fake-ui-for-media-stream',
+            `--use-file-for-fake-audio-capture=${AUDIO_FIXTURE}`,
             '--autoplay-policy=no-user-gesture-required'
         ]
     });
@@ -233,12 +236,15 @@ const run = async () => {
         }, 20000, 50);
         if (!started.ok) throw new Error(`audio_real_click_start_failed:${JSON.stringify(started.last)}`);
 
-        const scopeSnapshots = [];
-        for (let index = 0; index < 8; index += 1) {
-            await sleep(120);
+        const scopeSnapshots = [], pixelSamples = [];
+        for (let index = 0; index < 90; index += 1) {
+            await sleep(100);
             scopeSnapshots.push(await readAudioScopeSnapshot(page));
+            pixelSamples.push(await captureAudioToolPixels(page, path.join(OUT_DIR, 'tool_frames', `${index}.png`)));
         }
         const scopeVariable = scopeSnapshots.some((snapshot) => snapshot.ok && snapshot.max - snapshot.min > 0.25);
+        const pixelTimeline = analyzeAudioToolPixels(pixelSamples.filter((sample) => sample.ok));
+        await page.screenshot({ path: path.join(OUT_DIR, 'recording_full.png') });
 
         const projectAtomeId = started.last.state.projectAtomeId;
         await clickBevyMainMenuItem(page, 'eve_bevy_ui_main_menu_tool_capture__audio');
@@ -250,13 +256,13 @@ const run = async () => {
         }, 60000, 100, { atomeId: projectAtomeId });
         if (!stopped.ok) throw new Error(`audio_real_click_stop_failed:${JSON.stringify(stopped.last)}`);
 
-        report.recording = await safeEval(page, async ({ atomeId, projectId, scopeVariable, scopeSnapshots, initialState }) => {
+        report.recording = await safeEval(page, async ({ atomeId, projectId, scopeVariable, scopeSnapshots, pixelTimeline, initialState }) => {
             const stateRecord = await window.Atome.getStateCurrent(atomeId);
             const props = stateRecord?.properties || stateRecord?.props || {};
             const scene = window.eveToolBase?.getProjectSceneState?.(projectId) || {};
             const occurrences = (scene.records || []).filter((record) => String(record?.id || record?.atome_id || '') === atomeId).length;
             return {
-                ok: occurrences === 1 && scopeVariable === true,
+                ok: occurrences === 1 && scopeVariable === true && pixelTimeline.ok === true,
                 initialState: {
                     isRecording: initialState.isRecording === true,
                     fileName: initialState.fileName || null,
@@ -264,6 +270,7 @@ const run = async () => {
                 },
                 scope_variable: scopeVariable,
                 scope_snapshots: scopeSnapshots,
+                scope_pixel_timeline: pixelTimeline,
                 atom_occurrences: occurrences,
                 frame_count: Number(props.frame_count || 0),
                 duration_sec: Number(props.duration_sec || 0),
@@ -279,6 +286,7 @@ const run = async () => {
             projectId: project.id,
             scopeVariable,
             scopeSnapshots,
+            pixelTimeline,
             initialState
         }, 60000);
 

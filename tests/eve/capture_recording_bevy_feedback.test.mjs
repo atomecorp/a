@@ -160,7 +160,7 @@ test('recording visual runtime rejects stale scope frames and stale cleanup', as
     assert.equal(state.recordingVisualByToolId.get('ui.capture.audio').sequence, 4);
 });
 
-test('audio scope redraw is bounded to 30 Hz and skips an unchanged envelope', async () => {
+test('audio scope keeps 64 real history columns, stays still in silence and redraws at most 30 Hz', async () => {
     const state = { activePaletteKey: '', recordingVisualByToolId: new Map() };
     const render = vi.fn(async () => true);
     let clock = 100;
@@ -182,25 +182,60 @@ test('audio scope redraw is bounded to 30 Hz and skips an unchanged envelope', a
         toolId: 'ui.capture.audio', sessionId: 'scope_session', kind: 'audio_scope', phase: 'recording'
     });
     render.mockClear();
-    const scope = Array.from({ length: 64 }, () => [-0.01, 0.01]);
+    const silence = Array.from({ length: 64 }, () => [0, 0]);
     assert.equal(runtime.pushToolAudioScope({
-        toolId: 'ui.capture.audio', sessionId: 'scope_session', sequence: 1, pairs: scope
+        toolId: 'ui.capture.audio', sessionId: 'scope_session', sequence: 1, pairs: silence
     }), true);
-    assert.equal(render.mock.calls.length, 1);
+    assert.equal(render.mock.calls.length, 0);
     clock = 110;
     assert.equal(runtime.pushToolAudioScope({
-        toolId: 'ui.capture.audio', sessionId: 'scope_session', sequence: 2, pairs: scope
+        toolId: 'ui.capture.audio', sessionId: 'scope_session', sequence: 2, pairs: silence
     }), true);
-    assert.equal(render.mock.calls.length, 1);
+    assert.equal(render.mock.calls.length, 0);
     assert.equal(pending, null);
     assert.equal(runtime.pushToolAudioScope({
         toolId: 'ui.capture.audio', sessionId: 'scope_session', sequence: 3,
         pairs: Array.from({ length: 64 }, () => [-0.5, 0.5])
     }), true);
-    assert.equal(pending.delay, 24);
+    assert.equal(render.mock.calls.length, 1);
+    assert.equal(state.recordingVisualByToolId.get('ui.capture.audio').scope.pairs.length, 64);
+    assert.deepEqual(state.recordingVisualByToolId.get('ui.capture.audio').scope.pairs.at(-1), [-0.5, 0.5]);
+    clock = 111;
+    assert.equal(runtime.pushToolAudioScope({
+        toolId: 'ui.capture.audio', sessionId: 'scope_session', sequence: 4,
+        pairs: Array.from({ length: 64 }, () => [-0.1, 0.2])
+    }), true);
+    assert.equal(pending.delay, 33);
+    assert.deepEqual(state.recordingVisualByToolId.get('ui.capture.audio').scope.pairs.slice(-2), [
+        [-0.5, 0.5], [-0.1, 0.2]
+    ]);
     clock = 134;
     pending.callback();
     assert.equal(render.mock.calls.length, 2);
+});
+
+test('audio scope history distinguishes weak signal, voice and impulse without invented samples', async () => {
+    const state = { activePaletteKey: '', recordingVisualByToolId: new Map() };
+    const runtime = createMainMenuRecordingVisualRuntime({
+        state,
+        content: () => content,
+        items: () => [{ id: 'menu_audio', toolId: 'ui.capture.audio' }],
+        render: async () => true,
+        scheduleRender: () => true
+    });
+    await runtime.setToolRecordingVisual({
+        toolId: 'ui.capture.audio', sessionId: 'history', kind: 'audio_scope', phase: 'recording'
+    });
+    for (const [sequence, minimum, maximum] of [[1, -0.01, 0.01], [2, -0.35, 0.5], [3, -1, 1]]) {
+        runtime.pushToolAudioScope({
+            toolId: 'ui.capture.audio', sessionId: 'history', sequence,
+            pairs: Array.from({ length: 64 }, () => [minimum, maximum])
+        });
+    }
+    const history = state.recordingVisualByToolId.get('ui.capture.audio').scope.pairs;
+    assert.equal(history.length, 64);
+    assert.deepEqual(history.slice(-3), [[-0.01, 0.01], [-0.35, 0.5], [-1, 1]]);
+    assert.equal(history.slice(0, 61).every(([minimum, maximum]) => minimum === 0 && maximum === 0), true);
 });
 
 test('audio scope decimation is bounded, normalized and derived from the recorded PCM', () => {

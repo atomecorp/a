@@ -21,23 +21,62 @@ const normalizeScope = (payload = {}, sessionId = '') => {
 };
 
 const latestScopeBySessionId = new Map();
+const scopeSubscribersBySessionId = new Map();
+const scopeDiagnosticBySessionId = new Map();
 
-export const rememberRecordingScopeFrame = (payload = {}, sessionId = '') => {
+export const publishRecordingScopeFrame = (payload = {}, sessionId = '') => {
     const id = String(sessionId || payload?.session_id || payload?.sessionId || '').trim();
+    if (!id) return null;
     const frame = normalizeScope({ ...payload, available: payload?.available !== false }, id);
     if (!frame) return null;
     const previous = latestScopeBySessionId.get(id);
-    if (!previous || frame.sequence > previous.sequence) latestScopeBySessionId.set(id, frame);
-    return latestScopeBySessionId.get(id) || null;
+    if (previous && frame.sequence <= previous.sequence) return null;
+    latestScopeBySessionId.set(id, frame);
+    for (const listener of scopeSubscribersBySessionId.get(id) || []) {
+        try { listener(frame); } catch (_) { }
+    }
+    return frame;
 };
+
+export const rememberRecordingScopeFrame = publishRecordingScopeFrame;
 
 export const readLatestRecordingScopeFrame = (sessionId) => (
     latestScopeBySessionId.get(String(sessionId || '').trim()) || null
 );
 
-export const clearLatestRecordingScopeFrame = (sessionId) => (
-    latestScopeBySessionId.delete(String(sessionId || '').trim())
+export const readRecordingScopeDiagnostic = (sessionId) => (
+    scopeDiagnosticBySessionId.get(String(sessionId || '').trim()) || null
 );
+
+export const subscribeRecordingScopeFrame = ({ sessionId, listener, replayLatest = true } = {}) => {
+    const id = String(sessionId || '').trim();
+    if (!id || typeof listener !== 'function') return () => false;
+    const subscribers = scopeSubscribersBySessionId.get(id) || new Set();
+    subscribers.add(listener);
+    scopeSubscribersBySessionId.set(id, subscribers);
+    const latest = replayLatest ? latestScopeBySessionId.get(id) : null;
+    if (latest) {
+        try { listener(latest); } catch (_) { }
+    }
+    let active = true;
+    return () => {
+        if (!active) return false;
+        active = false;
+        subscribers.delete(listener);
+        if (subscribers.size === 0) scopeSubscribersBySessionId.delete(id);
+        return true;
+    };
+};
+
+export const clearRecordingScopeSession = (sessionId) => {
+    const id = String(sessionId || '').trim();
+    const removedFrame = latestScopeBySessionId.delete(id);
+    const removedSubscribers = scopeSubscribersBySessionId.delete(id);
+    const removedDiagnostic = scopeDiagnosticBySessionId.delete(id);
+    return removedFrame || removedSubscribers || removedDiagnostic;
+};
+
+export const clearLatestRecordingScopeFrame = clearRecordingScopeSession;
 
 export const createTauriRecordingScopePoller = ({
     windowRef = globalThis.window,
@@ -61,13 +100,22 @@ export const createTauriRecordingScopePoller = ({
             const frame = normalizeScope(await invoke('audio_get_scope'), String(sessionId));
             if (frame && frame.sequence > lastSequence) {
                 lastSequence = frame.sequence;
-                rememberRecordingScopeFrame(frame, sessionId);
+                publishRecordingScopeFrame(frame, sessionId);
                 const EventCtor = windowRef.CustomEvent || globalThis.CustomEvent;
                 if (typeof EventCtor === 'function') {
                     windowRef.dispatchEvent?.(new EventCtor('native_audio_scope', { detail: frame }));
                 }
             }
-        } catch (_) { }
+        } catch (error) {
+            const id = String(sessionId);
+            if (!scopeDiagnosticBySessionId.has(id)) {
+                scopeDiagnosticBySessionId.set(id, Object.freeze({
+                    type: 'audio_scope_poll_error',
+                    session_id: id,
+                    message: String(error?.message || error || 'audio_scope_poll_failed')
+                }));
+            }
+        }
         schedule();
     };
     void poll();
@@ -76,6 +124,7 @@ export const createTauriRecordingScopePoller = ({
         active = false;
         if (timerId !== null) clearTimer(timerId);
         timerId = null;
+        clearRecordingScopeSession(sessionId);
         return true;
     };
 };

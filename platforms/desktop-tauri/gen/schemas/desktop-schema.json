@@ -345,10 +345,10 @@
       "description": "Permission identifier",
       "oneOf": [
         {
-          "description": "Allows the main webview to use the native Kira audio engine commands.\n#### This permission set includes:\n\n- `allow-audio-init`\n- `allow-audio-load-clip`\n- `allow-audio-load-clip-from-bytes`\n- `allow-audio-has-clip`\n- `allow-audio-play`\n- `allow-audio-play-instance`\n- `allow-audio-stop`\n- `allow-audio-stop-instance`\n- `allow-audio-destroy-clip`\n- `allow-audio-set-volume`\n- `allow-audio-set-playback-rate`\n- `allow-audio-record-start`\n- `allow-audio-record-stop`\n- `allow-audio-get-levels`\n- `allow-audio-shutdown`",
+          "description": "Allows the main webview to use the native Kira audio engine commands.\n#### This permission set includes:\n\n- `allow-audio-init`\n- `allow-audio-load-clip`\n- `allow-audio-load-clip-from-bytes`\n- `allow-audio-has-clip`\n- `allow-audio-play`\n- `allow-audio-play-instance`\n- `allow-audio-stop`\n- `allow-audio-stop-instance`\n- `allow-audio-destroy-clip`\n- `allow-audio-set-volume`\n- `allow-audio-set-playback-rate`\n- `allow-audio-record-start`\n- `allow-audio-record-stop`\n- `allow-audio-get-levels`\n- `allow-audio-get-scope`\n- `allow-audio-shutdown`",
           "type": "string",
           "const": "audio-engine",
-          "markdownDescription": "Allows the main webview to use the native Kira audio engine commands.\n#### This permission set includes:\n\n- `allow-audio-init`\n- `allow-audio-load-clip`\n- `allow-audio-load-clip-from-bytes`\n- `allow-audio-has-clip`\n- `allow-audio-play`\n- `allow-audio-play-instance`\n- `allow-audio-stop`\n- `allow-audio-stop-instance`\n- `allow-audio-destroy-clip`\n- `allow-audio-set-volume`\n- `allow-audio-set-playback-rate`\n- `allow-audio-record-start`\n- `allow-audio-record-stop`\n- `allow-audio-get-levels`\n- `allow-audio-shutdown`"
+          "markdownDescription": "Allows the main webview to use the native Kira audio engine commands.\n#### This permission set includes:\n\n- `allow-audio-init`\n- `allow-audio-load-clip`\n- `allow-audio-load-clip-from-bytes`\n- `allow-audio-has-clip`\n- `allow-audio-play`\n- `allow-audio-play-instance`\n- `allow-audio-stop`\n- `allow-audio-stop-instance`\n- `allow-audio-destroy-clip`\n- `allow-audio-set-volume`\n- `allow-audio-set-playback-rate`\n- `allow-audio-record-start`\n- `allow-audio-record-stop`\n- `allow-audio-get-levels`\n- `allow-audio-get-scope`\n- `allow-audio-shutdown`"
         },
         {
           "description": "Allows the main webview to use the native Bevy renderer commands.\n#### This permission set includes:\n\n- `allow-bevy-native-start`\n- `allow-bevy-native-apply-ops`\n- `allow-bevy-native-resize`",
@@ -367,6 +367,12 @@
           "type": "string",
           "const": "allow-audio-get-levels",
           "markdownDescription": "Enables the audio_get_levels command."
+        },
+        {
+          "description": "Enables the audio_get_scope command.",
+          "type": "string",
+          "const": "allow-audio-get-scope",
+          "markdownDescription": "Enables the audio_get_scope command."
         },
         {
           "description": "Enables the audio_has_clip command.",
