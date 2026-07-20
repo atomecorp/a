@@ -1,29 +1,34 @@
-# State Graph - molecule
+# State Graph - Molecule Recording
 
 ```mermaid
 stateDiagram-v2
-  [*] --> runtime_installed: installMoleculeGroupTimelineRuntime
-  runtime_installed --> requested: openGroupTimeline(detail)
-  requested --> timeline_built: buildTimelineFromSteps
-  timeline_built --> saved_initial: await projectStore.saveTimeline
-  saved_initial --> session_created: createMoleculeSession
-  session_created --> panel_open: openMoleculePanel
-  panel_open --> ready: sessionsByGroup.set/currentGroup
-  ready --> mutating: session.apply/undo/redo
-  mutating --> committed: eventSink.append + onStateCommitted
-  committed --> ready: emit listeners/renderTimeline
-  ready --> hidden_partial: closeMoleculePanel only
-  hidden_partial --> ready: session still active PARTIAL_LIFECYCLE
-  ready --> closing: closeGroupTimeline
-  closing --> disposed: session.dispose + sessionsByGroup.delete
+  [*] --> idle: coordinator created
+  idle --> starting: start(exact request)
+  starting --> idle: invalid track/frame/clock or unsupported capability
+  starting --> recording: capture id + render/host clocks + origin + locked epoch
+  starting --> idle: backend start failure and cleanup
+  recording --> stopping: stop()
+  stopping --> idle: finish succeeded; timing validated; Atome persisted; clip committed
+  stopping --> idle: terminal finish returned but timing/result validation failed
+  stopping --> commit_failed: capture validated + Atome persisted; clip commit failed
+  commit_failed --> stopping: stop() retries cached clip commit
+  commit_failed --> idle: cached clip commit succeeds
+  stopping --> recording: backend did not finish; retry remains possible
+  recording --> canceling: cancel()
+  canceling --> idle: capture released; no clip
+  idle --> disposed: dispose()
+  starting --> disposed: dispose waits for start settlement and cancels acquisition
+  recording --> disposed: dispose cancels active capture
   disposed --> [*]
-  requested --> failed: invalid group/project/stores
-  saved_initial --> failed: openMoleculePanel throws UNKNOWN rollback
-  mutating --> failed: reducer/eventSink/projectStore error
 ```
 
-## State notes
+## State invariants
 
-- `RISK`: `hidden_partial` exists because `closeMoleculePanel` only sets `display = 'none'`.
-- `UNKNOWN`: no rollback state is implemented in `openGroupTimeline` after initial `projectStore.saveTimeline`.
-- `PARTIAL_LIFECYCLE`: listener cleanup happens in `session.dispose`, but close button does not reach dispose.
+- `read()` exposes status plus active capture, target, clock, epoch, frame origin, sample rate, and capability.
+- There is never more than one active capture per coordinator.
+- The `clock_epoch` and host-transport `timeline_origin_frame` become immutable when exact start succeeds and must match stop.
+- Exact stop requires a real earlier playback start, same-quantum playback observation/recording start, strictly positive latency, and origin-minus-roundtrip placement.
+- An exact video request returns `av_sample_accurate_overdub_unsupported` and returns to `idle` before backend capture.
+- `disposed` is terminal; subsequent start/stop/cancel operations fail explicitly.
+- Generic audio/video controllers have their own controller states and do not acquire exact status merely by returning frame metadata.
+- `commit_failed` retains no active backend capture: it retains only the validated clip and durable media identity required to retry the canonical session mutation.

@@ -107,7 +107,7 @@ acceptance:
 status: IN_PROGRESS
 files:
   - tests/probes/ui_full_stack_acceptance_test8_probe.test.mjs
-  - tests/probes/audio_recording_quick_capture_probe.test.mjs
+  - tests/probes/audio_recording_bevy_capture_probe.test.mjs
   - tests/probes/video_recording_audio_integrity_probe.test.mjs
   - tests/probes/tauri_recorded_video_mtrack_probe.test.mjs
   - tests/probes/atome_persistence_probe.test.mjs

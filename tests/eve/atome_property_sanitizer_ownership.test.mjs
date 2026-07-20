@@ -16,7 +16,7 @@ const cases = [
         importPattern: /from '\.\.\/\.\.\/\.\.\/\.\.\/atome\/src\/shared\/atome_contract\.js'/
     },
     {
-        path: 'eVe/intuition/tools/selection_style_apply.js',
+        path: 'eVe/intuition/tools/selection_style_atome.js',
         importPattern: /from '\.\.\/\.\.\/\.\.\/atome\/src\/shared\/atome_contract\.js'/
     }
 ];

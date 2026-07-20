@@ -245,6 +245,21 @@ pub fn audio_get_levels() -> Result<Value, String> {
 }
 
 #[tauri::command]
+pub fn audio_get_scope() -> Result<Value, String> {
+    let scope = metering::get_scope();
+    let levels = metering::get_levels();
+    Ok(json!({
+        "available": scope.available,
+        "sequence": scope.sequence,
+        "sample_rate": scope.sample_rate,
+        "channels": scope.channels,
+        "pairs": scope.pairs,
+        "rms": levels.rms,
+        "peak": levels.peak
+    }))
+}
+
+#[tauri::command]
 pub fn audio_shutdown() -> Result<Value, String> {
     playback::shutdown()?;
     Ok(json!({ "success": true }))

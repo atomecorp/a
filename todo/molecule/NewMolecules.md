@@ -1,6 +1,6 @@
 # NewMolecules — Cahier des charges: the Molecule timeline editor, rebuilt on Bevy/WebGPU
 
-Status: Active specification and implementation backlog. V1 items marked `DONE` describe verified implementation; unchecked V2/V3 items remain active work.
+Status: Active specification and implementation backlog. V1 and V2.3 items marked `DONE` describe verified implementation; unchecked V2/V3 items remain active work.
 
 Historical companion: [`full_bevy_renderer.md`](../../done/full_bevy_renderer.md). This document is the active work backlog for reintegrating the **Molecule timeline editor** (the system formerly known as MTrax) entirely on the single Bevy/WebGPU project canvas `#eve_surface_project`, by **reusing** the already-present, mtrax-free building blocks rather than rewriting from zero.
 
@@ -13,23 +13,25 @@ These came out of the post-deletion audit + a two-round scoping study. They are 
 
 | # | Decision | Choice |
 |---|----------|--------|
-| D1 | **Foundation** | **REUSE** the parked kernel `eVe/intuition/tools/molecule/` (3098 L — functional, tested, guarded, no mtrax dependency, currently being wired). Build rendering + interaction on Bevy *on top of it*. Do **not** rewrite from zero. |
+| D1 | **Foundation** | **REUSE** the guarded kernel `eVe/intuition/tools/molecule/` (functional, tested, no mtrax dependency, and connected to the group runtime). Build rendering + interaction on Bevy *on top of it*. Do **not** rewrite from zero. |
 | D2 | **Data format** | **REUSE** the canonical format of `documentations/Molecules.md` (`eve.timeline` / `…automation` / `…effect`), already implemented in `tools/molecule/kernel/schemas.js`. |
 | D3 | **API/MCP-first** | EVERY editor operation (cut/copy/paste/split/erase, move/trim, automation, track ops, transport…) is exposed as a programmatic **API + MCP tool** — scriptable, **batchable**, AI-drivable. No operation is UI-only. |
 | D4 | **Modular tracks** | A **track-type registry** so new kinds (chords, tablature, script-launch, timeline-trigger, …) plug in without touching the core. |
-| D5 | **Time model** | **Musical time (tempo / bars / beats) + seconds**, dual reference. **Kira stays the master clock**; video follows. |
+| D5 | **Time model** | **Musical time (tempo / bars / beats) + seconds**, dual reference. **Kira stays the project playback master clock**; video follows. Exact recording additionally requires a capture source proven to share its declared render clock and locked epoch. |
 | D6 | **History** | Every edit is a **reversible command on eVe's deterministic Time Machine log**; batched API/MCP calls are **atomic** (all-or-nothing → a single undo point). |
 | D7 | **Phasing** | **v1 → v2** (ship a usable, fully-scriptable core editor first; advanced track types after). |
+| D8 | **Exact recording** | Exact overdub is fail-closed and explicitly requested. It is supported only for AUv3 `plugin_input`: capture uses `clock_id="auv3.render"` / `clock_reference="record_start_render_quantum"`, timeline origin uses `timeline_clock_id="auv3.host_transport"`, and both share one locked `clock_epoch`. Generic recording remains a separate contract. |
 
 ## 1. Non-negotiable invariants (inherited from `full_bevy_renderer.md` + `.codex/AGENTS.md`)
 - **ONE renderer (Bevy/WebGPU), ONE canvas** `#eve_surface_project`. Every track/clip/overlay/handle and the visible editor chrome render through the shared Bevy UI route. No second surface, no DOM compositor beside Bevy, no offscreen→readback. The only browser exceptions are the minimal application shell and documented hidden text/accessibility services.
 - **Kira is the sole audio engine + master clock**; video follows via `setBevyVideoDecodePlayback` seeks. No rate loop, no unmute.
+- **Recorded clip placement uses integer frames.** Seconds are derived views. Generic recorder metadata must never be promoted to exact timing without the shared-clock capability proof in D8.
 - **No alternate route, no patch/bricolage.** Clean, factored, modular code. Delete anything that can be deleted; reuse existing functions before writing new ones.
 - **API/MCP parity**: anything the UI can do, the API + MCP can do, and vice-versa.
 - Comments/docs in English; temp probes only under `./temp`; persistent tests only under `./tests`; Git read-only.
 
 ## 2. Foundation inventory — what already exists (REUSE, do not recreate)
-### 2.1 The parked kernel `eVe/intuition/tools/molecule/` (3374 L) — to be **wired**
+### 2.1 The guarded kernel `eVe/intuition/tools/molecule/` — **wired**
 | Module | L | Provides |
 |--------|---|----------|
 | `kernel/reducers.js` | 498 | State transitions (the edit operations as pure reducers) |
@@ -39,7 +41,7 @@ These came out of the post-deletion audit + a two-round scoping study. They are 
 | `track_types/index.js` | 122 | Track-type registry + built-in video/audio/image/text/automation definitions |
 | `session/{session,registry,errors,index,timeline_operations}.js` | 700 | Session lifecycle, multi-session registry, timeline verb aliases, clipboard edits, and atomic operation batches |
 | `persistence/index.js` | 165 | Load/save of molecule state |
-| `recording/index.js` | 253 | Capture into the timeline |
+| `recording/index.js` | 500 | Exact recording coordinator: `read/start/stop/cancel/dispose`, clock/epoch validation, persisted-Atome clip commit |
 | `gestures/index.js` | 120 | Interaction logic |
 | `panel/index.js` | 264 | Legacy panel UI, scheduled for retirement in V2.12 |
 | `media/index.js` | 139 | Media clip handling (note: still references a `canvas_webgpu_preview` channel to re-point at Bevy) |
@@ -47,7 +49,7 @@ These came out of the post-deletion audit + a two-round scoping study. They are 
 | `runtime.js` | 240 | Entry `installMoleculeGroupTimelineRuntime` + open group timeline API bridge |
 | `index.js` | 10 | `MOLECULE_ENGINE_ID='eve.molecule'`, schema v1, `status: 'guarded_bootstrap'` |
 
-Status confirmed by audit: imports **no** deleted mtrax code; `molecule_session_history` probe **passes**; guarded by `check_molecule_guardrails`. It is sound — it just is not connected to the runtime.
+Status confirmed by audit: imports **no** deleted mtrax code; `molecule_session_history` probe **passes**; guarded by `check_molecule_guardrails`; group runtime, recording coordinator, persistence, and Bevy scene bridge are connected.
 
 ### 2.2 Already done on Bevy (reuse directly)
 - **M1** per-clip color filters (`video_external.wgsl`, `types.rs`, `video_external_texture.rs`, `bevy_projection_adapter.js`).
@@ -58,7 +60,7 @@ Status confirmed by audit: imports **no** deleted mtrax code; `molecule_session_
 - `eVe/core/media_engine/molecule.{js,api,native,scenarios}.js` = the **Kira** audio-session engine (audio-only; video composited by Bevy). Distinct from the editor kernel above.
 
 ### 2.4 Wiring seam already reserved
-- `eVe/intuition/runtime/layer_contract.js` already defines `intuition_molecule_layer` (role `molecule`) — the z-order slot on the project scene (consumed by `runtime/index.js`, `tool_genesis.js`, `preview_surface.js`).
+- `eVe/intuition/runtime/layer_contract.js` already defines `intuition_molecule_layer` (role `molecule`) — the z-order slot on the project scene consumed by the active Intuition runtime and tool genesis paths.
 
 ## 3. Architecture pillars
 ### A. Track-type registry (D4 — the modularity backbone)
@@ -70,6 +72,7 @@ Status confirmed by audit: imports **no** deleted mtrax code; `molecule_session_
 ### B. Data model (D2 + D5)
 - Schemas reused/extended from `kernel/schemas.js`, format per `Molecules.md` (`eve.timeline` / automation / effect).
 - **Dual time** on every time-bearing entity: `{ seconds, musical: { bar, beat, tick } }` resolved through a **tempo map** (BPM + time-signature changes). Seconds remain the render/seek truth (Kira clock); musical time is the editing/quantization layer for chord/tablature/automation.
+- Exact recorded clips additionally persist safe-integer `start_frame`, `duration_frames`, `source_in_frame`, and `source_out_frame`. Their seconds fields are derived from the timeline sample rate and are never the exact-placement authority.
 - Persist through `persistence/` + the sanitized project store.
 
 ### C. API + MCP surface (D3 — every operation)
@@ -99,12 +102,24 @@ All driven from kernel state → `virtual_scene_contract.js` diff → Bevy nodes
 
 ### E. Transport & clock (D5)
 - Kira master clock; `setBevyVideoDecodePlayback` follows for video frames; scrub/seek drive both. Musical↔seconds via the tempo map. A/V-sync logic stays where `full_bevy_renderer.md` mandates (Kira + decode-source seeks).
+- Exact overdub does not infer alignment from Kira/UI time. The capture adapter must prove one supported common clock, the exact integer timeline origin, and a locked epoch. Unsupported sources remain available only through generic recording.
 - **Time-stretch**: clip speed / stretch-to-tempo *without pitch artifacts*, as a processing stage feeding Kira, backed by an **external library** (decision pending — §7, task V2.10). Tempo edits in musical time drive it.
 
 ### F. History (D6)
 - Each kernel mutation emits a **reversible command** on eVe's Time Machine deterministic log (replayable identically). A `batch` wraps its ops into one atomic, single-undo entry. This is the contract that makes AI/script batch manipulation safe.
 
-### G. Marker-defined sections and track Cells (restored product invariant)
+### G. Exact recording coordinator (D8)
+
+- One coordinator is created per open group timeline and exposed through `readGroupTimelineRecording`, `startGroupTimelineRecording`, `stopGroupTimelineRecording`, and `cancelGroupTimelineRecording`.
+- `start` selects exactly one compatible armed track, validates the timeline sample rate and integer frame origin, requires exact capability, then locks the start `clock_epoch`.
+- `stop` accepts only matching render/host-transport clocks, reference, epoch, origin and sample rate; a real earlier `playback_start_frame`; `playback_observed_frame == recording_start_frame`; a positive integer frame count; strictly positive latency fields; and zero overrun/discontinuity. Host compensation is exact and frame-based: `roundtrip_latency_frames = input_latency_frames + output_latency_frames`, and `record_offset_frames_applied` must equal `roundtrip_latency_frames`.
+- Clip placement is `timeline_origin_frame - roundtrip_latency_frames`, clamped with matching source-in trimming. The real playback-start lead is timing evidence and is not applied again.
+- The capture controller persists the recorded media as an Atome first. The coordinator requires that Atome id before applying the single canonical `molecule.clip.add` mutation; persistence and Bevy rendering follow from the normal session commit.
+- `cancel` discards without a clip. `dispose` waits for an in-flight start and cancels any active capture; group close calls it before clearing the scene and disposing the session.
+- Exact capability is currently limited to an explicitly requested AUv3 `plugin_input` take (`auv3.render` capture / `auv3.host_transport` timeline origin / locked epoch). Browser, desktop/Tauri, iOS app, AUv3 microphone, AUv3 plug-in output/mix, and video exact requests are rejected with `av_sample_accurate_overdub_unsupported`. Their supported generic recorder paths remain usable.
+- Video stays exact-unsupported until every video/container PTS has a validated mapping to the audio sample timeline in that locked epoch.
+
+### H. Marker-defined sections and track Cells (restored product invariant)
 
 The former production Molecule editor had a `loop_cells` system. Its product behavior is mandatory for the rebuilt editor and must be restored as canonical model logic, not recreated as DOM state.
 
@@ -161,7 +176,7 @@ All operations that change boundaries or content must update the marker/section/
 ## 5. Phase v2 — Rich + advanced track types (modular plug-ins)
 - [ ] **V2.1** Text / karaoke (active-line bg, scroll, per-line weight/alpha) — M5.1.
 - [ ] **V2.2** Audio waveform overlay — `waveform_playback_overlay.rs` (M5.2).
-- [ ] **V2.3** Recording into the timeline (wire `recording/`).
+- [x] **V2.3 Recording into the timeline. DONE 2026-07-19.** `runtime.js` creates one recording coordinator per open group and exposes read/start/stop/cancel; close awaits coordinator `dispose()` before scene/session teardown. The Bevy audio/video/detail tools reach real controllers, with an active Molecule taking the exact coordinator route and other use remaining generic. Exact clip creation is frame-based and fail-closed: explicit exact mode, integer origin/sample rate, `auv3.render` capture, `auv3.host_transport` timeline origin, locked `clock_epoch`, real earlier playback start, `playback_observed_frame == recording_start_frame`, strictly positive latency, zero overrun/discontinuity, exact host round-trip compensation (`input_latency_frames + output_latency_frames = roundtrip_latency_frames = record_offset_frames_applied`), `timeline_origin_frame - roundtrip_latency_frames` placement, and a persisted media Atome id are all required before `molecule.clip.add`. If that final session mutation fails, `commit_failed` retains the same validated clip/media identity and a later stop retries only `session.apply`, never capture finalization or persistence. The delivered exact source is AUv3 `plugin_input`. Browser, desktop/Tauri, iOS app, AUv3 microphone, AUv3 plug-in output/mix, and video exact requests return `av_sample_accurate_overdub_unsupported`; generic capture remains available. Exact video remains blocked until video/container PTS is mapped and validated against the audio sample timeline. Generic video recording adds no DOM `<video>`/`<img>`, native overlay, or synthesized WebGPU viewfinder beside the single Bevy/WebGPU canvas.
 - [x] **V2.4** Nested molecules + multi-instances (wire `nested/` + `multi_instance/`). **DONE 2026-06-20.** Nested: wired `createMoleculeNestedResolver` + `renderNestedMoleculePreview` into the runtime as `window.eveMoleculeTimelineApi.resolveGroupTimelineNested({ group_id, clip_id })` — resolves a `molecule`/`molecule_ref` clip to its referenced timeline (via `moleculeStores.projectStore.loadTimeline`) plus a window-mapped preview of its clips, and rejects cycles. Node coverage `tests/probes/molecule_nested.test.mjs` 3/3 (resolve, cycle rejection, preview windowing). Multi-instances: multiple timelines are already openable simultaneously through the group registry (`sessionsByGroup` + `listOpenGroupTimelines`), which is the multi-instance capability. (Live nested resolution uses the canonical `loadTimeline`/`getStateCurrent`, which materializes for real group atomes; node-tested with a fake store since synthetic probe atomes don't materialize `state_current`.)
 - [ ] **V2.5** **Script-launch track** — place + launch script objects from the timeline (capabilities/sandbox via MCP risk tiers).
 - [ ] **V2.6** **Timeline-trigger track** — trigger other timelines from a timeline (sub-timeline scheduling).
@@ -171,10 +186,10 @@ All operations that change boundaries or content must update the marker/section/
 - [ ] **V2.10 Time-stretch** — integrate the chosen external library (§7) as a stretch/speed stage feeding Kira (no pitch artifacts, stretch-to-tempo); expose `clip.timestretch` / `clip.set_speed` over API + MCP; validate quality + A/V sync + latency on web (WASM) and native (Rust/Tauri/iOS).
 - [ ] **V2.11 Professional export** — pin the canonical timeline snapshot, render deterministically through Bevy/WebGPU, support an editable project package, an open archival master, and delivery profiles such as MP4; add checkpointed resume, atomic output publication, typed failures, and post-export frame/sample/A/V validation. The codec/container decision remains open until the AV audit evaluates quality, metadata, licensing, WASM/native support, and interoperability.
 - [ ] **V2.12 Bevy editor chrome and DOM retirement** — migrate the Molecule panel, controls, tool bands, inspector, transport chrome, resize/drag affordances, and panel-local interaction state to the shared Bevy UI contract; delete `tools/molecule/panel/` DOM rendering, DOM geometry/layout observers, and obsolete panel lifecycle routes only after Web/Tauri/iOS parity passes.
-- [ ] **V2.13 Marker-defined Cells** — restore the former production `loop_cells` behavior as the canonical marker → section → Cell model in §3G: deterministic Cell projection per track, marker-driven recomputation, Cell activation/selection/color/arming/recording, real-content batch operations, follow/repeat/playback hooks, API/MCP parity, migration of valid legacy Cell configuration, and removal of the old DOM-only Cells implementation.
+- [ ] **V2.13 Marker-defined Cells** — restore the former production `loop_cells` behavior as the canonical marker → section → Cell model in §3H: deterministic Cell projection per track, marker-driven recomputation, Cell activation/selection/color/arming/recording, real-content batch operations, follow/repeat/playback hooks, API/MCP parity, migration of valid legacy Cell configuration, and removal of the old DOM-only Cells implementation.
 
 ## 6. Phase v3 — Cross-platform validation (M7)
-- [ ] Web (:3001), Tauri (:3000), iOS/AUv3 parity: compositing + filters + transitions + selection + scrub + A/V sync on a looping molecule; Kira sample-accurate (`feedback_validate_real_mechanism`). _Absorbs the extracted validation tasks from the (cleanup) `full_bevy_renderer_remaining.md`: **R40** "Validate Web M7.1 on :3001 (montage compositing, filters, transitions, selection, scrub, A/V sync on the project canvas)" — the Web part is satisfied by the V1.9 full-session validation except live montage A/V sync; **R41** "Validate Tauri/iOS/AUv3 M7.2 (same scenario, Kira A/V sync on a looping montage)" — this V3 line. Both are editor validation, not cleanup, so they live here with the editor work._
+- [ ] Web (:3001), Tauri (:3000), iOS app, and iOS/AUv3 parity: compositing + filters + transitions + selection + scrub + A/V sync on a looping molecule. Validate generic capture positively on each supported backend; validate exact requests negatively on Web/Tauri/iOS app/video; validate exact AUv3 `plugin_input` overdub against the shared render epoch over long takes (`feedback_validate_real_mechanism`). _Absorbs the extracted validation tasks from the (cleanup) `full_bevy_renderer_remaining.md`: **R40** "Validate Web M7.1 on :3001 (montage compositing, filters, transitions, selection, scrub, A/V sync on the project canvas)" — the Web part is satisfied by the V1.9 full-session validation except live montage A/V sync; **R41** "Validate Tauri/iOS/AUv3 M7.2 (same scenario, Kira A/V sync on a looping montage)" — this V3 line. Both are editor validation, not cleanup, so they live here with the editor work._
 
 ## 7. Open questions (resolve during the relevant phase)
 - **Chord notation model**: chord symbols vs MIDI vs both? Rendering (text glyphs vs Bevy-drawn)?
@@ -186,6 +201,7 @@ All operations that change boundaries or content must update the marker/section/
 
 ## 8. Validation strategy (per phase)
 - Reuse + keep green `tests/molecule/run_molecule_tests.mjs` (mount/multitrack/session-history probes); add **API/MCP batch + atomicity** tests and an **AI-driven** edit test.
+- Keep the recording session/runtime/adapter probes green: explicit exact-mode gating; render/host-transport clocks; actual playback-start and same-quantum observation; `timeline_origin_frame - roundtrip_latency_frames` placement; strictly positive latency with sum/applied-offset equality; Atome-before-clip ordering; close-time cancellation; overrun rejection; and unsupported exact audio/video capability gates.
 - A GPU probe under `./temp` for every new Bevy overlay (selection, waveform, chord, tab) — screenshot ground truth, not `drawImage` readback.
 - Boot probe on the real app; `check:syntax`, `check:molecule-guardrails`, `check:no-fallbacks`, `cargo:bevy:check` green; existing deletion guard tests stay enforcing (they must keep asserting mtrax/old-renderer absence).
 
@@ -195,8 +211,9 @@ All operations that change boundaries or content must update the marker/section/
 - **Projection chain**: `render_atom.js` → `virtual_scene_contract.js` → `bevy_projection_adapter.js` → `bevy_{web,native}_renderer_runtime.js` → Rust `apply_style`.
 - **Material/render (Rust)**: `video_external.wgsl`, `types.rs`, `video_external_texture.rs`; new `selection_overlay.rs`, `waveform_playback_overlay.rs`.
 - **Playback/clock**: `bevy_video_decode_source_runtime.js` (`setBevyVideoDecodePlayback`) + Kira.
+- **Recording**: `tools/molecule/recording/index.js` → `domains/media/api/audio_api.js` capture adapter → `audio_runtime/sample_accurate_recording.js`; generic video remains in `domains/media/api/video_recording_controller.js` until an exact audio-sample PTS mapping exists.
 - **API/MCP**: `atome/src/squirrel/ai/default_tools.js`, `atome/src/squirrel/atome/mcp.js`, the runtime tool gateway (`invokeRuntimeDefaultTool`, `tool_gateway.js`).
 
 ---
 
-*This document supersedes the former pre-Bevy media-editor proposal. Its V1 implementation is partially complete as recorded above; V2/V3 remain active backlog.*
+*This document supersedes the former pre-Bevy media-editor proposal. Its V1 and V2.3 implementations are complete as recorded above; the remaining V2/V3 items stay active backlog.*

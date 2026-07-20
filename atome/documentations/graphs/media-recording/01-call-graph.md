@@ -2,20 +2,32 @@
 
 ```mermaid
 flowchart TD
-  Runtime["createMediaRecordCaptureRuntime\nrecord_capture_runtime.js:12"] --> Batch["startRecorderBatch\nrecord_capture_runtime.js:632"]
-  Batch --> AudioGUM["navigator.mediaDevices.getUserMedia audio\nrecord_capture_runtime.js:647"]
-  Batch --> VideoReady["ensureRecordActionVideoCaptureReady\nrecord_capture_runtime.js:687"]
-  Batch --> VideoGUM["navigator.mediaDevices.getUserMedia video\nrecord_capture_runtime.js:704"]
-  Batch --> NativeVideo["createNativeVideoRecorderRuntime\nrecord_capture_runtime.js:669"]
-  Batch --> Recorder["createMediaRecorderRuntime\nrecord_capture_runtime.js:255"]
-  Recorder --> MediaRecorder["new MediaRecorder + events\nrecord_capture_runtime.js:276-335"]
-  NativeVideo --> StartNative["startVideoRecordingSession\nrecord_capture_runtime.js:376"]
-  Stop["stopMediaRecorderRuntime\nrecord_capture_runtime.js:402"] --> StopNative["stopVideoRecordingSession\nrecord_capture_runtime.js:418"]
-  Stop --> StopBrowser["runtime.recorder.stop\nrecord_capture_runtime.js:450"]
-  Stop --> StopTracks["stream.getTracks().stop\nrecord_capture_runtime.js:468-472"]
-  Finalize["finalizeTrackSession\nrecord_capture_runtime.js:1259"] --> StopAll["Promise.all stopMediaRecorderRuntime\nrecord_capture_runtime.js:1261"]
-  StopAll --> Persist["persistRecorderResultsToTracks\nrecord_capture_runtime.js:741"]
-  Persist --> BlobEntry["buildMediaRecordEntryFromBlob\nrecord_capture_runtime.js:821"]
-  Persist --> AddClip["addClipFromEntry\nrecord_capture_runtime.js:827"]
-  Persist --> Flush["schedule/flush active group timeline persist\nrecord_capture_runtime.js:852-854"]
+  Tool["Capture tool / Molecule"] --> AudioAPI["startAudioRecording\naudio_api.js"]
+  Tool --> VideoAPI["startVideoRecording\nvideo_api_record.js"]
+
+  AudioAPI --> ExactGate{"explicit requireSampleAccurate?"}
+  ExactGate -->|yes| Capability["resolveSampleAccurateRecordingCapability\nsample_accurate_recording.js"]
+  Capability -->|AUv3 plugin_input + render/host clocks| Core["PlayRecordCore.recordStart\nplay_record_core.js"]
+  Capability -->|other runtime/source| ExactReject["av_sample_accurate_overdub_unsupported"]
+  ExactGate -->|no| RecordAudio["record_audio\naudio_core_record.js"]
+
+  RecordAudio --> Browser["getUserMedia + AudioContext + AudioWorklet"]
+  RecordAudio --> Native["record_start / record_stop\nrecord_audio_api.js"]
+  Core --> Native
+  Native --> Auv3["AUv3Recorder\nplugin_input on auv3.render\ntimeline origin on auv3.host_transport"]
+  Native --> GenericNative["desktop / iOS app / AUv3 mic or plugin\ngeneric only"]
+
+  Browser --> BrowserStop["flush -> tail chunk -> flush_ack -> cleanup"]
+  Native --> NativeCore["recorder_core stop\nclose producer -> drain ring -> finalize WAV"]
+  Auv3 --> ExactResult["record_done actual playback start\nobserved == recording start\npositive input+output=roundtrip=offset"]
+  ExactResult --> Normalize["normalizeSampleAccurateRecordingResult"]
+
+  VideoAPI --> VideoExact{"exact requested?"}
+  VideoExact -->|yes| VideoReject["av_sample_accurate_overdub_unsupported\nPTS-to-sample mapping unavailable"]
+  VideoExact -->|no| VideoGeneric["MediaRecorder or native video capture\nno DOM/native/fake-WebGPU viewfinder"]
+  VideoGeneric --> BrowserVideo["browser terminal capture\noptions + finalize helpers\nstable persistence identity"]
+  VideoGeneric --> NativeVideoState["iOS media_video_record_state\nrecover active/cached terminal work"]
+  NativeVideoState --> NativeVideoStop["bounded stop/cancel\ncoalesced completion + watchdogs"]
+  NativeVideoStop --> ProjectAtome["durable project media Atome"]
+  ProjectAtome --> NativeAck["media_video_record_ack"]
 ```

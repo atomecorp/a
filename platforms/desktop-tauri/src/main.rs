@@ -187,6 +187,7 @@ fn main() {
             audio_engine::bridge::audio_record_start,
             audio_engine::bridge::audio_record_stop,
             audio_engine::bridge::audio_get_levels,
+            audio_engine::bridge::audio_get_scope,
             audio_engine::bridge::audio_shutdown,
             bevy_backend::bevy_native_start,
             bevy_backend::bevy_native_apply_ops,

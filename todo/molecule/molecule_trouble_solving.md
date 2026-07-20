@@ -48,7 +48,7 @@ No task is complete until the same browser scenario that reproduced the bug pass
 
 - Capture `window.__DEBUG__.getAppState()` when available.
 - Capture `window.__DEBUG__.getTimelineState()` when available.
-- Capture `window.__DEBUG__.getGPUStats()` when playback or rendering is involved.
+- Capture `window.__DEBUG__.getWorkspaceSceneState()` and the renderer owner's existing diagnostics when playback or rendering is involved; do not install a detached GPU capability probe.
 - Capture `window.eveMtrackApi.getState()`.
 - Capture `window.eveMtrackApi.exportTimeline()`.
 - Capture visible clip DOM nodes:

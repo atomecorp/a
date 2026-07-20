@@ -15,11 +15,6 @@ import WebKit
 
 // File d'attente circulaire pour messages JS (évite blocage thread principal)
 
-// Protocol for real-time audio data delegation
-protocol AudioDataDelegate: AnyObject {
-    func didReceiveAudioData(_ data: [Float], timestamp: Double)
-}
-
 // Protocol for transport data delegation
 protocol TransportDataDelegate: AnyObject {
     func didReceiveTransportData(isPlaying: Bool, playheadPosition: Double, sampleRate: Double)
@@ -42,23 +37,7 @@ public class auv3Utils: AUAudioUnit, NativeAudioUnitControl {
     var masterGain: Float = 1.0
     var playActive: Bool = false
     
-    // Audio visualization properties
-    weak var audioDataDelegate: AudioDataDelegate?
     weak var transportDataDelegate: TransportDataDelegate?
-    let audioBufferSize = 1024
-    var audioBuffer = [Float](repeating: 0, count: 1024)
-    var bufferIndex = 0
-    var lastVisualizationUpdate: CFTimeInterval = 0
-    let visualizationUpdateInterval: CFTimeInterval = 1.0/2.0 // ULTRA AGGRESSIVE: 2 FPS max for visualization
-    
-    // OPTIMIZATION: Pre-allocated buffers to avoid allocations in render thread
-    var preAllocatedVisualizationBuffer = [Float](repeating: 0, count: 64)
-    var preAllocatedTempArray = [NSNumber](repeating: 0, count: 64)
-    
-    // ULTRA OPTIMIZATION: Skip frame counter for even more aggressive throttling
-    var frameSkipCounter: Int = 0
-    let frameSkipAmount: Int = 16 // Skip 15 out of 16 frames for visualization
-    var didLogOutputFormat: Bool = false
     // Debug capture (tiny ring buffer for quick inspection)
     var dbgCaptureEnabled: Bool = false
     var dbgBuffer: [Float] = [Float](repeating: 0, count: 48000) // ~1s stereo mixed
@@ -68,6 +47,11 @@ public class auv3Utils: AUAudioUnit, NativeAudioUnitControl {
         case idle
         case recording
     }
+    struct ExactPlaybackQuantum {
+        let renderFrame: Int64
+        let timelineFrame: Int64
+        let playbackStartFrame: Int64
+    }
     var recordingState: RecordingState = .idle
     var recordingSessionId: String = ""
     var recordingSource: String = "mic"
@@ -76,14 +60,20 @@ public class auv3Utils: AUAudioUnit, NativeAudioUnitControl {
     var recordingChannels: UInt32 = 0
     var recordingPath: String = ""
     var recordingRelativePath: String = ""
+    var recordingClockId: String = ""
+    var recordingRequireSampleAccurate: Bool = false
+    var recordingInputLatencyFrames: Int64 = 0
+    var recordingOutputLatencyFrames: Int64 = 0
     var recordingInputBuffer: AVAudioPCMBuffer?
     var recordingChannelPointers: [UnsafePointer<Float>?] = Array(repeating: nil, count: 8)
+    let recordingScopeBinCount = 64
+    var recordingScopeMinima = [Float](repeating: 0, count: 64)
+    var recordingScopeMaxima = [Float](repeating: 0, count: 64)
+    var recordingScopePairs = [Float](repeating: 0, count: 128)
+    var recordingScopeLastSequence: UInt64 = 0
+    var recordingScopeMonitorGeneration: UInt64 = 0
     let nativeRecorderBackend = AUv3NativeRecorderBackend()
     var micRecordingEngine: AVAudioEngine?
-    var micRecordingFile: AVAudioFile?
-    var micRecordingFrames: AVAudioFramePosition = 0
-    var micRecordingPeak: Float = 0
-    var micRecordingLock = os_unfair_lock()
     
     // NOUVEAU: JavaScript Audio Injection
     var jsAudioBuffer: [Float] = []
@@ -93,8 +83,30 @@ public class auv3Utils: AUAudioUnit, NativeAudioUnitControl {
     var jsAudioLock = os_unfair_lock() // Low-overhead lock for JS audio injection
     var audioDebugExpectedPeakFrame: Int? = nil
     var audioDebugRenderFrameCursor: Int64 = 0
+    let audioRenderClockEpoch: String = UUID().uuidString
     var audioDebugPlaybackStartFrame: Int64? = nil
+    var exactPlaybackStartFrame: Int64? = nil
     var audioDebugRecordingStartFrame: Int64? = nil
+    var recordingTimelineOriginFrame: Int64? = nil
+    var recordingExpectedRenderFrame: Int64? = nil
+    var recordingExpectedTimelineFrame: Int64? = nil
+    var recordingPlaybackObservedFrame: Int64? = nil
+    var recordingStartedEventPending: Bool = false
+    var recordingClockFailurePending: Bool = false
+    var recordingRenderFailureLatched: Bool = false
+    var recordingEventTimelineFrame: Int64? = nil
+    var recordingEventRecordingFrame: Int64? = nil
+    var recordingEventPlaybackFrame: Int64? = nil
+    var recordingEventPlaybackObservedFrame: Int64? = nil
+    var recordingEventLock = os_unfair_lock()
+    var recordingTimingLock = os_unfair_lock()
+    var playbackCurrentRenderFrame: Int64? = nil
+    var playbackCurrentTimelineFrame: Int64? = nil
+    var playbackExpectedRenderFrame: Int64? = nil
+    var playbackExpectedTimelineFrame: Int64? = nil
+    var playbackClockDiscontinuity: Bool = false
+    var audioTimingLock = os_unfair_lock()
+    var cachedTransportStateBlock: AUHostTransportStateBlock?
     // File playback through the native audio engine
     var loadedFilePath: String? = nil
     var pendingScrubPreview: (path: String, position: Float, duration: Double)? = nil
@@ -178,6 +190,14 @@ public class auv3Utils: AUAudioUnit, NativeAudioUnitControl {
         }
         set {
             super.musicalContextBlock = newValue
+        }
+    }
+
+    public override var transportStateBlock: AUHostTransportStateBlock? {
+        get { super.transportStateBlock }
+        set {
+            super.transportStateBlock = newValue
+            cachedTransportStateBlock = newValue
         }
     }
     // ULTRA OPTIMIZATION: Removed checkHostTempo() completely - not essential for core functionality

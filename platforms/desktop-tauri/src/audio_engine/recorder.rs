@@ -172,6 +172,7 @@ pub fn start_with_options(
 
             let actual_sr = sr;
             let actual_ch = ch;
+            metering::configure_scope(actual_sr, actual_ch);
 
             // Validate sample rate range
             if actual_sr < 8000 || actual_sr > 384000 {

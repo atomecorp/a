@@ -1,27 +1,37 @@
-# Event Graph - molecule
+# Event Graph - Molecule Recording
 
 ```mermaid
 flowchart TD
-  UserIntent["User intent: open group timeline"] --> GroupApi["openGroupTimeline(detail)\nruntime.js:149"]
-  GroupApi --> PanelReady["panel rendered\npanel/index.js:231-253"]
+  Intent["User intent on Bevy record tool"] --> Toggle["normalized active/inactive toggle"]
+  Toggle --> Route{"Active Molecule timeline?"}
 
-  ToolClick["click on molecule tool button\npanel/index.js:40"] --> InvokeTool["footerApi.invokeToolDefinition\npanel/index.js:63"]
-  MarkerDblClick["dblclick marker\npanel/index.js:132"] --> MarkerUpsert["session.apply('molecule.marker.upsert')\npanel/index.js:134"]
-  TrackToggle["click solo/mute/record_arm\npanel/index.js:153"] --> TrackUpdate["session.apply('molecule.track.update')\npanel/index.js:154-157"]
-  SnapChange["change snap select\npanel/index.js:179"] --> SnapApply["session.apply('molecule.transport.snap')\npanel/index.js:180"]
-  HistoryKey["keydown cmd/ctrl+z\npanel/index.js:189"] --> UndoRedo["session.undo/session.redo\npanel/index.js:193-197"]
-  CloseClick["click molecule-close\npanel/index.js:255"] --> HideOnly["closeMoleculePanel hides panel\npanel/index.js:202-206"]
+  Route -->|no| GenericEvent["generic audio/video controller transition"]
+  GenericEvent --> GenericState["recording state event + Bevy latch projection"]
 
-  RuntimeClose["closeGroupTimeline(groupId)\nruntime.js:196"] --> FullClose["close panel + session.dispose + sessionsByGroup.delete\nruntime.js:204-209"]
-  HideOnly --> ConflictClose["CONFLICT: close button does not call closeGroupTimeline"]
+  Route -->|yes and active=true| ExactStart["startGroupTimelineRecording"]
+  ExactStart --> Capability["exact capability decision"]
+  Capability -->|accepted| Started["coordinator status=recording\nrender + host clocks / origin / epoch locked"]
+  Capability -->|rejected| StartError["typed unsupported/clock error\nno capture and no clip"]
 
-  SessionApply["session.apply\nsession.js:205"] --> DurableEvent["eventSink.append\nsession.js:221"]
-  SessionApply --> ListenerEmit["emit listeners\nsession.js:245"]
-  UndoRedo --> HistoryEvent["molecule.history.undo/redo append\nsession.js:248-297"]
+  Route -->|yes and active=false| ExactStop["stopGroupTimelineRecording"]
+  ExactStop --> Persisted["recorded media Atome persisted"]
+  Persisted --> ClipEvent["molecule.clip.add event"]
+  ClipEvent -->|apply failed| CommitFailed["status=commit_failed\nvalidated capture retained"]
+  CommitFailed -->|stop retry| ClipEvent
+  ClipEvent --> CommitEvent["onStateCommitted"]
+  CommitEvent --> Save["canonical timeline saved"]
+  CommitEvent --> Render["single Bevy scene re-rendered"]
+
+  CancelIntent["cancelGroupTimelineRecording"] --> CancelEvent["capture canceled; no clip event"]
+  CloseIntent["closeGroupTimeline"] --> DisposeEvent["recording.dispose"]
+  DisposeEvent -->|active| CancelEvent
 ```
 
-## Event risks
+## Event guarantees
 
-- `CONFLICT`: UI close button calls `closeMoleculePanel` only; runtime close calls `closeMoleculePanel`, `session.dispose` and map deletion.
-- `CONFLICT`: panel DOM events call `session.apply` directly, while external tool invocations may mutate through `footerApi.invokeToolDefinition`.
-- `UNKNOWN`: no event listener named `atome_mtrack_open_request` is present in the molecule files; legacy `mtrax` may still own that route.
+- UI latch changes follow controller results; UI events do not define sample positions.
+- An exact start emits no timeline mutation.
+- The only successful exact timeline mutation is `molecule.clip.add`, after durable media identity exists.
+- A failed `molecule.clip.add` application emits no successful timeline mutation. The coordinator retains the immutable finalized clip/media identity and a later stop retries that application only.
+- Exact video rejection is the expected `av_sample_accurate_overdub_unsupported` capability result; it does not disable generic video recording or synthesize a live preview.
+- Closing the group triggers coordinator disposal even when capture is active.

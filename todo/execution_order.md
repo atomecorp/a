@@ -210,6 +210,47 @@ Les points Molecule non termines sont repris plus bas dans l'ordre obligatoire r
 
 ## Ordre obligatoire des phases restantes
 
+### Phase urgente autorisee - Enregistrement multipiste audio/video sample-accurate
+
+Statut:
+
+Termine verifie
+
+Decision utilisateur:
+
+- Priorite explicitement validee le 2026-07-19 avant la poursuite de l'ordre restant.
+- Cette tache ne clot pas les phases 3 ter, 4 ou 5 et ne supprime aucun de leurs criteres de sortie restants.
+
+Sources principales:
+
+- todo/media_handling/RECORDING_INTEGRATION_PLAN.md
+- todo/media_handling/video_recording_and_preview.md
+- todo/molecule/NewMolecules.md
+- todo/molecule/PROJET_MOLECULE_DEBUG.md
+- atome/documentations/audio_multitracks.md
+- maps/API_MAP.md
+- maps/ARCHITECTURE_MAP.md
+- maps/CODEMAP.md
+- maps/DESIGN_MAP.md
+
+Dependances appliquees:
+
+- Reutiliser les backends audio et video actifs et leur controleur canonique; ne pas creer un troisieme enregistreur.
+- Kira reste maitre de lecture du projet; l'enregistrement exact n'est accepte que lorsque la capture et la timeline prouvent le meme epoch. Le backend AUv3 livre utilise `auv3.render` pour la capture et `auv3.host_transport` pour le placement.
+- Conserver le pipeline visible Bevy/WebGPU unique; aucun proxy DOM, renderer ou canvas produit parallele ne peut etre restaure.
+- Construire d'abord la reproduction deterministe record -> stop -> Atome -> ouverture immediate Molecule avant de modifier le runtime produit.
+- Supprimer dans la meme tache tout chemin recording confirme orphelin, duplique ou rendu inutile.
+
+Taches:
+
+- [x] Rebrancher les outils Bevy audio/video et les actions d'enregistrement Molecule sur les vrais controleurs actifs, garantir pour l'overdub audio une horloge de transport commune en frames entieres avec metadonnees de latence explicites et placement sample-accurate, conserver la video generique sur son controleur canonique et refuser explicitement l'overdub video sample-accurate tant que le mapping PTS -> echantillons n'existe pas, supprimer les chemins orphelins ou dupliques confirmes, puis valider la stabilite start/stop, l'Atome cree, l'ouverture immediate de la piste et la synchronisation multipiste sur les backends supportes; critere de sortie: la reproduction deterministe echoue avant correction puis passe, les tests cibles audio/video/Molecule et garde-fous passent, les plateformes sans horloge precise retournent une erreur de capacite typee sans precision simulee, et les maps/documentations applicables refletent l'unique pipeline restant.
+
+Rapport de cloture:
+
+- Resultat: audio exact accepte uniquement sur `plugin_input` AUv3 avec epoch commun, sample rate identique, latences positives et placement en frames; video generique reconnectee avec cycle start/stop/reprise/ACK fiable et refus type `av_sample_accurate_overdub_unsupported` avant acces camera pour toute demande exacte.
+- Validation: 41 contrats Node, 34 contrats Vitest, 13 suites Molecule, garde-fous architecture/DOM/renderer, syntaxe globale, parse Swift, transaction de suppression native, build iOS simulateur arm64 application + AUv3 et clics reels sur la palette Capture.
+- Avancement global: 64/150 taches terminees (42.67%).
+
 ### Phase 2 bis - Migration exclusive du transport métier Atome vers WebSocket
 
 Statut:
@@ -575,6 +616,18 @@ Sources principales:
 - todo/molecule/NewMolecules.md
 
 Taches:
+
+- [ ] Reconnect and harden audio, video, and photo recording as the user-authorized Phase 5 priority from 2026-07-19: reuse the active capture controllers and their serialized start/stop lifecycle; reserve identity and placement in memory; persist and validate the media before one canonical Atome commit; display a derived Bevy-only audio scope or video thumbnail inside the active tool and a 120 ms Bevy shutter flash for photo; return to the normal icon only after durable success; preserve AUv3 sample-accurate `plugin_input` recording while generic audio and video reject exactness requests explicitly; and remove confirmed obsolete recording paths in the touched ownership chain.
+
+  Specific dependencies: the shared Bevy/WebGPU compositor remains the only visible renderer; all durable Atome writes use `window.Atome.commit` or `window.Atome.commitBatch`; the existing browser, Tauri, iOS, and AUv3 recording owners remain canonical; preview and scope frames remain bounded, ephemeral renderer state; and no pending Atome, visible media DOM, native preview overlay, second canvas, fallback renderer, or second capture stream may be introduced.
+
+  Required validation: first restore a fully green focused media/rendering baseline; then use real Bevy tool clicks with deterministic 48 kHz microphone and animated camera fixtures to validate first-click start, second-click stop, one final Atome, format metadata, immediate playback, retry identity, photo one-click flash, resource cleanup, reload, and offline playback; run the targeted Node, Vitest, Molecule, Rust, Swift/Xcode, execution-order, syntax, DOM, renderer, and no-fallback guardrails; and validate iOS and AUv3 behavior on physical hardware and in a real AUv3 host.
+
+  Exit criteria: audio creates one non-empty playable WAV Atome whose duration matches its integer frame count; AUv3 loopback alignment remains exact to the sample after measured positive latency compensation with zero overrun, discontinuity, or drift; video creates one decodable playable Atome with coherent container, MIME, tracks, dimensions, orientation, and duration; photo creates one decodable image Atome from one click without preview; second and repeated stop requests remain idempotent; failures leave no orphan Atome and retry the same identity when recoverable; fifty start/stop cycles leak no capture, audio, native, timer, callback, or GPU resources; and the maps and recording documentation describe the single remaining pipeline.
+
+  Implementation evidence (2026-07-19): browser, Tauri, iOS application, and AUv3 recording adapters now feed one serialized capture lifecycle and one terminal Atome commit after format validation and durable persistence. Bevy recording feedback consumes recorder-owned PCM/streams/frames with stable session guards; obsolete fullscreen/quick-preview/DOM scope owners were removed. The deterministic browser probes now use the canonical Bevy hit-test and real canvas clicks: audio exposes a variable in-tool scope, stops on the second click, commits one 53,504-frame 48 kHz WAV Atome, and decodes it; animated Y4M video advances the registered Bevy source from frame version 1 to 5, stops on the second click, commits one H.264/AAC 1280x720 MP4 Atome, and passes independent ffprobe decoding; photo exposes only the 120 ms Bevy flash and commits one decodable 1280x720 JPEG Atome. The menu remains anchored at y=760 with height=60 on an 820 px surface, and each media identity occurs once in the project scene. Focused Bevy/video/menu coverage is 55/55, focused photo persistence is 4/4, the real start/stop boundary probe is 1/1, the Tauri audio-engine suite including microphone record and lock-free 64-bin scope is 22/22, native iOS/AUv3 audio scope contracts are 8/8, and the one-canvas/zero-visible-media guard passes.
+
+  Validation status and remaining exit blockers (2026-07-19): the full Vitest baseline is green at 472/472 after aligning the stale Dashboard/debug assertions with their already documented product contracts, and the authorized deterministic real-click browser audio/video/photo probes are green. The desktop Tauri application rebuild is green, but this automated desktop session did not expose its native window for hardware interaction. Physical iOS microphone/camera plus real-host AUv3 48 kHz impulse/long-take evidence cannot be replaced by simulator or browser tests. Keep this task open until those physical runtime gates are executed and green.
 
 - [ ] Sortir l'extraction audio de conteneur video hors de bridge.rs.
 - [ ] Retirer les ecritures disque du callback CPAL.

@@ -1,32 +1,45 @@
-# Lifecycle Graph - molecule
+# Lifecycle Graph - Molecule Recording
 
 ```mermaid
 flowchart TD
-  Create["create timeline\nruntime.js:101"] --> Save["save initial timeline\nruntime.js:163"]
-  Save --> Session["create session\nsession.js:118"]
-  Session --> Panel["open panel\npanel/index.js:209"]
-  Panel --> Bind["bind listeners/tools/history\npanel/index.js:40,132,153,179,189,255"]
-  Bind --> Ready["ready: sessionsByGroup set\nruntime.js:177"]
-  Ready --> Update["apply/undo/redo\nsession.js:205,248,277"]
-  Update --> Persist["eventSink + projectStore\nsession.js:221,238"]
-  Ready --> UiClose["close button -> closeMoleculePanel\npanel/index.js:255"]
-  UiClose --> Hidden["panel hidden only\npanel/index.js:202-206"]:::risk
-  Hidden --> Ghost["PARTIAL_LIFECYCLE: session/listeners/map can remain"]:::risk
-  Ready --> RuntimeClose["closeGroupTimeline\nruntime.js:196"]
-  RuntimeClose --> Hide["closeMoleculePanel\nruntime.js:204"]
-  Hide --> Dispose["session.dispose\nruntime.js:208"]
-  Dispose --> Delete["sessionsByGroup.delete\nruntime.js:209"]
-  Delete --> Complete["disposed"]
+  Open["openGroupTimeline"] --> Session["create MoleculeSession"]
+  Session --> Recording["createMoleculeRecordingSession"]
+  Recording --> Render["render canonical timeline on Bevy canvas"]
+  Render --> Ready["group ready"]
 
-  Recording["recording lifecycle"] --> RecStart["startCapture -> current set\nrecording/index.js:203-204"]
-  RecStart --> RecConfirm["finish/import/add clip/current null\nrecording/index.js:219-243"]
-  RecStart --> RecCancel["cancelCapture/current null\nrecording/index.js:246-249"]
+  Ready --> Read["readGroupTimelineRecording"]
+  Ready --> Start["startGroupTimelineRecording"]
+  Start --> Active["exact capture active; render/host clocks, origin, epoch locked"]
+  Active --> Stop["stopGroupTimelineRecording"]
+  Stop --> Persist["persist media Atome"]
+  Persist --> Clip["commit frame-exact clip"]
+  Clip -->|commit failed| CommitFailed["retain finalized clip/media\nretry stop"]
+  CommitFailed --> Clip
+  Clip --> Ready
+  Active --> Cancel["cancelGroupTimelineRecording"]
+  Cancel --> Ready
 
-  classDef risk fill:#ffd6d6,stroke:#a80000,color:#111
+  Ready --> Close["closeGroupTimeline"]
+  Active --> Close
+  Close --> DisposeRecording["await recording.dispose"]
+  DisposeRecording -->|active| CancelBackend["await cancelCapture"]
+  DisposeRecording --> Clear["await sceneBridge.clear"]
+  CancelBackend --> Clear
+  Clear --> DisposeSession["session.dispose"]
+  DisposeSession --> Delete["sessionsByGroup.delete"]
+  Delete --> Complete["closed"]
+
+  BevyGeneric["Bevy audio/video tool without active group"] --> GenericController["generic audio/video controller"]
+  GenericController --> GenericStop["stop/discard releases capture"]
 ```
 
 ## Lifecycle findings
 
-- `PARTIAL_LIFECYCLE`: `closeMoleculePanel` does not dispose session or unregister `sessionsByGroup`.
-- `PARTIAL_LIFECYCLE`: panel listeners are attached to DOM nodes and cleared only by replacing panel content on next open; no explicit remove path exists.
-- `RISK`: recording lifecycle has `start`, `confirm`, `cancel`, but no external dispose/cancel-on-session-close hook was found.
+- The recording coordinator has an explicit terminal `dispose()` operation.
+- Group close awaits recording disposal before clearing the scene or disposing the session.
+- Disposal cancels active capture and also handles a start that is still settling.
+- Stop creates a clip only after capture has finished, timing has validated, and the media Atome is durable.
+- A clip-commit failure after those phases retains the immutable finalized result in `commit_failed`; retry does not touch the capture backend or create another media Atome.
+- Cancel/dispose create no clip.
+- Generic video remains available outside the exact coordinator; exact video returns `av_sample_accurate_overdub_unsupported` before acquisition until audio-sample PTS mapping exists.
+- Recording never owns a second product renderer, DOM `<video>`/`<img>`, native overlay, or fake WebGPU preview surface.

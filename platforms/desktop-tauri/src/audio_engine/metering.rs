@@ -8,6 +8,8 @@
 
 use std::sync::atomic::{AtomicU64, Ordering};
 
+use super::metering_scope;
+
 // Store levels as u64 bits (f64 reinterpreted) for lock-free atomic access
 static RMS_BITS: AtomicU64 = AtomicU64::new(0);
 static PEAK_BITS: AtomicU64 = AtomicU64::new(0);
@@ -54,9 +56,14 @@ where
     let mut sum_sq: f64 = 0.0;
     let mut peak: f32 = 0.0;
     let mut clips: u64 = 0;
+    let mut scope_minimums = [0.0f32; 64];
+    let mut scope_maximums = [0.0f32; 64];
     for index in 0..sample_count {
         let s = sample_at(index);
         let abs = s.abs();
+        let scope_index = (index.saturating_mul(64) / sample_count).min(63);
+        scope_minimums[scope_index] = scope_minimums[scope_index].min(s);
+        scope_maximums[scope_index] = scope_maximums[scope_index].max(s);
         sum_sq += (abs as f64) * (abs as f64);
         if abs > peak {
             peak = abs;
@@ -81,6 +88,7 @@ where
     if clips > 0 {
         CLIP_COUNT.fetch_add(clips, Ordering::Relaxed);
     }
+    metering_scope::publish(&scope_minimums, &scope_maximums);
 }
 
 #[derive(serde::Serialize, Clone, Debug)]
@@ -125,6 +133,15 @@ pub fn reset() {
     PEAK_BITS.store(0, Ordering::Relaxed);
     SMOOTHED_RMS_BITS.store(0, Ordering::Relaxed);
     CLIP_COUNT.store(0, Ordering::Relaxed);
+    metering_scope::reset();
+}
+
+pub fn configure_scope(sample_rate: u32, channels: u16) {
+    metering_scope::configure(sample_rate, channels);
+}
+
+pub fn get_scope() -> super::metering_scope::ScopeFrame {
+    metering_scope::snapshot()
 }
 
 #[cfg(test)]
@@ -133,6 +150,9 @@ mod tests {
 
     #[test]
     fn metering_accepts_i16_samples_without_float_buffer() {
+        let _lock = crate::audio_engine::metering_scope::METERING_TEST_LOCK
+            .lock()
+            .unwrap();
         reset();
         push_i16_samples(&[0, 16_384, -16_384, 32_767]);
         let levels = get_levels();
@@ -142,6 +162,9 @@ mod tests {
 
     #[test]
     fn metering_accepts_u16_samples_without_float_buffer() {
+        let _lock = crate::audio_engine::metering_scope::METERING_TEST_LOCK
+            .lock()
+            .unwrap();
         reset();
         push_u16_samples(&[32_768, 49_152, 16_384, 65_535]);
         let levels = get_levels();
@@ -151,6 +174,9 @@ mod tests {
 
     #[test]
     fn metering_keeps_f32_path() {
+        let _lock = crate::audio_engine::metering_scope::METERING_TEST_LOCK
+            .lock()
+            .unwrap();
         reset();
         push_samples(&[0.0, 0.25, -0.5, 1.0]);
         let levels = get_levels();

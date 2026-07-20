@@ -78,17 +78,17 @@ test('Bevy project renderer guards lock canvas ownership, drag, and video playba
     assert.match(selectedPlayback, /selected_project_video_timeline_required/);
 
     const decodeRuntime = readSource('eVe/domains/rendering/bevy_video_decode_source_runtime.js');
+    const streamSourceRuntime = readSource('eVe/domains/rendering/bevy_video_stream_source_runtime.js');
     const syncBody = sourceSlice(
         decodeRuntime,
         /export const syncBevyVideoDecodeSources/,
         /export const setBevyVideoDecodePlayback/
     );
-    assert.match(decodeRuntime, /__EVE_BEVY_VIDEO_FRAME_VERSION_FOR_ID__/);
+    assert.match(streamSourceRuntime, /__EVE_BEVY_VIDEO_FRAME_VERSION_FOR_ID__[\s\S]*requestVideoFrameCallback/);
     assert.match(decodeRuntime, /frameVersion/);
-    assert.match(decodeRuntime, /typeof entry\.video\?\.requestVideoFrameCallback === 'function'\s*\?\s*scheduleVideoFrameCallback\(state, entry\)\s*:\s*scheduleFramePump\(state, entry\)/);
+    assert.match(decodeRuntime, /typeof entry\.video(?:\?)?\.requestVideoFrameCallback === 'function'\s*\?\s*scheduleVideoFrameCallback\(state, entry\)\s*:\s*scheduleFramePump\(state, entry\)/);
     assert.doesNotMatch(syncBody, /video\.play\s*\(/);
     assert.doesNotMatch(syncBody, /setSourcePlayback\s*\(/);
-
     // The MTrax domain (and its timeline playback driver) was deleted. The project
     // transport now drives Bevy video decode directly from the eVeIntuition media
     // reader tool runtime so video does not freeze while Kira audio plays; guard

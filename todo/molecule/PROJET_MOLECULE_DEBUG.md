@@ -284,7 +284,7 @@ Constats principaux:
 
 - [confirmé] Le runtime MTrack/Molécule reste organisé autour d'un gros état singleton dans `eVe/domains/mtrax/core/state_factory.js`. Il mélange session, timeline, preview, rendu, audio, recording, sélection, drag, diagnostics et état projet.
 - [confirmé] Le modèle actif/dormant (`activeGroupId`, `dormantGroupId`, timeline active, preview actif) explique bien la contamination possible entre deux atomes ouverts successivement. Ce n'est pas encore un vrai modèle multi-instance.
-- [confirmé] Plusieurs fichiers dépassent 900 à 2000 lignes (`loop_cells_runtime.js`, `hmtracks_native_playback_runtime.js`, `record_capture_runtime.js`, `window_api_runtime.js`, `transport_gestures_runtime.js`, `styles.js`, `group_timeline_load_runtime.js`, `play_runtime.js`). Ce sont des zones à risque élevé pour les régressions et les effets de bord.
+- [confirmé] Plusieurs fichiers dépassent 900 à 2000 lignes (`loop_cells_runtime.js`, `hmtracks_native_playback_runtime.js`, `window_api_runtime.js`, `transport_gestures_runtime.js`, `styles.js`, `group_timeline_load_runtime.js`, `play_runtime.js`). Ce sont des zones à risque élevé pour les régressions et les effets de bord.
 - [confirmé] Le renderer WebGPU possède encore une route no-op. Elle doit être remplacée par une erreur explicite et testable; un preview vide silencieux est interdit.
 - [confirmé] Le vocabulaire technique `mtrax` est encore omniprésent dans les ids, schemas, datasets et routes. Il ne faut pas le renommer globalement maintenant, car il sert de contrat interne.
 - [confirmé] Les libellés utilisateur principaux pouvaient encore afficher `Mtrack`/`MTraX`.
@@ -337,9 +337,9 @@ Tâches ajoutées après audit:
 1. [en cours][P0] Extraire une vraie session Molécule par atome/groupe: état, timeline, preview, transport et audio doivent être adressés par `groupId/sessionId`, pas par un singleton global.
 2. [en cours][P0] Ajouter une probe double ouverture: vidéo puis audio, audio puis vidéo, deux molécules visibles en debug, aucune contamination de pistes/preview.
 3. [à faire][P0] Durcir la fermeture: fermer une Molécule ne doit jamais masquer ou supprimer l'atome source du bureau.
-4. [à faire][P0] Formaliser le contrat d'enregistrement unique: API JS commune, backends natifs Tauri/iOS/AUv3, backend browser séparé avec `AudioWorklet` seulement pour recording browser.
+4. [fait 2026-07-19][P0] The recording contract is canonical: Bevy tools reuse the existing generic controllers, an active Molecule uses its per-group exact coordinator, browser `AudioWorklet` remains capture-only, and unsupported exact sources fail with a typed capability error.
 5. [à faire][P1] Découper `state_factory.js` en sous-états par domaine: session, timeline, preview, audio, recording, UI, diagnostics.
-6. [en cours][P1] Découper les fichiers runtime les plus gros en modules testables, en commençant par `loop_cells_runtime.js`, `hmtracks_native_playback_runtime.js`, `record_capture_runtime.js`, `window_api_runtime.js`.
+6. [en cours][P1] Découper les fichiers runtime les plus gros en modules testables, en commençant par `loop_cells_runtime.js`, `hmtracks_native_playback_runtime.js`, `window_api_runtime.js`; the obsolete recording runtime was removed rather than split.
 7. [à faire][P1] Remplacer la route WebGPU no-op silencieuse par un état d'erreur explicite visible dans le diagnostic et testable.
 8. [à faire][P1] Séparer clairement UI de panel et lifecycle média: drag/resize/close ne doivent pas écrire la timeline ou le média hors action explicite.
 9. [à faire][P1] Continuer le renommage UI vers Molécule sans toucher aux ids techniques `mtrax` tant que les probes P0 ne sont pas vertes.
@@ -454,7 +454,21 @@ Reste à vérifier manuellement:
 4. [corrigé à valider][P0] Vignettes vidéo instables: normalisation upload/recording et retry d'erreur corrigés; vérifier sur Web, Web3 et Torii.
 5. [à faire][P1] Molécule vidéo non déplaçable après fermeture: reprendre le drag/overlay après correction audio.
 
-## Critères d'acceptation avant nouvelle feature d'enregistrement
+### 2026-07-19 - Canonical recording integration reconciliation
+
+Status: the explicitly authorized recording scope is delivered. This does not close the historical reload, thumbnail, drag, playback, or legacy MTrack P0 work, which remains active in execution-order Phase 4.
+
+- Bevy audio, video, and detail tools now reach the existing canonical recording controllers; an active Molecule owns one recording coordinator per group.
+- Exact overdub is limited to explicitly requested AUv3 `plugin_input`, with `auv3.render` capture, `auv3.host_transport` timeline origin, a locked clock epoch, integer-frame placement, explicit duplex latency, and media-Atome persistence before the clip mutation.
+- Other exact audio sources and exact video fail before capture with `av_sample_accurate_overdub_unsupported`; their supported generic recording paths remain available without claiming sample accuracy.
+- The obsolete duplicate recording runtime was removed instead of being retained as a parallel implementation.
+- Native audio stop drains every accepted producer push before WAV finalization; terminal timing failure retains explicit physical-delete recovery and cannot falsely report discard.
+- Browser video retries the same frozen terminal payload and persistence identities. Native iOS video recovers active/cached terminal work after WebView reload through bounded state/stop/cancel/ack semantics and acknowledges success only after project association.
+- A Molecule clip-commit failure retains the finalized clip/media identity in `commit_failed`; retrying stop does not finalize or persist the take twice.
+
+Validated software contracts cover controller start/stop routing, exact capability gating, frame placement, overrun rejection, persistence-before-clip ordering, timeline-close cancellation, browser capture flush, generic video stop retry, and the single Bevy/WebGPU rendering route. Long-duration AUv3 and physical camera/microphone validation remain separate hardware work.
+
+## Historical P0 acceptance criteria retained for the remaining work
 
 - Les médias ne disparaissent plus après reload.
 - Les médias ne disparaissent plus après fermeture/réouverture.

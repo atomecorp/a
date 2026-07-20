@@ -149,8 +149,8 @@ test('Dashboard ephemeral records do not raise imported media above the project 
 
     assert.equal(bounds.maxProjectZIndex, 7);
     assert.equal(bounds.maxProjectOrder, 20);
-    assert.equal(bounds.dashboardMinZIndex, 800);
-    assert.equal(bounds.dashboardMaxZIndex, 813);
+    assert.equal(bounds.dashboardMinZIndex, 1400);
+    assert.equal(bounds.dashboardMaxZIndex, 1413);
     assert.equal(stack.zIndex, 8);
     assert.equal(stack.order, 21);
     clearProjectScene('dashboard_stack_ignore_project');
@@ -192,10 +192,10 @@ test('New media stays below visible Dashboard records when the Dashboard band is
     const scene = createRenderScene(normalizeRenderAtoms([
         record('existing_front', { type: 'image', zIndex: 797, order: 20 }),
         imported,
-        record('__eve_dashboard_background', { zIndex: 798, order: 0 })
+        record('__eve_dashboard_background', { zIndex: 1398, order: 0 })
     ]));
 
-    assert.equal(stack.zIndex, 797);
+    assert.equal(stack.zIndex, 798);
     assert.equal(stack.order, 21);
     assert.equal(hitTestRenderScene(scene, { x: 20, y: 20 })?.id, '__eve_dashboard_background');
     clearProjectScene('dashboard_stack_cap_project');
@@ -239,10 +239,10 @@ test('Repeated explicit media stack positions are clamped below visible Dashboar
         renderOrder: first.order + 1
     });
 
-    assert.equal(first.zIndex, 900);
+    assert.equal(first.zIndex, 901);
     assert.equal(first.order, 31);
-    assert.equal(second.zIndex, 900);
-    assert.equal(second.z_index, 900);
+    assert.equal(second.zIndex, 902);
+    assert.equal(second.z_index, 902);
     assert.equal(second.order, 32);
     clearProjectScene('dashboard_stack_repeated_project');
 });
@@ -333,7 +333,7 @@ test('Project reconcile restarts Bevy after a failed projection instead of diffi
     const calls = [];
     const wasmModule = {
         default: async () => undefined,
-        run_atome_bevy_renderer: (_selector, _width, _height, initialScene) => {
+        run_atome_bevy_renderer: (_selector, _width, _height, _surfaceMetrics, initialScene) => {
             calls.push({ type: 'run', ids: initialScene.nodes.map((node) => node.id) });
             if (failRun) throw new Error('bevy_safari_initial_projection_failed');
         },
@@ -384,10 +384,10 @@ test('Bevy web runtime coalesces concurrent starts on the same canvas', async ()
             calls.push({ type: 'init' });
             await new Promise((resolve) => dom.window.setTimeout(resolve, 8));
         },
-        run_atome_bevy_renderer: (canvasSelector, width, height, initialNodes) => {
-            calls.push({ type: 'run', canvasSelector, width, height, initialNodes });
+        run_atome_bevy_renderer: (canvasSelector, width, height, surfaceMetrics, initialScene) => {
+            calls.push({ type: 'run', canvasSelector, width, height, surfaceMetrics, initialScene });
         },
-        apply_atome_bevy_spawn: (node) => calls.push({ type: 'ops', node }),
+        apply_atome_bevy_ops: (ops) => calls.push({ type: 'ops', ops }),
         apply_atome_bevy_surface: (payload) => calls.push({ type: 'surface', payload })
     };
     const firstScene = createVirtualSceneTree([
@@ -418,6 +418,9 @@ test('Bevy web runtime coalesces concurrent starts on the same canvas', async ()
     assert.equal(first.started, true);
     assert.equal(second.already_started, true);
     assert.equal(calls.filter((call) => call.type === 'run').length, 1);
-    assert.deepEqual(calls.filter((call) => call.type === 'ops').map((call) => call.node.id), ['concurrent_b']);
+    assert.deepEqual(
+        calls.filter((call) => call.type === 'ops').flatMap((call) => call.ops).map((op) => op.node?.id || op.id),
+        ['concurrent_b']
+    );
     assert.equal(readBevyWebRendererState(surface).node_count, 2);
 });

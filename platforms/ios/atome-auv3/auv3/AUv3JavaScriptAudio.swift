@@ -15,7 +15,7 @@ extension auv3Utils {
     public func injectJavaScriptAudio(_ audioData: [Float], sampleRate: Double, duration: Double) {
     os_unfair_lock_lock(&jsAudioLock)
     defer { os_unfair_lock_unlock(&jsAudioLock) }
-        audioDebugPlaybackStartFrame = nil
+        resetAudioPlaybackStartFrame()
 
         // 1) Detect host sample rate
         let hostSampleRate = getSampleRate() ?? 44100.0
@@ -65,7 +65,7 @@ extension auv3Utils {
         jsAudioActive = false
         jsAudioBuffer.removeAll()
         jsAudioPlaybackIndex = 0
-        audioDebugPlaybackStartFrame = nil
+        resetAudioPlaybackStartFrame()
     }
     
     /// Mix JavaScript audio into the output buffer (called from render thread)
@@ -74,8 +74,8 @@ extension auv3Utils {
     guard jsAudioActive, !jsAudioBuffer.isEmpty, os_unfair_lock_trylock(&jsAudioLock) else { return }
     defer { os_unfair_lock_unlock(&jsAudioLock) }
 
-        if jsAudioPlaybackIndex == 0 && audioDebugPlaybackStartFrame == nil {
-            audioDebugPlaybackStartFrame = renderStartFrame
+        if jsAudioPlaybackIndex == 0 {
+            markAudioPlaybackStartFrame(renderStartFrame)
         }
 
         let gain: Float = 1.0

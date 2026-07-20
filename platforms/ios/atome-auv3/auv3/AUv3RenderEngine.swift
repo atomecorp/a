@@ -8,6 +8,7 @@ import CoreAudio
 import CoreMedia
 import Foundation
 import Accelerate
+import QuartzCore
 import os.lock
 
 extension auv3Utils {
@@ -30,9 +31,6 @@ extension auv3Utils {
                 return noErr
             }
             
-            // PERFORMANCE: Reduce expensive operations in render thread
-            let currentTime = CACurrentMediaTime()
-            
             // Process MIDI events first (lightweight)
             if let eventList = realtimeEventListHead?.pointee {
                 strongSelf.processMIDIEvents(eventList)
@@ -40,22 +38,31 @@ extension auv3Utils {
 
             let bufferList = AudioBufferListWrapper(ptr: outputData)
             let renderStartFrame = strongSelf.audioDebugRenderFrameCursor
+            var pulledPluginInputThisQuantum = false
             // Determine output layout
             let outFormat = strongSelf._outputBusArray?[0].format
             let outChannels = Int(outFormat?.channelCount ?? 2)
             let outInterleaved = outFormat?.isInterleaved ?? false
             let outIsFloat32 = (outFormat?.commonFormat == .pcmFormatFloat32)
-            if !strongSelf.didLogOutputFormat, let fmt = outFormat {
-                strongSelf.didLogOutputFormat = true
-                AUv3Diagnostics.log("🔊 AUv3 out fmt: sr=\(fmt.sampleRate) ch=\(fmt.channelCount) interleaved=\(fmt.isInterleaved) common=\(fmt.commonFormat.rawValue) bytesPerFrame=\(fmt.streamDescription.pointee.mBytesPerFrame)")
-                let bl = AudioBufferListWrapper(ptr: outputData)
-                AUv3Diagnostics.log("🔊 AUv3 out buffers: \(bl.numberOfBuffers)")
-            }
             
             // File playback path (render decoded PCM if available)
-            let hasAuxAudio = !strongSelf.auxSlots.isEmpty
-            let renderMainSlot = strongSelf.playActive && strongSelf.fileLoaded
-            let renderAuxOnly = strongSelf.playActive && hasAuxAudio && !renderMainSlot
+            os_unfair_lock_lock(&strongSelf.fileLock)
+            let mainFrames = min(strongSelf.fileAudioL.count, strongSelf.fileAudioR.count)
+            let renderMainSlot = strongSelf.playActive
+                && strongSelf.fileLoaded
+                && strongSelf.fileFrameIndex < mainFrames
+            let hasAuxAudio = strongSelf.playActive && strongSelf.auxSlots.contains { slot in
+                slot.loaded && slot.frameIndex < min(slot.audioL.count, slot.audioR.count)
+            }
+            os_unfair_lock_unlock(&strongSelf.fileLock)
+            let renderAuxOnly = hasAuxAudio && !renderMainSlot
+            var exactPlaybackQuantum: ExactPlaybackQuantum? = nil
+            if renderMainSlot || renderAuxOnly {
+                exactPlaybackQuantum = strongSelf.latchExactPlaybackQuantum(
+                    timestamp: timestamp,
+                    frameCount: frameCount
+                )
+            }
 
             if renderMainSlot {
                 let channels = outChannels
@@ -271,7 +278,22 @@ extension auv3Utils {
                     }
             } else {
                 // Passthrough path: pull upstream audio when we are idle
-                if let pull = pullInputBlock {
+                if strongSelf.recordingState == .recording && strongSelf.recordingSource == "plugin_input" {
+                    pulledPluginInputThisQuantum = true
+                    let captured = strongSelf.captureRecordingInput(
+                        pullInputBlock: pullInputBlock,
+                        timestamp: timestamp,
+                        frameCount: frameCount,
+                        targetBufferList: outputData,
+                        playbackQuantum: exactPlaybackQuantum
+                    )
+                    if !captured {
+                        for i in 0..<bufferList.numberOfBuffers {
+                            let buffer = bufferList.buffer(at: i)
+                            if let mData = buffer.mData { memset(mData, 0, Int(buffer.mDataByteSize)) }
+                        }
+                    }
+                } else if let pull = pullInputBlock {
                     let status = pull(actionFlags, timestamp, frameCount, outputBusNumber, outputData)
                     if status != noErr {
                         for i in 0..<bufferList.numberOfBuffers {
@@ -346,41 +368,6 @@ extension auv3Utils {
                 }
             }
 
-            // PERFORMANCE: Skip expensive logging in render thread
-            // Audio logging moved to background processing if needed
-            
-            // ULTRA AGGRESSIVE: Skip most frames for visualization (only 1 in 16 frames processed)
-            strongSelf.frameSkipCounter += 1
-            if strongSelf.audioDataDelegate != nil && strongSelf.frameSkipCounter >= strongSelf.frameSkipAmount {
-                strongSelf.frameSkipCounter = 0
-                
-                // PERFORMANCE: Ultra-throttled visualization (2 FPS max + frame skipping)
-                if currentTime - strongSelf.lastVisualizationUpdate >= 0.5 { // 2 FPS instead of 5
-                    // Use pre-allocated buffer to avoid allocations
-                    if bufferList.numberOfBuffers > 0 {
-                        let buffer = bufferList.buffer(at: 0) // Only process first buffer
-                        if let inData = buffer.mData {
-                            let floatData = inData.assumingMemoryBound(to: Float.self)
-                            let count = min(Int(buffer.mDataByteSize) / MemoryLayout<Float>.size, strongSelf.audioBufferSize)
-                            
-                            // Ultra-simplified peak detection - sample every 32nd element instead of 8th
-                            var peak: Float = 0
-                            for i in stride(from: 0, to: count, by: 32) { // Sample every 32nd element for ultra efficiency
-                                peak = max(peak, abs(floatData[i]))
-                            }
-                            
-                            // Background dispatch for UI updates (only if significant change)
-                            if peak > 0.01 { // Only update if peak is significant
-                                DispatchQueue.main.async {
-                                    strongSelf.audioDataDelegate?.didReceiveAudioData([peak], timestamp: Double(timestamp.pointee.mSampleTime))
-                                }
-                            }
-                        }
-                    }
-                    strongSelf.lastVisualizationUpdate = currentTime
-                }
-            }
-
             // NOUVEAU: Mix JavaScript audio into the output
             if strongSelf.jsAudioActive {
                 strongSelf.mixJavaScriptAudio(bufferList: bufferList,
@@ -406,18 +393,17 @@ extension auv3Utils {
 
             if strongSelf.recordingState == .recording {
                 if strongSelf.recordingSource == "plugin" {
-                    if strongSelf.audioDebugRecordingStartFrame == nil {
-                        strongSelf.audioDebugRecordingStartFrame = renderStartFrame
-                    }
+                    strongSelf.markAudioRecordingStartFrame(renderStartFrame)
                     strongSelf.captureRecordingOutput(bufferList: bufferList,
                                                       channels: outChannels,
                                                       frames: frameCount,
                                                       interleaved: outInterleaved,
                                                       isFloat32: outIsFloat32)
-                } else if strongSelf.recordingSource == "mic" {
+                } else if strongSelf.recordingSource == "plugin_input" && !pulledPluginInputThisQuantum {
                     strongSelf.captureRecordingInput(pullInputBlock: pullInputBlock,
                                                      timestamp: timestamp,
-                                                     frameCount: frameCount)
+                                                     frameCount: frameCount,
+                                                     playbackQuantum: exactPlaybackQuantum)
                 }
             }
 
@@ -432,6 +418,7 @@ extension auv3Utils {
             }
             
             // Keep AUv3 host transport fresh enough for timeline and loop sync.
+            let currentTime = CACurrentMediaTime()
             if currentTime - strongSelf.lastTransportCheck >= 0.05 {
                 if strongSelf.shouldPollTransport() { // nouvelle condition unifiée
                     strongSelf.checkHostTransport()

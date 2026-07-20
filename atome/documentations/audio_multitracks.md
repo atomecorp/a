@@ -26,7 +26,8 @@ interface AudioFileAtome {
   sample_rate: number;
   bit_depth: number;
   channels: number;
-  duration: number; // seconds
+  frame_count: number;
+  duration: number; // frame_count / sample_rate
   container: 'wav';
   source: 'recording' | 'import' | 'generated';
   local_path: string; // data/users/<user_id>/media/audio/...
@@ -131,6 +132,26 @@ Optional (nice to have in MVP, but not mandatory):
 * Per-track/group `muted` / `solo`.
 * Simple snap to grid (tempo-based if `timebase = 'beats'`).
 
+### Recording timing guarantee matrix
+
+The generic recorder and the sample-accurate overdub recorder are intentionally two
+different contracts. A successful generic recording must never be promoted to an exact
+overdub merely because it contains a precise frame count.
+
+| Runtime / source | Generic recording | Exact overdub | Proven clock contract |
+|---|---:|---:|---|
+| Browser microphone | yes | no | continuous `AudioWorklet.currentFrame` values inside one `AudioContext`; not shared with Kira |
+| Desktop / Tauri microphone | yes | no | native recorder result, without a proven common playback/record epoch |
+| iOS app microphone | yes | no | native recorder result, without the AUv3 render-clock mapping |
+| AUv3 microphone | yes | no | microphone frames are not mapped to the plugin render clock |
+| AUv3 plugin output (`source = "plugin"`) | yes | no | generic output capture; no exact capability is advertised |
+| AUv3 plugin input (`source = "plugin_input"`) | yes | yes, when explicitly requested and validated | input read on `auv3.render`; placement anchored on `auv3.host_transport`; matching epoch |
+| Browser or native video | yes | no | no implemented and validated mapping from container/video PTS to the audio sample timeline |
+
+An exact request on an unsupported row is rejected with
+`av_sample_accurate_overdub_unsupported`. The same source remains available through the
+generic recording API when exactness is not requested.
+
 ---
 
 ## 3. Tracks as groups – simple model
@@ -209,6 +230,7 @@ const audioFile = await atome.objects.create<AudioFileAtome>({
     sample_rate: fileMeta.sampleRate,
     bit_depth: fileMeta.bitDepth,
     channels: fileMeta.channels,
+    frame_count: fileMeta.frameCount,
     duration: fileMeta.duration,
     container: 'wav',
     source: 'import',
@@ -217,40 +239,135 @@ const audioFile = await atome.objects.create<AudioFileAtome>({
 });
 ```
 
-#### Record (Tauri native audio or WebAudio fallback)
+#### Record through the canonical APIs
 
 ```ts
-// Start record from selected track/bus
-const recordSpec = {
-  timeline_id: timeline.id,
-  source_node_id: 'input_guitar_1',
-  channels_mode: 'mono',
-  bit_depth: 24,
-  sample_rate: 48000, // or session rate
+import {
+  startAudioRecording,
+  stopAudioRecording,
+} from '../../eVe/domains/media/api/audio_api.js';
+
+const started = await startAudioRecording({ fileName: 'take_01.wav' });
+if (!started.ok) throw new Error(started.error);
+
+// ... the user records, then stops.
+const stopped = await stopAudioRecording();
+if (!stopped.ok) throw new Error(stopped.error);
+
+const recordResult = stopped.result;
+const duration = recordResult.frame_count / recordResult.sample_rate;
+```
+
+The generic result contract includes at least:
+
+```ts
+interface GenericAudioRecordingResult {
+  sample_rate: number;
+  frame_count: number;
+  duration_sec: number; // derived from frame_count / sample_rate
+  overrun_frames?: number;
+  sample_accurate_overdub?: false;
+}
+```
+
+On the browser path, `sample_rate` is the actual `AudioContext.sampleRate`; capture is no
+longer resampled to 16 kHz. Stop sends an explicit `flush` request to the worklet. The
+worklet blocks future input, emits the partial tail as the last numbered chunk, then emits
+`flush_ack`. Only after that acknowledgement are the nodes, tracks and context closed.
+Chunk sequence, first/last worklet frame, total frame count and clock coherence are
+validated. A missing frame, invalid acknowledgement or `audio_recording_flush_timeout`
+fails the stop; a timeout is never treated as a partially successful finalization.
+
+The browser result also reports `capture_clock.kind = "audio_worklet_current_frame"`,
+`capture_clock.domain = "web_audio_context"`, `continuous = true` and
+`shared_with_kira = false`. Therefore it always reports
+`sample_accurate_overdub = false`, even though every frame in that local clock is retained.
+
+On native/AUv3 paths, stop is equally frame-closed but uses the existing recorder ring.
+The stop boundary rejects new producers, waits for in-flight render pushes, marks the
+producer drained, then empties and joins the writer before finalizing the WAV header. The
+reported `frame_count` therefore includes the final accepted render quantum and matches
+the physical WAV data size.
+
+A terminal native timing/protocol failure does not become an implicit success or silently
+lose cleanup ownership. The controller remains `finalization_failed`; explicit discard
+physically removes the returned file through `AtomeFileSystem.deleteFile`. Timeout or
+deletion failure keeps cleanup retryable, and only confirmed deletion permits the session
+to report `discarded: true`.
+
+#### Exact AUv3 plugin-input overdub
+
+Molecule uses `window.eveMoleculeRecordingCaptureAdapter` for the exact path. Capability
+must be resolved before start and the request must carry a timeline origin in frames:
+
+```ts
+const adapter = window.eveMoleculeRecordingCaptureAdapter;
+const exactRequest = {
+  require_sample_accurate: true,
+  media_kind: 'audio',
+  source: 'plugin_input',
+  clock_id: 'auv3.render',
+  clock_reference: 'record_start_render_quantum',
+  timeline_clock_id: 'auv3.host_transport',
+  timeline_start_frame: transportFrame,
+  timeline_sample_rate: sessionSampleRate,
 };
 
-const { record_session_id } = await atome.services.audioEngine.startRecord(
-  recordSpec,
-);
+const capability = adapter.resolveSampleAccurateCapability(exactRequest);
+if (!capability.supported) throw new Error(capability.error);
 
-// ... user plays, then stops recording
-
-const recordResult = await atome.services.audioEngine.stopRecord(
-  record_session_id,
-);
-
-// recordResult example:
-// {
-//   audio_file_id: 'af_123', // ADOLE object created by backend service
-//   duration: 12.345,
-//   content_hash: 'sha256:...',
-//   path: 'data/users/<user_id>/media/audio/recordings/<hash>.wav',
-//   latency_ms: 4.2,
-//   latency_compensated_play_position: 8.000
-// }
-
-const audioFile = await atome.objects.get<AudioFileAtome>(recordResult.audio_file_id);
+const capture = await adapter.startCapture(exactRequest);
+const exactResult = await adapter.finishCapture(capture.capture_id, exactRequest);
 ```
+
+The public flag is normalized to `requireSampleAccurate: true` at the native bridge. It is
+mandatory and is never inferred from the source or from precise-looking result metadata.
+
+Exact completion is accepted only when start and stop return the same non-wall-clock
+`clock_id`, `clock_reference`, `timeline_clock_id`, `clock_epoch` and sample rate. Capture
+frames use `auv3.render`; the timeline origin uses `auv3.host_transport`. The result must
+also expose
+contractual integer fields `frame_count`, `recording_start_frame`,
+`playback_start_frame`, `playback_observed_frame`, `timeline_origin_frame`,
+`output_latency_frames`, `input_latency_frames`,
+`roundtrip_latency_frames`, `record_offset_frames_applied`, `overrun_frames` and
+`discontinuity_frames`. Exact completion is rejected if the file is empty, a rate or epoch
+differs, or overrun/discontinuity is non-zero. A plugin-input pull or capacity failure
+increments `discontinuity_frames`; it can never be normalized away or accepted as an exact
+take. A valid take additionally proves
+`playback_start_frame < recording_start_frame` and
+`playback_observed_frame == recording_start_frame`.
+
+The measured latency contract is strict:
+
+```text
+roundtrip_latency_frames = output_latency_frames + input_latency_frames
+record_offset_frames_applied == roundtrip_latency_frames
+```
+
+An exact take is rejected when either equality is false.
+Each latency leg, the round trip, and the applied offset must be a strictly positive safe
+integer; zero is not accepted as an exact measurement.
+
+Placement is derived only from these measured frames:
+
+```text
+raw_timeline_start = timeline_origin_frame - roundtrip_latency_frames
+source_in_frame     = max(0, -raw_timeline_start)
+timeline_start      = max(0, raw_timeline_start)
+duration_frames     = frame_count - source_in_frame
+```
+
+For exact takes, these integer frame values are canonical. `play_position`,
+`start_offset` and UI seconds may be derived by dividing by `timeline_sample_rate`; they
+must not be converted back from wall-clock timestamps to reconstruct placement.
+
+`output_latency_frames`, `input_latency_frames` and `roundtrip_latency_frames` are strictly
+positive measured integer contract values. `record_offset_frames_applied` is the integer compensation
+actually applied and must match that round trip; none of these fields permits inventing a
+millisecond compensation. AUv3 `plugin_input` is the only exact-eligible source, and only
+after the full result validation; generic `plugin` output, desktop, iOS-app, microphone and
+video exact requests remain rejected.
 
 ---
 
@@ -637,7 +754,8 @@ Beyond place/move/trim/roll/split/join, the bare minimum to feel like a "real" m
 
 With ces briques, on obtient un **multitrack MVP** qui :
 
-* Enregistre en direct-to-disk (native audio ou WebAudio fallback) avec stockage unifié.
+* Enregistre via le backend générique disponible sur chaque runtime avec stockage unifié.
+* N'annonce un overdub exact que pour `plugin_input` AUv3 validé sur `auv3.render`.
 * Permet de placer, déplacer, couper, rallonger et recoller les clips.
 * Reste 100 % non-destructif (WAV jamais réécrit).
 * Utilise uniquement les APIs et objets déjà définis dans le document audio principal.

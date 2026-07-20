@@ -20,6 +20,7 @@ import {
 import { createBevyUiMainMenuRuntime } from '../../eVe/intuition/ribbon/bevy_ui_main_menu_runtime.js';
 import { setMainMenuRuntime } from '../../eVe/intuition/ribbon/bevy_ui_product_registry.js';
 import { createBevyMainMenuHoldRuntime } from '../../eVe/intuition/ribbon/bevy_ui_main_menu_hold_runtime.js';
+import { createContextToolInvocationRuntime } from '../../eVe/intuition/runtime/eve_intuition/context_tool_invocation_runtime.js';
 import { resolveDashboardBlockUnitSize } from '../../eVe/domains/dashboard/dashboard_tokens.js';
 import { readToolboxReservedHeight } from '../../eVe/domains/dashboard/dashboard_environment.js';
 import { MAIN_HANDLE_ICON } from '../../eVe/intuition/ribbon/tokens.js';
@@ -332,6 +333,47 @@ test('BevyUI main menu recomputes bottom placement after surface resize', async 
     }
 });
 
+test('BevyUI main menu cancels stale palette motion and stays bottom-anchored on visual viewport resize', async () => {
+    const content = {
+        toolbox: { children: ['capture'] },
+        capture: {
+            atome_tool: true,
+            label: 'capture',
+            icon: 'capture',
+            tool_id: 'tool.main.capture',
+            type: 'palette',
+            action: 'toggle',
+            children: ['video']
+        },
+        video: {
+            label: 'video',
+            icon: 'video_camera',
+            tool_id: 'ui.capture.video',
+            action: 'toggle'
+        }
+    };
+    const harness = createRuntimeHarness({ content });
+    const visualViewport = new harness.window.EventTarget();
+    Object.defineProperty(harness.window, 'visualViewport', {
+        configurable: true,
+        value: visualViewport
+    });
+    try {
+        const initialTree = await harness.runtime.showFully();
+        await findNode(initialTree.root, 'eve_bevy_ui_main_menu_tool_capture').on.activate();
+        assert.equal(harness.runtime.measure().paletteMotionActive, true);
+        harness.surface.setProbeRect({ width: 920, height: 640 });
+        visualViewport.dispatchEvent(new harness.window.Event('resize'));
+        await waitFrame();
+        const resizedTree = harness.calls.at(-1).payload.tree;
+        assert.equal(harness.runtime.measure().paletteMotionActive, false);
+        assert.equal(resizedTree.layout.y, 640 - resizedTree.layout.itemSize);
+    } finally {
+        harness.runtime.destroy();
+        harness.restore();
+    }
+});
+
 test('BevyUI main menu keeps fixed-size tools and scrolls horizontally when the surface is narrow', async () => {
     const toggles = [];
     const harness = createRuntimeHarness({ toggleDashboard: (payload) => toggles.push(payload) });
@@ -605,6 +647,87 @@ test('BevyUI main menu removes closed palette children so reopening starts from 
     } finally {
         harness.runtime.destroy();
         harness.restore();
+    }
+});
+
+test('BevyUI recording tools route the second activation as an off transition without a DOM latch', async () => {
+    const content = {
+        toolbox: { children: ['capture'] },
+        capture: {
+            atome_tool: true,
+            label: 'capture',
+            icon: 'capture',
+            tool_id: 'tool.main.capture',
+            type: 'palette',
+            action: 'toggle',
+            children: ['video']
+        },
+        video: {
+            atome_tool: true,
+            label: 'video',
+            icon: 'video_camera',
+            tool_id: 'ui.capture.video',
+            action: 'toggle'
+        }
+    };
+    const previousStates = [];
+    const harness = createRuntimeHarness({
+        content,
+        onInvoke: async (_definition, _eventName, payload) => {
+            previousStates.push(payload.previousLatched);
+            return { ok: true, nextLatched: payload.previousLatched !== true };
+        }
+    });
+    try {
+        const initialTree = await harness.runtime.showFully();
+        const capture = findNode(initialTree.root, 'eve_bevy_ui_main_menu_tool_capture');
+        assert.ok(capture);
+        await capture.on.activate();
+        await waitFrame();
+        const video = harness.calls
+            .map((call) => call.payload?.tree)
+            .filter(Boolean)
+            .map((tree) => findNode(tree.root, 'eve_bevy_ui_main_menu_tool_capture__video'))
+            .find(Boolean);
+        assert.ok(video);
+        await video.on.activate();
+        await video.on.activate();
+        assert.deepEqual(previousStates, [false, true]);
+        assert.equal(harness.runtime.getToolLatchedState({ toolId: 'ui.capture.video' }), false);
+    } finally {
+        harness.runtime.destroy();
+        harness.restore();
+    }
+});
+
+test('BevyUI invocation forwards its latch state as routing metadata, never tool input', async () => {
+    const env = installDom();
+    const invocations = [];
+    const runtime = createContextToolInvocationRuntime({
+        getFinderToolEl: () => null,
+        handleFinderTouch: () => null,
+        invokeToolFromUiButton: async (input) => {
+            invocations.push(input);
+            return { ok: true, nextLatched: false };
+        }
+    });
+    try {
+        const result = await runtime.invokeIntuitionXMainRibbonToolDefinition({
+            key: 'video',
+            toolId: 'ui.capture.video',
+            latch: true,
+            actionMode: 'toggle'
+        }, 'bevy_ui.activate', {
+            source: 'bevy_ui_main_menu',
+            itemId: 'eve_bevy_ui_main_menu_tool_capture__video',
+            previousLatched: true
+        });
+        assert.equal(result.nextLatched, false);
+        assert.equal(invocations.length, 1);
+        assert.equal(invocations[0].previousLatched, true);
+        assert.equal(Object.hasOwn(invocations[0].extraInput, 'previousLatched'), false);
+    } finally {
+        env.restore();
     }
 });
 

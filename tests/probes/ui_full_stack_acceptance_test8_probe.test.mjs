@@ -108,8 +108,8 @@ if (RUN_BROWSER) {
     {
       id: 'browser_audio_record_playback',
       label: 'Browser account creation, audio recording, audio decode/playable media',
-      file: 'tests/probes/audio_recording_quick_capture_probe.test.mjs',
-      report: 'temp/probe_reports/audio_recording_quick_capture_probe/report.json',
+      file: 'tests/probes/audio_recording_bevy_capture_probe.test.mjs',
+      report: 'temp/probe_reports/audio_recording_bevy_capture_probe/report.json',
       env: {
         ADOLE_TEST_URL: BROWSER_URL,
         ADOLE_TEST_PHONE: phoneFor('01'),

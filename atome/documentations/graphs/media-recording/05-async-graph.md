@@ -2,18 +2,34 @@
 
 ```mermaid
 flowchart TD
-  Batch["startRecorderBatch async\nrecord_capture_runtime.js:632"] --> Audio["await getUserMedia audio\nrecord_capture_runtime.js:647"]
-  Batch --> VideoReady["await ensureRecordActionVideoCaptureReady\nrecord_capture_runtime.js:687"]
-  Batch --> Video["await getUserMedia video\nrecord_capture_runtime.js:704"]
-  Batch --> Native["await createNativeVideoRecorderRuntime\nrecord_capture_runtime.js:669"]
-  Native --> StartNative["await startVideoRecordingSession\nrecord_capture_runtime.js:376"]
-  Stop["stopMediaRecorderRuntime async\nrecord_capture_runtime.js:402"] --> Race["Promise.race native stop/finalize timeout\nrecord_capture_runtime.js:418"]
-  Stop --> BrowserStop["recorder.stop event -> finalize promise\nrecord_capture_runtime.js:450"]
-  Stop --> Timeout["media_record_finalize_timeout\nrecord_capture_runtime.js:461"]:::risk
-  Finalize["finalizeTrackSession\nrecord_capture_runtime.js:1259"] --> StopAll["await Promise.all stop runtimes\nrecord_capture_runtime.js:1261"]
-  Persist["persistRecorderResultsToTracks\nrecord_capture_runtime.js:741"] --> User["await resolveCurrentUser\nrecord_capture_runtime.js:748"]
-  Persist --> Add["await addClipFromEntry\nrecord_capture_runtime.js:827"]
-  Persist --> VoidFlush["void flushActiveGroupTimelinePersist\nrecord_capture_runtime.js:854"]:::risk
+  Start["startAudioRecording promise"] --> Runtime["runtime capability and adapter selection"]
+  Runtime --> BrowserOpen["await getUserMedia + worklet module"]
+  Runtime --> NativeStart["await invoke or record_started event"]
+  NativeStart --> ExactStartValidation["validate explicit exact flag, render/host clocks\nepoch / timeline origin / rate"]
 
-  classDef risk fill:#ffd6d6,stroke:#a80000,color:#111
+  Stop["idempotent stop promise"] --> BrowserFlush["post flush(request_id)"]
+  BrowserFlush --> OrderedMessages["await ordered tail chunk then flush_ack"]
+  OrderedMessages --> BrowserValidate["validate all frames before cleanup"]
+  BrowserFlush --> FlushFailure["typed protocol/flush timeout failure"]:::failure
+
+  Stop --> NativeStop["await invoke result or record_done event"]
+  NativeStop --> ExactNormalize["validate actual playback + same-quantum observation\npositive input + output = roundtrip = applied offset\nplace at timeline origin - roundtrip"]
+  ExactNormalize --> DiscontinuityFailure["overrun, discontinuity, pull or capacity failure"]:::failure
+
+  BrowserValidate --> Persist["await local persistence and upload/queue decision"]
+  ExactNormalize --> Persist
+  Persist --> PersistRetry["retry same terminal payload\nand stable Atome/upload identity"]
+  PersistRetry --> Persist
+  FlushFailure --> Cleanup["deterministic cleanup; no partial success"]
+  DiscontinuityFailure --> Cleanup
+
+  NativeVideoOpen["await media_video_record_state"] --> NativeVideoRecover["recover active/cached lifecycle"]
+  NativeVideoRecover --> NativeVideoStop["bounded/coalesced stop or cancel"]
+  NativeVideoStop --> NativeVideoCommit["await durable project association"]
+  NativeVideoCommit --> NativeVideoAck["await media_video_record_ack"]
+  NativeVideoStop --> CleanupRetry["physical cleanup failed; retain retryable state"]:::failure
+
+  VideoExact["exact video start"] --> ImmediateReject["av_sample_accurate_overdub_unsupported"]:::failure
+
+  classDef failure fill:#ffd6d6,stroke:#a80000,color:#111
 ```

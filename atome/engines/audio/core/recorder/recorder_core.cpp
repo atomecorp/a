@@ -20,20 +20,21 @@ constexpr uint16_t kMaxChannels = 8;
 constexpr uint32_t kChunkFrames = 1024;
 constexpr uint32_t kRingSeconds = 4;
 
-enum class RecorderSource { Mic, Plugin };
+enum class RecorderSource { Mic, PluginOutput, PluginInput };
 
 RecorderSource parse_source(const char* source) {
   if (!source) return RecorderSource::Mic;
   const std::string s(source);
-  if (s == "plugin" || s == "plugin_output") return RecorderSource::Plugin;
+  if (s == "plugin" || s == "plugin_output") return RecorderSource::PluginOutput;
+  if (s == "plugin_input" || s == "input") return RecorderSource::PluginInput;
   return RecorderSource::Mic;
 }
 
-void write_wav_header(std::FILE* file,
+bool write_wav_header(std::FILE* file,
                       uint32_t sample_rate,
                       uint16_t channels,
                       uint32_t data_bytes) {
-  if (!file) return;
+  if (!file || std::fseek(file, 0, SEEK_SET) != 0) return false;
 
   const uint16_t audio_format = 1; // PCM
   const uint16_t bits_per_sample = 16;
@@ -42,21 +43,20 @@ void write_wav_header(std::FILE* file,
   const uint32_t riff_size = 36 + data_bytes;
   const uint32_t fmt_chunk_size = 16;
 
-  std::fseek(file, 0, SEEK_SET);
-  std::fwrite("RIFF", 1, 4, file);
-  std::fwrite(&riff_size, sizeof(riff_size), 1, file);
-  std::fwrite("WAVE", 1, 4, file);
-  std::fwrite("fmt ", 1, 4, file);
-  std::fwrite(&fmt_chunk_size, sizeof(fmt_chunk_size), 1, file);
-  std::fwrite(&audio_format, sizeof(audio_format), 1, file);
-  std::fwrite(&channels, sizeof(channels), 1, file);
-  std::fwrite(&sample_rate, sizeof(sample_rate), 1, file);
-  std::fwrite(&byte_rate, sizeof(byte_rate), 1, file);
-  std::fwrite(&block_align, sizeof(block_align), 1, file);
-  std::fwrite(&bits_per_sample, sizeof(bits_per_sample), 1, file);
-  std::fwrite("data", 1, 4, file);
-  std::fwrite(&data_bytes, sizeof(data_bytes), 1, file);
-  std::fflush(file);
+  const bool written = std::fwrite("RIFF", 1, 4, file) == 4
+      && std::fwrite(&riff_size, sizeof(riff_size), 1, file) == 1
+      && std::fwrite("WAVE", 1, 4, file) == 4
+      && std::fwrite("fmt ", 1, 4, file) == 4
+      && std::fwrite(&fmt_chunk_size, sizeof(fmt_chunk_size), 1, file) == 1
+      && std::fwrite(&audio_format, sizeof(audio_format), 1, file) == 1
+      && std::fwrite(&channels, sizeof(channels), 1, file) == 1
+      && std::fwrite(&sample_rate, sizeof(sample_rate), 1, file) == 1
+      && std::fwrite(&byte_rate, sizeof(byte_rate), 1, file) == 1
+      && std::fwrite(&block_align, sizeof(block_align), 1, file) == 1
+      && std::fwrite(&bits_per_sample, sizeof(bits_per_sample), 1, file) == 1
+      && std::fwrite("data", 1, 4, file) == 4
+      && std::fwrite(&data_bytes, sizeof(data_bytes), 1, file) == 1;
+  return written && std::fflush(file) == 0 && std::ferror(file) == 0;
 }
 
 char* dup_cstr(const std::string& s) {
@@ -96,7 +96,11 @@ public:
       return false;
     }
 
-    write_wav_header(file, sr, ch, 0);
+    if (!write_wav_header(file, sr, ch, 0)) {
+      std::fclose(file);
+      err = "Unable to write WAV header";
+      return false;
+    }
 
     const uint32_t ring_frames = std::max<uint32_t>(kChunkFrames * 2, sr * kRingSeconds);
     mRing.reset(new atome::RingBuffer(ch, static_cast<int>(ring_frames)));
@@ -105,7 +109,12 @@ public:
     mChannels = ch;
     mSource = source;
     mTotalFrames = 0;
-    mRunning.store(true);
+    mOverrunFrames.store(0, std::memory_order_relaxed);
+    mDiscontinuityFrames.store(0, std::memory_order_relaxed);
+    mWriteFailed.store(false, std::memory_order_relaxed);
+    mActivePushes.store(0, std::memory_order_seq_cst);
+    mProducerDrained.store(false, std::memory_order_release);
+    mRunning.store(true, std::memory_order_seq_cst);
     mScratch.assign(ch, std::vector<float>(kChunkFrames, 0.0f));
     mScratchPtrs.assign(ch, nullptr);
     for (uint16_t c = 0; c < ch; ++c) mScratchPtrs[c] = mScratch[c].data();
@@ -114,66 +123,139 @@ public:
     return true;
   }
 
-  bool stop(std::string& err, double* out_duration) {
+  bool stop(std::string& err,
+            double* out_duration,
+            uint64_t* out_frame_count,
+            uint64_t* out_overrun_frames,
+            uint64_t* out_discontinuity_frames) {
     std::unique_lock<std::mutex> lock(mMutex);
     if (!mRunning.load()) {
       err = "Recorder is not running";
       return false;
     }
 
-    mRunning.store(false);
+    mRunning.store(false, std::memory_order_seq_cst);
     lock.unlock();
+
+    while (mActivePushes.load(std::memory_order_seq_cst) != 0) {
+      std::this_thread::yield();
+    }
+    mProducerDrained.store(true, std::memory_order_release);
 
     if (mWriterThread.joinable()) {
       mWriterThread.join();
     }
 
     lock.lock();
+    const uint64_t data_bytes_64 = mTotalFrames * mChannels * sizeof(int16_t);
+    if (data_bytes_64 > UINT32_MAX) {
+      mWriteFailed.store(true, std::memory_order_relaxed);
+      err = "Recording exceeds the WAV 32-bit data limit";
+    }
     if (mFile) {
-      const uint32_t data_bytes = static_cast<uint32_t>(mTotalFrames * mChannels * sizeof(int16_t));
-      write_wav_header(mFile, mSampleRate, mChannels, data_bytes);
-      std::fclose(mFile);
+      const uint32_t data_bytes = data_bytes_64 <= UINT32_MAX
+          ? static_cast<uint32_t>(data_bytes_64)
+          : 0;
+      if (!write_wav_header(mFile, mSampleRate, mChannels, data_bytes)) {
+        mWriteFailed.store(true, std::memory_order_relaxed);
+      }
+      if (std::fclose(mFile) != 0) {
+        mWriteFailed.store(true, std::memory_order_relaxed);
+      }
       mFile = nullptr;
     }
 
+    const uint64_t frame_count = mTotalFrames;
+    const uint64_t overrun_frames = mOverrunFrames.load(std::memory_order_relaxed);
+    const uint64_t discontinuity_frames = mDiscontinuityFrames.load(std::memory_order_relaxed);
     if (out_duration) {
-      *out_duration = mSampleRate > 0 ? static_cast<double>(mTotalFrames) / static_cast<double>(mSampleRate) : 0.0;
+      *out_duration = mSampleRate > 0 ? static_cast<double>(frame_count) / static_cast<double>(mSampleRate) : 0.0;
     }
+    if (out_frame_count) *out_frame_count = frame_count;
+    if (out_overrun_frames) *out_overrun_frames = overrun_frames;
+    if (out_discontinuity_frames) *out_discontinuity_frames = discontinuity_frames;
+
+    if (mWriteFailed.load(std::memory_order_relaxed) && err.empty()) {
+      err = "Recorder file write failed";
+    }
+    if (overrun_frames > 0 && err.empty()) {
+      err = "Recorder input overrun: " + std::to_string(overrun_frames) + " frames lost";
+    }
+    if (discontinuity_frames > 0 && err.empty()) {
+      err = "Recorder input discontinuity: " + std::to_string(discontinuity_frames) + " frames lost";
+    }
+    if (frame_count == 0 && err.empty()) {
+      err = "Recording contains no audio frames";
+    }
+    const bool valid = err.empty();
 
     mRing.reset();
     mTotalFrames = 0;
-    return true;
+    mOverrunFrames.store(0, std::memory_order_relaxed);
+    mDiscontinuityFrames.store(0, std::memory_order_relaxed);
+    mWriteFailed.store(false, std::memory_order_relaxed);
+    mProducerDrained.store(false, std::memory_order_relaxed);
+    return valid;
   }
 
   void push(const float* const* data, uint16_t channels, uint32_t frames) {
-    if (!mRunning.load() || !mRing || !data || frames == 0) return;
-    const uint16_t ch = std::min<uint16_t>(channels, mChannels);
-    const float* const* ptr = data;
-    mRing->push(ptr, ch, static_cast<int>(frames));
+    if (!begin_input_operation()) return;
+    if (!mRing || !data || frames == 0) return end_input_operation();
+    if (channels != mChannels) {
+      mDiscontinuityFrames.fetch_add(static_cast<uint64_t>(frames), std::memory_order_relaxed);
+      return end_input_operation();
+    }
+    for (uint16_t channel = 0; channel < channels; ++channel) {
+      if (!data[channel]) {
+        mDiscontinuityFrames.fetch_add(static_cast<uint64_t>(frames), std::memory_order_relaxed);
+        return end_input_operation();
+      }
+    }
+    const int written = mRing->push(data, channels, static_cast<int>(frames));
+    if (written < static_cast<int>(frames)) {
+      mOverrunFrames.fetch_add(static_cast<uint64_t>(frames - written), std::memory_order_relaxed);
+    }
+    end_input_operation();
   }
 
   void push_interleaved(const float* data, uint16_t channels, uint32_t frames) {
-    if (!mRunning.load() || !mRing || !data || frames == 0) return;
-    const uint16_t ch = std::min<uint16_t>(channels, mChannels);
-    if (ch == 0) return;
+    if (!begin_input_operation()) return;
+    if (!mRing || !data || frames == 0) return end_input_operation();
+    if (channels != mChannels) {
+      mDiscontinuityFrames.fetch_add(static_cast<uint64_t>(frames), std::memory_order_relaxed);
+      return end_input_operation();
+    }
 
-    if (mScratch.size() != ch || mScratchPtrs.size() != ch) return;
+    if (mScratch.size() != channels || mScratchPtrs.size() != channels) {
+      mDiscontinuityFrames.fetch_add(static_cast<uint64_t>(frames), std::memory_order_relaxed);
+      return end_input_operation();
+    }
 
     uint32_t offset = 0;
     while (offset < frames) {
       const uint32_t remaining = frames - offset;
       const uint32_t chunk = remaining > kChunkFrames ? kChunkFrames : remaining;
 
-      const float* src = data + offset * ch;
+      const float* src = data + offset * channels;
       for (uint32_t f = 0; f < chunk; ++f) {
-        for (uint16_t c = 0; c < ch; ++c) {
-          mScratch[c][f] = src[f * ch + c];
+        for (uint16_t c = 0; c < channels; ++c) {
+          mScratch[c][f] = src[f * channels + c];
         }
       }
 
-      mRing->push(mScratchPtrs.data(), ch, static_cast<int>(chunk));
+      const int written = mRing->push(mScratchPtrs.data(), channels, static_cast<int>(chunk));
+      if (written < static_cast<int>(chunk)) {
+        mOverrunFrames.fetch_add(static_cast<uint64_t>(chunk - written), std::memory_order_relaxed);
+      }
       offset += chunk;
     }
+    end_input_operation();
+  }
+
+  void report_discontinuity(uint32_t frames) {
+    if (frames == 0 || !begin_input_operation()) return;
+    mDiscontinuityFrames.fetch_add(static_cast<uint64_t>(frames), std::memory_order_relaxed);
+    end_input_operation();
   }
 
   bool is_recording() const {
@@ -185,6 +267,17 @@ public:
   }
 
 private:
+  bool begin_input_operation() {
+    mActivePushes.fetch_add(1, std::memory_order_seq_cst);
+    if (mRunning.load(std::memory_order_seq_cst)) return true;
+    mActivePushes.fetch_sub(1, std::memory_order_seq_cst);
+    return false;
+  }
+
+  void end_input_operation() {
+    mActivePushes.fetch_sub(1, std::memory_order_seq_cst);
+  }
+
   void start_writer() {
     mWriterThread = std::thread([this]() {
       std::vector<std::vector<float>> buffers;
@@ -211,13 +304,15 @@ private:
           if (mFile) {
             const size_t written = std::fwrite(interleaved.data(), sizeof(int16_t),
                                               static_cast<size_t>(frame_count * mChannels), mFile);
-            (void)written;
+            if (written != static_cast<size_t>(frame_count * mChannels)) {
+              mWriteFailed.store(true, std::memory_order_relaxed);
+            }
           }
           mTotalFrames += static_cast<uint64_t>(frame_count);
           continue;
         }
 
-        if (!mRunning.load()) {
+        if (mProducerDrained.load(std::memory_order_acquire)) {
           break;
         }
 
@@ -235,6 +330,11 @@ private:
   std::thread mWriterThread;
   std::mutex mMutex;
   uint64_t mTotalFrames{0};
+  std::atomic<uint64_t> mOverrunFrames{0};
+  std::atomic<uint64_t> mDiscontinuityFrames{0};
+  std::atomic<bool> mWriteFailed{false};
+  std::atomic<uint32_t> mActivePushes{0};
+  std::atomic<bool> mProducerDrained{false};
   std::vector<std::vector<float>> mScratch;
   std::vector<float*> mScratchPtrs;
 };
@@ -261,10 +361,18 @@ bool squirrel_recorder_core_start(const char* abs_wav_path,
   return ok;
 }
 
-bool squirrel_recorder_core_stop(char** err_out, double* out_duration_sec) {
+bool squirrel_recorder_core_stop(char** err_out,
+                                 double* out_duration_sec,
+                                 uint64_t* out_frame_count,
+                                 uint64_t* out_overrun_frames,
+                                 uint64_t* out_discontinuity_frames) {
   if (err_out) *err_out = nullptr;
   std::string err;
-  const bool ok = recorder().stop(err, out_duration_sec);
+  const bool ok = recorder().stop(err,
+                                  out_duration_sec,
+                                  out_frame_count,
+                                  out_overrun_frames,
+                                  out_discontinuity_frames);
   if (!ok && err_out) *err_out = dup_cstr(err.empty() ? "Recorder stop failed" : err);
   return ok;
 }
@@ -287,6 +395,10 @@ void squirrel_recorder_core_push_interleaved(const float* data,
                                              uint16_t channels,
                                              uint32_t frames) {
   recorder().push_interleaved(data, channels, frames);
+}
+
+void squirrel_recorder_core_report_discontinuity(uint32_t frames) {
+  recorder().report_discontinuity(frames);
 }
 
 void squirrel_string_free(char* s) {

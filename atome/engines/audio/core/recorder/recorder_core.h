@@ -12,7 +12,11 @@ bool squirrel_recorder_core_start(const char* abs_wav_path,
                                  const char* source,
                                  char** err_out);
 
-bool squirrel_recorder_core_stop(char** err_out, double* out_duration_sec);
+bool squirrel_recorder_core_stop(char** err_out,
+                                 double* out_duration_sec,
+                                 uint64_t* out_frame_count,
+                                 uint64_t* out_overrun_frames,
+                                 uint64_t* out_discontinuity_frames);
 
 bool squirrel_recorder_core_is_recording(void);
 
@@ -27,6 +31,10 @@ void squirrel_recorder_core_push(const float* const* data,
 void squirrel_recorder_core_push_interleaved(const float* data,
                                              uint16_t channels,
                                              uint32_t frames);
+
+// Report frames that could not be pulled from the render input. Any non-zero
+// discontinuity makes the recording invalid at stop.
+void squirrel_recorder_core_report_discontinuity(uint32_t frames);
 
 void squirrel_string_free(char* s);
 

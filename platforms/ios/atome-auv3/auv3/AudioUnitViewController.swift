@@ -10,7 +10,7 @@ import WebKit
 import AVFoundation
 import OSLog
 
-public class AudioUnitViewController: AUViewController, AUAudioUnitFactory, AudioControllerProtocol, AudioDataDelegate, TransportDataDelegate {
+public class AudioUnitViewController: AUViewController, AUAudioUnitFactory, AudioControllerProtocol, TransportDataDelegate {
     var audioUnit: AUAudioUnit?
     var webView: WKWebView!
     
@@ -27,9 +27,6 @@ public class AudioUnitViewController: AUViewController, AUAudioUnitFactory, Audi
     public var isTestActive: Bool { return _isTestActive }
     public var currentTestFrequency: Double { return _currentTestFrequency }
     
-    // ULTRA AGGRESSIVE: Rate limiting for WebView updates (for maximum performance)
-    private var lastWebViewUpdate: TimeInterval = 0
-    private var webViewUpdateInterval: TimeInterval = 1.0 / 2.0 // ULTRA: Reduced to 2 FPS for maximum performance (instead of 5)
     private let log = Logger(subsystem: "atome", category: "AUv3View")
     private var didAppearOnce = false
     private var initialLoadScheduled = false
@@ -198,7 +195,6 @@ public class AudioUnitViewController: AUViewController, AUAudioUnitFactory, Audi
     if let au = audioUnit as? auv3Utils {
             au.mute = false  // CORRECTION: Démarrer NON muté pour entendre l'audio
             _isMuted = false
-            au.audioDataDelegate = self
             au.transportDataDelegate = self // AJOUT: Connexion du delegate transport
             print("🔊 AUv3 Audio Unit démarré NON MUTÉ")
         }
@@ -226,66 +222,6 @@ public class AudioUnitViewController: AUViewController, AUAudioUnitFactory, Audi
     }
   
  
-    // MARK: - Audio Data Delegate
-    
-    public func didReceiveAudioData(_ data: [Float], timestamp: Double) {
-        let currentTime = CACurrentMediaTime()
-        if currentTime - lastWebViewUpdate >= webViewUpdateInterval {
-            // ULTRA-AGGRESSIVE: Only process if audio is significant
-            let quickPeak = data.max() ?? 0
-            if abs(quickPeak) > 0.005 { // Only process if audio is above threshold
-                
-                // Calculate minimal audio metrics
-                let audioMetrics = processAudioData(data)
-                
-                // Minimal data structure - avoid dictionary merging
-                let audioData: [String: Any] = [
-                    "peak": audioMetrics["peak"] ?? 0,
-                    "rms": audioMetrics["rms"] ?? 0,
-                    "timestamp": timestamp,
-                    "testFreq": _currentTestFrequency,
-                    "testActive": _isTestActive
-                ]
-                
-                // Direct JSON conversion without error handling for performance
-                if let jsonData = try? JSONSerialization.data(withJSONObject: audioData),
-                   let jsonString = String(data: jsonData, encoding: .utf8) {
-                    WebViewManager.sendToJS(jsonString, "updateAudioVisualization")
-                }
-            }
-            
-            lastWebViewUpdate = currentTime
-        }
-    }
-    
-    private func processAudioData(_ data: [Float]) -> [String: Any] {
-        // ULTRA-AGGRESSIVE: Process only every 32nd sample for extreme CPU savings
-        let dataCount = data.count
-        guard dataCount > 0 else {
-            return ["rms": 0, "peak": 0, "zeroCrossings": 0]
-        }
-        
-        // Sample only every 32nd element for massive CPU reduction
-        let strideSize = max(32, dataCount / 64) // Maximum 64 samples analyzed
-        var peak: Float = 0
-        var sampleCount = 0
-        
-        // Only track peak - eliminate RMS and zero crossing calculations for maximum performance
-        for i in stride(from: 0, to: dataCount, by: strideSize) {
-            let absSample = abs(data[i])
-            if absSample > peak {
-                peak = absSample
-            }
-            sampleCount += 1
-            
-            // Break early if we have enough samples
-            if sampleCount >= 32 { break }
-        }
-        
-        // Return minimal metrics for maximum performance
-        return ["peak": peak, "rms": peak * 0.7] // Approximate RMS from peak
-    }
-    
     // MARK: - AudioControllerProtocol - Audio Commands (JS to MIDI routing)
     
     public func playNote(frequency: Double, note: String, amplitude: Float) {

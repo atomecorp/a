@@ -1,79 +1,57 @@
-# Open Questions - molecule
+# Open Questions - Molecule Recording
 
-## UNKNOWN-001
-
-Question:
-`window.Molecule` existe-t-il dans une autre zone que `eVe/intuition/tools/molecule` ?
-
-Pourquoi c'est important:
-Le prompt demande de verifier `window.Molecule`, mais aucune affectation directe n'a ete trouvee dans les fichiers molecule inspectes.
-
-Fichiers concernes:
-- eVe/intuition/tools/molecule/index.js
-- eVe/intuition/tools/molecule/runtime.js
-- eVe/domains/mtrax/api/window_api_runtime.js
-
-Comment verifier:
-Chercher globalement `window.Molecule`, `Molecule =`, `eveMoleculeTimelineApi` et les appels depuis le boot.
-
-## UNKNOWN-002
+## OPEN-001 - Exact video clock mapping
 
 Question:
-`atome_mtrack_open_request` declenche-t-il encore une creation concurrente de molecule/mtrax ?
 
-Pourquoi c'est important:
-Le bloc molecule est cense respecter `1 intention utilisateur -> 1 molecule_creation_id -> 1 MoleculeSession complete`; l'ancien chemin mtrax peut contourner ce principe.
+Which backend-owned mapping will translate every video/container PTS into an integer audio-sample position in the same identified and locked epoch?
 
-Fichiers concernes:
-- eVe/intuition/tools/mtrack.js
-- eVe/domains/mtrax/api/window_api_runtime.js
-- eVe/intuition/runtime/eve_intuition/mtrax_bridge_runtime.js
+Why it matters:
 
-Comment verifier:
-Cartographier `runtime-api` et `panel-lifecycle`, puis comparer les evenements d'ouverture.
+Nominal frame rate, file duration, and encoded frame count do not prove exact A/V placement. The mapping must account for variable frame rate, encoder reordering, dropped/duplicated frames, capture latency, and discontinuities.
 
-## UNKNOWN-003
+Current decision:
 
-Question:
-Quelle route est l'autorite officielle entre `openGroupTimeline` et `createMoleculeMultiInstanceController.openInstance` ?
+Exact video returns `av_sample_accurate_overdub_unsupported` with reason
+`video_pts_audio_sample_mapping_unavailable`. Generic browser/native video recording remains
+available without a synthesized live viewfinder.
 
-Pourquoi c'est important:
-Les deux routes creent des sessions et ouvrent des panneaux sans partager la meme map d'instances.
+Exit evidence:
 
-Fichiers concernes:
-- eVe/intuition/tools/molecule/runtime.js
-- eVe/intuition/tools/molecule/multi_instance/index.js
-- eVe/intuition/tools/molecule/session/registry.js
+- a documented PTS-to-audio-frame contract;
+- one clock id/reference/epoch across start and stop;
+- deterministic integer clip ranges;
+- long-duration hardware tests with zero unreported drift/discontinuity.
 
-Comment verifier:
-Trouver tous les imports/appels de `installMoleculeGroupTimelineRuntime`, `openGroupTimeline`, `createMoleculeMultiInstanceController` et `openInstance`.
-
-## UNKNOWN-004
+## OPEN-002 - AUv3 hardware calibration envelope
 
 Question:
-Quelle strategie doit etre appliquee quand `openMoleculePanel` echoue apres `projectStore.saveTimeline` ?
 
-Pourquoi c'est important:
-Sans rollback, une timeline peut etre persistee sans session/panneau stable.
+What device/sample-rate/buffer-size matrix is required to certify AUv3 `plugin_input` exact overdub in production?
 
-Fichiers concernes:
-- eVe/intuition/tools/molecule/runtime.js
-- eVe/intuition/tools/molecule/panel/index.js
+Why it matters:
 
-Comment verifier:
-Tester les erreurs `ANCHOR_NOT_FOUND`, `TOOLS_RUNTIME_REQUIRED` et regarder l'etat persiste apres echec.
+The software contract rejects mismatched epochs, sample rates, overruns, and discontinuities, but production certification still needs long-running hardware evidence across supported configurations.
 
-## UNKNOWN-005
+Current decision:
 
-Question:
-La fermeture UI doit-elle fermer la session ou seulement masquer le panneau ?
+Exact capability remains limited to explicitly requested `plugin_input`, captured inside
+the same AUv3 render quantum with `auv3.render`, placed from the `auv3.host_transport`
+timeline origin, and locked to one `clock_epoch`.
 
-Pourquoi c'est important:
-Le bouton close actuel appelle `closeMoleculePanel`; `closeGroupTimeline` fait le cleanup complet.
+Exit evidence:
 
-Fichiers concernes:
-- eVe/intuition/tools/molecule/panel/index.js
-- eVe/intuition/tools/molecule/runtime.js
+- loopback/overdub measurements over long takes;
+- verified actual playback start and `playback_observed_frame == recording_start_frame`;
+- verified strictly positive latency compensation;
+- verified `input_latency_frames + output_latency_frames = roundtrip_latency_frames = record_offset_frames_applied` and `timeline_origin_frame - roundtrip_latency_frames` placement on every certified configuration;
+- zero accumulated sample drift;
+- explicit coverage of supported sample rates and render quantum sizes.
 
-Comment verifier:
-Observer le comportement attendu par les tests UX et les specs molecule.
+## Locked, not open
+
+- Browser, desktop/Tauri, iOS app, AUv3 microphone, and AUv3 plug-in output/mix exact requests stay rejected.
+- Their supported generic recording paths remain usable.
+- Media Atome persistence precedes clip commit.
+- Molecule recording exposes `read/start/stop/cancel/dispose`.
+- The product has one Bevy/WebGPU renderer and no parallel product DOM/native preview surface; no static/fake WebGPU frame stands in for an unavailable camera viewfinder.

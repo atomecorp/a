@@ -1,8 +1,9 @@
-# Atome Audio Engine — Unified Native Audio
+# Atome Audio Engine — Unified Audio Contract
 
 ## Overview
 
-The Atome audio engine is now moving from a fragmented set of runtime-specific audio implementations to a single logical audio system with runtime-specific native backends.
+The Atome audio engine is moving from fragmented runtime-specific implementations to one
+logical contract with explicit native and browser adapters.
 
 The original Rust engine remains the foundation for Tauri desktop and cross-platform native playback/recording:
 
@@ -14,7 +15,7 @@ In parallel, AUv3 and iOS now expose the same unified playback/record/debug cont
 - audio playback
 - video audio playback
 - microphone recording
-- plugin-output recording
+- generic plugin-output recording and exact plugin-input recording
 - metering / debug / validation
 
 This target must be true in the following runtime contexts:
@@ -25,54 +26,58 @@ This target must be true in the following runtime contexts:
 
 The rule going forward is simple:
 
-> Every feature that emits or records audio must converge on the unified native audio engine, even if the UI layer, transport layer, or media decoding layer differs by runtime.
+> Every feature that emits or records audio must converge on the canonical audio contract. Runtime adapters may differ, but an adapter may claim sample-accurate overdub only when playback and capture expose the same measured render clock and epoch.
 
 ## Targets and Backends
 
-| Target | Backend | Playback | Recording | Status |
-|--------|---------|----------|-----------|--------|
-| macOS (Tauri) | Rust `CPAL + Kira` | native | native | existing foundation |
-| iOS app (Tauri shell) | native bridge / unified playback contract | native | native | aligned with new runtime contract |
-| iOS AUv3 | Swift native render + recorder bridge | native | native | sample-accurate validation now passing |
-| Web served by Fastify (FreeBSD) | Kira WASM + canonical web capture adapter | WASM | canonical web capture adapter | required target |
-| FreeBSD / Tauri native host | native backend with system audio dependencies | native | native | runtime prerequisites must be provisioned |
-| Android (Tauri) | CPAL / native backend | native | native | planned through Rust path |
-| Web (browser) | Kira WASM | WASM | canonical web capture adapter | required target |
-| Windows | WASAPI | native | native | Rust path |
-| Linux | ALSA / PipeWire | native | native | Rust path |
+| Target | Backend | Generic recording | Exact overdub | Proven timing boundary |
+|--------|---------|------------------|---------------|------------------------|
+| macOS / Windows / Linux / FreeBSD Tauri | Rust native recorder + Kira playback | yes | no | no common playback/record epoch exposed by the public contract |
+| iOS app | native recorder bridge | yes | no | app capture is not mapped to the AUv3 render clock |
+| iOS AUv3, microphone | Swift microphone recorder | yes | no | microphone frames are not mapped to plugin render frames |
+| iOS AUv3, plugin output (`plugin`) | Swift render-path output recorder | yes | no | generic output capture only |
+| iOS AUv3, plugin input (`plugin_input`) | same-quantum render-input recorder | yes | yes, after strict validation | `auv3.render` capture clock + `auv3.host_transport` timeline clock + matching `clock_epoch` |
+| Browser served by Fastify / Web | `getUserMedia` + recording-only `AudioWorklet` | yes | no | exact local `AudioContext` frames, not a Kira-shared clock |
+| Browser or native video | media/container recorder | yes | no | PTS-to-audio-sample mapping is unavailable |
+| Android | planned native adapter | planned | no proven support | capability remains unsupported until a common clock contract exists |
 
 ## Architecture
 
-The architecture is now a single logical audio stack with multiple native execution paths:
+The architecture is one logical audio stack with runtime-owned execution paths:
 
 ```text
 ┌─ JavaScript ───────────────────────────────────────────────────────────┐
 │  Squirrel.av.audio / runtime media APIs                               │
-│  audio_engine_debug_runtime.js                                        │
-│  record_audio_api.js                                               │
+│  sample_accurate_recording.js / record_audio_api.js                  │
 │                                                                       │
 │  Responsibilities:                                                    │
 │  - transport commands                                                 │
-│  - fixture generation / debug suite                                   │
 │  - runtime selection                                                  │
-│  - sample-accuracy assessment                                         │
+│  - typed capability and integer-frame validation                      │
 └───────────────────────────────────────────────────────────────────────┘
                                   │
-                ┌─────────────────┴─────────────────┐
-                │                                   │
-┌─ Tauri / Native App ─────────────────────┐  ┌─ AUv3 / iOS Plugin ──────────────┐
+          ┌───────────────────────┼───────────────────────┐
+          │                       │                       │
+┌─ Tauri / Native App ────────────┐  ┌─ AUv3 / iOS Plugin ──────────────┐
 │ Rust audio engine                        │  │ Swift bridge + native render path │
 │ platforms/desktop-tauri/src/audio_engine               │  │ platforms/ios/atome-auv3/Common/WebViewManager    │
 │ - playback.rs (Kira)                     │  │ platforms/ios/atome-auv3/auv3/AudioUnit...        │
-│ - recorder.rs (CPAL)                     │  │ platforms/ios/atome-auv3/auv3/utils.swift         │
+│ - recorder.rs (CPAL)                     │  │ AUv3Recorder.swift / AUv3RenderEngine.swift       │
 │ - metering.rs                            │  │                                   │
 │ - bridge.rs                              │  │ Responsibilities:                 │
 │                                          │  │ - accept JS PCM buffers           │
 │ Responsibilities:                        │  │ - inject them in render graph     │
 │ - clip loading                           │  │ - capture playback / record frame │
 │ - playback                               │  │ - emit record_done analysis       │
-│ - recording                              │  │ - expose sample-accurate metrics  │
+│ - recording                              │  │ - expose plugin_input exact fields│
 └──────────────────────────────────────────┘  └───────────────────────────────────┘
+                                  ┌─ Browser Capture ───────────────────┐
+                                  │ getUserMedia + AudioContext         │
+                                  │ recording-only AudioWorklet         │
+                                  │ - numbered continuous PCM chunks    │
+                                  │ - explicit tail flush + flush_ack   │
+                                  │ - no Kira-shared clock claim        │
+                                  └─────────────────────────────────────┘
 ```
 
 ## Current Direction
@@ -96,13 +101,14 @@ The new direction is:
 
 1. keep one JavaScript-facing contract
 2. drive one native audio engine per runtime
-3. make sample-accurate verification part of the engine contract
+3. make sample-accurate verification mandatory for paths that request exact overdub
 4. route both audio clips and video soundtrack playback through the same engine
 
 An important consequence is that web playback and capture remain two explicit
-responsibilities behind the same canonical public contract. Browser media acquisition
-may use platform capture primitives inside the approved adapter, but it must not create
-a WebAudio/AudioWorklet engine, alternate product path, or runtime fallback.
+responsibilities behind the same canonical public contract. The browser recorder does
+create a minimal `AudioContext`/`AudioWorklet` graph for capture, frame accounting and
+tail flushing. That graph is recording-only: it is not a second playback engine and it
+does not make the browser recorder share Kira's clock.
 
 ## Files
 
@@ -117,12 +123,24 @@ a WebAudio/AudioWorklet engine, alternate product path, or runtime fallback.
 | `platforms/web/audio-wasm/src/lib.rs` | WASM build of the engine |
 | `atome/src/application/audio_runtime/backend.kira.js` | JS backend for Rust / native engine usage |
 | `atome/src/application/audio_runtime/audio.facade.js` | Public audio facade |
-| `eVe/intuition_/tools/audio_engine_debug_runtime.js` | debug suite, fixture playback, sample-accuracy assessment, suite aggregation |
-| `platforms/ios/atome-auv3/Common/WebViewManager.swift` | JS → Swift bridge for AUv3 audio commands and PCM injection |
+| `tests/atome/audio_sample_accurate_recording.test.mjs` | exact capability, clock, latency, and placement contract |
+| `tests/atome/record_audio_auv3_clock_contract.test.mjs` | AUv3 event timing and terminal cleanup contract |
+| `platforms/ios/atome-auv3/Common/WebViewManager.swift` | shared WebView setup/composition state and injected native bridge bootstrap |
+| `platforms/ios/atome-auv3/Common/WebViewManagerScriptMessages.swift` | WK script-message dispatch and local media-path normalization |
+| `platforms/ios/atome-auv3/Common/WebViewManagerAudioTransport.swift` | audio/MIDI commands, PCM injection, and host time/transport streams |
+| `platforms/ios/atome-auv3/Common/WebViewManagerNavigation.swift` | navigation lifecycle and bounded native media-permission delegation |
+| `platforms/ios/atome-auv3/Common/WebViewManagerIPC.swift` | serialized native-invoke responses, JS dispatch throttling, readiness queue, and safe mode |
 | `platforms/ios/atome-auv3/Common/AudioControllerProtocol.swift` | common contract for playback / stop / debug expected peak propagation |
 | `platforms/ios/atome-auv3/auv3/AudioUnitViewController.swift` | AUv3 controller exposing the audio controller to the WebView bridge |
-| `platforms/ios/atome-auv3/auv3/utils.swift` | AUv3 native render path, JS audio mix, record events, frame tracking |
+| `platforms/ios/atome-auv3/auv3/utils.swift` | AUv3 shared render/record state and clock epoch |
+| `platforms/ios/atome-auv3/auv3/AUv3Recorder.swift` | record start/stop events and contractual frame/health payload |
+| `platforms/ios/atome-auv3/auv3/AUv3RenderEngine.swift` | same-quantum `plugin_input` pull and discontinuity accounting |
 | `atome/src/application/audio_runtime/record_audio_api.js` | recording entry point that must converge to the unified engine |
+| `atome/src/application/audio_runtime/sample_accurate_recording.js` | exact capability gate and result normalizer |
+| `eVe/domains/media/api/audio_api.js` | public recording controller and Molecule capture adapter |
+| `eVe/domains/media/api/audio_core_record.js` | browser worklet recorder and native recording facade |
+| `eVe/domains/media/api/audio_core_helpers.js` | browser chunk/flush/clock validation and PCM/WAV helpers |
+| `eVe/domains/media/api/video_api_record.js` | generic video capture and explicit exact-overdub rejection |
 
 ## JavaScript API
 
@@ -155,20 +173,66 @@ Squirrel.av.audio.destroy_clip('track1');
 
 ### Recording
 
-Recording is accessed via the native engine commands and must become the only production recording route:
+Feature code uses `startAudioRecording` / `stopAudioRecording` from
+`eVe/domains/media/api/audio_api.js`. `record_audio_api.js` and
+`audio_core_record.js` route that canonical request to the runtime-owned adapter; feature
+code does not invoke Tauri, Swift, `MediaRecorder` or `AudioWorklet` directly.
 
 ```javascript
-await window.__TAURI__.core.invoke('audio_record_start', {
-  sessionId: 'rec1',
-  filePath: 'data/users/me/recordings/take1.wav',
-  sampleRate: 44100,
-  channels: 1
-});
+const started = await startAudioRecording({ fileName: 'take1.wav' });
+if (!started.ok) throw new Error(started.error);
 
-const result = await window.__TAURI__.core.invoke('audio_record_stop', {
-  sessionId: 'rec1'
-});
+const stopped = await stopAudioRecording();
+if (!stopped.ok) throw new Error(stopped.error);
+
+const { sample_rate, frame_count } = stopped.result;
+const duration_sec = frame_count / sample_rate;
 ```
+
+Generic recording stays available on browser, desktop/Tauri, iOS app, AUv3 microphone,
+AUv3 plugin output and plugin input. It does not imply exact overdub.
+
+Exact recording is opt-in through `require_sample_accurate: true`. Molecule resolves the
+capability through `eveMoleculeRecordingCaptureAdapter` before start. The only supported
+combination is audio from AUv3 `plugin_input`, pulled in the same render quantum, with:
+
+```javascript
+{
+  source: 'plugin_input',
+  clock_id: 'auv3.render',
+  clock_reference: 'record_start_render_quantum',
+  timeline_clock_id: 'auv3.host_transport',
+  timeline_start_frame,
+  timeline_sample_rate,
+  require_sample_accurate: true
+}
+```
+
+The public snake-case flag is normalized to the explicit native bridge field
+`requireSampleAccurate: true`. Exact mode is never inferred from `plugin_input`, frame
+metadata, or a successful generic capture.
+
+An exact request on desktop/Tauri, iOS app, browser, AUv3 microphone, generic AUv3
+`plugin` output or any video source is rejected with
+`av_sample_accurate_overdub_unsupported`. Callers may retry as a generic
+recording only by deliberately dropping the exact requirement; there is no silent
+downgrade.
+
+### Native stop and terminal cleanup
+
+The native recorder has one producer/consumer finalization boundary. `stop` closes
+producer admission, waits until every render push that was already in flight has left the
+producer boundary, marks the producer drained, then lets the writer empty the ring before
+joining it and rewriting the WAV header. The final accepted render quantum is therefore
+included in `frame_count`; header size, duration, written frames, overrun frames, and
+discontinuity frames all describe the same drained payload.
+
+If native stop has already produced a file but timing/protocol validation makes that
+result terminal, the controller enters `finalization_failed`. A later explicit discard
+uses the existing `AtomeFileSystem.deleteFile` boundary on the returned file path. Delete
+failure or timeout keeps the terminal state retryable and is never reported as a
+successful discard. This prevents an invalid take from becoming either a timeline clip or
+an orphaned file hidden behind a false cleanup acknowledgement.
 
 ### AUv3 / Native PCM Injection Contract
 
@@ -180,6 +244,10 @@ For AUv3 sample-accurate playback validation, JavaScript sends a rendered PCM bu
 - `expectedPeakFrame`
 
 `WebViewManager.handleAudioBuffer(...)` forwards that payload to the native audio controller and also propagates `expectedPeakFrame` to the render path so the native side can report meaningful sample-accuracy metadata on recording stop.
+
+PCM injection is the validation stimulus. It does not make generic `source = "plugin"`
+output exact. The exact recorder source is `source = "plugin_input"`, read and accounted
+inside the same render quantum.
 
 ## Tauri Commands
 
@@ -195,6 +263,7 @@ For AUv3 sample-accurate playback validation, JavaScript sends a rendered PCM bu
 | `audio_record_start` | `session_id`, `file_path`, `sample_rate`, `channels` | Start recording mic to WAV |
 | `audio_record_stop` | `session_id` | Stop recording, finalize WAV |
 | `audio_get_levels` | — | Get real-time RMS/peak levels |
+| `audio_get_scope` | — | Read the latest 64-bin min/max envelope, RMS/peak, sequence, sample rate, and channel count published by the active recorder |
 | `audio_shutdown` | — | Shut down the audio engine |
 
 ## Supported Formats
@@ -264,7 +333,19 @@ At minimum, the migration output should document:
 
 ## Sample-Accurate Validation
 
-One of the major additions of the new engine is that AUv3 is no longer validated only by "did audio play?" or "did recording finish?". It is now validated by sample-accurate measurements derived from the native render timeline.
+Sample-accurate overdub is a narrow capability, not a synonym for successful recording.
+It is currently supported only for AUv3 `plugin_input` capture because that input is read
+in the same native render quantum used for timing. The capability resolver requires
+`clock_id = "auv3.render"` and
+`clock_reference = "record_start_render_quantum"` for capture, plus
+`timeline_clock_id = "auv3.host_transport"` for timeline placement. Start returns the
+native `clock_epoch`; stop must return that same epoch. The native bridge receives the
+explicit `requireSampleAccurate = true` flag; source selection alone never enables exact
+mode.
+
+Exact requests are rejected for desktop/Tauri, iOS app, browser, AUv3 microphone,
+generic `plugin` output and video. Their generic recorders remain valid and available, but they must report exact
+overdub as unsupported.
 
 ### Validation Fixture
 
@@ -288,19 +369,44 @@ On AUv3, the native recorder now emits:
 - `peak`
 - `first_peak_frame`
 - `playback_start_frame`
+- `playback_observed_frame`
 - `recording_start_frame`
 - `expected_peak_frame`
+- `sample_rate`
+- `frame_count`
+- `overrun_frames`
+- `discontinuity_frames`
+- `output_latency_frames`
+- `input_latency_frames`
+- `roundtrip_latency_frames`
+- `record_offset_frames_applied`
+- `clock_id`
+- `clock_reference`
+- `clock_epoch`
+- `timeline_clock_id`
+- `timeline_origin_frame`
 
-This is emitted in the `record_done` payload from `platforms/ios/atome-auv3/auv3/utils.swift`.
+This is emitted in the `record_done` payload by the AUv3 recorder. The production exact
+normalizer rejects missing/invalid frame fields, sample-rate or epoch mismatches, empty
+captures, `overrun_frames !== 0`, `discontinuity_frames !== 0`, non-positive input/output/
+round-trip latency, a round-trip latency that does not equal input plus output latency, or
+an applied record offset that does not equal that measured round-trip latency. It also
+requires a real earlier playback start (`playback_start_frame < recording_start_frame`)
+and the same-quantum observation proof
+(`playback_observed_frame == recording_start_frame`).
 
 ### Why Raw Peak Detection Was Not Enough
 
-In AUv3 plugin routing, recording can start before playback actually enters the render graph. This creates a real and measurable startup offset between:
+In exact AUv3 `plugin_input` routing, backing-track playback has a real start before the
+recording quantum. The recorder separately latches:
 
-- when recording begins
-- when the injected JS audio actually starts being mixed
+- the actual earlier `playback_start_frame`;
+- the `playback_observed_frame` in the recording quantum;
+- the same quantum's `recording_start_frame`.
 
-Because of that, comparing `first_peak_frame` directly to `expectedPeakFrame` is incorrect in AUv3 plugin mode.
+The last two values must be equal. Comparing `first_peak_frame` directly to
+`expectedPeakFrame` still ignores the real playback lead and is therefore only a debug
+mistake, not a production placement rule.
 
 ### Normalized Measurement
 
@@ -316,24 +422,44 @@ delta_samples         = measured_sample - expected_sample
 This normalization is applied for:
 
 - runtime: `auv3`
-- source: `plugin`
+- source: `plugin_input`
 
-This is the key change that makes sample-accuracy evaluation meaningful in the plugin routing case.
+This is the key change that makes sample-accuracy evaluation meaningful in the `plugin_input` routing case.
 
-### Latest Validated AUv3 Result
+The diagnostic impulse calculation above is not used as an invented placement offset.
+Production placement is anchored in the host-transport timeline domain and subtracts the
+strictly positive measured duplex round trip:
 
-The current validated AUv3 suite result is:
+```text
+raw_timeline_start = timeline_origin_frame - roundtrip_latency_frames
+source_in_frame     = max(0, -raw_timeline_start)
+timeline_start      = max(0, raw_timeline_start)
+duration_frames     = frame_count - source_in_frame
+```
 
-- `play_record_sync`: `measured_sample = 24000`, `delta_samples = 0`
-- `sample_alignment`: `measured_sample = 24000`, `delta_samples = 0`
-- `sample_accuracy_verified = true`
-- `suite_finished.status = "ok"`
-- `counts.ok = 5`
-- `counts.unsupported = 1`
-- `counts.warning = 0`
-- `counts.error = 0`
+The exact compensation invariant is:
 
-The `unsupported = 1` case is currently `direct_from_disk` in AUv3. It is intentionally not treated as a suite failure when workflow correctness and sample accuracy are both validated.
+```text
+roundtrip_latency_frames = output_latency_frames + input_latency_frames
+record_offset_frames_applied == roundtrip_latency_frames
+```
+
+The three latency values must be strictly positive measured integer contract fields;
+`record_offset_frames_applied` must be an integer and equal the measured round trip. A
+missing value or either equality mismatch rejects exact completion. `plugin_input` in the
+AUv3 render graph is the only exact-eligible source; it is exact only after the full result
+validation. Generic `plugin` output is not exact. This documentation does not claim a
+measured microphone latency or permit an invented offset. Any pull/capacity failure
+contributes to `discontinuity_frames` and makes the exact result invalid.
+
+### AUv3 Acceptance Criterion
+
+For an exact AUv3 `plugin_input` scenario, acceptance requires matching render-clock and
+host-transport identities, reference, epoch and sample rate, a real earlier playback start,
+same-quantum playback observation and recording start, strictly positive duplex latency,
+zero overrun/discontinuity, a positive frame count and the expected impulse delta for the
+fixture. A generic success payload or an expected `unsupported` scenario is not evidence
+that another runtime has acquired this capability.
 
 ### Suite Aggregation Rule
 
@@ -349,13 +475,12 @@ This prevents AUv3 from being marked unhealthy just because `direct_from_disk` i
 
 ## iOS App Runtime
 
-The iOS app runtime now follows the same native playback contract used by the AUv3 debug path. In current validation logs, the app runtime uses the same native JS-audio backend family and the same debug suite structure (`[APP][audio_debug]`).
-
-That means:
-
-- the app runtime should converge on the same transport and playback semantics
-- sample-accuracy and routing rules defined for AUv3 should also drive app-level integration
-- AUv3 is currently the strictest native validation target and therefore acts as the reference implementation for Apple-native timing behavior
+The iOS app runtime follows the canonical native recording API, but it is not the AUv3
+plugin render path. Generic app recording is supported. A request with
+`require_sample_accurate: true` is rejected because the app recorder does not return the
+`auv3.render` capture clock, `record_start_render_quantum` reference,
+`auv3.host_transport` timeline clock/origin and matching epoch.
+Shared API shape is not proof of a shared sample clock.
 
 ## Browser Runtime Served by Fastify / FreeBSD
 
@@ -368,18 +493,30 @@ When Atome/eVe is served by Fastify on FreeBSD and runs inside a browser:
 - video soundtrack ownership must still converge through the same transport rules
 - recording may still require a browser-native capture path
 
-Current working assumption:
+The implemented browser recorder uses `getUserMedia`, an `AudioContext` and a
+recording-only `AudioWorklet`. It retains the context sample rate rather than resampling
+the take to 16 kHz. Each chunk is numbered and carries start/end worklet frames. On stop:
 
-- browser capture may still need `getUserMedia` + `AudioWorklet`
-- if that assumption remains true, this path must stay minimal and recording-only
-- it must not survive as a parallel production playback engine
+1. the main thread sends `flush` with a request id;
+2. the worklet blocks further input and emits the partial tail, if any;
+3. it emits `flush_ack` with total frames, first/last frame, sample rate, flush frame and
+   context time;
+4. the main thread validates sequence, continuity, frame count and clock coherence;
+5. only then does cleanup disconnect nodes, stop tracks and close the context.
+
+`frame_count` is the validated PCM frame count and
+`duration_sec = frame_count / sample_rate`. A protocol failure or typed
+`audio_recording_flush_timeout` fails the stop; it does not manufacture a partial result.
+The result explicitly carries `sample_accurate_overdub = false` and
+`capture_clock.shared_with_kira = false`. The worklet path is exact within its own
+`AudioContext` frame domain, but that domain is not proven to be Kira's playback clock.
 
 This point is important because otherwise the migration could accidentally end in a split architecture:
 
 - one "real" engine for native runtimes
 - one semi-legacy engine for browser mode
 
-That outcome is explicitly out of scope. Browser mode served by Fastify / FreeBSD is part of the migration target, not an excuse to preserve the old playback architecture.
+That outcome is explicitly out of scope. Browser mode served by Fastify / FreeBSD is part of the migration target, not an excuse to preserve the old playback architecture. The capture worklet is the explicit recording exception, not a playback fallback.
 
 This browser target must also be distinguished from FreeBSD / Tauri native hosting:
 
@@ -399,7 +536,7 @@ That includes:
 - standalone audio clips
 - soundtrack audio from video objects
 - microphone recording
-- plugin output capture
+- generic plugin output capture and exact plugin-input capture
 - debug playback fixtures
 - metering and validation
 
@@ -411,14 +548,14 @@ For this document to be usable as a real migration spec, the first rule is to na
 
 | Area | Current entry points | Migration target |
 |------|----------------------|------------------|
-| Public clip playback | `atome/src/application/audio_runtime/audio.facade.js`, `atome/src/application/audio_runtime/backend.kira.js`, `atome/src/application/audio_runtime/backend.legacy_auv3.js` | keep one public facade, retire backend-specific feature code |
-| Audio recording | `eVe/domains/media/api/audio_api.js`, `atome/src/application/examples/record_audio.js`, `atome/src/application/examples/record_audio_UI.js`, `atome/src/application/audio_runtime/record_audio_api.js` | one recording contract backed by the unified native engine |
+| Public clip playback | `atome/src/application/audio_runtime/audio.facade.js`, `atome/src/application/audio_runtime/backend.kira.js` | keep one public facade and no legacy backend fallback |
+| Audio recording | `eVe/domains/media/api/audio_api.js`, `eVe/intuition/tools/capture.js`, `atome/src/application/audio_runtime/record_audio_api.js` | one recording contract backed by the unified native engine |
 | Video recording / media capture | `eVe/domains/media/api/video_api.js`, `atome/src/application/examples/record_video.js`, `atome/src/application/examples/record_video_UI.js` | separate visual capture is allowed, but audio persistence and playback must converge |
 | Shared media persistence | `eVe/domains/media/api/media_api_shared.js` | remain the canonical helper layer for project/user/storage resolution |
-| Media atome rendering | `atome/src/application/examples/user.js`, `eVe/domains/media/api/audio_api.js`, `eVe/domains/media/api/video_api.js` | all media atomes must resolve to one playback ownership model |
-| AUv3 native bridge | `platforms/ios/atome-auv3/Common/WebViewManager.swift`, `platforms/ios/atome-auv3/Common/AudioControllerProtocol.swift`, `platforms/ios/atome-auv3/auv3/AudioUnitViewController.swift`, `platforms/ios/atome-auv3/auv3/utils.swift` | reference native implementation for Apple timing and routing |
-| Debug validation | `eVe/intuition_/tools/audio_engine_debug_runtime.js` | source of truth for runtime validation and sample-accuracy assessment |
-| MTrack integration | `eVe/intuition_/tools/mtrack.js` and related mtrack bridge/controller files | timeline playback must be driven by the unified engine clock and routing model |
+| Media Atome persistence/rendering | `eVe/domains/media/api/media_persistence_service.js`, `eVe/domains/media/rendering/project_media_atome_renderer.js` | all media Atomes use one durable association and project projection boundary |
+| AUv3 native bridge | `platforms/ios/atome-auv3/Common/WebViewManager.swift`, `platforms/ios/atome-auv3/auv3/AUv3Recorder.swift`, `platforms/ios/atome-auv3/auv3/AUv3RenderEngine.swift`, `platforms/ios/atome-auv3/auv3/utils.swift` | exact `plugin_input` reference implementation |
+| Contract validation | `tests/atome/audio_sample_accurate_recording.test.mjs`, `tests/atome/record_audio_auv3_clock_contract.test.mjs` | executable exact assertions apply only to advertised `plugin_input` capability |
+| Molecule integration | `eVe/intuition/tools/molecule/runtime.js`, `eVe/intuition/tools/molecule/recording/index.js` | timeline recording consumes the unified engine clock and canonical capture adapter |
 
 ### Meaning of "Migrated"
 
@@ -617,6 +754,18 @@ The migration must explicitly separate:
 
 The visual stack can remain specialized. The soundtrack stack must converge.
 
+### Recording Viewfinder Boundary
+
+Generic video file capture and its recording feedback share the controller-owned source.
+Browser/Tauri feedback registers that existing `MediaStream` with the shared Bevy external
+image route; its hidden decoder is non-interactive and never owns or stops recorder tracks.
+Native iOS feedback reads the latest bounded BGRA frame produced by
+`AVCaptureVideoDataOutput` on the recorder's existing `AVCaptureSession`, converts it off
+the capture callback, and submits at most 96 x 96 pixels at 15 fps to the same Bevy tool
+overlay. No visible DOM media node, native preview layer, JPEG preview, second canvas, or
+parallel renderer is permitted. Photo capture has no viewfinder and emits only the 120 ms
+Bevy shutter flash.
+
 ### Video Soundtrack Rule
 
 For any `video` atome or MTrack video clip:
@@ -657,18 +806,28 @@ If a video is audible both through a DOM/native video element and through the un
 - old HTML/Tone branches are migration debt and must be removed; they are not supported
   runtime fallbacks and must not receive new feature dependencies
 - on FreeBSD / Tauri, required system audio dependencies must be provisioned explicitly; at minimum, `JACK` must be confirmed or rejected as a real prerequisite
+- generic native recording is supported, but exact overdub requests are rejected until a
+  common Kira playback/record clock id, reference and epoch are exposed and validated
 
 ### iOS App
 
 - the app runtime must align with AUv3 transport semantics where native playback is involved
 - app-level audio ownership must converge with the same unified media contract
 - validation must not rely on separate app-only playback assumptions
+- generic recording remains supported; exact overdub is rejected because the app bridge
+  does not expose the AUv3 plugin render-clock contract
 
 ### AUv3
 
-- AUv3 remains the strictest sample-accuracy validation runtime
-- playback offset normalization is part of the validation contract for plugin routing
-- any future AUv3 media feature must preserve the frame-reporting contract needed by `audio_engine_debug_runtime.js`
+- exact overdub is limited to `source = "plugin_input"`; `source = "plugin"` remains generic
+- exact mode requires the explicit native `requireSampleAccurate` flag; it is never inferred from the source
+- microphone capture remains generic and must not inherit the `plugin_input` capability
+- capture uses `auv3.render`, while placement uses `auv3.host_transport`
+- `playback_start_frame` must be earlier than `recording_start_frame`, and `playback_observed_frame` must equal `recording_start_frame`
+- exact results must preserve `frame_count`, measured input/output/round-trip latency,
+  matching applied record offset, overrun/discontinuity, clock identity, reference and
+  epoch fields
+- pull/capacity errors must increment discontinuity accounting and invalidate exactness
 
 ### Web
 
@@ -677,7 +836,10 @@ If a video is audible both through a DOM/native video element and through the un
 - remaining legacy paths must not be invoked as runtime fallbacks and must be removed
   after their owning features use the canonical engine
 - for browser mode served by Fastify / FreeBSD, playback ownership must still converge to the unified contract
-- if `AudioWorklet` remains necessary, it must be limited to browser recording and not retained as a general playback engine
+- the recording-only `AudioWorklet` must flush its partial tail and acknowledge stop before
+  cleanup; it must remain separate from playback ownership
+- browser recording explicitly reports `sample_accurate_overdub = false` because its
+  `AudioContext` clock is not shared with Kira
 
 ## Cutover Plan by Subsystem
 
@@ -687,7 +849,7 @@ Definition of done:
 
 - all public audio playback enters through `Squirrel.av.audio`
 - `backend.kira.js` or its successor is the preferred native route
-- `backend.legacy_auv3.js` is removal-bound migration debt, not a supported fallback
+- the removed legacy AUv3 backend must stay absent; it is not a supported fallback
 - no feature module calls raw media elements for production audio
 
 ### Subsystem 2: Audio Atomes
@@ -714,6 +876,8 @@ Definition of done:
 - `audio_api.js`, `record_audio_api.js`, `record_audio.js`, and UI wrappers all converge on one logical recording engine contract
 - runtime-specific adapters remain thin
 - playback of recorded results uses the unified playback engine
+- generic and exact requests remain distinct, with no silent downgrade
+- only validated AUv3 `plugin_input` results may produce frame-exact timeline placement
 
 ### Subsystem 5: MTrack
 
@@ -729,7 +893,7 @@ Definition of done:
 Definition of done:
 
 - runtime validation observes production audio paths
-- AUv3 sample accuracy remains green
+- AUv3 `plugin_input` exact scenarios pass all clock/frame/health gates
 - app/native runtimes expose enough metrics for regression detection
 
 ## Definition of Done for the Full Migration
@@ -741,10 +905,13 @@ The framework migration can be called complete only when all of the following ar
 3. Video soundtrack playback is routed through the unified engine everywhere it matters.
 4. Recording outputs are replayed through the same engine as imported media.
 5. No production feature depends on direct `HTMLAudioElement` or `HTMLVideoElement` audio output when a unified native backend is available.
-6. AUv3 sample-accuracy validation remains green.
+6. AUv3 `plugin_input` exact validation passes before that capability is advertised.
 7. Fallback backends are compatibility-only, not first-class production paths.
 8. Browser mode served by Fastify / FreeBSD follows the same ownership rules and only keeps the minimal browser-specific capture exception, if still required.
 9. Native FreeBSD / Tauri runtime prerequisites are documented and provisioned, including `JACK` if confirmed necessary for audio operation.
+10. Exact overdub capability remains false for browser, desktop/Tauri, iOS app,
+    AUv3 microphone, generic `plugin` output and video until each path proves a shared
+    sample clock and epoch.
 
 ## Execution Appendix: Migration Matrix
 
@@ -763,24 +930,26 @@ Status legend:
 |---------------|---------------|--------------|---------------------------|------------|--------|
 | `atome/src/application/audio_runtime/audio.facade.js` | public JS facade with backend switching | remains public facade | keep as the only public JS entry point; hide backend specifics from feature code | all clip playback still enters through facade | `target` |
 | `atome/src/application/audio_runtime/backend.kira.js` | native/Rust backend adapter | unified native engine adapter | extend until it becomes the preferred native path for clip playback and transport | clip load/play/stop/rate/gain pass on Tauri/native runtimes | `target` |
-| `atome/src/application/audio_runtime/backend.legacy_auv3.js` | legacy backend | removal-bound debt | forbid new feature dependencies; detach feature modules and delete it | no production-critical feature depends on it | `bridge` |
-| `atome/src/application/examples/user.js` media playback hooks | feature-local media creation/play behavior | facade + canonical media controller | route all audio/video audible playback commands to unified engine instead of local media ownership | `audio`, `sound`, `video` atomes play through unified transport | `current` |
+| Removed legacy AUv3 backend | deleted fallback path | remains absent | reject any attempt to restore backend-specific feature ownership | no production feature imports a legacy backend | `retire` |
+| `eVe/domains/media/api/media_persistence_service.js` | durable media association and project projection | canonical media boundary | await project projection after commit while preserving the durable record on render failure | committed media ID is visible or returns explicit `renderError` | `target` |
 
 ### Recording and Persistence
 
 | Module / file | Current owner | Target owner | Required migration action | Validation | Status |
 |---------------|---------------|--------------|---------------------------|------------|--------|
-| `eVe/domains/media/api/audio_api.js` | eVe audio capture + persistence wrapper | canonical audio recording adapter | reduce to project/media/persistence adapter on top of one recording engine contract | recorded media persists and replays through unified engine | `bridge` |
-| `atome/src/application/audio_runtime/record_audio_api.js` | runtime recording bridge | canonical recording bridge | keep only as a thin adapter to the unified engine contract | start/stop semantics identical across runtimes | `bridge` |
-| `atome/src/application/examples/record_audio.js` | feature/runtime recording implementation | UI wrapper over canonical recording APIs | remove ownership of backend choices and engine semantics | no standalone engine logic remains in example layer | `current` |
-| `atome/src/application/examples/record_audio_UI.js` | recording UI + backend toggles | UI only | keep UI concerns; remove backend-selection logic once migration completes | UI triggers canonical record commands only | `current` |
+| `eVe/domains/media/api/audio_api.js` | public capture/persistence controller + Molecule adapter | canonical audio recording adapter | keep generic and exact requests separate and surface typed capability errors | recorded media persists; unsupported exact requests are never downgraded | `target` |
+| `atome/src/application/audio_runtime/record_audio_api.js` | runtime recording bridge | canonical recording bridge | route browser/native/AUv3 while preserving runtime capability boundaries | generic start/stop works; exact start only succeeds for AUv3 `plugin_input` | `target` |
+| `atome/src/application/audio_runtime/sample_accurate_recording.js` | exact capability and normalization contract | remains exact gate | require explicit exact mode, render + host-transport clocks, real playback/observation frames, strictly positive duplex latency, matching epoch/rate and zero overrun/discontinuity | unsupported runtimes reject; accepted result yields deterministic `timeline_origin_frame - roundtrip_latency_frames` placement | `target` |
+| `eVe/domains/media/api/audio_core_record.js` | browser capture plus native facade | canonical generic browser recorder | preserve AudioContext rate, numbered chunks and tail `flush_ack`; never claim shared Kira time | WAV frame count equals validated chunks; exact overdub remains false | `target` |
+| `eVe/intuition/tools/capture.js` | capture-tool orchestration | UI wrapper over canonical recording APIs | keep UI state separate from backend choices and timing semantics | tools trigger only the canonical audio/video controllers | `target` |
+| `eVe/intuition/tools/core/tool_runtime_recording_handlers.js` | BevyUI action routing | UI action boundary | delegate start/stop to registered capture handlers | tool latches reflect controller results without becoming recorder state | `target` |
 | `eVe/domains/media/api/media_api_shared.js` | shared media persistence helpers | remains canonical media helper layer | keep as common source for auth, path, project and media metadata resolution | audio/video APIs resolve the same canonical media fields | `target` |
 
 ### Video and Soundtrack Ownership
 
 | Module / file | Current owner | Target owner | Required migration action | Validation | Status |
 |---------------|---------------|--------------|---------------------------|------------|--------|
-| `eVe/domains/media/api/video_api.js` | video capture / preview / persistence wrapper | canonical video adapter with engine-owned soundtrack | keep capture/persistence concerns; move soundtrack playback ownership to unified engine | video playback does not emit double audio | `bridge` |
+| `eVe/domains/media/api/video_api.js`, `video_api_record.js` | generic video capture / persistence wrapper | canonical generic video adapter with engine-owned soundtrack | keep capture/persistence concerns; reject exact requests with `av_sample_accurate_overdub_unsupported` until PTS maps to the sample timeline; expose only the controller-owned live source to the shared Bevy feedback route | video playback does not emit double audio; exact video is never advertised; feedback disposal never stops recorder tracks | `bridge` |
 | `atome/src/application/examples/record_video.js` | browser/video capture implementation | capture-only wrapper | keep only capture-specific logic; remove long-term playback ownership | recorded video replays with engine-owned soundtrack | `current` |
 | `atome/src/application/examples/record_video_UI.js` | video recording UI | UI only | keep UI concerns; delegate playback/record ownership to canonical APIs | UI never owns production soundtrack playback | `current` |
 | DOM / native video element audio output | local visual media element | unified engine soundtrack routing | mute local media-element audio whenever engine soundtrack is active | no double-output audio, seek/rate stay synchronized | `retire` |
@@ -789,17 +958,17 @@ Status legend:
 
 | Module / file | Current owner | Target owner | Required migration action | Validation | Status |
 |---------------|---------------|--------------|---------------------------|------------|--------|
-| `platforms/ios/atome-auv3/Common/WebViewManager.swift` | JS → Swift bridge | canonical AUv3 bridge | keep accepting PCM payloads and expected peak metadata; avoid runtime-specific divergence | debug fixture injection still works | `target` |
+| `platforms/ios/atome-auv3/Common/WebViewManager*.swift` | shared WebView composition, script dispatch, audio transport, navigation and IPC | canonical AUv3 bridge split by responsibility | keep one native-invoke route while accepting PCM payloads and expected peak metadata | debug fixture injection and native recording commands still use the same bridge | `target` |
 | `platforms/ios/atome-auv3/Common/AudioControllerProtocol.swift` | AU audio control contract | remains shared native contract | preserve unified methods for play/stop/inject/debug peak propagation | all AU controllers expose the same contract | `target` |
 | `platforms/ios/atome-auv3/auv3/AudioUnitViewController.swift` | AUv3 host/controller | unified AUv3 controller | keep transport ownership thin; delegate signal semantics to the audio engine path | playback/record/debug commands remain stable | `target` |
-| `platforms/ios/atome-auv3/auv3/utils.swift` | AUv3 render/mix/record implementation | canonical AUv3 native reference | preserve frame tracking and `record_done` timing payloads required for validation | sample accuracy stays green | `target` |
+| `platforms/ios/atome-auv3/auv3/AUv3Recorder.swift`, `AUv3RenderEngine.swift`, `utils.swift` | AUv3 record/render implementation | canonical AUv3 exact reference | preserve same-quantum input pull, frame tracking, health counters and `record_done` payload | valid `plugin_input` stays exact; any pull/capacity discontinuity rejects | `target` |
 
 ### Debug and Validation
 
 | Module / file | Current owner | Target owner | Required migration action | Validation | Status |
 |---------------|---------------|--------------|---------------------------|------------|--------|
-| `eVe/intuition_/tools/audio_engine_debug_runtime.js` | runtime validation suite | canonical validation harness | keep as source of truth for fixture playback, normalized sample-accuracy assessment, suite aggregation | AUv3 `play_record_sync` and `sample_alignment` stay at `delta_samples = 0` | `target` |
-| AUv3 native timing payloads | native record-stop analysis | canonical runtime timing contract | keep exposing `first_peak_frame`, `playback_start_frame`, `recording_start_frame`, `expected_peak_frame` | sample-accurate verification remains possible | `target` |
+| `tests/atome/audio_sample_accurate_recording.test.mjs`, `record_audio_auv3_clock_contract.test.mjs` | maintained executable contracts | canonical validation harness | validate production payload invariants and typed unsupported outcomes | valid exact fixtures normalize to the expected integer-frame placement | `target` |
+| AUv3 native timing payloads | native record-stop analysis | canonical runtime timing contract | expose clock id/reference/epoch, sample rate, frame count, start frames, measured input/output/round-trip latency, matching applied offset and overrun/discontinuity | exact `plugin_input` result passes strict normalization | `target` |
 | ad hoc media debug paths | fragmented feature-level diagnostics | shared engine-observing diagnostics | remove or demote any debug tooling that does not observe the production signal path | meters and debug panels match audible output | `retire` |
 
 ### Atome Types
@@ -816,7 +985,7 @@ Status legend:
 
 | Module / file | Current owner | Target owner | Required migration action | Validation | Status |
 |---------------|---------------|--------------|---------------------------|------------|--------|
-| `eVe/intuition_/tools/mtrack.js` | timeline feature implementation | unified engine transport client | route audible playback, preview, scrub and playhead to engine clock | MTrack playback is engine-clocked | `current` |
+| `eVe/intuition/tools/molecule/runtime.js` | active timeline feature runtime | unified engine transport client | consume explicit frame/clock contracts without owning recorder semantics | Molecule recording is engine-clocked and committed through its session | `target` |
 | MTrack bridge / controller files | panel/runtime coordination | transport adapter on top of unified engine | keep UI/panel coordination, remove ownership of audio semantics | preview and timeline playback share routing model | `bridge` |
 | MTrack audio clips | mixed feature ownership | engine-managed clip sources | preload and render as first-class engine clips | mute/solo/gain behave predictably | `current` |
 | MTrack video clips | visual clip ownership with implicit soundtrack | visual clip + engine-owned soundtrack | extract or route soundtrack to the unified engine, keep visual timeline sync | no double audio, synced seek/play/rate | `current` |
@@ -830,7 +999,7 @@ Each row above can only move to `retire` or `target` after the following gates a
 2. Audible playback ownership is unique.
 3. Recording output is replayable through the same engine family.
 4. Debug tooling observes the production path.
-5. For AUv3-sensitive paths, sample accuracy remains validated.
+5. For AUv3 `plugin_input`, exact clock/frame/health validation passes.
 
 ### Recommended Tracking Workflow
 
@@ -870,12 +1039,14 @@ Concretely:
 - if a video element still owns visual decoding, its own audio output must be muted when the unified engine owns the soundtrack
 - any sync correction must be done at the transport level, not by letting two engines fight each other
 
-### 3. Recording Must Converge to One Native Path
+### 3. Recording Must Converge to One Canonical Contract
 
 All recording flows must converge to the unified engine contract:
 
 - microphone recording
-- plugin output recording
+- generic plugin output recording
+- exact AUv3 plugin-input recording
+- browser capture through the recording-only worklet adapter
 - diagnostic fixture capture
 
 `record_audio_api.js` should be treated as an adapter layer, not as an alternative recording system.
@@ -886,15 +1057,19 @@ Waveform views, peak meters, validation tools, and debug panels must read from t
 
 ### 5. Sample Accuracy Is Part of the Contract
 
-For controlled runtimes such as AUv3 plugin routing, timing is no longer a best-effort property. It is now part of the engine contract.
+For controlled runtimes such as AUv3 `plugin_input` routing, timing is no longer a best-effort property. It is now part of the engine contract.
 
 If a new path cannot expose enough timing information to validate:
 
 - playback start
 - record start
-- measured peak position
+- sample rate and positive frame count
+- common clock identity, reference and epoch
+- measured input/output/round-trip latency and an applied offset equal to that round trip
+- overrun and discontinuity counts
 
-then that path is not yet fully integrated.
+then that path may remain a generic recorder, but its exact capability must be false.
+Video remains generic until a validated PTS-to-audio-sample mapping exists.
 
 ## Migration Plan
 
@@ -983,10 +1158,12 @@ The audio debug suite now covers:
 
 Current AUv3 expectation:
 
-- `play_record_sync` must verify sample accuracy
-- `sample_alignment` must verify sample accuracy
+- `play_record_sync` must verify sample accuracy only for `plugin_input`
+- `sample_alignment` must verify sample accuracy only for `plugin_input`
 - `direct_from_disk` may remain `unsupported` temporarily
 - final suite status must still be `ok` when all required checks pass
+- any plugin-input pull/capacity error must surface as discontinuity and invalidate the
+  exact result
 
 ## Migration from Legacy System
 

@@ -4,18 +4,34 @@ import {
     resolveVoiceCaptureProvider
 } from './runtime_audio_backend.js';
 import { installSharedAVContracts } from './av_contracts.js';
+import { resolveRecordingUserId } from './record_audio_user_identity.js';
+import { createTauriRecordingScopePoller } from './record_audio_scope_transport.js';
+import {
+    SAMPLE_ACCURATE_RECORDING_ERROR_CODES,
+    SampleAccurateRecordingError,
+    normalizeSampleAccurateRecordingResult,
+    resolveSampleAccurateRecordingCapability,
+    validateSampleAccurateRecordingRequest
+} from './sample_accurate_recording.js';
 
 // Unified recorder API (Tauri + AUv3 + browser capture backend)
 // Contract:
-// - record_start(params) -> Promise<sessionId>
+// - record_start(params) -> Promise<sessionId | exact-session-detail>
 // - record_stop(sessionId) -> Promise<payload> or throws
-
 (function () {
     if (typeof window === 'undefined') return;
 
     const PENDING = new Map();
     let listenersReady = false;
     const av = installSharedAVContracts(window);
+
+    function terminalRecordingError(error, result = null, discarded = false) {
+        const terminal = error instanceof Error ? error : new Error(String(error || 'Recording error'));
+        terminal.recordingTerminal = true;
+        if (result) terminal.recordingResult = result;
+        if (discarded) terminal.recordingDiscarded = true;
+        return terminal;
+    }
 
     function updateRecordProvider() {
         window.__SQUIRREL_RECORD_PROVIDER__ = resolveVoiceCaptureProvider(window);
@@ -25,6 +41,7 @@ import { installSharedAVContracts } from './av_contracts.js';
     function normalizeSource(raw) {
         const v = (typeof raw === 'string' ? raw : '').trim().toLowerCase();
         if (v === 'plugin' || v === 'plugin_output') return 'plugin';
+        if (v === 'plugin_input' || v === 'input') return 'plugin_input';
         return 'mic';
     }
 
@@ -34,10 +51,6 @@ import { installSharedAVContracts } from './av_contracts.js';
         if (runtime.runtime === 'ios_app') return 'ios_app';
         if (runtime.runtime === 'ios_auv3') return 'auv3';
         return 'browser';
-    }
-
-    function defaultSampleRate(context, source) {
-        return null;
     }
 
     function reportRecordingOverrun(result = {}, entry = {}) {
@@ -54,10 +67,6 @@ import { installSharedAVContracts } from './av_contracts.js';
         });
     }
 
-    function defaultChannels(context, source) {
-        return null;
-    }
-
     function randomSessionId() {
         if (window.crypto && typeof window.crypto.randomUUID === 'function') return window.crypto.randomUUID();
         return `rec_${Date.now()}_${Math.random().toString(16).slice(2)}`;
@@ -65,120 +74,6 @@ import { installSharedAVContracts } from './av_contracts.js';
 
     function defaultFileName(source) {
         return `${source}_${Date.now()}.wav`;
-    }
-
-    function extractUserId(value) {
-        if (!value) return null;
-        if (typeof value === 'string') {
-            const trimmed = value.trim();
-            return trimmed && trimmed !== 'anonymous' ? trimmed : null;
-        }
-        if (typeof value !== 'object') return null;
-        const user = value.logged && value.user ? value.user : value;
-        const nested = user.user || user.currentUser || user.current_user || null;
-        return extractUserId(user.user_id)
-            || extractUserId(user.userId)
-            || extractUserId(user.atome_id)
-            || extractUserId(user.atomeId)
-            || extractUserId(user.id)
-            || extractUserId(nested);
-    }
-
-    function readStoredUserId(storage) {
-        if (!storage || typeof storage.getItem !== 'function') return null;
-        const keys = [
-            'current_user',
-            'currentUser',
-            'adole_current_user',
-            'auth_user',
-            'user',
-            'user_id',
-            'userId'
-        ];
-        for (const key of keys) {
-            let raw = null;
-            try { raw = storage.getItem(key); } catch (_) { raw = null; }
-            if (!raw) continue;
-            const trimmed = String(raw || '').trim();
-            if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
-                try {
-                    const parsed = JSON.parse(trimmed);
-                    const parsedId = extractUserId(parsed);
-                    if (parsedId) return parsedId;
-                } catch (_) { }
-            } else {
-                const direct = extractUserId(trimmed);
-                if (direct) return direct;
-            }
-        }
-        return null;
-    }
-
-    function callUserIdProvider(provider) {
-        if (typeof provider !== 'function') return null;
-        try {
-            return provider();
-        } catch (_) {
-            return null;
-        }
-    }
-
-    function resolveUserIdSync() {
-        const api = window.AdoleAPI || (typeof AdoleAPI !== 'undefined' ? AdoleAPI : null);
-        return extractUserId(window.__currentUser)
-            || extractUserId(window.__CURRENT_USER__)
-            || extractUserId(window.currentUser)
-            || extractUserId(callUserIdProvider(api?.auth?.getCurrentInfo?.bind(api.auth)))
-            || extractUserId(api?.auth?.currentUser)
-            || extractUserId(api?.auth?.user)
-            || extractUserId(callUserIdProvider(api?.security?.getAnonymousUserId?.bind(api.security)))
-            || readStoredUserId(window.localStorage)
-            || readStoredUserId(window.sessionStorage)
-            || null;
-    }
-
-    function withTimeout(promise, ms) {
-        return new Promise((resolve) => {
-            let done = false;
-            const timer = setTimeout(() => {
-                if (done) return;
-                done = true;
-                resolve(null);
-            }, ms);
-            Promise.resolve(promise).then((value) => {
-                if (done) return;
-                done = true;
-                clearTimeout(timer);
-                resolve(value);
-            }).catch(() => {
-                if (done) return;
-                done = true;
-                clearTimeout(timer);
-                resolve(null);
-            });
-        });
-    }
-
-    async function getAdoleUserId() {
-        const syncUserId = resolveUserIdSync();
-        if (syncUserId) return syncUserId;
-        try {
-            const api = window.AdoleAPI || (typeof AdoleAPI !== 'undefined' ? AdoleAPI : null);
-            if (!api || !api.auth) return null;
-            if (typeof api.auth.getCurrentUser === 'function') {
-                const user = await withTimeout(api.auth.getCurrentUser(), 1500);
-                const userId = extractUserId(user);
-                if (userId) return userId;
-            }
-            if (typeof api.auth.current === 'function') {
-                const res = await withTimeout(api.auth.current(), 1500);
-                const userId = extractUserId(res);
-                if (userId) return userId;
-            }
-            return null;
-        } catch (_) {
-            return null;
-        }
     }
 
     function sendNativeMessage(msg) {
@@ -211,7 +106,44 @@ import { installSharedAVContracts } from './av_contracts.js';
 
         if (type === 'record_started') {
             if (entry.start) {
-                entry.start.resolve(sessionId);
+                if (entry.sampleAccurateRequest) {
+                    const clockId = String(detail.clock_id || detail.clockId || '').trim();
+                    const clockEpoch = String(detail.clock_epoch || detail.clockEpoch || '').trim();
+                    const clockReference = String(detail.clock_reference || detail.clockReference || '').trim();
+                    const timelineClockId = String(detail.timeline_clock_id || detail.timelineClockId || '').trim();
+                    const timelineOriginFrame = detail.timeline_origin_frame ?? detail.timelineOriginFrame;
+                    const sampleRate = Number(detail.sample_rate || detail.sampleRate || 0);
+                    const expectedRate = Number(entry.sampleAccurateRequest.timeline_sample_rate || 0);
+                    if (clockId !== entry.sampleAccurateRequest.clock_id
+                        || clockReference !== entry.sampleAccurateRequest.clock_reference
+                        || timelineClockId !== entry.sampleAccurateRequest.timeline_clock_id
+                        || !Number.isSafeInteger(timelineOriginFrame) || timelineOriginFrame < 0
+                        || !clockEpoch || sampleRate !== expectedRate) {
+                        const code = sampleRate !== expectedRate
+                            ? SAMPLE_ACCURATE_RECORDING_ERROR_CODES.SAMPLE_RATE_MISMATCH
+                            : SAMPLE_ACCURATE_RECORDING_ERROR_CODES.CLOCK_MISMATCH;
+                        entry.start.reject(new SampleAccurateRecordingError(code, {
+                            clock_id: clockId,
+                            clock_epoch: clockEpoch,
+                            clock_reference: clockReference,
+                            timeline_clock_id: timelineClockId,
+                            timeline_origin_frame: timelineOriginFrame ?? null,
+                            sample_rate: sampleRate
+                        }));
+                        entry.start = null;
+                        sendNativeMessage({ action: 'record_stop', sessionId });
+                        return;
+                    }
+                    entry.sampleAccurateRequest = Object.freeze({
+                        ...entry.sampleAccurateRequest,
+                        requested_timeline_start_frame: entry.sampleAccurateRequest.timeline_start_frame,
+                        timeline_start_frame: timelineOriginFrame,
+                        clock_epoch: clockEpoch
+                    });
+                    entry.start.resolve({ ...detail, session_id: sessionId, provider: entry.provider });
+                } else {
+                    entry.start.resolve(sessionId);
+                }
                 entry.start = null;
             }
             return;
@@ -220,7 +152,8 @@ import { installSharedAVContracts } from './av_contracts.js';
         if (type === 'record_done') {
             if (entry.stop) {
                 const frameCount = Number(detail.frame_count || detail.frameCount || 0);
-                const overrunFrames = Number(detail.overrun_frames || detail.overrunFrames || 0);
+                const rawOverrunFrames = detail.overrun_frames ?? detail.overrunFrames;
+                const overrunFrames = rawOverrunFrames === undefined ? undefined : Number(rawOverrunFrames);
                 const sampleRate = Number(detail.sample_rate || detail.sampleRate || entry.sampleRate || 0);
                 const resolved = {
                     ...detail,
@@ -231,11 +164,20 @@ import { installSharedAVContracts } from './av_contracts.js';
                         ? frameCount / sampleRate
                         : Number(detail.duration_sec || detail.durationSec || 0),
                     frame_count: frameCount,
-                    overrun_frames: Number.isFinite(overrunFrames) && overrunFrames > 0 ? overrunFrames : 0,
+                    overrun_frames: Number.isFinite(overrunFrames) ? overrunFrames : undefined,
                     sample_rate: sampleRate,
                     channels: Number(detail.channels || entry.channels || 0),
                     provider: entry.provider || 'native_audio_recorder'
                 };
+                if (entry.sampleAccurateRequest) {
+                    try {
+                        resolved.sample_timing = normalizeSampleAccurateRecordingResult(entry.sampleAccurateRequest, resolved);
+                    } catch (error) {
+                        entry.stop.reject(terminalRecordingError(error, resolved));
+                        PENDING.delete(sessionId);
+                        return;
+                    }
+                }
                 const monitoring = reportRecordingOverrun(resolved, entry);
                 entry.stop.resolve(monitoring ? { ...resolved, monitoring } : resolved);
                 entry.stop = null;
@@ -246,10 +188,16 @@ import { installSharedAVContracts } from './av_contracts.js';
 
         if (type === 'record_error') {
             const error = detail.error || detail.message || 'Recording error';
+            const recordingError = entry.sampleAccurateRequest
+                ? new SampleAccurateRecordingError(
+                    detail.code || SAMPLE_ACCURATE_RECORDING_ERROR_CODES.INVALID_CLOCK,
+                    { ...detail, native_error: error }
+                )
+                : new Error(error);
             if (entry.stop) {
-                entry.stop.reject(new Error(error));
+                entry.stop.reject(terminalRecordingError(recordingError, detail, detail.discarded === true));
             } else if (entry.start) {
-                entry.start.reject(new Error(error));
+                entry.start.reject(recordingError);
             }
             PENDING.delete(sessionId);
         }
@@ -271,11 +219,24 @@ import { installSharedAVContracts } from './av_contracts.js';
             : defaultFileName(source);
         const sampleRate = (typeof params.sampleRate === 'number')
             ? params.sampleRate
-            : defaultSampleRate(context, source);
+            : (typeof (params.timeline_sample_rate ?? params.timelineSampleRate) === 'number'
+                ? (params.timeline_sample_rate ?? params.timelineSampleRate)
+                : null);
         const channels = (typeof params.channels === 'number')
             ? params.channels
-            : defaultChannels(context, source);
-
+            : null;
+        const sampleAccurateRequest = params.require_sample_accurate === true || params.requireSampleAccurate === true
+            ? validateSampleAccurateRecordingRequest(params)
+            : null;
+        if (sampleAccurateRequest) {
+            const capability = resolveSampleAccurateRecordingCapability(window, params);
+            if (!capability.supported) {
+                const error = new Error(capability.error);
+                error.code = capability.error;
+                error.detail = capability;
+                throw error;
+            }
+        }
 
         if (context === 'tauri' || context === 'ios_app') {
             const invoke = getTauriInvoke(window);
@@ -286,7 +247,7 @@ import { installSharedAVContracts } from './av_contracts.js';
             }
             let userId = params.userId || params.user_id || null;
             if (!userId) {
-                userId = await getAdoleUserId();
+                userId = await resolveRecordingUserId(window);
             }
             if (!userId) {
                 throw new Error('Missing userId for native recording');
@@ -304,14 +265,23 @@ import { installSharedAVContracts } from './av_contracts.js';
                 sampleRate: requestedSampleRate,
                 channels: requestedChannels
             });
-            PENDING.set(sessionId, {
+            const pendingEntry = {
                 provider: 'native_audio_recorder',
                 transport: context,
                 fileName,
                 filePath,
                 sampleRate: requestedSampleRate,
-                channels: requestedChannels
-            });
+                channels: requestedChannels,
+                disposeScope: null
+            };
+            if (context === 'tauri') {
+                pendingEntry.disposeScope = createTauriRecordingScopePoller({
+                    windowRef: window,
+                    invoke,
+                    sessionId
+                });
+            }
+            PENDING.set(sessionId, pendingEntry);
             window.__SQUIRREL_RECORD_PROVIDER__ = 'native_audio_recorder';
             return sessionId;
         }
@@ -337,7 +307,7 @@ import { installSharedAVContracts } from './av_contracts.js';
 
         let userId = params.userId || params.user_id || null;
         if (!userId && (context === 'tauri' || context === 'ios_app')) {
-            userId = await getAdoleUserId();
+            userId = await resolveRecordingUserId(window);
         }
 
         const msg = {
@@ -347,7 +317,13 @@ import { installSharedAVContracts } from './av_contracts.js';
             source,
             sampleRate,
             channels,
-            userId
+            userId,
+            clockId: params.clock_id || params.clockId || null,
+            clockReference: params.clock_reference || params.clockReference || null,
+            timelineClockId: params.timeline_clock_id || params.timelineClockId || null,
+            timelineStartFrame: params.timeline_start_frame ?? params.timelineStartFrame ?? null,
+            timelineSampleRate: params.timeline_sample_rate ?? params.timelineSampleRate ?? null,
+            requireSampleAccurate: !!sampleAccurateRequest
         };
 
         // Pre-register the PENDING entry BEFORE creating the Promise to avoid
@@ -358,6 +334,7 @@ import { installSharedAVContracts } from './av_contracts.js';
             fileName,
             sampleRate: Number(sampleRate) || null,
             channels: Number(channels) || null,
+            sampleAccurateRequest,
             start: null,
             stop: null
         };
@@ -382,6 +359,7 @@ import { installSharedAVContracts } from './av_contracts.js';
         if (entry?.transport === 'tauri' || entry?.transport === 'ios_app') {
             const invoke = getTauriInvoke(window);
             if (typeof invoke !== 'function') {
+                entry.disposeScope?.();
                 PENDING.delete(sid);
                 throw new Error(entry.transport === 'ios_app'
                     ? 'iOS native audio recorder bridge is not available'
@@ -411,6 +389,7 @@ import { installSharedAVContracts } from './av_contracts.js';
                 const monitoring = reportRecordingOverrun(resolved, entry);
                 return monitoring ? { ...resolved, monitoring } : resolved;
             } finally {
+                entry.disposeScope?.();
                 PENDING.delete(sid);
             }
         }

@@ -7,9 +7,9 @@ const webViewManagerSource = await readFile(new URL('../../platforms/ios/atome-a
 const appViewControllerSource = await readFile(new URL('../../platforms/ios/atome-auv3/application/ViewController.swift', import.meta.url), 'utf8');
 const auv3ControllerSource = await readFile(new URL('../../platforms/ios/atome-auv3/auv3/AudioUnitViewController.swift', import.meta.url), 'utf8');
 const nativeRuntimeSource = await readFile(new URL('../../eVe/domains/rendering/bevy_native_renderer_runtime.js', import.meta.url), 'utf8');
-const projectSceneRuntimeSource = await readFile(new URL('../../eVe/domains/rendering/project_scene_runtime.js', import.meta.url), 'utf8');
+const projectSceneEngineSource = await readFile(new URL('../../eVe/domains/rendering/project_scene_engine.js', import.meta.url), 'utf8');
 const projectSceneBevyProjectionSource = await readFile(new URL('../../eVe/domains/rendering/project_scene_bevy_projection_runtime.js', import.meta.url), 'utf8');
-const toolGenesisSource = await readFile(new URL('../../eVe/intuition/runtime/tool_genesis.js', import.meta.url), 'utf8');
+const toolGenesisCreateSource = await readFile(new URL('../../eVe/intuition/runtime/tool_genesis_create_runtime.js', import.meta.url), 'utf8');
 const projectSource = await readFile(new URL('../../platforms/ios/atome-auv3/atome.xcodeproj/project.pbxproj', import.meta.url), 'utf8');
 const iosBevyCargoSource = await readFile(new URL('../../platforms/ios/bevy-renderer/Cargo.toml', import.meta.url), 'utf8');
 const iosBevyFfiSource = await readFile(new URL('../../platforms/ios/bevy-renderer/src/lib.rs', import.meta.url), 'utf8');
@@ -145,9 +145,7 @@ test('iOS project rendering selects native Bevy only when the host declares a pr
     assert.ok(nativeRuntimeSource.includes("typeof hostWindow?.__ATOME_IOS_NATIVE_INVOKE === 'function'"), 'native runtime must detect the iOS bridge');
     assert.ok(nativeRuntimeSource.includes('hasPresentableIosNativeBevyRenderer'), 'iOS native Bevy selection must be gated by presentation capability');
     assert.ok(nativeRuntimeSource.includes('hostWindow?.__ATOME_NATIVE_BEVY_PRESENTABLE__ === true'), 'iOS native Bevy must require an explicit presentable host flag');
-    assert.ok(nativeRuntimeSource.includes('[NativeBevy]'), 'native runtime must emit Xcode-visible bridge diagnostics');
-    assert.ok(nativeRuntimeSource.includes('start:prepare'), 'native runtime must log scene preparation before native start');
-    assert.ok(nativeRuntimeSource.includes('start:result'), 'native runtime must log the native start response');
+    assert.ok(nativeRuntimeSource.includes('assertNativeRendererVisible(result)'), 'native startup must reject a backend that cannot present on the shared surface');
     assert.equal(
         nativeRuntimeSource.includes("from './bevy_web_renderer_runtime.js'"),
         false,
@@ -174,7 +172,7 @@ test('iOS bridge uses the visible WebGPU canvas before native Bevy reports prese
     assert.equal(nativeRuntime.shouldUseNativeBevyRenderer(surface), false);
 });
 
-test('iOS native startup reaches Swift before browser media texture decoding when native presentation is declared', async () => {
+test('iOS native startup resolves media through the shared texture owner before Swift presentation', async () => {
     const commands = [];
     const hostWindow = {
         __HOST_ENV: 'app',
@@ -195,14 +193,16 @@ test('iOS native startup reaches Swift before browser media texture decoding whe
         id: 'eve_surface_project',
         ownerDocument: { defaultView: hostWindow }
     };
-    const rejectedResolver = async () => {
-        throw new Error('bevy_media_texture_image_decode_failed:stale_image');
-    };
+    const sharedResolver = async () => ({
+        width: 1,
+        height: 1,
+        rgba: [14, 28, 42, 255]
+    });
     const result = await nativeRuntime.startBevyNativeRenderer({
         surface,
         width: 320,
         height: 180,
-        mediaTextureResolver: rejectedResolver,
+        mediaTextureResolver: sharedResolver,
         virtualScene: {
             nodes: [{
                 id: 'file_1',
@@ -220,7 +220,8 @@ test('iOS native startup reaches Swift before browser media texture decoding whe
     assert.equal(commands.length, 1);
     assert.equal(commands[0].command, 'bevy_native_start');
     assert.equal(commands[0].payload.scene.nodes[0].source, '/file/data/users/u/Downloads/0000.png');
-    assert.equal(commands[0].payload.scene.nodes[0].texture, undefined);
+    assert.equal(commands[0].payload.scene.nodes[0].texture.width, 1);
+    assert.deepEqual(commands[0].payload.scene.nodes[0].texture.rgba, [14, 28, 42, 255]);
 });
 
 test('iOS native projection does not report visible rendering before the presenter exists', () => {
@@ -229,11 +230,12 @@ test('iOS native projection does not report visible rendering before the present
         'native renderer results must expose host presentability'
     );
     assert.ok(
-        projectSceneRuntimeSource.includes('const nativePresentable = !useNativeBevy || renderResult?.presentable !== 0'),
+        projectSceneEngineSource.includes('const nativePresentable = !useNativeBevy || renderResult?.presentable !== 0'),
         'project projection must treat presentable=0 as not visually rendered'
     );
     assert.ok(
-        projectSceneRuntimeSource.includes('if (projectionOk) runtime.virtualScene = virtualScene'),
+        projectSceneEngineSource.includes('if (projectionOk)')
+            && projectSceneEngineSource.includes('runtime.virtualScene = virtualScene'),
         'failed native presentation must not mark the virtual scene as successfully started'
     );
     assert.equal(
@@ -246,20 +248,20 @@ test('iOS native projection does not report visible rendering before the present
         'stale native projection state must retry a full native start instead of applying diffs to a missing renderer'
     );
     assert.ok(
-        projectSceneRuntimeSource.includes('ok: projectionOk'),
+        projectSceneEngineSource.includes('ok: projectionOk'),
         'project projection must use the presentability-aware ok flag'
     );
     assert.equal(
-        toolGenesisSource.includes('created:render_result'),
+        toolGenesisCreateSource.includes('created:render_result'),
         false,
         'created atome diagnostics must not emit temporary render logs'
     );
     assert.ok(
-        toolGenesisSource.includes('return renderAtomeRecord(canonicalState, layer)'),
+        toolGenesisCreateSource.includes('return renderAtomeRecord(canonicalState, layer)'),
         'created atomes must still render through the canonical project render path'
     );
     assert.ok(
-        toolGenesisSource.includes('view?.ok === true'),
+        toolGenesisCreateSource.includes('view?.ok === true'),
         'creator results must mark rendered only when the project projection is actually ok'
     );
 });

@@ -102,6 +102,9 @@ mod audio_engine_tests {
     #[test]
     fn test_record_mic() {
         let _lock = TEST_LOCK.lock().unwrap();
+        let _metering_lock = crate::audio_engine::metering_scope::METERING_TEST_LOCK
+            .lock()
+            .unwrap();
 
         let dir = test_dir();
         let rec_path = dir.join("test_recording.wav");
@@ -157,6 +160,9 @@ mod audio_engine_tests {
 
     #[test]
     fn test_metering() {
+        let _metering_lock = crate::audio_engine::metering_scope::METERING_TEST_LOCK
+            .lock()
+            .unwrap();
         // Reset and verify zeros
         crate::audio_engine::metering::reset();
         let levels = crate::audio_engine::metering::get_levels();

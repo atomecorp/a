@@ -377,19 +377,27 @@ Design rule: a business capability has one visual tool identity across toolbox, 
 Primary sources:
 
 - `eVe/intuition/tools/capture.js`
+- `eVe/intuition/tools/core/tool_runtime_recording_handlers.js`
 - `eVe/intuition/tools/capture_source_runtime.js`
-- `eVe/intuition/tools/capture_preview_session_runtime.js`
-- `eVe/intuition/tools/capture_quick_record_runtime.js`
-- `eVe/intuition/tools/capture_fullscreen_runtime.js`
-- `eVe/intuition/tools/capture_fullscreen_chrome_runtime.js`
+- `eVe/intuition/tools/capture_recording_feedback_runtime.js`
+- `eVe/intuition/tools/capture_video_recording_runtime.js`
 - `eVe/intuition/tools/capture_reveal_runtime.js`
 - `eVe/intuition/tools/capture_export_geometry.js`
+- `eVe/domains/media/api/audio_api.js`
+- `eVe/domains/media/api/video_recording_controller.js`
+- `eVe/domains/rendering/bevy_video_stream_source_runtime.js`
+- `eVe/domains/rendering/bevy_video_hidden_dom_runtime.js`
 
 Role:
 
 - Owns the capture-tool export/reveal motion for recorded audio, recorded video, and photos.
+- The visible capture/detail-record controls are BevyUI tool projections. Their active/latched appearance must follow the real audio/video controller result reached through the tool runtime; visual state must never simulate a recorder start or stop.
+- Capture interaction remains on those BevyUI tools. There is no capture fullscreen DOM chrome, expanded tool surface, document-level pointer interception, or click-suppression layer beside the canonical tool dispatch.
+- `capture_recording_feedback_runtime.js` may attach only bounded active-tool feedback and post-stop reveal behavior. For browser video it may register the controller-owned `MediaStream` under the active Bevy overlay id, but frame ownership, the hidden media consumer, and cleanup stay in `bevy_video_stream_source_runtime.js`. A retryable stop or project-association failure keeps feedback attached until the controller reaches a confirmed terminal result.
 - Creates the project media atome at the source tool bounds, animates it to the computed project position above the main toolbar, then persists the final geometry after the animation frame window.
 - The final geometry commit is intentionally delayed until the reveal animation has settled so commit-driven rehydration cannot collapse the motion into an instant creation.
+- Generic capture keeps its existing controller-specific behavior on supported runtimes. Exact-overdub status may be presented only for an explicitly requested AUv3 `plugin_input` take that proves `auv3.render` capture, `auv3.host_transport` placement, a native epoch, real earlier playback start, same-quantum playback observation/recording start, and strictly positive duplex latency. `plugin` is generic output/mix capture. Browser, desktop/Tauri, ordinary iOS app, and exact video must surface `av_sample_accurate_overdub_unsupported` rather than showing an approximate synchronization badge or success state.
+- Browser video recording displays real camera frames only inside the active Bevy tool through the existing external-texture lookups. The live stream source takes priority over URL decode for that overlay id, owns one fully hidden and non-interactive `<video>` below `#eve_bevy_video_decode_root`, and forwards at most 15 `requestVideoFrameCallback` redraw notifications per second; this preview throttle does not alter recorder cadence or output. Feedback disposal cancels the hidden consumer without stopping controller-owned tracks. It must not create a visible DOM media node, another canvas/compositor, a native overlay, a fake frame, or Atome state.
 
 Design rule: capture media reveal changes must preserve the source-tool-to-project animation and keep final geometry above the internally reported BevyUI main-menu reserved band; validation must measure intermediate frames, not only final presence.
 
@@ -505,19 +513,18 @@ Role:
 - Docked Molecule fullscreen bounds have no viewport margin: the host touches the WebView top/left/right edges and stops at the main toolbar top.
 - Molecule/MTraX panel titles are placed in the top header and centered; the bottom-right footer slot is reserved for the visible resize grip, not product text. The grip uses the bundled `assets/images/icons/resize.svg` icon inside the same visible button footprint as the shared close control while preserving its larger resize hit target.
 - Molecule footer transport is exposed as direct `play` and `stop` tool buttons. The former `transport` palette and its `play_media`/`play_animation` child presentation are not part of the Molecule panel surface; the media and animation reader tools remain catalog tools for non-panel invocation paths.
+- Molecule record-tool visuals delegate to `window.eveMoleculeTimelineApi` and the installed `audio_api.js` adapter. Armed/recording state may be displayed only from that runtime result; the visual layer does not calculate sample offsets, infer an epoch, or claim exact video support. Render/host-transport clocks, playback-start/observation proof, strictly positive `input_latency_frames`, `output_latency_frames`, `roundtrip_latency_frames`, and `record_offset_frames_applied` remain model/runtime diagnostics; integer placement is `timeline_origin_frame - roundtrip_latency_frames`, and all clock/latency metadata stays outside BevyUI nodes and DOM attributes.
 - Docked MTraX/Molecule footer controls are not the active-project inline-edit close overlay and are not accessibility bridge controls. They remain timeline/product transport controls; any project-media open path must be resolved from canonical Atome state and project-scene records, not from per-Atome DOM host geometry or footer/dock state.
 - MTraX preview compositing treats the top visible track as the playback and scrub priority for video/image clips. Selection may temporarily promote clips while playback and scrub are stopped so editing handles remain reachable, but transport playback/scrub returns to deterministic track-order compositing.
 - Molecule media image canvases clear to transparent and image hosts default to transparent unless canonical Atome properties explicitly request a background. SVG uploads and imports must use the editable vector shape renderer path, not the MTraX group preview or raster image canvas.
 - Molecule close-time poster capture is clip-source based; the removed internal preview canvas path must not be reintroduced as a fallback.
-- Video clip poster extraction for molecule close is owned by `eVe/domains/mtrax/preview/preview_video_poster_capture_runtime.js` and must seek to the runtime clip `media_time`, so the project poster follows the current playhead frame instead of the clip start.
 - Timeline clip preview projection stores thumbnail and waveform render payloads in `eVe/domains/mtrax/preview/preview_registry_runtime.js`; production DOM may expose `data-preview-id` and `data-preview-status` only, while visual pixels, peaks, frames, and signatures remain renderer/cache data.
 - Molecule/MTraX must not recreate an internal WebGPU compositor canvas or `mtrax-webgpu-compositor-canvas` audit role. The panel remains controls/timeline DOM only; visual montage output belongs on the single project Bevy/WebGPU canvas. Hidden MTraX duration-probe media elements must stay detached from the product DOM and must not serialize upload URLs or `media_user_id` query state in product DOM snapshots.
 - Molecule close-time project posters must be captured from the current MTraX playhead. The close lifecycle must not reset the playhead before `exportCurrentMtrackPreviewDescriptor()` runs, so reopening a molecule, scrubbing to another frame, and closing it updates the project atome image to that selected timeline frame.
 - Project video atomes use `eVe/domains/media/shared/media_video_poster_runtime.js` to capture and persist an image poster that the project WebGPU/Bevy route consumes before live video-frame decode, preventing black or transparent live-video rectangles on desktop WebKit after recording or refresh.
 - Project video recording posters are implemented by `eVe/domains/media/shared/media_video_poster_runtime.js` and are captured from the persisted recording file after project atome reuse/creation through the shared WebKit decode pool in `eVe/domains/media/shared/video_decode_pool_runtime.js`, then persisted through `media_poster_data_url`/`poster_data_url`.
 - Maintained DOM projection fixtures are audited and validated by `scripts/check_dom_projection_guardrails.mjs`, including measurable DOM size, element/tag counts, data attribute counts, inline style ratio, inline handlers, data URI/base64/preview-signature counts, local source attribute leaks, duplicate ids, document roots, media errors, and canvas/video counts so dense visual surfaces remain renderer-owned rather than DOM-owned. Full-app debug captures generated by `scripts/export_dom_subtrees.mjs` remain `.snapshot` diagnostics under `temp/`; versioned `.dom` examples are maintained subtree projections only.
-- Video recordings made from the capture tool snapshot the live preview through `eVe/intuition/shared/capture_video_poster_runtime.js` before the preview is disposed, then mount and persist that image on the reused `video_recording_*` project atome returned by the UI stop path. The later media-file poster generator must not overwrite a poster already mounted on that host.
-- Project-visible video molecule previews are finalized by `eVe/intuition/shared/group_video_poster_runtime.js`, which captures and persists an image poster before refreshing the group visual instead of leaving a live video surface in the atome square.
+- Video recording tools show a bounded live Bevy thumbnail sourced from the recorder-owned stream/frame producer; they never snapshot that transient preview into Atome state. On second click the moving media is replaced by stop/persist status, then cleared after durable success. The persisted recording file subsequently feeds the normal media poster/decode route.
 - MTraX clip preview metadata renders audio waveforms and video thumbnails from the clip source window before visual layout. Split and crop operations must display the `in`/`out` media interval without restarting from the source beginning or stretching the full-source waveform/thumbnails into the cropped clip width.
 - During active MTraX clip crop gestures, the clip preview is temporarily kept at its pre-gesture width and clipped by the body overflow so the cropped waveform or thumbnails are hidden live without resampling; the final source-window redraw runs after the gesture ends.
 
@@ -596,6 +603,7 @@ For any design change:
 - Verify touched file size and avoid expanding oversized visual/runtime files.
 - Run the narrowest relevant visual/runtime test when one exists.
 - For significant UI changes, use browser or probe verification on the real rendered surface.
+- Recording-tool visual/state changes must run `tests/probes/capture_tool_recording_boundary_probe.test.mjs`; Molecule record-state changes must also run the adapter/session/runtime probes. A screenshot or latched Bevy button alone is not recording evidence.
 
 ## Known Gaps
 

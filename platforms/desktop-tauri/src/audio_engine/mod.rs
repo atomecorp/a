@@ -3,6 +3,7 @@
 
 pub mod bridge;
 pub mod metering;
+mod metering_scope;
 pub mod playback;
 pub mod recorder;
 mod recorder_wav;

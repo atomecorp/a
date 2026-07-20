@@ -62,9 +62,16 @@ tests/shared/*
 !tests/eve/
 tests/eve/*
 !tests/eve/atome_commit.sanitization.test.mjs
+!tests/eve/capture_recording_bevy_feedback.test.mjs
+!tests/eve/dashboard_mockup_design_contract.test.mjs
 !tests/eve/dashboard_focus_color_contract.test.mjs
 !tests/eve/dashboard_preferences_contract.test.mjs
+!tests/eve/dashboard_records.test.mjs
+!tests/eve/debug_runtime_webgpu_probe.test.mjs
 !tests/eve/media_persistence_service.sanitization.test.mjs
+!tests/eve/media_recording_atomic_commit_contract.test.mjs
+!tests/eve/media_recording_format_validation.test.mjs
+!tests/eve/photo_capture_persistence_contract.test.mjs
 !tests/eve/mtrax_project_duplication.sanitization.test.mjs
 !tests/eve/project_layer_visibility_contract.test.mjs
 !tests/eve/render_surface_size_contract.test.mjs

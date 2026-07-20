@@ -1,11 +1,12 @@
 import { chromium } from 'playwright';
 import fs from 'node:fs';
 import path from 'node:path';
+import { ensureProject } from './dashboard_workspace_stress/product_actions.mjs';
 
 const APP_URL = process.env.ADOLE_TEST_URL || 'http://localhost:3001';
 const PHONE = process.env.ADOLE_TEST_PHONE || '55555555';
 const PASSWORD = process.env.ADOLE_TEST_PASSWORD || '55555555';
-const OUT_DIR = path.resolve('temp/probe_reports/audio_recording_quick_capture_probe');
+const OUT_DIR = path.resolve('temp/probe_reports/audio_recording_bevy_capture_probe');
 const REPORT_FILE = path.join(OUT_DIR, 'report.json');
 
 fs.mkdirSync(OUT_DIR, { recursive: true });
@@ -70,11 +71,72 @@ const tryLogin = async (page) => {
     }, { phone: PHONE, password: PASSWORD }, 30000);
 };
 
+const clickBevyMainMenuItem = async (page, nodeId) => {
+    const target = await page.evaluate((targetId) => {
+        const surface = document.getElementById('eve_surface_project');
+        const runtime = window.eveBevyUiRuntime;
+        const rect = surface?.getBoundingClientRect?.();
+        if (!surface || !runtime?.hitTestAtClientPoint || !rect) {
+            return { ok: false, error: 'bevy_surface_or_hit_test_missing' };
+        }
+        const itemSize = 60;
+        for (let y = Math.max(0, rect.height - (itemSize * 1.5)); y < rect.height; y += 2) {
+            for (let x = 0; x < rect.width; x += 2) {
+                const hit = runtime.hitTestAtClientPoint({
+                    surface,
+                    clientX: rect.left + x,
+                    clientY: rect.top + y
+                });
+                if (String(hit?.nodeId || hit?.node?.id || '') !== targetId) continue;
+                return { ok: true, clientX: rect.left + x, clientY: rect.top + y };
+            }
+        }
+        const tree = runtime.state?.trees?.get?.('eve_bevy_ui_main_menu')?.tree || null;
+        const ids = [];
+        const visit = (node) => {
+            if (!node || typeof node !== 'object') return;
+            if (node.on) ids.push({ id: node.id, position: node.style?.position, size: node.style?.size });
+            (node.children || []).forEach(visit);
+        };
+        visit(tree?.root);
+        return {
+            ok: false,
+            error: 'bevy_menu_item_not_found',
+            nodeId: targetId,
+            surface: { width: rect.width, height: rect.height },
+            treeIds: Array.from(runtime.state?.trees?.keys?.() || []),
+            interactive: ids
+        };
+    }, nodeId);
+    if (!target?.ok) throw new Error(`bevy_menu_click_target_failed:${JSON.stringify(target)}`);
+    await page.mouse.click(target.clientX, target.clientY);
+    return target;
+};
+
+const readAudioScopeSnapshot = (page) => page.evaluate(() => {
+    const tree = window.eveBevyUiRuntime?.state?.trees?.get?.('eve_bevy_ui_main_menu')?.tree || null;
+    const bars = [];
+    const visit = (node) => {
+        if (!node || typeof node !== 'object') return;
+        if (String(node.id || '').includes('capture__audio_recording_scope_bar_')) {
+            bars.push(Number(node.style?.size?.[1] || 0));
+        }
+        (node.children || []).forEach(visit);
+    };
+    visit(tree?.root);
+    return {
+        ok: bars.length === 32,
+        bars,
+        min: bars.length ? Math.min(...bars) : 0,
+        max: bars.length ? Math.max(...bars) : 0
+    };
+});
+
 const run = async () => {
     const report = {
         ok: false,
         app_url: APP_URL,
-        quick_capture: null,
+        bevy_capture: null,
         recording: null,
         file: null,
         state: null,
@@ -98,95 +160,120 @@ const run = async () => {
     page.on('pageerror', (error) => report.errors.push(error.message));
 
     try {
-        await page.goto(APP_URL, { waitUntil: 'networkidle', timeout: 45000 });
+        await page.goto(APP_URL, { waitUntil: 'domcontentloaded', timeout: 45000 });
         const ready = await waitFor(page, () => !!window.AdoleAPI && window.__authCheckComplete === true);
         if (!ready.ok) throw new Error('app_not_ready');
         const login = await tryLogin(page);
         if (!login?.ok) throw new Error(`login_failed:${login?.error || 'unknown'}`);
         await page.reload({ waitUntil: 'domcontentloaded', timeout: 45000 });
         await waitFor(page, () => window.__authCheckComplete === true, 20000);
-        await waitFor(page, () => {
-            const handle = document.querySelector('[role="eve_intuitionx-handle"], [data-role="eve_intuitionx-handle"]');
-            const api = window.eveCaptureQuickPreviewApi;
-            return { ok: !!(handle && api?.openFullscreenPreview), hasHandle: !!handle, hasCaptureApi: !!api };
-        }, 30000);
-
-        const swipeGeometry = await safeEval(page, () => {
-            const handle = document.querySelector('[role="eve_intuitionx-handle"], [data-role="eve_intuitionx-handle"]');
-            if (!(handle instanceof HTMLElement)) return { ok: false, error: 'handle_missing' };
-            const rect = handle.getBoundingClientRect();
+        const workspaceRuntimeReady = await waitFor(page, () => ({
+            ok: typeof window.eveToolBase?.loadProjectAtomes === 'function'
+                && typeof window.eveToolBase?.renderProjectScene === 'function'
+        }), 30000, 100);
+        if (!workspaceRuntimeReady.ok) throw new Error('probe_workspace_runtime_not_ready');
+        const project = await ensureProject(page, `Audio recording Bevy probe ${Date.now()}`);
+        if (!project?.ok) throw new Error(`probe_project_create_failed:${JSON.stringify(project)}`);
+        const activated = await safeEval(page, async (entry) => {
+            const module = await import('/eVe/intuition/matrix/core/project_data.js');
+            const result = await module.activateProjectWorkspace?.(entry, { force: true, staleFirst: false });
+            return { ok: result?.ok !== false, result };
+        }, project, 60000);
+        if (!activated?.ok) throw new Error(`probe_project_activation_failed:${JSON.stringify(activated)}`);
+        await page.waitForFunction(() => (
+            !!window.__DEBUG__ || !!document.getElementById('intuition')
+        ), null, { timeout: 30000 });
+        await page.waitForFunction(async () => {
+            const { getMainMenuRuntime } = await import('/eVe/intuition/ribbon/bevy_ui_product_registry.js');
+            const measure = getMainMenuRuntime()?.measure?.();
+            return !!document.getElementById('eve_surface_project')
+                && measure?.active === true
+                && measure?.treeMounted === true
+                && window.eveBevyUiRuntime?.state?.trees?.has?.('eve_bevy_ui_main_menu') === true;
+        }, null, { timeout: 30000 });
+        report.bevy_capture = await safeEval(page, async () => {
+            const { getMainMenuRuntime } = await import('/eVe/intuition/ribbon/bevy_ui_product_registry.js');
+            const measure = getMainMenuRuntime()?.measure?.() || {};
             return {
-                ok: true,
-                x: Math.round(rect.left + rect.width / 2),
-                y: Math.round(rect.top + rect.height / 2)
+                ok: measure.active === true
+                    && measure.treeMounted === true
+                    && !!document.getElementById('eve_surface_project')
+                    && window.eveBevyUiRuntime?.state?.trees?.has?.('eve_bevy_ui_main_menu') === true,
+                active: measure.active === true,
+                tree_mounted: measure.treeMounted === true,
+                canvas_id: document.getElementById('eve_surface_project')?.id || null
             };
         });
-        if (!swipeGeometry?.ok) throw new Error(swipeGeometry?.error || 'swipe_geometry_failed');
-        await page.mouse.move(swipeGeometry.x, swipeGeometry.y);
-        await page.mouse.down();
-        await page.mouse.move(swipeGeometry.x, swipeGeometry.y - 180, { steps: 12 });
-        await sleep(100);
-        report.quick_capture = await safeEval(page, () => {
-            const overlay = document.querySelector('[role="eve_intuitionx-quick-capture"], [data-role="eve_intuitionx-quick-capture"]');
-            const buttons = Array.from(overlay?.querySelectorAll?.('[role="eve_intuitionx-quick-capture-button"], [data-role="eve_intuitionx-quick-capture-button"]') || []);
-            return {
-                ok: !!overlay && buttons.length >= 4,
-                overlay_display: overlay ? getComputedStyle(overlay).display : null,
-                overlay_opacity: overlay ? getComputedStyle(overlay).opacity : null,
-                buttons: buttons.map((button) => ({
-                    key: button.getAttribute('data-key') || button.dataset?.key || '',
-                    visible: getComputedStyle(button).visibility,
-                    opacity: getComputedStyle(button).opacity
-                }))
-            };
-        });
-        await page.mouse.up();
-        await waitFor(page, async () => {
-            const mod = await import('/eVe/domains/media/api/audio_api.js');
-            const audio = mod.getAudioRecordingState?.() || {};
-            const capture = window.eveCaptureQuickPreviewApi?.getState?.() || {};
-            const quickCaptureVisible = Array.from(document.querySelectorAll('[role="eve_intuitionx-quick-capture"], [data-role="eve_intuitionx-quick-capture"]'))
-                .some((node) => {
-                    const style = getComputedStyle(node);
-                    return style.display !== 'none' && style.opacity !== '0';
-                });
-            return {
-                ok: audio.isRecording === true || (capture.pending !== true && !quickCaptureVisible),
-                audioRecording: audio.isRecording === true,
-                capturePending: capture.pending === true,
-                quickCaptureVisible
-            };
-        }, 3500, 100);
-        await sleep(250);
 
-        report.recording = await safeEval(page, async () => {
+        const initialState = await safeEval(page, async () => {
             const mod = await import('/eVe/domains/media/api/audio_api.js');
-            const initialState = mod.getAudioRecordingState?.() || {};
-            const started = initialState.isRecording === true
-                ? { ok: true, status: 'recording', fileName: initialState.fileName, source: 'quick_capture' }
-                : await mod.startAudioRecording({ fileName: `probe_${Date.now()}.wav` });
-            if (started?.ok !== true) return { ok: false, step: 'start', started, initialState };
-            await new Promise((resolve) => setTimeout(resolve, 900));
-            const stopped = await mod.stopAudioRecording();
+            return mod.getAudioRecordingState?.() || {};
+        });
+        if (initialState?.isRecording === true) throw new Error('probe_audio_already_recording');
+
+        await clickBevyMainMenuItem(page, 'eve_bevy_ui_main_menu_tool_capture');
+        const paletteReady = await waitFor(page, async () => {
+            const { getMainMenuRuntime } = await import('/eVe/intuition/ribbon/bevy_ui_product_registry.js');
+            return { ok: getMainMenuRuntime()?.measure?.()?.activePaletteKey === 'capture' };
+        }, 15000, 50);
+        if (!paletteReady.ok) throw new Error(`capture_palette_not_open:${JSON.stringify(paletteReady.last)}`);
+
+        await clickBevyMainMenuItem(page, 'eve_bevy_ui_main_menu_tool_capture__audio');
+        const started = await waitFor(page, async () => {
+            const mod = await import('/eVe/domains/media/api/audio_api.js');
+            const state = mod.getAudioRecordingState?.() || {};
+            return { ok: state.isRecording === true && !!state.projectAtomeId, state };
+        }, 20000, 50);
+        if (!started.ok) throw new Error(`audio_real_click_start_failed:${JSON.stringify(started.last)}`);
+
+        const scopeSnapshots = [];
+        for (let index = 0; index < 8; index += 1) {
+            await sleep(120);
+            scopeSnapshots.push(await readAudioScopeSnapshot(page));
+        }
+        const scopeVariable = scopeSnapshots.some((snapshot) => snapshot.ok && snapshot.max - snapshot.min > 0.25);
+
+        const projectAtomeId = started.last.state.projectAtomeId;
+        await clickBevyMainMenuItem(page, 'eve_bevy_ui_main_menu_tool_capture__audio');
+        const stopped = await waitFor(page, async ({ atomeId }) => {
+            const mod = await import('/eVe/domains/media/api/audio_api.js');
+            const state = mod.getAudioRecordingState?.() || {};
+            const record = await window.Atome?.getStateCurrent?.(atomeId).catch(() => null);
+            return { ok: state.isRecording !== true && !!record, state, record };
+        }, 60000, 100, { atomeId: projectAtomeId });
+        if (!stopped.ok) throw new Error(`audio_real_click_stop_failed:${JSON.stringify(stopped.last)}`);
+
+        report.recording = await safeEval(page, async ({ atomeId, projectId, scopeVariable, scopeSnapshots, initialState }) => {
+            const stateRecord = await window.Atome.getStateCurrent(atomeId);
+            const props = stateRecord?.properties || stateRecord?.props || {};
+            const scene = window.eveToolBase?.getProjectSceneState?.(projectId) || {};
+            const occurrences = (scene.records || []).filter((record) => String(record?.id || record?.atome_id || '') === atomeId).length;
             return {
-                ok: stopped?.ok === true && stopped?.status === 'stopped' && stopped?.result?.success === true,
+                ok: occurrences === 1 && scopeVariable === true,
                 initialState: {
                     isRecording: initialState.isRecording === true,
                     fileName: initialState.fileName || null,
                     pending: initialState.pending === true
                 },
-                started,
-                stopped,
-                frame_count: Number(stopped?.result?.frame_count || 0),
-                duration_sec: Number(stopped?.result?.duration_sec || 0),
-                sample_rate: Number(stopped?.result?.sample_rate || 0),
-                project_atome_id: stopped?.project?.atomeId || null,
-                project_id: stopped?.project?.projectId || null,
-                owner_id: stopped?.result?.owner_id || stopped?.result?.media_user_id || null,
-                file_path: stopped?.result?.file_path || stopped?.result?.path || null,
-                media_url: stopped?.result?.media_url || stopped?.result?.src || null
+                scope_variable: scopeVariable,
+                scope_snapshots: scopeSnapshots,
+                atom_occurrences: occurrences,
+                frame_count: Number(props.frame_count || 0),
+                duration_sec: Number(props.duration_sec || 0),
+                sample_rate: Number(props.sample_rate || 0),
+                project_atome_id: atomeId,
+                project_id: projectId,
+                owner_id: props.owner_id || props.media_user_id || null,
+                file_path: props.file_path || props.path || null,
+                media_url: props.media_url || props.src || null
             };
-        }, null, 60000);
+        }, {
+            atomeId: projectAtomeId,
+            projectId: project.id,
+            scopeVariable,
+            scopeSnapshots,
+            initialState
+        }, 60000);
 
         const audioFilePath = resolveWorkspaceRecordingPath({
             filePath: report.recording?.file_path,
@@ -311,8 +398,7 @@ const run = async () => {
         }, report.recording, 60000);
 
         report.decode = await safeEval(page, async (recording) => {
-            const stopped = recording?.stopped || null;
-            const projectId = stopped?.project?.atomeId || null;
+            const projectId = recording?.project_atome_id || null;
             let state = null;
             if (projectId && window.Atome?.getStateCurrent) {
                 state = await window.Atome.getStateCurrent(projectId).catch(() => null);
@@ -320,10 +406,10 @@ const run = async () => {
             const props = state?.properties || state?.props || state || {};
             const playInput = {
                 source: 'recording',
-                file_name: props.file_name || stopped?.result?.fileName || stopped?.result?.file_name || '',
-                recording_id: props.recording_id || stopped?.result?.local?.id || '',
-                local_recording_id: props.local_recording_id || stopped?.result?.local?.id || '',
-                local_recording_backend: props.local_recording_backend || stopped?.result?.local?.backend || ''
+                file_name: props.file_name || '',
+                recording_id: props.recording_id || projectId || '',
+                local_recording_id: props.local_recording_id || projectId || '',
+                local_recording_backend: props.local_recording_backend || ''
             };
             if (typeof window.record_audio_play !== 'function') return { ok: false, error: 'record_audio_play_unavailable', playInput };
             const playable = await window.record_audio_play(playInput);
@@ -345,7 +431,7 @@ const run = async () => {
             };
         }, report.recording, 60000);
 
-        report.ok = report.quick_capture?.ok === true
+        report.ok = report.bevy_capture?.ok === true
             && report.recording?.ok === true
             && report.file?.ok === true
             && report.file?.in_recordings === true
@@ -359,8 +445,8 @@ const run = async () => {
         await browser.close();
     }
     if (!report.ok) {
-        throw new Error(`audio_recording_quick_capture_probe_failed:${JSON.stringify({
-            quick_capture: report.quick_capture?.ok,
+        throw new Error(`audio_recording_bevy_capture_probe_failed:${JSON.stringify({
+            bevy_capture: report.bevy_capture?.ok,
             recording: report.recording?.ok,
             decode: report.decode?.ok,
             errors: report.errors

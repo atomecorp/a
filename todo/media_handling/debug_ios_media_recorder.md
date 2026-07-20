@@ -1,200 +1,66 @@
-# Debug iOS Media Recorder After Renderer Unification
+# iOS and AUv3 Media Recording Status
 
-Status: pending until MTRAX / molecule / Bevy path unification is complete.
-Scope: repair iOS app and AUv3 audio/video recording without adding fallbacks or new parallel media paths.
+Status: implementation connected; physical-device and real-host validation still required.
+Scope: iOS application and AUv3 audio/video recording on the shared Bevy projection route.
 
-## Non-negotiable constraints
+## Invariants
 
-- Do not start this repair before the renderer/media path unification is merged.
-- Do not reintroduce DOM media rendering for project atomes.
-- Do not use `navigator.mediaDevices`, `MediaRecorder`, or browser `AudioContext` recording as an iOS/AUv3 fallback.
-- Do not create another MTRAX-specific media persistence path.
-- Do not persist `blob:`, `file://`, absolute iOS sandbox paths, or temporary preview URLs.
-- Keep persisted media references limited to stable `file_path`, `media_url`, recording id, owner id, and normalized media metadata.
-- Keep Bevy as the renderer for project atomes. HTML stays limited to tools, panels, menus, and overlays.
+- iOS and AUv3 never fall back to `navigator.mediaDevices`, browser `MediaRecorder`, or a browser `AudioContext` recorder.
+- The ordinary iOS app recorder is generic. Only AUv3 `source = "plugin_input"` may accept `require_sample_accurate: true`, after the complete clock, latency, overrun, and discontinuity checks pass.
+- Project state stores stable relative media sources and normalized terminal metadata only. It never stores an absolute sandbox path, temporary preview URL, recording phase, session id, scope pairs, or preview pixels.
+- The existing project Bevy/WebGPU canvas is the only visible renderer. There is no native preview layer, visible DOM media viewfinder, JPEG preview, or second canvas.
 
-## Current verified failures
+## Connected ownership
 
-### MTRAX audio recording on iOS
+### Audio
 
-`eVe/domains/mtrax/media/record_capture_runtime.js` still starts audio recording through:
+- `atome/src/application/audio_runtime/record_audio_api.js` is the JavaScript runtime bridge.
+- `platforms/ios/atome-auv3/application/AppNativeAudioController.swift` and its focused recording/scope owners implement ordinary iOS application capture.
+- `platforms/ios/atome-auv3/auv3/AUv3Recorder.swift`, `AUv3RenderEngine.swift`, and `AUv3NativeRecorderBackend.mm` implement AUv3 capture and the exact `plugin_input` path.
+- Both native routes publish `record_scope` from fixed 64-bin min/max buffers. JavaScript forwards the matching session as `native_audio_scope`; `capture_recording_feedback_runtime.js` sends it to the active Bevy tool. There is no legacy level-meter or DOM oscilloscope owner.
+- The real-time path performs no scope allocation, lock, log, or disk write. Envelope reads and JavaScript event delivery happen off the audio callback.
 
-- `navigator.mediaDevices.getUserMedia({ audio: true, video: false })`
-- `MediaRecorder`
+### Video and photo
 
-That is wrong for iOS app and AUv3. The native audio recorder already exists:
+- `eVe/domains/media/api/video_recording_controller.js` and `video_api_record_native.js` retain the canonical JavaScript start/stop boundary.
+- `AppNativeVideoRecorder.swift` owns one `AVCaptureSession` with movie output plus `AVCaptureVideoDataOutput`. The callback retains only the latest frame; bounded conversion to BGRA at no more than 96 x 96 and 15 fps happens outside the capture callback.
+- `media_video_preview_frame` returns only the latest ephemeral frame to the shared Bevy tool texture route. No recorder track or capture session is owned by feedback cleanup.
+- Photo capture creates no preview. The UI emits only the 120 ms Bevy shutter flash.
 
-- JS: `atome/src/application/audio_runtime/record_audio_api.js`
-- iOS app Swift: `platforms/ios/atome-auv3/application/ViewController.swift`
-- AUv3 Swift: `platforms/ios/atome-auv3/auv3/AUv3Recorder.swift`
+## Terminal media contract
 
-When audio and video are armed together, audio starts first. If the browser audio path fails, MTRAX returns before reaching the native video path. This makes audio + video appear broken even though the native video route exists.
+Audio stop must report a non-empty WAV with coherent RIFF/WAVE bytes, sample rate, channels,
+integer frame count, duration, and byte size. Native video stop validates the actual AVAsset:
+readability/playability, duration, video track, requested audio track, dimensions, orientation,
+container, and codec metadata. JPEG photo stop validates bytes and dimensions.
 
-### Audio tool oscilloscope on iOS/AUv3
+Only after validation and durable persistence may the product perform one final project Atome
+commit. Retryable persistence or association failure keeps the same reserved identity and
+terminal file so retry does not re-record or duplicate the Atome. Confirmed discard removes
+the physical terminal file; failed deletion remains explicit and retryable.
 
-The live scope in `eVe/intuition/tools/capture_audio_scope.js` can render only:
+## Automated evidence
 
-- a `MediaStream`
-- a native-style `level_meter` source with `readLevels()`
+Focused contracts include:
 
-Native recording returns `stream: null`, which is correct. The missing piece is a native live meter contract. `eVe/intuition/tools/capture_audio_scope_source.js` expects one of:
+- `tests/probes/ios_app_native_audio_recording_contract.test.mjs`
+- `tests/probes/native_audio_scope_contract.test.mjs`
+- `tests/probes/native_video_bevy_preview_contract.test.mjs`
+- `tests/probes/native_video_terminal_metadata_contract.test.mjs`
+- `tests/probes/native_video_recording_recovery_contract.test.mjs`
+- `tests/probes/native_video_public_commit_ack_contract.test.mjs`
+- `tests/eve/media_recording_atomic_commit_contract.test.mjs`
+- `tests/eve/media_recording_format_validation.test.mjs`
+- `tests/eve/photo_capture_persistence_contract.test.mjs`
 
-- `window.audio_get_levels`
-- `window.audioGetLevels`
-- `window.__SQUIRREL_AUDIO_GET_LEVELS__`
-- native invoke command `audio_get_levels`
+The focused Node/Vitest contracts and arm64 simulator build are necessary gates, but they do
+not replace runtime evidence from a physical iOS microphone/camera or a real AUv3 host.
 
-There is no iOS/AUv3 implementation for this contract. AUv3 has an old `updateAudioVisualization` channel, but the current eVe scope does not consume it. Treat that as legacy or remove it during repair.
+## Remaining acceptance work
 
-## Required post-unification repair plan
+- On a physical iOS device: record audio, video with requested audio, and photo from the real Bevy tools; verify the animated scope/thumbnail or shutter flash, second-click stop, exactly one project Atome, reload/offline resolution, and normal playback.
+- In a real AUv3 host at 48 kHz: play a reference track, inject the impulse at frame 24,000, record `plugin_input`, and require zero-sample delta after measured latency compensation with zero overrun/discontinuity/drift.
+- Compare long AUv3 takes with feedback enabled and disabled; frame count and duration must match exactly.
+- Run fifty native start/stop cycles and confirm stable taps, callbacks, fixed buffers, texture ownership, timers, and capture tracks.
 
-### 1. Audit the final unified media entry points
-
-Before editing, identify the single canonical post-unification functions for:
-
-- starting an audio recording session
-- stopping an audio recording session
-- starting a video recording session
-- stopping a video recording session
-- creating/persisting `audio_recording` and `video_recording` atomes
-- resolving `file_path` and `media_url`
-- projecting persisted media atomes into Bevy
-
-Do not repair against any path that the unification has deprecated.
-
-### 2. Route MTRAX audio recording to native iOS/AUv3
-
-For iOS app and AUv3, MTRAX audio must use the existing native recorder contract:
-
-- `record_start`
-- `record_stop`
-- iOS app command: `audio_record_start`
-- iOS app command: `audio_record_stop`
-- AUv3 bridge action: `record_start`
-- AUv3 bridge action: `record_stop`
-
-The MTRAX audio path must not call `getUserMedia` or `MediaRecorder` in iOS/AUv3 runtime.
-
-Expected shape:
-
-```text
-MTRAX record request
-  -> canonical recording session orchestration
-  -> native audio backend for iOS/AUv3
-  -> native result with file_path/frame_count/sample_rate/channels/duration
-  -> canonical media persistence
-  -> Bevy-projected audio_recording atome
-```
-
-### 3. Keep native video recording on the native iOS route
-
-The existing native video route uses:
-
-- JS controller: `eVe/domains/media/api/video_recording_controller.js`
-- native command: `media_video_record_start`
-- native command: `media_video_record_stop`
-
-After unification, MTRAX must still reach that native route for iOS video recording. Do not replace it with browser `MediaRecorder`.
-
-### 4. Fix mixed audio + video recording ordering
-
-Mixed recording must not fail before native video is reached because native audio setup failed through a browser-only path.
-
-The session orchestration should either:
-
-- start native audio and native video through one coordinated recording session, or
-- prepare both native backends and fail atomically before any partial persisted media is created.
-
-If one backend fails after another has started, stop and discard the already-started backend through the same canonical discard/finalize path. Do not leave orphan files or pending runtime sessions.
-
-### 5. Add the native live level meter contract
-
-Implement one canonical native meter contract consumed by `resolveAudioScopeSource()`.
-
-Required public shape:
-
-```js
-{
-  peak: number,
-  rms: number,
-  value: number
-}
-```
-
-Values must be normalized to `0..1`.
-
-iOS app should expose levels from the active `AVAudioEngine` recording tap. AUv3 should expose levels from the active mic recorder or plugin recorder source, depending on the recording source. The scope should poll the same canonical reader; do not wire the UI to `updateAudioVisualization`.
-
-### 6. Remove or quarantine obsolete visualization channels
-
-If `updateAudioVisualization` is no longer the canonical contract, either remove it or leave it explicitly isolated from the Audio tool scope. Do not keep two live metering APIs for the same purpose.
-
-### 7. Preserve canonical persistence
-
-Every successful native recording must produce enough data for canonical persistence:
-
-- `file_name`
-- `file_path`
-- `media_url`
-- `duration_sec`
-- `frame_count` for audio where available
-- `sample_rate`
-- `channels`
-- `size_bytes`
-- `provider`
-- `source`
-
-`absolute_file_path` may be returned for native diagnostics, but must not become persisted project state.
-
-## Validation checklist
-
-Run the narrowest checks first, then widen only after the root checks pass.
-
-### Static contract checks
-
-- Confirm no iOS/AUv3 MTRAX audio path calls `getUserMedia` or `MediaRecorder`.
-- Confirm MTRAX video iOS still reaches `media_video_record_start` / `media_video_record_stop`.
-- Confirm mixed audio + video recording does not return before preparing the native video path because of a browser audio failure.
-- Confirm `resolveAudioScopeSource()` can obtain a native `level_meter` source in iOS/AUv3.
-- Confirm the Audio scope does not depend on `updateAudioVisualization`.
-
-### JS tests
-
-Re-run the existing focused checks:
-
-```bash
-npm run test:run -- tests/eve/media_persistence_service.sanitization.test.mjs
-npm run test:run -- tests/eve/video_recording_preview_stream_contract.test.mjs
-npm run test:run -- tests/probes/record_capture_source_atome_contract.test.mjs
-npm run test:run -- tests/probes/selected_project_video_audio_sync.test.mjs
-node --test atome/src/application/audio_runtime/runtime_audio_backend.strict_native.test.mjs
-node --test eVe/intuition/tools/core/hmtracks_audio_engine_v1.strict_native.test.mjs
-```
-
-Add or update focused tests only if the unified path has no coverage for:
-
-- iOS/AUv3 MTRAX audio using native record start/stop
-- mixed audio + video native session startup/failure cleanup
-- native audio level meter source resolution
-
-### iOS/AUv3 smoke validation
-
-Required manual/runtime evidence before declaring fixed:
-
-- iOS app audio-only recording creates a playable `audio_recording` atome.
-- AUv3 audio-only recording creates a playable `audio_recording` atome.
-- iOS app video-only recording creates a playable `video_recording` atome.
-- iOS app mixed audio + video recording no longer fails in the audio branch before video starts.
-- Audio tool oscilloscope moves during iOS app recording.
-- Audio tool oscilloscope moves during AUv3 recording.
-- Stopped recordings survive reload through stable `file_path` / `media_url`.
-
-## Completion criteria
-
-The repair is complete only when:
-
-- iOS/AUv3 recording never falls back to browser capture.
-- MTRAX, capture tool, and persisted media all use the unified post-cleanup path.
-- The Audio tool live scope receives native levels through one canonical meter contract.
-- Bevy renders the resulting media atomes.
-- No obsolete duplicate recording or metering path remains active.
+Do not mark this document complete from simulator or static-contract evidence alone.

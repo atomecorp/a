@@ -2,23 +2,39 @@
 
 ```mermaid
 flowchart TD
-  State["mtrackState record flags/tracks"] --> Batch["recorder batch target tracks"]
-  MediaStream["MediaStream tracks"] --> RecorderRuntime["runtime.stream/runtime.recorder/chunks"]
-  NativeSession["native video session"] --> NativeResult["native result atome id"]
-  RecorderRuntime --> Blob["Blob result"]
-  Blob --> RecordEntry["recording entry /api/recordings"]
-  NativeResult --> AppendAtome["eveMtrackApi.appendCaptureAtomes"]
-  RecordEntry --> Clip["timeline clip"]
-  AppendAtome --> Clip
-  Clip --> Timeline["mtrackState.clips + active group timeline persistence"]
-  LoopSchedule["loop/cell record windows"] --> Clip
+  Request["canonical recording request"] --> Capability["sample-accurate capability decision"]
+  Capability --> Generic["generic backend session"]
+  Capability --> Exact["explicit AUv3 plugin_input session\nrender + host-transport clocks / epoch"]
 
-  Multi["MULTI_SOURCE_OF_TRUTH: stream runtime, native session, clip state, schedule windows, persisted timeline"]:::risk
-  RecorderRuntime --> Multi
-  NativeSession --> Multi
-  Clip --> Multi
-  Timeline --> Multi
-  LoopSchedule --> Multi
+  Generic --> GenericResult["recording result\nsample_rate + frame_count + health"]
+  Exact --> NativeResult["record_done measured render frames"]
+  NativeResult --> ExactResult["actual playback start + same-quantum observation\nstrict positive-latency placement contract"]
 
-  classDef risk fill:#ffd6d6,stroke:#a80000,color:#111
+  GenericResult --> File["persisted media file / AudioFileAtome"]
+  ExactResult --> File
+  ExactResult --> Placement["timeline_origin - roundtrip\nstart/source_in/duration_frames"]
+  File --> Clip["canonical clip Atome"]
+  Placement --> Clip
+  Clip --> Timeline["canonical timeline state"]
+
+  BrowserClock["web_audio_context currentFrame"] --> GenericResult
+  KiraClock["Kira playback clock"] -.-> NoWebMap["no proven shared-clock mapping"]
+  NoWebMap -.-> BrowserClock
+  Auv3RenderClock["auv3.render capture + matching epoch"] --> Exact
+  HostTransportClock["auv3.host_transport timeline origin"] --> Exact
+
+  Timeline -.-> UI["derived UI / waveform / Bevy media projection"]
+
+  NativeRing["native recorder ring + active producer count"] --> WrittenFrames["producer-drained writer total"]
+  WrittenFrames --> GenericResult
+
+  NativeVideoState["native video lifecycle + cached terminal file"] --> VideoResult["validated generic video result"]
+  VideoResult --> VideoAtome["durable project video Atome"]
+  VideoAtome --> NativeAck["acknowledge terminal host result"]
+  NativeVideoState -.->|reload recovery only| VideoResult
 ```
+
+The native terminal cache is recoverable runtime state, not canonical project truth. The
+persisted media Atome becomes the durable owner; acknowledgement is permitted only after
+that commit succeeds. Browser retry similarly reuses one stable recording Atome/upload
+identity instead of producing a second durable object.

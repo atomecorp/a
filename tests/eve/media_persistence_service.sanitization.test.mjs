@@ -117,8 +117,19 @@ const result = await ensureProjectMediaAtome({
         file_path: 'data/users/user_a/recordings/video_1779220000000.webm',
         path: 'data/users/user_a/recordings/video_1779220000000.webm',
         duration_sec: 1.5,
+        mime_type: 'video/webm',
+        container: 'webm',
+        size_bytes: 8192,
         width: 320,
-        height: 180
+        height: 180,
+        orientation: 'landscape-right',
+        nominal_fps: 30,
+        video_track_count: 1,
+        audio_track_count: 1,
+        has_audio: true,
+        codecs: ['vp9', 'opus'],
+        video_codec: 'vp9',
+        audio_codec: 'opus'
     },
     accessToken: true,
     requireAdoleApi: true
@@ -132,6 +143,15 @@ assertNoEnvelopeOrAliasProps(commits[0].props);
 assert.equal(commits[0].props.media_user_id, 'user_a');
 assert.equal(commits[0].props.media_kind, 'video');
 assert.equal(commits[0].props.storage_root, 'recordings');
+assert.equal(commits[0].props.mime_type, 'video/webm');
+assert.equal(commits[0].props.container, 'webm');
+assert.equal(commits[0].props.size_bytes, 8192);
+assert.equal(commits[0].props.orientation, 'landscape-right');
+assert.equal(commits[0].props.nominal_fps, 30);
+assert.equal(commits[0].props.video_track_count, 1);
+assert.equal(commits[0].props.audio_track_count, 1);
+assert.equal(commits[0].props.has_audio, true);
+assert.deepEqual(commits[0].props.codecs, ['vp9', 'opus']);
 assert.equal(commits[0].props.media_width, 320);
 assert.equal(commits[0].props.mediaWidth, 320);
 assert.equal(commits[0].props.media_height, 180);
@@ -194,6 +214,12 @@ const hydrated = await ensureProjectMediaAtome({
         file_path: 'data/users/user_a/recordings/audio_1779220000002.wav',
         path: 'data/users/user_a/recordings/audio_1779220000002.wav',
         duration_sec: 1.25,
+        mime_type: 'audio/wav',
+        container: 'wav',
+        size_bytes: 120044,
+        sample_rate: 48000,
+        channels: 1,
+        frame_count: 60000,
         peaks: [0.1, -0.25, 2, 'bad']
     },
     accessToken: true,
@@ -209,6 +235,12 @@ assert.equal(commits[0].atome_id, 'audio_recording_pending');
 assert.equal(commits[0].props.kind, 'audio_recording');
 assert.equal(commits[0].props.pending, false);
 assert.equal(commits[0].props.media_pending, false);
+assert.equal(commits[0].props.mime_type, 'audio/wav');
+assert.equal(commits[0].props.container, 'wav');
+assert.equal(commits[0].props.size_bytes, 120044);
+assert.equal(commits[0].props.sample_rate, 48000);
+assert.equal(commits[0].props.channels, 1);
+assert.equal(commits[0].props.frame_count, 60000);
 assert.deepEqual(commits[0].props.peaks, [0.1, 0.25, 1]);
 assert.deepEqual(commits[0].props.waveform_peaks, [0.1, 0.25, 1]);
 assert.match(commits[0].props.visual_ref, /^waveform:/);
@@ -243,6 +275,44 @@ assert.deepEqual(commits[0].props.waveform_peaks, [0.4, 0.8]);
 const browserAudioSceneAtom = sceneRecords().find((atom) => atom.id === browserAudio.atomeId);
 assert.equal(browserAudioSceneAtom.type, 'audio_waveform');
 assert.deepEqual(browserAudioSceneAtom.content.peaks, [0.4, 0.8]);
+
+commits.length = 0;
+
+const photo = await ensureProjectMediaAtome({
+    kind: 'image',
+    fileName: 'photo_1779220000005.jpg',
+    result: {
+        file_path: 'data/users/user_a/captures/photo_1779220000005.jpg',
+        path: 'data/users/user_a/captures/photo_1779220000005.jpg',
+        mime_type: 'image/jpeg',
+        container: 'jpeg',
+        size_bytes: 4096,
+        width: 640,
+        height: 480
+    },
+    accessToken: true,
+    requireAdoleApi: true
+});
+
+assert.equal(photo.ok, true);
+assert.equal(commits.length, 1);
+assert.equal(commits[0].props.kind, 'image');
+assert.equal(commits[0].props.media_kind, 'image');
+assert.equal(commits[0].props.media_source, 'upload');
+assert.equal(commits[0].props.storage_root, 'captures');
+assert.equal(commits[0].props.file_name, 'photo_1779220000005.jpg');
+assert.equal(commits[0].props.mime_type, 'image/jpeg');
+assert.equal(commits[0].props.container, 'jpeg');
+assert.equal(commits[0].props.size_bytes, 4096);
+assert.equal(commits[0].props.media_width, 640);
+assert.equal(commits[0].props.media_height, 480);
+assert.equal(Object.hasOwn(commits[0].props, 'pending'), false);
+assert.equal(Object.hasOwn(commits[0].props, 'media_pending'), false);
+assert.equal(Object.hasOwn(commits[0].props, 'recording_id'), false);
+const photoSceneAtom = sceneRecords().find((atom) => atom.id === photo.atomeId);
+assert.equal(photoSceneAtom.type, 'image');
+assert.equal(photoSceneAtom.content.naturalWidth, 640);
+assert.equal(photoSceneAtom.content.naturalHeight, 480);
 
 commits.length = 0;
 
