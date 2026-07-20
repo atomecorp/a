@@ -80,8 +80,11 @@ test('main menu projects audio scope, video thumbnail and photo flash inside the
     assert.equal(videoPreview.kind, 'image');
     assert.equal(videoPreview.overlayRecord.type, 'video');
     assert.equal(videoPreview.overlayRecord.properties.source, 'capture://video_1');
-    assert.ok(videoPreview.style.position[0] >= 0 && videoPreview.style.position[0] < 70);
-    assert.ok(videoPreview.style.position[1] >= 0 && videoPreview.style.position[1] < 70);
+    assert.deepEqual(videoPreview.style.position, [0, 0]);
+    assert.deepEqual(videoPreview.style.size, [70, 70]);
+    assert.equal(videoPreview.overlayRecord.properties.width, 70);
+    assert.equal(videoPreview.overlayRecord.properties.height, 70);
+    assert.equal(videoPreview.overlayRecord.properties.fit, 'cover');
     assert.equal(
         videoPreview.overlayRecord.properties.left,
         videoItem.style.position[0] + videoPreview.style.position[0]

@@ -20,6 +20,10 @@ import {
     readProjectSceneStackBounds,
     resolveProjectSceneNextStackPosition
 } from '../../eVe/domains/rendering/project_scene_stack_runtime.js';
+import {
+    normalizeWorkspaceSceneRecord,
+    WORKSPACE_PROJECT_LAYER_MAX
+} from '../../eVe/domains/rendering/workspace_scene_layers.js';
 
 const flushBevyRun = () => new Promise((resolve) => setTimeout(resolve, 0));
 
@@ -156,7 +160,7 @@ test('Dashboard ephemeral records do not raise imported media above the project 
     clearProjectScene('dashboard_stack_ignore_project');
 });
 
-test('New media stays below visible Dashboard records when the Dashboard band is adjacent', async () => {
+test('New media stays inside the project band below visible Dashboard records', async () => {
     const dom = new JSDOM('<!doctype html><html><body><div id="project"></div></body></html>');
     const host = dom.window.document.getElementById('project');
     host.getBoundingClientRect = () => ({
@@ -195,13 +199,13 @@ test('New media stays below visible Dashboard records when the Dashboard band is
         record('__eve_dashboard_background', { zIndex: 1398, order: 0 })
     ]));
 
-    assert.equal(stack.zIndex, 798);
+    assert.equal(stack.zIndex, WORKSPACE_PROJECT_LAYER_MAX);
     assert.equal(stack.order, 21);
     assert.equal(hitTestRenderScene(scene, { x: 20, y: 20 })?.id, '__eve_dashboard_background');
     clearProjectScene('dashboard_stack_cap_project');
 });
 
-test('Repeated explicit media stack positions are clamped below visible Dashboard records', async () => {
+test('Repeated explicit media stack positions remain clamped inside the project band', async () => {
     const dom = new JSDOM('<!doctype html><html><body><div id="project"></div></body></html>');
     const host = dom.window.document.getElementById('project');
     host.getBoundingClientRect = () => ({
@@ -239,12 +243,25 @@ test('Repeated explicit media stack positions are clamped below visible Dashboar
         renderOrder: first.order + 1
     });
 
-    assert.equal(first.zIndex, 901);
+    assert.equal(first.zIndex, WORKSPACE_PROJECT_LAYER_MAX);
     assert.equal(first.order, 31);
-    assert.equal(second.zIndex, 902);
-    assert.equal(second.z_index, 902);
+    assert.equal(second.zIndex, WORKSPACE_PROJECT_LAYER_MAX);
+    assert.equal(second.z_index, WORKSPACE_PROJECT_LAYER_MAX);
     assert.equal(second.order, 32);
     clearProjectScene('dashboard_stack_repeated_project');
+});
+
+test('Timestamp-sized recorded-media z-index is normalized below every system layer', () => {
+    const recorded = normalizeWorkspaceSceneRecord(record('video_recording_timestamp', {
+        type: 'video',
+        zIndex: 1_784_488_998_071,
+        order: 42
+    }));
+
+    assert.equal(recorded.properties.layer, 'project');
+    assert.equal(recorded.properties.zIndex, WORKSPACE_PROJECT_LAYER_MAX);
+    assert.equal(recorded.properties.z_index, WORKSPACE_PROJECT_LAYER_MAX);
+    assert.equal(recorded.properties.parent_id, '__eve_workspace_layer_project');
 });
 
 test('RenderAtom keeps media natural dimensions out of project bounds', () => {

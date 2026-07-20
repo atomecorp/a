@@ -629,6 +629,8 @@ Taches:
 
   Validation status and remaining exit blockers (2026-07-19): the full Vitest baseline is green at 472/472 after aligning the stale Dashboard/debug assertions with their already documented product contracts, and the authorized deterministic real-click browser audio/video/photo probes are green. The desktop Tauri application rebuild is green, but this automated desktop session did not expose its native window for hardware interaction. Physical iOS microphone/camera plus real-host AUv3 48 kHz impulse/long-take evidence cannot be replaced by simulator or browser tests. Keep this task open until those physical runtime gates are executed and green.
 
+  Regression evidence (2026-07-20): recorded video/photo records, including historical timestamp-sized `z_index` values, are normalized into the canonical project workspace band with parent `__eve_workspace_layer_project` and a maximum visual layer of 599, below Dashboard (600), panels (1100), the main menu (1200), and Flower (1300). The live video preview now covers the complete active tool cell with `cover` fitting. The deterministic real-click browser probe measured an animated 60x60 preview at local position `[0,0]` inside a 60x60 tool, one video Atome and one photo Atome both projected on `layer=project` at z=599, and the menu still anchored at `760+60=820`; the default full Vitest run is green at 473/473, and all execution-order, DOM projection, eVe AI, no-fallback, and Molecule guardrails pass.
+
 - [ ] Sortir l'extraction audio de conteneur video hors de bridge.rs.
 - [ ] Retirer les ecritures disque du callback CPAL.
 - [ ] Supprimer les allocations par callback dans le metering recorder.

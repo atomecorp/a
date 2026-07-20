@@ -79,7 +79,8 @@ const readMenuVisual = (page, suffix) => page.evaluate((nodeSuffix) => {
     const tree = window.eveBevyUiRuntime?.state?.trees?.get?.('eve_bevy_ui_main_menu')?.tree || null;
     let found = null;
     let absolutePosition = null;
-    const visit = (node, parentX = 0, parentY = 0) => {
+    let parentSize = null;
+    const visit = (node, parentX = 0, parentY = 0, ancestorSize = null) => {
         if (!node || found) return;
         const localX = Number(node.style?.position?.[0] || 0);
         const localY = Number(node.style?.position?.[1] || 0);
@@ -88,8 +89,9 @@ const readMenuVisual = (page, suffix) => page.evaluate((nodeSuffix) => {
         if (String(node.id || '').endsWith(nodeSuffix)) {
             found = node;
             absolutePosition = [x, y];
+            parentSize = ancestorSize;
         }
-        (node.children || []).forEach((child) => visit(child, x, y));
+        (node.children || []).forEach((child) => visit(child, x, y, node.style?.size || null));
     };
     visit(tree?.root);
     const surface = document.getElementById('eve_surface_project');
@@ -101,8 +103,10 @@ const readMenuVisual = (page, suffix) => page.evaluate((nodeSuffix) => {
         position: absolutePosition,
         localPosition: found?.style?.position || null,
         size: found?.style?.size || null,
+        parentSize,
         overlayType: found?.overlayRecord?.type || '',
         source: found?.overlayRecord?.properties?.source || '',
+        fit: found?.overlayRecord?.properties?.fit || '',
         surfaceRect: surfaceRect ? {
             left: surfaceRect.left, top: surfaceRect.top,
             width: surfaceRect.width, height: surfaceRect.height
@@ -119,19 +123,29 @@ const readSceneMediaIds = (page, projectId) => page.evaluate((id) => {
 }, projectId);
 
 const readAtomeMedia = (page, { projectId, atomeId }) => safeEval(page, async ({ projectId, atomeId }) => {
+    const layerModule = await import('/eVe/domains/rendering/workspace_scene_layers.js');
     const state = await window.Atome?.getStateCurrent?.(atomeId).catch(() => null);
     const props = state?.properties || state?.props || {};
     const scene = window.eveToolBase?.getProjectSceneState?.(projectId) || {};
-    const occurrences = (scene.records || []).filter((record) => (
+    const matchingRecords = (scene.records || []).filter((record) => (
         String(record?.id || record?.atome_id || '') === atomeId
-    )).length;
+    ));
+    const sceneRecord = matchingRecords[0] || null;
+    const sceneProps = sceneRecord?.properties || {};
     const source = String(props.media_url || props.src || '').trim();
     const response = source ? await fetch(source, { credentials: 'include' }) : null;
     const bytes = response?.ok ? new Uint8Array(await response.arrayBuffer()) : new Uint8Array();
     return {
-        ok: occurrences === 1 && response?.ok === true && bytes.length > 0,
+        ok: matchingRecords.length === 1 && response?.ok === true && bytes.length > 0,
         atomeId,
-        occurrences,
+        occurrences: matchingRecords.length,
+        sceneLayer: sceneProps.layer || '',
+        sceneParentId: sceneRecord?.parent_id || sceneProps.parent_id || '',
+        sceneZIndex: Number(sceneProps.zIndex ?? sceneProps.z_index),
+        projectLayerMax: layerModule.WORKSPACE_PROJECT_LAYER_MAX,
+        layerSafe: sceneProps.layer === 'project'
+            && String(sceneRecord?.parent_id || sceneProps.parent_id || '') === '__eve_workspace_layer_project'
+            && Number(sceneProps.zIndex ?? sceneProps.z_index) <= layerModule.WORKSPACE_PROJECT_LAYER_MAX,
         props,
         source,
         byteLength: bytes.length,
@@ -270,6 +284,10 @@ const run = async () => {
             sourceStatus: previewReady.last.status,
             recordId: previewReady.last.recordId
         };
+        const previewFillsTool = preview.localPosition?.[0] === 0
+            && preview.localPosition?.[1] === 0
+            && preview.size?.[0] === preview.parentSize?.[0]
+            && preview.size?.[1] === preview.parentSize?.[1];
         const clip = {
             x: Math.max(0, preview.surfaceRect.left + preview.position[0]),
             y: Math.max(0, preview.surfaceRect.top + preview.position[1]),
@@ -355,8 +373,9 @@ const run = async () => {
         }
         const videoMedia = await readAtomeMedia(page, { projectId: project.id, atomeId: videoAtomeId });
         report.video = {
-            ok: videoMedia.ok && previewAnimated,
+            ok: videoMedia.ok && videoMedia.layerSafe && previewAnimated && previewFillsTool,
             preview,
+            previewFillsTool,
             previewAnimated,
             previewScreenshotChanged: !frameA.equals(frameB),
             motionA,
@@ -389,7 +408,12 @@ const run = async () => {
             atomeId: photoCreated.last.atomeId
         });
         const jpeg = photoMedia.signature[0] === 0xff && photoMedia.signature[1] === 0xd8;
-        report.photo = { ok: flashObserved && photoMedia.ok && jpeg, flashObserved, jpeg, media: photoMedia };
+        report.photo = {
+            ok: flashObserved && photoMedia.ok && photoMedia.layerSafe && jpeg,
+            flashObserved,
+            jpeg,
+            media: photoMedia
+        };
 
         report.menu = await safeEval(page, async () => {
             const module = await import('/eVe/intuition/ribbon/bevy_ui_product_registry.js');
