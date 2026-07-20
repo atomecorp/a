@@ -5,7 +5,7 @@ use crate::{
     types::{
         default_uv_rect, AtomeBevyRendererConfig, AtomeColorFilters, AtomeEntityTable,
         AtomeLocalTransform, AtomeRenderNode, AtomeRendererDiagnostics, AtomeResourcePatch,
-        AtomeStylePatch, AtomeTransformPatch, AtomeTransition,
+        AtomeSelectionOverlay, AtomeStylePatch, AtomeTransformPatch, AtomeTransition,
     },
 };
 use bevy::{
@@ -139,6 +139,71 @@ fn video_transform_resizes_external_texture_mesh_without_sprite_state() {
     let updated_mesh = world.get::<Mesh2d>(entity).unwrap().0.id();
     assert_ne!(original_mesh, updated_mesh);
     assert!(world.get::<Sprite>(entity).is_none());
+}
+
+#[test]
+fn video_translation_reuses_external_texture_mesh_asset() {
+    let mut world = world_with_video_assets();
+    let entity = apply_spawn(&mut world, video_node("external_translated")).unwrap();
+    let original_mesh = world.get::<Mesh2d>(entity).unwrap().0.id();
+    let original_asset_count = world.resource::<Assets<Mesh>>().len();
+
+    for step in 1..=16 {
+        apply_transform(
+            &mut world,
+            AtomeTransformPatch {
+                id: "external_translated".to_string(),
+                logical_position: [10.0 + step as f32, 20.0 + step as f32 * 2.0],
+                logical_size: [160.0, 90.0],
+                scale: [1.0, 1.0],
+                rotation: 0.0,
+                origin: [0.0, 0.0],
+            },
+        )
+        .unwrap();
+    }
+
+    assert_eq!(world.get::<Mesh2d>(entity).unwrap().0.id(), original_mesh);
+    assert_eq!(world.resource::<Assets<Mesh>>().len(), original_asset_count);
+}
+
+#[test]
+fn selected_video_translation_reuses_overlay_entities_and_texture() {
+    let mut world = world_with_video_assets();
+    let mut node = video_node("selected_external_translated");
+    node.selected = Some(true);
+    let entity = apply_spawn(&mut world, node).unwrap();
+    let original_overlay = world.get::<AtomeSelectionOverlay>(entity).unwrap().clone();
+    let original_positions = original_overlay
+        .entities
+        .iter()
+        .map(|overlay_entity| world.get::<Transform>(*overlay_entity).unwrap().translation)
+        .collect::<Vec<_>>();
+    let original_image_count = world.resource::<Assets<Image>>().len();
+
+    apply_transform(
+        &mut world,
+        AtomeTransformPatch {
+            id: "selected_external_translated".to_string(),
+            logical_position: [42.0, 57.0],
+            logical_size: [160.0, 90.0],
+            scale: [1.0, 1.0],
+            rotation: 0.0,
+            origin: [0.0, 0.0],
+        },
+    )
+    .unwrap();
+
+    let translated_overlay = world.get::<AtomeSelectionOverlay>(entity).unwrap();
+    assert_eq!(translated_overlay.entities, original_overlay.entities);
+    assert_eq!(translated_overlay.image_handles, original_overlay.image_handles);
+    assert_eq!(world.resource::<Assets<Image>>().len(), original_image_count);
+    for (index, overlay_entity) in translated_overlay.entities.iter().enumerate() {
+        let translated = world.get::<Transform>(*overlay_entity).unwrap().translation;
+        assert_near(translated.x, original_positions[index].x + 32.0);
+        assert_near(translated.y, original_positions[index].y - 37.0);
+        assert_near(translated.z, original_positions[index].z);
+    }
 }
 
 #[test]

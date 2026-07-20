@@ -225,7 +225,14 @@ const hydrated = await ensureProjectMediaAtome({
     accessToken: true,
     requireAdoleApi: true,
     reloadProjectAtomes: true,
-    resolvePlacement: () => ({ left: 33, top: 44, zIndex: 55 })
+    resolvePlacement: () => ({
+        left: 33,
+        top: 44,
+        zIndex: 55,
+        order: 67,
+        render_order: 67,
+        renderOrder: 67
+    })
 });
 
 assert.equal(hydrated.ok, true);
@@ -247,6 +254,9 @@ assert.match(commits[0].props.visual_ref, /^waveform:/);
 assert.match(commits[0].props.waveform_ref, /^waveform:/);
 assert.equal(commits[0].props.left, 33);
 assert.equal(commits[0].props.top, 44);
+assert.equal(commits[0].props.order, 67);
+assert.equal(commits[0].props.render_order, 67);
+assert.equal(commits[0].props.renderOrder, 67);
 assert.equal(sceneRecords().some((atom) => atom.id === 'audio_recording_pending'), true);
 assert.equal(latestSceneAtom().type, 'audio_waveform');
 assert.deepEqual(latestSceneAtom().content.peaks, [0.1, 0.25, 1]);

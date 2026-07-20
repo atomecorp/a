@@ -22,6 +22,7 @@ import {
 } from '../../eVe/domains/rendering/project_scene_stack_runtime.js';
 import {
     normalizeWorkspaceSceneRecord,
+    normalizeWorkspaceSceneRecords,
     WORKSPACE_PROJECT_LAYER_MAX
 } from '../../eVe/domains/rendering/workspace_scene_layers.js';
 
@@ -262,6 +263,45 @@ test('Timestamp-sized recorded-media z-index is normalized below every system la
     assert.equal(recorded.properties.zIndex, WORKSPACE_PROJECT_LAYER_MAX);
     assert.equal(recorded.properties.z_index, WORKSPACE_PROJECT_LAYER_MAX);
     assert.equal(recorded.properties.parent_id, '__eve_workspace_layer_project');
+});
+
+test('Timestamp-sized recorded videos receive stable unique dense Bevy layers', () => {
+    const recordings = [
+        record('video_recording_first', {
+            type: 'video',
+            zIndex: 1_784_488_998_071,
+            order: 40
+        }),
+        record('video_recording_second', {
+            type: 'video',
+            zIndex: 1_784_488_998_072,
+            order: 41
+        }),
+        record('video_recording_last', {
+            type: 'video',
+            zIndex: 1_784_488_998_073,
+            order: 42
+        })
+    ];
+    const normalized = normalizeWorkspaceSceneRecords(recordings);
+    const firstScene = createVirtualSceneTree(normalized);
+    const rebuiltScene = createVirtualSceneTree([...normalized].reverse());
+    const expectedIds = [
+        'video_recording_first',
+        'video_recording_second',
+        'video_recording_last'
+    ];
+
+    assert.deepEqual(
+        normalized.map((entry) => entry.properties.zIndex),
+        [WORKSPACE_PROJECT_LAYER_MAX, WORKSPACE_PROJECT_LAYER_MAX, WORKSPACE_PROJECT_LAYER_MAX]
+    );
+    assert.deepEqual(firstScene.nodes.map((node) => node.id), expectedIds);
+    assert.deepEqual(firstScene.nodes.map((node) => node.renderLayer), [0, 1, 2]);
+    assert.deepEqual(mapVirtualSceneTreeToBevyPayload(firstScene).map((node) => node.layer), [0, 1, 2]);
+    assert.deepEqual(rebuiltScene.nodes.map((node) => node.id), expectedIds);
+    assert.deepEqual(rebuiltScene.nodes.map((node) => node.renderLayer), [0, 1, 2]);
+    assert.equal(firstScene.byId.get('video_recording_last').renderLayer, 2);
 });
 
 test('RenderAtom keeps media natural dimensions out of project bounds', () => {

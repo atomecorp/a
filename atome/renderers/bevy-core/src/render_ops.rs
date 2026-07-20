@@ -9,7 +9,9 @@ use crate::{
         atome_camera_projection, atome_rect_transform_with_local, color_from_rgba, depth_for_layer,
     },
     resource_ops::texture_sprite_color,
-    selection_overlay::{rebuild_selection_overlay, remove_selection_overlay},
+    selection_overlay::{
+        rebuild_selection_overlay, remove_selection_overlay, translate_selection_overlay,
+    },
     shape_shadow_overlay::{
         rebuild_shape_shadow_overlay, remove_shape_shadow_overlay,
         sync_shape_shadow_overlay_opacity, sync_shape_shadow_overlay_transform,
@@ -100,6 +102,9 @@ pub fn apply_transform(world: &mut World, patch: AtomeTransformPatch) -> Result<
     let previous_size = *world
         .get::<AtomeLogicalSize>(entity)
         .ok_or_else(|| format!("bevy_transform_size_missing:{}", patch.id))?;
+    let previous_position = *world
+        .get::<AtomeLogicalPosition>(entity)
+        .ok_or_else(|| format!("bevy_transform_position_missing:{}", patch.id))?;
     let previous_local_transform = world
         .get::<AtomeLocalTransform>(entity)
         .copied()
@@ -142,35 +147,40 @@ pub fn apply_transform(world: &mut World, patch: AtomeTransformPatch) -> Result<
     }
     world.entity_mut(entity).insert(next_transform);
     sync_global_transform(world, entity, next_transform);
-    if let Some(mut sprite) = world.get_mut::<Sprite>(entity) {
-        sprite.custom_size = Some(Vec2::new(width, height));
-    }
-    if world
-        .get::<crate::video_external_texture::AtomeVideoExternalTexture>(entity)
-        .is_some()
-    {
-        let uv_rect = world
+    let dimensions_changed =
+        (previous_size.width - width).abs() > 0.01 || (previous_size.height - height).abs() > 0.01;
+    let local_transform_changed = previous_local_transform != local_transform;
+    if dimensions_changed {
+        if let Some(mut sprite) = world.get_mut::<Sprite>(entity) {
+            sprite.custom_size = Some(Vec2::new(width, height));
+        }
+        if world
             .get::<crate::video_external_texture::AtomeVideoExternalTexture>(entity)
-            .map(|video| video.uv_rect)
-            .unwrap_or_else(default_uv_rect);
-        insert_video_quad_mesh(world, entity, [width, height], uv_rect)?;
+            .is_some()
+        {
+            let uv_rect = world
+                .get::<crate::video_external_texture::AtomeVideoExternalTexture>(entity)
+                .map(|video| video.uv_rect)
+                .unwrap_or_else(default_uv_rect);
+            insert_video_quad_mesh(world, entity, [width, height], uv_rect)?;
+        }
+        resize_procedural_sdf(world, entity, [width, height])?;
+        resize_backdrop_surface(world, entity, [width, height])?;
+        if let Some(mut bounds) = world.get_mut::<TextBounds>(entity) {
+            *bounds = TextBounds::from(Vec2::new(width, height));
+        }
     }
-    resize_procedural_sdf(world, entity, [width, height])?;
-    resize_backdrop_surface(world, entity, [width, height])?;
-    if let Some(mut bounds) = world.get_mut::<TextBounds>(entity) {
-        *bounds = TextBounds::from(Vec2::new(width, height));
-    }
-    let size_changed = (previous_size.width - width).abs() > 0.01
-        || (previous_size.height - height).abs() > 0.01
-        || previous_local_transform != local_transform;
-    if size_changed {
+    if dimensions_changed || local_transform_changed {
         rebuild_selection_overlay(world, entity)?;
         rebuild_shape_shadow_overlay(world, entity)?;
         rebuild_waveform_playback_overlay(world, entity)?;
     } else {
-        if world.get::<AtomeSelectionOverlay>(entity).is_some() {
-            rebuild_selection_overlay(world, entity)?;
-        }
+        translate_selection_overlay(
+            world,
+            entity,
+            patch.logical_position[0] - previous_position.x,
+            patch.logical_position[1] - previous_position.y,
+        );
         sync_shape_shadow_overlay_transform(world, entity)?;
         if world.get::<AtomeWaveformPlaybackOverlay>(entity).is_some() {
             rebuild_waveform_playback_overlay(world, entity)?;

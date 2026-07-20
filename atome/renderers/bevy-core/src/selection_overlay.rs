@@ -185,6 +185,30 @@ pub fn remove_selection_overlay(world: &mut World, entity: Entity) {
     }
 }
 
+pub fn translate_selection_overlay(world: &mut World, entity: Entity, delta_x: f32, delta_y: f32) {
+    if delta_x.abs() <= f32::EPSILON && delta_y.abs() <= f32::EPSILON {
+        return;
+    }
+    let overlay_entities = world
+        .get::<AtomeSelectionOverlay>(entity)
+        .map(|overlay| overlay.entities.clone())
+        .unwrap_or_default();
+    for overlay_entity in overlay_entities {
+        let Some(current) = world.get::<Transform>(overlay_entity).copied() else {
+            continue;
+        };
+        let mut next = current;
+        next.translation.x += delta_x;
+        next.translation.y -= delta_y;
+        world.entity_mut(overlay_entity).insert(next);
+        if world.get::<GlobalTransform>(overlay_entity).is_some() {
+            world
+                .entity_mut(overlay_entity)
+                .insert(GlobalTransform::from(next));
+        }
+    }
+}
+
 pub fn rebuild_selection_overlay(world: &mut World, entity: Entity) -> Result<(), String> {
     remove_selection_overlay(world, entity);
     if world
