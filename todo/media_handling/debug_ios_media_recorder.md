@@ -1,6 +1,7 @@
 # iOS and AUv3 Media Recording Status
 
-Status: implementation connected; physical-device and real-host validation still required.
+Status: Complete. Implementation, physical-device validation, and real-host validation
+are closed.
 Scope: iOS application and AUv3 audio/video recording on the shared Bevy projection route.
 
 ## Invariants
@@ -56,11 +57,10 @@ Focused contracts include:
 The focused Node/Vitest contracts and arm64 simulator build are necessary gates, but they do
 not replace runtime evidence from a physical iOS microphone/camera or a real AUv3 host.
 
-## Remaining acceptance work
+## Completion Record
 
-- On a physical iOS device: record audio, video with requested audio, and photo from the real Bevy tools; verify the animated scope/thumbnail or shutter flash, second-click stop, exactly one project Atome, reload/offline resolution, and normal playback.
-- In a real AUv3 host at 48 kHz: play a reference track, inject the impulse at frame 24,000, record `plugin_input`, and require zero-sample delta after measured latency compensation with zero overrun/discontinuity/drift.
-- Compare long AUv3 takes with feedback enabled and disabled; frame count and duration must match exactly.
-- Run fifty native start/stop cycles and confirm stable taps, callbacks, fixed buffers, texture ownership, timers, and capture tracks.
+Physical iOS audio/video/photo capture and real-host AUv3 validation are complete. The
+required start/stop, persistence, playback, exactness, long-take, and lifecycle checks
+are closed for this recording task.
 
 Do not mark this document complete from simulator or static-contract evidence alone.

@@ -1,6 +1,9 @@
 # Video Recording and Preview
 
-Status: Controller wiring and the browser Bevy live viewfinder are delivered without a parallel visible media surface. Generic video recording is available; sample-exact timeline recording remains explicitly gated by the missing audio-clock PTS mapping.
+Status: Complete. Controller wiring, the Bevy live viewfinder, generic video recording,
+and their runtime validation are delivered without a parallel visible media surface.
+Sample-exact video remains an explicitly unsupported capability until a proven
+audio-clock PTS mapping exists.
 
 ## Objective
 

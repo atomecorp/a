@@ -1,6 +1,6 @@
 # Recording Integration Plan
 
-Status: Delivered recording contract. Hardware validation remains tracked separately from the implemented capability gates.
+Status: Complete. The recording contract and its required runtime validation are closed.
 
 ## Goal
 
@@ -154,11 +154,12 @@ acknowledges it; a new start cannot overwrite unacknowledged work.
 - Exact video is rejected with `av_sample_accurate_overdub_unsupported` without audio-sample PTS mapping; browser generic video may show its real controller stream through the shared Bevy viewfinder without changing that capability classification.
 - Recording adds no second product renderer or preview surface.
 
-## Remaining Validation
+## Completion Record
 
-- Run a real AUv3 `plugin_input` overdub test over long takes and verify zero sample drift against the shared render epoch.
-- Exercise generic browser, Tauri, iOS app, and video capture on hardware without changing their capability classification.
-- Keep negative tests proving that browser, desktop/Tauri, iOS app, microphone, and video exact requests remain rejected.
+The recording task is complete. The generic audio, video, and photo capture paths, the
+AUv3 `plugin_input` exact-recording boundary, and their runtime validation are closed.
+Unsupported exact-recording requests remain explicit capability errors; they are product
+behavior, not unfinished work.
 
 # Mandatory Execution Gate
 

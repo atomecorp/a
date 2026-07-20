@@ -617,7 +617,7 @@ Sources principales:
 
 Taches:
 
-- [ ] Reconnect and harden audio, video, and photo recording as the user-authorized Phase 5 priority from 2026-07-19: reuse the active capture controllers and their serialized start/stop lifecycle; reserve identity and placement in memory; persist and validate the media before one canonical Atome commit; display a derived Bevy-only audio scope or video thumbnail inside the active tool and a 120 ms Bevy shutter flash for photo; return to the normal icon only after durable success; preserve AUv3 sample-accurate `plugin_input` recording while generic audio and video reject exactness requests explicitly; and remove confirmed obsolete recording paths in the touched ownership chain.
+- [x] Reconnect and harden audio, video, and photo recording as the user-authorized Phase 5 priority from 2026-07-19: reuse the active capture controllers and their serialized start/stop lifecycle; reserve identity and placement in memory; persist and validate the media before one canonical Atome commit; display a derived Bevy-only audio scope or video thumbnail inside the active tool and a 120 ms Bevy shutter flash for photo; return to the normal icon only after durable success; preserve AUv3 sample-accurate `plugin_input` recording while generic audio and video reject exactness requests explicitly; and remove confirmed obsolete recording paths in the touched ownership chain.
 
   Specific dependencies: the shared Bevy/WebGPU compositor remains the only visible renderer; all durable Atome writes use `window.Atome.commit` or `window.Atome.commitBatch`; the existing browser, Tauri, iOS, and AUv3 recording owners remain canonical; preview and scope frames remain bounded, ephemeral renderer state; and no pending Atome, visible media DOM, native preview overlay, second canvas, fallback renderer, or second capture stream may be introduced.
 
@@ -638,6 +638,8 @@ Taches:
   Native audio-scope regression correction (2026-07-20, still open): Tauri now registers the recording session before `audio_record_start`, publishes every strictly newer `audio_get_scope` frame through a session-bound internal registry, replays one early frame to the controller, and cleans the frame, subscribers, and poll timer at stop. `native_audio_scope` remains compatibility-only. The Bevy tool derives a rolling 64-column history from the actual min/max frames, keeps zero input motionless, and redraws only changed history at no more than 30 Hz. The visible Chromium proof uses a deterministic 48 kHz WAV with silence, weak signal, modulated voice, impulse, and a long terminal silence: 51/90 tool crops were distinct, 51 pixel transitions were measured, 38 silence transitions were byte-stable including the final eight, and up to 10.14 percent of the 60x60 pixels changed. The second real Bevy click produced one decodable 825,600-frame WAV Atome at 48 kHz with an exact 17.2 s duration. Keep this task open until the same pixel/sequence/RMS/peak proof passes in the real Tauri macOS window with microphone speech and clap, plus the existing physical iOS and real-host AUv3 gates.
 
   Tauri permission root cause and repair (2026-07-20, still open): `audio_get_scope` was registered by both Rust entry points but omitted from the `audio-engine` capability, so every real Tauri poll was denied while the previous empty catch made the denial indistinguishable from silence. The source permission set now includes `allow-audio-get-scope`; the poller retains only the first session error as `scope_diagnostic`, continues bounded polling, resumes on valid frames, and clears the diagnostic with the session. A source contract prevents any registered scope command from losing its capability again. The normal Tauri build regenerated the capability schemas and the restarted `./run.sh` application was exercised through real Bevy clicks: the native 60x60 audio-tool crops changed by 2,304/14,400 pixels (16 percent) between two microphone envelopes, the second click restored the normal tool, and exactly one new RIFF/WAVE file was persisted. Independent `ffprobe` decoding reports mono PCM signed 24-bit at 44.1 kHz, 811.340045 s and 107,340,356 bytes. The Tauri scope gate is therefore green; keep Phase 5 open only for the already required physical iOS microphone/camera and real-host AUv3 sample-accuracy gates.
+
+  Completion record (2026-07-20): the user confirmed completion of the remaining physical iOS microphone/camera and real-host AUv3 validation gates. This recording task is closed. The unchecked Phase 5 entries below remain separate AV architecture and maintenance work.
 
 - [ ] Sortir l'extraction audio de conteneur video hors de bridge.rs.
 - [ ] Retirer les ecritures disque du callback CPAL.
@@ -810,9 +812,11 @@ Sources principales:
 - todo/dev_ops/eve_website_publishing.md
 - todo/ai_voice/ace_step_integration.md
 - todo/sharing_search_monitoring/tool_monitor.md
+- todo/eve_features/prompt_modification_menu_mvp_v146_ios_touch_tests.md
 
 Taches:
 
+- [x] Replace the legacy floating Atome editing footer with the shared-canvas Bevy contextual editing menu, including runtime-only multi-Atome editing state, the attached edit footer, the handed contextual rail, canonical drag/resize/fullscreen intents, and the common vertical slider; exit criterion: the specification and its Web, Tauri, and iOS validation gates are complete with no authoritative DOM footer or second canvas.
 - [ ] MIDI.
 - [ ] Vector editing layer.
 - [ ] Universal canvas, including verification that Squirrel and preferably the open-source Squirrel + Atome engine remain correctly exported through the CDN and still produce a viable functional PWA.

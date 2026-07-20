@@ -1,6 +1,6 @@
 # Menu contextuel d'édition Atome — spécification active
 
-Statut : implémentation active.
+Status: Complete. The contextual Atome editing menu replaces the legacy floating footer.
 
 Cette spécification remplace intégralement l'ancien cahier des charges du footer flottant. Le vocabulaire produit est désormais « menu contextuel d'édition Atome ».
 
@@ -115,3 +115,9 @@ En orientation verticale :
 - palettes, latch, texte, média et Molecule sans régression ;
 - absence de footer DOM autoritaire, de second canvas et de rendu historique actif ;
 - contrôles syntaxiques et validation réelle Web, Tauri et iOS.
+
+## Completion Record
+
+The shared-canvas Bevy contextual editing menu is complete. The legacy floating footer
+is no longer a product path; contextual editing state remains runtime-only, and no
+authoritative DOM footer or second canvas is introduced.
