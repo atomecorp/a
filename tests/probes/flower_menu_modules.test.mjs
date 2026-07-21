@@ -464,11 +464,10 @@ const flowerLiquidNode = flowerStyleTree.root.children.find((node) => node.id.en
 assert.equal(flowerPaletteNode.style.radius, 30, 'Flower palettes must stay circular');
 assert.equal(flowerActionNode.style.radius, 30, 'Flower action tools must be circular');
 assert.deepEqual(flowerPaletteNode.style.shadow, {
-    ...BEVY_MENU_TOKENS.surface.shadow
+    ...BEVY_MENU_TOKENS.surface.material.shadow
 }, 'Flower tool shadows must come from the centralized token');
 assert.deepEqual(flowerPaletteNode.style.backdrop, {
-    ...BEVY_MENU_TOKENS.surface.backdrop,
-    tint: BEVY_MENU_TOKENS.surface.normal
+    ...BEVY_MENU_TOKENS.surface.material.backdrop
 }, 'Flower palettes must carry the centralized glass blur contract');
 assert.equal(flowerLiquidNode, undefined, 'Flower must not mount a transient liquid record');
 const motionCenter = { x: 320, y: 240 };

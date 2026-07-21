@@ -104,6 +104,7 @@ test('Bevy panel contract removes tools dock and keeps system controls in footer
 
     const footer = findNode(tree, 'eve_bevy_panel_timeline_footer');
     const body = findNode(tree, 'eve_bevy_panel_timeline_body');
+    const panel = findNode(tree, 'eve_bevy_panel_timeline_panel');
     const close = findNode(tree, 'eve_bevy_panel_timeline_footer_close');
     const drag = findNode(tree, 'eve_bevy_panel_timeline_footer_drag');
     assert.equal(body.kind, 'scroll_area');
@@ -118,6 +119,7 @@ test('Bevy panel contract removes tools dock and keeps system controls in footer
     assert.equal(body.style.overflow, 'scroll');
     assert.deepEqual(body.style.position, [0, 0]);
     assert.equal(footer.style.shadow, undefined);
+    assert.ok(panel.style.shadow, 'only the outer panel owns the drop shadow');
     assert.equal(findNode(tree, 'eve_bevy_panel_timeline_footer_resize_left_icon').image.text, '◣');
     assert.equal(findNode(tree, 'eve_bevy_panel_timeline_footer_resize_icon').image.text, '◢');
 
@@ -187,7 +189,7 @@ test('Panel Lab is development-gated and uses the shared panel skin', async () =
     const { bevyPanelRuntimeState } = await import('../../eVe/intuition/runtime/bevy_panel/bevy_panel_runtime.js');
     const { createPanelSurfaceRuntime } = await import('../../eVe/intuition/runtime/eve_intuition/panel_surface_runtime.js');
     const { BEVY_PANEL_TOKENS } = await import('../../eVe/intuition/runtime/bevy_panel/bevy_panel_tokens.js');
-    const { EVE_PANEL_SKIN_TOKENS } = await import('../../eVe/elements/skin/index.js');
+    const { EVE_COMMON_SKIN_TOKENS, EVE_PANEL_SKIN_TOKENS } = await import('../../eVe/elements/skin/index.js');
     const { BEVY_MENU_TOKENS } = await import('../../eVe/intuition/ribbon/bevy_ui_menu_surface.js');
     bevyPanelRuntimeState.runtime = null;
     bevyPanelRuntimeState.mounted.clear();
@@ -204,8 +206,21 @@ test('Panel Lab is development-gated and uses the shared panel skin', async () =
     assert.equal(result.ok, true);
     assert.equal(mounted.length, 1);
     assert.equal(PANEL_SURFACE_DEFINITIONS.panel_lab, undefined);
-    assert.deepEqual(BEVY_PANEL_TOKENS.colors.surface, EVE_PANEL_SKIN_TOKENS.bevyPanel.colors.surface);
-    assert.deepEqual(BEVY_PANEL_TOKENS.colors.edge, BEVY_MENU_TOKENS.chrome.footer);
+    const material = EVE_COMMON_SKIN_TOKENS.bevy.systemSurface;
+    assert.equal(BEVY_PANEL_TOKENS.material, material);
+    assert.equal(BEVY_MENU_TOKENS.surface.material, material);
+    assert.deepEqual(material.shadow.offset, [0, 0]);
+    assert.equal(material.shadow.spread, 0);
+    assert.deepEqual(material.backdrop, { blurPx: 18, tint: [0, 0, 0, 0.3] });
+    const panel = findNode(mounted[0], 'eve_bevy_panel_panel_lab_panel');
+    const body = findNode(mounted[0], 'eve_bevy_panel_panel_lab_body');
+    const footer = findNode(mounted[0], 'eve_bevy_panel_panel_lab_footer');
+    assert.deepEqual(panel.style.background, material.background);
+    assert.deepEqual(panel.style.backdrop, material.backdrop);
+    assert.deepEqual(panel.style.shadow, material.shadow);
+    assert.equal(mounted[0].presentation, true);
+    assert.deepEqual(body.style.background, EVE_PANEL_SKIN_TOKENS.bevyPanel.colors.transparent);
+    assert.deepEqual(footer.style.background, BEVY_MENU_TOKENS.clear);
     assert.equal(dom.window.document.querySelectorAll('button,input,select,textarea').length, 0);
     await runtime.closePanelSurface('panel_lab');
 });

@@ -28,7 +28,7 @@ import { BEVY_MENU_TOKENS } from '../../eVe/intuition/ribbon/bevy_ui_menu_surfac
 
 const TOOL_KEYS = Object.freeze(['home', 'find', 'capture', 'time', 'communicate', 'mode', 'view']);
 const LIGHTGRAY_ICON_TINT = BEVY_MENU_TOKENS.surface.icon;
-const STANDARD_ITEM_BACKGROUND = BEVY_MENU_TOKENS.surface.normal;
+const STANDARD_ITEM_BACKGROUND = BEVY_MENU_TOKENS.surface.material.background;
 const STANDARD_LABEL_TINT = BEVY_MENU_TOKENS.surface.text;
 
 const collectJavaScriptSources = (directory) => readdirSync(directory, { withFileTypes: true })
@@ -334,7 +334,8 @@ test('BevyUI main menu keeps one stable shadow plane while palette children emer
         assert.deepEqual(openLayers, closedLayers, `${handedness}:stable-surface-plane`);
         stableIds.forEach((id) => {
             const background = findNode(opened.root, `${id}_background`);
-            assert.deepEqual(background.style.shadow, BEVY_MENU_TOKENS.surface.shadow, `${handedness}:${id}:shadow`);
+            assert.deepEqual(background.style.shadow, BEVY_MENU_TOKENS.surface.material.shadow, `${handedness}:${id}:shadow`);
+            assert.deepEqual(background.style.backdrop, BEVY_MENU_TOKENS.surface.material.backdrop, `${handedness}:${id}:backdrop`);
         });
         const parent = findNode(opened.root, 'eve_bevy_ui_main_menu_tool_time');
         const parentSurface = findNode(parent, `${parent.id}_background`);
@@ -756,6 +757,7 @@ test('BevyUI invocation forwards its latch state as routing metadata, never tool
     const runtime = createContextToolInvocationRuntime({
         getFinderToolEl: () => null,
         handleFinderTouch: () => null,
+        invokePanelLab: () => null,
         invokeToolFromUiButton: async (input) => {
             invocations.push(input);
             return { ok: true, nextLatched: false };

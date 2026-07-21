@@ -120,7 +120,11 @@ test('Atome contextual edit stays on one clipped Bevy tree with handed rail and 
     };
     const right = buildAtomeContextualEditTree(input);
     const rail = findNode(right.root, 'eve_bevy_panel_atome_contextual_edit_rail');
+    const outline = findNode(right.root, 'atome_contextual_edit_a_outline');
+    const footerBackground = findNode(right.root, 'atome_contextual_edit_a_footer_background');
     assert.deepEqual(rail.style.position, [740, 360]);
+    assert.equal(outline.style.shadow, BEVY_MENU_TOKENS.surface.material.shadow);
+    assert.equal(footerBackground.style.shadow, undefined);
     assert.equal(rail.children.length, 1);
     assert.deepEqual(findNode(rail, 'atome_contextual_tool_size_background').style.size, [60, 180]);
     assert.equal(findNode(right.root, 'atome_contextual_edit_b_footer'), null);
@@ -202,7 +206,8 @@ test('Atome contextual footer follows projected media bounds and uses compact da
     const background = findNode(tree.root, 'atome_contextual_edit_media_footer_background');
     assert.deepEqual(footer.style.position, [40, 470]);
     assert.deepEqual(footer.style.size, [310, 20]);
-    assert.deepEqual(background.style.background, BEVY_MENU_TOKENS.chrome.footer);
+    assert.deepEqual(background.style.background, BEVY_MENU_TOKENS.surface.material.background);
+    assert.deepEqual(background.style.backdrop, BEVY_MENU_TOKENS.surface.material.backdrop);
     assert.deepEqual(findNode(tree.root, 'atome_contextual_edit_media_resize_left_icon').style.scale, [-1, 1]);
     assert.deepEqual(findNode(tree.root, 'atome_contextual_edit_media_resize_right_icon').style.scale, [-1, 1]);
     assert.deepEqual(findNode(tree.root, 'atome_contextual_edit_media_resize_left_icon').style.position, [1, 0]);

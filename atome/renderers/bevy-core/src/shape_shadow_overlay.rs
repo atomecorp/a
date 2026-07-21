@@ -12,10 +12,7 @@ use crate::{
         AtomeShapeShadowTextureCache, AtomeVisualOpacity,
     },
     render_math::{atome_rect_transform, depth_for_layer},
-    shadow_texture::{
-        build_gaussian_outer_shadow_texture_rgba, build_gaussian_shadow_texture_rgba,
-        channel_to_u8, shadow_padding,
-    },
+    shadow_texture::{build_gaussian_outer_shadow_texture_rgba, channel_to_u8, shadow_padding},
     types::{
         normalize_opacity, AtomeBevyRendererConfig, AtomeLayer, AtomeLogicalPosition,
         AtomeLogicalSize, AtomeShadowStyle,
@@ -43,7 +40,6 @@ fn shape_shadow_cache_key(
     shadow_width: f32,
     shadow_height: f32,
     corner_radius: f32,
-    inner_cutout: bool,
 ) -> AtomeShapeShadowCacheKey {
     AtomeShapeShadowCacheKey {
         width: cache_dimension(shadow_width),
@@ -59,7 +55,6 @@ fn shape_shadow_cache_key(
             channel_to_u8(shadow.color[2]),
             channel_to_u8(shadow.color[3]),
         ],
-        inner_cutout,
     }
 }
 
@@ -69,14 +64,12 @@ fn cached_shape_shadow_handle(
     shadow_width: f32,
     shadow_height: f32,
     corner_radius: f32,
-    inner_cutout: bool,
 ) -> Result<Option<(Handle<Image>, u32, u32)>, String> {
     let key = shape_shadow_cache_key(
         shadow,
         shadow_width,
         shadow_height,
         corner_radius,
-        inner_cutout,
     );
     if let Some(handle) = world
         .get_resource::<AtomeShapeShadowTextureCache>()
@@ -100,23 +93,13 @@ fn cached_shape_shadow_handle(
             .total_bytes
             .saturating_sub(cache.byte_sizes.remove(&key).unwrap_or(0));
     }
-    let texture = if inner_cutout {
-        build_gaussian_outer_shadow_texture_rgba(
-            shadow.color,
-            shadow_width,
-            shadow_height,
-            corner_radius,
-            shadow.blur,
-        )
-    } else {
-        build_gaussian_shadow_texture_rgba(
-            shadow.color,
-            shadow_width,
-            shadow_height,
-            corner_radius,
-            shadow.blur,
-        )
-    };
+    let texture = build_gaussian_outer_shadow_texture_rgba(
+        shadow.color,
+        shadow_width,
+        shadow_height,
+        corner_radius,
+        shadow.blur,
+    );
     let Some((image_width, image_height, rgba)) = texture else {
         return Ok(None);
     };
@@ -174,7 +157,7 @@ pub(crate) fn build_shape_shadow_texture_rgba(
     height: f32,
     corner_radius: f32,
 ) -> Option<(u32, u32, Vec<u8>)> {
-    build_gaussian_shadow_texture_rgba(
+    build_gaussian_outer_shadow_texture_rgba(
         style.shadow_color,
         width,
         height,
@@ -318,9 +301,6 @@ pub fn rebuild_shape_shadow_overlay(world: &mut World, entity: Entity) -> Result
         .map(|value| value.0)
         .unwrap_or(0.0)
         + shadow.spread;
-    let inner_cutout = world
-        .get::<MeshMaterial2d<crate::backdrop_surface::BackdropSurfaceMaterial>>(entity)
-        .is_some();
     let Some((handle, image_width, image_height)) =
         cached_shape_shadow_handle(
             world,
@@ -328,7 +308,6 @@ pub fn rebuild_shape_shadow_overlay(world: &mut World, entity: Entity) -> Result
             shadow_width,
             shadow_height,
             corner_radius,
-            inner_cutout,
         )?
     else {
         return Ok(());

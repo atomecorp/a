@@ -107,7 +107,6 @@ pub struct AtomeShapeShadowCacheKey {
     pub offset_x: i32,
     pub offset_y: i32,
     pub color: [u8; 4],
-    pub inner_cutout: bool,
 }
 
 #[derive(Clone, Debug, Resource)]

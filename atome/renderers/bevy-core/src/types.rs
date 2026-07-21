@@ -16,6 +16,11 @@ pub fn normalize_opacity(opacity: f32) -> f32 {
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq)]
+/// Canonical GPU drop shadow for a shape silhouette.
+///
+/// The renderer derives the alpha mask from the owner's rounded geometry,
+/// composites the resulting Gaussian exterior shadow below that owner, and
+/// never samples or blurs the backdrop behind it.
 pub struct AtomeShadowStyle {
     pub color: [f32; 4],
     #[serde(default)]

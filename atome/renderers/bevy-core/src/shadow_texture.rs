@@ -115,12 +115,35 @@ pub(crate) fn build_gaussian_outer_shadow_texture_rgba(
     corner_radius: f32,
     blur: f32,
 ) -> Option<(u32, u32, Vec<u8>)> {
-    build_gaussian_shadow_texture_rgba_with_cutout(
-        color,
-        width,
-        height,
-        corner_radius,
-        blur,
-        true,
-    )
+    if blur <= 0.0 || color[3] <= 0.0 {
+        return None;
+    }
+    let padding = shadow_padding(blur) as usize;
+    let shape_width = width.max(1.0);
+    let shape_height = height.max(1.0);
+    let image_width = shape_width.ceil() as usize + padding * 2;
+    let image_height = shape_height.ceil() as usize + padding * 2;
+    let sigma = blur.max(0.001) * GAUSSIAN_SIGMA_RATIO;
+    let mut rgba = vec![0; image_width * image_height * 4];
+    for py in 0..image_height {
+        let y = py as f32 + 0.5 - padding as f32;
+        for px in 0..image_width {
+            let x = px as f32 + 0.5 - padding as f32;
+            let distance = rounded_rect_signed_distance(x, y, shape_width, shape_height, corner_radius);
+            // The owner paints the interior. Rendering only outside the exact
+            // silhouette gives the halo a visible contact edge without a
+            // spread-created gap or any change to the owner's fill.
+            let exterior_alpha = if distance >= 0.0 {
+                (-0.5 * (distance / sigma).powi(2)).exp()
+            } else {
+                0.0
+            };
+            let offset = (py * image_width + px) * 4;
+            rgba[offset] = channel_to_u8(color[0]);
+            rgba[offset + 1] = channel_to_u8(color[1]);
+            rgba[offset + 2] = channel_to_u8(color[2]);
+            rgba[offset + 3] = channel_to_u8(color[3] * exterior_alpha);
+        }
+    }
+    Some((image_width as u32, image_height as u32, rgba))
 }
