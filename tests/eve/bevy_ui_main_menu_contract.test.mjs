@@ -25,11 +25,18 @@ import { resolveDashboardBlockUnitSize } from '../../eVe/domains/dashboard/dashb
 import { readToolboxReservedHeight } from '../../eVe/domains/dashboard/dashboard_environment.js';
 import { MAIN_HANDLE_ICON } from '../../eVe/intuition/ribbon/tokens.js';
 import { BEVY_MENU_TOKENS } from '../../eVe/intuition/ribbon/bevy_ui_menu_surface.js';
+import { EVE_COMMON_SKIN_TOKENS } from '../../eVe/elements/skin/tokens.js';
 
 const TOOL_KEYS = Object.freeze(['home', 'find', 'capture', 'time', 'communicate', 'mode', 'view']);
 const LIGHTGRAY_ICON_TINT = BEVY_MENU_TOKENS.surface.icon;
 const STANDARD_ITEM_BACKGROUND = BEVY_MENU_TOKENS.surface.material.background;
 const STANDARD_LABEL_TINT = BEVY_MENU_TOKENS.surface.text;
+
+test('system menu content consumes the global content color contract', () => {
+    assert.equal(BEVY_MENU_TOKENS.surface.text, EVE_COMMON_SKIN_TOKENS.systemContent.gpu);
+    assert.equal(BEVY_MENU_TOKENS.surface.icon, EVE_COMMON_SKIN_TOKENS.systemContent.gpu);
+    assert.equal(BEVY_MENU_TOKENS.surface.grip, EVE_COMMON_SKIN_TOKENS.systemContent.gpu);
+});
 
 const collectJavaScriptSources = (directory) => readdirSync(directory, { withFileTypes: true })
     .flatMap((entry) => {

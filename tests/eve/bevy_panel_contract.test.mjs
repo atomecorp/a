@@ -221,6 +221,15 @@ test('Panel Lab is development-gated and uses the shared panel skin', async () =
     assert.equal(mounted[0].presentation, true);
     assert.deepEqual(body.style.background, EVE_PANEL_SKIN_TOKENS.bevyPanel.colors.transparent);
     assert.deepEqual(footer.style.background, BEVY_MENU_TOKENS.clear);
+    const contentTint = EVE_COMMON_SKIN_TOKENS.systemContent.gpu;
+    for (const id of [
+        'eve_bevy_panel_panel_lab_footer_resize_left_icon',
+        'eve_bevy_panel_panel_lab_footer_close_label',
+        'eve_bevy_panel_panel_lab_footer_status',
+        'eve_bevy_panel_panel_lab_footer_resize_icon'
+    ]) {
+        assert.deepEqual(findNode(mounted[0], id).image.tint, contentTint, id);
+    }
     assert.equal(dom.window.document.querySelectorAll('button,input,select,textarea').length, 0);
     await runtime.closePanelSurface('panel_lab');
 });

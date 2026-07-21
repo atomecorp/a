@@ -11,6 +11,7 @@ import {
     contextualGestureProps
 } from '../../eVe/intuition/runtime/eve_intuition/atome_contextual_edit_model.js';
 import { BEVY_MENU_TOKENS } from '../../eVe/intuition/ribbon/bevy_ui_menu_surface.js';
+import { EVE_COMMON_SKIN_TOKENS } from '../../eVe/elements/skin/tokens.js';
 import { buildBevyUiFlowerTree } from '../../eVe/intuition/ribbon/bevy_ui_flower_model.js';
 import { buildBevyMainMenuTree } from '../../eVe/intuition/ribbon/bevy_ui_main_menu_model.js';
 import { createAtomeContextualEditRuntime } from '../../eVe/intuition/runtime/eve_intuition/atome_contextual_edit_runtime.js';
@@ -120,9 +121,11 @@ test('Atome contextual edit stays on one clipped Bevy tree with handed rail and 
     };
     const right = buildAtomeContextualEditTree(input);
     const rail = findNode(right.root, 'eve_bevy_panel_atome_contextual_edit_rail');
+    const railBackground = findNode(right.root, 'eve_bevy_panel_atome_contextual_edit_rail_background');
     const outline = findNode(right.root, 'atome_contextual_edit_a_outline');
     const footerBackground = findNode(right.root, 'atome_contextual_edit_a_footer_background');
     assert.deepEqual(rail.style.position, [740, 360]);
+    assert.equal(railBackground, null, 'the rail is a transparent layout; only its tool surfaces own the shared shadow');
     assert.equal(outline.style.shadow, BEVY_MENU_TOKENS.surface.material.shadow);
     assert.equal(footerBackground.style.shadow, undefined);
     assert.equal(rail.children.length, 1);
@@ -208,6 +211,14 @@ test('Atome contextual footer follows projected media bounds and uses compact da
     assert.deepEqual(footer.style.size, [310, 20]);
     assert.deepEqual(background.style.background, BEVY_MENU_TOKENS.surface.material.background);
     assert.deepEqual(background.style.backdrop, BEVY_MENU_TOKENS.surface.material.backdrop);
+    for (const id of [
+        'atome_contextual_edit_media_resize_left_icon',
+        'atome_contextual_edit_media_close_icon',
+        'atome_contextual_edit_media_title',
+        'atome_contextual_edit_media_resize_right_icon'
+    ]) {
+        assert.deepEqual(findNode(tree.root, id).image.tint, EVE_COMMON_SKIN_TOKENS.systemContent.gpu, id);
+    }
     assert.deepEqual(findNode(tree.root, 'atome_contextual_edit_media_resize_left_icon').style.scale, [-1, 1]);
     assert.deepEqual(findNode(tree.root, 'atome_contextual_edit_media_resize_right_icon').style.scale, [-1, 1]);
     assert.deepEqual(findNode(tree.root, 'atome_contextual_edit_media_resize_left_icon').style.position, [1, 0]);
