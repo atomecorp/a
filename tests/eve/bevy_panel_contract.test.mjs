@@ -9,6 +9,7 @@ import { WORKSPACE_SCENE_LAYER_IDS } from '../../eVe/domains/rendering/workspace
 import { createEveBevyUiRuntime } from '../../eVe/domains/rendering/bevy_ui_runtime.js';
 import { setMainMenuRuntime } from '../../eVe/intuition/ribbon/bevy_ui_product_registry.js';
 import { PANEL_SURFACE_DEFINITIONS } from '../../eVe/intuition/panel_definitions.js';
+import { BEVY_PANEL_TOKENS } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_tokens.js';
 
 const repoRoot = dirname(dirname(dirname(fileURLToPath(import.meta.url))));
 
@@ -121,8 +122,17 @@ test('Bevy panel contract removes tools dock and keeps system controls in footer
     assert.deepEqual(body.style.position, [0, 0]);
     assert.equal(footer.style.shadow, undefined);
     assert.ok(panel.style.shadow, 'only the outer panel owns the drop shadow');
-    assert.equal(findNode(tree, 'eve_bevy_panel_timeline_footer_resize_left_icon').image.text, '◣');
-    assert.equal(findNode(tree, 'eve_bevy_panel_timeline_footer_resize_icon').image.text, '◢');
+    const { BEVY_CORNER_RESIZE_GRIP_ICON_SOURCE } = await import('../../eVe/intuition/ribbon/bevy_ui_menu_surface.js');
+    const leftGripIcon = findNode(tree, 'eve_bevy_panel_timeline_footer_resize_left_icon');
+    const rightGripIcon = findNode(tree, 'eve_bevy_panel_timeline_footer_resize_icon');
+    assert.equal(leftGripIcon.image.source, BEVY_CORNER_RESIZE_GRIP_ICON_SOURCE);
+    assert.equal(rightGripIcon.image.source, BEVY_CORNER_RESIZE_GRIP_ICON_SOURCE);
+    assert.deepEqual(leftGripIcon.style.size, [BEVY_PANEL_TOKENS.resizeHandlePx, BEVY_PANEL_TOKENS.footerHeightPx]);
+    assert.deepEqual(rightGripIcon.style.size, [BEVY_PANEL_TOKENS.resizeHandlePx, BEVY_PANEL_TOKENS.footerHeightPx]);
+    assert.deepEqual(leftGripIcon.style.scale, [-1, 1]);
+    assert.deepEqual(rightGripIcon.style.scale, [1, 1]);
+    assert.equal(leftGripIcon.style.position, undefined);
+    assert.equal(rightGripIcon.style.position, undefined);
 
     await drag.on.drag({ delta_x: 40, delta_y: 30 });
     const movedPanel = findNode(mounted.at(-1), 'eve_bevy_panel_timeline_panel');
@@ -189,7 +199,6 @@ test('Panel Lab is development-gated and uses the shared panel skin', async () =
     const { panelLabSurfaceDefinition, registerBevyPanelSurfaces } = await import('../../eVe/intuition/runtime/bevy_panel/bevy_panel_surfaces.js');
     const { bevyPanelRuntimeState } = await import('../../eVe/intuition/runtime/bevy_panel/bevy_panel_runtime.js');
     const { createPanelSurfaceRuntime } = await import('../../eVe/intuition/runtime/eve_intuition/panel_surface_runtime.js');
-    const { BEVY_PANEL_TOKENS } = await import('../../eVe/intuition/runtime/bevy_panel/bevy_panel_tokens.js');
     const { EVE_COMMON_SKIN_TOKENS, EVE_PANEL_SKIN_TOKENS } = await import('../../eVe/elements/skin/index.js');
     const { BEVY_MENU_TOKENS } = await import('../../eVe/intuition/ribbon/bevy_ui_menu_surface.js');
     bevyPanelRuntimeState.runtime = null;

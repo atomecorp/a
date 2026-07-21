@@ -10,7 +10,10 @@ import {
     buildAtomeContextualEditTree,
     contextualGestureProps
 } from '../../eVe/intuition/runtime/eve_intuition/atome_contextual_edit_model.js';
-import { BEVY_MENU_TOKENS } from '../../eVe/intuition/ribbon/bevy_ui_menu_surface.js';
+import {
+    BEVY_CORNER_RESIZE_GRIP_ICON_SOURCE,
+    BEVY_MENU_TOKENS
+} from '../../eVe/intuition/ribbon/bevy_ui_menu_surface.js';
 import { EVE_COMMON_SKIN_TOKENS } from '../../eVe/elements/skin/tokens.js';
 import { buildBevyUiFlowerTree } from '../../eVe/intuition/ribbon/bevy_ui_flower_model.js';
 import { buildBevyMainMenuTree } from '../../eVe/intuition/ribbon/bevy_ui_main_menu_model.js';
@@ -122,11 +125,15 @@ test('Atome contextual edit stays on one clipped Bevy tree with handed rail and 
     const right = buildAtomeContextualEditTree(input);
     const rail = findNode(right.root, 'eve_bevy_panel_atome_contextual_edit_rail');
     const railBackground = findNode(right.root, 'eve_bevy_panel_atome_contextual_edit_rail_background');
+    const contextualSurface = findNode(right.root, 'atome_contextual_edit_a_surface');
     const outline = findNode(right.root, 'atome_contextual_edit_a_outline');
     const footerBackground = findNode(right.root, 'atome_contextual_edit_a_footer_background');
     assert.deepEqual(rail.style.position, [740, 360]);
     assert.equal(railBackground, null, 'the rail is a transparent layout; only its tool surfaces own the shared shadow');
-    assert.equal(outline.style.shadow, BEVY_MENU_TOKENS.surface.material.shadow);
+    assert.deepEqual(contextualSurface.style.position, [40, 50]);
+    assert.deepEqual(contextualSurface.style.size, [200, 140]);
+    assert.equal(contextualSurface.style.shadow, BEVY_MENU_TOKENS.surface.material.shadow);
+    assert.equal(outline.style.shadow, undefined, 'the selection outline must not own the exterior shadow');
     assert.equal(footerBackground.style.shadow, undefined);
     assert.equal(rail.children.length, 1);
     assert.deepEqual(findNode(rail, 'atome_contextual_tool_size_background').style.size, [60, 180]);
@@ -236,8 +243,12 @@ test('Atome contextual footer follows projected media bounds and uses compact da
     });
     const footer = findNode(tree.root, 'atome_contextual_edit_media_footer');
     const background = findNode(tree.root, 'atome_contextual_edit_media_footer_background');
+    const contextualSurface = findNode(tree.root, 'atome_contextual_edit_media_surface');
     assert.deepEqual(footer.style.position, [40, 470]);
     assert.deepEqual(footer.style.size, [310, 20]);
+    assert.deepEqual(contextualSurface.style.position, [40, 50]);
+    assert.deepEqual(contextualSurface.style.size, [310, 440]);
+    assert.deepEqual(contextualSurface.style.shadow, BEVY_MENU_TOKENS.surface.material.shadow);
     assert.deepEqual(background.style.background, BEVY_MENU_TOKENS.surface.material.background);
     assert.deepEqual(background.style.backdrop, BEVY_MENU_TOKENS.surface.material.backdrop);
     for (const id of [
@@ -249,9 +260,17 @@ test('Atome contextual footer follows projected media bounds and uses compact da
         assert.deepEqual(findNode(tree.root, id).image.tint, EVE_COMMON_SKIN_TOKENS.systemContent.gpu, id);
     }
     assert.deepEqual(findNode(tree.root, 'atome_contextual_edit_media_resize_left_icon').style.scale, [-1, 1]);
-    assert.deepEqual(findNode(tree.root, 'atome_contextual_edit_media_resize_right_icon').style.scale, [-1, 1]);
-    assert.deepEqual(findNode(tree.root, 'atome_contextual_edit_media_resize_left_icon').style.position, [1, 0]);
-    assert.deepEqual(findNode(tree.root, 'atome_contextual_edit_media_resize_right_icon').style.position, [2, 0]);
+    assert.deepEqual(findNode(tree.root, 'atome_contextual_edit_media_resize_right_icon').style.scale, [1, 1]);
+    for (const id of [
+        'atome_contextual_edit_media_resize_left_icon',
+        'atome_contextual_edit_media_resize_right_icon'
+    ]) {
+        const icon = findNode(tree.root, id);
+        assert.equal(icon.image.source, BEVY_CORNER_RESIZE_GRIP_ICON_SOURCE, id);
+        assert.equal(icon.image.fit, 'fill', id);
+        assert.deepEqual(icon.style.size, [22, 20], id);
+        assert.equal(icon.style.position, undefined, id);
+    }
     assert.ok(findNode(tree.root, 'atome_contextual_tool_detail_background'));
 });
 
