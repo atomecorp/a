@@ -167,6 +167,35 @@ test('horizontal and vertical tools share the same material structure and relati
     assert.deepEqual(contextualShell.style.background, BEVY_MENU_TOKENS.clear);
 });
 
+test('contextual rail remains below the main menu at their shared boundary', () => {
+    const surface = { getBoundingClientRect: () => ({ width: 800, height: 600 }) };
+    const main = buildBevyMainMenuTree({
+        surface,
+        content: {
+            toolbox: { children: ['detail'] },
+            detail: { atome_tool: true, label: 'detail', icon: 'detail', tool_id: 'tool.detail' }
+        },
+        state: { activePaletteKey: '', latchedByToolId: new Map(), externalOpenByToolId: new Map() }
+    });
+    const contextual = buildAtomeContextualEditTree({
+        surface, activeAtomeId: 'a', definitions: [{ key: 'detail', label: 'detail', toolType: 'standard' }]
+    });
+    const mainRecords = projectBevyUiTreeRecords({
+        tree: normalizeBevyUiTree({ id: main.id, tree: main }), treeId: main.id, workspaceLayer: main.layer
+    });
+    const contextualRecords = projectBevyUiTreeRecords({
+        tree: normalizeBevyUiTree({ id: contextual.id, tree: contextual }), treeId: contextual.id, workspaceLayer: contextual.layer
+    });
+    const mainSurface = mainRecords.find((record) => record.id.endsWith('_eve_bevy_ui_main_menu_tool_detail_background'));
+    const contextualSurface = contextualRecords.find((record) => record.id.endsWith('_atome_contextual_tool_detail_background'));
+    assert.ok(mainSurface);
+    assert.ok(contextualSurface);
+    assert.ok(
+        mainSurface.properties.renderLayer > contextualSurface.properties.renderLayer,
+        'the main menu must paint over any contextual shadow at their shared boundary'
+    );
+});
+
 test('contextual palettes keep the semantic accent on the rail interior in both handedness modes', () => {
     const input = {
         surface: { getBoundingClientRect: () => ({ width: 800, height: 600 }) },
