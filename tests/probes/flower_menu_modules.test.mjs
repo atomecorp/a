@@ -446,7 +446,6 @@ const flowerModelSource = await readFile(new URL('../../eVe/intuition/ribbon/bev
 const { buildBevyUiFlowerTree } = await import('../../eVe/intuition/ribbon/bevy_ui_flower_model.js');
 const {
     FLOWER_PHASE,
-    flowerLiquidProcedural,
     flowerMotionTargets,
     sampleFlowerMotion
 } = await import('../../eVe/intuition/ribbon/bevy_ui_flower_motion.js');
@@ -471,7 +470,7 @@ assert.deepEqual(flowerPaletteNode.style.backdrop, {
     ...BEVY_MENU_TOKENS.surface.backdrop,
     tint: BEVY_MENU_TOKENS.surface.normal
 }, 'Flower palettes must carry the centralized glass blur contract');
-assert.equal(flowerLiquidNode.overlayRecord.properties.material.procedural.mode, 1, 'Flower must mount one shared liquid SDF record');
+assert.equal(flowerLiquidNode, undefined, 'Flower must not mount a transient liquid record');
 const motionCenter = { x: 320, y: 240 };
 const motionTree = buildBevyUiFlowerTree({
     surface: projectCanvas,
@@ -485,6 +484,11 @@ const openingEnd = sampleFlowerMotion({
     elapsedMs: RIBBON_TOKENS.flowerMotion.openDurationMs,
     targets: motionTargets
 });
+assert.deepEqual(
+    [...openingMiddle.frames.values()].map((frame) => frame.progress),
+    Array(6).fill(openingMiddle.progress),
+    'Flower petals must share one opening progress without stagger'
+);
 motionTargets.forEach((target) => {
     const frame = openingEnd.frames.get(target.nodeId);
     assert.deepEqual(frame.position, target.finalPosition, 'Flower motion must settle on canonical radial geometry');
@@ -503,20 +507,6 @@ motionTargets.forEach((target) => {
         'closing must continue from the current opening frame without a jump'
     );
 });
-const earlyLiquid = flowerLiquidProcedural({
-    sample: sampleFlowerMotion({ phase: FLOWER_PHASE.opening, elapsedMs: 35, targets: motionTargets }),
-    targets: motionTargets,
-    center: motionCenter,
-    surfaceSize: [640, 480]
-});
-const settledLiquid = flowerLiquidProcedural({
-    sample: openingEnd,
-    targets: motionTargets,
-    center: motionCenter,
-    surfaceSize: [640, 480]
-});
-assert.ok(earlyLiquid.flower_petals.some((petal) => petal[3] > 0), 'near-center petals must receive a temporary goo bridge');
-assert.equal(settledLiquid.flower_petals.every((petal) => petal[3] === 0), true, 'settled petals must leave no residual bridge');
 assert.ok(
     flowerContextItemsSource.includes("type === 'project' && !hasAtomeTarget")
         && flowerContextItemsSource.includes('selectedIds: contextSelectionIds')
