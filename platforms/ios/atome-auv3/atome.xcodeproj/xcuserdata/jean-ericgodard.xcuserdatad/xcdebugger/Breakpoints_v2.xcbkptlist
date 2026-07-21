@@ -31,9 +31,7 @@
             startingColumnNumber = "9223372036854775807"
             endingColumnNumber = "9223372036854775807"
             startingLineNumber = "549"
-            endingLineNumber = "549"
-            landmarkName = "makeSliceBuffer(from:startSeconds:durationSeconds:)"
-            landmarkType = "7">
+            endingLineNumber = "549">
          </BreakpointContent>
       </BreakpointProxy>
    </Breakpoints>

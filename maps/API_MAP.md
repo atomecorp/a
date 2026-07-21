@@ -161,6 +161,8 @@ Primary sources:
 
 Exposure: existing semi-public closed `openPanelSurface(surfaceKey, context)` and `closePanelSurface(surfaceKey, context)` route registered Bevy panel surfaces to `openBevyPanelSurface(...)` / `closeBevyPanelSurface(...)`. Migrated panels mount disposable BevyUI trees named `eve_bevy_panel_<surface>` on `eve_surface_project`; non-migrated panels remain on the existing registered surface path until they are migrated and verified.
 
+The temporary development/test-only `ui.dev.panel_lab` tool is not a public or semi-public API. It is registered only when the internal Panel Lab gate is enabled, delegates to the same closed panel route, and must be removed after the shared component migration is complete.
+
 Boundary status: Semi-public closed eVe product runtime. The panel view emits UI intentions only; durable mutations stay in existing owners such as Timeline, Calendar, profile, Asset Box, Molecule session, or Atome commit APIs. The Bevy panel path must not create visible panel DOM, a `tools_dock`, a second canvas, or a fallback renderer.
 
 Effect model: `PanelRoot -> HeaderInfo -> BodyScroll -> FooterControls`. Header contains only title/information, body is the single scroll surface, footer owns close and resize controls. Mobile layout occupies the shared canvas area above the toolbox-reserved band. Timeline is the first migrated surface and uses the existing `Atome.timeline` / `AtomeTimeline` API without creating the old HTML dialog.

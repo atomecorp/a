@@ -296,6 +296,9 @@ Role:
 
 Design rule: migrated panel surfaces must use this BevyUI panel owner, not `createEveDialog`, `panel_chrome.js`, panel-local DOM builders, CSS panels, or visible HTML controls.
 
+- `EVE_PANEL_SKIN_TOKENS.bevyPanel` is the shared GPU-ready visual contract for BevyUI panels. `bevy_panel_tokens.js` consumes it directly; panel surfaces and the temporary development-only Panel Lab must not define local panel colors, metrics, shadows, or radii.
+- Panel footer chrome reuses `EVE_TOOL_SKIN_TOKENS.bevyMenu.chrome.footer` and the contextual Atome-edit footer layout; close and both resize handles belong only to that footer.
+
 ## Design Factories and Runtime Surfaces
 
 ### eVe Element Factory
