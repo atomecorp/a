@@ -1,6 +1,8 @@
 use bevy::{image::Image, prelude::*};
 
-use crate::shape_shadow_overlay::build_shape_shadow_texture_rgba;
+use crate::shape_shadow_overlay::{
+    build_backdrop_shadow_texture_rgba, build_shape_shadow_texture_rgba,
+};
 use crate::*;
 
 fn shape_node(id: &str) -> AtomeRenderNode {
@@ -41,6 +43,24 @@ fn test_world() -> World {
     world.insert_resource(AtomeRendererDiagnostics::default());
     world.insert_resource(Assets::<Image>::default());
     world
+}
+
+#[test]
+fn backdrop_shadow_keeps_the_outer_halo_but_never_fills_the_tool_interior() {
+    let (width, height, rgba) = build_backdrop_shadow_texture_rgba(
+        [0.0, 0.0, 0.0, 1.0],
+        60.0,
+        60.0,
+        12.0,
+        12.0,
+    )
+    .unwrap();
+    let alpha_at = |x: u32, y: u32| rgba[((y * width + x) * 4 + 3) as usize];
+    assert_eq!(alpha_at(width / 2, height / 2), 0);
+    assert!(
+        (0..height).any(|y| (0..width).any(|x| alpha_at(x, y) > 0)),
+        "the exterior halo must remain visible"
+    );
 }
 
 fn shadow_style() -> SelectionVisualStyle {
@@ -186,6 +206,11 @@ fn shape_shadow_translation_reuses_existing_texture() {
             .unwrap()
             .translation,
         Vec3::ZERO
+    );
+    assert_eq!(
+        world.get::<GlobalTransform>(first_shadow_entity).unwrap().compute_transform(),
+        *world.get::<Transform>(first_shadow_entity).unwrap(),
+        "the shadow must reach the render world in the same patch as its owner"
     );
 }
 

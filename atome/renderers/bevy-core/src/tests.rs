@@ -241,6 +241,88 @@ fn backdrop_fixture_keeps_text_and_image_in_capture_and_large_glass_circle_in_pr
 }
 
 #[test]
+fn backdrop_style_patch_updates_the_resident_material_without_reallocation() {
+    let glass = AtomeRenderNode {
+        backdrop: Some(AtomeBackdropStyle {
+            blur_px: 9.0,
+            tint: [0.03, 0.06, 0.09, 0.52],
+        }),
+        presentation: true,
+        ..shape_node("backdrop_patch_fixture")
+    };
+    let mut app = App::new();
+    app.add_plugins(AtomeBevyRendererPlugin::new(AtomeBevyRendererConfig::new(
+        640.0,
+        480.0,
+        AtomeRenderScene {
+            nodes: vec![glass],
+            effects: Vec::new(),
+            selection_style: None,
+        },
+    )));
+    app.update();
+
+    let entity = app.world().resource::<AtomeEntityTable>().by_id["backdrop_patch_fixture"];
+    let material_handle = app
+        .world()
+        .get::<MeshMaterial2d<crate::backdrop_surface::BackdropSurfaceMaterial>>(entity)
+        .unwrap()
+        .0
+        .clone();
+    let mesh_handle = app.world().get::<Mesh2d>(entity).unwrap().0.clone();
+    let material_count = app
+        .world()
+        .resource::<Assets<crate::backdrop_surface::BackdropSurfaceMaterial>>()
+        .len();
+    let mesh_count = app.world().resource::<Assets<Mesh>>().len();
+    let image_count = app.world().resource::<Assets<Image>>().len();
+
+    apply_style(
+        app.world_mut(),
+        AtomeStylePatch {
+            id: "backdrop_patch_fixture".to_string(),
+            color: None,
+            shadow: None,
+            backdrop: Some(Some(AtomeBackdropStyle {
+                blur_px: 18.0,
+                tint: [0.24, 0.29, 0.37, 1.0],
+            })),
+            selected: None,
+            opacity: None,
+            playback_progress: None,
+            filters: None,
+            transition: None,
+            procedural: None,
+        },
+    )
+    .unwrap();
+
+    let resident_handle = app
+        .world()
+        .get::<MeshMaterial2d<crate::backdrop_surface::BackdropSurfaceMaterial>>(entity)
+        .unwrap()
+        .0
+        .clone();
+    let material = app
+        .world()
+        .resource::<Assets<crate::backdrop_surface::BackdropSurfaceMaterial>>()
+        .get(&resident_handle)
+        .unwrap();
+    assert_eq!(resident_handle, material_handle);
+    assert_eq!(app.world().get::<Mesh2d>(entity).unwrap().0, mesh_handle);
+    assert_eq!(material.uniform.size_radius.w, 18.0);
+    assert_eq!(material.uniform.tint, Vec4::new(0.24, 0.29, 0.37, 1.0));
+    assert_eq!(
+        app.world()
+            .resource::<Assets<crate::backdrop_surface::BackdropSurfaceMaterial>>()
+            .len(),
+        material_count
+    );
+    assert_eq!(app.world().resource::<Assets<Mesh>>().len(), mesh_count);
+    assert_eq!(app.world().resource::<Assets<Image>>().len(), image_count);
+}
+
+#[test]
 fn workspace_backdrop_reuses_its_image_handle_across_surface_resize() {
     let mut app = App::new();
     app.add_plugins(AtomeBevyRendererPlugin::new(

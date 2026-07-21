@@ -3,11 +3,16 @@ import { test } from 'vitest';
 import { JSDOM } from 'jsdom';
 
 import { createEveBevyUiRuntime } from '../../eVe/domains/rendering/bevy_ui_runtime.js';
+import { projectBevyUiTreeRecords } from '../../eVe/domains/rendering/bevy_ui_overlay_record_projection.js';
+import { normalizeBevyUiTree } from '../../eVe/domains/rendering/bevy_ui_tree_normalization.js';
 import { clearAllProjectScenes, getProjectSceneState } from '../../eVe/domains/rendering/project_scene_runtime.js';
 import {
     buildAtomeContextualEditTree,
     contextualGestureProps
 } from '../../eVe/intuition/runtime/eve_intuition/atome_contextual_edit_model.js';
+import { BEVY_MENU_TOKENS } from '../../eVe/intuition/ribbon/bevy_ui_menu_surface.js';
+import { buildBevyUiFlowerTree } from '../../eVe/intuition/ribbon/bevy_ui_flower_model.js';
+import { buildBevyMainMenuTree } from '../../eVe/intuition/ribbon/bevy_ui_main_menu_model.js';
 import { createAtomeContextualEditRuntime } from '../../eVe/intuition/runtime/eve_intuition/atome_contextual_edit_runtime.js';
 import {
     markDashboardWorkspaceMode,
@@ -55,6 +60,54 @@ const findNode = (node, id) => {
     return null;
 };
 
+test('all three Bevy menu trees stay outside the workspace backdrop capture', () => {
+    const surface = { getBoundingClientRect: () => ({ width: 800, height: 600 }) };
+    const main = buildBevyMainMenuTree({
+        surface,
+        handedness: 'left',
+        content: {
+            toolbox: { children: ['view'] },
+            view: { atome_tool: true, label: 'Vue', icon: 'view', tool_id: 'tool.view' }
+        },
+        state: { activePaletteKey: '', latchedByToolId: new Map(), externalOpenByToolId: new Map() }
+    });
+    const flower = buildBevyUiFlowerTree({
+        surface,
+        center: { x: 400, y: 300 },
+        items: [{ key: 'view', label: 'Vue', type: 'tool' }]
+    });
+    const contextual = buildAtomeContextualEditTree({
+        surface,
+        activeAtomeId: 'a',
+        definitions: [{ key: 'detail', label: 'detail', toolType: 'standard' }]
+    });
+    for (const tree of [main, flower, contextual]) {
+        const normalizedTree = normalizeBevyUiTree({ id: tree.id, tree });
+        const records = projectBevyUiTreeRecords({
+            tree: normalizedTree,
+            treeId: tree.id,
+            workspaceLayer: tree.layer
+        });
+        assert.equal(normalizedTree.presentation, true, tree.id);
+        assert.ok(records.length > 0);
+        assert.equal(records.every((record) => record.properties.presentation === true), true, tree.id);
+    }
+    const workspaceTree = normalizeBevyUiTree({
+        id: 'workspace_fixture',
+        tree: {
+            id: 'workspace_fixture',
+            root: { id: 'workspace_fixture_root', kind: 'panel', style: { size: [40, 40], background: [1, 1, 1, 1] } }
+        }
+    });
+    const workspaceRecords = projectBevyUiTreeRecords({
+        tree: workspaceTree,
+        treeId: 'workspace_fixture',
+        workspaceLayer: 'project'
+    });
+    assert.equal(workspaceTree.presentation, false);
+    assert.equal(workspaceRecords.every((record) => record.properties.presentation === false), true);
+});
+
 test('Atome contextual edit stays on one clipped Bevy tree with handed rail and 3x slider', () => {
     const surface = { getBoundingClientRect: () => ({ width: 800, height: 600 }) };
     const records = [{ id: 'a', properties: { left: 40, top: 50, width: 200, height: 120 } }, {
@@ -76,6 +129,67 @@ test('Atome contextual edit stays on one clipped Bevy tree with handed rail and 
     assert.equal(findNode(left.root, 'eve_bevy_panel_atome_contextual_edit_rail').style.position[0], 0);
 });
 
+test('horizontal and vertical tools share the same material structure and relative layer contract', () => {
+    const surface = { getBoundingClientRect: () => ({ width: 800, height: 600 }) };
+    const main = buildBevyMainMenuTree({
+        surface,
+        content: {
+            toolbox: { children: ['detail'] },
+            detail: { atome_tool: true, label: 'detail', icon: 'detail', tool_id: 'tool.detail' }
+        },
+        state: { activePaletteKey: '', latchedByToolId: new Map(), externalOpenByToolId: new Map() }
+    });
+    const contextual = buildAtomeContextualEditTree({
+        surface,
+        activeAtomeId: 'a',
+        records: [{ id: 'a', properties: { left: 20, top: 20, width: 100, height: 100 } }],
+        definitions: [{ key: 'detail', label: 'detail', icon: 'detail', toolType: 'standard' }]
+    });
+    const mainShell = findNode(main.root, 'eve_bevy_ui_main_menu_tool_detail');
+    const mainSurface = findNode(mainShell, `${mainShell.id}_background`);
+    const mainIcon = findNode(mainShell, `${mainShell.id}_icon`);
+    const contextualShell = findNode(contextual.root, 'atome_contextual_tool_detail');
+    const contextualSurface = findNode(contextualShell, `${contextualShell.id}_background`);
+    const contextualIcon = findNode(contextualShell, `${contextualShell.id}_icon`);
+    for (const property of ['background', 'radius', 'shadow', 'backdrop']) {
+        assert.deepEqual(mainSurface.style[property], contextualSurface.style[property], property);
+    }
+    assert.equal(mainShell.style.z_index - mainSurface.style.z_index, contextualShell.style.z_index - contextualSurface.style.z_index);
+    assert.equal(mainIcon.style.z_index - mainSurface.style.z_index, contextualIcon.style.z_index - contextualSurface.style.z_index);
+    assert.deepEqual(mainShell.style.background, BEVY_MENU_TOKENS.clear);
+    assert.deepEqual(contextualShell.style.background, BEVY_MENU_TOKENS.clear);
+});
+
+test('contextual palettes keep the semantic accent on the rail interior in both handedness modes', () => {
+    const input = {
+        surface: { getBoundingClientRect: () => ({ width: 800, height: 600 }) },
+        activeAtomeId: 'a',
+        definitions: [{ key: 'mode', toolType: 'palette', children: [{ key: 'perform', toolType: 'standard' }] }],
+        activePaletteKey: 'mode'
+    };
+    const right = buildAtomeContextualEditTree(input);
+    const left = buildAtomeContextualEditTree({ ...input, handedness: 'left' });
+    const rightAccent = findNode(right.root, 'atome_contextual_mode_accent');
+    const leftAccent = findNode(left.root, 'atome_contextual_mode_accent');
+    assert.deepEqual(rightAccent.style.position, [BEVY_MENU_TOKENS.paletteAccent.insetPx, BEVY_MENU_TOKENS.paletteAccent.insetPx]);
+    assert.deepEqual(leftAccent.style.position, [60 - BEVY_MENU_TOKENS.paletteAccent.insetPx - BEVY_MENU_TOKENS.paletteAccent.thicknessPx, BEVY_MENU_TOKENS.paletteAccent.insetPx]);
+    assert.equal(rightAccent.style.size[1], 114);
+    assert.equal(leftAccent.style.size[1], 114);
+});
+
+test('Flower palette accents are individual rounded top arcs', () => {
+    const tree = buildBevyUiFlowerTree({
+        surface: { getBoundingClientRect: () => ({ width: 800, height: 600 }) },
+        items: [{ key: 'mode', type: 'palette' }, { key: 'view', type: 'palette' }]
+    });
+    const petals = tree.root.children.filter((node) => node.kind === 'icon_button');
+    const accents = petals.map((petal) => findNode(petal, `${petal.id}_accent`));
+    assert.equal(accents.length, 2);
+    assert.equal(accents.every(Boolean), true);
+    assert.equal(accents.every((accent) => accent.style.radius === BEVY_MENU_TOKENS.shape.flowerRadiusPx), true);
+    assert.equal(accents.every((accent) => accent.style.position[1] === Math.max(BEVY_MENU_TOKENS.paletteAccent.insetPx, 6)), true);
+});
+
 test('Atome contextual footer follows projected media bounds and uses compact dark chrome', () => {
     const tree = buildAtomeContextualEditTree({
         surface: { getBoundingClientRect: () => ({ width: 800, height: 600 }) },
@@ -88,7 +202,7 @@ test('Atome contextual footer follows projected media bounds and uses compact da
     const background = findNode(tree.root, 'atome_contextual_edit_media_footer_background');
     assert.deepEqual(footer.style.position, [40, 470]);
     assert.deepEqual(footer.style.size, [310, 20]);
-    assert.deepEqual(background.style.background, [0.12, 0.13, 0.17, 0.98]);
+    assert.deepEqual(background.style.background, BEVY_MENU_TOKENS.chrome.footer);
     assert.deepEqual(findNode(tree.root, 'atome_contextual_edit_media_resize_left_icon').style.scale, [-1, 1]);
     assert.deepEqual(findNode(tree.root, 'atome_contextual_edit_media_resize_right_icon').style.scale, [-1, 1]);
     assert.deepEqual(findNode(tree.root, 'atome_contextual_edit_media_resize_left_icon').style.position, [1, 0]);

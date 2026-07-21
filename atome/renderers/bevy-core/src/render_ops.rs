@@ -1,7 +1,7 @@
 use bevy::{image::Image, prelude::*, text::TextBounds};
 
 use crate::{
-    backdrop_surface::{refresh_workspace_backdrop_enabled, resize_backdrop_surface},
+    backdrop_surface::{patch_backdrop_surface, refresh_workspace_backdrop_enabled, resize_backdrop_surface},
     backdrop_blur::apply_scene_effects,
     background::{apply_surface_background, resize_surface_background},
     procedural_sdf::{patch_procedural_sdf, resize_procedural_sdf},
@@ -303,6 +303,9 @@ pub fn apply_style(world: &mut World, patch: AtomeStylePatch) -> Result<(), Stri
             current.0 = shadow.and_then(|value| value.normalized());
         }
         rebuild_shape_shadow_overlay(world, entity)?;
+    }
+    if let Some(Some(backdrop)) = patch.backdrop {
+        patch_backdrop_surface(world, entity, backdrop)?;
     }
     if let Some(selected) = patch.selected {
         if let Some(mut current) = world.get_mut::<AtomeSelected>(entity) {

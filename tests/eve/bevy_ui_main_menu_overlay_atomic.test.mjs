@@ -17,7 +17,7 @@ import {
 } from '../../eVe/domains/rendering/project_scene_runtime.js';
 import { normalizeAtomeRenderNode } from '../../eVe/domains/rendering/virtual_scene_contract.js';
 import { buildBevyMainMenuTree } from '../../eVe/intuition/ribbon/bevy_ui_main_menu_model.js';
-import { RIBBON_TOKENS } from '../../eVe/intuition/ribbon/tokens.js';
+import { BEVY_MENU_TOKENS } from '../../eVe/intuition/ribbon/bevy_ui_menu_surface.js';
 
 test('BevyUI palette updates reuse unchanged hydrated icon textures and invalidate visual changes', async () => {
     clearBevyMediaTextureCache();
@@ -428,11 +428,10 @@ test('BevyUI main menu projects one semantic accent capsule per palette group', 
     const captureBackplateId = 'eve_bevy_ui_main_menu_palette_capture_backplate';
     const modeAccent = findTreeNode(closedTree.root, 'eve_bevy_ui_main_menu_palette_mode_accent');
     const viewAccent = findTreeNode(closedTree.root, 'eve_bevy_ui_main_menu_palette_view_accent');
-    const tokens = RIBBON_TOKENS.mainMenuPaletteAccent;
-    assert.deepEqual(findTreeNode(closedTree.root, captureAccentId)?.style.size, [54, tokens.heightPx]);
+    const tokens = BEVY_MENU_TOKENS.paletteAccent;
+    assert.deepEqual(findTreeNode(closedTree.root, captureAccentId)?.style.size, [54, tokens.thicknessPx]);
     assert.deepEqual(findTreeNode(closedTree.root, captureBackplateId)?.style.shadow, {
-        ...tokens.backplate.shadow,
-        color: [0, 0, 0, 0.55]
+        ...tokens.backplateShadow
     });
     assert.deepEqual(viewAccent.style.background, [89 / 255, 199 / 255, 211 / 255, 1]);
     assert.deepEqual(modeAccent.style.background, [210 / 255, 121 / 255, 223 / 255, 1]);
@@ -446,7 +445,20 @@ test('BevyUI main menu projects one semantic accent capsule per palette group', 
         itemSize: 60,
         state: { ...baseState, activePaletteKey: 'capture' }
     });
-    assert.deepEqual(findTreeNode(expandedTree.root, captureAccentId)?.style.size, [174, tokens.heightPx]);
+    for (const id of [
+        'eve_bevy_ui_main_menu_tool_atome',
+        'eve_bevy_ui_main_menu_tool_find',
+        'eve_bevy_ui_main_menu_tool_mode',
+        'eve_bevy_ui_main_menu_tool_view'
+    ]) {
+        const closedStyle = findTreeNode(closedTree.root, `${id}_background`).style;
+        const expandedStyle = findTreeNode(expandedTree.root, `${id}_background`).style;
+        assert.deepEqual(expandedStyle.background, closedStyle.background, `${id}:background`);
+        assert.deepEqual(expandedStyle.shadow, closedStyle.shadow, `${id}:shadow`);
+        assert.deepEqual(expandedStyle.backdrop, closedStyle.backdrop, `${id}:backdrop`);
+        assert.equal(expandedStyle.z_index, closedStyle.z_index, `${id}:surface-layer`);
+    }
+    assert.deepEqual(findTreeNode(expandedTree.root, captureAccentId)?.style.size, [174, tokens.thicknessPx]);
     assert.equal(findTreeNode(expandedTree.root, captureBackplateId)?.style.size[0], 176);
     assert.equal(findTreeNode(expandedTree.root, 'eve_bevy_ui_main_menu_tool_capture__import_palette_accent'), null);
     const paletteItemIds = new Set([
@@ -523,7 +535,7 @@ test('BevyUI main menu projects one semantic accent capsule per palette group', 
     const projectedBackplate = records.find((record) => record.id.endsWith(`_${captureBackplateId}`));
     assert.equal(projectedAccent?.properties?.width, 174);
     assert.equal(projectedAccent?.properties?.height, 4);
-    assert.equal(projectedAccent?.properties?.corner_radius, 2);
+    assert.equal(projectedAccent?.properties?.corner_radius, tokens.backplateRadiusPx);
     assert.equal(projectedAccent?.properties?.color, 'rgba(255,107,107,1)');
     assert.equal(projectedBackplate?.properties?.width, 176);
     assert.equal(projectedBackplate?.properties?.height, 6);
@@ -540,7 +552,7 @@ test('BevyUI main menu projects one semantic accent capsule per palette group', 
         treeId: 'eve_bevy_ui_main_menu',
         documentRef: dom.window.document,
         updates: [{
-            nodeId: 'eve_bevy_ui_main_menu_tool_capture__import',
+            nodeId: 'eve_bevy_ui_main_menu_tool_capture__import_background',
             position: [12, 640],
             opacity: 1
         }]
@@ -696,6 +708,7 @@ test('BevyUI overlay carries a petal shadow through to the projected shape mater
     await projectBevyUiTreeOverlay({
         tree: {
             id: 'eve_bevy_ui_flower',
+            presentation: true,
             root: {
                 id: 'root',
                 kind: 'root',

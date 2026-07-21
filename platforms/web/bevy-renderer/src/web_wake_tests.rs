@@ -1,4 +1,14 @@
 use super::*;
+
+#[test]
+fn web_event_loop_start_can_only_be_claimed_once() {
+    let started = Cell::new(false);
+    assert_eq!(claim_event_loop_start(&started), Ok(()));
+    assert_eq!(
+        claim_event_loop_start(&started),
+        Err("bevy_renderer_event_loop_already_started")
+    );
+}
 use atome_bevy_renderer_core::{
     AtomeRenderNode, AtomeRenderOp, AtomeRenderScene, AtomeRendererDiagnostics, AtomeTransformPatch,
 };

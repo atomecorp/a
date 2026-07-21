@@ -158,6 +158,34 @@ pub fn resize_backdrop_surface(
     Ok(())
 }
 
+pub fn patch_backdrop_surface(
+    world: &mut World,
+    entity: Entity,
+    contract: AtomeBackdropStyle,
+) -> Result<(), String> {
+    let style = contract
+        .normalized()
+        .ok_or_else(|| "bevy_backdrop_style_invalid".to_string())?;
+    let handle = world
+        .get::<MeshMaterial2d<BackdropSurfaceMaterial>>(entity)
+        .map(|material| material.0.clone())
+        .ok_or_else(|| "bevy_backdrop_surface_component_missing".to_string())?;
+    let blur_pipeline = world
+        .get_resource::<AtomeWorkspaceBackdrop>()
+        .map(|state| state.blur.clone())
+        .ok_or_else(|| "bevy_workspace_backdrop_required".to_string())?;
+    set_workspace_blur_radius(world, &blur_pipeline, style.blur_px)?;
+    let mut materials = world
+        .get_resource_mut::<Assets<BackdropSurfaceMaterial>>()
+        .ok_or_else(|| "bevy_backdrop_surface_assets_required".to_string())?;
+    let mut material = materials
+        .get_mut(&handle)
+        .ok_or_else(|| "bevy_backdrop_surface_material_missing".to_string())?;
+    material.uniform.size_radius.w = style.blur_px;
+    material.uniform.tint = Vec4::from_array(style.tint);
+    Ok(())
+}
+
 pub fn refresh_workspace_backdrop_enabled(world: &mut World) -> Result<(), String> {
     let assistant_count = world
         .query::<&MeshMaterial2d<crate::procedural_sdf::ProceduralSdfMaterial>>()

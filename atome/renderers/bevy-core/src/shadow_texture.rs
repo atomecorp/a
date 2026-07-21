@@ -47,12 +47,13 @@ fn convolve_axis(source: &[f32], width: usize, height: usize, kernel: &[f32], ho
     result
 }
 
-pub(crate) fn build_gaussian_shadow_texture_rgba(
+fn build_gaussian_shadow_texture_rgba_with_cutout(
     color: [f32; 4],
     width: f32,
     height: f32,
     corner_radius: f32,
     blur: f32,
+    inner_cutout: bool,
 ) -> Option<(u32, u32, Vec<u8>)> {
     if blur <= 0.0 || color[3] <= 0.0 {
         return None;
@@ -77,10 +78,49 @@ pub(crate) fn build_gaussian_shadow_texture_rgba(
     let mut rgba = vec![0; image_width * image_height * 4];
     for (index, value) in alpha.iter().enumerate() {
         let offset = index * 4;
+        let visible_alpha = if inner_cutout {
+            value * (1.0 - mask[index])
+        } else {
+            *value
+        };
         rgba[offset] = channel_to_u8(color[0]);
         rgba[offset + 1] = channel_to_u8(color[1]);
         rgba[offset + 2] = channel_to_u8(color[2]);
-        rgba[offset + 3] = channel_to_u8(color[3] * value);
+        rgba[offset + 3] = channel_to_u8(color[3] * visible_alpha);
     }
     Some((image_width as u32, image_height as u32, rgba))
+}
+
+pub(crate) fn build_gaussian_shadow_texture_rgba(
+    color: [f32; 4],
+    width: f32,
+    height: f32,
+    corner_radius: f32,
+    blur: f32,
+) -> Option<(u32, u32, Vec<u8>)> {
+    build_gaussian_shadow_texture_rgba_with_cutout(
+        color,
+        width,
+        height,
+        corner_radius,
+        blur,
+        false,
+    )
+}
+
+pub(crate) fn build_gaussian_outer_shadow_texture_rgba(
+    color: [f32; 4],
+    width: f32,
+    height: f32,
+    corner_radius: f32,
+    blur: f32,
+) -> Option<(u32, u32, Vec<u8>)> {
+    build_gaussian_shadow_texture_rgba_with_cutout(
+        color,
+        width,
+        height,
+        corner_radius,
+        blur,
+        true,
+    )
 }

@@ -14,7 +14,7 @@ use bevy::{
     winit::{EventLoopProxy, EventLoopProxyWrapper, UpdateMode, WinitSettings, WinitUserEvent},
 };
 use serde::Serialize;
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::time::Duration;
 
 mod exports;
@@ -34,6 +34,7 @@ thread_local! {
     static WEB_LAST_TICK_AT: RefCell<Option<Instant>> = const { RefCell::new(None) };
     static WEB_LAST_WAKE_AT: RefCell<Option<Instant>> = const { RefCell::new(None) };
     static WEB_FRAME_PROBE: RefCell<WebFrameProbe> = RefCell::new(WebFrameProbe::default());
+    static WEB_EVENT_LOOP_STARTED: Cell<bool> = const { Cell::new(false) };
 }
 
 const WEB_SLOW_FRAME_THRESHOLD_MS: f32 = 8.0;
@@ -252,6 +253,9 @@ fn merge_style_patch_fields(existing: &mut AtomeStylePatch, next: &AtomeStylePat
     }
     if next.shadow.is_some() {
         existing.shadow = next.shadow.clone();
+    }
+    if next.backdrop.is_some() {
+        existing.backdrop = next.backdrop;
     }
     if next.selected.is_some() {
         existing.selected = next.selected;
@@ -763,12 +767,21 @@ fn build_web_bevy_app(config: WebBevyRendererConfig) -> App {
     app
 }
 
-fn run_web_bevy_app(config: WebBevyRendererConfig) {
+fn claim_event_loop_start(started: &Cell<bool>) -> Result<(), &'static str> {
+    if started.replace(true) {
+        return Err("bevy_renderer_event_loop_already_started");
+    }
+    Ok(())
+}
+
+fn run_web_bevy_app(config: WebBevyRendererConfig) -> Result<(), &'static str> {
+    WEB_EVENT_LOOP_STARTED.with(claim_event_loop_start)?;
     let mut app = build_web_bevy_app(config);
     app.run();
     WEB_RUNNING_APPS.with(|cell| {
         cell.borrow_mut().push(app);
     });
+    Ok(())
 }
 
 #[cfg(test)]

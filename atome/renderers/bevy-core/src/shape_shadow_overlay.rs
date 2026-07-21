@@ -12,7 +12,10 @@ use crate::{
         AtomeShapeShadowTextureCache, AtomeVisualOpacity,
     },
     render_math::{atome_rect_transform, depth_for_layer},
-    shadow_texture::{build_gaussian_shadow_texture_rgba, channel_to_u8, shadow_padding},
+    shadow_texture::{
+        build_gaussian_outer_shadow_texture_rgba, build_gaussian_shadow_texture_rgba,
+        channel_to_u8, shadow_padding,
+    },
     types::{
         normalize_opacity, AtomeBevyRendererConfig, AtomeLayer, AtomeLogicalPosition,
         AtomeLogicalSize, AtomeShadowStyle,
@@ -40,6 +43,7 @@ fn shape_shadow_cache_key(
     shadow_width: f32,
     shadow_height: f32,
     corner_radius: f32,
+    inner_cutout: bool,
 ) -> AtomeShapeShadowCacheKey {
     AtomeShapeShadowCacheKey {
         width: cache_dimension(shadow_width),
@@ -55,6 +59,7 @@ fn shape_shadow_cache_key(
             channel_to_u8(shadow.color[2]),
             channel_to_u8(shadow.color[3]),
         ],
+        inner_cutout,
     }
 }
 
@@ -64,8 +69,15 @@ fn cached_shape_shadow_handle(
     shadow_width: f32,
     shadow_height: f32,
     corner_radius: f32,
+    inner_cutout: bool,
 ) -> Result<Option<(Handle<Image>, u32, u32)>, String> {
-    let key = shape_shadow_cache_key(shadow, shadow_width, shadow_height, corner_radius);
+    let key = shape_shadow_cache_key(
+        shadow,
+        shadow_width,
+        shadow_height,
+        corner_radius,
+        inner_cutout,
+    );
     if let Some(handle) = world
         .get_resource::<AtomeShapeShadowTextureCache>()
         .and_then(|cache| cache.handles.get(&key))
@@ -88,13 +100,24 @@ fn cached_shape_shadow_handle(
             .total_bytes
             .saturating_sub(cache.byte_sizes.remove(&key).unwrap_or(0));
     }
-    let Some((image_width, image_height, rgba)) = build_gaussian_shadow_texture_rgba(
-        shadow.color,
-        shadow_width,
-        shadow_height,
-        corner_radius,
-        shadow.blur,
-    ) else {
+    let texture = if inner_cutout {
+        build_gaussian_outer_shadow_texture_rgba(
+            shadow.color,
+            shadow_width,
+            shadow_height,
+            corner_radius,
+            shadow.blur,
+        )
+    } else {
+        build_gaussian_shadow_texture_rgba(
+            shadow.color,
+            shadow_width,
+            shadow_height,
+            corner_radius,
+            shadow.blur,
+        )
+    };
+    let Some((image_width, image_height, rgba)) = texture else {
         return Ok(None);
     };
     let image = Image::new(
@@ -160,6 +183,17 @@ pub(crate) fn build_shape_shadow_texture_rgba(
     )
 }
 
+#[cfg(test)]
+pub(crate) fn build_backdrop_shadow_texture_rgba(
+    color: [f32; 4],
+    width: f32,
+    height: f32,
+    corner_radius: f32,
+    blur: f32,
+) -> Option<(u32, u32, Vec<u8>)> {
+    build_gaussian_outer_shadow_texture_rgba(color, width, height, corner_radius, blur)
+}
+
 pub fn remove_shape_shadow_overlay(world: &mut World, entity: Entity) {
     if let Some(overlay) = world.get::<AtomeShapeShadowOverlay>(entity).cloned() {
         for overlay_entity in overlay.entities {
@@ -217,17 +251,18 @@ pub fn sync_shape_shadow_overlay_transform(
     let shadow_y = position.y + shadow.offset_y - shadow.spread - padding;
     for overlay_entity in overlay.entities {
         if world.get_entity(overlay_entity).is_ok() {
+            let transform = atome_rect_transform(
+                shadow_x,
+                shadow_y,
+                image_width,
+                image_height,
+                surface_width,
+                surface_height,
+                shadow_depth_for_layer(layer),
+            );
             world
                 .entity_mut(overlay_entity)
-                .insert(atome_rect_transform(
-                    shadow_x,
-                    shadow_y,
-                    image_width,
-                    image_height,
-                    surface_width,
-                    surface_height,
-                    shadow_depth_for_layer(layer),
-                ));
+                .insert((transform, GlobalTransform::from(transform)));
         }
     }
     Ok(())
@@ -283,8 +318,18 @@ pub fn rebuild_shape_shadow_overlay(world: &mut World, entity: Entity) -> Result
         .map(|value| value.0)
         .unwrap_or(0.0)
         + shadow.spread;
+    let inner_cutout = world
+        .get::<MeshMaterial2d<crate::backdrop_surface::BackdropSurfaceMaterial>>(entity)
+        .is_some();
     let Some((handle, image_width, image_height)) =
-        cached_shape_shadow_handle(world, shadow, shadow_width, shadow_height, corner_radius)?
+        cached_shape_shadow_handle(
+            world,
+            shadow,
+            shadow_width,
+            shadow_height,
+            corner_radius,
+            inner_cutout,
+        )?
     else {
         return Ok(());
     };

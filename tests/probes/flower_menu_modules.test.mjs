@@ -451,24 +451,25 @@ const {
     sampleFlowerMotion
 } = await import('../../eVe/intuition/ribbon/bevy_ui_flower_motion.js');
 const { RIBBON_TOKENS } = await import('../../eVe/intuition/ribbon/tokens.js');
+const { BEVY_MENU_TOKENS } = await import('../../eVe/intuition/ribbon/bevy_ui_menu_surface.js');
 const flowerStyleTree = buildBevyUiFlowerTree({
     surface: projectCanvas,
     items: [
-        { key: 'palette', type: 'palette' },
+        { key: 'mode', type: 'palette' },
         { key: 'action', type: 'tool' }
     ]
 });
-const flowerPaletteNode = flowerStyleTree.root.children.find((node) => node.id.includes('_palette_'));
+const flowerPaletteNode = flowerStyleTree.root.children.find((node) => node.id.includes('_mode_'));
 const flowerActionNode = flowerStyleTree.root.children.find((node) => node.id.includes('_action_'));
 const flowerLiquidNode = flowerStyleTree.root.children.find((node) => node.id.endsWith('_liquid'));
-assert.equal(flowerPaletteNode.style.radius, 3, 'Flower palettes must use the compact palette radius');
-assert.equal(flowerActionNode.style.radius, 29, 'Flower action tools must be circular');
+assert.equal(flowerPaletteNode.style.radius, 30, 'Flower palettes must stay circular');
+assert.equal(flowerActionNode.style.radius, 30, 'Flower action tools must be circular');
 assert.deepEqual(flowerPaletteNode.style.shadow, {
-    color: [0, 0, 0, 0.38], blur: 14, spread: 1, offset: [0, 5]
+    ...BEVY_MENU_TOKENS.surface.shadow
 }, 'Flower tool shadows must come from the centralized token');
 assert.deepEqual(flowerPaletteNode.style.backdrop, {
-    blurPx: RIBBON_TOKENS.flowerToolBackdropBlurPx,
-    tint: RIBBON_TOKENS.flowerPaletteGlassTint
+    ...BEVY_MENU_TOKENS.surface.backdrop,
+    tint: BEVY_MENU_TOKENS.surface.normal
 }, 'Flower palettes must carry the centralized glass blur contract');
 assert.equal(flowerLiquidNode.overlayRecord.properties.material.procedural.mode, 1, 'Flower must mount one shared liquid SDF record');
 const motionCenter = { x: 320, y: 240 };

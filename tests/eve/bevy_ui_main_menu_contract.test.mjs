@@ -24,11 +24,12 @@ import { createContextToolInvocationRuntime } from '../../eVe/intuition/runtime/
 import { resolveDashboardBlockUnitSize } from '../../eVe/domains/dashboard/dashboard_tokens.js';
 import { readToolboxReservedHeight } from '../../eVe/domains/dashboard/dashboard_environment.js';
 import { MAIN_HANDLE_ICON } from '../../eVe/intuition/ribbon/tokens.js';
+import { BEVY_MENU_TOKENS } from '../../eVe/intuition/ribbon/bevy_ui_menu_surface.js';
 
 const TOOL_KEYS = Object.freeze(['home', 'find', 'capture', 'time', 'communicate', 'mode', 'view']);
-const LIGHTGRAY_ICON_TINT = Object.freeze([211 / 255, 211 / 255, 211 / 255, 1]);
-const STANDARD_ITEM_BACKGROUND = Object.freeze([0.17, 0.19, 0.22, 1]);
-const STANDARD_LABEL_TINT = Object.freeze([0.94, 0.96, 0.98, 1]);
+const LIGHTGRAY_ICON_TINT = BEVY_MENU_TOKENS.surface.icon;
+const STANDARD_ITEM_BACKGROUND = BEVY_MENU_TOKENS.surface.normal;
+const STANDARD_LABEL_TINT = BEVY_MENU_TOKENS.surface.text;
 
 const collectJavaScriptSources = (directory) => readdirSync(directory, { withFileTypes: true })
     .flatMap((entry) => {
@@ -263,8 +264,9 @@ test('BevyUI main menu mounts only BevyUI nodes and preserves the internal runti
         assert.deepEqual(childBySuffix(atome, '_label').image.tint, STANDARD_LABEL_TINT);
         assert.equal(childBySuffix(atome, '_label').image.opacity, 1);
         assert.equal(childBySuffix(atome, '_icon').image.opacity, 1);
-        assert.deepEqual(atome.style.background, STANDARD_ITEM_BACKGROUND);
-        assert.equal(atome.style.radius, undefined);
+        const atomeBackground = findNode(atome, `${BEVY_MAIN_MENU_ATOME_ID}_background`);
+        assert.deepEqual(atomeBackground.style.background, STANDARD_ITEM_BACKGROUND);
+        assert.equal(atomeBackground.style.radius, BEVY_MENU_TOKENS.shape.standardRadiusPx);
         assert.ok(atome.style.padding[0] > atome.style.padding[2]);
         const iconTints = [];
         for (const key of TOOL_KEYS) {
@@ -279,8 +281,9 @@ test('BevyUI main menu mounts only BevyUI nodes and preserves the internal runti
             assert.equal(childBySuffix(item, '_label').image.text, key);
             assert.deepEqual(childBySuffix(item, '_label').image.tint, STANDARD_LABEL_TINT);
             assert.equal(childBySuffix(item, '_label').image.opacity, 1);
-            assert.deepEqual(item.style.background, STANDARD_ITEM_BACKGROUND);
-            assert.equal(item.style.radius, undefined);
+            const background = findNode(item, `${item.id}_background`);
+            assert.deepEqual(background.style.background, STANDARD_ITEM_BACKGROUND);
+            assert.equal(background.style.radius, BEVY_MENU_TOKENS.shape.standardRadiusPx);
             assert.ok(item.style.padding[0] > item.style.padding[2]);
         }
         iconTints.push(childBySuffix(atome, '_icon').image.tint);
@@ -294,6 +297,53 @@ test('BevyUI main menu mounts only BevyUI nodes and preserves the internal runti
         assert.equal(harness.document.querySelectorAll('button, input, [data-bevy-ui]').length, 0);
     } finally {
         harness.restore();
+    }
+});
+
+test('BevyUI main menu keeps one stable shadow plane while palette children emerge below their parent', () => {
+    const content = {
+        toolbox: { children: ['home', 'time', 'view'] },
+        home: { atome_tool: true, label: 'home', icon: 'home', tool_id: 'tool.main.home' },
+        time: {
+            atome_tool: true,
+            label: 'time',
+            icon: 'time',
+            tool_id: 'tool.main.time',
+            type: 'palette',
+            children: ['clock', 'calendar']
+        },
+        clock: { atome_tool: true, label: 'clock', icon: 'time', tool_id: 'ui.time.clock' },
+        calendar: { atome_tool: true, label: 'calendar', icon: 'time', tool_id: 'ui.time.calendar' },
+        view: { atome_tool: true, label: 'view', icon: 'view', tool_id: 'tool.main.view' }
+    };
+    const surface = { getBoundingClientRect: () => ({ width: 960, height: 720 }) };
+    const state = (activePaletteKey = '') => ({
+        activePaletteKey,
+        externalOpenByToolId: new Map(),
+        hoveredId: '',
+        latchedByToolId: new Map(),
+        pressedId: ''
+    });
+    for (const handedness of ['left', 'right']) {
+        const closed = buildBevyMainMenuTree({ content, surface, handedness, itemSize: 60, state: state() });
+        const opened = buildBevyMainMenuTree({ content, surface, handedness, itemSize: 60, state: state('time') });
+        const stableIds = [BEVY_MAIN_MENU_ATOME_ID, 'eve_bevy_ui_main_menu_tool_home', 'eve_bevy_ui_main_menu_tool_time', 'eve_bevy_ui_main_menu_tool_view'];
+        const closedLayers = stableIds.map((id) => findNode(closed.root, `${id}_background`).style.z_index);
+        const openLayers = stableIds.map((id) => findNode(opened.root, `${id}_background`).style.z_index);
+        assert.equal(new Set(closedLayers).size, 1, `${handedness}:closed-surface-plane`);
+        assert.deepEqual(openLayers, closedLayers, `${handedness}:stable-surface-plane`);
+        stableIds.forEach((id) => {
+            const background = findNode(opened.root, `${id}_background`);
+            assert.deepEqual(background.style.shadow, BEVY_MENU_TOKENS.surface.shadow, `${handedness}:${id}:shadow`);
+        });
+        const parent = findNode(opened.root, 'eve_bevy_ui_main_menu_tool_time');
+        const parentSurface = findNode(parent, `${parent.id}_background`);
+        for (const childKey of ['clock', 'calendar']) {
+            const child = findNode(opened.root, `eve_bevy_ui_main_menu_tool_time__${childKey}`);
+            const childSurface = findNode(child, `${child.id}_background`);
+            assert.ok(childSurface.style.z_index < parentSurface.style.z_index, `${handedness}:${childKey}:surface-under-parent`);
+            assert.ok(findNode(child, `${child.id}_icon`).style.z_index < parentSurface.style.z_index, `${handedness}:${childKey}:content-under-parent`);
+        }
     }
 });
 
@@ -774,9 +824,19 @@ test('BevyUI palette first moving frame contains the complete tool and overshoot
     assert.equal(findNode(initialChild, `${childId}_icon`).style.position, undefined);
     assert.equal(findNode(initialChild, `${childId}_label`).style.position, undefined);
     assert.ok(paletteParent.style.z_index > initialChild.style.z_index, 'the child must emerge from behind its palette parent');
-    assert.equal(findNode(initialChild, `${childId}_icon`).style.z_index, initialChild.style.z_index + 1);
-    assert.equal(findNode(initialChild, `${childId}_label`).style.z_index, initialChild.style.z_index + 1);
+    assert.equal(findNode(initialChild, `${childId}_icon`).style.z_index, initialChild.style.z_index);
+    assert.equal(findNode(initialChild, `${childId}_label`).style.z_index, initialChild.style.z_index);
+    assert.ok(
+        findNode(initialChild, `${childId}_background`).style.z_index
+        < findNode(paletteParent, `${paletteParent.id}_background`).style.z_index,
+        'the child surface must remain below its palette parent surface'
+    );
     assert.equal(initialChild.style.opacity, 1);
+    assert.deepEqual(
+        movingUpdates.find((update) => update.nodeId === `${childId}_background`)?.position,
+        firstMoving.frames.get(childId).position,
+        'the material surface must move atomically with its interaction shell'
+    );
     assert.equal(Object.hasOwn(movingUpdates.find((update) => update.nodeId === childId), 'opacity'), false);
     assert.equal(Object.hasOwn(movingUpdates.find((update) => update.nodeId === `${childId}_icon`), 'opacity'), false);
     assert.equal(Object.hasOwn(movingUpdates.find((update) => update.nodeId === `${childId}_label`), 'opacity'), false);

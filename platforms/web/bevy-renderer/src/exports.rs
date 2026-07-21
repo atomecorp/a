@@ -128,7 +128,7 @@ fn run_atome_bevy_renderer_with_transparency(
             false,
         )
     };
-    run_web_bevy_app(config);
+    run_web_bevy_app(config).map_err(JsValue::from_str)?;
     Ok(())
 }
 
