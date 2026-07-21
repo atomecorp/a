@@ -116,6 +116,7 @@ test('Bevy panel contract removes tools dock and keeps system controls in footer
     assert.equal(footer.children.some((node) => node.id.endsWith('_drag')), true);
     assert.equal(footer.children.some((node) => node.id.endsWith('_resize_left')), true);
     assert.equal(footer.children.some((node) => node.id.endsWith('_resize')), true);
+    assert.equal(drag.on.activate, undefined, 'only Panel Lab opts into footer fullscreen activation');
     assert.equal(body.style.overflow, 'scroll');
     assert.deepEqual(body.style.position, [0, 0]);
     assert.equal(footer.style.shadow, undefined);
@@ -215,12 +216,14 @@ test('Panel Lab is development-gated and uses the shared panel skin', async () =
     const panel = findNode(mounted[0], 'eve_bevy_panel_panel_lab_panel');
     const body = findNode(mounted[0], 'eve_bevy_panel_panel_lab_body');
     const footer = findNode(mounted[0], 'eve_bevy_panel_panel_lab_footer');
+    const drag = findNode(mounted[0], 'eve_bevy_panel_panel_lab_footer_drag');
     assert.deepEqual(panel.style.background, material.background);
     assert.deepEqual(panel.style.backdrop, material.backdrop);
     assert.deepEqual(panel.style.shadow, material.shadow);
     assert.equal(mounted[0].presentation, true);
     assert.deepEqual(body.style.background, EVE_PANEL_SKIN_TOKENS.bevyPanel.colors.transparent);
     assert.deepEqual(footer.style.background, BEVY_MENU_TOKENS.clear);
+    assert.equal(typeof drag.on.activate, 'function');
     const contentTint = EVE_COMMON_SKIN_TOKENS.systemContent.gpu;
     for (const id of [
         'eve_bevy_panel_panel_lab_footer_resize_left_icon',
@@ -231,6 +234,17 @@ test('Panel Lab is development-gated and uses the shared panel skin', async () =
         assert.deepEqual(findNode(mounted[0], id).image.tint, contentTint, id);
     }
     assert.equal(dom.window.document.querySelectorAll('button,input,select,textarea').length, 0);
+    await drag.on.activate();
+    await drag.on.activate();
+    const fullscreenPanel = findNode(mounted.at(-1), 'eve_bevy_panel_panel_lab_panel');
+    assert.deepEqual(fullscreenPanel.style.position, [0, 0]);
+    assert.deepEqual(fullscreenPanel.style.size, [1024, 694]);
+    const fullscreenDrag = findNode(mounted.at(-1), 'eve_bevy_panel_panel_lab_footer_drag');
+    await fullscreenDrag.on.activate();
+    await fullscreenDrag.on.activate();
+    const restoredPanel = findNode(mounted.at(-1), 'eve_bevy_panel_panel_lab_panel');
+    assert.deepEqual(restoredPanel.style.position, [260, 120]);
+    assert.deepEqual(restoredPanel.style.size, [420, 280]);
     await runtime.closePanelSurface('panel_lab');
 });
 

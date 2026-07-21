@@ -296,7 +296,7 @@ Role:
 Design rule: migrated panel surfaces must use this BevyUI panel owner, not `createEveDialog`, `panel_chrome.js`, panel-local DOM builders, CSS panels, or visible HTML controls.
 
 - `EVE_PANEL_SKIN_TOKENS.bevyPanel` references `EVE_COMMON_SKIN_TOKENS.bevy.systemSurface` directly. `bevy_panel_tokens.js`, Bevy menus, Flower and contextual Atome editing consume this one material through the same presentation composition route; panel surfaces and the temporary development-only Panel Lab must not define local panel colors, backdrop, shadows, or radii.
-- Panel footer chrome is part of the panel shell material and reuses the contextual Atome-edit footer layout; close and both resize handles belong only to that footer.
+- Panel footer chrome is part of the panel shell material and reuses the contextual Atome-edit footer layout; close and both resize handles belong only to that footer. The development-only Panel Lab drag region additionally accepts a double activation to toggle its internal fullscreen layout; this opt-in behavior does not apply to other panel surfaces.
 
 ## Design Factories and Runtime Surfaces
 
