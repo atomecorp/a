@@ -43,7 +43,7 @@ BevyUI panel ownership:
 - `eVe/intuition/runtime/eve_intuition/panel_surface_runtime.js` remains the existing `openPanelSurface` / `closePanelSurface` bridge. It routes registered Bevy panel surfaces to the BevyUI panel runtime and leaves non-migrated surfaces on the old panel creator until each one is migrated and verified.
 - `eVe/intuition/tools/timeline.js` is now a compatibility wrapper only; the visible Timeline panel surface is `timelineSurface` in `bevy_panel_surfaces.js` and must not recreate `createEveDialog`, tool docks, or visible HTML controls.
 - `eVe/intuition/runtime/bevy_panel/bevy_panel_surfaces.js` also registers minimal BevyUI `calendar` and `contact` surfaces so Dashboard header-created calendar/contact records open Bevy panels instead of the legacy HTML panels while those panels are being completed.
-- `tests/eve/bevy_panel_contract.test.mjs` guards the first migrated panel contract: no tools dock, header has no system control, body is the single scroll area, footer owns close/resize, and Timeline no longer builds an HTML dialog.
+- `tests/eve/bevy_panel_contract.test.mjs` guards the first migrated panel contract: no tools dock or passive header, body is the single scroll area, footer owns title/close/drag/resize, and Timeline no longer builds an HTML dialog.
 
 Dashboard Bevy ownership:
 

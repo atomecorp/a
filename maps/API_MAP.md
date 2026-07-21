@@ -165,7 +165,7 @@ The temporary development/test-only `ui.dev.panel_lab` tool is not a public or s
 
 Boundary status: Semi-public closed eVe product runtime. The panel view emits UI intentions only; durable mutations stay in existing owners such as Timeline, Calendar, profile, Asset Box, Molecule session, or Atome commit APIs. The Bevy panel path must not create visible panel DOM, a `tools_dock`, a second canvas, or a fallback renderer.
 
-Effect model: `PanelRoot -> HeaderInfo -> BodyScroll -> FooterControls`. Header contains only title/information, body is the single scroll surface, footer owns close and resize controls. Mobile layout occupies the shared canvas area above the toolbox-reserved band. Timeline is the first migrated surface and uses the existing `Atome.timeline` / `AtomeTimeline` API without creating the old HTML dialog.
+Effect model: `PanelRoot -> BodyScroll -> FooterControls`. Body is the single scroll surface; the footer owns title, close, drag, and resize controls. Mobile layout occupies the shared canvas area above the toolbox-reserved band. Timeline is the first migrated surface and uses the existing `Atome.timeline` / `AtomeTimeline` API without creating the old HTML dialog.
 
 ### eVe BevyUI Main Menu API
 

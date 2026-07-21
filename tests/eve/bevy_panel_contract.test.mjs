@@ -102,22 +102,24 @@ test('Bevy panel contract removes tools dock and keeps system controls in footer
     assert.equal(tree.root.parent_id, WORKSPACE_SCENE_LAYER_IDS.panel);
     assert.equal(ids.some((id) => id.includes('tools_dock')), false);
 
-    const header = findNode(tree, 'eve_bevy_panel_timeline_header');
     const footer = findNode(tree, 'eve_bevy_panel_timeline_footer');
     const body = findNode(tree, 'eve_bevy_panel_timeline_body');
     const close = findNode(tree, 'eve_bevy_panel_timeline_footer_close');
     const drag = findNode(tree, 'eve_bevy_panel_timeline_footer_drag');
-    assert.equal(header.kind, 'panel');
     assert.equal(body.kind, 'scroll_area');
     assert.equal(footer.kind, 'row');
     assert.equal(close.accessibility?.role, 'button');
     assert.deepEqual(close.accessibility?.actions, ['activate']);
-    assert.equal(header.children.some((node) => /close|resize/.test(node.id)), false);
+    assert.equal(findNode(tree, 'eve_bevy_panel_timeline_header'), null);
     assert.equal(footer.children.some((node) => node.id.endsWith('_close')), true);
     assert.equal(footer.children.some((node) => node.id.endsWith('_drag')), true);
     assert.equal(footer.children.some((node) => node.id.endsWith('_resize_left')), true);
     assert.equal(footer.children.some((node) => node.id.endsWith('_resize')), true);
     assert.equal(body.style.overflow, 'scroll');
+    assert.deepEqual(body.style.position, [0, 0]);
+    assert.equal(footer.style.shadow, undefined);
+    assert.equal(findNode(tree, 'eve_bevy_panel_timeline_footer_resize_left_icon').image.text, '◣');
+    assert.equal(findNode(tree, 'eve_bevy_panel_timeline_footer_resize_icon').image.text, '◢');
 
     await drag.on.drag({ delta_x: 40, delta_y: 30 });
     const movedPanel = findNode(mounted.at(-1), 'eve_bevy_panel_timeline_panel');

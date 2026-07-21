@@ -287,10 +287,9 @@ Role:
 
 - Owns the migrated panel visual contract over BevyUI/WebGPU.
 - Uses Dashboard/Menu text values: Roboto, light text color, shared body label/text size, and compact `3px` chrome radius.
-- Defines the new panel structure: `PanelRoot -> HeaderInfo -> BodyScroll -> FooterControls`.
-- HeaderInfo is information-only and may contain the title; it must not contain close, resize, tools, or other system controls.
+- Defines the new panel structure: `PanelRoot -> BodyScroll -> FooterControls`; no redundant passive header is rendered.
 - BodyScroll is the only scroll container.
-- FooterControls owns close and resize controls.
+- FooterControls owns the title, close, drag, and resize controls. Its background is the canonical tool footer token, its edges remain sharp, and the PanelRoot owns the one external shadow for the complete body-plus-footer silhouette.
 - Migrated panels must not emit a generic tools dock or the old footer-centered title.
 - Mobile panels fill the available canvas above the toolbox-reserved band.
 
