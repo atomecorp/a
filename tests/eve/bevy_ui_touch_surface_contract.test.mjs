@@ -214,8 +214,9 @@ test('contextual palettes keep the semantic accent on the rail interior in both 
     const left = buildAtomeContextualEditTree({ ...input, handedness: 'left' });
     const rightAccent = findNode(right.root, 'atome_contextual_mode_accent');
     const leftAccent = findNode(left.root, 'atome_contextual_mode_accent');
-    assert.deepEqual(rightAccent.style.position, [BEVY_MENU_TOKENS.paletteAccent.insetPx, BEVY_MENU_TOKENS.paletteAccent.insetPx]);
-    assert.deepEqual(leftAccent.style.position, [60 - BEVY_MENU_TOKENS.paletteAccent.insetPx - BEVY_MENU_TOKENS.paletteAccent.thicknessPx, BEVY_MENU_TOKENS.paletteAccent.insetPx]);
+    const verticalPosition = BEVY_MENU_TOKENS.paletteAccent.insetPx + BEVY_MENU_TOKENS.paletteAccent.verticalOffsetPx;
+    assert.deepEqual(rightAccent.style.position, [BEVY_MENU_TOKENS.paletteAccent.insetPx, verticalPosition]);
+    assert.deepEqual(leftAccent.style.position, [60 - BEVY_MENU_TOKENS.paletteAccent.insetPx - BEVY_MENU_TOKENS.paletteAccent.thicknessPx, verticalPosition]);
     assert.equal(rightAccent.style.size[1], 114);
     assert.equal(leftAccent.style.size[1], 114);
 });
