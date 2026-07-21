@@ -10,6 +10,7 @@ import { createEveBevyUiRuntime } from '../../eVe/domains/rendering/bevy_ui_runt
 import { setMainMenuRuntime } from '../../eVe/intuition/ribbon/bevy_ui_product_registry.js';
 import { PANEL_SURFACE_DEFINITIONS } from '../../eVe/intuition/panel_definitions.js';
 import { BEVY_PANEL_TOKENS } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_tokens.js';
+import { EVE_TOOL_SKIN_TOKENS } from '../../eVe/elements/skin/tool_skin.js';
 
 const repoRoot = dirname(dirname(dirname(fileURLToPath(import.meta.url))));
 
@@ -106,10 +107,12 @@ test('Bevy panel contract removes tools dock and keeps system controls in footer
     const footer = findNode(tree, 'eve_bevy_panel_timeline_footer');
     const body = findNode(tree, 'eve_bevy_panel_timeline_body');
     const panel = findNode(tree, 'eve_bevy_panel_timeline_panel');
+    const accent = findNode(tree, 'eve_bevy_panel_timeline_footer_accent');
     const close = findNode(tree, 'eve_bevy_panel_timeline_footer_close');
     const drag = findNode(tree, 'eve_bevy_panel_timeline_footer_drag');
     assert.equal(body.kind, 'scroll_area');
     assert.equal(footer.kind, 'row');
+    assert.equal(BEVY_PANEL_TOKENS.footerHeightPx, EVE_TOOL_SKIN_TOKENS.bevyMenu.footerHeightPx);
     assert.equal(close.accessibility?.role, 'button');
     assert.deepEqual(close.accessibility?.actions, ['activate']);
     assert.equal(findNode(tree, 'eve_bevy_panel_timeline_header'), null);
@@ -122,6 +125,13 @@ test('Bevy panel contract removes tools dock and keeps system controls in footer
     assert.deepEqual(body.style.position, [0, 0]);
     assert.equal(footer.style.shadow, undefined);
     assert.ok(panel.style.shadow, 'only the outer panel owns the drop shadow');
+    assert.deepEqual(accent.style.position, [0, 0]);
+    assert.deepEqual(accent.style.size, [panel.style.size[0], EVE_TOOL_SKIN_TOKENS.bevyMenu.footerAccentThicknessPx]);
+    assert.deepEqual(accent.style.background, EVE_TOOL_SKIN_TOKENS.bevyMenu.footerAccentColor);
+    assert.equal(accent.style.shadow, undefined);
+    assert.equal(accent.style.border, undefined);
+    assert.equal(accent.on, undefined);
+    assert.ok(findNode(tree, 'eve_bevy_panel_timeline_footer_close_label').style.z_index > accent.style.z_index);
     const { BEVY_CORNER_RESIZE_GRIP_ICON_SOURCE } = await import('../../eVe/intuition/ribbon/bevy_ui_menu_surface.js');
     const leftGripIcon = findNode(tree, 'eve_bevy_panel_timeline_footer_resize_left_icon');
     const rightGripIcon = findNode(tree, 'eve_bevy_panel_timeline_footer_resize_icon');

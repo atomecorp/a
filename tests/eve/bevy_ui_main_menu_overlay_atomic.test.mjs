@@ -425,14 +425,11 @@ test('BevyUI main menu projects one semantic accent capsule per palette group', 
     const baseState = { latchedByToolId: new Map(), externalOpenByToolId: new Map() };
     const closedTree = buildBevyMainMenuTree({ content, surface, itemSize: 60, state: baseState });
     const captureAccentId = 'eve_bevy_ui_main_menu_palette_capture_accent';
-    const captureBackplateId = 'eve_bevy_ui_main_menu_palette_capture_backplate';
     const modeAccent = findTreeNode(closedTree.root, 'eve_bevy_ui_main_menu_palette_mode_accent');
     const viewAccent = findTreeNode(closedTree.root, 'eve_bevy_ui_main_menu_palette_view_accent');
     const tokens = BEVY_MENU_TOKENS.paletteAccent;
     assert.deepEqual(findTreeNode(closedTree.root, captureAccentId)?.style.size, [54, tokens.thicknessPx]);
-    assert.deepEqual(findTreeNode(closedTree.root, captureBackplateId)?.style.shadow, {
-        ...tokens.backplateShadow
-    });
+    assert.equal(findTreeNode(closedTree.root, 'eve_bevy_ui_main_menu_palette_capture_backplate'), null);
     assert.deepEqual(viewAccent.style.background, [89 / 255, 199 / 255, 211 / 255, 1]);
     assert.deepEqual(modeAccent.style.background, [210 / 255, 121 / 255, 223 / 255, 1]);
     assert.equal(modeAccent.style.position[0] - (viewAccent.style.position[0] + viewAccent.style.size[0]), 6);
@@ -459,7 +456,7 @@ test('BevyUI main menu projects one semantic accent capsule per palette group', 
         assert.equal(expandedStyle.z_index, closedStyle.z_index, `${id}:surface-layer`);
     }
     assert.deepEqual(findTreeNode(expandedTree.root, captureAccentId)?.style.size, [174, tokens.thicknessPx]);
-    assert.equal(findTreeNode(expandedTree.root, captureBackplateId)?.style.size[0], 176);
+    assert.equal(findTreeNode(expandedTree.root, 'eve_bevy_ui_main_menu_palette_capture_backplate'), null);
     assert.equal(findTreeNode(expandedTree.root, 'eve_bevy_ui_main_menu_tool_capture__import_palette_accent'), null);
     const paletteItemIds = new Set([
         'eve_bevy_ui_main_menu_tool_capture',
@@ -532,20 +529,9 @@ test('BevyUI main menu projects one semantic accent capsule per palette group', 
     );
     const records = projectedState.records;
     const projectedAccent = records.find((record) => record.id.endsWith(`_${captureAccentId}`));
-    const projectedBackplate = records.find((record) => record.id.endsWith(`_${captureBackplateId}`));
     assert.equal(projectedAccent?.properties?.width, 174);
     assert.equal(projectedAccent?.properties?.height, 4);
-    assert.equal(projectedAccent?.properties?.corner_radius, tokens.backplateRadiusPx);
     assert.equal(projectedAccent?.properties?.color, 'rgba(255,107,107,1)');
-    assert.equal(projectedBackplate?.properties?.width, 176);
-    assert.equal(projectedBackplate?.properties?.height, 6);
-    assert.deepEqual(projectedBackplate?.properties?.material?.shadow, {
-        color: [0, 0, 0, 0.55],
-        blur: 2,
-        spread: 0,
-        offsetX: 0,
-        offsetY: 1
-    });
 
     compositorCalls.length = 0;
     const motionResult = await patchBevyUiTreeMotion({

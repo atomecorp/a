@@ -244,14 +244,36 @@ test('Atome contextual footer follows projected media bounds and uses compact da
     });
     const footer = findNode(tree.root, 'atome_contextual_edit_media_footer');
     const background = findNode(tree.root, 'atome_contextual_edit_media_footer_background');
+    const accent = findNode(tree.root, 'atome_contextual_edit_media_footer_accent');
     const contextualSurface = findNode(tree.root, 'atome_contextual_edit_media_surface');
+    const footerHeight = BEVY_MENU_TOKENS.footerHeightPx;
     assert.deepEqual(footer.style.position, [40, 470]);
-    assert.deepEqual(footer.style.size, [310, 20]);
+    assert.deepEqual(footer.style.size, [310, footerHeight]);
     assert.deepEqual(contextualSurface.style.position, [40, 50]);
-    assert.deepEqual(contextualSurface.style.size, [310, 440]);
+    assert.deepEqual(contextualSurface.style.size, [310, 420 + footerHeight]);
     assert.deepEqual(contextualSurface.style.shadow, BEVY_MENU_TOKENS.surface.material.shadow);
     assert.deepEqual(background.style.background, BEVY_MENU_TOKENS.surface.material.background);
     assert.deepEqual(background.style.backdrop, BEVY_MENU_TOKENS.surface.material.backdrop);
+    assert.deepEqual(accent.style.position, [40, 470]);
+    assert.deepEqual(accent.style.size, [310, BEVY_MENU_TOKENS.footerAccentThicknessPx]);
+    assert.deepEqual(accent.style.background, BEVY_MENU_TOKENS.footerAccentColor);
+    assert.equal(accent.style.shadow, undefined);
+    assert.equal(accent.style.border, undefined);
+    assert.equal(accent.on, undefined);
+    assert.ok(accent.style.z_index < footer.style.z_index);
+    for (const id of [
+        'atome_contextual_edit_media_footer_background',
+        'atome_contextual_edit_media_footer',
+        'atome_contextual_edit_media_resize_left',
+        'atome_contextual_edit_media_close',
+        'atome_contextual_edit_media_drag',
+        'atome_contextual_edit_media_resize_right'
+    ]) {
+        assert.equal(findNode(tree.root, id).style.size[1], footerHeight, id);
+        assert.equal(findNode(tree.root, id).style.shadow, undefined, id);
+    }
+    assert.deepEqual(findNode(tree.root, 'atome_contextual_edit_media_close_icon').style.size, [footerHeight, footerHeight]);
+    assert.equal(findNode(tree.root, 'atome_contextual_edit_media_title').style.size[1], footerHeight);
     for (const id of [
         'atome_contextual_edit_media_resize_left_icon',
         'atome_contextual_edit_media_close_icon',
@@ -269,7 +291,7 @@ test('Atome contextual footer follows projected media bounds and uses compact da
         const icon = findNode(tree.root, id);
         assert.equal(icon.image.source, BEVY_CORNER_RESIZE_GRIP_ICON_SOURCE, id);
         assert.equal(icon.image.fit, 'fill', id);
-        assert.deepEqual(icon.style.size, [22, 20], id);
+        assert.deepEqual(icon.style.size, [22, footerHeight], id);
         assert.equal(icon.style.position, undefined, id);
     }
     assert.ok(findNode(tree.root, 'atome_contextual_tool_detail_background'));
