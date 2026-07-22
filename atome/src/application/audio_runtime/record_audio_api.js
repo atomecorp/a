@@ -394,6 +394,7 @@ import {
                     file_name: entry.fileName,
                     file_path: entry.filePath,
                     absolute_file_path: result?.absolute_file_path || result?.file_path || null,
+                    size_bytes: Number(result?.size_bytes || result?.sizeBytes || result?.byte_size || 0),
                     duration_sec: frameCount > 0 && sampleRate > 0
                         ? frameCount / sampleRate
                         : Number(result?.duration_sec || 0),

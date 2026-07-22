@@ -12,6 +12,9 @@ import {
 
 afterEach(() => {
     vi.useRealTimers();
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+    vi.resetModules();
 });
 
 const scopePayload = (sequence) => ({
@@ -179,4 +182,59 @@ test('Tauri callback scope publisher is fixed-size and lock-free', async () => {
     assert.doesNotMatch(publishBody, /Mutex|Vec|println|File|write\(/);
     assert.match(meteringSource, /let mut scope_minimums = \[0\.0f32; 64\]/);
     assert.match(bridgeSource, /pub fn audio_get_scope\(\)/);
+});
+
+test('Tauri terminal payload keeps a positive file size through the JavaScript recorder bridge', async () => {
+    const listeners = new Map();
+    const invoke = vi.fn(async (command) => {
+        if (command === 'audio_record_start') return { success: true };
+        if (command === 'audio_record_stop') {
+            return {
+                success: true,
+                absolute_file_path: '/tmp/tauri_audio_take.wav',
+                size_bytes: 96_044,
+                frame_count: 48_000,
+                sample_rate: 48_000,
+                channels: 1
+            };
+        }
+        if (command === 'audio_get_scope') return { available: false };
+        throw new Error(`unexpected_command:${command}`);
+    });
+    const windowRef = {
+        __TAURI_INTERNALS__: { invoke },
+        __currentUser: { id: 'tauri_scope_user' },
+        location: { protocol: 'tauri:' },
+        addEventListener: (type, listener) => listeners.set(type, listener),
+        removeEventListener: (type) => listeners.delete(type),
+        dispatchEvent: () => true,
+        setTimeout,
+        clearTimeout
+    };
+    vi.stubGlobal('window', windowRef);
+    await import('../../atome/src/application/audio_runtime/record_audio_api.js?tauri-size-contract');
+
+    const sessionId = await windowRef.record_start({
+        sessionId: 'tauri_size_take',
+        fileName: 'tauri_size_take.wav'
+    });
+    const terminal = await windowRef.record_stop(sessionId);
+
+    assert.equal(terminal.file_path, 'data/users/tauri_scope_user/recordings/tauri_size_take.wav');
+    assert.equal(terminal.absolute_file_path, '/tmp/tauri_audio_take.wav');
+    assert.equal(terminal.size_bytes, 96_044);
+    assert.equal(terminal.frame_count, 48_000);
+    assert.equal(terminal.sample_rate, 48_000);
+    assert.equal(invoke.mock.calls.filter(([command]) => command === 'audio_get_scope').length >= 0, true);
+});
+
+test('Tauri recorder publishes output size and rejects a zero-byte terminal file before acknowledgement', async () => {
+    const [recorderSource, bridgeSource] = await Promise.all([
+        readFile(new URL('../../platforms/desktop-tauri/src/audio_engine/recorder.rs', import.meta.url), 'utf8'),
+        readFile(new URL('../../platforms/desktop-tauri/src/audio_engine/bridge.rs', import.meta.url), 'utf8')
+    ]);
+    assert.match(recorderSource, /pub size_bytes: u64/);
+    assert.match(recorderSource, /fs::metadata\(&session\.file_path\)/);
+    assert.match(recorderSource, /audio_recording_empty: no output bytes were written/);
+    assert.match(bridgeSource, /"size_bytes": result\.size_bytes/);
 });

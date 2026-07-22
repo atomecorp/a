@@ -253,7 +253,7 @@ assert.equal(getFlowerPointerLock(11), null);
 assert.equal(getFlowerContextHoldCandidate(), null);
 assert.equal(getFlowerContextLongPressActive(), null);
 
-const flowerInteraction = { closeCount: 0, open: true, openCount: 0, button: null };
+const flowerInteraction = { closeCount: 0, open: true, openCount: 0, activationCount: 0, button: null };
 setFlowerRuntime({
     isOpen: () => flowerInteraction.open,
     close: async () => {
@@ -264,12 +264,20 @@ setFlowerRuntime({
         flowerInteraction.openCount += 1;
         flowerInteraction.open = true;
     },
+    activateButton: () => {
+        flowerInteraction.activationCount += 1;
+        return true;
+    },
     resolveButtonFromPoint: () => flowerInteraction.button
 });
 const disposeFlowerContext = installIntuitionXFlowerContextRuntime({ longPressMs: 5 });
 let downstreamFlowerPointerCancelCount = 0;
+let downstreamFlowerPointerUpCount = 0;
 projectCanvas.addEventListener('pointercancel', () => {
     downstreamFlowerPointerCancelCount += 1;
+});
+projectCanvas.addEventListener('pointerup', () => {
+    downstreamFlowerPointerUpCount += 1;
 });
 const makeFlowerPointerEvent = (type, properties = {}) => {
     const event = new window.Event(type, { bubbles: true, cancelable: true });
@@ -332,6 +340,7 @@ assert.equal(longPressContextMenu.defaultPrevented, true, 'the native contextmen
 assert.equal(flowerInteraction.open, true, 'an immobile long press must keep Flower open after release');
 assert.equal(flowerInteraction.closeCount, 2, 'the derived contextmenu must not close Flower');
 assert.equal(flowerInteraction.button, null, 'an immobile long press must not select a Flower tool');
+
 const longPressCompatibilityClick = makeFlowerPointerEvent('click', {
     pointerId: undefined,
     pointerType: 'mouse',
@@ -414,6 +423,33 @@ projectCanvas.dispatchEvent(makeFlowerPointerEvent('pointerdown', {
 }));
 assert.equal(flowerInteraction.open, false, 'a later outside tap must retain the normal Flower-close behaviour');
 assert.equal(flowerInteraction.closeCount, 5);
+
+const radialSelectionPointerId = 75;
+const pointerUpCountBeforeRadialSelection = downstreamFlowerPointerUpCount;
+flowerInteraction.button = { key: 'audio', type: 'tool' };
+projectCanvas.dispatchEvent(makeFlowerPointerEvent('pointerdown', {
+    pointerId: radialSelectionPointerId,
+    pointerType: 'touch',
+    clientX: 154,
+    clientY: 126
+}));
+await delay(10);
+projectCanvas.dispatchEvent(makeFlowerPointerEvent('pointermove', {
+    pointerId: radialSelectionPointerId,
+    pointerType: 'touch',
+    clientX: 254,
+    clientY: 126
+}));
+const radialSelectionRelease = makeFlowerPointerEvent('pointerup', {
+    pointerId: radialSelectionPointerId,
+    pointerType: 'touch',
+    clientX: 254,
+    clientY: 126
+});
+projectCanvas.dispatchEvent(radialSelectionRelease);
+assert.equal(radialSelectionRelease.defaultPrevented, true, 'a radial Flower selection must consume its terminal release');
+assert.equal(flowerInteraction.activationCount, 1, 'a radial Flower selection must activate exactly once');
+assert.equal(downstreamFlowerPointerUpCount, pointerUpCountBeforeRadialSelection, 'the Bevy route must not receive the same terminal release');
 disposeFlowerContext();
 setFlowerRuntime(null);
 

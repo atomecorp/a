@@ -70,6 +70,7 @@
   "tests/governance/master_cleanup_governance.test.mjs",
   "tests/governance/vitest_manifest_guard.test.mjs",
   "tests/probes/audio_browser_recording_flush_contract.test.mjs",
+  "tests/probes/audio_recording_repeat_persistence_contract.test.mjs",
   "tests/probes/audio_tauri_recording_scope_contract.test.mjs",
   "tests/probes/bevy_video_stream_source_contract.test.mjs",
   "tests/probes/bevy_web_renderer_runtime_media_failure.test.mjs",

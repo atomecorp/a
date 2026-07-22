@@ -145,6 +145,7 @@ delete window.eveDashboardBevyUiRuntime;
 delete window.__eveWorkspaceMode;
 
 const workspaceOpenCalls = [];
+const readinessCalls = [];
 window.__eveWorkspaceWarmupsStarted = false;
 delete window.__currentProject;
 installEveIntuitionBootRuntime({
@@ -203,6 +204,10 @@ installEveIntuitionBootRuntime({
     ensureLayerPanelModule() {},
     ensureMatrixModule() {},
     ensureMoleculeMediaRuntime() {},
+    ensureProjectBootstrapReady: async () => {
+        readinessCalls.push('ready');
+        return 'boot_project_valid';
+    },
     ensurePastePanelModule() {},
     ensureSizePanelModule() {},
     ensureTimelinePanelModule() {},
@@ -256,7 +261,8 @@ installEveIntuitionBootRuntime({
 await new Promise((resolve) => setTimeout(resolve, 120));
 assert.deepEqual(workspaceOpenCalls, [
     { source: 'boot_workspace' }
-], 'workspace boot must open the default dashboard without waiting for a current project');
+], 'workspace boot must open the default dashboard above the prepared current project');
+assert.deepEqual(readinessCalls, ['ready'], 'workspace boot must await canonical project readiness before opening the Dashboard');
 window.dispatchEvent(new window.CustomEvent('squirrel:project-changed', {
     detail: { id: 'boot_project_valid' }
 }));

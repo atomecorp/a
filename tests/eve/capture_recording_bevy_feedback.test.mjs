@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { afterEach, test, vi } from 'vitest';
-import { buildBevyMainMenuTree } from '../../eVe/intuition/ribbon/bevy_ui_main_menu_model.js';
+import { buildBevyMainMenuItems, buildBevyMainMenuTree } from '../../eVe/intuition/ribbon/bevy_ui_main_menu_model.js';
 import { createMainMenuRecordingVisualRuntime } from '../../eVe/intuition/ribbon/bevy_ui_main_menu_recording_visual_runtime.js';
 import { createCaptureRecordingFeedbackRuntime } from '../../eVe/intuition/tools/capture_recording_feedback_runtime.js';
 import { createAudioScopeFrame } from '../../eVe/domains/media/api/audio_browser_recorder_worklet.js';
@@ -48,29 +48,26 @@ afterEach(() => {
 });
 
 test('main menu projects audio scope, video thumbnail and photo flash inside their Bevy tools', () => {
-    const visuals = new Map([
-        ['ui.capture.audio', {
-            kind: 'audio_scope', phase: 'recording', sessionId: 'audio_1', sequence: 2,
-            scope: { pairs: Array.from({ length: 64 }, (_, index) => [-index / 64, index / 64]) }
-        }],
-        ['ui.capture.video', {
-            kind: 'video_preview', phase: 'recording', sessionId: 'video_1', sourceId: 'capture://video_1'
-        }],
-        ['ui.capture.photo', {
-            kind: 'photo_flash', phase: 'recording', sessionId: 'photo_1', flashOpacity: 0.9
-        }]
-    ]);
-    const tree = buildBevyMainMenuTree({
+    const treeFor = (visuals) => buildBevyMainMenuTree({
         content,
         surface,
         itemSize: 60,
         state: treeState(visuals),
         handlers: {}
     });
-
-    const audioItem = findNode(tree.root, (node) => node.id.endsWith('capture__audio'));
-    const videoItem = findNode(tree.root, (node) => node.id.endsWith('capture__video'));
-    const photoItem = findNode(tree.root, (node) => node.id.endsWith('capture__photo'));
+    const audioTree = treeFor(new Map([['ui.capture.audio', {
+        kind: 'audio_scope', phase: 'recording', sessionId: 'audio_1', sequence: 2,
+        scope: { pairs: Array.from({ length: 64 }, (_, index) => [-index / 64, index / 64]) }
+    }]]));
+    const videoTree = treeFor(new Map([['ui.capture.video', {
+        kind: 'video_preview', phase: 'recording', sessionId: 'video_1', sourceId: 'capture://video_1'
+    }]]));
+    const photoTree = treeFor(new Map([['ui.capture.photo', {
+        kind: 'photo_flash', phase: 'recording', sessionId: 'photo_1', flashOpacity: 0.9
+    }]]));
+    const audioItem = findNode(audioTree.root, (node) => node.id.endsWith('capture__audio'));
+    const videoItem = findNode(videoTree.root, (node) => node.id.endsWith('capture__video'));
+    const photoItem = findNode(photoTree.root, (node) => node.id.endsWith('capture__photo'));
     assert.ok(audioItem);
     assert.ok(videoItem);
     assert.ok(photoItem);
@@ -102,7 +99,16 @@ test('main menu projects audio scope, video thumbnail and photo flash inside the
     assert.equal(flash.overlayRecord.properties.opacity, 0.9);
     assert.equal(flash.style.z_index > photoItem.children.find((node) => node.id.endsWith('_label')).style.z_index, true);
 
-    assert.doesNotThrow(() => normalizeBevyUiTree({ id: tree.id, tree }));
+    assert.doesNotThrow(() => normalizeBevyUiTree({ id: audioTree.id, tree: audioTree }));
+    assert.doesNotThrow(() => normalizeBevyUiTree({ id: videoTree.id, tree: videoTree }));
+    assert.doesNotThrow(() => normalizeBevyUiTree({ id: photoTree.id, tree: photoTree }));
+});
+
+test('recording feedback never changes the main menu composition', () => {
+    assert.deepEqual(
+        buildBevyMainMenuItems(content, { activePaletteKey: 'capture' }).map((item) => item.key),
+        ['atome', 'capture', 'audio', 'video', 'photo']
+    );
 });
 
 test('audio scope uses fixed logarithmic levels without fake silence movement', () => {
@@ -158,6 +164,14 @@ test('recording visual runtime rejects stale scope frames and stale cleanup', as
         sampleRate: 48_000, channels: 1, pairs: [[-1, 1]]
     }), false);
     assert.equal(state.recordingVisualByToolId.get('ui.capture.audio').sequence, 4);
+    assert.equal(await runtime.clearToolRecordingVisual({
+        toolId: 'ui.capture.audio', sessionId: 'new_session'
+    }), true);
+    assert.equal(state.activePaletteKey, 'capture');
+    assert.deepEqual(buildBevyMainMenuItems(content, {
+        activePaletteKey: state.activePaletteKey,
+        recordingVisualByToolId: state.recordingVisualByToolId
+    }).map((item) => item.key), ['atome', 'capture', 'audio', 'video', 'photo']);
 });
 
 test('audio scope keeps 64 real history columns, stays still in silence and redraws at most 30 Hz', async () => {
@@ -274,7 +288,7 @@ test('capture feedback binds the live sources and clears only the matching sessi
     const state = { activeSession: null, sequence: 0 };
     const runtime = createCaptureRecordingFeedbackRuntime({
         captureVisualState: state,
-        menuResolver: () => menu,
+        flowerResolver: () => menu,
         audioScopeSubscriber: (listener) => {
             audioListener = listener;
             return unsubscribe;
@@ -296,6 +310,43 @@ test('capture feedback binds the live sources and clears only the matching sessi
     assert.equal(stream.getTracks()[0].stop.mock.calls.length, 0);
 });
 
+test('two successive audio Flower sessions get independent scope subscriptions and leave no stale visual', async () => {
+    const pushed = [];
+    const subscribers = [];
+    const menu = {
+        setToolRecordingVisual: vi.fn(async () => ({ ok: true, recordId: 'flower_audio_record' })),
+        pushToolAudioScope: vi.fn((frame) => pushed.push(frame)),
+        clearToolRecordingVisual: vi.fn(async () => true)
+    };
+    const state = { activeSession: null, sequence: 0 };
+    const runtime = createCaptureRecordingFeedbackRuntime({
+        captureVisualState: state,
+        flowerResolver: () => menu,
+        audioScopeSubscriber: (listener) => {
+            subscribers.push(listener);
+            return () => { subscribers[subscribers.length - 1] = null; };
+        }
+    });
+
+    const first = await runtime.startCaptureVisualSession({ kind: 'audio' });
+    subscribers[0]({ sequence: 1, pairs: [[-0.2, 0.2]] });
+    assert.equal(pushed.length, 1);
+    await first.dispose();
+    assert.equal(state.activeSession, null);
+    assert.equal(menu.clearToolRecordingVisual.mock.calls[0][0].sessionId, first.id);
+
+    const second = await runtime.startCaptureVisualSession({ kind: 'audio' });
+    assert.notEqual(second.id, first.id);
+    subscribers[0]?.({ sequence: 2, pairs: [[-1, 1]] });
+    subscribers[1]({ sequence: 1, pairs: [[-0.4, 0.4]] });
+    assert.equal(pushed.length, 2);
+    assert.equal(pushed[1].sessionId, second.id);
+    await second.dispose();
+    assert.equal(state.activeSession, null);
+    assert.equal(menu.clearToolRecordingVisual.mock.calls.length, 2);
+    assert.equal(menu.clearToolRecordingVisual.mock.calls[1][0].sessionId, second.id);
+});
+
 test('video feedback refuses a recording phase when neither stream nor native frames are available', async () => {
     const menu = {
         setToolRecordingVisual: vi.fn(async () => ({ ok: true, recordId: 'video_record' })),
@@ -303,7 +354,7 @@ test('video feedback refuses a recording phase when neither stream nor native fr
     };
     const runtime = createCaptureRecordingFeedbackRuntime({
         captureVisualState: { activeSession: null, sequence: 0 },
-        menuResolver: () => menu,
+        flowerResolver: () => menu,
         videoStateResolver: () => ({ stream: null, readNativePreviewFrame: null })
     });
     await assert.rejects(
@@ -320,7 +371,7 @@ test('photo feedback is a 120 ms Bevy flash without a preview source', async () 
     };
     const runtime = createCaptureRecordingFeedbackRuntime({
         captureVisualState: { activeSession: null, sequence: 0 },
-        menuResolver: () => menu
+        flowerResolver: () => menu
     });
     const pending = runtime.flashPhotoCapture();
     await vi.advanceTimersByTimeAsync(120);
@@ -339,7 +390,7 @@ test('native BGRA preview polling pushes a bounded RGBA texture into the matchin
     };
     const runtime = createCaptureRecordingFeedbackRuntime({
         captureVisualState: { activeSession: null, sequence: 0 },
-        menuResolver: () => menu,
+        flowerResolver: () => menu,
         videoStateResolver: () => ({
             stream: null,
             nativePreviewSourceId: 'native_preview_1',

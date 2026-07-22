@@ -14,6 +14,7 @@ use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{SampleFormat, StreamConfig};
 use ringbuf::{traits::*, HeapRb};
 use std::collections::HashMap;
+use std::fs;
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{mpsc, Arc, Condvar, Mutex};
@@ -83,6 +84,7 @@ static SESSIONS: once_cell::sync::Lazy<Mutex<HashMap<String, RecordingSession>>>
 pub struct RecordResult {
     pub session_id: String,
     pub file_path: String,
+    pub size_bytes: u64,
     pub duration_sec: f64,
     pub frame_count: u64,
     pub overrun_frames: u64,
@@ -421,10 +423,21 @@ pub fn stop(session_id: &str) -> Result<RecordResult, String> {
             "audio_recording_empty: no input frames were captured for session '{session_id}'"
         ));
     }
+    let size_bytes = fs::metadata(&session.file_path)
+        .map(|metadata| metadata.len())
+        .map_err(|error| format!(
+            "audio_recording_output_metadata_failed: unable to inspect recording for session '{session_id}': {error}"
+        ))?;
+    if size_bytes == 0 {
+        return Err(format!(
+            "audio_recording_empty: no output bytes were written for session '{session_id}'"
+        ));
+    }
 
     Ok(RecordResult {
         session_id: session_id.to_string(),
         file_path: session.file_path,
+        size_bytes,
         duration_sec,
         frame_count,
         overrun_frames,

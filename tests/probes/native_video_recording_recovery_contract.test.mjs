@@ -57,7 +57,14 @@ test('native reload/retry keeps a stable project id and defers ACK until durable
                 file_name: 'recovered.mov',
                 file_path: 'data/users/test/recordings/recovered.mov',
                 project_atome_id: 'video_recording_stable_123',
-                duration_sec: 2.5
+                duration_sec: 2.5,
+                size_bytes: 8192,
+                width: 1280,
+                height: 720,
+                video_track_count: 1,
+                audio_track_count: 0,
+                is_readable: true,
+                is_playable: true
             };
         }
         if (command === 'media_video_record_ack') {
@@ -176,7 +183,14 @@ test('lost ACK response preserves the committed media and permits a new recordin
                 file_name: 'committed.mov',
                 file_path: 'data/users/test/recordings/committed.mov',
                 project_atome_id: 'video_recording_committed',
-                duration_sec: 1.25
+                duration_sec: 1.25,
+                size_bytes: 8192,
+                width: 1280,
+                height: 720,
+                video_track_count: 1,
+                audio_track_count: 0,
+                is_readable: true,
+                is_playable: true
             };
         }
         if (command === 'media_video_record_ack') {
@@ -235,7 +249,14 @@ test('an ignored early discard does not contaminate the later normal stop', asyn
                 file_name: 'early.mov',
                 file_path: 'data/users/test/recordings/early.mov',
                 project_atome_id: 'video_recording_early',
-                duration_sec: 1
+                duration_sec: 1,
+                size_bytes: 8192,
+                width: 1280,
+                height: 720,
+                video_track_count: 1,
+                audio_track_count: 0,
+                is_readable: true,
+                is_playable: true
             };
         }
         if (command === 'media_video_record_cancel') {
@@ -321,7 +342,14 @@ test('native stop rejects a project identity substitution before touching the re
                 file_name: 'identity.mov',
                 file_path: 'data/users/test/recordings/identity.mov',
                 project_atome_id: 'video_recording_identity',
-                duration_sec: 1
+                duration_sec: 1,
+                size_bytes: 8192,
+                width: 1280,
+                height: 720,
+                video_track_count: 1,
+                audio_track_count: 0,
+                is_readable: true,
+                is_playable: true
             };
         }
         throw new Error(`unexpected_native_command:${command}`);
@@ -344,6 +372,34 @@ test('native stop rejects a project identity substitution before touching the re
 
     assert.equal(stopped.project_atome_id, 'video_recording_identity');
     assert.equal(calls.filter(({ command }) => command === 'media_video_record_stop').length, 1);
+});
+
+test('native video terminal without a playable video track never acknowledges persistence', async () => {
+    const calls = [];
+    const invoke = vi.fn(async (command) => {
+        calls.push(command);
+        if (command === 'media_video_record_state') return { success: true, status: 'idle', recoverable: false };
+        if (command === 'media_video_record_start') {
+            return { success: true, file_name: 'empty.mov', file_path: 'data/users/test/recordings/empty.mov' };
+        }
+        if (command === 'media_video_record_stop') {
+            return {
+                success: true, file_name: 'empty.mov', file_path: 'data/users/test/recordings/empty.mov',
+                duration_sec: 0, size_bytes: 0, width: 0, height: 0,
+                video_track_count: 0, audio_track_count: 0, is_readable: false, is_playable: false
+            };
+        }
+        throw new Error(`unexpected_native_command:${command}`);
+    });
+    installNativeBridge(invoke);
+    const { recordVideoNativeIos } = await import(
+        '../../eVe/domains/media/api/video_api_record_native.js?native-viability-invalid'
+    );
+    const controller = await recordVideoNativeIos('empty.mov', null, { audio: false });
+
+    await assert.rejects(controller.stop({ force: true }), /ios_video_recording_viability_invalid/);
+    await assert.rejects(controller.acknowledge(), /native_video_record_ack_before_stop/);
+    assert.equal(calls.includes('media_video_record_ack'), false);
 });
 
 test('native exact-video request fails before state or camera bridge access', async () => {

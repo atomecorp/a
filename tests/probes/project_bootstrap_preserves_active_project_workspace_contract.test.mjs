@@ -16,10 +16,12 @@ window.__eveStartupView = 'dashboard';
 
 let loggedIn = false;
 const authWaiters = [];
+const loadedProjects = [];
 
 window.eveToolBase = {
-    loadProjectAtomes: async () => {
-        throw new Error('dashboard_bootstrap_must_not_load_project_atomes');
+    loadProjectAtomes: async (projectId) => {
+        loadedProjects.push(projectId);
+        return [];
     }
 };
 
@@ -113,6 +115,11 @@ assert.equal(
     window.__currentProject?.id,
     'project_existing',
     'delayed dashboard bootstrap must not clear the active current project'
+);
+assert.deepEqual(
+    loadedProjects,
+    ['project_existing'],
+    'dashboard startup must prepare the authenticated project before the Dashboard can be dismissed'
 );
 
 console.log('project_bootstrap_preserves_active_project_workspace_contract.test: PASS');

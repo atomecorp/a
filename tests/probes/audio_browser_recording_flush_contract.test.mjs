@@ -23,7 +23,7 @@ const createApiContext = () => ({
     enqueueUpload: vi.fn()
 });
 
-const installAudioBrowser = ({ sampleRate = 48000, onFlush = null } = {}) => {
+const installAudioBrowser = ({ sampleRate = 48000, onFlush = null, getUserMedia = null } = {}) => {
     const track = { stop: vi.fn() };
     const stream = { getTracks: () => [track] };
     const source = { connect: vi.fn(), disconnect: vi.fn() };
@@ -63,7 +63,7 @@ const installAudioBrowser = ({ sampleRate = 48000, onFlush = null } = {}) => {
         }
     }
 
-    const mediaDevices = { getUserMedia: vi.fn(async () => stream) };
+    const mediaDevices = { getUserMedia: vi.fn(getUserMedia || (async () => stream)) };
     const fakeWindow = {
         navigator: { mediaDevices },
         AudioContext: FakeAudioContext,
@@ -143,6 +143,45 @@ test('browser capture flushes every frame and preserves the AudioContext sample 
     assert.equal(browser.context.close.mock.calls.length, 1);
     assert.equal(URL.revokeObjectURL.mock.calls.length, 1);
     assert.equal(controller.stop(), firstStop);
+});
+
+test('WebKit creates and resumes AudioContext before microphone permission resolves', async () => {
+    let resolveMicrophone = null;
+    const browser = installAudioBrowser({
+        onFlush: emitContinuousCapture,
+        getUserMedia: () => new Promise((resolve) => { resolveMicrophone = resolve; })
+    });
+    const pendingController = createAudioRecord(createApiContext()).record_audio('webkit-gesture.wav');
+
+    await Promise.resolve();
+    assert.ok(browser.context, 'AudioContext must remain in the activating user gesture');
+    assert.equal(browser.mediaDevices.getUserMedia.mock.calls.length, 1);
+
+    resolveMicrophone(browser.stream);
+    const controller = await pendingController;
+    await controller.stop({ discard: true });
+    assert.equal(browser.context.close.mock.calls.length, 1);
+});
+
+test('browser audio releases a completed session for a distinct second take', async () => {
+    const browser = installAudioBrowser({ onFlush: emitContinuousCapture });
+    const ctx = createApiContext();
+    const audio = createAudioRecord(ctx);
+    const scopeFrames = [];
+
+    const first = await audio.record_audio('first-take.wav');
+    first.subscribeScope((frame) => scopeFrames.push({ take: 1, sequence: frame.sequence }));
+    const firstResult = await first.stop();
+
+    const second = await audio.record_audio('second-take.wav');
+    second.subscribeScope((frame) => scopeFrames.push({ take: 2, sequence: frame.sequence }));
+    const secondResult = await second.stop();
+
+    assert.equal(firstResult.frame_count, 7);
+    assert.equal(secondResult.frame_count, 7);
+    assert.equal(ctx.persistRecordingLocally.mock.calls.length, 2);
+    assert.deepEqual(scopeFrames.map((entry) => entry.take), [1, 1, 2, 2]);
+    assert.equal(browser.track.stop.mock.calls.length, 2);
 });
 
 test('the AudioWorklet protocol emits the partial tail before acknowledging flush', async () => {
@@ -306,6 +345,34 @@ test('native discard physically deletes the consumed WAV and retries deletion wi
     assert.equal((await controller.stop({ discard: true })).discarded, true);
     assert.equal(stopCalls, 1);
     assert.equal(deleteCalls, 2);
+});
+
+test('native audio terminal with no decodable samples never reaches persistence', async () => {
+    const fakeWindow = {
+        __AUV3_MODE__: true,
+        webkit: { messageHandlers: { swiftBridge: {} } },
+        record_start: () => {},
+        record_stop: () => {}
+    };
+    Object.defineProperty(fakeWindow, '__SQUIRREL_PLAY_RECORD_CORE__', {
+        value: {
+            recordStart: async () => 'native_empty_session',
+            recordStop: async () => ({
+                file_path: 'data/users/u/recordings/empty.wav',
+                duration_sec: 0,
+                frame_count: 0,
+                sample_rate: 48_000,
+                size_bytes: 0
+            })
+        }
+    });
+    vi.stubGlobal('window', fakeWindow);
+    const ctx = createApiContext();
+    const controller = await createAudioRecord(ctx).record_audio('empty.wav');
+
+    await assert.rejects(controller.stop(), (error) => error?.code === 'audio_recording_native_viability_invalid');
+    assert.equal(ctx.persistRecordingLocally.mock.calls.length, 0);
+    assert.equal(ctx.enqueueUpload.mock.calls.length, 0);
 });
 
 test('native exact terminal result stays owned until its physical cleanup succeeds', async () => {

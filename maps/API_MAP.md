@@ -921,7 +921,7 @@ Verified entry point: `installEveIntuitionBootRuntime`.
 Boundary rules:
 
 - The runtime owns boot-time window menu exposure, auth sync, panel surface registration, Flower/contextual-edit/vector/draw installation, non-critical module warmup, UI tool registration, the closed contextual-edit module registry, and debug runtime installation.
-- It opens the default Dashboard workspace without requiring a current project id; project restoration/loading is a later explicit project-mode path and must not be used as the Dashboard boot gate.
+- It opens the default Dashboard workspace only after the closed `ensureProjectBootstrapReady` contract has restored, loaded, and rendered the authenticated current project. The Dashboard remains the initial view but is projected over that resident project surface.
 - It must receive all product callbacks by injection and must not own Bevy/WebGPU rendering, durable Atome state, or tool implementation behavior.
 
 Boundary status: Closed product runtime API. Public promotion would require a product-neutral boot registration contract.

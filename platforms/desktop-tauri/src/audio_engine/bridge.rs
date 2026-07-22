@@ -221,6 +221,7 @@ pub fn audio_record_stop(session_id: String) -> Result<Value, String> {
         "success": true,
         "session_id": result.session_id,
         "absolute_file_path": result.file_path,
+        "size_bytes": result.size_bytes,
         "duration_sec": result.duration_sec,
         "frame_count": result.frame_count,
         "overrun_frames": result.overrun_frames,
