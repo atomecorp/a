@@ -27,6 +27,15 @@ const scopePayload = (sequence) => ({
     peak: 0.75
 });
 
+const iosScopePayload = (sequence) => ({
+    sequence,
+    sample_rate: 48_000,
+    channels: 1,
+    min_max_pairs: Array.from({ length: 64 }, (_, index) => [-index / 64, index / 64]).flat(),
+    rms: 0.25,
+    peak: 0.75
+});
+
 test('Tauri scope polls the recorded CPAL stream at no more than 30 Hz', async () => {
     vi.useFakeTimers();
     const events = [];
@@ -79,6 +88,22 @@ test('native scope registry replays one early frame and rejects stale sequences'
     assert.equal(unsubscribe(), true);
     assert.equal(unsubscribe(), false);
     clearRecordingScopeSession('early_take');
+});
+
+test('standalone iOS scope normalizes native min/max pairs and rejects malformed frames', () => {
+    const received = [];
+    const unsubscribe = subscribeRecordingScopeFrame({
+        sessionId: 'ios_take',
+        listener: (frame) => received.push(frame)
+    });
+    const frame = publishRecordingScopeFrame(iosScopePayload(1), 'ios_take');
+    assert.equal(frame?.pairs.length, 64);
+    assert.deepEqual(frame?.pairs[8], [-0.125, 0.125]);
+    assert.equal(received.length, 1);
+    assert.equal(publishRecordingScopeFrame({ ...iosScopePayload(2), min_max_pairs: [0, 1] }, 'ios_take'), null);
+    assert.equal(publishRecordingScopeFrame(iosScopePayload(1), 'ios_take'), null);
+    unsubscribe();
+    clearRecordingScopeSession('ios_take');
 });
 
 test('native scope registry cleanup detaches subscribers across fifty sessions', () => {

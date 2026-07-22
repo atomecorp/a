@@ -60,6 +60,10 @@ const clickButton = async (node) => {
     node.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
     await new Promise((resolve) => setTimeout(resolve, 0));
 };
+const activatePasswordVisibility = async (node) => {
+    node.dispatchEvent(new window.Event('pointerdown', { bubbles: true, cancelable: true }));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+};
 const waitForCondition = async (predicate, timeoutMs = 3000, intervalMs = 20) => {
     const startedAt = Date.now();
     while (Date.now() - startedAt < timeoutMs) {
@@ -253,6 +257,7 @@ dispatchEnter(otpInput);
 await waitForCondition(() => document.getElementById('eve_login_sequence__password_field__input')?.style?.display === 'block');
 
 const passwordInput = document.getElementById('eve_login_sequence__password_field__input');
+const passwordVisibilityToggle = document.getElementById('eve_login_sequence__password_field__toggle');
 const mirroredText = document.getElementById('eve_login_sequence__typed');
 const mirroredCaret = document.getElementById('eve_login_sequence__typed_caret');
 const instruction = document.getElementById('eve_login_sequence__instruction');
@@ -267,6 +272,19 @@ assert.equal(mirroredText?.style?.opacity, LOGIN_TEXT_STYLE.opacity, 'mirrored i
 assert.equal(passwordInput?.style?.opacity, '0.01', 'native password input must stay visually hidden');
 assert.equal(passwordInput?.style?.color, 'transparent', 'native password input must not render browser password dots');
 assert.equal(passwordInput?.style?.caretColor, 'transparent', 'native password input must not render a second caret');
+assert.ok(passwordVisibilityToggle, 'password step must expose the canonical visibility control');
+assert.equal(passwordVisibilityToggle?.style?.top, 'calc(50% + 54px)', 'password visibility control must sit below the mirrored input');
+assert.equal(passwordVisibilityToggle?.style?.display, 'block', 'password visibility control must be available only on the password step');
+assert.equal(passwordVisibilityToggle?.getAttribute('aria-pressed'), 'false', 'password visibility control must start masked');
+assert.ok(passwordVisibilityToggle?.querySelector('svg'), 'password visibility control must retain its masked icon');
+const passwordTogglePointerDown = new window.Event('pointerdown', { bubbles: true, cancelable: true });
+passwordVisibilityToggle.dispatchEvent(passwordTogglePointerDown);
+assert.equal(passwordTogglePointerDown.defaultPrevented, true, 'password visibility control must retain native input focus and avoid change-driven submission');
+await new Promise((resolve) => setTimeout(resolve, 360));
+const passwordToggleMaskPointerDown = new window.Event('pointerdown', { bubbles: true, cancelable: true });
+passwordVisibilityToggle.dispatchEvent(passwordToggleMaskPointerDown);
+assert.equal(passwordInput?.type, 'password', 'password visibility control must restore masking on its second pointer activation');
+await new Promise((resolve) => setTimeout(resolve, 360));
 assert.ok(mirroredCaret, 'credential surface must expose a mirrored caret');
 assert.equal(mirroredCaret?.style?.borderLeftWidth, '2px', 'mirrored caret must expose a visible stroke width');
 assert.equal(mirroredCaret?.style?.borderLeftStyle, 'solid', 'mirrored caret must expose a solid stroke');
@@ -275,6 +293,34 @@ assert.equal(mirroredCaret?.style?.opacity, '1', 'mirrored caret must be visible
 passwordInput.value = 'abc';
 dispatchInput(passwordInput);
 assert.equal(mirroredText?.textContent, '•••', 'password display must be owned by mirrored bullet text');
+const nativeInputType = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(passwordInput), 'type');
+assert.equal(typeof nativeInputType?.get, 'function', 'password visibility regression must access the native input type descriptor');
+assert.equal(typeof nativeInputType?.set, 'function', 'password visibility regression must update the native input type descriptor');
+Object.defineProperty(passwordInput, 'type', {
+    configurable: true,
+    get: () => nativeInputType.get.call(passwordInput),
+    set: (nextType) => {
+        nativeInputType.set.call(passwordInput, nextType);
+        passwordInput.value = '';
+    }
+});
+try {
+    await activatePasswordVisibility(passwordVisibilityToggle);
+    assert.equal(passwordInput?.type, 'text', 'password visibility control must reveal the native password value');
+    assert.equal(passwordInput?.value, 'abc', 'password visibility control must restore a value cleared by a native type change while revealing it');
+    assert.equal(passwordVisibilityToggle?.getAttribute('aria-pressed'), 'true', 'password visibility control must expose its revealed state');
+    assert.ok(passwordVisibilityToggle?.querySelector('svg'), 'password visibility control must retain its revealed icon');
+    assert.equal(mirroredText?.textContent, 'abc', 'revealed password must update the mirrored display without changing the value');
+    await new Promise((resolve) => setTimeout(resolve, 360));
+    await activatePasswordVisibility(passwordVisibilityToggle);
+    assert.equal(passwordInput?.type, 'password', 'password visibility control must restore native masking');
+    assert.equal(passwordInput?.value, 'abc', 'password visibility control must restore a value cleared by a native type change while masking it again');
+    assert.equal(passwordVisibilityToggle?.getAttribute('aria-pressed'), 'false', 'password visibility control must expose its masked state');
+    assert.ok(passwordVisibilityToggle?.querySelector('svg'), 'password visibility control must retain its masked icon after a second click');
+    assert.equal(mirroredText?.textContent, '•••', 'masked password must restore mirrored bullets');
+} finally {
+    delete passwordInput.type;
+}
 
 dispatchEnter(passwordInput);
 await waitForCondition(() => root.style.display === 'none' && document.activeElement?.id !== passwordInput.id);

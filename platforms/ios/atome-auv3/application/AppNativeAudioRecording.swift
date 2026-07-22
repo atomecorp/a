@@ -235,6 +235,12 @@ extension AppNativeAudioController {
             ? (((try? FileManager.default.attributesOfItem(atPath: absolutePath))?[.size]
                 as? NSNumber)?.int64Value ?? -1)
             : -1
+        // The recorder owns the real-time microphone path.  Waveform analysis is
+        // deliberately performed only after it has closed the WAV file, so it
+        // cannot allocate, read disk, or otherwise burden the input tap.
+        let waveformPeaks = fileExists
+            ? (try? waveformPeaks(for: URL(fileURLWithPath: absolutePath))) ?? []
+            : []
         resetActiveRecordingState()
 
         guard stopped, frameCount > 0, fileExists, fileSize > 44 else {
@@ -271,8 +277,56 @@ extension AppNativeAudioController {
             "overrun_frames": overrunFrames,
             "discontinuity_frames": discontinuityFrames,
             "absolute_file_path": absolutePath,
-            "size_bytes": fileSize
+            "size_bytes": fileSize,
+            "peaks": waveformPeaks,
+            "waveform_peaks": waveformPeaks
         ])
+    }
+
+    func waveformPeaks(for url: URL, maximumPeakCount: Int = 256) throws -> [Double] {
+        guard maximumPeakCount > 0 else { return [] }
+        let audioFile = try AVAudioFile(
+            forReading: url,
+            commonFormat: .pcmFormatFloat32,
+            interleaved: false
+        )
+        let totalFrames = Int64(audioFile.length)
+        let channelCount = Int(audioFile.processingFormat.channelCount)
+        guard totalFrames > 0, channelCount > 0 else { return [] }
+
+        let peakCount = min(maximumPeakCount, Int(totalFrames))
+        guard peakCount > 0 else { return [] }
+        var peaks = [Double](repeating: 0, count: peakCount)
+        let bufferCapacity: AVAudioFrameCount = 4096
+        guard let buffer = AVAudioPCMBuffer(
+            pcmFormat: audioFile.processingFormat,
+            frameCapacity: bufferCapacity
+        ) else { return [] }
+
+        var processedFrames: Int64 = 0
+        while processedFrames < totalFrames {
+            buffer.frameLength = 0
+            let remainingFrames = totalFrames - processedFrames
+            try audioFile.read(
+                into: buffer,
+                frameCount: AVAudioFrameCount(min(Int64(bufferCapacity), remainingFrames))
+            )
+            let readFrames = Int64(buffer.frameLength)
+            guard readFrames > 0, let channelData = buffer.floatChannelData else { break }
+            for frame in 0..<Int(readFrames) {
+                let absoluteFrame = processedFrames + Int64(frame)
+                let peakIndex = min(
+                    peakCount - 1,
+                    Int((absoluteFrame * Int64(peakCount)) / totalFrames)
+                )
+                for channel in 0..<channelCount {
+                    let amplitude = min(1, abs(Double(channelData[channel][frame])))
+                    peaks[peakIndex] = max(peaks[peakIndex], amplitude)
+                }
+            }
+            processedFrames += readFrames
+        }
+        return peaks
     }
 
     func shutdownAudioRecording() {

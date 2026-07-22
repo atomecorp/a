@@ -2,6 +2,8 @@
 
 Status: Initial architecture map after the Atome open / eVe closed boundary validation.
 
+Current workspace-entry ordering (2026-07-22): after a valid authenticated session, the neutral Dashboard scene is mounted before resolution, creation, selection, or loading of a user project. `project_bootstrap.js` remains the canonical project owner and performs that work behind the Dashboard without forcing the project surface foreground. On readiness, the Dashboard refreshes its data context while retaining the neutral shared canvas; a failure is phase-qualified as `dashboard_open`, `project_bootstrap`, or `dashboard_refresh` and must not be collapsed into an authentication failure.
+
 Current mobile resource/lifecycle contract (2026-07-17; supersedes older warmup, preview, and fixed-cadence details below wherever they conflict):
 
 - Boot and workspace restoration are demand-driven. No delayed cascade may preload Dashboard, capture, panels, activities, voice/TTS, or renderer WASM. Camera/microphone permission belongs to the explicit capture gesture.

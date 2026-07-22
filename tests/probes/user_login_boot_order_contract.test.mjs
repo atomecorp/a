@@ -229,9 +229,10 @@ installEveIntuitionBootRuntime({
     normalizeAtomeEditFooterToolKey: (value) => value,
     openCanonicalHomePanel() {},
     openInitialLoginSequence() {},
-    openWorkspaceDashboardAndMainMenu: async (payload) => {
+    openWorkspaceDashboardWithProjectBootstrap: async (payload) => {
         workspaceOpenCalls.push(payload);
-        return { ok: true };
+        const projectId = await payload.ensureProjectReady();
+        return { ok: true, projectId };
     },
     panelSurfaceDefinitions: {},
     publishAtomeEditFooterSelection() {},
@@ -260,15 +261,15 @@ installEveIntuitionBootRuntime({
 });
 await new Promise((resolve) => setTimeout(resolve, 120));
 assert.deepEqual(workspaceOpenCalls, [
-    { source: 'boot_workspace' }
-], 'workspace boot must open the default dashboard above the prepared current project');
-assert.deepEqual(readinessCalls, ['ready'], 'workspace boot must await canonical project readiness before opening the Dashboard');
+    { source: 'boot_workspace', ensureProjectReady: workspaceOpenCalls[0]?.ensureProjectReady }
+], 'workspace boot must open the Dashboard before starting canonical project preparation');
+assert.deepEqual(readinessCalls, ['ready'], 'workspace boot must prepare the project through the canonical bootstrap after Dashboard opening starts');
 window.dispatchEvent(new window.CustomEvent('squirrel:project-changed', {
     detail: { id: 'boot_project_valid' }
 }));
 await new Promise((resolve) => setTimeout(resolve, 0));
 assert.deepEqual(workspaceOpenCalls, [
-    { source: 'boot_workspace' }
+    { source: 'boot_workspace', ensureProjectReady: workspaceOpenCalls[0]?.ensureProjectReady }
 ], 'workspace boot must not reopen the dashboard when a project id is published later');
 
 console.log('user_login_boot_order_contract.test: PASS');

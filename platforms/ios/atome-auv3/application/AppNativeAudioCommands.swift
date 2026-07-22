@@ -109,6 +109,7 @@ extension AppNativeAudioController {
                         return
                     }
                     self.stopVoiceLocked(voiceId, reason: "replace_same_voice")
+                    try self.preparePlaybackEngine()
                     let startSeconds = self.clamp(
                         self.resolveDouble(payload, ["startSeconds", "start_seconds"], fallback: 0),
                         min: 0,

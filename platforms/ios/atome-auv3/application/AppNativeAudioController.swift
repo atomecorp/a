@@ -45,6 +45,8 @@ final class AppNativeAudioController: NSObject {
     var clips: [String: ClipEntry] = [:]
     var voices: [String: VoiceEntry] = [:]
     var audioSessionReady = false
+    var playbackEngineNeedsReset = false
+    var playbackRouteSignature = ""
     var activeRecordingSessionId: String?
     var activeRecordingFileName: String?
     var activeRecordingPath: String?
@@ -60,6 +62,25 @@ final class AppNativeAudioController: NSObject {
 
     private override init() {
         super.init()
+        let center = NotificationCenter.default
+        center.addObserver(
+            self,
+            selector: #selector(handleAudioSessionInterruption),
+            name: AVAudioSession.interruptionNotification,
+            object: AVAudioSession.sharedInstance()
+        )
+        center.addObserver(
+            self,
+            selector: #selector(handleAudioSessionRouteChange),
+            name: AVAudioSession.routeChangeNotification,
+            object: AVAudioSession.sharedInstance()
+        )
+        center.addObserver(
+            self,
+            selector: #selector(handleAudioSessionMediaServicesReset),
+            name: AVAudioSession.mediaServicesWereResetNotification,
+            object: AVAudioSession.sharedInstance()
+        )
     }
 
     func complete(_ completion: @escaping ([String: Any], String?) -> Void,
@@ -175,15 +196,36 @@ final class AppNativeAudioController: NSObject {
     }
 
     func configureAudioSessionIfNeeded() throws {
-        if audioSessionReady { return }
         let session = AVAudioSession.sharedInstance()
-        try session.setCategory(
-            .playAndRecord,
-            mode: .default,
-            options: [.mixWithOthers, .defaultToSpeaker, .allowBluetoothHFP]
-        )
+        if !audioSessionReady {
+            try session.setCategory(
+                .playAndRecord,
+                mode: .default,
+                options: [.mixWithOthers, .defaultToSpeaker, .allowBluetoothHFP]
+            )
+            audioSessionReady = true
+        }
         try session.setActive(true)
-        audioSessionReady = true
+    }
+
+    @objc private func handleAudioSessionInterruption(_ notification: Notification) {
+        queue.async {
+            self.audioSessionReady = false
+            self.playbackEngineNeedsReset = true
+        }
+    }
+
+    @objc private func handleAudioSessionRouteChange(_ notification: Notification) {
+        queue.async {
+            self.playbackEngineNeedsReset = true
+        }
+    }
+
+    @objc private func handleAudioSessionMediaServicesReset(_ notification: Notification) {
+        queue.async {
+            self.audioSessionReady = false
+            self.playbackEngineNeedsReset = true
+        }
     }
 
     func requestMicrophonePermission(_ completion: @escaping (Bool) -> Void) {

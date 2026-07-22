@@ -2,6 +2,8 @@
 
 Status: Initial API map after the Atome open / eVe closed boundary validation.
 
+Workspace entry API: `openWorkspaceDashboardWithProjectBootstrap({ source, ensureProjectReady })` in `user_workspace_surface_runtime.js` is the internal canonical orchestration route for authenticated boot. It opens the neutral Dashboard first, invokes the supplied canonical project-readiness owner behind it, then refreshes Dashboard data. Its result is phase-qualified (`dashboard_open`, `project_bootstrap`, `dashboard_refresh`) so callers preserve a clear workspace error instead of misreporting credentials.
+
 Current mobile performance API contract (2026-07-17; supersedes older preview/warmup details below wherever they conflict):
 
 - `AdoleAPI.projects.list(options?, callback?)` omits the heavy `preview_url` particle by default and accepts `{ includePreviewSources: true }` only as an explicit compatibility opt-in. The unified list request carries `exclude_particle_keys`; Tauri SQLite, the iOS local SQLite server, and Fastify/PostgreSQL exclude those keys before record serialization.

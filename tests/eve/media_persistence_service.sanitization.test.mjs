@@ -220,7 +220,7 @@ const hydrated = await ensureProjectMediaAtome({
         sample_rate: 48000,
         channels: 1,
         frame_count: 60000,
-        peaks: [0.1, -0.25, 2, 'bad']
+        waveform_peaks: [0.1, -0.25, 2, 'bad']
     },
     accessToken: true,
     requireAdoleApi: true,

@@ -3,6 +3,30 @@ import CoreMedia
 import Foundation
 
 extension AppNativeAudioController {
+    func currentPlaybackRouteSignature() -> String {
+        let session = AVAudioSession.sharedInstance()
+        let outputs = session.currentRoute.outputs.map { output in
+            "\(output.portType.rawValue):\(output.uid)"
+        }.sorted().joined(separator: "|")
+        return "\(outputs)#\(session.sampleRate)#\(session.outputNumberOfChannels)"
+    }
+
+    func preparePlaybackEngine() throws {
+        try configureAudioSessionIfNeeded()
+        let routeSignature = currentPlaybackRouteSignature()
+        if !playbackRouteSignature.isEmpty && playbackRouteSignature != routeSignature {
+            playbackEngineNeedsReset = true
+        }
+        if playbackEngineNeedsReset {
+            Array(voices.keys).forEach { stopVoiceLocked($0, reason: "audio_session_recovery") }
+            engine.stop()
+            engine.reset()
+            playbackEngineNeedsReset = false
+        }
+        try ensureAudioEngineRunning()
+        playbackRouteSignature = routeSignature
+    }
+
     func ensureAudioEngineRunning(playbackFormat: AVAudioFormat? = nil) throws {
         if engine.isRunning { return }
         let mixerNode = engine.mainMixerNode

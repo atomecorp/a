@@ -4,8 +4,20 @@ const normalizePair = (pair) => {
     return minimum <= maximum ? [minimum, maximum] : [maximum, minimum];
 };
 
+const normalizeMinMaxPairs = (payload = {}) => {
+    const flatPairs = Array.isArray(payload?.min_max_pairs) ? payload.min_max_pairs : null;
+    if (!flatPairs || flatPairs.length !== 128) return [];
+    const pairs = [];
+    for (let index = 0; index < flatPairs.length; index += 2) {
+        pairs.push(normalizePair([flatPairs[index], flatPairs[index + 1]]));
+    }
+    return pairs;
+};
+
 const normalizeScope = (payload = {}, sessionId = '') => {
-    const pairs = Array.isArray(payload?.pairs) ? payload.pairs.slice(0, 64).map(normalizePair) : [];
+    const pairs = Array.isArray(payload?.pairs)
+        ? payload.pairs.slice(0, 64).map(normalizePair)
+        : normalizeMinMaxPairs(payload);
     const sequence = Math.max(0, Math.trunc(Number(payload?.sequence) || 0));
     if (payload?.available !== true || sequence < 1 || pairs.length !== 64) return null;
     return {

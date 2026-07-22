@@ -100,6 +100,21 @@ test('standalone iOS stop finalizes exact frame counts and releases recording re
     assert.match(recordingSource, /"overrun_frames": overrunFrames/);
     assert.match(recordingSource, /"discontinuity_frames": discontinuityFrames/);
     assert.match(recordingSource, /guard stopped, frameCount > 0, fileExists, fileSize > 44/);
+    assert.match(recordingSource, /func waveformPeaks\(for url: URL, maximumPeakCount: Int = 256\)/);
+    assert.match(recordingSource, /forReading: url,\s+commonFormat: \.pcmFormatFloat32/);
+    assert.match(recordingSource, /"peaks": waveformPeaks/);
+    assert.match(recordingSource, /"waveform_peaks": waveformPeaks/);
     assert.match(recordingSource, /func shutdownAudioRecording\(\)/);
     assert.match(commandsSource, /case "audio_shutdown":\s+self\.shutdownAudioRecording\(\)/);
+});
+
+test('standalone iOS playback reactivates the session and recovers after route changes', () => {
+    assert.match(controllerSource, /AVAudioSession\.interruptionNotification/);
+    assert.match(controllerSource, /AVAudioSession\.routeChangeNotification/);
+    assert.match(controllerSource, /AVAudioSession\.mediaServicesWereResetNotification/);
+    assert.match(controllerSource, /try session\.setActive\(true\)/);
+    assert.match(playbackSource, /func preparePlaybackEngine/);
+    assert.match(playbackSource, /engine\.stop\(\)/);
+    assert.match(playbackSource, /engine\.reset\(\)/);
+    assert.match(commandsSource, /preparePlaybackEngine\(\)/);
 });

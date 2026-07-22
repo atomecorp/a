@@ -91,6 +91,18 @@ result = await runPhoneStep({ lookupResult: { ok: false, success: false, error: 
 await waitForCondition(() => document.getElementById('eve_login_sequence__otp_input')?.style?.display === 'block');
 assert.equal(result.otpRequests, 1, 'new local account must request OTP');
 assert.equal(document.getElementById('eve_login_sequence__instruction')?.textContent, 'O.T.P: 5273', 'new local account must show the OTP step');
+document.getElementById('eve_login_sequence__otp_input')
+    ?.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+await waitForCondition(() => (
+    document.getElementById('eve_login_sequence__choice')?.style?.display === 'flex'
+    && document.getElementById('eve_login_sequence__credentials')?.style?.display === 'none'
+), 4000);
+assert.equal(document.getElementById('eve_login_sequence__credentials')?.style?.display, 'none', 'empty OTP validation must return to the login choice');
+result.sequence.destroy();
+
+result = await runPhoneStep({ lookupResult: { ok: true, success: false, missing: true } });
+await waitForCondition(() => document.getElementById('eve_login_sequence__otp_input')?.style?.display === 'block');
+assert.equal(result.otpRequests, 1, 'canonical missing lookup must request OTP');
 result.sequence.destroy();
 
 result = await runPhoneStep({

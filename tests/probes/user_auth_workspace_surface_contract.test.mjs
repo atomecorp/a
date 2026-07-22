@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { createUserAuthFlowRuntime } from '../../eVe/intuition/tools/user_auth_flow_runtime.js';
 
 const calls = [];
+let workspaceResult = null;
 
 globalThis.window = {
     refreshToolCatalog: async () => {
@@ -42,9 +43,11 @@ const runtime = createUserAuthFlowRuntime({
         return 'project_one';
     },
     isProjectBootstrapManaged: () => false,
-    afterWorkspaceOpen: async (payload = {}) => {
-        calls.push({ name: 'afterWorkspaceOpen', ...payload });
-        return { ok: true };
+    openWorkspaceWithProjectBootstrap: async (payload = {}) => {
+        calls.push({ name: 'openWorkspaceWithProjectBootstrap', source: payload.source });
+        if (workspaceResult) return workspaceResult;
+        const projectId = await payload.ensureProjectReady();
+        return { ok: true, projectId };
     },
     setUserNotice: (key, text) => calls.push({ name: 'setUserNotice', key, text }),
     clearUserNotice: () => calls.push({ name: 'clearUserNotice' })
@@ -79,9 +82,9 @@ await authenticatedVisualFinished;
 
 assert.equal(ok, true, 'authenticated login must succeed');
 assert.deepEqual(
-    calls.filter((entry) => entry.name === 'afterWorkspaceOpen'),
-    [{ name: 'afterWorkspaceOpen', source: 'authenticated', projectId: 'project_one' }],
-    'authenticated login must open the Dashboard above the prepared current project'
+    calls.filter((entry) => entry.name === 'openWorkspaceWithProjectBootstrap'),
+    [{ name: 'openWorkspaceWithProjectBootstrap', source: 'authenticated' }],
+    'authenticated login must delegate Dashboard-first project preparation to the canonical workspace flow'
 );
 assert.equal(
     calls.some((entry) => entry.name === 'ensureCurrentProject'),
@@ -104,7 +107,7 @@ assert.ok(
     'authenticated visual callback must run before profile/project/workspace work'
 );
 assert.ok(
-    calls.findIndex((entry) => entry.name === 'afterWorkspaceOpen')
+    calls.findIndex((entry) => entry.name === 'openWorkspaceWithProjectBootstrap')
     < calls.findIndex((entry) => entry.name === 'onAuthenticatedFinished'),
     'workspace opening must not wait for the authenticated visual animation to finish'
 );
@@ -117,6 +120,19 @@ assert.deepEqual(
     calls.filter((entry) => entry.name === 'onAuthenticated'),
     [{ name: 'onAuthenticated', phone: '0600000000', username: '0600000000' }],
     'authenticated visual callback must receive the normalized login identity'
+);
+
+workspaceResult = { ok: false, phase: 'project_bootstrap', error: 'projects_create_failed' };
+const projectBootstrapOk = await runtime.executeLoginFlow({
+    phone: '0600000000',
+    password: 'valid_password',
+    username: '0600000000'
+});
+assert.equal(projectBootstrapOk, false, 'project bootstrap failure must stop only workspace readiness');
+assert.equal(
+    runtime.getLastLoginErrorText(),
+    'Espace de travail indisponible : le projet ne peut pas être préparé',
+    'workspace failure must not be reported as invalid credentials'
 );
 
 console.log('user_auth_workspace_surface_contract.test: PASS');
