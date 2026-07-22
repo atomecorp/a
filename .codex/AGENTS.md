@@ -121,6 +121,7 @@ Reference integrity marker for the integrated source before the split:
 - Coding standards, prohibitions, language policy, i18n, fallback policy, temporary files, or Git policy: read `.codex/modules/02-coding-standards-and-prohibitions.md`.
 - Architecture review, code conduct, framework understanding, constitutional rules, DOM authority, or routing interpretation: read `.codex/modules/01-root-constitution.md`.
 - Tests, guardrails, UI validation, or runtime validation strategy: read `.codex/modules/03-debugging-testing-and-ui-validation.md` and `.codex/modules/07-future-code-guardrails.md`.
+- Visual acceptance across Web, Tauri, and a physical iOS device: read and follow `.codex/visual-test-protocol.md` in addition to the relevant debugging, UI, media, state, and runtime modules.
 
 ## Module index
 
@@ -131,6 +132,13 @@ Reference integrity marker for the integrated source before the split:
 - `.codex/modules/05-api-rendering-and-ui.md`: API and MCP policy, communication architecture, WebGPU rendering pipeline, and Squirrel/UI component rules.
 - `.codex/modules/06-atome-state-sync-and-runtime-modes.md`: Atome model, canonical mutation pipeline, history and synchronization, execution modes, and sharing/ACL policy.
 - `.codex/modules/07-future-code-guardrails.md`: mandatory future-facing pre-prompt, anti-regression gates, validation locks, progress format, and final completion requirements.
+
+## Visual acceptance runbook
+
+For reproducible visual test campaigns on the real Web, Tauri Debug, and iOS
+Debug code paths, use `.codex/visual-test-protocol.md`. It defines runtime
+startup, device control, evidence requirements, media acceptance criteria,
+failure classification, and reporting completion rules.
 
 ## Mandatory UI debugging adjunct
 
