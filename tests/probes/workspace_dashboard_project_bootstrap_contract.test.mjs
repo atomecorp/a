@@ -33,16 +33,30 @@ window.eveDashboardBevyUiRuntime = {
         };
         return { ok: true };
     },
-    close: async () => ({ ok: true })
+    close: async () => {
+        calls.push({ name: 'dashboard_close' });
+        window.eveDashboardBevyUiRuntime.state = {
+            ...window.eveDashboardBevyUiRuntime.state,
+            active: false,
+            suspended: true
+        };
+        return { ok: true };
+    }
 };
 
-const { openWorkspaceDashboardWithProjectBootstrap } = await import('../../eVe/intuition/tools/user_workspace_surface_runtime.js');
+const {
+    openWorkspaceDashboardWithProjectBootstrap,
+    toggleWorkspaceDashboardAndMainMenu
+} = await import('../../eVe/intuition/tools/user_workspace_surface_runtime.js');
 
 const opened = await openWorkspaceDashboardWithProjectBootstrap({
     source: 'contract',
     ensureProjectReady: async () => {
         calls.push({ name: 'project' });
         window.__currentProject = { id: 'project_ready' };
+        const projectView = document.createElement('div');
+        projectView.id = 'project_view_project_ready';
+        view.appendChild(projectView);
         return 'project_ready';
     }
 });
@@ -51,11 +65,16 @@ assert.equal(opened.ok, true, JSON.stringify(opened));
 assert.equal(opened.projectId, 'project_ready');
 assert.equal(calls[0].name, 'dashboard', 'Dashboard must mount before project preparation starts');
 assert.equal(calls[1].name, 'project', 'project preparation must run behind the mounted Dashboard');
-assert.equal(calls[2].name, 'dashboard', 'Dashboard must refresh after the project becomes available');
+assert.equal(calls.length, 2, 'preparing a project must never hide the Dashboard automatically');
 assert.equal(calls[0].input.sceneProjectId, '__eve_dashboard_workspace__');
-assert.equal(calls[2].input.sceneProjectId, '__eve_dashboard_workspace__', 'the ready project must not steal the Dashboard foreground');
-assert.equal(calls[2].input.dataProjectId, 'project_ready');
-assert.equal(calls[2].input.refresh, true);
+assert.equal(window.eveDashboardBevyUiRuntime.state.active, true, 'Dashboard stays foregrounded after project preparation');
+assert.equal(window.eveDashboardBevyUiRuntime.state.suspended, false, 'Dashboard must not flicker or suspend during preparation');
+assert.equal(window.__eveWorkspaceMode.mode, 'dashboard');
+
+await toggleWorkspaceDashboardAndMainMenu({ source: 'contract_explicit_hide' });
+assert.equal(calls[2].name, 'dashboard_close', 'only the explicit Dashboard action may close it');
+assert.equal(window.__eveWorkspaceMode.mode, 'project');
+assert.equal(window.__eveWorkspaceMode.projectId, 'project_ready');
 
 const projectFailure = await openWorkspaceDashboardWithProjectBootstrap({
     source: 'contract_failure',

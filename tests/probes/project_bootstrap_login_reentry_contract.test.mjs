@@ -13,6 +13,7 @@ document.body.appendChild(view);
 window.__authCheckComplete = false;
 window.__authCheckResult = { authenticated: false, userId: null, anonymous: false };
 window.__eveStartupView = 'project';
+window.__eveWorkspaceDashboardReady = true;
 
 let loggedIn = false;
 const authWaiters = [];
@@ -68,7 +69,8 @@ window.AdoleAPI = {
     }
 };
 
-await import('../../eVe/intuition/tools/project_bootstrap.js');
+const { ensureProjectBootstrapReady } = await import('../../eVe/intuition/tools/project_bootstrap.js');
+void ensureProjectBootstrapReady();
 await new Promise((resolve) => setTimeout(resolve, 0));
 
 assert.equal(authWaiters.length, 1, 'initial bootstrap must be waiting on auth');
