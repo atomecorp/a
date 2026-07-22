@@ -225,14 +225,26 @@ test('the AudioWorklet protocol emits the partial tail before acknowledging flus
     assert.equal(posted[2].message.type, 'flush_ack');
     assert.equal(posted[2].message.request_id, 'tail-2');
 
-    const gapProcessor = new Processor({ processorOptions: { chunkSec: 0.02 } });
+    const startupProcessor = new Processor({ processorOptions: { chunkSec: 0.02 } });
     sandbox.currentFrame = 3000;
-    gapProcessor.process([[new Float32Array([0.1, 0.2])]]);
+    startupProcessor.process([[new Float32Array([0.1, 0.2])]]);
     sandbox.currentFrame = 3003;
+    startupProcessor.process([[new Float32Array([0.3, 0.4])]]);
+    startupProcessor.port.onmessage({ data: { type: 'flush', request_id: 'startup-1' } });
+    assert.equal(posted[3].message.type, 'chunk');
+    assert.equal(posted[3].message.start_frame, 3003);
+    assert.equal(posted[3].message.frame_count, 2);
+    assert.equal(posted[4].message.type, 'flush_ack');
+    assert.equal(posted[4].message.total_frames, 2);
+
+    const gapProcessor = new Processor({ processorOptions: { chunkSec: 0.02 } });
+    sandbox.currentFrame = 4000;
+    gapProcessor.process([[new Float32Array(960)]]);
+    sandbox.currentFrame = 4961;
     gapProcessor.process([[new Float32Array([0.3, 0.4])]]);
-    assert.equal(posted[3].message.type, 'protocol_error');
-    assert.equal(posted[3].message.expected_frame, 3002);
-    assert.equal(posted[3].message.received_frame, 3003);
+    assert.equal(posted[6].message.type, 'protocol_error');
+    assert.equal(posted[6].message.expected_frame, 4960);
+    assert.equal(posted[6].message.received_frame, 4961);
     await controller.stop({ discard: true });
 });
 
