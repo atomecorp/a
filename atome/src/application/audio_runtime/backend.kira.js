@@ -130,6 +130,17 @@ import {
     return wasmModulePromise;
   }
 
+  // Keep module download/compilation off the interaction path. Creating the
+  // audio manager remains deferred until unlock(), which callers invoke from
+  // the real user action that starts playback.
+  function prewarmWasmModule() {
+    return loadWasmModule().catch(function (error) {
+      wasmModulePromise = null;
+      wasm = null;
+      throw error;
+    });
+  }
+
   function ensureRuntimeMode(options) {
     var shouldCreateAudioManager = !!(options && options.audioManager);
     var runtime = resolveAudioRuntime(window);
@@ -214,8 +225,18 @@ import {
   }
 
   var backend = {
+    prewarm() {
+      var runtime = resolveAudioRuntime(window);
+      if (runtime.playback !== 'web_wasm_kira') return Promise.resolve();
+      return prewarmWasmModule();
+    },
+
+    unlock() {
+      return ensureRuntimeMode({ audioManager: true });
+    },
+
     async init() {
-      await ensureRuntimeMode({ audioManager: true });
+      await backend.unlock();
     },
 
     create_clip(arg) {
@@ -426,7 +447,9 @@ import {
     var runtime = resolveAudioRuntime(window);
     if (runtime.playback === 'web_wasm_kira') {
       audio.set_backend('kira');
-      return;
+      return backend.prewarm().catch(function (error) {
+        emitError('wasm_prewarm', error);
+      });
     }
     backend.init().then(function () {
       audio.set_backend('kira');

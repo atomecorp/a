@@ -363,7 +363,7 @@ Status: Verified by repository tree inspection and existing scripts.
 
 The architecture targets these runtime modes with the same Atome contract, command/history policy, sharing model, and synchronization rules:
 
-- Web browser: Fastify, WebGPU, Kira WASM, Symphonia WASM.
+- Web browser: Fastify, WebGPU, Kira WASM, Symphonia WASM. The Kira/WASM module may prewarm at boot, but its one output is initialized only through the ephemeral `Squirrel.av.audio.unlockPlayback()` capability invoked by the real user play action; this keeps browser autoplay policy at the platform boundary without adding a second audio engine or mutating Atome state.
 - Tauri desktop: local Axum, WebGPU, native Kira, native Symphonia, and feature-gated native Bevy command routing for the main project surface through the shared Atome Bevy core instead of the browser/WASM renderer.
 - iOS AiS companion app: AIS server, native SQLite iOS, WebGPU, native Kira, native Symphonia, and a native Bevy command boundary backed by a linked Rust Bevy staticlib; successful Rust scene validation is accepted by the import flow, and the native Metal/Bevy presenter still must be connected before the iOS main project surface can visually render.
 - AUv3: AIS server, native SQLite iOS, WebGPU, native Kira, native Symphonia, no blocking or allocation-prone realtime audio work.

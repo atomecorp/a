@@ -23,8 +23,11 @@ rm -rf "$BUILD_OUT_DIR"
 mkdir -p "$BUILD_OUT_DIR" "$OUT_DIR"
 trap 'rm -rf "$BUILD_OUT_DIR"' EXIT
 
-# Build for web target (ES module output)
-wasm-pack build \
+# Rust 1.95 emits WasmGC/reference-type descriptors that stable browser
+# engines reject (for example: "invalid heap type 'exact'"). This flag is
+# intentionally scoped to the browser audio artifact: native Tauri Kira does
+# not consume this module or inherit this compiler setting.
+RUSTFLAGS="${RUSTFLAGS:+$RUSTFLAGS }-C target-feature=-reference-types" wasm-pack build \
     --target web \
     --out-dir "$BUILD_OUT_DIR" \
     --out-name squirrel_audio_wasm \

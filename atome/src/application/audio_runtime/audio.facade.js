@@ -69,7 +69,7 @@ import { installSharedAVContracts } from './av_contracts.js';
   }
 
   // API facade: routes to active backend
-  const immediateNames = new Set(['create_clip', 'destroy_clip', 'play', 'play_instance', 'stop', 'stop_clip', 'stop_instance', 'jump', 'set_param']);
+  const immediateNames = new Set(['create_clip', 'destroy_clip', 'unlock', 'play', 'play_instance', 'stop', 'stop_clip', 'stop_instance', 'jump', 'set_param']);
   const callBackendMethod = (name, arg) => {
     if (!active || !backends[active] || typeof backends[active][name] !== 'function') {
       return false;
@@ -117,6 +117,9 @@ import { installSharedAVContracts } from './av_contracts.js';
   audio.destroy_clip = (arg) => playbackApi.unloadAsset(typeof arg === 'string' ? arg : (arg && (arg.id || arg.clip_id || arg.clipId || arg.assetId || arg.asset_id)));
   audio.play = (arg) => playbackApi.playAsset(arg);
   audio.play_instance = (arg) => playbackApi.startVoice(arg);
+  // This is an ephemeral platform capability, not an Atome mutation. Browser
+  // playback must unlock Kira while a real user gesture is still active.
+  audio.unlockPlayback = () => callBackendMethod('unlock');
   audio.stop = (arg) => playbackApi.stopAsset(arg);
   audio.stop_instance = (arg) => playbackApi.stopVoice(arg);
   audio.stop_clip = (arg) => playbackApi.stopAsset(arg);
