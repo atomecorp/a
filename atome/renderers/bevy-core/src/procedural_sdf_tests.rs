@@ -244,6 +244,9 @@ fn procedural_sdf_has_one_directional_ejection_mode() {
 #[test]
 fn procedural_sdf_keeps_clear_glass_and_a_continuous_shadow_free_aura() {
     let shader = include_str!("assets/shaders/procedural_sdf.wgsl");
+    assert!(shader.contains("let screen_uv = uv;"));
+    assert!(!shader.contains("mesh.world_position.x / surface_size.x + 0.5"));
+    assert!(!shader.contains("mesh.position.xy / max(screen_dimensions"));
     assert!(shader.contains("let glass_color = mix(original_color, blurred_color, material.optics.y)"));
     assert!(shader.contains("fn gaussian_tail"));
     assert!(shader.contains("let halo_near = gaussian_tail"));

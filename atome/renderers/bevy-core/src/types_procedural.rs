@@ -39,6 +39,12 @@ pub struct AtomeProceduralSdf {
     pub assistant_center: [f32; 2],
     #[serde(default = "default_assistant_size")]
     pub assistant_size: f32,
+    #[serde(default = "default_assistant_blur")]
+    pub background_blur_px: f32,
+    #[serde(default = "default_assistant_refraction")]
+    pub lens_refraction_px: f32,
+    #[serde(default)]
+    pub assistant_background_tint: [f32; 4],
     #[serde(default)]
     pub mode: f32,
     #[serde(default)]
@@ -58,6 +64,8 @@ pub struct AtomeProceduralSdf {
 fn default_reveal() -> f32 { 1.0 }
 fn default_surface_size() -> [f32; 2] { [1.0, 1.0] }
 fn default_assistant_size() -> f32 { 1.0 }
+fn default_assistant_blur() -> f32 { 48.0 }
+fn default_assistant_refraction() -> f32 { 24.0 }
 fn default_flower_edge_softness() -> f32 { 1.0 }
 fn finite_or(value: f32, fallback: f32) -> f32 {
     if value.is_finite() { value } else { fallback }
@@ -102,6 +110,9 @@ impl AtomeProceduralSdf {
                 finite_or(self.assistant_center[1], 0.5),
             ],
             assistant_size: finite_or(self.assistant_size, 1.0).max(1.0),
+            background_blur_px: finite_or(self.background_blur_px, 48.0).clamp(0.0, 128.0),
+            lens_refraction_px: finite_or(self.lens_refraction_px, 24.0).clamp(0.0, 128.0),
+            assistant_background_tint: self.assistant_background_tint.map(|value| finite_or(value, 0.0).clamp(0.0, 1.0)),
             mode: finite_or(self.mode, 0.0).clamp(0.0, 1.0),
             flower_count: finite_or(self.flower_count, 0.0).clamp(0.0, 8.0),
             flower_core_radius: finite_or(self.flower_core_radius, 0.0).max(0.0),

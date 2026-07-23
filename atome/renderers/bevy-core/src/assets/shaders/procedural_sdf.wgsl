@@ -12,6 +12,7 @@ struct ProceduralSdfUniform {
     shape: vec4<f32>,
     flower: vec4<f32>,
     flower_tint: vec4<f32>,
+    assistant_background_tint: vec4<f32>,
     flower_petals: array<vec4<f32>, 8>,
 }
 
@@ -95,7 +96,9 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
     let assistant_size = max(material.shape.x, 1.0);
     let pixel_position = vec2(uv.x * surface_size.x, (1.0 - uv.y) * surface_size.y);
     let screen_dimensions = vec2<f32>(textureDimensions(blurred_texture));
-    let screen_uv = clamp(mesh.position.xy / max(screen_dimensions, vec2(1.0)), vec2(0.0), vec2(1.0));
+    // This material owns one full-workspace quad. Its interpolated UVs map
+    // directly to the workspace capture regardless of viewport or DPR.
+    let screen_uv = uv;
     if material.flower.x > 0.5 {
         return flower_liquid(pixel_position, screen_uv);
     }
@@ -182,6 +185,7 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
     let original_color = textureSample(original_texture, original_sampler, refracted_uv).rgb;
     let blurred_color = textureSample(blurred_texture, blurred_sampler, refracted_uv).rgb;
     let glass_color = mix(original_color, blurred_color, material.optics.y);
+    let tinted_glass_color = mix(glass_color, material.assistant_background_tint.rgb, material.assistant_background_tint.a);
     let glass_alpha = shell_mask * shell_shape_reveal;
 
     let core_inertia = select(0.0, destructive_pull * mix(0.10, 0.18, gesture_velocity), destructive_active);
@@ -213,7 +217,7 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
         * (1.0 - shell_mask) * shell_shape_reveal * material.optics.w;
     let destructive_alpha = select(1.0, 1.0 - smoothstep(0.85, 1.0, destructive_progress), destructive_active);
     let base_alpha = max(max(max(shell_alpha, core_alpha), glow_alpha), max(glass_alpha, halo_alpha)) * destructive_alpha;
-    var color = glass_color * glass_alpha;
+    var color = tinted_glass_color * glass_alpha;
     color = mix(color, vec3(1.0, 0.55, 0.58), glow_alpha);
     color += mix(cyan, rose, shell_mix) * halo_alpha;
     color = mix(color, shell_color, shell_alpha);

@@ -33,9 +33,9 @@ pub struct AssistantOpticsSettings {
 impl Default for AssistantOpticsSettings {
     fn default() -> Self {
         Self {
-            blur_radius_px: 16.0,
+            blur_radius_px: 48.0,
             refraction_px: 24.0,
-            glass_mix: 0.48,
+            glass_mix: 1.0,
             rim_refraction_start: 0.20,
             halo_opacity: 0.10,
         }
@@ -45,7 +45,7 @@ impl Default for AssistantOpticsSettings {
 impl AssistantOpticsSettings {
     pub fn normalized(self) -> Self {
         Self {
-            blur_radius_px: self.blur_radius_px.clamp(0.0, 32.0),
+            blur_radius_px: self.blur_radius_px.clamp(0.0, 128.0),
             refraction_px: self.refraction_px.clamp(0.0, 32.0),
             glass_mix: self.glass_mix.clamp(0.0, 1.0),
             rim_refraction_start: self.rim_refraction_start.clamp(0.0, 0.95),
@@ -197,7 +197,7 @@ pub fn set_workspace_blur_radius(
         .map(|config| config.device_pixel_ratio)
         .unwrap_or(1.0)
         .max(1.0);
-    let radius = logical_radius_px.clamp(0.0, 32.0) * device_pixel_ratio;
+    let radius = logical_radius_px.clamp(0.0, 128.0) * device_pixel_ratio;
     let mut materials = world
         .get_resource_mut::<Assets<WorkspaceBlurMaterial>>()
         .ok_or_else(|| "bevy_workspace_blur_material_assets_required".to_string())?;

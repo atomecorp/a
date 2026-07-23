@@ -13,7 +13,7 @@ use bevy::{
 use crate::workspace_backdrop::{
     set_workspace_backdrop_enabled, AtomeWorkspaceBackdrop, FLOWER_PRESENTATION_LAYER,
 };
-use crate::workspace_blur::AssistantOpticsSettings;
+use crate::workspace_blur::{set_workspace_blur_radius, AssistantOpticsSettings};
 use crate::{types::AtomeProceduralSdf, video_external_texture::video_quad_mesh_handle_from_size};
 
 const PROCEDURAL_SDF_SHADER_HANDLE: Handle<Shader> =
@@ -32,6 +32,7 @@ pub struct ProceduralSdfUniform {
     pub shape: Vec4,
     pub flower: Vec4,
     pub flower_tint: Vec4,
+    pub assistant_background_tint: Vec4,
     pub flower_petals: [Vec4; 8],
 }
 
@@ -135,6 +136,7 @@ fn material_from_contract(
                 normalized.flower_tint[2],
                 normalized.flower_tint[3],
             ),
+            assistant_background_tint: Vec4::from_array(normalized.assistant_background_tint),
             flower_petals: normalized.flower_petals.map(Vec4::from_array),
         },
         original_backdrop,
@@ -152,16 +154,16 @@ pub fn insert_procedural_sdf(
         .get_resource::<AtomeWorkspaceBackdrop>()
         .map(|state| (state.image.clone(), state.blur.vertical_image.clone()))
         .ok_or_else(|| "bevy_workspace_backdrop_required".to_string())?;
-    let optics = world
+    let normalized = contract.normalized();
+    let device_pixel_ratio = world.get_resource::<crate::types::AtomeBevyRendererConfig>().map(|config| config.device_pixel_ratio).unwrap_or(1.0);
+    let mut optics = world
         .get_resource::<AssistantOpticsSettings>()
         .copied()
         .unwrap_or_default()
-        .sdf_uniform(
-            world
-                .get_resource::<crate::types::AtomeBevyRendererConfig>()
-                .map(|config| config.device_pixel_ratio)
-                .unwrap_or(1.0),
-        );
+        .sdf_uniform(device_pixel_ratio);
+    optics.x = normalized.lens_refraction_px * device_pixel_ratio.max(1.0);
+    let backdrop = world.get_resource::<AtomeWorkspaceBackdrop>().cloned().ok_or_else(|| "bevy_workspace_backdrop_required".to_string())?;
+    set_workspace_blur_radius(world, &backdrop.blur, normalized.background_blur_px)?;
     let mesh = {
         let mut meshes = world
             .get_resource_mut::<Assets<Mesh>>()
@@ -173,7 +175,7 @@ pub fn insert_procedural_sdf(
             .get_resource_mut::<Assets<ProceduralSdfMaterial>>()
             .ok_or_else(|| "bevy_procedural_sdf_assets_required".to_string())?;
         materials.add(material_from_contract(
-            contract,
+            normalized,
             original_backdrop,
             blurred_backdrop,
             optics,
@@ -218,6 +220,10 @@ pub fn patch_procedural_sdf(
         .get::<MeshMaterial2d<ProceduralSdfMaterial>>(entity)
         .map(|material| material.0.clone())
         .ok_or_else(|| "bevy_procedural_sdf_component_missing".to_string())?;
+    let normalized = contract.normalized();
+    let device_pixel_ratio = world.get_resource::<crate::types::AtomeBevyRendererConfig>().map(|config| config.device_pixel_ratio).unwrap_or(1.0);
+    let backdrop = world.get_resource::<AtomeWorkspaceBackdrop>().cloned().ok_or_else(|| "bevy_workspace_backdrop_required".to_string())?;
+    set_workspace_blur_radius(world, &backdrop.blur, normalized.background_blur_px)?;
     let mut materials = world
         .get_resource_mut::<Assets<ProceduralSdfMaterial>>()
         .ok_or_else(|| "bevy_procedural_sdf_assets_required".to_string())?;
@@ -226,7 +232,8 @@ pub fn patch_procedural_sdf(
         .ok_or_else(|| "bevy_procedural_sdf_material_missing".to_string())?;
     let original_backdrop = material.original_backdrop.clone();
     let blurred_backdrop = material.blurred_backdrop.clone();
-    let optics = material.uniform.optics;
-    *material = material_from_contract(contract, original_backdrop, blurred_backdrop, optics);
+    let mut optics = material.uniform.optics;
+    optics.x = normalized.lens_refraction_px * device_pixel_ratio.max(1.0);
+    *material = material_from_contract(normalized, original_backdrop, blurred_backdrop, optics);
     Ok(())
 }

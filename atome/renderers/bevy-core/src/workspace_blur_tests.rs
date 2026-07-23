@@ -18,21 +18,21 @@ use crate::{
 #[test]
 fn assistant_optics_settings_are_bounded() {
     let settings = AssistantOpticsSettings {
-        blur_radius_px: 100.0,
+        blur_radius_px: 1_000.0,
         refraction_px: -4.0,
         glass_mix: 2.0,
         rim_refraction_start: 1.0,
         halo_opacity: 0.8,
     }
     .normalized();
-    assert_eq!(settings.blur_radius_px, 32.0);
+    assert_eq!(settings.blur_radius_px, 128.0);
     assert_eq!(settings.refraction_px, 0.0);
     assert_eq!(settings.glass_mix, 1.0);
     assert_eq!(settings.rim_refraction_start, 0.95);
     assert_eq!(settings.halo_opacity, 0.10);
     let defaults = AssistantOpticsSettings::default();
-    assert_eq!(defaults.blur_radius_px, 16.0);
-    assert_eq!(defaults.glass_mix, 0.48);
+    assert_eq!(defaults.blur_radius_px, 48.0);
+    assert_eq!(defaults.glass_mix, 1.0);
     assert_eq!(defaults.sdf_uniform(2.0).x, 48.0);
 }
 
@@ -86,11 +86,11 @@ fn workspace_blur_pipeline_has_ordered_reusable_passes() {
     assert_eq!(vertical.source, state.blur.horizontal_image);
     assert_eq!(
         horizontal.uniform.direction_radius,
-        Vec4::new(1.0, 0.0, 16.0, 0.0)
+        Vec4::new(1.0, 0.0, 48.0, 0.0)
     );
     assert_eq!(
         vertical.uniform.direction_radius,
-        Vec4::new(0.0, 1.0, 16.0, 0.0)
+        Vec4::new(0.0, 1.0, 48.0, 0.0)
     );
 
     for _ in 0..5 {
