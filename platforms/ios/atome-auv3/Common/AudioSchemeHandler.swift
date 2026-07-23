@@ -41,6 +41,10 @@ class AudioSchemeHandler: NSObject, WKURLSchemeHandler {
             serveSandboxFile(relativePath: relative, label: "file", task: urlSchemeTask)
             return
         }
+        if path.hasPrefix("/api/recordings/") {
+            serveRecording(url: url, path: path, task: urlSchemeTask)
+            return
+        }
         
         if serveStatic(path: path, task: urlSchemeTask) { return }
         print("[AudioSchemeHandler] 404 for path=\(path)")
@@ -133,6 +137,28 @@ document.getElementById('player').addEventListener('error', e => {
             print("[AudioSchemeHandler] Error serving file: \(error)")
             respond404(task: task)
         }
+    }
+
+    private func serveRecording(url: URL, path: String, task: WKURLSchemeTask) {
+        let fileName = String(path.dropFirst("/api/recordings/".count))
+        let userId = URLComponents(url: url, resolvingAgainstBaseURL: false)?
+            .queryItems?
+            .first(where: { $0.name == "media_user_id" })?
+            .value ?? ""
+        guard let safeFileName = SandboxPathValidator.sanitizedRelativePath(fileName),
+              !safeFileName.contains("/"),
+              let safeUserId = SandboxPathValidator.sanitizedRelativePath(userId),
+              !safeUserId.isEmpty,
+              !safeUserId.contains("/") else {
+            SandboxPathValidator.reportViolation(path: path, context: "AudioSchemeHandler.recording")
+            respond404(task: task)
+            return
+        }
+        serveSandboxFile(
+            relativePath: "data/users/\(safeUserId)/recordings/\(safeFileName)",
+            label: "recording",
+            task: task
+        )
     }
     
     private func parseRange(rangeHeader: String, fileLength: Int64) -> Range<Int>? {

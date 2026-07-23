@@ -104,11 +104,35 @@ test('main menu projects audio scope, video thumbnail and photo flash inside the
     assert.doesNotThrow(() => normalizeBevyUiTree({ id: photoTree.id, tree: photoTree }));
 });
 
-test('recording feedback never changes the main menu composition', () => {
+test('recording feedback keeps only the active main-menu tool visible during capture', () => {
     assert.deepEqual(
         buildBevyMainMenuItems(content, { activePaletteKey: 'capture' }).map((item) => item.key),
         ['atome', 'capture', 'audio', 'video', 'photo']
     );
+    const tree = buildBevyMainMenuTree({
+        content,
+        surface,
+        itemSize: 60,
+        state: treeState(new Map([['ui.capture.audio', {
+            toolId: 'ui.capture.audio', kind: 'audio_scope', phase: 'recording', sessionId: 'audio_1'
+        }]])),
+        handlers: {}
+    });
+    assert.deepEqual(tree.visualItems.map((item) => item.toolId), ['ui.capture.audio']);
+    assert.equal(tree.layout.width, 60);
+});
+
+test('an orphaned recording visual never hides the canonical main menu', () => {
+    const tree = buildBevyMainMenuTree({
+        content,
+        surface,
+        itemSize: 60,
+        state: treeState(new Map([['stale.capture', {
+            toolId: 'stale.capture', kind: 'audio_scope', phase: 'recording', sessionId: 'stale_1'
+        }]])),
+        handlers: {}
+    });
+    assert.deepEqual(tree.visualItems.map((item) => item.key), ['photo', 'video', 'audio', 'capture', 'atome']);
 });
 
 test('audio scope uses fixed logarithmic levels without fake silence movement', () => {
@@ -308,6 +332,33 @@ test('capture feedback binds the live sources and clears only the matching sessi
     await video.dispose();
     assert.equal(unregisterVideo.mock.calls.length, 1);
     assert.equal(stream.getTracks()[0].stop.mock.calls.length, 0);
+});
+
+test('capture feedback keeps Flower and main-menu visual sessions isolated', async () => {
+    const flower = {
+        setToolRecordingVisual: vi.fn(async () => ({ ok: true })),
+        clearToolRecordingVisual: vi.fn(async () => true)
+    };
+    const mainMenu = {
+        setToolRecordingVisual: vi.fn(async () => ({ ok: true })),
+        clearToolRecordingVisual: vi.fn(async () => true)
+    };
+    const runtime = createCaptureRecordingFeedbackRuntime({
+        captureVisualState: { activeSession: null, sequence: 0 },
+        flowerResolver: () => flower,
+        mainMenuResolver: () => mainMenu
+    });
+
+    const mainSession = await runtime.startCaptureVisualSession({ kind: 'audio', presentation: 'main_menu' });
+    assert.equal(mainMenu.setToolRecordingVisual.mock.calls.length, 1);
+    assert.equal(flower.setToolRecordingVisual.mock.calls.length, 0);
+    await mainSession.dispose();
+    assert.equal(mainMenu.clearToolRecordingVisual.mock.calls.length, 1);
+
+    const flowerSession = await runtime.startCaptureVisualSession({ kind: 'audio', presentation: 'flower' });
+    assert.equal(flower.setToolRecordingVisual.mock.calls.length, 1);
+    await flowerSession.dispose();
+    assert.equal(flower.clearToolRecordingVisual.mock.calls.length, 1);
 });
 
 test('two successive audio Flower sessions get independent scope subscriptions and leave no stale visual', async () => {

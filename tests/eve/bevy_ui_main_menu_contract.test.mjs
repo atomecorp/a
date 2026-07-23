@@ -266,8 +266,8 @@ test('BevyUI main menu mounts only BevyUI nodes and preserves the internal runti
         assert.deepEqual(childBySuffix(atome, '_icon').style.size, [iconSize, iconSize]);
         assert.deepEqual(childBySuffix(atome, '_icon').image.tint, LIGHTGRAY_ICON_TINT);
         assert.deepEqual(childBySuffix(atome, '_icon').image.tint, childBySuffix(findNode(tree.root, 'eve_bevy_ui_main_menu_tool_home'), '_icon').image.tint);
-        assert.equal(childBySuffix(atome, '_label').text, 'Atome');
-        assert.equal(childBySuffix(atome, '_label').image.text, 'Atome');
+        assert.equal(childBySuffix(atome, '_label').text, 'atome');
+        assert.equal(childBySuffix(atome, '_label').image.text, 'atome');
         assert.deepEqual(childBySuffix(atome, '_label').image.tint, STANDARD_LABEL_TINT);
         assert.equal(childBySuffix(atome, '_label').image.opacity, 1);
         assert.equal(childBySuffix(atome, '_icon').image.opacity, 1);
@@ -783,6 +783,7 @@ test('BevyUI invocation forwards its latch state as routing metadata, never tool
         });
         assert.equal(result.nextLatched, false);
         assert.equal(invocations.length, 1);
+        assert.equal(invocations[0].sourceLayer, 'bevy_ui_main_menu');
         assert.equal(invocations[0].previousLatched, true);
         assert.equal(Object.hasOwn(invocations[0].extraInput, 'previousLatched'), false);
     } finally {

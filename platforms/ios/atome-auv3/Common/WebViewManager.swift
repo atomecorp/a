@@ -193,7 +193,7 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
                             var m=document.createElement('meta');
                             m.name='viewport';
                             m.content='width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover';
-                            document.head.appendChild(m);
+                            (document.head || document.documentElement).appendChild(m);
                         } else if(!/viewport-fit=cover/.test(document.querySelector('meta[name=viewport]').content)) {
                             document.querySelector('meta[name=viewport]').content += ',viewport-fit=cover';
                         }

@@ -280,6 +280,18 @@ test('iOS custom scheme serves Bevy WASM and project file media', () => {
         'iOS scheme must serve Bevy WASM with the application/wasm MIME type'
     );
     assert.ok(
+        audioSchemeHandlerSource.includes('path.hasPrefix("/api/recordings/")'),
+        'iOS scheme must resolve canonical recording media routes'
+    );
+    assert.ok(
+        audioSchemeHandlerSource.includes('data/users/\\(safeUserId)/recordings/\\(safeFileName)'),
+        'iOS recording routes must resolve through the owner-scoped sandbox path'
+    );
+    assert.ok(
+        webViewManagerSource.includes('(document.head || document.documentElement).appendChild(m)'),
+        'iOS viewport injection must work before document.head exists'
+    );
+    assert.ok(
         audioSchemeHandlerSource.includes('components?.query = nil'),
         'iOS scheme routing must ignore cache-version queries when resolving bundled assets'
     );
