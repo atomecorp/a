@@ -27,16 +27,31 @@ privacy, cost, and cross-platform contract are approved.
 Use exactly one status per stage: `planned`, `in_review`, `validated`, or
 `superseded`.
 
-## Mandatory one-component approval loop
+## Mandatory one-new-component approval loop
 
-Every component follows this closed loop. No step may be skipped, combined with
-another component type, or inferred from a previous approval:
+Every new component follows this closed loop. No new component type may be
+skipped, combined with another new type, or inferred from a previous approval:
 
 1. Before implementation, recommend the next component type and explain why it
    is the most judicious next dependency for shared controls and product-panel
    coverage.
-2. Inspect the already approved component, panel, home, menu, and system-control
-   tokens. Present the proposed visual integration to the product owner,
+2. Inspect the native BevyUI widget vocabulary and the canonical Atome/Squirrel
+   system-control contract before inspecting approved component, panel, home,
+   menu, and system-control tokens. Before selecting an implementation, record
+   a BevyUI integration decision for the component: the available widget kinds,
+   the actual native/WASM runtime availability, the canonical Atome/Squirrel
+   control contract, the chosen route, and the rejected alternatives. Direct
+   use of an existing BevyUI widget is preferred whenever it covers the
+   required behavior and presentation. A panel-local builder may configure or
+   compose that widget, but may not reimplement its rendering, interaction
+   semantics, geometry rules, state ownership, or styling contract. A custom
+   composition is allowed only when the record proves that the library lacks a
+   suitable primitive or extension point; it must compose existing primitives,
+   preserve the shared WebGPU route, and introduce no parallel widget contract.
+   A reusable missing system control must be completed in the canonical
+   Atome/Squirrel component system first, then consumed through BevyUI; an
+   eVe-local graphical substitute is forbidden. Present the proposed visual
+   integration to the product owner,
    including which styles must be shared, which existing style is reused, the
    intended panel placements, exact geometry, typography, colors, states, and
    component behavior. Ask explicitly whether the component must inherit the
@@ -44,12 +59,22 @@ another component type, or inferred from a previous approval:
 3. If any visual or behavioral detail is unspecified, update this guide and
    obtain explicit product-owner approval of the complete specimen contract
    before changing implementation code.
-4. Mount exactly one visible specimen of exactly one component type in Panel
-   Lab. Do not mount duplicates, alternative types, a product composition,
-   diagnostic content, or an unrelated control. Multiple variants or states
-   cannot be shown together unless the product owner first approves them as the
-   single component type's explicit test contract.
-5. Run focused automated contracts, then open the actual browser test
+4. Before implementation and before presenting the result, report the current
+   counters: checked and remaining global execution-order tasks, approved and
+   remaining shared components (out of 10), approved and remaining product
+   panels (out of 16), and legacy HTML panel routes still pending retirement
+   (out of 13). The counts must be derived from this ledger and
+   `todo/execution_order.md`; they must never be copied forward without
+   checking their current evidence.
+5. Mount one specimen of the newly introduced component type in Panel Lab and
+   retain every previously approved specimen in chronological body flow. Do not
+   remove, replace, duplicate, or restyle an approved specimen merely because
+   a new component is being reviewed. Do not mount alternative variants,
+   unapproved component types, product composition, diagnostic content, or
+   unrelated controls. Multiple variants or states cannot be shown together
+   unless the product owner first approves them as that component's explicit
+   test contract.
+6. Run focused automated contracts, then open the actual browser test
    environment and inspect the real shared canvas visually. Exercise every
    declared interaction using real input. An input must accept focus, typed
    text, editing and deletion and must visibly report the resulting value; a
@@ -58,11 +83,11 @@ another component type, or inferred from a previous approval:
    clamping, and close behavior. Verify the Panel Lab short-open,
    short-close, long-press reload, and post-reload reopen contracts as part of
    every specimen check.
-6. Present only that specimen to the product owner, state exactly what was
-   tested and what the product owner should inspect, and wait for explicit
-   visual and behavioral approval. Automated tests and the agent's visual
-   inspection never replace this approval.
-7. If rejected, correct the same specimen, rerun every applicable check, and
+7. Present the newly introduced specimen to the product owner in the cumulative
+   Lab, state exactly what was tested and what the product owner should inspect,
+   and wait for explicit visual and behavioral approval. Automated tests and
+   the agent's visual inspection never replace this approval.
+8. If rejected, correct the same specimen, rerun every applicable check, and
    resubmit it. If approved, record its canonical builders, tokens, intents,
    test evidence, and reuse decision before recommending the next component.
 
@@ -141,13 +166,21 @@ Status: `in_review`
 Validate exactly one component type at a time in Panel Lab in this order: text,
 separator, tool button, input, list/row, slider tool, accordion, select,
 checkbox/radio/toggle, and table/property grid. A separator is an optional
-product-composition component. Every component must use the shared panel skin
-and emit intents only.
+product-composition component. Every component must choose the strongest
+available BevyUI widget route as its rendering primitive, use the shared panel
+skin, and emit intents only. Direct native/WASM widget use is preferred when it
+is available; an unavailable native route must be recorded with evidence rather
+than silently emulated. Panel Lab and product surfaces must configure or compose
+the canonical BevyUI/Atome/Squirrel component; they must never recreate a
+widget with local drawing, interaction, state, or styling code. Each approval
+record must include the component's BevyUI integration decision and state
+whether the native/WASM widget route was available, used, or unavailable with
+evidence.
 
 ### First specimen contract — static body text
 
-The first and only Lab specimen is one static body-text node. Its contract is
-fully fixed before implementation:
+The first Lab specimen is one static body-text node. Its contract is fully
+fixed before implementation:
 
 - builder: the shared `textNode` from `bevy_panel_tree.js`; no Lab-local text
   factory;
@@ -161,7 +194,8 @@ fully fixed before implementation:
 - paint: `BEVY_PANEL_TOKENS.colors.text`, transparent background, no border,
   radius, shadow, icon, diagnostic label, or state decoration;
 - behavior: static and non-interactive, with no event handler, mutation,
-  diagnostic counter, duplicate text, separator, or second component;
+  diagnostic counter, duplicate text, separator, or second component at its
+  initial approval gate;
 - content must fit on one line in the specimen box; wrapping, truncation, and
   editable-text behavior are outside this specimen and cannot be introduced
   implicitly.
@@ -193,13 +227,36 @@ Validation record — 2026-07-23:
   skin tokens. Lab-local text factories, offsets, and rasterizers remain
   forbidden.
 
-The separator may now be specified, but must complete its own full approval
-loop before implementation.
+### Second specimen contract — horizontal divider
+
+The separator is approved as the second shared specimen:
+
+- builder: shared `dividerNode` in `bevy_panel_tree.js`; no Lab-local factory;
+- geometry: native `1 px` horizontal height and automatic body-width stretch
+  after the canonical `21 px` left and right margins;
+- paint: `BEVY_PANEL_TOKENS.colors.divider`, system white at 25% opacity;
+- behavior: passive and structural only, with no text, interaction, state,
+  mutation, border, radius, shadow, or local size override.
+
+Validation record — 2026-07-23:
+
+- Approved by the product owner after integrated-browser inspection.
+- Canonical builder and tokens: `dividerNode`, `colors.divider`, and
+  `dividerMarginHorizontalPx` from the shared panel skin; intent: none.
+- Evidence: focused Panel Lab and projection tests passed; the projection
+  contract resolves a `420 px` body with `10 px` padding to `358 × 1 px` at
+  `x = 31 px`. Syntax, M0, main-menu contract, and whitespace checks passed.
+  The real shared canvas showed the divider, short open/close and
+  post-reload reopen, with no console warnings or errors.
+- Reuse decision: approved Lab specimens now remain mounted cumulatively in
+  chronological body flow. The text specimen remains visible above this divider
+  for every later component review.
 
 The Lab body remains empty until the shared PanelRoot and FooterControls have
-been reviewed. After that review, each Lab entry contains one specimen of one
-component type only: no Timeline content, domain data, diagnostic status,
-duplicate controls, or product mutation is allowed. The specimen must expose
+been reviewed. After that review, it grows cumulatively with each approved
+specimen in approval order. No approved specimen may be removed before Panel
+Lab retirement. There is no Timeline content, domain data, diagnostic status,
+duplicate control, or product mutation. The newly reviewed specimen must expose
 only the behavior belonging to its component type: text is static; an input
 accepts and reports text; each toggle/radio/momentary-tool behavior is tested
 as its own state; and a slider tool expands, tracks drag/touch movement, and
@@ -212,7 +269,8 @@ presenting any Lab or component change, visibly verify all three actions on the
 real shared canvas, then confirm that the Lab still opens and closes after the
 reload.
 
-After each component, apply the full mandatory approval loop above. The
+After each component, apply the full mandatory approval loop above and retain
+the approved component in Panel Lab. The
 approved tool-button tokens are the shared reference for panels, home, menus,
 and system controls; panel-local button colors or tool appearances are
 forbidden. Tool buttons and slider tools must compose the existing canonical
@@ -247,14 +305,24 @@ confirm its active registry mapping (`home` currently owns `tools/user.js`) and
 its complete required-component inventory; do not assume a second unregistered
 surface.
 
-Open the completed composition in the actual browser, verify its visual
-hierarchy and every real interaction, run its focused contracts, and submit it
+Before each panel composition and its approval presentation, report the same
+current global-task, component, product-panel, and legacy-HTML-route counters
+required by the component loop. Open the completed composition in the actual
+browser, verify its visual hierarchy and every real interaction, run its focused
+contracts, and submit it
 for explicit product-owner approval. If it is rejected, repair and revalidate
 the same panel. Only after functional parity and explicit approval may the
 visible HTML route, builders, styles, listeners, and obsolete tests be deleted.
 Then prove that only the Bevy route remains and that no visible DOM or double
 rendering survives. A partial Bevy panel and an HTML panel must never be active
 in parallel.
+
+Program finalization lock: only once all 16 product panels have functional
+parity, focused evidence, and explicit approval, delete every remaining legacy
+panel HTML route, builder, style, listener, fixture, and obsolete test. Verify
+that active source and tests contain no executable legacy panel HTML rendering
+path and that the shared BevyUI route is the only product-panel renderer. This
+HTML retirement is a required final migration task, not deferred cleanup.
 
 Cross-platform and responsive validation occurs only at the complete-panel
 gate, after all of that panel's components and its integrated browser

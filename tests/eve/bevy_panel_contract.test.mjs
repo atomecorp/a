@@ -279,15 +279,25 @@ test('Panel Lab is development-gated and uses the shared panel skin', async () =
     assert.deepEqual(panel.style.shadow, material.shadow);
     assert.equal(mounted[0].presentation, true);
     assert.deepEqual(body.style.background, EVE_PANEL_SKIN_TOKENS.bevyPanel.colors.transparent);
-    assert.equal(body.children.length, 1, 'Panel Lab must mount exactly one approved component specimen');
-    const specimen = findNode(mounted[0], 'panel_lab_static_body_text');
-    assert.equal(specimen.kind, 'text');
-    assert.equal(specimen.text, 'Texte de démonstration');
-    assert.deepEqual(specimen.style.size, [200, 24]);
-    assert.equal(specimen.style.font_size, BEVY_PANEL_TOKENS.bodyTextSizePx);
-    assert.equal(specimen.style.font_weight, BEVY_PANEL_TOKENS.bodyTextWeight);
-    assert.equal(specimen.style.line_height, BEVY_PANEL_TOKENS.bodyTextLineHeightPx);
-    assert.equal(specimen.style.text_align, 'left');
+    assert.equal(body.children.length, 2, 'Panel Lab must retain every approved component specimen');
+    const textSpecimen = findNode(mounted[0], 'panel_lab_static_body_text');
+    assert.equal(textSpecimen.kind, 'text');
+    assert.equal(textSpecimen.text, 'Texte de démonstration');
+    assert.equal(textSpecimen.on, undefined);
+    assert.deepEqual(textSpecimen.style.size, [200, 24]);
+    assert.equal(textSpecimen.style.font_size, BEVY_PANEL_TOKENS.bodyTextSizePx);
+    assert.equal(textSpecimen.style.font_weight, BEVY_PANEL_TOKENS.bodyTextWeight);
+    assert.equal(textSpecimen.style.line_height, BEVY_PANEL_TOKENS.bodyTextLineHeightPx);
+    assert.equal(textSpecimen.style.text_align, 'left');
+    const dividerSpecimen = findNode(mounted[0], 'panel_lab_horizontal_divider');
+    assert.equal(dividerSpecimen.kind, 'divider');
+    assert.equal(dividerSpecimen.text, undefined);
+    assert.equal(dividerSpecimen.on, undefined);
+    assert.equal(dividerSpecimen.style.size, undefined);
+    assert.deepEqual(dividerSpecimen.style.background, BEVY_PANEL_TOKENS.colors.divider);
+    assert.deepEqual(dividerSpecimen.style.margin, [0, BEVY_PANEL_TOKENS.dividerMarginHorizontalPx, 0, BEVY_PANEL_TOKENS.dividerMarginHorizontalPx]);
+    assert.equal(BEVY_PANEL_TOKENS.dividerMarginHorizontalPx, 21);
+    assert.deepEqual(BEVY_PANEL_TOKENS.colors.divider, [1, 1, 1, 0.25]);
     assert.equal(EVE_DEFAULT_MESSAGES.fr['eve.panel_lab.static_body_text'], 'Texte de démonstration');
     assert.equal(EVE_DEFAULT_MESSAGES.en['eve.panel_lab.static_body_text'], 'Demonstration text');
     assert.deepEqual(footer.style.background, BEVY_MENU_TOKENS.clear);
@@ -342,6 +352,31 @@ test('Bevy UI text projection preserves canonical node typography', () => {
         padding_x: 0,
         padding_y: 0
     });
+});
+
+test('Bevy UI divider projection preserves native stretch and margins', () => {
+    const records = projectBevyUiTreeRecords({
+        tree: {
+            root: {
+                id: 'root', kind: 'root', style: { size: [420, 260] }, children: [{
+                    id: 'body', kind: 'scroll_area', style: {
+                        size: [420, 260], padding: [10, 10, 10, 10], flex_direction: 'column'
+                    }, children: [{
+                        id: 'divider', kind: 'divider', style: {
+                            background: [1, 1, 1, 0.25], margin: [0, 21, 0, 21]
+                        }
+                    }]
+                }]
+            }
+        },
+        treeId: 'divider_contract',
+        workspaceLayer: 'panel'
+    });
+    const divider = records.find((record) => record.id === '__eve_bevy_ui_divider_contract_divider');
+    assert.deepEqual(
+        [divider?.properties?.left, divider?.properties?.top, divider?.properties?.width, divider?.properties?.height],
+        [31, 10, 358, 1]
+    );
 });
 
 test('Panel layer wins canvas hit-testing over Dashboard-local z-index', async () => {

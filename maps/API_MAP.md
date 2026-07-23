@@ -165,10 +165,11 @@ Exposure: existing semi-public closed `openPanelSurface(surfaceKey, context)` an
 
 The temporary development/test-only `ui.dev.panel_lab` tool is not a public or semi-public API. It is registered only when the internal Panel Lab gate is enabled, delegates to the same closed panel route, and must be removed after the shared component migration is complete. Its short activation toggles the Lab through that route; its 520 ms long press is a development-only `window.location.reload()` action and suppresses the matching toggle activation.
 
-Panel Lab mounts exactly one approved component specimen at a time; its current
-specimen is one static shared body-text node. Product-surface composition
-reviews start only after their required primitives are approved; it is never a
-second Timeline API or state owner.
+Panel Lab introduces exactly one new component specimen per approval loop and
+retains all approved specimens in chronological body flow; its current shared
+specimens are static body text and a passive horizontal divider. Product-surface
+composition reviews start only after their required primitives are approved; it
+is never a second Timeline API or state owner.
 
 Boundary status: Semi-public closed eVe product runtime. The panel view emits UI intentions only; durable mutations stay in existing owners such as Timeline, Calendar, profile, Asset Box, Molecule session, or Atome commit APIs. The Bevy panel path must not create visible panel DOM, a `tools_dock`, a second canvas, or a fallback renderer.
 
