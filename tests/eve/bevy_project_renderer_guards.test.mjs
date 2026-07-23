@@ -72,10 +72,23 @@ test('Bevy project renderer guards lock canvas ownership, drag, and video playba
     );
 
     const selectedPlayback = readSource('eVe/domains/media/selected_project_media_playback_runtime.js');
+    const mediaReaderRuntime = readSource('eVe/intuition/runtime/eve_intuition/media_reader_tool_runtime.js');
     assert.doesNotMatch(selectedPlayback, /setBevyVideoDecodePlayback/);
     assert.doesNotMatch(selectedPlayback, /updateProjectSceneRecordByAtomeId/);
     assert.doesNotMatch(selectedPlayback, /media_playback_active|mediaPlaybackActive/);
     assert.match(selectedPlayback, /selected_project_video_timeline_required/);
+    assert.match(selectedPlayback, /videoPlaybackCompleted/);
+    assert.match(selectedPlayback, /projectMediaVoiceId/);
+    const playHandlerStart = mediaReaderRuntime.indexOf("tool_id: 'ui.play'");
+    assert.notEqual(playHandlerStart, -1);
+    const playHandler = mediaReaderRuntime.slice(playHandlerStart);
+    assert.match(playHandler, /const mediaResult = await runMediaReaderAction\('toggle'/);
+    assert.match(playHandler, /const animationResult = mediaResult\?\.handled === true/);
+    assert.ok(
+        playHandler.indexOf("const mediaResult = await runMediaReaderAction('toggle'")
+        < playHandler.indexOf('const animationResult = mediaResult?.handled === true'),
+        'ui.play must let the media reader own video transport before any animation fallback'
+    );
 
     const decodeRuntime = readSource('eVe/domains/rendering/bevy_video_decode_source_runtime.js');
     const streamSourceRuntime = readSource('eVe/domains/rendering/bevy_video_stream_source_runtime.js');
