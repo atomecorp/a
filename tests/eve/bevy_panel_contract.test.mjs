@@ -13,6 +13,7 @@ import { BEVY_PANEL_TOKENS } from '../../eVe/intuition/runtime/bevy_panel/bevy_p
 import { EVE_TOOL_SKIN_TOKENS } from '../../eVe/elements/skin/tool_skin.js';
 import { EVE_DEFAULT_MESSAGES } from '../../eVe/i18n/languages.js';
 import { projectBevyUiTreeRecords } from '../../eVe/domains/rendering/bevy_ui_overlay_record_projection.js';
+import { buildBevyFooterCloseRingNode } from '../../eVe/intuition/ribbon/bevy_ui_menu_surface.js';
 
 const repoRoot = dirname(dirname(dirname(fileURLToPath(import.meta.url))));
 
@@ -119,18 +120,33 @@ test('Bevy panel contract removes tools dock and keeps system controls in footer
     assert.equal(close.accessibility?.role, 'button');
     assert.deepEqual(close.accessibility?.actions, ['activate']);
     assert.equal(close.style.size[1], BEVY_PANEL_TOKENS.footerHeightPx, 'close target must occupy the full footer height');
-    assert.deepEqual(closeIndicator.style.size, [EVE_TOOL_SKIN_TOKENS.bevyMenu.footerCloseRing.diameterPx, EVE_TOOL_SKIN_TOKENS.bevyMenu.footerCloseRing.diameterPx]);
+    const closeDiameter = EVE_TOOL_SKIN_TOKENS.bevyMenu.footerCloseRing.diameterPx;
+    const closeBorder = EVE_TOOL_SKIN_TOKENS.bevyMenu.footerCloseRing.borderPx;
+    assert.deepEqual(closeIndicator.style.size, [closeDiameter, closeDiameter]);
+    assert.deepEqual(closeIndicator.style.position, [4.5, 7.5]);
     assert.equal(closeIndicator.kind, 'panel');
-    assert.equal(closeIndicator.children.length, 36);
-    assert.ok(closeIndicator.children.every((segment) => (
+    const closeFill = findNode(tree, 'eve_bevy_panel_timeline_footer_close_indicator_fill');
+    const closeSegments = closeIndicator.children.filter((segment) => segment.id.includes('_segment_'));
+    assert.deepEqual(closeFill.style.size, [closeDiameter - (closeBorder * 2), closeDiameter - (closeBorder * 2)]);
+    assert.deepEqual(closeFill.style.position, [3, 7]);
+    assert.deepEqual(closeFill.style.background, EVE_TOOL_SKIN_TOKENS.bevyMenu.footerCloseRing.fillColor);
+    assert.equal(closeIndicator.children.length, 37);
+    assert.equal(closeSegments.length, 36);
+    assert.ok(closeSegments.every((segment) => (
         segment.kind === 'panel'
         && segment.style.background === EVE_TOOL_SKIN_TOKENS.bevyMenu.footerCloseRing.color
         && segment.style.radius === EVE_TOOL_SKIN_TOKENS.bevyMenu.footerCloseRing.borderPx / 2
     )));
     assert.equal(
-        Math.min(...closeIndicator.children.map((segment) => segment.style.position[1])),
+        Math.min(...closeSegments.map((segment) => segment.style.position[1])),
         EVE_TOOL_SKIN_TOKENS.bevyMenu.footerCloseRing.offsetYPx
     );
+    const unfilledCloseIndicator = buildBevyFooterCloseRingNode({ id: 'unfilled_close_indicator', filled: false });
+    assert.equal(unfilledCloseIndicator.children.some((child) => child.id.endsWith('_fill')), false, 'skin consumers can disable the red close fill');
+    const rightAnchoredCloseIndicator = buildBevyFooterCloseRingNode({
+        id: 'right_anchored_close_indicator', anchorSize: close.style.size[0], edge: 'right'
+    });
+    assert.deepEqual(rightAnchoredCloseIndicator.style.position, [10.5, 7.5], 'a reversed footer must move Close toward its nearest exterior edge');
     assert.equal(findNode(tree, 'eve_bevy_panel_timeline_header'), null);
     assert.equal(footer.children.some((node) => node.id.endsWith('_close')), true);
     assert.equal(footer.children.some((node) => node.id.endsWith('_drag')), true);
@@ -152,14 +168,19 @@ test('Bevy panel contract removes tools dock and keeps system controls in footer
     const { BEVY_CORNER_RESIZE_GRIP_ICON_SOURCE } = await import('../../eVe/intuition/ribbon/bevy_ui_menu_surface.js');
     const leftGripIcon = findNode(tree, 'eve_bevy_panel_timeline_footer_resize_left_icon');
     const rightGripIcon = findNode(tree, 'eve_bevy_panel_timeline_footer_resize_icon');
+    const footerTitle = findNode(tree, 'eve_bevy_panel_timeline_footer_status');
     assert.equal(leftGripIcon.image.source, BEVY_CORNER_RESIZE_GRIP_ICON_SOURCE);
     assert.equal(rightGripIcon.image.source, BEVY_CORNER_RESIZE_GRIP_ICON_SOURCE);
-    assert.deepEqual(leftGripIcon.style.size, [BEVY_PANEL_TOKENS.resizeHandlePx, BEVY_PANEL_TOKENS.footerHeightPx]);
-    assert.deepEqual(rightGripIcon.style.size, [BEVY_PANEL_TOKENS.resizeHandlePx, BEVY_PANEL_TOKENS.footerHeightPx]);
+    const expectedGripWidth = Math.round(BEVY_PANEL_TOKENS.resizeHandlePx * EVE_TOOL_SKIN_TOKENS.bevyMenu.footerGripVisualRatio);
+    const expectedGripHeight = Math.round(BEVY_PANEL_TOKENS.footerHeightPx * EVE_TOOL_SKIN_TOKENS.bevyMenu.footerGripVisualRatio);
+    assert.deepEqual(leftGripIcon.style.size, [expectedGripWidth, expectedGripHeight]);
+    assert.deepEqual(rightGripIcon.style.size, [expectedGripWidth, expectedGripHeight]);
+    assert.deepEqual(leftGripIcon.style.position, [0, BEVY_PANEL_TOKENS.footerHeightPx - expectedGripHeight]);
+    assert.deepEqual(rightGripIcon.style.position, [BEVY_PANEL_TOKENS.resizeHandlePx - expectedGripWidth, BEVY_PANEL_TOKENS.footerHeightPx - expectedGripHeight]);
     assert.deepEqual(leftGripIcon.style.scale, [-1, 1]);
     assert.deepEqual(rightGripIcon.style.scale, [1, 1]);
-    assert.equal(leftGripIcon.style.position, undefined);
-    assert.equal(rightGripIcon.style.position, undefined);
+    assert.equal(footerTitle.style.position[0] + (footerTitle.style.size[0] / 2), footer.style.size[0] / 2, 'footer title must center against the complete footer width');
+    assert.equal(footerTitle.style.position[1], EVE_TOOL_SKIN_TOKENS.bevyMenu.footerTitleOffsetYPx, 'footer title must use the shared optical downward offset');
 
     await drag.on.drag({ delta_x: 40, delta_y: 30 });
     const movedPanel = findNode(mounted.at(-1), 'eve_bevy_panel_timeline_panel');
@@ -279,7 +300,7 @@ test('Panel Lab is development-gated and uses the shared panel skin', async () =
     ]) {
         assert.deepEqual(findNode(mounted[0], id).image.tint, contentTint, id);
     }
-    assert.equal(findNode(mounted[0], 'eve_bevy_panel_panel_lab_footer_close_indicator').children.length, 36);
+    assert.equal(findNode(mounted[0], 'eve_bevy_panel_panel_lab_footer_close_indicator').children.length, 37);
     assert.equal(dom.window.document.querySelectorAll('button,input,select,textarea').length, 0);
     await drag.on.activate();
     await drag.on.activate();

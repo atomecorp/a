@@ -273,19 +273,31 @@ test('Atome contextual footer follows projected media bounds and uses compact da
         assert.equal(findNode(tree.root, id).style.shadow, undefined, id);
     }
     const closeIndicator = findNode(tree.root, 'atome_contextual_edit_media_close_indicator');
-    assert.deepEqual(closeIndicator.style.size, [BEVY_MENU_TOKENS.footerCloseRing.diameterPx, BEVY_MENU_TOKENS.footerCloseRing.diameterPx]);
+    const closeDiameter = BEVY_MENU_TOKENS.footerCloseRing.diameterPx;
+    const closeBorder = BEVY_MENU_TOKENS.footerCloseRing.borderPx;
+    assert.deepEqual(closeIndicator.style.size, [closeDiameter, closeDiameter]);
+    assert.deepEqual(closeIndicator.style.position, [4.5, 7.5]);
     assert.equal(closeIndicator.kind, 'panel');
-    assert.equal(closeIndicator.children.length, 36);
-    assert.ok(closeIndicator.children.every((segment) => (
+    const closeFill = findNode(tree.root, 'atome_contextual_edit_media_close_indicator_fill');
+    const closeSegments = closeIndicator.children.filter((segment) => segment.id.includes('_segment_'));
+    assert.deepEqual(closeFill.style.size, [closeDiameter - (closeBorder * 2), closeDiameter - (closeBorder * 2)]);
+    assert.deepEqual(closeFill.style.position, [3, 7]);
+    assert.deepEqual(closeFill.style.background, BEVY_MENU_TOKENS.footerCloseRing.fillColor);
+    assert.equal(closeIndicator.children.length, 37);
+    assert.equal(closeSegments.length, 36);
+    assert.ok(closeSegments.every((segment) => (
         segment.kind === 'panel'
         && segment.style.background === BEVY_MENU_TOKENS.footerCloseRing.color
         && segment.style.radius === BEVY_MENU_TOKENS.footerCloseRing.borderPx / 2
     )));
     assert.equal(
-        Math.min(...closeIndicator.children.map((segment) => segment.style.position[1])),
+        Math.min(...closeSegments.map((segment) => segment.style.position[1])),
         BEVY_MENU_TOKENS.footerCloseRing.offsetYPx
     );
-    assert.equal(findNode(tree.root, 'atome_contextual_edit_media_title').style.size[1], footerHeight);
+    const footerTitle = findNode(tree.root, 'atome_contextual_edit_media_title');
+    assert.equal(footerTitle.style.size[1], footerHeight);
+    assert.equal(footerTitle.style.position[0] + (footerTitle.style.size[0] / 2), footer.style.size[0] / 2, 'footer title must center against the complete footer width');
+    assert.equal(footerTitle.style.position[1], BEVY_MENU_TOKENS.footerTitleOffsetYPx, 'footer title must use the shared optical downward offset');
     for (const id of [
         'atome_contextual_edit_media_resize_left_icon',
         'atome_contextual_edit_media_title',
@@ -302,9 +314,10 @@ test('Atome contextual footer follows projected media bounds and uses compact da
         const icon = findNode(tree.root, id);
         assert.equal(icon.image.source, BEVY_CORNER_RESIZE_GRIP_ICON_SOURCE, id);
         assert.equal(icon.image.fit, 'fill', id);
-        assert.deepEqual(icon.style.size, [22, footerHeight], id);
-        assert.equal(icon.style.position, undefined, id);
+        assert.deepEqual(icon.style.size, [11, 15], id);
     }
+    assert.deepEqual(findNode(tree.root, 'atome_contextual_edit_media_resize_left_icon').style.position, [0, 15]);
+    assert.deepEqual(findNode(tree.root, 'atome_contextual_edit_media_resize_right_icon').style.position, [11, 15]);
     assert.ok(findNode(tree.root, 'atome_contextual_tool_detail_background'));
 });
 
@@ -332,7 +345,11 @@ test('Atome contextual rail projects visible tool records inside the lateral rai
     const tree = buildAtomeContextualEditTree({
         surface, records: [{ id: 'a', properties: { left: 40, top: 50, width: 200, height: 120 } }],
         editing: [{ atomeId: 'a', kind: 'image' }], activeAtomeId: 'a',
-        definitions: [{ key: 'detail', label: 'detail', icon: 'edit', toolType: 'standard' }]
+        definitions: [{ key: 'detail', label: 'detail', icon: 'edit', toolType: 'standard' }],
+        handlers: {
+            atome_contextual_edit_a_drag: { drag: () => null },
+            atome_contextual_edit_a_resize_left: { drag: () => null }
+        }
     });
     await runtime.mountTree({ id: tree.id, surface, tree });
     const projected = getProjectSceneState('__eve_dashboard_workspace__');
@@ -346,6 +363,10 @@ test('Atome contextual rail projects visible tool records inside the lateral rai
     assert.ok(toolIcon.properties.renderLayer > tool.properties.renderLayer);
     assert.ok(toolLabel.properties.renderLayer > tool.properties.renderLayer);
     assert.ok(footerTitle.properties.renderLayer > footer.properties.renderLayer);
+    const centeredTitleHit = runtime.hitTestAtClientPoint({ surface, clientX: 140, clientY: 185 });
+    assert.equal(centeredTitleHit?.nodeId, 'atome_contextual_edit_a_drag', 'centered title must not obstruct the drag target');
+    const outerGripHit = runtime.hitTestAtClientPoint({ surface, clientX: 42, clientY: 172 });
+    assert.equal(outerGripHit?.nodeId, 'atome_contextual_edit_a_resize_left', 'reduced grip artwork must preserve the full resize target');
 });
 
 test('Atome contextual runtime keeps local edits and emits one canonical homothetic resize commit', async () => {
