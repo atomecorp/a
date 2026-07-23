@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { afterEach, test, vi } from 'vitest';
 import { buildBevyMainMenuItems, buildBevyMainMenuTree } from '../../eVe/intuition/ribbon/bevy_ui_main_menu_model.js';
+import { buildBevyUiFlowerTree } from '../../eVe/intuition/ribbon/bevy_ui_flower_model.js';
 import { createMainMenuRecordingVisualRuntime } from '../../eVe/intuition/ribbon/bevy_ui_main_menu_recording_visual_runtime.js';
 import { createCaptureRecordingFeedbackRuntime } from '../../eVe/intuition/tools/capture_recording_feedback_runtime.js';
 import { createAudioScopeFrame } from '../../eVe/domains/media/api/audio_browser_recorder_worklet.js';
@@ -104,7 +105,7 @@ test('main menu projects audio scope, video thumbnail and photo flash inside the
     assert.doesNotThrow(() => normalizeBevyUiTree({ id: photoTree.id, tree: photoTree }));
 });
 
-test('recording feedback keeps only the active main-menu tool visible during capture', () => {
+test('recording feedback keeps the main menu visible and projects the preview in its active tool', () => {
     assert.deepEqual(
         buildBevyMainMenuItems(content, { activePaletteKey: 'capture' }).map((item) => item.key),
         ['atome', 'capture', 'audio', 'video', 'photo']
@@ -118,8 +119,34 @@ test('recording feedback keeps only the active main-menu tool visible during cap
         }]])),
         handlers: {}
     });
-    assert.deepEqual(tree.visualItems.map((item) => item.toolId), ['ui.capture.audio']);
-    assert.equal(tree.layout.width, 60);
+    assert.deepEqual(tree.visualItems.map((item) => item.key), ['photo', 'video', 'audio', 'capture', 'atome']);
+    assert.equal(tree.layout.width, 300);
+    const audioItem = findNode(tree.root, (node) => node.id.endsWith('capture__audio'));
+    assert.ok(audioItem);
+    assert.equal(audioItem.children.some((node) => node.id.endsWith('_icon')), false);
+    assert.equal(audioItem.children.some((node) => node.id.endsWith('_label')), false);
+    assert.equal(audioItem.children.filter((node) => node.id.includes('_recording_scope_bar_')).length, 64);
+});
+
+test('Flower keeps only its stationary recording tool visible', () => {
+    const items = [
+        { key: 'audio', label: 'Audio', icon: 'microphone', toolId: 'ui.capture.audio' },
+        { key: 'video', label: 'Video', icon: 'video_camera', toolId: 'ui.capture.video' }
+    ];
+    const tree = buildBevyUiFlowerTree({
+        surface,
+        center: { x: 320, y: 240 },
+        items,
+        stationaryItem: items[0],
+        stationaryPoint: { x: 320, y: 240 },
+        recordingVisual: {
+            kind: 'audio_scope', phase: 'recording', sessionId: 'flower_audio_1',
+            scope: { pairs: Array.from({ length: 64 }, () => [-0.25, 0.25]) }
+        }
+    });
+    assert.equal(tree.root.children.length, 1);
+    assert.equal(tree.root.children[0].id.endsWith('_audio_0'), true);
+    assert.equal(tree.root.children[0].children.filter((node) => node.id.includes('_recording_scope_bar_')).length, 64);
 });
 
 test('an orphaned recording visual never hides the canonical main menu', () => {
