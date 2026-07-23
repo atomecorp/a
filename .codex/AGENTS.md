@@ -140,6 +140,14 @@ Debug code paths, use `.codex/visual-test-protocol.md`. It defines runtime
 startup, device control, evidence requirements, media acceptance criteria,
 failure classification, and reporting completion rules.
 
+## Known recurrent bug solutions
+
+Before investigating a recurrent symptom, inspect
+`known-bug-solutions/README.md`. When a matching issue folder exists, use its
+recorded reproduction, confirmed ownership, rejected hypotheses, correction,
+and regression checks before changing product code. Keep this knowledge base
+updated whenever a recurring issue receives a confirmed root-cause repair.
+
 ## Mandatory UI debugging adjunct
 
 When the task concerns eVe UI readiness, missing tool handles, Playwright click failures, hit-testing, overlays, pointer routing, or selector/actionability problems, reading `atome/documentations/how_debug_UI.md` is mandatory.
