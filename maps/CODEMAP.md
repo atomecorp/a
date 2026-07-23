@@ -40,6 +40,10 @@ Implementation may proceed only after the map check identifies the owning layer,
 
 BevyUI panel ownership:
 
+- `todo/ui_bevy/bevy_panel_migration_guide.md` is the Priority 1 execution
+  ledger for the mandatory one-component approval loop, product-panel coverage,
+  browser verification, explicit product-owner approval, and final HTML-route
+  retirement gates.
 - `eVe/intuition/runtime/bevy_panel/` owns the closed eVe BevyUI panel shell: tokens, mobile/desktop geometry, pure tree construction, surface registration, and BevyUI mount/unmount lifecycle over `window.eveBevyUiRuntime`.
 - `eVe/intuition/runtime/bevy_panel/bevy_panel_runtime.js` must use the installed canonical BevyUI canvas runtime (never create a competing pointer owner), own ephemeral panel geometry plus Panel Lab's opt-in footer fullscreen/restoration state, and reassert the authenticated/workspace main-menu invariant after mounting a BevyUI panel surface, using the shared workspace menu helper instead of panel-local HTML chrome.
 - `eVe/intuition/runtime/eve_intuition/atome_contextual_edit_model.js` owns the disposable Atome-edit footer tree: an exact-bounds transparent composed shell alone carries the shared exterior shadow, while the sibling selection outline remains shadow-free and cannot expand that silhouette.
@@ -47,6 +51,7 @@ BevyUI panel ownership:
 - `eVe/intuition/runtime/eve_intuition/panel_surface_runtime.js` remains the existing `openPanelSurface` / `closePanelSurface` bridge. It routes registered Bevy panel surfaces to the BevyUI panel runtime and leaves non-migrated surfaces on the old panel creator until each one is migrated and verified.
 - `eVe/intuition/tools/timeline.js` is now a compatibility wrapper only; the visible Timeline panel surface is `timelineSurface` in `bevy_panel_surfaces.js` and must not recreate `createEveDialog`, tool docks, or visible HTML controls.
 - `eVe/intuition/runtime/bevy_panel/bevy_panel_surfaces.js` also registers minimal BevyUI `calendar` and `contact` surfaces so Dashboard header-created calendar/contact records open Bevy panels instead of the legacy HTML panels while those panels are being completed.
+- `bevy_panel_tree.js` owns the shared Bevy panel text and button node builders, including the body-content layer above the opaque panel shell. Its `textNode` consumes canonical panel typography tokens; the approved Panel Lab specimen is its one static body-text node. Panel Lab does not own copied component styles or behavior.
 - `tests/eve/bevy_panel_contract.test.mjs` guards the first migrated panel contract: no tools dock or passive header, body is the single scroll area, footer owns title/close/drag/resize, and Timeline no longer builds an HTML dialog.
 
 Dashboard Bevy ownership:

@@ -791,6 +791,42 @@ test('BevyUI invocation forwards its latch state as routing metadata, never tool
     }
 });
 
+test('Panel Lab routes a long press to its development-only reload action', async () => {
+    const env = installDom();
+    const panelLabInvocations = [];
+    const runtime = createContextToolInvocationRuntime({
+        getFinderToolEl: () => null,
+        handleFinderTouch: () => null,
+        invokePanelLab: async (input) => {
+            panelLabInvocations.push(input);
+            return { ok: true, reloading: input.action === 'reload' };
+        },
+        invokeToolFromUiButton: () => null
+    });
+    try {
+        const result = await runtime.invokeIntuitionXMainRibbonToolDefinition({
+            key: 'panel_lab',
+            toolId: 'ui.dev.panel_lab',
+            longPressAction: 'reload'
+        }, 'bevy_ui.hold', {
+            source: 'bevy_ui_main_menu',
+            actionOverride: 'reload'
+        });
+        assert.deepEqual(result, { ok: true, reloading: true });
+        assert.deepEqual(panelLabInvocations, [{ el: null, action: 'reload' }]);
+    } finally {
+        env.restore();
+    }
+});
+
+test('Panel Lab declares the canonical long-press reload contract', () => {
+    const source = readFileSync(
+        resolve(process.cwd(), 'eVe/intuition/runtime/eve_intuition/main_menu_content_runtime.js'),
+        'utf8'
+    );
+    assert.match(source, /panel_lab:\s*\{[\s\S]*?longPressAction:\s*'reload'[\s\S]*?longPressDelay:\s*520/);
+});
+
 test('BevyUI palette first moving frame contains the complete tool and overshoots every target by 6 to 14 px', () => {
     const content = {
         toolbox: { children: ['capture', 'time'] },

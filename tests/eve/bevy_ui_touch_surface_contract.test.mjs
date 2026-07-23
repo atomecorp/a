@@ -131,7 +131,7 @@ test('Atome contextual edit stays on one clipped Bevy tree with handed rail and 
     assert.deepEqual(rail.style.position, [740, 360]);
     assert.equal(railBackground, null, 'the rail is a transparent layout; only its tool surfaces own the shared shadow');
     assert.deepEqual(contextualSurface.style.position, [40, 50]);
-    assert.deepEqual(contextualSurface.style.size, [200, 140]);
+    assert.deepEqual(contextualSurface.style.size, [200, 120 + BEVY_MENU_TOKENS.footerHeightPx]);
     assert.equal(contextualSurface.style.shadow, BEVY_MENU_TOKENS.surface.material.shadow);
     assert.equal(outline.style.shadow, undefined, 'the selection outline must not own the exterior shadow');
     assert.equal(footerBackground.style.shadow, undefined);
@@ -272,11 +272,22 @@ test('Atome contextual footer follows projected media bounds and uses compact da
         assert.equal(findNode(tree.root, id).style.size[1], footerHeight, id);
         assert.equal(findNode(tree.root, id).style.shadow, undefined, id);
     }
-    assert.deepEqual(findNode(tree.root, 'atome_contextual_edit_media_close_icon').style.size, [footerHeight, footerHeight]);
+    const closeIndicator = findNode(tree.root, 'atome_contextual_edit_media_close_indicator');
+    assert.deepEqual(closeIndicator.style.size, [BEVY_MENU_TOKENS.footerCloseRing.diameterPx, BEVY_MENU_TOKENS.footerCloseRing.diameterPx]);
+    assert.equal(closeIndicator.kind, 'panel');
+    assert.equal(closeIndicator.children.length, 36);
+    assert.ok(closeIndicator.children.every((segment) => (
+        segment.kind === 'panel'
+        && segment.style.background === BEVY_MENU_TOKENS.footerCloseRing.color
+        && segment.style.radius === BEVY_MENU_TOKENS.footerCloseRing.borderPx / 2
+    )));
+    assert.equal(
+        Math.min(...closeIndicator.children.map((segment) => segment.style.position[1])),
+        BEVY_MENU_TOKENS.footerCloseRing.offsetYPx
+    );
     assert.equal(findNode(tree.root, 'atome_contextual_edit_media_title').style.size[1], footerHeight);
     for (const id of [
         'atome_contextual_edit_media_resize_left_icon',
-        'atome_contextual_edit_media_close_icon',
         'atome_contextual_edit_media_title',
         'atome_contextual_edit_media_resize_right_icon'
     ]) {
@@ -301,10 +312,10 @@ test('Atome contextual drag and homothetic resize stay above the main toolbox', 
     const limits = { viewportWidth: 800, viewportHeight: 600, mainMenuHeight: 52 };
     assert.deepEqual(contextualGestureProps({
         ...limits, gesture: { mode: 'drag', origin: { x: 40, y: 30, width: 200, height: 100 }, dx: 900, dy: 900 }
-    }), { left: 600, top: 431 });
+    }), { left: 600, top: 600 - 52 - BEVY_MENU_TOKENS.footerHeightPx - 100 });
     assert.deepEqual(contextualGestureProps({
         ...limits, gesture: { mode: 'resize', edge: 'right', origin: { x: 0, y: 30, width: 100, height: 100 }, dx: 900, dy: 900 }
-    }), { width: 501, height: 501 });
+    }), { width: 600 - 52 - 30 - BEVY_MENU_TOKENS.footerHeightPx, height: 600 - 52 - 30 - BEVY_MENU_TOKENS.footerHeightPx });
 });
 
 test('Atome contextual rail projects visible tool records inside the lateral rail', async () => {
@@ -331,7 +342,7 @@ test('Atome contextual rail projects visible tool records inside the lateral rai
     const footer = projected.records.find((record) => record.id.includes('atome_contextual_edit_a_footer_background'));
     const footerTitle = projected.records.find((record) => record.id.includes('atome_contextual_edit_a_title_text'));
     assert.deepEqual([tool.properties.left, tool.properties.top, tool.properties.width, tool.properties.height], [740, 480, 60, 60]);
-    assert.deepEqual([footer.properties.left, footer.properties.top, footer.properties.width, footer.properties.height], [40, 170, 200, 20]);
+    assert.deepEqual([footer.properties.left, footer.properties.top, footer.properties.width, footer.properties.height], [40, 170, 200, BEVY_MENU_TOKENS.footerHeightPx]);
     assert.ok(toolIcon.properties.renderLayer > tool.properties.renderLayer);
     assert.ok(toolLabel.properties.renderLayer > tool.properties.renderLayer);
     assert.ok(footerTitle.properties.renderLayer > footer.properties.renderLayer);
@@ -368,7 +379,7 @@ test('Atome contextual runtime keeps local edits and emits one canonical homothe
     grip.on.drag({ delta_x: 20, delta_y: 0 });
     await runtime.render();
     assert.deepEqual(findNode(rendered.at(-1).root, 'atome_contextual_edit_a_footer').style.position, [60, 120]);
-    assert.deepEqual(findNode(rendered.at(-1).root, 'atome_contextual_edit_a_footer').style.size, [180, 52 / 3]);
+    assert.deepEqual(findNode(rendered.at(-1).root, 'atome_contextual_edit_a_footer').style.size, [180, BEVY_MENU_TOKENS.footerHeightPx]);
     grip.on.release();
     await Promise.resolve();
     assert.deepEqual(intents.map((intent) => intent.kind), ['resize.start', 'resize.move', 'resize.end']);

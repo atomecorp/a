@@ -163,7 +163,12 @@ Primary sources:
 
 Exposure: existing semi-public closed `openPanelSurface(surfaceKey, context)` and `closePanelSurface(surfaceKey, context)` route registered Bevy panel surfaces to `openBevyPanelSurface(...)` / `closeBevyPanelSurface(...)`. Migrated panels mount disposable BevyUI trees named `eve_bevy_panel_<surface>` on `eve_surface_project`; non-migrated panels remain on the existing registered surface path until they are migrated and verified.
 
-The temporary development/test-only `ui.dev.panel_lab` tool is not a public or semi-public API. It is registered only when the internal Panel Lab gate is enabled, delegates to the same closed panel route, and must be removed after the shared component migration is complete.
+The temporary development/test-only `ui.dev.panel_lab` tool is not a public or semi-public API. It is registered only when the internal Panel Lab gate is enabled, delegates to the same closed panel route, and must be removed after the shared component migration is complete. Its short activation toggles the Lab through that route; its 520 ms long press is a development-only `window.location.reload()` action and suppresses the matching toggle activation.
+
+Panel Lab mounts exactly one approved component specimen at a time; its current
+specimen is one static shared body-text node. Product-surface composition
+reviews start only after their required primitives are approved; it is never a
+second Timeline API or state owner.
 
 Boundary status: Semi-public closed eVe product runtime. The panel view emits UI intentions only; durable mutations stay in existing owners such as Timeline, Calendar, profile, Asset Box, Molecule session, or Atome commit APIs. The Bevy panel path must not create visible panel DOM, a `tools_dock`, a second canvas, or a fallback renderer.
 

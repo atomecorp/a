@@ -39,6 +39,40 @@ Document status vocabulary:
 
 Checkboxes are reserved for executable work and final executable validation gates. Phase lifecycle labels are plain text derived from their child tasks and are not included in progress totals.
 
+### Phase prioritaire 1 - Programme de migration des panels vers BevyUI
+
+Statut:
+
+Actif
+
+Source principale:
+
+- todo/ui_bevy/bevy_panel_migration_guide.md
+
+Dependances et ordre:
+
+- Cette phase est la premiere tache active a executer.
+- Le guide impose un seul specimen d'un seul type de composant a la fois, une
+  specification visuelle approuvee avant implementation, une verification
+  automatisee et dans le navigateur reel avant presentation, puis une
+  validation utilisateur explicite avant le composant suivant.
+- La validation de chaque composant utilise uniquement le navigateur de test
+  integre a Codex; aucune validation mobile, Tauri ou iOS ne bloque les
+  composants individuels. Ces plateformes sont controlees une seule fois au
+  niveau du panel complet lorsque leur validation finale est requise.
+- Lorsqu'un panel est entierement couvert par les composants approuves, sa
+  composition Bevy est verifiee et approuvee avant la suppression definitive
+  de sa route HTML.
+
+- [ ] Executer integralement le guide de migration BevyUI, composant par composant puis panel par panel, jusqu'a la validation des 16 surfaces, au retrait des 13 routes HTML actives et a la suppression finale du Panel Lab.
+
+Critere de sortie:
+
+- Chaque boucle composant et chaque boucle panel possede ses preuves ciblees,
+  sa verification sur le canvas reel et l'approbation explicite du product
+  owner; Finder respecte son verrou externe; aucune route HTML, composition
+  double ou implementation Panel Lab temporaire ne demeure a la fin.
+
 ### Reconciliation audit - original 138-entry snapshot
 
 Statut:
@@ -125,6 +159,9 @@ Scope completed:
 Baseline after the 2026-07-13 renderer-decision cleanup: 61/138 checked tasks (44.20%). Historical progress reports below retain the totals recorded at their original completion date.
 
 Reconciled state after the 2026-07-16 audit and subsequent documentation decisions: 61/148 executable tasks checked (41.22%). The current denominator includes the completed reconciliation, the WebSocket-only transport decision, secure browser/native authentication-token storage remediation, the OVHcloud production SMS provider boundary, stable user identity independent of phone, explicit cross-runtime account provisioning with preserved isolated guest mode, Argon2id migration of legacy bcrypt password verifiers, trusted-device and Recovery-Kit account recovery, snapshot-accelerated rebuild, two ordered Time Machine historical-branching tasks, reopened `/ws/sync` security validation, persistent sender auto-accept UI, true manual-linked sharing, append-only last-write-wins offline conflict handling, and private-by-default directory contact data. The full original 138-entry decision ledger remains `done/planning_audit/execution_order_reconciliation_2026-07-16.md`.
+
+Current governance audit after registering the Priority 1 BevyUI panel
+migration programme: 66/153 executable tasks checked (43.14%).
 
 ## Gardes-fous transverses obligatoires
 

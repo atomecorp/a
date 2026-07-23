@@ -88,10 +88,24 @@ Missing primitives must be implemented in the shared Bevy UI owner before a prod
 
 ### 4. Panels, dialogs, and Molecule chrome
 
+- Execute `todo/ui_bevy/bevy_panel_migration_guide.md` first. It is the
+  authoritative one-component-at-a-time approval and panel-retirement ledger
+  registered as Priority 1 in `todo/execution_order.md`.
+- For this panel programme, the cross-platform requirements in the foundation
+  gate apply at complete-panel acceptance only. Individual Panel Lab components
+  use the integrated Codex browser fast path and must not be blocked by mobile,
+  Tauri, iOS, or repeated viewport validation.
 - Replace the visible `createEveDialog` panel chrome, panel body, footer, tool bands, resize/drag affordances, and panel-local DOM state with the shared Bevy UI scene.
 - Migrate simple panels first, then calendar, Finder, communication, detail, layer, and Molecule.
 - Migrate the complete Molecule editor chrome and panel interaction to Bevy; its timeline content and its chrome must not use separate visible renderers.
 - Delete panel DOM factories, CSS/layout observers, DOM geometry reads, and legacy panel lifecycle code after each panel family is migrated.
+- The active migration scope is the 16 surfaces in `PANEL_SURFACE_DEFINITIONS`.
+  Validate Timeline, Calendar, and Contact in Panel Lab before migrating a
+  legacy HTML surface. Then migrate Paste, Font, Size, Undo, Delete, Info,
+  Layer, Couleur, Background, Home, Contact, Communicate, Detail, Calendar,
+  and Finder in that order. Finder includes the map feature and remains blocked
+  until `todo/eve_features/map_localization.md` has an approved provider and
+  privacy/platform contract.
 
 ### 5. Calendar
 

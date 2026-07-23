@@ -11,6 +11,8 @@ import { setMainMenuRuntime } from '../../eVe/intuition/ribbon/bevy_ui_product_r
 import { PANEL_SURFACE_DEFINITIONS } from '../../eVe/intuition/panel_definitions.js';
 import { BEVY_PANEL_TOKENS } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_tokens.js';
 import { EVE_TOOL_SKIN_TOKENS } from '../../eVe/elements/skin/tool_skin.js';
+import { EVE_DEFAULT_MESSAGES } from '../../eVe/i18n/languages.js';
+import { projectBevyUiTreeRecords } from '../../eVe/domains/rendering/bevy_ui_overlay_record_projection.js';
 
 const repoRoot = dirname(dirname(dirname(fileURLToPath(import.meta.url))));
 
@@ -109,12 +111,26 @@ test('Bevy panel contract removes tools dock and keeps system controls in footer
     const panel = findNode(tree, 'eve_bevy_panel_timeline_panel');
     const accent = findNode(tree, 'eve_bevy_panel_timeline_footer_accent');
     const close = findNode(tree, 'eve_bevy_panel_timeline_footer_close');
+    const closeIndicator = findNode(tree, 'eve_bevy_panel_timeline_footer_close_indicator');
     const drag = findNode(tree, 'eve_bevy_panel_timeline_footer_drag');
     assert.equal(body.kind, 'scroll_area');
     assert.equal(footer.kind, 'row');
     assert.equal(BEVY_PANEL_TOKENS.footerHeightPx, EVE_TOOL_SKIN_TOKENS.bevyMenu.footerHeightPx);
     assert.equal(close.accessibility?.role, 'button');
     assert.deepEqual(close.accessibility?.actions, ['activate']);
+    assert.equal(close.style.size[1], BEVY_PANEL_TOKENS.footerHeightPx, 'close target must occupy the full footer height');
+    assert.deepEqual(closeIndicator.style.size, [EVE_TOOL_SKIN_TOKENS.bevyMenu.footerCloseRing.diameterPx, EVE_TOOL_SKIN_TOKENS.bevyMenu.footerCloseRing.diameterPx]);
+    assert.equal(closeIndicator.kind, 'panel');
+    assert.equal(closeIndicator.children.length, 36);
+    assert.ok(closeIndicator.children.every((segment) => (
+        segment.kind === 'panel'
+        && segment.style.background === EVE_TOOL_SKIN_TOKENS.bevyMenu.footerCloseRing.color
+        && segment.style.radius === EVE_TOOL_SKIN_TOKENS.bevyMenu.footerCloseRing.borderPx / 2
+    )));
+    assert.equal(
+        Math.min(...closeIndicator.children.map((segment) => segment.style.position[1])),
+        EVE_TOOL_SKIN_TOKENS.bevyMenu.footerCloseRing.offsetYPx
+    );
     assert.equal(findNode(tree, 'eve_bevy_panel_timeline_header'), null);
     assert.equal(footer.children.some((node) => node.id.endsWith('_close')), true);
     assert.equal(footer.children.some((node) => node.id.endsWith('_drag')), true);
@@ -122,6 +138,7 @@ test('Bevy panel contract removes tools dock and keeps system controls in footer
     assert.equal(footer.children.some((node) => node.id.endsWith('_resize')), true);
     assert.equal(drag.on.activate, undefined, 'only Panel Lab opts into footer fullscreen activation');
     assert.equal(body.style.overflow, 'scroll');
+    assert.ok(findNode(tree, 'timeline_status_row').style.z_index > panel.style.z_index, 'body content must render above the panel shell');
     assert.deepEqual(body.style.position, [0, 0]);
     assert.equal(footer.style.shadow, undefined);
     assert.ok(panel.style.shadow, 'only the outer panel owns the drop shadow');
@@ -131,7 +148,7 @@ test('Bevy panel contract removes tools dock and keeps system controls in footer
     assert.equal(accent.style.shadow, undefined);
     assert.equal(accent.style.border, undefined);
     assert.equal(accent.on, undefined);
-    assert.ok(findNode(tree, 'eve_bevy_panel_timeline_footer_close_label').style.z_index > accent.style.z_index);
+    assert.ok(findNode(tree, 'eve_bevy_panel_timeline_footer_close_indicator').style.z_index > accent.style.z_index);
     const { BEVY_CORNER_RESIZE_GRIP_ICON_SOURCE } = await import('../../eVe/intuition/ribbon/bevy_ui_menu_surface.js');
     const leftGripIcon = findNode(tree, 'eve_bevy_panel_timeline_footer_resize_left_icon');
     const rightGripIcon = findNode(tree, 'eve_bevy_panel_timeline_footer_resize_icon');
@@ -241,17 +258,28 @@ test('Panel Lab is development-gated and uses the shared panel skin', async () =
     assert.deepEqual(panel.style.shadow, material.shadow);
     assert.equal(mounted[0].presentation, true);
     assert.deepEqual(body.style.background, EVE_PANEL_SKIN_TOKENS.bevyPanel.colors.transparent);
+    assert.equal(body.children.length, 1, 'Panel Lab must mount exactly one approved component specimen');
+    const specimen = findNode(mounted[0], 'panel_lab_static_body_text');
+    assert.equal(specimen.kind, 'text');
+    assert.equal(specimen.text, 'Texte de démonstration');
+    assert.deepEqual(specimen.style.size, [200, 24]);
+    assert.equal(specimen.style.font_size, BEVY_PANEL_TOKENS.bodyTextSizePx);
+    assert.equal(specimen.style.font_weight, BEVY_PANEL_TOKENS.bodyTextWeight);
+    assert.equal(specimen.style.line_height, BEVY_PANEL_TOKENS.bodyTextLineHeightPx);
+    assert.equal(specimen.style.text_align, 'left');
+    assert.equal(EVE_DEFAULT_MESSAGES.fr['eve.panel_lab.static_body_text'], 'Texte de démonstration');
+    assert.equal(EVE_DEFAULT_MESSAGES.en['eve.panel_lab.static_body_text'], 'Demonstration text');
     assert.deepEqual(footer.style.background, BEVY_MENU_TOKENS.clear);
     assert.equal(typeof drag.on.activate, 'function');
     const contentTint = EVE_COMMON_SKIN_TOKENS.systemContent.gpu;
     for (const id of [
         'eve_bevy_panel_panel_lab_footer_resize_left_icon',
-        'eve_bevy_panel_panel_lab_footer_close_label',
         'eve_bevy_panel_panel_lab_footer_status',
         'eve_bevy_panel_panel_lab_footer_resize_icon'
     ]) {
         assert.deepEqual(findNode(mounted[0], id).image.tint, contentTint, id);
     }
+    assert.equal(findNode(mounted[0], 'eve_bevy_panel_panel_lab_footer_close_indicator').children.length, 36);
     assert.equal(dom.window.document.querySelectorAll('button,input,select,textarea').length, 0);
     await drag.on.activate();
     await drag.on.activate();
@@ -265,6 +293,34 @@ test('Panel Lab is development-gated and uses the shared panel skin', async () =
     assert.deepEqual(restoredPanel.style.position, [260, 120]);
     assert.deepEqual(restoredPanel.style.size, [420, 280]);
     await runtime.closePanelSurface('panel_lab');
+});
+
+test('Bevy UI text projection preserves canonical node typography', () => {
+    const records = projectBevyUiTreeRecords({
+        tree: {
+            root: {
+                id: 'root', kind: 'root', style: { size: [240, 80] }, children: [{
+                    id: 'text', kind: 'text', text: 'Demonstration text',
+                    style: {
+                        position: [10, 10], size: [200, 24], font_size: 16,
+                        font_weight: 500, line_height: 19, text_align: 'left'
+                    }
+                }]
+            }
+        },
+        treeId: 'typography_contract',
+        workspaceLayer: 'panel'
+    });
+    const text = records.find((record) => record.id === '__eve_bevy_ui_typography_contract_text_text');
+    assert.deepEqual(text?.properties?.text_style, {
+        font_size: 16,
+        font_weight: 500,
+        line_height: 19,
+        align: 'left',
+        baseline: 'middle',
+        padding_x: 0,
+        padding_y: 0
+    });
 });
 
 test('Panel layer wins canvas hit-testing over Dashboard-local z-index', async () => {
