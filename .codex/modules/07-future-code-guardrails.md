@@ -543,6 +543,69 @@ Do not declare the task complete until all of the following are true:
 - Temporary diagnostics were removed or confined to `./temp`.
 - Persistent tests were placed only under `./tests`.
 - All final errors, warnings, skipped tests, or missing validations are explicitly reported.
+- `eVe/documentations/FRAMEWORK_STATE.md` reflects every verified framework-state change, limitation, regression, uncertainty, and validation result produced by the task.
+
+### Framework state maintenance
+
+`eVe/documentations/FRAMEWORK_STATE.md` (the **State File**) is the
+repository's persistent, factual operational record of the framework's
+verified current state. It is not a roadmap, a task list, a changelog
+substitute, or an aspirational design document.
+
+Before finalizing a task, update the State File when the task reaches a
+completion decision and produces a verified change to framework behavior,
+ownership, validation status, known limitations, regressions, or
+evidence-based recommendations. This includes feature work, removals, bug
+fixes, investigations, refactors, migrations, cleanup, API, rendering, UI,
+media, state, synchronization, replay, history, test, validation, map, and
+documentation work.
+
+For a task that makes no repository change, update the State File only when it
+produces new factual evidence, changes a verification status, records a known
+limitation, or produces an evidence-based recommendation. Do not add a
+no-change record that merely repeats known information.
+
+Before changing the State File:
+
+1. Read the relevant implementation, directly relevant documentation, maps,
+   task records, and current State File entries.
+2. Inspect the task's actual affected files and diff.
+3. Run the narrowest relevant validation, widening it only when the task risk
+   or result requires it.
+4. Distinguish code-inspected, test-confirmed, manually validated, documented
+   intent, inference, and unverified claims.
+5. Preserve verified information unless current evidence supersedes it.
+
+Never report planned, proposed, assumed, or requested work as implemented.
+Never infer success solely from an edit, an unexecuted test, or a task
+description. Never hide a failed, skipped, blocked, flaky, unavailable, or
+not-run validation. Mark every material unverified claim, ambiguous ownership
+boundary, unavailable validation, suspected issue, or stale record as
+**To verify**, with its reason, affected scope, and smallest verification
+action.
+
+The State File must use these consistently named sections:
+
+1. Scope and evidence status
+2. Implemented and verified capabilities
+3. Partial implementations and known limitations
+4. Regressions, bugs, and unresolved issues
+5. Recent task record
+6. Uncertainties and verification backlog
+7. Recommended next steps
+
+Each material verified capability must identify its observable behavior, owner
+or source location, evidence level, and important operational constraint.
+Each limitation or unresolved issue must identify the affected scope and
+supporting evidence. Each recent task entry must be concise and newest-first,
+and state its date, title, outcome, factual state change, changed files,
+validation results, unavailable or skipped validation, and **To verify**
+items. Condense older records after their essential factual state is preserved.
+
+Keep the State File concise, dated, traceable, and free of secrets or personal
+data. Reference source paths, test names, commands, or issue identifiers when
+they materially improve traceability. Recommendations must be clearly marked
+as recommendations, not as current behavior or completed work.
 
 Final report format:
 
@@ -561,6 +624,12 @@ Text service result: <pass/fail/not in scope + evidence>
 Matrix preview result: <pass/fail/not in scope + evidence>
 Legacy renderer result: <pass/fail/not in scope + evidence>
 State mutation result: <pass/fail/not in scope + evidence>
+Framework state: <updated / not updated + specific reason>
+State File: <eVe/documentations/FRAMEWORK_STATE.md / not updated + reason>
+Task outcome: <completed / partially completed / blocked / reverted / no change>
+Framework-state summary: <factual summary>
+Framework-state uncertainties: <**To verify** items / none>
+Recommended next step: <smallest evidence-based action / none>
 Remaining risks: <none or precise list>
 Completion claim: <one sentence proving all gates passed>
 ```

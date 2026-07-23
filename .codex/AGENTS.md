@@ -76,6 +76,20 @@ Before considering the task complete, report:
 
 Tasks are not complete until this report has been produced.
 
+### 6. Framework state maintenance
+
+Before finalizing any task that changes verified framework state, update
+`eVe/documentations/FRAMEWORK_STATE.md` according to the mandatory protocol in
+`.codex/modules/07-future-code-guardrails.md`. The State File is the factual
+operational record of verified framework behavior, limitations, regressions,
+uncertainties, and recent task outcomes; it is not a roadmap or a substitute
+for architecture maps.
+
+Do not update it with a no-change task unless that task produced new factual
+evidence, a changed verification status, a known limitation, or an
+evidence-based recommendation. The unified final report defined by module 07
+must state whether the State File was updated.
+
 ## Active modular rule set
 
 This file is the only entry point. The active rule set is now distributed across the following mandatory modules:
@@ -131,7 +145,7 @@ Reference integrity marker for the integrated source before the split:
 - `.codex/modules/04-feature-work-cleanup-and-framework-reuse.md`: legacy removal, architectural authority, map maintenance, framework reuse, and feature-work planning obligations.
 - `.codex/modules/05-api-rendering-and-ui.md`: API and MCP policy, communication architecture, WebGPU rendering pipeline, and Squirrel/UI component rules.
 - `.codex/modules/06-atome-state-sync-and-runtime-modes.md`: Atome model, canonical mutation pipeline, history and synchronization, execution modes, and sharing/ACL policy.
-- `.codex/modules/07-future-code-guardrails.md`: mandatory future-facing pre-prompt, anti-regression gates, validation locks, progress format, and final completion requirements.
+- `.codex/modules/07-future-code-guardrails.md`: mandatory future-facing pre-prompt, anti-regression gates, validation locks, framework-state maintenance, progress format, and final completion requirements.
 
 ## Visual acceptance runbook
 

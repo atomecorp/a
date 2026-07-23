@@ -1439,6 +1439,13 @@ Main files:
 - `Security_and_sharing.md`
 - `eVe_canvas.md`
 - `Atome Time Machine.md`
+- `FRAMEWORK_STATE.md`
+
+Framework-state contract:
+
+- `FRAMEWORK_STATE.md` is the persistent factual record of verified framework behavior, limitations, regressions, uncertainties, and recent task outcomes.
+- It is maintained through the mandatory completion protocol in `.codex/modules/07-future-code-guardrails.md`.
+- It complements architecture maps and source validation; it must not duplicate them, become a roadmap, or claim unverified behavior.
 
 Reusable logic exposed: No runtime logic. Use as source material only after validating against code.
 
