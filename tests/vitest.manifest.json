@@ -54,6 +54,7 @@
   "tests/eve/project_scene_media_projection_filter.test.mjs",
   "tests/eve/project_scene_multi_selection_transform.test.mjs",
   "tests/eve/project_scene_native_capability_selection.test.mjs",
+  "tests/eve/project_scene_spatial_index.test.mjs",
   "tests/eve/project_scene_stale_drag_regression.test.mjs",
   "tests/eve/project_scene_text_edit_contract.test.mjs",
   "tests/eve/project_scene_unified_rendering_contract.test.mjs",
