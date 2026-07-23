@@ -4,6 +4,8 @@ Status: Initial architecture map after the Atome open / eVe closed boundary vali
 
 Current workspace-entry ordering (2026-07-22): after a valid authenticated session, the neutral Dashboard scene is mounted before resolution, creation, selection, or loading of a user project. `project_bootstrap.js` remains the canonical project owner and performs that work behind the Dashboard without forcing the project surface foreground. On readiness, the Dashboard refreshes its data context while retaining the neutral shared canvas; a failure is phase-qualified as `dashboard_open`, `project_bootstrap`, or `dashboard_refresh` and must not be collapsed into an authentication failure.
 
+Current boot resilience contract (2026-07-23): `boot_runtime.js` may retry the canonical Dashboard/main-menu open only while its bounded boot window is active. It must regard the boot as successful only once the shared surface, mounted BevyUI tree, and interactive main-menu records are present in the foreground scene. A transient renderer/menu absence is not a permanent boot failure; expiry records the terminal error, while a subsequent real workspace signal starts a fresh bounded attempt.
+
 Current mobile resource/lifecycle contract (2026-07-17; supersedes older warmup, preview, and fixed-cadence details below wherever they conflict):
 
 - Boot and workspace restoration are demand-driven. No delayed cascade may preload Dashboard, capture, panels, activities, voice/TTS, or renderer WASM. Camera/microphone permission belongs to the explicit capture gesture.

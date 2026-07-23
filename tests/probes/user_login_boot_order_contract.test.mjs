@@ -146,6 +146,7 @@ delete window.__eveWorkspaceMode;
 
 const workspaceOpenCalls = [];
 const readinessCalls = [];
+let workspaceOpenAttempts = 0;
 window.__eveWorkspaceWarmupsStarted = false;
 delete window.__currentProject;
 installEveIntuitionBootRuntime({
@@ -231,6 +232,8 @@ installEveIntuitionBootRuntime({
     openInitialLoginSequence() {},
     openWorkspaceDashboardWithProjectBootstrap: async (payload) => {
         workspaceOpenCalls.push(payload);
+        workspaceOpenAttempts += 1;
+        if (workspaceOpenAttempts === 1) return { ok: false, error: 'bevy_surface_not_ready' };
         const projectId = await payload.ensureProjectReady();
         return { ok: true, projectId };
     },
@@ -260,16 +263,14 @@ installEveIntuitionBootRuntime({
     warmupToolGatewayRuntime() {}
 });
 await new Promise((resolve) => setTimeout(resolve, 120));
-assert.deepEqual(workspaceOpenCalls, [
-    { source: 'boot_workspace', ensureProjectReady: workspaceOpenCalls[0]?.ensureProjectReady }
-], 'workspace boot must open the Dashboard before starting canonical project preparation');
-assert.deepEqual(readinessCalls, ['ready'], 'workspace boot must prepare the project through the canonical bootstrap after Dashboard opening starts');
+assert.equal(workspaceOpenCalls.length, 2, 'a transient Dashboard/main-menu readiness failure must retry within the bounded boot window');
+assert.equal(workspaceOpenCalls[0]?.source, 'boot_workspace');
+assert.equal(workspaceOpenCalls[1]?.source, 'boot_workspace');
+assert.deepEqual(readinessCalls, ['ready'], 'only the successful retry must prepare the project through canonical bootstrap');
 window.dispatchEvent(new window.CustomEvent('squirrel:project-changed', {
     detail: { id: 'boot_project_valid' }
 }));
 await new Promise((resolve) => setTimeout(resolve, 0));
-assert.deepEqual(workspaceOpenCalls, [
-    { source: 'boot_workspace', ensureProjectReady: workspaceOpenCalls[0]?.ensureProjectReady }
-], 'workspace boot must not reopen the dashboard when a project id is published later');
+assert.equal(workspaceOpenCalls.length, 2, 'workspace boot must not reopen the dashboard when a project id is published after retry success');
 
 console.log('user_login_boot_order_contract.test: PASS');

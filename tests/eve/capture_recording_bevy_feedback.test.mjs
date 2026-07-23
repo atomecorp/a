@@ -61,7 +61,8 @@ test('main menu projects audio scope, video thumbnail and photo flash inside the
         scope: { pairs: Array.from({ length: 64 }, (_, index) => [-index / 64, index / 64]) }
     }]]));
     const videoTree = treeFor(new Map([['ui.capture.video', {
-        kind: 'video_preview', phase: 'recording', sessionId: 'video_1', sourceId: 'capture://video_1'
+        kind: 'video_preview', phase: 'recording', sessionId: 'video_1', sourceId: 'capture://video_1',
+        texture: { width: 2, height: 2, rgba: Uint8Array.from([0, 0, 0, 255, 1, 1, 1, 255, 2, 2, 2, 255, 3, 3, 3, 255]) }
     }]]));
     const photoTree = treeFor(new Map([['ui.capture.photo', {
         kind: 'photo_flash', phase: 'recording', sessionId: 'photo_1', flashOpacity: 0.9
@@ -77,8 +78,9 @@ test('main menu projects audio scope, video thumbnail and photo flash inside the
     assert.equal(audioItem.children.filter((node) => node.id.includes('_recording_scope_bar_')).length, 64);
     const videoPreview = videoItem.children.find((node) => node.id.endsWith('_recording_video'));
     assert.equal(videoPreview.kind, 'image');
-    assert.equal(videoPreview.overlayRecord.type, 'video');
-    assert.equal(videoPreview.overlayRecord.properties.source, 'capture://video_1');
+    assert.equal(videoPreview.overlayRecord.type, 'image');
+    assert.equal(videoPreview.overlayRecord.properties.source.includes('capture://'), false);
+    assert.equal(videoPreview.overlayRecord.bevyTexture.rgba.length, 16);
     assert.deepEqual(videoPreview.style.position, [0, 0]);
     assert.deepEqual(videoPreview.style.size, [60, 60]);
     assert.equal(videoPreview.overlayRecord.properties.width, 60);

@@ -154,3 +154,35 @@ test('browser video persistence preserves upload and Atome identities without co
     assert.equal(completion.upload_id, 'upload_reserved');
     assert.equal(completion.atome_id, 'video_recording_reserved');
 });
+
+test('browser video persistence rejects an acknowledged upload outside the recording storage path', async () => {
+    globalThis.window = {};
+    vi.doMock('../../atome/src/squirrel/apis/unified/adole.js', () => ({ FastifyAdapter: {}, TauriAdapter: {} }));
+    vi.doMock('../../eVe/domains/media/api/media_api_shared.js', () => ({
+        buildTauriLocalMediaPath: ({ userId, identifier }) => `data/users/${userId}/recordings/${identifier}`,
+        getCloudAuthToken: () => '',
+        getFastifyBaseUrl: () => 'http://127.0.0.1:3000',
+        getLocalAuthToken: () => '',
+        getTauriHttpBaseUrl: () => '',
+        isTauriRuntime: () => false,
+        resolveCurrentUser: async () => ({ ok: true, id: 'user_a', user: { user_id: 'user_a' } })
+    }));
+    vi.doMock('../../eVe/domains/media/api/video_api_helpers.js', () => ({
+        bytesToBase64: () => 'encoded',
+        randomId: () => 'random',
+        resolveFastifyRecordingToken: async () => 'cloud-token',
+        sendFileMessage: async (_adapter, message) => (
+            message.action === 'upload-complete'
+                ? { success: true, file_name: message.file_name, file_path: `Downloads/${message.file_name}` }
+                : { success: true }
+        )
+    }));
+
+    const { persistRecording } = await import('../../eVe/domains/media/api/video_api_persist.js?durable-path-required');
+    await assert.rejects(
+        persistRecording({
+            fileName: 'take.webm', bytes: new Uint8Array([1]), mode: 'video', mimeType: 'video/webm'
+        }),
+        /recording_upload_path_mismatch/
+    );
+});

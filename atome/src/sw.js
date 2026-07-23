@@ -32,6 +32,19 @@ const isCacheableWasm = (request) => {
     return url.origin === self.location.origin && WASM_PATH_RE.test(url.pathname);
 };
 
+const isCacheableResponse = (request, response) => {
+    if (!response || response.status !== 200 || response.type !== 'basic') return false;
+    try {
+        const requestUrl = new URL(request.url);
+        const responseUrl = new URL(response.url || request.url);
+        const requestUsesHttp = requestUrl.protocol === 'http:' || requestUrl.protocol === 'https:';
+        const responseUsesHttp = responseUrl.protocol === 'http:' || responseUrl.protocol === 'https:';
+        return requestUsesHttp && responseUsesHttp;
+    } catch (_) {
+        return false;
+    }
+};
+
 self.addEventListener('install', (event) => {
     // Take over as soon as the new worker is ready instead of waiting for all tabs to close.
     event.waitUntil(self.skipWaiting());
@@ -54,9 +67,16 @@ self.addEventListener('fetch', (event) => {
         const cached = await cache.match(event.request);
         if (cached) return cached;
         const response = await fetch(event.request);
-        // Only cache complete, successful responses (skip 206/opaque/errors).
-        if (response && response.status === 200 && response.type === 'basic') {
-            cache.put(event.request, response.clone());
+        // Internal runtime identifiers such as capture:// must never reach Cache.put.
+        if (isCacheableResponse(event.request, response)) {
+            // Caching is a warm-load optimization. A cache backend failure must
+            // never reject the FetchEvent or turn a valid WASM network response
+            // into net::ERR_FAILED.
+            try {
+                await cache.put(event.request, response.clone());
+            } catch (_) {
+                // Keep serving the verified network response; the next load may retry caching.
+            }
         }
         return response;
     })());
