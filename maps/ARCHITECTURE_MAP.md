@@ -48,7 +48,14 @@ BevyUI panel architecture:
 - Panel Lab introduces exactly one new primitive component type at a time after
   the panel shell and FooterControls are reviewed, while retaining every
   previously approved specimen in chronological body flow. The approved
-  specimens are static `textNode` and horizontal `dividerNode`; product-surface
+  specimens are static `textNode` and horizontal `dividerNode`; the square
+  `toolButtonNode` specimen is in review and composes the shared Bevy menu
+  widget path. Its shared `off`/`offPressed`/`on`/`onPressed` skin tokens own
+  dark raised and lighter opaque inset visual states; one non-interactive tight
+  dark GPU shadow renders the inset without a bright rim or second route. Its selected state is isolated to the Panel Lab surface runtime,
+  resets when that surface closes, and is projected only through the shared
+  WebGPU tree; it never creates a product mutation or DOM-owned state.
+  Product-surface
   compositions are reviewed only after all required primitives are approved.
   Every new primitive begins with a recorded BevyUI integration decision:
   existing widget kinds, actual native/WASM availability, the canonical

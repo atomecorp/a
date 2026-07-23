@@ -244,7 +244,7 @@ test('Panel Lab is development-gated and uses the shared panel skin', async () =
         updateTree: async ({ tree }) => { mounted.push(tree); return tree; },
         unmountTree: async (id) => ({ id })
     };
-    const { panelLabSurfaceDefinition, registerBevyPanelSurfaces } = await import('../../eVe/intuition/runtime/bevy_panel/bevy_panel_surfaces.js');
+    const { panelLabSurface, panelLabSurfaceDefinition, registerBevyPanelSurfaces } = await import('../../eVe/intuition/runtime/bevy_panel/bevy_panel_surfaces.js');
     const { bevyPanelRuntimeState } = await import('../../eVe/intuition/runtime/bevy_panel/bevy_panel_runtime.js');
     const { createPanelSurfaceRuntime } = await import('../../eVe/intuition/runtime/eve_intuition/panel_surface_runtime.js');
     const { EVE_COMMON_SKIN_TOKENS, EVE_PANEL_SKIN_TOKENS } = await import('../../eVe/elements/skin/index.js');
@@ -279,7 +279,7 @@ test('Panel Lab is development-gated and uses the shared panel skin', async () =
     assert.deepEqual(panel.style.shadow, material.shadow);
     assert.equal(mounted[0].presentation, true);
     assert.deepEqual(body.style.background, EVE_PANEL_SKIN_TOKENS.bevyPanel.colors.transparent);
-    assert.equal(body.children.length, 2, 'Panel Lab must retain every approved component specimen');
+    assert.equal(body.children.length, 3, 'Panel Lab must retain every approved component specimen');
     const textSpecimen = findNode(mounted[0], 'panel_lab_static_body_text');
     assert.equal(textSpecimen.kind, 'text');
     assert.equal(textSpecimen.text, 'Texte de démonstration');
@@ -300,6 +300,70 @@ test('Panel Lab is development-gated and uses the shared panel skin', async () =
     assert.deepEqual(BEVY_PANEL_TOKENS.colors.divider, [1, 1, 1, 0.25]);
     assert.equal(EVE_DEFAULT_MESSAGES.fr['eve.panel_lab.static_body_text'], 'Texte de démonstration');
     assert.equal(EVE_DEFAULT_MESSAGES.en['eve.panel_lab.static_body_text'], 'Demonstration text');
+    assert.equal(EVE_DEFAULT_MESSAGES.fr['eve.panel_lab.tool_button'], 'Outil');
+    assert.equal(EVE_DEFAULT_MESSAGES.en['eve.panel_lab.tool_button'], 'Tool');
+    const toolButtonSpecimen = findNode(mounted[0], 'panel_lab_tool_button');
+    const toolButtonBackground = findNode(mounted[0], 'panel_lab_tool_button_background');
+    const toolButtonIcon = findNode(mounted[0], 'panel_lab_tool_button_icon');
+    const toolButtonLabel = findNode(mounted[0], 'panel_lab_tool_button_label');
+    assert.equal(toolButtonSpecimen.kind, 'icon_button');
+    assert.equal(toolButtonSpecimen.style.position, undefined, 'the panel body flow owns tool-button placement');
+    assert.deepEqual(toolButtonSpecimen.style.size, [60, 60]);
+    assert.deepEqual(toolButtonSpecimen.style.padding, [8, 0, 0, 0], 'the shared tool label must sit two pixels lower');
+    assert.deepEqual(toolButtonSpecimen.style.margin, [8, 8, 8, 8], 'the tool shadow must retain a visible body gap');
+    assert.equal(typeof toolButtonSpecimen.on.press, 'function');
+    assert.equal(typeof toolButtonSpecimen.on.release, 'function');
+    assert.equal(typeof toolButtonSpecimen.on.cancel, 'function');
+    assert.equal(typeof toolButtonSpecimen.on.activate, 'function');
+    assert.deepEqual(toolButtonBackground.style.background, BEVY_MENU_TOKENS.interaction.off.background);
+    assert.deepEqual(toolButtonBackground.style.shadow, BEVY_MENU_TOKENS.interaction.off.shadow);
+    assert.equal(findNode(mounted[0], 'panel_lab_tool_button_inset_shadow_top'), null, 'the dark off state must remain raised');
+    assert.equal(toolButtonBackground.style.radius, BEVY_MENU_TOKENS.shape.standardRadiusPx);
+    assert.equal(toolButtonIcon.image.source.endsWith('/tool.svg'), true);
+    assert.equal(toolButtonLabel.image.text, 'Outil');
+    assert.deepEqual(toolButtonLabel.style.translation, [0, 1], 'the tool label must sit one pixel below the shared content flow');
+    toolButtonSpecimen.on.press();
+    const pressedButton = findNode(mounted.at(-1), 'panel_lab_tool_button');
+    const pressedBackground = findNode(mounted.at(-1), 'panel_lab_tool_button_background');
+    assert.deepEqual(pressedButton.style.translation, [0, 1]);
+    assert.deepEqual(pressedBackground.style.background, BEVY_MENU_TOKENS.interaction.offPressed.background);
+    assert.deepEqual(pressedBackground.style.shadow, BEVY_MENU_TOKENS.interaction.offPressed.shadow);
+    const pressedInset = findNode(mounted.at(-1), 'panel_lab_tool_button_inset_shadow');
+    assert.ok(pressedInset, 'pressed state must render one tight dark inner shadow');
+    assert.deepEqual(pressedInset.style.background, BEVY_MENU_TOKENS.interaction.offPressed.innerShadow.color);
+    assert.equal(pressedInset.on, undefined, 'the inner shadow must not become an interaction target');
+    assert.ok(pressedInset.style.z_index < pressedButton.style.z_index + 4, 'the inner shadow must remain below content');
+    pressedButton.on.release();
+    const releasedButton = findNode(mounted.at(-1), 'panel_lab_tool_button');
+    assert.equal(releasedButton.style.translation, undefined);
+    releasedButton.on.activate();
+    const activeBackground = findNode(mounted.at(-1), 'panel_lab_tool_button_background');
+    assert.deepEqual(activeBackground.style.background, BEVY_MENU_TOKENS.interaction.on.background);
+    assert.deepEqual(activeBackground.style.shadow, BEVY_MENU_TOKENS.interaction.on.shadow);
+    assert.ok(findNode(mounted.at(-1), 'panel_lab_tool_button_inset_shadow'));
+    findNode(mounted.at(-1), 'panel_lab_tool_button').on.press();
+    const activePressedBackground = findNode(mounted.at(-1), 'panel_lab_tool_button_background');
+    assert.deepEqual(activePressedBackground.style.background, BEVY_MENU_TOKENS.interaction.onPressed.background);
+    assert.deepEqual(activePressedBackground.style.shadow, BEVY_MENU_TOKENS.interaction.onPressed.shadow);
+    const emittedIntents = [];
+    const specimens = panelLabSurface.buildContent(panelLabSurface.readState(), { emit: (intent) => emittedIntents.push(intent) });
+    specimens.at(-1).on.press();
+    specimens.at(-1).on.release();
+    specimens.at(-1).on.cancel();
+    specimens.at(-1).on.activate();
+    assert.deepEqual(emittedIntents, [
+        { type: 'panel_lab.tool_button.press' },
+        { type: 'panel_lab.tool_button.release' },
+        { type: 'panel_lab.tool_button.cancel' },
+        { type: 'panel_lab.tool_button.activate' }
+    ]);
+    assert.deepEqual(panelLabSurface.handleEvent({ type: 'panel_lab.tool_button.cancel' }), { ok: true });
+    panelLabSurface.onClose();
+    assert.equal(panelLabSurface.readState().toolButton.active, false, 'the Lab control state must not survive surface close');
+    assert.deepEqual(
+        panelLabSurface.handleEvent({ type: 'panel_lab.unsupported' }),
+        { ok: false, error: 'panel_lab_intent_unsupported:panel_lab.unsupported' }
+    );
     assert.deepEqual(footer.style.background, BEVY_MENU_TOKENS.clear);
     assert.equal(typeof drag.on.activate, 'function');
     const contentTint = EVE_COMMON_SKIN_TOKENS.systemContent.gpu;

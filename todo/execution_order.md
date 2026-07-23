@@ -63,15 +63,21 @@ Dependances et ordre:
 - Lorsqu'un panel est entierement couvert par les composants approuves, sa
   composition Bevy est verifiee et approuvee avant la suppression definitive
   de sa route HTML.
+- Before creating or composing a panel, the guide must contain its
+  function-to-MCP-command ledger: every effectful function must reuse a
+  canonical MCP-invocable and auditable command; passive elements have no
+  command. A panel cannot be approved or retire its HTML route while the ledger
+  contains an unmapped function.
 
 - [ ] Executer integralement le guide de migration BevyUI, composant par composant puis panel par panel, jusqu'a la validation des 16 surfaces, au retrait des 13 routes HTML actives et a la suppression finale du Panel Lab.
 
 Critere de sortie:
 
-- Chaque boucle composant et chaque boucle panel possede ses preuves ciblees,
-  sa verification sur le canvas reel et l'approbation explicite du product
-  owner; Finder respecte son verrou externe; aucune route HTML, composition
-  double ou implementation Panel Lab temporaire ne demeure a la fin.
+- Each component and panel loop has targeted evidence, real-canvas validation,
+  and explicit product-owner approval; every effectful function of every panel
+  is mapped to its canonical MCP command and audit; Finder respects its external
+  gate; no HTML route, double composition, or temporary Panel Lab implementation
+  remains at completion.
 
 ### Reconciliation audit - original 138-entry snapshot
 

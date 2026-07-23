@@ -12,6 +12,7 @@
   "tests/eve/bevy_project_renderer_guards.test.mjs",
   "tests/eve/bevy_projection_adapter_contract.test.mjs",
   "tests/eve/bevy_projection_adapter_effects.test.mjs",
+  "tests/eve/bevy_ui_layout_contract.test.mjs",
   "tests/eve/bevy_ui_main_menu_contract.test.mjs",
   "tests/eve/bevy_ui_main_menu_overlay_atomic.test.mjs",
   "tests/eve/bevy_ui_main_menu_palette_motion.test.mjs",

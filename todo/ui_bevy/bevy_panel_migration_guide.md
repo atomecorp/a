@@ -177,6 +177,51 @@ record must include the component's BevyUI integration decision and state
 whether the native/WASM widget route was available, used, or unavailable with
 evidence.
 
+### Shared tool-control interaction prerequisite
+
+Status: `planned`
+
+This prerequisite does not add an eleventh component and does not authorize
+multiple specimens in Panel Lab. It makes the required interaction contract
+explicit across the existing `tool button` and `checkbox/radio/toggle`
+positions in the ten-component sequence. Before an interactive product control
+is migrated, its component record must select exactly one of these semantics:
+
+- `momentary`: the control is visibly pressed only between real `press` and
+  `release`/`cancel`; it emits its activation only when released on its target
+  and does not retain selection;
+- `hold`: the control starts its declared action on `press`, retains the pressed
+  appearance while the pointer is held, and stops on `release` or `cancel`;
+- `toggle`: activation changes one selected value between off and on; the
+  selected value belongs to the feature's identified canonical state owner,
+  never to the DOM or a generic button singleton;
+- `radio`: two or more controls in an identified group share one selected
+  value; activating a choice selects it and deselects the other choices, while
+  activating the current choice does not clear the group selection;
+- `checkbox`: independent multiple-selection controls use the same explicit
+  canonical-state rule and are not substituted for a radio group.
+
+Every interactive tool contract must also specify and verify the complete
+visual-state matrix: idle, hover, focus, pressed, selected where applicable,
+and disabled. Pressed and selected are distinct states. The shared Bevy tool
+surface must provide the visual treatment; panel code must not redraw a local
+button. The pressed treatment must visibly read as depression by adjusting the
+shared exterior shadow and surface treatment. The selected treatment may use a
+small semantic accent tint and rim. A green accent is opt-in for a feature with
+that semantic meaning; it is not the global default for an on state. Exact
+paint, shadow, icon, label, and focus tokens remain subject to the
+component-specific product-owner approval gate.
+
+The current in-review `tool button` is the latching `toggle` member of this
+matrix. Its correction must reuse the shared menu top and bottom content
+padding so its label aligns with the main ribbon; it must visibly depress while
+pressed, switch on and off only after activation, and reset its ephemeral Lab
+state when the surface closes. The later
+`checkbox/radio/toggle` component position validates the selected and group
+transitions. Each contract must prove its declared transitions with real canvas
+press, release, cancel, and activation input, focused contracts, and the
+canonical overlay hit-test when that runtime diagnostic is available.
+
 ### First specimen contract — static body text
 
 The first Lab specimen is one static body-text node. Its contract is fully
@@ -252,6 +297,57 @@ Validation record — 2026-07-23:
   chronological body flow. The text specimen remains visible above this divider
   for every later component review.
 
+### Third specimen contract — square tool button
+
+Status: `in_review`
+
+- builder: shared `toolButtonNode` in `bevy_panel_tree.js`, composing the
+  canonical Bevy ribbon `buildBevyMenuToolNode` and `buildBevyMenuToolContent`;
+  no Lab-local tool builder, material, icon, or label factory;
+- native contract: BevyUI `icon_button` is available in the normalized tree
+  vocabulary and native Bevy ECS contract. The product Web route remains the
+  existing shared WebGPU overlay route; native WASM UI operations remain opt-in
+  and inactive, so no second UI path is introduced;
+- geometry: `60 × 60 px`, in normal body flow after the approved divider with
+  the existing `10 px` padding and `8 px` gap;
+- content: the existing `tool.svg` asset and localized `Outil` / `Tool` label;
+- paint and behavior: the existing standard Bevy menu material, radius,
+  typography, icon tint, and menu metrics. Activation emits only
+  `panel_lab.tool_button.activate`; it does not mutate product state, retain
+  local state, display a counter, or add diagnostic content.
+- correction under review: the shared tool label metric is `[8, 0, 0, 0]`,
+  lowering the icon/label group by exactly `2 px` for every 60 px ribbon tool;
+  the label itself has a final `1 px` shared visual translation.
+  `EVE_TOOL_SKIN_TOKENS.bevyMenu.interaction` exposes independent `off`,
+  `offPressed`, `on`, and `onPressed` background, outer-shadow, and inner-shadow
+  tokens. Off is darker and raised; pressed/on is lighter and more opaque, with
+  one tight, dark GPU inner shadow below icon/label content. There is no bright
+  edge, lateral band, or embossed rim. It is
+  a latching `toggle` control: a real press visibly depresses the shared surface
+  until release or cancel, then each activation alternates the ephemeral selected
+  state. The state resets when Panel Lab closes and is not a business mutation, a
+  persistent setting, or DOM-owned state. Its outer shadow receives one shared
+  body-gap clearance on every side so the visible space to the divider and panel
+  bounds remains regular.
+
+Validation record — 2026-07-23:
+
+- Focused Panel Lab, layout, Bevy runtime, main-menu, and manifest contracts
+  passed (61/61), along with syntax, M0, and execution-order checks. The
+  contracts prove the 2 px-lowered shared label metric, dark raised off state,
+  lighter inset off/on states, shadow clearance, and matching overlay and
+  hit-test boxes.
+- The existing integrated-browser canvas showed one 60 px tool button after the
+  text and divider. Real pointer clicks showed idle/on/off/reset behavior. A
+  fresh browser tab remained blank before mounting the canvas, so the revised
+  no-emboss visual requires one fresh-canvas review.
+- The current browser session did not expose `window.eveBevyUiRuntime` for
+  record-center diagnostics. The real-canvas evidence and focused intent test
+  are recorded; the overlay hit-test diagnostic remains **To verify** in a
+  session exposing the canonical runtime.
+- Product-owner visual and behavioral approval remains required before this
+  specimen becomes `validated` or the next component is proposed.
+
 The Lab body remains empty until the shared PanelRoot and FooterControls have
 been reviewed. After that review, it grows cumulatively with each approved
 specimen in approval order. No approved specimen may be removed before Panel
@@ -291,11 +387,40 @@ behavior is forbidden.
 
 Status: `planned`
 
+### Mandatory MCP command mapping at panel creation
+
+Before creating or composing a product panel, create and maintain a panel-level
+functional command ledger. For every function the panel exposes, the ledger
+must name the canonical runtime tool or domain command, its MCP entrypoint,
+required capability/policy checks, and its audit result. A panel function is
+complete only when the same canonical command can be invoked from the visible
+panel and by an AI through MCP; MCP must prefer `runtime.tools.call` or
+`runtime.tools.batch_call` whenever the runtime V2 tool exists.
+
+This is a panel-creation gate, not a requirement to expose graphical elements
+as commands. Passive layout, text, separators, and other non-effectful
+components need no MCP command. Every component that invokes an effectful
+function must instead reuse the function's already-declared canonical command;
+it must never introduce a panel-local handler, UI-only action, legacy helper,
+or second command path. If no canonical command exists, creating the panel is
+blocked until that command and its MCP contract are defined through the command
+bus, capability validation, policy checks, trace fields, and audit path.
+
+The ledger must be reviewed before the panel enters composition and again at
+complete-panel acceptance. It must record, at minimum: panel registry key,
+function/intent, canonical tool or domain command id, MCP method and parameter
+contract, supported actions, capability/policy requirement, audit surface, and
+validation evidence. Every declared function must have one explicit status:
+`mapped`, `blocked`, or `not_applicable` with its evidence. A panel cannot be
+approved, retire its HTML route, or count toward program finalization while any
+effectful function is missing a `mapped` MCP command.
+
 Maintain a coverage ledger for every active panel with its registry key,
 required component types, individually validated component types, missing
 types, Bevy composition status, product-owner approval, and HTML-retirement
-status. A panel may enter composition only when its required-component column
-has no gap.
+status, plus the mandatory MCP command ledger status. A panel may enter
+composition only when its required-component column has no gap and the MCP
+command ledger contains no unreviewed effectful function.
 
 When the individually approved components are sufficient to cover the
 highest-priority product panel, recommend that panel as the next composition
@@ -307,8 +432,10 @@ surface.
 
 Before each panel composition and its approval presentation, report the same
 current global-task, component, product-panel, and legacy-HTML-route counters
-required by the component loop. Open the completed composition in the actual
-browser, verify its visual hierarchy and every real interaction, run its focused
+required by the component loop, together with the panel MCP command-ledger
+status. Open the completed composition in the actual browser, verify its visual
+hierarchy and every real interaction, exercise every mapped function through
+its canonical MCP command with its expected audit evidence, run its focused
 contracts, and submit it
 for explicit product-owner approval. If it is rejected, repair and revalidate
 the same panel. Only after functional parity and explicit approval may the

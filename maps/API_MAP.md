@@ -166,8 +166,13 @@ Exposure: existing semi-public closed `openPanelSurface(surfaceKey, context)` an
 The temporary development/test-only `ui.dev.panel_lab` tool is not a public or semi-public API. It is registered only when the internal Panel Lab gate is enabled, delegates to the same closed panel route, and must be removed after the shared component migration is complete. Its short activation toggles the Lab through that route; its 520 ms long press is a development-only `window.location.reload()` action and suppresses the matching toggle activation.
 
 Panel Lab introduces exactly one new component specimen per approval loop and
-retains all approved specimens in chronological body flow; its current shared
-specimens are static body text and a passive horizontal divider. Product-surface
+retains all approved specimens in chronological body flow; its approved shared
+specimens are static body text and a passive horizontal divider, with a square
+tool-button specimen in review. That tool button emits its closed Lab intents
+(`panel_lab.tool_button.press`, `.release`, `.cancel`, and `.activate`) and
+exposes no public API or durable state; its selected presentation state is
+ephemeral and resets on surface close.
+Product-surface
 composition reviews start only after their required primitives are approved; it
 is never a second Timeline API or state owner.
 
