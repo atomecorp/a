@@ -48,11 +48,14 @@ BevyUI panel architecture:
 - Panel Lab introduces exactly one new primitive component type at a time after
   the panel shell and FooterControls are reviewed, while retaining every
   previously approved specimen in chronological body flow. The approved
-  specimens are static `textNode` and horizontal `dividerNode`; the square
-  `toolButtonNode` specimen is in review and composes the shared Bevy menu
-  widget path. Its shared `off`/`offPressed`/`on`/`onPressed` skin tokens own
-  dark raised and lighter opaque inset visual states; one non-interactive tight
-  dark GPU shadow renders the inset without a bright rim or second route. Its selected state is isolated to the Panel Lab surface runtime,
+  specimens are static `textNode` and horizontal `dividerNode`; the in-review
+  icon action button composes the shared `buildBevyIconButtonNode` widget path.
+  Its opaque 30 px role-tinted no-backdrop rest surface, hue-preserving
+  rest-derived pressed luminance, accent-mixed active surface, distinct state
+  shadows, and 8 px divider/label spacing are owned by
+  `EVE_BUTTON_SKIN_TOKENS`; its label is a vertically centered right-side
+  sibling rather than button content. Bevy 0.19 has no native inner-shadow
+  style, so no synthetic overlay or second route is added. Its selected state is isolated to the Panel Lab surface runtime,
   resets when that surface closes, and is projected only through the shared
   WebGPU tree; it never creates a product mutation or DOM-owned state.
   Product-surface

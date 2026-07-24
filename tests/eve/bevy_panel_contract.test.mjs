@@ -279,7 +279,8 @@ test('Panel Lab is development-gated and uses the shared panel skin', async () =
     assert.deepEqual(panel.style.shadow, material.shadow);
     assert.equal(mounted[0].presentation, true);
     assert.deepEqual(body.style.background, EVE_PANEL_SKIN_TOKENS.bevyPanel.colors.transparent);
-    assert.equal(body.children.length, 3, 'Panel Lab must retain every approved component specimen');
+    assert.equal(body.style.gap, 0, 'Panel Lab owns its vertical rhythm through specimen divider margins');
+    assert.equal(body.children.length, 11, 'Panel Lab must retain the text, separators, and every declared button variant');
     const textSpecimen = findNode(mounted[0], 'panel_lab_static_body_text');
     assert.equal(textSpecimen.kind, 'text');
     assert.equal(textSpecimen.text, 'Texte de démonstration');
@@ -295,71 +296,127 @@ test('Panel Lab is development-gated and uses the shared panel skin', async () =
     assert.equal(dividerSpecimen.on, undefined);
     assert.equal(dividerSpecimen.style.size, undefined);
     assert.deepEqual(dividerSpecimen.style.background, BEVY_PANEL_TOKENS.colors.divider);
-    assert.deepEqual(dividerSpecimen.style.margin, [0, BEVY_PANEL_TOKENS.dividerMarginHorizontalPx, 0, BEVY_PANEL_TOKENS.dividerMarginHorizontalPx]);
+    assert.deepEqual(dividerSpecimen.style.margin, [8, BEVY_PANEL_TOKENS.dividerMarginHorizontalPx, 8, BEVY_PANEL_TOKENS.dividerMarginHorizontalPx]);
     assert.equal(BEVY_PANEL_TOKENS.dividerMarginHorizontalPx, 21);
     assert.deepEqual(BEVY_PANEL_TOKENS.colors.divider, [1, 1, 1, 0.25]);
     assert.equal(EVE_DEFAULT_MESSAGES.fr['eve.panel_lab.static_body_text'], 'Texte de démonstration');
     assert.equal(EVE_DEFAULT_MESSAGES.en['eve.panel_lab.static_body_text'], 'Demonstration text');
-    assert.equal(EVE_DEFAULT_MESSAGES.fr['eve.panel_lab.tool_button'], 'Outil');
-    assert.equal(EVE_DEFAULT_MESSAGES.en['eve.panel_lab.tool_button'], 'Tool');
-    const toolButtonSpecimen = findNode(mounted[0], 'panel_lab_tool_button');
-    const toolButtonBackground = findNode(mounted[0], 'panel_lab_tool_button_background');
-    const toolButtonIcon = findNode(mounted[0], 'panel_lab_tool_button_icon');
-    const toolButtonLabel = findNode(mounted[0], 'panel_lab_tool_button_label');
-    assert.equal(toolButtonSpecimen.kind, 'icon_button');
-    assert.equal(toolButtonSpecimen.style.position, undefined, 'the panel body flow owns tool-button placement');
-    assert.deepEqual(toolButtonSpecimen.style.size, [60, 60]);
-    assert.deepEqual(toolButtonSpecimen.style.padding, [8, 0, 0, 0], 'the shared tool label must sit two pixels lower');
-    assert.deepEqual(toolButtonSpecimen.style.margin, [8, 8, 8, 8], 'the tool shadow must retain a visible body gap');
-    assert.equal(typeof toolButtonSpecimen.on.press, 'function');
-    assert.equal(typeof toolButtonSpecimen.on.release, 'function');
-    assert.equal(typeof toolButtonSpecimen.on.cancel, 'function');
-    assert.equal(typeof toolButtonSpecimen.on.activate, 'function');
-    assert.deepEqual(toolButtonBackground.style.background, BEVY_MENU_TOKENS.interaction.off.background);
-    assert.deepEqual(toolButtonBackground.style.shadow, BEVY_MENU_TOKENS.interaction.off.shadow);
-    assert.equal(findNode(mounted[0], 'panel_lab_tool_button_inset_shadow_top'), null, 'the dark off state must remain raised');
-    assert.equal(toolButtonBackground.style.radius, BEVY_MENU_TOKENS.shape.standardRadiusPx);
-    assert.equal(toolButtonIcon.image.source.endsWith('/tool.svg'), true);
-    assert.equal(toolButtonLabel.image.text, 'Outil');
-    assert.deepEqual(toolButtonLabel.style.translation, [0, 1], 'the tool label must sit one pixel below the shared content flow');
-    toolButtonSpecimen.on.press();
-    const pressedButton = findNode(mounted.at(-1), 'panel_lab_tool_button');
-    const pressedBackground = findNode(mounted.at(-1), 'panel_lab_tool_button_background');
-    assert.deepEqual(pressedButton.style.translation, [0, 1]);
-    assert.deepEqual(pressedBackground.style.background, BEVY_MENU_TOKENS.interaction.offPressed.background);
-    assert.deepEqual(pressedBackground.style.shadow, BEVY_MENU_TOKENS.interaction.offPressed.shadow);
-    const pressedInset = findNode(mounted.at(-1), 'panel_lab_tool_button_inset_shadow');
-    assert.ok(pressedInset, 'pressed state must render one tight dark inner shadow');
-    assert.deepEqual(pressedInset.style.background, BEVY_MENU_TOKENS.interaction.offPressed.innerShadow.color);
-    assert.equal(pressedInset.on, undefined, 'the inner shadow must not become an interaction target');
-    assert.ok(pressedInset.style.z_index < pressedButton.style.z_index + 4, 'the inner shadow must remain below content');
-    pressedButton.on.release();
-    const releasedButton = findNode(mounted.at(-1), 'panel_lab_tool_button');
-    assert.equal(releasedButton.style.translation, undefined);
-    releasedButton.on.activate();
-    const activeBackground = findNode(mounted.at(-1), 'panel_lab_tool_button_background');
-    assert.deepEqual(activeBackground.style.background, BEVY_MENU_TOKENS.interaction.on.background);
-    assert.deepEqual(activeBackground.style.shadow, BEVY_MENU_TOKENS.interaction.on.shadow);
-    assert.ok(findNode(mounted.at(-1), 'panel_lab_tool_button_inset_shadow'));
-    findNode(mounted.at(-1), 'panel_lab_tool_button').on.press();
-    const activePressedBackground = findNode(mounted.at(-1), 'panel_lab_tool_button_background');
-    assert.deepEqual(activePressedBackground.style.background, BEVY_MENU_TOKENS.interaction.onPressed.background);
-    assert.deepEqual(activePressedBackground.style.shadow, BEVY_MENU_TOKENS.interaction.onPressed.shadow);
-    const emittedIntents = [];
-    const specimens = panelLabSurface.buildContent(panelLabSurface.readState(), { emit: (intent) => emittedIntents.push(intent) });
-    specimens.at(-1).on.press();
-    specimens.at(-1).on.release();
-    specimens.at(-1).on.cancel();
-    specimens.at(-1).on.activate();
-    assert.deepEqual(emittedIntents, [
-        { type: 'panel_lab.tool_button.press' },
-        { type: 'panel_lab.tool_button.release' },
-        { type: 'panel_lab.tool_button.cancel' },
-        { type: 'panel_lab.tool_button.activate' }
-    ]);
-    assert.deepEqual(panelLabSurface.handleEvent({ type: 'panel_lab.tool_button.cancel' }), { ok: true });
+    assert.equal(EVE_DEFAULT_MESSAGES.fr['eve.panel_lab.icon_button.momentary'], 'Momentané');
+    assert.equal(EVE_DEFAULT_MESSAGES.en['eve.panel_lab.icon_button.toggle'], 'Toggle');
+    const { EVE_BUTTON_SKIN_TOKENS } = await import('../../eVe/elements/skin/button_skin.js');
+    const { resolveBevyIconButtonSurface } = await import('../../eVe/intuition/shared/bevy_ui_icon_button.js');
+    const buttonTokens = EVE_BUTTON_SKIN_TOKENS.bevyButton;
+    assert.equal(buttonTokens.specimenDividerMarginPx, 8);
+    assert.equal(buttonTokens.labelGapPx, 8);
+    assert.equal(buttonTokens.restToneMix, 0.72);
+    assert.equal(buttonTokens.pressedLuminanceLift, 0.16);
+    assert.equal(buttonTokens.activeAccentMix, 0.34);
+    assert.equal(buttonTokens.rest.backdrop, null);
+    const variants = ['momentary', 'hold', 'toggle', 'radio_a', 'radio_b'];
+    for (const variant of variants) {
+        const button = findNode(mounted[0], `panel_lab_icon_button_${variant}`);
+        const label = findNode(mounted[0], `panel_lab_icon_button_${variant}_label`);
+        const background = findNode(mounted[0], `panel_lab_icon_button_${variant}_background`);
+        assert.equal(button.kind, 'icon_button');
+        assert.deepEqual(button.style.size, [30, 30]);
+        assert.equal(button.children.length, 2, 'a panel action button has only its surface and centered icon');
+        const tone = variant === 'hold' ? 'success' : variant === 'toggle' ? 'warning' : variant.startsWith('radio') ? 'danger' : 'neutral';
+        const expectedBackground = variant === 'radio_a'
+            ? resolveBevyIconButtonSurface({ tone, active: true }).background
+            : resolveBevyIconButtonSurface({ tone }).background;
+        assert.deepEqual(background.style.background, expectedBackground);
+        assert.equal(label.kind, 'text');
+        assert.equal(label.style.position, undefined, 'the label must be a flow sibling to the button, never in it');
+        assert.equal(label.style.text_vertical_align, buttonTokens.labelVerticalAlign);
+        assert.equal(label.style.text_offset_y, buttonTokens.labelOffsetYPx);
+    }
+    const neutralRest = resolveBevyIconButtonSurface({ tone: 'neutral' }).background;
+    const successRest = resolveBevyIconButtonSurface({ tone: 'success' }).background;
+    const warningRest = resolveBevyIconButtonSurface({ tone: 'warning' }).background;
+    const dangerRest = resolveBevyIconButtonSurface({ tone: 'danger' }).background;
+    assert.equal(new Set([neutralRest, successRest, warningRest, dangerRest].map((color) => color.join(','))).size, 4);
+    const warningPressed = resolveBevyIconButtonSurface({ tone: 'warning', pressed: true }).background;
+    assert.equal(warningPressed[3], 1);
+    assert.ok(Math.max(...warningPressed.slice(0, 3)) > Math.max(...warningRest.slice(0, 3)));
+    assert.ok(warningPressed[0] > warningPressed[1] && warningPressed[1] > warningPressed[2]);
+    assert.equal(resolveBevyIconButtonSurface({ tone: 'warning' }).backdrop, null);
+    for (const id of ['momentary', 'hold', 'toggle', 'radio']) {
+        assert.equal(findNode(mounted[0], `panel_lab_icon_button_${id}_divider`).kind, 'divider');
+    }
+    const layoutRecords = projectBevyUiTreeRecords({
+        tree: mounted[0], treeId: 'panel_lab_geometry_contract', workspaceLayer: 'panel'
+    });
+    const recordFor = (id) => layoutRecords.find((record) => record.id === `__eve_bevy_ui_panel_lab_geometry_contract_${id}`);
+    const dividerRecord = recordFor('panel_lab_horizontal_divider');
+    const momentaryBackgroundRecord = recordFor('panel_lab_icon_button_momentary_background');
+    const momentaryLabelRecord = recordFor('panel_lab_icon_button_momentary_label_text');
+    assert.deepEqual(
+        [dividerRecord?.properties?.left, dividerRecord?.properties?.top, dividerRecord?.properties?.width, dividerRecord?.properties?.height],
+        [291, 162, 358, 1]
+    );
+    assert.deepEqual(
+        [momentaryBackgroundRecord?.properties?.left, momentaryBackgroundRecord?.properties?.top],
+        [270, 171]
+    );
+    assert.deepEqual(
+        [momentaryLabelRecord?.properties?.left, momentaryLabelRecord?.properties?.top],
+        [308, 171]
+    );
+    assert.equal(momentaryLabelRecord?.properties?.text_style?.vertical_align, 'center');
+    assert.equal(momentaryLabelRecord?.properties?.text_style?.padding_y, 1);
+    const momentary = findNode(mounted[0], 'panel_lab_icon_button_momentary');
+    const hold = findNode(mounted[0], 'panel_lab_icon_button_hold');
+    const toggle = findNode(mounted[0], 'panel_lab_icon_button_toggle');
+    const radioA = findNode(mounted[0], 'panel_lab_icon_button_radio_a');
+    const radioB = findNode(mounted[0], 'panel_lab_icon_button_radio_b');
+    momentary.on.press();
+    assert.deepEqual(findNode(mounted.at(-1), 'panel_lab_icon_button_momentary').style.translation, [0, 1]);
+    assert.deepEqual(
+        findNode(mounted.at(-1), 'panel_lab_icon_button_momentary_background').style.background,
+        resolveBevyIconButtonSurface({ tone: 'neutral', pressed: true }).background
+    );
+    assert.deepEqual(findNode(mounted.at(-1), 'panel_lab_icon_button_momentary_background').style.shadow, buttonTokens.pressed.shadow);
+    momentary.on.release();
+    assert.equal(findNode(mounted.at(-1), 'panel_lab_icon_button_momentary').style.translation, undefined);
+    assert.deepEqual(
+        findNode(mounted.at(-1), 'panel_lab_icon_button_momentary_background').style.background,
+        resolveBevyIconButtonSurface({ tone: 'neutral' }).background
+    );
+    hold.on.press();
+    assert.deepEqual(
+        findNode(mounted.at(-1), 'panel_lab_icon_button_hold_background').style.background,
+        resolveBevyIconButtonSurface({ tone: 'success', active: true }).background
+    );
+    assert.deepEqual(findNode(mounted.at(-1), 'panel_lab_icon_button_hold_background').style.shadow, buttonTokens.active.shadow);
+    hold.on.cancel();
+    assert.equal(panelLabSurface.readState().iconButton.holdPressed, false);
+    toggle.on.press();
+    toggle.on.release();
+    toggle.on.activate();
+    assert.equal(panelLabSurface.readState().iconButton.toggleActive, true);
+    assert.deepEqual(
+        findNode(mounted.at(-1), 'panel_lab_icon_button_toggle_background').style.background,
+        resolveBevyIconButtonSurface({ tone: 'warning', active: true }).background
+    );
+    toggle.on.press();
+    toggle.on.release();
+    toggle.on.activate();
+    assert.equal(panelLabSurface.readState().iconButton.toggleActive, false);
+    radioB.on.press();
+    radioB.on.release();
+    radioB.on.activate();
+    assert.equal(panelLabSurface.readState().iconButton.radioSelected, 'b');
+    assert.deepEqual(
+        findNode(mounted.at(-1), 'panel_lab_icon_button_radio_b_background').style.background,
+        resolveBevyIconButtonSurface({ tone: 'danger', active: true }).background
+    );
+    assert.deepEqual(
+        findNode(mounted.at(-1), 'panel_lab_icon_button_radio_a_background').style.background,
+        resolveBevyIconButtonSurface({ tone: 'danger' }).background
+    );
     panelLabSurface.onClose();
-    assert.equal(panelLabSurface.readState().toolButton.active, false, 'the Lab control state must not survive surface close');
+    assert.equal(panelLabSurface.readState().iconButton.toggleActive, false, 'the Lab control state must not survive surface close');
+    assert.equal(panelLabSurface.readState().iconButton.radioSelected, 'a', 'the Lab radio group must reset on close');
     assert.deepEqual(
         panelLabSurface.handleEvent({ type: 'panel_lab.unsupported' }),
         { ok: false, error: 'panel_lab_intent_unsupported:panel_lab.unsupported' }
@@ -386,8 +443,101 @@ test('Panel Lab is development-gated and uses the shared panel skin', async () =
     await fullscreenDrag.on.activate();
     const restoredPanel = findNode(mounted.at(-1), 'eve_bevy_panel_panel_lab_panel');
     assert.deepEqual(restoredPanel.style.position, [260, 120]);
-    assert.deepEqual(restoredPanel.style.size, [420, 280]);
+    assert.deepEqual(restoredPanel.style.size, [420, 340]);
     await runtime.closePanelSurface('panel_lab');
+});
+
+test('Panel Lab icon buttons retain their distinct states through real canvas pointer cycles', async () => {
+    const { dom, surface } = installPanelDom();
+    const previousWindow = globalThis.window;
+    const previousDocument = globalThis.document;
+    globalThis.window = dom.window;
+    globalThis.document = dom.window.document;
+    try {
+        const { panelLabSurface } = await import('../../eVe/intuition/runtime/bevy_panel/bevy_panel_surfaces.js');
+        panelLabSurface.onOpen();
+        const uiRuntime = createEveBevyUiRuntime({
+            imageResolverFactory: () => async () => ({ width: 1, height: 1, rgba: [255, 255, 255, 255] }),
+            requestFrame: () => 0
+        });
+        let tree = null;
+        const buildTree = () => ({
+            id: 'panel_lab_pointer_tree',
+            layer: 'panel',
+            root: {
+                id: 'panel_lab_pointer_root',
+                kind: 'root',
+                style: { size: [420, 340] },
+                children: [{
+                    id: 'panel_lab_pointer_body',
+                    kind: 'scroll_area',
+                    style: { size: [420, 340], padding: [10, 10, 10, 10], gap: 0, flex_direction: 'column' },
+                    children: panelLabSurface.buildContent(panelLabSurface.readState(), {
+                        emit: (intent) => {
+                            panelLabSurface.handleEvent(intent);
+                            tree = buildTree();
+                            void uiRuntime.updateTree({ id: tree.id, surface, tree });
+                        }
+                    })
+                }]
+            }
+        });
+        const pointFor = (id) => {
+            const records = projectBevyUiTreeRecords({ tree, treeId: tree.id, workspaceLayer: 'panel' });
+            const record = records.find((candidate) => candidate.id === `__eve_bevy_ui_${tree.id}_${id}_background`);
+            return {
+                x: Number(record?.properties?.left) + 15,
+                y: Number(record?.properties?.top) + 15
+            };
+        };
+        const pointer = (type, { x, y }, pointerId) => {
+            const event = new dom.window.Event(type, { bubbles: true, cancelable: true });
+            Object.defineProperties(event, {
+                pointerId: { value: pointerId },
+                clientX: { value: x },
+                clientY: { value: y }
+            });
+            return event;
+        };
+        const click = async (id, pointerId) => {
+            const point = pointFor(id);
+            surface.dispatchEvent(pointer('pointerdown', point, pointerId));
+            await Promise.resolve();
+            surface.dispatchEvent(pointer('pointerup', point, pointerId));
+            await Promise.resolve();
+            await Promise.resolve();
+        };
+
+        tree = buildTree();
+        await uiRuntime.mountTree({ id: tree.id, surface, tree });
+
+        const momentaryPoint = pointFor('panel_lab_icon_button_momentary');
+        surface.dispatchEvent(pointer('pointerdown', momentaryPoint, 1));
+        assert.equal(panelLabSurface.readState().iconButton.momentaryPressed, true);
+        surface.dispatchEvent(pointer('pointerup', momentaryPoint, 1));
+        assert.equal(panelLabSurface.readState().iconButton.momentaryPressed, false);
+
+        const holdPoint = pointFor('panel_lab_icon_button_hold');
+        surface.dispatchEvent(pointer('pointerdown', holdPoint, 2));
+        assert.equal(panelLabSurface.readState().iconButton.holdPressed, true);
+        surface.dispatchEvent(pointer('pointerup', holdPoint, 2));
+        assert.equal(panelLabSurface.readState().iconButton.holdPressed, false);
+
+        await click('panel_lab_icon_button_toggle', 3);
+        assert.equal(panelLabSurface.readState().iconButton.toggleActive, true);
+        await click('panel_lab_icon_button_toggle', 4);
+        assert.equal(panelLabSurface.readState().iconButton.toggleActive, false);
+        await click('panel_lab_icon_button_radio_b', 5);
+        assert.equal(panelLabSurface.readState().iconButton.radioSelected, 'b');
+        await click('panel_lab_icon_button_radio_a', 6);
+        assert.equal(panelLabSurface.readState().iconButton.radioSelected, 'a');
+
+        await uiRuntime.unmountTree(tree.id);
+        panelLabSurface.onClose();
+    } finally {
+        globalThis.window = previousWindow;
+        globalThis.document = previousDocument;
+    }
 });
 
 test('Bevy UI text projection preserves canonical node typography', () => {
@@ -398,7 +548,8 @@ test('Bevy UI text projection preserves canonical node typography', () => {
                     id: 'text', kind: 'text', text: 'Demonstration text',
                     style: {
                         position: [10, 10], size: [200, 24], font_size: 16,
-                        font_weight: 500, line_height: 19, text_align: 'left'
+                        font_weight: 500, line_height: 19, text_align: 'left',
+                        text_vertical_align: 'center', text_offset_y: 1
                     }
                 }]
             }
@@ -413,8 +564,9 @@ test('Bevy UI text projection preserves canonical node typography', () => {
         line_height: 19,
         align: 'left',
         baseline: 'middle',
+        vertical_align: 'center',
         padding_x: 0,
-        padding_y: 0
+        padding_y: 1
     });
 });
 

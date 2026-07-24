@@ -164,7 +164,7 @@ interaction check.
 Status: `in_review`
 
 Validate exactly one component type at a time in Panel Lab in this order: text,
-separator, tool button, input, list/row, slider tool, accordion, select,
+separator, icon action button, input, list/row, slider tool, accordion, select,
 checkbox/radio/toggle, and table/property grid. A separator is an optional
 product-composition component. Every component must choose the strongest
 available BevyUI widget route as its rendering primitive, use the shared panel
@@ -297,56 +297,65 @@ Validation record — 2026-07-23:
   chronological body flow. The text specimen remains visible above this divider
   for every later component review.
 
-### Third specimen contract — square tool button
+### Third specimen contract — icon action button
 
 Status: `in_review`
 
-- builder: shared `toolButtonNode` in `bevy_panel_tree.js`, composing the
-  canonical Bevy ribbon `buildBevyMenuToolNode` and `buildBevyMenuToolContent`;
-  no Lab-local tool builder, material, icon, or label factory;
-- native contract: BevyUI `icon_button` is available in the normalized tree
-  vocabulary and native Bevy ECS contract. The product Web route remains the
-  existing shared WebGPU overlay route; native WASM UI operations remain opt-in
-  and inactive, so no second UI path is introduced;
-- geometry: `60 × 60 px`, in normal body flow after the approved divider with
-  the existing `10 px` padding and `8 px` gap;
-- content: the existing `tool.svg` asset and localized `Outil` / `Tool` label;
-- paint and behavior: the existing standard Bevy menu material, radius,
-  typography, icon tint, and menu metrics. Activation emits only
-  `panel_lab.tool_button.activate`; it does not mutate product state, retain
-  local state, display a counter, or add diagnostic content.
-- correction under review: the shared tool label metric is `[8, 0, 0, 0]`,
-  lowering the icon/label group by exactly `2 px` for every 60 px ribbon tool;
-  the label itself has a final `1 px` shared visual translation.
-  `EVE_TOOL_SKIN_TOKENS.bevyMenu.interaction` exposes independent `off`,
-  `offPressed`, `on`, and `onPressed` background, outer-shadow, and inner-shadow
-  tokens. Off is darker and raised; pressed/on is lighter and more opaque, with
-  one tight, dark GPU inner shadow below icon/label content. There is no bright
-  edge, lateral band, or embossed rim. It is
-  a latching `toggle` control: a real press visibly depresses the shared surface
-  until release or cancel, then each activation alternates the ephemeral selected
-  state. The state resets when Panel Lab closes and is not a business mutation, a
-  persistent setting, or DOM-owned state. Its outer shadow receives one shared
-  body-gap clearance on every side so the visible space to the divider and panel
-  bounds remains regular.
+- Decision: the former `60 × 60 px` icon-plus-label specimen is a ribbon tool,
+  not a panel action button. It is superseded before approval and is not a
+  reference for this component. Tool active-state design remains out of scope.
+- builder: one shared BevyUI icon-button builder and one shared button skin;
+  Panel Lab only composes its declared variants and must not draw local button
+  paint, shadow, icon, or label treatments.
+- native contract: BevyUI `icon_button` is the available normalized widget
+  kind. The product Web route remains the existing shared WebGPU overlay route;
+  native WASM UI operations remain opt-in and inactive, so no second UI path is
+  introduced.
+- geometry: the interactive square is `30 × 30 px`; it is exactly half the
+  former tool width and height. Its icon is centered and it has no visible
+  in-square label. A localized text label is a separate sibling placed on the
+  right, with `labelGapPx: 8`. Panel Lab sets its body flow gap to `0`; every
+  specimen divider carries `specimenDividerMarginPx: 8` above and below, so
+  the vertical rhythm is explicit and never written locally as a literal.
+- paint: both rest and active surfaces are opaque. The shared button palette
+  defines neutral/blue, success/green, warning/orange, and danger/red semantic
+  roles. Rest mixes each declared semantic role into the shared opaque system
+  surface through `restToneMix: 0.72`, without inheriting the translucent
+  surface backdrop. Pressed scales the RGB channels of that role-tinted rest
+  background through `pressedLuminanceLift: 0.16`, preserving its hue instead
+  of adding gray, then applies its own diffuse shadow and `1 px` downward
+  translation. Active selection mixes the declared semantic surface toward its
+  accent through `activeAccentMix: 0.34`, remains opaque, and uses its own
+  diffuse shadow. Icon
+  and external label use shared system-content tokens. The label uses the
+  normalized `text_vertical_align` plus `text_offset_y` (`+1 px`). Bevy 0.19
+  has no native inner-shadow field, so this contract does not emulate one with
+  geometric bands or embossing.
+- variants approved together as the one button-component test contract:
+  `momentary` activates only on release and never remains selected; `hold`
+  begins on press and ends on release/cancel; `toggle` alternates one ephemeral
+  selected value; `radio` shows two choices in one exclusive ephemeral group.
+  All Lab state resets on close and emits only `panel_lab.icon_button.*`
+  ephemeral intents. No product mutation, persistent setting, counter, or
+  diagnostic content is allowed.
 
-Validation record — 2026-07-23:
+Validation required before status becomes `validated`:
 
-- Focused Panel Lab, layout, Bevy runtime, main-menu, and manifest contracts
-  passed (61/61), along with syntax, M0, and execution-order checks. The
-  contracts prove the 2 px-lowered shared label metric, dark raised off state,
-  lighter inset off/on states, shadow clearance, and matching overlay and
-  hit-test boxes.
-- The existing integrated-browser canvas showed one 60 px tool button after the
-  text and divider. Real pointer clicks showed idle/on/off/reset behavior. A
-  fresh browser tab remained blank before mounting the canvas, so the revised
-  no-emboss visual requires one fresh-canvas review.
-- The current browser session did not expose `window.eveBevyUiRuntime` for
-  record-center diagnostics. The real-canvas evidence and focused intent test
-  are recorded; the overlay hit-test diagnostic remains **To verify** in a
-  session exposing the canonical runtime.
-- Product-owner visual and behavioral approval remains required before this
-  specimen becomes `validated` or the next component is proposed.
+- focused contracts for exact 30 px geometry, sibling labels, shared palette,
+  token-owned separator/label spacing, text vertical alignment, i18n, no
+  visible DOM, real canvas press/release/cancel/activate transitions, exclusive
+  radio selection, and panel-close reset;
+- regression proof that the existing main-menu tool builder is unchanged;
+- real-canvas open, close, long-press reload, reopen, and real interaction for
+  every declared variant; and
+- explicit product-owner visual and behavioral approval.
+
+Technical evidence on 2026-07-24: a fresh Tauri current-resource run showed
+the four distinct opaque rest tones; real native pointer input captured the
+brighter momentary and hold states during pressure, two-click toggle
+activation/deactivation, exclusive Radio A/B replacement, close/reopen reset,
+and post-reload reopen. The component remains `in_review` solely for the
+explicit product-owner approval gate.
 
 The Lab body remains empty until the shared PanelRoot and FooterControls have
 been reviewed. After that review, it grows cumulatively with each approved
@@ -366,11 +375,11 @@ real shared canvas, then confirm that the Lab still opens and closes after the
 reload.
 
 After each component, apply the full mandatory approval loop above and retain
-the approved component in Panel Lab. The
-approved tool-button tokens are the shared reference for panels, home, menus,
-and system controls; panel-local button colors or tool appearances are
-forbidden. Tool buttons and slider tools must compose the existing canonical
-Bevy menu/tool visual contract rather than redefining a local control.
+the approved component in Panel Lab. The approved icon-button skin and builder
+are the shared reference for panel action buttons; panel-local button colors or
+appearances are forbidden. Ribbon tools and slider tools remain separate
+components and continue to compose their existing canonical menu/tool visual
+contract rather than redefining a local control.
 
 No new component, panel module, or Panel Lab composition may be presented as
 implemented until it has been opened in the browser test environment and its
