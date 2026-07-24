@@ -121,10 +121,10 @@ Style sources audited:
 Accepted contract:
 
 - Bevy panel tokens are derived from `EVE_PANEL_SKIN_TOKENS.bevyPanel`.
-- The panel shell, its footer, ribbon tools, Flower and contextual Atome edit
-  chrome consume the one immutable system material: paint, backdrop and drop
-  shadow. Footer controls remain transparent layout children so the panel emits
-  one backdrop and one shadow only.
+- The panel shell, ribbon tools, Flower and contextual Atome edit chrome consume
+  the immutable system material. The panel alone owns its backdrop and external
+  shadow. Its footer covers scrolled content with the same system-surface
+  background and backdrop blur, but deliberately omits the external shadow.
 - The visible panel uses the shared canvas and no visible panel DOM.
 - The lab is opened and closed through the normal panel route only.
 - The empty body intentionally contains no product component.
@@ -145,7 +145,7 @@ No mobile check is required before component integration.
 
 ## Stage 2 — Panel system behavior
 
-Status: `in_review`
+Status: `validated`
 
 The footer reuses the existing Bevy contextual Atome-edit visual contract from
 `atome_contextual_edit_model.js` and `BEVY_MENU_TOKENS`: left resize handle,
@@ -155,9 +155,51 @@ Validate close, drag, each resize handle, and scroll separately. Geometry
 remains ephemeral runtime state in the Bevy panel owner and must not be stored
 in the DOM or persisted without an identified canonical owner.
 
-The footer visual contract is approved. This stage remains `in_review` until
-drag, both resize handles, and scroll have each completed their separate
-interaction check.
+The corrected footer and inertial-scroll visual contract is validated. Drag,
+both resize handles, clipping, scroll release and reset retain separate
+interaction checks as permanent regression coverage.
+
+Overflow implementation record — 2026-07-24:
+
+- `BodyViewport`, translated `BodyContent`, and `FooterControls` remain one
+  shared BevyUI tree; the footer is a fixed sibling at the panel bottom.
+- Shared layout code computes natural content height, bounded vertical offset,
+  and inherited viewport clips for both projection and hit-testing.
+- Wheel/trackpad input targets the nearest scroll ancestor. A vertical pointer
+  drag beyond `8 px` cancels its child control and becomes the scroll gesture.
+  Releasing that drag continues with bounded, friction-based inertia. Scroll
+  offset, sampled velocity and animation-frame state are ephemeral per
+  tree/area and are cancelled/reset on unmount.
+- The Virtual Scene carries one axis-aligned `clip_rect` on spawn and transform
+  updates. The shared Bevy renderer crops sprite geometry, UVs and associated
+  shape-shadow textures; fully out-of-viewport records are omitted from
+  projection and hit-testing.
+- The footer background/backdrop pair, inertial velocity/friction values and the
+  `3 px` auto-hidden scroll thumb are panel-skin tokens. The footer pair aliases
+  the common panel/tool system material and does not create a second shadow.
+  Desktop size stays at least `240 × 120 px` when the surface permits.
+- The visible product route remains the existing WebGPU overlay. Native WASM
+  BevyUI stays opt-in and inactive, with no DOM mask or fallback renderer.
+
+The product owner explicitly approved this overflow/footer treatment on
+2026-07-24 after the integrated-browser blur and release-inertia evidence.
+
+Technical evidence — 2026-07-24:
+
+- focused Panel/layout/runtime/projection contracts pass `54/54`; Bevy core
+  library tests pass `67/67`; Web and Tauri renderer crates compile;
+  `check:syntax`, `check:m0`, and `check:execution-order` pass;
+- a fresh WebGPU bundle was exercised in the integrated browser with real
+  pointer input: short resize to overflow, wheel scroll to the bottom, drag
+  takeover from a button, activation after scrolling, footer drag, second
+  resize, fullscreen/restoration, close/reopen reset, reload/reopen, and an
+  empty browser warning/error console;
+- real release-time and settling captures show that content continues after the
+  pointer is released and decelerates to the bounded bottom offset; a
+  contrasting Dashboard colour boundary behind the fixed footer is visibly
+  diffused by the shared backdrop while the footer controls remain legible.
+  Close/reopen restores the top offset. The thin thumb appears only while the
+  overflowing body is active.
 
 ## Stage 3 — Shared components
 
@@ -360,6 +402,79 @@ and post-reload reopen. The product owner explicitly approved the visual,
 behavioral, spacing, and tokenized skinning contract on 2026-07-24. This third
 shared component is therefore `validated`; its builders, tokens, intents, and
 evidence remain the canonical reference for later panel compositions.
+
+### Fourth specimen contract — text input
+
+Status: `in_review`
+
+- Contract: one localized, single-line `358 × 32 px` `text_input` follows the
+  approved text, divider, and icon-action specimens. Its draft is runtime-only,
+  begins empty, and resets on close/reopen or reload; blur/Return preserve the
+  displayed runtime value but never emit an Atome mutation or MCP command.
+- Ownership: `atome/src/squirrel/components/input_contract.js` owns the
+  renderer-neutral Input presentation contract; `text_editing_session.js` and
+  `text_editing_layout.js` own the one active keyboard/selection/caret session
+  and glyph-coordinate layout; `bevy_panel_tree.js` owns the shared visible
+  builder; Panel Lab only composes these owners.
+- Interaction: while the empty field is not focused, it displays its localized
+  placeholder. Focus hides that presentation text immediately, leaves the
+  runtime value empty, and places a visible caret at index `0`. A user-entered
+  value is never cleared by a later focus, which places the caret at the
+  clicked glyph; pointer drag selects in either direction and double-click
+  selects the complete value. Return outside IME validates exactly once and
+  ends focus like blur without inserting a line break. An empty blur restores
+  the placeholder. Disabled fields mount no editor.
+- Paint: selection is system white at 45% alpha. A collapsed selection projects
+  a one-logical-pixel white caret with a 530 ms visible/hidden cadence, reset to
+  visible after input or pointer movement. Layout uses browser glyph metrics
+  when available and the same font/style inputs as text texture rendering.
+- DOM boundary: there is at most one hidden active textarea, used only for
+  keyboard, IME, clipboard, and native selection services. Text, selection,
+  caret, focus, and disabled feedback remain visible only through WebGPU.
+- Panel isolation: every panel tree contains one exact-bounds
+  `pointer_capture` boundary behind its controls. Pointer, click, double-click,
+  wheel, and touch-equivalent input inside that boundary is consumed before
+  project hit-testing, including empty panel regions; the full-canvas root is
+  not blocking.
+- Desktop reuse: project text editing uses the same session and layout. Existing
+  text enters standard contextual editing with its caret at the end; a later
+  double-click on that active text emits only `text.selection.all`, keeps the
+  same editor/footer/session, and selects the complete value. Plain/Shift
+  Return insert one newline; Ctrl/Meta+Return retain the existing commit
+  behavior. New background text starts at one 24 px line, transfers provisional
+  mobile typing, and grows by the shared `lineHeight` with a 132 px minimum
+  width so both grips, Close, and the footer title fit.
+
+Validation required before status becomes `validated`:
+
+- focused session/layout, Panel Lab, project-text, creation-handoff, surface
+  isolation, manifest, and historical Input builder contracts;
+- real integrated-browser immediate placeholder hiding, Return validation, caret
+  placement, partial drag, active-text second-double-click selection, deletion,
+  close/reopen, reload/reopen, and multiline desktop text creation/re-entry;
+- fixed-viewport captures proving white 45% selection, one-pixel caret,
+  clipping, 132 px desktop minimum, and zero project intents behind the panel;
+- empty warning/error console and explicit product-owner visual/behavioral
+  approval.
+
+Validation evidence recorded on 2026-07-24:
+
+- the focused Vitest contracts pass for the shared session/layout, Panel Lab
+  Input, project text, creation handoff, interaction isolation, unified
+  rendering, and manifest;
+- at a fixed `1280 × 720` viewport, real browser gestures verify Return
+  validation, immediate placeholder hiding with empty value and caret `0/0`,
+  later user-value preservation/click-to-caret, and hidden-editor teardown;
+- a moved Panel Lab was superposed on an Atome and its Input double-click kept
+  the single hidden editor owned by the field without opening project editing;
+- existing project text opens at selection `length/length`; each later real
+  double-click keeps the same session and selects `0..length`. Plain Return
+  preserves consecutive/trailing newlines, resolves unitless `1.2` line-height
+  values as a font multiplier, spaces every visible line by `19.2 px` at the
+  tested 16 px font, and repositions the contextual footer below the measured
+  multiline block;
+- the final browser warning/error console is empty. Status remains `in_review`
+  until explicit product-owner approval.
 
 The Lab body remains empty until the shared PanelRoot and FooterControls have
 been reviewed. After that review, it grows cumulatively with each approved

@@ -1,6 +1,7 @@
 pub mod backdrop_blur;
 pub mod backdrop_surface;
 pub mod background;
+pub mod clip;
 pub mod components;
 pub mod plugin;
 pub mod procedural_sdf;
@@ -14,6 +15,7 @@ pub mod spawn;
 pub mod texture;
 pub mod types;
 mod types_procedural;
+mod types_ops;
 pub mod ui;
 pub mod video_diagnostics;
 pub mod video_external_texture;

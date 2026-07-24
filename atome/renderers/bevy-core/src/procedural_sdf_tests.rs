@@ -8,7 +8,10 @@ use crate::{
         AtomeRenderScene, AtomeStylePatch,
     },
     workspace_backdrop::{AtomePresentationCamera, AtomeWorkspaceBackdrop},
-    workspace_blur::{AssistantOpticsSettings, WorkspaceBlurPipeline},
+    workspace_blur::{
+        AssistantOpticsSettings, WorkspaceBlurMaterial, WorkspaceBlurPipeline,
+        WorkspaceBlurUniform,
+    },
 };
 
 fn contract() -> AtomeProceduralSdf {
@@ -47,6 +50,7 @@ fn world() -> World {
     world.insert_resource(Assets::<Image>::default());
     world.insert_resource(Assets::<Mesh>::default());
     world.insert_resource(Assets::<ProceduralSdfMaterial>::default());
+    world.insert_resource(Assets::<WorkspaceBlurMaterial>::default());
     world.insert_resource(AssistantOpticsSettings::default());
     let image = world.resource_mut::<Assets<Image>>().add(Image::default());
     let horizontal_image = world.resource_mut::<Assets<Image>>().add(Image::default());
@@ -56,6 +60,28 @@ fn world() -> World {
     let vertical_camera = world.spawn(Camera::default()).id();
     let horizontal_quad = world.spawn(Visibility::Hidden).id();
     let vertical_quad = world.spawn(Visibility::Hidden).id();
+    let horizontal_material = world
+        .resource_mut::<Assets<WorkspaceBlurMaterial>>()
+        .add(WorkspaceBlurMaterial {
+            uniform: WorkspaceBlurUniform {
+                direction_radius: Vec4::new(1.0, 0.0, 48.0, 0.0),
+            },
+            source: image.clone(),
+        });
+    let vertical_material = world
+        .resource_mut::<Assets<WorkspaceBlurMaterial>>()
+        .add(WorkspaceBlurMaterial {
+            uniform: WorkspaceBlurUniform {
+                direction_radius: Vec4::new(0.0, 1.0, 48.0, 0.0),
+            },
+            source: horizontal_image.clone(),
+        });
+    world
+        .entity_mut(horizontal_quad)
+        .insert(MeshMaterial2d(horizontal_material.clone()));
+    world
+        .entity_mut(vertical_quad)
+        .insert(MeshMaterial2d(vertical_material.clone()));
     let visual = world.spawn((Sprite::default(), Visibility::Hidden)).id();
     world.spawn((Camera::default(), AtomePresentationCamera));
     world.insert_resource(AtomeWorkspaceBackdrop {
@@ -71,8 +97,8 @@ fn world() -> World {
             vertical_camera,
             horizontal_quad,
             vertical_quad,
-            horizontal_material: Handle::default(),
-            vertical_material: Handle::default(),
+            horizontal_material,
+            vertical_material,
         },
     });
     world
@@ -89,6 +115,7 @@ fn procedural_sdf_spawns_and_patches_one_full_surface_material_quad() {
             parent_id: None,
             logical_position: [430.0, 150.0],
             logical_size: [420.0, 420.0],
+            clip_rect: None,
             scale: [1.0, 1.0],
             rotation: 0.0,
             origin: [0.0, 0.0],

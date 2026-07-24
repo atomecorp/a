@@ -45,12 +45,24 @@ BevyUI panel architecture:
 - The panel structure is fixed as `PanelRoot -> BodyScroll -> FooterControls`. BodyScroll is the only scroll owner; FooterControls owns the title, close, drag, and resize controls. A generic tools dock and a redundant passive header are forbidden on migrated panels.
 - Contextual Atome editing follows the same exterior-depth rule: its disposable exact-bounds composed shell owns the shared shadow around the Atome plus footer, while its selection-outline projection is shadow-free and cannot alter the shell geometry.
 - During the migration only, the development/test-gated `panel_lab` surface is opened through the same Bevy panel router from a temporary trailing main-ribbon tool. A short activation toggles the Lab; a 520 ms long press is suppressed from normal activation and invokes only the development-view reload. It renders only the shared panel foundation, keeps drag/resize geometry and its opt-in footer double-activation fullscreen/restoration state in `bevy_panel_runtime.js`, shares the one canonical canvas BevyUI runtime with Dashboard and the ribbon so footer hit-testing remains active above Dashboard, and reuses the contextual Atome-edit footer order (left resize, close, drag, right resize) from the existing Bevy ribbon contract. Its internal fullscreen fills the canvas above the main-menu reserved band and restores its prior geometry; it must be deleted completely after its permanent component tests replace it.
+- Shared BevyUI overflow is owned below panels: `bevy_ui_layout_runtime.js` is
+  the single geometry/content/clip calculator used by overlay projection and
+  hit-testing; `bevy_ui_scroll_runtime.js` owns ephemeral bounded offsets,
+  wheel normalization, the 8 px drag takeover, tokenized release inertia,
+  animation cancellation, and the tokenized thumb; and
+  `bevy_ui_pointer_runtime.js` arbitrates press/cancel/release without
+  panel-specific branches. Virtual Scene `clip` maps to renderer `clip_rect`;
+  the shared Bevy core crops visible sprite/UV/shadow geometry. The footer
+  stays a fixed sibling and reuses the common system-surface background and
+  backdrop while omitting its external shadow; it owns no DOM mask, renderer,
+  or persistent state. This architecture passed explicit product-owner
+  approval on 2026-07-24.
 - Panel Lab introduces exactly one new primitive component type at a time after
   the panel shell and FooterControls are reviewed, while retaining every
   previously approved specimen in chronological body flow. The approved
-  specimens are static `textNode`, horizontal `dividerNode`, and the validated
+  specimens are static `textNode`, horizontal `dividerNode`, the validated
   icon action button composed through the shared `buildBevyIconButtonNode`
-  widget path.
+  widget path, and the in-review canonical `text_input`.
   Its opaque 30 px role-tinted no-backdrop rest surface, hue-preserving
   rest-derived pressed luminance, accent-mixed active surface, distinct state
   shadows, and 8 px divider/label spacing are owned by
@@ -68,6 +80,22 @@ BevyUI panel architecture:
   primitive but never reimplement its graphics, interaction, geometry, styling,
   or state. Panel Lab is never a second renderer, product state owner, or
   compatibility route.
+- Panel trees place one exact-geometry `pointer_capture` boundary behind their
+  contents. The shared surface interceptor owns pointer/click/double-click/
+  wheel arbitration before project hit-testing, so panel gaps cannot select,
+  edit, drag, lasso, or create an Atome behind the panel. The full-canvas root
+  remains non-blocking.
+- `text_editing_session.js` is the single active text-entry owner for BevyUI
+  Input and project text. It delegates only keyboard/IME/clipboard capture to
+  `hidden_text_service_runtime.js`; `text_editing_layout.js` owns glyph-index,
+  caret, selection-range, canonical line-height, and measured-size geometry.
+  Panel Lab keeps only its focused-placeholder visibility and Return-as-blur
+  policy; it never clears user-entered values. Surface routing distinguishes a text session synchronously opened by
+  the current double-click from one active before that gesture: only the latter
+  routes through `text.selection.all`. Unitless line-height values up to `4`
+  are font multipliers, and contextual chrome reschedules from hidden-editor
+  input so its footer follows measured multiline height. Durable project text
+  still commits only through `text.commit`.
 - Mobile panel geometry occupies the available shared canvas area above the toolbox-reserved band so the main toolbox remains accessible.
 - Panel trees emit UI intentions such as close, resize, field, list, and command activation. Durable business mutations remain in their existing owners and must still pass through the canonical APIs or `Atome.commit` / `commitBatch` where canonical state changes.
 - Timeline is the first migrated panel surface. `eVe/intuition/tools/timeline.js` is compatibility glue only and must not recreate the old HTML dialog. Future panel migrations must delete the old visible HTML code only after imports and runtime references prove the BevyUI surface fully owns the panel.

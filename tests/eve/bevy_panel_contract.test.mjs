@@ -6,7 +6,6 @@ import { dirname } from 'node:path';
 import { JSDOM } from 'jsdom';
 import { test } from 'vitest';
 import { WORKSPACE_SCENE_LAYER_IDS } from '../../eVe/domains/rendering/workspace_scene_layers.js';
-import { createEveBevyUiRuntime } from '../../eVe/domains/rendering/bevy_ui_runtime.js';
 import { setMainMenuRuntime } from '../../eVe/intuition/ribbon/bevy_ui_product_registry.js';
 import { PANEL_SURFACE_DEFINITIONS } from '../../eVe/intuition/panel_definitions.js';
 import { BEVY_PANEL_TOKENS } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_tokens.js';
@@ -153,10 +152,19 @@ test('Bevy panel contract removes tools dock and keeps system controls in footer
     assert.equal(footer.children.some((node) => node.id.endsWith('_resize_left')), true);
     assert.equal(footer.children.some((node) => node.id.endsWith('_resize')), true);
     assert.equal(drag.on.activate, undefined, 'only Panel Lab opts into footer fullscreen activation');
-    assert.equal(body.style.overflow, 'scroll');
+    assert.equal(body.style.overflow, 'scroll_y');
+    assert.deepEqual(footer.style.background, BEVY_PANEL_TOKENS.footerMaterial.background);
+    assert.equal(footer.style.background[3], 1);
+    assert.deepEqual(footer.style.backdrop, BEVY_PANEL_TOKENS.footerMaterial.backdrop);
+    assert.equal(footer.style.shadow, undefined, 'footer backdrop must not duplicate the outer panel shadow');
+    assert.deepEqual(body.scrollMotion, BEVY_PANEL_TOKENS.scrollMotion);
+    assert.equal(body.scrollbar.widthPx, 3);
+    assert.equal(body.scrollbar.insetPx, 3);
+    assert.equal(body.scrollbar.minHeightPx, 24);
+    assert.equal(body.scrollbar.hideDelayMs, 700);
+    assert.equal(body.scrollbar.fadeMs, 120);
     assert.ok(findNode(tree, 'timeline_status_row').style.z_index > panel.style.z_index, 'body content must render above the panel shell');
     assert.deepEqual(body.style.position, [0, 0]);
-    assert.equal(footer.style.shadow, undefined);
     assert.ok(panel.style.shadow, 'only the outer panel owns the drop shadow');
     assert.deepEqual(accent.style.position, [0, 0]);
     assert.deepEqual(accent.style.size, [panel.style.size[0], EVE_TOOL_SKIN_TOKENS.bevyMenu.footerAccentThicknessPx]);
@@ -280,7 +288,7 @@ test('Panel Lab is development-gated and uses the shared panel skin', async () =
     assert.equal(mounted[0].presentation, true);
     assert.deepEqual(body.style.background, EVE_PANEL_SKIN_TOKENS.bevyPanel.colors.transparent);
     assert.equal(body.style.gap, 0, 'Panel Lab owns its vertical rhythm through specimen divider margins');
-    assert.equal(body.children.length, 11, 'Panel Lab must retain the text, separators, and every declared button variant');
+    assert.equal(body.children.length, 13, 'Panel Lab must retain approved specimens and append the text-input specimen');
     const textSpecimen = findNode(mounted[0], 'panel_lab_static_body_text');
     assert.equal(textSpecimen.kind, 'text');
     assert.equal(textSpecimen.text, 'Texte de démonstration');
@@ -429,7 +437,8 @@ test('Panel Lab is development-gated and uses the shared panel skin', async () =
         panelLabSurface.handleEvent({ type: 'panel_lab.unsupported' }),
         { ok: false, error: 'panel_lab_intent_unsupported:panel_lab.unsupported' }
     );
-    assert.deepEqual(footer.style.background, BEVY_MENU_TOKENS.clear);
+    assert.deepEqual(footer.style.background, BEVY_PANEL_TOKENS.footerMaterial.background);
+    assert.deepEqual(footer.style.backdrop, BEVY_PANEL_TOKENS.footerMaterial.backdrop);
     assert.equal(typeof drag.on.activate, 'function');
     const contentTint = EVE_COMMON_SKIN_TOKENS.systemContent.gpu;
     for (const id of [
@@ -453,191 +462,4 @@ test('Panel Lab is development-gated and uses the shared panel skin', async () =
     assert.deepEqual(restoredPanel.style.position, [260, 120]);
     assert.deepEqual(restoredPanel.style.size, [420, 340]);
     await runtime.closePanelSurface('panel_lab');
-});
-
-test('Panel Lab icon buttons retain their distinct states through real canvas pointer cycles', async () => {
-    const { dom, surface } = installPanelDom();
-    const previousWindow = globalThis.window;
-    const previousDocument = globalThis.document;
-    globalThis.window = dom.window;
-    globalThis.document = dom.window.document;
-    try {
-        const { panelLabSurface } = await import('../../eVe/intuition/runtime/bevy_panel/bevy_panel_surfaces.js');
-        panelLabSurface.onOpen();
-        const uiRuntime = createEveBevyUiRuntime({
-            imageResolverFactory: () => async () => ({ width: 1, height: 1, rgba: [255, 255, 255, 255] }),
-            requestFrame: () => 0
-        });
-        let tree = null;
-        const buildTree = () => ({
-            id: 'panel_lab_pointer_tree',
-            layer: 'panel',
-            root: {
-                id: 'panel_lab_pointer_root',
-                kind: 'root',
-                style: { size: [420, 340] },
-                children: [{
-                    id: 'panel_lab_pointer_body',
-                    kind: 'scroll_area',
-                    style: { size: [420, 340], padding: [10, 10, 10, 10], gap: 0, flex_direction: 'column' },
-                    children: panelLabSurface.buildContent(panelLabSurface.readState(), {
-                        emit: (intent) => {
-                            panelLabSurface.handleEvent(intent);
-                            tree = buildTree();
-                            void uiRuntime.updateTree({ id: tree.id, surface, tree });
-                        }
-                    })
-                }]
-            }
-        });
-        const pointFor = (id) => {
-            const records = projectBevyUiTreeRecords({ tree, treeId: tree.id, workspaceLayer: 'panel' });
-            const record = records.find((candidate) => candidate.id === `__eve_bevy_ui_${tree.id}_${id}_background`);
-            return {
-                x: Number(record?.properties?.left) + 15,
-                y: Number(record?.properties?.top) + 15
-            };
-        };
-        const pointer = (type, { x, y }, pointerId) => {
-            const event = new dom.window.Event(type, { bubbles: true, cancelable: true });
-            Object.defineProperties(event, {
-                pointerId: { value: pointerId },
-                clientX: { value: x },
-                clientY: { value: y }
-            });
-            return event;
-        };
-        const click = async (id, pointerId) => {
-            const point = pointFor(id);
-            surface.dispatchEvent(pointer('pointerdown', point, pointerId));
-            await Promise.resolve();
-            surface.dispatchEvent(pointer('pointerup', point, pointerId));
-            await Promise.resolve();
-            await Promise.resolve();
-        };
-
-        tree = buildTree();
-        await uiRuntime.mountTree({ id: tree.id, surface, tree });
-
-        const momentaryPoint = pointFor('panel_lab_icon_button_momentary');
-        surface.dispatchEvent(pointer('pointerdown', momentaryPoint, 1));
-        assert.equal(panelLabSurface.readState().iconButton.momentaryPressed, true);
-        surface.dispatchEvent(pointer('pointerup', momentaryPoint, 1));
-        assert.equal(panelLabSurface.readState().iconButton.momentaryPressed, false);
-
-        const holdPoint = pointFor('panel_lab_icon_button_hold');
-        surface.dispatchEvent(pointer('pointerdown', holdPoint, 2));
-        assert.equal(panelLabSurface.readState().iconButton.holdPressed, true);
-        surface.dispatchEvent(pointer('pointerup', holdPoint, 2));
-        assert.equal(panelLabSurface.readState().iconButton.holdPressed, false);
-
-        await click('panel_lab_icon_button_toggle', 3);
-        assert.equal(panelLabSurface.readState().iconButton.toggleActive, true);
-        await click('panel_lab_icon_button_toggle', 4);
-        assert.equal(panelLabSurface.readState().iconButton.toggleActive, false);
-        await click('panel_lab_icon_button_radio_b', 5);
-        assert.equal(panelLabSurface.readState().iconButton.radioSelected, 'b');
-        await click('panel_lab_icon_button_radio_a', 6);
-        assert.equal(panelLabSurface.readState().iconButton.radioSelected, 'a');
-
-        await uiRuntime.unmountTree(tree.id);
-        panelLabSurface.onClose();
-    } finally {
-        globalThis.window = previousWindow;
-        globalThis.document = previousDocument;
-    }
-});
-
-test('Bevy UI text projection preserves canonical node typography', () => {
-    const records = projectBevyUiTreeRecords({
-        tree: {
-            root: {
-                id: 'root', kind: 'root', style: { size: [240, 80] }, children: [{
-                    id: 'text', kind: 'text', text: 'Demonstration text',
-                    style: {
-                        position: [10, 10], size: [200, 24], font_size: 16,
-                        font_weight: 500, line_height: 19, text_align: 'left',
-                        text_vertical_align: 'center', text_offset_y: 1
-                    }
-                }]
-            }
-        },
-        treeId: 'typography_contract',
-        workspaceLayer: 'panel'
-    });
-    const text = records.find((record) => record.id === '__eve_bevy_ui_typography_contract_text_text');
-    assert.deepEqual(text?.properties?.text_style, {
-        font_size: 16,
-        font_weight: 500,
-        line_height: 19,
-        align: 'left',
-        baseline: 'middle',
-        vertical_align: 'center',
-        padding_x: 0,
-        padding_y: 1
-    });
-});
-
-test('Bevy UI divider projection preserves native stretch and margins', () => {
-    const records = projectBevyUiTreeRecords({
-        tree: {
-            root: {
-                id: 'root', kind: 'root', style: { size: [420, 260] }, children: [{
-                    id: 'body', kind: 'scroll_area', style: {
-                        size: [420, 260], padding: [10, 10, 10, 10], flex_direction: 'column'
-                    }, children: [{
-                        id: 'divider', kind: 'divider', style: {
-                            background: [1, 1, 1, 0.25], margin: [0, 21, 0, 21]
-                        }
-                    }]
-                }]
-            }
-        },
-        treeId: 'divider_contract',
-        workspaceLayer: 'panel'
-    });
-    const divider = records.find((record) => record.id === '__eve_bevy_ui_divider_contract_divider');
-    assert.deepEqual(
-        [divider?.properties?.left, divider?.properties?.top, divider?.properties?.width, divider?.properties?.height],
-        [31, 10, 358, 1]
-    );
-});
-
-test('Panel layer wins canvas hit-testing over Dashboard-local z-index', async () => {
-    const { surface } = installPanelDom();
-    const uiRuntime = createEveBevyUiRuntime({
-        overlayProjector: { project: async () => [], clear: async () => [] },
-        requestFrame: () => 0
-    });
-    const dashboardTree = {
-        id: 'dashboard_bevy_ui',
-        layer: 'dashboard',
-        root: {
-            id: 'dashboard_root', kind: 'root',
-            style: { size: [1024, 768], z_index: 9000 },
-            children: [{
-                id: 'dashboard_card', kind: 'button',
-                style: { position: [100, 100], size: [300, 240] },
-                on: { activate: () => null }
-            }]
-        }
-    };
-    const panelTree = {
-        id: 'eve_bevy_panel_test',
-        layer: 'panel',
-        root: {
-            id: 'panel_root', kind: 'root',
-            style: { size: [1024, 768], z_index: 1250 },
-            children: [{
-                id: 'panel_footer_drag', kind: 'drag_handle',
-                style: { position: [100, 100], size: [300, 240] },
-                on: { drag: () => null }
-            }]
-        }
-    };
-    await uiRuntime.mountTree({ id: dashboardTree.id, surface, tree: dashboardTree });
-    await uiRuntime.mountTree({ id: panelTree.id, surface, tree: panelTree });
-    const hit = uiRuntime.hitTestAtClientPoint({ surface, clientX: 220, clientY: 180 });
-    assert.equal(hit?.treeId, 'eve_bevy_panel_test');
-    assert.equal(hit?.nodeId, 'panel_footer_drag');
 });

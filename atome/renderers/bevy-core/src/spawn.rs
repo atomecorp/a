@@ -7,6 +7,7 @@ use bevy::{
 
 use crate::{
     backdrop_surface::insert_backdrop_surface,
+    clip::apply_entity_clip,
     procedural_sdf::insert_procedural_sdf,
     render_math::{atome_rect_transform_with_local, color_from_rgba, depth_for_layer},
     selection_overlay::rebuild_selection_overlay,
@@ -172,6 +173,7 @@ pub fn spawn_node_in_world(world: &mut World, node: AtomeRenderNode) -> Result<E
     rebuild_selection_overlay(world, entity)?;
     rebuild_shape_shadow_overlay(world, entity)?;
     rebuild_waveform_playback_overlay(world, entity)?;
+    apply_entity_clip(world, entity)?;
     Ok(entity)
 }
 
@@ -325,7 +327,11 @@ pub fn spawn_node_with_texture_handle(
         AtomeVisualColor(visual_color),
         AtomeVisualOpacity(normalize_opacity(node.opacity)),
         AtomeCornerRadius(node.corner_radius.max(0.0)),
+        AtomeClipRect(node.clip_rect),
     ));
+    if let Some(source_rect) = world.get::<Sprite>(entity).map(|sprite| sprite.rect) {
+        world.entity_mut(entity).insert(AtomeSpriteSourceRect(source_rect));
+    }
     if node.presentation {
         world.entity_mut(entity).insert(bevy::camera::visibility::RenderLayers::layer(
             crate::workspace_backdrop::FLOWER_PRESENTATION_LAYER,

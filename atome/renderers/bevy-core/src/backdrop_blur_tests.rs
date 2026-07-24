@@ -9,6 +9,7 @@ fn shape_node(id: &str) -> AtomeRenderNode {
         parent_id: None,
         logical_position: [12.0, 24.0],
         logical_size: [120.0, 50.0],
+        clip_rect: None,
         scale: [1.0, 1.0],
         rotation: 0.0,
         origin: [0.0, 0.0],

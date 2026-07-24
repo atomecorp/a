@@ -1,9 +1,13 @@
 use bevy::{image::Image, prelude::*, text::TextBounds};
 
+use crate::workspace_backdrop::resize_workspace_backdrop;
 use crate::{
-    backdrop_surface::{patch_backdrop_surface, refresh_workspace_backdrop_enabled, resize_backdrop_surface},
     backdrop_blur::apply_scene_effects,
+    backdrop_surface::{
+        patch_backdrop_surface, refresh_workspace_backdrop_enabled, resize_backdrop_surface,
+    },
     background::{apply_surface_background, resize_surface_background},
+    clip::apply_entity_clip,
     procedural_sdf::{patch_procedural_sdf, resize_procedural_sdf},
     render_math::{
         atome_camera_projection, atome_rect_transform_with_local, color_from_rgba, depth_for_layer,
@@ -24,7 +28,6 @@ use crate::{
         rebuild_waveform_playback_overlay, remove_waveform_playback_overlay,
     },
 };
-use crate::workspace_backdrop::resize_workspace_backdrop;
 
 pub use crate::resource_ops::apply_resource;
 
@@ -97,6 +100,11 @@ pub fn apply_despawn(world: &mut World, id: &str) -> Result<(), String> {
 
 pub fn apply_transform(world: &mut World, patch: AtomeTransformPatch) -> Result<(), String> {
     let entity = entity_for(world, &patch.id)?;
+    let previous_clip_rect = world
+        .get::<AtomeClipRect>(entity)
+        .ok_or_else(|| format!("bevy_transform_clip_missing:{}", patch.id))?
+        .0;
+    let clip_changed = previous_clip_rect != patch.clip_rect;
     let width = patch.logical_size[0].max(1.0);
     let height = patch.logical_size[1].max(1.0);
     let previous_size = *world
@@ -132,6 +140,10 @@ pub fn apply_transform(world: &mut World, patch: AtomeTransformPatch) -> Result<
     *world
         .get_mut::<AtomeLocalTransform>(entity)
         .ok_or_else(|| format!("bevy_transform_local_missing:{}", patch.id))? = local_transform;
+    *world
+        .get_mut::<AtomeClipRect>(entity)
+        .ok_or_else(|| format!("bevy_transform_clip_missing:{}", patch.id))? =
+        AtomeClipRect(patch.clip_rect);
     let next_transform = transform_for_rect(
         patch.logical_position[0],
         patch.logical_position[1],
@@ -170,7 +182,7 @@ pub fn apply_transform(world: &mut World, patch: AtomeTransformPatch) -> Result<
             *bounds = TextBounds::from(Vec2::new(width, height));
         }
     }
-    if dimensions_changed || local_transform_changed {
+    if dimensions_changed || local_transform_changed || clip_changed {
         rebuild_selection_overlay(world, entity)?;
         rebuild_shape_shadow_overlay(world, entity)?;
         rebuild_waveform_playback_overlay(world, entity)?;
@@ -186,6 +198,7 @@ pub fn apply_transform(world: &mut World, patch: AtomeTransformPatch) -> Result<
             rebuild_waveform_playback_overlay(world, entity)?;
         }
     }
+    apply_entity_clip(world, entity)?;
     Ok(())
 }
 
@@ -274,6 +287,7 @@ pub fn apply_surface(world: &mut World, patch: AtomeSurfacePatch) -> Result<(), 
         if world.get::<AtomeWaveformPlaybackOverlay>(entity).is_some() {
             rebuild_waveform_playback_overlay(world, entity)?;
         }
+        apply_entity_clip(world, entity)?;
     }
     resize_surface_background(world);
     Ok(())
@@ -442,6 +456,7 @@ pub fn apply_text(world: &mut World, patch: AtomeTextPatch) -> Result<(), String
             sprite.image = handle;
             sprite.color = color;
         }
+        apply_entity_clip(world, entity)?;
     }
     Ok(())
 }

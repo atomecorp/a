@@ -25,6 +25,12 @@ pub struct AtomeLogicalPosition {
     pub y: f32,
 }
 
+#[derive(Clone, Copy, Debug, Component)]
+pub struct AtomeClipRect(pub Option<[f32; 4]>);
+
+#[derive(Clone, Copy, Debug, Component)]
+pub struct AtomeSpriteSourceRect(pub Option<Rect>);
+
 #[derive(Clone, Copy, Debug, Component, PartialEq)]
 pub struct AtomeLocalTransform {
     pub scale: [f32; 2],

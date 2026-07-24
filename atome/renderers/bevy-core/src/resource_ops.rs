@@ -1,6 +1,7 @@
 use bevy::{image::Image, prelude::*};
 
 use crate::{
+    clip::apply_entity_clip,
     render_math::color_from_rgba,
     texture::image_handle_from_texture,
     types::*,
@@ -87,6 +88,7 @@ pub fn apply_resource(world: &mut World, patch: AtomeResourcePatch) -> Result<()
             parent_id: None,
             logical_position: [0.0, 0.0],
             logical_size: [1.0, 1.0],
+            clip_rect: world.get::<AtomeClipRect>(entity).and_then(|clip| clip.0),
             scale: local_transform.scale,
             rotation: local_transform.rotation,
             origin: local_transform.origin,
@@ -130,6 +132,8 @@ pub fn apply_resource(world: &mut World, patch: AtomeResourcePatch) -> Result<()
             .ok_or_else(|| format!("bevy_resource_sprite_missing:{}", patch.id))?;
         sprite.image = handle;
         sprite.color = color;
+        drop(sprite);
+        apply_entity_clip(world, entity)?;
     }
     Ok(())
 }

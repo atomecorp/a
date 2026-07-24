@@ -8,8 +8,8 @@ use bevy::{
 
 use crate::{
     components::{
-        AtomeCornerRadius, AtomeShapeShadow, AtomeShapeShadowCacheKey, AtomeShapeShadowOverlay,
-        AtomeShapeShadowTextureCache, AtomeVisualOpacity,
+        AtomeClipRect, AtomeCornerRadius, AtomeShapeShadow, AtomeShapeShadowCacheKey,
+        AtomeShapeShadowOverlay, AtomeShapeShadowTextureCache, AtomeVisualOpacity,
     },
     render_math::{atome_rect_transform, depth_for_layer},
     shadow_texture::{build_gaussian_outer_shadow_texture_rgba, channel_to_u8, shadow_padding},
@@ -21,6 +21,63 @@ use crate::{
 
 fn shadow_depth_for_layer(layer: i32) -> f32 {
     depth_for_layer(layer) - 0.25
+}
+
+fn clip_shadow_overlay(
+    world: &mut World,
+    owner: Entity,
+    shadow_rect: [f32; 4],
+    layer: i32,
+) {
+    let Some(clip) = world.get::<AtomeClipRect>(owner).and_then(|value| value.0) else {
+        return;
+    };
+    let left = shadow_rect[0].max(clip[0]);
+    let top = shadow_rect[1].max(clip[1]);
+    let right = (shadow_rect[0] + shadow_rect[2]).min(clip[0] + clip[2]);
+    let bottom = (shadow_rect[1] + shadow_rect[3]).min(clip[1] + clip[3]);
+    let overlay_entities = world
+        .get::<AtomeShapeShadowOverlay>(owner)
+        .map(|overlay| overlay.entities.clone())
+        .unwrap_or_default();
+    let (surface_width, surface_height) = {
+        let config = world.resource::<AtomeBevyRendererConfig>();
+        (config.width, config.height)
+    };
+    for overlay_entity in overlay_entities {
+        if right <= left || bottom <= top {
+            world.entity_mut(overlay_entity).insert(Visibility::Hidden);
+            continue;
+        }
+        let visible = [left, top, right - left, bottom - top];
+        let start = Vec2::new(
+            (visible[0] - shadow_rect[0]) / shadow_rect[2],
+            (visible[1] - shadow_rect[1]) / shadow_rect[3],
+        );
+        let end = Vec2::new(
+            (visible[0] + visible[2] - shadow_rect[0]) / shadow_rect[2],
+            (visible[1] + visible[3] - shadow_rect[1]) / shadow_rect[3],
+        );
+        if let Some(mut sprite) = world.get_mut::<Sprite>(overlay_entity) {
+            sprite.custom_size = Some(Vec2::new(visible[2], visible[3]));
+            sprite.rect = Some(Rect::from_corners(
+                Vec2::new(shadow_rect[2], shadow_rect[3]) * start,
+                Vec2::new(shadow_rect[2], shadow_rect[3]) * end,
+            ));
+        }
+        let transform = atome_rect_transform(
+            visible[0],
+            visible[1],
+            visible[2],
+            visible[3],
+            surface_width,
+            surface_height,
+            shadow_depth_for_layer(layer),
+        );
+        world
+            .entity_mut(overlay_entity)
+            .insert((Visibility::Visible, transform, GlobalTransform::from(transform)));
+    }
 }
 
 fn cache_dimension(value: f32) -> u32 {
@@ -248,6 +305,12 @@ pub fn sync_shape_shadow_overlay_transform(
                 .insert((transform, GlobalTransform::from(transform)));
         }
     }
+    clip_shadow_overlay(
+        world,
+        entity,
+        [shadow_x, shadow_y, image_width, image_height],
+        layer,
+    );
     Ok(())
 }
 
@@ -349,5 +412,11 @@ pub fn rebuild_shape_shadow_overlay(world: &mut World, entity: Entity) -> Result
         entities: vec![shadow_entity],
         image_handles: vec![handle],
     });
+    clip_shadow_overlay(
+        world,
+        entity,
+        [shadow_x, shadow_y, image_width as f32, image_height as f32],
+        layer,
+    );
     Ok(())
 }

@@ -10,6 +10,7 @@ fn shape_node(id: &str) -> AtomeRenderNode {
         parent_id: None,
         logical_position: [12.0, 24.0],
         logical_size: [120.0, 50.0],
+        clip_rect: None,
         scale: [1.0, 1.0],
         rotation: 0.0,
         origin: [0.0, 0.0],
@@ -41,6 +42,7 @@ fn text_node_with_texture(id: &str) -> AtomeRenderNode {
         parent_id: None,
         logical_position: [18.0, 26.0],
         logical_size: [80.0, 30.0],
+        clip_rect: None,
         scale: [1.0, 1.0],
         rotation: 0.0,
         origin: [0.0, 0.0],
@@ -148,6 +150,7 @@ fn backdrop_fixture_keeps_text_and_image_in_capture_and_large_glass_circle_in_pr
         parent_id: None,
         logical_position: [70.0, 90.0],
         logical_size: [360.0, 240.0],
+        clip_rect: None,
         scale: [1.0, 1.0],
         rotation: 0.0,
         origin: [0.0, 0.0],
@@ -177,6 +180,7 @@ fn backdrop_fixture_keeps_text_and_image_in_capture_and_large_glass_circle_in_pr
     let text = AtomeRenderNode {
         logical_position: [130.0, 160.0],
         logical_size: [220.0, 60.0],
+        clip_rect: None,
         layer: 3,
         text: Some("Backdrop fixture text".to_string()),
         texture: Some(AtomeTexture {
@@ -189,6 +193,7 @@ fn backdrop_fixture_keeps_text_and_image_in_capture_and_large_glass_circle_in_pr
     let circle = AtomeRenderNode {
         logical_position: [150.0, 120.0],
         logical_size: [340.0, 340.0],
+        clip_rect: None,
         corner_radius: 170.0,
         backdrop: Some(AtomeBackdropStyle {
             blur_px: 12.0,
@@ -221,16 +226,21 @@ fn backdrop_fixture_keeps_text_and_image_in_capture_and_large_glass_circle_in_pr
         .resource::<Assets<crate::backdrop_surface::BackdropSurfaceMaterial>>()
         .get(&material_handle)
         .unwrap();
-    assert_eq!(material.uniform.workspace_size.xy(), Vec2::new(640.0, 480.0));
+    assert_eq!(
+        material.uniform.workspace_size.xy(),
+        Vec2::new(640.0, 480.0)
+    );
     assert_eq!(material.uniform.size_radius.z, 170.0);
     assert_eq!(material.uniform.size_radius.w, 12.0);
     let circle_layers = app
         .world()
         .get::<bevy::camera::visibility::RenderLayers>(circle_entity)
         .unwrap();
-    assert!(circle_layers.intersects(&bevy::camera::visibility::RenderLayers::layer(
-        crate::workspace_backdrop::FLOWER_PRESENTATION_LAYER,
-    )));
+    assert!(
+        circle_layers.intersects(&bevy::camera::visibility::RenderLayers::layer(
+            crate::workspace_backdrop::FLOWER_PRESENTATION_LAYER,
+        ))
+    );
     for id in ["backdrop_fixture_image", "backdrop_fixture_text"] {
         let entity = table.by_id[id];
         assert!(app
@@ -382,6 +392,45 @@ fn shape_spawn_applies_initial_opacity_to_sprite() {
 
     assert_alpha_near(world.get::<Sprite>(entity).unwrap().color, 0.25);
     assert_eq!(world.get::<AtomeVisualOpacity>(entity).unwrap().0, 0.25);
+}
+
+#[test]
+fn shape_clip_crops_on_spawn_and_restores_on_transform_update() {
+    let mut world = World::new();
+    world.insert_resource(AtomeEntityTable::default());
+    world.insert_resource(AtomeBevyRendererConfig::empty(640.0, 480.0));
+    world.insert_resource(AtomeRendererDiagnostics::default());
+    world.insert_resource(Assets::<Image>::default());
+    let entity = apply_spawn(
+        &mut world,
+        AtomeRenderNode {
+            clip_rect: Some([42.0, 34.0, 50.0, 30.0]),
+            ..shape_node("clipped_shape")
+        },
+    )
+    .unwrap();
+    assert_vec2_near(
+        world.get::<Sprite>(entity).unwrap().custom_size,
+        Vec2::new(50.0, 30.0),
+    );
+
+    apply_transform(
+        &mut world,
+        AtomeTransformPatch {
+            id: "clipped_shape".to_string(),
+            logical_position: [12.0, 24.0],
+            logical_size: [120.0, 50.0],
+            scale: [1.0, 1.0],
+            rotation: 0.0,
+            origin: [0.0, 0.0],
+            clip_rect: None,
+        },
+    )
+    .unwrap();
+    assert_vec2_near(
+        world.get::<Sprite>(entity).unwrap().custom_size,
+        Vec2::new(120.0, 50.0),
+    );
 }
 
 #[test]
@@ -843,6 +892,7 @@ fn audio_waveform_progress_spawns_and_moves_bevy_playhead_overlay() {
             parent_id: None,
             logical_position: [20.0, 30.0],
             logical_size: [200.0, 60.0],
+            clip_rect: None,
             scale: [1.0, 1.0],
             rotation: 0.0,
             origin: [0.0, 0.0],

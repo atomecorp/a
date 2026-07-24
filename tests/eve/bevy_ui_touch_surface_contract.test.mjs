@@ -413,12 +413,17 @@ test('Dashboard mode suspends contextual edit chrome and project return restores
     const previousDocument = globalThis.document;
     const dom = new JSDOM('<!doctype html><canvas id="eve_surface_project"></canvas>');
     const { window } = dom;
-    window.requestAnimationFrame = () => 1;
+    let renderFrameCallback = null;
+    window.requestAnimationFrame = (callback) => {
+        renderFrameCallback = callback;
+        return 1;
+    };
     globalThis.window = window;
     globalThis.document = window.document;
     const records = [{ id: 'a', properties: { left: 20, top: 30, width: 100, height: 80 } }];
     const scene = { project_id: 'project_a', records, text: null };
     let mounts = 0;
+    let updates = 0;
     let unmounts = 0;
     try {
         window.__eveWorkspaceMode = { mode: 'project', projectId: 'project_a', transitioning: false, targetMode: '' };
@@ -426,7 +431,7 @@ test('Dashboard mode suspends contextual edit chrome and project return restores
             legacyState: {}, resolveDefinitions: () => [], invokeDefinition: async () => ({ ok: true }),
             surfaceResolver: () => window.document.getElementById('eve_surface_project'),
             bevyRuntimeResolver: () => ({
-                mountTree: async () => { mounts += 1; }, updateTree: async () => null,
+                mountTree: async () => { mounts += 1; }, updateTree: async () => { updates += 1; },
                 unmountTree: async () => { unmounts += 1; }
             }),
             findSceneByAtomeId: (id) => id === 'a' ? scene : null,
@@ -449,6 +454,16 @@ test('Dashboard mode suspends contextual edit chrome and project return restores
         assert.equal(runtime.readState().suspended, false);
         assert.deepEqual(runtime.readState().editingAtomeIds, ['a']);
         assert.equal(mounts, 2);
+
+        renderFrameCallback = null;
+        const hiddenEditor = window.document.createElement('textarea');
+        hiddenEditor.setAttribute('data-role', 'active-text-editor');
+        window.document.body.appendChild(hiddenEditor);
+        const updatesBeforeTextInput = updates;
+        hiddenEditor.dispatchEvent(new window.Event('input', { bubbles: true }));
+        assert.equal(typeof renderFrameCallback, 'function');
+        await renderFrameCallback();
+        assert.equal(updates, updatesBeforeTextInput + 1);
 
         markDashboardWorkspaceMode();
         markProjectWorkspaceMode('project_b');

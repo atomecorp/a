@@ -544,3 +544,21 @@ test('Bevy video texture size ignores ambiguous display width and height content
     assert.equal(node.texture_size, undefined);
     assert.equal(patch.texture_size, undefined);
 });
+
+test('Bevy projection carries an axis-aligned clip rectangle on spawn and transform updates', () => {
+    const node = mapVirtualSceneNodeToBevyPayload({
+        id: 'clipped_shape',
+        kind: 'shape',
+        bounds: { x: 10, y: 20, width: 80, height: 40 },
+        layer: 3,
+        clip: { x: 15, y: 25, width: 60, height: 30 },
+        material: { fill: '#336699' }
+    });
+    const patch = mapVirtualSceneTransformToBevyPatch({
+        id: 'clipped_shape',
+        bounds: { x: 12, y: 22, width: 80, height: 40 },
+        clip: { x: 15, y: 25, width: 60, height: 30 }
+    });
+    assert.deepEqual(node.clip_rect, [15, 25, 60, 30]);
+    assert.deepEqual(patch.clip_rect, [15, 25, 60, 30]);
+});

@@ -104,6 +104,7 @@ mod tests {
             parent_id: None,
             logical_position: [10.0, 20.0],
             logical_size: [80.0, 40.0],
+            clip_rect: None,
             scale: [1.0, 1.0],
             rotation: 0.0,
             origin: [0.0, 0.0],

@@ -1,4 +1,5 @@
 import { $, define } from '../squirrel.js';
+import { normalizeTextInputPresentation } from './input_contract.js';
 
 define('input-container', {
     tag: 'input',
@@ -92,6 +93,7 @@ const createInput = (config = {}) => {
         onBlur,
         ...otherProps
     } = applyTemplate(config, templateName);
+    const presentation = normalizeTextInputPresentation({ value, placeholder, disabled, readOnly });
 
     const inputId = id || `input_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     const baseCss = {
@@ -104,22 +106,22 @@ const createInput = (config = {}) => {
         attrs: {
             ...(attrs || {}),
             type,
-            value,
-            placeholder,
+            value: presentation.value,
+            placeholder: presentation.placeholder,
             ...(name ? { name } : {}),
-            ...(disabled ? { disabled: true } : {}),
-            ...(readOnly ? { readonly: true } : {})
+            ...(presentation.disabled ? { disabled: true } : {}),
+            ...(presentation.readOnly ? { readonly: true } : {})
         },
         ...otherProps
     });
 
     input._config = {
         type,
-        value,
-        placeholder,
+        value: presentation.value,
+        placeholder: presentation.placeholder,
         name,
-        disabled,
-        readOnly,
+        disabled: presentation.disabled,
+        readOnly: presentation.readOnly,
         css: baseCss,
         focusStyle: { ...(focusStyle || {}) },
         disabledStyle: { ...(disabledStyle || {}) }
@@ -191,7 +193,7 @@ createInput.removeTemplate = (name) => {
     return createInput;
 };
 
-export { createInput };
+export { createInput, normalizeTextInputPresentation };
 
 const Input = createInput;
 Input.templates = createInput.templates;
