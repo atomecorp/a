@@ -405,7 +405,7 @@ evidence remain the canonical reference for later panel compositions.
 
 ### Fourth specimen contract — text input
 
-Status: `in_review`
+Status: `validated`
 
 - Contract: one localized, single-line `358 × 32 px` `text_input` follows the
   approved text, divider, and icon-action specimens. Its draft is runtime-only,
@@ -473,8 +473,11 @@ Validation evidence recorded on 2026-07-24:
   values as a font multiplier, spaces every visible line by `19.2 px` at the
   tested 16 px font, and repositions the contextual footer below the measured
   multiline block;
-- the final browser warning/error console is empty. Status remains `in_review`
-  until explicit product-owner approval.
+- the final browser warning/error console is empty;
+- the product owner explicitly approved the visual and behavioral contract on
+  2026-07-24 after the immediate placeholder-hiding correction and confirmed
+  that the component may advance to the next specimen. The canonical
+  `text_input` is therefore `validated`.
 
 The Lab body remains empty until the shared PanelRoot and FooterControls have
 been reviewed. After that review, it grows cumulatively with each approved
