@@ -48,8 +48,9 @@ BevyUI panel architecture:
 - Panel Lab introduces exactly one new primitive component type at a time after
   the panel shell and FooterControls are reviewed, while retaining every
   previously approved specimen in chronological body flow. The approved
-  specimens are static `textNode` and horizontal `dividerNode`; the in-review
-  icon action button composes the shared `buildBevyIconButtonNode` widget path.
+  specimens are static `textNode`, horizontal `dividerNode`, and the validated
+  icon action button composed through the shared `buildBevyIconButtonNode`
+  widget path.
   Its opaque 30 px role-tinted no-backdrop rest surface, hue-preserving
   rest-derived pressed luminance, accent-mixed active surface, distinct state
   shadows, and 8 px divider/label spacing are owned by

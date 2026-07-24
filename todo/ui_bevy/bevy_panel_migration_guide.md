@@ -299,7 +299,7 @@ Validation record — 2026-07-23:
 
 ### Third specimen contract — icon action button
 
-Status: `in_review`
+Status: `validated`
 
 - Decision: the former `60 × 60 px` icon-plus-label specimen is a ribbon tool,
   not a panel action button. It is superseded before approval and is not a
@@ -326,8 +326,10 @@ Status: `in_review`
   of adding gray, then applies its own diffuse shadow and `1 px` downward
   translation. Active selection mixes the declared semantic surface toward its
   accent through `activeAccentMix: 0.34`, remains opaque, and uses its own
-  diffuse shadow. Icon
-  and external label use shared system-content tokens. The label uses the
+  diffuse shadow. Every semantic tone exposes its own rest/pressed/active
+  shadow, icon-color, and label-color variables; their current values all
+  reference the shared system-content and state-shadow tokens, so this added
+  skinning granularity does not alter the approved rendering. The label uses the
   normalized `text_vertical_align` plus `text_offset_y` (`+1 px`). Bevy 0.19
   has no native inner-shadow field, so this contract does not emulate one with
   geometric bands or embossing.
@@ -354,8 +356,10 @@ Technical evidence on 2026-07-24: a fresh Tauri current-resource run showed
 the four distinct opaque rest tones; real native pointer input captured the
 brighter momentary and hold states during pressure, two-click toggle
 activation/deactivation, exclusive Radio A/B replacement, close/reopen reset,
-and post-reload reopen. The component remains `in_review` solely for the
-explicit product-owner approval gate.
+and post-reload reopen. The product owner explicitly approved the visual,
+behavioral, spacing, and tokenized skinning contract on 2026-07-24. This third
+shared component is therefore `validated`; its builders, tokens, intents, and
+evidence remain the canonical reference for later panel compositions.
 
 The Lab body remains empty until the shared PanelRoot and FooterControls have
 been reviewed. After that review, it grows cumulatively with each approved

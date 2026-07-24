@@ -167,15 +167,17 @@ The temporary development/test-only `ui.dev.panel_lab` tool is not a public or s
 
 Panel Lab introduces exactly one new component specimen per approval loop and
 retains all approved specimens in chronological body flow; its approved shared
-specimens are static body text and a passive horizontal divider, with one icon
-action-button component in review. Its momentary, hold, toggle, and radio
+specimens are static body text, a passive horizontal divider, and the validated
+icon action-button component. Its momentary, hold, toggle, and radio
 variants emit only closed `panel_lab.icon_button.*` intents and expose no public
 API or durable state; all presentation state is ephemeral and resets on surface
 close. `EVE_BUTTON_SKIN_TOKENS.bevyButton` is the closed shared presentation
 interface for its geometry, `labelGapPx`, `specimenDividerMarginPx`, label
 vertical alignment, opaque no-backdrop rest surface, `restToneMix`,
 hue-preserving rest-derived `pressedLuminanceLift`, `activeAccentMix`, state
-shadows, and neutral/success/warning/danger tones.
+shadows, and neutral/success/warning/danger tones. Each tone independently
+exposes its icon color, label color, and rest/pressed/active shadows for future
+skin overrides; the current values still resolve to the shared system tokens.
 Product-surface
 composition reviews start only after their required primitives are approved; it
 is never a second Timeline API or state owner.

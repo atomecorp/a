@@ -324,7 +324,15 @@ test('Panel Lab is development-gated and uses the shared panel skin', async () =
         const expectedBackground = variant === 'radio_a'
             ? resolveBevyIconButtonSurface({ tone, active: true }).background
             : resolveBevyIconButtonSurface({ tone }).background;
+        const toneTokens = buttonTokens.tones[tone];
         assert.deepEqual(background.style.background, expectedBackground);
+        assert.deepEqual(findNode(mounted[0], `panel_lab_icon_button_${variant}_icon`).image.tint, toneTokens.icon);
+        assert.deepEqual(label.style.color, toneTokens.label);
+        assert.deepEqual(toneTokens.shadows, {
+            rest: buttonTokens.rest.shadow,
+            pressed: buttonTokens.pressed.shadow,
+            active: buttonTokens.active.shadow
+        });
         assert.equal(label.kind, 'text');
         assert.equal(label.style.position, undefined, 'the label must be a flow sibling to the button, never in it');
         assert.equal(label.style.text_vertical_align, buttonTokens.labelVerticalAlign);
