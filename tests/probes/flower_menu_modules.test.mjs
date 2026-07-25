@@ -308,6 +308,17 @@ assert.equal(flowerInteraction.openCount, 0, 'closing an open Flower menu must n
 
 flowerInteraction.open = false;
 flowerInteraction.button = null;
+projectCanvas.addEventListener('pointerdown', (event) => event.preventDefault(), { once: true });
+projectCanvas.dispatchEvent(makeFlowerPointerEvent('pointerdown', {
+    pointerId: 72,
+    pointerType: 'touch',
+    clientX: 148,
+    clientY: 124
+}));
+await delay(10);
+assert.equal(flowerInteraction.open, false, 'a BevyUI-consumed pointerdown must cancel the pending Flower long press');
+assert.equal(flowerInteraction.openCount, 0, 'a panel-owned gesture must never open Flower behind it');
+
 const longPressPointerId = 73;
 projectCanvas.dispatchEvent(makeFlowerPointerEvent('pointerdown', {
     pointerId: longPressPointerId,

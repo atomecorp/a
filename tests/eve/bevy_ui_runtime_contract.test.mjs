@@ -3,6 +3,7 @@ import { test } from 'vitest';
 import { JSDOM } from 'jsdom';
 
 import { createEveBevyUiRuntime, normalizeBevyUiTree } from '../../eVe/domains/rendering/bevy_ui_runtime.js';
+import { ensureRenderSurface } from '../../eVe/domains/rendering/surface_runtime.js';
 import { hydrateImageTree } from '../../eVe/domains/rendering/bevy_ui_image_runtime.js';
 import { DEFERRED_TEXTURE_BATCH_SIZE, withResolvedMediaTexture } from '../../eVe/domains/rendering/bevy_media_resource_runtime.js';
 import { mapVirtualSceneNodeToBevyPayload } from '../../eVe/domains/rendering/bevy_projection_adapter.js';
@@ -596,6 +597,98 @@ test('BevyUI emits one activation for pointer input and ignores delayed compatib
             );
         }
         await runtime.unmountTree('native_mouse_tree');
+    } finally {
+        globalThis.window = previousWindow;
+        globalThis.document = previousDocument;
+    }
+});
+
+test('BevyUI text focus waits for the terminal click and consumes it across an iOS viewport resize', async () => {
+    const dom = new JSDOM('<!doctype html><html><body><div id="project_view_alpha"></div></body></html>');
+    const host = dom.window.document.getElementById('project_view_alpha');
+    let viewportHeight = 120;
+    Object.defineProperties(host, {
+        clientWidth: { configurable: true, value: 200 },
+        clientHeight: { configurable: true, get: () => viewportHeight }
+    });
+    host.getBoundingClientRect = () => ({
+        left: 0,
+        top: 0,
+        width: 200,
+        height: viewportHeight,
+        right: 200,
+        bottom: viewportHeight
+    });
+    dom.window.requestAnimationFrame = (callback) => dom.window.setTimeout(() => callback(Date.now()), 0);
+    const previousWindow = globalThis.window;
+    const previousDocument = globalThis.document;
+    globalThis.window = dom.window;
+    globalThis.document = dom.window.document;
+    const received = [];
+    let downstreamClicks = 0;
+    try {
+        const surface = ensureRenderSurface({ zone: 'project', host });
+        surface.getBoundingClientRect = host.getBoundingClientRect;
+        const runtime = createEveBevyUiRuntime({
+            imageResolverFactory: () => async () => null,
+            requestFrame: () => 0
+        });
+        await runtime.mountTree({
+            id: 'ios_text_tree',
+            surface,
+            tree: {
+                id: 'ios_text_tree',
+                root: {
+                    id: 'ios_text_root',
+                    kind: 'root',
+                    style: { size: [200, 120] },
+                    children: [{
+                        id: 'ios_text_input',
+                        kind: 'text_input',
+                        style: { position: [20, 30], size: [160, 32] },
+                        on: {
+                            press: () => received.push('press'),
+                            focus: () => {
+                                received.push('focus');
+                                viewportHeight = 70;
+                            },
+                            release: () => received.push('release'),
+                            activate: () => received.push('activate')
+                        }
+                    }]
+                }
+            }
+        });
+        dom.window.document.addEventListener('click', () => {
+            downstreamClicks += 1;
+        });
+        const pointer = (type) => {
+            const event = new dom.window.Event(type, { bubbles: true, cancelable: true });
+            Object.defineProperties(event, {
+                pointerId: { value: 91 },
+                pointerType: { value: 'touch' },
+                clientX: { value: 40 },
+                clientY: { value: 40 }
+            });
+            return event;
+        };
+        surface.dispatchEvent(pointer('pointerdown'));
+        assert.deepEqual(received, ['press'], 'opening the iOS keyboard must not resize the viewport while the finger is down');
+        surface.dispatchEvent(pointer('pointerup'));
+        assert.deepEqual(received, ['press', 'release'], 'pointerup must not focus before WebKit finishes the tap default action');
+        assert.equal(viewportHeight, 120);
+        const compatibilityClick = new dom.window.MouseEvent('click', {
+            bubbles: true,
+            cancelable: true,
+            clientX: 40,
+            clientY: 40
+        });
+        surface.dispatchEvent(compatibilityClick);
+        assert.deepEqual(received, ['press', 'release', 'focus', 'activate']);
+        assert.equal(viewportHeight, 70);
+        assert.equal(compatibilityClick.defaultPrevented, true);
+        assert.equal(downstreamClicks, 0, 'the terminal click must not reach the project after keyboard viewport contraction');
+        await runtime.unmountTree('ios_text_tree');
     } finally {
         globalThis.window = previousWindow;
         globalThis.document = previousDocument;
