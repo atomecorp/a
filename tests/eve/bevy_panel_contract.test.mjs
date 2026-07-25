@@ -13,6 +13,7 @@ import { EVE_TOOL_SKIN_TOKENS } from '../../eVe/elements/skin/tool_skin.js';
 import { EVE_DEFAULT_MESSAGES } from '../../eVe/i18n/languages.js';
 import { projectBevyUiTreeRecords } from '../../eVe/domains/rendering/bevy_ui_overlay_record_projection.js';
 import { buildBevyFooterCloseRingNode } from '../../eVe/intuition/ribbon/bevy_ui_menu_surface.js';
+import { resolveBevyPanelGeometry } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_layout.js';
 
 const repoRoot = dirname(dirname(dirname(fileURLToPath(import.meta.url))));
 
@@ -56,6 +57,40 @@ const findNode = (tree, id) => {
     });
     return found;
 };
+
+test('Panel Lab can retain floating geometry on a mobile viewport', () => {
+    const surface = {
+        getBoundingClientRect: () => ({ width: 390, height: 844 })
+    };
+    const defaultGeometry = { left: 260, top: 120, width: 420, height: 340 };
+    const standardMobileGeometry = resolveBevyPanelGeometry({ surface, defaultGeometry });
+    const panelLabGeometry = resolveBevyPanelGeometry({
+        surface,
+        defaultGeometry,
+        allowMobileFloating: true
+    });
+    assert.deepEqual(
+        standardMobileGeometry,
+        { x: 0, y: 0, width: 390, height: 770, toolboxReservedHeight: 74, mobile: true },
+        'product panels must retain their existing mobile fullscreen policy'
+    );
+    assert.deepEqual(
+        panelLabGeometry,
+        { x: 0, y: 430, width: 390, height: 340, toolboxReservedHeight: 74, mobile: false },
+        'Panel Lab must open with its bottom edge against the mobile main toolbar'
+    );
+    const resizedPanelLabGeometry = resolveBevyPanelGeometry({
+        surface,
+        defaultGeometry: { x: 70, y: 160, width: 300, height: 280 },
+        restoredGeometry: { x: 70, y: 160, width: 300, height: 280 },
+        allowMobileFloating: true
+    });
+    assert.deepEqual(
+        resizedPanelLabGeometry,
+        { x: 70, y: 160, width: 300, height: 280, toolboxReservedHeight: 74, mobile: false },
+        'Panel Lab mobile drag and resize results must not be replaced by fullscreen geometry'
+    );
+});
 
 test('Bevy panel contract removes tools dock and keeps system controls in footer', async () => {
     const { dom } = installPanelDom();
@@ -127,7 +162,7 @@ test('Bevy panel contract removes tools dock and keeps system controls in footer
     const closeFill = findNode(tree, 'eve_bevy_panel_timeline_footer_close_indicator_fill');
     const closeSegments = closeIndicator.children.filter((segment) => segment.id.includes('_segment_'));
     assert.deepEqual(closeFill.style.size, [closeDiameter - (closeBorder * 2), closeDiameter - (closeBorder * 2)]);
-    assert.deepEqual(closeFill.style.position, [3, 7]);
+    assert.deepEqual(closeFill.style.position, [3, 5]);
     assert.deepEqual(closeFill.style.background, EVE_TOOL_SKIN_TOKENS.bevyMenu.footerCloseRing.fillColor);
     assert.equal(closeIndicator.children.length, 37);
     assert.equal(closeSegments.length, 36);
@@ -166,6 +201,11 @@ test('Bevy panel contract removes tools dock and keeps system controls in footer
     assert.ok(findNode(tree, 'timeline_status_row').style.z_index > panel.style.z_index, 'body content must render above the panel shell');
     assert.deepEqual(body.style.position, [0, 0]);
     assert.ok(panel.style.shadow, 'only the outer panel owns the drop shadow');
+    assert.equal(
+        panel.style.position[1] + panel.style.size[1],
+        768 - 74,
+        'desktop panel opening geometry must meet the top of the main toolbar'
+    );
     assert.deepEqual(accent.style.position, [0, 0]);
     assert.deepEqual(accent.style.size, [panel.style.size[0], EVE_TOOL_SKIN_TOKENS.bevyMenu.footerAccentThicknessPx]);
     assert.deepEqual(accent.style.background, EVE_TOOL_SKIN_TOKENS.bevyMenu.footerAccentColor);
@@ -192,7 +232,7 @@ test('Bevy panel contract removes tools dock and keeps system controls in footer
 
     await drag.on.drag({ delta_x: 40, delta_y: 30 });
     const movedPanel = findNode(mounted.at(-1), 'eve_bevy_panel_timeline_panel');
-    assert.deepEqual(movedPanel.style.position, [250, 150]);
+    assert.deepEqual(movedPanel.style.position, [250, 434], 'a panel cannot drag down across the toolbar boundary');
 
     await close.on.activate();
     assert.deepEqual(unmounted, ['eve_bevy_panel_timeline']);
@@ -273,6 +313,7 @@ test('Panel Lab is development-gated and uses the shared panel skin', async () =
     assert.equal(mounted.length, 1);
     assert.equal(PANEL_SURFACE_DEFINITIONS.panel_lab, undefined);
     const material = EVE_COMMON_SKIN_TOKENS.bevy.systemSurface;
+    assert.equal(panelLabSurface.allowMobileFloating, true);
     assert.equal(BEVY_PANEL_TOKENS.material, material);
     assert.equal(BEVY_MENU_TOKENS.surface.material, material);
     assert.deepEqual(material.shadow.offset, [0, 0]);
@@ -368,15 +409,15 @@ test('Panel Lab is development-gated and uses the shared panel skin', async () =
     const momentaryLabelRecord = recordFor('panel_lab_icon_button_momentary_label_text');
     assert.deepEqual(
         [dividerRecord?.properties?.left, dividerRecord?.properties?.top, dividerRecord?.properties?.width, dividerRecord?.properties?.height],
-        [291, 162, 358, 1]
+        [291, 396, 358, 1]
     );
     assert.deepEqual(
         [momentaryBackgroundRecord?.properties?.left, momentaryBackgroundRecord?.properties?.top],
-        [270, 171]
+        [270, 405]
     );
     assert.deepEqual(
         [momentaryLabelRecord?.properties?.left, momentaryLabelRecord?.properties?.top],
-        [308, 171]
+        [308, 405]
     );
     assert.equal(momentaryLabelRecord?.properties?.text_style?.vertical_align, 'center');
     assert.equal(momentaryLabelRecord?.properties?.text_style?.padding_y, 1);
@@ -459,7 +500,7 @@ test('Panel Lab is development-gated and uses the shared panel skin', async () =
     await fullscreenDrag.on.activate();
     await fullscreenDrag.on.activate();
     const restoredPanel = findNode(mounted.at(-1), 'eve_bevy_panel_panel_lab_panel');
-    assert.deepEqual(restoredPanel.style.position, [260, 120]);
+    assert.deepEqual(restoredPanel.style.position, [260, 354]);
     assert.deepEqual(restoredPanel.style.size, [420, 340]);
     await runtime.closePanelSurface('panel_lab');
 });

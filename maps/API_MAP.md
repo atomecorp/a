@@ -163,7 +163,7 @@ Primary sources:
 
 Exposure: existing semi-public closed `openPanelSurface(surfaceKey, context)` and `closePanelSurface(surfaceKey, context)` route registered Bevy panel surfaces to `openBevyPanelSurface(...)` / `closeBevyPanelSurface(...)`. Migrated panels mount disposable BevyUI trees named `eve_bevy_panel_<surface>` on `eve_surface_project`; non-migrated panels remain on the existing registered surface path until they are migrated and verified.
 
-The temporary development/test-only `ui.dev.panel_lab` tool is not a public or semi-public API. It is registered only when the internal Panel Lab gate is enabled, delegates to the same closed panel route, and must be removed after the shared component migration is complete. Its short activation toggles the Lab through that route; its 520 ms long press is a development-only `window.location.reload()` action and suppresses the matching toggle activation.
+The temporary development/test-only `ui.dev.panel_lab` tool is not a public or semi-public API. It is registered only when the internal Panel Lab gate is enabled, delegates to the same closed panel route, and must be removed after the shared component migration is complete. Its short activation toggles the Lab through that route; its 520 ms long press is a development-only `window.location.reload()` action and suppresses the matching toggle activation. Native iOS Debug configurations set the existing `window.__EVE_PANEL_LAB__` gate through the shared `WKUserScript` document-start bootstrap; native iOS Release configurations do not set it.
 
 Panel Lab introduces exactly one new component specimen per approval loop and
 retains all approved specimens in chronological body flow; its approved shared

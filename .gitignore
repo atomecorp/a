@@ -68,6 +68,8 @@ tests/eve/*
 !tests/eve/dashboard_preferences_contract.test.mjs
 !tests/eve/dashboard_records.test.mjs
 !tests/eve/debug_runtime_webgpu_probe.test.mjs
+!tests/eve/bevy_ui_runtime_contract.test.mjs
+!tests/eve/input_event_runtime_contract.test.mjs
 !tests/eve/media_persistence_service.sanitization.test.mjs
 !tests/eve/media_recording_atomic_commit_contract.test.mjs
 !tests/eve/media_recording_format_validation.test.mjs

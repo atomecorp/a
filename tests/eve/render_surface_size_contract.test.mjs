@@ -8,6 +8,11 @@ import {
 } from '../../eVe/domains/rendering/project_scene_runtime.js';
 import { ensureRenderSurface } from '../../eVe/domains/rendering/surface_runtime.js';
 import { resolveRenderSurfaceSize } from '../../eVe/domains/rendering/surface_size_runtime.js';
+import {
+    mountActiveTextEditor,
+    unmountActiveTextEditor
+} from '../../eVe/domains/rendering/hidden_text_service_runtime.js';
+import { resolveEffectivePanelViewport } from '../../eVe/intuition/runtime/eve_intuition/panel_layout_geometry.js';
 
 const setBox = (element, width, height) => {
     Object.defineProperty(element, 'clientWidth', {
@@ -448,4 +453,48 @@ test('Project render surface reacts to visualViewport resize', async () => {
     assert.equal(surface.style.width, '1200px');
     assert.equal(surface.style.height, '700px');
     assert.equal(intents.some((intent) => intent.kind === 'surface.resize'), true);
+});
+
+test('Project render surface and panel follow the iOS keyboard viewport while text editing is active', async () => {
+    const dom = new JSDOM('<!doctype html><html><body><div id="view"><div id="project_view_alpha"></div></div></body></html>');
+    globalThis.document = dom.window.document;
+    globalThis.window = dom.window;
+    Object.defineProperty(dom.window, 'devicePixelRatio', { configurable: true, value: 1 });
+    Object.defineProperty(dom.window, 'innerWidth', { configurable: true, value: 390 });
+    Object.defineProperty(dom.window, 'innerHeight', { configurable: true, value: 844 });
+    const visualViewport = new dom.window.EventTarget();
+    Object.defineProperty(visualViewport, 'width', { configurable: true, value: 390 });
+    Object.defineProperty(visualViewport, 'height', { configurable: true, value: 844 });
+    Object.defineProperty(dom.window, 'visualViewport', { configurable: true, value: visualViewport });
+    dom.window.requestAnimationFrame = (callback) => dom.window.setTimeout(() => callback(Date.now()), 0);
+    dom.window.cancelAnimationFrame = (id) => dom.window.clearTimeout(id);
+
+    const view = dom.window.document.getElementById('view');
+    const host = dom.window.document.getElementById('project_view_alpha');
+    setBox(view, 0, 0);
+    setBox(host, 0, 0);
+    const intents = [];
+    const surface = ensureRenderSurface({
+        zone: 'project',
+        host,
+        onIntent: (intent) => {
+            intents.push(intent);
+            return intent;
+        }
+    });
+    assert.equal(surface.style.height, '844px');
+
+    mountActiveTextEditor({ atomeId: 'panel_lab_text_input', documentRef: dom.window.document });
+    Object.defineProperty(visualViewport, 'height', { configurable: true, value: 463 });
+    setBox(view, 390, 463);
+    const keyboardPanelViewport = resolveEffectivePanelViewport(view);
+    assert.equal(keyboardPanelViewport.width, 390);
+    assert.equal(keyboardPanelViewport.height, 463);
+    visualViewport.dispatchEvent(new dom.window.Event('resize'));
+    await new Promise((resolve) => dom.window.setTimeout(resolve, 20));
+
+    assert.equal(surface.style.height, '463px');
+    assert.equal(intents.some((intent) => intent.kind === 'surface.resize'), true);
+
+    unmountActiveTextEditor();
 });

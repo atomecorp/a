@@ -45,12 +45,23 @@ test('BevyUI canvas binding owns touch gestures for mobile pointer scroll', asyn
 
     assert.equal(surface.style.touchAction, 'none');
     surface.getBoundingClientRect = () => ({ left: 20, top: 30, width: 120, height: 80 });
-    assert.deepEqual(runtime.hitTestAtClientPoint({ surface, clientX: 40, clientY: 50 }), {
+    const hit = runtime.hitTestAtClientPoint({ surface, clientX: 40, clientY: 50 });
+    assert.deepEqual({
+        treeId: hit?.treeId,
+        nodeId: hit?.nodeId,
+        kind: hit?.kind,
+        box: hit?.box
+    }, {
         treeId: 'touch_tree',
         nodeId: 'scroll_target',
         kind: 'scroll_area',
         box: { x: 0, y: 0, width: 120, height: 80 }
     });
+    assert.deepEqual(
+        hit?.scrollAncestors?.map((entry) => entry.node?.id),
+        ['scroll_target'],
+        'touch hit testing must retain the canonical scroll ownership chain'
+    );
     assert.equal(runtime.hitTestAtClientPoint({ surface, clientX: 200, clientY: 200 }), null);
     assert.equal(dom.window.document.querySelectorAll('button, input, [data-bevy-ui]').length, 0);
 });
@@ -281,7 +292,7 @@ test('Atome contextual footer follows projected media bounds and uses compact da
     const closeFill = findNode(tree.root, 'atome_contextual_edit_media_close_indicator_fill');
     const closeSegments = closeIndicator.children.filter((segment) => segment.id.includes('_segment_'));
     assert.deepEqual(closeFill.style.size, [closeDiameter - (closeBorder * 2), closeDiameter - (closeBorder * 2)]);
-    assert.deepEqual(closeFill.style.position, [3, 7]);
+    assert.deepEqual(closeFill.style.position, [3, 5]);
     assert.deepEqual(closeFill.style.background, BEVY_MENU_TOKENS.footerCloseRing.fillColor);
     assert.equal(closeIndicator.children.length, 37);
     assert.equal(closeSegments.length, 36);

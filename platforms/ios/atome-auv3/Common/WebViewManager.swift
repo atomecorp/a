@@ -136,6 +136,9 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
                 } catch(e) { }
                 """
             : ""
+        let panelLabBootstrap = FeatureFlags.panelLabEnabled
+            ? "try { window.__EVE_PANEL_LAB__ = true; } catch(e) { }"
+            : ""
         let scriptSource = """
                 // Pre-paint background black ASAP to avoid white flash (especially on app launch)
                 (function(){try{document.documentElement.style.background='#000';}catch(e){}; try{if(document.body){document.body.style.background='#000';}}catch(e){}})();
@@ -203,6 +206,7 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
                 })();
                 // Inject host environment flag early for UI logic
                 try { window.__HOST_ENV = '\(isExtension ? "auv3" : "app")'; } catch(e) { }
+                \(panelLabBootstrap)
                 \(localPortBootstrap)
                 (function(){
                     if(window.__ATOME_IOS_NATIVE_INVOKE) return;

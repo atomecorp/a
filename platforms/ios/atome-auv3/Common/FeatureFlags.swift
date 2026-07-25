@@ -3,6 +3,11 @@ import Foundation
 // Central kill-switches to bisect added Swift behaviors without removing code.
 // Set to true selectively to re-enable.
 enum FeatureFlags {
+#if DEBUG
+    static let panelLabEnabled: Bool = true
+#else
+    static let panelLabEnabled: Bool = false
+#endif
     static let deferMainLoad: Bool = true
     static let centralTerminationRetry: Bool = true
     static let mainThreadPrecondition: Bool = true

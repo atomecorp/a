@@ -4,6 +4,7 @@ import { test } from 'node:test';
 
 const controllerSource = await readFile(new URL('../../platforms/ios/atome-auv3/Common/AppNativeBevyRendererController.swift', import.meta.url), 'utf8');
 const webViewManagerSource = await readFile(new URL('../../platforms/ios/atome-auv3/Common/WebViewManager.swift', import.meta.url), 'utf8');
+const featureFlagsSource = await readFile(new URL('../../platforms/ios/atome-auv3/Common/FeatureFlags.swift', import.meta.url), 'utf8');
 const appViewControllerSource = await readFile(new URL('../../platforms/ios/atome-auv3/application/ViewController.swift', import.meta.url), 'utf8');
 const auv3ControllerSource = await readFile(new URL('../../platforms/ios/atome-auv3/auv3/AudioUnitViewController.swift', import.meta.url), 'utf8');
 const nativeRuntimeSource = await readFile(new URL('../../eVe/domains/rendering/bevy_native_renderer_runtime.js', import.meta.url), 'utf8');
@@ -18,6 +19,27 @@ const iosBevyHeaderSource = await readFile(new URL('../../platforms/ios/atome-au
 const bridgingHeaderSource = await readFile(new URL('../../platforms/ios/atome-auv3/Common/AtomeAUv3BridgingHeader.h', import.meta.url), 'utf8');
 const audioSchemeHandlerSource = await readFile(new URL('../../platforms/ios/atome-auv3/Common/AudioSchemeHandler.swift', import.meta.url), 'utf8');
 const nativeRuntime = await import('../../eVe/domains/rendering/bevy_native_renderer_runtime.js');
+
+test('iOS development builds enable Panel Lab before eVe boot while release builds remain gated', () => {
+    assert.match(
+        featureFlagsSource,
+        /#if DEBUG\s+static let panelLabEnabled: Bool = true\s+#else\s+static let panelLabEnabled: Bool = false\s+#endif/,
+        'Panel Lab must be compiled on only for iOS Debug configurations'
+    );
+    assert.ok(
+        webViewManagerSource.includes('let panelLabBootstrap = FeatureFlags.panelLabEnabled'),
+        'The shared iOS WebView bootstrap must consume the Debug-only Panel Lab flag'
+    );
+    assert.ok(
+        webViewManagerSource.includes('window.__EVE_PANEL_LAB__ = true;'),
+        'Debug iOS WebViews must expose the existing internal Panel Lab gate'
+    );
+    assert.ok(
+        webViewManagerSource.indexOf('\\(panelLabBootstrap)')
+            < webViewManagerSource.indexOf('WKUserScript(source: scriptSource, injectionTime: .atDocumentStart'),
+        'The Panel Lab gate must be part of the document-start bootstrap before eVe modules run'
+    );
+});
 
 test('iOS exposes the same native Bevy command boundary as Tauri', () => {
     assert.ok(controllerSource.includes('"bevy_native_start"'), 'iOS controller must accept native Bevy start');
