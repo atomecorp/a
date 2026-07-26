@@ -102,6 +102,15 @@ BevyUI panel architecture:
   are font multipliers, and contextual chrome reschedules from hidden-editor
   input so its footer follows measured multiline height. Durable project text
   still commits only through `text.commit`.
+- Project-background double-tap classification has priority over lasso
+  activation for the bounded second press. `project_layer_tap_classifier.js`
+  recognizes the existing 520 ms / 32 px gesture before the 8 px lasso
+  threshold is evaluated, while motion beyond the double-tap bound still
+  becomes a normal lasso. A successful background double-tap therefore enters
+  the single compact `132 × 24 px` project-text creation path exactly once.
+  The active hidden editor mirrors document-level native `selectionchange`
+  events into the canonical text session, allowing the iOS space-bar trackpad
+  to move the WebGPU caret without changing the text value.
 - Mobile panel geometry occupies the available shared canvas area above the toolbox-reserved band so the main toolbox remains accessible. A floating panel keeps its pre-keyboard geometry as the stable position: keyboard contraction may clamp its projected copy upward, but dismissal restores the exact original position.
 - Panel trees emit UI intentions such as close, resize, field, list, and command activation. Durable business mutations remain in their existing owners and must still pass through the canonical APIs or `Atome.commit` / `commitBatch` where canonical state changes.
 - Timeline is the first migrated panel surface. `eVe/intuition/tools/timeline.js` is compatibility glue only and must not recreate the old HTML dialog. Future panel migrations must delete the old visible HTML code only after imports and runtime references prove the BevyUI surface fully owns the panel.
