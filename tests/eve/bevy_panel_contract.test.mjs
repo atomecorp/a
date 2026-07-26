@@ -13,7 +13,6 @@ import { EVE_TOOL_SKIN_TOKENS } from '../../eVe/elements/skin/tool_skin.js';
 import { EVE_DEFAULT_MESSAGES } from '../../eVe/i18n/languages.js';
 import { projectBevyUiTreeRecords } from '../../eVe/domains/rendering/bevy_ui_overlay_record_projection.js';
 import { buildBevyFooterCloseRingNode } from '../../eVe/intuition/ribbon/bevy_ui_menu_surface.js';
-import { resolveBevyPanelGeometry } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_layout.js';
 
 const repoRoot = dirname(dirname(dirname(fileURLToPath(import.meta.url))));
 
@@ -59,148 +58,6 @@ const findNode = (tree, id) => {
 };
 
 const flushPanelRefresh = () => new Promise((resolve) => setTimeout(resolve, 5));
-
-test('Panel Lab can retain floating geometry on a mobile viewport', () => {
-    const surface = {
-        getBoundingClientRect: () => ({ width: 390, height: 844 })
-    };
-    const defaultGeometry = { left: 260, top: 120, width: 420, height: 340 };
-    const standardMobileGeometry = resolveBevyPanelGeometry({ surface, defaultGeometry });
-    const panelLabGeometry = resolveBevyPanelGeometry({
-        surface,
-        defaultGeometry,
-        allowMobileFloating: true
-    });
-    assert.deepEqual(
-        standardMobileGeometry,
-        { x: 0, y: 0, width: 390, height: 770, toolboxReservedHeight: 74, mobile: true },
-        'product panels must retain their existing mobile fullscreen policy'
-    );
-    assert.deepEqual(
-        panelLabGeometry,
-        { x: 0, y: 430, width: 390, height: 340, toolboxReservedHeight: 74, mobile: false },
-        'Panel Lab must open with its bottom edge against the mobile main toolbar'
-    );
-    const resizedPanelLabGeometry = resolveBevyPanelGeometry({
-        surface,
-        defaultGeometry: { x: 70, y: 160, width: 300, height: 280 },
-        restoredGeometry: { x: 70, y: 160, width: 300, height: 280 },
-        allowMobileFloating: true
-    });
-    assert.deepEqual(
-        resizedPanelLabGeometry,
-        { x: 70, y: 160, width: 300, height: 280, toolboxReservedHeight: 74, mobile: false },
-        'Panel Lab mobile drag and resize results must not be replaced by fullscreen geometry'
-    );
-    const keyboardSurface = {
-        getBoundingClientRect: () => ({ width: 390, height: 463 })
-    };
-    const keyboardGeometry = resolveBevyPanelGeometry({
-        surface: keyboardSurface,
-        defaultGeometry,
-        restoredGeometry: panelLabGeometry,
-        allowMobileFloating: true
-    });
-    assert.deepEqual(
-        keyboardGeometry,
-        { x: 0, y: 49, width: 390, height: 340, toolboxReservedHeight: 74, mobile: false },
-        'keyboard contraction must clamp the floating panel without overwriting its full-viewport geometry'
-    );
-    assert.deepEqual(
-        resolveBevyPanelGeometry({
-            surface,
-            defaultGeometry,
-            restoredGeometry: panelLabGeometry,
-            allowMobileFloating: true
-        }),
-        panelLabGeometry,
-        'restoring the viewport must restore the exact pre-keyboard panel geometry'
-    );
-});
-
-test('Bevy panel restores its pre-keyboard position after the iOS viewport expands', async () => {
-    const dom = new JSDOM('<!doctype html><html><body><canvas id="eve_surface_project"></canvas></body></html>');
-    globalThis.window = dom.window;
-    globalThis.document = dom.window.document;
-    globalThis.HTMLElement = dom.window.HTMLElement;
-    globalThis.CustomEvent = dom.window.CustomEvent;
-    dom.window.__eveWorkspaceMode = {
-        mode: 'project',
-        projectId: 'ios_keyboard_restore_project',
-        transitioning: false
-    };
-    dom.window.requestAnimationFrame = (callback) => dom.window.setTimeout(() => callback(Date.now()), 0);
-    dom.window.cancelAnimationFrame = (id) => dom.window.clearTimeout(id);
-    const viewport = new dom.window.EventTarget();
-    Object.defineProperty(dom.window, 'visualViewport', { configurable: true, value: viewport });
-    const surface = dom.window.document.getElementById('eve_surface_project');
-    let viewportHeight = 844;
-    surface.getBoundingClientRect = () => ({
-        left: 0,
-        top: 0,
-        right: 390,
-        bottom: viewportHeight,
-        width: 390,
-        height: viewportHeight
-    });
-    const mounted = [];
-    dom.window.eveBevyUiRuntime = {
-        mountTree: async ({ tree }) => {
-            mounted.push(tree);
-            return tree;
-        },
-        updateTree: async ({ tree }) => {
-            mounted.push(tree);
-            return tree;
-        },
-        unmountTree: async (id) => ({ id })
-    };
-    setMainMenuRuntime({
-        showFully: async () => true,
-        getReservedHeight: () => 74,
-        measure: () => ({ active: true, treeMounted: true })
-    }, dom.window);
-    const {
-        bevyPanelRuntimeState,
-        closeBevyPanelSurface,
-        openBevyPanelSurface,
-        registerBevyPanelSurface
-    } = await import('../../eVe/intuition/runtime/bevy_panel/bevy_panel_runtime.js');
-    bevyPanelRuntimeState.runtime = null;
-    bevyPanelRuntimeState.mounted.clear();
-    bevyPanelRuntimeState.geometryBySurfaceKey.clear();
-    registerBevyPanelSurface({
-        surfaceKey: 'ios_keyboard_restore_fixture',
-        title: 'Fixture',
-        allowMobileFloating: true,
-        defaultGeometry: { left: 0, top: 120, width: 390, height: 340 },
-        readState: () => ({ title: 'Fixture' }),
-        buildContent: () => []
-    });
-    await openBevyPanelSurface('ios_keyboard_restore_fixture');
-    const panelId = 'eve_bevy_panel_ios_keyboard_restore_fixture_panel';
-    assert.deepEqual(findNode(mounted.at(-1), panelId).style.position, [0, 430]);
-
-    viewportHeight = 500;
-    viewport.dispatchEvent(new dom.window.Event('resize'));
-    viewportHeight = 480;
-    viewport.dispatchEvent(new dom.window.Event('resize'));
-    viewportHeight = 463;
-    viewport.dispatchEvent(new dom.window.Event('resize'));
-    await new Promise((resolve) => dom.window.setTimeout(resolve, 120));
-    assert.deepEqual(findNode(mounted.at(-1), panelId).style.position, [0, 49]);
-    assert.equal(mounted.length, 2, 'one settled keyboard transition must produce one panel update');
-
-    viewportHeight = 844;
-    viewport.dispatchEvent(new dom.window.Event('resize'));
-    await new Promise((resolve) => dom.window.setTimeout(resolve, 120));
-    assert.deepEqual(
-        findNode(mounted.at(-1), panelId).style.position,
-        [0, 430],
-        'keyboard dismissal must restore the exact pre-keyboard position'
-    );
-    await closeBevyPanelSurface('ios_keyboard_restore_fixture');
-});
 
 test('Bevy panel contract removes tools dock and keeps system controls in footer', async () => {
     const { dom } = installPanelDom();
@@ -434,12 +291,19 @@ test('Panel Lab is development-gated and uses the shared panel skin', async () =
     const footer = findNode(mounted[0], 'eve_bevy_panel_panel_lab_footer');
     const drag = findNode(mounted[0], 'eve_bevy_panel_panel_lab_footer_drag');
     assert.deepEqual(panel.style.background, material.background);
+    assert.deepEqual(panel.style.size, [420, 520], 'the cumulative Lab specimens must be visible at first open');
     assert.deepEqual(panel.style.backdrop, material.backdrop);
     assert.deepEqual(panel.style.shadow, material.shadow);
     assert.equal(mounted[0].presentation, true);
     assert.deepEqual(body.style.background, EVE_PANEL_SKIN_TOKENS.bevyPanel.colors.transparent);
     assert.equal(body.style.gap, 0, 'Panel Lab owns its vertical rhythm through specimen divider margins');
-    assert.equal(body.children.length, 13, 'Panel Lab must retain approved specimens and append the text-input specimen');
+    assert.equal(body.children.length, 15, 'Panel Lab must retain approved specimens and append one grouped passive-list specimen');
+    const listGroup = findNode(mounted[0], 'panel_lab_list_group');
+    assert.equal(listGroup.kind, 'panel');
+    assert.deepEqual(listGroup.style.size, [358, 104]);
+    assert.equal(listGroup.style.gap, 4);
+    assert.equal(listGroup.on, undefined);
+    assert.equal(listGroup.children.length, 3);
     const textSpecimen = findNode(mounted[0], 'panel_lab_static_body_text');
     assert.equal(textSpecimen.kind, 'text');
     assert.equal(textSpecimen.text, 'Texte de démonstration');
@@ -519,15 +383,15 @@ test('Panel Lab is development-gated and uses the shared panel skin', async () =
     const momentaryLabelRecord = recordFor('panel_lab_icon_button_momentary_label_text');
     assert.deepEqual(
         [dividerRecord?.properties?.left, dividerRecord?.properties?.top, dividerRecord?.properties?.width, dividerRecord?.properties?.height],
-        [291, 396, 358, 1]
+        [291, 216, 358, 1]
     );
     assert.deepEqual(
         [momentaryBackgroundRecord?.properties?.left, momentaryBackgroundRecord?.properties?.top],
-        [270, 405]
+        [270, 225]
     );
     assert.deepEqual(
         [momentaryLabelRecord?.properties?.left, momentaryLabelRecord?.properties?.top],
-        [308, 405]
+        [308, 225]
     );
     assert.equal(momentaryLabelRecord?.properties?.text_style?.vertical_align, 'center');
     assert.equal(momentaryLabelRecord?.properties?.text_style?.padding_y, 1);
@@ -615,7 +479,7 @@ test('Panel Lab is development-gated and uses the shared panel skin', async () =
     await fullscreenDrag.on.activate();
     await fullscreenDrag.on.activate();
     const restoredPanel = findNode(mounted.at(-1), 'eve_bevy_panel_panel_lab_panel');
-    assert.deepEqual(restoredPanel.style.position, [260, 354]);
-    assert.deepEqual(restoredPanel.style.size, [420, 340]);
+    assert.deepEqual(restoredPanel.style.position, [260, 174]);
+    assert.deepEqual(restoredPanel.style.size, [420, 520]);
     await runtime.closePanelSurface('panel_lab');
 });

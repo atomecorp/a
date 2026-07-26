@@ -106,7 +106,8 @@ choose after the browser evidence is presented.
 
 ## Stage 1 — Empty panel foundation
 
-Status: `in_review`
+Status: `in_review` — visual approval captured; the repository-wide
+execution-order gate remains blocked outside this component's scope.
 
 Scope: `PanelRoot` only, rendered by the temporary development-only Panel Lab
 surface on the shared project canvas.
@@ -488,6 +489,56 @@ only the behavior belonging to its component type: text is static; an input
 accepts and reports text; each toggle/radio/momentary-tool behavior is tested
 as its own state; and a slider tool expands, tracks drag/touch movement, and
 collapses using the canonical tool-slider interaction contract.
+
+### Fifth specimen contract — passive list row
+
+Status: `in_review`
+
+- Integration decision: the existing native BevyUI `row` primitive is available
+  through the shared panel-tree projection and is the selected route. The legacy
+  DOM `List_builder.js` is rejected because it creates a DOM-owned list surface.
+  No custom renderer, local list factory, DOM node, state owner, or interaction
+  contract is introduced.
+- Builder: shared `listRowNode` in `bevy_panel_tree.js`; Panel Lab only
+  configures its localized label.
+- Geometry and paint: `358 × 32 px`, `10 px` horizontal padding, `3 px` radius,
+  the existing opaque panel control background, no shadow, and no new token.
+  The label is left aligned, vertically centered, `13 px`, and uses the existing
+  input line-height token.
+- Content and behavior: the Lab presents three localized passive instances:
+  `Élément de liste`, `Deuxième élément de liste`, and `Troisième élément de
+  liste` in French; `List item`, `Second list item`, and `Third list item` in
+  English. Each row has no handler, hover, press, selection, action, state,
+  intent, mutation, accessibility action, or DOM projection.
+  Future product panels own any selection or action semantics themselves.
+- Composition: one shared divider separates the approved Input from one
+  transparent native BevyUI group. That group owns the three sibling rows with
+  a `4 px` gap and no internal divider, so the divider marks a new component
+  while the gaps mark lines of the same list. Every earlier approved specimen
+  remains visible in chronological body flow.
+- Visibility: the cumulative flow is `429 px` high, so Panel Lab opens at
+  `420 × 520 px`; every approved specimen, including all three rows, is visible
+  without initial scrolling.
+
+Validation required before status becomes `validated`:
+
+- focused contracts for builder geometry, existing-token reuse, localization,
+  native WebGPU record projection, and absence of handlers, accessibility
+  actions, mutation, and visible DOM;
+- syntax, M0 guardrails, and execution-order validation; and
+- real integrated-browser canvas inspection of the cumulative Panel Lab:
+  short open/close, long-press reload, post-reload reopen, visible passive row,
+  and empty warning/error console.
+
+Approval record: the product owner approved the passive-row contract and the
+real-canvas cumulative composition on 2026-07-26. The approved composition has
+one shared separator before a transparent three-row group with `4 px` gaps and
+no internal divider. Implementation evidence: `listRowNode`, localization, the
+cumulative Lab composition, and focused builder/projection contracts pass.
+The component remains technically `in_review` only because
+`check:execution-order` is blocked by the unrelated unregistered document
+`todo/text_caret_creation_contract.md`; no component change is needed for that
+repository-wide gate.
 
 The development-only Panel Lab main-ribbon tool has a fixed test contract: a
 short activation opens it, the next short activation closes it, and a 520 ms

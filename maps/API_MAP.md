@@ -168,7 +168,9 @@ The temporary development/test-only `ui.dev.panel_lab` tool is not a public or s
 Panel Lab introduces exactly one new component specimen per approval loop and
 retains all approved specimens in chronological body flow; its approved shared
 specimens are static body text, a passive horizontal divider, and the validated
-icon action-button component. Its momentary, hold, toggle, and radio
+icon action-button component. Its in-review passive list row configures the
+native BevyUI `row` primitive through `listRowNode`, exposes no handler or API,
+and owns no state or mutation. Its momentary, hold, toggle, and radio
 variants emit only closed `panel_lab.icon_button.*` intents and expose no public
 API or durable state; all presentation state is ephemeral and resets on surface
 close. `EVE_BUTTON_SKIN_TOKENS.bevyButton` is the closed shared presentation
