@@ -288,6 +288,17 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
     let contentController = webView.configuration.userContentController
         let userScript = WKUserScript(source: scriptSource, injectionTime: .atDocumentStart, forMainFrameOnly: true)
         contentController.addUserScript(userScript)
+        // Debug builds only: arm the runtime's own verbose text tracing before eVe
+        // boots. Keeping this switch native means it cannot ship enabled, and no
+        // diagnostic flag has to live in the JavaScript sources.
+        #if DEBUG
+        let traceScript = WKUserScript(
+            source: "window.__EVE_TEXT_TRACE__ = true;",
+            injectionTime: .atDocumentStart,
+            forMainFrameOnly: true
+        )
+        contentController.addUserScript(traceScript)
+        #endif
     // Always capture console for diagnostics
     contentController.add(WebViewManager.shared, name: "console")
     if FeatureFlags.enableJSBridge {
