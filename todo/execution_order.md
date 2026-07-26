@@ -99,6 +99,15 @@ Sources principales:
 - done/obsolete/tools_monitoring.md
 - todo/tests/
 - todo/ui_bevy/
+- todo/text_caret_creation_contract.md
+
+Classification record:
+
+- `todo/text_caret_creation_contract.md` is a historical product record, not
+  active executable work. The product owner confirmed that its feature predates
+  the current BevyUI component sequence. Its legacy unchecked entries do not
+  authorize implementation; a future regression requires a separately
+  registered task with current evidence.
 
 - [x] Auditer et reconcilier le snapshot original des 138 entrees, classifier tous les documents todo, produire la preuve entree par entree et installer le controle permanent `npm run check:execution-order`.
 

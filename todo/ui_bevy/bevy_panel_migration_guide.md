@@ -207,7 +207,8 @@ Technical evidence — 2026-07-24:
 Status: `in_review`
 
 Validate exactly one component type at a time in Panel Lab in this order: text,
-separator, icon action button, input, list/row, slider tool, accordion, select,
+separator, icon action button, input, list/row, slider tool when a product panel
+actually needs one, accordion, select,
 checkbox/radio/toggle, and table/property grid. A separator is an optional
 product-composition component. Every component must choose the strongest
 available BevyUI widget route as its rendering primitive, use the shared panel
@@ -492,7 +493,7 @@ collapses using the canonical tool-slider interaction contract.
 
 ### Fifth specimen contract — passive list row
 
-Status: `in_review`
+Status: `validated`
 
 - Integration decision: the existing native BevyUI `row` primitive is available
   through the shared panel-tree projection and is the selected route. The legacy
@@ -531,14 +532,64 @@ Validation required before status becomes `validated`:
   and empty warning/error console.
 
 Approval record: the product owner approved the passive-row contract and the
-real-canvas cumulative composition on 2026-07-26. The approved composition has
-one shared separator before a transparent three-row group with `4 px` gaps and
-no internal divider. Implementation evidence: `listRowNode`, localization, the
+real-canvas cumulative composition on 2026-07-26, then reconfirmed its approval
+after the execution-order registry correction. The approved composition has one
+shared separator before a transparent three-row group with `4 px` gaps and no
+internal divider. Implementation evidence: `listRowNode`, localization, the
 cumulative Lab composition, and focused builder/projection contracts pass.
-The component remains technically `in_review` only because
-`check:execution-order` is blocked by the unrelated unregistered document
-`todo/text_caret_creation_contract.md`; no component change is needed for that
-repository-wide gate.
+`check:execution-order` now passes, so this fifth shared component is
+`validated` and the next component may be proposed through the mandatory
+one-component approval loop.
+
+### Deferred slider-tool investigation — not a Panel Lab specimen
+
+Status: `deferred`
+
+- Product-owner decision: the proposed compact vertical tool-slider does not
+  belong in Panel Lab. It is an existing tool-context pattern, not evidence of
+  a panel component need. The Panel Lab specimen, its reserved height, intent
+  adapter, locale keys, and Panel Lab-specific test were removed.
+- Retained investigation: `bevy_ui_tool_slider.js` and the contextual-slider
+  route remain available for a future dedicated tool-slider review. They are
+  not design-approved and must not be reused for a panel slider by implication.
+- Existing panel evidence: `timeline_seek_slider` is the only slider-shaped
+  node in a current Bevy panel. It is a horizontal Timeline progress/seek
+  surface, not the compact tool-slider pattern; a future Timeline interaction
+  task must define and validate it separately if it becomes editable.
+
+### Sixth specimen proposal — accordion
+
+Status: `in_review`; implementation is complete, pending real-canvas visual
+approval.
+
+- Scope: Panel Lab only. Finder, Profile, their legacy HTML accordions,
+  keyboard activation, exclusive groups, and the deferred slider remain out of
+  scope.
+- Shared builder: `bevy_panel_accordion.js` composes the normalized native
+  `accordion` header with the shared panel skin. It has a `358 × 32 px` compact
+  header, localized left label, and a `12 px` two-stroke chevron that points
+  right when closed and down when open. It is stateless: callers provide their
+  own `expanded` boolean, body children, and activation handler, so sibling
+  sections remain independent by construction.
+- Open body: the tree contains no hidden body while closed. When open, it adds
+  one `358 × 56 px` opaque body using the same control material and continuous
+  `3 px` outer corners; the Lab composes only one localized passive text child.
+  No DOM, CSS control, local paint, animation, durable mutation, or product
+  state is introduced.
+- Lab state: `bevy_panel_lab_accordion_runtime.js` owns only the ephemeral
+  `expanded` flag, emits `panel_lab.accordion.toggle`, and resets on both Lab
+  open and close. The Lab opens at `420 × 560 px` so every previous specimen
+  and the new closed header are visible without initial scrolling.
+- Reveal: after an opening rebuild, the canonical scroll runtime reveals the
+  accordion root inside the existing Panel BodyScroll with a tokenized `10 px`
+  margin. It cancels scroll inertia, clamps to the existing scroll bounds, and
+  never resizes the panel.
+
+Validation required before `validated`: focused accordion, Panel Lab, scroll,
+manifest, syntax, M0, execution-order, and diff checks; then real shared-canvas
+inspection of closed/open geometry, chevron direction, bounded reveal,
+open/close/reset, short Lab toggle, long-press reload/reopen, and a clean
+console. Product-owner visual approval is still required.
 
 The development-only Panel Lab main-ribbon tool has a fixed test contract: a
 short activation opens it, the next short activation closes it, and a 520 ms

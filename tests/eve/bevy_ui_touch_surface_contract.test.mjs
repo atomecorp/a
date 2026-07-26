@@ -147,7 +147,7 @@ test('Atome contextual edit stays on one clipped Bevy tree with handed rail and 
     assert.equal(outline.style.shadow, undefined, 'the selection outline must not own the exterior shadow');
     assert.equal(footerBackground.style.shadow, undefined);
     assert.equal(rail.children.length, 1);
-    assert.deepEqual(findNode(rail, 'atome_contextual_tool_size_background').style.size, [60, 180]);
+    assert.deepEqual(findNode(rail, 'atome_contextual_tool_size_background').style.size, [60, 60]);
     assert.equal(findNode(right.root, 'atome_contextual_edit_b_footer'), null);
     assert.equal(findNode(rail, 'atome_contextual_tool_size').style.size[1], 180);
     const left = buildAtomeContextualEditTree({ ...input, handedness: 'left' });

@@ -309,7 +309,16 @@ Design rule: migrated panel surfaces must use this BevyUI panel owner, not `crea
 - `EVE_PANEL_SKIN_TOKENS.bevyPanel` owns static body-text size, weight, and line-height. The shared `textNode` consumes them, and the BevyUI overlay projection preserves each node's `font_weight`, `line_height`, and `text_align`; it must not replace them with a local centered bold style.
 - `EVE_PANEL_SKIN_TOKENS.bevyPanel` also owns `colors.divider` (system white at 25% opacity) and `dividerMarginHorizontalPx` (`21 px`). The shared `dividerNode` uses those tokens with native `1 px` height and body-width stretch after margins; it has no local paint or interaction styling.
 - The validated Panel Lab icon action button is a shared `30 × 30 px` opaque `icon_button`, not a ribbon tool. `EVE_BUTTON_SKIN_TOKENS` owns neutral/blue, success/green, warning/orange, and danger/red semantic roles, `labelGapPx`, `specimenDividerMarginPx`, and label vertical alignment/offset. Each role independently exposes its icon color, label color, and rest/pressed/active shadows; these currently reference the same shared system-content and state-shadow values, preserving the verified design while allowing later per-role skins. Each role is visibly dark-tinted at rest through `restToneMix: 0.72` on an opaque surface that does not inherit the panel backdrop; its pressed background scales that same role-tinted RGB through `pressedLuminanceLift: 0.16`, preserving hue and never using a separate light-gray literal; its active state mixes toward the role accent through `activeAccentMix: 0.34` and remains opaque after release. The Lab body has no implicit gap: each shared divider owns the 8 px vertical rhythm, while the localized sibling label uses the same 8 px horizontal token. Bevy 0.19 provides no native inner-shadow style, so this component adds neither synthetic rim nor embossing. The shared builder is intentionally separate from the existing ribbon-tool contract.
-- The in-review Panel Lab list row is a passive native BevyUI `row`: it reuses the panel's `358 × 32 px` control geometry, `10 px` horizontal padding, `3 px` radius, opaque system control paint, and 13 px left-aligned localized text. It has neither shadow, hover/pressed/selected style, handler, nor durable or ephemeral state. Future panel-specific selection or action semantics must stay with the consuming panel and must not be added to this passive shared builder.
+- The validated Panel Lab list row is a passive native BevyUI `row`: it reuses the panel's `358 × 32 px` control geometry, `10 px` horizontal padding, `3 px` radius, opaque system control paint, and 13 px left-aligned localized text. It has neither shadow, hover/pressed/selected style, handler, nor durable or ephemeral state. Future panel-specific selection or action semantics must stay with the consuming panel and must not be added to this passive shared builder.
+- The in-review Panel Lab accordion is a stateless native `accordion` header,
+  not an HTML control: its shared skin owns the `358 × 32 px` compact control
+  geometry, `12 px` vector chevron and `358 × 56 px` optional opaque body. The
+  closed header has the full `3 px` radius; the open header/body split those
+  corners into one continuous material. The Lab owns only a reset-on-close
+  boolean and its pointer activation intent. It has no animation, keyboard
+  activation, exclusive-group behavior, DOM projection, product mutation, or
+  Finder/Profile migration. Opening preserves panel geometry and uses the
+  existing BodyScroll to reveal the complete component with a `10 px` margin.
 - Every panel control must record an integration decision that evaluates BevyUI widget coverage, actual native/WASM availability, and the canonical Atome/Squirrel system-control contract. Existing BevyUI widgets are preferred. Panel-specific code may place, configure, and compose selected primitives with shared skin tokens only when the record proves that this is necessary; it must not redraw a bespoke substitute or redefine interaction, geometry, state, or visual tokens locally.
 
 ## Design Factories and Runtime Surfaces
@@ -375,6 +384,7 @@ P8 projection style ownership:
 - Main menu, Flower, and contextual rail are complete Bevy presentation trees: normalization must preserve this inherited flag on every descendant so icons, labels, accents, surfaces, and shadows never enter the workspace backdrop capture. The contextual rail itself is transparent layout only: its contiguous tool surfaces are its sole background/backdrop/shadow owners, preventing a rail-level shadow from stacking with every tool shadow. Backdrop tools keep the canonical exterior shadow, but its texture has a transparent inner cutout matching the tool silhouette; a layer update can therefore never project the shadow fill over the translucent glass interior.
 - Inline style remains allowed for projection sliders while expanded/collapsed width is actively driven by the runtime.
 - `eVe/intuition/shared/slider_tool_content.js`
+- `eVe/intuition/shared/bevy_ui_tool_slider.js`
 
 Role:
 
@@ -385,6 +395,9 @@ Role:
 - For sliders specifically, the canonical product-tool behavior lives in `atome/src/squirrel/components/tool_slider_builder.js`: `orientation` is horizontal or vertical; both start compact and use relative no-jump motion. A vertical slider expands to three times its height, increases upward, reflows its rail, and collapses on release, cancel, or lost capture.
 - `atome/src/squirrel/components/tool_slider_builder.js` now owns both the canonical slider DOM/data-role contract and the shared direct-drag gesture semantics for the product-tool slider.
 - `eVe/intuition/shared/slider_tool_content.js`, `eVe/intuition/shared/slider_tool_dom.js`, and `eVe/intuition/shared/slider_direct_drag.js` are product wrappers and compatibility re-exports around the Atome owner.
+- `eVe/intuition/shared/bevy_ui_tool_slider.js` is the parallel canvas-only
+  presentation adapter for the existing contextual slider semantics. It is not
+  a DOM product-tool replacement, state store, or public API.
 - Background text creation uses a point-origin editable surface: the provisional editor and first rendered text child start at the click coordinate with a one-pixel width and no padding, then expand through the shared text fit runtime as characters are entered.
 
 Design rule: a business capability has one visual tool identity across toolbox, projection, panel, Finder, and MCP-triggered contexts.

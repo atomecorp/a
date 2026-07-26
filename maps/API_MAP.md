@@ -156,6 +156,7 @@ Ownership: eVe closed panel projection over the shared BevyUI runtime.
 Primary sources:
 
 - `eVe/intuition/runtime/bevy_panel/bevy_panel_runtime.js`
+- `eVe/intuition/runtime/bevy_panel/bevy_panel_accordion.js`
 - `eVe/intuition/runtime/bevy_panel/bevy_panel_tree.js`
 - `eVe/intuition/runtime/bevy_panel/bevy_panel_layout.js`
 - `eVe/intuition/runtime/bevy_panel/bevy_panel_surfaces.js`
@@ -167,10 +168,13 @@ The temporary development/test-only `ui.dev.panel_lab` tool is not a public or s
 
 Panel Lab introduces exactly one new component specimen per approval loop and
 retains all approved specimens in chronological body flow; its approved shared
-specimens are static body text, a passive horizontal divider, and the validated
-icon action-button component. Its in-review passive list row configures the
-native BevyUI `row` primitive through `listRowNode`, exposes no handler or API,
-and owns no state or mutation. Its momentary, hold, toggle, and radio
+specimens are static body text, a passive horizontal divider, the validated
+icon action-button component, and the validated passive list row. Its
+in-review accordion is Lab-only: it emits a closed ephemeral intent, holds no
+Atome state, and requests canonical post-rebuild scroll reveal through the
+closed runtime bridge. The proposed
+vertical tool-slider was removed from Panel Lab because it is a tool-context
+pattern rather than a current panel need. Its momentary, hold, toggle, and radio
 variants emit only closed `panel_lab.icon_button.*` intents and expose no public
 API or durable state; all presentation state is ephemeral and resets on surface
 close. `EVE_BUTTON_SKIN_TOKENS.bevyButton` is the closed shared presentation

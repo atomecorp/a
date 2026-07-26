@@ -291,13 +291,13 @@ test('Panel Lab is development-gated and uses the shared panel skin', async () =
     const footer = findNode(mounted[0], 'eve_bevy_panel_panel_lab_footer');
     const drag = findNode(mounted[0], 'eve_bevy_panel_panel_lab_footer_drag');
     assert.deepEqual(panel.style.background, material.background);
-    assert.deepEqual(panel.style.size, [420, 520], 'the cumulative Lab specimens must be visible at first open');
+    assert.deepEqual(panel.style.size, [420, 560], 'the closed accordion header must join every visible Lab specimen');
     assert.deepEqual(panel.style.backdrop, material.backdrop);
     assert.deepEqual(panel.style.shadow, material.shadow);
     assert.equal(mounted[0].presentation, true);
     assert.deepEqual(body.style.background, EVE_PANEL_SKIN_TOKENS.bevyPanel.colors.transparent);
     assert.equal(body.style.gap, 0, 'Panel Lab owns its vertical rhythm through specimen divider margins');
-    assert.equal(body.children.length, 15, 'Panel Lab must retain approved specimens and append one grouped passive-list specimen');
+    assert.equal(body.children.length, 17, 'Panel Lab must retain approved specimens and append the closed accordion specimen');
     const listGroup = findNode(mounted[0], 'panel_lab_list_group');
     assert.equal(listGroup.kind, 'panel');
     assert.deepEqual(listGroup.style.size, [358, 104]);
@@ -383,15 +383,15 @@ test('Panel Lab is development-gated and uses the shared panel skin', async () =
     const momentaryLabelRecord = recordFor('panel_lab_icon_button_momentary_label_text');
     assert.deepEqual(
         [dividerRecord?.properties?.left, dividerRecord?.properties?.top, dividerRecord?.properties?.width, dividerRecord?.properties?.height],
-        [291, 216, 358, 1]
+        [291, 176, 358, 1]
     );
     assert.deepEqual(
         [momentaryBackgroundRecord?.properties?.left, momentaryBackgroundRecord?.properties?.top],
-        [270, 225]
+        [270, 185]
     );
     assert.deepEqual(
         [momentaryLabelRecord?.properties?.left, momentaryLabelRecord?.properties?.top],
-        [308, 225]
+        [308, 185]
     );
     assert.equal(momentaryLabelRecord?.properties?.text_style?.vertical_align, 'center');
     assert.equal(momentaryLabelRecord?.properties?.text_style?.padding_y, 1);
@@ -479,7 +479,7 @@ test('Panel Lab is development-gated and uses the shared panel skin', async () =
     await fullscreenDrag.on.activate();
     await fullscreenDrag.on.activate();
     const restoredPanel = findNode(mounted.at(-1), 'eve_bevy_panel_panel_lab_panel');
-    assert.deepEqual(restoredPanel.style.position, [260, 174]);
-    assert.deepEqual(restoredPanel.style.size, [420, 520]);
+    assert.deepEqual(restoredPanel.style.position, [260, 134]);
+    assert.deepEqual(restoredPanel.style.size, [420, 560]);
     await runtime.closePanelSurface('panel_lab');
 });
