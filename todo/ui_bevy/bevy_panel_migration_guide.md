@@ -559,8 +559,8 @@ Status: `deferred`
 
 ### Sixth specimen proposal — accordion
 
-Status: `in_review`; implementation is complete, pending real-canvas visual
-approval.
+Status: `validated`; focused contracts, shared-canvas review, and explicit
+product-owner approval are complete.
 
 - Scope: Panel Lab only. Finder, Profile, their legacy HTML accordions,
   keyboard activation, exclusive groups, and the deferred slider remain out of
@@ -571,11 +571,16 @@ approval.
   right when closed and down when open. It is stateless: callers provide their
   own `expanded` boolean, body children, and activation handler, so sibling
   sections remain independent by construction.
+- Paint: the header uses the tokenized, slightly darker accordion background so
+  it remains legible as the activation zone; the body keeps the existing opaque
+  panel-control material. Closed, the header owns a short, light drop shadow.
+  Open, its transparent root owns the larger tokenized shadow around the whole
+  `358 × 88 px` perimeter. The shadow changes with the rebuilt tree; it is not
+  animated.
 - Open body: the tree contains no hidden body while closed. When open, it adds
-  one `358 × 56 px` opaque body using the same control material and continuous
-  `3 px` outer corners; the Lab composes only one localized passive text child.
-  No DOM, CSS control, local paint, animation, durable mutation, or product
-  state is introduced.
+  one `358 × 56 px` opaque body with continuous `3 px` outer corners; the Lab
+  composes only one localized passive text child. No DOM, CSS control, local
+  paint, animation, durable mutation, or product state is introduced.
 - Lab state: `bevy_panel_lab_accordion_runtime.js` owns only the ephemeral
   `expanded` flag, emits `panel_lab.accordion.toggle`, and resets on both Lab
   open and close. The Lab opens at `420 × 560 px` so every previous specimen
@@ -585,11 +590,53 @@ approval.
   margin. It cancels scroll inertia, clamps to the existing scroll bounds, and
   never resizes the panel.
 
-Validation required before `validated`: focused accordion, Panel Lab, scroll,
-manifest, syntax, M0, execution-order, and diff checks; then real shared-canvas
-inspection of closed/open geometry, chevron direction, bounded reveal,
-open/close/reset, short Lab toggle, long-press reload/reopen, and a clean
-console. Product-owner visual approval is still required.
+Validation evidence: focused accordion, Panel Lab, scroll, manifest, syntax,
+M0, execution-order, and diff checks pass. The product owner explicitly
+approved the closed/open geometry, header/body distinction, chevron direction,
+bounded reveal, reset behavior, and the final shadow treatment on 2026-07-26.
+
+### Seventh specimen proposal — select
+
+Status: `validated`; focused contracts, real-canvas interaction evidence, and
+explicit product-owner approval are complete.
+
+- Scope: one localized language Select in Panel Lab only. It deliberately does
+  not migrate Finder/Profile dropdowns, the deferred slider, keyboard/listbox
+  semantics, or any durable preference.
+- Integration decision: the inspected native/WASM vocabulary exposes generic
+  interactive `select` and `button` primitives but no dedicated popup/listbox
+  widget. `atome/src/squirrel/components/select_contract.js` is therefore the
+  canonical renderer-neutral option/value contract; the shared
+  `bevy_panel_select.js` configures those available primitives rather than
+  redrawing a local widget. The DOM legacy `dropDown_builder.js` is rejected for
+  this route. Its non-Panel-Lab example consumers require their own migration
+  task; this specimen keeps no compatibility or visible DOM route.
+- Geometry and paint: the closed field is `358 × 32 px`, with `10 px`
+  horizontal padding, a dedicated `32 px` indicator zone, and a `10 px` two-
+  stroke chevron pointing down when closed and up when open. Opening keeps that
+  field at `32 px`; three localized `32 px` option rows float `4 px` below it
+  instead of extending the body flow as an accordion would. The popup owns its
+  own elevated shadow, each row has hover/focus/pressed feedback, and the
+  selected row carries a vector check mark plus a selection tint. Shared Select
+  tokens own this distinct field/menu treatment; accordion shadows and its
+  continuous-corner silhouette are not reused.
+- Interaction and state: header activation toggles the list; an enabled option
+  selects its value and closes the list. The Lab runtime owns only ephemeral
+  expanded, header/option hover, header/option focus, pressed, and selected-
+  value state, emits closed
+  `panel_lab.select.*` intents, resets to `Français` on close/reopen, and never
+  calls an Atome mutation. Opening requests the existing canonical BodyScroll
+  reveal of the floating options with its `10 px` margin. The shared BevyUI
+  hit-test and BodyScroll owners retain overflow-visible popup descendants for
+  pointer routing and bounded reveal while still respecting the scroll clip.
+- Evidence: the focused Select contract passes 6/6, including floating-menu
+  hit testing and scroll reveal. The surrounding Panel and BevyUI runtime suites
+  pass 39/39. The real shared canvas showed the field, floating option list,
+  check mark, selection, and an empty warning/error console. The Panel Lab
+  geometry is `420 × 620 px` so the closed specimen remains in chronological
+  body flow. The product owner explicitly approved the field/menu distinction,
+  down/up chevron, selected mark, floating-list behavior, and reset contract on
+  2026-07-27.
 
 The development-only Panel Lab main-ribbon tool has a fixed test contract: a
 short activation opens it, the next short activation closes it, and a 520 ms

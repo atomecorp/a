@@ -57,12 +57,25 @@ BevyUI panel ownership:
   design review, not as a Panel Lab or generic panel component.
   `bevy_ui_pointer_runtime.js` exempts `tool_slider` from panel-scroll
   drag takeover, so its vertical gesture remains slider-owned.
-- `eVe/intuition/runtime/bevy_panel/bevy_panel_accordion.js` owns the shared
-  stateless panel accordion tree: native interactive header, localized-label
-  slot, vector chevron, and optional body-child slot composed only from
+- `eVe/intuition/runtime/bevy_panel/bevy_panel_accordion.js` owns the validated
+  shared stateless panel accordion tree: native interactive header, localized-
+  label slot, vector chevron, and optional body-child slot composed only from
   `EVE_PANEL_SKIN_TOKENS.bevyPanel`. `bevy_panel_lab_accordion_runtime.js`
   owns only the Lab's close-reset `expanded` flag and its closed
   `panel_lab.accordion.toggle` intent; no product state or DOM control exists.
+- `atome/src/squirrel/components/select_contract.js` owns renderer-neutral
+  Select option and value normalization. `bevy_panel_select.js` composes that
+  canonical contract into the available native BevyUI interactive primitives:
+  a `select` header and generic `button` option rows. The validated
+  `bevy_panel_lab_select_runtime.js` owns only the Lab's reset-on-close
+  expanded, hover, focus, pressed, and selected-value snapshot plus closed
+  `panel_lab.select.*` intents. It creates neither a DOM control nor an Atome
+  mutation; product-specific canonical selection ownership remains with each
+  future consuming surface. `bevy_ui_hit_test_runtime.js` traverses an
+  overflow-visible descendant outside its non-clipping parent while preserving
+  hidden/scroll clip boundaries, and `bevy_ui_scroll_runtime.js` includes that
+  visible descendant in a scroll area's reveal extent. Those shared owners make
+  the Select popup interactive and revealable without reserving panel body flow.
 - `bevy_ui_scroll_runtime.js` owns bounded, inertia-cancelling post-rebuild
   target reveal inside existing scroll areas. `bevy_ui_runtime.js` exposes it
   only through the closed `revealTreeNode({ id, nodeId, marginPx })` runtime
@@ -71,7 +84,7 @@ BevyUI panel ownership:
 - `eVe/intuition/runtime/eve_intuition/panel_surface_runtime.js` remains the existing `openPanelSurface` / `closePanelSurface` bridge. It routes registered Bevy panel surfaces to the BevyUI panel runtime and leaves non-migrated surfaces on the old panel creator until each one is migrated and verified.
 - `eVe/intuition/tools/timeline.js` is now a compatibility wrapper only; the visible Timeline panel surface is `timelineSurface` in `bevy_panel_surfaces.js` and must not recreate `createEveDialog`, tool docks, or visible HTML controls.
 - `eVe/intuition/runtime/bevy_panel/bevy_panel_surfaces.js` also registers minimal BevyUI `calendar` and `contact` surfaces so Dashboard header-created calendar/contact records open Bevy panels instead of the legacy HTML panels while those panels are being completed.
-- `bevy_panel_tree.js` owns shared panel text, divider, composition-row, and passive-list-row builders above the opaque shell. `textNode` consumes canonical panel typography and `dividerNode` consumes canonical divider paint/margins. `listRowNode` configures the native BevyUI `row` primitive with existing panel control geometry, system surface, and localized text; it never adds an interaction handler, state owner, or DOM projection. The validated Panel Lab action button composes `buildBevyIconButtonNode` from `intuition/shared/bevy_ui_icon_button.js`; the shared `EVE_BUTTON_SKIN_TOKENS` owns its 30 px geometry, tokenized 8 px label/divider rhythm, role-tinted opaque no-backdrop rest (`restToneMix`), hue-preserving rest-derived pressed luminosity, accent-mixed active surface, and semantic roles. Each role exposes independently skinnable icon color, label color, and rest/pressed/active shadows while currently referencing the shared system values. `bevy_ui_tree_normalization.js`, `bevy_ui_overlay_record_projection.js`, and `bevy_media_texture_resolver.js` carry the row label's normalized vertical alignment and +1 px offset to the text texture. The panel row places the localized label as a sibling on the right, never inside the button. `bevy_panel_surfaces.js` owns only close-reset ephemeral Lab state for the declared momentary, hold, toggle, radio, and accordion variants; it never owns product state or DOM state. Ribbon-tool builders remain separate and are not restyled by this component review.
+- `bevy_panel_tree.js` owns shared panel text, divider, composition-row, and passive-list-row builders above the opaque shell. `textNode` consumes canonical panel typography and `dividerNode` consumes canonical divider paint/margins. `listRowNode` configures the native BevyUI `row` primitive with existing panel control geometry, system surface, and localized text; it never adds an interaction handler, state owner, or DOM projection. The validated Panel Lab action button composes `buildBevyIconButtonNode` from `intuition/shared/bevy_ui_icon_button.js`; the shared `EVE_BUTTON_SKIN_TOKENS` owns its 30 px geometry, tokenized 8 px label/divider rhythm, role-tinted opaque no-backdrop rest (`restToneMix`), hue-preserving rest-derived pressed luminosity, accent-mixed active surface, and semantic roles. Each role exposes independently skinnable icon color, label color, and rest/pressed/active shadows while currently referencing the shared system values. `bevy_ui_tree_normalization.js`, `bevy_ui_overlay_record_projection.js`, and `bevy_media_texture_resolver.js` carry the row label's normalized vertical alignment and +1 px offset to the text texture. The panel row places the localized label as a sibling on the right, never inside the button. `bevy_panel_surfaces.js` owns only close-reset ephemeral Lab state for the declared momentary, hold, toggle, radio, accordion, and validated Select variants; it never owns product state or DOM state. Ribbon-tool builders remain separate and are not restyled by this component review.
 - `bevy_panel_lab_text_input_runtime.js` owns only the Panel Lab field policy:
   consume the first enabled activation without mutating the value, preserve all
   user-entered values, validate Return as blur, and reset on panel

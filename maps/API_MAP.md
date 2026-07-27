@@ -157,6 +157,9 @@ Primary sources:
 
 - `eVe/intuition/runtime/bevy_panel/bevy_panel_runtime.js`
 - `eVe/intuition/runtime/bevy_panel/bevy_panel_accordion.js`
+- `eVe/intuition/runtime/bevy_panel/bevy_panel_select.js`
+- `eVe/intuition/runtime/bevy_panel/bevy_panel_lab_select_runtime.js`
+- `atome/src/squirrel/components/select_contract.js`
 - `eVe/intuition/runtime/bevy_panel/bevy_panel_tree.js`
 - `eVe/intuition/runtime/bevy_panel/bevy_panel_layout.js`
 - `eVe/intuition/runtime/bevy_panel/bevy_panel_surfaces.js`
@@ -169,10 +172,15 @@ The temporary development/test-only `ui.dev.panel_lab` tool is not a public or s
 Panel Lab introduces exactly one new component specimen per approval loop and
 retains all approved specimens in chronological body flow; its approved shared
 specimens are static body text, a passive horizontal divider, the validated
-icon action-button component, and the validated passive list row. Its
-in-review accordion is Lab-only: it emits a closed ephemeral intent, holds no
+icon action-button component, the validated passive list row, and the validated
+accordion. The accordion is Lab-only: it emits a closed ephemeral intent, holds no
 Atome state, and requests canonical post-rebuild scroll reveal through the
-closed runtime bridge. The proposed
+closed runtime bridge. The validated Select follows the same closed route:
+`select_contract.js` owns renderer-neutral option/value normalization,
+`bevy_panel_select.js` composes a fixed-height field and floating option rows
+from the available native primitives, and the Lab runtime owns only reset-on-close
+presentation state plus `panel_lab.select.*` intents. It exposes no public API,
+DOM control, or durable mutation. The proposed
 vertical tool-slider was removed from Panel Lab because it is a tool-context
 pattern rather than a current panel need. Its momentary, hold, toggle, and radio
 variants emit only closed `panel_lab.icon_button.*` intents and expose no public

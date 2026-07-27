@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'vitest';
 
 import { EVE_DEFAULT_MESSAGES } from '../../eVe/i18n/languages.js';
+import { projectBevyUiTreeRecords } from '../../eVe/domains/rendering/bevy_ui_overlay_record_projection.js';
 import { accordionNode } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_accordion.js';
 import { panelLabSurface } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_surfaces.js';
 import { BEVY_PANEL_TOKENS } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_tokens.js';
@@ -33,11 +34,17 @@ test('shared panel accordion has one native header and no hidden body when close
     assert.deepEqual(header.style.size, [358, 32]);
     assert.deepEqual(header.style.padding, [0, 10, 0, 10]);
     assert.equal(header.style.radius, 3);
-    assert.deepEqual(header.style.background, BEVY_PANEL_TOKENS.colors.control);
+    assert.deepEqual(header.style.background, BEVY_PANEL_TOKENS.accordion.headerBackground);
+    assert.deepEqual(header.style.shadow, BEVY_PANEL_TOKENS.accordion.collapsedShadow);
     assert.equal(typeof header.on.activate, 'function');
     assert.deepEqual(chevron.style.size, [12, 12]);
     assert.equal(chevron.style.rotation, 0);
     assert.equal(findNode(closed, 'accordion_fixture_body'), null);
+    const closedRecords = projectBevyUiTreeRecords({ tree: { root: closed }, treeId: 'accordion_closed', workspaceLayer: 'panel' });
+    assert.deepEqual(
+        closedRecords.find((record) => record.id === '__eve_bevy_ui_accordion_closed_accordion_fixture_header')?.properties?.material?.shadow,
+        { color: [0, 0, 0, 0.18], blur: 3, spread: 0, offsetX: 0, offsetY: 1 }
+    );
     header.on.activate();
     assert.equal(activations, 1);
 });
@@ -54,8 +61,10 @@ test('shared panel accordion opens a continuous 56 px body and keeps instances i
     const body = findNode(open, 'accordion_open_body');
 
     assert.deepEqual(open.style.size, [358, 88]);
+    assert.deepEqual(open.style.shadow, BEVY_PANEL_TOKENS.accordion.expandedShadow);
     assert.deepEqual(header.style.radius_corners, [3, 3, 0, 0]);
     assert.equal(header.style.radius, undefined);
+    assert.equal(header.style.shadow, undefined);
     assert.deepEqual(findNode(open, 'accordion_open_chevron').style.rotation, 90);
     assert.deepEqual(body.style.position, [0, 32]);
     assert.deepEqual(body.style.size, [358, 56]);
@@ -63,6 +72,11 @@ test('shared panel accordion opens a continuous 56 px body and keeps instances i
     assert.deepEqual(body.style.background, BEVY_PANEL_TOKENS.colors.control);
     assert.equal(findNode(open, 'accordion_open_body_text').text, 'Section content');
     assert.equal(findNode(other, 'accordion_other_body'), null);
+    const openRecords = projectBevyUiTreeRecords({ tree: { root: open }, treeId: 'accordion_open', workspaceLayer: 'panel' });
+    assert.deepEqual(
+        openRecords.find((record) => record.id === '__eve_bevy_ui_accordion_open_accordion_open')?.properties?.material?.shadow,
+        { color: [0, 0, 0, 0.22], blur: 5, spread: 1, offsetX: 0, offsetY: 2 }
+    );
 });
 
 test('Panel Lab appends the accordion, toggles it through an intent, and resets it on close', () => {
@@ -73,7 +87,7 @@ test('Panel Lab appends the accordion, toggles it through an intent, and resets 
         const dividerIndex = closed.findIndex((node) => node.id === 'panel_lab_accordion_divider');
         const accordionIndex = closed.findIndex((node) => node.id === 'panel_lab_accordion');
 
-        assert.equal(closed.length, 17);
+        assert.equal(closed.length, 19);
         assert.equal(dividerIndex, 15);
         assert.equal(accordionIndex, dividerIndex + 1);
         assert.equal(panelLabSurface.readState().accordion.expanded, false);

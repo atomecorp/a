@@ -310,15 +310,34 @@ Design rule: migrated panel surfaces must use this BevyUI panel owner, not `crea
 - `EVE_PANEL_SKIN_TOKENS.bevyPanel` also owns `colors.divider` (system white at 25% opacity) and `dividerMarginHorizontalPx` (`21 px`). The shared `dividerNode` uses those tokens with native `1 px` height and body-width stretch after margins; it has no local paint or interaction styling.
 - The validated Panel Lab icon action button is a shared `30 × 30 px` opaque `icon_button`, not a ribbon tool. `EVE_BUTTON_SKIN_TOKENS` owns neutral/blue, success/green, warning/orange, and danger/red semantic roles, `labelGapPx`, `specimenDividerMarginPx`, and label vertical alignment/offset. Each role independently exposes its icon color, label color, and rest/pressed/active shadows; these currently reference the same shared system-content and state-shadow values, preserving the verified design while allowing later per-role skins. Each role is visibly dark-tinted at rest through `restToneMix: 0.72` on an opaque surface that does not inherit the panel backdrop; its pressed background scales that same role-tinted RGB through `pressedLuminanceLift: 0.16`, preserving hue and never using a separate light-gray literal; its active state mixes toward the role accent through `activeAccentMix: 0.34` and remains opaque after release. The Lab body has no implicit gap: each shared divider owns the 8 px vertical rhythm, while the localized sibling label uses the same 8 px horizontal token. Bevy 0.19 provides no native inner-shadow style, so this component adds neither synthetic rim nor embossing. The shared builder is intentionally separate from the existing ribbon-tool contract.
 - The validated Panel Lab list row is a passive native BevyUI `row`: it reuses the panel's `358 × 32 px` control geometry, `10 px` horizontal padding, `3 px` radius, opaque system control paint, and 13 px left-aligned localized text. It has neither shadow, hover/pressed/selected style, handler, nor durable or ephemeral state. Future panel-specific selection or action semantics must stay with the consuming panel and must not be added to this passive shared builder.
-- The in-review Panel Lab accordion is a stateless native `accordion` header,
+- The validated Panel Lab accordion is a stateless native `accordion` header,
   not an HTML control: its shared skin owns the `358 × 32 px` compact control
-  geometry, `12 px` vector chevron and `358 × 56 px` optional opaque body. The
-  closed header has the full `3 px` radius; the open header/body split those
-  corners into one continuous material. The Lab owns only a reset-on-close
-  boolean and its pointer activation intent. It has no animation, keyboard
+  geometry, slightly darker header paint, `12 px` vector chevron, a short light
+  closed-header shadow, and a larger open-root shadow around the optional
+  `358 × 56 px` opaque panel-control body. The closed header has the full `3 px`
+  radius; the open header/body split those corners into one continuous material.
+  The shadow changes with the rebuilt tree without animation. The Lab owns only
+  a reset-on-close boolean and its pointer activation intent. It has no keyboard
   activation, exclusive-group behavior, DOM projection, product mutation, or
   Finder/Profile migration. Opening preserves panel geometry and uses the
   existing BodyScroll to reveal the complete component with a `10 px` margin.
+- The validated Panel Lab Select consumes the canonical renderer-neutral
+  `normalizeSelectPresentation` Squirrel contract, not the legacy DOM dropdown
+  builder. The current native/WASM vocabulary has no dedicated popup/listbox
+  primitive, so the shared `bevy_panel_select.js` composes the available
+  interactive `select` field and generic `button` option rows with the common
+  panel material. The `358 × 32 px` field has `10 px` horizontal padding, a
+  dedicated `32 px` indicator zone, and a down/up two-stroke chevron. Its three
+  localized `32 px` rows float `4 px` below the fixed-height field and carry
+  token-owned hover/focus/pressed feedback; a selected row has a vector check
+  mark and dedicated tint. The popup owns its elevated shadow, so it never
+  inherits the accordion's continuous-card silhouette or expands body flow.
+  The canonical BevyUI hit-test and scroll owners preserve overflow-visible
+  descendants for popup input and reveal, while the BodyScroll remains the clip
+  owner. The Lab runtime keeps only ephemeral reset-on-close presentation state
+  and emits no product mutation or DOM control. Keyboard/listbox semantics are
+  deliberately outside this first Panel Lab specimen and need a consuming
+  product-surface contract before they can be added.
 - Every panel control must record an integration decision that evaluates BevyUI widget coverage, actual native/WASM availability, and the canonical Atome/Squirrel system-control contract. Existing BevyUI widgets are preferred. Panel-specific code may place, configure, and compose selected primitives with shared skin tokens only when the record proves that this is necessary; it must not redraw a bespoke substitute or redefine interaction, geometry, state, or visual tokens locally.
 
 ## Design Factories and Runtime Surfaces
