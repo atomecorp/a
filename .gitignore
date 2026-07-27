@@ -92,6 +92,8 @@ tests/eve/*
 !tests/eve/bevy_project_renderer_guards.test.mjs
 !tests/eve/bevy_panel_contract.test.mjs
 !tests/eve/bevy_panel_accordion_contract.test.mjs
+!tests/eve/bevy_panel_table_contract.test.mjs
+!tests/eve/bevy_panel_choice_contract.test.mjs
 !tests/eve/bevy_tool_slider_contract.test.mjs
 !tests/eve/bevy_ui_main_menu_overlay_atomic.test.mjs
 !tests/eve/bevy_ui_overlay_reconciliation.test.mjs

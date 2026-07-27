@@ -297,7 +297,19 @@ test('Panel Lab is development-gated and uses the shared panel skin', async () =
     assert.equal(mounted[0].presentation, true);
     assert.deepEqual(body.style.background, EVE_PANEL_SKIN_TOKENS.bevyPanel.colors.transparent);
     assert.equal(body.style.gap, 0, 'Panel Lab owns its vertical rhythm through specimen divider margins');
-    assert.equal(body.children.length, 19, 'Panel Lab must retain approved specimens and append the closed Select specimen');
+    assert.equal(body.children.length, 23, 'Panel Lab must retain approved specimens and append the passive table specimen');
+    const tableSpecimen = findNode(mounted[0], 'panel_lab_table');
+    assert.equal(tableSpecimen.kind, 'table');
+    assert.equal(tableSpecimen.on, undefined);
+    assert.deepEqual(
+        tableSpecimen.style.size,
+        [panel.style.size[0] - (BEVY_PANEL_TOKENS.paddingPx * 2), 128],
+        'the fluid table must fill the mounted body width resolved by the panel owner'
+    );
+    assert.deepEqual(
+        findNode(mounted[0], 'panel_lab_table_row_0').style.size[0],
+        tableSpecimen.style.size[0]
+    );
     const listGroup = findNode(mounted[0], 'panel_lab_list_group');
     assert.equal(listGroup.kind, 'panel');
     assert.deepEqual(listGroup.style.size, [358, 104]);

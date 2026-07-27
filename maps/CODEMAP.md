@@ -76,6 +76,28 @@ BevyUI panel ownership:
   hidden/scroll clip boundaries, and `bevy_ui_scroll_runtime.js` includes that
   visible descendant in a scroll area's reveal extent. Those shared owners make
   the Select popup interactive and revealable without reserving panel body flow.
+- `atome/src/squirrel/components/toggleable_contract.js` owns renderer-neutral
+  normalization for the independent two-state controls (`checkbox`, `switch`).
+  A radio group has the option/value semantics of a Select, so `radioGroupNode`
+  reuses `select_contract.js` instead of a second option contract.
+  `bevy_panel_choice.js` composes both into the native `checkbox`, `radio`, and
+  `toggle` kinds with one shared row geometry and indicator column;
+  `bevy_panel_lab_choice_runtime.js` owns only ephemeral checked/selected/hover/
+  focus/pressed state and closed `panel_lab.choice.*` intents. The validated
+  Select check mark now lives once in `bevy_panel_tree.js` as `checkMarkNode`
+  and serves both Select and the checkbox.
+- `atome/src/squirrel/components/table_contract.js` owns renderer-neutral table
+  column/row normalization and the fluid column-width resolution: fixed `widthPx`
+  columns are subtracted first, the remainder is split by `flex`, and the last
+  fluid column absorbs the rounding remainder so columns always sum exactly to
+  the table width. `bevy_panel_table.js` composes that contract into the passive
+  native `table` root, `row` rows, `text` cells, and `divider` rules; it holds no
+  state, handler, or measurement, and the DOM `table_builder.js` route is
+  rejected. `bevy_panel_runtime.js` remains the single geometry authority and
+  passes `bodyWidth` into `buildContent`, so a fluid component never measures the
+  DOM. `panelBodyLayer` in `bevy_panel_tree.js` resolves a node's `z_index`
+  against the layer its parent received, so an elevated subtree such as the
+  Select popup keeps its whole content above later body siblings.
 - `bevy_ui_scroll_runtime.js` owns bounded, inertia-cancelling post-rebuild
   target reveal inside existing scroll areas. `bevy_ui_runtime.js` exposes it
   only through the closed `revealTreeNode({ id, nodeId, marginPx })` runtime

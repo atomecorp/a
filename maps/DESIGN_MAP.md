@@ -338,6 +338,32 @@ Design rule: migrated panel surfaces must use this BevyUI panel owner, not `crea
   and emits no product mutation or DOM control. Keyboard/listbox semantics are
   deliberately outside this first Panel Lab specimen and need a consuming
   product-surface contract before they can be added.
+- The Panel Lab choice controls (checkbox, radio group, switch) each use their
+  own native interactive kind on one shared `358 × 32 px` row. A single `36 px`
+  indicator column keeps every label aligned whatever the indicator shape: an
+  `18 px` box at panel radius, an `18 px` circle with a `6 px` dot, or a
+  `36 × 18 px` pill whose `14 px` knob travels between `2 px` insets. The row
+  carries hover and pressed tints plus the existing input focus ring; the
+  indicator carries idle/hover/pressed/selected, so pressed and selected read
+  differently. Disabled drops to `0.55` opacity and mounts no handler. The
+  selected tint is the approved Select selection colour: a green accent stays
+  opt-in for a feature with that semantic meaning and is never the default on
+  state, which is why the legacy DOM `preset_controls.js` green glow was not
+  reused. The check mark is the promoted shared Select glyph, not a redraw.
+- The Panel Lab table is the first deliberately fluid panel component: it fills
+  the usable body width instead of the `358 px` control width, because a table is
+  a data surface rather than a control. The panel runtime keeps geometry
+  ownership and hands `bodyWidth` to `buildContent`. Columns are declared by
+  weight, the last fluid column absorbs the rounding remainder, and the card is
+  one opaque body-width `× 128 px` surface with `3 px` outer corners, no shadow
+  (passive components stay flat), a tokenized darker header band whose labels
+  keep the body font weight at `0.72` opacity, and horizontal `1 px` rules only —
+  no vertical grid, which reads as noise on a translucent dark panel. Cells clip
+  their text because the native vocabulary has no ellipsis primitive. The
+  component is fully passive: sorting and row selection belong to the consuming
+  product panel. A `z_index` is resolved against its parent's assigned layer, so
+  a floating popup keeps its content above later body siblings such as this
+  table.
 - Every panel control must record an integration decision that evaluates BevyUI widget coverage, actual native/WASM availability, and the canonical Atome/Squirrel system-control contract. Existing BevyUI widgets are preferred. Panel-specific code may place, configure, and compose selected primitives with shared skin tokens only when the record proves that this is necessary; it must not redraw a bespoke substitute or redefine interaction, geometry, state, or visual tokens locally.
 
 ## Design Factories and Runtime Surfaces

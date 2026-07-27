@@ -180,7 +180,20 @@ closed runtime bridge. The validated Select follows the same closed route:
 `bevy_panel_select.js` composes a fixed-height field and floating option rows
 from the available native primitives, and the Lab runtime owns only reset-on-close
 presentation state plus `panel_lab.select.*` intents. It exposes no public API,
-DOM control, or durable mutation. The proposed
+DOM control, or durable mutation. The validated choice specimen follows the same
+closed route: `toggleable_contract.js` owns the two-state normalization, radio
+groups reuse `select_contract.js`, `bevy_panel_choice.js` composes the native
+`checkbox`/`radio`/`toggle` kinds, and the Lab runtime owns only reset-on-close
+presentation state plus `panel_lab.choice.*` intents. Each control declares
+exactly one semantic — independent boolean, exclusive group, or single on/off
+value — and the canonical state owner remains the future consuming surface.
+The validated table specimen is the first
+fluid panel component: `table_contract.js` owns renderer-neutral column/row
+normalization plus fluid column-width resolution, `bevy_panel_table.js` composes
+the passive native `table` root, and `bevy_panel_runtime.js` hands
+`buildContent` the `bodyWidth` it already owns. The specimen declares no intent,
+no Lab runtime, no handler, and no state at all; sorting and row selection stay
+with a future consuming product panel. The proposed
 vertical tool-slider was removed from Panel Lab because it is a tool-context
 pattern rather than a current panel need. Its momentary, hold, toggle, and radio
 variants emit only closed `panel_lab.icon_button.*` intents and expose no public
@@ -192,7 +205,7 @@ hue-preserving rest-derived `pressedLuminanceLift`, `activeAccentMix`, state
 shadows, and neutral/success/warning/danger tones. Each tone independently
 exposes its icon color, label color, and rest/pressed/active shadows for future
 skin overrides; the current values still resolve to the shared system tokens.
-The in-review `text_input` additionally emits the closed single-line
+The validated `text_input` additionally emits the closed single-line
 `validate`/submit callback on Return outside IME and then blurs. An empty,
 unfocused field projects its localized placeholder; focus hides only that
 presentation text, keeps the value empty, and projects the caret at `0`.

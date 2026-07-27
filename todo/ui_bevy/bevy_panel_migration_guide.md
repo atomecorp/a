@@ -204,7 +204,13 @@ Technical evidence — 2026-07-24:
 
 ## Stage 3 — Shared components
 
-Status: `in_review`
+Status: `in_review` — every reviewed component position is now `validated`
+(text, separator, icon action button, input, list/row, accordion, select,
+checkbox/radio/toggle, table/property grid: 9 of 10, approved 2026-07-27). The
+tenth position, the tool slider, remains `deferred` by product-owner decision
+because no panel needs it. The stage therefore has no component work left; it
+stays `in_review` only until the composition reviews below (Timeline, Calendar,
+then Contact) confirm that the approved builders cover a routed surface.
 
 Validate exactly one component type at a time in Panel Lab in this order: text,
 separator, icon action button, input, list/row, slider tool when a product panel
@@ -637,6 +643,181 @@ explicit product-owner approval are complete.
   body flow. The product owner explicitly approved the field/menu distinction,
   down/up chevron, selected mark, floating-list behavior, and reset contract on
   2026-07-27.
+
+### Eighth specimen proposal — checkbox / radio / toggle
+
+Status: `validated`; focused contracts are complete and the product owner
+explicitly approved the specimen on the real canvas on 2026-07-27. This position
+was reviewed after the table because
+the product owner deferred it, then asked for it explicitly; the table specimen
+below therefore keeps its own record and stays after this one in body flow so
+the declared component order is readable in the Lab.
+
+- Scope: the four choice controls in Panel Lab only. The legacy DOM
+  `createEveCheckbox` / `createEveRadio` consumers in the user/profile runtimes
+  (`user_visual_preferences_runtime.js`, `user_identity_fields_runtime.js`,
+  `user_accessibility_preferences_runtime.js`, `user_custom_field_list.js`)
+  migrate with the Home panel and are out of scope here. Keyboard activation is
+  outside this specimen.
+- Integration decision: `checkbox`, `radio`, and `toggle` are real native BevyUI
+  kinds — present in `SUPPORTED_KINDS`, in `INTERACTIVE_KINDS`, and in the Rust
+  `is_button_kind` list — so each control uses its own native interactive node
+  directly. This is the strongest available route and needed no new primitive.
+  The DOM `preset_controls.js` visual contract is rejected: it is CSS-owned and
+  makes a green accent glow the default on state, which the shared tool-control
+  prerequisite forbids as a global default.
+- Ownership and reuse: a radio group carries exactly the option/value semantics
+  of a Select, so `radioGroupNode` reuses the canonical
+  `select_contract.js` normalization rather than declaring a second option
+  contract; duplicate or unknown values still throw there. Only the independent
+  two-state controls needed a new canonical contract,
+  `atome/src/squirrel/components/toggleable_contract.js`. The validated Select
+  check mark was promoted once into `bevy_panel_tree.js` as `checkMarkNode` and
+  is now consumed by both Select and the checkbox, so the glyph is not redrawn
+  locally; the Select record's geometry is unchanged and its contract still
+  passes.
+- Declared semantics, one per control, per the shared tool-control
+  prerequisite: `checkbox` is an independent boolean; `radio` is an exclusive
+  group where activating the current choice keeps the selection; `toggle` is one
+  on/off value. Each is proven in both directions by the focused contract.
+- Geometry: every control is a `358 × 32 px` row with `3 px` radius. One shared
+  `36 px` indicator column keeps the labels of all three shapes aligned, with a
+  `10 px` gap before the label. The checkbox box is `18 × 18 px` at the panel
+  radius, the radio is an `18 px` circle with a `6 px` dot, and the switch is a
+  `36 × 18 px` pill whose `14 px` knob travels between a `2 px` inset on each
+  side.
+- Paint and the complete state matrix: idle row transparent; hover and pressed
+  add a tokenized row tint; focus reuses the existing input focus ring; the
+  indicator carries idle / hover / pressed / selected treatments, so **pressed
+  and selected stay visually distinct**; disabled drops to `0.55` opacity and
+  mounts no handler at all. The selected tint is the approved Select selection
+  colour — a green accent stays opt-in for a feature whose semantics call for
+  it, never the default on state.
+- Test contract to approve together, matching the icon-button precedent: one
+  checkbox, one two-option radio group, one switch, and one disabled checkbox,
+  in a single transparent group with `4 px` gaps.
+- Lab state: `bevy_panel_lab_choice_runtime.js` owns only ephemeral checked,
+  selected-value, hover, focus, and pressed state, emits closed
+  `panel_lab.choice.*` intents, resets on Lab open and close, and performs no
+  Atome mutation and no DOM projection.
+
+Validation evidence — 2026-07-27:
+
+- focused choice contract passes 6/6: canonical contract guards, the three
+  native kinds, label alignment across shapes, selected-mark/dot/knob
+  transitions, the full state matrix with pressed distinct from selected, the
+  disabled no-handler rule, the Lab composition and both radio transitions
+  (including reactivating the current choice), the WebGPU projection, and the
+  canonical `press → focus → release → activate` pointer route;
+- the cumulative Lab body count moved from 21 to 23 in every ledger test, and
+  the panel/BevyUI suites pass 36/36 including the untouched Select geometry
+  after the check-mark promotion;
+- `check:syntax`, `check:m0`, and `check:execution-order` pass;
+- the agent could not reach the project workspace that hosts the main ribbon in
+  its own browser session, so the real-canvas review of the four rows, their
+  pressed/hover feedback, and the ribbon short-open / short-close /
+  long-press-reload contract were performed by the product owner in their own
+  Lab session. They confirmed the result correct and approved the specimen on
+  2026-07-27, which closes this component.
+
+### Ninth specimen proposal — table / property grid
+
+Status: `validated`; focused contracts and runtime projection evidence are
+complete, and the product owner explicitly approved the specimen on the real
+canvas on 2026-07-27.
+
+The product owner first deferred the `checkbox/radio/toggle` position and the
+already-`deferred` slider, so the table was implemented first; the choice
+controls were then requested and recorded above. The slider remains `deferred`.
+
+- Scope: one passive Panel Lab table. Sorting, row selection, hover, cell
+  editing, virtualization, internal scrolling, and the Info/Detail product
+  property grids are explicitly outside this specimen.
+- Integration decision: `table` and `property_grid` already exist in the shared
+  `SUPPORTED_KINDS` vocabulary and are absent from `INTERACTIVE_KINDS`, so the
+  native `table` kind is passive by construction and is the selected root. The
+  rows reuse the `row` primitive validated by the list specimen, the cells are
+  `text`, and the rules are `divider`. The Rust owner treats `table` as a generic
+  column container, so no renderer change was required. The DOM
+  `table_builder.js` + `table_visual_contract.js` pair is rejected for this
+  route: it creates DOM nodes, DOM listeners, and a light CSS palette. Its
+  example consumers (`atome/src/application/examples/tables.js`, `spark.js`,
+  `scripts/bundle.js`) need their own migration task; no bridge is introduced.
+- Ownership: `atome/src/squirrel/components/table_contract.js` owns the
+  renderer-neutral column/row normalization **and the fluid column-width
+  resolution**, so any renderer lays the same table out identically.
+  `bevy_panel_table.js` only composes that contract with panel tokens.
+- Fluid width, decided with the product owner: unlike every earlier `358 px`
+  specimen, the table fills the usable body width. A field or accordion is a
+  control, where wider is not better; a table is a data surface that would read
+  as broken when frozen at `358 px` inside a resized Info/Detail panel. The panel
+  runtime stays the single geometry authority and passes
+  `bodyWidth = geometry.width - 2 × paddingPx` into `buildContent`; the tree is
+  already rebuilt on every resize gesture, so no component measures anything and
+  no DOM geometry is read. The floor is the minimum body width (`220 px`).
+- Columns are declared by weight, not absolute pixels: a column carries either a
+  fixed `widthPx` or a `flex` (default `1`). Fixed widths are subtracted first,
+  the remainder is split proportionally, and the last fluid column absorbs the
+  rounding remainder so the columns always sum exactly to the table width and no
+  rule drifts off the edge. The specimen uses `1.6 / 1 / 1`, left alignment by
+  default, and a right-aligned value column.
+- Paint: one opaque card of the body width `× 128 px` with `3 px` outer corners
+  only, and **no shadow** — in the approved language a shadow means elevation or
+  interaction, and this component is passive and flat like the list rows. The
+  header band reuses the tokenized accordion header background; its labels keep
+  the body font weight (only Roboto Thin is embedded, so an unguaranteed heavier
+  weight is not used) and are distinguished by the band plus a `0.72` opacity.
+  Rows use the existing opaque panel-control material. Rules are horizontal
+  `1 px` only, on a dedicated `rowDivider` token that is more discreet than the
+  global divider; there is no vertical grid, which would read as noise on a
+  translucent dark panel. Cells clip their text: the native vocabulary has no
+  ellipsis primitive, which is recorded as a limitation rather than emulated.
+- Property grid: the same builder configured with two columns and
+  `header: false` covers the property-grid position. It is not mounted as a
+  second Lab specimen and is exercised only by focused contracts until a product
+  panel needs it.
+- Lab state: none. The specimen is passive, so no Lab runtime, intent, or reset
+  entry was added.
+
+#### Layering correction — floating popup over a later body sibling
+
+The product owner reported that the open Select popup became illegible above the
+table. The cause was neither component's design but the shared body layering
+contract in `bevy_panel_tree.js`: `panelBodyLayer` resolved every node's
+`z_index` against one flat absolute scale, so a floating popup could lift its own
+root (`1271`) while its option rows and labels stayed on the shared body band
+(`1252`/`1253`) — below the table rules and cell labels (`1253`), which won at
+equal depth because the table comes later in body flow. A `z_index` is now
+resolved against the layer its parent received, so an elevated subtree keeps its
+whole content elevated. Measured after the correction: popup floor `1272`
+against table ceiling `1254`. The passive table can never steal the popup's
+pointer either, since none of its kinds are interactive.
+
+Validation evidence — 2026-07-27:
+
+- focused table contract passes 8/8, including the fluid distribution summing
+  exactly at `220/358/400/683/901`, the fixed-column mix, the `header: false`
+  property grid, the passive/no-handler guarantee, the popup-above-table
+  layering regression, and the overlapping-popup hit-test;
+- the surrounding panel and BevyUI suites pass (`bevy_panel_contract`,
+  `select`, `accordion`, `list_row`, `input`, `geometry`, `pointer touch
+  surface`, `workspace_scene_layers`); the cumulative Lab body count moved from
+  19 to 21 in every ledger test;
+- `check:syntax`, `check:m0`, and `check:execution-order` pass;
+- in the running browser app the mounted Panel Lab projected the table at
+  `400 px` wide inside a `420 px` panel — against `358 px` for the specimens
+  above it — with columns resolved to `178 / 111 / 111` summing exactly to
+  `400`, and projected table depths `2351…2355`;
+- the agent could not exercise the ribbon short-open / short-close /
+  long-press-reload contract or the resize drag on the real canvas in this
+  session, because the project workspace that hosts the main ribbon could not be
+  reached (the dashboard route kept the workspace overlay from repainting).
+  The product owner performed that review in their own Lab session, confirmed
+  the result correct, and approved the specimen on 2026-07-27.
+- pre-existing and unrelated: `tests/eve/bevy_ui_pointer_contract.test.mjs`
+  fails 1/6 (touch press on the Lab input no longer mounts the hidden textarea).
+  Reproduced with pristine `bevy_panel_tree.js` and `bevy_panel_surfaces.js`
+  restored from HEAD, so it is not caused by this specimen.
 
 The development-only Panel Lab main-ribbon tool has a fixed test contract: a
 short activation opens it, the next short activation closes it, and a 520 ms
