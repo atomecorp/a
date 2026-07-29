@@ -20,21 +20,37 @@ couleur, size, font, detail, and layer. This registry is the migration scope.
 Timeline, Calendar, and Contact currently route through BevyUI; the other 13
 surfaces still use the legacy HTML dialog path. The Finder map is a Finder
 feature, not an extra panel surface, and remains blocked until its provider,
-privacy, cost, and cross-platform contract are approved.
+privacy, cost, and cross-platform contract are approved. The active shared
+component backlog intentionally excludes Timeline and Molecule / MTraX
+capabilities: their components are reviewed only with the complete Timeline or
+Molecule migration, never inferred as generic Panel work.
 
 ## Status vocabulary
 
 Use exactly one status per stage: `planned`, `in_review`, `validated`, or
 `superseded`.
 
-## Mandatory one-new-component approval loop
+## Mandatory component approval loop and passive-batch exception
 
-Every new component follows this closed loop. No new component type may be
-skipped, combined with another new type, or inferred from a previous approval:
+Every new component follows this closed loop. Interactive, editable, stateful,
+effectful, virtualized, gesture-driven, or layout-algorithm components may not
+be combined with another new type or inferred from a previous approval.
+
+A bounded passive batch is allowed when every included component has no
+handler, intent, writable Lab state, durable mutation, MCP route, asynchronous
+loading owner, virtualization, gesture, or layout algorithm. A batch may contain
+up to ten independent passive component types, but every type still requires
+its own canonical contract, native-widget decision, builder, focused test, map
+entry, and visible Lab specimen. The batch receives one shared real-canvas
+review and one explicit product-owner approval; rejection returns only the
+rejected component to its own correction loop.
 
 1. Before implementation, recommend the next component type and explain why it
    is the most judicious next dependency for shared controls and product-panel
-   coverage.
+   coverage. Trace it to a concrete visible legacy Panel occurrence and its
+   measured geometry first. A similarly named eVe tool, Timeline, Molecule, or
+   MTraX surface is not panel evidence and must be deferred to its owning
+   product migration.
 2. Inspect the native BevyUI widget vocabulary and the canonical Atome/Squirrel
    system-control contract before inspecting approved component, panel, home,
    menu, and system-control tokens. Before selecting an implementation, record
@@ -66,7 +82,7 @@ skipped, combined with another new type, or inferred from a previous approval:
    (out of 13). The counts must be derived from this ledger and
    `todo/execution_order.md`; they must never be copied forward without
    checking their current evidence.
-5. Mount one specimen of the newly introduced component type in Panel Lab and
+5. Mount one specimen of every newly introduced component type in Panel Lab and
    retain every previously approved specimen in chronological body flow. Do not
    remove, replace, duplicate, or restyle an approved specimen merely because
    a new component is being reviewed. Do not mount alternative variants,
@@ -83,18 +99,21 @@ skipped, combined with another new type, or inferred from a previous approval:
    clamping, and close behavior. Verify the Panel Lab short-open,
    short-close, long-press reload, and post-reload reopen contracts as part of
    every specimen check.
-7. Present the newly introduced specimen to the product owner in the cumulative
-   Lab, state exactly what was tested and what the product owner should inspect,
-   and wait for explicit visual and behavioral approval. Automated tests and
-   the agent's visual inspection never replace this approval.
+7. Present the newly introduced specimen, or the declared passive batch, to the
+   product owner in the cumulative Lab, state exactly what was tested and what
+   the product owner should inspect, and wait for explicit visual and
+   behavioral approval. Automated tests and the agent's visual inspection never
+   replace this approval.
 8. If rejected, correct the same specimen, rerun every applicable check, and
    resubmit it. If approved, record its canonical builders, tokens, intents,
    test evidence, and reuse decision before recommending the next component.
 
-The next component cannot be specified, implemented, or displayed before the
-preceding component has completed this loop. The order below is the current
-architectural recommendation; before every new component the agent must confirm
-that it remains the most useful order and explain the dependency/reuse reason.
+The next interactive or stateful component cannot be specified, implemented, or
+displayed before the preceding component has completed this loop. A declared
+passive batch is the sole exception and must satisfy the eligibility gate above.
+The order below is the current architectural recommendation; before every new
+component or batch the agent must confirm that it remains the most useful order
+and explain the dependency/reuse reason.
 
 Component-level validation uses the fastest real browser path available in the
 Codex integrated browser test environment. It proves that the specimen is
@@ -209,10 +228,12 @@ Status: `in_review` — every reviewed component position is now `validated`
 checkbox/radio/toggle, table/property grid: 9 of 10, approved 2026-07-27). The
 tenth position, the tool slider, remains `deferred` by product-owner decision
 because no panel needs it. The stage therefore has no component work left; it
-stays `in_review` only until the composition reviews below (Timeline, Calendar,
-then Contact) confirm that the approved builders cover a routed surface.
+stays `in_review` only until the non-deferred composition reviews below
+(Calendar, then Contact) confirm that the approved builders cover a routed
+surface.
 
-Validate exactly one component type at a time in Panel Lab in this order: text,
+Validate one component type at a time, except for an eligible passive batch, in
+Panel Lab in this order: text,
 separator, icon action button, input, list/row, slider tool when a product panel
 actually needs one, accordion, select,
 checkbox/radio/toggle, and table/property grid. A separator is an optional
@@ -826,7 +847,8 @@ presenting any Lab or component change, visibly verify all three actions on the
 real shared canvas, then confirm that the Lab still opens and closes after the
 reload.
 
-After each component, apply the full mandatory approval loop above and retain
+After each component or approved passive batch, apply the full mandatory
+approval loop above and retain
 the approved component in Panel Lab. The approved icon-button skin and builder
 are the shared reference for panel action buttons; panel-local button colors or
 appearances are forbidden. Ribbon tools and slider tools remain separate
@@ -838,15 +860,350 @@ implemented until it has been opened in the browser test environment and its
 visible records have been verified on the real shared canvas. Tree/unit tests
 are necessary but never substitute for this rendering check.
 
-Only after every required primitive is individually approved may a routed
-BevyUI surface be reviewed in Panel Lab as a composition: Timeline, Calendar,
-then Contact. A composition review must call the same component builders,
+Only after every required primitive is individually approved may a routed,
+non-deferred BevyUI surface be reviewed in Panel Lab as a composition:
+Calendar, then Contact. Timeline is deferred to its complete product migration.
+A composition review must call the same component builders,
 tokens, and intent handlers as its product surface; copied Lab-only styling or
 behavior is forbidden.
 
 ## Stage 4 — Product panels
 
 Status: `planned`
+
+### Mandatory complete component-coverage baseline
+
+Status: `planned`
+
+The ten Panel Lab positions are only the generic control baseline. They do not
+by themselves cover the product-specific visual and interaction capabilities
+needed to retire every legacy panel. Before any product-panel composition, the
+following source-inspected capability inventory is the mandatory coverage
+baseline. A capability is counted as remaining until its canonical
+Atome/Squirrel/Bevy owner, MCP-command mapping where effectful, focused
+contract, real-canvas evidence, and product-owner approval are recorded.
+
+The active baseline contains the **13 families required by the currently scoped
+Calendar and Contact panel migration**: 4, 5, 6, 13, 18, and 21 to 28.
+Families 1 through 3 are already implemented or under their final approval
+loop. Families 4 and 5 are validated, so **11 active families
+remain to implement**; this is not an approval count. Timeline and every
+Molecule / MTraX-owned capability, including Families 31 to 35, are temporarily
+excluded until their complete product migration. Families 9 and 17 are also
+excluded: source review found a Contact editor photo and tool selection counts,
+not the proposed generic Panel cards or measured Panel geometries. This remains
+a coverage ledger: the component approval loop remains mandatory, with only the
+explicitly declared passive-batch exception above. A family may reuse an already
+validated generic component only when its panel-specific behavior is covered by
+the existing contract; otherwise it still requires its own canonical extension
+and approval.
+
+Already validated generic components (not included in the 36): text,
+separator, icon action button, single-line input, passive list row, accordion,
+select, checkbox/radio/toggle, and table/property grid. The shared PanelRoot,
+footer, scroll, clipping, drag, resize, and pointer-capture contracts are also
+existing infrastructure, not product component families.
+
+#### Capability-family execution order
+
+1. **Validated —** labeled action button, including enabled, disabled,
+   destructive, and busy presentation without a panel-local command path.
+2. **Visually approved; record-backed validation pending —** segmented control
+   / tab strip with canonical selected-value ownership.
+3. Interactive selectable list row, distinct from the validated passive row.
+4. Localized empty, loading, error, and permission-denied state composition.
+5. Numeric field with validation, stepper semantics, and unit formatting.
+6. Multiline text editor using the canonical hidden text service.
+13. Filter chip / scope control with explicit selected and unavailable states.
+18. Contact card with avatar/media, identity summary, and canonical action
+    intents.
+21. Calendar range header with previous/next/today navigation and locale/timezone
+    label projection.
+22. Calendar month date grid and date-cell state matrix.
+23. Calendar week/day time grid with locale-first week rules and daylight-saving
+    discontinuities.
+24. Calendar agenda list with virtualized date ranges.
+25. Calendar event rectangle with selection, all-day, todo, recurrence, and
+    overflow presentation.
+26. Calendar all-day lane and event-overlap layout.
+27. Calendar event hit testing, drag/reschedule, resize, and touch/pointer
+    gesture routing.
+28. Calendar event/todo editor, including date/time, recurrence, alarm,
+    completion, sharing, Webcal/ICS, and timezone-safe validation.
+#### Deferred pending Timeline / Molecule migration and wider panel scope
+
+These families remain part of the full 16-surface migration but are outside the
+active Calendar/Contact component backlog. They may start only after Phase 4 —
+Molecule / MTraX — is validated, or when a future source audit identifies a
+measured, non-Timeline, non-Molecule Panel occurrence:
+
+9. Media thumbnail/card. The current passive prototype is not evidence of a
+   required Panel component; the existing Contact photo is an editable 90 px
+   editor field and belongs to the Contact composition decision.
+17. Selection/context summary. Existing occurrences are eVe tool count labels
+   and Timeline input scope, not a Panel card.
+29. Detail preview surface for the selected Atome, layer, clip, or recording
+    take, using the shared renderer rather than DOM projections.
+30. Detail-specific editor compositions: karaoke/lyrics lines, recording
+    schedule controls, take selection, and SVG-layer context actions.
+31. Timeline integration group: transport control group, including play/stop/
+    record state and canonical command intents.
+32. Timeline ruler with temporal scale, ticks, labels, and viewport conversion.
+33. Timeline track lane with clipping, vertical scroll, and deterministic row
+    geometry.
+34. Timeline clip/region with selection, trim/move hit zones, and canonical
+    gesture intents.
+35. Timeline playhead, seek interaction, and horizontal zoom/scroll viewport.
+
+7. Color field and canonical RGBA value presentation.
+8. Color-swatch grid with selected, hover, focus, and disabled states.
+10. Asset grid with selection, virtualized range, and keyboard-independent
+    pointer/touch interaction.
+11. Import/drop target with explicit capability/error state and no browser-only
+    file ownership.
+12. Hierarchical tree row with depth, expand/collapse, selection, and disabled
+    descendants.
+14. Sortable result-column header with direction and accessible label state.
+15. History event row with current-position and grouped-section presentation.
+16. History cursor / scrubber, separate from the compact product tool slider.
+19. Conversation/thread row and message bubble projection.
+20. Message composer with multiline editing, attachments, send state, and
+    delivery/error projection.
+36. **Tool slider:** the compact Intuition product-tool slider, only if Size
+    selects that interaction.
+
+#### Family 1 — Labeled action button
+
+Status: `validated`
+
+- Canonical contract: `atome/src/squirrel/components/action_button_contract.js`
+  normalizes the localized label, the `neutral` or `destructive` variant, and
+  the `disabled`/`busy` presentation flags. Busy and disabled states mount no
+  interaction handler.
+- Bevy composition: the existing shared `buttonNode` consumes that contract and
+  the shared Panel skin. Timeline continues to use its neutral default without
+  changing its tool intents.
+- Panel Lab contract: one cumulative state matrix contains a neutral interactive
+  `358 × 32 px` button plus busy, disabled, and destructive rows. Its only
+  events are closed `panel_lab.action_button.*` intents; it has no MCP call,
+  Atome mutation, DOM control, or durable state.
+- Required approval evidence: focused contract and pointer tests, real-canvas
+  press/release/activation, no interaction for busy/disabled rows, close/reopen
+  and reload reset, empty console, and explicit product-owner visual and
+  behavioral approval.
+
+Validation evidence — 2026-07-28:
+
+- focused action-button and Panel Lab contracts pass, including presentation
+  validation, handler suppression, interactive pointer routing, and reset;
+- the canonical 520 ms Panel Lab long-press reload contract passes;
+- `npm run check:syntax`, `npm run check:m0`, and
+  `npm run check:execution-order` pass;
+- the integrated browser opened Panel Lab through its shared-canvas tool,
+  displayed the neutral, busy, disabled, and destructive rows, exercised the
+  neutral/destructive actions, confirmed no response from busy/disabled rows,
+  verified close/reopen reset, and recorded no warning or error console output;
+- the product owner explicitly approved the visual and behavioral matrix on
+  2026-07-28. Family 1 is therefore `validated`.
+
+#### Family 2 — Segmented control
+
+Status: `in_review`
+
+- Integration decision: the normalized BevyUI tree supports the native
+  `segmented_control` kind and native `button` primitives, but the active
+  WASM runtime has no specialized segmented-widget renderer. The chosen shared
+  composition therefore uses that native root with native button segments; a
+  panel-local renderer, DOM control, tab-content system, or alternate widget
+  contract is rejected.
+- Canonical contract: `atome/src/squirrel/components/segmented_control_contract.js`
+  reuses Select option normalization and requires at least two unique options
+  plus exactly one known selected value. The consuming product surface must own
+  that value; the Panel Lab has only reset-on-close ephemeral presentation state.
+- Accepted specimen contract: one localized `358 × 32 px` horizontal control
+  with equal `List` / `Table` / `Natural` segments. It reuses the approved
+  Panel/Select material, selected tint, focus ring, disabled opacity, and
+  divider paint. Idle, hover, focus, pressed, selected, and disabled remain
+  visually distinct. Activating the selected segment preserves its selection.
+- Lab behavior: every segment emits only a closed `panel_lab.segmented.*`
+  intent. It creates no MCP call, Atome mutation, DOM control, or durable state,
+  and resets to `List` after close or reload.
+- Required approval evidence: focused contract and pointer tests, real-canvas
+  press/release/cancel/selection evidence, close/reopen and reload reset,
+  empty browser console, and explicit product-owner visual and behavioral
+  approval.
+- Current evidence: 36 focused/cumulative contract tests, the Vitest manifest
+  guard, `check:syntax`, `check:m0`, and `check:execution-order` pass. In the
+  integrated browser, the shared canvas rendered the three French labels, moved
+  the sole selected tint through `Liste`, `Tableau`, and `Naturel`, and reset to
+  `Liste` after close/reopen with an empty warning/error console. The active
+  runtime exposes no canonical overlay record to the browser diagnostic path,
+  so those coordinate clicks remain diagnostic evidence only. The product owner
+  explicitly approved the visual and behavioral specimen on 2026-07-28.
+  Record-backed pointer validation remains required before this family may
+  become `validated`.
+
+#### Family 3 — Interactive selectable list row
+
+Status: `in_review`
+
+- Integration decision: native `row` is a layout primitive, not an interactive
+  kind. The shared builder therefore uses native `button` rows, retains the
+  approved passive-row geometry, and reuses Select paint and check-mark
+  primitives. A DOM list, local renderer, mutation, tab system, or alternate
+  selection owner is rejected.
+- Canonical contract: `selectable_list_contract.js` reuses Select option/value
+  normalization, requires at least two unique options and one known enabled
+  selected value, and rejects a disabled selected option. The consuming product
+  surface owns the value.
+- Accepted Lab specimen: a `358 × 104 px` transparent group with three
+  `358 × 32 px` rows and `4 px` gaps: selected `List item`, available `Second
+  list item`, and disabled `Unavailable item`. Selection uses the existing blue
+  tint plus right-side Select check mark; hover, pressed, focus, and disabled
+  use existing Select state tokens. Activating the selected row preserves it.
+- Lab behavior: it emits only closed `panel_lab.selectable_list.*` intents;
+  its value and presentation state reset on close/reload and create no MCP
+  call, Atome mutation, DOM control, or durable state.
+- Required approval evidence: focused contract/pointer/projection tests,
+  real-canvas interaction of both enabled rows and the disabled row, close/reopen
+  and reload reset, empty console, and explicit product-owner approval.
+- Current evidence: 40 focused/cumulative Panel tests, the Vitest manifest
+  guard, `check:syntax`, `check:m0`, and `check:execution-order` pass. In the
+  integrated browser, the shared canvas moved selection from the first to the
+  second French row, kept the disabled row unchanged, reset to the first row
+  after reload, and reported no warning/error console entries. The active
+  runtime exposes no canonical overlay record to this browser diagnostic path,
+  so coordinate interactions remain diagnostic evidence only. Explicit
+  product-owner approval and record-backed pointer validation remain required
+  before this family may become `validated`.
+
+#### Family 4 — Localized panel state
+
+Status: `validated`
+
+- Canonical contract: `panel_state_contract.js` accepts only `empty`,
+  `loading`, `error`, and `permission_denied`, with a non-empty localized title
+  and message. It has no action, handler, or business-state ownership.
+- Integration decision: the active native vocabulary already supports the
+  passive `empty_state` kind, so `bevy_panel_state.js` composes that kind
+  directly rather than creating a DOM view, local renderer, or interactive
+  pseudo-control. The panel skin aliases existing neutral, danger, and warning
+  semantic values; it creates no parallel state theme.
+- Accepted Lab specimen: four static `358 × 72 px` entries, each with centered
+  title/message and `4 px` spacing: empty, loading, error, and permission
+  denied. The surrounding BodyScroll remains the sole overflow owner.
+- Lab behavior: this matrix has no runtime, handler, intent, MCP call, Atome
+  mutation, DOM control, durable state, or reset requirement. A future product
+  surface owns the actual status and composes any retry or permission command.
+- Required approval evidence: focused contract/projection tests, real-canvas
+  visual inspection of all four entries, inert pointer checks, close/reopen and
+  reload stability, empty console, and explicit product-owner approval.
+- Current evidence: focused and cumulative Panel contracts pass. The integrated
+  browser rendered every French entry on the shared canvas, left all four inert
+  under pointer diagnostics, preserved the static matrix through close/reopen
+  and reload, and reported no warning/error console entries. The active runtime
+  exposes no canonical overlay record to this diagnostic path. The product owner
+  explicitly validated Family 4 on 2026-07-29; record-backed pointer evidence
+  remains a technical follow-up for the runtime diagnostic route.
+
+#### Family 5 — Numeric field with stepper and drag adjustment
+
+Status: `validated`
+
+- Canonical contract: `numeric_input_contract.js` normalizes finite caller-owned
+  `value`, `min`, `max`, positive `step`, localized non-empty `unit`, and
+  `disabled` presentation. It rejects inverted ranges and values outside the
+  range; it owns neither a business value nor a mutation.
+- Integration decision: `bevy_panel_numeric_field.js` is one shared composite
+  builder. It composes existing native `button` controls for `−` and `+`, the
+  native `number_input` kind for direct value editing, and a passive unit label.
+  It reuses panel input and action-button tokens; no DOM input, spinner skin, or
+  alternate theme is introduced. Disabled presentation mounts no handlers.
+- Accepted Lab specimen: `Interval [−] [1] [+] months` on the standard
+  `358 × 32 px` row. Buttons are `30 × 30 px`, the value field is `56 × 32 px`,
+  and the unit remains passive. A scrub drag begun on the value field has a 4 px
+  threshold and changes the value by one configured step per 8 px: right or up
+  increases, while left or down decreases. A
+  cancelled gesture restores its start value; the surrounding scroll area keeps
+  vertical-scroll ownership.
+- Lab behavior: it emits only closed `panel_lab.numeric_field.*` intents. Its
+  value, focus, editor projection, button press state, and drag snapshot reset
+  on close/reload and create no MCP call, Atome mutation, DOM control, or
+  durable state. A future product caller owns business validation and maps any
+  effectful result through its canonical command bus.
+- Required approval evidence: contract validation, native-kind/geometry/disabled
+  handler tests, direct edit, decrement/increment, drag/cancel, reset,
+  real-canvas pointer interaction, empty console, and explicit product-owner
+  approval.
+- Current evidence: 55 focused/cumulative Panel tests, the Vitest manifest
+  guard, `check:syntax`, `check:m0`, and `check:execution-order` pass. In the
+  integrated browser, the French specimen incremented from 1 to 2, accepted
+  direct entry of 7, changed to 10 after a real scrub drag, and reset to 1
+  after close/reopen; the warning/error console was empty. The active runtime
+  exposes no canonical overlay record to this diagnostic path, so the canvas
+  interactions are diagnostic evidence. The product owner explicitly validated
+  Family 5 on 2026-07-29; record-backed pointer evidence remains a technical
+  follow-up for the runtime diagnostic route.
+
+#### Superseded passive batch A — Families 9 and 17
+
+Status: `superseded` for the active Panel migration
+
+The batch implementation remains a technical prototype, but it is not a
+current Panel component and must not be counted, presented for approval, or
+used as a reuse precedent. Source review found no corresponding generic card
+in an active legacy Panel: the Contact photo is editable and `90 × 90 px`,
+while selection counts are Tool and Timeline-context information. The proposed
+`358 × 128 px` and `358 × 64 px` geometries are Lab choices, not measured
+legacy Panel geometry.
+
+- **Family 9, media thumbnail/card:** `media_card_contract.js` accepts a
+  caller-owned `ready`, `loading`, or `error` presentation plus localized title,
+  message, accessibility label, and a source only for `ready`. The builder uses
+  a passive native `panel` card with the existing native `image` route for the
+  clipped thumbnail; it delegates hydration to the shared renderer. Loading and
+  error compose the validated passive state builder. It has no handler, loading
+  runtime, DOM control, MCP call, or mutation.
+- **Family 17, selection/context summary:** `selection_summary_contract.js`
+  accepts localized title/summary and a nonnegative caller-owned count. The
+  builder uses a passive native `panel` and text nodes only. It neither reads
+  global selection nor creates a second selection owner.
+- **No active acceptance path:** a future owner must first identify its
+  concrete product surface, measured geometry, interaction model, and canonical
+  state owner. The current contracts and Lab specimens do not grant that
+  evidence.
+
+#### Surface coverage matrix
+
+Calendar and Contact are the essential current migration surfaces. Timeline is
+deferred as one complete Timeline / Molecule migration; every other matrix row
+is deferred after Phase 4 — Molecule / MTraX. Each non-deferred surface may be
+composed only after its listed families have a recorded coverage decision
+(`validated`, `blocked`, or `not_applicable`) and every effectful function has a
+mapped MCP command.
+
+| Surface | Required coverage beyond the validated generic baseline |
+| --- | --- |
+| Home | 1, 2, 3, 4, 5, 6, 8, 9, 17 |
+| Contact | 1, 3, 4, 6, 18 |
+| Info | 1, 3, 4, 12, 17, 29, 30 |
+| Finder | 3, 4, 6, 13, 14, 17; map presentation remains blocked by its external provider/privacy/cost contract |
+| Communicate | 1, 3, 4, 6, 9, 11, 19, 20 |
+| Delete | 1, 3, 4, 11, 17 |
+| Undo | 1, 4, 15, 16, 17 |
+| Paste | 1, 3, 4, 9, 10, 11, 17 |
+| Timeline | Deferred: complete Timeline / Molecule migration owns Families 31–35 and any Timeline-only supporting component |
+| Calendar | 1, 3, 4, 5, 6, 13, 21–28 |
+| Background | 1, 3, 4, 9, 10, 11 |
+| Couleur | 1, 4, 5, 7, 8, 17 |
+| Size | 1, 4, 5, 17; family 36 only if the compact tool-slider interaction is selected |
+| Font | 1, 3, 4, 17 |
+| Detail | 1, 3, 4, 5, 6, 7, 8, 12, 17, 29, 30 |
+| Layer | 1, 3, 4, 12, 17, 30 |
+
+No legacy HTML route may be deleted until its entire matrix row is validated,
+the real panel has explicit product-owner approval, and the legacy builders,
+styles, listeners, tests, and imports have been removed with targeted evidence.
 
 ### Mandatory MCP command mapping at panel creation
 

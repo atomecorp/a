@@ -95,7 +95,12 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
     let assistant_center = material.geometry.zw;
     let assistant_size = max(material.shape.x, 1.0);
     let pixel_position = vec2(uv.x * surface_size.x, (1.0 - uv.y) * surface_size.y);
-    let screen_dimensions = vec2<f32>(textureDimensions(blurred_texture));
+    // Workspace size in physical pixels. Deliberately NOT
+    // `textureDimensions(blurred_texture)`: the blur targets are rendered at a
+    // reduced resolution, so their size no longer matches the surface. The
+    // refraction offset below is a physical-pixel amount and must be divided by
+    // the physical surface size to become a UV offset.
+    let screen_dimensions = surface_size * max(material.shape.z, 1.0);
     // This material owns one full-workspace quad. Its interpolated UVs map
     // directly to the workspace capture regardless of viewport or DPR.
     let screen_uv = uv;

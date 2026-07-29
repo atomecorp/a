@@ -225,8 +225,8 @@ test('Panel Lab appends the table after the validated Select and keeps it passiv
         const dividerIndex = body.findIndex((node) => node.id === 'panel_lab_table_divider');
         const tableIndex = body.findIndex((node) => node.id === 'panel_lab_table');
 
-        assert.equal(body.length, 23);
-        assert.equal(tableIndex, body.length - 1);
+        assert.equal(body.length, 37);
+        assert.equal(tableIndex < body.findIndex((node) => node.id === 'panel_lab_action_button_group'), true);
         assert.equal(tableIndex, dividerIndex + 1);
         assert.equal(dividerIndex > body.findIndex((node) => node.id === 'panel_lab_select'), true);
 
@@ -244,7 +244,7 @@ test('Panel Lab appends the table after the validated Select and keeps it passiv
         });
 
         const narrow = panelLabSurface.buildContent(panelLabSurface.readState(), { emit: () => {}, bodyWidth: 260 });
-        assert.deepEqual(narrow[narrow.length - 1].style.size, [260, 128]);
+        assert.deepEqual(narrow.find((node) => node.id === 'panel_lab_table').style.size, [260, 128]);
 
         const records = projectBevyUiTreeRecords({
             tree: { root: table }, treeId: 'table_projection', workspaceLayer: 'panel'

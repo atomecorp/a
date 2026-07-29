@@ -21,6 +21,37 @@ const WORKSPACE_BLUR_SHADER_HANDLE: Handle<Shader> =
 pub const HORIZONTAL_BLUR_LAYER: usize = 2;
 pub const VERTICAL_BLUR_LAYER: usize = 3;
 
+/// Linear factor by which the workspace capture and both Gaussian ping-pong
+/// targets are shrunk relative to the presented surface.
+///
+/// A separable Gaussian costs `pixels × taps × 2 passes`, and both terms scale
+/// with resolution: the tap count is proportional to the radius in target
+/// texels, so shrinking the target by `N` divides the pixel count by `N²` and
+/// the tap count by `N` — a combined `N³` reduction. At the default 48 px
+/// radius on a device pixel ratio of 3 the full-resolution pipeline needed
+/// ~145 taps per pixel per pass over ~3.0 Mpx, roughly 870 M texture fetches
+/// per frame; at `N = 4` that becomes ~37 taps over ~0.19 Mpx.
+///
+/// Blurring is a low-pass filter, so the discarded detail is exactly what the
+/// filter would have removed anyway — the result stays visually equivalent.
+pub const WORKSPACE_BACKDROP_DOWNSCALE: u32 = 4;
+
+/// Pixel size of the capture and blur render targets for a given surface size.
+pub fn backdrop_capture_pixel_size(surface_pixel_size: UVec2) -> UVec2 {
+    UVec2::new(
+        (surface_pixel_size.x / WORKSPACE_BACKDROP_DOWNSCALE).max(1),
+        (surface_pixel_size.y / WORKSPACE_BACKDROP_DOWNSCALE).max(1),
+    )
+}
+
+/// Blur radius expressed in target texels.
+///
+/// The public token is a logical-pixel radius; it becomes physical pixels
+/// through the device pixel ratio, then target texels through the downscale.
+fn blur_radius_in_target_texels(logical_radius_px: f32, device_pixel_ratio: f32) -> f32 {
+    logical_radius_px * device_pixel_ratio.max(1.0) / WORKSPACE_BACKDROP_DOWNSCALE as f32
+}
+
 #[derive(Resource, Clone, Copy, Debug, PartialEq)]
 pub struct AssistantOpticsSettings {
     pub blur_radius_px: f32,
@@ -132,7 +163,10 @@ pub fn spawn_workspace_blur_pipeline(
         [config.width, config.height],
         [0.0, 0.0, 1.0, 1.0],
     );
-    let radius = settings.normalized().blur_radius_px * config.device_pixel_ratio.max(1.0);
+    let radius = blur_radius_in_target_texels(
+        settings.normalized().blur_radius_px,
+        config.device_pixel_ratio,
+    );
     let horizontal_material = materials.add(WorkspaceBlurMaterial {
         uniform: WorkspaceBlurUniform {
             direction_radius: Vec4::new(1.0, 0.0, radius, 0.0),
@@ -197,7 +231,8 @@ pub fn set_workspace_blur_radius(
         .map(|config| config.device_pixel_ratio)
         .unwrap_or(1.0)
         .max(1.0);
-    let radius = logical_radius_px.clamp(0.0, 128.0) * device_pixel_ratio;
+    let radius =
+        blur_radius_in_target_texels(logical_radius_px.clamp(0.0, 128.0), device_pixel_ratio);
     let mut materials = world
         .get_resource_mut::<Assets<WorkspaceBlurMaterial>>()
         .ok_or_else(|| "bevy_workspace_blur_material_assets_required".to_string())?;
@@ -229,6 +264,9 @@ fn spawn_blur_camera(
                 clear_color: ClearColorConfig::Custom(Color::NONE),
                 ..default()
             },
+            // A separable Gaussian blur samples a texture through a full-screen
+            // quad; there is no geometry edge for MSAA to resolve.
+            Msaa::Off,
             RenderTarget::Image(target.into()),
             atome_camera_projection(config.width, config.height),
             RenderLayers::layer(layer),

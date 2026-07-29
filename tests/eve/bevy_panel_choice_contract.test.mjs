@@ -103,7 +103,7 @@ test('Panel Lab mounts the approved four-variant contract before the table and p
         const dividerIndex = body.findIndex((node) => node.id === 'panel_lab_choice_divider');
         const groupIndex = body.findIndex((node) => node.id === 'panel_lab_choice_group');
 
-        assert.equal(body.length, 23);
+        assert.equal(body.length, 37);
         assert.equal(groupIndex, dividerIndex + 1);
         assert.equal(dividerIndex > body.findIndex((node) => node.id === 'panel_lab_select'), true);
         assert.equal(groupIndex < body.findIndex((node) => node.id === 'panel_lab_table'), true);

@@ -611,6 +611,102 @@ fn web_renderer_uses_reactive_winit_updates_with_explicit_redraw_wakes() {
     app.add_plugins(WebBevyRendererPlugin { config });
 
     let settings = app.world().resource::<bevy::winit::WinitSettings>();
-    assert_reactive_mode(settings.focused_mode, Duration::from_millis(16));
-    assert_reactive_mode(settings.unfocused_mode, Duration::from_millis(16));
+    let heartbeat = Duration::from_millis(WEB_IDLE_HEARTBEAT_MS);
+    assert_reactive_mode(settings.focused_mode, heartbeat);
+    assert_reactive_mode(settings.unfocused_mode, heartbeat);
+}
+
+#[test]
+fn idle_heartbeat_is_far_slower_than_the_display_so_a_static_workspace_stops_redrawing() {
+    // `UpdateMode::Reactive { wait }` runs a full extract+render+present every
+    // time `wait` elapses, regardless of whether anything changed. Anything
+    // near a display period here means the renderer redraws a motionless
+    // workspace ~60 times a second, which is what overheated the device.
+    // Frames come from wakes now; this interval is only a failsafe.
+    assert!(
+        WEB_IDLE_HEARTBEAT_MS >= 500,
+        "the idle wait must not approach a frame period, got {WEB_IDLE_HEARTBEAT_MS}ms"
+    );
+}
+
+fn bench_app() -> App {
+    let mut app = App::new();
+    app.add_plugins(WebBevyRendererPlugin {
+        config: WebBevyRendererConfig::new(
+            "#atome-bevy".to_string(),
+            640.0,
+            480.0,
+            AtomeRenderScene {
+                nodes: vec![shape_node("shape_1")],
+                effects: Vec::new(),
+                selection_style: None,
+            },
+        ),
+    });
+    app
+}
+
+#[test]
+fn wakes_are_coalesced_per_tick_but_never_rate_limited() {
+    // A wake is the renderer's frame clock: dropping one for being "too soon"
+    // would cap the interactive frame rate at the throttle period. Only a wake
+    // issued while a tick is already scheduled is redundant.
+    let _ = drain_web_ops();
+    let _ = reset_web_renderer_diagnostics();
+    WEB_WAKE_INFLIGHT.with(|cell| *cell.borrow_mut() = false);
+    WEB_WAKE_COALESCED.with(|cell| *cell.borrow_mut() = false);
+
+    request_web_redraw();
+    request_web_redraw();
+    request_web_redraw();
+    assert_eq!(
+        read_web_renderer_diagnostics().wake_calls,
+        3,
+        "every wake must still be observable in diagnostics"
+    );
+    assert!(
+        WEB_WAKE_INFLIGHT.with(|cell| *cell.borrow()),
+        "a tick is scheduled, so further wakes coalesce into it"
+    );
+    assert!(
+        WEB_WAKE_COALESCED.with(|cell| *cell.borrow()),
+        "the merged wakes must be remembered, not discarded"
+    );
+
+    // Delivering a WakeUp costs an extra event-loop turn, so a wake issued once
+    // per animation frame would only land every other frame if merging dropped
+    // it. The completed tick must therefore re-emit it.
+    let mut app = bench_app();
+    app.update();
+    assert!(
+        !WEB_WAKE_COALESCED.with(|cell| *cell.borrow()),
+        "the remembered wake must be consumed by the tick"
+    );
+    assert!(
+        WEB_WAKE_INFLIGHT.with(|cell| *cell.borrow()),
+        "the remembered wake must be re-emitted so no animation frame is dropped"
+    );
+}
+
+#[test]
+fn a_tick_with_no_merged_wake_leaves_the_loop_idle() {
+    // The mirror case: without pending work, a tick must not schedule another
+    // one. Otherwise the loop would free-run again and the idle saving is lost.
+    let _ = drain_web_ops();
+    let _ = reset_web_renderer_diagnostics();
+    WEB_WAKE_INFLIGHT.with(|cell| *cell.borrow_mut() = false);
+    WEB_WAKE_COALESCED.with(|cell| *cell.borrow_mut() = false);
+
+    let mut app = bench_app();
+    app.update();
+    app.update();
+
+    assert!(
+        !WEB_WAKE_COALESCED.with(|cell| *cell.borrow()),
+        "an idle tick must not remember a wake"
+    );
+    assert!(
+        !WEB_WAKE_INFLIGHT.with(|cell| *cell.borrow()),
+        "an idle tick must not schedule a follow-up tick"
+    );
 }

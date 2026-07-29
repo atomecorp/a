@@ -69,9 +69,13 @@ Dependances et ordre:
   command. A panel cannot be approved or retire its HTML route while the ledger
   contains an unmapped function.
 
-- [ ] Executer integralement le guide de migration BevyUI, composant par composant puis panel par panel, jusqu'a la validation des 16 surfaces, au retrait des 13 routes HTML actives et a la suppression finale du Panel Lab.
+- [ ] Execute the active BevyUI-guide baseline component by component: finalize Families 2 and 3; Families 4 and 5 are validated; then complete Families 6, 13, 18, and 21 to 28 before composing and approving Calendar and Contact. Timeline and Molecule / MTraX components, including Families 9, 17, and 29 to 35, are temporarily excluded and will be reconsidered only with their complete product migration. Exit criterion: Calendar and Contact use their canonical Bevy owners, their effectful functions have a complete MCP ledger, real interactions and product approvals are recorded, and neither surface retains a parallel DOM route.
 
-Critere de sortie:
+Deferred after Phase 4 — complete Molecule / MTraX and Timeline migration:
+
+- [ ] Resume the complete Panel programme after Phase 4: first migrate the complete Timeline / Molecule scope, including Families 9, 17, and 29 to 35, then assess Families 7, 8, 10, 11, 12, 14, 15, 16, 19, 20, and 36 with their owning product surfaces. Exit criterion: all 16 surfaces are validated, the 13 active HTML routes are retired, and the temporary Panel Lab is removed.
+
+Critere de sortie du programme complet:
 
 - Each component and panel loop has targeted evidence, real-canvas validation,
   and explicit product-owner approval; every effectful function of every panel
@@ -175,8 +179,9 @@ Baseline after the 2026-07-13 renderer-decision cleanup: 61/138 checked tasks (4
 
 Reconciled state after the 2026-07-16 audit and subsequent documentation decisions: 61/148 executable tasks checked (41.22%). The current denominator includes the completed reconciliation, the WebSocket-only transport decision, secure browser/native authentication-token storage remediation, the OVHcloud production SMS provider boundary, stable user identity independent of phone, explicit cross-runtime account provisioning with preserved isolated guest mode, Argon2id migration of legacy bcrypt password verifiers, trusted-device and Recovery-Kit account recovery, snapshot-accelerated rebuild, two ordered Time Machine historical-branching tasks, reopened `/ws/sync` security validation, persistent sender auto-accept UI, true manual-linked sharing, append-only last-write-wins offline conflict handling, and private-by-default directory contact data. The full original 138-entry decision ledger remains `done/planning_audit/execution_order_reconciliation_2026-07-16.md`.
 
-Current governance audit after registering the Priority 1 BevyUI panel
-migration programme: 66/153 executable tasks checked (43.14%).
+Current governance audit after splitting the Priority 1 BevyUI panel migration
+programme into essential and post-Molecule work: 66/154 executable tasks
+checked (42.86%).
 
 ## Gardes-fous transverses obligatoires
 

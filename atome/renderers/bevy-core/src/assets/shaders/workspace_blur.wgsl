@@ -14,6 +14,18 @@ struct WorkspaceBlurUniform {
 //
 // `coc` is a diameter in physical pixels. The caller maps the public logical
 // blur radius to a CoC whose Gaussian support reaches that radius.
+// Hard ceiling on the standard deviation, expressed in target texels.
+//
+// The loop below runs `ceil(sigma * 1.5) / 2` iterations of two texture
+// fetches, so an unbounded sigma makes the per-pixel cost grow without limit —
+// the shape of the runaway that let a 48 px token cost ~145 taps per pixel per
+// pass. Clamping sigma (rather than truncating `support`) keeps the kernel a
+// true Gaussian: an over-large request degrades to a slightly tighter blur
+// instead of a hard-cut one that would ring. At `WORKSPACE_BACKDROP_DOWNSCALE`
+// = 4 the default 48 px token yields sigma 24, so the common path is untouched
+// and only extreme radii are bounded.
+const MAX_BLUR_SIGMA: f32 = 32.0;
+
 fn gaussian_blur(
     color_texture: texture_2d<f32>,
     color_texture_sampler: sampler,
@@ -21,7 +33,7 @@ fn gaussian_blur(
     coc: f32,
     frag_offset: vec2<f32>,
 ) -> vec4<f32> {
-    let sigma = coc * 0.25;
+    let sigma = min(coc * 0.25, MAX_BLUR_SIGMA);
     let support = i32(ceil(sigma * 1.5));
     let uv = frag_coord.xy / vec2<f32>(textureDimensions(color_texture));
     let offset = frag_offset / vec2<f32>(textureDimensions(color_texture));

@@ -31,8 +31,8 @@ thread_local! {
     static WEB_REDRAW_PENDING: RefCell<bool> = const { RefCell::new(false) };
     static WEB_DIAGNOSTICS: RefCell<WebRendererDiagnostics> = RefCell::new(WebRendererDiagnostics::default());
     static WEB_RUNNING_APPS: RefCell<Vec<App>> = const { RefCell::new(Vec::new()) };
-    static WEB_LAST_TICK_AT: RefCell<Option<Instant>> = const { RefCell::new(None) };
-    static WEB_LAST_WAKE_AT: RefCell<Option<Instant>> = const { RefCell::new(None) };
+    static WEB_WAKE_INFLIGHT: RefCell<bool> = const { RefCell::new(false) };
+    static WEB_WAKE_COALESCED: RefCell<bool> = const { RefCell::new(false) };
     static WEB_FRAME_PROBE: RefCell<WebFrameProbe> = RefCell::new(WebFrameProbe::default());
     static WEB_EVENT_LOOP_STARTED: Cell<bool> = const { Cell::new(false) };
 }
@@ -54,8 +54,17 @@ struct WebFrameProbe {
 }
 
 fn web_frame_probe_begin(_world: &mut World) {
-    WEB_LAST_TICK_AT.with(|cell| {
-        *cell.borrow_mut() = Some(Instant::now());
+    // Reopen the wake path as soon as this tick starts, not when it ends.
+    //
+    // Holding it until `Last` cost exactly half the interactive frame rate
+    // (measured: 60 wakes/s produced only 30 ticks/s): the browser delivers the
+    // next frame's rAF callback before the current tick finishes, so every
+    // other wake was swallowed. JavaScript cannot run during a tick, so no work
+    // can be queued between here and the drain in `Update` — clearing early is
+    // free of races and keeps one wake per animation frame turning into one
+    // frame.
+    WEB_WAKE_INFLIGHT.with(|cell| {
+        *cell.borrow_mut() = false;
     });
     WEB_DIAGNOSTICS.with(|cell| {
         cell.borrow_mut().update_ticks += 1;
@@ -68,6 +77,11 @@ fn web_frame_probe_begin(_world: &mut World) {
 }
 
 fn web_frame_probe_end(world: &mut World) {
+    // Re-emit a wake that arrived while this tick was already scheduled, so no
+    // animation frame is ever dropped (see `wake_web_renderer`).
+    if WEB_WAKE_COALESCED.with(|cell| cell.replace(false)) {
+        wake_web_renderer();
+    }
     // The UI pass renders into the camera's physical viewport; the JS UI
     // runtime needs the effective size to pre-scale logical trees exactly.
     let ui_viewport = {
@@ -410,34 +424,38 @@ fn remember_event_loop_proxy(proxy: Option<Res<EventLoopProxyWrapper>>) {
     });
 }
 
-// Every WakeUp user event makes the reactive winit runner recompute its
-// wait deadline; at rAF cadence (one wake per queued op batch) the 16ms
-// deadline never expires and the loop stops ticking entirely (measured:
-// a pure-wake flood at 60/s drops update ticks from ~58/s to 0). The loop
-// already self-ticks every 16ms, so a wake is only useful when it has been
-// genuinely silent; emission is throttled so wakes can never re-starve it.
-const WEB_WAKE_SILENCE_THRESHOLD_MS: u128 = 50;
-
+// Wakes are the renderer's frame clock.
+//
+// The loop no longer self-ticks at display rate (see `web_winit_settings`), so
+// a wake is what turns queued work into a frame. It must therefore never be
+// dropped for being "too soon" — a time-based throttle here would cap the
+// interactive frame rate at its own period.
+//
+// Wakes issued while a tick is already scheduled are merged into it rather than
+// sent twice — the pending queues are drained wholesale, so a second event
+// would only re-render an identical frame.
+//
+// Merging must not *drop* the wake, though. Delivering a `WakeUp` costs an
+// extra event-loop turn (Bevy re-arms `window.request_redraw()` after each
+// update), so a wake issued once per animation frame only lands every other
+// frame: measured 60 wakes/s producing 30 ticks/s, against a loop that reaches
+// 60 ticks/s when fed faster. A merged wake is therefore remembered and
+// re-emitted once the tick completes, which pipelines one frame behind and
+// restores full display-rate interaction.
+//
+// A wake can only ever be held until the next tick of any kind, and the
+// heartbeat guarantees one — so a lost `WakeUp` cannot wedge the clock.
 fn wake_web_renderer() {
     WEB_DIAGNOSTICS.with(|cell| {
         cell.borrow_mut().wake_calls += 1;
     });
-    let loop_silent = WEB_LAST_TICK_AT.with(|cell| {
-        cell.borrow()
-            .map(|at| at.elapsed().as_millis() > WEB_WAKE_SILENCE_THRESHOLD_MS)
-            .unwrap_or(true)
-    });
-    let wake_recent = WEB_LAST_WAKE_AT.with(|cell| {
-        cell.borrow()
-            .map(|at| at.elapsed().as_millis() <= WEB_WAKE_SILENCE_THRESHOLD_MS)
-            .unwrap_or(false)
-    });
-    if !loop_silent || wake_recent {
+    let already_scheduled = WEB_WAKE_INFLIGHT.with(|cell| cell.replace(true));
+    if already_scheduled {
+        WEB_WAKE_COALESCED.with(|cell| {
+            *cell.borrow_mut() = true;
+        });
         return;
     }
-    WEB_LAST_WAKE_AT.with(|cell| {
-        *cell.borrow_mut() = Some(Instant::now());
-    });
     WEB_EVENT_LOOP_PROXY.with(|cell| {
         if let Some(proxy) = cell.borrow().as_ref() {
             if proxy.send_event(WinitUserEvent::WakeUp).is_err() {
@@ -509,10 +527,29 @@ struct WebBevyRendererPlugin {
     config: WebBevyRendererConfig,
 }
 
+/// Interval of the idle heartbeat, *not* a frame budget.
+///
+/// `UpdateMode::Reactive { wait }` runs a full `app.update()` — extract, render
+/// and present included — every time `wait` elapses, whether or not anything
+/// changed. A 16 ms wait therefore meant ~60 full redraws per second on a
+/// completely static workspace, which is what made the device heat up with no
+/// finger on the screen.
+///
+/// Frames are driven by wakes instead: every path that queues work
+/// (`queue_web_ops`, `queue_web_ui_ops`, `request_web_redraw`,
+/// `notify_web_video_frame`) calls `wake_web_renderer`, and the JS runtime
+/// already batches those on `requestAnimationFrame`. Interaction therefore
+/// still renders at display rate — and, being rAF-driven, in step with the
+/// compositor rather than a free-running timer.
+///
+/// This long wait is only a failsafe: it bounds how long a dropped wake could
+/// leave the surface stale, and it clears a stuck in-flight wake flag.
+const WEB_IDLE_HEARTBEAT_MS: u64 = 1_000;
+
 fn web_winit_settings() -> WinitSettings {
     WinitSettings {
-        focused_mode: UpdateMode::reactive(Duration::from_millis(16)),
-        unfocused_mode: UpdateMode::reactive(Duration::from_millis(16)),
+        focused_mode: UpdateMode::reactive(Duration::from_millis(WEB_IDLE_HEARTBEAT_MS)),
+        unfocused_mode: UpdateMode::reactive(Duration::from_millis(WEB_IDLE_HEARTBEAT_MS)),
     }
 }
 

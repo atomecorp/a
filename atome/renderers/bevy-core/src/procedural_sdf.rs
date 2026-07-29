@@ -81,6 +81,7 @@ fn material_from_contract(
     original_backdrop: Handle<Image>,
     blurred_backdrop: Handle<Image>,
     optics: Vec4,
+    device_pixel_ratio: f32,
 ) -> ProceduralSdfMaterial {
     let normalized = contract.normalized();
     ProceduralSdfMaterial {
@@ -121,7 +122,12 @@ fn material_from_contract(
             shape: Vec4::new(
                 normalized.assistant_size,
                 normalized.flower_edge_softness,
-                0.0,
+                // The lens refraction is expressed in physical pixels, so the
+                // shader needs the workspace size in physical pixels to turn it
+                // into a UV offset. It used to read that from
+                // `textureDimensions(blurred_texture)`, which stopped being the
+                // surface size once the blur targets were downscaled.
+                device_pixel_ratio.max(1.0),
                 0.0,
             ),
             flower: Vec4::new(
@@ -179,6 +185,7 @@ pub fn insert_procedural_sdf(
             original_backdrop,
             blurred_backdrop,
             optics,
+            device_pixel_ratio,
         ))
     };
     world.entity_mut(entity).insert((
@@ -234,6 +241,12 @@ pub fn patch_procedural_sdf(
     let blurred_backdrop = material.blurred_backdrop.clone();
     let mut optics = material.uniform.optics;
     optics.x = normalized.lens_refraction_px * device_pixel_ratio.max(1.0);
-    *material = material_from_contract(normalized, original_backdrop, blurred_backdrop, optics);
+    *material = material_from_contract(
+        normalized,
+        original_backdrop,
+        blurred_backdrop,
+        optics,
+        device_pixel_ratio,
+    );
     Ok(())
 }

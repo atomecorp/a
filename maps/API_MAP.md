@@ -169,8 +169,9 @@ Exposure: existing semi-public closed `openPanelSurface(surfaceKey, context)` an
 
 The temporary development/test-only `ui.dev.panel_lab` tool is not a public or semi-public API. It is registered only when the internal Panel Lab gate is enabled, delegates to the same closed panel route, and must be removed after the shared component migration is complete. Its short activation toggles the Lab through that route; its 520 ms long press is a development-only `window.location.reload()` action and suppresses the matching toggle activation. Native iOS Debug configurations set the existing `window.__EVE_PANEL_LAB__` gate through the shared `WKUserScript` document-start bootstrap; native iOS Release configurations do not set it.
 
-Panel Lab introduces exactly one new component specimen per approval loop and
-retains all approved specimens in chronological body flow; its approved shared
+Panel Lab introduces one new component specimen per approval loop, except for a
+declared bounded batch of independent passive components, and retains all
+approved specimens in chronological body flow; its approved shared
 specimens are static body text, a passive horizontal divider, the validated
 icon action-button component, the validated passive list row, and the validated
 accordion. The accordion is Lab-only: it emits a closed ephemeral intent, holds no
@@ -194,6 +195,39 @@ the passive native `table` root, and `bevy_panel_runtime.js` hands
 `buildContent` the `bodyWidth` it already owns. The specimen declares no intent,
 no Lab runtime, no handler, and no state at all; sorting and row selection stay
 with a future consuming product panel. The proposed
+segmented-control specimen uses the closed `normalizeSegmentedControlPresentation`
+contract for at least two unique options and a required selected value.
+`bevy_panel_segmented_control.js` composes the supported native
+`segmented_control` root with native button segments; the active runtime has no
+specialized native segmented widget. Its Lab runtime owns only reset-on-close
+presentation state and emits `panel_lab.segmented.*` intents. It exposes no
+public API, DOM control, MCP command, or durable mutation; a future product
+surface remains the canonical selected-value owner. The in-review selectable
+list follows the same closed boundary: `selectable_list_contract.js` requires
+an enabled selected option, `bevy_panel_selectable_list.js` composes interactive
+native button rows because `row` has no interactive kind, and the Lab runtime
+emits only `panel_lab.selectable_list.*` intents. It exposes no public API, DOM
+control, MCP command, or durable mutation; a future product surface owns the
+selection. `normalizePanelStatePresentation` is the closed renderer-neutral
+Squirrel API for passive `empty`, `loading`, `error`, and `permission_denied`
+presentation. It requires localized title/message text; `bevy_panel_state.js`
+projects the supported non-interactive native `empty_state` kind. The static
+Panel Lab matrix has no intent, local state, MCP route, DOM control, or durable
+mutation; future product surfaces remain the canonical status owner.
+`normalizeNumericInputPresentation` is the closed renderer-neutral Squirrel API
+for a finite caller-owned numeric value, its inclusive range, positive step,
+localized unit, and disabled presentation. `numericFieldNode` composes native
+`button` and `number_input` nodes only; its Lab runtime emits closed numeric
+field intents for direct edit, stepping, and scrub drag. It exposes no
+public API, DOM control, MCP command, or durable mutation; product surfaces own
+the business value and any command mapping.
+The superseded passive Family 9/17 prototype adds two further closed Squirrel
+presentation APIs: `normalizeMediaCardPresentation` and
+`normalizeSelectionSummaryPresentation`. Their Bevy builders are passive and
+receive caller-owned status/content only; shared image hydration remains the
+existing renderer owner. The Lab emits no intent for either component. They are
+not active Panel APIs or a Timeline/Molecule substitute: a future owner must
+first establish a concrete product occurrence and measured geometry. The
 vertical tool-slider was removed from Panel Lab because it is a tool-context
 pattern rather than a current panel need. Its momentary, hold, toggle, and radio
 variants emit only closed `panel_lab.icon_button.*` intents and expose no public

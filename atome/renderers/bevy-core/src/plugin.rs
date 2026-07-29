@@ -69,6 +69,13 @@ fn spawn_atome_bevy_scene(
     commands.spawn((
         Camera2d,
         IsDefaultUiCamera,
+        // Bevy defaults every camera to `Msaa::Sample4`, which multiplies the
+        // raster bandwidth of the whole pass by four. Shapes are already
+        // antialiased analytically in `procedural_sdf.wgsl` and
+        // `backdrop_surface.wgsl` (`smoothstep` over the SDF), so MSAA buys no
+        // visible quality here and only costs fill rate — which dominates
+        // power draw on mobile GPUs at a device pixel ratio of 3.
+        Msaa::Off,
         atome_camera_projection(config.width, config.height),
         bevy::camera::visibility::RenderLayers::layer(WORKSPACE_CAPTURE_LAYER)
             .with(FLOWER_PRESENTATION_LAYER),

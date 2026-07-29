@@ -8,8 +8,8 @@ use crate::{render_math::atome_camera_projection, types::AtomeBevyRendererConfig
 use crate::{
     video_external_texture::video_quad_mesh_handle_from_size,
     workspace_blur::{
-        spawn_workspace_blur_pipeline, AssistantOpticsSettings, WorkspaceBlurMaterial,
-        WorkspaceBlurPipeline,
+        backdrop_capture_pixel_size, spawn_workspace_blur_pipeline, AssistantOpticsSettings,
+        WorkspaceBlurMaterial, WorkspaceBlurPipeline,
     },
 };
 
@@ -58,7 +58,11 @@ pub fn spawn_workspace_backdrop(
     optics: AssistantOpticsSettings,
 ) -> AtomeWorkspaceBackdrop {
     let pixel_size = UVec2::new(config.pixel_width.max(1), config.pixel_height.max(1));
-    let image = images.add(target_image(pixel_size.x, pixel_size.y));
+    // The capture and both ping-pong targets share one reduced resolution so
+    // the Gaussian passes keep sampling a source the same size as their own
+    // target (`frag_coord / textureDimensions(source)` stays exact).
+    let capture_size = backdrop_capture_pixel_size(pixel_size);
+    let image = images.add(target_image(capture_size.x, capture_size.y));
     let blur = spawn_workspace_blur_pipeline(
         commands,
         images,
@@ -66,7 +70,7 @@ pub fn spawn_workspace_backdrop(
         blur_materials,
         config,
         image.clone(),
-        || target_image(pixel_size.x, pixel_size.y),
+        || target_image(capture_size.x, capture_size.y),
         optics,
     );
     let camera = commands
@@ -78,6 +82,9 @@ pub fn spawn_workspace_backdrop(
                 clear_color: ClearColorConfig::Custom(Color::NONE),
                 ..default()
             },
+            // The capture is only ever read back by the blur passes, which
+            // average it anyway: multisampling it is pure wasted bandwidth.
+            Msaa::Off,
             RenderTarget::Image(image.clone().into()),
             atome_camera_projection(config.width, config.height),
             RenderLayers::layer(WORKSPACE_CAPTURE_LAYER),
@@ -155,7 +162,8 @@ pub fn resize_workspace_backdrop(
         return Ok(());
     };
     if state.pixel_size != pixel_size {
-        let replacement = || target_image(pixel_size.x, pixel_size.y);
+        let capture_size = backdrop_capture_pixel_size(pixel_size);
+        let replacement = || target_image(capture_size.x, capture_size.y);
         let mut images = world.resource_mut::<Assets<Image>>();
         for image in [
             &state.image,

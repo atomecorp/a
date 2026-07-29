@@ -12,7 +12,10 @@ use crate::{
         set_workspace_backdrop_enabled, AtomePresentationCamera, AtomeWorkspaceBackdrop,
         FLOWER_PRESENTATION_LAYER, WORKSPACE_CAPTURE_LAYER,
     },
-    workspace_blur::{AssistantOpticsSettings, WorkspaceBlurMaterial},
+    workspace_blur::{
+        backdrop_capture_pixel_size, AssistantOpticsSettings, WorkspaceBlurMaterial,
+        WORKSPACE_BACKDROP_DOWNSCALE,
+    },
 };
 
 #[test]
@@ -34,6 +37,80 @@ fn assistant_optics_settings_are_bounded() {
     assert_eq!(defaults.blur_radius_px, 48.0);
     assert_eq!(defaults.glass_mix, 1.0);
     assert_eq!(defaults.sdf_uniform(2.0).x, 48.0);
+}
+
+#[test]
+fn every_camera_disables_msaa() {
+    // Bevy defaults cameras to `Msaa::Sample4`, which quadruples the raster
+    // bandwidth of every pass. Shapes are antialiased analytically in the
+    // shaders, so MSAA is pure cost here — and fill rate is the dominant
+    // power draw on the iOS GPU at a device pixel ratio of 3.
+    let mut app = App::new();
+    app.add_plugins(AtomeBevyRendererPlugin::new(
+        AtomeBevyRendererConfig::empty(640.0, 480.0),
+    ));
+    app.update();
+    let state = app.world().resource::<AtomeWorkspaceBackdrop>().clone();
+    let presentation_camera = app
+        .world_mut()
+        .query_filtered::<Entity, With<AtomePresentationCamera>>()
+        .single(app.world())
+        .unwrap();
+    for camera in [
+        presentation_camera,
+        state.camera,
+        state.blur.horizontal_camera,
+        state.blur.vertical_camera,
+    ] {
+        assert_eq!(
+            app.world().get::<Msaa>(camera).copied(),
+            Some(Msaa::Off),
+            "camera {camera:?} must opt out of MSAA"
+        );
+    }
+}
+
+#[test]
+fn backdrop_capture_and_blur_targets_are_downscaled_together() {
+    // The Gaussian passes rely on source and target sharing a size
+    // (`frag_coord / textureDimensions(source)`), so the capture and both
+    // ping-pong targets must be downscaled by the same factor — never one
+    // without the others.
+    let mut app = App::new();
+    app.add_plugins(AtomeBevyRendererPlugin::new(
+        AtomeBevyRendererConfig::with_surface_metrics(
+            640.0,
+            480.0,
+            1280.0,
+            960.0,
+            2.0,
+            Default::default(),
+        ),
+    ));
+    app.update();
+    let state = app.world().resource::<AtomeWorkspaceBackdrop>().clone();
+    assert_eq!(state.pixel_size, UVec2::new(1280, 960));
+    let expected = backdrop_capture_pixel_size(state.pixel_size);
+    assert_eq!(
+        expected,
+        UVec2::new(
+            1280 / WORKSPACE_BACKDROP_DOWNSCALE,
+            960 / WORKSPACE_BACKDROP_DOWNSCALE
+        )
+    );
+    let images = app.world().resource::<Assets<Image>>();
+    for handle in [
+        &state.image,
+        &state.blur.horizontal_image,
+        &state.blur.vertical_image,
+    ] {
+        let size = images.get(handle).unwrap().texture_descriptor.size;
+        assert_eq!(
+            (size.width, size.height),
+            (expected.x, expected.y),
+            "capture and blur targets must all share the downscaled size"
+        );
+    }
 }
 
 #[test]
@@ -84,13 +161,17 @@ fn workspace_blur_pipeline_has_ordered_reusable_passes() {
     let vertical = materials.get(&vertical_handle).unwrap();
     assert_eq!(horizontal.source, state.image);
     assert_eq!(vertical.source, state.blur.horizontal_image);
+    // The 48 px default token is a *logical* radius; the passes work in target
+    // texels, which are `WORKSPACE_BACKDROP_DOWNSCALE` times coarser than
+    // physical pixels (device pixel ratio is 1 in this fixture).
+    let expected_radius = 48.0 / WORKSPACE_BACKDROP_DOWNSCALE as f32;
     assert_eq!(
         horizontal.uniform.direction_radius,
-        Vec4::new(1.0, 0.0, 48.0, 0.0)
+        Vec4::new(1.0, 0.0, expected_radius, 0.0)
     );
     assert_eq!(
         vertical.uniform.direction_radius,
-        Vec4::new(0.0, 1.0, 48.0, 0.0)
+        Vec4::new(0.0, 1.0, expected_radius, 0.0)
     );
 
     for _ in 0..5 {

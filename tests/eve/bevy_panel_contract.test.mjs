@@ -13,6 +13,10 @@ import { EVE_TOOL_SKIN_TOKENS } from '../../eVe/elements/skin/tool_skin.js';
 import { EVE_DEFAULT_MESSAGES } from '../../eVe/i18n/languages.js';
 import { projectBevyUiTreeRecords } from '../../eVe/domains/rendering/bevy_ui_overlay_record_projection.js';
 import { buildBevyFooterCloseRingNode } from '../../eVe/intuition/ribbon/bevy_ui_menu_surface.js';
+import {
+    normalizeActionButtonHandlers,
+    normalizeActionButtonPresentation
+} from '../../atome/src/squirrel/components/action_button_contract.js';
 
 const repoRoot = dirname(dirname(dirname(fileURLToPath(import.meta.url))));
 
@@ -58,6 +62,19 @@ const findNode = (tree, id) => {
 };
 
 const flushPanelRefresh = () => new Promise((resolve) => setTimeout(resolve, 5));
+
+test('Squirrel action-button contract validates presentations and suppresses blocked handlers', () => {
+    const presentation = normalizeActionButtonPresentation({ label: 'Apply', variant: 'neutral' });
+    const handler = () => true;
+    assert.deepEqual(presentation, { label: 'Apply', variant: 'neutral', disabled: false, busy: false });
+    assert.equal(normalizeActionButtonHandlers({ activate: handler }, presentation).activate, handler);
+    assert.deepEqual(normalizeActionButtonHandlers({ activate: handler }, normalizeActionButtonPresentation({ label: 'Saving', busy: true })), {});
+    assert.deepEqual(normalizeActionButtonHandlers({ activate: handler }, normalizeActionButtonPresentation({ label: 'Unavailable', disabled: true })), {});
+    assert.throws(() => normalizeActionButtonPresentation({ label: '' }), /squirrel_action_button_label_required/);
+    assert.throws(() => normalizeActionButtonPresentation({ label: 'Save', variant: 'warning' }), /squirrel_action_button_variant_unsupported:warning/);
+    assert.throws(() => normalizeActionButtonPresentation({ label: 'Save', busy: 'true' }), /squirrel_action_button_busy_boolean_required/);
+    assert.throws(() => normalizeActionButtonHandlers(null, {}), /squirrel_action_button_handlers_object_required/);
+});
 
 test('Bevy panel contract removes tools dock and keeps system controls in footer', async () => {
     const { dom } = installPanelDom();
@@ -297,7 +314,7 @@ test('Panel Lab is development-gated and uses the shared panel skin', async () =
     assert.equal(mounted[0].presentation, true);
     assert.deepEqual(body.style.background, EVE_PANEL_SKIN_TOKENS.bevyPanel.colors.transparent);
     assert.equal(body.style.gap, 0, 'Panel Lab owns its vertical rhythm through specimen divider margins');
-    assert.equal(body.children.length, 23, 'Panel Lab must retain approved specimens and append the passive table specimen');
+    assert.equal(body.children.length, 37, 'Panel Lab must retain approved specimens and append the numeric field');
     const tableSpecimen = findNode(mounted[0], 'panel_lab_table');
     assert.equal(tableSpecimen.kind, 'table');
     assert.equal(tableSpecimen.on, undefined);
@@ -338,6 +355,23 @@ test('Panel Lab is development-gated and uses the shared panel skin', async () =
     assert.equal(EVE_DEFAULT_MESSAGES.en['eve.panel_lab.static_body_text'], 'Demonstration text');
     assert.equal(EVE_DEFAULT_MESSAGES.fr['eve.panel_lab.icon_button.momentary'], 'Momentané');
     assert.equal(EVE_DEFAULT_MESSAGES.en['eve.panel_lab.icon_button.toggle'], 'Toggle');
+    assert.equal(EVE_DEFAULT_MESSAGES.fr['eve.panel_lab.action_button.neutral'], 'Appliquer');
+    assert.equal(EVE_DEFAULT_MESSAGES.en['eve.panel_lab.action_button.destructive'], 'Delete');
+    const actionGroup = findNode(mounted[0], 'panel_lab_action_button_group');
+    const actionNeutral = findNode(mounted[0], 'panel_lab_action_button_neutral');
+    const actionBusy = findNode(mounted[0], 'panel_lab_action_button_busy');
+    const actionDisabled = findNode(mounted[0], 'panel_lab_action_button_disabled');
+    const actionDestructive = findNode(mounted[0], 'panel_lab_action_button_destructive');
+    assert.deepEqual(actionGroup.style.size, [358, 140]);
+    assert.deepEqual(actionNeutral.style.size, [358, 32]);
+    assert.equal(actionNeutral.on.activate instanceof Function, true);
+    assert.equal(actionBusy.on, undefined);
+    assert.equal(actionDisabled.on, undefined);
+    assert.equal(actionDestructive.on.activate instanceof Function, true);
+    assert.deepEqual(actionNeutral.style.background, BEVY_PANEL_TOKENS.actionButton.idleBackground);
+    assert.deepEqual(actionDestructive.style.background, BEVY_PANEL_TOKENS.actionButton.destructiveBackground);
+    assert.equal(actionBusy.style.opacity, BEVY_PANEL_TOKENS.actionButton.busyOpacity);
+    assert.equal(actionDisabled.style.opacity, BEVY_PANEL_TOKENS.actionButton.disabledOpacity);
     const { EVE_BUTTON_SKIN_TOKENS } = await import('../../eVe/elements/skin/button_skin.js');
     const { resolveBevyIconButtonSurface } = await import('../../eVe/intuition/shared/bevy_ui_icon_button.js');
     const buttonTokens = EVE_BUTTON_SKIN_TOKENS.bevyButton;
@@ -462,6 +496,13 @@ test('Panel Lab is development-gated and uses the shared panel skin', async () =
         findNode(mounted.at(-1), 'panel_lab_icon_button_radio_a_background').style.background,
         resolveBevyIconButtonSurface({ tone: 'danger' }).background
     );
+    actionNeutral.on.press();
+    await flushPanelRefresh();
+    assert.deepEqual(findNode(mounted.at(-1), 'panel_lab_action_button_neutral').style.background, BEVY_PANEL_TOKENS.actionButton.pressedBackground);
+    actionNeutral.on.release();
+    actionNeutral.on.activate();
+    await flushPanelRefresh();
+    assert.deepEqual(findNode(mounted.at(-1), 'panel_lab_action_button_neutral').style.background, BEVY_PANEL_TOKENS.actionButton.idleBackground);
     panelLabSurface.onClose();
     assert.equal(panelLabSurface.readState().iconButton.toggleActive, false, 'the Lab control state must not survive surface close');
     assert.equal(panelLabSurface.readState().iconButton.radioSelected, 'a', 'the Lab radio group must reset on close');
