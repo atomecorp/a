@@ -1,4 +1,4 @@
-# Flower — l'appui long sur le fond du projet n'ouvrait plus le menu
+# Flower — l'appui long n'ouvrait plus le menu (fond, puis atomes)
 
 Corrigé le 29/07/2026. Régression introduite le 25/07/2026, sans rapport avec le
 travail sur la consommation d'énergie du même jour.
@@ -78,3 +78,45 @@ La probe de la primitive a été passée sur un module volontairement cassé
 
 Performances inchangées après correction : repos 1,0 tick/s (~0,10 % d'un cœur),
 activité 59,9 ticks/s.
+
+## Deuxième moitié : les atomes
+
+Même cause, autre consommateur. `domains/rendering/surface_interaction_runtime.js`
+appelle `stopSurfaceEvent(event)` dès qu'un atome est touché (l.124), **avant**
+de savoir si la pression va router vers l'édition de texte ou simplement armer
+un déplacement. Le `defaultPrevented` qui en résultait faisait reculer le timer
+d'appui long exactement comme sur le fond.
+
+La primitive a donc été généralisée — `markFlowerPointerGestureArmed` /
+`isFlowerPointerGestureArmed` / `clearFlowerPointerGestureArmed` — et posée dans
+la branche déplacement/redimensionnement uniquement. Les deux branches d'édition
+de texte au-dessus sortent avant et ne marquent rien, donc elles continuent de
+faire reculer le Flower. Le marquage est nettoyé en tête des handlers
+`pointerup` et `pointercancel`, avant leurs sorties anticipées.
+
+Là aussi le design prévoyait déjà que le Flower gagne : le runtime de surface
+termine sa session dès que le Flower verrouille le pointeur (l.278 et l.330).
+
+## Sélection multiple : outils ajoutés
+
+`FLOWER_MIXED_SELECTION_TOOL_KEYS` passe de `['info', 'play']` à
+`['info', 'play', 'delete', 'communicate']`. La clé canonique est
+**`communicate`**, celle des trois autres jeux d'outils.
+
+`delete` reçoit `selection_ids` et agit donc sur toute la sélection, et il prend
+le style `danger` comme dans les jeux mono-kind.
+
+## Limite de vérification
+
+Le contrat du fond (maintien -> menu, glissé -> lasso) est vérifié bout-en-bout.
+**L'appui long sur atome et le menu de sélection multiple ne le sont pas** : le
+serveur local renvoie `remote_account_not_provisioned` à la création de projet,
+ce qui bloque aussi le parcours dashboard lui-même (appui long sur l'en-tête
+« Projets » ne crée plus rien). Rien à voir avec ces correctifs — constaté aussi
+avec la modification retirée.
+
+À rejouer dès que le provisionnement du compte anonyme refonctionne :
+
+```bash
+node temp/energy_probe/flower_atome_probe.mjs
+```

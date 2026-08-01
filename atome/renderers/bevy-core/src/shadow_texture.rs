@@ -1,4 +1,4 @@
-use crate::texture::rounded_rect_signed_distance;
+use crate::texture::{rounded_rect_signed_distance, AtomeCornerRadii};
 
 const GAUSSIAN_SIGMA_RATIO: f32 = 0.5;
 const GAUSSIAN_TAIL_SIGMAS: f32 = 3.0;
@@ -51,7 +51,7 @@ fn build_gaussian_shadow_texture_rgba_with_cutout(
     color: [f32; 4],
     width: f32,
     height: f32,
-    corner_radius: f32,
+    corner_radii: AtomeCornerRadii,
     blur: f32,
     inner_cutout: bool,
 ) -> Option<(u32, u32, Vec<u8>)> {
@@ -68,7 +68,7 @@ fn build_gaussian_shadow_texture_rgba_with_cutout(
         let y = py as f32 + 0.5 - padding as f32;
         for px in 0..image_width {
             let x = px as f32 + 0.5 - padding as f32;
-            let distance = rounded_rect_signed_distance(x, y, shape_width, shape_height, corner_radius);
+            let distance = rounded_rect_signed_distance(x, y, shape_width, shape_height, corner_radii);
             mask[py * image_width + px] = (0.5 - distance).clamp(0.0, 1.0);
         }
     }
@@ -95,14 +95,14 @@ pub(crate) fn build_gaussian_shadow_texture_rgba(
     color: [f32; 4],
     width: f32,
     height: f32,
-    corner_radius: f32,
+    corner_radii: AtomeCornerRadii,
     blur: f32,
 ) -> Option<(u32, u32, Vec<u8>)> {
     build_gaussian_shadow_texture_rgba_with_cutout(
         color,
         width,
         height,
-        corner_radius,
+        corner_radii,
         blur,
         false,
     )
@@ -112,7 +112,7 @@ pub(crate) fn build_gaussian_outer_shadow_texture_rgba(
     color: [f32; 4],
     width: f32,
     height: f32,
-    corner_radius: f32,
+    corner_radii: AtomeCornerRadii,
     blur: f32,
 ) -> Option<(u32, u32, Vec<u8>)> {
     if blur <= 0.0 || color[3] <= 0.0 {
@@ -129,7 +129,7 @@ pub(crate) fn build_gaussian_outer_shadow_texture_rgba(
         let y = py as f32 + 0.5 - padding as f32;
         for px in 0..image_width {
             let x = px as f32 + 0.5 - padding as f32;
-            let distance = rounded_rect_signed_distance(x, y, shape_width, shape_height, corner_radius);
+            let distance = rounded_rect_signed_distance(x, y, shape_width, shape_height, corner_radii);
             // The owner paints the interior. Rendering only outside the exact
             // silhouette gives the halo a visible contact edge without a
             // spread-created gap or any change to the owner's fill.

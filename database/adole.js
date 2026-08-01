@@ -567,7 +567,18 @@ export async function resolvePendingOwners() {
     return { resolved, failed, total: pending.length };
 }
 
-export async function transferOwner({ fromOwnerId, toOwnerId, includeCreator = true } = {}) {
+function adoptionDigest(operationId) {
+    return operationId ? String(operationId) : null;
+}
+
+export async function isGuestWorkspacePrincipal(userId) {
+    if (!userId) return false;
+    const record = await query('get', `SELECT status FROM guest_workspace_principals
+        WHERE guest_principal_id = ? LIMIT 1`, [String(userId)]);
+    return record?.status === 'active';
+}
+
+export async function transferOwner({ fromOwnerId, toOwnerId, includeCreator = true, operationId = null } = {}) {
     if (!fromOwnerId || !toOwnerId) {
         throw new Error('Missing fromOwnerId or toOwnerId');
     }
@@ -576,6 +587,17 @@ export async function transferOwner({ fromOwnerId, toOwnerId, includeCreator = t
     }
 
     const pendingOwner = JSON.stringify(fromOwnerId);
+    const guestWorkspace = await isGuestWorkspacePrincipal(fromOwnerId);
+    const digest = adoptionDigest(operationId);
+    if (guestWorkspace && !digest) throw new Error('guest_adoption_operation_required');
+    if (guestWorkspace) {
+        const existing = await query('get', `SELECT status, adopted_principal_id FROM guest_workspace_principals
+            WHERE guest_principal_id = ? AND adoption_operation_digest = ?`, [fromOwnerId, digest]);
+        if (existing?.status === 'adopted') {
+            if (String(existing.adopted_principal_id) !== String(toOwnerId)) throw new Error('guest_adoption_operation_conflict');
+            return { updated: 0, replayed: true, adopted: true };
+        }
+    }
     const creatorClause = includeCreator ? ' OR a.creator_id = ?' : '';
     const params = includeCreator
         ? [fromOwnerId, fromOwnerId, pendingOwner]
@@ -587,13 +609,20 @@ export async function transferOwner({ fromOwnerId, toOwnerId, includeCreator = t
         LEFT JOIN particles p
           ON p.atome_id = a.atome_id
          AND p.particle_key = '_pending_owner_id'
-        WHERE a.atome_type != 'user'
+        WHERE a.atome_id != ? AND a.atome_type NOT IN ('user', 'guest_workspace')
           AND (a.owner_id = ?${creatorClause} OR (a.owner_id IS NULL AND p.particle_value = ?))
-    `, params);
+    `, [fromOwnerId, ...params]);
 
     const ids = (rows || []).map((row) => row.atome_id).filter(Boolean);
     if (!ids.length) {
-        return { updated: 0 };
+        if (guestWorkspace) {
+            await withTransaction(async () => {
+                await query('run', `UPDATE guest_workspace_principals SET status = 'adopted', adopted_principal_id = ?,
+                    adoption_operation_digest = ?, adopted_at = ? WHERE guest_principal_id = ? AND status = 'active'`,
+                [toOwnerId, digest, new Date().toISOString(), fromOwnerId]);
+            });
+        }
+        return { updated: 0, adopted: guestWorkspace };
     }
 
     const now = new Date().toISOString();
@@ -602,8 +631,9 @@ export async function transferOwner({ fromOwnerId, toOwnerId, includeCreator = t
     await withTransaction(async () => {
         await query(
             'run',
-            `UPDATE atomes SET owner_id = ?, updated_at = ?, sync_status = 'pending' WHERE atome_id IN (${placeholders})`,
-            [toOwnerId, now, ...ids]
+            `UPDATE atomes SET owner_id = ?, creator_id = CASE WHEN ? THEN ? ELSE creator_id END,
+             updated_at = ?, sync_status = 'pending' WHERE atome_id IN (${placeholders})`,
+            [toOwnerId, includeCreator ? 1 : 0, toOwnerId, now, ...ids]
         );
 
         await query(
@@ -617,9 +647,16 @@ export async function transferOwner({ fromOwnerId, toOwnerId, includeCreator = t
             `DELETE FROM particles WHERE particle_key = '_pending_owner_id' AND atome_id IN (${placeholders})`,
             ids
         );
+        if (guestWorkspace) {
+            await query('run', `UPDATE permissions SET principal_id = ? WHERE principal_id = ?`, [toOwnerId, fromOwnerId]);
+            await query('run', `UPDATE permissions SET granted_by = ? WHERE granted_by = ?`, [toOwnerId, fromOwnerId]);
+            await query('run', `UPDATE guest_workspace_principals SET status = 'adopted', adopted_principal_id = ?,
+                adoption_operation_digest = ?, adopted_at = ? WHERE guest_principal_id = ? AND status = 'active'`,
+            [toOwnerId, digest, now, fromOwnerId]);
+        }
     });
 
-    return { updated: ids.length };
+    return { updated: ids.length, adopted: guestWorkspace };
 }
 
 /**
@@ -695,25 +732,6 @@ export async function getAtome(id) {
         properties: data,
         kind
     });
-}
-
-export async function isAnonymousUser(userId) {
-    if (!userId) return false;
-    try {
-        const atome = await getAtome(userId);
-        const data = atome?.properties || {};
-        if (data.anonymous === true || data.is_anonymous === true) return true;
-        const username = String(data.username || data.name || '').trim().toLowerCase();
-        if (username === 'anonymous' || username === 'guest') return true;
-        const phone = String(data.phone || '').trim();
-        if (phone.startsWith('999') || phone.startsWith('000000')) return true;
-    } catch (error) {
-        if (process.env.SQUIRREL_ADOLE_DEBUG === '1') {
-            console.warn('[ADOLE] anonymous user classification failed:', error.message);
-        }
-        return false;
-    }
-    return false;
 }
 
 /**
@@ -1973,7 +1991,7 @@ export default {
     markAsSynced,
     resolvePendingOwners,
     transferOwner,
-    isAnonymousUser,
+    isGuestWorkspacePrincipal,
 
     // Legacy compatibility
     createObject,

@@ -13,6 +13,8 @@ Current mobile resource/lifecycle contract (2026-07-17; supersedes older warmup,
 - One shared surface interceptor owns input. Dashboard render backpressure keeps only current plus latest state, and data hydration is restricted to lanes currently visible in the viewport; newly revealed lanes hydrate on scroll. Dashboard mode suspends hidden media decode and its frame callbacks. The Web renderer is strictly event-driven with explicit wakeups and no idle update cadence; surface DPR is capped at 1.5 and decoded texture retention at 16 MiB.
 - iOS file propagation is event-driven. `FileSyncCoordinator.syncAll()` runs after initialization, confirmed explicit file mutations/imports/captures, explicit sync, or list freshness; `FileSystemDeletionTransaction` forbids success, tombstones, and sync when coordination, removal, or absence confirmation fails, and a partial batch marks only confirmed deletions. No repeating directory-scanning timer exists, and the local HTTP server never synchronizes all roots for ordinary static GET requests.
 
+Current inter-runtime identity contract (2026-07-30): Fastify ADOLE owns remote principals and authorizes only provisioned `user` Atomes. A local principal cannot authenticate Fastify; the only creation/link route is the explicit `/ws/api` provision operation guarded by a verified remote fingerprint, credentials, expiry, and idempotency journal. Guest principals are local UUID v4 workspace identities with no Fastify account or remote sync/share/message authority. Browser guest data is persisted in IndexedDB as projected records plus append-only events, snapshots, queue entries, and blobs. Confirmed adoption is owned by the Fastify `guest-adoption` journal; it atomically moves active ADOLE references, retains immutable guest actors in events/snapshots, stages files before finalization, and leaves a rejected workspace untouched.
+
 Purpose:
 
 - Define the cross-layer architecture contract used before future implementation work.
@@ -81,6 +83,11 @@ BevyUI panel architecture:
   primitive but never reimplement its graphics, interaction, geometry, styling,
   or state. Panel Lab is never a second renderer, product state owner, or
   compatibility route.
+- Package 1 keeps all shared-control interaction state local to its Lab
+  runtimes: selectable-list value, multiline draft/caret/scroll, and scope-chip
+  selected values reset on close or reload and emit only closed Lab intents.
+  Future Contact and Calendar surfaces remain the canonical owners of any
+  durable selection, draft, filter, or command mapping.
 - Panel trees place one exact-geometry `pointer_capture` boundary behind their
   contents. The shared surface interceptor owns pointer/click/double-click/
   wheel arbitration before project hit-testing, so panel gaps cannot select,
@@ -113,7 +120,7 @@ BevyUI panel architecture:
   to move the WebGPU caret without changing the text value.
 - Mobile panel geometry occupies the available shared canvas area above the toolbox-reserved band so the main toolbox remains accessible. A floating panel keeps its pre-keyboard geometry as the stable position: keyboard contraction may clamp its projected copy upward, but dismissal restores the exact original position.
 - Panel trees emit UI intentions such as close, resize, field, list, and command activation. Durable business mutations remain in their existing owners and must still pass through the canonical APIs or `Atome.commit` / `commitBatch` where canonical state changes.
-- Timeline is the first migrated panel surface. `eVe/intuition/tools/timeline.js` is compatibility glue only and must not recreate the old HTML dialog. Future panel migrations must delete the old visible HTML code only after imports and runtime references prove the BevyUI surface fully owns the panel.
+- Timeline is the final product-panel migration. `eVe/intuition/tools/timeline.js` is compatibility glue only and must not recreate the old HTML dialog. Its existing Bevy route is not completion evidence; Timeline controls retain their own product ownership and must not be counted, specified, or validated as generic Panel components.
 
 Dashboard Bevy architecture:
 
@@ -161,6 +168,7 @@ The core invariant is deterministic, tool-driven, append-only state:
 
 - User, AI, voice, MCP, script, and automation actions converge on the same tool/runtime path.
 - Communication contract: all Atome application and business operations use the canonical `/ws/api` WebSocket transport on every supported runtime. HTTP is forbidden as an Atome CRUD, event, state, history, snapshot, restore, authentication, sharing, synchronization, or user-data fallback. Static/bootstrap resources, health/configuration discovery, and explicit file/media/archive byte transfers remain separate HTTP-capable infrastructure concerns and must not mutate or query canonical Atome business state outside `/ws/api`.
+- Identity boundary: Fastify ADOLE plus `/ws/api` is the canonical account owner. Principals are immutable CSPRNG UUID v4 values; phone credentials live only in the private `principal_phone_credentials` registry. Active references migrate transactionally to the new principal, while append-only events and snapshots remain byte-for-byte immutable and resolve former actors through protected `principal_identity_aliases` rather than rewritten history.
 - The login choice voice-guidance prompt is a pre-auth UI side effect routed through the existing global voice API only. It does not create a second TTS provider, does not mutate profile state, and does not decide accessibility preferences until a later explicit user choice is implemented.
 - Durable mutation flows through `window.Atome.commit` or `window.Atome.commitBatch` on the client boundary.
 - Server writes flow through the event commit helpers and database persistence boundary.
@@ -758,3 +766,22 @@ The current project scene remains the WebGPU owner across Dashboard toggles. Wor
 # Resident overlay hot path (2026-07-18, authoritative)
 
 The shared scene is not a reason to rebuild static Dashboard records when a toolbox palette changes. Closed palette subtrees are absent. Activation uses `project_scene_direct_prefix_runtime.js` to present every opaque palette record atomically at the expansion origin, then `project_scene_direct_motion_runtime.js` moves those resident records through the complete 180 ms expansion, 6–14 px / 70 ms outward overshoot, and exact 120 ms settlement without texture re-resolution or RGBA signature hashing. Prefix and motion share one serialized direct-mutation queue with canonical full rendering. The rAF loop is independent of renderer completion, allows one batch in flight, and replaces any queued sample with the latest position; backpressure therefore cannot produce a trail or replay stale motion. Completion does not trigger another structural render. Dashboard data hydration has no autonomous retry loop, and Dashboard headers own vertical input before any adjacent lane ownership is considered.
+# Contact panel migration update — 2026-07-31
+
+- Contact has one visible route: its registered BevyUI tree on the shared
+  project canvas. Directory and Contacts service data remain canonical outside
+  the DOM; panel selection, expansion, draft, field focus, confirmation, and
+  import busy state are disposable runtime state. The field editor delegates to
+  the one shared hidden text service and commits only through the existing
+  Contacts or profile owner. The retired HTML dialog does not coexist as a
+  fallback route.
+- Contact composes its list and accordion at the panel body's supplied width;
+  no child measures the canvas or retains a fixed 358 px product width. Every
+  `eve_bevy_panel_*` projection reconciles its full record prefix atomically,
+  so an asynchronous Contact refresh removes stale loading, empty, and prior
+  accordion records before presenting the current panel tree.
+- The authenticated Contact profile is rebuilt from the current authenticated
+  id and canonical profile snapshot, placed first, and kept separate from
+  directory entries. Phone or email equality never grants identity equivalence
+  when an entry has a distinct stable id; only the authenticated profile can
+  enter the profile persistence path.

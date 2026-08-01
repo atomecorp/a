@@ -337,10 +337,11 @@ test('Rendering surfaces and text bridge stay bounded', () => {
     const rootA = ensureHiddenTextServiceRoot(document);
     const rootB = ensureHiddenTextServiceRoot(document);
     assert.equal(rootA, rootB);
-    mountActiveTextEditor({ atomeId: 'text_a', value: 'hello', documentRef: document });
+    const firstEditor = mountActiveTextEditor({ atomeId: 'text_a', value: 'hello', documentRef: document }).editor;
     mountActiveTextEditor({ atomeId: 'text_b', value: 'world', documentRef: document });
     assert.equal(getTextServiceState().hiddenRootCount, 1);
     assert.equal(getTextServiceState().activeEditorCount, 1);
+    assert.equal(firstEditor.style.outline, 'none', 'the native focus ring must never leak above the WebGPU text projection');
     unmountActiveTextEditor();
     assert.equal(getTextServiceState().activeEditorCount, 0);
 });

@@ -349,6 +349,10 @@ pub struct AtomeRenderNode {
     pub opacity: f32,
     #[serde(default)]
     pub corner_radius: f32,
+    // Per-corner override in [top_left, top_right, bottom_right, bottom_left]
+    // order. When absent the uniform `corner_radius` applies to all four.
+    #[serde(default)]
+    pub corner_radii: Option<[f32; 4]>,
     #[serde(default)]
     pub shadow: Option<AtomeShadowStyle>,
     #[serde(default)]

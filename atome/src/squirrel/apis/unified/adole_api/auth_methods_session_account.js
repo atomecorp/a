@@ -7,19 +7,21 @@ import {
     setSessionState,
     clearSessionState,
     loadSessionState,
-    getAnonymousCredentials,
-    setAnonymousCredentials,
+    getGuestWorkspace,
+    setGuestWorkspace,
+    clearGuestWorkspace,
     getCurrentProjectCache,
     clearCurrentProjectCache,
     resetWorkspaceForNextUser,
     waitForAuthCheck
 } from './session.js';
 import { adapters, normalizePhone, getPrimaryBackend, getSecondaryBackend, hasToken, hasAuthenticatedToken } from './auth_core.js';
-import { loginBackend, bootstrapBackend, meBackend, createAnonymousCredentials, ensureBackendAvailability } from './auth_backends.js';
+import { meBackend, ensureBackendAvailability } from './auth_backends.js';
 import { loadFastifyLoginCache, ensureFastifyToken, markFastifyAuthValid } from './auth_fastify_token.js';
-import { migratePreviousWorkspace, migrateAnonymousWorkspace } from './auth_workspace.js';
+import { transferGuestWorkspace } from './auth_workspace.js';
 import { requireAuth, normalizeSessionUser } from './auth_state.js';
 import { auth } from './auth.js';
+import { isTauriRuntime } from './runtime.js';
 
 export const sessionAccountMethods = {
     async logout() {
@@ -86,7 +88,6 @@ export const sessionAccountMethods = {
                     user,
                     backend
                 });
-                await migratePreviousWorkspace(prevSession, prevProjectCache, user.id);
                 return { authenticated: true, user };
             };
 
@@ -147,29 +148,25 @@ export const sessionAccountMethods = {
         }
 
         if (stored.mode === 'anonymous') {
-            // Restore anonymous session if possible without forcing login unless needed.
-            const anonUser = normalizeSessionUser(stored.user);
-            if (hasToken(primary) && anonUser?.id) {
+            const guest = getGuestWorkspace();
+            const anonUser = normalizeSessionUser(guest?.user || stored.user);
+            if (anonUser?.id) {
                 setSessionState({
                     mode: 'anonymous',
                     user: anonUser,
-                    backend: primary
+                    backend: 'local_guest'
                 });
                 return { authenticated: true, user: anonUser, anonymous: true };
             }
-            const anonResult = await auth.ensureAnonymousUser({ force: true });
-            return {
-                authenticated: !!anonResult?.ok,
-                user: anonResult?.user || null,
-                anonymous: true
-            };
+            clearSessionState();
+            return { authenticated: false, user: null, anonymous: false };
         }
 
         clearSessionState();
         return { authenticated: false, user: null };
     },
 
-    async ensureAnonymousUser({ force = false } = {}) {
+    async startGuest({ force = false } = {}) {
         const state = getSessionState();
         if (state.mode === 'authenticated') {
             return { ok: false, reason: 'authenticated', user: null };
@@ -178,60 +175,64 @@ export const sessionAccountMethods = {
             return { ok: false, reason: 'logged_out', user: null };
         }
 
-        let creds = getAnonymousCredentials();
-        if (!creds) {
-            creds = createAnonymousCredentials();
-            setAnonymousCredentials(creds);
+        let guest = getGuestWorkspace();
+        if (!guest?.user?.id) {
+            const principalId = globalThis.crypto?.randomUUID?.();
+            if (!principalId) return { ok: false, reason: 'secure_random_unavailable', user: null };
+            guest = { user: { id: principalId, name: 'Guest', phone: null }, createdAt: new Date().toISOString() };
+            setGuestWorkspace(guest);
         }
-
-        const backend = getPrimaryBackend();
-        const adapter = adapters[backend];
-
-        if (adapter?.getToken?.()) {
-            const me = await meBackend(backend);
-            if (me.ok && me.user) {
-                if (backend === 'fastify') markFastifyAuthValid();
-                setSessionState({
-                    mode: 'anonymous',
-                    user: me.user,
-                    backend
-                });
-                return { ok: true, user: me.user, source: backend };
-            }
+        const user = normalizeSessionUser(guest.user);
+        if (isTauriRuntime() && adapters.tauri?.auth?.startGuest) {
+            const native = await adapters.tauri.auth.startGuest({ guestId: user.id });
+            if (!native?.ok && !native?.success) return { ok: false, reason: native?.error || 'local_guest_start_failed', user: null };
         }
+        setSessionState({ mode: 'anonymous', user, backend: 'local_guest' });
+        return { ok: true, user, source: 'local_guest' };
+    },
 
-        let bootstrapResult = await bootstrapBackend(backend, {
-            phone: creds.phone,
-            password: creds.password,
-            username: creds.username,
-            visibility: 'private'
+    async provisionAccount({ operationId, expiresAt, verifiedServerFingerprint, username, phone, password } = {}) {
+        if (!operationId || !expiresAt || !verifiedServerFingerprint) {
+            return { ok: false, error: 'remote_identity_unverified' };
+        }
+        const adapter = adapters.fastify;
+        if (!adapter?.auth?.provisionAccount) return { ok: false, error: 'provisioning_unavailable' };
+        const result = await adapter.auth.provisionAccount({
+            operationId,
+            expiresAt,
+            verifiedServerFingerprint,
+            username,
+            phone,
+            password
         });
+        const ok = Boolean(result?.ok || result?.success);
+        return { ok, success: ok, ...result };
+    },
 
-        if (!bootstrapResult.ok && bootstrapResult.error === 'Invalid credentials') {
-            creds = createAnonymousCredentials();
-            setAnonymousCredentials(creds);
-            bootstrapResult = await bootstrapBackend(backend, {
-                phone: creds.phone,
-                password: creds.password,
-                username: creds.username,
-                visibility: 'private'
-            });
-        }
+    async leaveGuest({ discard = false } = {}) {
+        if (getSessionState().mode !== 'anonymous') return { ok: false, error: 'guest_not_active' };
+        if (isTauriRuntime() && adapters.tauri?.auth?.leaveGuest) await adapters.tauri.auth.leaveGuest();
+        clearSessionState();
+        if (discard) clearGuestWorkspace();
+        return { ok: true, retained: !discard };
+    },
 
-        if (bootstrapResult.ok && bootstrapResult.user && hasAuthenticatedToken(backend, bootstrapResult)) {
-            if (backend === 'fastify') markFastifyAuthValid();
-            setSessionState({
-                mode: 'anonymous',
-                user: bootstrapResult.user,
-                backend
-            });
-            return { ok: true, user: bootstrapResult.user, source: backend };
+    async adoptGuestWorkspace({ confirmed = false, operationId = null } = {}) {
+        const state = getSessionState();
+        const guest = getGuestWorkspace();
+        if (!confirmed) return { ok: false, error: 'guest_adoption_confirmation_required' };
+        if (state.mode !== 'authenticated' || !state.user?.id || !guest?.user?.id) {
+            return { ok: false, error: 'authenticated_account_required' };
         }
-        if (bootstrapResult.ok && bootstrapResult.user) {
-            return { ok: false, reason: 'missing_authenticated_session', user: null };
-        }
-
-        return { ok: false, reason: bootstrapResult.error || 'anonymous_failed', user: null };
+        const persistedOperationId = guest.adoptionOperationId || null;
+        const resolvedOperationId = operationId || persistedOperationId || globalThis.crypto?.randomUUID?.();
+        if (!resolvedOperationId) return { ok: false, error: 'secure_random_unavailable' };
+        setGuestWorkspace({ ...guest, adoptionOperationId: resolvedOperationId });
+        const result = await transferGuestWorkspace(guest.user.id, state.user.id, {
+            operationId: resolvedOperationId
+        });
+        if (result.ok) clearGuestWorkspace();
+        return result;
     },
 
     async ensureFastifyToken() {
@@ -425,5 +426,5 @@ export const sessionAccountMethods = {
         return waitForAuthCheck();
     },
 
-    migrateAnonymousWorkspace
+    transferGuestWorkspace
 };

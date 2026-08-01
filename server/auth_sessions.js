@@ -29,8 +29,8 @@ export async function readRefreshSessions(dataSource, userId) {
     try {
         const parsed = JSON.parse(rows[0].particle_value);
         return Array.isArray(parsed) ? parsed : [];
-    } catch {
-        return [];
+    } catch (error) {
+        throw new Error(`invalid_refresh_session_store:${error.message}`);
     }
 }
 
@@ -40,7 +40,7 @@ export async function writeRefreshSessions(dataSource, userId, sessions) {
         .filter((session) => session && typeof session === 'object')
         .filter((session) => session.revoked_at || Date.parse(session.expires_at || '') > nowMs)
         .slice(-(MAX_REFRESH_SESSIONS_PER_USER * 2));
-    await updateUserParticle(dataSource, userId, retained);
+    await updateUserParticle(dataSource, userId, REFRESH_SESSION_PARTICLE_KEY, retained);
     return retained;
 }
 
@@ -115,6 +115,17 @@ export async function revokeRefreshToken(dataSource, userId, refreshToken, reaso
     });
     if (changed) await updateUserParticle(dataSource, userId, REFRESH_SESSION_PARTICLE_KEY, updated);
     return changed;
+}
+
+export async function revokeAllRefreshSessions(dataSource, userId, reason = 'credential_changed') {
+    const now = new Date().toISOString();
+    const sessions = await readRefreshSessions(dataSource, userId);
+    const revoked = sessions.map((session) => {
+        if (!session || typeof session !== 'object' || session.revoked_at) return session;
+        return { ...session, revoked_at: now, revoke_reason: reason };
+    });
+    await writeRefreshSessions(dataSource, userId, revoked);
+    return revoked.length;
 }
 
 export function setAuthCookies(reply, accessToken, refreshToken, isProduction) {

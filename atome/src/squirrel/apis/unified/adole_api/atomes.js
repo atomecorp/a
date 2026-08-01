@@ -1,6 +1,7 @@
 import { TauriAdapter, FastifyAdapter, checkBackends, generateUUID } from '../adole.js';
 import { isTauriRuntime } from './runtime.js';
 import { sanitizeAtomeProperties } from '../../../../shared/atome_contract.js';
+import { commitGuestAtome, deleteGuestAtome, getGuestAtome, listGuestAtomes } from './guest_workspace_store.js';
 import {
     buildUpsertPayload,
     extractUserId,
@@ -45,6 +46,15 @@ export async function list_atomes(options = {}, callback) {
     }
 
     const runtimeTauri = isTauriRuntime();
+    if (isAnonymous() && !runtimeTauri) {
+        const result = {
+            tauri: { atomes: [], error: null },
+            fastify: { atomes: await listGuestAtomes(currentUserId, options), error: null },
+            meta: { source: 'local_guest' }
+        };
+        if (typeof callback === 'function') callback(result);
+        return result;
+    }
     const primary = runtimeTauri ? 'tauri' : 'fastify';
     const secondary = runtimeTauri ? 'fastify' : 'tauri';
     const atomeType = options.type || options.atomeType || options.atome_type || null;
@@ -145,6 +155,13 @@ export async function create_atome(options = {}, callback) {
             ...(Array.isArray(options.traits) ? { traits: options.traits.slice() } : {})
         }
     };
+
+    if (isAnonymous() && !runtimeTauri) {
+        const local = await commitGuestAtome(currentUserId, payload);
+        const result = { tauri: { success: false, data: null, error: null }, fastify: { success: !!local.ok, data: local, error: local.error || null } };
+        if (typeof callback === 'function') callback(result);
+        return result;
+    }
 
     const primaryResult = await adapters[primary].atome.commit(payload);
     const okPrimary = !!(primaryResult?.ok || primaryResult?.success);
@@ -340,6 +357,13 @@ export async function alter_atome(atomeId, properties = {}, callback) {
 
     const payload = sanitizeAtomeProperties(properties?.properties || properties?.particles || properties || {});
 
+    if (isAnonymous() && !runtimeTauri) {
+        const local = await commitGuestAtome(currentUserId, { atome_id: atomeId, props: payload });
+        const result = { tauri: { success: false, data: null, error: null }, fastify: { success: !!local.ok, data: local, error: local.error || null } };
+        if (typeof callback === 'function') callback(result);
+        return result;
+    }
+
     const primaryResult = await adapters[primary].atome.commit({
         kind: 'set',
         atome_id: atomeId,
@@ -385,6 +409,12 @@ export async function delete_atome(atomeId, callback) {
     }
 
     const runtimeTauri = isTauriRuntime();
+    if (isAnonymous() && !runtimeTauri) {
+        const local = await deleteGuestAtome(currentUserId, atomeId);
+        const result = { tauri: { success: false, data: null, error: null }, fastify: { success: !!local.ok, data: local, error: local.error || null } };
+        if (typeof callback === 'function') callback(result);
+        return result;
+    }
     const primary = runtimeTauri ? 'tauri' : 'fastify';
     const secondary = runtimeTauri ? 'fastify' : 'tauri';
 
@@ -412,6 +442,9 @@ export async function delete_atome(atomeId, callback) {
 
 export async function realtime_patch(atomeId, properties = {}, callback) {
     const runtimeTauri = isTauriRuntime();
+    if (isAnonymous() && !runtimeTauri) {
+        return alter_atome(atomeId, properties, callback);
+    }
     const primary = runtimeTauri ? 'tauri' : 'fastify';
     const adapter = adapters[primary];
     if (!adapter?.atome?.realtime) {
@@ -427,6 +460,13 @@ export async function realtime_patch(atomeId, properties = {}, callback) {
 
 export async function get_atome(atomeId, callback) {
     const runtimeTauri = isTauriRuntime();
+    if (isAnonymous() && !runtimeTauri) {
+        const currentUserId = getCurrentUserId();
+        const atome = currentUserId ? await getGuestAtome(currentUserId, atomeId) : null;
+        const result = atome ? { ok: true, success: true, atome } : { ok: false, error: 'atome_not_found' };
+        if (typeof callback === 'function') callback(result);
+        return result;
+    }
     const primary = runtimeTauri ? 'tauri' : 'fastify';
     const adapter = adapters[primary];
     if (!adapter?.atome?.get) {

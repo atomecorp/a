@@ -58,14 +58,12 @@ export async function getUserOptionalParticles(dataSource, userId) {
             if (key.startsWith('_')) continue;
             let value = row?.particle_value;
             if (typeof value === 'string') {
-                try { value = JSON.parse(value); } catch (error) {
-        console.warn("[cleanup] operation failed", error); }
+                try { value = JSON.parse(value); } catch { }
             }
             optional[key] = value;
         }
         return optional;
-    } catch (error) {
-        console.warn("[cleanup] operation failed", error);
+    } catch {
         return {};
     }
 }
@@ -80,8 +78,7 @@ export async function ensureUserAtomeType(dataSource, userId, currentType = null
             [now, userId]
         );
         return true;
-    } catch (error) {
-        console.warn("[cleanup] operation failed", error);
+    } catch {
         return false;
     }
 }
@@ -112,19 +109,17 @@ export async function repairMistypedUserAtomes(dataSource) {
             if (changed) repaired += 1;
         }
         return repaired;
-    } catch (error) {
-        console.warn("[cleanup] operation failed", error);
+    } catch {
         return 0;
     }
 }
 
-export async function upsertUserStateCurrent(dataSource, userId, username, phone, visibility, now, optional = {}) {
+export async function upsertUserStateCurrent(dataSource, userId, username, visibility, now, optional = {}) {
     if (!dataSource || !userId) return;
     const patch = {
         type: 'user',
         name: username,
         username,
-        phone,
         visibility,
         access: visibility
     };

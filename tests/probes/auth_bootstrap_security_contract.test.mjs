@@ -50,12 +50,10 @@ const lookupPhoneMethod = sliceBetween(sessionAccountMethods, 'async lookupPhone
 assert.match(lookupPhoneMethod, /const backend = getPrimaryBackend\(\)/, 'Unified lookupPhone must resolve the active auth backend');
 assert.match(lookupPhoneMethod, /const adapter = adapters\[backend\]/, 'Unified lookupPhone must use the active adapter map');
 assert.doesNotMatch(lookupPhoneMethod, /FastifyAdapter\.auth\.lookupPhone/, 'Unified lookupPhone must not force Fastify when Tauri is active');
-assert.match(sessionAccountMethods, /import \{[^}]*loginBackend[^}]*bootstrapBackend/s, 'Session account methods must keep loginBackend available for authenticated auto-login while anonymous entry uses bootstrap');
-const anonymousEnsureMethod = sliceBetween(sessionAccountMethods, 'async ensureAnonymousUser', 'async lookupPhone');
-assert.match(anonymousEnsureMethod, /bootstrapBackend\(backend/, 'Anonymous workspace entry must use the atomic bootstrap backend flow');
-assert.doesNotMatch(anonymousEnsureMethod, /loginBackend\(backend/, 'Anonymous workspace entry must not split bootstrap into a separate login request');
-assert.doesNotMatch(anonymousEnsureMethod, /registerBackend\(backend/, 'Anonymous workspace entry must not split bootstrap into a separate register request');
-assert.match(anonymousEnsureMethod, /bootstrapResult\.error === 'Invalid credentials'[\s\S]*createAnonymousCredentials\(\)/, 'Anonymous workspace entry must rotate invalid persisted anonymous credentials explicitly');
+const guestStartMethod = sliceBetween(sessionAccountMethods, 'async startGuest', 'async provisionAccount');
+assert.match(guestStartMethod, /globalThis\.crypto\?\.randomUUID\?\.\(\)/, 'Guest entry must create an opaque local UUID v4');
+assert.doesNotMatch(guestStartMethod, /bootstrapBackend\(/, 'Guest entry must not bootstrap a remote account');
+assert.doesNotMatch(sessionAccountMethods, /ensureAnonymousUser/, 'Legacy anonymous-account alias must not remain exposed');
 assert.match(localAuth, /const AUTH_BCRYPT_COST: u32 = 10;/, 'Tauri local auth bcrypt cost must match the Fastify auth cost so local bootstrap fits the workspace-open budget');
 assert.doesNotMatch(localAuth, /DEFAULT_COST/, 'Tauri local auth must not use bcrypt DEFAULT_COST because it is slower than the Fastify contract');
 

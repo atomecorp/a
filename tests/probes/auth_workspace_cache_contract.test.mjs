@@ -1,50 +1,9 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 
-const storage = new Map();
-globalThis.window = {
-    location: {
-        protocol: 'http:',
-        hostname: 'localhost',
-        port: '8000'
-    }
-};
-globalThis.localStorage = {
-    getItem(key) {
-        return storage.has(key) ? storage.get(key) : null;
-    },
-    setItem(key, value) {
-        storage.set(key, String(value));
-    },
-    removeItem(key) {
-        storage.delete(key);
-    }
-};
-
-const session = await import('../../atome/src/squirrel/apis/unified/adole_api/session.js');
-session.setCurrentProjectCache({
-    id: 'previous_project',
-    name: 'Previous project',
-    userId: 'previous_user',
-    updatedAt: 1
-});
-
-const { migratePreviousWorkspace } = await import('../../atome/src/squirrel/apis/unified/adole_api/auth_workspace.js');
-
-await migratePreviousWorkspace(
-    { mode: 'authenticated', user: { id: 'next_user' } },
-    null,
-    'next_user'
-);
-
-assert.equal(
-    storage.has('squirrel_current_project_v2'),
-    false,
-    'previous workspace migration must clear stale project cache when no recoverable source exists'
-);
-assert.equal(
-    session.getCurrentProjectCache(),
-    null,
-    'previous workspace migration must clear the in-memory current project cache'
-);
+const source = readFileSync(new URL('../../atome/src/squirrel/apis/unified/adole_api/auth_workspace.js', import.meta.url), 'utf8');
+assert.match(source, /guest_adoption_operation_required/, 'Guest adoption must require an idempotency operation');
+assert.match(source, /adoption_confirmed: true/, 'Guest transfer must require explicit confirmation at the local boundary');
+assert.doesNotMatch(source, /recoverSingleLocalWorkspaceCandidate/, 'Automatic workspace recovery must not guess a guest source');
 
 console.log('auth_workspace_cache_contract.test: PASS');

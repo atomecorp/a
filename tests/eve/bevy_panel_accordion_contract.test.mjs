@@ -87,7 +87,7 @@ test('Panel Lab appends the accordion, toggles it through an intent, and resets 
         const dividerIndex = closed.findIndex((node) => node.id === 'panel_lab_accordion_divider');
         const accordionIndex = closed.findIndex((node) => node.id === 'panel_lab_accordion');
 
-        assert.equal(closed.length, 37);
+        assert.equal(closed.length, 41);
         assert.equal(dividerIndex, 15);
         assert.equal(accordionIndex, dividerIndex + 1);
         assert.equal(panelLabSurface.readState().accordion.expanded, false);
@@ -126,4 +126,29 @@ test('native accordion headers use the canonical pointer activation route', () =
     runtime.routePointerEvent({ canvas, phase: 'pointerdown', point: { x: 12, y: 12 }, event: { pointerId: 8 } });
     runtime.routePointerEvent({ canvas, phase: 'pointerup', point: { x: 12, y: 12 }, event: { pointerId: 8 } });
     assert.deepEqual(emitted.map((event) => event.type), ['press', 'focus', 'release', 'activate']);
+});
+
+// Regression guard for the per-corner radii defect: the builder tree carried
+// `radius_corners` while the active WebGPU overlay projection read only the
+// scalar `style.radius`, so an open accordion painted fully square. Asserting
+// the tree kept passing throughout — only the projected record catches it.
+test('open accordion projects its partial corner radii to the GPU record', () => {
+    const open = accordionNode({
+        id: 'accordion_corner_fixture',
+        label: 'Section',
+        expanded: true,
+        bodyChildren: [textNode('accordion_corner_fixture_text', 'Contenu', {})]
+    });
+    const records = projectBevyUiTreeRecords({
+        tree: { root: open }, treeId: 'accordion_corners', workspaceLayer: 'panel'
+    });
+    const recordFor = (suffix) => records.find((record) => record.id.endsWith(suffix))?.properties;
+
+    const header = recordFor('accordion_corner_fixture_header');
+    assert.equal(header?.shape, 'rounded_rect');
+    assert.deepEqual(header?.corner_radii, [BEVY_PANEL_TOKENS.radiusPx, BEVY_PANEL_TOKENS.radiusPx, 0, 0]);
+
+    const body = recordFor('accordion_corner_fixture_body');
+    assert.equal(body?.shape, 'rounded_rect');
+    assert.deepEqual(body?.corner_radii, [0, 0, BEVY_PANEL_TOKENS.radiusPx, BEVY_PANEL_TOKENS.radiusPx]);
 });

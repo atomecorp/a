@@ -8,6 +8,9 @@ globalThis.MutationObserver = window.MutationObserver;
 globalThis.getComputedStyle = window.getComputedStyle.bind(window);
 globalThis.requestAnimationFrame = window.requestAnimationFrame;
 globalThis.cancelAnimationFrame = window.cancelAnimationFrame;
+window.HTMLCanvasElement.prototype.getBoundingClientRect = function getBoundingClientRect() {
+    return { left: 0, top: 0, right: window.innerWidth, bottom: window.innerHeight, width: window.innerWidth, height: window.innerHeight };
+};
 
 const view = Object.assign(document.createElement('div'), { id: 'view' });
 document.body.appendChild(view);
@@ -19,9 +22,17 @@ setMainMenuRuntime({
 }, window);
 const sceneRecordsByProject = new Map();
 window.eveDashboardBevyUiRuntime = {
-    open: async ({ projectId } = {}) => {
-        sceneRecordsByProject.set(projectId, [{ id: '__eve_dashboard_background', properties: {} }]);
+    state: { active: false, suspended: false, sceneProjectId: null },
+    readDiagnostics: () => ({ mounted_nodes: 1 }),
+    open: async ({ projectId, sceneProjectId } = {}) => {
+        const resolvedId = sceneProjectId || projectId;
+        sceneRecordsByProject.set(resolvedId, [{ id: '__eve_dashboard_background', properties: {} }]);
+        window.eveDashboardBevyUiRuntime.state = { active: true, suspended: false, sceneProjectId: resolvedId };
         return { ok: true, active: true };
+    },
+    close: async () => {
+        window.eveDashboardBevyUiRuntime.state.active = false;
+        return { ok: true };
     }
 };
 
@@ -83,7 +94,7 @@ const hasActiveHiddenForwardAnimation = (nodes) => capturedAnimations.some((entr
 const hasActiveGradientMotion = (node) => capturedAnimations.some((entry) => Array.isArray(entry.frames)
     && !entry.canceled
     && entry.element === node
-    && entry.options?.iterations === Infinity
+    && entry.options?.iterations === 1
     && entry.frames.some((frame) => Object.hasOwn(frame, 'backgroundPosition')));
 
 const assertChoiceVisualReady = (context) => {
@@ -108,7 +119,7 @@ const assertChoiceVisualReady = (context) => {
     backgrounds.forEach((background, index) => {
         assert.ok(background?.isConnected, `${context}: choice background ${index} must stay connected`);
         assert.equal(background.style.opacity, '1', `${context}: choice background ${index} must restore opacity`);
-        assert.equal(hasActiveGradientMotion(background), true, `${context}: choice background ${index} must keep gradient motion`);
+        assert.equal(hasActiveGradientMotion(background), true, `${context}: choice background ${index} must register its finite gradient motion`);
     });
     assert.equal(hasActiveHiddenForwardAnimation([choice, ...labels, ...backgrounds]), false, `${context}: choice must not keep hidden fill-forwards exit animations`);
     assert.ok(document.getElementById('eve_login_sequence__choice_divider_sweep'), `${context}: choice divider line animation node must remain`);
@@ -123,6 +134,7 @@ window.__authCheckResult = {
 
 await import('../../eVe/intuition/tools/user.js');
 const { createUserLoginSequence } = await import('../../eVe/intuition/tools/user_login_sequence.js');
+window.eveBevyUiRuntime = { readOverlayDiagnostics: () => null };
 
 assert.equal(typeof window.open_home_panel, 'function', 'open_home_panel must be installed');
 
@@ -145,8 +157,6 @@ assertChoiceVisualReady('initial unauthenticated auth-check');
 const dispatchInput = (node) => node.dispatchEvent(new window.Event('input', { bubbles: true }));
 const dispatchEnter = (node) => node.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
 const activateButton = async (node) => {
-    node.dispatchEvent(new window.MouseEvent('pointerdown', { bubbles: true }));
-    node.dispatchEvent(new window.MouseEvent('pointerup', { bubbles: true }));
     node.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
     await new Promise((resolve) => setTimeout(resolve, 20));
 };
@@ -199,7 +209,7 @@ window.AdoleAPI.auth.current = async () => anonymousUser
     ? { logged: true, user: anonymousUser }
     : { logged: false, user: null };
 window.AdoleAPI.security.isAnonymous = () => !!anonymousUser;
-window.AdoleAPI.security.ensureAnonymousUser = async (options = {}) => {
+window.AdoleAPI.security.startGuest = async (options = {}) => {
     anonymousCalls.push(options);
     anonymousUser = { id: 'anonymous_user', user_id: 'anonymous_user', username: 'anonymous' };
     window.__currentProject = { id: 'anonymous_project', name: 'welcome', userId: anonymousUser.id };
@@ -263,8 +273,15 @@ const authOpenAgain = await window.open_home_panel({ source: { type: 'user_panel
 assert.equal(authOpenAgain.ok, true, 'auth panel reopen must succeed');
 assert.equal(document.getElementById('eve_login_sequence__choice')?.style?.display, 'flex', 'login choice must re-open before credentials');
 assertChoiceVisualReady('guest exit then login reopen');
+await new Promise((resolve) => setTimeout(resolve, 200));
 await activateButton(document.getElementById('eve_login_sequence__choice_authenticate'));
+assert.equal(
+    await waitForCondition(() => document.getElementById('eve_login_sequence__credentials')?.style?.display === 'block'),
+    true,
+    'authenticate choice must open the credential surface before accepting a phone submission'
+);
 const emptyPhoneInput = document.getElementById('eve_login_sequence__phone_input');
+assert.equal(emptyPhoneInput?.disabled, false, 'credential surface must enable the phone input when it opens');
 dispatchEnter(emptyPhoneInput);
 await new Promise((resolve) => setTimeout(resolve, 20));
 assertChoiceVisualReady('credential empty phone return');
@@ -273,6 +290,16 @@ assert.equal(
     document.getElementById('eve_login_sequence__instruction')?.textContent,
     'Entrez votre numéro de téléphone',
     'authenticate choice must open the phone step'
+);
+assert.equal(
+    await waitForCondition(() => document.getElementById('eve_login_sequence__credentials')?.style?.display === 'block'),
+    true,
+    'authenticate choice must re-open credentials after returning from an empty phone'
+);
+assert.equal(
+    emptyPhoneInput?.disabled,
+    false,
+    'reopened credential surface must enable its phone input'
 );
 await new Promise((resolve) => setTimeout(resolve, 0));
 assert.equal(
@@ -384,7 +411,9 @@ window.AdoleAPI.auth.create = async () => {
     forbiddenAuthCalls.push('create');
     return { fastify: { success: false, error: 'forbidden' }, tauri: { success: false, error: 'forbidden' } };
 };
-window.AdoleAPI.auth.current = async () => ({ logged: false, user: null });
+window.AdoleAPI.auth.current = async () => createdSession
+    ? { logged: true, user: { id: createdSession.id, user_id: createdSession.id } }
+    : { logged: false, user: null };
 window.AdoleAPI.auth.getCurrentInfo = () => createdSession ? { id: createdSession.id } : null;
 window.AdoleAPI.security.isAuthenticated = () => !!createdSession;
 window.AdoleAPI.security.isAnonymous = () => false;
@@ -398,7 +427,12 @@ const sequencePasswordInput = document.getElementById('eve_login_sequence__passw
 sequencePasswordInput.value = 'validpass';
 dispatchInput(sequencePasswordInput);
 dispatchEnter(sequencePasswordInput);
-await waitForCondition(() => loginSequence.style.display === 'none');
+const loginSequenceClosed = await waitForCondition(() => loginSequence.style.display === 'none');
+assert.equal(
+    loginSequenceClosed,
+    true,
+    'successful password submit must close the login sequence'
+);
 assert.notEqual(document.activeElement?.id, 'eve_login_sequence__password_field__input', 'successful password submit must clear native password focus before reveal');
 assert.deepEqual(
     authAttempts.map((entry) => entry.action),

@@ -13,8 +13,8 @@ import { appendEvent } from '../database/adole.js';
 import { getABoxEventBus } from './aBoxServer.js';
 import { initServerIdentity, signChallenge, getServerIdentity, isConfigured as serverIdentityConfigured } from './serverIdentity.js';
 import { ensureUserHome } from './userHome.js';
-import { normalizePhone, generateDeterministicUserId, hashPassword, verifyPassword, requireConfiguredAuthSecret } from './auth_crypto.js';
-import { createUserAtome, findUserByPhone, ensureAnonymousUser, findUserById, listAllUsers, updateUserParticle, deleteUserAtome, syncUserToTauri, ANONYMOUS_PHONE, ANONYMOUS_USERNAME, ANONYMOUS_PASSWORD, ANONYMOUS_VISIBILITY, ANONYMOUS_OPTIONAL } from './auth_users.js';
+import { normalizePhone, generateOpaquePrincipalId, hashPassword, verifyPassword, requireConfiguredAuthSecret } from './auth_crypto.js';
+import { createUserAtome, findUserByPhone, findUserById, listAllUsers, updateUserParticle, deleteUserAtome, syncUserToTauri } from './auth_users.js';
 import { getUserOptionalParticles, ensureUserAtomeType, repairMistypedUserAtomes, upsertUserStateCurrent, normalizeUserOptional, normalizeAccessValue } from './auth_user_particles.js';
 import { generateOTP, storeOTP, verifyOTP, readClientRateKey, enforceAuthIdentityRateLimit, enforceAuthRateLimit, sendSMS } from './auth_otp.js';
 import { readRefreshTokenFromRequest, readRefreshSessions, writeRefreshSessions, createRefreshSession, consumeRefreshSession, revokeRefreshToken, setAuthCookies, COOKIE_MAX_AGE, REFRESH_COOKIE_NAME } from './auth_sessions.js';
@@ -59,9 +59,7 @@ export function registerRegisterRoutes(server, { dataSource, isProduction }) {
             // Hash password
             const passwordHash = await hashPassword(password);
 
-            // Use deterministic user ID based on phone number
-            // This ensures same user gets same ID across Fastify, Tauri, and iOS
-            const principalId = generateDeterministicUserId(cleanPhone);
+            const principalId = generateOpaquePrincipalId();
             const now = new Date().toISOString();
 
             // Create user atome with particles (ADOLE v3.0)
@@ -86,7 +84,6 @@ export function registerRegisterRoutes(server, { dataSource, isProduction }) {
             const token = server.jwt.sign({
                 id: principalId,
                 tenantId: 'local-tenant',
-                phone: cleanPhone,
                 username: cleanUsername,
                 refresh_session_id: refreshSession.session_id
             });
@@ -133,7 +130,6 @@ export function registerRegisterRoutes(server, { dataSource, isProduction }) {
                     id: principalId,
                     user_id: principalId,
                     username: cleanUsername,
-                    phone: cleanPhone,
                     optional: safeOptional
                 }
             };
@@ -198,7 +194,7 @@ export function registerRegisterRoutes(server, { dataSource, isProduction }) {
             }
 
             // Create user atome with pre-hashed password (ADOLE v3.0)
-            const principalId = generateDeterministicUserId(cleanPhone);
+            const principalId = generateOpaquePrincipalId();
 
             console.log(`[Auth] Sync-register request access=${incomingAccess ?? 'n/a'} resolvedVisibility=${visibility}`);
 

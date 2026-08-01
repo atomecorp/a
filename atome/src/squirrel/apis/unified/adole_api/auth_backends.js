@@ -114,17 +114,6 @@ const meBackend = async (backend) => {
     };
 };
 
-const createAnonymousCredentials = () => {
-    const randomSeed = Math.floor(100000000 + Math.random() * 900000000);
-    const phone = `999${randomSeed}`;
-    const password = `anon_${Math.random().toString(36).slice(2)}_${Date.now()}`;
-    return {
-        phone,
-        password,
-        username: 'anonymous'
-    };
-};
-
 const ensureBackendAvailability = async () => {
     try {
         return await checkBackends(true);
@@ -134,4 +123,4 @@ const ensureBackendAvailability = async () => {
 };
 
 
-export { loginBackend, registerBackend, bootstrapBackend, meBackend, createAnonymousCredentials, ensureBackendAvailability };
+export { loginBackend, registerBackend, bootstrapBackend, meBackend, ensureBackendAvailability };

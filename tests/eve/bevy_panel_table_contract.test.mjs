@@ -225,7 +225,7 @@ test('Panel Lab appends the table after the validated Select and keeps it passiv
         const dividerIndex = body.findIndex((node) => node.id === 'panel_lab_table_divider');
         const tableIndex = body.findIndex((node) => node.id === 'panel_lab_table');
 
-        assert.equal(body.length, 37);
+        assert.equal(body.length, 41);
         assert.equal(tableIndex < body.findIndex((node) => node.id === 'panel_lab_action_button_group'), true);
         assert.equal(tableIndex, dividerIndex + 1);
         assert.equal(dividerIndex > body.findIndex((node) => node.id === 'panel_lab_select'), true);
@@ -254,4 +254,38 @@ test('Panel Lab appends the table after the validated Select and keeps it passiv
     } finally {
         panelLabSurface.onClose();
     }
+});
+
+// Same regression guard as the accordion: assert the projected record, not the
+// builder tree. The tree-level `radius_corners` assertions above stayed green
+// while the active overlay route painted every table corner square.
+test('table projects its outer corner radii to the GPU records', () => {
+    const table = tableNode({
+        id: 'table_corner_fixture',
+        columns: [{ id: 'name', label: 'Nom' }, { id: 'value', label: 'Valeur', align: 'right' }],
+        rows: [
+            { id: 'r0', cells: { name: 'A', value: '1' } },
+            { id: 'r1', cells: { name: 'B', value: '2' } }
+        ],
+        header: true,
+        width: BEVY_PANEL_TOKENS.inputWidthPx
+    });
+    const records = projectBevyUiTreeRecords({
+        tree: { root: table }, treeId: 'table_corners', workspaceLayer: 'panel'
+    });
+    const recordFor = (suffix) => records.find((record) => record.id.endsWith(suffix))?.properties;
+    const radius = BEVY_PANEL_TOKENS.radiusPx;
+
+    const header = recordFor('table_corner_fixture_header');
+    assert.equal(header?.shape, 'rounded_rect');
+    assert.deepEqual(header?.corner_radii, [radius, radius, 0, 0]);
+
+    const lastRow = recordFor('table_corner_fixture_row_1');
+    assert.equal(lastRow?.shape, 'rounded_rect');
+    assert.deepEqual(lastRow?.corner_radii, [0, 0, radius, radius]);
+
+    // A middle row has no rounded corner at all and must stay a plain rect.
+    const firstRow = recordFor('table_corner_fixture_row_0');
+    assert.equal(firstRow?.shape, 'rect');
+    assert.equal(firstRow?.corner_radii, undefined);
 });

@@ -1,6 +1,5 @@
 // Extracted from auth.js: account creation / login flows (bootstrap, register, login).
 import { TauriAdapter, FastifyAdapter } from '../adole.js';
-import { syncLocalProjectsToFastify } from './atomes.js';
 import {
     getSessionState,
     setSessionState,
@@ -10,7 +9,6 @@ import {
 import { normalizePhone, normalizeUsername, getPrimaryBackend, getSecondaryBackend, hasAuthenticatedToken } from './auth_core.js';
 import { loginBackend, registerBackend, bootstrapBackend, ensureBackendAvailability } from './auth_backends.js';
 import { persistFastifyLoginCache, markFastifyAuthValid } from './auth_fastify_token.js';
-import { migratePreviousWorkspace } from './auth_workspace.js';
 
 const markValidFastifySession = (backend, result) => {
     if (backend === 'fastify' && hasAuthenticatedToken('fastify', result)) markFastifyAuthValid();
@@ -30,8 +28,6 @@ export const loginMethods = {
         const availability = await ensureBackendAvailability();
         const primary = getPrimaryBackend();
         const secondary = getSecondaryBackend();
-        const prevSession = getSessionState();
-        const prevProjectCache = getCurrentProjectCache();
 
         TauriAdapter?.clearToken?.();
         FastifyAdapter?.clearToken?.();
@@ -109,10 +105,6 @@ export const loginMethods = {
             user: activeResult.user,
             backend: activeBackend
         });
-        await migratePreviousWorkspace(prevSession, prevProjectCache, activeResult.user.id);
-
-        syncLocalProjectsToFastify({ reason: 'bootstrap' }).catch(() => { });
-
         response.ok = true;
         response.user = activeResult.user;
         response.token = activeResult.token || null;
@@ -134,8 +126,6 @@ export const loginMethods = {
         const primary = getPrimaryBackend();
         const secondary = getSecondaryBackend();
 
-        const prevSession = getSessionState();
-        const prevProjectCache = getCurrentProjectCache();
 
         TauriAdapter?.clearToken?.();
         FastifyAdapter?.clearToken?.();
@@ -216,9 +206,6 @@ export const loginMethods = {
                 user: activeResult.user,
                 backend: activeBackend
             });
-            await migratePreviousWorkspace(prevSession, prevProjectCache, activeResult.user.id);
-
-            syncLocalProjectsToFastify({ reason: 'register' }).catch(() => { });
         } else if (activeResult?.ok) {
             response[activeBackend] = {
                 success: false,
@@ -243,8 +230,6 @@ export const loginMethods = {
         const primary = getPrimaryBackend();
         const secondary = getSecondaryBackend();
 
-        const prevSession = getSessionState();
-        const prevProjectCache = getCurrentProjectCache();
 
         // Security: clear any stale auth state before attempting a new login
         TauriAdapter?.clearToken?.();
@@ -308,9 +293,6 @@ export const loginMethods = {
                 user: loggedUser,
                 backend: activeBackend
             });
-            await migratePreviousWorkspace(prevSession, prevProjectCache, loggedUser.id);
-
-            syncLocalProjectsToFastify({ reason: 'login' }).catch(() => { });
         }
 
         return response;

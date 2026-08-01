@@ -314,7 +314,7 @@ test('Panel Lab is development-gated and uses the shared panel skin', async () =
     assert.equal(mounted[0].presentation, true);
     assert.deepEqual(body.style.background, EVE_PANEL_SKIN_TOKENS.bevyPanel.colors.transparent);
     assert.equal(body.style.gap, 0, 'Panel Lab owns its vertical rhythm through specimen divider margins');
-    assert.equal(body.children.length, 37, 'Panel Lab must retain approved specimens and append the numeric field');
+    assert.equal(body.children.length, 41, 'Panel Lab must retain approved specimens and append the shared-controls package');
     const tableSpecimen = findNode(mounted[0], 'panel_lab_table');
     assert.equal(tableSpecimen.kind, 'table');
     assert.equal(tableSpecimen.on, undefined);

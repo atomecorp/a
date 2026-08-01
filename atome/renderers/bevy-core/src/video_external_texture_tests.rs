@@ -26,6 +26,7 @@ fn video_node(id: &str) -> AtomeRenderNode {
         layer: 2,
         opacity: 0.65,
         corner_radius: 0.0,
+        corner_radii: None,
         shadow: None,
         backdrop: None,
         presentation: false,

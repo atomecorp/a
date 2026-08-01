@@ -12,6 +12,8 @@
 		34960428281861EE00E13C15 /* src in Resources */ = {isa = PBXBuildFile; fileRef = 34960426281861EE00E13C15 /* src */; };
 		6BARCH010000000000000003 /* eVe in Resources */ = {isa = PBXBuildFile; fileRef = 6BARCH000000000000000002 /* eVe */; };
 		6BARCH010000000000000004 /* eVe in Resources */ = {isa = PBXBuildFile; fileRef = 6BARCH000000000000000002 /* eVe */; };
+		7A1000030000000000000003 /* GuestAdoptionRuntimeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A1000010000000000000001 /* GuestAdoptionRuntimeTests.swift */; };
+		7A1000050000000000000005 /* XCTest.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 7A1000040000000000000004 /* XCTest.framework */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -46,6 +48,9 @@
 		6BARCH000000000000000002 /* eVe */ = {isa = PBXFileReference; lastKnownFileType = folder; name = eVe; path = ../../../eVe; sourceTree = "<group>"; };
 		6BB7DA3B2D63233600CD6691 /* LICENSE */ = {isa = PBXFileReference; lastKnownFileType = text; path = LICENSE; sourceTree = "<group>"; };
 		6BB7DA3C2D63233600CD6691 /* README.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = README.md; sourceTree = "<group>"; };
+		7A1000010000000000000001 /* GuestAdoptionRuntimeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GuestAdoptionRuntimeTests.swift; sourceTree = "<group>"; };
+		7A1000020000000000000002 /* atomeGuestAdoptionTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = atomeGuestAdoptionTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		7A1000040000000000000004 /* XCTest.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = XCTest.framework; path = System/Library/Frameworks/XCTest.framework; sourceTree = SDKROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -109,6 +114,14 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		7A1000090000000000000009 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				7A1000050000000000000005 /* XCTest.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -124,7 +137,17 @@
 				349603E52818619000E13C15 /* Products */,
 				6BB7DA3B2D63233600CD6691 /* LICENSE */,
 				6BB7DA3C2D63233600CD6691 /* README.md */,
+				7A1000060000000000000006 /* Tests */,
 			);
+			sourceTree = "<group>";
+		};
+		7A1000060000000000000006 /* Tests */ = {
+			isa = PBXGroup;
+			children = (
+				7A1000010000000000000001 /* GuestAdoptionRuntimeTests.swift */,
+			);
+			name = Tests;
+			path = ../../../tests/ios;
 			sourceTree = "<group>";
 		};
 		349603E52818619000E13C15 /* Products */ = {
@@ -132,6 +155,7 @@
 			children = (
 				349603E42818619000E13C15 /* atome.app */,
 				349603FF281861B500E13C15 /* atomeAudioUnit.appex */,
+				7A1000020000000000000002 /* atomeGuestAdoptionTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -186,6 +210,23 @@
 			productReference = 349603FF281861B500E13C15 /* atomeAudioUnit.appex */;
 			productType = "com.apple.product-type.app-extension";
 		};
+		7A1000070000000000000007 /* atomeGuestAdoptionTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 7A10000F000000000000000F /* Build configuration list for PBXNativeTarget "atomeGuestAdoptionTests" */;
+			buildPhases = (
+				7A1000080000000000000008 /* Sources */,
+				7A1000090000000000000009 /* Frameworks */,
+				7A10000A000000000000000A /* Resources */,
+			);
+			buildRules = ();
+			dependencies = (
+				7A10000C000000000000000C /* PBXTargetDependency */,
+			);
+			name = atomeGuestAdoptionTests;
+			productName = atomeGuestAdoptionTests;
+			productReference = 7A1000020000000000000002 /* atomeGuestAdoptionTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -219,6 +260,7 @@
 			targets = (
 				349603E32818619000E13C15 /* atome */,
 				349603FE281861B500E13C15 /* atomeAudioUnit */,
+				7A1000070000000000000007 /* atomeGuestAdoptionTests */,
 			);
 		};
 /* End PBXProject section */
@@ -240,6 +282,12 @@
 				34960428281861EE00E13C15 /* src in Resources */,
 				6BARCH010000000000000004 /* eVe in Resources */,
 			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		7A10000A000000000000000A /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = ();
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
@@ -334,13 +382,33 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		7A1000080000000000000008 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				7A1000030000000000000003 /* GuestAdoptionRuntimeTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
+		7A10000B000000000000000B /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 349603DC2818618F00E13C15 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 349603E32818619000E13C15;
+			remoteInfo = atome;
+		};
 		3496041F281861B500E13C15 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			target = 349603FE281861B500E13C15 /* atomeAudioUnit */;
 			targetProxy = 3496041E281861B500E13C15 /* PBXContainerItemProxy */;
+		};
+		7A10000C000000000000000C /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 349603E32818619000E13C15 /* atome */;
+			targetProxy = 7A10000B000000000000000B /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -656,6 +724,46 @@
 			};
 			name = Release;
 		};
+		7A10000D000000000000000D /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.6;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = one.atome.app.guestadoptiontests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/atome.app/atome";
+			};
+			name = Debug;
+		};
+		7A10000E000000000000000E /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.6;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = one.atome.app.guestadoptiontests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/atome.app/atome";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -682,6 +790,15 @@
 			buildConfigurations = (
 				34960422281861B500E13C15 /* Debug */,
 				34960423281861B500E13C15 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		7A10000F000000000000000F /* Build configuration list for PBXNativeTarget "atomeGuestAdoptionTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				7A10000D000000000000000D /* Debug */,
+				7A10000E000000000000000E /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;

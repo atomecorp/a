@@ -2,20 +2,27 @@
  * auth user atome management (CRUD + particles + state projection) — ADOLE v3.0.
  */
 
-import { v4 as uuidv4 } from 'uuid';
 import { getABoxEventBus } from './aBoxServer.js';
 import { ensureUserHome } from './userHome.js';
-import { appendEvent } from '../database/adole.js';
-import { normalizePhone, generateDeterministicUserId, hashPassword } from './auth_crypto.js';
-import { getUserOptionalParticles, ensureUserAtomeType, upsertUserStateCurrent, normalizeUserOptional, normalizeAccessValue } from './auth_user_particles.js';
+import { withTransaction } from '../database/adole.js';
+import { normalizePhone } from './auth_crypto.js';
+import { ensureUserAtomeType, upsertUserStateCurrent, normalizeUserOptional, normalizeAccessValue } from './auth_user_particles.js';
+import {
+    assignVerifiedPhone,
+    ensureOpaquePrincipalIdentity,
+    findPrincipalByPhone,
+    readPrincipalPhone,
+    revokeVerifiedPhone
+} from './auth_identity.js';
 
-export const ANONYMOUS_PHONE = '0000000000';
-export const ANONYMOUS_USERNAME = 'anonymous';
-export const ANONYMOUS_PASSWORD = 'anonymous';
-export const ANONYMOUS_VISIBILITY = 'private';
-export const ANONYMOUS_OPTIONAL = { anonymous: true, local_only: true };
 
 export async function createUserAtome(dataSource, userId, username, phone, passwordHash, visibility = 'public', optional = {}) {
+    return withTransaction(() => createUserAtomeInTransaction(
+        dataSource, userId, username, phone, passwordHash, visibility, optional
+    ));
+}
+
+async function createUserAtomeInTransaction(dataSource, userId, username, phone, passwordHash, visibility = 'public', optional = {}) {
     const now = new Date().toISOString();
     // Normalize visibility value
     const normalizedVisibility = normalizeAccessValue(visibility);
@@ -33,8 +40,6 @@ export async function createUserAtome(dataSource, userId, username, phone, passw
         const needsTypeRepair = !existingType || existingType !== 'user';
         if (existing.deleted_at) {
             // Reactivate soft-deleted user
-            console.log(`🔄 [ADOLE] Reactivating soft-deleted user: ${userId}`);
-
             if (needsTypeRepair) {
                 await ensureUserAtomeType(dataSource, userId, existingType);
             }
@@ -67,9 +72,8 @@ export async function createUserAtome(dataSource, userId, username, phone, passw
                 await updateUserParticle(dataSource, userId, key, value);
             }
 
-            await upsertUserStateCurrent(dataSource, userId, username, phone, normalizedVisibility, now, optionalParticles);
-
-            console.log(`✅ [ADOLE] User reactivated: ${username} (${phone}) [${userId}]`);
+            await assignVerifiedPhone(dataSource, userId, phone, { now });
+            await upsertUserStateCurrent(dataSource, userId, username, normalizedVisibility, now, optionalParticles);
 
             return {
                 user_id: userId,
@@ -82,11 +86,9 @@ export async function createUserAtome(dataSource, userId, username, phone, passw
         }
 
         if (needsTypeRepair) {
-            console.log(`🧩 [ADOLE] Repairing mistyped user atome: ${userId}`);
             await ensureUserAtomeType(dataSource, userId, existingType);
 
             const particles = [
-                { key: 'phone', value: JSON.stringify(phone) },
                 { key: 'username', value: JSON.stringify(username) },
                 { key: 'password_hash', value: JSON.stringify(passwordHash) },
                 { key: 'visibility', value: JSON.stringify(normalizedVisibility) },
@@ -108,7 +110,8 @@ export async function createUserAtome(dataSource, userId, username, phone, passw
                 await updateUserParticle(dataSource, userId, key, value);
             }
 
-            await upsertUserStateCurrent(dataSource, userId, username, phone, normalizedVisibility, now, optionalParticles);
+            await assignVerifiedPhone(dataSource, userId, phone, { now });
+            await upsertUserStateCurrent(dataSource, userId, username, normalizedVisibility, now, optionalParticles);
 
             return {
                 user_id: userId,
@@ -133,7 +136,6 @@ export async function createUserAtome(dataSource, userId, username, phone, passw
 
     // Create particles for user properties (particle_id is auto-increment)
     const particles = [
-        { key: 'phone', value: JSON.stringify(phone) },
         { key: 'username', value: JSON.stringify(username) },
         { key: 'password_hash', value: JSON.stringify(passwordHash) },
         { key: 'visibility', value: JSON.stringify(normalizedVisibility) },
@@ -152,19 +154,8 @@ export async function createUserAtome(dataSource, userId, username, phone, passw
         await updateUserParticle(dataSource, userId, key, value);
     }
 
-    await upsertUserStateCurrent(dataSource, userId, username, phone, normalizedVisibility, now, optionalParticles);
-
-    try {
-        const accessRows = await dataSource.query(
-            'SELECT particle_value FROM particles WHERE atome_id = ? AND particle_key = ?',
-            [userId, 'access']
-        );
-        const storedAccess = accessRows?.[0]?.particle_value ? JSON.parse(accessRows[0].particle_value) : null;
-        console.log(`✅ [ADOLE] User atome created: ${username} (${phone}) [${userId}] access=${storedAccess}`);
-    } catch (error) {
-        console.warn("[cleanup] operation failed", error);
-        console.log(`✅ [ADOLE] User atome created: ${username} (${phone}) [${userId}] access=${normalizedVisibility}`);
-    }
+    await assignVerifiedPhone(dataSource, userId, phone, { now });
+    await upsertUserStateCurrent(dataSource, userId, username, normalizedVisibility, now, optionalParticles);
 
     return {
         user_id: userId,
@@ -176,122 +167,14 @@ export async function createUserAtome(dataSource, userId, username, phone, passw
 }
 
 export async function findUserByPhone(dataSource, phone) {
-    const normalizedPhone = normalizePhone(phone);
-    if (!normalizedPhone) return null;
-
-    const parseUserRow = (user) => ({
-        user_id: user.user_id,
-        username: user.username ? JSON.parse(user.username) : null,
-        phone: user.phone ? JSON.parse(user.phone) : null,
-        password_hash: user.password_hash ? JSON.parse(user.password_hash) : null,
-        created_at: user.created_at,
-        updated_at: user.updated_at,
-        last_sync: user.last_sync,
-        created_source: user.created_source,
-        atome_type: user.atome_type || 'user'
-    });
-
-    const directRows = await dataSource.query(
-        `SELECT a.atome_id as user_id, a.atome_type, a.created_at, a.updated_at, a.last_sync, a.created_source,
-                MAX(CASE WHEN p.particle_key = 'phone' THEN p.particle_value END) AS phone,
-                MAX(CASE WHEN p.particle_key = 'username' THEN p.particle_value END) AS username,
-                MAX(CASE WHEN p.particle_key = 'password_hash' THEN p.particle_value END) AS password_hash
-         FROM atomes a
-         LEFT JOIN particles p ON a.atome_id = p.atome_id
-         WHERE a.atome_type = 'user' AND a.deleted_at IS NULL
-         GROUP BY a.atome_id
-         HAVING MAX(CASE WHEN p.particle_key = 'phone' THEN p.particle_value END) = ?`,
-        [JSON.stringify(normalizedPhone)]
-    );
-
-    if (directRows.length > 0) {
-        const hit = parseUserRow(directRows[0]);
-        if (hit.atome_type !== 'user') {
-            await ensureUserAtomeType(dataSource, hit.user_id, hit.atome_type);
-        }
-        return hit;
-    }
-
-    const rows = await dataSource.query(
-        `SELECT a.atome_id as user_id, a.atome_type, a.created_at, a.updated_at, a.last_sync, a.created_source,
-                MAX(CASE WHEN p.particle_key = 'phone' THEN p.particle_value END) AS phone,
-                MAX(CASE WHEN p.particle_key = 'username' THEN p.particle_value END) AS username,
-                MAX(CASE WHEN p.particle_key = 'password_hash' THEN p.particle_value END) AS password_hash
-         FROM atomes a
-         LEFT JOIN particles p ON a.atome_id = p.atome_id
-         WHERE a.deleted_at IS NULL
-         GROUP BY a.atome_id`
-    );
-
-    const match = rows.find((row) => {
-        if (!row?.phone || !row?.password_hash) return false;
-        try {
-            const storedPhone = JSON.parse(row.phone);
-            return normalizePhone(storedPhone) === normalizedPhone;
-        } catch (error) {
-        console.warn("[cleanup] operation failed", error);
-            return false;
-        }
-    });
-
-    if (!match) return null;
-    const parsed = parseUserRow(match);
-    if (parsed.atome_type !== 'user') {
-        await ensureUserAtomeType(dataSource, parsed.user_id, parsed.atome_type);
-    }
-    return parsed;
-}
-
-export async function ensureAnonymousUser(dataSource) {
-    if (!dataSource) return { ok: false, error: 'no_datasource' };
-    const phone = normalizePhone(ANONYMOUS_PHONE);
-    if (!phone) return { ok: false, error: 'invalid_phone' };
-
-    const deterministicId = generateDeterministicUserId(phone);
-
-    try {
-        const existingByPhone = await findUserByPhone(dataSource, phone);
-        if (existingByPhone?.user_id) {
-            return { ok: true, userId: existingByPhone.user_id, exists: true };
-        }
-
-        const existingById = await dataSource.query(
-            'SELECT atome_id, deleted_at FROM atomes WHERE atome_id = ?',
-            [deterministicId]
-        );
-        if (existingById.length > 0) {
-            if (existingById[0]?.deleted_at) {
-                await dataSource.query(
-                    `UPDATE atomes SET deleted_at = NULL, updated_at = ?, sync_status = 'local' WHERE atome_id = ?`,
-                    [new Date().toISOString(), deterministicId]
-                );
-            }
-            return { ok: true, userId: deterministicId, exists: true };
-        }
-
-        const passwordHash = await hashPassword(ANONYMOUS_PASSWORD);
-        await createUserAtome(
-            dataSource,
-            deterministicId,
-            ANONYMOUS_USERNAME,
-            phone,
-            passwordHash,
-            ANONYMOUS_VISIBILITY,
-            ANONYMOUS_OPTIONAL
-        );
-
-        console.log(`[Auth] Anonymous user ensured: ${ANONYMOUS_USERNAME} (${phone}) [${deterministicId}]`);
-        return { ok: true, userId: deterministicId, created: true };
-    } catch (error) {
-        console.warn('[Auth] Failed to ensure anonymous user:', error?.message || error);
-        return { ok: false, error: error?.message || String(error) };
-    }
+    await ensureOpaquePrincipalIdentity(dataSource);
+    return findPrincipalByPhone(dataSource, phone);
 }
 
 export async function findUserById(dataSource, userId) {
+    await ensureOpaquePrincipalIdentity(dataSource);
     const rows = await dataSource.query(
         `SELECT a.atome_id as user_id, a.atome_type, a.created_at, a.updated_at, a.last_sync, a.created_source,
-                MAX(CASE WHEN p.particle_key = 'phone' THEN p.particle_value END) AS phone,
                 MAX(CASE WHEN p.particle_key = 'username' THEN p.particle_value END) AS username,
                 MAX(CASE WHEN p.particle_key = 'password_hash' THEN p.particle_value END) AS password_hash
          FROM atomes a
@@ -306,7 +189,7 @@ export async function findUserById(dataSource, userId) {
         return {
             user_id: user.user_id,
             username: user.username ? JSON.parse(user.username) : null,
-            phone: user.phone ? JSON.parse(user.phone) : null,
+            phone: await readPrincipalPhone(dataSource, user.user_id),
             password_hash: user.password_hash ? JSON.parse(user.password_hash) : null,
             created_at: user.created_at,
             updated_at: user.updated_at,
@@ -317,7 +200,6 @@ export async function findUserById(dataSource, userId) {
 
     const secondary = await dataSource.query(
         `SELECT a.atome_id as user_id, a.atome_type, a.created_at, a.updated_at, a.last_sync, a.created_source,
-                MAX(CASE WHEN p.particle_key = 'phone' THEN p.particle_value END) AS phone,
                 MAX(CASE WHEN p.particle_key = 'username' THEN p.particle_value END) AS username,
                 MAX(CASE WHEN p.particle_key = 'password_hash' THEN p.particle_value END) AS password_hash
          FROM atomes a
@@ -336,7 +218,7 @@ export async function findUserById(dataSource, userId) {
     return {
         user_id: user.user_id,
         username: user.username ? JSON.parse(user.username) : null,
-        phone: user.phone ? JSON.parse(user.phone) : null,
+        phone: await readPrincipalPhone(dataSource, user.user_id),
         password_hash: user.password_hash ? JSON.parse(user.password_hash) : null,
         created_at: user.created_at,
         updated_at: user.updated_at,
@@ -346,7 +228,7 @@ export async function findUserById(dataSource, userId) {
 }
 
 export async function listAllUsers(dataSource, includePrivate = false) {
-    await repairMistypedUserAtomes(dataSource);
+    await ensureOpaquePrincipalIdentity(dataSource);
 
     // Build query with visibility filter
     const visibilityFilter = includePrivate
@@ -355,7 +237,6 @@ export async function listAllUsers(dataSource, includePrivate = false) {
 
     const rows = await dataSource.query(
         `SELECT a.atome_id as user_id, a.created_at, a.updated_at, a.last_sync, a.created_source,
-                MAX(CASE WHEN p.particle_key = 'phone' THEN p.particle_value END) AS phone,
                 MAX(CASE WHEN p.particle_key = 'username' THEN p.particle_value END) AS username,
                 MAX(CASE WHEN p.particle_key = 'visibility' THEN p.particle_value END) AS visibility
          FROM atomes a
@@ -368,7 +249,7 @@ export async function listAllUsers(dataSource, includePrivate = false) {
     return rows.map(user => ({
         user_id: user.user_id,
         username: user.username ? JSON.parse(user.username) : null,
-        phone: user.phone ? JSON.parse(user.phone) : null,
+        phone: null,
         visibility: user.visibility ? JSON.parse(user.visibility) : 'private',
         created_at: user.created_at,
         updated_at: user.updated_at,
@@ -378,6 +259,7 @@ export async function listAllUsers(dataSource, includePrivate = false) {
 }
 
 export async function updateUserParticle(dataSource, userId, key, value) {
+    if (key === 'phone') throw new Error('phone_particle_is_not_a_supported_credential_store');
     const now = new Date().toISOString();
     const valueStr = JSON.stringify(value);
 
@@ -415,7 +297,7 @@ export async function deleteUserAtome(dataSource, userId) {
         `UPDATE atomes SET deleted_at = ?, updated_at = ?, sync_status = 'pending' WHERE atome_id = ?`,
         [now, now, userId]
     );
-    console.log(`🗑️ [ADOLE] User atome soft-deleted: ${userId}`);
+    await revokeVerifiedPhone(dataSource, userId, 'account_deleted');
 }
 
 export async function syncUserToTauri(username, phone, passwordHash, userId = null, optional = {}, visibility = 'public') {
@@ -429,7 +311,7 @@ export async function syncUserToTauri(username, phone, passwordHash, userId = nu
                 timestamp: new Date().toISOString(),
                 runtime: 'Fastify',
                 payload: {
-                    userId: userId || generateDeterministicUserId(phone),
+                    userId,
                     username,
                     phone,
                     passwordHash,
@@ -439,14 +321,11 @@ export async function syncUserToTauri(username, phone, passwordHash, userId = nu
                     access: normalizedVisibility
                 }
             });
-            console.log(`🔄 [WebSocket] User sync event emitted: ${username} (${phone})`);
             return { success: true, synced: true };
         } else {
-            console.warn(`⚠️ EventBus not available for sync`);
             return { success: false, error: 'EventBus not available' };
         }
     } catch (error) {
-        console.warn(`⚠️ WebSocket sync failed: ${error.message}`);
         return { success: false, error: error.message };
     }
 }

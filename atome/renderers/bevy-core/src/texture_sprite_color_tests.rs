@@ -16,6 +16,7 @@ fn textured_image_node(id: &str) -> AtomeRenderNode {
         layer: 1,
         opacity: 1.0,
         corner_radius: 0.0,
+        corner_radii: None,
         shadow: None,
         backdrop: None,
         presentation: false,

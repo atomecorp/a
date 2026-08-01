@@ -52,33 +52,36 @@ Source principale:
 Dependances et ordre:
 
 - Cette phase est la premiere tache active a executer.
-- Le guide impose un seul specimen d'un seul type de composant a la fois, une
-  specification visuelle approuvee avant implementation, une verification
-  automatisee et dans le navigateur reel avant presentation, puis une
-  validation utilisateur explicite avant le composant suivant.
+- Le guide organise la migration en paquets fonctionnels et visuels. Chaque
+  paquet centralise d'abord ses styles et ses composants reutilisables, puis
+  les implemente et les valide ensemble dans le navigateur reel. Les contrats
+  et les tests restent cibles par composant, mais l'approbation utilisateur est
+  requise au niveau du paquet utilisable et du panel complet, pas entre chaque
+  composant.
 - La validation de chaque composant utilise uniquement le navigateur de test
   integre a Codex; aucune validation mobile, Tauri ou iOS ne bloque les
   composants individuels. Ces plateformes sont controlees une seule fois au
   niveau du panel complet lorsque leur validation finale est requise.
-- Lorsqu'un panel est entierement couvert par les composants approuves, sa
-  composition Bevy est verifiee et approuvee avant la suppression definitive
-  de sa route HTML.
+- Lorsqu'un panel est entierement couvert par les composants testes de ses
+  paquets, sa composition Bevy est verifiee et approuvee avant la suppression
+  definitive de sa route HTML.
 - Before creating or composing a panel, the guide must contain its
   function-to-MCP-command ledger: every effectful function must reuse a
   canonical MCP-invocable and auditable command; passive elements have no
   command. A panel cannot be approved or retire its HTML route while the ledger
   contains an unmapped function.
 
-- [ ] Execute the active BevyUI-guide baseline component by component: finalize Families 2 and 3; Families 4 and 5 are validated; then complete Families 6, 13, 18, and 21 to 28 before composing and approving Calendar and Contact. Timeline and Molecule / MTraX components, including Families 9, 17, and 29 to 35, are temporarily excluded and will be reconsidered only with their complete product migration. Exit criterion: Calendar and Contact use their canonical Bevy owners, their effectful functions have a complete MCP ledger, real interactions and product approvals are recorded, and neither surface retains a parallel DOM route.
+- [ ] Execute the five active BevyUI migration packages: (1) shared controls — Families 3, 6, and 13; (2) Contact — Family 18 and complete Contact composition; (3) Calendar structure — Families 21 to 24; (4) Calendar events — Families 25 to 27; (5) Calendar editor and completion — Family 28 and complete Calendar composition. Families 4 and 5 remain validated shared foundations. Molecule / MTraX capabilities, including Families 9, 17, 29, and 30, remain deferred until their owning product migration. Exit criterion: Calendar and Contact use their canonical Bevy owners, their effectful functions have a complete MCP ledger, real interactions and package/panel approvals are recorded, and neither surface retains a parallel DOM route.
 
-Deferred after Phase 4 — complete Molecule / MTraX and Timeline migration:
+Deferred after Phase 4 — complete Molecule / MTraX migration:
 
-- [ ] Resume the complete Panel programme after Phase 4: first migrate the complete Timeline / Molecule scope, including Families 9, 17, and 29 to 35, then assess Families 7, 8, 10, 11, 12, 14, 15, 16, 19, 20, and 36 with their owning product surfaces. Exit criterion: all 16 surfaces are validated, the 13 active HTML routes are retired, and the temporary Panel Lab is removed.
+- [ ] Resume the remaining Panel programme after Phase 4: assess Families 7, 8, 9, 10, 11, 12, 14 to 17, 19, 20, 29, 30, and 36 with their owning product panels. Exit criterion: all 15 in-scope panels are validated, the 13 active HTML routes are retired, and the temporary Panel Lab is removed.
 
 Critere de sortie du programme complet:
 
-- Each component and panel loop has targeted evidence, real-canvas validation,
-  and explicit product-owner approval; every effectful function of every panel
+- Each component has targeted evidence and real-canvas validation; each usable
+  migration package and complete panel has explicit product-owner approval.
+  Every effectful function of every panel
   is mapped to its canonical MCP command and audit; Finder respects its external
   gate; no HTML route, double composition, or temporary Panel Lab implementation
   remains at completion.
@@ -341,7 +344,7 @@ Taches:
 
 - [x] Migrer toutes les operations Atome métier vers `/ws/api`, securiser `/ws/sync` par authentification et filtrage des permissions, implementer les actions WebSocket manquantes, retirer les lectures/ecritures HTTP et leurs fallbacks, puis valider la parite Fastify/Tauri/iOS et installer des garde-fous permanents; critere de sortie: tous les criteres et tests de `done/websocket_only_atome_transport.md` et `todo/cleanup_architecture/authenticated_permission_scoped_ws_sync.md` passent.
 - [ ] Migrer l'identite utilisateur vers un principal opaque, immuable et independant du telephone: separer les alias de connexion/recherche, supprimer toute derivation ou prediction d'identifiant depuis un numero, migrer atomiquement les comptes existants et toutes leurs references, puis valider changement, suppression et reattribution du telephone sans perte ni transfert de donnees; critere de sortie: tous les criteres et tests de `todo/cleanup_architecture/stable_user_identity_independent_of_phone.md` passent.
-- [ ] Remplacer la creation implicite de shadow users par un provisionnement Tauri/Fastify explicite et securise, tout en conservant `Essayer` comme espace invite local/prive a principal opaque isole et avec adoption transactionnelle optionnelle lors de la creation ou liaison d'un compte; critere de sortie: tous les criteres et tests de `todo/cleanup_architecture/explicit_cross_runtime_account_provisioning.md` passent.
+- [x] Remplacer la creation implicite de shadow users par un provisionnement Tauri/Fastify explicite et securise, tout en conservant `Essayer` comme espace invite local/prive a principal opaque isole et avec adoption transactionnelle optionnelle lors de la creation ou liaison d'un compte; critere de sortie: tous les criteres et tests de `todo/cleanup_architecture/explicit_cross_runtime_account_provisioning.md` passent.
 - [ ] Migrer les verificateurs de mot de passe Fastify/Tauri/iOS vers Argon2id: ne creer que des hashes Argon2id, verifier les anciens bcrypt uniquement pour migration, les remplacer atomiquement apres connexion reussie, imposer 15 points de code Unicode minimum et au moins 64 acceptes avec espaces sans regles de composition, refuser les secrets compromis de facon respectueuse de la confidentialite, puis borner memoire/concurrence; critere de sortie: tous les criteres et tests de `todo/cleanup_architecture/argon2id_password_hash_migration.md` passent.
 - [ ] Implementer la frontiere OVHcloud SMS de production apres une requete `/ws/api`: raccorder le point d'extension `sendSMS()` a un compte OVHcloud restreint, conserver protocoles et secrets exclusivement dans l'adaptateur serveur, interdire tout fallback automatique, remplacer `Math.random()` et les stores process-locaux par un OTP cryptographiquement sur et un defi temporaire PostgreSQL consomme atomiquement, sans OTP persiste en clair ni entree Atome/historique/sync, appliquer des limitations progressives multidimensionnelles sans verrouillage global du compte, puis journaliser les evenements de securite avec references opaques, empreinte reseau HMAC rotative, client normalise et retention automatique de six mois sans IP/user-agent complets; critere de sortie: tous les criteres et tests de `todo/cleanup_architecture/production_sms_provider_boundary.md` passent.
 - [ ] Remplacer atomiquement la recuperation SMS seule par SMS plus cle d'appareil autorise, ou SMS plus Recovery Kit lorsque l'appareil est perdu, avec changement de telephone securise, delais/notifications, revocation complete et maintien du chemin actuel jusqu'a validation du remplacement; critere de sortie: tous les criteres et tests de `todo/cleanup_architecture/account_recovery_trusted_device_and_recovery_kit.md` passent.

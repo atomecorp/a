@@ -3,6 +3,13 @@ import { test } from 'vitest';
 import { JSDOM } from 'jsdom';
 
 import { createEveBevyUiRuntime } from '../../eVe/domains/rendering/bevy_ui_runtime.js';
+import { projectBevyUiTreeOverlay } from '../../eVe/domains/rendering/bevy_ui_project_overlay_runtime.js';
+import {
+    clearAllProjectScenes,
+    getProjectSceneState,
+    renderProjectScene
+} from '../../eVe/domains/rendering/project_scene_runtime.js';
+import { createTestCompositor, installDom } from './unified_rendering_test_helpers.mjs';
 
 const createSurface = () => {
     const dom = new JSDOM('<!doctype html><canvas id="eve_surface_project"></canvas>');
@@ -82,4 +89,43 @@ test('BevyUI overlay remount reconciles from an exact empty baseline after a pro
     assert.deepEqual(retry.previousIds, []);
     assert.deepEqual(runtime.state.overlayRecordIds.get('ui_tree'), idsForWidth(320));
     assert.equal(runtime.state.lastOverlayError, null);
+});
+
+test('Bevy panel overlay reconciliation removes stale Contact records without relying on a prior id list', async () => {
+    clearAllProjectScenes();
+    const dom = installDom('<!doctype html><html><body><main id="project"></main></body></html>');
+    const host = dom.window.document.getElementById('project');
+    await renderProjectScene({
+        projectId: '__eve_dashboard_workspace__',
+        records: [],
+        host,
+        compositor: createTestCompositor()
+    });
+    const loadingTree = {
+        id: 'eve_bevy_panel_contact',
+        root: {
+            id: 'contact_root', kind: 'root', style: { size: [420, 620] },
+            children: [{
+                id: 'contact_loading', kind: 'text', text: 'Loading contacts',
+                style: { position: [10, 10], size: [300, 28] }
+            }]
+        }
+    };
+    const loadedTree = {
+        id: 'eve_bevy_panel_contact',
+        root: {
+            id: 'contact_root', kind: 'root', style: { size: [420, 620] },
+            children: [{
+                id: 'contact_list', kind: 'text', text: 'Anonymous',
+                style: { position: [10, 10], size: [300, 28] }
+            }]
+        }
+    };
+
+    await projectBevyUiTreeOverlay({ tree: loadingTree, documentRef: dom.window.document, previousIds: [] });
+    await projectBevyUiTreeOverlay({ tree: loadedTree, documentRef: dom.window.document, previousIds: [] });
+
+    const records = getProjectSceneState('__eve_dashboard_workspace__').records;
+    assert.equal(records.some((record) => record.id.endsWith('_contact_loading_text')), false);
+    assert.equal(records.some((record) => record.id.endsWith('_contact_list_text')), true);
 });

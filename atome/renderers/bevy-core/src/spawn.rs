@@ -13,8 +13,9 @@ use crate::{
     selection_overlay::rebuild_selection_overlay,
     shape_shadow_overlay::rebuild_shape_shadow_overlay,
     texture::{
-        cached_image_handle_from_rounded_rect_mask, image_handle_from_rounded_rect_mask,
-        image_handle_from_texture,
+        cached_image_handle_from_rounded_rect_mask, corner_radii_are_zero,
+        image_handle_from_rounded_rect_mask, image_handle_from_texture, uniform_corner_radii,
+        AtomeCornerRadii,
     },
     types::*,
     video_external_texture::{
@@ -104,6 +105,14 @@ fn node_base_components(
     )
 }
 
+/// A node may carry per-corner radii instead of the uniform scalar. A partially
+/// rounded shape has `corner_radius == 0.0`, so the mask must be selected on the
+/// resolved radii rather than on the scalar alone.
+pub(crate) fn effective_corner_radii(node: &AtomeRenderNode) -> AtomeCornerRadii {
+    node.corner_radii
+        .unwrap_or_else(|| uniform_corner_radii(node.corner_radius))
+}
+
 pub(crate) fn texture_handle_for_node(
     images: &mut Assets<Image>,
     node: &AtomeRenderNode,
@@ -118,12 +127,13 @@ pub(crate) fn texture_handle_for_node(
             &node.id,
         )?));
     }
-    if node.kind == "shape" && node.corner_radius > 0.0 {
+    let radii = effective_corner_radii(node);
+    if node.kind == "shape" && !corner_radii_are_zero(radii) {
         return Ok(Some(image_handle_from_rounded_rect_mask(
             images,
             node.logical_size[0],
             node.logical_size[1],
-            node.corner_radius,
+            radii,
             &node.id,
         )?));
     }
@@ -134,12 +144,13 @@ pub(crate) fn texture_handle_for_node_in_world(
     world: &mut World,
     node: &AtomeRenderNode,
 ) -> Result<Option<Handle<Image>>, String> {
-    if node.kind == "shape" && node.texture.is_none() && node.corner_radius > 0.0 {
+    let radii = effective_corner_radii(node);
+    if node.kind == "shape" && node.texture.is_none() && !corner_radii_are_zero(radii) {
         return Ok(Some(cached_image_handle_from_rounded_rect_mask(
             world,
             node.logical_size[0],
             node.logical_size[1],
-            node.corner_radius,
+            radii,
             &node.id,
         )?));
     }
@@ -326,7 +337,7 @@ pub fn spawn_node_with_texture_handle(
     world.entity_mut(entity).insert((
         AtomeVisualColor(visual_color),
         AtomeVisualOpacity(normalize_opacity(node.opacity)),
-        AtomeCornerRadius(node.corner_radius.max(0.0)),
+        AtomeCornerRadius(effective_corner_radii(&node)),
         AtomeClipRect(node.clip_rect),
     ));
     if let Some(source_rect) = world.get::<Sprite>(entity).map(|sprite| sprite.rect) {

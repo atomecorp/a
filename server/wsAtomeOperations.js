@@ -4,7 +4,7 @@ import {
     commitAtomeEvent,
     commitAtomeEvents
 } from './atomeRoutes.orm.js';
-import { resolveWsApiPrincipal } from './wsApiIdentity.js';
+import { isWsApiPrincipalProvisioned, resolveWsApiPrincipal } from './wsApiIdentity.js';
 
 const MUTATING_ACTIONS = new Set([
     'events:commit',
@@ -64,7 +64,8 @@ function rememberMutation(connection, message, result) {
 async function requirePrincipal(connection, message, type) {
     try {
         const userId = resolveWsApiPrincipal(connection, message);
-        if (userId) return { userId };
+        if (userId && await isWsApiPrincipalProvisioned(userId)) return { userId };
+        if (userId) return { error: errorResponse(type, message, 'remote_account_not_provisioned') };
         return { error: errorResponse(type, message, 'Authentication required') };
     } catch (error) {
         return { error: errorResponse(type, message, error) };

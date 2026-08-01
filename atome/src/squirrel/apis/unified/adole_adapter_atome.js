@@ -160,7 +160,9 @@ export const buildAtomeApi = ({ getWs, tokenKey }) => ({
                     token,
                     from_owner_id: data.from_owner_id || data.fromOwnerId || data.fromOwner || null,
                     to_owner_id: data.to_owner_id || data.toOwnerId || data.toOwner || null,
-                    include_creator: data.includeCreator !== false
+                    include_creator: data.includeCreator !== false,
+                    operation_id: data.operation_id || data.operationId || null,
+                    adoption_confirmed: data.adoption_confirmed === true || data.adoptionConfirmed === true
                 });
             },
 

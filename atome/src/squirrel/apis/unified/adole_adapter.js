@@ -109,6 +109,35 @@ function createWebSocketAdapter(tokenKey, backend = 'tauri') {
                 }
                 return result;
             },
+            async provisionAccount(data = {}) {
+                const result = await getWs().send({
+                    type: 'auth',
+                    action: 'account-provision',
+                    intent: 'account_provision',
+                    operation_id: data.operationId || data.operation_id || null,
+                    expires_at: data.expiresAt || data.expires_at || null,
+                    verified_server_fingerprint: data.verifiedServerFingerprint || data.verified_server_fingerprint || null,
+                    username: data.username || null,
+                    phone: data.phone || null,
+                    password: data.password || null
+                });
+                const token = result?.token || result?.data?.token || null;
+                if (token) setToken(tokenKey, token);
+                return result;
+            },
+            async startGuest(data = {}) {
+                const result = await getWs().send({
+                    type: 'auth',
+                    action: 'start-guest',
+                    guest_id: data.guestId || data.guest_id || null
+                });
+                const token = result?.token || result?.data?.token || null;
+                if (token) setToken(tokenKey, token);
+                return result;
+            },
+            async leaveGuest() {
+                return getWs().send({ type: 'auth', action: 'leave-guest' });
+            },
             async logout() {
                 clearToken(tokenKey);
                 await getWs().send({ type: 'auth', action: 'logout' });

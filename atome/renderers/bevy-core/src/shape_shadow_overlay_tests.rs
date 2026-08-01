@@ -19,6 +19,7 @@ fn shape_node(id: &str) -> AtomeRenderNode {
         layer: 3,
         opacity: 1.0,
         corner_radius: 0.0,
+        corner_radii: None,
         shadow: None,
         backdrop: None,
         presentation: false,
@@ -52,7 +53,7 @@ fn backdrop_shadow_keeps_the_outer_halo_but_never_fills_the_tool_interior() {
         [0.0, 0.0, 0.0, 1.0],
         60.0,
         60.0,
-        12.0,
+        [12.0; 4],
         12.0,
     )
     .unwrap();
@@ -269,7 +270,7 @@ fn equivalent_shape_shadows_share_one_texture_asset() {
 #[test]
 fn rounded_drop_shadow_keeps_the_owner_interior_transparent() {
     let (width, height, rgba) =
-        build_shape_shadow_texture_rgba(shadow_style(), 120.0, 50.0, 10.0).unwrap();
+        build_shape_shadow_texture_rgba(shadow_style(), 120.0, 50.0, [10.0; 4]).unwrap();
 
     assert_eq!(width, 144);
     assert_eq!(height, 74);
@@ -299,7 +300,7 @@ fn rounded_shape_shadow_overlay_uses_card_radius() {
     )
     .unwrap();
 
-    assert_eq!(world.get::<AtomeCornerRadius>(entity).unwrap().0, 10.0);
+    assert_eq!(world.get::<AtomeCornerRadius>(entity).unwrap().0, [10.0; 4]);
     let sprite = world.get::<Sprite>(entity).unwrap();
     assert_vec2_near(sprite.custom_size, Vec2::new(120.0, 50.0));
     let overlay = world
@@ -363,9 +364,9 @@ fn initial_scene_rounded_shape_uses_mask_before_shadow_overlay() {
 #[test]
 fn shape_shadow_keeps_rectangular_corners_without_radius() {
     let (rounded_width, _rounded_height, rounded_rgba) =
-        build_shape_shadow_texture_rgba(shadow_style(), 120.0, 50.0, 10.0).unwrap();
+        build_shape_shadow_texture_rgba(shadow_style(), 120.0, 50.0, [10.0; 4]).unwrap();
     let (rect_width, _rect_height, rect_rgba) =
-        build_shape_shadow_texture_rgba(shadow_style(), 120.0, 50.0, 0.0).unwrap();
+        build_shape_shadow_texture_rgba(shadow_style(), 120.0, 50.0, [0.0; 4]).unwrap();
 
     assert!(alpha_at(&rounded_rgba, rounded_width, 14, 14) > alpha_at(&rect_rgba, rect_width, 14, 14));
 }

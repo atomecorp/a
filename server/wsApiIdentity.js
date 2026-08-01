@@ -1,4 +1,5 @@
 import jwt from 'jsonwebtoken';
+import db from '../database/adole.js';
 import {
     attachWsApiClientToUser,
     detachWsApiClient
@@ -40,4 +41,10 @@ export function resolveWsApiPrincipal(connection, message = {}, options = {}) {
     }
     connection._wsApiAuthExpMs = typeof decoded.exp === 'number' ? decoded.exp * 1000 : null;
     return userId;
+}
+
+export async function isWsApiPrincipalProvisioned(principalId) {
+    if (!principalId) return false;
+    const record = await db.getAtomeById(String(principalId));
+    return Boolean(record && record.atome_type === 'user' && !record.deleted_at);
 }

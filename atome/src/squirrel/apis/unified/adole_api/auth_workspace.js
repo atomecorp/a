@@ -1,157 +1,71 @@
 // Extracted from auth.js: anonymous→account workspace migration + previous-session workspace recovery.
 import { adapters, getPrimaryBackend } from './auth_core.js';
-import { isTauriRuntime } from './runtime.js';
 import { syncLocalProjectsToFastify } from './atomes.js';
-import {
-    clearCurrentProjectCache,
-    setCurrentProjectCache
-} from './session.js';
+import { clearGuestWorkspace, guestAdoptionPayload, listGuestFiles } from './guest_workspace_store.js';
 
-const migrateAnonymousWorkspace = async (fromUserId, toUserId) => {
+const bytesToBase64 = (bytes) => {
+    let value = '';
+    const view = new Uint8Array(bytes);
+    for (let offset = 0; offset < view.length; offset += 0x8000) value += String.fromCharCode(...view.subarray(offset, offset + 0x8000));
+    return globalThis.btoa(value);
+};
+
+const adoptBrowserGuestWorkspace = async (adapter, fromUserId, toUserId, operationId = null) => {
+    const resolvedOperationId = operationId || globalThis.crypto?.randomUUID?.();
+    if (!resolvedOperationId) return { ok: false, reason: 'secure_random_unavailable' };
+    const payload = await guestAdoptionPayload(fromUserId);
+    const json = JSON.stringify(payload);
+    const bytes = new TextEncoder().encode(json);
+    const digest = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', bytes))).map((value) => value.toString(16).padStart(2, '0')).join('');
+    const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
+    const prepare = await adapter.ws.send({ type: 'guest-adoption', action: 'prepare', operation_id: resolvedOperationId, guest_principal_id: fromUserId, manifest_digest: digest, expires_at: expiresAt, confirmed: true });
+    if (!prepare?.ok && !prepare?.success) return { ok: false, reason: prepare?.error || 'guest_adoption_prepare_failed' };
+    const imported = await adapter.ws.send({ type: 'guest-adoption', action: 'import', operation_id: resolvedOperationId, payload, payload_digest: digest });
+    if (!imported?.ok && !imported?.success) return { ok: false, reason: imported?.error || 'guest_adoption_import_failed' };
+    const files = await listGuestFiles(fromUserId);
+    for (const file of files) {
+        const contentBase64 = bytesToBase64(await file.blob.arrayBuffer());
+        const staged = await adapter.ws.send({ type: 'guest-adoption', action: 'stage-file', operation_id: resolvedOperationId, file_id: file.file_id, content_base64: contentBase64 });
+        if (!staged?.ok && !staged?.success) return { ok: false, reason: staged?.error || 'guest_adoption_file_stage_failed' };
+    }
+    const finalized = await adapter.ws.send({ type: 'guest-adoption', action: 'finalize', operation_id: resolvedOperationId });
+    if (!finalized?.ok && !finalized?.success) return { ok: false, reason: finalized?.error || 'guest_adoption_finalize_failed' };
+    await clearGuestWorkspace(fromUserId);
+    return { ok: true, adopted: payload.atomes.length, operationId: resolvedOperationId };
+};
+const transferGuestWorkspace = async (fromUserId, toUserId, { operationId = null } = {}) => {
     if (!fromUserId || !toUserId || String(fromUserId) === String(toUserId)) {
         return { ok: false, reason: 'invalid_ids' };
     }
     const backend = getPrimaryBackend();
+    if (backend === 'fastify') {
+        if (!operationId) return { ok: false, reason: 'guest_adoption_operation_required' };
+        const adapter = adapters.fastify;
+        if (!adapter?.atome?.commit) return { ok: false, reason: 'transfer_unavailable' };
+        return adoptBrowserGuestWorkspace(adapter, fromUserId, toUserId, operationId);
+    }
     const adapter = adapters[backend];
     if (!adapter?.atome?.transferOwner) {
         return { ok: false, reason: 'transfer_unavailable' };
     }
+    if (!operationId) return { ok: false, reason: 'guest_adoption_operation_required' };
     try {
         const res = await adapter.atome.transferOwner({
             fromOwnerId: fromUserId,
             toOwnerId: toUserId,
-            includeCreator: true
+            includeCreator: true,
+            operation_id: operationId,
+            adoption_confirmed: true
         });
         const ok = !!(res?.ok || res?.success);
+        let sync = null;
         if (ok) {
-            
-                syncLocalProjectsToFastify({ reason: 'anonymous-migration' }).catch(() => { });
-            
+            sync = await syncLocalProjectsToFastify({ reason: 'guest-adoption' });
         }
-        return { ok, raw: res };
+        return { ok, raw: res, sync };
     } catch (e) {
         return { ok: false, reason: 'transfer_failed', error: e?.message || String(e) };
     }
 };
 
-const RECOVERABLE_RENDER_TYPES = ['image', 'video', 'shape', 'sound', 'text', 'audio_recording'];
-
-const pickAtomeArray = (result) => {
-    if (Array.isArray(result?.atomes)) return result.atomes;
-    if (Array.isArray(result?.data?.atomes)) return result.data.atomes;
-    return [];
-};
-
-const resolveAtomeOwnerId = (record) => {
-    if (!record || typeof record !== 'object') return null;
-    const props = record.data || record.properties || record.particles || {};
-    const ownerId = record.owner_id || record.ownerId || props.owner_id || props.ownerId || null;
-    return ownerId ? String(ownerId) : null;
-};
-
-const resolveAtomeProjectId = (record) => {
-    if (!record || typeof record !== 'object') return null;
-    const props = record.data || record.properties || record.particles || {};
-    const projectId = record.project_id || record.projectId || props.project_id || props.projectId || record.parent_id || record.parentId || null;
-    return projectId ? String(projectId) : null;
-};
-
-const listLocalRenderableAtomes = async (adapter, ownerId) => {
-    const records = [];
-    for (const type of RECOVERABLE_RENDER_TYPES) {
-        const result = await adapter.atome.list({
-            type,
-            owner_id: ownerId,
-            limit: 1000
-        });
-        pickAtomeArray(result).forEach((record) => records.push(record));
-    }
-    return records;
-};
-
-const recoverSingleLocalWorkspaceCandidate = async (toUserId) => {
-    if (!toUserId || !isTauriRuntime()) {
-        return { ok: false, reason: 'not_tauri' };
-    }
-    const adapter = adapters[getPrimaryBackend()];
-    if (!adapter?.atome?.list || !adapter?.atome?.transferOwner) {
-        return { ok: false, reason: 'adapter_unavailable' };
-    }
-    const currentRecords = await listLocalRenderableAtomes(adapter, toUserId);
-    if (currentRecords.length > 0) {
-        return { ok: false, reason: 'current_workspace_has_renderables' };
-    }
-
-    const byOwner = new Map();
-    for (const type of RECOVERABLE_RENDER_TYPES) {
-        const result = await adapter.atome.list({
-            type,
-            owner_id: '*',
-            limit: 2000
-        });
-        pickAtomeArray(result).forEach((record) => {
-            const ownerId = resolveAtomeOwnerId(record);
-            if (!ownerId || String(ownerId) === String(toUserId)) return;
-            if (!byOwner.has(ownerId)) byOwner.set(ownerId, []);
-            byOwner.get(ownerId).push(record);
-        });
-    }
-
-    if (byOwner.size !== 1) {
-        return { ok: false, reason: 'ambiguous_or_missing_source' };
-    }
-    const [fromOwnerId, records] = Array.from(byOwner.entries())[0];
-    const migration = await migrateAnonymousWorkspace(fromOwnerId, toUserId);
-    if (!migration.ok) return migration;
-
-    const returnedProjectId = migration.raw?.data?.project_id
-        || migration.raw?.data?.projectId
-        || migration.raw?.project_id
-        || migration.raw?.projectId
-        || null;
-    const projectId = returnedProjectId || records.map(resolveAtomeProjectId).find(Boolean);
-    if (projectId) {
-        setCurrentProjectCache({
-            id: projectId,
-            name: null,
-            userId: toUserId,
-            updatedAt: Date.now()
-        });
-    }
-    return { ok: true, sourceId: fromOwnerId, projectId: projectId || null };
-};
-
-const resolveWorkspaceMigrationSourceId = (prevSession, prevProjectCache, nextUserId) => {
-    const explicitAnonymousId = prevSession?.mode === 'anonymous' ? prevSession.user?.id : null;
-    if (explicitAnonymousId && String(explicitAnonymousId) !== String(nextUserId)) {
-        return String(explicitAnonymousId);
-    }
-    const cachedUserId = prevProjectCache?.userId || null;
-    if (cachedUserId && String(cachedUserId) !== String(nextUserId)) {
-        return String(cachedUserId);
-    }
-    return null;
-};
-
-const migratePreviousWorkspace = async (prevSession, prevProjectCache, nextUserId) => {
-    const sourceId = resolveWorkspaceMigrationSourceId(prevSession, prevProjectCache, nextUserId);
-    if (!sourceId) {
-        const recovered = await recoverSingleLocalWorkspaceCandidate(nextUserId);
-        if (!recovered.ok) clearCurrentProjectCache();
-        return;
-    }
-    const migration = await migrateAnonymousWorkspace(sourceId, nextUserId);
-    if (migration.ok && prevProjectCache?.id) {
-        setCurrentProjectCache({
-            id: prevProjectCache.id,
-            name: prevProjectCache.name || null,
-            userId: nextUserId,
-            updatedAt: Date.now()
-        });
-        return;
-    }
-    clearCurrentProjectCache();
-};
-
-
-export { migrateAnonymousWorkspace, migratePreviousWorkspace };
+export { transferGuestWorkspace };

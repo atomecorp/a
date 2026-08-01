@@ -11,6 +11,8 @@ Current mobile performance API contract (2026-07-17; supersedes older preview/wa
 - The browser renderer surface DPR is capped at 1.5; preview DPR is capped at 1. Hidden decode video sources suspend on Dashboard workspace mode and resume only remembered requested playback. Reactive Winit redraw is strictly event-driven through explicit wake messages and has no idle cadence.
 - iOS `FileSyncCoordinator.syncAll(force:)` remains the internal explicit propagation boundary. `FileSystemBridgeDeletion.swift` delegates to `FileSystemDeletionTransaction.swift`, which requires coordinator access, successful `removeItem`, and confirmed absence before it may report success, create a tombstone, or request one sync; partial multi-delete marks only confirmed removals. The periodic `startAutoSync`/`stopAutoSync` surface is removed; ordinary local HTTP GET delivery cannot invoke filesystem synchronization.
 
+Current account-provisioning contract (2026-07-30): Fastify owns the sole remote account creation/link action, `auth/account-provision`, on `/ws/api`. It requires `account_provision` intent, a bounded-expiry idempotency operation id, Fastify credentials, and the configured server-identity fingerprint; it never accepts a local principal as remote authentication. `AdoleAPI.auth.provisionAccount` is the open adapter entry. `startGuest` and `leaveGuest` are local-runtime entries: a guest UUID v4 is local only and has no Fastify token. Confirmed `adoptGuestWorkspace` uses the `guest-adoption` WebSocket family (`prepare`, `import`, `stage-file`, `finalize`) with one UUID v4 operation, manifest and payload digests. Fastify persists the journal through `prepared`, `importing`, `committed`, and `completed`; file staging is explicit and collision-safe.
+
 Purpose:
 
 - Identify verified API families, ownership, and stable entry points.
@@ -169,9 +171,9 @@ Exposure: existing semi-public closed `openPanelSurface(surfaceKey, context)` an
 
 The temporary development/test-only `ui.dev.panel_lab` tool is not a public or semi-public API. It is registered only when the internal Panel Lab gate is enabled, delegates to the same closed panel route, and must be removed after the shared component migration is complete. Its short activation toggles the Lab through that route; its 520 ms long press is a development-only `window.location.reload()` action and suppresses the matching toggle activation. Native iOS Debug configurations set the existing `window.__EVE_PANEL_LAB__` gate through the shared `WKUserScript` document-start bootstrap; native iOS Release configurations do not set it.
 
-Panel Lab introduces one new component specimen per approval loop, except for a
-declared bounded batch of independent passive components, and retains all
-approved specimens in chronological body flow; its approved shared
+Panel Lab supports compact representative matrices for the active migration
+packages and retains approved reusable specimens in chronological body flow;
+its approved shared
 specimens are static body text, a passive horizontal divider, the validated
 icon action-button component, the validated passive list row, and the validated
 accordion. The accordion is Lab-only: it emits a closed ephemeral intent, holds no
@@ -194,7 +196,7 @@ normalization plus fluid column-width resolution, `bevy_panel_table.js` composes
 the passive native `table` root, and `bevy_panel_runtime.js` hands
 `buildContent` the `bodyWidth` it already owns. The specimen declares no intent,
 no Lab runtime, no handler, and no state at all; sorting and row selection stay
-with a future consuming product panel. The proposed
+with a future consuming product panel. The validated
 segmented-control specimen uses the closed `normalizeSegmentedControlPresentation`
 contract for at least two unique options and a required selected value.
 `bevy_panel_segmented_control.js` composes the supported native
@@ -208,7 +210,15 @@ an enabled selected option, `bevy_panel_selectable_list.js` composes interactive
 native button rows because `row` has no interactive kind, and the Lab runtime
 emits only `panel_lab.selectable_list.*` intents. It exposes no public API, DOM
 control, MCP command, or durable mutation; a future product surface owns the
-selection. `normalizePanelStatePresentation` is the closed renderer-neutral
+selection. `normalizeMultilineInputPresentation` is the closed renderer-neutral
+newline-preserving draft contract; `bevy_panel_multiline_input.js` reuses the
+shared editable text tree and the WebGPU layout's opt-in wrapping, while its Lab
+runtime retains only close-reset ephemeral draft/caret/scroll state. The closed
+`normalizeScopeChipPresentation` contract accepts caller-owned multi-selection;
+`bevy_panel_scope_chips.js` composes native buttons with Select-derived paint and
+its Lab runtime emits only `panel_lab.scope_chip.*` intents. Neither adds a
+public API, DOM control, MCP command, durable mutation, or business-state owner.
+`normalizePanelStatePresentation` is the closed renderer-neutral
 Squirrel API for passive `empty`, `loading`, `error`, and `permission_denied`
 presentation. It requires localized title/message text; `bevy_panel_state.js`
 projects the supported non-interactive native `empty_state` kind. The static
@@ -414,7 +424,7 @@ Known constraints: `atome/src/squirrel/apis/unified/adole.js` is a large legacy 
 
 Authentication bootstrap: `AdoleAPI.auth.bootstrap(phone, password, username, visibility)` is the atomic first-auth contract. Existing-phone attempts must verify the password and return a real authenticated token/session; unknown-phone attempts may create the account. The unified result exposes legacy per-backend fields plus top-level `ok`, `user`, `token`, and `backend` after a successful authenticated login or creation. UI code must not emulate this by calling `auth.login` followed by `auth.create`, and must not add its own post-bootstrap session gate beyond the canonical bootstrap success result and auth/session events owned by Atome auth state. The eVe login submit payload may carry internal `onAuthenticating` and `onAuthenticated` visual callbacks; `user_auth_flow_runtime.js` is the only owner allowed to call them. `onAuthenticating` runs immediately after local password-form validation and before `bootstrap`, with neutral wait text only; `onAuthenticated` runs only after `bootstrap` succeeds and before profile/project/dashboard/menu work begins, and it must not be awaited before the workspace flow starts.
 
-Anonymous workspace entry: `AdoleAPI.security.ensureAnonymousUser({ force: true })` currently uses the atomic backend bootstrap path before opening the neutral Dashboard workspace. The target guest contract is an isolated opaque local/private guest principal that does not create a shared Fastify account or reusable password verifier. Dashboard boot, main-handle toggle, and Flower access must remain available within the measured workspace-open budget. Account credentials use the separate Argon2id contract in `todo/cleanup_architecture/argon2id_password_hash_migration.md`; guest responsiveness must not be obtained by weakening authenticated-account password hashing.
+Guest workspace entry: `AdoleAPI.security.startGuest({ force: true })` creates or resumes the persistent opaque local guest principal for this installation. It does not bootstrap a Fastify account, credential, or reusable password verifier. Dashboard boot, main-handle toggle, and Flower access remain local until an authenticated account explicitly confirms adoption. Account credentials use the separate Argon2id contract in `todo/cleanup_architecture/argon2id_password_hash_migration.md`.
 
 Pre-auth account lookup: `AdoleAPI.auth.lookupPhone(phone)` is the browser-facing account-presence contract used before OTP. It normalizes the phone and calls only the active auth backend adapter resolved by `getPrimaryBackend()`; it must not force Fastify in Tauri mode and must not fall back to a secondary backend. A successful response with a user means the login UI skips OTP and asks for the password. An explicit `User not found` response means the login UI may request OTP for new-account setup. Any other response is a hard failure and must not request OTP.
 
@@ -445,7 +455,9 @@ Verified route families:
 
 Boundary status: Open server infrastructure. Route names containing `eve` currently exist for product mail integration and must be reviewed before being treated as stable open API names.
 
-Pre-auth OTP WebSocket actions: `/ws/api` auth messages `request-phone-verification` and `verify-phone-verification` own the login pre-auth OTP request/check flow. They reuse `generateOTP`, `storeOTP`, `verifyOTP`, `sendSMS`, and `enforceAuthIdentityRateLimit` from `server/auth.js`; no `/api/auth/request-phone-verification` or `/api/auth/verify-phone-verification` REST route is part of this contract. The local-only `SQUIRREL_AUTH_OTP_BYPASS=1` route is still request-validated and rate-limited before it returns `otpBypassed: true`, and it must never be active in production.
+Principal identity contract: `/ws/api` authentication returns only opaque `user.id` / `user.user_id` principals. `principal_phone_credentials` is the private, active-phone registry; `principal_identity_aliases` resolves legacy principals solely for immutable history; `principal_identity_migrations` is the resumable migration journal. Phone values are neither Atome particles nor public projections or JWT claims.
+
+Phone verification WebSocket actions: `/ws/api` auth messages `request-phone-verification`, `verify-phone-verification`, `change-phone`, and `remove-phone` own phone credential enrollment, change, and removal. Verification requires the explicit `enrollment`, `change`, or `removal` purpose; change/removal require the already attached authenticated principal, revoke affected refresh sessions, and never synthesize a user from a phone lookup. They reuse `generateOTP`, `storeOTP`, `verifyOTP`, `sendSMS`, and `enforceAuthIdentityRateLimit` from `server/auth.js`; no `/api/auth/request-phone-verification` or `/api/auth/verify-phone-verification` REST route is part of this contract. The local-only `SQUIRREL_AUTH_OTP_BYPASS=1` route is still request-validated and rate-limited before it returns `otpBypassed: true`, and it must never be active in production.
 
 SMS infrastructure boundary: eVe/Atome clients continue to use only typed `/ws/api`
 authentication actions. The server-owned SMS adapter is the sole permitted boundary to
@@ -1794,3 +1806,21 @@ The next execution tasks must refine this map by:
 - Main-menu palette controls are absent while closed. A real opening atomically projects every opaque child, icon, label, accent, and displaced tool at the expansion origin through the internal direct-prefix route, then uses direct motion for the complete 180 ms expansion, bounded 6–14 px / 70 ms outward overshoot, and exact 120 ms settlement. Prefix and motion share one direct-mutation queue; the rAF producer allows one renderer submission in flight and retains only the latest pending sample. No hidden resident subtree, browser API, persisted Atome state, RGBA re-hash, or full Dashboard/toolbox rebuild is created by the motion path.
 - Dashboard post-open hydration failure is observable through runtime diagnostics and cannot self-schedule an unbounded retry loop.
 - Dashboard header wheel/drag input is vertical-only. Lane horizontal offsets cannot change from an event targeted at the header column.
+# Contact panel migration update — 2026-07-31
+
+- Contact panel effects reuse the Contacts API for local create/delete and
+  macOS import, and the existing profile API for current-user eVe profile
+  persistence. The panel never writes a third Contact store: local records use
+  `createLocalContact`, `updateLocalContact`, and `deleteLocalContact`; only
+  the current profile may use `upsertUserProfile`.
+  `contacts.import_icloud` and `contacts.push_icloud` remain headless MCP/API
+  operations; no Contact panel UI invokes them.
+- The rendering correction changes no Contacts or profile API: it only makes
+  the existing Contact tree width-responsive and reconciles obsolete WebGPU
+  projection records before the current tree is presented.
+- `resolveCurrentUserSnapshot` remains the sole current-profile reader for
+  Contact. Known identities are deduplicated by stable id before optional
+  contact fields, so matching phone/email values do not authorize a cross-user
+  merge or a profile write. Removing the visible Refresh control removes no
+  API or MCP operation; open, save, and successful import still reload via the
+  existing canonical readers.

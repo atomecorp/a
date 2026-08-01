@@ -14,7 +14,7 @@ use serde_json::{json, Map as JsonMap, Value as JsonValue};
 use sha2::{Digest, Sha256};
 use std::{
     collections::{HashMap, HashSet, VecDeque},
-    path::PathBuf,
+    path::{Path, PathBuf},
     sync::{Arc, Mutex},
 };
 use tokio::time::{sleep, timeout, Duration};
@@ -37,11 +37,15 @@ macro_rules! eprintln {
     };
 }
 
-const ANONYMOUS_USERNAME: &str = "anonymous";
-const ANONYMOUS_PHONE_TAURI: &str = "0000000000";
 const ADOLE_SCHEMA_SQL: &str = include_str!("../../../../database/schema.sql");
 const ADOLE_SCHEMA_TABLES: &str =
     "atomes, particles, particles_versions, snapshots, events, state_current, permissions, sync_queue, sync_state";
+
+fn is_uuid_v4(value: &str) -> bool {
+    Uuid::parse_str(value)
+        .map(|uuid| uuid.get_version_num() == 4)
+        .unwrap_or(false)
+}
 
 pub fn schema_hash() -> String {
     let mut hasher = Sha256::new();
@@ -114,8 +118,41 @@ pub fn filter_sync_event_for_user(
 #[derive(Clone)]
 pub struct LocalAtomeState {
     pub db: Arc<Mutex<Connection>>,
+    storage_root: PathBuf,
     pub recent_request_ids: Arc<Mutex<DedupeCache>>,
     pub recent_fingerprints: Arc<Mutex<FingerprintCache>>,
+}
+
+fn move_guest_downloads(storage_root: &Path, from_owner_id: &str, to_owner_id: &str) -> Result<(), String> {
+    let source_root = storage_root.join("data").join("users").join(from_owner_id).join("Downloads");
+    let target_root = storage_root.join("data").join("users").join(to_owner_id).join("Downloads");
+    let mut pending = vec![(source_root.clone(), target_root.clone())];
+    while let Some((source_dir, target_dir)) = pending.pop() {
+        let entries = match std::fs::read_dir(&source_dir) {
+            Ok(entries) => entries,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
+            Err(error) => return Err(error.to_string()),
+        };
+        std::fs::create_dir_all(&target_dir).map_err(|error| error.to_string())?;
+        for entry in entries {
+            let entry = entry.map_err(|error| error.to_string())?;
+            let source_path = entry.path();
+            let target_path = target_dir.join(entry.file_name());
+            let kind = entry.file_type().map_err(|error| error.to_string())?;
+            if kind.is_dir() {
+                pending.push((source_path, target_path));
+                continue;
+            }
+            if !kind.is_file() { return Err("guest_adoption_file_invalid".to_string()); }
+            match std::fs::metadata(&target_path) {
+                Ok(_) => return Err("guest_adoption_file_collision".to_string()),
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+                Err(error) => return Err(error.to_string()),
+            }
+            std::fs::rename(&source_path, &target_path).map_err(|error| error.to_string())?;
+        }
+    }
+    Ok(())
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -254,42 +291,26 @@ fn sync_debug(message: &str) {
     }
 }
 
-fn is_anonymous_user(db: &Connection, user_id: &str) -> bool {
-    let phone_json = format!("\"{}\"", ANONYMOUS_PHONE_TAURI);
-    let username_json = format!("\"{}\"", ANONYMOUS_USERNAME);
-    let explicit_anonymous = db
-        .query_row(
-        "SELECT 1 FROM particles WHERE atome_id = ?1 AND particle_key = 'phone' AND particle_value = ?2 LIMIT 1",
-        rusqlite::params![user_id, phone_json],
+#[cfg(test)]
+fn is_guest_workspace_principal(db: &Connection, user_id: &str) -> bool {
+    db.query_row(
+        "SELECT 1 FROM guest_workspace_principals WHERE guest_principal_id = ?1 AND status = 'active' LIMIT 1",
+        rusqlite::params![user_id],
         |_| Ok(()),
     )
     .is_ok()
-        || db
-            .query_row(
-                "SELECT 1 FROM particles WHERE atome_id = ?1 AND particle_key = 'username' AND particle_value = ?2 LIMIT 1",
-                rusqlite::params![user_id, username_json],
-                |_| Ok(()),
-            )
-            .is_ok();
-    if explicit_anonymous {
-        return true;
-    }
+}
 
-    let has_login_phone = db
-        .query_row(
-            "SELECT 1 FROM particles WHERE atome_id = ?1 AND particle_key = 'phone' LIMIT 1",
-            rusqlite::params![user_id],
-            |_| Ok(()),
-        )
-        .is_ok();
-    let has_password_hash = db
-        .query_row(
-            "SELECT 1 FROM particles WHERE atome_id = ?1 AND particle_key = 'password_hash' LIMIT 1",
-            rusqlite::params![user_id],
-            |_| Ok(()),
-        )
-        .is_ok();
-    !has_login_phone && !has_password_hash
+fn is_guest_workspace_or_adopted_principal(db: &Connection, user_id: &str) -> bool {
+    db.query_row(
+        "SELECT 1 FROM guest_workspace_principals WHERE guest_principal_id = ?1 AND status IN ('active', 'adopted') LIMIT 1",
+        rusqlite::params![user_id],
+        |_| Ok(()),
+    )
+    .optional()
+    .ok()
+    .flatten()
+    .is_some()
 }
 
 fn should_dedupe_request_id(state: &LocalAtomeState, request_id: &Option<String>) -> bool {
@@ -511,6 +532,16 @@ async fn handle_transfer_owner(
         .get("includeCreator")
         .and_then(|v| v.as_bool())
         .unwrap_or(true);
+    let adoption_confirmed = message
+        .get("adoption_confirmed")
+        .or_else(|| message.get("adoptionConfirmed"))
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+    let adoption_operation = message
+        .get("operation_id")
+        .or_else(|| message.get("operationId"))
+        .and_then(|v| v.as_str())
+        .filter(|value| !value.trim().is_empty());
 
     let from_owner_id = match from_owner_id {
         Some(id) if !id.is_empty() => id,
@@ -533,8 +564,42 @@ async fn handle_transfer_owner(
         Err(e) => return error_response(request_id, &e.to_string()),
     };
 
-    if from_owner_id != user_id && !is_anonymous_user(&db, from_owner_id) {
-        return error_response(request_id, "Access denied - source owner must be anonymous");
+    let source_is_guest = is_guest_workspace_or_adopted_principal(&db, from_owner_id);
+    let guest_workspace = from_owner_id != user_id && source_is_guest;
+    if from_owner_id != user_id && !guest_workspace {
+        return error_response(request_id, "Access denied - source owner must be an active guest workspace");
+    }
+    if guest_workspace && !adoption_confirmed {
+        return error_response(request_id, "guest_adoption_confirmation_required");
+    }
+    if guest_workspace && !adoption_operation.is_some_and(is_uuid_v4) {
+        return error_response(request_id, "guest_adoption_operation_required");
+    }
+    if guest_workspace {
+        let existing = db.query_row(
+            "SELECT status, adopted_principal_id FROM guest_workspace_principals
+             WHERE guest_principal_id = ?1 AND adoption_operation_digest = ?2",
+            rusqlite::params![from_owner_id, adoption_operation],
+            |row| Ok((row.get::<_, String>(0)?, row.get::<_, Option<String>>(1)?)),
+        ).optional();
+        match existing {
+            Ok(Some((status, adopted_principal_id))) if status == "adopted" => {
+                if adopted_principal_id.as_deref() != Some(to_owner_id) {
+                    return error_response(request_id, "guest_adoption_operation_conflict");
+                }
+                let storage_root = state.storage_root.clone();
+                drop(db);
+                if let Err(error) = move_guest_downloads(&storage_root, from_owner_id, to_owner_id) {
+                    return error_response(request_id, &error);
+                }
+                return WsResponse {
+                    msg_type: "atome-response".into(), request_id, success: true, error: None,
+                    data: Some(json!({ "updated": 0, "replayed": true, "adopted": true })), atomes: None, count: Some(0),
+                };
+            }
+            Ok(_) => {}
+            Err(error) => return error_response(request_id, &error.to_string()),
+        }
     }
 
     let pending_owner =
@@ -546,7 +611,7 @@ async fn handle_transfer_owner(
          LEFT JOIN particles p
            ON p.atome_id = a.atome_id
           AND p.particle_key = '_pending_owner_id'
-         WHERE a.atome_type != 'user'
+         WHERE a.atome_type NOT IN ('user', 'guest_workspace')
            AND (a.owner_id = ?1",
     );
     if include_creator {
@@ -567,6 +632,24 @@ async fn handle_transfer_owner(
     }
 
     if ids.is_empty() {
+        if guest_workspace {
+            if let Err(error) = with_transaction(&db, |tx| {
+                tx.execute(
+                    "UPDATE guest_workspace_principals SET status = 'adopted', adopted_principal_id = ?1,
+                     adoption_operation_digest = ?2, adopted_at = ?3
+                     WHERE guest_principal_id = ?4 AND status = 'active'",
+                    rusqlite::params![to_owner_id, adoption_operation, Utc::now().to_rfc3339(), from_owner_id],
+                ).map_err(|error| error.to_string())?;
+                Ok(())
+            }) {
+                return error_response(request_id, &error);
+            }
+            let storage_root = state.storage_root.clone();
+            drop(db);
+            if let Err(error) = move_guest_downloads(&storage_root, from_owner_id, to_owner_id) {
+                return error_response(request_id, &error);
+            }
+        }
         return WsResponse {
             msg_type: "atome-response".into(),
             request_id,
@@ -602,7 +685,9 @@ async fn handle_transfer_owner(
     };
 
     let result = with_transaction(&db, |tx| {
-        let mut params: Vec<Box<dyn rusqlite::ToSql>> = Vec::with_capacity(2 + ids.len());
+        let mut params: Vec<Box<dyn rusqlite::ToSql>> = Vec::with_capacity(4 + ids.len());
+        params.push(Box::new(to_owner_id.to_string()));
+        params.push(Box::new(if include_creator { 1 } else { 0 }));
         params.push(Box::new(to_owner_id.to_string()));
         params.push(Box::new(now.clone()));
         for id in &ids {
@@ -611,7 +696,8 @@ async fn handle_transfer_owner(
         let params_refs: Vec<&dyn rusqlite::ToSql> = params.iter().map(|p| p.as_ref()).collect();
         tx.execute(
             &format!(
-                "UPDATE atomes SET owner_id = ?, updated_at = ?, sync_status = 'pending' WHERE atome_id IN ({})",
+                "UPDATE atomes SET owner_id = ?, creator_id = CASE WHEN ? THEN ? ELSE creator_id END,
+                 updated_at = ?, sync_status = 'pending' WHERE atome_id IN ({})",
                 placeholders
             ),
             params_refs.as_slice(),
@@ -634,6 +720,19 @@ async fn handle_transfer_owner(
             params_state_refs.as_slice(),
         )
         .map_err(|e| e.to_string())?;
+
+        if guest_workspace {
+            tx.execute("UPDATE permissions SET principal_id = ?1 WHERE principal_id = ?2", rusqlite::params![to_owner_id, from_owner_id])
+                .map_err(|e| e.to_string())?;
+            tx.execute("UPDATE permissions SET granted_by = ?1 WHERE granted_by = ?2", rusqlite::params![to_owner_id, from_owner_id])
+                .map_err(|e| e.to_string())?;
+            tx.execute(
+                "UPDATE guest_workspace_principals SET status = 'adopted', adopted_principal_id = ?1,
+                 adoption_operation_digest = ?2, adopted_at = ?3
+                 WHERE guest_principal_id = ?4 AND status = 'active'",
+                rusqlite::params![to_owner_id, adoption_operation, now, from_owner_id],
+            ).map_err(|e| e.to_string())?;
+        }
 
         let mut params_particles: Vec<Box<dyn rusqlite::ToSql>> = Vec::with_capacity(ids.len());
         for id in &ids {
@@ -670,8 +769,17 @@ async fn handle_transfer_owner(
         Ok(())
     });
 
-    match result {
-        Ok(_) => WsResponse {
+    if let Err(err) = result {
+        return error_response(request_id, &err);
+    }
+    if guest_workspace {
+        let storage_root = state.storage_root.clone();
+        drop(db);
+        if let Err(error) = move_guest_downloads(&storage_root, from_owner_id, to_owner_id) {
+            return error_response(request_id, &error);
+        }
+    }
+    WsResponse {
             msg_type: "atome-response".into(),
             request_id,
             success: true,
@@ -679,8 +787,6 @@ async fn handle_transfer_owner(
             data: Some(json!({ "updated": ids.len(), "project_id": recovered_project_id })),
             atomes: None,
             count: Some(ids.len() as i64),
-        },
-        Err(err) => error_response(request_id, &err),
     }
 }
 
@@ -2610,7 +2716,12 @@ mod state_current_owner_tests {
         )
         .expect("insert local owner");
 
-        assert!(is_anonymous_user(&db, "local_owner_1"));
+        db.execute(
+            "INSERT INTO guest_workspace_principals (guest_principal_id, status) VALUES (?1, 'active')",
+            rusqlite::params!["local_owner_1"],
+        )
+        .unwrap();
+        assert!(is_guest_workspace_principal(&db, "local_owner_1"));
     }
 
     #[test]
@@ -2628,7 +2739,63 @@ mod state_current_owner_tests {
         )
         .expect("insert phone");
 
-        assert!(!is_anonymous_user(&db, "real_owner_1"));
+        assert!(!is_guest_workspace_principal(&db, "real_owner_1"));
+    }
+
+    #[test]
+    fn guest_adoption_operation_requires_uuid_v4() {
+        assert!(is_uuid_v4("550e8400-e29b-41d4-a716-446655440000"));
+        assert!(!is_uuid_v4("550e8400-e29b-11d4-a716-446655440000"));
+        assert!(!is_uuid_v4("not-a-uuid"));
+    }
+
+    #[tokio::test]
+    async fn guest_adoption_transfers_active_references_and_downloads_without_rewriting_history() {
+        let workspace = tempfile::tempdir().expect("temporary workspace");
+        let target_id = Uuid::new_v4().to_string();
+        let guest_id = Uuid::new_v4().to_string();
+        let operation_id = Uuid::new_v4().to_string();
+        let state = create_state(workspace.path().join("state"), workspace.path().to_path_buf());
+        {
+            let db = state.db.lock().expect("database lock");
+            let now = "2026-07-31T00:00:00Z";
+            db.execute("INSERT INTO atomes (atome_id, atome_type, owner_id, creator_id, created_at, updated_at) VALUES (?1, 'user', ?1, ?1, ?2, ?2)", rusqlite::params![target_id, now]).unwrap();
+            db.execute("INSERT INTO atomes (atome_id, atome_type, created_at, updated_at) VALUES (?1, 'guest_workspace', ?2, ?2)", rusqlite::params![guest_id, now]).unwrap();
+            db.execute("INSERT INTO guest_workspace_principals (guest_principal_id, status) VALUES (?1, 'active')", rusqlite::params![guest_id]).unwrap();
+            assert!(is_guest_workspace_principal(&db, &guest_id));
+            db.execute("INSERT INTO atomes (atome_id, atome_type, owner_id, creator_id, created_at, updated_at) VALUES (?1, 'project', ?2, ?2, ?3, ?3)", rusqlite::params!["guest_adoption_project", guest_id, now]).unwrap();
+            db.execute("INSERT INTO state_current (atome_id, owner_id, project_id, properties, updated_at, version) VALUES (?1, ?2, ?1, '{}', ?3, 1)", rusqlite::params!["guest_adoption_project", guest_id, now]).unwrap();
+            db.execute("INSERT INTO permissions (atome_id, principal_id, granted_by, granted_at) VALUES (?1, ?2, ?2, ?3)", rusqlite::params!["guest_adoption_project", guest_id, now]).unwrap();
+            db.execute("INSERT INTO events (id, ts, atome_id, kind, actor) VALUES ('guest_adoption_event', ?1, ?2, 'set', ?3)", rusqlite::params![now, "guest_adoption_project", json!({ "type": "guest", "id": guest_id }).to_string()]).unwrap();
+            db.execute("INSERT INTO snapshots (atome_id, snapshot_data, actor, created_by, created_at) VALUES (?1, '{}', ?2, ?3, ?4)", rusqlite::params!["guest_adoption_project", json!({ "type": "guest", "id": guest_id }).to_string(), guest_id, now]).unwrap();
+            db.execute("INSERT INTO sync_queue (atome_id, operation, payload, target_server, status, attempts, max_attempts, created_at) VALUES (?1, 'commit', '{}', 'fastify', 'pending', 0, 5, ?2)", rusqlite::params!["guest_adoption_project", now]).unwrap();
+        }
+        let source_dir = workspace.path().join("data").join("users").join(&guest_id).join("Downloads");
+        std::fs::create_dir_all(&source_dir).unwrap();
+        std::fs::write(source_dir.join("guest.txt"), "guest content").unwrap();
+        let request = json!({
+            "action": "transfer-owner", "from_owner_id": guest_id, "to_owner_id": target_id,
+            "adoption_confirmed": true, "operation_id": operation_id
+        });
+        let response = handle_transfer_owner(request.clone(), &target_id, &state, None).await;
+        assert!(response.success, "{:?}", response.error);
+        let replay = handle_transfer_owner(request, &target_id, &state, None).await;
+        assert!(replay.success, "{:?}", replay.error);
+        let target_file = workspace.path().join("data").join("users").join(&target_id).join("Downloads").join("guest.txt");
+        assert_eq!(std::fs::read_to_string(target_file).unwrap(), "guest content");
+        let db = state.db.lock().expect("database lock");
+        let owner: String = db.query_row("SELECT owner_id FROM atomes WHERE atome_id = 'guest_adoption_project'", [], |row| row.get(0)).unwrap();
+        let state_owner: String = db.query_row("SELECT owner_id FROM state_current WHERE atome_id = 'guest_adoption_project'", [], |row| row.get(0)).unwrap();
+        let permission: String = db.query_row("SELECT principal_id FROM permissions WHERE atome_id = 'guest_adoption_project'", [], |row| row.get(0)).unwrap();
+        let event_actor: String = db.query_row("SELECT actor FROM events WHERE id = 'guest_adoption_event'", [], |row| row.get(0)).unwrap();
+        let snapshot_actor: String = db.query_row("SELECT actor FROM snapshots WHERE atome_id = 'guest_adoption_project'", [], |row| row.get(0)).unwrap();
+        let queue_count: i64 = db.query_row("SELECT COUNT(*) FROM sync_queue WHERE atome_id = 'guest_adoption_project'", [], |row| row.get(0)).unwrap();
+        assert_eq!(owner, target_id);
+        assert_eq!(state_owner, target_id);
+        assert_eq!(permission, target_id);
+        assert!(event_actor.contains(&guest_id));
+        assert!(snapshot_actor.contains(&guest_id));
+        assert_eq!(queue_count, 1);
     }
 
     #[test]
@@ -3717,10 +3884,11 @@ fn error_response(request_id: Option<String>, error: &str) -> WsResponse {
 // PUBLIC API
 // =============================================================================
 
-pub fn create_state(data_dir: PathBuf) -> LocalAtomeState {
+pub fn create_state(data_dir: PathBuf, storage_root: PathBuf) -> LocalAtomeState {
     let conn = init_database(&data_dir).expect("Failed to initialize ADOLE database");
     LocalAtomeState {
         db: Arc::new(Mutex::new(conn)),
+        storage_root,
         recent_request_ids: Arc::new(Mutex::new(DedupeCache::new(2000))),
         recent_fingerprints: Arc::new(Mutex::new(FingerprintCache::new(5000, 750))),
     }

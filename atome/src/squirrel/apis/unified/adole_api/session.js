@@ -2,7 +2,7 @@ import { readJson, writeJson, removeStorage } from './storage.js';
 import { nowIso } from './runtime.js';
 
 const SESSION_KEY = 'squirrel_session_v2';
-const ANON_KEY = 'squirrel_anonymous_v2';
+const GUEST_KEY = 'squirrel_guest_v1';
 const CURRENT_PROJECT_KEY = 'squirrel_current_project_v2';
 
 let sessionState = {
@@ -220,16 +220,10 @@ export const resetWorkspaceForNextUser = ({ clearStorage = false, reason = 'logo
     });
 
     if (clearStorage) {
-        
-            if (typeof localStorage !== 'undefined') {
-                localStorage.clear();
-            }
-        
-        
-            if (typeof sessionStorage !== 'undefined') {
-                sessionStorage.clear();
-            }
-        
+        // A guest workspace belongs to this installation, not to a signed-in
+        // session. Never erase it as a side effect of account logout.
+        removeStorage(SESSION_KEY);
+        removeStorage(CURRENT_PROJECT_KEY);
     }
 };
 
@@ -250,18 +244,18 @@ export const markAuthUnchecked = () => {
     authCheckComplete = false;
 };
 
-export const getAnonymousCredentials = () => readJson(ANON_KEY);
+export const getGuestWorkspace = () => readJson(GUEST_KEY);
 
-export const setAnonymousCredentials = (creds) => {
-    if (!creds) {
-        removeStorage(ANON_KEY);
+export const setGuestWorkspace = (guest) => {
+    if (!guest) {
+        removeStorage(GUEST_KEY);
         return;
     }
-    writeJson(ANON_KEY, creds);
+    writeJson(GUEST_KEY, guest);
 };
 
-export const clearAnonymousCredentials = () => {
-    removeStorage(ANON_KEY);
+export const clearGuestWorkspace = () => {
+    removeStorage(GUEST_KEY);
 };
 
 let currentProjectCache = null;

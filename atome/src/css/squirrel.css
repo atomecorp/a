@@ -26,6 +26,16 @@ body {
     -webkit-tap-highlight-color: transparent !important;
 }
 
+#eve_hidden_text_service > textarea::selection {
+    background: transparent;
+    color: transparent;
+}
+
+#eve_hidden_text_service > textarea::-moz-selection {
+    background: transparent;
+    color: transparent;
+}
+
 /* Polices personnalisées */
 @font-face {
     font-family: 'Roboto-Thin';

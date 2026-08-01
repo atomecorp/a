@@ -174,7 +174,6 @@ final class LocalHTTPServer {
         let routePath = URLComponents(string: "http://127.0.0.1\(rawPath)")?.path
             ?? rawPath.split(separator: "?", maxSplits: 1).first.map(String.init)
             ?? rawPath
-        let queryItems = httpQueryItems(from: rawPath)
         var headers: [String: String] = [:]
         var rangeHeader: String? = nil
         for line in lines.dropFirst() {
@@ -1037,15 +1036,6 @@ final class LocalHTTPServer {
         return token.isEmpty ? nil : token
     }
 
-    private func httpQueryItems(from rawPath: String) -> [String: String] {
-        guard let components = URLComponents(string: "http://127.0.0.1\(rawPath)") else { return [:] }
-        var out: [String: String] = [:]
-        for item in components.queryItems ?? [] {
-            out[item.name] = item.value ?? ""
-        }
-        return out
-    }
-
     private func responseSuccess(_ payload: [String: Any]) -> Bool {
         if let success = payload["success"] as? Bool { return success }
         if let ok = payload["ok"] as? Bool { return ok }
@@ -1689,7 +1679,7 @@ extension LocalHTTPServer {
 
 // (Helper async supprimé; utilisation d'attente sémaphore pour compat non-async)
 
-fileprivate enum AiSRuntime {
+enum AiSRuntime {
     private static let queue = DispatchQueue(label: "ais.runtime.queue")
     private static var db: OpaquePointer?
     private static var phoneVerificationStore: [String: (code: String, expiresAt: Date)] = [:]
@@ -1699,10 +1689,6 @@ fileprivate enum AiSRuntime {
     private static let authAttemptWindow: TimeInterval = 15 * 60
     private static let authAttemptLimit = 8
     private static let otpExpiry: TimeInterval = 10 * 60
-    private static let userNamespace: [UInt8] = [
-        0x6b, 0xa7, 0xb8, 0x10, 0x9d, 0xad, 0x11, 0xd1,
-        0x80, 0xb4, 0x00, 0xc0, 0x4f, 0xd4, 0x30, 0xc8
-    ]
     private static let reservedUserParticleKeys: Set<String> = [
         "id", "atome_id", "user_id", "type", "kind", "owner_id", "creator_id",
         "created_at", "updated_at", "deleted_at", "sync_status", "last_sync",
@@ -1726,6 +1712,45 @@ fileprivate enum AiSRuntime {
     CREATE INDEX IF NOT EXISTS idx_atomes_type ON atomes(atome_type);
     CREATE INDEX IF NOT EXISTS idx_atomes_parent ON atomes(parent_id);
     CREATE INDEX IF NOT EXISTS idx_atomes_owner ON atomes(owner_id);
+    CREATE TABLE IF NOT EXISTS principal_phone_credentials (
+        credential_id INTEGER PRIMARY KEY AUTOINCREMENT,
+        principal_id TEXT NOT NULL,
+        normalized_phone TEXT NOT NULL,
+        verified_at TEXT NOT NULL,
+        revoked_at TEXT,
+        revoked_reason TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_principal_phone_active_unique
+        ON principal_phone_credentials(normalized_phone) WHERE revoked_at IS NULL;
+    CREATE INDEX IF NOT EXISTS idx_principal_phone_principal
+        ON principal_phone_credentials(principal_id, revoked_at);
+    CREATE TABLE IF NOT EXISTS guest_workspace_principals (
+        guest_principal_id TEXT PRIMARY KEY,
+        status TEXT NOT NULL DEFAULT 'active',
+        adopted_principal_id TEXT,
+        adoption_operation_digest TEXT UNIQUE,
+        classified_at TEXT NOT NULL DEFAULT (datetime('now')),
+        adopted_at TEXT,
+        CHECK(status IN ('active', 'adopted'))
+    );
+    CREATE TABLE IF NOT EXISTS principal_identity_aliases (
+        alias_id INTEGER PRIMARY KEY AUTOINCREMENT,
+        alias_value TEXT NOT NULL UNIQUE,
+        principal_id TEXT NOT NULL,
+        alias_kind TEXT NOT NULL CHECK(alias_kind IN ('legacy_principal')),
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE TABLE IF NOT EXISTS principal_identity_migrations (
+        migration_id INTEGER PRIMARY KEY AUTOINCREMENT,
+        legacy_principal_id TEXT NOT NULL UNIQUE,
+        principal_id TEXT NOT NULL UNIQUE,
+        status TEXT NOT NULL CHECK(status IN ('prepared', 'completed', 'failed')),
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        completed_at TEXT,
+        failure_code TEXT
+    );
     CREATE TABLE IF NOT EXISTS particles (
         particle_id INTEGER PRIMARY KEY AUTOINCREMENT,
         atome_id TEXT NOT NULL,
@@ -1760,6 +1785,24 @@ fileprivate enum AiSRuntime {
     );
     CREATE INDEX IF NOT EXISTS idx_state_current_project ON state_current(project_id);
     CREATE INDEX IF NOT EXISTS idx_state_current_owner ON state_current(owner_id);
+    CREATE TABLE IF NOT EXISTS permissions (
+        permission_id INTEGER PRIMARY KEY AUTOINCREMENT,
+        atome_id TEXT NOT NULL,
+        particle_key TEXT,
+        principal_id TEXT NOT NULL,
+        can_read INTEGER NOT NULL DEFAULT 1,
+        can_write INTEGER NOT NULL DEFAULT 0,
+        can_delete INTEGER NOT NULL DEFAULT 0,
+        can_share INTEGER NOT NULL DEFAULT 0,
+        can_create INTEGER NOT NULL DEFAULT 0,
+        share_mode TEXT DEFAULT 'real-time',
+        conditions TEXT,
+        granted_by TEXT,
+        granted_at TEXT NOT NULL DEFAULT (datetime('now')),
+        expires_at TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_permissions_atome ON permissions(atome_id);
+    CREATE INDEX IF NOT EXISTS idx_permissions_principal ON permissions(principal_id);
     CREATE TABLE IF NOT EXISTS events (
         id TEXT PRIMARY KEY,
         ts TEXT NOT NULL,
@@ -1786,6 +1829,19 @@ fileprivate enum AiSRuntime {
         created_by TEXT,
         created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
+    CREATE TABLE IF NOT EXISTS sync_queue (
+        queue_id INTEGER PRIMARY KEY AUTOINCREMENT,
+        atome_id TEXT NOT NULL,
+        operation TEXT NOT NULL,
+        payload TEXT,
+        target_server TEXT,
+        status TEXT NOT NULL DEFAULT 'pending',
+        attempts INTEGER NOT NULL DEFAULT 0,
+        max_attempts INTEGER NOT NULL DEFAULT 5,
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_sync_queue_atome ON sync_queue(atome_id);
+    CREATE INDEX IF NOT EXISTS idx_sync_queue_status ON sync_queue(status);
     """
 
     static func handleAuthMessage(_ message: [String: Any]) -> [String: Any] {
@@ -1802,6 +1858,10 @@ fileprivate enum AiSRuntime {
                     response = try handleBootstrap(message, db: db, requestId: requestId)
                 case "login":
                     response = try handleLogin(message, db: db, requestId: requestId)
+                case "start-guest":
+                    response = try handleStartGuest(message, db: db, requestId: requestId)
+                case "leave-guest":
+                    response = authResponse(requestId: requestId, success: true)
                 case "me":
                     response = try handleMe(message, db: db, requestId: requestId)
                 case "lookup-phone":
@@ -1844,6 +1904,8 @@ fileprivate enum AiSRuntime {
                     response = try handleAtomeAlter(message, db: db, requestId: requestId)
                 case "delete", "soft-delete":
                     response = try handleAtomeDelete(message, db: db, requestId: requestId)
+                case "transfer-owner":
+                    response = try handleAtomeTransferOwner(message, db: db, requestId: requestId)
                 default:
                     response = atomeResponse(requestId: requestId, success: false, error: "Unknown action: \(action)")
                 }
@@ -1958,6 +2020,23 @@ fileprivate enum AiSRuntime {
         return try registerUser(message, db: db, requestId: requestId, username: resolvedUsername)
     }
 
+    private static func handleStartGuest(_ message: [String: Any], db: OpaquePointer?, requestId: String?) throws -> [String: Any] {
+        let guestId = stringValue(message["guest_id"] ?? message["guestId"])
+        guard let principal = UUID(uuidString: guestId),
+              principal.uuidString.lowercased() == guestId.lowercased(),
+              principal.uuidString.split(separator: "-").dropFirst(2).first?.first == "4" else {
+            return authResponse(requestId: requestId, success: false, error: "Guest principal must be a UUID v4")
+        }
+        try execute(db, "INSERT OR IGNORE INTO guest_workspace_principals (guest_principal_id, status) VALUES (?1, 'active')", [.text(principal.uuidString.lowercased())])
+        let token = try createToken(userId: principal.uuidString.lowercased(), username: "Guest")
+        return authResponse(
+            requestId: requestId,
+            success: true,
+            user: ["id": principal.uuidString.lowercased(), "user_id": principal.uuidString.lowercased(), "username": "Guest"],
+            token: token
+        )
+    }
+
     private static func registerUser(_ message: [String: Any], db: OpaquePointer?, requestId: String?, username: String) throws -> [String: Any] {
         let phone = normalizePhone(stringValue(message["phone"]))
         if phone.count < 6 {
@@ -1969,11 +2048,11 @@ fileprivate enum AiSRuntime {
         }
         let visibility = normalizeVisibility(stringValue(message["visibility"]))
         let optional = normalizeUserOptional(message["optional"] as? [String: Any] ?? [:])
-        let userId = generateDeterministicUserId(phone)
+        let userId = generateOpaquePrincipalId()
         let now = isoNow()
         let passwordHash = hashPassword(password)
 
-        if let existing = try findUserRecordByPhone(db, phone) ?? findUserRecordById(db, userId) {
+        if let existing = try findUserRecordByPhone(db, phone) {
             if existing.deletedAt != nil {
                 try execute(db, """
                     UPDATE atomes
@@ -1981,14 +2060,15 @@ fileprivate enum AiSRuntime {
                     WHERE atome_id = ?
                     """, [.text(now), .text(existing.userId)])
                 try upsertRequiredUserParticles(db, atomeId: existing.userId, username: username, phone: phone, passwordHash: passwordHash, visibility: visibility, now: now)
+                try assignVerifiedPhone(db, principalId: existing.userId, phone: phone, now: now)
                 try upsertOptionalParticles(db, atomeId: existing.userId, values: optional, changedBy: existing.userId, now: now)
                 try upsertStateCurrent(db, atomeId: existing.userId, ownerId: existing.userId, properties: try loadParticles(db, atomeId: existing.userId), now: now)
                 let user = try loadUserInfo(db, userId: existing.userId)
-                let token = try createToken(userId: existing.userId, username: user["username"] as? String ?? username, phone: user["phone"] as? String ?? phone)
+                let token = try createToken(userId: existing.userId, username: user["username"] as? String ?? username)
                 return authResponse(requestId: requestId, success: true, user: user, token: token)
             }
             let user = try loadUserInfo(db, userId: existing.userId)
-            let token = try createToken(userId: existing.userId, username: user["username"] as? String ?? username, phone: user["phone"] as? String ?? phone)
+            let token = try createToken(userId: existing.userId, username: user["username"] as? String ?? username)
             return authResponse(requestId: requestId, success: true, user: user, token: token, alreadyExists: true)
         }
 
@@ -1997,9 +2077,10 @@ fileprivate enum AiSRuntime {
             VALUES (?, 'user', ?, ?, ?, ?, 'ais', 'local')
             """, [.text(userId), .text(userId), .text(userId), .text(now), .text(now)])
         try upsertRequiredUserParticles(db, atomeId: userId, username: username, phone: phone, passwordHash: passwordHash, visibility: visibility, now: now)
+        try assignVerifiedPhone(db, principalId: userId, phone: phone, now: now)
         try upsertOptionalParticles(db, atomeId: userId, values: optional, changedBy: userId, now: now)
         try upsertStateCurrent(db, atomeId: userId, ownerId: userId, properties: try loadParticles(db, atomeId: userId), now: now)
-        let token = try createToken(userId: userId, username: username, phone: phone)
+        let token = try createToken(userId: userId, username: username)
         let user = try loadUserInfo(db, userId: userId)
         return authResponse(requestId: requestId, success: true, user: user, token: token)
     }
@@ -2010,7 +2091,7 @@ fileprivate enum AiSRuntime {
         if phone.isEmpty || password.isEmpty {
             return authResponse(requestId: requestId, success: false, error: "Phone and password are required")
         }
-        guard let existing = try findUserRecordByPhone(db, phone) ?? findUserRecordById(db, generateDeterministicUserId(phone)) else {
+        guard let existing = try findUserRecordByPhone(db, phone) else {
             return authResponse(requestId: requestId, success: false, error: "Invalid credentials")
         }
         let storedHash = try loadParticleString(db, atomeId: existing.userId, key: "password_hash") ?? ""
@@ -2018,7 +2099,7 @@ fileprivate enum AiSRuntime {
             return authResponse(requestId: requestId, success: false, error: "Invalid credentials")
         }
         let user = try loadUserInfo(db, userId: existing.userId)
-        let token = try createToken(userId: existing.userId, username: user["username"] as? String ?? "", phone: user["phone"] as? String ?? phone)
+        let token = try createToken(userId: existing.userId, username: user["username"] as? String ?? "")
         return authResponse(requestId: requestId, success: true, user: user, token: token)
     }
 
@@ -2278,6 +2359,97 @@ fileprivate enum AiSRuntime {
         return atomeResponse(requestId: requestId, success: true)
     }
 
+    private static func handleAtomeTransferOwner(_ message: [String: Any], db: OpaquePointer?, requestId: String?) throws -> [String: Any] {
+        guard let claims = try verifyToken(stringValue(message["token"])) else {
+            return atomeResponse(requestId: requestId, success: false, error: "Access denied")
+        }
+        let authenticatedId = stringValue(claims["sub"])
+        let fromOwnerId = stringValue(message["from_owner_id"] ?? message["fromOwnerId"])
+        let toOwnerId = stringValue(message["to_owner_id"] ?? message["toOwnerId"])
+        let operationId = stringValue(message["operation_id"] ?? message["operationId"])
+        let confirmed = boolValue(message["adoption_confirmed"] ?? message["adoptionConfirmed"])
+        guard !fromOwnerId.isEmpty, !toOwnerId.isEmpty else {
+            return atomeResponse(requestId: requestId, success: false, error: "Missing from_owner_id or to_owner_id")
+        }
+        guard authenticatedId == toOwnerId else {
+            return atomeResponse(requestId: requestId, success: false, error: "Access denied - target owner must be current user")
+        }
+        let guestRows = try query(db, "SELECT status, adopted_principal_id, adoption_operation_digest FROM guest_workspace_principals WHERE guest_principal_id = ? LIMIT 1", [.text(fromOwnerId)])
+        guard let guest = guestRows.first else {
+            return atomeResponse(requestId: requestId, success: false, error: "Access denied - source owner must be an active guest workspace")
+        }
+        let status = stringValue(rowValue(guest, "status"))
+        if status == "adopted" {
+            if stringValue(rowValue(guest, "adopted_principal_id")) == toOwnerId && stringValue(rowValue(guest, "adoption_operation_digest")) == operationId {
+                try moveGuestDownloads(fromOwnerId: fromOwnerId, toOwnerId: toOwnerId)
+                return atomeResponse(requestId: requestId, success: true, data: ["updated": 0, "replayed": true, "adopted": true])
+            }
+            return atomeResponse(requestId: requestId, success: false, error: "guest_adoption_operation_conflict")
+        }
+        guard status == "active", confirmed else {
+            return atomeResponse(requestId: requestId, success: false, error: "guest_adoption_confirmation_required")
+        }
+        let operationCharacters = Array(operationId.lowercased())
+        guard UUID(uuidString: operationId) != nil,
+              operationCharacters.count == 36,
+              operationCharacters[14] == "4",
+              ["8", "9", "a", "b"].contains(operationCharacters[19]) else {
+            return atomeResponse(requestId: requestId, success: false, error: "guest_adoption_operation_required")
+        }
+        let now = isoNow()
+        try execute(db, "BEGIN IMMEDIATE")
+        do {
+            let countRows = try query(db, "SELECT COUNT(*) AS count FROM atomes WHERE owner_id = ? AND atome_type NOT IN ('user', 'guest_workspace')", [.text(fromOwnerId)])
+            let count = intValue(rowValue(countRows.first, "count"), defaultValue: 0)
+            try execute(db, "UPDATE atomes SET owner_id = ?, creator_id = CASE WHEN creator_id = ? THEN ? ELSE creator_id END, updated_at = ?, sync_status = 'pending' WHERE owner_id = ? AND atome_type NOT IN ('user', 'guest_workspace')", [.text(toOwnerId), .text(fromOwnerId), .text(toOwnerId), .text(now), .text(fromOwnerId)])
+            try execute(db, "UPDATE state_current SET owner_id = ?, updated_at = ? WHERE owner_id = ?", [.text(toOwnerId), .text(now), .text(fromOwnerId)])
+            try execute(db, "UPDATE permissions SET principal_id = ? WHERE principal_id = ?", [.text(toOwnerId), .text(fromOwnerId)])
+            try execute(db, "UPDATE permissions SET granted_by = ? WHERE granted_by = ?", [.text(toOwnerId), .text(fromOwnerId)])
+            try execute(db, "UPDATE guest_workspace_principals SET status = 'adopted', adopted_principal_id = ?, adoption_operation_digest = ?, adopted_at = ? WHERE guest_principal_id = ? AND status = 'active'", [.text(toOwnerId), .text(operationId), .text(now), .text(fromOwnerId)])
+            try execute(db, "COMMIT")
+            try moveGuestDownloads(fromOwnerId: fromOwnerId, toOwnerId: toOwnerId)
+            return atomeResponse(requestId: requestId, success: true, data: ["updated": count, "adopted": true])
+        } catch {
+            try? execute(db, "ROLLBACK")
+            throw error
+        }
+    }
+
+    private static func moveGuestDownloads(fromOwnerId: String, toOwnerId: String) throws {
+        guard let root = iCloudFileManager.shared.getCurrentStorageURL() else {
+            throw NSError(domain: "GuestAdoption", code: 1, userInfo: [NSLocalizedDescriptionKey: "guest_adoption_storage_unavailable"])
+        }
+        let manager = FileManager.default
+        let source = root.appendingPathComponent("data/users/\(fromOwnerId)/Downloads", isDirectory: true)
+        let target = root.appendingPathComponent("data/users/\(toOwnerId)/Downloads", isDirectory: true)
+        guard manager.fileExists(atPath: source.path) else { return }
+        try manager.createDirectory(at: target, withIntermediateDirectories: true)
+        let enumerator = manager.enumerator(at: source, includingPropertiesForKeys: [.isDirectoryKey], options: [.skipsHiddenFiles])
+        var moves: [(source: URL, target: URL)] = []
+        while let sourceURL = enumerator?.nextObject() as? URL {
+            let relative = sourceURL.path.replacingOccurrences(of: source.path + "/", with: "")
+            guard !relative.isEmpty, !relative.contains("..") else {
+                throw NSError(domain: "GuestAdoption", code: 2, userInfo: [NSLocalizedDescriptionKey: "guest_adoption_file_invalid"])
+            }
+            let targetURL = target.appendingPathComponent(relative)
+            let values = try sourceURL.resourceValues(forKeys: [.isDirectoryKey])
+            if values.isDirectory == true {
+                try manager.createDirectory(at: targetURL, withIntermediateDirectories: true)
+                continue
+            }
+            moves.append((sourceURL, targetURL))
+        }
+        for move in moves {
+            let sourceURL = move.source
+            let targetURL = move.target
+            if manager.fileExists(atPath: targetURL.path) {
+                throw NSError(domain: "GuestAdoption", code: 3, userInfo: [NSLocalizedDescriptionKey: "guest_adoption_file_collision"])
+            }
+            try manager.createDirectory(at: targetURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try manager.moveItem(at: sourceURL, to: targetURL)
+        }
+    }
+
     private static func resolveEventUserId(_ message: [String: Any]) -> String? {
         let token = stringValue(message["token"])
         if !token.isEmpty, let claims = try? verifyToken(token) {
@@ -2466,14 +2638,12 @@ fileprivate enum AiSRuntime {
 
     private static func loadUserInfo(_ db: OpaquePointer?, userId: String) throws -> [String: Any] {
         let username = try loadParticleString(db, atomeId: userId, key: "username") ?? ""
-        let phone = try loadParticleString(db, atomeId: userId, key: "phone") ?? ""
         let rows = try query(db, "SELECT created_at FROM atomes WHERE atome_id = ? LIMIT 1", [.text(userId)])
         let createdAt = rowString(rows.first, "created_at") ?? isoNow()
         return [
             "user_id": userId,
             "id": userId,
             "username": username,
-            "phone": phone,
             "created_at": createdAt
         ]
     }
@@ -2482,11 +2652,11 @@ fileprivate enum AiSRuntime {
         let rows = try query(db, """
             SELECT a.atome_id, a.atome_type, a.deleted_at
             FROM atomes a
-            JOIN particles p ON p.atome_id = a.atome_id AND p.particle_key = 'phone'
-            WHERE p.particle_value = ?
+            JOIN principal_phone_credentials c ON c.principal_id = a.atome_id
+            WHERE c.normalized_phone = ? AND c.revoked_at IS NULL
             ORDER BY a.updated_at DESC
             LIMIT 1
-            """, [.text(try jsonString(phone))])
+            """, [.text(phone)])
         guard let row = rows.first else { return nil }
         return UserRecord(
             userId: stringValue(rowValue(row, "atome_id")),
@@ -2553,9 +2723,33 @@ fileprivate enum AiSRuntime {
         return false
     }
 
-    private static func upsertRequiredUserParticles(_ db: OpaquePointer?, atomeId: String, username: String, phone: String, passwordHash: String, visibility: String, now: String) throws {
+    private static func assignVerifiedPhone(_ db: OpaquePointer?, principalId: String, phone: String, now: String) throws {
+        let existing = try query(db, """
+            SELECT principal_id FROM principal_phone_credentials
+            WHERE normalized_phone = ? AND revoked_at IS NULL LIMIT 1
+            """, [.text(phone)])
+        if let owner = rowString(existing.first, "principal_id") {
+            if owner == principalId { return }
+            throw NSError(domain: "LocalHTTPServer", code: 409, userInfo: [NSLocalizedDescriptionKey: "phone_credential_already_assigned"])
+        }
+        try execute(db, """
+            INSERT INTO principal_phone_credentials
+            (principal_id, normalized_phone, verified_at, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?)
+            """, [.text(principalId), .text(phone), .text(now), .text(now), .text(now)])
+    }
+
+    private static func readVerifiedPhone(_ db: OpaquePointer?, principalId: String) throws -> String? {
+        let rows = try query(db, """
+            SELECT normalized_phone FROM principal_phone_credentials
+            WHERE principal_id = ? AND revoked_at IS NULL
+            ORDER BY credential_id DESC LIMIT 1
+            """, [.text(principalId)])
+        return rowString(rows.first, "normalized_phone")
+    }
+
+    private static func upsertRequiredUserParticles(_ db: OpaquePointer?, atomeId: String, username: String, phone _: String, passwordHash: String, visibility: String, now: String) throws {
         try upsertParticle(db, atomeId: atomeId, key: "username", value: username, changedBy: atomeId, now: now)
-        try upsertParticle(db, atomeId: atomeId, key: "phone", value: phone, changedBy: atomeId, now: now)
         try upsertParticle(db, atomeId: atomeId, key: "password_hash", value: passwordHash, changedBy: atomeId, now: now)
         try upsertParticle(db, atomeId: atomeId, key: "visibility", value: visibility, changedBy: atomeId, now: now)
         try upsertParticle(db, atomeId: atomeId, key: "access", value: visibility, changedBy: atomeId, now: now)
@@ -3230,13 +3424,12 @@ fileprivate enum AiSRuntime {
         return hex(digest) == expected
     }
 
-    private static func createToken(userId: String, username: String, phone: String) throws -> String {
+    private static func createToken(userId: String, username: String) throws -> String {
         let header = try base64urlEncoded(["alg": "HS256", "typ": "JWT"])
         let now = Int(Date().timeIntervalSince1970)
         let payload = try base64urlEncoded([
             "sub": userId,
             "username": username,
-            "phone": phone,
             "iat": now,
             "exp": now + (7 * 24 * 60 * 60)
         ])
@@ -3262,20 +3455,8 @@ fileprivate enum AiSRuntime {
         return payload
     }
 
-    private static func generateDeterministicUserId(_ phone: String) -> String {
-        let normalized = normalizePhone(phone).lowercased()
-        let digest = Insecure.SHA1.hash(data: Data(userNamespace + Array(normalized.utf8)))
-        var bytes = Array(digest.prefix(16))
-        bytes[6] = (bytes[6] & 0x0f) | 0x50
-        bytes[8] = (bytes[8] & 0x3f) | 0x80
-        let hex = bytes.map { String(format: "%02x", $0) }.joined()
-        return [
-            String(hex.prefix(8)),
-            String(hex.dropFirst(8).prefix(4)),
-            String(hex.dropFirst(12).prefix(4)),
-            String(hex.dropFirst(16).prefix(4)),
-            String(hex.dropFirst(20).prefix(12))
-        ].joined(separator: "-")
+    private static func generateOpaquePrincipalId() -> String {
+        UUID().uuidString.lowercased()
     }
 
     private static func base64urlEncoded(_ object: [String: Any]) throws -> String {

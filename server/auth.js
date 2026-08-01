@@ -7,7 +7,6 @@
  */
 
 import bcrypt from 'bcrypt';
-import { v4 as uuidv4, v5 as uuidv5 } from 'uuid';
 import { initServerIdentity, signChallenge, getServerIdentity, isConfigured as serverIdentityConfigured } from './serverIdentity.js';
 import { getABoxEventBus } from './aBoxServer.js';
 import path from 'path';
@@ -16,11 +15,12 @@ import { fileURLToPath } from 'url';
 import crypto from 'crypto';
 import { ensureUserHome } from './userHome.js';
 import { appendEvent } from '../database/adole.js';
-import { normalizePhone, requireConfiguredAuthSecret, generateDeterministicUserId, hashPassword, verifyPassword, hashRefreshSecret, createRefreshSecret } from './auth_crypto.js';
-import { createUserAtome, findUserByPhone, ensureAnonymousUser, findUserById, listAllUsers, updateUserParticle, deleteUserAtome, syncUserToTauri, ANONYMOUS_PHONE, ANONYMOUS_USERNAME, ANONYMOUS_PASSWORD, ANONYMOUS_VISIBILITY, ANONYMOUS_OPTIONAL } from './auth_users.js';
+import { normalizePhone, requireConfiguredAuthSecret, generateOpaquePrincipalId, hashPassword, verifyPassword, hashRefreshSecret, createRefreshSecret } from './auth_crypto.js';
+import { createUserAtome, findUserByPhone, findUserById, listAllUsers, updateUserParticle, deleteUserAtome, syncUserToTauri } from './auth_users.js';
 import { getUserOptionalParticles, ensureUserAtomeType, repairMistypedUserAtomes, upsertUserStateCurrent, normalizeUserOptional, normalizeAccessValue } from './auth_user_particles.js';
 import { generateOTP, storeOTP, verifyOTP, readClientRateKey, enforceAuthIdentityRateLimit, enforceAuthRateLimit, sendSMS } from './auth_otp.js';
 import { readRefreshTokenFromRequest, readRefreshSessions, writeRefreshSessions, createRefreshSession, consumeRefreshSession, revokeRefreshToken, setAuthCookies } from './auth_sessions.js';
+import { ensureOpaquePrincipalIdentity } from './auth_identity.js';
 export { generateOTP, storeOTP, verifyOTP, sendSMS, enforceAuthIdentityRateLimit } from './auth_otp.js';
 import { registerCoreAuthRoutes } from './auth_routes_core.js';
 import { registerRegisterRoutes } from './auth_routes_register.js';
@@ -39,19 +39,6 @@ const PROJECT_ROOT = path.resolve(__dirname, '..');
 // =============================================================================
 
 const JWT_EXPIRY = '7d'; // 7 days
-
-// Namespace UUID for deterministic user ID generation
-// This MUST be the same in Fastify and Axum to generate identical user IDs
-
-/**
- * Generate a deterministic user ID from phone number
- * Uses UUID v5 (SHA-1 based) with a fixed namespace
- * This ensures the same phone number always produces the same user ID
- * across all platforms (Fastify, Axum/Tauri, iOS)
- * 
- * @param {string} phone - The normalized phone number
- * @returns {string} - Deterministic UUID
- */
 
 // In-memory OTP storage (use Redis in production for multi-instance deployments)
 
@@ -191,9 +178,10 @@ export async function registerAuthRoutes(server, dataSource, options = {}) {
         hook: 'onRequest'
     });
 
+    await ensureOpaquePrincipalIdentity(dataSource);
+
     // Ensure anonymous user exists at startup (local-only)
     try {
-        await ensureAnonymousUser(dataSource);
     } catch (error) {
         console.warn('[Auth] Anonymous user init failed:', error?.message || error);
     }
@@ -222,7 +210,7 @@ export {
     listAllUsers,
     updateUserParticle,
     deleteUserAtome,
-    generateDeterministicUserId,
+    generateOpaquePrincipalId,
     normalizePhone,
     hashPassword,
     verifyPassword

@@ -34,10 +34,6 @@ use super::local_atome::LocalAtomeState;
 // CONSTANTS
 // =============================================================================
 
-/// Namespace UUID for deterministic user ID generation (same as Fastify)
-const SQUIRREL_USER_NAMESPACE: Uuid = Uuid::from_bytes([
-    0x6b, 0xa7, 0xb8, 0x10, 0x9d, 0xad, 0x11, 0xd1, 0x80, 0xb4, 0x00, 0xc0, 0x4f, 0xd4, 0x30, 0xc8,
-]);
 const AUTH_BCRYPT_COST: u32 = 10;
 
 const AUTH_ATTEMPT_WINDOW_SECONDS: i64 = 15 * 60;
@@ -122,7 +118,6 @@ fn verify_phone_verification(phone: &str, code: &str) -> Result<(), String> {
 pub struct Claims {
     pub sub: String, // User ID (atome_id)
     pub username: String,
-    pub phone: String,
     pub exp: i64,
     pub iat: i64,
 }
@@ -183,6 +178,8 @@ pub async fn handle_auth_message(
         "register" => handle_register(message, state, request_id).await,
         "bootstrap" => handle_bootstrap(message, state, request_id).await,
         "login" => handle_login(message, state, request_id).await,
+        "start-guest" => handle_start_guest(message, state, request_id),
+        "leave-guest" => handle_logout(request_id),
         "request-phone-verification" => {
             handle_request_phone_verification(message, request_id).await
         }
@@ -196,6 +193,53 @@ pub async fn handle_auth_message(
         "get-fastify-token" => handle_get_fastify_token(message, state, request_id).await,
         "delete-fastify-token" => handle_delete_fastify_token(message, state, request_id).await,
         _ => error_response(request_id, &format!("Unknown action: {}", action)),
+    }
+}
+
+fn handle_start_guest(
+    message: serde_json::Value,
+    state: &LocalAuthState,
+    request_id: Option<String>,
+) -> AuthResponse {
+    let guest_id = message
+        .get("guest_id")
+        .or_else(|| message.get("guestId"))
+        .and_then(|value| value.as_str())
+        .and_then(|value| Uuid::parse_str(value).ok())
+        .filter(|value| value.get_version_num() == 4)
+        .map(|value| value.to_string());
+    let Some(user_id) = guest_id else {
+        return error_response(request_id, "Guest principal must be a UUID v4");
+    };
+    let db = match state.db.lock() {
+        Ok(db) => db,
+        Err(error) => return error_response(request_id, &error.to_string()),
+    };
+    if let Err(error) = db.execute(
+        "INSERT OR IGNORE INTO guest_workspace_principals (guest_principal_id, status) VALUES (?1, 'active')",
+        rusqlite::params![&user_id],
+    ) {
+        return error_response(request_id, &error.to_string());
+    }
+    let token = match generate_token(&state.jwt_secret, &user_id, "Guest", "") {
+        Ok(token) => token,
+        Err(error) => return error_response(request_id, &error),
+    };
+    AuthResponse {
+        msg_type: "auth-response".into(),
+        request_id,
+        success: true,
+        already_exists: None,
+        error: None,
+        user: Some(UserInfo {
+            user_id,
+            username: "Guest".into(),
+            phone: String::new(),
+            created_at: None,
+        }),
+        token: Some(token),
+        code: None,
+        otp_bypassed: None,
     }
 }
 
@@ -241,10 +285,8 @@ async fn handle_bootstrap(
         Err(e) => return error_response(request_id, &e.to_string()),
     };
 
-    let existing_user = find_user_record_by_phone(&db, &phone)
-        .or_else(|| find_user_record_by_id(&db, &generate_user_id(&phone)));
-
-    let user_id = generate_user_id(&phone);
+    let existing_user = find_user_record_by_phone(&db, &phone);
+    let user_id = generate_opaque_principal_id();
     let now = Utc::now().to_rfc3339();
 
     if let Some((existing_id, existing_type, deleted_at)) = existing_user {
@@ -334,7 +376,6 @@ async fn handle_bootstrap(
 
     let particles = [
         ("username", &username),
-        ("phone", &phone),
         ("password_hash", &password_hash),
         ("visibility", &visibility),
     ];
@@ -346,6 +387,9 @@ async fn handle_bootstrap(
              VALUES (?1, ?2, ?3, 'string', 1, ?4, ?4)",
             rusqlite::params![&user_id, key, &value_json, &now],
         );
+    }
+    if let Err(error) = assign_verified_phone(&db, &user_id, &phone, &now) {
+        return error_response(request_id, &error);
     }
 
     let _ = upsert_optional_particles(&db, &user_id, &optional, &now);
@@ -420,8 +464,7 @@ async fn handle_register(
     };
 
     // Check if user already exists (including soft-deleted, even if mistyped)
-    let existing_user = find_user_record_by_phone(&db, &phone)
-        .or_else(|| find_user_record_by_id(&db, &generate_user_id(&phone)));
+    let existing_user = find_user_record_by_phone(&db, &phone);
 
     // Hash password
     let password_hash = match hash(password, AUTH_BCRYPT_COST) {
@@ -429,8 +472,8 @@ async fn handle_register(
         Err(e) => return error_response(request_id, &e.to_string()),
     };
 
-    // Generate deterministic user ID
-    let user_id = generate_user_id(&phone);
+    // Generate a new opaque principal ID.
+    let user_id = generate_opaque_principal_id();
     let now = Utc::now().to_rfc3339();
 
     if let Some((existing_id, existing_type, deleted_at)) = existing_user {
@@ -594,6 +637,15 @@ async fn handle_register(
         return error_response(request_id, &e);
     }
 
+    if let Err(e) = tx.execute(
+        "INSERT INTO principal_phone_credentials
+         (principal_id, normalized_phone, verified_at, created_at, updated_at)
+         VALUES (?1, ?2, ?3, ?3, ?3)",
+        rusqlite::params![&user_id, &phone, &now],
+    ) {
+        return error_response(request_id, &e.to_string());
+    }
+
     if let Err(e) = upsert_optional_particles(&tx, &user_id, &optional, &now) {
         return error_response(request_id, &e);
     }
@@ -664,11 +716,7 @@ async fn handle_login(
 
     // Find user by phone (accept mistyped atomes and fix them)
     let now = Utc::now().to_rfc3339();
-    let mut found_by_phone = true;
-    let user_record = find_user_record_by_phone(&db, &phone).or_else(|| {
-        found_by_phone = false;
-        find_user_record_by_id(&db, &generate_user_id(&phone))
-    });
+    let user_record = find_user_record_by_phone(&db, &phone);
     let (user_id, existing_type, _deleted_at) = match user_record {
         Some((id, atome_type, _deleted_at)) if _deleted_at.is_none() => {
             (id, atome_type, _deleted_at)
@@ -689,12 +737,6 @@ async fn handle_login(
         .ok()
         .and_then(|v| serde_json::from_str::<String>(&v).ok())
         .unwrap_or_else(|| "public".to_string());
-
-    // Ensure phone/username particles exist if the lookup succeeded by id
-    if !found_by_phone {
-        let _ = ensure_user_particle(&db, &user_id, "phone", &phone, &now);
-        let _ = ensure_user_particle(&db, &user_id, "username", &phone, &now);
-    }
 
     // Get user particles (repair if corrupted)
     let (username, password_hash, created_at) = match get_user_particles(&db, &user_id) {
@@ -860,8 +902,7 @@ async fn handle_lookup_phone(
     };
 
     let now = Utc::now().to_rfc3339();
-    let user_record = find_user_record_by_phone(&db, &phone)
-        .or_else(|| find_user_record_by_id(&db, &generate_user_id(&phone)));
+    let user_record = find_user_record_by_phone(&db, &phone);
     let (user_id, existing_type, _deleted_at) = match user_record {
         Some((id, atome_type, deleted_at)) if deleted_at.is_none() => (id, atome_type, deleted_at),
         _ => return error_response(request_id, "User not found"),
@@ -942,6 +983,7 @@ async fn handle_me(
         Ok(p) => p,
         Err(e) => return error_response(request_id, &e),
     };
+    let phone = read_verified_phone(&db, &claims.sub).unwrap_or_default();
 
     AuthResponse {
         msg_type: "auth-response".into(),
@@ -952,7 +994,7 @@ async fn handle_me(
         user: Some(UserInfo {
             user_id: claims.sub,
             username,
-            phone: claims.phone,
+            phone,
             created_at: Some(created_at),
         }),
         token: None,
@@ -1116,9 +1158,8 @@ async fn handle_delete(
 // HELPERS
 // =============================================================================
 
-fn generate_user_id(phone: &str) -> String {
-    let normalized = normalize_phone(phone).to_lowercase();
-    Uuid::new_v5(&SQUIRREL_USER_NAMESPACE, normalized.as_bytes()).to_string()
+fn generate_opaque_principal_id() -> String {
+    Uuid::new_v4().to_string()
 }
 
 fn normalize_phone(phone: &str) -> String {
@@ -1189,7 +1230,7 @@ fn generate_token(
     secret: &str,
     user_id: &str,
     username: &str,
-    phone: &str,
+    _phone: &str,
 ) -> Result<String, String> {
     let now = Utc::now();
     let exp = now + Duration::days(7);
@@ -1197,7 +1238,6 @@ fn generate_token(
     let claims = Claims {
         sub: user_id.to_string(),
         username: username.to_string(),
-        phone: phone.to_string(),
         iat: now.timestamp(),
         exp: exp.timestamp(),
     };
@@ -1291,13 +1331,12 @@ fn find_user_record_by_phone(
     db: &Connection,
     phone: &str,
 ) -> Option<(String, String, Option<String>)> {
-    let phone_json = format!("\"{}\"", phone);
     db.query_row(
-        "SELECT a.atome_id, a.atome_type, a.deleted_at FROM particles p
-         JOIN atomes a ON p.atome_id = a.atome_id
-         WHERE p.particle_key = 'phone' AND p.particle_value = ?1
+        "SELECT a.atome_id, a.atome_type, a.deleted_at FROM principal_phone_credentials c
+         JOIN atomes a ON c.principal_id = a.atome_id
+         WHERE c.normalized_phone = ?1 AND c.revoked_at IS NULL
          LIMIT 1",
-        rusqlite::params![phone_json],
+        rusqlite::params![phone],
         |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
     )
     .optional()
@@ -1305,50 +1344,56 @@ fn find_user_record_by_phone(
     .flatten()
 }
 
-fn find_user_record_by_id(
-    db: &Connection,
-    user_id: &str,
-) -> Option<(String, String, Option<String>)> {
-    db.query_row(
-        "SELECT atome_id, atome_type, deleted_at FROM atomes WHERE atome_id = ?1 LIMIT 1",
-        rusqlite::params![user_id],
-        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
-    )
-    .optional()
-    .ok()
-    .flatten()
-}
-
-fn ensure_user_particle(
-    db: &Connection,
-    user_id: &str,
-    key: &str,
-    value: &str,
-    ts: &str,
-) -> Result<(), String> {
-    let value_json = serde_json::to_string(value).unwrap_or_default();
+fn assign_verified_phone(db: &Connection, user_id: &str, phone: &str, ts: &str) -> Result<(), String> {
+    let existing: Option<String> = db
+        .query_row(
+            "SELECT principal_id FROM principal_phone_credentials
+             WHERE normalized_phone = ?1 AND revoked_at IS NULL LIMIT 1",
+            rusqlite::params![phone],
+            |row| row.get(0),
+        )
+        .optional()
+        .map_err(|e| e.to_string())?;
+    if let Some(principal_id) = existing {
+        if principal_id == user_id {
+            return Ok(());
+        }
+        return Err("phone_credential_already_assigned".to_string());
+    }
     db.execute(
-        "INSERT INTO particles (atome_id, particle_key, particle_value, value_type, version, created_at, updated_at)
-         VALUES (?1, ?2, ?3, 'string', 1, ?4, ?4)
-         ON CONFLICT(atome_id, particle_key) DO NOTHING",
-        rusqlite::params![user_id, key, value_json, ts],
+        "INSERT INTO principal_phone_credentials
+         (principal_id, normalized_phone, verified_at, created_at, updated_at)
+         VALUES (?1, ?2, ?3, ?3, ?3)",
+        rusqlite::params![user_id, phone, ts],
     )
     .map_err(|e| e.to_string())?;
     Ok(())
+}
+
+fn read_verified_phone(db: &Connection, user_id: &str) -> Result<String, String> {
+    db.query_row(
+        "SELECT normalized_phone FROM principal_phone_credentials
+         WHERE principal_id = ?1 AND revoked_at IS NULL
+         ORDER BY credential_id DESC LIMIT 1",
+        rusqlite::params![user_id],
+        |row| row.get(0),
+    )
+    .optional()
+    .map_err(|e| e.to_string())?
+    .ok_or_else(|| "principal_phone_credential_missing".to_string())
 }
 
 fn upsert_required_user_particles(
     db: &Connection,
     user_id: &str,
     username: &str,
-    phone: &str,
+    _phone: &str,
     password_hash: &str,
     visibility: &str,
     ts: &str,
 ) -> Result<(), String> {
     let particles = [
         ("username", username),
-        ("phone", phone),
         ("password_hash", password_hash),
         ("visibility", visibility),
     ];
@@ -1415,7 +1460,7 @@ fn upsert_user_state_current(
     db: &Connection,
     user_id: &str,
     username: &str,
-    phone: &str,
+    _phone: &str,
     visibility: &str,
     ts: &str,
     optional: &JsonMap<String, JsonValue>,
@@ -1427,7 +1472,6 @@ fn upsert_user_state_current(
         "username".to_string(),
         JsonValue::String(username.to_string()),
     );
-    patch.insert("phone".to_string(), JsonValue::String(phone.to_string()));
     patch.insert(
         "visibility".to_string(),
         JsonValue::String(visibility.to_string()),

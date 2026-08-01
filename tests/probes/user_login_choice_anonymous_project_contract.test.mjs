@@ -116,7 +116,7 @@ window.AdoleAPI.security.isAuthenticated = () => !!anonymousUser;
 window.AdoleAPI.security.isAnonymous = () => !!anonymousUser;
 window.AdoleAPI.security.getAnonymousUserId = () => anonymousUser?.id || null;
 window.AdoleAPI.security.waitForAuthCheck = () => new Promise(() => {});
-window.AdoleAPI.security.ensureAnonymousUser = async (options = {}) => {
+window.AdoleAPI.security.startGuest = async (options = {}) => {
     anonymousCalls.push(options);
     anonymousUser = {
         id: 'anon_user_valid',
@@ -171,7 +171,7 @@ withoutAccountChoice.dispatchEvent(new window.MouseEvent('pointerup', { bubbles:
 withoutAccountChoice.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
 await new Promise((resolve) => setTimeout(resolve, 260));
 
-assert.deepEqual(anonymousCalls, [{ force: true }], 'without-account choice must call ensureAnonymousUser once');
+assert.deepEqual(anonymousCalls, [{ force: true }], 'without-account choice must start the local guest workspace once');
 assert.equal(
     loginSignals.filter((entry) => entry.userId === 'anon_user_valid' && entry.anonymous === true).length,
     1,

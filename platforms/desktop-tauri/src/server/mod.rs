@@ -5190,7 +5190,7 @@ pub async fn start_server(static_dir: PathBuf, uploads_dir: PathBuf, data_dir: P
     };
 
     // Initialize local atome and auth states (ADOLE v3.0 WebSocket-based)
-    let atome_state = local_atome::create_state(data_dir.clone());
+    let atome_state = local_atome::create_state(data_dir.clone(), project_root.clone());
     let auth_state = local_auth::create_state(&atome_state, &data_dir);
 
     let state = AppState {

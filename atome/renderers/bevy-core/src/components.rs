@@ -68,7 +68,7 @@ pub struct AtomeVisualColor(pub [f32; 4]);
 pub struct AtomeVisualOpacity(pub f32);
 
 #[derive(Clone, Copy, Debug, Component)]
-pub struct AtomeCornerRadius(pub f32);
+pub struct AtomeCornerRadius(pub [f32; 4]);
 
 #[derive(Clone, Debug, Component)]
 pub struct AtomeTextMetadata(pub Option<String>);
@@ -107,7 +107,7 @@ pub struct AtomeShapeShadowOverlay {
 pub struct AtomeShapeShadowCacheKey {
     pub width: u32,
     pub height: u32,
-    pub corner_radius: u32,
+    pub corner_radii: [u32; 4],
     pub blur: u32,
     pub spread: u32,
     pub offset_x: i32,
@@ -142,7 +142,10 @@ impl Default for AtomeShapeShadowTextureCache {
 pub struct AtomeRoundedRectMaskCacheKey {
     pub width: u32,
     pub height: u32,
-    pub radius: u32,
+    // One entry per corner in [top_left, top_right, bottom_right, bottom_left]
+    // order, quantised to 1/100 px. A partially rounded shape (accordion header,
+    // table row, outer segment) must not reuse the uniform-radius mask.
+    pub radii: [u32; 4],
 }
 
 // CPU-generated rounded-rect alpha masks are expensive at full-surface sizes

@@ -73,12 +73,6 @@ export function resolveUserId(user) {
     if (text) return text;
   }
 
-  const phone = user?.phone || user?.user_phone || user?.userPhone;
-  if (phone !== undefined && phone !== null) {
-    const text = String(phone).trim();
-    if (text) return generateDeterministicUserId(text);
-  }
-
   const logLine = user?.username || user?.name;
   if (logLine !== undefined && logLine !== null) {
     const text = String(logLine).trim();

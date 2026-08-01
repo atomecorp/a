@@ -4,13 +4,11 @@
 
 import bcrypt from 'bcrypt';
 import crypto from 'crypto';
-import { v5 as uuidv5 } from 'uuid';
 
 export const REFRESH_SESSION_PARTICLE_KEY = 'auth_refresh_sessions';
 
 const SALT_ROUNDS = 10;
 const MIN_AUTH_SECRET_LENGTH = 32;
-const SQUIRREL_USER_NAMESPACE = '6ba7b810-9dad-11d1-80b4-00c04fd430c8';
 
 export function normalizePhone(phone) {
     if (phone === null || phone === undefined) return '';
@@ -32,14 +30,8 @@ export function requireConfiguredAuthSecret(name, value) {
     return secret;
 }
 
-export function generateDeterministicUserId(phone) {
-    const normalizedPhone = normalizePhone(phone).toLowerCase();
-
-    // Generate UUID v5 from phone + namespace
-    const userId = uuidv5(normalizedPhone, SQUIRREL_USER_NAMESPACE);
-
-    console.log(`[Auth] Generated deterministic userId for phone ${phone.substring(0, 4)}***: ${userId}`);
-    return userId;
+export function generateOpaquePrincipalId() {
+    return crypto.randomUUID();
 }
 
 export async function hashPassword(password) {

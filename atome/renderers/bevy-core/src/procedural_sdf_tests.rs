@@ -122,6 +122,7 @@ fn procedural_sdf_spawns_and_patches_one_full_surface_material_quad() {
             layer: 1180,
             opacity: 1.0,
             corner_radius: 0.0,
+            corner_radii: None,
             shadow: None,
             backdrop: None,
             presentation: false,

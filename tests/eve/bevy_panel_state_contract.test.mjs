@@ -53,13 +53,13 @@ test('Panel Lab projects all four passive localized states after the selectable 
     try {
         const before = panelLabSurface.readState();
         const body = panelLabSurface.buildContent(before, { emit: () => {}, bodyWidth: 400 });
-        const selectableIndex = body.findIndex((node) => node.id === 'panel_lab_selectable_list');
+        const scopeChipIndex = body.findIndex((node) => node.id === 'panel_lab_scope_chip');
         const dividerIndex = body.findIndex((node) => node.id === 'panel_lab_state_divider');
         const groupIndex = body.findIndex((node) => node.id === 'panel_lab_state_group');
         const group = body[groupIndex];
 
-        assert.equal(body.length, 37);
-        assert.equal(dividerIndex, selectableIndex + 1);
+        assert.equal(body.length, 41);
+        assert.equal(dividerIndex, scopeChipIndex + 1);
         assert.equal(groupIndex, dividerIndex + 1);
         assert.deepEqual(group.style.size, [358, 300]);
         assert.deepEqual(group.children.map((child) => child.style.position), [[0, 0], [0, 76], [0, 152], [0, 228]]);

@@ -109,7 +109,7 @@ pub(crate) fn build_shadow_texture_rgba(
     width: f32,
     height: f32,
 ) -> Option<(u32, u32, Vec<u8>)> {
-    build_gaussian_shadow_texture_rgba(style.shadow_color, width, height, 0.0, style.shadow_size)
+    build_gaussian_shadow_texture_rgba(style.shadow_color, width, height, [0.0; 4], style.shadow_size)
 }
 
 fn spawn_blurred_shadow(

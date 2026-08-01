@@ -230,6 +230,119 @@ CREATE INDEX IF NOT EXISTS idx_sync_queue_status ON sync_queue(status);
 CREATE INDEX IF NOT EXISTS idx_sync_queue_next_retry ON sync_queue(next_retry_at);
 
 -- ============================================================================
+-- 9. Principal identity and credential aliases
+-- Canonical principals are opaque Atome ids. Credentials and migration aliases
+-- are private authentication records and are never projected as Atome particles.
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS principal_phone_credentials (
+    credential_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    principal_id TEXT NOT NULL,
+    normalized_phone TEXT NOT NULL,
+    verified_at TEXT NOT NULL,
+    revoked_at TEXT,
+    revoked_reason TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY(principal_id) REFERENCES atomes(atome_id) ON DELETE CASCADE
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_principal_phone_active_unique
+    ON principal_phone_credentials(normalized_phone)
+    WHERE revoked_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_principal_phone_principal
+    ON principal_phone_credentials(principal_id, revoked_at);
+
+-- Local guest workspaces are never credentials or remote accounts. The marker
+-- is also used to quarantine historical user rows that never had credentials.
+CREATE TABLE IF NOT EXISTS guest_workspace_principals (
+    guest_principal_id TEXT PRIMARY KEY,
+    status TEXT NOT NULL DEFAULT 'active',
+    adopted_principal_id TEXT,
+    adoption_operation_digest TEXT UNIQUE,
+    classified_at TEXT NOT NULL DEFAULT (datetime('now')),
+    adopted_at TEXT,
+    CHECK(status IN ('active', 'adopted'))
+);
+
+-- Idempotency journal for explicit remote account provisioning. It stores no
+-- credential, phone number, JWT, local principal or file data.
+CREATE TABLE IF NOT EXISTS account_provision_operations (
+    operation_digest TEXT PRIMARY KEY,
+    principal_id TEXT NOT NULL,
+    status TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY(principal_id) REFERENCES atomes(atome_id) ON DELETE CASCADE,
+    CHECK(status IN ('completed'))
+);
+
+-- Explicit adoption journal. Browser guest data is staged under this durable
+-- operation before the authenticated principal imports it atomically.
+CREATE TABLE IF NOT EXISTS guest_adoption_operations (
+    operation_digest TEXT PRIMARY KEY,
+    guest_principal_id TEXT NOT NULL,
+    target_principal_id TEXT NOT NULL,
+    manifest_digest TEXT NOT NULL,
+    status TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    committed_at TEXT,
+    completed_at TEXT,
+    failure_code TEXT,
+    FOREIGN KEY(target_principal_id) REFERENCES atomes(atome_id) ON DELETE CASCADE,
+    CHECK(status IN ('prepared', 'importing', 'committed', 'completed', 'failed'))
+);
+
+CREATE TABLE IF NOT EXISTS guest_adoption_payloads (
+    operation_digest TEXT PRIMARY KEY,
+    payload_json TEXT NOT NULL,
+    payload_digest TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY(operation_digest) REFERENCES guest_adoption_operations(operation_digest) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS guest_adoption_files (
+    operation_digest TEXT NOT NULL,
+    file_id TEXT NOT NULL,
+    file_name TEXT NOT NULL,
+    content_digest TEXT NOT NULL,
+    byte_length INTEGER NOT NULL,
+    status TEXT NOT NULL,
+    staged_path TEXT,
+    target_path TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY(operation_digest, file_id),
+    FOREIGN KEY(operation_digest) REFERENCES guest_adoption_operations(operation_digest) ON DELETE CASCADE,
+    CHECK(status IN ('declared', 'staged', 'moved'))
+);
+
+CREATE TABLE IF NOT EXISTS principal_identity_aliases (
+    alias_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    alias_value TEXT NOT NULL UNIQUE,
+    principal_id TEXT NOT NULL,
+    alias_kind TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY(principal_id) REFERENCES atomes(atome_id) ON DELETE CASCADE,
+    CHECK(alias_kind IN ('legacy_principal'))
+);
+
+CREATE TABLE IF NOT EXISTS principal_identity_migrations (
+    migration_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    legacy_principal_id TEXT NOT NULL UNIQUE,
+    principal_id TEXT NOT NULL UNIQUE,
+    status TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    completed_at TEXT,
+    failure_code TEXT,
+    CHECK(status IN ('prepared', 'completed', 'failed'))
+);
+
+-- ============================================================================
 -- 9. TABLE sync_state
 -- État de synchronisation par atome (avec hash pour détecter les changements)
 -- ============================================================================
@@ -254,7 +367,6 @@ CREATE TABLE IF NOT EXISTS sync_state (
 CREATE VIEW IF NOT EXISTS users_view AS
 SELECT 
     a.atome_id AS user_id,
-    MAX(CASE WHEN p.particle_key = 'phone' THEN JSON_EXTRACT(p.particle_value, '$') END) AS phone,
     MAX(CASE WHEN p.particle_key = 'username' THEN JSON_EXTRACT(p.particle_value, '$') END) AS username,
     MAX(CASE WHEN p.particle_key = 'password_hash' THEN JSON_EXTRACT(p.particle_value, '$') END) AS password_hash,
     a.created_at,

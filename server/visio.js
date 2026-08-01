@@ -1,7 +1,7 @@
 import mediasoup from 'mediasoup';
 import { v4 as uuidv4 } from 'uuid';
 import db from '../database/adole.js';
-import { findUserByPhone, findUserById, generateDeterministicUserId } from './auth.js';
+import { findUserByPhone, findUserById } from './auth.js';
 import { wsSendJson } from './wsSend.js';
 
 import { DEFAULT_RTC_MIN_PORT, DEFAULT_RTC_MAX_PORT, DEFAULT_LISTEN_IP, DEFAULT_MEDIA_CODECS, nowIso, normalizePhone, makeRequestId, safeParseJson, normalizeVisibility, ensureSet } from './visio_helpers.js';
@@ -170,23 +170,13 @@ export function createVisioService(options = {}) {
       };
     }
 
-    const bodyPhone = normalizePhone(request.body?.phone_e164 || request.body?.phone);
-    if (bodyPhone) {
-      return {
-        id: generateDeterministicUserId(bodyPhone),
-        user_id: generateDeterministicUserId(bodyPhone),
-        phone: bodyPhone,
-        username: null
-      };
-    }
-
     return null;
   }
 
   async function resolveUserInfo(userId, phone) {
     if (!databaseEnabled) {
       return {
-        id: userId || (phone ? generateDeterministicUserId(phone) : null),
+        id: userId || null,
         phone: phone || null,
         username: null
       };
@@ -213,11 +203,7 @@ export function createVisioService(options = {}) {
           username: user.username
         };
       }
-      return {
-        id: generateDeterministicUserId(phone),
-        phone,
-        username: null
-      };
+      return null;
     }
 
     return {

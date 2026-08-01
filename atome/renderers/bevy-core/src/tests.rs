@@ -17,6 +17,7 @@ fn shape_node(id: &str) -> AtomeRenderNode {
         layer: 3,
         opacity: 1.0,
         corner_radius: 0.0,
+        corner_radii: None,
         shadow: None,
         backdrop: None,
         presentation: false,
@@ -49,6 +50,7 @@ fn text_node_with_texture(id: &str) -> AtomeRenderNode {
         layer: 5,
         opacity: 1.0,
         corner_radius: 0.0,
+        corner_radii: None,
         shadow: None,
         backdrop: None,
         presentation: false,
@@ -157,6 +159,7 @@ fn backdrop_fixture_keeps_text_and_image_in_capture_and_large_glass_circle_in_pr
         layer: 2,
         opacity: 1.0,
         corner_radius: 0.0,
+        corner_radii: None,
         shadow: None,
         backdrop: None,
         presentation: false,
@@ -195,6 +198,7 @@ fn backdrop_fixture_keeps_text_and_image_in_capture_and_large_glass_circle_in_pr
         logical_size: [340.0, 340.0],
         clip_rect: None,
         corner_radius: 170.0,
+        corner_radii: None,
         backdrop: Some(AtomeBackdropStyle {
             blur_px: 12.0,
             tint: [0.36, 0.4, 0.47, 0.58],
@@ -646,6 +650,7 @@ fn rounded_shape_nodes_use_alpha_mask_texture_without_resizing() {
         &mut world,
         AtomeRenderNode {
             corner_radius: 8.0,
+            corner_radii: None,
             ..shape_node("rounded_shape")
         },
     )
@@ -899,6 +904,7 @@ fn audio_waveform_progress_spawns_and_moves_bevy_playhead_overlay() {
             layer: 2,
             opacity: 1.0,
             corner_radius: 0.0,
+            corner_radii: None,
             shadow: None,
             backdrop: None,
             presentation: false,
@@ -981,15 +987,15 @@ fn rounded_rect_mask_handles_are_cached_per_dimensions() {
     world.insert_resource(Assets::<Image>::default());
 
     let first = crate::texture::cached_image_handle_from_rounded_rect_mask(
-        &mut world, 1440.0, 920.0, 12.0, "bg_1",
+        &mut world, 1440.0, 920.0, [12.0; 4], "bg_1",
     )
     .unwrap();
     let second = crate::texture::cached_image_handle_from_rounded_rect_mask(
-        &mut world, 1440.0, 920.0, 12.0, "bg_2",
+        &mut world, 1440.0, 920.0, [12.0; 4], "bg_2",
     )
     .unwrap();
     let different = crate::texture::cached_image_handle_from_rounded_rect_mask(
-        &mut world, 1440.0, 920.0, 8.0, "bg_3",
+        &mut world, 1440.0, 920.0, [8.0; 4], "bg_3",
     )
     .unwrap();
 
@@ -999,4 +1005,47 @@ fn rounded_rect_mask_handles_are_cached_per_dimensions() {
     let cache = world.resource::<crate::components::AtomeRoundedRectMaskCache>();
     assert!(cache.total_bytes <= cache.max_bytes);
     assert_eq!(cache.max_bytes, 8 * 1024 * 1024);
+}
+
+// The accordion header, the table header/outer rows, the last Select option and
+// the outer segmented-control segments all round only part of their perimeter.
+// A uniform-radius mask cannot express that, so the rasterizer must honour each
+// corner independently.
+#[test]
+fn rounded_rect_mask_rounds_only_the_requested_corners() {
+    let mut images = Assets::<Image>::default();
+    // Top corners rounded, bottom corners square: [TL, TR, BR, BL].
+    let handle = crate::texture::image_handle_from_rounded_rect_mask(
+        &mut images, 40.0, 40.0, [8.0, 8.0, 0.0, 0.0], "partial",
+    )
+    .unwrap();
+    let image = images.get(&handle).unwrap();
+    let alpha_at = |x: usize, y: usize| image.data.as_ref().unwrap()[(y * 40 + x) * 4 + 3];
+
+    // Rounded corners are cut away.
+    assert_eq!(alpha_at(0, 0), 0, "top-left must be carved");
+    assert_eq!(alpha_at(39, 0), 0, "top-right must be carved");
+    // Square corners stay fully opaque.
+    assert_eq!(alpha_at(0, 39), 255, "bottom-left must stay square");
+    assert_eq!(alpha_at(39, 39), 255, "bottom-right must stay square");
+    // The interior is untouched.
+    assert_eq!(alpha_at(20, 20), 255);
+}
+
+#[test]
+fn partially_rounded_shape_gets_a_mask_even_with_a_zero_scalar_radius() {
+    // The regression this whole change exists for: a node carrying only
+    // `corner_radii` used to fall through the `corner_radius > 0.0` guard and
+    // was spawned as a plain square sprite.
+    let node = AtomeRenderNode {
+        corner_radius: 0.0,
+        corner_radii: Some([3.0, 3.0, 0.0, 0.0]),
+        ..shape_node("accordion_header")
+    };
+    let mut images = Assets::<Image>::default();
+    let handle = crate::spawn::texture_handle_for_node(&mut images, &node).unwrap();
+    assert!(
+        handle.is_some(),
+        "a node with only per-corner radii must still receive a rounded mask"
+    );
 }

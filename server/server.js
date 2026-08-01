@@ -8,6 +8,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { promises as fs, createReadStream, createWriteStream, readFileSync, existsSync, mkdirSync, watchFile } from 'fs';
 import crypto from 'crypto';
+import jwt from 'jsonwebtoken';
 import { execFile } from 'child_process';
 import pino from 'pino';
 import { coerceLogEnvelope, isValidLogEnvelope } from '../atome/shared/logging.js';
@@ -69,7 +70,14 @@ import {
   getABoxWatcherHandle,
   getABoxEventBus
 } from './aBoxServer.js';
-import { createUserAtome, findUserByPhone, findUserById, listAllUsers, updateUserParticle, deleteUserAtome, hashPassword, generateDeterministicUserId, normalizePhone, generateOTP, storeOTP, verifyOTP, sendSMS, enforceAuthIdentityRateLimit } from './auth.js';
+import { createUserAtome, findUserByPhone, findUserById, listAllUsers, updateUserParticle, deleteUserAtome, hashPassword, generateOpaquePrincipalId, normalizePhone, generateOTP, storeOTP, verifyOTP, sendSMS, enforceAuthIdentityRateLimit } from './auth.js';
+import { ensureOpaquePrincipalIdentity, replaceVerifiedPhone, removeVerifiedPhone } from './auth_identity.js';
+import { handleWsApiAccountProvision } from './wsApiAuthProvisioning.js';
+import { handleWsApiGuestAdoption } from './wsApiGuestAdoption.js';
+import { registerServerIdentityRoutes } from './auth_routes_server.js';
+import { initServerIdentity } from './serverIdentity.js';
+import { isWsApiPrincipalProvisioned } from './wsApiIdentity.js';
+import { revokeAllRefreshSessions } from './auth_sessions.js';
 import {
   commitAtomeEvent,
   commitAtomeEvents,
@@ -644,6 +652,7 @@ async function startServer() {
 
       try {
         await db.initDatabase();
+        await ensureOpaquePrincipalIdentity(db.getDataSourceAdapter());
         console.log('✅ Connexion à la base de données établie (SQLite/LibSQL)');
       } catch (error) {
         console.error('❌ Database initialization failed:', error.message);
@@ -700,6 +709,12 @@ async function startServer() {
     // ===========================
     // 2. ROUTES API
     // ===========================
+
+    initServerIdentity();
+    registerServerIdentityRoutes(server, {
+      dataSource: DATABASE_ENABLED ? db.getDataSourceAdapter() : null,
+      isProduction: process.env.NODE_ENV === 'production'
+    });
 
     const getRequiredJwtSecret = () => {
         const secret = String(process.env.JWT_SECRET || '').trim();
@@ -2040,6 +2055,23 @@ async function startServer() {
               });
               return;
             }
+            if (!await isWsApiPrincipalProvisioned(attachedSenderUserId)) {
+              safeSend({
+                type: 'direct-message-response',
+                requestId,
+                success: false,
+                error: 'remote_account_not_provisioned',
+                sender_id: attachedSenderUserId,
+                sender_phone: null,
+                sender_name: null,
+                receiver_id: null,
+                receiver_phone: null,
+                receiver_name: null,
+                recipientConnections: 0,
+                queueSize: 0
+              });
+              return;
+            }
             // Reject stale/expired attached identity.
             // We only authenticate once per connection for performance, but we still enforce token expiry.
             const authExpMs = connection && typeof connection._wsApiAuthExpMs === 'number' ? connection._wsApiAuthExpMs : null;
@@ -2086,9 +2118,10 @@ async function startServer() {
               let senderUserId = attachedSenderUserId;
               let senderPhone = null;
               let senderUsername = null;
+              let senderUser = null;
 
               try {
-                const senderUser = await findUserById(dataSource, String(senderUserId));
+                senderUser = await findUserById(dataSource, String(senderUserId));
                 if (senderUser) {
                   senderPhone = senderUser.phone || null;
                   senderUsername = senderUser.username || null;
@@ -2099,7 +2132,6 @@ async function startServer() {
 
               // If token payload is missing username, enrich from DB.
               // This keeps `from.username` reliable even for older tokens.
-              let senderUser = null;
               if (!senderUsername) {
                 try {
                   if (senderUserId) {
@@ -2128,7 +2160,7 @@ async function startServer() {
                   targetUserId = String(targetUser.user_id);
                 } else {
                   try {
-                    targetUserId = generateDeterministicUserId(String(normalizedToPhone));
+                    targetUserId = null;
                   } catch (error) {
                     console.warn("[server] operation failed", error);
                     targetUserId = null;
@@ -2146,37 +2178,36 @@ async function startServer() {
                 }
               }
 
-              if (!targetUser && targetUserId) {
-                try {
-                  const shadowUsername = normalizedToPhone || `user_${String(targetUserId).slice(0, 8)}`;
-                  const randomHash = await hashPassword(`shadow_${Date.now()}_${Math.random()}`);
-                  await createUserAtome(
-                    dataSource,
-                    targetUserId,
-                    shadowUsername,
-                    normalizedToPhone || '',
-                    randomHash,
-                    'private',
-                    {}
-                  );
-                  targetUser = await findUserById(dataSource, targetUserId);
-                } catch (err) {
-                  console.warn('[direct-message] failed to create shadow user:', err?.message || err);
-                }
-              }
-
-              if (!targetUserId) {
+              if (!senderUser) {
                 safeSend({
                   type: 'direct-message-response',
                   requestId,
                   success: false,
-                  error: 'Target user id could not be resolved',
+                  error: 'remote_account_not_provisioned',
+                  sender_id: attachedSenderUserId,
+                  sender_phone: null,
+                  sender_name: null,
+                  receiver_id: null,
+                  receiver_phone: null,
+                  receiver_name: null,
+                  recipientConnections: 0,
+                  queueSize: 0
+                });
+                return;
+              }
+
+              if (!targetUserId || !targetUser) {
+                safeSend({
+                  type: 'direct-message-response',
+                  requestId,
+                  success: false,
+                  error: 'remote_account_not_provisioned',
                   sender_id: senderUserId,
-                  sender_phone: senderPhone,
+                  sender_phone: null,
                   sender_name: senderUsername,
                   receiver_id: null,
-                  receiver_phone: normalizedToPhone ? String(normalizedToPhone) : null,
-                  receiver_name: targetUser ? targetUser.username : null,
+                  receiver_phone: null,
+                  receiver_name: null,
                   recipientConnections: 0,
                   queueSize: 0
                 });
@@ -2373,6 +2404,15 @@ async function startServer() {
                 requestId,
                 success: false,
                 error: 'file_request_auth_required'
+              });
+              return;
+            }
+            if (!await isWsApiPrincipalProvisioned(userId)) {
+              safeSend({
+                type: 'file-response',
+                requestId,
+                success: false,
+                error: 'remote_account_not_provisioned'
               });
               return;
             }
@@ -2653,12 +2693,39 @@ async function startServer() {
           }
 
           // Handle auth requests (ADOLE v3.0 WebSocket-only)
+          const guestAdoptionResponse = await handleWsApiGuestAdoption(data, {
+            dataSource: db.getDataSourceAdapter(),
+            connection,
+            projectRoot
+          });
+          if (guestAdoptionResponse) {
+            safeSend(guestAdoptionResponse);
+            return;
+          }
+
           if (data.type === 'auth') {
             const action = data.action || '';
             const requestId = data.requestId;
 
             // Get dataSource adapter for auth functions
             const dataSource = db.getDataSourceAdapter();
+
+            const provisionResponse = await handleWsApiAccountProvision(data, {
+              dataSource,
+              connection,
+              jwtSecret: getRequiredJwtSecret,
+              generatePrincipalId: generateOpaquePrincipalId,
+              attach: (targetConnection, userId, token) => {
+                if (!targetConnection) return;
+                attachWsApiClientToUser(targetConnection, userId);
+                const decoded = jwt.verify(token, getRequiredJwtSecret());
+                targetConnection._wsApiAuthExpMs = decoded?.exp ? decoded.exp * 1000 : null;
+              }
+            });
+            if (provisionResponse) {
+              safeSend(provisionResponse);
+              return;
+            }
 
             try {
               if (action === 'bootstrap' || action === 'register' || action === 'create-user') {
@@ -2741,7 +2808,7 @@ async function startServer() {
                   const jwt = await import('jsonwebtoken');
                   const jwtSecret = getRequiredJwtSecret();
                   const token = jwt.default.sign(
-                    { userId: existingUser.user_id, phone: existingUser.phone },
+                    { userId: existingUser.user_id },
                     jwtSecret,
                     { expiresIn: '7d' }
                   );
@@ -2750,7 +2817,6 @@ async function startServer() {
                     await ensureUserHome(projectRoot, {
                       id: existingUser.user_id,
                       username: existingUser.username,
-                      phone: existingUser.phone
                     });
                   } catch (e) {
                     console.warn('[ws/api] Failed to prepare user home:', e.message);
@@ -2767,7 +2833,6 @@ async function startServer() {
                       id: existingUser.user_id,
                       user_id: existingUser.user_id,
                       username: existingUser.username,
-                      phone: existingUser.phone
                     },
                     message: 'User authenticated successfully'
                   });
@@ -2790,7 +2855,7 @@ async function startServer() {
                 // Hash password and create user
                 // visibility: 'public' = visible in user_list (default), 'private' = hidden
                 const passwordHash = await hashPassword(password);
-                const userId = generateDeterministicUserId(cleanPhone);
+                const userId = generateOpaquePrincipalId();
                 try {
                   await createUserAtome(dataSource, userId, cleanUsername, cleanPhone, passwordHash, visibility, data.optional || {});
 
@@ -2832,7 +2897,6 @@ async function startServer() {
                       payload: {
                         userId,
                         username: cleanUsername,
-                        phone: cleanPhone,
                         optional: data.optional || {},
                         visibility,
                         access: visibility
@@ -2847,7 +2911,7 @@ async function startServer() {
                 const jwt = await import('jsonwebtoken');
                 const jwtSecret = getRequiredJwtSecret();
                 const token = jwt.default.sign(
-                  { userId, phone: cleanPhone },
+                  { userId },
                   jwtSecret,
                   { expiresIn: '7d' }
                 );
@@ -2863,7 +2927,6 @@ async function startServer() {
                     id: userId,
                     user_id: userId,
                     username: cleanUsername,
-                    phone: cleanPhone
                   },
                   message: 'User created successfully'
                 });
@@ -2882,6 +2945,15 @@ async function startServer() {
                 }
               } else if (action === 'request-phone-verification') {
                 const rawPhone = data.phone;
+                const purpose = String(data.purpose || '');
+                if (!['enrollment', 'change', 'removal'].includes(purpose)) {
+                  safeSend({ type: 'auth-response', requestId, success: false, error: 'Explicit verification purpose is required' });
+                  return;
+                }
+                if (purpose !== 'enrollment' && !connection?._wsApiUserId) {
+                  safeSend({ type: 'auth-response', requestId, success: false, error: 'Authentication is required' });
+                  return;
+                }
                 if (!rawPhone || typeof rawPhone !== 'string') {
                   safeSend({
                     type: 'auth-response',
@@ -2919,7 +2991,7 @@ async function startServer() {
                     requestId,
                     success: true,
                     ok: true,
-                    context: data.context || 'login_demo',
+                    purpose,
                     otpBypassed: true
                   });
                   return;
@@ -2932,7 +3004,7 @@ async function startServer() {
                   requestId,
                   success: true,
                   ok: true,
-                  context: data.context || 'login_demo'
+                  purpose
                 };
                 if (data.exposeForTest === true && process.env.NODE_ENV !== 'production') {
                   response.code = code;
@@ -2940,6 +3012,15 @@ async function startServer() {
                 safeSend(response);
               } else if (action === 'verify-phone-verification') {
                 const rawPhone = data.phone;
+                const purpose = String(data.purpose || '');
+                if (!['enrollment', 'change', 'removal'].includes(purpose)) {
+                  safeSend({ type: 'auth-response', requestId, success: false, error: 'Explicit verification purpose is required' });
+                  return;
+                }
+                if (purpose !== 'enrollment' && !connection?._wsApiUserId) {
+                  safeSend({ type: 'auth-response', requestId, success: false, error: 'Authentication is required' });
+                  return;
+                }
                 const code = data.code === undefined || data.code === null ? '' : String(data.code).trim();
                 if (!rawPhone || typeof rawPhone !== 'string' || !code) {
                   safeSend({
@@ -2979,9 +3060,40 @@ async function startServer() {
                   requestId,
                   success: true,
                   ok: true,
-                  context: data.context || 'login_demo'
+                  purpose
                 });
+              } else if (action === 'change-phone' || action === 'remove-phone') {
+                const principalId = connection?._wsApiUserId ? String(connection._wsApiUserId) : null;
+                if (!principalId) {
+                  safeSend({ type: 'auth-response', requestId, success: false, error: 'Authentication is required' });
+                  return;
+                }
+                const purpose = action === 'change-phone' ? 'change' : 'removal';
+                const rawPhone = action === 'change-phone' ? data.phone : (await findUserById(dataSource, principalId))?.phone;
+                const cleanPhone = normalizePhone(rawPhone);
+                const code = String(data.code || '').trim();
+                if (!cleanPhone || !code) {
+                  safeSend({ type: 'auth-response', requestId, success: false, error: 'Verified phone and code are required' });
+                  return;
+                }
+                const verified = verifyOTP(cleanPhone, code);
+                if (!verified.valid) {
+                  safeSend({ type: 'auth-response', requestId, success: false, error: verified.error || 'Invalid verification code' });
+                  return;
+                }
+                if (purpose === 'change') await replaceVerifiedPhone(dataSource, principalId, cleanPhone);
+                else await removeVerifiedPhone(dataSource, principalId);
+                await revokeAllRefreshSessions(dataSource, principalId, `phone_${purpose}`);
+                const activeConnections = wsApiClientsByUserId.get(principalId);
+                for (const activeConnection of activeConnections || []) {
+                  if (activeConnection !== connection) detachWsApiClient(activeConnection);
+                }
+                safeSend({ type: 'auth-response', requestId, success: true, ok: true, user: { id: principalId, user_id: principalId } });
               } else if (action === 'lookup-phone') {
+                if (!connection?._wsApiUserId) {
+                  safeSend({ type: 'auth-response', requestId, success: false, error: 'Authentication is required' });
+                  return;
+                }
                 const rawPhone = data.phone;
                 if (!rawPhone || typeof rawPhone !== 'string') {
                   safeSend({
@@ -3031,32 +3143,20 @@ async function startServer() {
                     id: user.user_id,
                     user_id: user.user_id,
                     username: user.username,
-                    phone: user.phone,
                     visibility: visibility === 'public' ? 'public' : 'private'
                   }
                 });
               } else if (action === 'delete' || action === 'delete-user') {
-                const { userId, phone, token, password } = data;
-                let targetUserId = userId || (phone ? generateDeterministicUserId(phone) : null);
+                const { userId } = data;
+                const authenticatedUserId = connection?._wsApiUserId ? String(connection._wsApiUserId) : null;
+                const targetUserId = userId ? String(userId) : authenticatedUserId;
 
-                // If no userId/phone provided, try to get from token
-                if (!targetUserId && token) {
-                  try {
-                    const jwt = await import('jsonwebtoken');
-                    const jwtSecret = getRequiredJwtSecret();
-                    const decoded = jwt.default.verify(token, jwtSecret);
-                    targetUserId = decoded.userId;
-                  } catch (jwtError) {
-                    // Token invalid, continue without userId
-                  }
-                }
-
-                if (!targetUserId) {
+                if (!targetUserId || targetUserId !== authenticatedUserId) {
                   safeSend({
                     type: 'auth-response',
                     requestId,
                     success: false,
-                    error: 'Missing required field: userId, phone, or valid token'
+                    error: 'Authenticated principal is required'
                   });
                   return;
                 }
@@ -3098,6 +3198,10 @@ async function startServer() {
                 });
               } else if (action === 'get-user') {
                 const { userId, phone } = data;
+                if (phone && !connection?._wsApiUserId) {
+                  safeSend({ type: 'auth-response', requestId, success: false, error: 'Authentication is required' });
+                  return;
+                }
                 let user = null;
 
                 if (userId) {
@@ -3106,11 +3210,12 @@ async function startServer() {
                   user = await findUserByPhone(dataSource, phone);
                 }
 
+                const publicUser = user ? { ...user, phone: undefined, password_hash: undefined } : null;
                 safeSend({
                   type: 'auth-response',
                   requestId,
                   success: true,
-                  user
+                  user: publicUser
                 });
               } else if (action === 'update-user') {
                 const { userId, key, value } = data;
@@ -3187,7 +3292,7 @@ async function startServer() {
                 const jwt = await import('jsonwebtoken');
                 const jwtSecret = getRequiredJwtSecret();
                 const token = jwt.default.sign(
-                  { userId: user.user_id, phone: user.phone },
+                  { userId: user.user_id },
                   jwtSecret,
                   { expiresIn: '7d' }
                 );
@@ -3195,8 +3300,7 @@ async function startServer() {
                 try {
                   await ensureUserHome(projectRoot, {
                     id: user.user_id,
-                    username: user.username,
-                    phone: user.phone
+                    username: user.username
                   });
                 } catch (e) {
                   console.warn('[ws/api] Failed to prepare user home:', e.message);
@@ -3210,8 +3314,8 @@ async function startServer() {
                   token,
                   user: {
                     id: user.user_id,
-                    username: user.username,
-                    phone: user.phone
+                    user_id: user.user_id,
+                    username: user.username
                   }
                 });
 
@@ -3250,30 +3354,12 @@ async function startServer() {
                   const decodedUserId = decoded.userId || decoded.id || decoded.user_id || decoded.sub || null;
                   let user = decodedUserId ? await findUserById(dataSource, String(decodedUserId)) : null;
 
-                  // If user doesn't exist but JWT is valid, create a shadow user
-                  // This enables Tauri users to authenticate on Fastify without explicit registration
-                  if (!user && decodedUserId && decoded) {
-                    const shadowUsername = decoded.username || decoded.name || `user_${decodedUserId.substring(0, 8)}`;
-                    const shadowPhone = decoded.phone || decoded.phoneNumber || null;
-
-                    console.log(`[ws/api] Creating shadow user from valid JWT: ${decodedUserId.substring(0, 8)}`);
-                    try {
-                      // Create user with a random password hash (they'll auth via JWT only)
-                      const bcrypt = await import('bcrypt');
-                      const randomHash = await bcrypt.hash(`shadow_${Date.now()}_${Math.random()}`, 10);
-                      await createUserAtome(dataSource, decodedUserId, shadowUsername, shadowPhone, randomHash, 'public', {});
-                      user = await findUserById(dataSource, String(decodedUserId));
-                    } catch (createErr) {
-                      console.warn(`[ws/api] Failed to create shadow user: ${createErr.message}`);
-                    }
-                  }
-
                   if (!user) {
                     safeSend({
                       type: 'auth-response',
                       requestId,
                       success: false,
-                      error: 'User not found'
+                      error: 'remote_account_not_provisioned'
                     });
                     return;
                   }
@@ -3281,8 +3367,7 @@ async function startServer() {
                   try {
                     await ensureUserHome(projectRoot, {
                       id: user.user_id,
-                      username: user.username,
-                      phone: user.phone
+                      username: user.username
                     });
                   } catch (e) {
                     console.warn('[ws/api] Failed to prepare user home:', e.message);
@@ -3303,8 +3388,8 @@ async function startServer() {
                     ok: true,
                     user: {
                       id: user.user_id,
-                      username: user.username,
-                      phone: user.phone
+                      user_id: user.user_id,
+                      username: user.username
                     },
                     registeredAs: registerAsUserId
                   });
@@ -3422,6 +3507,16 @@ async function startServer() {
                 requestId,
                 success: false,
                 error: 'atome_request_auth_required'
+              });
+              return;
+            }
+
+            if (!await isWsApiPrincipalProvisioned(requesterId)) {
+              safeSend({
+                type: 'atome-response',
+                requestId,
+                success: false,
+                error: 'remote_account_not_provisioned'
               });
               return;
             }
@@ -3858,7 +3953,7 @@ async function startServer() {
                 let allowTransfer = String(fromOwnerId) === String(requesterId);
                 if (!allowTransfer) {
                   try {
-                    allowTransfer = await db.isAnonymousUser(fromOwnerId);
+                    allowTransfer = await db.isGuestWorkspacePrincipal(fromOwnerId);
                   } catch (error) {
                     console.warn("[server] operation failed", error);
                     allowTransfer = false;
@@ -3870,7 +3965,17 @@ async function startServer() {
                     type: 'atome-response',
                     requestId,
                     success: false,
-                    error: 'Access denied - source owner must be anonymous'
+                    error: 'Access denied - source owner must be an active guest workspace'
+                  });
+                  return;
+                }
+
+                if (String(fromOwnerId) !== String(requesterId) && data.adoption_confirmed !== true) {
+                  safeSend({
+                    type: 'atome-response',
+                    requestId,
+                    success: false,
+                    error: 'guest_adoption_confirmation_required'
                   });
                   return;
                 }
@@ -3878,7 +3983,8 @@ async function startServer() {
                 const result = await db.transferOwner({
                   fromOwnerId,
                   toOwnerId,
-                  includeCreator
+                  includeCreator,
+                  operationId: data.operation_id || data.operationId || null
                 });
 
                 safeSend({
@@ -3996,7 +4102,6 @@ async function startServer() {
 
                   const rows = await dataSource.query(
                     `SELECT a.atome_id, a.atome_type, a.parent_id, a.owner_id, a.creator_id, a.created_at, a.updated_at, a.deleted_at,
-                            MAX(CASE WHEN p.particle_key = 'phone' THEN p.particle_value END) AS phone,
                             MAX(CASE WHEN p.particle_key = 'username' THEN p.particle_value END) AS username,
                             MAX(CASE WHEN p.particle_key = 'visibility' THEN p.particle_value END) AS visibility
                      FROM atomes a
@@ -4032,7 +4137,6 @@ async function startServer() {
                       created_at: row.created_at,
                       updated_at: row.updated_at,
                       deleted_at: row.deleted_at,
-                      phone: parse(row.phone),
                       username: parse(row.username),
                       visibility: parse(row.visibility) || 'public'
                     };
@@ -4258,6 +4362,15 @@ async function startServer() {
               });
               return;
             }
+            if (!await isWsApiPrincipalProvisioned(userId)) {
+              safeSend({
+                type: 'share-response',
+                requestId,
+                success: false,
+                error: 'remote_account_not_provisioned'
+              });
+              return;
+            }
 
             try {
               const response = await handleShareMessage(data, userId);
@@ -4374,6 +4487,10 @@ async function startServer() {
 
         const activate = async (userId) => {
           if (!userId || authenticated) return;
+          if (!await isWsApiPrincipalProvisioned(userId)) {
+            closeUnauthenticated('remote_account_not_provisioned');
+            return;
+          }
           authenticated = true;
           if (authTimer) clearTimeout(authTimer);
           authTimer = null;

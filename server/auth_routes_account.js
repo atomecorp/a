@@ -9,11 +9,12 @@ import { appendEvent } from '../database/adole.js';
 import { getABoxEventBus } from './aBoxServer.js';
 import { initServerIdentity, signChallenge, getServerIdentity, isConfigured as serverIdentityConfigured } from './serverIdentity.js';
 import { ensureUserHome } from './userHome.js';
-import { normalizePhone, generateDeterministicUserId, hashPassword, verifyPassword, requireConfiguredAuthSecret } from './auth_crypto.js';
-import { createUserAtome, findUserByPhone, ensureAnonymousUser, findUserById, listAllUsers, updateUserParticle, deleteUserAtome, syncUserToTauri, ANONYMOUS_PHONE, ANONYMOUS_USERNAME, ANONYMOUS_PASSWORD, ANONYMOUS_VISIBILITY, ANONYMOUS_OPTIONAL } from './auth_users.js';
+import { normalizePhone, hashPassword, verifyPassword, requireConfiguredAuthSecret } from './auth_crypto.js';
+import { createUserAtome, findUserByPhone, findUserById, listAllUsers, updateUserParticle, deleteUserAtome, syncUserToTauri } from './auth_users.js';
 import { getUserOptionalParticles, ensureUserAtomeType, repairMistypedUserAtomes, upsertUserStateCurrent, normalizeUserOptional, normalizeAccessValue } from './auth_user_particles.js';
 import { generateOTP, storeOTP, verifyOTP, readClientRateKey, enforceAuthIdentityRateLimit, enforceAuthRateLimit, sendSMS } from './auth_otp.js';
-import { readRefreshTokenFromRequest, readRefreshSessions, writeRefreshSessions, createRefreshSession, consumeRefreshSession, revokeRefreshToken, setAuthCookies, COOKIE_MAX_AGE, REFRESH_COOKIE_NAME } from './auth_sessions.js';
+import { readRefreshTokenFromRequest, readRefreshSessions, writeRefreshSessions, createRefreshSession, consumeRefreshSession, revokeRefreshToken, revokeAllRefreshSessions, setAuthCookies, COOKIE_MAX_AGE, REFRESH_COOKIE_NAME } from './auth_sessions.js';
+import { replaceVerifiedPhone } from './auth_identity.js';
 
 const PROJECT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const fs = fsp;
@@ -311,31 +312,24 @@ export function registerAccountRoutes(server, { dataSource, isProduction }) {
                 return reply.code(400).send({ success: false, error: otpResult.error });
             }
 
-            // ADOLE v3.0: Update phone in particles
             const current = await findUserById(dataSource, String(resolvedUserId));
 
             if (!current) {
                 return reply.code(404).send({ success: false, error: 'User not found' });
             }
 
-            await updateUserParticle(dataSource, String(resolvedUserId), 'phone', cleanPhone);
+            await replaceVerifiedPhone(dataSource, String(resolvedUserId), cleanPhone);
+            await revokeAllRefreshSessions(dataSource, String(resolvedUserId), 'phone_changed');
+            const refreshSession = await createRefreshSession(dataSource, String(resolvedUserId), 'phone_changed');
 
-            // Generate new JWT with updated phone
             const newToken = server.jwt.sign({
                 id: String(resolvedUserId),
                 tenantId: decoded.tenantId,
-                phone: cleanPhone,
-                username: current.username
+                username: current.username,
+                refresh_session_id: refreshSession.session_id
             });
 
-            // Update cookie
-            reply.setCookie('access_token', newToken, {
-                path: '/',
-                httpOnly: true,
-                secure: isProduction,
-                sameSite: 'strict',
-                maxAge: COOKIE_MAX_AGE
-            });
+            setAuthCookies(reply, newToken, refreshSession.refresh_token, isProduction);
 
             console.log(`Phone changed for user ${String(resolvedUserId)}`);
 
@@ -352,7 +346,6 @@ export function registerAccountRoutes(server, { dataSource, isProduction }) {
                 user: {
                     id: String(resolvedUserId),
                     username: current.username,
-                    phone: cleanPhone,
                     optional: optional || {}
                 }
             };
@@ -460,7 +453,6 @@ export function registerAccountRoutes(server, { dataSource, isProduction }) {
                         runtime: 'Fastify',
                         payload: {
                             userId: String(resolvedUserId),
-                            phone: user.phone,
                             username: user.username
                         }
                     });

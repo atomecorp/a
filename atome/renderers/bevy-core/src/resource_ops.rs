@@ -95,6 +95,7 @@ pub fn apply_resource(world: &mut World, patch: AtomeResourcePatch) -> Result<()
             layer,
             opacity,
             corner_radius: 0.0,
+            corner_radii: None,
             shadow: None,
             backdrop: None,
             presentation: false,

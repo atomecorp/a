@@ -299,9 +299,9 @@ const run = async () => {
                 return { ok: true, current_id: currentId, created: false };
             }
             let anonymousEnsured = false;
-            if (api?.security?.ensureAnonymousUser) {
+            if (api?.security?.startGuest) {
                 try {
-                    const anon = await api.security.ensureAnonymousUser({ force: true });
+                    const anon = await api.security.startGuest({ force: true });
                     anonymousEnsured = !!anon?.ok;
                 } catch (error) {
                     console.warn("[cleanup] operation failed", error);

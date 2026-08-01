@@ -13,6 +13,7 @@ use crate::{
     },
     render_math::{atome_rect_transform, depth_for_layer},
     shadow_texture::{build_gaussian_outer_shadow_texture_rgba, channel_to_u8, shadow_padding},
+    texture::AtomeCornerRadii,
     types::{
         normalize_opacity, AtomeBevyRendererConfig, AtomeLayer, AtomeLogicalPosition,
         AtomeLogicalSize, AtomeShadowStyle,
@@ -96,12 +97,12 @@ fn shape_shadow_cache_key(
     shadow: AtomeShadowStyle,
     shadow_width: f32,
     shadow_height: f32,
-    corner_radius: f32,
+    corner_radii: AtomeCornerRadii,
 ) -> AtomeShapeShadowCacheKey {
     AtomeShapeShadowCacheKey {
         width: cache_dimension(shadow_width),
         height: cache_dimension(shadow_height),
-        corner_radius: cache_scalar(corner_radius),
+        corner_radii: corner_radii.map(cache_scalar),
         blur: cache_scalar(shadow.blur),
         spread: cache_scalar(shadow.spread),
         offset_x: cache_signed_scalar(shadow.offset_x),
@@ -120,13 +121,13 @@ fn cached_shape_shadow_handle(
     shadow: AtomeShadowStyle,
     shadow_width: f32,
     shadow_height: f32,
-    corner_radius: f32,
+    corner_radii: AtomeCornerRadii,
 ) -> Result<Option<(Handle<Image>, u32, u32)>, String> {
     let key = shape_shadow_cache_key(
         shadow,
         shadow_width,
         shadow_height,
-        corner_radius,
+        corner_radii,
     );
     if let Some(handle) = world
         .get_resource::<AtomeShapeShadowTextureCache>()
@@ -154,7 +155,7 @@ fn cached_shape_shadow_handle(
         shadow.color,
         shadow_width,
         shadow_height,
-        corner_radius,
+        corner_radii,
         shadow.blur,
     );
     let Some((image_width, image_height, rgba)) = texture else {
@@ -212,13 +213,13 @@ pub(crate) fn build_shape_shadow_texture_rgba(
     style: crate::types::SelectionVisualStyle,
     width: f32,
     height: f32,
-    corner_radius: f32,
+    corner_radii: AtomeCornerRadii,
 ) -> Option<(u32, u32, Vec<u8>)> {
     build_gaussian_outer_shadow_texture_rgba(
         style.shadow_color,
         width,
         height,
-        corner_radius,
+        corner_radii,
         style.shadow_size,
     )
 }
@@ -228,10 +229,10 @@ pub(crate) fn build_backdrop_shadow_texture_rgba(
     color: [f32; 4],
     width: f32,
     height: f32,
-    corner_radius: f32,
+    corner_radii: AtomeCornerRadii,
     blur: f32,
 ) -> Option<(u32, u32, Vec<u8>)> {
-    build_gaussian_outer_shadow_texture_rgba(color, width, height, corner_radius, blur)
+    build_gaussian_outer_shadow_texture_rgba(color, width, height, corner_radii, blur)
 }
 
 pub fn remove_shape_shadow_overlay(world: &mut World, entity: Entity) {
@@ -359,18 +360,21 @@ pub fn rebuild_shape_shadow_overlay(world: &mut World, entity: Entity) -> Result
         .unwrap_or_else(|| normalize_opacity(1.0));
     let shadow_width = size.width.max(1.0) + shadow.spread * 2.0;
     let shadow_height = size.height.max(1.0) + shadow.spread * 2.0;
-    let corner_radius = world
+    // The shadow silhouette follows the shape, so a partially rounded surface
+    // keeps its square corners square in the shadow too. Spread grows every
+    // non-zero corner; a zero corner stays sharp.
+    let corner_radii = world
         .get::<AtomeCornerRadius>(entity)
         .map(|value| value.0)
-        .unwrap_or(0.0)
-        + shadow.spread;
+        .unwrap_or([0.0; 4])
+        .map(|radius| if radius > 0.0 { radius + shadow.spread } else { 0.0 });
     let Some((handle, image_width, image_height)) =
         cached_shape_shadow_handle(
             world,
             shadow,
             shadow_width,
             shadow_height,
-            corner_radius,
+            corner_radii,
         )?
     else {
         return Ok(());

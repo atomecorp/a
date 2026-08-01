@@ -129,7 +129,7 @@ export const AdoleAPI = {
     register: auth.registerMachine,
     getLastUser: auth.getMachineLastUser
   },
-  security: {
+    security: {
     clearView: auth.clearView,
     isAuthenticated: () => getSessionState().mode === 'authenticated',
     getAuthenticatedUser: () => (getSessionState().mode === 'authenticated' ? getSessionState().user : null),
@@ -137,8 +137,10 @@ export const AdoleAPI = {
     isAnonymous: () => isAnonymousMode(),
     getAnonymousIdentity: () => getAnonymousIdentity(),
     getAnonymousUserId: () => (getSessionState().mode === 'anonymous' ? getSessionState().user?.id || null : null),
-    ensureAnonymousUser: auth.ensureAnonymousUser,
-    migrateAnonymousWorkspace: auth.migrateAnonymousWorkspace,
+    startGuest: auth.startGuest,
+    leaveGuest: auth.leaveGuest,
+    adoptGuestWorkspace: auth.adoptGuestWorkspace,
+    provisionAccount: auth.provisionAccount,
     signalAuthComplete: auth.signalAuthComplete,
     waitForAuthCheck: waitForAuthCheck
   }

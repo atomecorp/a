@@ -9,8 +9,8 @@ import { appendEvent } from '../database/adole.js';
 import { getABoxEventBus } from './aBoxServer.js';
 import { initServerIdentity, signChallenge, getServerIdentity, isConfigured as serverIdentityConfigured } from './serverIdentity.js';
 import { ensureUserHome } from './userHome.js';
-import { normalizePhone, generateDeterministicUserId, hashPassword, verifyPassword, requireConfiguredAuthSecret } from './auth_crypto.js';
-import { createUserAtome, findUserByPhone, ensureAnonymousUser, findUserById, listAllUsers, updateUserParticle, deleteUserAtome, syncUserToTauri, ANONYMOUS_PHONE, ANONYMOUS_USERNAME, ANONYMOUS_PASSWORD, ANONYMOUS_VISIBILITY, ANONYMOUS_OPTIONAL } from './auth_users.js';
+import { normalizePhone, hashPassword, verifyPassword, requireConfiguredAuthSecret } from './auth_crypto.js';
+import { createUserAtome, findUserByPhone, findUserById, listAllUsers, updateUserParticle, deleteUserAtome, syncUserToTauri } from './auth_users.js';
 import { getUserOptionalParticles, ensureUserAtomeType, repairMistypedUserAtomes, upsertUserStateCurrent, normalizeUserOptional, normalizeAccessValue } from './auth_user_particles.js';
 import { generateOTP, storeOTP, verifyOTP, readClientRateKey, enforceAuthIdentityRateLimit, enforceAuthRateLimit, sendSMS } from './auth_otp.js';
 import { readRefreshTokenFromRequest, readRefreshSessions, writeRefreshSessions, createRefreshSession, consumeRefreshSession, revokeRefreshToken, setAuthCookies, COOKIE_MAX_AGE, REFRESH_COOKIE_NAME } from './auth_sessions.js';
@@ -170,7 +170,6 @@ export function registerCoreAuthRoutes(server, { dataSource, isProduction }) {
                     dataSource,
                     user.user_id,
                     user.username,
-                    user.phone,
                     visibility || 'public',
                     new Date().toISOString()
                 );
@@ -183,7 +182,6 @@ export function registerCoreAuthRoutes(server, { dataSource, isProduction }) {
             const token = server.jwt.sign({
                 id: user.user_id,
                 tenantId: 'local-tenant', // ADOLE: flat tenant model
-                phone: user.phone,
                 username: user.username,
                 refresh_session_id: refreshSession.session_id
             });
@@ -195,8 +193,7 @@ export function registerCoreAuthRoutes(server, { dataSource, isProduction }) {
             try {
                 await ensureUserHome(PROJECT_ROOT, {
                     id: user.user_id,
-                    username: user.username,
-                    phone: user.phone
+                    username: user.username
                 });
             } catch (e) {
                 console.warn('[auth] Failed to prepare user home:', e.message);
@@ -209,7 +206,6 @@ export function registerCoreAuthRoutes(server, { dataSource, isProduction }) {
                 user: {
                     id: user.user_id,
                     username: user.username,
-                    phone: user.phone,
                     optional: await getUserOptionalParticles(dataSource, user.user_id)
                 }
             };
@@ -309,7 +305,6 @@ export function registerCoreAuthRoutes(server, { dataSource, isProduction }) {
                 user: {
                     id: user.user_id,
                     username: user.username,
-                    phone: user.phone,
                     optional: await getUserOptionalParticles(dataSource, user.user_id)
                 }
             };
