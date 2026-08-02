@@ -1806,21 +1806,27 @@ The next execution tasks must refine this map by:
 - Main-menu palette controls are absent while closed. A real opening atomically projects every opaque child, icon, label, accent, and displaced tool at the expansion origin through the internal direct-prefix route, then uses direct motion for the complete 180 ms expansion, bounded 6–14 px / 70 ms outward overshoot, and exact 120 ms settlement. Prefix and motion share one direct-mutation queue; the rAF producer allows one renderer submission in flight and retains only the latest pending sample. No hidden resident subtree, browser API, persisted Atome state, RGBA re-hash, or full Dashboard/toolbox rebuild is created by the motion path.
 - Dashboard post-open hydration failure is observable through runtime diagnostics and cannot self-schedule an unbounded retry loop.
 - Dashboard header wheel/drag input is vertical-only. Lane horizontal offsets cannot change from an event targeted at the header column.
-# Contact panel migration update — 2026-07-31
+# Contact panel migration update — 2026-08-02
 
-- Contact panel effects reuse the Contacts API for local create/delete and
-  macOS import, and the existing profile API for current-user eVe profile
-  persistence. The panel never writes a third Contact store: local records use
-  `createLocalContact`, `updateLocalContact`, and `deleteLocalContact`; only
-  the current profile may use `upsertUserProfile`.
-  `contacts.import_icloud` and `contacts.push_icloud` remain headless MCP/API
-  operations; no Contact panel UI invokes them.
-- The rendering correction changes no Contacts or profile API: it only makes
-  the existing Contact tree width-responsive and reconciles obsolete WebGPU
-  projection records before the current tree is presented.
-- `resolveCurrentUserSnapshot` remains the sole current-profile reader for
-  Contact. Known identities are deduplicated by stable id before optional
-  contact fields, so matching phone/email values do not authorize a cross-user
-  merge or a profile write. Removing the visible Refresh control removes no
-  API or MCP operation; open, save, and successful import still reload via the
-  existing canonical readers.
+- Contact effects reuse `createLocalContact`, `updateLocalContact`,
+  `deleteLocalContact`, and `importSource`; the authenticated stable id alone
+  may call `upsertUserProfile`. A draft calls `createLocalContact` only after
+  its first meaningful edit. Group deletion invokes local deletes sequentially
+  in projection order and returns explicit `deleted` and `failed` lists.
+- `createContactsConnectorContract` now exposes `interactive_import:boolean`
+  and `label_key:string`; `sources()` projects both fields through
+  `cloneSourceInfo`. Contact shows only import-role sources with
+  `interactive_import:true`. Zero sources disables Importer, one starts
+  directly, and several open a WebGPU source chooser.
+- `createMacosContactsSource` opts into interactive import and propagates
+  `permission` through sync status and source results. The existing
+  `macos_contacts_snapshot` command name and contact payload remain stable,
+  while the Tauri implementation uses `CNContactStore` and returns
+  `not_determined`, `authorized`, `denied`, or `restricted`. Permission is
+  requested only after `importSource` reaches the native snapshot command.
+- `contacts.import_icloud` and `contacts.push_icloud` remain unchanged headless
+  API/MCP operations. No Contact-panel event invokes them, and iCloud has no
+  `interactive_import` capability.
+- Directory normalization requires an explicit stable `id` or
+  `source_contact_id`. Phone, email, and name equality never produce identity,
+  authorization, profile writes, or deletion rights.

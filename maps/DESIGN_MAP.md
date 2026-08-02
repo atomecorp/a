@@ -705,20 +705,26 @@ This section supersedes the earlier fade-and-neutral-scene design notes. Dashboa
 The lateral header column is a dedicated vertical scroll surface: wheel, trackpad, touch, and stylus drags started on it move only the Dashboard category stack, even beside a horizontally overflowing Projects lane. Small deltas move continuously and snap at rest rather than being rounded away per event. Main-menu palette opening over the Dashboard must retain the complete 180/70/120 ms expansion, visible outward overshoot, and smooth settlement at frame cadence; it may not rebuild the resident Dashboard/project scene. Palette controls are allocated lazily on first use and remain absent and inert when closed; only their immutable textures may be prehydrated. The first structural projection contains every opaque icon, label, accent, background, and displaced tool together at the expansion origin; direct samples move that complete set through expansion, overshoot, and return.
 
 The perceptual contract is backed by presented WebGPU frames, not JS sampling alone: queued and drained renderer operations must advance during the 370 ms motion, with at most two 35-operation batches resident. A cold renderer build must refresh only its tiny version manifest and keep the large glue/WASM pair content-addressed; stale mixed artifacts, delayed icons, structural terminal repaint, trail, and final-state-only presentation are regressions.
-# Contact panel migration update — 2026-07-31
+# Contact panel migration update — 2026-08-02
 
-- `EVE_PANEL_SKIN_TOKENS.bevyPanel.contactIdentity` owns the Contact identity
-  avatar size, editor body height, summary height, and read-only opacity. The
-  Contact panel otherwise reuses the approved panel Input, list, accordion,
-  action-button, and footer token groups. A persisted `user_face` source is
-  projected by the shared WebGPU image node; an empty source uses the same
-  tokenized avatar placeholder. Contact does not introduce a panel-local
-  palette, visible file input, or DOM image control.
-- The Contact list and identity accordion consume the available panel-body
-  width, including on the mobile fullscreen geometry. A refresh replaces the
-  complete visible Contact record set in one projection, so loading, empty,
-  and expanded visual states cannot be painted simultaneously.
-- The compact Contact toolbar contains creation and capability-gated macOS
-  import only. The authenticated profile is the first visible identity; other
-  people retain their source-derived read-only treatment rather than adopting
-  the current profile's edit affordances.
+- Contact is one vertical list of neutral shared accordions. Each stable person
+  appears once; the authenticated profile is first with the same neutral header
+  and no blue fill or validation glyph. Expansion is exclusive and independent
+  from the compact checkbox rail reserved for deletable local contacts.
+- `contactIdentity` owns only the `90 px` avatar size. An avatar appears only
+  when `user_face` exists; no placeholder, source field, status summary, native
+  image control, or manual Save action is rendered. Identity fields and custom
+  rows use shared inputs; custom rows stay above the canonical outlined `+`.
+- The fixed action surface immediately above, but outside, the shared footer
+  uses a stable order: `Importer`, `Ajouter`, conditional `Supprimer (N)`.
+  Confirmation replaces that row with a measured two-line count/actions block
+  so narrow panels never truncate `Annuler` or `Confirmer`.
+  Import labels are generic; a multi-source chooser appears in the scroll body
+  immediately above the fixed action area.
+- Desktop retains Contact docking beside the handed Dashboard header and above
+  the main menu. Mobile opens in the same safe bounds and then exposes the
+  shared footer drag/resize gestures. The footer design and close action remain
+  independent from Contact actions.
+- All color, spacing, typography, input, accordion, checkbox, action-button,
+  avatar, fixed-area, and footer values remain structured skin tokens. Contact
+  adds no CSS, visible DOM control, local palette, or alternate renderer.

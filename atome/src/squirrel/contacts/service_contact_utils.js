@@ -32,6 +32,8 @@ export const cloneSourceInfo = (source = {}) => ({
     writable: source.writable === true,
     provider: toText(source.contract?.provider || source.source_id),
     protocol: toText(source.contract?.protocol || 'contacts'),
+    interactive_import: source.contract?.interactive_import === true,
+    label_key: toText(source.contract?.label_key),
     sync: typeof source.syncStatus === 'function' ? source.syncStatus() : null,
     read_capabilities: Array.isArray(source.contract?.read_capabilities) ? [...source.contract.read_capabilities] : [],
     write_capabilities: Array.isArray(source.contract?.write_capabilities) ? [...source.contract.write_capabilities] : []

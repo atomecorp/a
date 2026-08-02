@@ -766,22 +766,34 @@ The current project scene remains the WebGPU owner across Dashboard toggles. Wor
 # Resident overlay hot path (2026-07-18, authoritative)
 
 The shared scene is not a reason to rebuild static Dashboard records when a toolbox palette changes. Closed palette subtrees are absent. Activation uses `project_scene_direct_prefix_runtime.js` to present every opaque palette record atomically at the expansion origin, then `project_scene_direct_motion_runtime.js` moves those resident records through the complete 180 ms expansion, 6–14 px / 70 ms outward overshoot, and exact 120 ms settlement without texture re-resolution or RGBA signature hashing. Prefix and motion share one serialized direct-mutation queue with canonical full rendering. The rAF loop is independent of renderer completion, allows one batch in flight, and replaces any queued sample with the latest position; backpressure therefore cannot produce a trail or replay stale motion. Completion does not trigger another structural render. Dashboard data hydration has no autonomous retry loop, and Dashboard headers own vertical input before any adjacent lane ownership is considered.
-# Contact panel migration update — 2026-07-31
+# Contact panel migration update — 2026-08-02
 
-- Contact has one visible route: its registered BevyUI tree on the shared
-  project canvas. Directory and Contacts service data remain canonical outside
-  the DOM; panel selection, expansion, draft, field focus, confirmation, and
-  import busy state are disposable runtime state. The field editor delegates to
-  the one shared hidden text service and commits only through the existing
-  Contacts or profile owner. The retired HTML dialog does not coexist as a
-  fallback route.
-- Contact composes its list and accordion at the panel body's supplied width;
-  no child measures the canvas or retains a fixed 358 px product width. Every
-  `eve_bevy_panel_*` projection reconciles its full record prefix atomically,
-  so an asynchronous Contact refresh removes stale loading, empty, and prior
-  accordion records before presenting the current panel tree.
-- The authenticated Contact profile is rebuilt from the current authenticated
-  id and canonical profile snapshot, placed first, and kept separate from
-  directory entries. Phone or email equality never grants identity equivalence
-  when an entry has a distinct stable id; only the authenticated profile can
-  enter the profile persistence path.
+- Contact has one visible route: one registered BevyUI tree on the shared
+  canvas. Canonical profile and Contacts data remain outside the DOM; expansion,
+  selection, rail gesture, one draft, field projection, confirmation, chooser,
+  permission notice, and busy state are disposable runtime-only values.
+- The runtime separates stable responsibilities: orchestration in
+  `bevy_panel_contact_runtime.js`, projection in
+  `bevy_panel_contact_view.js`, hidden-text editing in
+  `bevy_panel_contact_editing.js`, and fixed effects/actions in
+  `bevy_panel_contact_actions.js`. All four consume existing shared builders;
+  none owns canonical Contact storage or a parallel renderer.
+- Stable explicit identifiers are the sole reconciliation and authority keys.
+  The authenticated profile is moved to the first projection position and
+  removed from its prior position by exact id only. Local deletability is
+  source-based and cannot be inferred from name, phone, email, or visual state.
+- One accordion owns each person header and body. Opening another first
+  persists the prior draft; failure leaves that accordion and draft intact.
+  Checkbox rail gestures are bounded to the shared pointer route, and ordinary
+  scroll outside the rail remains owned by the panel scroll area.
+- Contact actions live in the existing fixed surface above the footer. The
+  shared panel tree sizes that surface from its tallest fixed child, including
+  the responsive two-line deletion confirmation. The
+  shared footer retains close, desktop docking, and mobile float/resize
+  ownership. Neither Contact nor the fixed surface creates a second geometry
+  owner.
+- Interactive source discovery is capability-based. Apple Contacts is a
+  read-only import source backed by `CNContactStore`; the native bridge returns
+  snapshots and permission state only, while `Squirrel.contacts` remains the
+  sole import persistence owner. CardDAV/iCloud stays headless and cannot
+  appear through label or provider-name inference.

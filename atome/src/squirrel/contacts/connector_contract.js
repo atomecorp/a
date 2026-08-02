@@ -20,11 +20,15 @@ export const createContactsConnectorContract = ({
     protocol = CONTACTS_V1_ARCHITECTURE_DECISION.protocol,
     role = CONTACTS_V1_ARCHITECTURE_DECISION.primary_read_source.role,
     read_capabilities = CONTACTS_V1_ARCHITECTURE_DECISION.read_capabilities,
-    write_capabilities = []
+    write_capabilities = [],
+    interactive_import = false,
+    label_key = ''
 } = {}) => ({
     provider: String(provider || CONTACTS_V1_ARCHITECTURE_DECISION.provider),
     protocol: String(protocol || CONTACTS_V1_ARCHITECTURE_DECISION.protocol),
     role: String(role || CONTACTS_V1_ARCHITECTURE_DECISION.primary_read_source.role),
     read_capabilities: Array.isArray(read_capabilities) ? [...read_capabilities] : [],
-    write_capabilities: Array.isArray(write_capabilities) ? [...write_capabilities] : []
+    write_capabilities: Array.isArray(write_capabilities) ? [...write_capabilities] : [],
+    interactive_import: interactive_import === true,
+    label_key: String(label_key || '')
 });

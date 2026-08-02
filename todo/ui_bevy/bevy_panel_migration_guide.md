@@ -917,16 +917,31 @@ Status: `in_review`
   if the existing panel, state, text, and action tokens cannot express it.
 - Exit criterion: the usable Contact panel has a complete MCP ledger,
   real-canvas evidence, product-owner approval, and no parallel HTML route.
-- Current implementation — 2026-07-31: the routed Contact surface now owns the
-  shared-canvas directory list, local-contact creation, profile/local save,
-  editable identity and Asset Box photo-source fields, editable custom fields,
-  confirmation-gated local deletion, read-only source presentation, and
-  capability-gated macOS import. The editor reuses the one hidden text service;
-  it introduces no visible native input. The former Contact HTML entry and all
-  of its visible controls were removed. iCloud import and push remain headless
-  Contacts API/MCP functions and are explicitly outside this package's UI and
-  acceptance scope. Focused contracts and real-canvas inspection remain
-  required before product-owner approval.
+- Current implementation — 2026-08-02: the routed Contact surface is one list
+  of autonomous shared accordions. The authenticated profile is first and
+  appears exactly once by stable id; local and read-only identities retain
+  their own permission treatment, and personal data never authorizes merging.
+  Opening is exclusive and auto-saves the prior draft; a failed save preserves
+  it. `Ajouter` inserts an open transient draft immediately after the profile
+  and persists only its first meaningful edit. Empty drafts disappear.
+- A compact canonical checkbox rail is available only to deletable local
+  contacts. Its vertical gesture adds or removes traversed visible rows while
+  expansion remains independent. The fixed area above the shared footer owns
+  `Importer`, `Ajouter`, and conditional `Supprimer (N)`; grouped confirmation
+  reports partial failures without losing their selection. The custom-field
+  `+` is outlined and remains below every custom row. Existing avatars only are
+  projected; there is no technical photo-source field or manual Save action.
+- Import UI is provider-neutral and capability-based through
+  `interactive_import`. Apple Contacts uses the native `CNContactStore` bridge,
+  requests permission only after an explicit Import action, and persists the
+  returned snapshot only through `Squirrel.contacts`. iCloud/CardDAV import and
+  push remain headless API/MCP functions and are outside this package's UI and
+  acceptance scope. The panel retains desktop docking and mobile footer
+  drag/resize. Focused contracts and real-canvas desktop plus `390 x 844`
+  mobile inspection pass for the unique profile accordion, selection,
+  responsive confirmation, movement, resize, close/reopen, zero visible
+  Contact DOM controls, and clean consoles. Product-owner approval is still
+  required, so Package 2 stays `in_review`.
 
 ##### Package 3 — Calendar structure
 
@@ -968,8 +983,8 @@ Molecule / MTraX — is validated, or when a future source audit identifies a
 measured, non-Molecule Panel occurrence:
 
 9. Media thumbnail/card. The current passive prototype is not evidence of a
-   required Panel component; the existing Contact photo is an editable 90 px
-   editor field and belongs to the Contact composition decision.
+   required Panel component; Contact only projects an existing avatar at
+   `90 × 90 px` and exposes no photo editor or source field.
 17. Selection/context summary. Existing occurrences are eVe tool count labels
    and tool-context selection information, not a Panel card.
 29. Detail preview surface for the selected Atome, layer, clip, or recording
@@ -1176,8 +1191,8 @@ Status: `superseded` for the active Panel migration
 The batch implementation remains a technical prototype, but it is not a
 current Panel component and must not be counted, presented for approval, or
 used as a reuse precedent. Source review found no corresponding generic card
-in an active legacy Panel: the Contact photo is editable and `90 × 90 px`,
-while selection counts are Tool-context information. The proposed
+in an active legacy Panel: Contact only projects an existing `90 × 90 px`
+avatar, while selection counts are Tool-context information. The proposed
 `358 × 128 px` and `358 × 64 px` geometries are Lab choices, not measured
 legacy Panel geometry.
 

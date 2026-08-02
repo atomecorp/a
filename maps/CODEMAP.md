@@ -1887,23 +1887,34 @@ This section supersedes earlier Dashboard lifecycle descriptions in this map. `e
 - `bevy_ui_overlay_record_projection.js` owns BevyUI-tree-to-overlay-record conversion. `project_scene_direct_prefix_runtime.js` applies compatible palette prefix additions/removals and same-id visual changes atomically against resident scene records; `project_scene_direct_motion_runtime.js` applies later transform/style samples without rebuilding the Dashboard, re-normalizing render nodes, or re-hashing unchanged RGBA payloads. Both routes share the serialized direct-mutation queue and retain canonical projection as the guarded fallback.
 - `bevy_ui_main_menu_runtime.js` keeps palette children absent while closed and prewarms only their image/label textures, one palette per idle frame, through the shared bounded texture cache without mounting or projection. Activation submits one complete opaque structural palette atomically at the expansion origin: every background, accent, tool, icon, and label exists before movement, with no delayed texture or opacity. Structural icon/label layout stays relative until projection; direct samples then move the tool, icon, label, accent, and displaced siblings together through the full 180/70/120 ms curve. `bevy_ui_main_menu_palette_motion.js` owns that one interruptible `requestAnimationFrame` loop, including the outward 6–14 px overshoot and exact settlement. Frame sampling never waits on a renderer promise: at most one WebGPU submission is in flight, and backpressure retains only the latest pending sample instead of building a FIFO, trail, or stale terminal update. The last motion sample is the definitive layout, with no redundant structural render.
 - `platforms/web/bevy-renderer/src/lib.rs` owns Web presentation cadence: a reactive 16 ms Winit update drains the single per-frame operation batch, while the proven 50 ms last-tick/last-wake guard suppresses rAF `WakeUp` floods that otherwise starve `apply_pending_web_ops`. `bevy_web_renderer_module_loader.js` reloads the tiny renderer-version manifest once per page boot, then content-addresses both wasm-bindgen glue and WASM with the binary hash so a rebuilt binary can never be paired with stale cached glue.
-# Contact panel migration update — 2026-07-31
+# Contact panel migration update — 2026-08-02
 
-- `eVe/intuition/runtime/bevy_panel/bevy_panel_contact_runtime.js` is the
-  product Contact composition owner. It reads the existing people directory and
-  Contacts API, keeps selection, draft, field focus, confirmation, and import
-  state ephemeral, and projects only WebGPU panel nodes. Its editable fields
-  reuse the single hidden text service; profile/local writes remain in their
-  existing owners. `eVe/intuition/tools/contact.js` is now a no-DOM
-  compatibility entry to that surface; it no longer builds a dialog.
-- `tests/eve/bevy_panel_contact_contract.test.mjs` covers local draft editing,
-  custom fields, photo-source projection, canonical local save/delete, macOS
-  capability gating, read-only suppression, and fluid list/accordion widths.
-- `bevy_panel_accordion.js` accepts the caller's available width while keeping
-  its shared default token. `bevy_ui_project_overlay_runtime.js` reconciles
-  every `eve_bevy_panel_*` tree by record prefix, preventing stale panel text
-  from a prior asynchronous projection from surviving the next tree update.
-- `contact_model.js` keys known people by stable id before phone or email.
-  `bevy_panel_contact_runtime.js` rebuilds the authenticated profile from that
-  canonical snapshot, puts it first, and exposes no manual Refresh action;
-  panel opening, save, and successful import own canonical reloads.
+- `bevy_panel_contact_runtime.js` owns Contact orchestration and only ephemeral
+  `expandedId`, `selectedIds`, one open draft, confirmation, import, and text-
+  projection state. `bevy_panel_contact_view.js` projects one neutral shared
+  accordion per stable identity; `bevy_panel_contact_editing.js` reuses the one
+  hidden text service; `bevy_panel_contact_actions.js` owns the fixed action
+  composition and delegates effects to the existing service owners. There is
+  no selected-row list, blue state, check-mark header, or global editor.
+- `contact_model.js` accepts and reconciles identities only through explicit
+  `id` or `source_contact_id` values. Name, phone, and email remain display and
+  search data and never authorize merging, editing, or deletion. The exact
+  authenticated profile is projected once at the top and is editable only
+  through `profile_api.js`; local `eve_contacts_local` entries alone expose the
+  compact checkbox rail and grouped deletion.
+- The shared `accordionNode`, `toggleableRowNode`, text inputs, action buttons,
+  and fixed panel children remain the only visual builders. Checkbox pointer
+  ownership supports a bounded vertical rail gesture; drag outside that rail
+  remains normal panel scrolling. Custom fields precede the canonical outlined
+  `+`; an avatar is projected only when `user_face` exists.
+- `connector_contract.js` and `service_contact_utils.js` expose the explicit
+  `interactive_import` and localized `label_key` source metadata. The Contact
+  panel filters on that capability, so CardDAV/iCloud stays headless. The fixed
+  row above the shared footer is `Importer`, `Ajouter`, and conditional
+  `Supprimer (N)`; confirmation replaces that row and partial failures remain
+  selected.
+- `platforms/desktop-tauri/src/native_contacts.rs` keeps the
+  `macos_contacts_snapshot` command but now reads Apple Contacts through
+  `CNContactStore`, returning the native permission state without persistence.
+  `Info.plist` owns `NSContactsUsageDescription`; the removed JXA/`osascript`
+  path is not a valid Contacts bridge.

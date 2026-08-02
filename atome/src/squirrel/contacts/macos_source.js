@@ -26,7 +26,7 @@ const normalizeList = (items = []) => (Array.isArray(items) ? items : [])
     .filter((entry) => entry.value);
 
 const buildCustomFields = ({ phones = [], emails = [], organization = '', note = '' } = {}) => {
-    const fields = [{ label: 'source', value: 'Mac Contacts' }];
+    const fields = [{ label: 'source', value: 'Apple Contacts' }];
     if (organization) fields.push({ label: 'organisation', value: organization });
     normalizeList(phones).forEach((entry, index) => {
         if (index === 0) return;
@@ -62,7 +62,7 @@ export const normalizeMacosContact = (record = {}) => {
         visibility: 'private',
         read_only: true,
         source_provider: 'macos_contacts',
-        source_label: 'Mac Contacts',
+        source_label: 'Apple Contacts',
         source_writable: false,
         custom_fields: buildCustomFields({
             phones,
@@ -102,15 +102,19 @@ export const createMacosContactsSource = ({
         provider: 'macos_contacts',
         protocol: 'macos_contacts',
         role,
+        interactive_import: true,
+        label_key: 'eve.contact.import_source_apple',
         write_capabilities: writable ? ['contacts_update'] : []
     });
     const invoke = typeof commandRunner === 'function' ? commandRunner : getTauriInvoke();
     const contactsById = new Map();
     let lastCursor = null;
+    let permission = 'not_determined';
 
     const syncStatus = () => ({
         cursor: lastCursor,
-        synced: contactsById.size > 0
+        synced: contactsById.size > 0,
+        permission
     });
 
     const fetchSnapshot = async (mode = 'initial') => {
@@ -122,11 +126,13 @@ export const createMacosContactsSource = ({
             };
         }
         const response = await invoke('macos_contacts_snapshot', {});
+        permission = toText(response?.permission || permission) || 'not_determined';
         if (!response || response.ok !== true) {
             return {
                 ok: false,
                 error: response?.error || 'macos_contacts_snapshot_failed',
                 message: response?.message || null,
+                permission,
                 source_id
             };
         }
@@ -141,6 +147,7 @@ export const createMacosContactsSource = ({
             source_id,
             cursor: lastCursor,
             mode,
+            permission,
             items: normalized.map((entry) => ({ ...entry }))
         };
     };
@@ -166,6 +173,7 @@ export const createMacosContactsSource = ({
                 ok: true,
                 source_id,
                 cursor: lastCursor,
+                permission,
                 items
             };
         },

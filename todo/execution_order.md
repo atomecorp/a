@@ -72,6 +72,10 @@ Dependances et ordre:
   contains an unmapped function.
 
 - [ ] Execute the five active BevyUI migration packages: (1) shared controls — Families 3, 6, and 13; (2) Contact — Family 18 and complete Contact composition; (3) Calendar structure — Families 21 to 24; (4) Calendar events — Families 25 to 27; (5) Calendar editor and completion — Family 28 and complete Calendar composition. Families 4 and 5 remain validated shared foundations. Molecule / MTraX capabilities, including Families 9, 17, 29, and 30, remain deferred until their owning product migration. Exit criterion: Calendar and Contact use their canonical Bevy owners, their effectful functions have a complete MCP ledger, real interactions and package/panel approvals are recorded, and neither surface retains a parallel DOM route.
+  Current gate — 2026-08-02: Package 2 Contact is implemented and contract-
+  validated but remains `in_review` until real desktop/mobile canvas evidence
+  and product-owner approval. Home follows Contact only after the required
+  product discussion; Timeline remains the final panel migration.
 
 Deferred after Phase 4 — complete Molecule / MTraX migration:
 

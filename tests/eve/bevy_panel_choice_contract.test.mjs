@@ -56,6 +56,30 @@ test('each choice control uses its own native interactive kind and the shared ro
     assert.equal(findNode(group, 'rg_left_indicator').style.radius, tokens.radioSizePx / 2);
 });
 
+test('a compact checkbox rail keeps its accessible label and owns vertical drag events', () => {
+    const events = [];
+    const rail = toggleableRowNode({
+        id: 'contact_rail',
+        kind: 'checkbox',
+        label: 'Select Ada',
+        indicatorOnly: true,
+        width: tokens.paddingHorizontalPx * 2 + tokens.indicatorColumnPx,
+        on: {
+            press: () => events.push('press'),
+            drag: () => events.push('drag'),
+            release: () => events.push('release')
+        }
+    });
+
+    assert.equal(findNode(rail, 'contact_rail_label'), null);
+    assert.deepEqual(rail.accessibility, { label: 'Select Ada' });
+    assert.equal(typeof rail.on.drag, 'function');
+    rail.on.press();
+    rail.on.drag();
+    rail.on.release();
+    assert.deepEqual(events, ['press', 'drag', 'release']);
+});
+
 test('the selected state is a distinct indicator treatment reusing the shared check mark', () => {
     const off = toggleableRowNode({ id: 'off', kind: 'checkbox', label: 'A' });
     const on = toggleableRowNode({ id: 'on', kind: 'checkbox', label: 'A', checked: true });
