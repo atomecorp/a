@@ -48,10 +48,11 @@ for (const key of SIMPLE_PANEL_SURFACE_KEYS) {
     assert.ok(file, `${key} must have a simple panel module file`);
     const source = readFileSync(file, 'utf8');
     const owningSource = key === 'home'
-        ? `${source}\n${readFileSync('eVe/intuition/tools/user_dialogs_runtime.js', 'utf8')}`
+        ? `${source}\n${readFileSync('eVe/intuition/tools/user_home_panel_runtime.js', 'utf8')}`
         : source;
     const usesStandardPanelPath = owningSource.includes('createEveDialog({')
-        || source.includes('openPanelSurface(');
+        || owningSource.includes('openPanelSurface(')
+        || owningSource.includes('openBevyPanelSurface(');
     assert.equal(usesStandardPanelPath, true, `${key} must use the standard dialog or panel API`);
     assert.ok(def.surface_id, `${key} must keep one canonical surface id`);
 }

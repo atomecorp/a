@@ -10,6 +10,21 @@ import { setMainMenuRuntime } from '../../eVe/intuition/ribbon/bevy_ui_product_r
 import { PANEL_SURFACE_DEFINITIONS } from '../../eVe/intuition/panel_definitions.js';
 import { BEVY_PANEL_TOKENS } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_tokens.js';
 import { EVE_TOOL_SKIN_TOKENS } from '../../eVe/elements/skin/tool_skin.js';
+import { EVE_PANEL_SKIN_TOKENS } from '../../eVe/elements/skin/panel_skin.js';
+import {
+    SYSTEM_UI_INPUT_TOKENS,
+    SYSTEM_UI_ROOT_VARS,
+    SYSTEM_UI_THEME_TOKENS
+} from '../../eVe/elements/system_ui_tokens.js';
+import { EVE_PANEL_CHROME_TOKENS } from '../../eVe/elements/design/panel_chrome_tokens.js';
+import { EVE_CONTROL_PRESETS } from '../../eVe/elements/look/preset_controls.js';
+import { EVE_PANEL_CHROME_PRESETS } from '../../eVe/elements/look/preset_chrome.js';
+import { EVE_COMM_TABLE_PRESETS } from '../../eVe/elements/look/preset_comm_table.js';
+import { EVE_COMM_SURFACE_PRESETS } from '../../eVe/elements/look/preset_comm_surface.js';
+import { eveCalendarPreset } from '../../eVe/elements/look/calendar_preset.js';
+import { MATRIX_VISUAL_THEME_TOKENS } from '../../eVe/intuition/matrix/visual/matrix_visual_tokens.js';
+import { RIBBON_TOKENS } from '../../eVe/intuition/ribbon/tokens.js';
+import { buildAtomeEditorStyle } from '../../eVe/intuition/tools/visual/tool_visual_tokens.js';
 import { EVE_DEFAULT_MESSAGES } from '../../eVe/i18n/languages.js';
 import { projectBevyUiTreeRecords } from '../../eVe/domains/rendering/bevy_ui_overlay_record_projection.js';
 import { buildBevyFooterCloseRingNode } from '../../eVe/intuition/ribbon/bevy_ui_menu_surface.js';
@@ -62,6 +77,58 @@ const findNode = (tree, id) => {
 };
 
 const flushPanelRefresh = () => new Promise((resolve) => setTimeout(resolve, 5));
+
+test('style projections keep one source for system depth and panel control paint', () => {
+    assert.equal(SYSTEM_UI_THEME_TOKENS.panelBackdropFilter, SYSTEM_UI_THEME_TOKENS.backdropFilter);
+    assert.equal(RIBBON_TOKENS.backdropFilter, SYSTEM_UI_THEME_TOKENS.backdropFilter);
+    assert.equal(SYSTEM_UI_ROOT_VARS['--system-input-text-shadow'], SYSTEM_UI_INPUT_TOKENS.textShadow);
+    assert.equal(EVE_PANEL_CHROME_TOKENS.textShadow, SYSTEM_UI_INPUT_TOKENS.textShadow);
+    assert.equal(EVE_CONTROL_PRESETS.fieldLabel.css.textShadow, SYSTEM_UI_INPUT_TOKENS.textShadow);
+    assert.equal(eveCalendarPreset.rules.calendarPanelTitle.css.textShadow, SYSTEM_UI_INPUT_TOKENS.textShadow);
+
+    const panel = EVE_PANEL_SKIN_TOKENS.bevyPanel;
+    assert.equal(panel.colors.control, panel.actionButton.idleBackground);
+    assert.equal(panel.colors.control, panel.table.rowBackground);
+    assert.equal(panel.colors.control, panel.select.optionBackground);
+    assert.equal(panel.colors.control, panel.mediaCard.background);
+    assert.equal(panel.colors.control, panel.selectionSummary.background);
+    assert.equal(panel.colors.control, panel.input.idleBackground);
+    assert.equal(panel.colors.inputHover, panel.select.hoverBackground);
+    assert.equal(panel.select.hoverBackground, panel.select.focusBackground);
+    assert.equal(panel.actionButton.pressedBackground, panel.select.pressedBackground);
+    assert.equal(panel.state.tones.empty, panel.state.tones.loading);
+    assert.notEqual(
+        EVE_TOOL_SKIN_TOKENS.bevyMenu.shape.flowerRadiusPx,
+        EVE_TOOL_SKIN_TOKENS.bevyMenu.shape.standardRadiusPx
+    );
+});
+
+test('factored legacy presets remain independently mutable', () => {
+    assert.deepEqual(EVE_CONTROL_PRESETS.passwordGroup.css, EVE_CONTROL_PRESETS.dateTimeGroup.css);
+    assert.notEqual(EVE_CONTROL_PRESETS.passwordGroup.css, EVE_CONTROL_PRESETS.dateTimeGroup.css);
+    assert.deepEqual(EVE_CONTROL_PRESETS.checkbox.checked, EVE_CONTROL_PRESETS.radio.checked);
+    assert.notEqual(EVE_CONTROL_PRESETS.checkbox.checked, EVE_CONTROL_PRESETS.radio.checked);
+    assert.deepEqual(EVE_COMM_TABLE_PRESETS.commTableCell.css, EVE_COMM_TABLE_PRESETS.commTableCellMessage.css);
+    assert.notEqual(EVE_COMM_TABLE_PRESETS.commTableCell.css, EVE_COMM_TABLE_PRESETS.commTableCellMessage.css);
+    assert.deepEqual(EVE_COMM_SURFACE_PRESETS.commPropertyTitle.css, EVE_COMM_SURFACE_PRESETS.commSearchTitle.css);
+    assert.equal(EVE_PANEL_CHROME_PRESETS.header.css.textShadow, EVE_PANEL_CHROME_TOKENS.textShadow);
+});
+
+test('Matrix and generated editor CSS consume factored style owners', () => {
+    assert.equal(MATRIX_VISUAL_THEME_TOKENS.filledCellBackground, MATRIX_VISUAL_THEME_TOKENS.currentCellBackground);
+    assert.equal(MATRIX_VISUAL_THEME_TOKENS.filledCellShadow, MATRIX_VISUAL_THEME_TOKENS.currentCellShadow);
+
+    const css = buildAtomeEditorStyle({ editorId: 'style_factorization_probe' });
+    assert.equal((css.match(/scrollbar-width: none;/g) || []).length, 1);
+    assert.equal((css.match(/#style_factorization_probe \[data-role="tools"\] \{/g) || []).length, 1);
+    assert.match(css, /\[data-eve-tool-visual-host="atome-editor"\] \.eve-atome-edit-footer-tool/);
+
+    const dom = new JSDOM('<!doctype html><html><head></head><body></body></html>');
+    const style = dom.window.document.createElement('style');
+    style.textContent = css;
+    dom.window.document.head.appendChild(style);
+    assert.ok(style.sheet.cssRules.length > 10, 'generated editor CSS must parse as a complete stylesheet');
+});
 
 test('Squirrel action-button contract validates presentations and suppresses blocked handlers', () => {
     const presentation = normalizeActionButtonPresentation({ label: 'Apply', variant: 'neutral' });
@@ -237,9 +304,11 @@ test('Calendar and Contact panel surfaces route to Bevy UI instead of legacy HTM
         unmountTree: async (id) => ({ id })
     };
     const { createPanelSurfaceRuntime } = await import('../../eVe/intuition/runtime/eve_intuition/panel_surface_runtime.js');
-    const { bevyPanelRuntimeState } = await import('../../eVe/intuition/runtime/bevy_panel/bevy_panel_runtime.js');
+    const { bevyPanelRuntimeState, registerBevyPanelSurface } = await import('../../eVe/intuition/runtime/bevy_panel/bevy_panel_runtime.js');
+    const { contactSurface } = await import('../../eVe/intuition/runtime/bevy_panel/bevy_panel_contact_runtime.js');
     bevyPanelRuntimeState.runtime = null;
     bevyPanelRuntimeState.mounted.clear();
+    registerBevyPanelSurface(contactSurface);
     const runtime = createPanelSurfaceRuntime({
         capturePanelVisibilitySnapshot: () => ({}),
         preparePanelSurfaceDuringOpen: () => {
@@ -276,14 +345,16 @@ test('Panel Lab is development-gated and uses the shared panel skin', async () =
         updateTree: async ({ tree }) => { mounted.push(tree); return tree; },
         unmountTree: async (id) => ({ id })
     };
-    const { panelLabSurface, panelLabSurfaceDefinition, registerBevyPanelSurfaces } = await import('../../eVe/intuition/runtime/bevy_panel/bevy_panel_surfaces.js');
-    const { bevyPanelRuntimeState } = await import('../../eVe/intuition/runtime/bevy_panel/bevy_panel_runtime.js');
+    const { registerBevyPanelSurfaces } = await import('../../eVe/intuition/runtime/bevy_panel/bevy_panel_surfaces.js');
+    const { panelLabSurface, panelLabSurfaceDefinition } = await import('../../eVe/intuition/runtime/bevy_panel/bevy_panel_lab_surface.js');
+    const { bevyPanelRuntimeState, registerBevyPanelSurface } = await import('../../eVe/intuition/runtime/bevy_panel/bevy_panel_runtime.js');
     const { createPanelSurfaceRuntime } = await import('../../eVe/intuition/runtime/eve_intuition/panel_surface_runtime.js');
     const { EVE_COMMON_SKIN_TOKENS, EVE_PANEL_SKIN_TOKENS } = await import('../../eVe/elements/skin/index.js');
     const { BEVY_MENU_TOKENS } = await import('../../eVe/intuition/ribbon/bevy_ui_menu_surface.js');
     bevyPanelRuntimeState.runtime = null;
     bevyPanelRuntimeState.mounted.clear();
     registerBevyPanelSurfaces();
+    registerBevyPanelSurface(panelLabSurface);
     const runtime = createPanelSurfaceRuntime({
         capturePanelVisibilitySnapshot: () => ({}),
         preparePanelSurfaceDuringOpen: () => {
@@ -375,12 +446,14 @@ test('Panel Lab is development-gated and uses the shared panel skin', async () =
     const { EVE_BUTTON_SKIN_TOKENS } = await import('../../eVe/elements/skin/button_skin.js');
     const { resolveBevyIconButtonSurface } = await import('../../eVe/intuition/shared/bevy_ui_icon_button.js');
     const buttonTokens = EVE_BUTTON_SKIN_TOKENS.bevyButton;
+    assert.equal(actionNeutral.style.radius, buttonTokens.radiusPx);
+    assert.equal(actionNeutral.style.shadow, buttonTokens.surface.shadow);
     assert.equal(buttonTokens.specimenDividerMarginPx, 8);
     assert.equal(buttonTokens.labelGapPx, 8);
     assert.equal(buttonTokens.restToneMix, 0.72);
     assert.equal(buttonTokens.pressedLuminanceLift, 0.16);
     assert.equal(buttonTokens.activeAccentMix, 0.34);
-    assert.equal(buttonTokens.rest.backdrop, null);
+    assert.equal(buttonTokens.surface, EVE_COMMON_SKIN_TOKENS.bevy.systemSurface);
     const variants = ['momentary', 'hold', 'toggle', 'radio_a', 'radio_b'];
     for (const variant of variants) {
         const button = findNode(mounted[0], `panel_lab_icon_button_${variant}`);
@@ -397,11 +470,8 @@ test('Panel Lab is development-gated and uses the shared panel skin', async () =
         assert.deepEqual(background.style.background, expectedBackground);
         assert.deepEqual(findNode(mounted[0], `panel_lab_icon_button_${variant}_icon`).image.tint, toneTokens.icon);
         assert.deepEqual(label.style.color, toneTokens.label);
-        assert.deepEqual(toneTokens.shadows, {
-            rest: buttonTokens.rest.shadow,
-            pressed: buttonTokens.pressed.shadow,
-            active: buttonTokens.active.shadow
-        });
+        assert.equal(toneTokens.shadows, undefined);
+        assert.equal(background.style.shadow, buttonTokens.surface.shadow);
         assert.equal(label.kind, 'text');
         assert.equal(label.style.position, undefined, 'the label must be a flow sibling to the button, never in it');
         assert.equal(label.style.text_vertical_align, buttonTokens.labelVerticalAlign);
@@ -453,7 +523,7 @@ test('Panel Lab is development-gated and uses the shared panel skin', async () =
         findNode(mounted.at(-1), 'panel_lab_icon_button_momentary_background').style.background,
         resolveBevyIconButtonSurface({ tone: 'neutral', pressed: true }).background
     );
-    assert.deepEqual(findNode(mounted.at(-1), 'panel_lab_icon_button_momentary_background').style.shadow, buttonTokens.pressed.shadow);
+    assert.equal(findNode(mounted.at(-1), 'panel_lab_icon_button_momentary_background').style.shadow, buttonTokens.surface.shadow);
     momentary.on.release();
     await flushPanelRefresh();
     assert.equal(findNode(mounted.at(-1), 'panel_lab_icon_button_momentary').style.translation, undefined);
@@ -467,7 +537,7 @@ test('Panel Lab is development-gated and uses the shared panel skin', async () =
         findNode(mounted.at(-1), 'panel_lab_icon_button_hold_background').style.background,
         resolveBevyIconButtonSurface({ tone: 'success', active: true }).background
     );
-    assert.deepEqual(findNode(mounted.at(-1), 'panel_lab_icon_button_hold_background').style.shadow, buttonTokens.active.shadow);
+    assert.equal(findNode(mounted.at(-1), 'panel_lab_icon_button_hold_background').style.shadow, buttonTokens.surface.shadow);
     hold.on.cancel();
     assert.equal(panelLabSurface.readState().iconButton.holdPressed, false);
     toggle.on.press();

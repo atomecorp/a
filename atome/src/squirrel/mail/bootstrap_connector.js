@@ -5,6 +5,7 @@ import {
     resolveFetch,
     resolveMailSyncBase,
     resolveRuntimeMailCredentials,
+    resolveSecureMailAuth,
     hasCompleteRuntimeMailCredentials
 } from './bootstrap_transport.js';
 
@@ -214,25 +215,6 @@ const getOrCreateService = (env) => {
     return service;
 };
 
-const resolveSecureAuthOptions = async (env, options = {}) => {
-    const authRef = String(options?.auth_ref || options?.authRef || '').trim();
-    if (!authRef) {
-        return { ...options };
-    }
-    const securityApi = env?.Squirrel?.security || env?.atome?.security || env?.AtomeSecurity || null;
-    if (!securityApi || typeof securityApi.readToken !== 'function') {
-        throw new Error('security_token_vault_unavailable');
-    }
-    const stored = await securityApi.readToken(authRef);
-    if (!stored || stored.ok !== true) {
-        throw new Error(stored?.error || 'security_token_read_failed');
-    }
-    return {
-        ...options,
-        auth: stored.value
-    };
-};
-
 const createRuntimeMailConnector = async (env, options = {}) => {
     const runtimeCredentials = await resolveRuntimeMailCredentials(env, options);
     if (!hasCompleteRuntimeMailCredentials(runtimeCredentials)) {
@@ -256,7 +238,14 @@ const createRuntimeMailConnector = async (env, options = {}) => {
 };
 
 const createConfiguredMailConnector = async (env, options = {}) => {
-    const resolvedOptions = await resolveSecureAuthOptions(env, options);
+    const secureOptions = await resolveSecureMailAuth(env, options);
+    const resolvedOptions = {
+        ...secureOptions,
+        auth: secureOptions.auth || {
+            username: secureOptions.username || secureOptions.email,
+            password: secureOptions.password
+        }
+    };
     const connectorOptions = {
         provider: resolvedOptions.provider,
         auth: resolvedOptions.auth,

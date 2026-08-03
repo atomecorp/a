@@ -17,7 +17,7 @@ both documents are updated first.
 The canonical panel registry has 16 entries, and all 16 are in scope for final
 product-panel migration: home, contact, info, finder, communicate, delete,
 undo, paste, timeline, calendar, background, couleur, size, font, detail, and
-layer. Calendar, Contact, and Timeline currently route through BevyUI; that
+layer. Home, Calendar, Contact, and Timeline currently route through BevyUI; that
 route is not evidence that their product-panel migration is complete. The
 Timeline product panel is intentionally the final migration in this programme.
 The Finder map is a Finder feature, not an
@@ -637,19 +637,18 @@ explicit product-owner approval are complete.
 
 ### Eighth specimen proposal — checkbox / radio / toggle
 
-Status: `validated`; focused contracts are complete and the product owner
-explicitly approved the specimen on the real canvas on 2026-07-27. This position
+Status: `in_review`; control semantics retain their 2026-07-27 approval, but
+the visual surface was reopened on 2026-08-02 after size and style drift was
+found between choices and the canonical icon actions. This position
 was reviewed after the table because
 the product owner deferred it, then asked for it explicitly; the table specimen
 below therefore keeps its own record and stays after this one in body flow so
 the declared component order is readable in the Lab.
 
-- Scope: the four choice controls in Panel Lab only. The legacy DOM
-  `createEveCheckbox` / `createEveRadio` consumers in the user/profile runtimes
-  (`user_visual_preferences_runtime.js`, `user_identity_fields_runtime.js`,
-  `user_accessibility_preferences_runtime.js`, `user_custom_field_list.js`)
-  migrate with the Home panel and are out of scope here. Keyboard activation is
-  outside this specimen.
+- Scope: the four choice controls in Panel Lab only. The former legacy DOM
+  `createEveCheckbox` / `createEveRadio` user/profile consumers were removed
+  with the Home migration; Home now composes these canonical Bevy choices.
+  Keyboard activation is outside this specimen.
 - Integration decision: `checkbox`, `radio`, and `toggle` are real native BevyUI
   kinds — present in `SUPPORTED_KINDS`, in `INTERACTIVE_KINDS`, and in the Rust
   `is_button_kind` list — so each control uses its own native interactive node
@@ -671,24 +670,19 @@ the declared component order is readable in the Lab.
   prerequisite: `checkbox` is an independent boolean; `radio` is an exclusive
   group where activating the current choice keeps the selection; `toggle` is one
   on/off value. Each is proven in both directions by the focused contract.
-- Geometry: every control is a `358 × 32 px` row with `3 px` radius. One shared
-  `36 px` indicator column keeps the labels of all three shapes aligned, with a
-  `10 px` gap before the label. The checkbox box is `18 × 18 px` at the panel
-  radius, the radio is an `18 px` circle with a `6 px` dot, and the switch is a
-  `36 × 18 px` pill whose `14 px` knob travels between a `2 px` inset on each
-  side.
-- Paint and the complete state matrix: idle row transparent; hover and pressed
-  add a tokenized row tint; focus reuses the existing input focus ring; the
-  indicator carries idle / hover / pressed / selected treatments, so **pressed
-  and selected stay visually distinct**; disabled drops to `0.55` opacity and
-  mounts no handler at all. The selected tint is the approved Select selection
-  colour — a green accent stays opt-in for a feature whose semantics call for
-  it, never the default on state.
+- Geometry and paint: every control consumes the same canonical 30 px opaque
+  surface, 8 px label gap, 210 px label slot, radius, shadow, pressed
+  translation, and disabled opacity as the icon actions. Checkbox uses neutral
+  blue, radio danger red, switch warning orange, and the unavailable option is
+  neutral and attenuated. Choice retains only the centered glyph geometry: a
+  16 px checkbox/radio area and a 20 × 10 px switch track. The former local row
+  hover paint, surface colors, dimensions, and indicator state palette are
+  removed.
 - Test contract to approve together, matching the icon-button precedent: one
   checkbox, one two-option radio group, one switch, and one disabled checkbox,
   in a single transparent group with `4 px` gaps.
 - Lab state: `bevy_panel_lab_choice_runtime.js` owns only ephemeral checked,
-  selected-value, hover, focus, and pressed state, emits closed
+  selected-value, focus, and pressed state, emits closed
   `panel_lab.choice.*` intents, resets on Lab open and close, and performs no
   Atome mutation and no DOM projection.
 
@@ -709,7 +703,9 @@ Validation evidence — 2026-07-27:
   pressed/hover feedback, and the ribbon short-open / short-close /
   long-press-reload contract were performed by the product owner in their own
   Lab session. They confirmed the result correct and approved the specimen on
-  2026-07-27, which closes this component.
+  2026-07-27. That approval is historical evidence for semantics only; the
+  unified 30 px visual surface requires a new real-canvas review, so this
+  component remains `in_review`.
 
 ### Ninth specimen proposal — table / property grid
 
@@ -831,14 +827,14 @@ are necessary but never substitute for this rendering check.
 
 Once a package provides its target panel's required coverage, that routed,
 non-deferred BevyUI surface may be reviewed as a composition. Contact may be
-reviewed after Package 2; Calendar may be reviewed after Package 5.
+reviewed after Package 2, Home after Package 3, and Calendar after Package 6.
 A composition review must call the same component builders,
 tokens, and intent handlers as its product surface; copied Lab-only styling or
 behavior is forbidden.
 
 ## Stage 4 — Product panels
 
-Status: `planned`
+Status: `in_review`
 
 ### Mandatory complete component-coverage baseline
 
@@ -853,7 +849,7 @@ Atome/Squirrel/Bevy owner, MCP-command mapping where effectful, focused
 contract, real-canvas evidence, and product-owner approval are recorded.
 
 The active baseline contains the **13 families required by the currently scoped
-Calendar and Contact panel migration**: 4, 5, 6, 13, 18, and 21 to 28.
+Home, Calendar, and Contact panel migration**: 4, 5, 6, 13, 18, and 21 to 28.
 Families 1 through 3 are already implemented or under their final approval
 loop. Families 4 and 5 are validated, so **11 active families
 remain to implement**; this is not an approval count. Molecule / MTraX-owned
@@ -874,7 +870,7 @@ existing infrastructure, not product component families.
 
 #### Active migration packages — authoritative task grouping
 
-The following five packages replace Family-by-Family delivery as the active
+The following six packages replace Family-by-Family delivery as the active
 task order. Family records below remain the evidence ledger for their canonical
 owner, focused tests, and real-canvas behavior; they are not separate
 product-owner approval gates.
@@ -907,7 +903,8 @@ Status: `validated`
 
 ##### Package 2 — Contact panel
 
-Status: `in_review`
+Status: `validated` — product-owner approval recorded on 2026-08-02 after the
+canonical 30 px button-skin convergence and Contact interaction review.
 
 - Scope: Family 18 and the actual routed Contact panel migration, using Package
   1's visual controls, the validated state surface, and the canonical Contact
@@ -929,7 +926,8 @@ Status: `in_review`
   expansion remains independent. The fixed area above the shared footer owns
   `Importer`, `Ajouter`, and conditional `Supprimer (N)`; grouped confirmation
   reports partial failures without losing their selection. The custom-field
-  `+` is outlined and remains below every custom row. Existing avatars only are
+  `+` reuses the canonical 30 px `add.svg` icon button and remains below every
+  custom row. Existing avatars only are
   projected; there is no technical photo-source field or manual Save action.
 - Import UI is provider-neutral and capability-based through
   `interactive_import`. Apple Contacts uses the native `CNContactStore` bridge,
@@ -940,10 +938,99 @@ Status: `in_review`
   drag/resize. Focused contracts and real-canvas desktop plus `390 x 844`
   mobile inspection pass for the unique profile accordion, selection,
   responsive confirmation, movement, resize, close/reopen, zero visible
-  Contact DOM controls, and clean consoles. Product-owner approval is still
-  required, so Package 2 stays `in_review`.
+  Contact DOM controls, and clean consoles. The custom-field add action and
+  local-selection rail now consume the canonical 30 px icon-button surface.
+  A long press on the Dashboard Contacts header toggles this panel and cannot
+  create a contact; creation remains exclusive to `Ajouter`. The product owner
+  approved the complete Contact panel on 2026-08-02, so Package 2 is
+  `validated`. Native Apple permission-dialog outcomes remain a non-blocking
+  environment verification and do not reopen the panel migration.
 
-##### Package 3 — Calendar structure
+##### Package 3 — Home panel
+
+Status: `validated` — the product owner explicitly approved the corrected Home
+result on 2026-08-03. Focused contracts, authenticated real-canvas
+desktop/mobile evidence, DOM/console audits, and the legacy-owner audit pass.
+Contact and Home are the validated panels (**2/16**).
+
+- Scope: one authenticated/guest Home composition on the shared canvas. It
+  contains six exclusive accordions: Identity/photo, Bio/Biometrics, Profile,
+  Passwords and keys, Preferences, and Account/security. Profile contains only
+  Competences, Passions, and Experiences; historical Pro flags remain in data
+  but are not projected or mutated. Handedness and accessibility belong to Bio.
+  Generic credentials and the five AI provider/model/key entries belong to
+  Passwords and keys. Preferences separates Mail, Visual/Wallpaper, Dashboard,
+  Language, and Server. Account/security contains no AI settings.
+  Login and registration remain the existing application-shell sequence; they
+  are not a panel fallback. Guest Home is read-only for profile/security data
+  and exposes only the existing leave-guest action.
+- Reuse: the panel consumes the shared shell, fixed action area, footer,
+  docking, drag, resize, scroll, accordion, input, select, choice, image,
+  labeled/icon button, and hidden text/file-entry services. It adds no renderer,
+  visible DOM control, CSS, local palette, component clone, or persistence key.
+  Families 9 and 17 require no new shared implementation: the shared identity
+  media frame composes the existing image node and existing skin tokens, and
+  Home has no selection/context summary.
+- Canonical action ledger:
+
+| Intent | Canonical owner/path | Existing command/API/MCP status | Security/policy |
+| --- | --- | --- | --- |
+| Open/close Home | `tool.main.home` → `ui.home.panel` → `user_home_panel_runtime.js` → Bevy surface `home` | `runtime.tools.call` / `runtime.audit.list`, mapped | Existing Runtime V2 tool policy and audit; the window owner resolves session state before composition. |
+| Read/save identity, photo, Bio, Profile custom fields, access and preferences | `loadUserProfile` / `upsertUserProfile` → sanitized `Atome.commit`; `auth.setVisibility` for access | Existing closed profile API; MCP `not_applicable` for private self-profile editing under the approved security exception | Authenticated stable user id only; no name/phone/email/DOM inference; Guest cannot write. Historical Pro values are preserved but not projected or mutated. |
+| Apply handedness, locale, accessibility and Dashboard visibility | existing handedness/accessibility normalizers, main-menu runtime, locale owner, `eve:profile-preferences-updated`, Dashboard preference normalizer/controller | Same canonical profile-save path; MCP `not_applicable` for private self-preferences | Disposable UI state only until sanitized profile commit succeeds; category changes force active Dashboard refiltering even when geometry is unchanged. |
+| Create/update/delete generic credentials | existing Squirrel encrypted token vault through `bevy_panel_home_vault.js` | Existing closed security API; MCP `not_applicable` for private secrets | Name, login, and password are encrypted in one opaque principal-scoped entry; no secret enters profile, DOM projection, logs, events, or MCP. |
+| Apply Mail settings | `mail/runtime_preferences.js`, `mail/bootstrap_connector.js`, opaque `auth_ref`, and canonical profile save | Existing closed Mail/profile API; MCP `not_applicable` | Mail password is stored only in the common encrypted vault and resolved asynchronously by the connector; preferences persist `auth_ref`, never the password. |
+| Open/generate, use selection, import, or download Background | `ui.background.panel` plus the existing Background selection/import/download owners | Existing closed tool/API routes; open remains mapped through `runtime.tools.call` / `runtime.audit.list` | Home delegates all four actions and owns no Background mutation, media storage, or renderer. |
+| Select AI provider/model and manage its key | Passwords and keys → existing Squirrel provider registry/model cache plus `configureVaultSecret`, `storeToken`, `readToken`, and `removeToken` | Existing closed AI/security APIs; MCP `not_applicable` for private secrets | OpenAI, Anthropic, Mistral, Google, and DeepSeek use catalog models only. Provider/model metadata may enter the profile; each key is encrypted under stable user id + provider and never projected, logged, or stored in profile. Guest cannot access it. |
+| Select/add Server | existing URL normalization in `loadServerConfig.js`, current preference save, SyncEngine and RemoteCommands reconnect operations | Existing closed configuration/runtime APIs; MCP `not_applicable` | Valid normalized HTTP(S) URL only; invalid loopback ports are rejected. No new endpoint, persistence, or authorization rule. |
+| Change password | `AdoleAPI.auth.changePassword` | Existing authenticated API; MCP `not_applicable` | Current/new secrets remain transient in the one hidden secure input and never enter DOM attributes, profile payloads, logs, or MCP. |
+| Logout / leave Guest | `AdoleAPI.auth.logout` / `AdoleAPI.security.leaveGuest` | Existing session/security API; MCP `not_applicable` | The session owner decides authorization; logout returns to the existing application shell and Guest data remains local unless explicitly adopted. |
+| Delete account | `AdoleAPI.auth.deleteAccount` | Existing authenticated API; MCP `not_applicable` | Explicit destructive confirmation plus current password; no inferred authority and no MCP secret transport. |
+| Login/register | existing `user_login_*` application-shell owners and `AdoleAPI.auth.bootstrap` | Outside Home panel composition | The shell remains authorized pre-auth UI; it is not rendered as Home HTML or used after an active session is present. |
+| Voice actions | no Home control | `not_applicable` | Voice remains owned only by the existing application shell/runtime; Home creates no duplicate action. |
+
+- HTML retirement: `eve_user_dialog`, its `createEveDialog` composition, and 22
+  `user_*` panel-only runtimes were deleted after functional parity and the
+  product owner's explicit instruction to remove the legacy panel. Auth/login,
+  workspace, model-only accessibility/visual preference, and canonical profile
+  owners remain. No HTML Home fallback or parallel visible route survives.
+- Evidence — 2026-08-02: focused Home, Dashboard, encrypted-vault, AI
+  catalog/provider, Background, profile/Mail/route, syntax, and architecture
+  guardrails pass. An isolated authenticated Fastify account exercised real
+  canvas clicks at desktop `1280 × 720` and mobile `390 × 844`: display Select;
+  Biometrics, Competences, Passions, and Experiences draft creation; generic
+  credential creation; vault unlock; five provider entries; OpenAI catalog/model
+  selection and encrypted key storage; Mail/Wallpaper/Dashboard/Language/Server
+  projection; bottom-right and bottom-left reopen after real handedness changes;
+  full-width mobile layout; and immediate Dashboard category hide/restore.
+  Background Download applied a random image immediately. Import opened the
+  canonical hidden file chooser; binary file injection and persisted application
+  remain covered by the Background owner contracts because the integrated
+  browser connector exposes no file-injection action. DOM audits report one
+  canvas, zero `#eve_user_dialog`, zero visible native controls, and an empty
+  warning/error console. The widened suite retains 11 known renderer/text/scene
+  failures outside Home.
+- Performance/lifecycle evidence — 2026-08-03: Home, Contact, and Panel Lab no
+  longer load through the common eager registry. Home builds only an opened
+  accordion/subsection and initializes vault, Mail, Background, Dashboard, or
+  Server only at its owning section boundary. Closed panels release source and
+  hit-test trees, overlay records, handlers, scroll/inertia/caret/timers,
+  editors, render queues, resize/drop listeners, and section subscriptions.
+  Scroll, drag, resize preview, and text use the shared targeted/latest-wins
+  paths; resize performs one structural reflow on release. Real-canvas checks
+  verify responsive bottom/menu anchoring, full-width mobile projection with
+  desktop restoration, footer-close then one-click Home reopen, smooth real
+  drag/resize/scroll, one canvas, zero visible DOM controls, and an empty
+  warning/error console. The display Select now has the translated `Afficher`
+  heading. Home and editable Contact reuse the same empty/photo media frame,
+  click picker, and Bevy hit-tested image drop contract; Guests/read-only
+  contacts cannot mutate it. The product owner approved the corrected result on
+  2026-08-03; Home is `validated`, bringing the programme to **2/16**.
+- **To verify**: destructive account deletion, a real Mail connection, a custom
+  Server reconnection, and native file selection remain contract-verified rather
+  than executed against a user account or external service.
+
+##### Package 4 — Calendar structure
 
 Status: `planned`
 
@@ -954,7 +1041,7 @@ Status: `planned`
 - Exit criterion: all three Calendar views render canonical Calendar records
   through the shared canvas with bounded visible-range behavior.
 
-##### Package 4 — Calendar events
+##### Package 5 — Calendar events
 
 Status: `planned`
 
@@ -965,7 +1052,7 @@ Status: `planned`
 - Exit criterion: all event presentation and gesture paths use canonical
   commands and remain correctly layered in every Calendar view.
 
-##### Package 5 — Calendar editor and completion
+##### Package 6 — Calendar editor and completion
 
 Status: `planned`
 
@@ -1257,10 +1344,12 @@ This is a panel-creation gate, not a requirement to expose graphical elements
 as commands. Passive layout, text, separators, and other non-effectful
 components need no MCP command. Every component that invokes an effectful
 function must instead reuse the function's already-declared canonical command;
-it must never introduce a panel-local handler, UI-only action, legacy helper,
-or second command path. If no canonical command exists, creating the panel is
-blocked until that command and its MCP contract are defined through the command
-bus, capability validation, policy checks, trace fields, and audit path.
+it must never introduce a panel-local handler, legacy helper, or second command
+path. If no canonical command exists, creating the panel is blocked unless an
+explicit security review records `not_applicable` because exposing the function
+would transport credentials/secrets or weaken authorization. Such an exception
+must reuse the existing authenticated API, remain UI-session scoped, and
+document why no MCP/public command is introduced.
 
 The ledger must be reviewed before the panel enters composition and again at
 complete-panel acceptance. It must record, at minimum: panel registry key,
@@ -1269,7 +1358,8 @@ contract, supported actions, capability/policy requirement, audit surface, and
 validation evidence. Every declared function must have one explicit status:
 `mapped`, `blocked`, or `not_applicable` with its evidence. A panel cannot be
 approved, retire its HTML route, or count toward program finalization while any
-effectful function is missing a `mapped` MCP command.
+effectful function remains unreviewed or `blocked`; every `not_applicable`
+entry requires explicit security evidence.
 
 Maintain a coverage ledger for every active panel with its registry key,
 required component types, individually validated component types, missing
@@ -1300,7 +1390,7 @@ Then prove that only the Bevy route remains and that no visible DOM or double
 rendering survives. A partial Bevy panel and an HTML panel must never be active
 in parallel.
 
-Program finalization lock: only once all 15 in-scope product panels have functional
+Program finalization lock: only once all 16 registered product panels have functional
 parity, focused evidence, and explicit approval, delete every remaining legacy
 panel HTML route, builder, style, listener, fixture, and obsolete test. Verify
 that active source and tests contain no executable legacy panel HTML rendering
@@ -1314,21 +1404,20 @@ platforms once for the complete panel when the product owner requests or when
 final platform acceptance requires it. This check is never repeated for each
 primitive component.
 
-### Authoritative next-panel decision — 2026-07-31
+### Authoritative next-panel decision — 2026-08-03
 
-Contact is the active panel migration and must be completed before another panel
-starts. **Home is the next panel after Contact.** Home implementation is
-explicitly gated by a product-owner discussion of its scope, visual composition,
-data owners, commands, and acceptance criteria; no Home source, specimen, or
-panel composition may be created before that discussion records an approved
-plan.
+Contact was validated by the product owner on 2026-08-02 and Home on
+2026-08-03; the programme therefore records **2/16 validated panels**. The
+existing package roadmap makes Calendar the next planned product panel through
+Packages 4 to 6. Calendar implementation does not start before its product
+discussion and recorded scope, design, data, command, and acceptance plan.
 
 **Timeline is the final panel migration.** Its existing Bevy route is not
 completion evidence and does not authorize early Timeline product work. The
-remaining panel order between Home and Timeline must be discussed and recorded
-before each implementation. Finder retains its separate provider, privacy,
-cost, and cross-platform gate and cannot retain a parallel HTML/Leaflet route
-after migration.
+remaining panel order after Calendar and before Timeline must be discussed and
+recorded before each implementation. Finder retains its separate provider,
+privacy, cost, and cross-platform gate and cannot retain a parallel
+HTML/Leaflet route after migration.
 
 ## Skinnability audit — 2026-07-31
 

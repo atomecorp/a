@@ -26,9 +26,15 @@ assert.doesNotMatch(tauriExistingBranch, /"password_hash"/, 'Tauri bootstrap exi
 assert.doesNotMatch(tauriExistingBranch, /upsert_required_user_particles/, 'Tauri bootstrap existing-phone branch must not repair credentials by overwriting them');
 
 const fastifyServer = readSource('server/server.js');
+const databaseCore = readSource('database/adole_db_core.js');
+assert.match(databaseCore, /let transactionTail = Promise\.resolve\(\)/, 'Canonical database transactions must share one serialization queue');
+assert.match(databaseCore, /transactionContext\.getStore\(\) === true\) return work\(\)/, 'A nested canonical write must reuse its owning transaction instead of opening a second SQLite transaction');
+assert.match(databaseCore, /await previousTransaction[\s\S]*transactionContext\.run\(true,[\s\S]*await db\.beginTransaction\(\)/, 'An independent transaction must wait for its predecessor before opening SQLite state');
+assert.match(databaseCore, /finally \{[\s\S]*releaseTransaction\(\)/, 'The transaction queue must advance after both commit and rollback');
 const fastifyBootstrapBranch = sliceBetween(fastifyServer, "if (action === 'bootstrap' || action === 'register' || action === 'create-user')", "} else if (action === 'lookup-phone')");
 assert.match(fastifyBootstrapBranch, /const isBootstrap = action === 'bootstrap'/, 'Fastify WS auth must expose an explicit bootstrap action');
 assert.match(fastifyBootstrapBranch, /verifyPassword\(password, existingUser\.password_hash\)/, 'Fastify bootstrap must verify existing-phone passwords');
+assert.equal((fastifyBootstrapBranch.match(/phone: cleanPhone/g) || []).length, 2, 'Fastify bootstrap must return the verified normalized phone for both existing and newly created principals');
 assert.match(fastifyBootstrapBranch, /success: false,[\s\S]*alreadyExists: true,[\s\S]*error: 'Invalid credentials'/, 'Fastify register/create must not report existing phone as authenticated');
 assert.doesNotMatch(fastifyBootstrapBranch, /message: 'User already exists - ready to login'/, 'Fastify auth must not preserve the former misleading existing-user success message');
 
@@ -40,6 +46,7 @@ assert.match(authBackends, /alreadyExists && !token\) ok = false/, 'Unified regi
 assert.match(authLoginMethods, /hasAuthenticatedToken\(activeBackend, activeResult\)/, 'Unified auth must require an effective authenticated backend token before installing a session');
 
 const authPhoneVerification = readSource('atome/src/squirrel/apis/unified/adole_api/auth_phone_verification.js');
+const adoleAdapter = readSource('atome/src/squirrel/apis/unified/adole_adapter.js');
 assert.match(authPhoneVerification, /requestPhoneVerificationBackend/, 'Unified auth API must route pre-auth phone verification through backend adapters');
 assert.match(authPhoneVerification, /verifyPhoneVerificationBackend/, 'Unified auth API must route pre-auth phone verification checks through backend adapters');
 assert.match(authPhoneVerification, /otpBypassed: isOtpBypassed\(result\)/, 'Unified phone verification must preserve explicit OTP bypass responses from the backend adapter');
@@ -50,6 +57,13 @@ const lookupPhoneMethod = sliceBetween(sessionAccountMethods, 'async lookupPhone
 assert.match(lookupPhoneMethod, /const backend = getPrimaryBackend\(\)/, 'Unified lookupPhone must resolve the active auth backend');
 assert.match(lookupPhoneMethod, /const adapter = adapters\[backend\]/, 'Unified lookupPhone must use the active adapter map');
 assert.doesNotMatch(lookupPhoneMethod, /FastifyAdapter\.auth\.lookupPhone/, 'Unified lookupPhone must not force Fastify when Tauri is active');
+
+const fastifyLookupBranch = sliceBetween(fastifyServer, "} else if (action === 'lookup-phone')", "} else if (action === 'delete'");
+assert.doesNotMatch(
+    fastifyLookupBranch,
+    /_wsApiUserId|Authentication is required/,
+    'Fastify phone lookup must remain a pre-auth routing check and never act as an authorization decision'
+);
 const guestStartMethod = sliceBetween(sessionAccountMethods, 'async startGuest', 'async provisionAccount');
 assert.match(guestStartMethod, /globalThis\.crypto\?\.randomUUID\?\.\(\)/, 'Guest entry must create an opaque local UUID v4');
 assert.doesNotMatch(guestStartMethod, /bootstrapBackend\(/, 'Guest entry must not bootstrap a remote account');
@@ -60,6 +74,9 @@ assert.doesNotMatch(localAuth, /DEFAULT_COST/, 'Tauri local auth must not use bc
 const adoleApis = readSource('atome/src/squirrel/apis/unified/adole_apis.js');
 assert.match(adoleApis, /bootstrap: auth\.bootstrap/, 'AdoleAPI.auth must expose bootstrap');
 assert.match(adoleApis, /requestPhoneVerification,[\s\S]*verifyPhoneVerification,/, 'AdoleAPI.auth must expose pre-auth phone verification helpers from the dedicated module');
+assert.match(adoleAdapter, /data\.context === 'login_demo' \? 'enrollment' : data\.context/, 'Fastify adapter must map the legacy login context to the canonical enrollment purpose');
+assert.match(adoleAdapter, /action: 'request-phone-verification',[\s\S]*purpose,/, 'Fastify phone verification requests must transmit an explicit purpose');
+assert.match(adoleAdapter, /action: 'verify-phone-verification',[\s\S]*purpose/, 'Fastify phone verification checks must transmit the same explicit purpose');
 
 const fastifyHttpAuth = readSource('server/auth.js');
 assert.doesNotMatch(fastifyHttpAuth, /\/api\/auth\/request-phone-verification/, 'Fastify auth must not add HTTP phone verification routes');
@@ -83,8 +100,8 @@ assert.match(iosLocalServer, /exposeForTest && !isProductionRuntime\(\)/, 'iOS l
 assert.match(iosLocalServer, /ProcessInfo\.processInfo\.environment\["SQUIRREL_AUTH_OTP_BYPASS"\]/, 'iOS OTP bypass must be explicitly environment gated');
 assert.match(iosLocalServer, /if let otpBypassed \{ response\["otpBypassed"\] = otpBypassed \}/, 'iOS auth responses must expose the camelCase OTP bypass contract');
 
-const userTool = readSource('eVe/intuition/tools/user_auth_flow_runtime.js');
-const executeLoginFlow = sliceBetween(userTool, 'const executeLoginFlow = async', 'return {');
+const userTool = readSource('eVe/intuition/tools/user_home_panel_runtime.js');
+const executeLoginFlow = sliceBetween(userTool, 'const executeLoginFlow = async', 'setSharedLoginHandlers({');
 assert.match(executeLoginFlow, /api\.auth\.bootstrap/, 'Initial login UI must call the atomic bootstrap flow');
 assert.doesNotMatch(executeLoginFlow, /api\.auth\.create/, 'Initial login UI must not create after a failed login');
 assert.doesNotMatch(executeLoginFlow, /api\.auth\.login/, 'Initial login UI must not split bootstrap into a separate login attempt');

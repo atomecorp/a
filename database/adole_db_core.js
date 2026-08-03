@@ -11,10 +11,13 @@ import {
     getDatabase as getDriverDb,
     closeDatabase as closeDriver
 } from './driver.js';
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { runAdoleSchemaMigrations } from './adole_schema_migrations.js';
 
 let db = null;
 let isAsync = false;
+let transactionTail = Promise.resolve();
+const transactionContext = new AsyncLocalStorage();
 
 export async function initDatabase(config = {}) {
     if (db) return db;
@@ -69,18 +72,31 @@ export function serializeJson(value) {
 
 export async function withTransaction(work) {
     if (!db) await initDatabase();
+    if (transactionContext.getStore() === true) return work();
+    const previousTransaction = transactionTail;
+    let releaseTransaction;
+    transactionTail = new Promise((resolve) => {
+        releaseTransaction = resolve;
+    });
+    await previousTransaction;
     try {
-        await db.beginTransaction();
-        const result = await work();
-        await db.commit();
-        return result;
-    } catch (error) {
-        try {
-            await db.rollback();
-        } catch (rollbackError) {
-            error.rollback_error = rollbackError.message;
-        }
-        throw error;
+        return await transactionContext.run(true, async () => {
+            try {
+                await db.beginTransaction();
+                const result = await work();
+                await db.commit();
+                return result;
+            } catch (error) {
+                try {
+                    await db.rollback();
+                } catch (rollbackError) {
+                    error.rollback_error = rollbackError.message;
+                }
+                throw error;
+            }
+        });
+    } finally {
+        releaseTransaction();
     }
 }
 

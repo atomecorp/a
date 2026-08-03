@@ -8,7 +8,7 @@ import { INTERACTIVE_KINDS, SUPPORTED_KINDS } from '../../eVe/domains/rendering/
 import { EVE_DEFAULT_MESSAGES } from '../../eVe/i18n/languages.js';
 import { mediaCardNode } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_media_card.js';
 import { selectionSummaryNode } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_selection_summary.js';
-import { panelLabSurface } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_surfaces.js';
+import { panelLabSurface } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_lab_surface.js';
 import { BEVY_PANEL_TOKENS } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_tokens.js';
 
 const findNode = (node, id) => {

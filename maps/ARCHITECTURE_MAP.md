@@ -67,9 +67,11 @@ BevyUI panel architecture:
   icon action button composed through the shared `buildBevyIconButtonNode`
   widget path, and the in-review canonical `text_input`.
   Its opaque 30 px role-tinted no-backdrop rest surface, hue-preserving
-  rest-derived pressed luminance, accent-mixed active surface, distinct state
-  shadows, and 8 px divider/label spacing are owned by
-  `EVE_BUTTON_SKIN_TOKENS`; its label is a vertically centered right-side
+  rest-derived pressed luminance, accent-mixed active surface, shared centered
+  material depth, focus ring, standard radius, pressed translation, and 8 px
+  divider/label spacing are owned by `EVE_BUTTON_SKIN_TOKENS`. Labeled panel
+  actions and standard/palette menu tools consume the same contract; Flower
+  overrides only the standard radius with its circular petal geometry. Its label is a vertically centered right-side
   sibling rather than button content. Bevy 0.19 has no native inner-shadow
   style, so no synthetic overlay or second route is added. Its selected state is isolated to the Panel Lab surface runtime,
   resets when that surface closes, and is projected only through the shared
@@ -83,6 +85,7 @@ BevyUI panel architecture:
   primitive but never reimplement its graphics, interaction, geometry, styling,
   or state. Panel Lab is never a second renderer, product state owner, or
   compatibility route.
+- Visual configuration remains a three-layer projection, not three competing theme systems: `system_ui_tokens.js` owns shared CSS primitives, `elements/skin/` owns immutable Squirrel/Bevy domain projections, and `elements/look/` owns the still-active DOM compatibility translation. Repeated preset declarations may be composed inside their current owner, but feature geometry and semantic paint remain local exceptions. Flower therefore shares the button/system material while retaining its circular radius; Matrix and Dashboard keep their own semantic palettes. Generated CSS must consume these owners and factor selector lists without creating another renderer, stylesheet authority, or runtime state source.
 - Package 1 keeps all shared-control interaction state local to its Lab
   runtimes: selectable-list value, multiline draft/caret/scroll, and scope-chip
   selected values reset on close or reload and emit only closed Lab intents.
@@ -406,7 +409,7 @@ Canonical extension points:
 - `database/adole.js` and `database/driver.js` for SQL persistence and database driver concerns.
 - `server/wsApiState.js`, `server/wsSend.js`, `server/wsApiIdentity.js`, `server/wsAtomeOperations.js`, and `server/wsSyncSecurity.js` for WebSocket runtime state, identity, operations, and notification authorization.
 - Existing route modules for their own families only, with size reduction required before feature growth in oversized files.
-- Login pre-auth account lookup and phone verification belong to the existing auth/WebSocket boundary: the eVe login shell first calls `AdoleAPI.auth.lookupPhone(...)` on the active auth backend. A found local account skips OTP and moves directly to password; an explicit `User not found` launches `AdoleAPI.auth.requestPhoneVerification(...)`, then `AdoleAPI.auth.verifyPhoneVerification(...)`, and only after a successful check may it call `AdoleAPI.auth.bootstrap(...)`. Lookup failures other than explicit absence are hard failures and must not request OTP. The OTP secret is a transient auth artifact; in test/demo mode it may be projected in the login shell instruction band, but it must not become Atome state, DOM-owned canonical state, durable project state, or a production response field. The explicit local test launcher `./run.sh --test` may set `SQUIRREL_AUTH_OTP_BYPASS=1`; Fastify and Tauri/Axum may then return `otpBypassed: true` only outside production, after request validation and rate limiting, so the login shell skips the OTP entry step without bypassing password/bootstrap. After local password validation, `user_auth_flow_runtime.js` may call the login shell's internal `onAuthenticating` callback before `bootstrap` so the user gets neutral immediate wait feedback; after successful `bootstrap`, it may call `onAuthenticated` before profile restoration, current-project creation, tool-catalog refresh, dashboard open, and menu reveal without awaiting that visual animation. These callbacks are disposable UI acknowledgements only and must not become auth/session authority.
+- Login pre-auth account lookup and phone verification belong to the existing auth/WebSocket boundary: the eVe login shell first calls `AdoleAPI.auth.lookupPhone(...)` on the active auth backend. A found local account skips OTP and moves directly to password; an explicit `User not found` launches `AdoleAPI.auth.requestPhoneVerification(...)`, then `AdoleAPI.auth.verifyPhoneVerification(...)`, and only after a successful check may it call `AdoleAPI.auth.bootstrap(...)`. Lookup failures other than explicit absence are hard failures and must not request OTP. The OTP secret is a transient auth artifact; in test/demo mode it may be projected in the login shell instruction band, but it must not become Atome state, DOM-owned canonical state, durable project state, or a production response field. The explicit local test launcher `./run.sh --test` may set `SQUIRREL_AUTH_OTP_BYPASS=1`; Fastify and Tauri/Axum may then return `otpBypassed: true` only outside production, after request validation and rate limiting, so the login shell skips the OTP entry step without bypassing password/bootstrap. After local password validation, `user_home_panel_runtime.js` may call the login shell's internal `onAuthenticating` callback before `bootstrap` so the user gets neutral immediate wait feedback; after successful `bootstrap`, it may call `onAuthenticated` before profile restoration, current-project creation, tool-catalog refresh, dashboard open, and menu reveal without awaiting that visual animation. These callbacks are disposable UI acknowledgements only and must not become auth/session authority.
 - The login shell owns only a transient visual choreography. Its persistent logo may dock to the Bevy main-menu Atome item during final reveal; the deleted DOM ribbon auth-dock path must not be reintroduced as a second competing post-auth movement.
 
 Must not be duplicated by:
@@ -785,7 +788,9 @@ The shared scene is not a reason to rebuild static Dashboard records when a tool
 - One accordion owns each person header and body. Opening another first
   persists the prior draft; failure leaves that accordion and draft intact.
   Checkbox rail gestures are bounded to the shared pointer route, and ordinary
-  scroll outside the rail remains owned by the panel scroll area.
+  scroll outside the rail remains owned by the panel scroll area. The rail and
+  custom-field add action both consume the existing canonical 30 px icon-button
+  surface; choice owns only its semantic glyph geometry.
 - Contact actions live in the existing fixed surface above the footer. The
   shared panel tree sizes that surface from its tallest fixed child, including
   the responsive two-line deletion confirmation. The
@@ -797,3 +802,79 @@ The shared scene is not a reason to rebuild static Dashboard records when a tool
   snapshots and permission state only, while `Squirrel.contacts` remains the
   sole import persistence owner. CardDAV/iCloud stays headless and cannot
   appear through label or provider-name inference.
+- The Dashboard Contacts-header long press is an interaction-only bridge into
+  this existing surface: it reads Bevy panel open state and calls the registered
+  panel open/close API. It cannot load Contacts data, create a contact, or
+  invalidate directory state; Contact creation remains owned by `Ajouter`.
+
+# Home panel architecture update — 2026-08-02
+
+- Review status: Contact and Home are product-owner `validated` panels
+  (**2/16**). Calendar is the next planned panel; Timeline remains the final
+  panel migration.
+- Home has one active product-panel route:
+  `tool.main.home` → `ui.home.panel` → session-aware window owner → registered
+  Bevy surface `home` → `eve_bevy_panel_home` on the shared project canvas.
+  The generic panel bootstrap does not bypass this session owner.
+- Authenticated and Guest sessions compose Home in Bevy. Unauthenticated login
+  and registration remain the existing authorized application-shell surface;
+  that shell is not a Home fallback, second panel renderer, or state owner.
+- Canonical profile/session/preference state remains outside the DOM. Home tree
+  state is disposable; durable profile writes cross the existing profile API
+  and Atome commit boundary, while auth/security decisions remain in AdoleAPI.
+  Secrets are transient and cannot be inferred from display identity or DOM.
+- Guest registry persistence is local when no remote account is provisioned.
+  `remote_account_not_provisioned` is treated as an access-denied remote write,
+  preserving the local canonical tool registry without manufacturing a remote
+  account, fallback store, or second persistence path.
+- The legacy `eve_user_dialog` route and its panel-only owners are removed. The
+  shared shell/footer/docking/drag/resize/scroll and shared component pipeline
+  are the sole visible Home composition path.
+- Home opts into the shared shell's handedness-edge opening mode. Every open
+  resolves bottom/right or bottom/left from canonical handedness; mobile uses
+  full available width. Drag and resize remain transient during that opening.
+- Blank custom-row drafts remain in disposable Home state until persistence or
+  close, so reprojection cannot delete the row created above a list's `+`.
+  Dashboard category changes force the existing controller to refilter without
+  making geometry the invalidation authority.
+- Generic credentials, Mail authentication, and AI provider keys remain
+  exclusively in Squirrel's encrypted token vault. Provider/model metadata may
+  remain in the sanitized profile; AI consumers resolve vault credentials
+  asynchronously. Neither the Bevy tree nor the DOM owns secrets.
+- Preferences delegates Mail, Background, Dashboard, language, and Server to
+  their existing owners. Account/security contains remote control, account
+  password, logout, and deletion only; it is not an AI-settings owner.
+
+# Shared Bevy panel lifecycle/performance update — 2026-08-03
+
+- The common registry remains limited to permanently declared lightweight
+  surfaces. Home, Contact, and the development Panel Lab are imported and
+  registered only by their canonical loaders when requested. A closed panel is
+  fully unmounted: source/interaction trees, overlay records, handlers, scroll
+  and inertia state, caret/timers, hidden editors, render queues, resize
+  watchers, drop listeners, and section-owned subscriptions are released.
+- Home builds only the opened top-level accordion and opened nested subsection.
+  Select options exist only while that Select is open. Profile is the sole
+  initial Home data dependency; vault/provider, Mail, Background, Dashboard,
+  and Server owners initialize at their owning subsection and release their
+  active listeners when it closes. Guests do not initialize private owners.
+- `bevy_panel_runtime.js` is the single interaction and geometry owner. Scroll
+  is frame-coalesced and patches offsets, descendants, hit-test geometry, and
+  the scrollbar; drag translates the mounted record/hit tree; resize previews
+  shell/footer/clip geometry and performs one complete reflow on release; text
+  editing patches only text, selection, caret, and caret opacity. Each path
+  allows one active projection and one latest pending value.
+- Structural WebView resize recomputes every open Bevy panel against the top of
+  the canonical main-menu reserved band. Horizontal placement is preserved and
+  clamped; docked geometry is recomputed; Home projects full-width on mobile
+  and restores its saved desktop geometry afterwards. A temporary mobile
+  keyboard contraction does not replace that canonical desktop geometry.
+- The runtime emits `eve:surface-state` from actual surface lifecycle. The
+  Home tool alias family reads that state, so footer close clears its latch and
+  the next real tool click opens once. Login/Guest shell synchronization remains
+  separate and cannot become connected-Home surface authority.
+- `identityMediaFrameNode` is the shared Bevy media target used by editable Home
+  identity and Contact identity. Its empty state is a tokenized, unlabeled
+  visual frame; click uses the disposable picker service and canvas drop uses
+  Bevy hit testing before project import routing. Home and Contact retain their
+  existing profile/contact persistence and authorization owners.

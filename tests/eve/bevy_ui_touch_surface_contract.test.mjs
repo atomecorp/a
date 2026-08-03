@@ -242,6 +242,8 @@ test('Flower palette accents are individual rounded top arcs', () => {
     assert.equal(accents.length, 2);
     assert.equal(accents.every(Boolean), true);
     assert.equal(accents.every((accent) => accent.style.radius === BEVY_MENU_TOKENS.shape.flowerRadiusPx), true);
+    assert.equal(petals.every((petal) => petal.style.radius === BEVY_MENU_TOKENS.shape.flowerRadiusPx), true);
+    assert.equal(petals.every((petal) => petal.style.shadow === BEVY_MENU_TOKENS.surface.material.shadow), true);
     assert.equal(accents.every((accent) => accent.style.position[1] === Math.max(BEVY_MENU_TOKENS.paletteAccent.insetPx, 6)), true);
 });
 

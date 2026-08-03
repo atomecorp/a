@@ -10,6 +10,7 @@ import {
     getAiModelProviderDefinition
 } from './model_catalog_registry.js';
 import { loadRuntimeUserProfile } from './profile_loader.js';
+import { resolveConfiguredAiProviderCredentials } from './provider_client.js';
 
 const REFRESH_INTERVAL_MS = 60 * 60 * 1000;
 const DEFAULT_TIMEOUT_MS = 15000;
@@ -77,31 +78,15 @@ const sortModels = (models = [], definition = null) => {
     });
 };
 
-export const resolveConfiguredAiProviderKeys = async ({
-    loadProfile = loadRuntimeUserProfile
-} = {}) => {
-    const profileResult = await loadProfile();
-    if (!profileResult?.ok) {
-        return {
-            ok: false,
-            error: toText(profileResult?.error) || 'no_profile',
-            items: []
-        };
-    }
-
-    const keys = Array.isArray(profileResult?.profile?.passkeys?.keys)
-        ? profileResult.profile.passkeys.keys
-        : [];
-
+export const resolveConfiguredAiProviderKeys = async (options = {}) => {
+    const resolved = await resolveConfiguredAiProviderCredentials(options);
     return {
-        ok: true,
-        items: keys
-            .map((entry) => ({
-                provider: toText(entry?.provider).toLowerCase(),
-                model: toText(entry?.model),
-                apiKey: toText(entry?.key)
-            }))
-            .filter((entry) => entry.provider && entry.apiKey && getAiModelProviderDefinition(entry.provider))
+        ...resolved,
+        items: (resolved.items || []).map((entry) => ({
+            provider: entry.providerId,
+            model: entry.model,
+            apiKey: entry.apiKey
+        }))
     };
 };
 
@@ -240,9 +225,11 @@ export const refreshAiModelCatalog = async ({
     storage = null,
     fetchImpl = globalThis.fetch?.bind(globalThis),
     loadProfile = loadRuntimeUserProfile,
+    securityApi = null,
+    env = globalThis,
     now = () => new Date().toISOString()
 } = {}) => {
-    const configured = await resolveConfiguredAiProviderKeys({ loadProfile });
+    const configured = await resolveConfiguredAiProviderKeys({ loadProfile, securityApi, env });
     const configuredByProvider = new Map((configured.items || []).map((entry) => [entry.provider, entry]));
     const items = [];
 
@@ -296,6 +283,8 @@ export const ensureFreshAiModelCatalog = async ({
     storage = null,
     fetchImpl = globalThis.fetch?.bind(globalThis),
     loadProfile = loadRuntimeUserProfile,
+    securityApi = null,
+    env = globalThis,
     force = false,
     now = () => new Date().toISOString()
 } = {}) => {
@@ -307,6 +296,8 @@ export const ensureFreshAiModelCatalog = async ({
         storage,
         fetchImpl,
         loadProfile,
+        securityApi,
+        env,
         now
     });
 };
@@ -316,6 +307,7 @@ export const bootstrapAiModelCatalogRefresh = ({
     storage = env?.localStorage || null,
     fetchImpl = env?.fetch?.bind(env),
     loadProfile = loadRuntimeUserProfile,
+    securityApi = null,
     intervalMs = REFRESH_INTERVAL_MS
 } = {}) => {
     if (!env || typeof env !== 'object') return null;
@@ -330,6 +322,8 @@ export const bootstrapAiModelCatalogRefresh = ({
                 storage,
                 fetchImpl,
                 loadProfile,
+                securityApi,
+                env,
                 force
             });
         } finally {

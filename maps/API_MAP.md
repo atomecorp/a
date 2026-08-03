@@ -115,7 +115,7 @@ Effect model:
 - `dashboard_preferences.js` owns profile-driven category visibility. `preferences.dashboard.categories[categoryId] === false` hides a rubrique before data hydration, layout, hit-testing, record projection, and tool-handler activation; missing values keep default categories visible.
 - `dashboard_data_controller.js` is the single dynamic invalidation owner. `CalendarAPI.on()` invalidates `calendar`, `eve:people-directory-updated` and `eve:user-profile-updated` invalidate `contacts`, project Atome events and any non-Dashboard Atome mutation carrying a project id invalidate `projects` because project card miniatures depend on rendered project contents, and `source_domain: "eve.dashboard"` records invalidate their own `category_id`; unknown deletes invalidate the loaded dashboard categories.
 - `dashboard_data_adapters.js` exposes read-only `list(category, { projectId, hydratePreviews, forceCurrentProjectPreview })` and `listMany(categories, { projectId, hydratePreviews, forceCurrentProjectPreview })` for grouped category reads. `generic_record` categories share one explicit-project `state_current(projectId)` read and are split by `source_domain: "eve.dashboard"` plus `category_id`. Calendar lists only dated, non-deleted, unique `CalendarAPI.listEvents({ projectId })` items through `calendar_api.js` so dashboard reads do not initialize the Calendar panel DOM or depend on the implicit current project. Projects are ordered by most recent modification date, creation date, and stable id without mutating Matrix stable order. Default Dashboard boot requests `hydratePreviews:false` and later neutral hydration keeps preview hydration disabled, so project/contact rows appear from persisted metadata only and no missing preview can trigger a background project load. Explicit non-boot preview refresh paths resolve the active id through the canonical `currentProjectId()`/`AdoleAPI.projects` contract, not only through the optional `__currentProject` mirror, and may derive disposable `metadata.project_preview_source`, `project_preview_width`, and `project_preview_height` from the shared WebGPU project preview runtime; when `forceCurrentProjectPreview` is true for the active project, persisted preview metadata is ignored, the shared renderer capture path is invoked again with `forceCapture:true`, and the resulting source is exposed only after `project_preview_runtime.js` persists `preview_url`, `preview_width`, `preview_height`, and `preview_updated_at` through `Atome.commit`; commit failure returns `project_preview_error` without a valid preview source. Project preview runtime must capture from renderer-owned records, prefer current Bevy scene state, merge loaded records only for explicit hydration, and propagate `bevy_project_preview_capture_empty`, pending-resource, or skipped-resource errors instead of substituting icons, DOM screenshots, or empty preview URLs. Contacts combine `collectPeopleDirectory()` with local `eve_contacts_local` payloads; local payloads replace matching directory entries by phone/email/source id and remain the only editable contacts, the Dashboard list is alphabetical, and the current user is pinned first when available. Contact titles prefer display/name fields before phone or email, and may carry disposable `metadata.user_face` for Bevy card projection.
-- `dashboard_actions.js` owns effectful dashboard item interactions. Focused entêtes no longer expose no-op, panel-opening, or project-creation `+` actions. Header-only long press is owned by `dashboard_header_long_press_runtime.js`; only `projects`, `calendar`, and `contacts` are routed to `dashboard_header_creation_actions.js`, and unsupported headers keep the normal activation behavior. Focused-category item clicks use the item's real category, not the visual lane used to display it. Project item clicks first enter `transition`, close/fade out the Dashboard, then activate/load that project as the Bevy desktop and mark workspace mode `project`.
+- `dashboard_actions.js` owns effectful dashboard item interactions. Focused entêtes no longer expose no-op, panel-opening, or project-creation `+` actions. Header-only long press is owned by `dashboard_header_long_press_runtime.js`; `projects` and `calendar` create through their existing owners, while `contacts` only reads `isBevyPanelSurfaceOpen` and toggles the existing Contact surface through `openPanelSurface` / `closePanelSurface`. That gesture performs no Contacts API load, record creation, or category invalidation. Unsupported headers keep the normal activation behavior. Focused-category item clicks use the item's real category, not the visual lane used to display it. Project item clicks first enter `transition`, close/fade out the Dashboard, then activate/load that project as the Bevy desktop and mark workspace mode `project`.
 - Dashboard item label editing is owned by `dashboard_label_edit_runtime.js`, `dashboard_item_text_fields.js`, and `dashboard_label_persistence.js`. Long press on project, calendar, or local `eve_contacts_local` contact text fields starts hidden-text-service editing on the existing Bevy dashboard records, suppresses the normal click action and flower menu, and commits only through existing owners: Matrix `updateProjectName`, `CalendarAPI.updateEvent` for calendar `title` or `start`, or `Squirrel.contacts.updateLocalContact` for local contacts. Active project renames update the project record and the persisted current-project name so reload bootstrap reads the renamed label. Enter/Escape are consumed by the label editor so cancel/commit cannot leak into global dashboard close/navigation handlers; explicit dashboard project actions bypass and clear that transient keyboard guard. Non-local contacts do not arm dashboard label editing and still reject explicitly if persistence is called directly.
 - `dashboard_bevy_ui_runtime.js` delegates derived item cache and hydration to `dashboard_data_controller.js`, then projects only records whose visibility matches the current active state. Opening resolves an explicit scene `projectId` first and otherwise defaults to `__eve_dashboard_workspace__`, not the real current project. Neutral Dashboard opening invalidates in-flight warmup and the Projects item cache before first paint, then hydrates asynchronously with preview hydration disabled so missing project previews cannot load projects in the background. Warmup is internal and must not mutate focus/layout while the runtime is active, opening, closing, or serial-invalidated. `open()`, `refresh()`, and `warmup()` clear previous `asyncError` state before the new attempt so diagnostics describe only the current Dashboard transaction. Project-change lifecycle does not auto-close an active neutral Dashboard when a real project id is published later; real project transition is owned by the explicit project-card item path. Header interaction commits on pointer release only when the same header/item target is released without a drag, so vertical header drags can scroll the rubrique stack without opening a category. Opening and header activation paint immediately from cache when present; focused cached/current items are projected in the same render as the active-state flip through stable category+item record ids, while missing category content hydrates asynchronously and stale work is cancelled when the dashboard closes or another category supersedes it. Explicit `refresh()`, logout, project change, and dynamic invalidation can force only the touched category. Clicking a header focuses that category; the focused category's deduplicated items are distributed once across the existing lanes instead of mirrored into every lane, and clicking the already active header clears focus and returns to the base dashboard overview.
 - `renderProjectScene(..., { preserveEphemeralRecords: true })` is an internal rendering extension for late project reconciliation; it preserves ephemeral Bevy overlay records (`mol:lane:`, `mol:clip:`, `mol:kf:`, `mol:playhead`) from the current runtime map and preserves Dashboard Bevy UI overlay records only while `window.eveDashboardBevyUiRuntime` is active on that same project. Closed or other-project dashboard overlays are never preserved by project refresh, launch, or late reconciliation. Foreground project renders resolve the canonical `project_view_<projectId>` host when no explicit `host` is supplied, so the shared `eve_surface_project` canvas cannot remain attached to `#view` after project activation, reload, import, or project switch. Project media/import stack allocation is owned by `project_scene_stack_runtime.js`; it scans durable project records only, ignores ephemeral overlay records, detects visible Dashboard overlays as an active ceiling, and clamps explicit media/drop positions below that ceiling while preserving order-based stacking among durable project records.
@@ -183,11 +183,12 @@ closed runtime bridge. The validated Select follows the same closed route:
 `bevy_panel_select.js` composes a fixed-height field and floating option rows
 from the available native primitives, and the Lab runtime owns only reset-on-close
 presentation state plus `panel_lab.select.*` intents. It exposes no public API,
-DOM control, or durable mutation. The validated choice specimen follows the same
+DOM control, or durable mutation. The choice specimen follows the same
 closed route: `toggleable_contract.js` owns the two-state normalization, radio
 groups reuse `select_contract.js`, `bevy_panel_choice.js` composes the native
-`checkbox`/`radio`/`toggle` kinds, and the Lab runtime owns only reset-on-close
-presentation state plus `panel_lab.choice.*` intents. Each control declares
+`checkbox`/`radio`/`toggle` kinds around the canonical
+`EVE_BUTTON_SKIN_TOKENS.bevyButton` surface, and the Lab runtime owns only
+reset-on-close presentation state plus `panel_lab.choice.*` intents. Each control declares
 exactly one semantic — independent boolean, exclusive group, or single on/off
 value — and the canonical state owner remains the future consuming surface.
 The validated table specimen is the first
@@ -243,12 +244,14 @@ pattern rather than a current panel need. Its momentary, hold, toggle, and radio
 variants emit only closed `panel_lab.icon_button.*` intents and expose no public
 API or durable state; all presentation state is ephemeral and resets on surface
 close. `EVE_BUTTON_SKIN_TOKENS.bevyButton` is the closed shared presentation
-interface for its geometry, `labelGapPx`, `specimenDividerMarginPx`, label
-vertical alignment, opaque no-backdrop rest surface, `restToneMix`,
-hue-preserving rest-derived `pressedLuminanceLift`, `activeAccentMix`, state
-shadows, and neutral/success/warning/danger tones. Each tone independently
-exposes its icon color, label color, and rest/pressed/active shadows for future
-skin overrides; the current values still resolve to the shared system tokens.
+interface for the standard BevyUI button material/depth, radius, focus ring,
+pressed translation, disabled opacity, geometry, `labelGapPx`,
+`specimenDividerMarginPx`, label vertical alignment, `restToneMix`,
+hue-preserving rest-derived `pressedLuminanceLift`, `activeAccentMix`, and
+neutral/success/warning/danger tones. Role-local state-shadow maps are not part
+of the interface. Labeled panel actions and standard/palette menu tools consume
+the same surface/radius contract; Flower is the explicit circular-radius
+override.
 The validated `text_input` additionally emits the closed single-line
 `validate`/submit callback on Return outside IME and then blurs. An empty,
 unfocused field projects its localized placeholder; focus hides only that
@@ -422,7 +425,7 @@ Boundary status: Open application/data API. eVe tools may consume it, but must n
 
 Known constraints: `atome/src/squirrel/apis/unified/adole.js` is a large legacy surface and requires targeted verification before mutation.
 
-Authentication bootstrap: `AdoleAPI.auth.bootstrap(phone, password, username, visibility)` is the atomic first-auth contract. Existing-phone attempts must verify the password and return a real authenticated token/session; unknown-phone attempts may create the account. The unified result exposes legacy per-backend fields plus top-level `ok`, `user`, `token`, and `backend` after a successful authenticated login or creation. UI code must not emulate this by calling `auth.login` followed by `auth.create`, and must not add its own post-bootstrap session gate beyond the canonical bootstrap success result and auth/session events owned by Atome auth state. The eVe login submit payload may carry internal `onAuthenticating` and `onAuthenticated` visual callbacks; `user_auth_flow_runtime.js` is the only owner allowed to call them. `onAuthenticating` runs immediately after local password-form validation and before `bootstrap`, with neutral wait text only; `onAuthenticated` runs only after `bootstrap` succeeds and before profile/project/dashboard/menu work begins, and it must not be awaited before the workspace flow starts.
+Authentication bootstrap: `AdoleAPI.auth.bootstrap(phone, password, username, visibility)` is the atomic first-auth contract. Existing-phone attempts must verify the password and return a real authenticated token/session; unknown-phone attempts may create the account. The unified result exposes legacy per-backend fields plus top-level `ok`, `user`, `token`, and `backend` after a successful authenticated login or creation. UI code must not emulate this by calling `auth.login` followed by `auth.create`, and must not add its own post-bootstrap session gate beyond the canonical bootstrap success result and auth/session events owned by Atome auth state. The eVe login submit payload may carry internal `onAuthenticating` and `onAuthenticated` visual callbacks; `user_home_panel_runtime.js` is the only owner allowed to call them. `onAuthenticating` runs immediately after local password-form validation and before `bootstrap`, with neutral wait text only; `onAuthenticated` runs only after `bootstrap` succeeds and before profile/project/dashboard/menu work begins, and it must not be awaited before the workspace flow starts.
 
 Guest workspace entry: `AdoleAPI.security.startGuest({ force: true })` creates or resumes the persistent opaque local guest principal for this installation. It does not bootstrap a Fastify account, credential, or reusable password verifier. Dashboard boot, main-handle toggle, and Flower access remain local until an authenticated account explicitly confirms adoption. Account credentials use the separate Argon2id contract in `todo/cleanup_architecture/argon2id_password_hash_migration.md`.
 
@@ -1718,17 +1721,27 @@ Ownership: eVe closed user/profile domain.
 
 Primary sources:
 
-- `eVe/intuition/tools/user_preferences_cache_runtime.js`
 - `eVe/intuition/tools/user_accessibility_preferences_model.js`
-- `eVe/intuition/tools/user_accessibility_preferences_runtime.js`
+- `eVe/intuition/tools/user_visual_preferences_model.js`
+- `eVe/intuition/runtime/bevy_panel/bevy_panel_home_actions.js`
 - `eVe/domains/user/profile_api.js`
+- `eVe/domains/user/profile_api_support.js`
 - `eVe/domains/user/profile_events.js`
 
 Exposure: durable profile payload stored under `eve_profile.preferences`. `preferences.accessibility` is normalized as `{ auditory: boolean, visual: boolean }`; missing values default to `false`. Internal event `eve:user-profile-updated` has detail `{ userId, profile, properties, source, ts }` and is emitted only after a successful durable profile create/update.
 
-Boundary status: Semi-public closed eVe product profile contract. It is edited by the user panel and persisted through the existing profile autosave path, which writes through `window.Atome.commit` via `upsertUserProfile`.
+Boundary status: Semi-public closed eVe product profile contract. It is edited
+by Home and persisted through `upsertUserProfile`, which writes through the
+existing `window.Atome.commit` path.
 
-Effect model: UI controls update only the in-memory profile preference cache, publish the existing `eve:profile-preferences-updated` event, and schedule the existing profile save. Profile save success also publishes `eve:user-profile-updated` with the committed projection so Dashboard contacts can invalidate without rereading DOM state. They must not write DOM state as preference authority, create a separate persistence route, swallow durable write failures, or bypass the canonical Atome commit path.
+Effect model: Home keeps edits in disposable runtime state, publishes the
+existing `eve:profile-preferences-updated` event when applying preferences, and
+persists the sanitized complete profile through the existing profile API.
+Profile save success also publishes `eve:user-profile-updated` with the
+committed projection so Dashboard contacts can invalidate without rereading DOM
+state. Home must not write DOM state as preference authority, create a separate
+persistence route, swallow durable write failures, or bypass the canonical
+Atome commit path.
 
 ### Internal APIs
 
@@ -1830,3 +1843,64 @@ The next execution tasks must refine this map by:
 - Directory normalization requires an explicit stable `id` or
   `source_contact_id`. Phone, email, and name equality never produce identity,
   authorization, profile writes, or deletion rights.
+
+# Home panel API update — 2026-08-02
+
+- Review status: Contact and Home are product-owner `validated` panels
+  (**2/16**). Calendar is the next planned panel; Timeline remains the final
+  panel migration.
+- `tool.main.home` resolves `ui.home.panel`; `runtime.tools.call` and
+  `runtime.audit.list` remain the existing MCP invocation/audit surfaces for
+  Home open/close. `runtime_owner: 'window'` makes the established
+  `open_home_panel` session gate authoritative before the Bevy surface opens.
+- Profile read/write uses only `loadUserProfile` / `upsertUserProfile` and the
+  existing sanitized `Atome.commit` path. Visibility continues through
+  `AdoleAPI.auth.setVisibility`; visual, handedness, locale, accessibility,
+  Dashboard and Mail preferences keep their existing owners and update event.
+- Background opening uses the existing `ui.background.panel` Runtime V2 tool.
+  Home's selection, import, and download intents delegate to the existing
+  Background owner globals; no Home media API or persistence is introduced.
+  Dashboard preference events force the existing data controller to refilter
+  an active dashboard even when its geometry signature is unchanged.
+- The `Mot de passe et clés` section owns generic credential metadata and the
+  five AI-provider entries. Provider/model metadata is normalized into
+  `profile.passkeys.keys` without key material.
+  `resolveConfiguredAiProviderCredentials` asynchronously reads each provider
+  key through the existing security API; `aiProviderVaultEntryId` scopes
+  entries by authenticated stable user id and provider. Generic credentials and
+  Mail authentication use separate opaque entries in the same vault. Home reuses
+  `configureVaultSecret`, `storeToken`, `readToken`, and `removeToken`; these are
+  internal extensions of existing owners, not a public API.
+- Server selection reuses `loadServerConfig.js` normalization and the existing
+  Sync/RemoteCommands owners. Home persists only the selected URL and known URL
+  list in the existing user preferences, then clears availability caches and
+  reconnects; no new server API is exposed.
+- Password change, logout, Guest exit and account deletion use the existing
+  `AdoleAPI.auth` / `AdoleAPI.security` methods. They intentionally add no MCP
+  or public API: credentials/secrets remain UI-session scoped and authorization
+  stays with the authenticated session owner.
+- `normalizeHomeProfile`, profile persistence sanitization, and Mail runtime
+  persistence remove password/key material. No visible DOM value, display
+  identity, phone, or email is an API authority input.
+
+# Shared Bevy panel lifecycle/performance update — 2026-08-03
+
+- No public API was added. Home, Contact, and Panel Lab are no longer imported
+  by the common surface registry; their canonical tool/feature loader imports
+  and registers each surface only on first demand. The loaded JavaScript module
+  may remain cached, but a closed surface owns no mounted tree or active UI
+  component.
+- `eve:surface-state` is an existing-boundary internal lifecycle notification
+  emitted by the shared Bevy panel runtime after an actual open or close. Tool
+  latch consumers use the real surface state; `tool.main.home` and
+  `ui.home.panel` are one alias family. This is internal synchronization, not a
+  state store, command, MCP surface, or authorization input.
+- Shared motion/text operations remain closed renderer operations. Scroll,
+  drag, resize preview, caret opacity, and targeted text updates reuse the
+  existing BevyUI/project-overlay patch paths with a one-in-flight plus
+  latest-pending queue. Resize performs one structural reflow on release.
+- Media-frame drop is a transient BevyUI intent. A native `File` is delivered
+  directly to the authenticated/editable media owner and never enters a tree,
+  projected event payload, profile, persistence record, log, or public API.
+  The existing hidden file-input service is created only for an active click
+  and is destroyed after selection or cancellation.

@@ -7,7 +7,7 @@ import { hitTestBevyUiNode } from '../../eVe/domains/rendering/bevy_ui_hit_test_
 import { INTERACTIVE_KINDS, SUPPORTED_KINDS } from '../../eVe/domains/rendering/bevy_ui_tree_normalization.js';
 import { selectNode } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_select.js';
 import { EVE_DEFAULT_MESSAGES } from '../../eVe/i18n/languages.js';
-import { panelLabSurface } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_surfaces.js';
+import { panelLabSurface } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_lab_surface.js';
 import { tableNode } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_table.js';
 import { buildBevyPanelTree } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_tree.js';
 import { BEVY_PANEL_TOKENS } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_tokens.js';

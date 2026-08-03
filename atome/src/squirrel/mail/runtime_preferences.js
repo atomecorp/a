@@ -4,6 +4,7 @@ const MAIL_RUNTIME_SETTINGS_KEY = 'eve_runtime_mail_preferences_v1';
 
 export const DEFAULT_RUNTIME_MAIL_PREFERENCES = Object.freeze({
     provider: 'custom_imap_smtp',
+    auth_ref: '',
     email: '',
     username: '',
     password: '',
@@ -44,6 +45,7 @@ export const normalizeRuntimeMailPreferences = (prefs = {}, fallbackEmail = '') 
         || DEFAULT_RUNTIME_MAIL_PREFERENCES.provider;
     return {
         provider: defaultProvider,
+        auth_ref: String(source.auth_ref || source.authRef || '').trim(),
         email,
         username,
         password: String(source.password || '').trim(),
@@ -61,6 +63,13 @@ export const normalizeRuntimeMailPreferences = (prefs = {}, fallbackEmail = '') 
     };
 };
 
+const withoutMailPassword = (preferences = {}) => ({
+    ...preferences,
+    password: '',
+    imap: { ...(preferences.imap || {}) },
+    smtp: { ...(preferences.smtp || {}) }
+});
+
 const readStorage = (env) => {
     try {
         if (env && typeof env === 'object' && env !== globalThis) {
@@ -75,7 +84,7 @@ const readStorage = (env) => {
 export const readPersistedRuntimeMailPreferences = (env = globalThis) => {
     const inMemory = env?.__eveRuntimeMailPreferences;
     if (inMemory && typeof inMemory === 'object') {
-        return normalizeRuntimeMailPreferences(inMemory);
+        return withoutMailPassword(normalizeRuntimeMailPreferences(inMemory));
     }
     const storage = readStorage(env);
     if (!storage || typeof storage.getItem !== 'function') return null;
@@ -83,10 +92,11 @@ export const readPersistedRuntimeMailPreferences = (env = globalThis) => {
         const raw = storage.getItem(MAIL_RUNTIME_SETTINGS_KEY);
         if (!raw) return null;
         const parsed = JSON.parse(raw);
-        const normalized = normalizeRuntimeMailPreferences(parsed);
+        const normalized = withoutMailPassword(normalizeRuntimeMailPreferences(parsed));
         if (env && typeof env === 'object') {
             env.__eveRuntimeMailPreferences = normalized;
         }
+        storage.setItem(MAIL_RUNTIME_SETTINGS_KEY, JSON.stringify(normalized));
         return normalized;
     } catch (_) {
         return null;
@@ -94,7 +104,7 @@ export const readPersistedRuntimeMailPreferences = (env = globalThis) => {
 };
 
 export const persistRuntimeMailPreferences = (env = globalThis, prefs = {}, fallbackEmail = '') => {
-    const normalized = normalizeRuntimeMailPreferences(prefs, fallbackEmail);
+    const normalized = withoutMailPassword(normalizeRuntimeMailPreferences(prefs, fallbackEmail));
     if (env && typeof env === 'object') {
         env.__eveRuntimeMailPreferences = normalized;
     }

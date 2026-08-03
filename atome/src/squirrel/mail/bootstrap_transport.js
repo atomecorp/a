@@ -156,6 +156,7 @@ const mergeMailCredentialSources = (...sources) => {
     sources.forEach((source) => {
         if (!source || typeof source !== 'object') return;
         applyValue(merged, 'provider', source.provider);
+        applyValue(merged, 'auth_ref', source.auth_ref || source.authRef);
         applyValue(merged, 'email', source.email);
         applyValue(merged, 'username', source.username);
         applyValue(merged, 'password', source.password);
@@ -174,6 +175,23 @@ const mergeMailCredentialSources = (...sources) => {
         }
     });
     return Object.keys(merged).length ? merged : null;
+};
+
+const resolveSecureMailAuth = async (env, source = {}) => {
+    const authRef = String(source?.auth_ref || source?.authRef || '').trim();
+    if (!authRef) return { ...source };
+    const host = resolveTransportHost(env);
+    const securityApi = host?.Squirrel?.security || host?.atome?.security || host?.AtomeSecurity || null;
+    if (!securityApi || typeof securityApi.readToken !== 'function') {
+        throw new Error('security_token_vault_unavailable');
+    }
+    const stored = await securityApi.readToken(authRef);
+    if (!stored?.ok) throw new Error(stored?.error || 'security_token_read_failed');
+    const merged = mergeMailCredentialSources(source, {
+        username: stored.value?.username,
+        password: stored.value?.password
+    });
+    return { ...merged, auth: { ...stored.value } };
 };
 
 const hasCompleteRuntimeMailCredentials = (source) => !!(
@@ -223,6 +241,7 @@ const resolveRuntimeMailCredentials = async (env, options = {}) => {
     if (!source) return null;
     source = normalizeRuntimeMailPreferences(source);
     persistRuntimeMailPreferences(env, source);
+    source = await resolveSecureMailAuth(env, source);
     const email = String(source.email || '').trim();
     const password = String(source.password || '').trim();
     const imapHost = String(source?.imap?.host || '').trim();
@@ -251,5 +270,6 @@ export {
     resolveFetch,
     resolveMailSyncBase,
     resolveRuntimeMailCredentials,
+    resolveSecureMailAuth,
     hasCompleteRuntimeMailCredentials
 };

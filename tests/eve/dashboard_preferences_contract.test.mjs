@@ -5,6 +5,7 @@ import { JSDOM } from 'jsdom';
 
 import { createDashboardBevyUiRuntime } from '../../eVe/domains/dashboard/dashboard_bevy_ui_runtime.js';
 import { createDashboardDataController } from '../../eVe/domains/dashboard/dashboard_data_controller.js';
+import { createDashboardEnvironmentWatcher } from '../../eVe/domains/dashboard/dashboard_environment_watcher.js';
 import { createDashboardDataAdapters } from '../../eVe/domains/dashboard/dashboard_data_adapters.js';
 import { DASHBOARD_WORKSPACE_PROJECT_ID } from '../../eVe/domains/dashboard/dashboard_workspace_mode.js';
 import { createEveBevyUiRuntime } from '../../eVe/domains/rendering/bevy_ui_runtime.js';
@@ -16,6 +17,7 @@ import {
     extractProjectOwnerId,
     filterProjectsByOwner
 } from '../../eVe/core/project_security.js';
+import { normalizeHomeProfile } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_home_actions.js';
 
 const dashboardPreferenceCategories = Object.freeze([
     { id: 'news', label_key: 'eve.dashboard.category.news', color_family: 'red', order: 10, visible: true },
@@ -141,6 +143,41 @@ test('dashboard data controller does not hydrate hidden preference categories', 
     assert.deepEqual(loaded, [['calendar']]);
     assert.equal(state.itemsByCategory.has('news'), false);
     assert.equal(state.itemsByCategory.has('calendar'), true);
+});
+
+test('dashboard preference events refilter categories even when geometry is unchanged', async () => {
+    const dom = new JSDOM('<!doctype html><html><body><canvas id="surface"></canvas></body></html>', { url: 'http://localhost/' });
+    const surface = dom.window.document.getElementById('surface');
+    surface.getBoundingClientRect = () => ({ width: 1024, height: 768 });
+    let frameCallback = null;
+    dom.window.requestAnimationFrame = (callback) => {
+        frameCallback = callback;
+        return 1;
+    };
+    dom.window.cancelAnimationFrame = () => {};
+    let preferences = { categories: {} };
+    const state = {};
+    const data = createDashboardDataController({
+        state,
+        constants: { dashboard: { categories: dashboardPreferenceCategories } },
+        adapters: { listMany: async () => new Map() },
+        readDashboardPreferences: () => preferences
+    });
+    await withGlobals({ window: dom.window }, async () => {
+        await data.loadCategories();
+        const watcher = createDashboardEnvironmentWatcher({
+            readSurface: () => surface,
+            onChange: () => data.loadCategories()
+        });
+        watcher.start();
+        preferences = { categories: { news: false } };
+        dom.window.dispatchEvent(new dom.window.CustomEvent('eve:profile-preferences-updated'));
+        assert.equal(typeof frameCallback, 'function');
+        frameCallback();
+        await Promise.resolve();
+        assert.deepEqual(state.categories.map((category) => category.id), ['calendar']);
+        watcher.stop();
+    });
 });
 
 test('dashboard hidden preference categories cannot be activated by tool handlers', async () => {
@@ -480,36 +517,14 @@ test('BevyUI mount failures stay on the returned operation without an orphan que
     await Promise.resolve();
 });
 
-test('user preferences cache publishes dashboard rubrique preferences', async () => {
-    const events = new EventTarget();
-    const received = [];
-    await withGlobals({
-        CustomEvent: class extends Event {
-            constructor(type, options = {}) {
-                super(type, options);
-                this.detail = options.detail;
-            }
-        },
-        HTMLElement: (() => {
-            function HTMLElement() {}
-            HTMLElement.prototype.animate = () => null;
-            return HTMLElement;
-        })(),
-        window: {
-            addEventListener: events.addEventListener.bind(events),
-            removeEventListener: events.removeEventListener.bind(events),
-            dispatchEvent: events.dispatchEvent.bind(events)
-        }
-    }, async () => {
-        const { createUserPreferencesCacheRuntime } = await import('../../eVe/intuition/tools/user_preferences_cache_runtime.js');
-        window.addEventListener('eve:profile-preferences-updated', (event) => received.push(event.detail));
-        const runtime = createUserPreferencesCacheRuntime();
-        runtime.updatePreferencesCache({
+test('Home preserves normalized dashboard rubrique preferences in canonical profile state', () => {
+    const profile = normalizeHomeProfile({
+        preferences: {
             visual: { handedness: 'left' },
-            dashboard: { categories: { news: false } }
-        });
-        assert.equal(received.length, 1);
-        assert.equal(received[0].preferences.dashboard.categories.news, false);
-        assert.equal(window.__eveProfilePreferences.dashboard.categories.news, false);
+            dashboard: { categories: { news: false, calendar: true, invalid: 'off' } }
+        }
+    });
+    assert.deepEqual(profile.preferences.dashboard, {
+        categories: { news: false, calendar: true }
     });
 });

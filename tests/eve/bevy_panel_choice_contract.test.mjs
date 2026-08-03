@@ -6,11 +6,18 @@ import { projectBevyUiTreeRecords } from '../../eVe/domains/rendering/bevy_ui_ov
 import { createBevyUiPointerRuntime } from '../../eVe/domains/rendering/bevy_ui_pointer_runtime.js';
 import { INTERACTIVE_KINDS } from '../../eVe/domains/rendering/bevy_ui_tree_normalization.js';
 import { EVE_DEFAULT_MESSAGES } from '../../eVe/i18n/languages.js';
+import {
+    BEVY_ICON_BUTTON_TOKENS,
+    resolveBevyIconButtonSurface
+} from '../../eVe/intuition/shared/bevy_ui_icon_button.js';
 import { radioGroupNode, toggleableRowNode } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_choice.js';
-import { panelLabSurface } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_surfaces.js';
+import { panelLabSurface } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_lab_surface.js';
 import { BEVY_PANEL_TOKENS } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_tokens.js';
 
 const tokens = BEVY_PANEL_TOKENS.choice;
+const rowWidth = BEVY_ICON_BUTTON_TOKENS.sizePx
+    + BEVY_ICON_BUTTON_TOKENS.labelGapPx
+    + BEVY_ICON_BUTTON_TOKENS.labelWidthPx;
 
 const findNode = (node, id) => {
     if (Array.isArray(node)) return node.map((child) => findNode(child, id)).find(Boolean) || null;
@@ -41,14 +48,15 @@ test('each choice control uses its own native interactive kind and the shared ro
     assert.equal(findNode(group, 'rg_left').kind, 'radio');
     [checkbox.kind, toggle.kind, 'radio'].forEach((kind) => assert.equal(INTERACTIVE_KINDS.has(kind), true));
 
-    assert.deepEqual(checkbox.style.size, [BEVY_PANEL_TOKENS.inputWidthPx, tokens.rowHeightPx]);
-    assert.deepEqual(toggle.style.size, [BEVY_PANEL_TOKENS.inputWidthPx, tokens.rowHeightPx]);
-    assert.deepEqual(group.style.size, [BEVY_PANEL_TOKENS.inputWidthPx, (tokens.rowHeightPx * 2) + 4]);
-    assert.deepEqual(findNode(group, 'rg_right').style.position, [0, tokens.rowHeightPx + 4]);
+    const gap = BEVY_PANEL_TOKENS.controlGroupGapPx;
+    assert.deepEqual(checkbox.style.size, [rowWidth, BEVY_ICON_BUTTON_TOKENS.rowHeightPx]);
+    assert.deepEqual(toggle.style.size, [rowWidth, BEVY_ICON_BUTTON_TOKENS.rowHeightPx]);
+    assert.deepEqual(group.style.size, [rowWidth, (BEVY_ICON_BUTTON_TOKENS.rowHeightPx * 2) + gap]);
+    assert.deepEqual(findNode(group, 'rg_right').style.position, [0, BEVY_ICON_BUTTON_TOKENS.rowHeightPx + gap]);
 
     // One shared indicator column keeps every label aligned whatever the shape.
     const labelLeft = (node, id) => findNode(node, id).style.position[0];
-    assert.equal(labelLeft(checkbox, 'cb_label'), tokens.paddingHorizontalPx + tokens.indicatorColumnPx + tokens.labelGapPx);
+    assert.equal(labelLeft(checkbox, 'cb_label'), BEVY_ICON_BUTTON_TOKENS.sizePx + BEVY_ICON_BUTTON_TOKENS.labelGapPx);
     assert.equal(labelLeft(toggle, 'sw_label'), labelLeft(checkbox, 'cb_label'));
     assert.equal(labelLeft(group, 'rg_left_label'), labelLeft(checkbox, 'cb_label'));
     assert.deepEqual(findNode(checkbox, 'cb_indicator').style.size, [tokens.boxSizePx, tokens.boxSizePx]);
@@ -63,7 +71,6 @@ test('a compact checkbox rail keeps its accessible label and owns vertical drag 
         kind: 'checkbox',
         label: 'Select Ada',
         indicatorOnly: true,
-        width: tokens.paddingHorizontalPx * 2 + tokens.indicatorColumnPx,
         on: {
             press: () => events.push('press'),
             drag: () => events.push('drag'),
@@ -72,6 +79,7 @@ test('a compact checkbox rail keeps its accessible label and owns vertical drag 
     });
 
     assert.equal(findNode(rail, 'contact_rail_label'), null);
+    assert.deepEqual(rail.style.size, [BEVY_ICON_BUTTON_TOKENS.sizePx, BEVY_ICON_BUTTON_TOKENS.sizePx]);
     assert.deepEqual(rail.accessibility, { label: 'Select Ada' });
     assert.equal(typeof rail.on.drag, 'function');
     rail.on.press();
@@ -87,8 +95,8 @@ test('the selected state is a distinct indicator treatment reusing the shared ch
     assert.equal(findNode(off, 'off_selected_mark'), null);
     assert.ok(findNode(on, 'on_selected_mark_short'));
     assert.ok(findNode(on, 'on_selected_mark_long'));
-    assert.deepEqual(findNode(on, 'on_indicator').style.background, tokens.selectedBackground);
-    assert.deepEqual(findNode(off, 'off_indicator').style.background, tokens.idleBackground);
+    assert.deepEqual(findNode(on, 'on_background').style.background, resolveBevyIconButtonSurface({ tone: 'neutral', active: true }).background);
+    assert.deepEqual(findNode(off, 'off_background').style.background, resolveBevyIconButtonSurface({ tone: 'neutral' }).background);
 
     const group = radioGroupNode({ id: 'rg', options: radioOptions, value: 'right' });
     assert.ok(findNode(group, 'rg_right_indicator_dot'));
@@ -100,22 +108,22 @@ test('the selected state is a distinct indicator treatment reusing the shared ch
     assert.equal(switchOn.style.position[0], tokens.switchWidthPx - tokens.switchKnobPx - tokens.switchKnobInsetPx);
 });
 
-test('the complete visual-state matrix is tokenized and pressed stays distinct from selected', () => {
+test('the complete visual-state matrix reuses the canonical icon-button surface', () => {
     const idle = toggleableRowNode({ id: 'i', kind: 'checkbox', label: 'A' });
-    const hovered = toggleableRowNode({ id: 'h', kind: 'checkbox', label: 'A', hovered: true });
     const focused = toggleableRowNode({ id: 'f', kind: 'checkbox', label: 'A', focused: true });
     const pressed = toggleableRowNode({ id: 'p', kind: 'checkbox', label: 'A', pressed: true });
     const selected = toggleableRowNode({ id: 's', kind: 'checkbox', label: 'A', checked: true });
     const disabled = toggleableRowNode({ id: 'd', kind: 'checkbox', label: 'A', disabled: true, on: { activate: () => {} } });
+    const radio = findNode(radioGroupNode({ id: 'r', options: radioOptions, value: 'left' }), 'r_left');
+    const toggle = toggleableRowNode({ id: 't', kind: 'switch', label: 'A' });
 
     assert.deepEqual(idle.style.background, BEVY_PANEL_TOKENS.colors.transparent);
-    assert.deepEqual(hovered.style.background, tokens.rowHoverBackground);
-    assert.deepEqual(pressed.style.background, tokens.rowPressedBackground);
-    assert.deepEqual(focused.style.shadow, BEVY_PANEL_TOKENS.input.focusShadow);
-    assert.equal(idle.style.shadow, undefined);
-    assert.deepEqual(findNode(pressed, 'p_indicator').style.background, tokens.pressedBackground);
-    assert.notDeepEqual(findNode(pressed, 'p_indicator').style.background, findNode(selected, 's_indicator').style.background);
-    assert.equal(disabled.style.opacity, tokens.disabledOpacity);
+    assert.deepEqual(pressed.style.translation, BEVY_ICON_BUTTON_TOKENS.pressedTranslation);
+    assert.deepEqual(findNode(focused, 'f_background').style.shadow, BEVY_ICON_BUTTON_TOKENS.focusShadow);
+    assert.notDeepEqual(findNode(pressed, 'p_background').style.background, findNode(selected, 's_background').style.background);
+    assert.deepEqual(findNode(radio, 'r_left_background').style.background, resolveBevyIconButtonSurface({ tone: 'danger', active: true }).background);
+    assert.deepEqual(findNode(toggle, 't_background').style.background, resolveBevyIconButtonSurface({ tone: 'warning' }).background);
+    assert.equal(disabled.style.opacity, BEVY_ICON_BUTTON_TOKENS.disabled.opacity);
     assert.equal(disabled.on, undefined, 'a disabled control must expose no handler');
     assert.equal(idle.style.opacity, 1);
 });
@@ -151,7 +159,7 @@ test('Panel Lab mounts the approved four-variant contract before the table and p
         // switch: single on/off value.
         assert.deepEqual(panelLabSurface.handleEvent({ type: 'panel_lab.choice.switch.activate' }), { ok: true, checked: true });
 
-        // pressed and hover are ephemeral presentation state only.
+        // pressed state is ephemeral presentation state only.
         panelLabSurface.handleEvent({ type: 'panel_lab.choice.checkbox.press' });
         assert.equal(panelLabSurface.readState().choice.checkboxPressed, true);
         panelLabSurface.handleEvent({ type: 'panel_lab.choice.checkbox.cancel' });
@@ -169,7 +177,7 @@ test('Panel Lab mounts the approved four-variant contract before the table and p
     assert.equal(reset.radioValue, 'left');
     assert.equal(reset.checkboxChecked, false);
     assert.equal(reset.switchChecked, false);
-    assert.equal(reset.radioHovered, null);
+    assert.equal('radioHovered' in reset, false);
 });
 
 test('native choice controls activate through the canonical pointer route', () => {

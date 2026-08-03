@@ -931,26 +931,32 @@ export async function listAtomes(ownerId, options = {}) {
 export async function setParticle(atomeId, key, value, author = null) {
     const propertyKey = assertCanonicalPropertyKey(key);
     const now = new Date().toISOString();
-    const valueStr = typeof value === 'object' ? JSON.stringify(value) : JSON.stringify(value);
+    const valueStr = JSON.stringify(value);
     const valueType = typeof value === 'object' ? 'json' : typeof value;
 
-    // Check if particle exists
+    // One read: the old value is needed for history anyway, so selecting it here
+    // removes the second round-trip that used to re-read the same row below.
     const existing = await query('get',
-        'SELECT particle_id, version FROM particles WHERE atome_id = ? AND particle_key = ?',
+        'SELECT particle_id, version, particle_value FROM particles WHERE atome_id = ? AND particle_key = ?',
         [atomeId, propertyKey]
     );
+
+    // A write that changes nothing is not history. Without this guard every
+    // re-commit of an unchanged property appended a particles_versions row (and
+    // flipped the atome back to sync_status='pending'), which is what grew that
+    // table to 1.59M rows / 485MB for 27k real particles. Returning early skips
+    // the UPDATE, the history INSERT and the atome touch — correct, since with
+    // no change there is nothing to replicate either.
+    if (existing && existing.particle_value === valueStr) {
+        return { particleId: existing.particle_id, version: existing.version, unchanged: true };
+    }
 
     let particleId;
     let version;
     let oldValue = null;
 
     if (existing) {
-        // Get old value for history
-        const oldRow = await query('get',
-            'SELECT particle_value FROM particles WHERE particle_id = ?',
-            [existing.particle_id]
-        );
-        oldValue = oldRow?.particle_value || null;
+        oldValue = existing.particle_value || null;
 
         // Update existing particle
         version = (existing.version || 1) + 1;
@@ -1028,11 +1034,14 @@ export async function setParticles(atomeId, particles, author = null) {
     const historyRecords = [];
 
     for (const [key, value] of entries) {
-        const valueStr = typeof value === 'object' ? JSON.stringify(value) : JSON.stringify(value);
+        const valueStr = JSON.stringify(value);
         const valueType = typeof value === 'object' ? 'json' : typeof value;
         const existing = existingMap.get(key);
 
         if (existing) {
+            // Same no-op guard as setParticle: an unchanged key contributes
+            // neither an UPDATE nor a history row.
+            if (existing.particle_value === valueStr) continue;
             const newVersion = (existing.version || 1) + 1;
             toUpdate.push({ key, valueStr, valueType, version: newVersion, particleId: existing.particle_id });
             historyRecords.push({
@@ -1085,6 +1094,10 @@ export async function setParticles(atomeId, particles, author = null) {
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         `, [record.particleId, atomeId, record.key, record.version, record.oldValue, record.newValue, author, now]);
     }
+
+    // Nothing actually changed: leave the atome's sync_status alone rather than
+    // re-flagging it as pending for a write that never happened.
+    if (!toUpdate.length && !toInsert.length && !historyRecords.length) return;
 
     // Update atome's updated_at only once at the end
     await query('run',

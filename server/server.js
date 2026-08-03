@@ -2833,6 +2833,7 @@ async function startServer() {
                       id: existingUser.user_id,
                       user_id: existingUser.user_id,
                       username: existingUser.username,
+                      phone: cleanPhone,
                     },
                     message: 'User authenticated successfully'
                   });
@@ -2927,6 +2928,7 @@ async function startServer() {
                     id: userId,
                     user_id: userId,
                     username: cleanUsername,
+                    phone: cleanPhone,
                   },
                   message: 'User created successfully'
                 });
@@ -3090,10 +3092,6 @@ async function startServer() {
                 }
                 safeSend({ type: 'auth-response', requestId, success: true, ok: true, user: { id: principalId, user_id: principalId } });
               } else if (action === 'lookup-phone') {
-                if (!connection?._wsApiUserId) {
-                  safeSend({ type: 'auth-response', requestId, success: false, error: 'Authentication is required' });
-                  return;
-                }
                 const rawPhone = data.phone;
                 if (!rawPhone || typeof rawPhone !== 'string') {
                   safeSend({

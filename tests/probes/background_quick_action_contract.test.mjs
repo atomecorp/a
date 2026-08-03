@@ -3,31 +3,28 @@ import { readFile } from 'node:fs/promises';
 import { test } from 'node:test';
 
 const userPanelSource = await readFile(new URL('../../eVe/intuition/tools/user.js', import.meta.url), 'utf8');
-const userBackgroundActionsSource = await readFile(new URL('../../eVe/intuition/tools/user_background_actions.js', import.meta.url), 'utf8');
+const homeActionsSource = await readFile(new URL('../../eVe/intuition/runtime/bevy_panel/bevy_panel_home_actions.js', import.meta.url), 'utf8');
 const backgroundSource = await readFile(new URL('../../eVe/intuition/tools/background.js', import.meta.url), 'utf8');
 const backgroundImageSource = await readFile(new URL('../../eVe/intuition/tools/background_image.js', import.meta.url), 'utf8');
 const backgroundPrefsSource = await readFile(new URL('../../eVe/intuition/tools/background_prefs.js', import.meta.url), 'utf8');
 const userSurfaceBackgroundSource = await readFile(new URL('../../eVe/user/background.js', import.meta.url), 'utf8');
 
-test('user background download quick action uses the wallpaper download owner', () => {
+test('Home delegates every wallpaper action to the canonical Background owner', () => {
     assert.ok(
-        userPanelSource.includes("createUserBackgroundActions({ setUserNotice, clearUserNotice })"),
-        'user panel must consume the shared background quick-action owner'
+        homeActionsSource.includes("tool_id: 'ui.background.panel'"),
+        'Home must route Background through the registered tool gateway'
     );
-    assert.ok(
-        userBackgroundActionsSource.includes("const result = await window.download_random_background_image()"),
-        'download quick action must use the background download API'
-    );
-    assert.ok(
-        userBackgroundActionsSource.includes("background_download_failed"),
-        'download quick action must surface download failures through the existing user notice'
-    );
+    assert.match(homeActionsSource, /apply_background_from_selection/);
+    assert.match(homeActionsSource, /open_background_import/);
+    assert.match(homeActionsSource, /download_random_background_image/);
+    assert.match(homeActionsSource, /await import\('\.\.\/\.\.\/tools\/background\.js'\)/);
+    assert.doesNotMatch(userPanelSource, /user_background_actions|createUserBackgroundActions/);
     assert.ok(
         backgroundSource.includes('download_random_background_image')
             && backgroundImageSource.includes('downloadRemoteWallpaper')
             && !backgroundImageSource.includes('picsum.photos')
             && !backgroundImageSource.includes('RANDOM_WALLPAPER_URL'),
-        'background runtime must expose the explicit wallpaper download action through the server wallpaper owner'
+        'the Background panel keeps ownership of its own wallpaper download action'
     );
     assert.ok(
         backgroundPrefsSource.includes('publishBackgroundPreferences') && backgroundPrefsSource.includes("source: 'background_panel'"),

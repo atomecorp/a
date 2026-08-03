@@ -3,6 +3,7 @@ import { test } from 'vitest';
 import { JSDOM } from 'jsdom';
 
 import { createEveBevyUiRuntime, normalizeBevyUiTree } from '../../eVe/domains/rendering/bevy_ui_runtime.js';
+import { createBevyUiDropRuntime } from '../../eVe/domains/rendering/bevy_ui_pointer_runtime.js';
 import { ensureRenderSurface } from '../../eVe/domains/rendering/surface_runtime.js';
 import { hydrateImageTree } from '../../eVe/domains/rendering/bevy_ui_image_runtime.js';
 import { DEFERRED_TEXTURE_BATCH_SIZE, withResolvedMediaTexture } from '../../eVe/domains/rendering/bevy_media_resource_runtime.js';
@@ -28,6 +29,34 @@ const createSurface = () => {
 };
 
 const projectDom = () => installDom('<!doctype html><html><body><main id="project"></main></body></html>');
+
+test('BevyUI drop routing keeps File objects transient and releases its canvas listeners', async () => {
+    const listeners = new Map();
+    const removed = [];
+    const canvas = {
+        addEventListener: (type, handler) => listeners.set(type, handler),
+        removeEventListener: (type) => { removed.push(type); listeners.delete(type); }
+    };
+    const received = [];
+    const state = { handlers: new Map([['photo_tree:photo_frame:drop', (event) => received.push(event.files)]]) };
+    const runtime = createBevyUiDropRuntime({
+        state,
+        hitTestTrees: () => ({ treeId: 'photo_tree', nodeId: 'photo_frame', kind: 'button', box: { x: 0, y: 0, width: 90, height: 90 } }),
+        surfacePointFromEvent: () => ({ x: 20, y: 20 }),
+        localEventForTarget: (target, eventName) => ({ tree_id: target.treeId, node_id: target.nodeId, event: eventName })
+    });
+    runtime.ensureSurface(canvas);
+    const file = { name: 'avatar.png', type: 'image/png', size: 4 };
+    await listeners.get('drop')({
+        dataTransfer: { files: [file], items: [], types: ['Files'] },
+        preventDefault: () => {},
+        stopPropagation: () => {}
+    });
+    assert.deepEqual(received, [[file]]);
+    assert.equal(state.files, undefined);
+    runtime.releaseSurface(canvas);
+    assert.deepEqual(removed.sort(), ['dragover', 'drop']);
+});
 
 test('BevyUI image prewarming hydrates without mounting or projecting a tree', async () => {
     const surface = createSurface();
@@ -195,6 +224,11 @@ test('BevyUI runtime uses the project overlay path without native WASM UI ops by
     await runtime.unmountTree('ui_tree');
 
     assert.equal(moduleRequested, false);
+    assert.equal(runtime.state.trees.size, 0);
+    assert.equal(runtime.state.sourceTrees.size, 0);
+    assert.equal(runtime.state.handlers.size, 0);
+    assert.equal(runtime.state.renderQueues.size, 0);
+    assert.equal(runtime.state.scaleWatchFrames.size, 0);
     assert.deepEqual(runtime.readDiagnostics(), {
         overlay: {
             treeCount: 0,

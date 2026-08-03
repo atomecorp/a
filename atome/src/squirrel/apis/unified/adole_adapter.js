@@ -158,21 +158,23 @@ function createWebSocketAdapter(tokenKey, backend = 'tauri') {
                 });
             },
             async requestPhoneVerification(data = {}) {
+                const purpose = data.purpose || (data.context === 'login_demo' ? 'enrollment' : data.context);
                 return getWs().send({
                     type: 'auth',
                     action: 'request-phone-verification',
                     phone: data.phone,
-                    context: data.context,
+                    purpose,
                     exposeForTest: data.exposeForTest === true
                 });
             },
             async verifyPhoneVerification(data = {}) {
+                const purpose = data.purpose || (data.context === 'login_demo' ? 'enrollment' : data.context);
                 return getWs().send({
                     type: 'auth',
                     action: 'verify-phone-verification',
                     phone: data.phone,
                     code: data.code,
-                    context: data.context
+                    purpose
                 });
             },
             async deleteAccount(data) {

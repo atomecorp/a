@@ -25,6 +25,7 @@ import { resolveDashboardBlockUnitSize } from '../../eVe/domains/dashboard/dashb
 import { readToolboxReservedHeight } from '../../eVe/domains/dashboard/dashboard_environment.js';
 import { MAIN_HANDLE_ICON } from '../../eVe/intuition/ribbon/tokens.js';
 import { BEVY_MENU_TOKENS } from '../../eVe/intuition/ribbon/bevy_ui_menu_surface.js';
+import { EVE_BUTTON_SKIN_TOKENS } from '../../eVe/elements/skin/button_skin.js';
 import { EVE_COMMON_SKIN_TOKENS } from '../../eVe/elements/skin/tokens.js';
 
 const TOOL_KEYS = Object.freeze(['home', 'find', 'capture', 'time', 'communicate', 'mode', 'view']);
@@ -36,6 +37,15 @@ test('system menu content consumes the global content color contract', () => {
     assert.equal(BEVY_MENU_TOKENS.surface.text, EVE_COMMON_SKIN_TOKENS.systemContent.gpu);
     assert.equal(BEVY_MENU_TOKENS.surface.icon, EVE_COMMON_SKIN_TOKENS.systemContent.gpu);
     assert.equal(BEVY_MENU_TOKENS.surface.grip, EVE_COMMON_SKIN_TOKENS.systemContent.gpu);
+});
+
+test('standard menu tools inherit the canonical button surface while Flower overrides only its circular geometry', () => {
+    const button = EVE_BUTTON_SKIN_TOKENS.bevyButton;
+    assert.equal(BEVY_MENU_TOKENS.surface.material, button.surface);
+    assert.equal(BEVY_MENU_TOKENS.shape.standardRadiusPx, button.radiusPx);
+    assert.equal(BEVY_MENU_TOKENS.shape.paletteRadiusPx, button.radiusPx);
+    assert.equal(BEVY_MENU_TOKENS.chrome.outlineRadiusPx, button.radiusPx);
+    assert.notEqual(BEVY_MENU_TOKENS.shape.flowerRadiusPx, button.radiusPx);
 });
 
 const collectJavaScriptSources = (directory) => readdirSync(directory, { withFileTypes: true })

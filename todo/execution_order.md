@@ -71,15 +71,19 @@ Dependances et ordre:
   command. A panel cannot be approved or retire its HTML route while the ledger
   contains an unmapped function.
 
-- [ ] Execute the five active BevyUI migration packages: (1) shared controls — Families 3, 6, and 13; (2) Contact — Family 18 and complete Contact composition; (3) Calendar structure — Families 21 to 24; (4) Calendar events — Families 25 to 27; (5) Calendar editor and completion — Family 28 and complete Calendar composition. Families 4 and 5 remain validated shared foundations. Molecule / MTraX capabilities, including Families 9, 17, 29, and 30, remain deferred until their owning product migration. Exit criterion: Calendar and Contact use their canonical Bevy owners, their effectful functions have a complete MCP ledger, real interactions and package/panel approvals are recorded, and neither surface retains a parallel DOM route.
-  Current gate — 2026-08-02: Package 2 Contact is implemented and contract-
-  validated but remains `in_review` until real desktop/mobile canvas evidence
-  and product-owner approval. Home follows Contact only after the required
-  product discussion; Timeline remains the final panel migration.
+- [ ] Execute the six active BevyUI migration packages: (1) shared controls — Families 3, 6, and 13; (2) Contact — Family 18 and complete Contact composition; (3) Home — complete Home composition and legacy-route retirement; (4) Calendar structure — Families 21 to 24; (5) Calendar events — Families 25 to 27; (6) Calendar editor and completion — Family 28 and complete Calendar composition. Families 4 and 5 remain validated shared foundations. Molecule / MTraX capabilities, including Families 9, 17, 29, and 30, remain deferred until their owning product migration. Exit criterion: Home, Calendar, and Contact use their canonical Bevy owners, their effectful functions have a complete reviewed command/API/MCP ledger, real interactions and package/panel approvals are recorded, and none retains a parallel DOM panel route.
+  Current gate — 2026-08-03: Contact is `validated`; Home is `in_review`, so the
+  programme remains at **1/16 validated panels**. Home's corrections are
+  contract- and real-canvas-verified, including lazy activation/teardown,
+  frame-coalesced scroll/drag/resize/text paths, one-click reopen, structural
+  viewport anchoring, and the shared Home/Contact identity-photo target. Its
+  legacy HTML panel plus 22 panel-only runtime owners remain removed, but
+  promotion requires explicit product approval of the corrected result.
+  Timeline remains the final panel migration.
 
 Deferred after Phase 4 — complete Molecule / MTraX migration:
 
-- [ ] Resume the remaining Panel programme after Phase 4: assess Families 7, 8, 9, 10, 11, 12, 14 to 17, 19, 20, 29, 30, and 36 with their owning product panels. Exit criterion: all 15 in-scope panels are validated, the 13 active HTML routes are retired, and the temporary Panel Lab is removed.
+- [ ] Resume the remaining Panel programme after Phase 4: assess Families 7, 8, 9, 10, 11, 12, 14 to 17, 19, 20, 29, 30, and 36 with their owning product panels. Exit criterion: all 16 registered panels are validated, the 12 legacy HTML routes still active after Home are retired (13 total legacy routes including Home), and the temporary Panel Lab is removed.
 
 Critere de sortie du programme complet:
 

@@ -5,7 +5,7 @@ import { normalizePanelStatePresentation } from '../../atome/src/squirrel/compon
 import { projectBevyUiTreeRecords } from '../../eVe/domains/rendering/bevy_ui_overlay_record_projection.js';
 import { INTERACTIVE_KINDS, SUPPORTED_KINDS } from '../../eVe/domains/rendering/bevy_ui_tree_normalization.js';
 import { EVE_DEFAULT_MESSAGES } from '../../eVe/i18n/languages.js';
-import { panelLabSurface } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_surfaces.js';
+import { panelLabSurface } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_lab_surface.js';
 import { panelStateNode } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_state.js';
 import { BEVY_PANEL_TOKENS } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_tokens.js';
 

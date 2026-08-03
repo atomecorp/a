@@ -3,6 +3,7 @@ import {
     AI_MODEL_PROVIDER_REGISTRY
 } from './model_catalog_registry.js';
 import { loadRuntimeUserProfile } from './profile_loader.js';
+import { createGlobalSecurityApi } from '../security/bootstrap.js';
 import {
     DEFAULT_TIMEOUT_MS,
     toText,
@@ -32,6 +33,65 @@ export const AI_PROVIDER_LIST = Object.freeze(AI_MODEL_PROVIDER_LIST.map((entry)
 })));
 
 const containsAny = (haystack = '', needles = []) => needles.some((needle) => haystack.includes(needle));
+const resolveSecurityApi = (env = globalThis) => {
+    const owner = env?.window && typeof env.window === 'object' ? env.window : env;
+    return owner?.Squirrel?.security || owner?.AtomeSecurity || createGlobalSecurityApi({ env: owner });
+};
+
+export const aiProviderVaultEntryId = ({ userId, providerId } = {}) => {
+    const principal = toText(userId);
+    const provider = toText(providerId).toLowerCase();
+    if (!principal) throw new Error('ai_profile_user_id_missing');
+    if (!AI_PROVIDER_DEFINITIONS[provider]) throw new Error('unknown_provider');
+    return `ai.provider.${encodeURIComponent(principal)}.${provider}`;
+};
+
+export const resolveConfiguredAiProviderCredentials = async ({
+    loadProfile = loadRuntimeUserProfile,
+    securityApi = null,
+    env = globalThis
+} = {}) => {
+    const profileResult = await loadProfile();
+    if (!profileResult?.ok) {
+        return { ok: false, error: toText(profileResult?.error) || 'no_profile', items: [] };
+    }
+    const userId = toText(profileResult.userId || profileResult.user_id);
+    if (!userId) return { ok: false, error: 'ai_profile_user_id_missing', items: [] };
+    const metadata = Array.isArray(profileResult?.profile?.passkeys?.keys)
+        ? profileResult.profile.passkeys.keys
+        : [];
+    const configured = metadata
+        .map((entry) => ({
+            providerId: toText(entry?.provider).toLowerCase(),
+            model: toText(entry?.model)
+        }))
+        .filter((entry) => entry.providerId && AI_PROVIDER_DEFINITIONS[entry.providerId]);
+    if (!configured.length) return { ok: true, userId, items: [] };
+    const vault = securityApi || resolveSecurityApi(env);
+    if (vault?.vaultStatus?.().configured !== true) {
+        return { ok: false, error: 'ai_vault_locked', userId, items: [] };
+    }
+    const items = [];
+    for (const entry of configured) {
+        const entryId = aiProviderVaultEntryId({ userId, providerId: entry.providerId });
+        let token = null;
+        try {
+            token = await vault.readToken(entryId);
+        } catch (_) {
+            return { ok: false, error: 'ai_vault_unlock_failed', userId, items: [] };
+        }
+        const apiKey = toText(token?.value?.apiKey ?? token?.value);
+        if (!token?.ok || !apiKey) continue;
+        items.push({
+            providerId: entry.providerId,
+            provider: AI_PROVIDER_DEFINITIONS[entry.providerId],
+            model: entry.model || AI_PROVIDER_DEFINITIONS[entry.providerId].models?.[0] || '',
+            apiKey,
+            entryId
+        });
+    }
+    return { ok: true, userId, items };
+};
 
 export const extractJsonResponse = (text) => {
     const trimmed = toText(text);
@@ -49,45 +109,18 @@ export const extractJsonResponse = (text) => {
 };
 
 export const resolveFirstAiProviderConfig = async ({
-    loadProfile = loadRuntimeUserProfile
+    loadProfile = loadRuntimeUserProfile,
+    securityApi = null,
+    env = globalThis
 } = {}) => {
-    const profileResult = await loadProfile();
-    if (!profileResult?.ok) {
-        return {
-            ok: false,
-            error: toText(profileResult?.error) || 'no_profile'
-        };
-    }
-
-    const keys = Array.isArray(profileResult?.profile?.passkeys?.keys)
-        ? profileResult.profile.passkeys.keys
-        : [];
-
-    const entry = keys.find((item) => {
-        const providerId = toText(item?.provider);
-        const apiKey = toText(item?.key);
-        return providerId && apiKey && AI_PROVIDER_DEFINITIONS[providerId];
-    });
-
-    if (!entry) {
-        return {
-            ok: false,
-            error: 'no_ai_key_configured'
-        };
-    }
-
-    const providerId = toText(entry.provider);
-    const provider = AI_PROVIDER_DEFINITIONS[providerId];
-    const model = toText(entry.model) || provider.models?.[0] || '';
-    const apiKey = toText(entry.key);
-
+    const resolved = await resolveConfiguredAiProviderCredentials({ loadProfile, securityApi, env });
+    if (!resolved?.ok) return { ok: false, error: resolved?.error || 'no_ai_key_configured' };
+    const entry = resolved.items[0];
+    if (!entry) return { ok: false, error: 'no_ai_key_configured' };
     return {
         ok: true,
-        providerId,
-        provider,
-        model,
-        apiKey,
-        source: 'profile.passkeys.keys.first'
+        ...entry,
+        source: 'profile.passkeys.keys+token_vault.first'
     };
 };
 

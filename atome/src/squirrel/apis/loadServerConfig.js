@@ -253,16 +253,16 @@ function readTauriFastifyOverride() {
 
 function applyFastifyGlobalsFromHttpBase(httpBase, config = null) {
     const base = resolveCanonicalFastifyHttpBase(httpBase);
-    if (!base) return;
+    if (!base) return false;
     if (shouldBlockFastifyPrimaryOnLocalAxumPage()) {
         clearFastifyRuntimeGlobals();
         clearFastifyOverrideStorage();
-        return;
+        return false;
     }
     if (isCrossOriginLoopbackFastifyBaseForBrowser(base) && !canUseFastifyPrimaryOnLocalAxumPage()) {
         clearFastifyRuntimeGlobals();
         clearFastifyOverrideStorage();
-        return;
+        return false;
     }
     if (
         isInvalidFastifyLoopbackBase(base)
@@ -270,7 +270,7 @@ function applyFastifyGlobalsFromHttpBase(httpBase, config = null) {
         || isLikelyTauriLoopbackBase(base, config)
     ) {
         clearFastifyOverrideStorage();
-        return;
+        return false;
     }
 
     window.__SQUIRREL_FASTIFY_URL__ = base;
@@ -280,6 +280,7 @@ function applyFastifyGlobalsFromHttpBase(httpBase, config = null) {
 
     window.__SQUIRREL_FASTIFY_WS_API_URL__ = buildFastifyWsUrl(base, apiWsPath);
     window.__SQUIRREL_FASTIFY_WS_SYNC_URL__ = buildFastifyWsUrl(base, syncWsPath);
+    return true;
 }
 
 function resolveConfigUrl() {
@@ -493,3 +494,5 @@ export function getServerConfigSync() {
     if (typeof window === 'undefined') return null;
     return window.__SQUIRREL_SERVER_CONFIG__ || null;
 }
+
+export { applyFastifyGlobalsFromHttpBase, isInvalidFastifyLoopbackBase };

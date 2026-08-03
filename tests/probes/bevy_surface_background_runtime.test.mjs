@@ -248,7 +248,7 @@ test('Bevy web renderer registers the surface background after renderer start', 
         false,
         'surface background registration must not happen while the renderer state is still marked as not started'
     );
-    const startedStateIndex = source.indexOf('started: true,\n            startPromise: null');
+    const startedStateIndex = source.indexOf('setSurfaceRuntimeState(canvas, createStartedBevyRendererState(latest))');
     const registerIndex = source.indexOf('registerBevySurfaceBackgroundRuntime(canvas, SURFACE_RUNTIME.get(canvas))');
     assert.ok(startedStateIndex > 0, 'renderer start state update must remain explicit');
     assert.ok(registerIndex > startedStateIndex, 'surface background registration must run after the started state is stored');
