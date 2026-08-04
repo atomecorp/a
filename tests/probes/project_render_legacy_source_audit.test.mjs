@@ -31,13 +31,14 @@ test('project restore path updates the scene runtime instead of rendering an HTM
     assert.ok(deleteSource.includes('deleteBlackHoleRuntime.restoreAtomeToProject'));
 });
 
-test('project info assignment updates the scene runtime instead of requiring an HTMLElement render return', () => {
-    const body = sliceFunction(infosSource, 'ensureAtomeRendered');
-
-    assert.equal(body.includes('renderAtomeRecord('), false);
-    assert.equal(body.includes('createAtomeElement('), false);
-    assert.ok(body.includes('updateProjectSceneRecord({'));
-    assert.ok(infosSource.includes("from '../../domains/rendering/project_scene_runtime.js'"));
+test('Infos compatibility entry cannot restore project DOM rendering or assignment', () => {
+    assert.ok(infosSource.includes("openBevyPanelSurface('info'"));
+    assert.ok(infosSource.includes("closeBevyPanelSurface('info'"));
+    assert.equal(infosSource.includes('renderAtomeRecord('), false);
+    assert.equal(infosSource.includes('createAtomeElement('), false);
+    assert.equal(infosSource.includes('updateProjectSceneRecord('), false);
+    assert.equal(infosSource.includes('createEveDialog'), false);
+    assert.equal(infosSource.includes('document.'), false);
 });
 
 test('shared project atomes hydrate the project scene without dead legacy render branches', () => {

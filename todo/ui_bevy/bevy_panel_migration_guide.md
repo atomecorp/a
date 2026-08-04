@@ -1032,7 +1032,8 @@ Contact and Home are the validated panels (**2/16**).
 
 ##### Package 4 — Calendar structure
 
-Status: `implemented`; focused/Web/Tauri/iOS compile contracts pass, native interaction/product-owner acceptance pending.
+Status: `validated`; focused/Web/Tauri/iOS compile contracts pass and
+product-owner approval was recorded on 2026-08-04.
 
 - Scope: Families 21 to 24 — range navigation, month grid, week/day grid, and
   agenda virtualization.
@@ -1043,7 +1044,8 @@ Status: `implemented`; focused/Web/Tauri/iOS compile contracts pass, native inte
 
 ##### Package 5 — Calendar events
 
-Status: `implemented`; focused/Web/Tauri/iOS compile contracts pass, native interaction/product-owner acceptance pending.
+Status: `validated`; focused/Web/Tauri/iOS compile contracts pass and
+product-owner approval was recorded on 2026-08-04.
 
 - Scope: Families 25 to 27 — event rectangles, all-day/overlap layout, and
   hit-testing, drag, resize, and touch feedback.
@@ -1054,7 +1056,8 @@ Status: `implemented`; focused/Web/Tauri/iOS compile contracts pass, native inte
 
 ##### Package 6 — Calendar editor and completion
 
-Status: `implemented`; focused/Web/Tauri/iOS compile contracts pass, native interaction/product-owner acceptance pending.
+Status: `validated`; focused/Web/Tauri/iOS compile contracts pass and
+product-owner approval was recorded on 2026-08-04.
 
 - Scope: Family 28, Calendar composition, complete MCP ledger, panel approval,
   and HTML-route retirement.
@@ -1062,6 +1065,73 @@ Status: `implemented`; focused/Web/Tauri/iOS compile contracts pass, native inte
   Calendar-editor group only for a proven product-specific distinction.
 - Exit criterion: Calendar is usable through Bevy only, covers event/todo
   editing and timezone-safe validation, and has full product-owner approval.
+
+##### Package 7 — Infos inspection and editing
+
+Status: `in_review`; implementation, focused contracts, and the available
+real-canvas empty/error interaction pass. Record-backed canvas review and
+explicit product-owner acceptance remain required.
+
+- Authoritative order decision: the product owner selected Infos as the next
+  panel on 2026-08-04. Timeline remains final.
+- Global counters at composition: 9 validated generic shared components;
+  Families 12, 17, 29, and 30 have concrete Infos owners and focused technical
+  coverage; 3/16 product panels remain validated; Infos is the fourth panel in
+  review; 11 HTML-active routes and 5 registered Bevy routes remain.
+- Scope: Families 1, 3, 4, 12, 17, 29, and 30. Infos reuses the shared panel,
+  accordion, selection-summary, table, input, choice, action, scroll, footer,
+  lifecycle, and selectable-list owners. The selectable-list owner absorbs
+  hierarchical depth/chevron rows; the selection summary accepts owner-provided
+  fluid width. No Info-local skin, CSS, component clone, or renderer exists.
+- Canonical state: `listStateCurrent` / `getStateCurrent` and `selection.js`.
+  The panel keeps only disposable expansion, draft, notice, preview, and load
+  state. It subscribes to `adole-atome-selected` and `atome:changed`; it has no
+  polling, DOM cache, project-drop state, or second source of truth.
+- Mutation: only scalar properties already common to the selected records are
+  editable. They commit once through `Atome.commitBatch` and refresh from the
+  canonical event path. Type, kind, parent, project, owner, timestamps, complex
+  properties, and unknown-property creation stay read-only.
+- Rendering: selected-Atome preview calls the existing
+  `project_preview_runtime` / unified WebGPU compositor with a derived rebased
+  copy and projects the returned image in the same Bevy panel tree. It creates
+  no new renderer, canvas, persistence, public API, or HTML fallback.
+- Retirement evidence: the historical eight HTML modules and legacy
+  `info_panel_sync_runtime` total 3,033 lines. Every line has an explicit
+  disposition and target in
+  `todo/ui_bevy/info_html_line_migration_registry.md`; a persistent contract
+  proves full, gap-free coverage and prevents their return.
+- Real-canvas evidence: the integrated browser opens Infos through the actual
+  project-context flower, expands the project hierarchy accordion, and closes
+  it through the shared footer. The audit records one canvas, zero native
+  controls, zero legacy Infos roots, and no warning/error console entry. The
+  current account returns a remote-provisioning error, so record-backed preview
+  and property-edit interaction remain the smallest technical acceptance gap.
+
+Infos coverage ledger:
+
+| Family | Decision/evidence |
+| --- | --- |
+| 1 | `validated` shared panel shell/footer/scroll/drag/resize route. |
+| 3 | `validated` hidden single-line input; Infos uses one lifecycle-owned editor session. |
+| 4 | `validated` list-row/selectable-list paint and pointer contract. |
+| 12 | `implemented` hierarchical depth, vector chevron, expand/collapse, and canonical row selection in the shared selectable-list owner. |
+| 17 | `implemented` selection summary reused with fluid panel-owner width. |
+| 29 | `implemented` selected-Atome detail preview through the existing unified WebGPU compositor. |
+| 30 | `implemented` detail composition: immutable table, typed existing-property text/number/switch editors, passive complex values. |
+
+Infos MCP command ledger:
+
+| Function/intent | Canonical owner/path | MCP method and parameters | Capability/policy | Status/evidence |
+| --- | --- | --- | --- | --- |
+| Open/close Infos | Runtime V2 `ui.info.panel` → registered panel open/close | `runtime.tools.call`, tool `ui.info.panel`, actions `open` / `close`, optional `target_id` | `ui.read`, LOW | `mapped`; existing panel tool registration and shared route contract. |
+| Read selected Atome detail | `getStateCurrent` | `ai.tools.call`, `adole.atomes.get`, `{ id }` | `atome.read` | `mapped`; same canonical state-current record. |
+| Read project/all Atomes | `listStateCurrent` | `ai.tools.call`, `adole.atomes.list`, `{ projectId? }` | `atome.read` | `mapped`; same canonical list owner. |
+| Select a hierarchy row | `selection.js#applySelectionIntent` → Runtime V2 `ui.select` | `runtime.tools.call`, tool `ui.select`, `{ atome_id, target_id, selection_intent: "replace" }` | existing selection policy | `mapped`; selection runtime applies local projection then audits through the gateway. |
+| Edit an existing scalar property | `Atome.commitBatch` canonical mutation boundary | `ai.tools.call`, `adole.atomes.alter`, `{ id, properties }` | `atome.write`, MEDIUM | `mapped`; focused contract proves one batch and no pre-commit record mutation. |
+| Copy selection JSON | shared OS clipboard writer | none | local output only; AI can read the same records with `get/list` | `not_applicable`; no durable effect, credential, or remote command. |
+| Expand/collapse, preview, immutable/complex display | disposable Bevy projection + shared compositor | none | passive UI/rendering only | `not_applicable`; no canonical mutation or external effect. |
+
+No effectful Infos function is unreviewed or `blocked`.
 #### Deferred pending Molecule migration and wider panel scope
 
 These families remain part of the 16-panel programme but are outside the active
@@ -1072,12 +1142,6 @@ measured, non-Molecule Panel occurrence:
 9. Media thumbnail/card. The current passive prototype is not evidence of a
    required Panel component; Contact only projects an existing avatar at
    `90 × 90 px` and exposes no photo editor or source field.
-17. Selection/context summary. Existing occurrences are eVe tool count labels
-   and tool-context selection information, not a Panel card.
-29. Detail preview surface for the selected Atome, layer, clip, or recording
-    take, using the shared renderer rather than DOM projections.
-30. Detail-specific editor compositions: karaoke/lyrics lines, recording
-    schedule controls, take selection, and SVG-layer context actions.
 7. Color field and canonical RGBA value presentation.
 8. Color-swatch grid with selected, hover, focus, and disabled states.
 10. Asset grid with selection, virtualized range, and keyboard-independent
@@ -1301,7 +1365,7 @@ legacy Panel geometry.
 
 #### Surface coverage matrix
 
-Calendar, Contact, Home, and Timeline are the explicitly ordered migration
+Calendar, Contact, Home, Infos, and Timeline are the explicitly ordered migration
 surfaces. Every other matrix row remains deferred after Phase 4 — Molecule /
 MTraX. Each non-deferred
 surface may be composed only after its listed families have a recorded coverage decision
@@ -1404,13 +1468,22 @@ platforms once for the complete panel when the product owner requests or when
 final platform acceptance requires it. This check is never repeated for each
 primitive component.
 
-### Authoritative next-panel decision — 2026-08-03
+### Authoritative next-panel decision — 2026-08-04
 
-Contact was validated by the product owner on 2026-08-02 and Home on
-2026-08-03; the programme therefore records **2/16 validated panels**. The
-Calendar implementation for Packages 4 to 6 is complete and focused contracts
-pass. Native interaction evidence and explicit product-owner approval remain
-required before Calendar can increase the validated-panel count.
+Contact was validated by the product owner on 2026-08-02, Home on 2026-08-03,
+and Calendar on 2026-08-04; the programme therefore records **3/16 validated
+panels**. Calendar Packages 4 to 6, including canonical Calendar–Dashboard
+synchronization and Dashboard-card opening of the existing event editor, are
+accepted on the shared BevyUI/WebGPU route.
+
+The product owner selected **Infos** as the next implementation on 2026-08-04.
+Package 7 is technically migrated and `in_review`: its focused contracts and
+3,033-line retirement ledger pass. Real-canvas opening, empty/error projection,
+accordion interaction, close, DOM audit, and console audit also pass; only the
+record-backed canvas review and explicit product-owner acceptance remain the
+gate for changing the validated panel count. The active inventory is therefore
+3/16 validated, one additional panel in review, 5 Bevy routes, and 11
+HTML-active routes.
 
 **Timeline is the final panel migration.** Its existing Bevy route is not
 completion evidence and does not authorize early Timeline product work. The

@@ -15,6 +15,7 @@
   "tests/eve/bevy_panel_contract.test.mjs",
   "tests/eve/bevy_panel_geometry_contract.test.mjs",
   "tests/eve/bevy_panel_home_contract.test.mjs",
+  "tests/eve/bevy_panel_info_contract.test.mjs",
   "tests/eve/bevy_panel_input_contract.test.mjs",
   "tests/eve/bevy_panel_list_row_contract.test.mjs",
   "tests/eve/bevy_panel_multiline_input_contract.test.mjs",

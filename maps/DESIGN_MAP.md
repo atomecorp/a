@@ -790,4 +790,26 @@ The perceptual contract is backed by presented WebGPU frames, not JS sampling al
 - Calendar reuses the shared panel shell, body scroll, footer, buttons, segmented controls, inputs, hidden text service, and motion path. The named `bevyPanel.calendar` token group in `panel_skin.js` owns only proven Calendar geometry and semantic event/todo/grid/today/selection paint.
 - Month uses a bounded six-week grid; week/day share the 24-hour grid and all-day lane; agenda uses bounded pages. Overlap columns, event rectangles, resize zones, drag feedback, todo state, and editor state are projected in WebGPU.
 - The retired Calendar CSS preset and EventCalendar stylesheet/vendor are removed. Calendar adds no visible DOM, CSS string, per-event canvas, alternate renderer, or HTML fallback.
-- Technical implementation is complete, but product-owner visual approval and native Tauri/iOS parity remain pending; the programme count therefore remains 2/16.
+- Technical implementation is complete and Calendar is product-owner validated; the programme count is 3/16.
+
+# Info panel design update — 2026-08-04
+
+- Infos is one fluid vertical Bevy composition on `eve_surface_project`: shared
+  selection summary, selected-Atome accordion, WebGPU preview, immutable
+  property table, typed existing-property editors, and Selection/Project/All
+  hierarchical accordions followed by the shared copy action.
+- Hierarchical rows reuse selectable-list paint and control typography, add
+  token-owned depth indentation and vector chevrons, and use canonical
+  selection intent. Parent activation selects and expands/collapses; no browser
+  drag payload, DOM picker, DOM row, forced click, or HTML fallback exists.
+- Detail preview uses `contain` inside a tokenized control surface. Its pixels
+  come from the existing unified WebGPU preview renderer, never a DOM capture,
+  symbolic thumbnail, per-Atome canvas, or newly persisted preview field.
+- Type, kind, parent, project, owner, and timestamps remain passive immutable
+  rows. Existing scalar properties compose shared text, numeric, and switch
+  controls. Complex properties are passive JSON text until a schema-owned
+  editor exists; no unknown property creator is exposed.
+- Selection summary width is resolved by the panel owner so it remains fluid
+  after resize. All material, radius, spacing, typography, states, footer,
+  scroll, focus, pressed, disabled, and notice paint remains in existing shared
+  tokens; Infos adds no CSS or local palette.

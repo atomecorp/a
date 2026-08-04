@@ -1,12 +1,11 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { createInfoPanelSyncRuntime } from '../../eVe/intuition/runtime/info_panel_sync_runtime.js';
+import { FastifyAdapter } from '../../atome/src/squirrel/apis/unified/adole.js';
 import { createPersistenceDiagRuntime } from '../../eVe/intuition/runtime/persistence_diag_runtime.js';
 import { createRealtimeAtomeEventsRuntime } from '../../eVe/intuition/runtime/realtime_atome_events_runtime.js';
 import { createSharedProjectOverrideRuntime } from '../../eVe/intuition/runtime/shared_project_override_runtime.js';
 import {
     hostRegistrySource,
-    infoPanelSyncSource,
     persistenceDiagSource,
     projectAtomeIndexSource,
     realtimeEventsSource,
@@ -201,66 +200,13 @@ test('persistence diagnostics runtime summarizes records and logs only when enab
     }
 });
 
-test('tool genesis delegates info panel synchronization outside the legacy runtime', () => {
+test('tool genesis retires legacy info panel projection synchronization', () => {
     assert.ok(toolGenesisSource.includes("from './tool_genesis_core_services_runtime.js'"));
-    assert.ok(toolGenesisCoreServicesSource.includes("from './info_panel_sync_runtime.js'"));
-    assert.ok(infoPanelSyncSource.includes('createInfoPanelSyncRuntime'));
-    assert.ok(infoPanelSyncSource.includes('notifyInfoPanelProperties'));
-    assert.ok(infoPanelSyncSource.includes('notifyInfoPanelPosition'));
-    assert.ok(infoPanelSyncSource.includes('notifyInfoPanelResize'));
-    assert.equal(toolGenesisSource.includes('const notifyInfoPanelProperties ='), false);
-    assert.equal(toolGenesisSource.includes('const notifyInfoPanelPosition ='), false);
-    assert.equal(toolGenesisSource.includes('const notifyInfoPanelResize ='), false);
-});
-
-test('info panel sync runtime projects position and resize updates', () => {
-    const originalWindow = globalThis.window;
-    try {
-        const updates = [];
-        globalThis.window = {
-            eveInfoPanelUpdateAtomeProperties: (atomeId, props) => updates.push({ atomeId, props })
-        };
-        const runtime = createInfoPanelSyncRuntime({
-            toPx: (value) => `${Math.round(Number(value) || 0)}px`
-        });
-        const item = {
-            id: 'shape_panel',
-            width: 40,
-            height: 50,
-            parentWidth: 200,
-            parentHeight: 180,
-            hasRight: true,
-            hasBottom: true
-        };
-
-        runtime.notifyInfoPanelPosition(item, 10, 20);
-        runtime.notifyInfoPanelResize(item, 15, 25, 60, 70);
-
-        assert.deepEqual(updates, [
-            {
-                atomeId: 'shape_panel',
-                props: {
-                    left: '10px',
-                    top: '20px',
-                    right: '150px',
-                    bottom: '110px'
-                }
-            },
-            {
-                atomeId: 'shape_panel',
-                props: {
-                    left: '15px',
-                    top: '25px',
-                    width: '60px',
-                    height: '70px',
-                    right: '125px',
-                    bottom: '85px'
-                }
-            }
-        ]);
-    } finally {
-        globalThis.window = originalWindow;
-    }
+    assert.equal(toolGenesisCoreServicesSource.includes('info_panel_sync_runtime'), false);
+    assert.equal(toolGenesisCoreServicesSource.includes('InfoPanelSync'), false);
+    assert.equal(toolGenesisSource.includes('notifyInfoPanel'), false);
+    assert.equal(toolGenesisHostLifecycleSource.includes('notifyInfoPanel'), false);
+    assert.equal(hostRegistrySource.includes('notifyInfoPanel'), false);
 });
 
 test('tool genesis delegates legacy host registry and cleanup outside the legacy runtime', () => {
@@ -306,7 +252,8 @@ test('tool genesis delegates shared project override ownership outside the legac
 test('shared project override runtime persists overrides and prunes stale remote records', async () => {
     const originalWindow = globalThis.window;
     const originalLocalStorage = globalThis.localStorage;
-    const originalFetch = globalThis.fetch;
+    const originalGetToken = FastifyAdapter.getToken;
+    const originalAtomeGet = FastifyAdapter.atome.get;
     try {
         const storage = new Map();
         const fetches = [];
@@ -318,26 +265,23 @@ test('shared project override runtime persists overrides and prunes stale remote
                 storage.set(key, String(value));
             }
         };
-        globalThis.fetch = async (url) => {
-            fetches.push(String(url));
-            if (String(url).endsWith('/shared_a')) {
+        FastifyAdapter.getToken = () => 'token_a';
+        FastifyAdapter.atome.get = async (id) => {
+            fetches.push(String(id));
+            if (String(id) === 'shared_a') {
                 return {
                     ok: true,
-                    status: 200,
-                    json: async () => ({
-                        data: {
-                            atome: {
-                                id: 'shared_a',
-                                type: 'shape'
-                            }
+                    data: {
+                        atome: {
+                            id: 'shared_a',
+                            type: 'shape'
                         }
-                    })
+                    }
                 };
             }
             return {
                 ok: false,
-                status: 404,
-                json: async () => ({})
+                error: 'not found'
             };
         };
 
@@ -364,8 +308,8 @@ test('shared project override runtime persists overrides and prunes stale remote
             projectId: 'project_a'
         }]);
         assert.equal(fetches.length, 2);
-        assert.ok(fetches.some((url) => url.endsWith('/shared_a')));
-        assert.ok(fetches.some((url) => url.endsWith('/stale_a')));
+        assert.ok(fetches.includes('shared_a'));
+        assert.ok(fetches.includes('stale_a'));
         assert.equal(runtime.getSharedProjectOverride('stale_a'), null);
         assert.equal(runtime.getSharedProjectOverride('shared_a'), 'project_a');
         assert.deepEqual(JSON.parse(storage.get('eve_shared_project_overrides_owner_a')), {
@@ -377,6 +321,7 @@ test('shared project override runtime persists overrides and prunes stale remote
     } finally {
         globalThis.window = originalWindow;
         globalThis.localStorage = originalLocalStorage;
-        globalThis.fetch = originalFetch;
+        FastifyAdapter.getToken = originalGetToken;
+        FastifyAdapter.atome.get = originalAtomeGet;
     }
 });

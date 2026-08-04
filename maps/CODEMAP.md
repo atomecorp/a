@@ -404,10 +404,10 @@ Unified rendering ownership:
 - `eVe/intuition/runtime/realtime_atome_events_runtime.js` owns `tool_genesis.js` realtime event binding and media patch sanitation: event-bus update/delete routing, DOM realtime event routing, textual media patch stripping, and media integrity diagnostics. It must emit/consume canonical update intents through injected callbacks and must not store durable Atome state.
 - `eVe/intuition/runtime/tool_genesis_realtime_patch_runtime.js` owns `tool_genesis.js` realtime patch application after event routing: legacy non-project host text/style/group/tool/media/SVG projection refresh, protected media rehydration requests through the existing media runtimes, shared-project override tagging for disposable hosts, and active project record updates through `project_scene_runtime.js`. It must not create durable state or render active project Atomes through per-Atome DOM hosts.
 - `eVe/intuition/runtime/persistence_diag_runtime.js` owns temporary persistence diagnostics behind `tool_genesis.js`: diagnostic-gated bridge logging and compact record summaries for load/render traces. It must remain observability-only and must not influence project membership, rendering, or mutation ordering.
-- `eVe/intuition/runtime/info_panel_sync_runtime.js` owns legacy info panel synchronization callbacks behind `tool_genesis.js`: position/resize projection payloads and optional right/bottom derived values. It may notify the panel, but it must not mutate canonical Atome state or infer project membership.
+- `eVe/intuition/runtime/bevy_panel/bevy_panel_info_{runtime,model,editing,view}.js` own the Infos Bevy product package: canonical state reads, derived hierarchy/selection/detail state, hidden text editing, typed property commits, shared-compositor preview, and pure Bevy composition. `eVe/intuition/tools/infos.js` is its DOM-free compatibility bridge. The retired `info_panel_sync_runtime.js` and `notifyInfoPanel*` host parameters must not return.
 - `eVe/intuition/matrix/core/preview.js` consumes the unified `createMatrixPreviewRenderer()` and project scene records for Matrix thumbnails. It must not use DOM capture paths such as `html2canvas`, SVG `foreignObject`, cloned project DOM, or symbolic Atome DOM scanning.
 - `eVe/intuition/matrix/ui/matrix_interaction_runtime.js` owns Matrix tile interaction routing through a single scroll-surface gesture binding and scene hit testing. `eVe/intuition/matrix/ui/view.js` owns bounded shell tile DOM only and must not attach per-tile preview/open/rename/menu listeners.
-- Project restore, info assignment, shared-Atome hydration, and timeline replay paths update `project_scene_runtime.js` for project-visible records. They must not call `renderAtomeRecord()` as a project visual fallback or require an `HTMLElement` render return.
+- Project restore, shared-Atome hydration, and timeline replay paths update `project_scene_runtime.js` for project-visible records. They must not call `renderAtomeRecord()` as a project visual fallback or require an `HTMLElement` render return. Infos has no project-assignment or DOM-render helper; it reads canonical records and previews through the unified WebGPU compositor.
 - `RenderAtom` data is runtime-only and derived from canonical Atome records. It must not be written into DOM attributes, persisted as business state, or used as a second writable source of truth.
 - Project audio waveform Atomes now publish waveform render metadata into the Atome runtime registry and Bevy texture route instead of creating per-Atome visible waveform DOM or SVG nodes. Project-only audio playback progress is owned by `eVe/domains/media/project_audio_playback_progress_runtime.js`, projected at a bounded runtime cadence as disposable `playback_progress` Virtual Scene style data, and rendered by Bevy as a waveform playhead overlay inside the existing project canvas; Molecule, sequencer, timeline, and direct API audio playback paths must not consume this project playhead runtime. Browser/WASM Bevy coalesces queued progress-only style ops per Atome and `bevy_web_renderer_runtime.js` uses a single redraw request for progress-only diffs so audio playback cannot starve the renderer queue. Direct audio/video recording APIs must render the committed media Atome through `project_media_atome_renderer.js` so the canonical project source Atome appears on the current project canvas. Browser audio recordings must persist canonical `audio_recording` kind plus waveform peak arrays on the project Atome before Bevy texture generation; pending recording Atomes without a renderable media source must stay out of the Bevy projection until the committed media source is available.
 
@@ -1995,3 +1995,18 @@ This section supersedes earlier Dashboard lifecycle descriptions in this map. `e
 - `bevy_panel_calendar_projection.js` owns bounded range/occurrence, month/week/day/agenda, overlap, all-day, rectangle, and hit-zone derivation. `bevy_panel_calendar_view.js` and `bevy_panel_calendar_editor_view.js` compose only shared BevyUI nodes. `bevy_panel_calendar_editing.js` reuses the hidden text service. `bevy_panel_calendar_runtime.js` owns disposable load/filter/editor/gesture state and delegates every durable effect.
 - `tools/calendar.js` is a lazy Bevy compatibility bridge. The deleted `calendar_panel_dom.js`, `calendar_panel_init.js`, `calendar_panel_utils.js`, Calendar DOM preset, EventCalendar vendor, and duplicate example API/UI are not valid owners or fallbacks.
 - Calendar share/export are now included in the existing Runtime V2 and MCP ledgers; sharing remains confirmation/capability gated.
+
+# Infos Bevy migration update — 2026-08-04
+
+- Entry: `eVe/intuition/tools/infos.js`; registered surface:
+  `bevy_panel_info_runtime.js`; pure data/hierarchy:
+  `bevy_panel_info_model.js`; hidden input:
+  `bevy_panel_info_editing.js`; composition:
+  `bevy_panel_info_view.js`.
+- Shared owners consumed: `bevy_panel_{accordion,selection_summary,table,
+  selectable_list,editable_text,choice,tree}.js`, `selection.js`,
+  `atome_commit.js`, `project_preview_runtime.js`, and
+  `tools/clipboard/system_writer.js`.
+- Persistent evidence: `tests/eve/bevy_panel_info_contract.test.mjs`, shared
+  panel route contract, legacy rendering audits, and the 3,033-line registry in
+  `todo/ui_bevy/info_html_line_migration_registry.md`.

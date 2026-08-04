@@ -67,6 +67,7 @@ tests/eve/*
 !tests/eve/dashboard_focus_color_contract.test.mjs
 !tests/eve/dashboard_preferences_contract.test.mjs
 !tests/eve/bevy_panel_home_contract.test.mjs
+!tests/eve/bevy_panel_info_contract.test.mjs
 !tests/eve/dashboard_records.test.mjs
 !tests/eve/debug_runtime_webgpu_probe.test.mjs
 !tests/eve/bevy_panel_state_contract.test.mjs

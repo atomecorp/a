@@ -287,7 +287,7 @@ test('Bevy panel contract removes tools dock and keeps system controls in footer
     assert.deepEqual(unmounted, ['eve_bevy_panel_timeline']);
 });
 
-test('Calendar and Contact panel surfaces route to Bevy UI instead of legacy HTML', async () => {
+test('Calendar Contact and Info panel surfaces route to Bevy UI instead of legacy HTML', async () => {
     const { dom } = installPanelDom();
     const mounted = [];
     dom.window.eveBevyUiRuntime = {
@@ -304,9 +304,23 @@ test('Calendar and Contact panel surfaces route to Bevy UI instead of legacy HTM
     const { createPanelSurfaceRuntime } = await import('../../eVe/intuition/runtime/eve_intuition/panel_surface_runtime.js');
     const { bevyPanelRuntimeState, registerBevyPanelSurface } = await import('../../eVe/intuition/runtime/bevy_panel/bevy_panel_runtime.js');
     const { contactSurface } = await import('../../eVe/intuition/runtime/bevy_panel/bevy_panel_contact_runtime.js');
+    const { createInfoPanelSurface } = await import('../../eVe/intuition/runtime/bevy_panel/bevy_panel_info_runtime.js');
     bevyPanelRuntimeState.runtime = null;
     bevyPanelRuntimeState.mounted.clear();
     registerBevyPanelSurface(contactSurface);
+    registerBevyPanelSurface(createInfoPanelSurface({
+        readAll: async () => [{
+            atome_id: 'info_shape', type: 'shape', project_id: 'panel_project',
+            properties: { name: 'Info shape', color: '#ff3355', width: 120, height: 80, locked: false }
+        }],
+        readOne: async () => null,
+        readSelection: () => ['info_shape'],
+        selectAtome: () => 'info_shape',
+        persist: async () => ({ ok: true }),
+        copyText: async () => ({ ok: true }),
+        renderPreview: async () => ({ ok: true, preview_url: 'data:image/webp;base64,AA==' }),
+        events: { on: () => () => false }
+    }).surface);
     const runtime = createPanelSurfaceRuntime({
         capturePanelVisibilitySnapshot: () => ({}),
         preparePanelSurfaceDuringOpen: () => {
@@ -317,11 +331,15 @@ test('Calendar and Contact panel surfaces route to Bevy UI instead of legacy HTM
 
     const calendar = await runtime.openPanelSurface('calendar');
     const contact = await runtime.openPanelSurface('contact');
+    const info = await runtime.openPanelSurface('info');
+    await flushPanelRefresh();
 
     assert.equal(calendar.ok, true);
     assert.equal(calendar.bevy, true);
     assert.equal(contact.ok, true);
     assert.equal(contact.bevy, true);
+    assert.equal(info.ok, true);
+    assert.equal(info.bevy, true);
     assert.equal(dom.window.document.querySelectorAll('button,input,select,textarea').length, 0);
     assert.ok(mounted.some((tree) => tree.root.id === 'eve_bevy_panel_calendar_root'), 'calendar must mount as a Bevy panel tree');
     const calendarTree = mounted.filter((tree) => tree.root.id === 'eve_bevy_panel_calendar_root').at(-1);
@@ -329,6 +347,11 @@ test('Calendar and Contact panel surfaces route to Bevy UI instead of legacy HTM
     assert.ok(findNode(calendarTree, 'calendar_month_grid'), 'calendar must project a bounded month grid through BevyUI');
     assert.ok(findNode(calendarTree, 'calendar_source_all'), 'calendar must expose its canonical source filter in the canvas');
     assert.ok(mounted.some((tree) => tree.root.id === 'eve_bevy_panel_contact_root'), 'contact must mount as a Bevy panel tree');
+    assert.ok(mounted.some((tree) => tree.root.id === 'eve_bevy_panel_info_root'), 'Info must mount as a Bevy panel tree');
+    const infoTree = mounted.filter((tree) => tree.root.id === 'eve_bevy_panel_info_root').at(-1);
+    assert.ok(findNode(infoTree, 'info_selection_summary'), 'Info must project the shared selection summary');
+    assert.ok(findNode(infoTree, 'info_detail_accordion'), 'Info must project its selected-atome detail composition');
+    assert.ok(findNode(infoTree, 'info_selection_hierarchy'), 'Info must project its hierarchical selection list');
     assert.equal(mounted.every((tree) => tree.layer === 'panel' && tree.root.parent_id === WORKSPACE_SCENE_LAYER_IDS.panel), true);
 });
 

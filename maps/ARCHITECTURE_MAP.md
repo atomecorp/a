@@ -348,8 +348,8 @@ Responsibilities:
 - `eVe/intuition/runtime/implicit_gesture_commit_runtime.js` owns implicit gesture commit routing behind `tool_genesis.js`. It translates canonical gesture event batches into tool-gateway actions, marks self patches for realtime dedupe, suppresses duplicate gesture phases briefly, and delegates non-gesture batches to `window.Atome.commitBatch`; durable mutation ownership remains the canonical Atome/tool pipeline.
 - `eVe/intuition/runtime/realtime_atome_events_runtime.js` owns legacy realtime binding behind `tool_genesis.js`: event bus listeners, DOM Atome event listeners, realtime update/delete routing, and media textual patch sanitation. `eVe/intuition/runtime/tool_genesis_realtime_patch_runtime.js` owns the paired realtime projection patch applicator for legacy non-project hosts and active project scene records; active project visual updates must enter `project_scene_runtime.js`, while legacy host patching remains disposable projection only. Canonical mutation ordering and durable Atome state remain outside DOM and outside both runtimes.
 - `eVe/intuition/runtime/persistence_diag_runtime.js` owns temporary persistence diagnostics and compact record summaries for `tool_genesis.js` load/render tracing. It is observability-only and must not become a persistence policy owner, state source, or rendering decision point.
-- `eVe/intuition/runtime/info_panel_sync_runtime.js` owns legacy info panel projection notifications behind `tool_genesis.js`. It computes panel-facing position/resize payloads, including right/bottom derivations, but it must not write canonical Atome state or own layout policy.
-- Legacy project-adjacent tools that restore, assign, share, or replay project Atomes must treat project-visible updates as scene invalidations through `project_scene_runtime.js`. `delete.js`, `infos.js`, `communication.js`, and project-scoped timeline replay are not allowed to resurrect `renderAtomeRecord()` as an active project visual path.
+- Infos no longer consumes legacy host position/resize projection callbacks. Its Bevy surface subscribes to canonical selection and `atome:changed` events; `tool_genesis.js` and host registries must not restore `notifyInfoPanel*` plumbing.
+- Legacy project-adjacent tools that restore, share, or replay project Atomes must treat project-visible updates as scene invalidations through `project_scene_runtime.js`. `delete.js`, `communication.js`, and project-scoped timeline replay are not allowed to resurrect `renderAtomeRecord()` as an active project visual path. Infos is inspection/editing UI only and has no project-render assignment path.
 - Matrix and Dashboard project preview rendering use `eVe/domains/rendering/project_preview_runtime.js`, which delegates to `matrix_preview_renderer.js` and the shared WebGPU compositor after filtering dashboard/background/wallpaper records. Matrix DOM tile application remains inside `eVe/intuition/matrix/core/preview.js`, while preview capture and canonical persistence (`preview_url`, `preview_width`, `preview_height`, `preview_updated_at` through `Atome.commit`) are reusable renderer responsibilities for Dashboard projects. Browser Dashboard previews use `bevy_project_preview_capture_adapter.js` to keep one hidden `/eve_preview_capture.html` iframe ready from project activation, then fit the complete active-project viewport homothetically inside the DPR-scaled `640x400` maximum output box on one reusable Bevy/WebGPU preview canvas. The capture frame publishes an explicit transparent surface descriptor through `bevy_surface_background_runtime.js`, never the workspace wallpaper or default project colour; only filtered project Atomes contribute pixels, and nearly empty output remains a capture error. Atome content bounds never become capture bounds. Default Dashboard boot must consume persisted preview descriptors only and must not force current-project preview hydration or call a project loader before a project-card click; explicit project close resolves the active project through `AdoleAPI.projects`, starts Projects preview hydration before non-critical categories, and capture or persistence failure keeps the last durable preview while surfacing the error. Dashboard card images then pass through the product-neutral image texture path: `render_atom.js` carries disposable `media_fit` / `object_fit`, `bevy_media_texture_image_fit.js` computes contain/cover draw rectangles and rounded alpha clipping, and `bevy_media_texture_resolver.js` rasterizes the fitted texture for Bevy. Active previews must come from current project scene records or merged project-loader records and shared render targets, not live embedded projects in cards, `html2canvas`, SVG `foreignObject`, cloned DOM, DOM screenshots, CSS clipping, per-item canvases, or symbolic DOM scans.
 - Matrix tile interactions are centralized in `eVe/intuition/matrix/ui/matrix_interaction_runtime.js`. Tile open, menu, create, and label-edit intents must be resolved by one scroll-surface gesture binding and scene hit testing rather than per-project preview/tile listeners.
 - The shared render-at-time entry point in `eVe/domains/rendering/webgpu_compositor.js` is the architectural entry for interactive display, previews, animation, and export targets. It must consume the existing WebGPU adapter infrastructure and must not grow separate UI, preview, and export renderers.
@@ -892,4 +892,29 @@ The shared scene is not a reason to rebuild static Dashboard records when a tool
 - Motion previews patch the existing Bevy source/overlay/hit tree; drag and resize emit one Calendar service mutation on release. Text/IME/clipboard reuse the single hidden editor service. Close releases subscriptions, timers, gestures, editors, hit trees, overlay records, and renderer resources through existing lifecycle owners.
 - Explicit descendant drag handlers outrank ancestor panel scrolling. Editor-open Calendar composition geometry covers its complete descendant extent, while the shared scroll source remains canonical and unscrolled; deep clipping may not prune visible late-hour descendants or desynchronize their hit tree.
 - The legacy DOM/vendor/example route is deleted. No fallback, second renderer, public persistence surface, or platform-specific Calendar UI exists.
-- Focused technical contracts pass. Tauri/iOS real-input parity and explicit product-owner approval remain acceptance gates, so Calendar is not yet counted as a third validated product panel.
+- Focused technical contracts pass and Calendar is product-owner validated, so the programme count is 3/16 before Infos review.
+
+# Info panel migration update — 2026-08-04
+
+- `eVe/intuition/tools/infos.js` is compatibility glue only. It registers and
+  opens `eve_bevy_panel_info`; it must not recreate a dialog, native control,
+  DOM picker, project drop target, polling loop, or local projection updater.
+- `bevy_panel_info_runtime.js` owns disposable orchestration only. Canonical
+  data comes from `listStateCurrent` / `getStateCurrent`, selection from
+  `selection.js`, and edits from one `commitBatch` followed by
+  `atome:changed`. Envelope type, parent, project, owner, and timestamps are
+  read-only; Infos cannot mutate relationships as arbitrary properties.
+- Product projection is split between the runtime, pure record/hierarchy model,
+  hidden text-input owner, and Bevy view. The view reuses shared accordions,
+  selection summary, property table, text/number/switch inputs, actions, panel
+  chrome, scrolling, and skin tokens. The selectable-list owner absorbs the
+  first hierarchical tree-row composition and selection summary accepts the
+  panel-owner-provided fluid width.
+- Selected-Atome preview reuses `project_preview_runtime.js` and the unified
+  WebGPU compositor with a derived, rebased record copy. Preview data is never
+  persisted and never becomes canonical Atome state. The visible result stays
+  in the existing shared project canvas; no renderer or per-item canvas exists.
+- The 3,033-line historical HTML/synchronization implementation is exhaustively
+  classified in `todo/ui_bevy/info_html_line_migration_registry.md`. Persistent
+  tests enforce line coverage, canonical mutation, DOM-free routing, file-size
+  ceilings, lifecycle subscriptions, hierarchy, and shared preview ownership.
