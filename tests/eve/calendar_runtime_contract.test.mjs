@@ -5,6 +5,7 @@ import {
     calendarSurface
 } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_calendar_runtime.js';
 import { hitTestBevyUiNode } from '../../eVe/domains/rendering/bevy_ui_hit_test_runtime.js';
+import { createDashboardActionRuntime } from '../../eVe/domains/dashboard/dashboard_actions.js';
 
 const previousWindow = globalThis.window;
 const updates = [];
@@ -51,6 +52,43 @@ assert.equal(
     'Calendar opened over the neutral Dashboard scene must retain the canonical data project scope'
 );
 closeOpenedSurface();
+
+const openedPanels = [];
+let genericEditorCalls = 0;
+const dashboardActions = createDashboardActionRuntime({
+    destroy: async () => ({ ok: true }),
+    openEditor: async () => { genericEditorCalls += 1; },
+    openPanel: async (surfaceKey, context) => {
+        openedPanels.push({ surfaceKey, context });
+        return { ok: true, surface_key: surfaceKey };
+    }
+});
+await dashboardActions.activateItemAction({
+    category: { id: 'calendar' },
+    item: { id: canonicalEvent.id, payload: { ...canonicalEvent, projectId: 'project_calendar_canonical' } }
+});
+assert.deepEqual(openedPanels, [{
+    surfaceKey: 'calendar',
+    context: {
+        eventId: canonicalEvent.id,
+        projectId: 'project_calendar_canonical',
+        source: { type: 'dashboard_calendar_item' }
+    }
+}], 'a Dashboard Calendar card delegates only its canonical identity to the existing Calendar panel');
+assert.equal(genericEditorCalls, 0, 'Calendar cards never enter the duplicated Dashboard summary editor');
+
+const closeDashboardOpenedSurface = calendarSurface.onOpen({
+    context: openedPanels[0].context,
+    refresh: () => {}
+});
+await new Promise((resolve) => setTimeout(resolve, 0));
+assert.equal(calendarRuntimeState.selectedEventId, canonicalEvent.id, 'Calendar selects the canonical event requested by the Dashboard');
+assert.equal(calendarRuntimeState.editorMode, 'event', 'the existing Calendar editor opens directly in edit mode');
+assert.equal(calendarRuntimeState.draft.title, canonicalEvent.title, 'the editor draft is derived from the canonical Calendar event');
+closeDashboardOpenedSurface();
+calendarSurface.onClose();
+assert.equal(calendarRuntimeState.editorMode, 'none', 'closing the Calendar panel discards the editor projection');
+assert.equal(calendarRuntimeState.selectedEventId, '', 'closing the Calendar panel clears its ephemeral selection');
 calendarRuntimeState.events = [canonicalEvent];
 calendarRuntimeState.view = 'week';
 calendarRuntimeState.anchor = new Date(2026, 7, 3, 12);
