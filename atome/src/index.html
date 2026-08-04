@@ -14,14 +14,12 @@
   <script src="squirrel/early-init.js"></script>
   <!-- Error handlers are installed early by squirrel/spark.js -->
   <link rel="stylesheet" href="js/leaflet.min.css">
-  <link rel="stylesheet" href="js/event-calendar.css">
   <link rel="stylesheet" href="css/squirrel.css?v=20260731-text-service">
   <!-- Optional feature globals: defer so they never block HTML parse or the app entry.
        Consumers read these only at interaction time (map tool -> window.L,
-       calendar panel -> window.eventCalendar, animations -> window.gsap). -->
+       map tool -> window.L, animations -> window.gsap). -->
   <script defer src="js/gsap.min.js"></script>
   <script defer src="js/leaflet.min.js"></script>
-  <script defer src="js/event-calendar.min.js"></script>
   <!-- Preload the deepest dynamically-imported entries so their fetch/parse overlaps
        boot instead of being discovered late in the serial import chain (no execution
        until spark imports them). -->

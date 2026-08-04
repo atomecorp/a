@@ -1408,94 +1408,7 @@
     observeMutations
   };
 
-  /**
-   * Composant Slider skinnable avec HyperSquirrel
-   * Chaque élément du slider est entièrement customisable
-   * Support pour sliders horizontaux, verticaux et circulaires
-   */
-
-
-  // === DÉFINITION DES TEMPLATES DE BASE ===
-
-  // Template pour le conteneur principal du slider
-  define('slider-container', {
-    tag: 'div',
-    class: 'hs-slider',
-    css: {
-      position: 'relative',
-      display: 'inline-block',
-      userSelect: 'none',
-      touchAction: 'none'
-    }
-  });
-
-  // Template pour la piste du slider
-  define('slider-track', {
-    tag: 'div',
-    class: 'hs-slider-track',
-    css: {
-      position: 'absolute',
-      backgroundColor: '#e0e0e0',
-      borderRadius: '4px',
-      overflow: 'hidden',
-      zIndex: '1',
-      boxSizing: 'border-box'  // Ajout important
-    }
-  });
-
-  // Template pour la partie progression du slider
-  define('slider-progression', {
-    tag: 'div',
-    class: 'hs-slider-progression',
-    css: {
-      position: 'absolute',
-      backgroundColor: '#007bff',
-      borderRadius: '0',
-      zIndex: '2',
-    }
-  });
-
-  // Template pour le handle/thumb du slider
-  define('slider-handle', {
-    tag: 'div',
-    class: 'hs-slider-handle',
-    css: {
-      position: 'absolute',
-      backgroundColor: '#fff',
-      border: '2px solid #007bff',
-      borderRadius: '50%',
-      cursor: 'pointer',
-      zIndex: '20',  // Augmenté pour être sûr qu'il est au-dessus
-      boxShadow: '0 4px 8px rgba(0,0,0,0.15)'
-    }
-  });
-
-  // Template pour le label/valeur du slider
-  define('slider-label', {
-    tag: 'div',
-    class: 'hs-slider-label',
-    css: {
-      position: 'absolute',
-      fontSize: '12px',
-      fontFamily: 'system-ui, sans-serif',
-      color: '#666',
-      whiteSpace: 'nowrap'
-    }
-  });
-
-  // Template pour les graduations
-  define('slider-tick', {
-    tag: 'div',
-    class: 'hs-slider-tick',
-    css: {
-      position: 'absolute',
-      backgroundColor: '#ccc',
-      pointerEvents: 'none'
-    }
-  });
-
-  // === STYLES PRÉDÉFINIS ===
-
+  // Slider visual config extracted from slider_builder.js: variant styles, size presets, and the preset system.
   const sliderVariants = {
     horizontal: {
       container: { width: '200px', height: '20px' },
@@ -1527,173 +1440,13 @@
     xl: { scale: 1.5 }
   };
 
-  // === COMPOSANT SLIDER PRINCIPAL ===
+  // Extracted from slider_builder.js createSlider: position rendering (updatePosition — all 3 types
+  // incl. circular SVG), pointer→value mapping, and mouse/touch drag handlers + listener wiring.
+  // Shared mutable state passed in via `sState` (mutate-in-place).
 
-  /**
-   * Crée un slider entièrement skinnable
-   * @param {Object} config - Configuration du slider
-   * @param {string} config.type - Type de slider (horizontal, vertical, circular)
-   * @param {number} config.min - Valeur minimum (défaut: 0)
-   * @param {number} config.max - Valeur maximum (défaut: 100)
-   * @param {number} config.value - Valeur initiale (défaut: 50)
-   * @param {number} config.step - Pas de progression (défaut: 1)
-   * @param {Function} config.onChange - Handler de changement de valeur
-   * @param {Function} config.onInput - Handler d'input continu
-   * @param {Object} config.skin - Styles personnalisés pour chaque partie
-   * @param {string} config.id - ID personnalisé (sinon auto-généré)
-   * @param {boolean} config.disabled - Slider désactivé
-   * @param {boolean} config.showLabel - Afficher la valeur (défaut: true)
-   * @param {boolean} config.showTicks - Afficher les graduations
-   * @param {Array} config.ticks - Positions des graduations
-   * @param {number} config.radius - Rayon personnalisé pour slider circulaire
-   * @param {number} config.handleOffset - Décalage du handle (en %) : positif = extérieur, négatif = intérieur
-   */
-  const createSlider = (config = {}) => {
-    const {
-      type = 'horizontal',
-      min = 0,
-      max = 100,
-      value = 50,
-      step = 1,
-      onChange,
-      onInput,
-      skin = {},
-      id,
-      disabled = false,
-      showLabel = true,
-      showTicks = false,
-      ticks = [],
-      size = 'md',
-      radius,  // Ajout du paramètre radius
-      handleOffset = 0,  // Nouveau paramètre pour ajuster la position du handle
-      // Nouveaux paramètres pour zone de drag limitée
-      dragMin = null,  // Zone de drag minimum (null = utilise min)
-      dragMax = null,  // Zone de drag maximum (null = utilise max)
-      ...otherProps
-    } = config;
+  function setupSliderBehavior(deps) {
+    const { container, track, handle, progression, label, type, isCircular, min, max, step, disabled, onChange, onInput, sState } = deps;
 
-    // Génération d'ID unique si non fourni
-    const sliderId = id || `slider_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
-
-    // Validation des valeurs
-    const currentValue = Math.max(min, Math.min(max, value));
-    const isCircular = type === 'circular';
-
-    // Styles de base selon type et taille
-    let containerStyles = { ...sliderVariants[type]?.container || {}, ...sliderSizes[size] || {} };
-    let trackStyles = { ...sliderVariants[type]?.track || {} };
-    let progressionStyles = { ...sliderVariants[type]?.progression || {} };
-    let handleStyles = { ...sliderVariants[type]?.handle || {} };
-    let labelStyles = { ...sliderVariants[type]?.label || {} };
-
-    // Si un radius est fourni pour un slider circulaire, l'utiliser
-    if (isCircular && radius) {
-      const diameter = radius * 2;
-      containerStyles.width = `${diameter}px`;
-      containerStyles.height = `${diameter}px`;
-    }
-
-    // Application des styles personnalisés
-    if (skin.container) containerStyles = { ...containerStyles, ...skin.container };
-    if (skin.track) trackStyles = { ...trackStyles, ...skin.track };
-    if (skin.progression) progressionStyles = { ...progressionStyles, ...skin.progression };
-    if (skin.handle) handleStyles = { ...handleStyles, ...skin.handle };
-    if (skin.label) labelStyles = { ...labelStyles, ...skin.label };
-
-    // Styles pour état disabled
-    if (disabled) {
-      containerStyles.opacity = '0.6';
-      containerStyles.pointerEvents = 'none';
-    }
-
-    // Création du conteneur principal
-    const container = $('slider-container', {
-      id: sliderId,
-      css: containerStyles,
-      ...otherProps
-    });
-
-    // Création de la piste
-    const track = $('slider-track', {
-      id: `${sliderId}_track`,
-      css: trackStyles
-    });
-
-    // Pour un slider circulaire, s'assurer que le track remplit le conteneur
-    if (isCircular) {
-      track.$({
-        css: {
-          width: '100%',
-          height: '100%',
-          top: '0',
-          left: '0'
-        }
-      });
-    }
-
-    // Création de la progression
-    let progression;
-    if (!isCircular) {
-      progression = $('slider-progression', {
-        id: `${sliderId}_progression`,
-        css: progressionStyles
-      });
-      track.appendChild(progression);
-    }
-
-    // Création du handle
-    const handle = $('slider-handle', {
-      id: `${sliderId}_handle`,
-      css: handleStyles
-    });
-
-    // Création du label si demandé
-    let label;
-    if (showLabel) {
-      label = $('slider-label', {
-        id: `${sliderId}_label`,
-        text: currentValue.toString(),
-        css: labelStyles
-      });
-    }
-
-    // Création des graduations si demandées
-    if (showTicks && ticks.length > 0) {
-      ticks.forEach((tickValue, index) => {
-        const tickPosition = ((tickValue - min) / (max - min)) * 100;
-        const tick = $('slider-tick', {
-          id: `${sliderId}_tick_${index}`,
-          css: {
-            ...skin.tick || {},
-            ...(type === 'horizontal' ? {
-              left: `${tickPosition}%`,
-              top: '12px',
-              width: '2px',
-              height: '6px'
-            } : {
-              top: `${100 - tickPosition}%`,
-              left: '12px',
-              width: '6px',
-              height: '2px'
-            })
-          }
-        });
-        container.appendChild(tick);
-      });
-    }
-
-    // Assemblage des éléments
-    container.appendChild(track);
-    if (!isCircular && progression) track.appendChild(progression);
-    container.appendChild(handle);  // Handle toujours au niveau du conteneur
-    if (label) container.appendChild(label);
-
-    // Variables de state
-    let isDragging = false;
-    let currentVal = currentValue;
-    let currentHandleOffset = handleOffset;  // Stocker l'offset actuel
-
-    // Fonction de mise à jour de position
     const updatePosition = (newValue) => {
       const clampedValue = Math.max(min, Math.min(max, newValue));
 
@@ -1735,7 +1488,7 @@
 
         // Appliquer l'offset personnalisé
         // handleOffset positif = vers l'extérieur, négatif = vers l'intérieur
-        const radiusPercent = 50 - borderPercent + currentHandleOffset;
+        const radiusPercent = 50 - borderPercent + sState.currentHandleOffset;
 
         const x = 50 + radiusPercent * Math.cos(handleAngleInRadians);
         const y = 50 + radiusPercent * Math.sin(handleAngleInRadians);
@@ -1896,7 +1649,7 @@
         label.$({ text: Math.round(clampedValue).toString() });
       }
 
-      currentVal = clampedValue;
+      sState.currentVal = clampedValue;
     };
 
     // Fonction de calcul de valeur depuis position
@@ -1967,13 +1720,13 @@
     const handleMouseDown = (e) => {
       if (disabled) return;
 
-      isDragging = true;
+      sState.isDragging = true;
       const newValue = getValueFromPosition(e.clientX, e.clientY);
       const steppedValue = Math.round(newValue / step) * step;
 
       updatePosition(steppedValue);
 
-      if (onInput) onInput(currentVal);
+      if (onInput) onInput(sState.currentVal);
 
       document.addEventListener('mousemove', handleMouseMove);
       document.addEventListener('mouseup', handleMouseUp);
@@ -1981,24 +1734,24 @@
     };
 
     const handleMouseMove = (e) => {
-      if (!isDragging) return;
+      if (!sState.isDragging) return;
 
       const newValue = getValueFromPosition(e.clientX, e.clientY);
       const steppedValue = Math.round(newValue / step) * step;
 
       updatePosition(steppedValue);
 
-      if (onInput) onInput(currentVal);
+      if (onInput) onInput(sState.currentVal);
 
       e.preventDefault();
     };
 
     const handleMouseUp = () => {
-      if (!isDragging) return;
+      if (!sState.isDragging) return;
 
-      isDragging = false;
+      sState.isDragging = false;
 
-      if (onChange) onChange(currentVal);
+      if (onChange) onChange(sState.currentVal);
 
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', handleMouseUp);
@@ -2013,7 +1766,7 @@
     };
 
     const handleTouchMove = (e) => {
-      if (!isDragging) return;
+      if (!sState.isDragging) return;
 
       const touch = e.touches[0];
       handleMouseMove({ clientX: touch.clientX, clientY: touch.clientY, preventDefault: () => e.preventDefault() });
@@ -2036,18 +1789,255 @@
     updatePosition(currentValue);
 
     // Méthodes utilitaires spécifiques au slider
+
+    return { updatePosition };
+  }
+
+  /**
+   * Composant Slider skinnable avec HyperSquirrel
+   * Chaque élément du slider est entièrement customisable
+   * Support pour sliders horizontaux, verticaux et circulaires
+   */
+
+
+  // === DÉFINITION DES TEMPLATES DE BASE ===
+
+  // Template pour le conteneur principal du slider
+  define('slider-container', {
+    tag: 'div',
+    class: 'hs-slider',
+    css: {
+      position: 'relative',
+      display: 'inline-block',
+      userSelect: 'none',
+      touchAction: 'none'
+    }
+  });
+
+  // Template pour la piste du slider
+  define('slider-track', {
+    tag: 'div',
+    class: 'hs-slider-track',
+    css: {
+      position: 'absolute',
+      backgroundColor: '#e0e0e0',
+      borderRadius: '4px',
+      overflow: 'hidden',
+      zIndex: '1',
+      boxSizing: 'border-box'  // Ajout important
+    }
+  });
+
+  // Template pour la partie progression du slider
+  define('slider-progression', {
+    tag: 'div',
+    class: 'hs-slider-progression',
+    css: {
+      position: 'absolute',
+      backgroundColor: '#007bff',
+      borderRadius: '0',
+      zIndex: '2',
+    }
+  });
+
+  // Template pour le handle/thumb du slider
+  define('slider-handle', {
+    tag: 'div',
+    class: 'hs-slider-handle',
+    css: {
+      position: 'absolute',
+      backgroundColor: '#fff',
+      border: '2px solid #007bff',
+      borderRadius: '50%',
+      cursor: 'pointer',
+      zIndex: '20',  // Augmenté pour être sûr qu'il est au-dessus
+      boxShadow: '0 4px 8px rgba(0,0,0,0.15)'
+    }
+  });
+
+  // Template pour le label/valeur du slider
+  define('slider-label', {
+    tag: 'div',
+    class: 'hs-slider-label',
+    css: {
+      position: 'absolute',
+      fontSize: '12px',
+      fontFamily: 'system-ui, sans-serif',
+      color: '#666',
+      whiteSpace: 'nowrap'
+    }
+  });
+
+  // Template pour les graduations
+  define('slider-tick', {
+    tag: 'div',
+    class: 'hs-slider-tick',
+    css: {
+      position: 'absolute',
+      backgroundColor: '#ccc',
+      pointerEvents: 'none'
+    }
+  });
+
+  // === STYLES PRÉDÉFINIS ===
+
+  const createSlider = (config = {}) => {
+    const {
+      type = 'horizontal',
+      min = 0,
+      max = 100,
+      value = 50,
+      step = 1,
+      onChange,
+      onInput,
+      skin = {},
+      id,
+      disabled = false,
+      showLabel = true,
+      showTicks = false,
+      ticks = [],
+      size = 'md',
+      radius,  // Ajout du paramètre radius
+      handleOffset = 0,  // Nouveau paramètre pour ajuster la position du handle
+      // Nouveaux paramètres pour zone de drag limitée
+      dragMin = null,  // Zone de drag minimum (null = utilise min)
+      dragMax = null,  // Zone de drag maximum (null = utilise max)
+      ...otherProps
+    } = config;
+
+    // Génération d'ID unique si non fourni
+    const sliderId = id || `slider_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
+
+    // Validation des valeurs
+    const currentValue = Math.max(min, Math.min(max, value));
+    const isCircular = type === 'circular';
+
+    // Styles de base selon type et taille
+    let containerStyles = { ...sliderVariants[type]?.container || {}, ...sliderSizes[size] || {} };
+    let trackStyles = { ...sliderVariants[type]?.track || {} };
+    let progressionStyles = { ...sliderVariants[type]?.progression || {} };
+    let handleStyles = { ...sliderVariants[type]?.handle || {} };
+    let labelStyles = { ...sliderVariants[type]?.label || {} };
+
+    // Si un radius est fourni pour un slider circulaire, l'utiliser
+    if (isCircular && radius) {
+      const diameter = radius * 2;
+      containerStyles.width = `${diameter}px`;
+      containerStyles.height = `${diameter}px`;
+    }
+
+    // Application des styles personnalisés
+    if (skin.container) containerStyles = { ...containerStyles, ...skin.container };
+    if (skin.track) trackStyles = { ...trackStyles, ...skin.track };
+    if (skin.progression) progressionStyles = { ...progressionStyles, ...skin.progression };
+    if (skin.handle) handleStyles = { ...handleStyles, ...skin.handle };
+    if (skin.label) labelStyles = { ...labelStyles, ...skin.label };
+
+    // Styles pour état disabled
+    if (disabled) {
+      containerStyles.opacity = '0.6';
+      containerStyles.pointerEvents = 'none';
+    }
+
+    // Création du conteneur principal
+    const container = $('slider-container', {
+      id: sliderId,
+      css: containerStyles,
+      ...otherProps
+    });
+
+    // Création de la piste
+    const track = $('slider-track', {
+      id: `${sliderId}_track`,
+      css: trackStyles
+    });
+
+    // Pour un slider circulaire, s'assurer que le track remplit le conteneur
+    if (isCircular) {
+      track.$({
+        css: {
+          width: '100%',
+          height: '100%',
+          top: '0',
+          left: '0'
+        }
+      });
+    }
+
+    // Création de la progression
+    let progression;
+    if (!isCircular) {
+      progression = $('slider-progression', {
+        id: `${sliderId}_progression`,
+        css: progressionStyles
+      });
+      track.appendChild(progression);
+    }
+
+    // Création du handle
+    const handle = $('slider-handle', {
+      id: `${sliderId}_handle`,
+      css: handleStyles
+    });
+
+    // Création du label si demandé
+    let label;
+    if (showLabel) {
+      label = $('slider-label', {
+        id: `${sliderId}_label`,
+        text: currentValue.toString(),
+        css: labelStyles
+      });
+    }
+
+    // Création des graduations si demandées
+    if (showTicks && ticks.length > 0) {
+      ticks.forEach((tickValue, index) => {
+        const tickPosition = ((tickValue - min) / (max - min)) * 100;
+        const tick = $('slider-tick', {
+          id: `${sliderId}_tick_${index}`,
+          css: {
+            ...skin.tick || {},
+            ...(type === 'horizontal' ? {
+              left: `${tickPosition}%`,
+              top: '12px',
+              width: '2px',
+              height: '6px'
+            } : {
+              top: `${100 - tickPosition}%`,
+              left: '12px',
+              width: '6px',
+              height: '2px'
+            })
+          }
+        });
+        container.appendChild(tick);
+      });
+    }
+
+    // Assemblage des éléments
+    container.appendChild(track);
+    if (!isCircular && progression) track.appendChild(progression);
+    container.appendChild(handle);  // Handle toujours au niveau du conteneur
+    if (label) container.appendChild(label);
+
+    // Variables de state
+    const sState = { isDragging: false, currentVal: currentValue, currentHandleOffset: handleOffset };
+
+    // Fonction de mise à jour de position
+    const { updatePosition } = setupSliderBehavior({ container, track, handle, progression, label, type, isCircular, min, max, step, disabled, onChange, onInput, sState });
     container.setValue = (newValue) => {
       updatePosition(newValue);
-      if (onChange) onChange(currentVal);
+      if (onChange) onChange(sState.currentVal);
       return container;
     };
 
-    container.getValue = () => currentVal;
+    container.getValue = () => sState.currentVal;
 
     container.setRange = (newMin, newMax) => {
       min = newMin;
       max = newMax;
-      updatePosition(currentVal);
+      updatePosition(sState.currentVal);
       return container;
     };
 
@@ -2064,13 +2054,13 @@
 
     container.setHandleOffset = (offset) => {
       if (isCircular) {
-        currentHandleOffset = offset;
-        updatePosition(currentVal);
+        sState.currentHandleOffset = offset;
+        updatePosition(sState.currentVal);
       }
       return container;
     };
 
-    container.getHandleOffset = () => currentHandleOffset;
+    container.getHandleOffset = () => sState.currentHandleOffset;
 
     return container;
   };
@@ -2083,6 +2073,9 @@
   Slider.controlKind = createSlider.controlKind;
   Slider.isToolSlider = createSlider.isToolSlider;
   Slider.canonicalToolOwner = createSlider.canonicalToolOwner;
+
+  // Extracted from tool_slider_builder.js: constants, canonical selectors, and pure helpers
+  // (number/format/unit utilities + createNode/setStyles DOM helpers + design-token resolver).
 
   const VALUE_DOUBLE_CLICK_GUARD_MS = 180;
   const DEFAULT_TOOL_SLIDER_COLORS = Object.freeze({
@@ -2196,6 +2189,19 @@
       textMuted: ensureString(designTokens.textMuted, DEFAULT_TOOL_SLIDER_COLORS.textMuted)
   });
 
+
+  const stopBubble = (event) => {
+    if (!event) return;
+    event.stopPropagation?.();
+  };
+  const stopAndPrevent = (event) => {
+    if (!event) return;
+    event.preventDefault?.();
+    event.stopPropagation?.();
+  };
+
+  // Extracted from tool_slider_builder.js: builds the IntuitionX slider tool DOM (shell/hitzone/input/value).
+
   const createSliderToolElements = ({
       button,
       contentHost = null,
@@ -2205,16 +2211,19 @@
       step,
       initialValue,
       label,
+      orientation = 'horizontal',
       designTokens = {}
   } = {}) => {
       const host = contentHost instanceof HTMLElement ? contentHost : button;
       const colors = resolveDesignTokens(designTokens);
+      const vertical = orientation === 'vertical';
 
       const shell = createNode('div', {
           parent: host,
           attrs: { 'data-role': 'eve_intuitionx-slider-shell' },
           css: {
               width: '100%',
+              height: '100%',
               display: 'grid',
               gridTemplateRows: 'minmax(0, 1fr) auto',
               alignItems: 'stretch',
@@ -2229,6 +2238,7 @@
           attrs: { 'data-role': 'eve_intuitionx-slider-hitzone' },
           css: {
               width: '100%',
+              height: '100%',
               minWidth: '0',
               display: 'flex',
               alignItems: 'center',
@@ -2253,12 +2263,15 @@
               'aria-label': label
           },
           css: {
-              width: '100%',
+              width: vertical ? '18px' : '100%',
+              height: vertical ? '100%' : 'auto',
               minWidth: '0',
               margin: '0',
               accentColor: 'rgba(255, 255, 255, 0.92)',
               cursor: 'pointer',
-              pointerEvents: 'auto'
+              pointerEvents: 'auto',
+              writingMode: vertical ? 'vertical-lr' : '',
+              direction: vertical ? 'rtl' : ''
           }
       });
       addOptionalClassNames(input, classNames.input);
@@ -2395,10 +2408,12 @@
       };
   };
 
+  // Extracted from tool_slider_builder.js: direct pointer-drag controller for the slider tool.
   const createDirectSliderDragController = ({
       input,
       hitzone,
-      expandedWidth,
+      expandedLength,
+      orientation = 'horizontal',
       step,
       min,
       max,
@@ -2423,6 +2438,7 @@
           window.removeEventListener('pointermove', onPointerMove, true);
           window.removeEventListener('pointerup', onPointerUp, true);
           window.removeEventListener('pointercancel', onPointerCancel, true);
+          input.removeEventListener('lostpointercapture', onPointerCancel, true);
           try {
               if (Number.isFinite(dragSession.pointerId)) {
                   input.releasePointerCapture?.(dragSession.pointerId);
@@ -2431,22 +2447,25 @@
           dragSession = null;
       };
 
-      const resolveTrackWidth = () => {
+      const vertical = orientation === 'vertical';
+      const resolveTrackLength = () => {
           const inputRect = input.getBoundingClientRect?.();
           const hitzoneRect = hitzone.getBoundingClientRect?.();
           return Math.max(
               1,
-              Number(inputRect?.width) || 0,
-              Number(hitzoneRect?.width) || 0,
-              expandedWidth
+              Number(vertical ? inputRect?.height : inputRect?.width) || 0,
+              Number(vertical ? hitzoneRect?.height : hitzoneRect?.width) || 0,
+              expandedLength
           );
       };
 
-      const readValue = (clientX) => {
+      const readValue = (clientX, clientY) => {
           if (!dragSession) return null;
-          const dx = Number(clientX) - Number(dragSession.startX || 0);
+          const delta = vertical
+              ? Number(dragSession.startY || 0) - Number(clientY)
+              : Number(clientX) - Number(dragSession.startX || 0);
           const range = Math.max(step, max - min);
-          const deltaRatio = dx / Math.max(1, dragSession.trackWidth || expandedWidth);
+          const deltaRatio = delta / Math.max(1, dragSession.trackLength || expandedLength);
           return quantizeSliderValue(Number(dragSession.startValue || initialValue) + (deltaRatio * range));
       };
 
@@ -2457,8 +2476,9 @@
           dragSession = {
               pointerId: Number.isFinite(Number(event?.pointerId)) ? Number(event.pointerId) : null,
               startX: Number(event?.clientX) || 0,
+              startY: Number(event?.clientY) || 0,
               startValue: quantizeSliderValue(input.value),
-              trackWidth: resolveTrackWidth(),
+              trackLength: resolveTrackLength(),
               moved: false
           };
           if (typeof onStart === 'function') {
@@ -2476,13 +2496,14 @@
               window.addEventListener('pointermove', onPointerMove, true);
               window.addEventListener('pointerup', onPointerUp, true);
               window.addEventListener('pointercancel', onPointerCancel, true);
+              input.addEventListener('lostpointercapture', onPointerCancel, true);
           }
       };
 
       function onPointerMove(event) {
           if (!dragSession) return;
           if (Number.isFinite(dragSession.pointerId) && Number(event?.pointerId) !== dragSession.pointerId) return;
-          const nextValue = readValue(event?.clientX);
+          const nextValue = readValue(event?.clientX, event?.clientY);
           if (!Number.isFinite(nextValue)) return;
           dragSession.moved = true;
           stopAndPrevent(event);
@@ -2496,7 +2517,7 @@
           let finalValue = quantizeSliderValue(input.value);
           if (moved) {
               stopAndPrevent(event);
-              const nextValue = readValue(event?.clientX);
+              const nextValue = readValue(event?.clientX, event?.clientY);
               finalValue = commitInputValue(Number.isFinite(nextValue) ? nextValue : input.value, 'slider.direct.drag');
           }
           clear();
@@ -2540,11 +2561,56 @@
       };
   };
 
+  // Extracted from tool_slider_builder.js: the slider input/change/unit-change emitter trio.
+  // Pure — receives the DOM handles + callbacks + a live getUnit() accessor, no mutable state.
+  const createSliderEmitters = ({
+      onInput, onChange, onUnitChange, input, button, labelEl, valueButton, unitButton, getUnit
+  }) => {
+      const emitInput = (value, source = 'slider.input') => {
+          if (typeof onInput !== 'function') return;
+          onInput(value, {
+              input,
+              button,
+              labelEl,
+              valueButton,
+              unitButton,
+              unit: getUnit(),
+              source
+          });
+      };
+      const emitChange = (value, source = 'slider.change') => {
+          if (typeof onChange !== 'function') return;
+          onChange(value, {
+              input,
+              button,
+              labelEl,
+              valueButton,
+              unitButton,
+              unit: getUnit(),
+              source
+          });
+      };
+      const emitUnitChange = (unit, source = 'slider.unit.change') => {
+          if (typeof onUnitChange !== 'function') return;
+          onUnitChange(unit, {
+              input,
+              button,
+              labelEl,
+              valueButton,
+              unitButton,
+              unit,
+              source
+          });
+      };
+      return { emitInput, emitChange, emitUnitChange };
+  };
+
   const mountIntuitionXSliderToolContent = ({
       button,
       contentHost = null,
       classNames = {},
       definition = {},
+      orientation = 'horizontal',
       collapsedWidthPx = null,
       expandedWidthPx = null,
       onInput = null,
@@ -2556,8 +2622,12 @@
       designTokens = {}
   } = {}) => {
       if (!(button instanceof HTMLElement)) return null;
+      const resolvedOrientation = String(orientation || definition?.orientation || 'horizontal').trim().toLowerCase() === 'vertical'
+          ? 'vertical'
+          : 'horizontal';
+      const vertical = resolvedOrientation === 'vertical';
       const toolSizePx = Math.max(1, Math.round(toFiniteNumber(collapsedWidthPx, 57)));
-      const expandedWidth = Math.max(toolSizePx, Math.round(toFiniteNumber(expandedWidthPx, Math.round(toolSizePx * 3))));
+      const expandedLength = Math.max(toolSizePx, Math.round(toFiniteNumber(expandedWidthPx, Math.round(toolSizePx * 3))));
       const min = toFiniteNumber(definition.sliderMin, 0);
       const max = Math.max(min, toFiniteNumber(definition.sliderMax, 100));
       const step = Math.max(0.0001, toFiniteNumber(definition.sliderStep, 1));
@@ -2575,7 +2645,10 @@
       let valueClickSuppressUntil = 0;
       let directSliderDragController = null;
       button.dataset.sliderCollapsedWidthPx = String(toolSizePx);
-      button.dataset.sliderExpandedWidthPx = String(expandedWidth);
+      button.dataset.sliderExpandedWidthPx = String(vertical ? toolSizePx : expandedLength);
+      button.dataset.sliderCollapsedHeightPx = String(toolSizePx);
+      button.dataset.sliderExpandedHeightPx = String(vertical ? expandedLength : toolSizePx);
+      button.dataset.sliderOrientation = resolvedOrientation;
       button.dataset.sliderExpanded = 'false';
 
       const {
@@ -2595,53 +2668,13 @@
           step,
           initialValue,
           label,
+          orientation: resolvedOrientation,
           designTokens: colors
       });
-      const stopBubble = (event) => {
-          if (!event) return;
-          event.stopPropagation?.();
-      };
-      const stopAndPrevent = (event) => {
-          if (!event) return;
-          event.preventDefault?.();
-          event.stopPropagation?.();
-      };
-      const emitInput = (value, source = 'slider.input') => {
-          if (typeof onInput !== 'function') return;
-          onInput(value, {
-              input,
-              button,
-              labelEl,
-              valueButton,
-              unitButton,
-              unit: currentUnit,
-              source
-          });
-      };
-      const emitChange = (value, source = 'slider.change') => {
-          if (typeof onChange !== 'function') return;
-          onChange(value, {
-              input,
-              button,
-              labelEl,
-              valueButton,
-              unitButton,
-              unit: currentUnit,
-              source
-          });
-      };
-      const emitUnitChange = (unit, source = 'slider.unit.change') => {
-          if (typeof onUnitChange !== 'function') return;
-          onUnitChange(unit, {
-              input,
-              button,
-              labelEl,
-              valueButton,
-              unitButton,
-              unit,
-              source
-          });
-      };
+      const { emitInput, emitChange, emitUnitChange } = createSliderEmitters({
+          onInput, onChange, onUnitChange, input, button, labelEl, valueButton, unitButton,
+          getUnit: () => currentUnit
+      });
       const syncValueVisual = () => {
           const currentValue = clamp(toFiniteNumber(input.value, initialValue), min, max);
           valueButton.textContent = formatSliderValue({
@@ -2684,9 +2717,12 @@
           expanded = nextExpanded === true;
           button.dataset.sliderExpanded = expanded ? 'true' : 'false';
           setStyles(button, {
-              width: `${expanded ? expandedWidth : toolSizePx}px`,
-              minWidth: `${expanded ? expandedWidth : toolSizePx}px`,
-              maxWidth: `${expanded ? expandedWidth : toolSizePx}px`,
+              width: `${vertical ? toolSizePx : (expanded ? expandedLength : toolSizePx)}px`,
+              minWidth: `${vertical ? toolSizePx : (expanded ? expandedLength : toolSizePx)}px`,
+              maxWidth: `${vertical ? toolSizePx : (expanded ? expandedLength : toolSizePx)}px`,
+              height: `${vertical ? (expanded ? expandedLength : toolSizePx) : toolSizePx}px`,
+              minHeight: `${vertical ? (expanded ? expandedLength : toolSizePx) : toolSizePx}px`,
+              maxHeight: `${vertical ? (expanded ? expandedLength : toolSizePx) : toolSizePx}px`,
               zIndex: expanded ? '6' : ''
           });
           if (!expanded) {
@@ -2731,7 +2767,8 @@
       directSliderDragController = createDirectSliderDragController({
           input,
           hitzone,
-          expandedWidth,
+          expandedLength,
+          orientation: resolvedOrientation,
           step,
           min,
           max,
@@ -2797,8 +2834,8 @@
           const dx = Number(clientX) - Number(valueDragSession.startX || 0);
           const dy = Number(clientY) - Number(valueDragSession.startY || 0);
           const range = Math.max(step, max - min);
-          const pxForRange = Math.max(96, expandedWidth);
-          const deltaRatio = (dx - dy) / pxForRange;
+          const pxForRange = Math.max(96, expandedLength);
+          const deltaRatio = (vertical ? -dy : (dx - dy)) / pxForRange;
           return quantizeSliderValue(Number(valueDragSession.startValue || initialValue) + (deltaRatio * range));
       };
       function onValuePointerMove(event) {
@@ -3113,14 +3150,7 @@
     return badge;
   };
 
-  /**
-   * Composant Button skinnable avec HyperSquirrel
-   * Chaque élément du bouton est entièrement customisable
-   */
-
-  // === SYSTÈME DE TEMPLATES/SKINS ===
-
-  // Registre des templates globaux
+  // Button visual config extracted from button_builder.js: variant templates, base styles, size presets.
   const buttonTemplates = {
     'squirrel_design': {
       name: 'Material Design Green',
@@ -3380,6 +3410,55 @@
   // === FONCTIONS DE GESTION DES TEMPLATES ===
 
   // Fonction pour appliquer un template
+
+  const buttonStyles = {
+    primary: {
+      backgroundColor: '#007bff',
+      color: 'white',
+      borderColor: '#007bff'
+    },
+    secondary: {
+      backgroundColor: '#6c757d',
+      color: 'white',
+      borderColor: '#6c757d'
+    },
+    success: {
+      backgroundColor: '#28a745',
+      color: 'white',
+      borderColor: '#28a745'
+    },
+    danger: {
+      backgroundColor: '#dc3545',
+      color: 'white',
+      borderColor: '#dc3545'
+    },
+    warning: {
+      backgroundColor: '#ffc107',
+      color: '#212529',
+      borderColor: '#ffc107'
+    },
+    outline: {
+      backgroundColor: 'transparent',
+      borderWidth: '2px'
+    },
+    ghost: {
+      backgroundColor: 'transparent',
+      border: 'none',
+      boxShadow: 'none'
+    }
+  };
+
+  const buttonSizes = {
+    xs: { padding: '4px 8px', fontSize: '11px' },
+    sm: { padding: '6px 12px', fontSize: '12px' },
+    md: { padding: '8px 16px', fontSize: '14px' }, // default
+    lg: { padding: '12px 24px', fontSize: '16px' },
+    xl: { padding: '16px 32px', fontSize: '18px' }
+  };
+
+  // Template application extracted from button_builder.js: resolves a named template into a
+  // config (applyTemplate) and applies its DOM/interaction effects to a built button (applyTemplateEffects).
+
   const applyTemplate = (config, templateName) => {
     const template = buttonTemplates[templateName];
     if (!template) {
@@ -3589,86 +3668,170 @@
     }
   });
 
-  // === VARIANTES DE STYLES PRÉDÉFINIES ===
+  // Extracted from button_builder.js createButton: appends icon/text/badge to a built button and
+  // attaches its base mutation methods (updateText/updateBadge/setVariant/setDisabled + template getters).
 
-  const buttonStyles = {
-    primary: {
-      backgroundColor: '#007bff',
-      color: 'white',
-      borderColor: '#007bff'
-    },
-    secondary: {
-      backgroundColor: '#6c757d',
-      color: 'white',
-      borderColor: '#6c757d'
-    },
-    success: {
-      backgroundColor: '#28a745',
-      color: 'white',
-      borderColor: '#28a745'
-    },
-    danger: {
-      backgroundColor: '#dc3545',
-      color: 'white',
-      borderColor: '#dc3545'
-    },
-    warning: {
-      backgroundColor: '#ffc107',
-      color: '#212529',
-      borderColor: '#ffc107'
-    },
-    outline: {
-      backgroundColor: 'transparent',
-      borderWidth: '2px'
-    },
-    ghost: {
-      backgroundColor: 'transparent',
-      border: 'none',
-      boxShadow: 'none'
+  function attachButtonContentAndMethods(button, deps) {
+    const { buttonId, icon, finalText, badge, skin, buttonStyles, processedConfig } = deps;
+
+    // === MÉTHODES POUR TEMPLATES ===
+    button.getTemplate = () => processedConfig._templateName || null;
+    button.getTemplateInfo = () => processedConfig._templateInfo || null;
+
+    // Ajout de l'icône si présente
+    if (icon) {
+      const iconElement = $('button-icon', {
+        id: `${buttonId}_icon`,
+        text: icon,
+        css: skin.icon || {}
+      });
+
+      // Ajustement de la marge si pas de texte
+      if (!finalText) {
+        iconElement.$({ css: { marginRight: '0' } });
+      }
+
+      button.appendChild(iconElement);
     }
-  };
 
-  const buttonSizes = {
-    xs: { padding: '4px 8px', fontSize: '11px' },
-    sm: { padding: '6px 12px', fontSize: '12px' },
-    md: { padding: '8px 16px', fontSize: '14px' }, // default
-    lg: { padding: '12px 24px', fontSize: '16px' },
-    xl: { padding: '16px 32px', fontSize: '18px' }
-  };
+    // Ajout du texte si présent
+    if (finalText) {
+      // Si le bouton n'a pas déjà de texte, on le met directement sur le bouton principal
+      if (!button.querySelector('.hs-button-text')) {
+        button.textContent = finalText;
+      } else {
+        const textElement = $('button-text', {
+          id: `${buttonId}_text`,
+          text: finalText,
+          css: skin.text || {}
+        });
+        button.appendChild(textElement);
+      }
+    }
 
-  // === COMPOSANT BUTTON PRINCIPAL ===
+    // Ajout du badge si présent
+    if (badge !== undefined) {
+      const badgeElement = $('button-badge', {
+        id: `${buttonId}_badge`,
+        text: badge.toString(),
+        css: skin.badge || {}
+      });
+      button.appendChild(badgeElement);
+    }
+
+    // Méthodes utilitaires de base
+    button.updateText = (newText) => {
+      // Si le bouton n'a pas de .hs-button-text, on modifie directement textContent
+      const textEl = button.querySelector('.hs-button-text');
+      if (textEl) textEl.textContent = newText;
+      else button.textContent = newText;
+      return button;
+    };
+
+    button.updateBadge = (newBadge) => {
+      const badgeEl = button.querySelector('.hs-button-badge');
+      if (badgeEl) {
+        badgeEl.textContent = newBadge.toString();
+      } else if (newBadge !== undefined) {
+        // Créer le badge s'il n'existe pas
+        const badgeElement = $('button-badge', {
+          id: `${buttonId}_badge_new`,
+          text: newBadge.toString(),
+          css: skin.badge || {}
+        });
+        button.appendChild(badgeElement);
+      }
+      return button;
+    };
+
+    button.setVariant = (newVariant) => {
+      const variantStyles = buttonStyles[newVariant] || {};
+      button.$({ css: variantStyles });
+      return button;
+    };
+
+    button.setDisabled = (isDisabled) => {
+      button.disabled = isDisabled;
+      button.$({
+        css: {
+          opacity: isDisabled ? '0.6' : '1',
+          cursor: isDisabled ? 'not-allowed' : 'pointer',
+          pointerEvents: isDisabled ? 'none' : 'auto'
+        }
+      });
+      return button;
+    };
+
+  }
+
+  // Exposes onClick/onAction/offAction as live getter/setters over button._handlers.
+  function exposeButtonHandlerProperties(button) {
+    // === CORRECTION: EXPOSER LES HANDLERS COMME PROPRIÉTÉS MODIFIABLES ===
+
+    // Exposer onClick comme propriété getter/setter
+    Object.defineProperty(button, 'onClick', {
+      get() {
+        return this._handlers.onClick;
+      },
+      set(newHandler) {
+        this._handlers.onClick = newHandler;
+      },
+      enumerable: true,
+      configurable: true
+    });
+
+    // Exposer onAction comme propriété getter/setter
+    Object.defineProperty(button, 'onAction', {
+      get() {
+        return this._handlers.onAction;
+      },
+      set(newHandler) {
+        this._handlers.onAction = newHandler;
+      },
+      enumerable: true,
+      configurable: true
+    });
+
+    // Exposer offAction comme propriété getter/setter
+    Object.defineProperty(button, 'offAction', {
+      get() {
+        return this._handlers.offAction;
+      },
+      set(newHandler) {
+        this._handlers.offAction = newHandler;
+      },
+      enumerable: true,
+      configurable: true
+    });
+  }
+
+  // Extracted from button_builder.js: multi-state index helper, common variant factory functions,
+  // and the preset system (materialSwitch). Variant/preset factories call createButton only at
+  // call-time → safe circular import with the entry module.
+
+  // === FONCTION UTILITAIRE POUR CALCULER LE PROCHAIN ÉTAT ===
+  function getNextStateIndex(current, total, mode, direction = 1) {
+    switch (mode) {
+      case 'backward':
+        return (current - 1 + total) % total;
+      case 'ping-pong':
+        const next = current + direction;
+        if (next >= total) return total - 2;
+        if (next < 0) return 1;
+        return next;
+      default: // 'forward'
+        return (current + 1) % total;
+    }
+  }
 
   /**
-   * Crée un bouton entièrement skinnable
-   * @param {Object} config - Configuration du bouton
-   * @param {string} config.text - Texte du bouton
-   * @param {string} config.icon - Icône (HTML ou emoji)
-   * @param {string|number} config.badge - Badge/compteur
-   * @param {string} config.variant - Style prédéfini (primary, secondary, etc.)
-   * @param {string} config.size - Taille (xs, sm, md, lg, xl)
-   * @param {Function} config.onClick - Handler de clic
-   * @param {Object} config.skin - Styles personnalisés pour chaque partie
-   * @param {string} config.id - ID personnalisé (sinon auto-généré)
-   * @param {boolean} config.disabled - Bouton désactivé
-   * 
-   * === SYSTÈME DE TEMPLATES ===
-   * @param {string} config.template - Nom du template à appliquer
-   * @param {string} config.templates - Alias pour template
-   * 
-   * === NOUVELLES PROPRIÉTÉS TOGGLE ===
-   * @param {string} config.onText - Texte quand activé
-   * @param {string} config.offText - Texte quand désactivé
-   * @param {Function} config.onAction - Action quand passe à ON
-   * @param {Function} config.offAction - Action quand passe à OFF
-   * @param {Object} config.onStyle - Styles CSS pour état ON
-   * @param {Object} config.offStyle - Styles CSS pour état OFF
-   * @param {boolean} config.initialState - État initial (true=ON, false=OFF)
-   * @param {Function} config.onStateChange - Callback lors du changement d'état
-   * 
-   * === PROPRIÉTÉS MULTI-ÉTATS ===
-   * @param {Array} config.states - Array d'états {text, css, action, icon}
-   * @param {string} config.cycleMode - Mode de cycle ('forward', 'backward', 'ping-pong')
+   * Composant Button skinnable avec HyperSquirrel
+   * Chaque élément du bouton est entièrement customisable
    */
+
+  // === SYSTÈME DE TEMPLATES/SKINS ===
+
+  // Registre des templates globaux
   const createButton = (config = {}) => {
     const {
       // default to empty text: components will show no label unless explicitly provided
@@ -4024,178 +4187,7 @@
       applyTemplateEffects(button, buttonTemplates[templateName]);
     }
 
-    // Ajout de l'icône si présente
-    if (icon) {
-      const iconElement = $('button-icon', {
-        id: `${buttonId}_icon`,
-        text: icon,
-        css: skin.icon || {}
-      });
-
-      // Ajustement de la marge si pas de texte
-      if (!finalText) {
-        iconElement.$({ css: { marginRight: '0' } });
-      }
-
-      button.appendChild(iconElement);
-    }
-
-    // Ajout du texte si présent
-    if (finalText) {
-      // Si le bouton n'a pas déjà de texte, on le met directement sur le bouton principal
-      if (!button.querySelector('.hs-button-text')) {
-        button.textContent = finalText;
-      } else {
-        const textElement = $('button-text', {
-          id: `${buttonId}_text`,
-          text: finalText,
-          css: skin.text || {}
-        });
-        button.appendChild(textElement);
-      }
-    }
-
-    // Ajout du badge si présent
-    if (badge !== undefined) {
-      const badgeElement = $('button-badge', {
-        id: `${buttonId}_badge`,
-        text: badge.toString(),
-        css: skin.badge || {}
-      });
-      button.appendChild(badgeElement);
-    }
-
-    // Méthodes utilitaires de base
-    button.updateText = (newText) => {
-      // Si le bouton n'a pas de .hs-button-text, on modifie directement textContent
-      const textEl = button.querySelector('.hs-button-text');
-      if (textEl) textEl.textContent = newText;
-      else button.textContent = newText;
-      return button;
-    };
-
-    button.updateBadge = (newBadge) => {
-      const badgeEl = button.querySelector('.hs-button-badge');
-      if (badgeEl) {
-        badgeEl.textContent = newBadge.toString();
-      } else if (newBadge !== undefined) {
-        // Créer le badge s'il n'existe pas
-        const badgeElement = $('button-badge', {
-          id: `${buttonId}_badge_new`,
-          text: newBadge.toString(),
-          css: skin.badge || {}
-        });
-        button.appendChild(badgeElement);
-      }
-      return button;
-    };
-
-    button.setVariant = (newVariant) => {
-      const variantStyles = buttonStyles[newVariant] || {};
-      button.$({ css: variantStyles });
-      return button;
-    };
-
-    button.setDisabled = (isDisabled) => {
-      button.disabled = isDisabled;
-      button.$({
-        css: {
-          opacity: isDisabled ? '0.6' : '1',
-          cursor: isDisabled ? 'not-allowed' : 'pointer',
-          pointerEvents: isDisabled ? 'none' : 'auto'
-        }
-      });
-      return button;
-    };
-
-    // === MÉTHODES POUR TEMPLATES ===
-    button.getTemplate = () => processedConfig._templateName || null;
-    button.getTemplateInfo = () => processedConfig._templateInfo || null;
-
-    // Ajout de l'icône si présente
-    if (icon) {
-      const iconElement = $('button-icon', {
-        id: `${buttonId}_icon`,
-        text: icon,
-        css: skin.icon || {}
-      });
-
-      // Ajustement de la marge si pas de texte
-      if (!finalText) {
-        iconElement.$({ css: { marginRight: '0' } });
-      }
-
-      button.appendChild(iconElement);
-    }
-
-    // Ajout du texte si présent
-    if (finalText) {
-      // Si le bouton n'a pas déjà de texte, on le met directement sur le bouton principal
-      if (!button.querySelector('.hs-button-text')) {
-        button.textContent = finalText;
-      } else {
-        const textElement = $('button-text', {
-          id: `${buttonId}_text`,
-          text: finalText,
-          css: skin.text || {}
-        });
-        button.appendChild(textElement);
-      }
-    }
-
-    // Ajout du badge si présent
-    if (badge !== undefined) {
-      const badgeElement = $('button-badge', {
-        id: `${buttonId}_badge`,
-        text: badge.toString(),
-        css: skin.badge || {}
-      });
-      button.appendChild(badgeElement);
-    }
-
-    // Méthodes utilitaires de base
-    button.updateText = (newText) => {
-      // Si le bouton n'a pas de .hs-button-text, on modifie directement textContent
-      const textEl = button.querySelector('.hs-button-text');
-      if (textEl) textEl.textContent = newText;
-      else button.textContent = newText;
-      return button;
-    };
-
-    button.updateBadge = (newBadge) => {
-      const badgeEl = button.querySelector('.hs-button-badge');
-      if (badgeEl) {
-        badgeEl.textContent = newBadge.toString();
-      } else if (newBadge !== undefined) {
-        // Créer le badge s'il n'existe pas
-        const badgeElement = $('button-badge', {
-          id: `${buttonId}_badge_new`,
-          text: newBadge.toString(),
-          css: skin.badge || {}
-        });
-        button.appendChild(badgeElement);
-      }
-      return button;
-    };
-
-    button.setVariant = (newVariant) => {
-      const variantStyles = buttonStyles[newVariant] || {};
-      button.$({ css: variantStyles });
-      return button;
-    };
-
-    button.setDisabled = (isDisabled) => {
-      button.disabled = isDisabled;
-      button.$({
-        css: {
-          opacity: isDisabled ? '0.6' : '1',
-          cursor: isDisabled ? 'not-allowed' : 'pointer',
-          pointerEvents: isDisabled ? 'none' : 'auto'
-        }
-      });
-      return button;
-    };
-
+    attachButtonContentAndMethods(button, { buttonId, icon, finalText, badge, skin, buttonStyles, processedConfig });
     // === MÉTHODES SPÉCIFIQUES AU TOGGLE ===
     if (isToggleMode) {
       button.toggle = () => {
@@ -4262,61 +4254,11 @@
       button.getStates = () => states;
     }
 
-    // === CORRECTION: EXPOSER LES HANDLERS COMME PROPRIÉTÉS MODIFIABLES ===
-
-    // Exposer onClick comme propriété getter/setter
-    Object.defineProperty(button, 'onClick', {
-      get() {
-        return this._handlers.onClick;
-      },
-      set(newHandler) {
-        this._handlers.onClick = newHandler;
-      },
-      enumerable: true,
-      configurable: true
-    });
-
-    // Exposer onAction comme propriété getter/setter
-    Object.defineProperty(button, 'onAction', {
-      get() {
-        return this._handlers.onAction;
-      },
-      set(newHandler) {
-        this._handlers.onAction = newHandler;
-      },
-      enumerable: true,
-      configurable: true
-    });
-
-    // Exposer offAction comme propriété getter/setter
-    Object.defineProperty(button, 'offAction', {
-      get() {
-        return this._handlers.offAction;
-      },
-      set(newHandler) {
-        this._handlers.offAction = newHandler;
-      },
-      enumerable: true,
-      configurable: true
-    });
+    exposeButtonHandlerProperties(button);
 
     return button;
   };
 
-  // === FONCTION UTILITAIRE POUR CALCULER LE PROCHAIN ÉTAT ===
-  function getNextStateIndex(current, total, mode, direction = 1) {
-    switch (mode) {
-      case 'backward':
-        return (current - 1 + total) % total;
-      case 'ping-pong':
-        const next = current + direction;
-        if (next >= total) return total - 2;
-        if (next < 0) return 1;
-        return next;
-      default: // 'forward'
-        return (current + 1) % total;
-    }
-  }
 
   // === API STATIQUE POUR LES TEMPLATES ===
 
@@ -4350,13 +4292,6 @@
   Button.addTemplate = createButton.addTemplate;
   Button.listTemplates = createButton.listTemplates;
   Button.removeTemplate = createButton.removeTemplate;
-
-  /**
-   * Composant Draggable avec HyperSquirrel
-   * Rend n'importe quel élément draggable avec des callbacks personnalisables
-   */
-
-  // === FONCTION UTILITAIRE DE DRAG & DROP ===
 
   /**
    * Fonction pour créer des zones de drop
@@ -4580,8 +4515,6 @@
       element.draggable = false;
     };
   }
-
-  // === FONCTION UTILITAIRE DE DRAG ===
 
   /**
    * Fonction de drag ultra-performante avec transform
@@ -5350,6 +5283,1021 @@
     return list.container;
   }
 
+  // Extracted from matrix_builder.js: Matrix events methods (prototype mixin; `this` bound to the Matrix instance).
+  const matrixEventsMethods = {
+    setupEventListeners() {
+      // Event delegation sur le container
+      this.container.addEventListener('click', this.handleCellClick.bind(this));
+      this.container.addEventListener('dblclick', this.handleCellDoubleClick.bind(this));
+      this.container.addEventListener('mousedown', this.handleCellMouseDown.bind(this));
+      this.container.addEventListener('mouseup', this.handleCellMouseUp.bind(this));
+      this.container.addEventListener('mouseenter', this.handleCellHover.bind(this), true);
+      this.container.addEventListener('mouseleave', this.handleCellLeave.bind(this), true);
+      this.container.addEventListener('keydown', this.handleCellKeyDown.bind(this));
+    },
+
+    handleCellClick(event) {
+      const cellData = this.getCellFromEvent(event);
+      if (!cellData) return;
+
+      const { x, y, id, element } = cellData;
+
+      // Callback
+      if (this.callbacks.onCellClick) {
+        this.callbacks.onCellClick(element, x, y, id, event);
+      }
+    },
+
+    handleCellDoubleClick(event) {
+      const cellData = this.getCellFromEvent(event);
+      if (!cellData) return;
+
+      const { x, y, id, element } = cellData;
+
+      // Callback
+      if (this.callbacks.onCellDoubleClick) {
+        this.callbacks.onCellDoubleClick(element, x, y, id, event);
+      }
+    },
+
+    handleCellMouseDown(event) {
+      const cellData = this.getCellFromEvent(event);
+      if (!cellData) return;
+
+      const { x, y, id, element } = cellData;
+
+      // Démarrage du timer pour long click
+      this.longClickTimer = setTimeout(() => {
+        if (this.callbacks.onCellLongClick) {
+          this.callbacks.onCellLongClick(element, x, y, id, event);
+        }
+      }, 500);
+    },
+
+    handleCellMouseUp(event) {
+      // Annulation du long click
+      if (this.longClickTimer) {
+        clearTimeout(this.longClickTimer);
+        this.longClickTimer = null;
+      }
+    },
+
+    handleCellHover(event) {
+      const cellData = this.getCellFromEvent(event);
+      if (!cellData || !event.target.classList.contains('matrix-cell')) return;
+
+      const { x, y, id, element } = cellData;
+
+      // Application du style hover s'il est défini
+      if (this.config.states.hover) {
+        this.applyStylesToElement(element, this.config.states.hover, true);
+      }
+
+      // Callback
+      if (this.callbacks.onCellHover) {
+        this.callbacks.onCellHover(element, x, y, id, event);
+      }
+    },
+
+    handleCellLeave(event) {
+      const cellData = this.getCellFromEvent(event);
+      if (!cellData || !event.target.classList.contains('matrix-cell')) return;
+
+      const { x, y, id, element } = cellData;
+
+      // Suppression du style hover et réapplication des styles d'états
+      this.reapplyCellStyles(x, y);
+
+      // Callback
+      if (this.callbacks.onCellLeave) {
+        this.callbacks.onCellLeave(element, x, y, id, event);
+      }
+    },
+
+    handleCellKeyDown(event) {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        this.handleCellClick(event);
+      }
+    },
+
+    getCellFromEvent(event) {
+      const cellElement = event.target.closest('.matrix-cell');
+      if (!cellElement) return null;
+
+      const x = parseInt(cellElement.getAttribute('data-x'));
+      const y = parseInt(cellElement.getAttribute('data-y'));
+      const id = cellElement.getAttribute('data-cell-id');
+      const cellKey = `${x},${y}`;
+      const cellData = this.cellsMap.get(cellKey);
+
+      return { x, y, id, element: cellElement, cellData };
+    },
+
+    // ========================================
+    // 🗂️ GESTION D'ÉTAT DES CELLULES
+    // ========================================
+
+  };
+
+  // Extracted from matrix_builder.js: Matrix state methods (prototype mixin; `this` bound to the Matrix instance).
+  const matrixStateMethods = {
+    getCellState(x, y) {
+      const cellKey = `${x},${y}`;
+      const states = this.cellStates.get(cellKey);
+      if (!states || states.size === 0) return null;
+
+      // Retourne l'état principal (le dernier ajouté qui n'est pas 'normal')
+      const statesArray = Array.from(states);
+      return statesArray.find(state => state !== 'normal') || 'normal';
+    },
+
+    getCellStates(x, y) {
+      const cellKey = `${x},${y}`;
+      const states = this.cellStates.get(cellKey);
+      return states ? Array.from(states) : [];
+    },
+
+    hasCellState(x, y, stateName) {
+      const cellKey = `${x},${y}`;
+      const states = this.cellStates.get(cellKey);
+      return states ? states.has(stateName) : false;
+    },
+
+    setCellState(x, y, stateName, active = true) {
+      const cellKey = `${x},${y}`;
+      const states = this.cellStates.get(cellKey) || new Set();
+      const cell = this.cellsMap.get(cellKey);
+
+      if (!cell) return;
+
+      const wasActive = states.has(stateName);
+
+      if (active && !wasActive) {
+        states.add(stateName);
+        this.applyCellStateStyle(x, y, stateName);
+      } else if (!active && wasActive) {
+        states.delete(stateName);
+        this.removeCellStateStyle(x, y, stateName);
+      }
+
+      this.cellStates.set(cellKey, states);
+
+      // Gestion de la sélection
+      if (stateName === 'selected') {
+        if (active) {
+          this.selectedCells.add(cellKey);
+        } else {
+          this.selectedCells.delete(cellKey);
+        }
+        this.triggerSelectionChange();
+      }
+
+      // Callback
+      if (this.callbacks.onCellStateChange && wasActive !== active) {
+        this.callbacks.onCellStateChange(cell.element, x, y, stateName, active);
+      }
+    },
+
+    addCellState(x, y, stateName) {
+      this.setCellState(x, y, stateName, true);
+    },
+
+    removeCellState(x, y, stateName) {
+      this.setCellState(x, y, stateName, false);
+    },
+
+    toggleCellState(x, y, stateName) {
+      const hasState = this.hasCellState(x, y, stateName);
+      this.setCellState(x, y, stateName, !hasState);
+      return !hasState;
+    },
+
+    clearCellStates(x, y) {
+      const cellKey = `${x},${y}`;
+      const cell = this.cellsMap.get(cellKey);
+
+      if (!cell) return;
+
+      // Retour au style par défaut
+      this.resetCellStyle(x, y);
+
+      // Réinitialisation avec état normal uniquement
+      this.cellStates.set(cellKey, new Set(['normal']));
+
+      // Suppression de la sélection
+      this.selectedCells.delete(cellKey);
+      this.triggerSelectionChange();
+    },
+
+    applyCellStateStyle(x, y, stateName) {
+      const cellKey = `${x},${y}`;
+      const cell = this.cellsMap.get(cellKey);
+      const stateStyle = this.config.states[stateName];
+
+      if (cell && stateStyle) {
+        // Application des styles avec priorité !important pour éviter les conflits
+        this.applyStylesToElement(cell.element, stateStyle, true);
+      }
+    },
+
+    removeCellStateStyle(x, y, stateName) {
+      const cellKey = `${x},${y}`;
+      const cell = this.cellsMap.get(cellKey);
+
+      if (!cell) return;
+
+      // Suppression spécifique des propriétés CSS de cet état
+      const stateStyle = this.config.states[stateName];
+      if (stateStyle) {
+        Object.keys(stateStyle).forEach(property => {
+          const cssProp = property.replace(/([A-Z])/g, '-$1').toLowerCase();
+          cell.element.style.removeProperty(cssProp);
+        });
+      }
+
+      // Réapplication des styles d'états restants
+      this.reapplyCellStyles(x, y);
+    },
+
+    reapplyCellStyles(x, y) {
+      const cellKey = `${x},${y}`;
+      const cell = this.cellsMap.get(cellKey);
+      const states = this.cellStates.get(cellKey);
+
+      if (!cell || !states) return;
+
+      // Reset et réapplication des styles de base
+      this.resetCellStyle(x, y);
+
+      // Réapplication des styles d'états actifs avec priorité !important
+      states.forEach(stateName => {
+        if (stateName !== 'normal' && this.config.states[stateName]) {
+          this.applyStylesToElement(cell.element, this.config.states[stateName], true);
+        }
+      });
+    },
+
+    // ========================================
+    // 📐 MÉTHODES DE REDIMENSIONNEMENT
+    // ========================================
+
+    /**
+     * Force un redimensionnement manuel de la matrice
+     * @param {number} width - Nouvelle largeur (optionnel)
+     * @param {number} height - Nouvelle hauteur (optionnel)
+     */
+  };
+
+  // Extracted from matrix_builder.js: Matrix resize methods (prototype mixin; `this` bound to the Matrix instance).
+  const matrixResizeMethods = {
+    resize(width, height) {
+      if (width !== undefined && height !== undefined) {
+        this.config.size.width = width;
+        this.config.size.height = height;
+
+        if (!this.config.autoResize) {
+          this.container.style.width = `${width}px`;
+          this.container.style.height = `${height}px`;
+        }
+      }
+
+      this.updateCellSizes();
+
+      if (this.config.debug) ;
+    },
+
+    /**
+     * Active ou désactive le redimensionnement automatique
+     * @param {boolean} enabled - Activer ou désactiver
+     */
+    setAutoResize(enabled) {
+      const wasEnabled = this.config.autoResize;
+      this.config.autoResize = enabled;
+
+      if (enabled && !wasEnabled) {
+        // Activation du redimensionnement automatique
+        this.applyContainerStyles();
+        this.setupResizeObserver();
+      } else if (!enabled && wasEnabled) {
+        // Désactivation du redimensionnement automatique
+        this.disconnectResizeObserver();
+        this.applyContainerStyles();
+      }
+    },
+
+    /**
+     * Déconnecte le ResizeObserver
+     */
+    disconnectResizeObserver() {
+      if (this.resizeObserver) {
+        this.resizeObserver.disconnect();
+        this.resizeObserver = null;
+      }
+    },
+
+    /**
+     * S'adapte à un élément parent spécifique
+     * @param {HTMLElement|string} parentElement - Élément parent ou sélecteur
+     */
+    fitToParent(parentElement) {
+      const parent = typeof parentElement === 'string'
+        ? document.querySelector(parentElement)
+        : parentElement;
+
+      if (!parent) {
+        return;
+      }
+
+      // Déplacement vers le nouveau parent
+      parent.appendChild(this.container);
+
+      // Activation du redimensionnement automatique
+      this.setAutoResize(true);
+
+      // Force une mise à jour immédiate
+      const rect = parent.getBoundingClientRect();
+      this.handleResize({ contentRect: rect });
+    },
+
+    /**
+     * Ajuste automatiquement la taille des cellules en fonction de leur contenu
+     * @param {Object} options - Options d'ajustement
+     */
+    autoSizeCells(options = {}) {
+      const {
+        minWidth = 40,
+        minHeight = 40,
+        padding = 8,
+        fontSize = null
+      } = options;
+
+      this.cellsMap.forEach((cell, cellKey) => {
+        const element = cell.element;
+        const content = element.textContent || '';
+
+        if (content.length > 0) {
+          // Créer un élément temporaire pour mesurer le texte
+          const measureEl = document.createElement('div');
+          measureEl.style.cssText = `
+          position: absolute;
+          top: -9999px;
+          left: -9999px;
+          visibility: hidden;
+          white-space: nowrap;
+          font-family: ${element.style.fontFamily || 'inherit'};
+          font-size: ${fontSize || element.style.fontSize || '14px'};
+          font-weight: ${element.style.fontWeight || 'inherit'};
+        `;
+          measureEl.textContent = content;
+          document.body.appendChild(measureEl);
+
+          const textWidth = measureEl.offsetWidth;
+          const textHeight = measureEl.offsetHeight;
+
+          document.body.removeChild(measureEl);
+
+          // Appliquer les nouvelles dimensions
+          const newWidth = Math.max(textWidth + padding * 2, minWidth);
+          const newHeight = Math.max(textHeight + padding * 2, minHeight);
+
+          element.style.width = `${newWidth}px`;
+          element.style.height = `${newHeight}px`;
+        }
+      });
+
+      if (this.config.debug) ;
+    },
+
+    /**
+     * Redimensionne la grille pour s'adapter au contenu
+     * @param {Object} options - Options de redimensionnement
+     */
+    fitToContent(options = {}) {
+      this.autoSizeCells(options);
+
+      // Recalcul de la taille du container
+      let maxWidth = 0;
+      let maxHeight = 0;
+
+      this.cellsMap.forEach((cell) => {
+        const rect = cell.element.getBoundingClientRect();
+        maxWidth = Math.max(maxWidth, rect.width);
+        maxHeight = Math.max(maxHeight, rect.height);
+      });
+
+      const totalWidth = (maxWidth * this.config.grid.x) +
+        (this.config.spacing.horizontal * (this.config.grid.x - 1)) +
+        (this.config.spacing.external * 2);
+
+      const totalHeight = (maxHeight * this.config.grid.y) +
+        (this.config.spacing.vertical * (this.config.grid.y - 1)) +
+        (this.config.spacing.external * 2);
+
+      this.resize(totalWidth, totalHeight);
+    },
+
+    setupResizeObserver() {
+      if (!this.config.autoResize || !window.ResizeObserver) return;
+
+      // Observer pour détecter les changements de taille du parent
+      this.resizeObserver = new ResizeObserver((entries) => {
+        for (let entry of entries) {
+          this.handleResize(entry);
+        }
+      });
+
+      // Observer le parent du container
+      const parent = this.container.parentElement;
+      if (parent) {
+        this.resizeObserver.observe(parent);
+      }
+    },
+
+    handleResize(entry) {
+      if (!this.config.autoResize) return;
+
+      const { width, height } = entry.contentRect;
+
+      if (this.config.debug) ;
+
+      // Mise à jour de la configuration interne
+      this.config.size.width = width;
+      this.config.size.height = height;
+
+      // Redimensionnement des cellules si nécessaire
+      this.updateCellSizes();
+
+      // Callback de redimensionnement si défini
+      if (this.callbacks.onResize) {
+        this.callbacks.onResize(width, height);
+      }
+    },
+
+    updateCellSizes() {
+      if (this.config.cellSize) {
+        const sizePx = `${this.config.cellSize}px`;
+        this.cellsMap.forEach((cell) => {
+          cell.element.style.width = sizePx;
+          cell.element.style.height = sizePx;
+          cell.element.style.minWidth = sizePx;
+          cell.element.style.minHeight = sizePx;
+          cell.element.style.scrollSnapAlign = 'start';
+          cell.element.style.scrollSnapStop = 'always';
+        });
+
+        this.updateContainerDimensions();
+        return;
+      }
+
+      if (!this.config.autoResize) return;
+
+      // Les cellules se redimensionnent automatiquement grâce au CSS Grid
+      // Mais on peut ajuster certaines propriétés si nécessaire
+
+      const containerRect = this.container.getBoundingClientRect();
+      const availableWidth = containerRect.width - (2 * this.config.spacing.external);
+      const availableHeight = containerRect.height - (2 * this.config.spacing.external);
+
+      const cellWidth = (availableWidth - (this.config.spacing.horizontal * (this.config.grid.x - 1))) / this.config.grid.x;
+      const cellHeight = (availableHeight - (this.config.spacing.vertical * (this.config.grid.y - 1))) / this.config.grid.y;
+
+      // Maintien du ratio d'aspect si demandé
+      if (this.config.maintainAspectRatio) {
+        const minSize = Math.min(cellWidth, cellHeight);
+        this.cellsMap.forEach((cell) => {
+          cell.element.style.width = `${minSize}px`;
+          cell.element.style.height = `${minSize}px`;
+        });
+      }
+
+      if (this.config.debug) ;
+    },
+
+    addColumn() {
+      const prevCols = this.config.grid.x;
+      const rows = this.config.grid.y;
+      const newColIndex = prevCols;
+
+      this.config.grid.x += 1;
+      this.updateGridTemplate();
+
+      for (let y = 0; y < rows; y += 1) {
+        const insertIndex = (y * this.config.grid.x) + newColIndex;
+        this.createCell(newColIndex, y, insertIndex);
+      }
+
+      this.updateCellSizes();
+      return this;
+    },
+
+    addRow() {
+      const prevRows = this.config.grid.y;
+      const cols = this.config.grid.x;
+      const newRowIndex = prevRows;
+
+      this.config.grid.y += 1;
+      this.updateGridTemplate();
+
+      for (let x = 0; x < cols; x += 1) {
+        this.createCell(x, newRowIndex);
+      }
+
+      this.updateCellSizes();
+      return this;
+    },
+    // ========================================
+    // 🎨 UTILITAIRES DE STYLES
+    // ========================================
+
+    /**
+     * Applique un objet de styles à un élément avec gestion automatique camelCase/kebab-case
+     * @param {HTMLElement} element - Élément DOM
+     * @param {Object} styles - Objet de styles
+     * @param {boolean} important - Utiliser !important
+     */
+    applyStylesToElement(element, styles, important = false) {
+      Object.entries(styles).forEach(([property, value]) => {
+        if (typeof value === 'string' || typeof value === 'number') {
+          const cssProp = property.replace(/([A-Z])/g, '-$1').toLowerCase();
+          element.style.setProperty(cssProp, String(value), important ? 'important' : '');
+        }
+      });
+    },
+
+    /**
+     * Convertit un nom de propriété camelCase en kebab-case
+     * @param {string} camelCase - Propriété en camelCase
+     * @returns {string} Propriété en kebab-case
+     */
+    camelToKebab(camelCase) {
+      return camelCase.replace(/([A-Z])/g, '-$1').toLowerCase();
+    },
+
+    // ========================================
+    // 🔍 INTERROGATION GLOBALE
+    // ========================================
+
+  };
+
+  // Extracted from matrix_builder.js: Matrix query methods (prototype mixin; `this` bound to the Matrix instance).
+  const matrixQueryMethods = {
+    getCellsByState(stateName) {
+      const result = [];
+
+      this.cellStates.forEach((states, cellKey) => {
+        if (states.has(stateName)) {
+          const [x, y] = cellKey.split(',').map(Number);
+          const cell = this.cellsMap.get(cellKey);
+          result.push({ x, y, id: cell.id, element: cell.element });
+        }
+      });
+
+      return result;
+    },
+
+    getCellsWithAnyState(stateNames) {
+      const result = [];
+
+      this.cellStates.forEach((states, cellKey) => {
+        const hasAnyState = stateNames.some(stateName => states.has(stateName));
+        if (hasAnyState) {
+          const [x, y] = cellKey.split(',').map(Number);
+          const cell = this.cellsMap.get(cellKey);
+          result.push({
+            x, y,
+            id: cell.id,
+            element: cell.element,
+            states: Array.from(states)
+          });
+        }
+      });
+
+      return result;
+    },
+
+    getCellsWithAllStates(stateNames) {
+      const result = [];
+
+      this.cellStates.forEach((states, cellKey) => {
+        const hasAllStates = stateNames.every(stateName => states.has(stateName));
+        if (hasAllStates) {
+          const [x, y] = cellKey.split(',').map(Number);
+          const cell = this.cellsMap.get(cellKey);
+          result.push({
+            x, y,
+            id: cell.id,
+            element: cell.element,
+            states: Array.from(states)
+          });
+        }
+      });
+
+      return result;
+    },
+
+    getStateCount(stateName) {
+      let count = 0;
+      this.cellStates.forEach(states => {
+        if (states.has(stateName)) count++;
+      });
+      return count;
+    },
+
+    getAllStates() {
+      const allStates = new Set();
+      this.cellStates.forEach(states => {
+        states.forEach(state => allStates.add(state));
+      });
+      return Array.from(allStates);
+    },
+
+    getStateDistribution() {
+      const distribution = {};
+      this.cellStates.forEach(states => {
+        states.forEach(state => {
+          distribution[state] = (distribution[state] || 0) + 1;
+        });
+      });
+      return distribution;
+    },
+
+    // ========================================
+    // 🔍 RECHERCHE AVANCÉE
+    // ========================================
+
+    findCells(criteria) {
+      const result = [];
+
+      this.cellsMap.forEach((cell, cellKey) => {
+        const [x, y] = cellKey.split(',').map(Number);
+        let matches = true;
+
+        // Vérification des critères
+        if (criteria.state && !this.hasCellState(x, y, criteria.state)) {
+          matches = false;
+        }
+
+        if (criteria.hasContent !== undefined) {
+          const hasContent = cell.content && cell.content.trim().length > 0;
+          if (criteria.hasContent !== hasContent) {
+            matches = false;
+          }
+        }
+
+        if (criteria.position) {
+          if (criteria.position.x) {
+            if (criteria.position.x.min !== undefined && x < criteria.position.x.min) matches = false;
+            if (criteria.position.x.max !== undefined && x > criteria.position.x.max) matches = false;
+          }
+          if (criteria.position.y) {
+            if (criteria.position.y.min !== undefined && y < criteria.position.y.min) matches = false;
+            if (criteria.position.y.max !== undefined && y > criteria.position.y.max) matches = false;
+          }
+        }
+
+        if (matches) {
+          result.push({
+            x, y,
+            id: cell.id,
+            element: cell.element,
+            content: cell.content,
+            states: this.getCellStates(x, y)
+          });
+        }
+      });
+
+      return result;
+    },
+
+    getCellsInRange(x1, y1, x2, y2) {
+      const result = [];
+      const minX = Math.min(x1, x2);
+      const maxX = Math.max(x1, x2);
+      const minY = Math.min(y1, y2);
+      const maxY = Math.max(y1, y2);
+
+      for (let y = minY; y <= maxY; y++) {
+        for (let x = minX; x <= maxX; x++) {
+          const cellKey = `${x},${y}`;
+          const cell = this.cellsMap.get(cellKey);
+          if (cell) {
+            result.push({
+              x, y,
+              id: cell.id,
+              element: cell.element
+            });
+          }
+        }
+      }
+
+      return result;
+    },
+
+    getCellsInRow(rowIndex) {
+      const result = [];
+      for (let x = 0; x < this.config.grid.x; x++) {
+        const cellKey = `${x},${rowIndex}`;
+        const cell = this.cellsMap.get(cellKey);
+        if (cell) {
+          result.push({
+            x,
+            y: rowIndex,
+            id: cell.id,
+            element: cell.element
+          });
+        }
+      }
+      return result;
+    },
+
+    getCellsInColumn(columnIndex) {
+      const result = [];
+      for (let y = 0; y < this.config.grid.y; y++) {
+        const cellKey = `${columnIndex},${y}`;
+        const cell = this.cellsMap.get(cellKey);
+        if (cell) {
+          result.push({
+            x: columnIndex,
+            y,
+            id: cell.id,
+            element: cell.element
+          });
+        }
+      }
+      return result;
+    },
+
+    compareCellStates(x1, y1, x2, y2) {
+      const states1 = new Set(this.getCellStates(x1, y1));
+      const states2 = new Set(this.getCellStates(x2, y2));
+
+      const same = [...states1].every(state => states2.has(state)) &&
+        [...states2].every(state => states1.has(state));
+
+      const common = [...states1].filter(state => states2.has(state));
+      const different1 = [...states1].filter(state => !states2.has(state));
+      const different2 = [...states2].filter(state => !states1.has(state));
+
+      return { same, common, different1, different2 };
+    },
+
+    findSimilarCells(x, y) {
+      const referenceStates = new Set(this.getCellStates(x, y));
+      const result = [];
+
+      this.cellStates.forEach((states, cellKey) => {
+        const [cellX, cellY] = cellKey.split(',').map(Number);
+
+        // Skip la cellule de référence
+        if (cellX === x && cellY === y) return;
+
+        // Vérifier si les états sont identiques
+        const same = states.size === referenceStates.size &&
+          [...states].every(state => referenceStates.has(state));
+
+        if (same) {
+          const cell = this.cellsMap.get(cellKey);
+          result.push({
+            x: cellX,
+            y: cellY,
+            id: cell.id,
+            element: cell.element
+          });
+        }
+      });
+
+      return result;
+    },
+
+    groupCellsByState() {
+      const groups = {};
+
+      this.cellStates.forEach((states, cellKey) => {
+        const [x, y] = cellKey.split(',').map(Number);
+        const cell = this.cellsMap.get(cellKey);
+
+        states.forEach(stateName => {
+          if (!groups[stateName]) {
+            groups[stateName] = [];
+          }
+          groups[stateName].push({
+            x, y,
+            id: cell.id,
+            element: cell.element
+          });
+        });
+      });
+
+      return groups;
+    },
+
+    // ========================================
+    // 📝 GESTION DU CONTENU ET STYLES
+    // ========================================
+
+  };
+
+  // Extracted from matrix_builder.js: Matrix content methods (prototype mixin; `this` bound to the Matrix instance).
+  const matrixContentMethods = {
+    getCellId(x, y) {
+      const cellKey = `${x},${y}`;
+      const cell = this.cellsMap.get(cellKey);
+      return cell ? cell.id : null;
+    },
+
+    getCellContent(x, y) {
+      const cellKey = `${x},${y}`;
+      const cell = this.cellsMap.get(cellKey);
+      return cell ? cell.content : null;
+    },
+
+    setCellContent(x, y, content) {
+      const cellKey = `${x},${y}`;
+      const cell = this.cellsMap.get(cellKey);
+
+      if (cell) {
+        cell.content = content;
+        cell.element.textContent = content;
+      }
+    },
+
+    setCellContentById(cellId, content) {
+      const cellKey = this.getCellKeyById(cellId);
+      if (!cellKey) return false;
+      const [x, y] = cellKey.split(',').map(Number);
+      this.setCellContent(x, y, content);
+      return true;
+    },
+
+    getCellStyle(x, y) {
+      const cellKey = `${x},${y}`;
+      const cell = this.cellsMap.get(cellKey);
+      return cell ? cell.element.style : null;
+    },
+
+    setCellStyle(x, y, styles) {
+      const cellKey = `${x},${y}`;
+      const cell = this.cellsMap.get(cellKey);
+
+      if (cell) {
+        Object.assign(cell.element.style, styles);
+      }
+    },
+
+    resetCellStyle(x, y) {
+      const cellKey = `${x},${y}`;
+      const cell = this.cellsMap.get(cellKey);
+
+      if (cell) {
+        const preserved = {
+          width: cell.element.style.width,
+          height: cell.element.style.height,
+          minWidth: cell.element.style.minWidth,
+          minHeight: cell.element.style.minHeight
+        };
+        // Récupération des styles de base
+        const cellConfig = cell.config;
+        const defaultConfig = this.config.cells.default || {};
+
+        const defaultCellStyles = {
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          backgroundColor: '#ffffff',
+          border: '1px solid #dee2e6',
+          borderRadius: '8px',
+          cursor: 'pointer',
+          fontSize: '14px',
+          fontWeight: '500',
+          minHeight: '40px',
+          transition: 'all 0.2s ease',
+          userSelect: 'none'
+        };
+
+        const baseStyles = {
+          ...defaultCellStyles,
+          ...defaultConfig.style,
+          ...cellConfig.style
+        };
+
+        // Reset complet du style
+        cell.element.removeAttribute('style');
+
+        // Réapplication des styles de base avec priorité normale
+        this.applyStylesToElement(cell.element, baseStyles, false);
+
+        Object.entries(preserved).forEach(([prop, value]) => {
+          if (value && value.length) {
+            cell.element.style[prop] = value;
+          }
+        });
+      }
+    },
+
+    // ========================================
+    // 🎯 GESTION DE LA SÉLECTION
+    // ========================================
+
+    getSelectedCells() {
+      const result = [];
+      this.selectedCells.forEach(cellKey => {
+        const [x, y] = cellKey.split(',').map(Number);
+        const cell = this.cellsMap.get(cellKey);
+        result.push({
+          x, y,
+          id: cell.id,
+          element: cell.element
+        });
+      });
+      return result;
+    },
+
+    clearSelection() {
+      const selectedCoords = Array.from(this.selectedCells);
+      selectedCoords.forEach(cellKey => {
+        const [x, y] = cellKey.split(',').map(Number);
+        this.removeCellState(x, y, 'selected');
+      });
+    },
+
+    triggerSelectionChange() {
+      if (this.callbacks.onSelectionChange) {
+        this.callbacks.onSelectionChange(this.getSelectedCells());
+      }
+    },
+
+    // ========================================
+    // 📊 UTILITAIRES ET STATISTIQUES
+    // ========================================
+
+    getTotalCells() {
+      return this.config.grid.x * this.config.grid.y;
+    },
+
+    getCell(x, y) {
+      const cellKey = `${x},${y}`;
+      const cell = this.cellsMap.get(cellKey);
+      return cell ? cell.element : null;
+    },
+
+    getCellData(x, y) {
+      const cellKey = `${x},${y}`;
+      return this.cellsMap.get(cellKey);
+    },
+
+    // ========================================
+    // 🆔 API PAR ID
+    // ========================================
+
+    getCellKeyById(cellId) {
+      return this.cellIdToKey.get(cellId) || null;
+    },
+
+    getCellById(cellId) {
+      const cellKey = this.getCellKeyById(cellId);
+      if (!cellKey) return null;
+      const cell = this.cellsMap.get(cellKey);
+      return cell ? cell.element : null;
+    },
+
+    getCellDataById(cellId) {
+      const cellKey = this.getCellKeyById(cellId);
+      if (!cellKey) return null;
+      return this.cellsMap.get(cellKey) || null;
+    },
+
+    appendCellContentById(cellId, text, { separator = '' } = {}) {
+      const cellKey = this.getCellKeyById(cellId);
+      if (!cellKey) return false;
+      const cell = this.cellsMap.get(cellKey);
+      if (!cell) return false;
+
+      const next = `${cell.content || ''}${separator}${text}`;
+      const [x, y] = cellKey.split(',').map(Number);
+      this.setCellContent(x, y, next);
+      return true;
+    },
+
+    setCellStateById(cellId, stateName, active = true) {
+      const cellKey = this.getCellKeyById(cellId);
+      if (!cellKey) return false;
+      const [x, y] = cellKey.split(',').map(Number);
+      this.setCellState(x, y, stateName, active);
+      return true;
+    },
+
+    selectCellById(cellId, { clearFirst = false } = {}) {
+      if (clearFirst) this.clearSelection();
+      return this.setCellStateById(cellId, 'selected', true);
+    },
+
+    // ========================================
+    // 🧹 NETTOYAGE
+    // ========================================
+
+  };
+
   /**
    * 🎯 MATRIX COMPONENT - VERSION 2.0 COMPLÈTE
    * Composant Matrix avec gestion d'état granulaire et customisation complète des cellules
@@ -5672,1001 +6620,6 @@
     // 🎯 GESTION DES ÉVÉNEMENTS
     // ========================================
 
-    setupEventListeners() {
-      // Event delegation sur le container
-      this.container.addEventListener('click', this.handleCellClick.bind(this));
-      this.container.addEventListener('dblclick', this.handleCellDoubleClick.bind(this));
-      this.container.addEventListener('mousedown', this.handleCellMouseDown.bind(this));
-      this.container.addEventListener('mouseup', this.handleCellMouseUp.bind(this));
-      this.container.addEventListener('mouseenter', this.handleCellHover.bind(this), true);
-      this.container.addEventListener('mouseleave', this.handleCellLeave.bind(this), true);
-      this.container.addEventListener('keydown', this.handleCellKeyDown.bind(this));
-    }
-
-    handleCellClick(event) {
-      const cellData = this.getCellFromEvent(event);
-      if (!cellData) return;
-
-      const { x, y, id, element } = cellData;
-
-      // Callback
-      if (this.callbacks.onCellClick) {
-        this.callbacks.onCellClick(element, x, y, id, event);
-      }
-    }
-
-    handleCellDoubleClick(event) {
-      const cellData = this.getCellFromEvent(event);
-      if (!cellData) return;
-
-      const { x, y, id, element } = cellData;
-
-      // Callback
-      if (this.callbacks.onCellDoubleClick) {
-        this.callbacks.onCellDoubleClick(element, x, y, id, event);
-      }
-    }
-
-    handleCellMouseDown(event) {
-      const cellData = this.getCellFromEvent(event);
-      if (!cellData) return;
-
-      const { x, y, id, element } = cellData;
-
-      // Démarrage du timer pour long click
-      this.longClickTimer = setTimeout(() => {
-        if (this.callbacks.onCellLongClick) {
-          this.callbacks.onCellLongClick(element, x, y, id, event);
-        }
-      }, 500);
-    }
-
-    handleCellMouseUp(event) {
-      // Annulation du long click
-      if (this.longClickTimer) {
-        clearTimeout(this.longClickTimer);
-        this.longClickTimer = null;
-      }
-    }
-
-    handleCellHover(event) {
-      const cellData = this.getCellFromEvent(event);
-      if (!cellData || !event.target.classList.contains('matrix-cell')) return;
-
-      const { x, y, id, element } = cellData;
-
-      // Application du style hover s'il est défini
-      if (this.config.states.hover) {
-        this.applyStylesToElement(element, this.config.states.hover, true);
-      }
-
-      // Callback
-      if (this.callbacks.onCellHover) {
-        this.callbacks.onCellHover(element, x, y, id, event);
-      }
-    }
-
-    handleCellLeave(event) {
-      const cellData = this.getCellFromEvent(event);
-      if (!cellData || !event.target.classList.contains('matrix-cell')) return;
-
-      const { x, y, id, element } = cellData;
-
-      // Suppression du style hover et réapplication des styles d'états
-      this.reapplyCellStyles(x, y);
-
-      // Callback
-      if (this.callbacks.onCellLeave) {
-        this.callbacks.onCellLeave(element, x, y, id, event);
-      }
-    }
-
-    handleCellKeyDown(event) {
-      if (event.key === 'Enter' || event.key === ' ') {
-        event.preventDefault();
-        this.handleCellClick(event);
-      }
-    }
-
-    getCellFromEvent(event) {
-      const cellElement = event.target.closest('.matrix-cell');
-      if (!cellElement) return null;
-
-      const x = parseInt(cellElement.getAttribute('data-x'));
-      const y = parseInt(cellElement.getAttribute('data-y'));
-      const id = cellElement.getAttribute('data-cell-id');
-      const cellKey = `${x},${y}`;
-      const cellData = this.cellsMap.get(cellKey);
-
-      return { x, y, id, element: cellElement, cellData };
-    }
-
-    // ========================================
-    // 🗂️ GESTION D'ÉTAT DES CELLULES
-    // ========================================
-
-    getCellState(x, y) {
-      const cellKey = `${x},${y}`;
-      const states = this.cellStates.get(cellKey);
-      if (!states || states.size === 0) return null;
-
-      // Retourne l'état principal (le dernier ajouté qui n'est pas 'normal')
-      const statesArray = Array.from(states);
-      return statesArray.find(state => state !== 'normal') || 'normal';
-    }
-
-    getCellStates(x, y) {
-      const cellKey = `${x},${y}`;
-      const states = this.cellStates.get(cellKey);
-      return states ? Array.from(states) : [];
-    }
-
-    hasCellState(x, y, stateName) {
-      const cellKey = `${x},${y}`;
-      const states = this.cellStates.get(cellKey);
-      return states ? states.has(stateName) : false;
-    }
-
-    setCellState(x, y, stateName, active = true) {
-      const cellKey = `${x},${y}`;
-      const states = this.cellStates.get(cellKey) || new Set();
-      const cell = this.cellsMap.get(cellKey);
-
-      if (!cell) return;
-
-      const wasActive = states.has(stateName);
-
-      if (active && !wasActive) {
-        states.add(stateName);
-        this.applyCellStateStyle(x, y, stateName);
-      } else if (!active && wasActive) {
-        states.delete(stateName);
-        this.removeCellStateStyle(x, y, stateName);
-      }
-
-      this.cellStates.set(cellKey, states);
-
-      // Gestion de la sélection
-      if (stateName === 'selected') {
-        if (active) {
-          this.selectedCells.add(cellKey);
-        } else {
-          this.selectedCells.delete(cellKey);
-        }
-        this.triggerSelectionChange();
-      }
-
-      // Callback
-      if (this.callbacks.onCellStateChange && wasActive !== active) {
-        this.callbacks.onCellStateChange(cell.element, x, y, stateName, active);
-      }
-    }
-
-    addCellState(x, y, stateName) {
-      this.setCellState(x, y, stateName, true);
-    }
-
-    removeCellState(x, y, stateName) {
-      this.setCellState(x, y, stateName, false);
-    }
-
-    toggleCellState(x, y, stateName) {
-      const hasState = this.hasCellState(x, y, stateName);
-      this.setCellState(x, y, stateName, !hasState);
-      return !hasState;
-    }
-
-    clearCellStates(x, y) {
-      const cellKey = `${x},${y}`;
-      const cell = this.cellsMap.get(cellKey);
-
-      if (!cell) return;
-
-      // Retour au style par défaut
-      this.resetCellStyle(x, y);
-
-      // Réinitialisation avec état normal uniquement
-      this.cellStates.set(cellKey, new Set(['normal']));
-
-      // Suppression de la sélection
-      this.selectedCells.delete(cellKey);
-      this.triggerSelectionChange();
-    }
-
-    applyCellStateStyle(x, y, stateName) {
-      const cellKey = `${x},${y}`;
-      const cell = this.cellsMap.get(cellKey);
-      const stateStyle = this.config.states[stateName];
-
-      if (cell && stateStyle) {
-        // Application des styles avec priorité !important pour éviter les conflits
-        this.applyStylesToElement(cell.element, stateStyle, true);
-      }
-    }
-
-    removeCellStateStyle(x, y, stateName) {
-      const cellKey = `${x},${y}`;
-      const cell = this.cellsMap.get(cellKey);
-
-      if (!cell) return;
-
-      // Suppression spécifique des propriétés CSS de cet état
-      const stateStyle = this.config.states[stateName];
-      if (stateStyle) {
-        Object.keys(stateStyle).forEach(property => {
-          const cssProp = property.replace(/([A-Z])/g, '-$1').toLowerCase();
-          cell.element.style.removeProperty(cssProp);
-        });
-      }
-
-      // Réapplication des styles d'états restants
-      this.reapplyCellStyles(x, y);
-    }
-
-    reapplyCellStyles(x, y) {
-      const cellKey = `${x},${y}`;
-      const cell = this.cellsMap.get(cellKey);
-      const states = this.cellStates.get(cellKey);
-
-      if (!cell || !states) return;
-
-      // Reset et réapplication des styles de base
-      this.resetCellStyle(x, y);
-
-      // Réapplication des styles d'états actifs avec priorité !important
-      states.forEach(stateName => {
-        if (stateName !== 'normal' && this.config.states[stateName]) {
-          this.applyStylesToElement(cell.element, this.config.states[stateName], true);
-        }
-      });
-    }
-
-    // ========================================
-    // 📐 MÉTHODES DE REDIMENSIONNEMENT
-    // ========================================
-
-    /**
-     * Force un redimensionnement manuel de la matrice
-     * @param {number} width - Nouvelle largeur (optionnel)
-     * @param {number} height - Nouvelle hauteur (optionnel)
-     */
-    resize(width, height) {
-      if (width !== undefined && height !== undefined) {
-        this.config.size.width = width;
-        this.config.size.height = height;
-
-        if (!this.config.autoResize) {
-          this.container.style.width = `${width}px`;
-          this.container.style.height = `${height}px`;
-        }
-      }
-
-      this.updateCellSizes();
-
-      if (this.config.debug) ;
-    }
-
-    /**
-     * Active ou désactive le redimensionnement automatique
-     * @param {boolean} enabled - Activer ou désactiver
-     */
-    setAutoResize(enabled) {
-      const wasEnabled = this.config.autoResize;
-      this.config.autoResize = enabled;
-
-      if (enabled && !wasEnabled) {
-        // Activation du redimensionnement automatique
-        this.applyContainerStyles();
-        this.setupResizeObserver();
-      } else if (!enabled && wasEnabled) {
-        // Désactivation du redimensionnement automatique
-        this.disconnectResizeObserver();
-        this.applyContainerStyles();
-      }
-    }
-
-    /**
-     * Déconnecte le ResizeObserver
-     */
-    disconnectResizeObserver() {
-      if (this.resizeObserver) {
-        this.resizeObserver.disconnect();
-        this.resizeObserver = null;
-      }
-    }
-
-    /**
-     * S'adapte à un élément parent spécifique
-     * @param {HTMLElement|string} parentElement - Élément parent ou sélecteur
-     */
-    fitToParent(parentElement) {
-      const parent = typeof parentElement === 'string'
-        ? document.querySelector(parentElement)
-        : parentElement;
-
-      if (!parent) {
-        return;
-      }
-
-      // Déplacement vers le nouveau parent
-      parent.appendChild(this.container);
-
-      // Activation du redimensionnement automatique
-      this.setAutoResize(true);
-
-      // Force une mise à jour immédiate
-      const rect = parent.getBoundingClientRect();
-      this.handleResize({ contentRect: rect });
-    }
-
-    /**
-     * Ajuste automatiquement la taille des cellules en fonction de leur contenu
-     * @param {Object} options - Options d'ajustement
-     */
-    autoSizeCells(options = {}) {
-      const {
-        minWidth = 40,
-        minHeight = 40,
-        padding = 8,
-        fontSize = null
-      } = options;
-
-      this.cellsMap.forEach((cell, cellKey) => {
-        const element = cell.element;
-        const content = element.textContent || '';
-
-        if (content.length > 0) {
-          // Créer un élément temporaire pour mesurer le texte
-          const measureEl = document.createElement('div');
-          measureEl.style.cssText = `
-          position: absolute;
-          top: -9999px;
-          left: -9999px;
-          visibility: hidden;
-          white-space: nowrap;
-          font-family: ${element.style.fontFamily || 'inherit'};
-          font-size: ${fontSize || element.style.fontSize || '14px'};
-          font-weight: ${element.style.fontWeight || 'inherit'};
-        `;
-          measureEl.textContent = content;
-          document.body.appendChild(measureEl);
-
-          const textWidth = measureEl.offsetWidth;
-          const textHeight = measureEl.offsetHeight;
-
-          document.body.removeChild(measureEl);
-
-          // Appliquer les nouvelles dimensions
-          const newWidth = Math.max(textWidth + padding * 2, minWidth);
-          const newHeight = Math.max(textHeight + padding * 2, minHeight);
-
-          element.style.width = `${newWidth}px`;
-          element.style.height = `${newHeight}px`;
-        }
-      });
-
-      if (this.config.debug) ;
-    }
-
-    /**
-     * Redimensionne la grille pour s'adapter au contenu
-     * @param {Object} options - Options de redimensionnement
-     */
-    fitToContent(options = {}) {
-      this.autoSizeCells(options);
-
-      // Recalcul de la taille du container
-      let maxWidth = 0;
-      let maxHeight = 0;
-
-      this.cellsMap.forEach((cell) => {
-        const rect = cell.element.getBoundingClientRect();
-        maxWidth = Math.max(maxWidth, rect.width);
-        maxHeight = Math.max(maxHeight, rect.height);
-      });
-
-      const totalWidth = (maxWidth * this.config.grid.x) +
-        (this.config.spacing.horizontal * (this.config.grid.x - 1)) +
-        (this.config.spacing.external * 2);
-
-      const totalHeight = (maxHeight * this.config.grid.y) +
-        (this.config.spacing.vertical * (this.config.grid.y - 1)) +
-        (this.config.spacing.external * 2);
-
-      this.resize(totalWidth, totalHeight);
-    }
-
-    setupResizeObserver() {
-      if (!this.config.autoResize || !window.ResizeObserver) return;
-
-      // Observer pour détecter les changements de taille du parent
-      this.resizeObserver = new ResizeObserver((entries) => {
-        for (let entry of entries) {
-          this.handleResize(entry);
-        }
-      });
-
-      // Observer le parent du container
-      const parent = this.container.parentElement;
-      if (parent) {
-        this.resizeObserver.observe(parent);
-      }
-    }
-
-    handleResize(entry) {
-      if (!this.config.autoResize) return;
-
-      const { width, height } = entry.contentRect;
-
-      if (this.config.debug) ;
-
-      // Mise à jour de la configuration interne
-      this.config.size.width = width;
-      this.config.size.height = height;
-
-      // Redimensionnement des cellules si nécessaire
-      this.updateCellSizes();
-
-      // Callback de redimensionnement si défini
-      if (this.callbacks.onResize) {
-        this.callbacks.onResize(width, height);
-      }
-    }
-
-    updateCellSizes() {
-      if (this.config.cellSize) {
-        const sizePx = `${this.config.cellSize}px`;
-        this.cellsMap.forEach((cell) => {
-          cell.element.style.width = sizePx;
-          cell.element.style.height = sizePx;
-          cell.element.style.minWidth = sizePx;
-          cell.element.style.minHeight = sizePx;
-          cell.element.style.scrollSnapAlign = 'start';
-          cell.element.style.scrollSnapStop = 'always';
-        });
-
-        this.updateContainerDimensions();
-        return;
-      }
-
-      if (!this.config.autoResize) return;
-
-      // Les cellules se redimensionnent automatiquement grâce au CSS Grid
-      // Mais on peut ajuster certaines propriétés si nécessaire
-
-      const containerRect = this.container.getBoundingClientRect();
-      const availableWidth = containerRect.width - (2 * this.config.spacing.external);
-      const availableHeight = containerRect.height - (2 * this.config.spacing.external);
-
-      const cellWidth = (availableWidth - (this.config.spacing.horizontal * (this.config.grid.x - 1))) / this.config.grid.x;
-      const cellHeight = (availableHeight - (this.config.spacing.vertical * (this.config.grid.y - 1))) / this.config.grid.y;
-
-      // Maintien du ratio d'aspect si demandé
-      if (this.config.maintainAspectRatio) {
-        const minSize = Math.min(cellWidth, cellHeight);
-        this.cellsMap.forEach((cell) => {
-          cell.element.style.width = `${minSize}px`;
-          cell.element.style.height = `${minSize}px`;
-        });
-      }
-
-      if (this.config.debug) ;
-    }
-
-    addColumn() {
-      const prevCols = this.config.grid.x;
-      const rows = this.config.grid.y;
-      const newColIndex = prevCols;
-
-      this.config.grid.x += 1;
-      this.updateGridTemplate();
-
-      for (let y = 0; y < rows; y += 1) {
-        const insertIndex = (y * this.config.grid.x) + newColIndex;
-        this.createCell(newColIndex, y, insertIndex);
-      }
-
-      this.updateCellSizes();
-      return this;
-    }
-
-    addRow() {
-      const prevRows = this.config.grid.y;
-      const cols = this.config.grid.x;
-      const newRowIndex = prevRows;
-
-      this.config.grid.y += 1;
-      this.updateGridTemplate();
-
-      for (let x = 0; x < cols; x += 1) {
-        this.createCell(x, newRowIndex);
-      }
-
-      this.updateCellSizes();
-      return this;
-    }
-    // ========================================
-    // 🎨 UTILITAIRES DE STYLES
-    // ========================================
-
-    /**
-     * Applique un objet de styles à un élément avec gestion automatique camelCase/kebab-case
-     * @param {HTMLElement} element - Élément DOM
-     * @param {Object} styles - Objet de styles
-     * @param {boolean} important - Utiliser !important
-     */
-    applyStylesToElement(element, styles, important = false) {
-      Object.entries(styles).forEach(([property, value]) => {
-        if (typeof value === 'string' || typeof value === 'number') {
-          const cssProp = property.replace(/([A-Z])/g, '-$1').toLowerCase();
-          element.style.setProperty(cssProp, String(value), important ? 'important' : '');
-        }
-      });
-    }
-
-    /**
-     * Convertit un nom de propriété camelCase en kebab-case
-     * @param {string} camelCase - Propriété en camelCase
-     * @returns {string} Propriété en kebab-case
-     */
-    camelToKebab(camelCase) {
-      return camelCase.replace(/([A-Z])/g, '-$1').toLowerCase();
-    }
-
-    // ========================================
-    // 🔍 INTERROGATION GLOBALE
-    // ========================================
-
-    getCellsByState(stateName) {
-      const result = [];
-
-      this.cellStates.forEach((states, cellKey) => {
-        if (states.has(stateName)) {
-          const [x, y] = cellKey.split(',').map(Number);
-          const cell = this.cellsMap.get(cellKey);
-          result.push({ x, y, id: cell.id, element: cell.element });
-        }
-      });
-
-      return result;
-    }
-
-    getCellsWithAnyState(stateNames) {
-      const result = [];
-
-      this.cellStates.forEach((states, cellKey) => {
-        const hasAnyState = stateNames.some(stateName => states.has(stateName));
-        if (hasAnyState) {
-          const [x, y] = cellKey.split(',').map(Number);
-          const cell = this.cellsMap.get(cellKey);
-          result.push({
-            x, y,
-            id: cell.id,
-            element: cell.element,
-            states: Array.from(states)
-          });
-        }
-      });
-
-      return result;
-    }
-
-    getCellsWithAllStates(stateNames) {
-      const result = [];
-
-      this.cellStates.forEach((states, cellKey) => {
-        const hasAllStates = stateNames.every(stateName => states.has(stateName));
-        if (hasAllStates) {
-          const [x, y] = cellKey.split(',').map(Number);
-          const cell = this.cellsMap.get(cellKey);
-          result.push({
-            x, y,
-            id: cell.id,
-            element: cell.element,
-            states: Array.from(states)
-          });
-        }
-      });
-
-      return result;
-    }
-
-    getStateCount(stateName) {
-      let count = 0;
-      this.cellStates.forEach(states => {
-        if (states.has(stateName)) count++;
-      });
-      return count;
-    }
-
-    getAllStates() {
-      const allStates = new Set();
-      this.cellStates.forEach(states => {
-        states.forEach(state => allStates.add(state));
-      });
-      return Array.from(allStates);
-    }
-
-    getStateDistribution() {
-      const distribution = {};
-      this.cellStates.forEach(states => {
-        states.forEach(state => {
-          distribution[state] = (distribution[state] || 0) + 1;
-        });
-      });
-      return distribution;
-    }
-
-    // ========================================
-    // 🔍 RECHERCHE AVANCÉE
-    // ========================================
-
-    findCells(criteria) {
-      const result = [];
-
-      this.cellsMap.forEach((cell, cellKey) => {
-        const [x, y] = cellKey.split(',').map(Number);
-        let matches = true;
-
-        // Vérification des critères
-        if (criteria.state && !this.hasCellState(x, y, criteria.state)) {
-          matches = false;
-        }
-
-        if (criteria.hasContent !== undefined) {
-          const hasContent = cell.content && cell.content.trim().length > 0;
-          if (criteria.hasContent !== hasContent) {
-            matches = false;
-          }
-        }
-
-        if (criteria.position) {
-          if (criteria.position.x) {
-            if (criteria.position.x.min !== undefined && x < criteria.position.x.min) matches = false;
-            if (criteria.position.x.max !== undefined && x > criteria.position.x.max) matches = false;
-          }
-          if (criteria.position.y) {
-            if (criteria.position.y.min !== undefined && y < criteria.position.y.min) matches = false;
-            if (criteria.position.y.max !== undefined && y > criteria.position.y.max) matches = false;
-          }
-        }
-
-        if (matches) {
-          result.push({
-            x, y,
-            id: cell.id,
-            element: cell.element,
-            content: cell.content,
-            states: this.getCellStates(x, y)
-          });
-        }
-      });
-
-      return result;
-    }
-
-    getCellsInRange(x1, y1, x2, y2) {
-      const result = [];
-      const minX = Math.min(x1, x2);
-      const maxX = Math.max(x1, x2);
-      const minY = Math.min(y1, y2);
-      const maxY = Math.max(y1, y2);
-
-      for (let y = minY; y <= maxY; y++) {
-        for (let x = minX; x <= maxX; x++) {
-          const cellKey = `${x},${y}`;
-          const cell = this.cellsMap.get(cellKey);
-          if (cell) {
-            result.push({
-              x, y,
-              id: cell.id,
-              element: cell.element
-            });
-          }
-        }
-      }
-
-      return result;
-    }
-
-    getCellsInRow(rowIndex) {
-      const result = [];
-      for (let x = 0; x < this.config.grid.x; x++) {
-        const cellKey = `${x},${rowIndex}`;
-        const cell = this.cellsMap.get(cellKey);
-        if (cell) {
-          result.push({
-            x,
-            y: rowIndex,
-            id: cell.id,
-            element: cell.element
-          });
-        }
-      }
-      return result;
-    }
-
-    getCellsInColumn(columnIndex) {
-      const result = [];
-      for (let y = 0; y < this.config.grid.y; y++) {
-        const cellKey = `${columnIndex},${y}`;
-        const cell = this.cellsMap.get(cellKey);
-        if (cell) {
-          result.push({
-            x: columnIndex,
-            y,
-            id: cell.id,
-            element: cell.element
-          });
-        }
-      }
-      return result;
-    }
-
-    compareCellStates(x1, y1, x2, y2) {
-      const states1 = new Set(this.getCellStates(x1, y1));
-      const states2 = new Set(this.getCellStates(x2, y2));
-
-      const same = [...states1].every(state => states2.has(state)) &&
-        [...states2].every(state => states1.has(state));
-
-      const common = [...states1].filter(state => states2.has(state));
-      const different1 = [...states1].filter(state => !states2.has(state));
-      const different2 = [...states2].filter(state => !states1.has(state));
-
-      return { same, common, different1, different2 };
-    }
-
-    findSimilarCells(x, y) {
-      const referenceStates = new Set(this.getCellStates(x, y));
-      const result = [];
-
-      this.cellStates.forEach((states, cellKey) => {
-        const [cellX, cellY] = cellKey.split(',').map(Number);
-
-        // Skip la cellule de référence
-        if (cellX === x && cellY === y) return;
-
-        // Vérifier si les états sont identiques
-        const same = states.size === referenceStates.size &&
-          [...states].every(state => referenceStates.has(state));
-
-        if (same) {
-          const cell = this.cellsMap.get(cellKey);
-          result.push({
-            x: cellX,
-            y: cellY,
-            id: cell.id,
-            element: cell.element
-          });
-        }
-      });
-
-      return result;
-    }
-
-    groupCellsByState() {
-      const groups = {};
-
-      this.cellStates.forEach((states, cellKey) => {
-        const [x, y] = cellKey.split(',').map(Number);
-        const cell = this.cellsMap.get(cellKey);
-
-        states.forEach(stateName => {
-          if (!groups[stateName]) {
-            groups[stateName] = [];
-          }
-          groups[stateName].push({
-            x, y,
-            id: cell.id,
-            element: cell.element
-          });
-        });
-      });
-
-      return groups;
-    }
-
-    // ========================================
-    // 📝 GESTION DU CONTENU ET STYLES
-    // ========================================
-
-    getCellId(x, y) {
-      const cellKey = `${x},${y}`;
-      const cell = this.cellsMap.get(cellKey);
-      return cell ? cell.id : null;
-    }
-
-    getCellContent(x, y) {
-      const cellKey = `${x},${y}`;
-      const cell = this.cellsMap.get(cellKey);
-      return cell ? cell.content : null;
-    }
-
-    setCellContent(x, y, content) {
-      const cellKey = `${x},${y}`;
-      const cell = this.cellsMap.get(cellKey);
-
-      if (cell) {
-        cell.content = content;
-        cell.element.textContent = content;
-      }
-    }
-
-    setCellContentById(cellId, content) {
-      const cellKey = this.getCellKeyById(cellId);
-      if (!cellKey) return false;
-      const [x, y] = cellKey.split(',').map(Number);
-      this.setCellContent(x, y, content);
-      return true;
-    }
-
-    getCellStyle(x, y) {
-      const cellKey = `${x},${y}`;
-      const cell = this.cellsMap.get(cellKey);
-      return cell ? cell.element.style : null;
-    }
-
-    setCellStyle(x, y, styles) {
-      const cellKey = `${x},${y}`;
-      const cell = this.cellsMap.get(cellKey);
-
-      if (cell) {
-        Object.assign(cell.element.style, styles);
-      }
-    }
-
-    resetCellStyle(x, y) {
-      const cellKey = `${x},${y}`;
-      const cell = this.cellsMap.get(cellKey);
-
-      if (cell) {
-        const preserved = {
-          width: cell.element.style.width,
-          height: cell.element.style.height,
-          minWidth: cell.element.style.minWidth,
-          minHeight: cell.element.style.minHeight
-        };
-        // Récupération des styles de base
-        const cellConfig = cell.config;
-        const defaultConfig = this.config.cells.default || {};
-
-        const defaultCellStyles = {
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          backgroundColor: '#ffffff',
-          border: '1px solid #dee2e6',
-          borderRadius: '8px',
-          cursor: 'pointer',
-          fontSize: '14px',
-          fontWeight: '500',
-          minHeight: '40px',
-          transition: 'all 0.2s ease',
-          userSelect: 'none'
-        };
-
-        const baseStyles = {
-          ...defaultCellStyles,
-          ...defaultConfig.style,
-          ...cellConfig.style
-        };
-
-        // Reset complet du style
-        cell.element.removeAttribute('style');
-
-        // Réapplication des styles de base avec priorité normale
-        this.applyStylesToElement(cell.element, baseStyles, false);
-
-        Object.entries(preserved).forEach(([prop, value]) => {
-          if (value && value.length) {
-            cell.element.style[prop] = value;
-          }
-        });
-      }
-    }
-
-    // ========================================
-    // 🎯 GESTION DE LA SÉLECTION
-    // ========================================
-
-    getSelectedCells() {
-      const result = [];
-      this.selectedCells.forEach(cellKey => {
-        const [x, y] = cellKey.split(',').map(Number);
-        const cell = this.cellsMap.get(cellKey);
-        result.push({
-          x, y,
-          id: cell.id,
-          element: cell.element
-        });
-      });
-      return result;
-    }
-
-    clearSelection() {
-      const selectedCoords = Array.from(this.selectedCells);
-      selectedCoords.forEach(cellKey => {
-        const [x, y] = cellKey.split(',').map(Number);
-        this.removeCellState(x, y, 'selected');
-      });
-    }
-
-    triggerSelectionChange() {
-      if (this.callbacks.onSelectionChange) {
-        this.callbacks.onSelectionChange(this.getSelectedCells());
-      }
-    }
-
-    // ========================================
-    // 📊 UTILITAIRES ET STATISTIQUES
-    // ========================================
-
-    getTotalCells() {
-      return this.config.grid.x * this.config.grid.y;
-    }
-
-    getCell(x, y) {
-      const cellKey = `${x},${y}`;
-      const cell = this.cellsMap.get(cellKey);
-      return cell ? cell.element : null;
-    }
-
-    getCellData(x, y) {
-      const cellKey = `${x},${y}`;
-      return this.cellsMap.get(cellKey);
-    }
-
-    // ========================================
-    // 🆔 API PAR ID
-    // ========================================
-
-    getCellKeyById(cellId) {
-      return this.cellIdToKey.get(cellId) || null;
-    }
-
-    getCellById(cellId) {
-      const cellKey = this.getCellKeyById(cellId);
-      if (!cellKey) return null;
-      const cell = this.cellsMap.get(cellKey);
-      return cell ? cell.element : null;
-    }
-
-    getCellDataById(cellId) {
-      const cellKey = this.getCellKeyById(cellId);
-      if (!cellKey) return null;
-      return this.cellsMap.get(cellKey) || null;
-    }
-
-    appendCellContentById(cellId, text, { separator = '' } = {}) {
-      const cellKey = this.getCellKeyById(cellId);
-      if (!cellKey) return false;
-      const cell = this.cellsMap.get(cellKey);
-      if (!cell) return false;
-
-      const next = `${cell.content || ''}${separator}${text}`;
-      const [x, y] = cellKey.split(',').map(Number);
-      this.setCellContent(x, y, next);
-      return true;
-    }
-
-    setCellStateById(cellId, stateName, active = true) {
-      const cellKey = this.getCellKeyById(cellId);
-      if (!cellKey) return false;
-      const [x, y] = cellKey.split(',').map(Number);
-      this.setCellState(x, y, stateName, active);
-      return true;
-    }
-
-    selectCellById(cellId, { clearFirst = false } = {}) {
-      if (clearFirst) this.clearSelection();
-      return this.setCellStateById(cellId, 'selected', true);
-    }
-
-    // ========================================
-    // 🧹 NETTOYAGE
-    // ========================================
-
     destroy() {
       try {
         // Nettoyage des timers
@@ -6708,6 +6661,9 @@
       }
     }
   }
+
+  Object.assign(Matrix.prototype, matrixEventsMethods, matrixStateMethods, matrixResizeMethods, matrixQueryMethods, matrixContentMethods);
+
 
   // ========================================
   // 🌟 EXPORT DU MODULE
@@ -7925,12 +7881,7 @@
     return tooltip;
   };
 
-  /**
-   * Composant Unit Builder avec HyperSquirrel
-   * Créer des blocs graphiques draggables connectables entre eux
-   */
-
-  // === GESTIONNAIRE GLOBAL DES UNITS ===
+  // Extracted from unit_builder.js: UnitManager — registry of units + connections + selection state.
   class UnitManager {
     constructor() {
       this.units = new Map();
@@ -8358,184 +8309,11 @@
   }
 
   // Instance globale du gestionnaire
+
   const unitManager = new UnitManager();
 
-  // === DÉFINITION DES TEMPLATES ===
+  // Extracted from unit_builder.js: the Unit component class (DOM element, connectors, drag, edit).
 
-  // Template pour le conteneur principal du unit
-  define('unit-container', {
-    tag: 'div',
-    class: 'unit-container',
-    css: {
-      position: 'absolute',
-      minWidth: '120px',
-      minHeight: '80px',
-      backgroundColor: '#f8f9fa',
-      border: '2px solid #ddd',
-      borderRadius: '8px',
-      cursor: 'move',
-      userSelect: 'none',
-      overflow: 'visible',
-      zIndex: '100'
-    }
-  });
-
-  // Template pour l'en-tête du unit
-  define('unit-header', {
-    tag: 'div',
-    class: 'unit-header',
-    css: {
-      backgroundColor: '#e9ecef',
-      borderBottom: '1px solid #ddd',
-      borderRadius: '6px 6px 0 0',
-      padding: '8px 12px',
-      fontWeight: 'bold',
-      fontSize: '14px',
-      color: '#333',
-      cursor: 'move'
-    }
-  });
-
-  // Template pour le nom éditable
-  define('unit-name', {
-    tag: 'span',
-    class: 'unit-name',
-    css: {
-      display: 'block',
-      outline: 'none',
-      backgroundColor: 'transparent',
-      border: 'none'
-    }
-  });
-
-  // Template pour le corps du unit
-  define('unit-body', {
-    tag: 'div',
-    class: 'unit-body',
-    css: {
-      padding: '8px 12px', // Réduire le padding vertical
-      minHeight: '32px', // Réduire la hauteur minimale
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      position: 'relative'
-    }
-  });
-
-  // Template pour l'icône
-  define('unit-icon', {
-    tag: 'img',
-    class: 'unit-icon',
-    attrs: { draggable: 'false' },
-    css: {
-      maxWidth: '32px',
-      maxHeight: '32px',
-      objectFit: 'contain',
-      pointerEvents: 'none'
-    }
-  });
-
-  // Template pour les connecteurs
-  define('unit-connector', {
-    tag: 'div',
-    class: 'unit-connector',
-    css: {
-      zIndex: '2',
-      position: 'absolute',
-      width: '12px',
-      height: '12px',
-      backgroundColor: '#007bff',
-      borderRadius: '50%',
-      cursor: 'pointer',
-      border: '2px solid #fff',
-      boxShadow: '0 0 0 1px #007bff'
-    }
-  });
-
-  // Template pour les connecteurs d'entrée
-  define('unit-connector-input', {
-    tag: 'div',
-    class: 'unit-connector unit-connector-input',
-    css: {
-      position: 'absolute',
-      width: '12px',
-      height: '12px',
-      borderRadius: '50%',
-      cursor: 'pointer',
-      border: '2px solid #fff',
-      left: '-8px',
-      backgroundColor: '#28a745',
-      boxShadow: '0 0 0 1px #28a745'
-    }
-  });
-
-  // Template pour les connecteurs de sortie
-  define('unit-connector-output', {
-    tag: 'div',
-    class: 'unit-connector unit-connector-output',
-    css: {
-      position: 'absolute',
-      width: '12px',
-      height: '12px',
-      borderRadius: '50%',
-      cursor: 'pointer',
-      border: '2px solid #fff',
-      right: '-8px',
-      backgroundColor: '#dc3545',
-      boxShadow: '0 0 0 1px #dc3545'
-    }
-  });
-
-  // === CSS GLOBAL ===
-  const unitStyles = `
-  .unit-selected {
-    border-color: #007bff !important;
-    box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25) !important;
-  }
-  
-  .unit-name[contenteditable="true"] {
-    background-color: rgba(255, 255, 255, 0.9) !important;
-    border: none !important;
-    border-radius: 3px !important;
-    padding: 0 !important;
-    outline: none !important;
-    box-shadow: inset 0 0 0 1px rgba(0, 123, 255, 0.3) !important;
-  }
-  
-  .connector-selected {
-    transform: scale(1.3) !important;
-    box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.4) !important;
-  }
-  
-  .unit-connector:hover {
-    transform: scale(1.2);
-  }
-  
-  .connector-drag-hover {
-    transform: scale(1.4) !important;
-    box-shadow: 0 0 0 4px rgba(40, 167, 69, 0.6) !important;
-  }
-  
-  .unit-icon.animated {
-    animation: iconPulse 0.3s ease;
-  }
-  
-  @keyframes iconPulse {
-    0% { transform: scale(1); }
-    50% { transform: scale(1.1); }
-    100% { transform: scale(1); }
-  }
-`;
-
-  // Injecter les styles
-  if (!document.querySelector('#unit-styles')) {
-    const style = document.createElement('style');
-    style.id = 'unit-styles';
-    style.textContent = unitStyles;
-    document.head.appendChild(style);
-  }
-
-  // === CLASSE UNIT ===
   class Unit {
     constructor(options = {}) {
       const {
@@ -8969,8 +8747,189 @@
     }
   }
 
-  // === FONCTIONS UTILITAIRES DE L'API ===
+  /**
+   * Composant Unit Builder avec HyperSquirrel
+   * Créer des blocs graphiques draggables connectables entre eux
+   */
 
+  // === GESTIONNAIRE GLOBAL DES UNITS ===
+
+  // === DÉFINITION DES TEMPLATES ===
+
+  // Template pour le conteneur principal du unit
+  define('unit-container', {
+    tag: 'div',
+    class: 'unit-container',
+    css: {
+      position: 'absolute',
+      minWidth: '120px',
+      minHeight: '80px',
+      backgroundColor: '#f8f9fa',
+      border: '2px solid #ddd',
+      borderRadius: '8px',
+      cursor: 'move',
+      userSelect: 'none',
+      overflow: 'visible',
+      zIndex: '100'
+    }
+  });
+
+  // Template pour l'en-tête du unit
+  define('unit-header', {
+    tag: 'div',
+    class: 'unit-header',
+    css: {
+      backgroundColor: '#e9ecef',
+      borderBottom: '1px solid #ddd',
+      borderRadius: '6px 6px 0 0',
+      padding: '8px 12px',
+      fontWeight: 'bold',
+      fontSize: '14px',
+      color: '#333',
+      cursor: 'move'
+    }
+  });
+
+  // Template pour le nom éditable
+  define('unit-name', {
+    tag: 'span',
+    class: 'unit-name',
+    css: {
+      display: 'block',
+      outline: 'none',
+      backgroundColor: 'transparent',
+      border: 'none'
+    }
+  });
+
+  // Template pour le corps du unit
+  define('unit-body', {
+    tag: 'div',
+    class: 'unit-body',
+    css: {
+      padding: '8px 12px', // Réduire le padding vertical
+      minHeight: '32px', // Réduire la hauteur minimale
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      position: 'relative'
+    }
+  });
+
+  // Template pour l'icône
+  define('unit-icon', {
+    tag: 'img',
+    class: 'unit-icon',
+    attrs: { draggable: 'false' },
+    css: {
+      maxWidth: '32px',
+      maxHeight: '32px',
+      objectFit: 'contain',
+      pointerEvents: 'none'
+    }
+  });
+
+  // Template pour les connecteurs
+  define('unit-connector', {
+    tag: 'div',
+    class: 'unit-connector',
+    css: {
+      zIndex: '2',
+      position: 'absolute',
+      width: '12px',
+      height: '12px',
+      backgroundColor: '#007bff',
+      borderRadius: '50%',
+      cursor: 'pointer',
+      border: '2px solid #fff',
+      boxShadow: '0 0 0 1px #007bff'
+    }
+  });
+
+  // Template pour les connecteurs d'entrée
+  define('unit-connector-input', {
+    tag: 'div',
+    class: 'unit-connector unit-connector-input',
+    css: {
+      position: 'absolute',
+      width: '12px',
+      height: '12px',
+      borderRadius: '50%',
+      cursor: 'pointer',
+      border: '2px solid #fff',
+      left: '-8px',
+      backgroundColor: '#28a745',
+      boxShadow: '0 0 0 1px #28a745'
+    }
+  });
+
+  // Template pour les connecteurs de sortie
+  define('unit-connector-output', {
+    tag: 'div',
+    class: 'unit-connector unit-connector-output',
+    css: {
+      position: 'absolute',
+      width: '12px',
+      height: '12px',
+      borderRadius: '50%',
+      cursor: 'pointer',
+      border: '2px solid #fff',
+      right: '-8px',
+      backgroundColor: '#dc3545',
+      boxShadow: '0 0 0 1px #dc3545'
+    }
+  });
+
+  // === CSS GLOBAL ===
+  const unitStyles = `
+  .unit-selected {
+    border-color: #007bff !important;
+    box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25) !important;
+  }
+  
+  .unit-name[contenteditable="true"] {
+    background-color: rgba(255, 255, 255, 0.9) !important;
+    border: none !important;
+    border-radius: 3px !important;
+    padding: 0 !important;
+    outline: none !important;
+    box-shadow: inset 0 0 0 1px rgba(0, 123, 255, 0.3) !important;
+  }
+  
+  .connector-selected {
+    transform: scale(1.3) !important;
+    box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.4) !important;
+  }
+  
+  .unit-connector:hover {
+    transform: scale(1.2);
+  }
+  
+  .connector-drag-hover {
+    transform: scale(1.4) !important;
+    box-shadow: 0 0 0 4px rgba(40, 167, 69, 0.6) !important;
+  }
+  
+  .unit-icon.animated {
+    animation: iconPulse 0.3s ease;
+  }
+  
+  @keyframes iconPulse {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.1); }
+    100% { transform: scale(1); }
+  }
+`;
+
+  // Injecter les styles
+  if (!document.querySelector('#unit-styles')) {
+    const style = document.createElement('style');
+    style.id = 'unit-styles';
+    style.textContent = unitStyles;
+    document.head.appendChild(style);
+  }
+
+  // === CLASSE UNIT ===
   function createUnit(options) {
     return new Unit(options);
   }

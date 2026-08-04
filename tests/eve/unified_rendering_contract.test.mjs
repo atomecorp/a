@@ -211,16 +211,25 @@ test('project preview runtime bounds thumbnail density independently from the pr
         await runtime.renderProjectPreview({
             projectId: 'preview_project',
             records: [makeRecord('preview_image', 'image', 1)],
-            viewport: { width: 1280, height: 720 }
+            viewport: { width: 1280, height: 720 },
+            forceCapture: true
+        });
+        await runtime.renderProjectPreview({
+            projectId: 'preview_project',
+            records: [makeRecord('preview_image', 'image', 2)],
+            viewport: { width: 1280, height: 720 },
+            forceCapture: true
         });
 
+        assert.equal(frames.length, 2);
         assert.equal(frames[0].target.width, 640);
         assert.equal(frames[0].target.height, 400);
         assert.equal(frames[0].target.devicePixelRatio, 1);
         assert.equal(frames[0].target.pixelWidth, 640);
         assert.equal(frames[0].target.pixelHeight, 400);
         assert.deepEqual(frames[0].sourceViewport, { width: 1280, height: 720 });
-        assert.deepEqual(frames[0].sourceBackground.color, [61 / 255, 3 / 255, 71 / 255, 1]);
+        assert.equal(frames[0].sourceBackground, null);
+        assert.equal(frames[1].sourceBackground, null);
         assert.deepEqual(
             resolveProjectPreviewCaptureGeometry({
                 viewport: frames[0].sourceViewport,

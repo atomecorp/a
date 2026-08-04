@@ -35,21 +35,6 @@ const withSoftTimeout = async (task, {
     ]);
 };
 
-const loadCalendarApi = async () => {
-    if (globalThis.CalendarAPI) return globalThis.CalendarAPI;
-    if (globalThis.atome?.calendar) return globalThis.atome.calendar;
-    if (globalThis.window?.atome?.calendar) return globalThis.window.atome.calendar;
-    return null;
-};
-
-const requireCalendarApi = async () => {
-    const api = await loadCalendarApi();
-    if (!api) {
-        throw new Error('CalendarAPI is not available');
-    }
-    return api;
-};
-
 const requireMailApi = async () => {
     if (globalThis.atome?.mail) return globalThis.atome.mail;
     if (globalThis.window?.atome?.mail) return globalThis.window.atome.mail;
@@ -191,7 +176,7 @@ const registerDefaultTools = () => {
     const getAdoleAPI = () => globalThis.AdoleAPI;
 
     registerAdoleDefaultTools({ Agent, requireGlobal, safeString, getAdoleAPI });
-    registerCalendarDefaultTools({ Agent, safeString, requireCalendarApi, requireCalendarServiceApi, invokeRuntimeDefaultTool });
+    registerCalendarDefaultTools({ Agent, safeString, requireCalendarServiceApi, invokeRuntimeDefaultTool });
     registerMailDefaultTools({ Agent, safeString, prepareMailApi });
     registerContactsDefaultTools({ Agent, safeString, prepareContactsApi, requireContactsApi });
     registerBankDefaultTools({ Agent, safeString, requireBankApi });

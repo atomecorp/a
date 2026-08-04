@@ -145,6 +145,38 @@ test('dashboard data controller does not hydrate hidden preference categories', 
     assert.equal(state.itemsByCategory.has('calendar'), true);
 });
 
+test('dashboard data controller never stores a late project response in the next project cache', async () => {
+    let releaseProjectA;
+    const projectAGate = new Promise((resolve) => { releaseProjectA = resolve; });
+    const state = {
+        dataProjectId: 'project_a',
+        sceneProjectId: DASHBOARD_WORKSPACE_PROJECT_ID
+    };
+    const data = createDashboardDataController({
+        state,
+        constants: { dashboard: { categories: dashboardPreferenceCategories } },
+        adapters: {
+            listMany: async (categoriesToLoad, { projectId } = {}) => {
+                if (projectId === 'project_a') await projectAGate;
+                return new Map(categoriesToLoad.map((category) => [category.id, [{
+                    id: `${projectId}_${category.id}`,
+                    category_id: category.id,
+                    title: `${projectId} ${category.id}`
+                }]]));
+            }
+        }
+    });
+    const categories = await data.loadCategories();
+    const projectALoad = data.loadVisibleItems(categories, { categoryIds: ['calendar'] });
+    state.dataProjectId = 'project_b';
+    releaseProjectA();
+    await projectALoad;
+
+    assert.equal(data.readProjectItemCache('project_a').has('calendar'), false, 'Calendar remains a direct canonical read, not a Dashboard cache');
+    assert.equal(data.readProjectItemCache('project_b').has('calendar'), false);
+    assert.equal(state.itemsByCategory.has('calendar'), false, 'late project A data must not become visible in project B');
+});
+
 test('dashboard preference events refilter categories even when geometry is unchanged', async () => {
     const dom = new JSDOM('<!doctype html><html><body><canvas id="surface"></canvas></body></html>', { url: 'http://localhost/' });
     const surface = dom.window.document.getElementById('surface');
@@ -406,6 +438,31 @@ test('dashboard forces preview refresh from the canonical current-project API', 
         assert.equal(calls.length, 1);
         assert.equal(calls[0].projectId, 'project_a');
         assert.equal(calls[0].forceCapture, true);
+    });
+});
+
+test('dashboard keeps its durable thumbnail until a forced replacement commits', async () => {
+    await withGlobals({
+        window: { AdoleAPI: { projects: { getCurrentId: () => 'project_a' } } },
+        Atome: { commit: async () => { throw new Error('preview_commit_failed'); } }
+    }, async () => {
+        const adapters = createDashboardDataAdapters({
+            projectsLoader: async () => [{
+                id: 'project_a', name: 'Current project',
+                preview_url: 'data:image/png;base64,durable', preview_width: 320, preview_height: 180
+            }],
+            projectPreviewLoader: async () => ({
+                preview_url: 'data:image/png;base64,uncommitted', width: 320, height: 180
+            })
+        });
+        const [project] = await adapters.list(
+            { id: 'projects', data_source: 'projects' },
+            { forceCurrentProjectPreview: true }
+        );
+
+        assert.equal(project.metadata.project_preview_source, 'data:image/png;base64,durable');
+        assert.equal(project.metadata.project_preview_kind, 'persisted');
+        assert.equal(project.metadata.project_preview_error, 'preview_commit_failed');
     });
 });
 

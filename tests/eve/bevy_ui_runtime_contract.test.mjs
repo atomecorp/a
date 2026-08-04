@@ -241,6 +241,55 @@ test('BevyUI runtime uses the project overlay path without native WASM UI ops by
     assert.equal(runtime.state.nativeUiEnabled, false);
 });
 
+test('BevyUI explicit vertical drag handlers take priority over ancestor scrolling', async () => {
+    const dom = installDom('<!doctype html><html><body><canvas id="eve_surface_project"></canvas></body></html>');
+    const surface = dom.window.document.getElementById('eve_surface_project');
+    surface.getBoundingClientRect = () => ({ left: 0, top: 0, right: 200, bottom: 200, width: 200, height: 200 });
+    const received = [];
+    const runtime = createEveBevyUiRuntime({
+        imageResolverFactory: () => async () => null,
+        requestFrame: () => 0
+    });
+    await runtime.mountTree({
+        id: 'drag_over_scroll_tree',
+        surface,
+        tree: {
+            id: 'drag_over_scroll_tree',
+            root: {
+                id: 'drag_over_scroll_root', kind: 'root', style: { size: [200, 200] }, children: [{
+                    id: 'drag_over_scroll_area', kind: 'scroll_area',
+                    style: { position: [0, 0], size: [200, 100], overflow: 'scroll_y' },
+                    children: [{
+                        id: 'calendar_resize_handle', kind: 'resize_handle',
+                        style: { size: [120, 30] },
+                        on: {
+                            press: () => received.push('press'),
+                            drag: () => received.push('drag'),
+                            release: () => received.push('release'),
+                            cancel: () => received.push('cancel')
+                        }
+                    }, {
+                        id: 'drag_over_scroll_content', kind: 'panel', style: { size: [200, 300] }
+                    }]
+                }]
+            }
+        }
+    });
+    const pointer = (type, clientY) => {
+        const event = new dom.window.Event(type, { bubbles: true, cancelable: true });
+        Object.defineProperties(event, {
+            pointerId: { value: 44 }, pointerType: { value: 'mouse' },
+            clientX: { value: 40 }, clientY: { value: clientY }
+        });
+        return event;
+    };
+    surface.dispatchEvent(pointer('pointerdown', 15));
+    surface.dispatchEvent(pointer('pointermove', 45));
+    surface.dispatchEvent(pointer('pointerup', 45));
+    assert.deepEqual(received, ['press', 'drag', 'release']);
+    await runtime.unmountTree('drag_over_scroll_tree');
+});
+
 test('BevyUI tree suspension retains projection records and disables hit-testing atomically', async () => {
     const surface = createSurface();
     surface.getBoundingClientRect = () => ({ left: 0, top: 0, width: 200, height: 200 });

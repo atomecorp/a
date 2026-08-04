@@ -25,7 +25,7 @@ Scope constraints for this spec:
 
 ## Bevy migration gate
 
-Current audit finding: the repository contains an eVe `CalendarAPI`/panel path, older Atome example documentation, and a newer `atome/src/squirrel/calendar/` service family. Before UI work, identify one canonical writable CalendarAPI and one calendar-record projection; update or retire the stale documentation and example paths. A Bevy renderer must never reconcile competing calendar stores.
+Resolved audit: `eVe/intuition/tools/calendar_api.js` is the sole writable CalendarAPI, `atome/src/squirrel/calendar/` is its multi-source service facade, and `bevy_panel_calendar_projection.js` is the sole renderer-neutral visible projection. The duplicate example API/UI and DOM panel paths are retired.
 
 Before deleting the current calendar panel, audit and validate on Web, Tauri, and iOS:
 
@@ -42,7 +42,7 @@ Migration tasks:
 2. Implement shared Bevy calendar primitives before the panel: time grid, event rectangles, all-day lane, range header, scroll/zoom, overlap layout, and event hit-testing.
 3. Wire all edits through the canonical CalendarAPI/Atome mutation path and expose missing actions through API/MCP.
 4. Validate deterministic timezone and recurrence behavior with fixtures, then validate Web, Tauri, and iOS interaction parity.
-5. Delete `eVe/intuition/tools/calendar_panel_dom.js`, DOM form construction, DOM layout logic, and associated legacy tests/imports only after the Bevy panel is complete.
+5. Completed: the DOM form/layout path, associated imports, vendor renderer, and duplicate examples are deleted after focused Bevy contracts passed.
 
 ---
 
@@ -50,8 +50,9 @@ Migration tasks:
 
 Source of truth today:
 
-- Logic + storage: `src/application/examples/calendar.js` exports `CalendarAPI`.
-- UI demo: `src/application/examples/calendarUI.js` uses `CalendarAPI`.
+- Logic + storage: `eVe/intuition/tools/calendar_api.js` exports `CalendarAPI` and writes through `Atome.commit`.
+- Unified sources: `atome/src/squirrel/calendar/service.js`.
+- Visible UI: the lazy registered `bevy_panel_calendar_runtime.js` surface on the shared canvas.
 
 Storage:
 
@@ -169,6 +170,8 @@ Ensure:
 - Keep existing keys unchanged for non-todo events.
 
 ### 2.3 Add optional sugar methods (recommended, not mandatory)
+
+Current decision: do not add these wrappers. The Bevy editor uses existing `createEvent`/`updateEvent` semantics, avoiding a new public API.
 
 To avoid spreading task logic across UI code, add convenience wrappers:
 

@@ -94,6 +94,10 @@ tests/eve/*
 !tests/eve/assistant_session_controller.test.mjs
 !tests/eve/bevy_project_renderer_guards.test.mjs
 !tests/eve/bevy_panel_contract.test.mjs
+!tests/eve/calendar_projection_contract.test.mjs
+!tests/eve/calendar_runtime_contract.test.mjs
+!tests/eve/calendar_persistence_contract.test.mjs
+!tests/eve/calendar_todo_contract.test.mjs
 !tests/eve/bevy_panel_accordion_contract.test.mjs
 !tests/eve/bevy_panel_table_contract.test.mjs
 !tests/eve/bevy_panel_choice_contract.test.mjs
@@ -109,6 +113,15 @@ tests/eve/*
 !tests/eve/unified_rendering_test_helpers.mjs
 !tests/eve/inline_edit_close_overlay_contract.test.mjs
 !tests/eve/inline_edit_session_contract.test.mjs
+!tests/atome/
+tests/atome/*
+!tests/atome/src/
+tests/atome/src/*
+!tests/atome/src/squirrel/
+tests/atome/src/squirrel/*
+!tests/atome/src/squirrel/atome/
+tests/atome/src/squirrel/atome/*
+!tests/atome/src/squirrel/atome/mcp.calendar_completion.test.mjs
 !tests/probes/
 !tests/probes/flower_menu_modules.test.mjs
 !tests/probes/project_scene_inline_edit_accessibility_bridge_smoke.test.mjs

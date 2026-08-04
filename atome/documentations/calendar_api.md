@@ -1,299 +1,36 @@
-# Calendar API (EventCalendar)
+# Calendar API
 
-This document describes the APIs implemented in `atome/src/application/examples/calendar.js`.
+Canonical implementation: `eVe/intuition/tools/calendar_api.js`.
 
-## Overview
+CalendarAPI persists through the canonical Atome mutation pipeline. Events are Atomes of `type: calendar_event`; calendars use `type: calendar`. The DOM and the Bevy panel are not state authorities.
 
-The calendar logic is implemented as an API object exported as `CalendarAPI`.
+## Event shape
 
-- Storage backend: `AdoleAPI.atomes` (create/get/list/alter/delete)
-- Event atome type: `calendar_event`
-- Calendar atome type: `calendar`
-- Default calendar id: `calendar_default`
+Normalized events expose `id`, `projectId`, `calendarId`, `title`, `description`, `location`, `start`, `end`, `allDay`, `timezone`, `color`, `alarms`, `recurrence`, `createdAt`, `updatedAt`, `kind`, `status`, `dueAt`, and `completedAt`.
 
-When `atome/src/application/examples/calendar.js` runs in a browser/webview environment, it also:
+`kind` is `event` by default or `todo`. Todos store `due_at` from `dueAt`/`start`; `status` is `open` or `done`; reopening clears `completed_at`. Existing records without task fields normalize as open events.
 
-- Assigns the API to `window.CalendarAPI`
-- Attempts to load the UI demo from `atome/src/application/examples/calendarUI.js`
+## Canonical methods
 
-## Data model
+- `listEvents`, `getEvent`, `createEvent`, `updateEvent`, `deleteEvent`
+- `createCalendar`, `ensureCalendar`, `shareCalendar`
+- `exportWebcal`, `buildWebcalUrl`, `buildIcs`, `expandOccurrences`
+- `scheduleAlarmsForEvent`, `on`, `off`
 
-### Event object (normalized)
+Creates carry explicit `type: calendar_event`; `kind` remains a separate business value. All durable methods route through `window.Atome.commit`. Sharing reuses the established Adole owner. ICS is returned as data and an optional Webcal URL; no HTML download fallback is created.
 
-`CalendarAPI` normalizes events into a consistent shape:
+`type` is commit-envelope metadata, not an ordinary particle. The Atome commit normalizer projects that trusted value into the reserved event metadata consumed by ADOLE, while property sanitation continues to reject caller-supplied `type`. Both individual and list `state_current` reads must restore the envelope type from `atomes.atome_type`; business `kind: event|todo` must never replace `calendar_event` during projection.
 
-- `id` (string|null)
-- `calendarId` (string) – defaults to `calendar_default`
-- `title` (string)
-- `description` (string)
-- `location` (string)
-- `start` (Date) – required
-- `end` (Date|null)
-- `allDay` (boolean)
-- `timezone` (string) – defaults to the local timezone (fallback `UTC`)
-- `color` (string|null)
-- `alarms` (array)
-- `recurrence` (object|null)
-- `kind` (string) – optional; recommended values: `event` (default), `todo`
-- `status` (string) – optional; recommended values: `open` (default), `done`
-- `dueAt` (Date|null) – optional; for todos, the due date/time
-- `completedAt` (Date|null) – optional; for done todos
-- `createdAt` (string|null) – ISO date string when present
-- `updatedAt` (string|null) – ISO date string when present
+Todo creation and completion use the existing `createEvent`/`updateEvent` methods with `kind`, `status`, `dueAt`, and `completedAt`. No additional public API is introduced.
 
-Internally, persistence uses an “atome particles” payload with keys like:
+## Unified service
 
-- `title`, `description`, `location`
-- `start` (ISO string), `end` (ISO string|null)
-- `all_day` (boolean)
-- `calendar_id` (string)
-- `timezone` (string)
-- `alarms` (JSON string|null)
-- `recurrence` (JSON string|null)
-- `kind` (string) – optional
-- `status` (string) – optional
-- `due_at` (ISO string|null) – optional
-- `completed_at` (ISO string|null) – optional
-- `created_at` (ISO string), `updated_at` (ISO string)
+`atome/src/squirrel/calendar/bootstrap.js` installs the existing `Squirrel.calendar`, `atome.calendar`, and `AtomeCalendar` facades. They expose source registration/sync, `sources`, `search`, `today`, `next`, `read`, `create`, `update`, `delete`, `openPanel`, and `closePanel`. Conflict resolution prefers the writable primary source and exposes provenance metadata.
 
-## Todos (Phase 1) using the calendar backend
+The built-in source normalizes an unavailable or inaccessible optional `ensureCalendar('default')` lookup as a source result. That auxiliary logical-calendar lookup cannot abort creation of a canonical `calendar_event`; the event remains scoped by its real data project and persists through the existing Atome pipeline.
 
-The current codebase does not ship a dedicated `TaskAPI` yet, but the calendar storage model can support simple todos ("due date + reminder") by storing them as `calendar_event` atomes with extra particles.
+## Runtime and MCP
 
-### Recommended particles for todos
+Runtime V2 tools: `calendar.list_events`, `calendar.get_event`, `calendar.create_event`, `calendar.update_event`, `calendar.delete_event`, `calendar.ensure_calendar`, `calendar.share`, and `calendar.export_webcal`.
 
-- `kind: 'todo'`
-- `status: 'open' | 'done'`
-- `due_at: <ISO string>`
-- `completed_at: <ISO string|null>`
-
-### Recommended mapping rules
-
-- For a todo, treat `start` as the due date/time. Persist `due_at` equal to `start`.
-- When marking a todo done, set `status = 'done'` and set `completed_at`.
-- When reopening, set `status = 'open'` and clear `completed_at`.
-
-### How to use with existing API
-
-You can implement todos today by calling existing CRUD methods:
-
-- Create: `CalendarAPI.createEvent({ title, start: dueDate, kind: 'todo', status: 'open', alarms: [...] })`
-- Complete: `CalendarAPI.updateEvent(id, { status: 'done', completedAt: new Date() })`
-- Reopen: `CalendarAPI.updateEvent(id, { status: 'open', completedAt: null })`
-
-Note: The current implementation of `atome/src/application/examples/calendar.js` does not yet normalize/persist these fields automatically; the section above defines the intended contract to implement.
-
-### Alarm object
-
-Alarms are stored in `event.alarms` as an array. Each alarm can include:
-
-- `id` (string) – optional
-- `offsetMinutes` (number) – minutes relative to the next occurrence (negative means “before”)
-- `at` (string|Date) – optional absolute trigger time (overrides `offsetMinutes`)
-- `action` (string) – `notify` or `script`
-- `message` (string) – notification text
-- `script` (function|string) – only when `action === 'script'`
-- `targetUserId` or `targetPhone` – optional remote notification target
-
-Default behavior:
-
-- If you do not provide an `alarms` property at all when creating an event, the API adds a default alarm (`offsetMinutes = -30`).
-- If you provide `alarms: []`, no default alarm is added.
-
-### Recurrence object
-
-Recurrence is stored in `event.recurrence` as an object. Supported fields:
-
-- `freq` (string) – `daily`, `weekly`, `monthly`, `yearly`
-- `interval` (number) – defaults to `1`
-- `until` (string|Date) – optional
-- `count` (number) – optional maximum occurrences
-- `byWeekday` (array) – for weekly recurrence; values are numbers `0..6` or strings like `mon`, `tue`, …
-- `weekStart` (number) – optional; default is `1` (Monday)
-
-Safety limits:
-
-- Occurrence expansion is capped to `MAX_OCCURRENCES` (800) unless `count` is lower.
-
-## Public API
-
-`CalendarAPI` is exported from `atome/src/application/examples/calendar.js`:
-
-```js
-import { CalendarAPI } from './calendar.js';
-```
-
-### `await CalendarAPI.listEvents(options?)`
-
-Lists calendar events for the current project.
-
-- `options.projectId` (string) – optional; defaults to the current project id.
-
-Returns:
-
-- `{ ok: true, items: Event[] }`
-
-Side effects:
-
-- Populates an in-memory cache and schedules alarms.
-
-### `await CalendarAPI.getEvent(eventId)`
-
-Fetches one event by id, using the in-memory cache when possible.
-
-Returns:
-
-- `Event|null`
-
-### `await CalendarAPI.createEvent(input)`
-
-Creates a new event.
-
-- Validates that `title` and `start` exist.
-- Converts `alarms` and `recurrence` to JSON strings for storage.
-
-Returns:
-
-- Success: `{ ok: true, event: Event }`
-- Failure: `{ ok: false, error: string }`
-
-### `await CalendarAPI.updateEvent(eventId, changes)`
-
-Updates an existing event.
-
-Returns:
-
-- Success: `{ ok: true, event: Event }`
-- Failure: `{ ok: false, error: string }`
-
-### `await CalendarAPI.deleteEvent(eventId)`
-
-Deletes an event by id.
-
-Returns:
-
-- Success: `{ ok: true }`
-- Failure: `{ ok: false, error: string }`
-
-### `await CalendarAPI.createCalendar(input?)`
-
-Creates a calendar atome.
-
-Inputs:
-
-- `id` or `calendarId` (string) – optional; auto-generated when omitted
-- `name`, `color`, `timezone`, `description`
-- `projectId` (string) – optional
-
-Returns:
-
-- Success: `{ ok: true, calendar }`
-- Failure: `{ ok: false, error: string }`
-
-### `await CalendarAPI.ensureCalendar(calendarId?)`
-
-Ensures a calendar exists.
-
-- If the calendar is missing, it creates a “Default calendar”.
-
-Returns:
-
-- `calendar|null`
-
-### `await CalendarAPI.shareCalendar(options)`
-
-Shares a calendar with another stable user principal. A phone number may be accepted
-only by an explicitly authorized lookup boundary and must be resolved to the opaque
-principal before the share is persisted.
-
-Inputs:
-
-- `calendarId` (string) – defaults to `calendar_default`
-- `phone` / `targetPhone` (string) – required
-- `permissions` (object) – defaults to `{ read: true, alter: false, delete: false, create: false }`
-- `shareType` (string) – defaults to `linked`
-
-Returns:
-
-- Success: `{ ok: true, data }`
-- Failure: `{ ok: false, error: string }`
-
-### `CalendarAPI.buildWebcalUrl(options?)`
-
-Builds a webcal URL for an ICS endpoint.
-
-- `calendarId` (string) – defaults to `calendar_default`
-- `baseUrl` (string) – defaults to `window.location.origin`
-
-Returns:
-
-- `string|null`
-
-URL format:
-
-- `webcal://<host>/calendar/<calendarId>.ics`
-
-### `await CalendarAPI.exportWebcal(options?)`
-
-Generates an ICS document and (optionally) a webcal URL.
-
-Inputs:
-
-- `calendarId` (string)
-- `events` (Event[]) – optional; defaults to `await listEvents()`
-- `name`, `timeZone`, `prodId` – optional metadata
-- `baseUrl` (string) – optional, for building the webcal URL
-
-Returns:
-
-- `{ ok: true, ics: string, url: string|null }`
-
-### `CalendarAPI.buildIcs(events, options?)`
-
-Builds an ICS text for the provided events.
-
-### `CalendarAPI.expandOccurrences(event, rangeStart, rangeEnd)`
-
-Expands a recurring event into concrete occurrences within a range.
-
-### `CalendarAPI.scheduleAlarmsForEvent(event)`
-
-Schedules local timers for the next upcoming occurrence(s) of an event.
-
-Notes:
-
-- The scheduling horizon is ~3 months.
-- On trigger, the API can show a local notification and optionally send a remote command.
-
-### `CalendarAPI.on(handler)` / `CalendarAPI.off(handler)`
-
-Subscribes to API changes.
-
-- `handler(type, payload)` is called on changes.
-- Returns an unsubscribe function.
-
-Known `type` values emitted by this module:
-
-- `create`, `update`, `delete`
-- `calendar:create`
-- `calendar:share`
-
-## Minimal usage example
-
-```js
-import { CalendarAPI } from './calendar.js';
-
-await CalendarAPI.ensureCalendar('calendar_default');
-
-const result = await CalendarAPI.createEvent({
-  title: 'Daily standup',
-  start: new Date(),
-  end: new Date(Date.now() + 15 * 60 * 1000),
-  recurrence: { freq: 'daily', interval: 1 },
-  alarms: [{ offsetMinutes: -5, action: 'notify', message: 'Standup in 5 minutes' }]
-});
-
-if (result.ok) {
-  console.log('Created:', result.event.id);
-}
-```
+MCP methods: `calendar.sources`, `calendar.search`, `calendar.today`, `calendar.next`, `calendar.create`, `calendar.update`, `calendar.delete`, `calendar.share`, and `calendar.export_webcal`. Calendar writes remain confirmation/rate-limit governed; sharing additionally requires `share.write`.

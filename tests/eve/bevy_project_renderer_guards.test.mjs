@@ -117,6 +117,8 @@ test('Bevy project renderer guards lock canvas ownership, drag, and video playba
     const mediaResourceRuntime = readSource('eVe/domains/rendering/bevy_media_resource_runtime.js');
     const presentationRuntime = readSource('eVe/domains/rendering/bevy_web_presentation_runtime.js');
     const wasmDiagnosticsRuntime = readSource('eVe/domains/rendering/bevy_wasm_diagnostics_runtime.js');
+    const previewCaptureAdapter = readSource('eVe/domains/rendering/bevy_project_preview_capture_adapter.js');
+    const previewCaptureFrame = readSource('eVe/domains/rendering/bevy_project_preview_capture_frame.js');
     assert.match(webRenderer, /opsAreTransformOnly/);
     assert.match(webRenderer, /opsNeedMediaSourceSync/);
     assert.match(webRenderer, /opsNeedPresentationRedrawPrime/);
@@ -131,6 +133,11 @@ test('Bevy project renderer guards lock canvas ownership, drag, and video playba
     assert.match(webRendererModuleLoader, /bevy_renderer_version_required/);
     assert.match(mediaResourceRuntime, /createBrowserBevyMediaTextureResolver/);
     assert.match(mediaResourceRuntime, /resumeDeferredTextureQueue/);
+    assert.match(mediaResourceRuntime, /deferredNodeIsCurrent/);
+    assert.match(previewCaptureAdapter, /warmBevyProjectPreviewCapture[\s\S]*ensureFrameRuntime/);
+    assert.doesNotMatch(previewCaptureAdapter, /iframe\?\.remove|destroyFrameRuntime/);
+    assert.match(previewCaptureFrame, /project-preview-transparent-surface-v1/);
+    assert.match(previewCaptureFrame, /color:\s*\[0,\s*0,\s*0,\s*0\]/);
     assert.match(presentationRuntime, /requestBevyPresentationRedraw/);
     assert.match(presentationRuntime, /notify_atome_bevy_video_frame/);
     assert.match(presentationRuntime, /installBevyWebGpuContextDiagnostics/);

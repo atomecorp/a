@@ -68,7 +68,7 @@ export function resolveRateLimitRule(method, params = {}, policy = {}) {
     if (normalizedMethod === 'mail.send') {
         return MCP_RATE_LIMIT_RULES.find((entry) => entry.id === 'mail.send') || null;
     }
-    if (normalizedMethod === 'calendar.create' || normalizedMethod === 'calendar.update' || normalizedMethod === 'calendar.delete') {
+    if (normalizedMethod === 'calendar.create' || normalizedMethod === 'calendar.update' || normalizedMethod === 'calendar.delete' || normalizedMethod === 'calendar.share') {
         return MCP_RATE_LIMIT_RULES.find((entry) => entry.id === 'calendar.write') || null;
     }
     if (
@@ -120,6 +120,7 @@ export function listAclRules() {
             { subject: 'calendar.create', access: 'confirm', required_capabilities: ['calendar.write'] },
             { subject: 'calendar.update', access: 'confirm', required_capabilities: ['calendar.write'] },
             { subject: 'calendar.delete', access: 'confirm', required_capabilities: ['calendar.write'] },
+            { subject: 'calendar.share', access: 'confirm', required_capabilities: ['calendar.write', 'share.write'] },
             {
                 subject: 'runtime.tools.call:ui.capture.*',
                 access: 'confirm',
@@ -221,13 +222,13 @@ export function resolveAccessPolicy(method, params = {}) {
             idempotent: true
         };
     }
-    if (normalizedMethod === 'calendar.create' || normalizedMethod === 'calendar.update' || normalizedMethod === 'calendar.delete') {
+    if (normalizedMethod === 'calendar.create' || normalizedMethod === 'calendar.update' || normalizedMethod === 'calendar.delete' || normalizedMethod === 'calendar.share') {
         return {
             ...defaultPolicy,
             scope: 'tool',
             subject: normalizedMethod,
             access: 'confirm',
-            required_capabilities: ['calendar.write'],
+            required_capabilities: normalizedMethod === 'calendar.share' ? ['calendar.write', 'share.write'] : ['calendar.write'],
             confirmation_required: true,
             proposal_required: true,
             sensitive: true,
@@ -307,11 +308,11 @@ export function resolveAccessPolicy(method, params = {}) {
                 requiredCapabilities.push('mail.send');
                 return true;
             }
-            if (stepMethod === 'calendar.create' || stepMethod === 'calendar.update' || stepMethod === 'calendar.delete') {
+            if (stepMethod === 'calendar.create' || stepMethod === 'calendar.update' || stepMethod === 'calendar.delete' || stepMethod === 'calendar.share') {
                 requiredCapabilities.push('calendar.write');
                 return true;
             }
-            return ['mail.send', 'calendar.create', 'calendar.update', 'calendar.delete'].includes(stepMethod);
+            return ['mail.send', 'calendar.create', 'calendar.update', 'calendar.delete', 'calendar.share'].includes(stepMethod);
         });
         return sensitive
             ? {

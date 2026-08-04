@@ -130,6 +130,8 @@ export const createMcpPlatformHandlers = (getHandlers) => ({
                 'calendar.create',
                 'calendar.update',
                 'calendar.delete',
+                'calendar.share',
+                'calendar.export_webcal',
                 'bank.accounts',
                 'bank.balance',
                 'bank.transactions',

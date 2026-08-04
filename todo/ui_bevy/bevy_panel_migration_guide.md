@@ -1032,7 +1032,7 @@ Contact and Home are the validated panels (**2/16**).
 
 ##### Package 4 — Calendar structure
 
-Status: `planned`
+Status: `implemented`; focused/Web/Tauri/iOS compile contracts pass, native interaction/product-owner acceptance pending.
 
 - Scope: Families 21 to 24 — range navigation, month grid, week/day grid, and
   agenda virtualization.
@@ -1043,7 +1043,7 @@ Status: `planned`
 
 ##### Package 5 — Calendar events
 
-Status: `planned`
+Status: `implemented`; focused/Web/Tauri/iOS compile contracts pass, native interaction/product-owner acceptance pending.
 
 - Scope: Families 25 to 27 — event rectangles, all-day/overlap layout, and
   hit-testing, drag, resize, and touch feedback.
@@ -1054,7 +1054,7 @@ Status: `planned`
 
 ##### Package 6 — Calendar editor and completion
 
-Status: `planned`
+Status: `implemented`; focused/Web/Tauri/iOS compile contracts pass, native interaction/product-owner acceptance pending.
 
 - Scope: Family 28, Calendar composition, complete MCP ledger, panel approval,
   and HTML-route retirement.
@@ -1408,9 +1408,9 @@ primitive component.
 
 Contact was validated by the product owner on 2026-08-02 and Home on
 2026-08-03; the programme therefore records **2/16 validated panels**. The
-existing package roadmap makes Calendar the next planned product panel through
-Packages 4 to 6. Calendar implementation does not start before its product
-discussion and recorded scope, design, data, command, and acceptance plan.
+Calendar implementation for Packages 4 to 6 is complete and focused contracts
+pass. Native interaction evidence and explicit product-owner approval remain
+required before Calendar can increase the validated-panel count.
 
 **Timeline is the final panel migration.** Its existing Bevy route is not
 completion evidence and does not authorize early Timeline product work. The
@@ -1475,13 +1475,13 @@ uniform-layout change. No panel node currently combines `backdrop` with
 `radius_corners` — the panel shell and footer use a uniform radius — so this is
 recorded rather than emulated.
 
-### Correction — Calendar is not yet a composed panel
+### Superseded correction — Calendar composition
 
-`registerBevyPanelSurfaces()` registers `calendar` and `contact`. Calendar is
-still built by `simpleTextSurface`, whose `buildContent` returns a single status
-text node. Contact is now its own routed WebGPU product composition in
-`bevy_panel_contact_runtime.js`. The verified skinnability applies to Contact's
-reused builders and tokens; Calendar remains a future product-panel composition.
+The earlier status below is no longer current: Calendar was formerly a
+`simpleTextSurface` placeholder. It now lazy-registers
+`bevy_panel_calendar_runtime.js`, composes the shared builders/tokens through the
+project canvas, and has no active HTML/vendor route. Native interaction and
+product-owner approval remain its open acceptance gates.
 
 ### Applied in this pass — render-constant unless stated
 

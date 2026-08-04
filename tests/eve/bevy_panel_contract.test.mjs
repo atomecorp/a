@@ -21,7 +21,6 @@ import { EVE_CONTROL_PRESETS } from '../../eVe/elements/look/preset_controls.js'
 import { EVE_PANEL_CHROME_PRESETS } from '../../eVe/elements/look/preset_chrome.js';
 import { EVE_COMM_TABLE_PRESETS } from '../../eVe/elements/look/preset_comm_table.js';
 import { EVE_COMM_SURFACE_PRESETS } from '../../eVe/elements/look/preset_comm_surface.js';
-import { eveCalendarPreset } from '../../eVe/elements/look/calendar_preset.js';
 import { MATRIX_VISUAL_THEME_TOKENS } from '../../eVe/intuition/matrix/visual/matrix_visual_tokens.js';
 import { RIBBON_TOKENS } from '../../eVe/intuition/ribbon/tokens.js';
 import { buildAtomeEditorStyle } from '../../eVe/intuition/tools/visual/tool_visual_tokens.js';
@@ -84,7 +83,6 @@ test('style projections keep one source for system depth and panel control paint
     assert.equal(SYSTEM_UI_ROOT_VARS['--system-input-text-shadow'], SYSTEM_UI_INPUT_TOKENS.textShadow);
     assert.equal(EVE_PANEL_CHROME_TOKENS.textShadow, SYSTEM_UI_INPUT_TOKENS.textShadow);
     assert.equal(EVE_CONTROL_PRESETS.fieldLabel.css.textShadow, SYSTEM_UI_INPUT_TOKENS.textShadow);
-    assert.equal(eveCalendarPreset.rules.calendarPanelTitle.css.textShadow, SYSTEM_UI_INPUT_TOKENS.textShadow);
 
     const panel = EVE_PANEL_SKIN_TOKENS.bevyPanel;
     assert.equal(panel.colors.control, panel.actionButton.idleBackground);
@@ -326,6 +324,10 @@ test('Calendar and Contact panel surfaces route to Bevy UI instead of legacy HTM
     assert.equal(contact.bevy, true);
     assert.equal(dom.window.document.querySelectorAll('button,input,select,textarea').length, 0);
     assert.ok(mounted.some((tree) => tree.root.id === 'eve_bevy_panel_calendar_root'), 'calendar must mount as a Bevy panel tree');
+    const calendarTree = mounted.filter((tree) => tree.root.id === 'eve_bevy_panel_calendar_root').at(-1);
+    assert.ok(findNode(calendarTree, 'calendar_view_selector'), 'calendar must expose the shared Month/Week/Day/Agenda selector');
+    assert.ok(findNode(calendarTree, 'calendar_month_grid'), 'calendar must project a bounded month grid through BevyUI');
+    assert.ok(findNode(calendarTree, 'calendar_source_all'), 'calendar must expose its canonical source filter in the canvas');
     assert.ok(mounted.some((tree) => tree.root.id === 'eve_bevy_panel_contact_root'), 'contact must mount as a Bevy panel tree');
     assert.equal(mounted.every((tree) => tree.layer === 'panel' && tree.root.parent_id === WORKSPACE_SCENE_LAYER_IDS.panel), true);
 });
@@ -334,6 +336,13 @@ test('legacy Timeline module no longer creates an HTML dialog', () => {
     const source = readFileSync(join(repoRoot, 'eVe/intuition/tools/timeline.js'), 'utf8');
     assert.doesNotMatch(source, /createEveDialog/);
     assert.doesNotMatch(source, /createEveButton|createEveSlider|createEveNumberInput/);
+});
+
+test('Calendar bridge and app shell cannot restore the retired DOM/vendor route', () => {
+    const bridge = readFileSync(join(repoRoot, 'eVe/intuition/tools/calendar.js'), 'utf8');
+    const shell = readFileSync(join(repoRoot, 'atome/src/index.html'), 'utf8');
+    assert.doesNotMatch(bridge, /createEveDialog|calendar_panel_dom|calendar_panel_init|innerHTML|createElement/);
+    assert.doesNotMatch(shell, /event-calendar|eventCalendar/);
 });
 
 test('Panel Lab is development-gated and uses the shared panel skin', async () => {

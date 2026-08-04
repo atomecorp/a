@@ -244,6 +244,16 @@ export const createMcpCommunicationHandlers = () => ({
         const eventId = params?.event_id || params?.eventId || params?.id;
         return calendar.delete(eventId, params || {});
     },
+    'calendar.share'(params = {}) {
+        const api = globalThis.CalendarAPI;
+        if (typeof api?.shareCalendar !== 'function') throw new Error('Calendar share API is not available');
+        return api.shareCalendar(params);
+    },
+    'calendar.export_webcal'(params = {}) {
+        const api = globalThis.CalendarAPI;
+        if (typeof api?.exportWebcal !== 'function') throw new Error('Calendar export API is not available');
+        return api.exportWebcal(params);
+    },
     'bank.accounts'() {
         const bank = ensureBankApi();
         return bank.accounts();

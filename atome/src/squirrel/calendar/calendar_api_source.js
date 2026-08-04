@@ -18,10 +18,9 @@ const toIso = (value) => {
 };
 
 const loadCalendarApi = async () => {
-    if (globalThis.CalendarAPI) return globalThis.CalendarAPI;
-    if (globalThis.atome?.calendar) return globalThis.atome.calendar;
-    if (globalThis.window?.atome?.calendar) return globalThis.window.atome.calendar;
-    return null;
+    if (globalThis.CalendarAPI?.createEvent) return globalThis.CalendarAPI;
+    const module = await import('../../../../eVe/intuition/tools/calendar_api.js');
+    return module?.CalendarAPI || null;
 };
 
 const normalizeCalendarEvent = (event = {}) => ({
@@ -36,6 +35,12 @@ const normalizeCalendarEvent = (event = {}) => ({
     timezone: normalizeText(event.timezone || ''),
     updatedAt: toIso(event.updatedAt || event.updated_at || event.start || null),
     recurrence: event.recurrence && typeof event.recurrence === 'object' ? { ...event.recurrence } : null,
+    alarms: Array.isArray(event.alarms) ? event.alarms.map((alarm) => ({ ...alarm })) : [],
+    kind: event.kind === 'todo' ? 'todo' : 'event',
+    status: event.status === 'done' ? 'done' : 'open',
+    dueAt: toDate(event.dueAt || event.due_at || (event.kind === 'todo' ? event.start : null)),
+    completedAt: toDate(event.completedAt || event.completed_at),
+    color: normalizeText(event.color || ''),
     raw: event
 });
 
@@ -98,19 +103,28 @@ export const createCalendarApiSource = ({
             };
         },
         async ensureCalendar(calendarId) {
-            const api = await requireApi();
-            if (typeof api.ensureCalendar !== 'function') {
-                return { ok: false, error: 'calendar_ensure_unavailable', source_id };
+            try {
+                const api = await requireApi();
+                if (typeof api.ensureCalendar !== 'function') {
+                    return { ok: false, error: 'calendar_ensure_unavailable', source_id };
+                }
+                const calendar = await api.ensureCalendar(calendarId);
+                if (!calendar) {
+                    return { ok: false, error: 'calendar_ensure_failed', source_id, calendar_id: String(calendarId || '') || null };
+                }
+                return {
+                    ok: true,
+                    source_id,
+                    calendar: { ...calendar }
+                };
+            } catch (error) {
+                return {
+                    ok: false,
+                    error: error?.message || String(error),
+                    source_id,
+                    calendar_id: String(calendarId || '') || null
+                };
             }
-            const calendar = await api.ensureCalendar(calendarId);
-            if (!calendar) {
-                return { ok: false, error: 'calendar_ensure_failed', source_id, calendar_id: String(calendarId || '') || null };
-            }
-            return {
-                ok: true,
-                source_id,
-                calendar: { ...calendar }
-            };
         },
         async createEvent(input = {}) {
             if (!writable) {

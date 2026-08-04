@@ -111,10 +111,10 @@ Missing primitives must be implemented in the shared Bevy UI owner before a prod
 
 ### 5. Calendar
 
-- Perform the dedicated calendar migration and canonical-data audit in `todo/eve_features/calendar_todos.md` before implementing the Bevy calendar panel.
-- Preserve calendar data, recurrence, alarms, todos, sharing, Webcal/ICS, timezones, and API/MCP ownership.
-- Implement month/week/day/agenda layout, range virtualization, event hit-testing, drag/reschedule, editing through the hidden text service, and timezone-safe rendering in Bevy.
-- Remove `calendar_panel_dom.js`, DOM form construction, and DOM layout/state only after equivalent Bevy interactions and native-target validation pass.
+- Completed implementation: the canonical-data audit identifies CalendarAPI, Squirrel Calendar, and the neutral Bevy projection as the sole owners.
+- Preserved calendar data, recurrence, alarms, todos, sharing, Webcal/ICS, timezones, and API/MCP ownership.
+- Implemented month/week/day/agenda, bounded range projection, event hit-testing, drag/reschedule/resize, and hidden-text-service editing in Bevy.
+- Retired the DOM/vendor/example route after focused parity contracts passed. Web build plus Tauri and arm64 iOS Simulator compile checks pass; real native interaction parity and product-owner approval remain open acceptance gates.
 
 ### 6. Map and location search
 

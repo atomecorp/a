@@ -1656,7 +1656,10 @@ export async function listStateCurrent(projectId, options = {}) {
 
     const rows = await query(
         'all',
-        `SELECT sc.*, COALESCE(sc.owner_id, a.owner_id) AS owner_id FROM state_current sc ${join} ${where} ORDER BY sc.updated_at DESC LIMIT ? OFFSET ?`,
+        `SELECT sc.*, a.atome_type AS atome_type, a.parent_id AS parent_id,
+                COALESCE(sc.owner_id, a.owner_id) AS owner_id
+         FROM state_current sc ${join} ${where}
+         ORDER BY sc.updated_at DESC LIMIT ? OFFSET ?`,
         includeShared && ownerId ? [ownerId, ...params, limit, offset] : [...params, limit, offset]
     );
 

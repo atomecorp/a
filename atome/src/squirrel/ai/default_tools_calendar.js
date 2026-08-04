@@ -1,4 +1,4 @@
-export const registerCalendarDefaultTools = ({ Agent, safeString, requireCalendarApi, requireCalendarServiceApi, invokeRuntimeDefaultTool }) => {
+export const registerCalendarDefaultTools = ({ Agent, safeString, requireCalendarServiceApi, invokeRuntimeDefaultTool }) => {
     Agent.registerTool({
         name: 'calendar.list_events',
         description: 'List calendar events.',
@@ -160,8 +160,7 @@ export const registerCalendarDefaultTools = ({ Agent, safeString, requireCalenda
                 shareType: { type: 'string' }
             }
         },
-        handler: async ({ params }) => {
-            const api = await requireCalendarApi();
+        handler: async ({ params, context }) => {
             const phone = safeString(params?.phone);
             if (!phone) throw new Error('Missing phone');
             const options = {
@@ -170,7 +169,9 @@ export const registerCalendarDefaultTools = ({ Agent, safeString, requireCalenda
                 permissions: params?.permissions,
                 shareType: params?.shareType
             };
-            return api.shareCalendar(options);
+            return invokeRuntimeDefaultTool({
+                tool_id: 'calendar.share', source_tool: 'calendar.share', params: options, context
+            });
         },
         summary: () => 'Share calendar'
     });
@@ -186,11 +187,13 @@ export const registerCalendarDefaultTools = ({ Agent, safeString, requireCalenda
                 baseUrl: { type: 'string' }
             }
         },
-        handler: async ({ params }) => {
-            const api = await requireCalendarApi();
-            return api.exportWebcal({
+        handler: async ({ params, context }) => {
+            return invokeRuntimeDefaultTool({
+                tool_id: 'calendar.export_webcal', source_tool: 'calendar.export_webcal', context,
+                params: {
                 calendarId: params?.calendarId ? String(params.calendarId) : undefined,
                 baseUrl: params?.baseUrl ? String(params.baseUrl) : undefined
+                }
             });
         },
         summary: () => 'Export calendar webcal'

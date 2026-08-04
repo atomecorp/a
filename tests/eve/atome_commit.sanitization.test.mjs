@@ -38,6 +38,7 @@ assert.equal(
 const event = __ATOME_COMMIT_TEST_ONLY__.normalizeEventInput({
     kind: 'set',
     atome_id: 'shape_a',
+    type: 'shape',
     parentId: 'project_a',
     props: {
         id: 'wrong_id',
@@ -55,9 +56,11 @@ const event = __ATOME_COMMIT_TEST_ONLY__.normalizeEventInput({
 });
 
 assert.deepEqual(event.payload.props, {
+    type: 'shape',
     left: '10px',
     top: '20px'
 });
+assert.equal(event.type, 'shape');
 assert.equal(event.props, undefined);
 assert.equal(event.properties, undefined);
 assert.equal(event.patch, undefined);
