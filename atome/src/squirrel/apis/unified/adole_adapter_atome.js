@@ -230,6 +230,8 @@ export const buildAtomeApi = ({ getWs, tokenKey }) => ({
                     token,
                     project_id: params.project_id || params.projectId || params.parent_id || params.parentId || null,
                     include_shared: params.include_shared === true || params.includeShared === true,
+                    include_total: params.include_total === true || params.includeTotal === true,
+                    exclude_system: params.exclude_system === true || params.excludeSystem === true,
                     limit: params.limit,
                     offset: params.offset
                 });

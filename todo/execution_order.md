@@ -48,6 +48,7 @@ Actif
 Source principale:
 
 - todo/ui_bevy/bevy_panel_migration_guide.md
+- todo/ui_bevy/finder_html_line_migration_registry.md
 
 Dependances et ordre:
 
@@ -65,26 +66,46 @@ Dependances et ordre:
 - Lorsqu'un panel est entierement couvert par les composants testes de ses
   paquets, sa composition Bevy est verifiee et approuvee avant la suppression
   definitive de sa route HTML.
+- Deux chantiers panel simultanes sont autorises depuis le 2026-08-04 (regle
+  des deux slots du guide, section "Parallel product-panel workstreams"). Un
+  panel dont l'implementation, les contrats, les preuves real-canvas et le
+  ledger MCP sont complets passe en `acceptance_pending` et libere son slot:
+  l'attente de la validation produit ne bloque plus le panel suivant. Un rejet
+  produit reprend un slot en priorite. Deux chantiers concurrents ne peuvent ni
+  modifier le meme composant/token partage, ni posseder le meme module legacy;
+  un helper legacy partage n'est supprime que par le chantier qui retire son
+  dernier consommateur. Chaque panel garde son propre ledger, ses propres
+  preuves et sa propre approbation explicite.
 - Before creating or composing a panel, the guide must contain its
   function-to-MCP-command ledger: every effectful function must reuse a
   canonical MCP-invocable and auditable command; passive elements have no
   command. A panel cannot be approved or retire its HTML route while the ledger
   contains an unmapped function.
 
-- [ ] Execute the seven active BevyUI migration packages: (1) shared controls — Families 3, 6, and 13; (2) Contact — Family 18 and complete Contact composition; (3) Home — complete Home composition and legacy-route retirement; (4) Calendar structure — Families 21 to 24; (5) Calendar events — Families 25 to 27; (6) Calendar editor and completion — Family 28 and complete Calendar composition; (7) Infos — Families 12, 17, 29, and 30 plus complete canonical inspection/editing composition. Families 4 and 5 remain validated shared foundations. Exit criterion: Home, Calendar, Contact, and Infos use their canonical Bevy owners, their effectful functions have a complete reviewed command/API/MCP ledger, real interactions and package/panel approvals are recorded, and none retains a parallel DOM panel route.
+- [ ] Execute the nine active BevyUI migration packages: (1) shared controls — Families 3, 6, and 13; (2) Contact — Family 18 and complete Contact composition; (3) Home — complete Home composition and legacy-route retirement; (4) Calendar structure — Families 21 to 24; (5) Calendar events — Families 25 to 27; (6) Calendar editor and completion — Family 28 and complete Calendar composition; (7) Infos — Families 12, 17, 29, and 30 plus complete canonical inspection/editing composition; (8) workstream slot A — complete Size composition then Font composition, reusing Families 1, 3, 4, 5, and 17 and rejecting the deferred Family 36 tool slider; (9) queued — complete Layer composition, reusing Families 1, 3, 4, 12, 17, and 30; (10) shared component — Family 14, the sortable result-column header with per-column direction, accent tint, and 420 ms long-press to filters, occupying no workstream slot; (11) workstream slot B — complete Finder composition over Families 3, 4, 6, 13, and 14, with Family 17 recorded `not_applicable`, no search field composed, the `place` map scope dropped as `blocked`, a per-row delete control added to the custom filter rows, the `+` re-anchored under the last added row, and row drag preserved through the shared `tool_drag.js` payload. Families 4 and 5 remain validated shared foundations; packages 8 and 9 add no new component family, package 10 adds Family 14. Exit criterion: Home, Calendar, Contact, Infos, Size, Font, Finder, and Layer use their canonical Bevy owners, their effectful functions have a complete reviewed command/API/MCP ledger, real interactions and package/panel approvals are recorded, and none retains a parallel DOM panel route.
   Current gate — 2026-08-04: Contact, Home, and Calendar are `validated`, so
-  the programme is **3/16 validated panels**. The product owner selected Infos
-  next. Its Bevy route, canonical state/mutation ownership, shared WebGPU
+  the programme is **3/16 validated panels**. Infos is `acceptance_pending`:
+  its Bevy route, canonical state/mutation ownership, shared WebGPU
   preview, focused contracts, HTML retirement, and exhaustive 3,033-line
-  migration ledger are implemented. Real-canvas open, empty/error projection,
-  accordion, close, DOM, and console checks pass; record-backed canvas review
-  and explicit product approval remain its `in_review` gate. Five Bevy routes
+  migration ledger are implemented; real-canvas open, empty/error projection,
+  accordion, close, DOM, and console checks pass; only the record-backed canvas
+  review and explicit product approval remain. It therefore releases its slot.
+  Slot A takes Size then Font — same slot because they share the legacy
+  `selection_style_apply.js` and `style_panels_visual.js` helpers. The product
+  owner then selected **Finder** for slot B, so Layer returns to the queue
+  unstarted. Finder is the largest remaining migration (2 694 lines over 10
+  modules plus `map.js`), it composes **no search field** — the legacy search
+  row is deliberately hidden and only carries state fed by the inline finder
+  tool — and it migrates **without the `place` scope**, whose Leaflet/OSM/
+  Nominatim map stays blocked by its provider/privacy/cost contract and is
+  deleted with the HTML route. Family 17 is `not_applicable` for Finder, so it
+  has no dependency on the unvalidated Infos work. Five Bevy routes
   exist and 11 HTML-active routes remain. Timeline remains the final panel
   migration.
 
 Deferred after Phase 4 — complete Molecule / MTraX migration:
 
-- [ ] Resume the remaining Panel programme after Phase 4: assess Families 7 to 11, 14 to 16, 19, 20, and 36 plus any panel-specific extensions of the Infos-owned 12/17/29/30 contracts. Exit criterion: all 16 registered panels are validated, the 11 legacy HTML routes still active after Infos are retired, and the temporary Panel Lab is removed.
+- [ ] Resume the remaining Panel programme after Phase 4: assess Families 7 to 11, 14 to 16, 19, 20, and 36 plus any panel-specific extensions of the Infos-owned 12/17/29/30 contracts. Exit criterion: all 16 registered panels are validated, the 8 legacy HTML routes still active after Infos, Size, Font, and Layer are retired, and the temporary Panel Lab is removed.
 
 Critere de sortie du programme complet:
 

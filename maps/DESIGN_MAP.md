@@ -800,8 +800,17 @@ The perceptual contract is backed by presented WebGPU frames, not JS sampling al
   hierarchical accordions followed by the shared copy action.
 - Hierarchical rows reuse selectable-list paint and control typography, add
   token-owned depth indentation and vector chevrons, and use canonical
-  selection intent. Parent activation selects and expands/collapses; no browser
-  drag payload, DOM picker, DOM row, forced click, or HTML fallback exists.
+  selection intent. Project rows add the same checkbox surface as Contacts and
+  a right-side BevyUI grip only for renderable Atomes. The row body remains the
+  scroll/select/expand target; only the grip owns dragging. A selected row drags
+  the renderable selection, while an unselected row first becomes the sole
+  selection. No browser drag payload, DOM picker, DOM row, forced click, or HTML
+  fallback exists.
+- A release on the current project canvas creates typed copies at the gesture
+  anchor while retaining relative offsets. Panel/menu/Dashboard hits, short
+  motion, cancel, missing project, and off-canvas release produce no object.
+  Loading failures use a dedicated error row immediately after the selection
+  summary; action confirmations remain after the copy action.
 - Detail preview uses `contain` inside a tokenized control surface. Its pixels
   come from the existing unified WebGPU preview renderer, never a DOM capture,
   symbolic thumbnail, per-Atome canvas, or newly persisted preview field.
@@ -813,3 +822,23 @@ The perceptual contract is backed by presented WebGPU frames, not JS sampling al
   after resize. All material, radius, spacing, typography, states, footer,
   scroll, focus, pressed, disabled, and notice paint remains in existing shared
   tokens; Infos adds no CSS or local palette.
+
+# Infos virtual loading and contextual insertion design — 2026-08-05
+
+- Project and All accordions expose one continuous scroll surface backed by a
+  replace-in-place 200-row virtual window. There are no Previous/Next controls,
+  and a collapsed accordion has no row subtree. Exact totals remain visible in
+  collapsed headers after metadata hydration.
+- The common `bevy_panel_selectable_list.js` owner supplies the virtual-window
+  math, spacer projection, scroll-to-window intent and synchronous drag-session
+  contract. Infos consumes it; Finder and future panel lists must reuse the same
+  owner instead of copying lazy-load or drag state machines.
+- Project checkboxes reuse the Contacts rail gesture: one press chooses select
+  or deselect mode, crossed rows receive that same mode, and cancel restores
+  the initial canonical selection. Row hold and the dedicated grip share the
+  same drag intent; pre-hold vertical motion remains scroll.
+- While a Finder tool crosses the active contextual rail, the rail inserts one
+  item-sized derived gap at the computed index, so neighbouring icons separate
+  before release. Leave, cancel and invalid drop remove the gap immediately.
+- The source Finder catalogue never changes. A tool already in the contextual
+  menu moves to the displayed index and never gains a duplicate visual entry.

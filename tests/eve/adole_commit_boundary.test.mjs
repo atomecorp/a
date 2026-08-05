@@ -9,8 +9,15 @@ import jwt from 'jsonwebtoken';
 import { WebSocketServer } from 'ws';
 import { messageHandlerMixin } from '../../atome/src/squirrel/apis/unified/adole_websocket_message.js';
 import { sendWsApiRequest } from '../../server/wsApiClient.js';
+import { extractStateListTotal } from '../../eVe/core/atome_commit_response.js';
 
 const readSource = (path) => readFile(new URL(`../../${path}`, import.meta.url), 'utf8');
+
+test('state-current list metadata preserves exact filtered totals without changing the records array contract', () => {
+    assert.equal(extractStateListTotal({ data: { states: [], total: 42 } }), 42);
+    assert.equal(extractStateListTotal({ states: [], count: 7 }), 7);
+    assert.equal(extractStateListTotal({ states: [] }), null);
+});
 
 test('Adole framework Atome APIs route durable writes through event commit', async () => {
     const [atomesSource, authEntry, authLogin, authSession, sharingSource, adapterSource] = await Promise.all([
@@ -199,6 +206,19 @@ test('Fastify WebSocket operations enforce identity, restoration idempotency, an
             actor: { id: ownerId },
             payload: { props: { left: '10px' } }
         });
+        const toolId = 'tool.ui.ws_test';
+        await db.createAtome({
+            id: toolId,
+            type: 'tool',
+            parent: projectId,
+            owner: ownerId,
+            creator: ownerId,
+            properties: { project_id: projectId, name: 'System tool' }
+        });
+        await db.appendEvent({
+            id: 'ws_tool_initial', kind: 'set', atome_id: toolId, project_id: projectId,
+            actor: { id: ownerId }, payload: { props: { type: 'tool', name: 'System tool' } }
+        });
         const denied = await operations.handleWsAtomeOperation({
             type: 'state-current',
             action: 'get',
@@ -207,6 +227,14 @@ test('Fastify WebSocket operations enforce identity, restoration idempotency, an
         }, {});
         assert.equal(denied.success, false);
         const connection = { _wsApiUserId: ownerId };
+        const filteredList = await operations.handleWsAtomeOperation({
+            type: 'state-current', action: 'list', requestId: 'filtered-list',
+            project_id: projectId, limit: 200, offset: 0,
+            include_total: true, exclude_system: true
+        }, connection);
+        assert.equal(filteredList.success, true);
+        assert.equal(filteredList.states.some((entry) => entry.atome_id === toolId), false);
+        assert.equal(filteredList.total, filteredList.states.length);
         const history = await operations.handleWsAtomeOperation({
             type: 'atome',
             action: 'history',

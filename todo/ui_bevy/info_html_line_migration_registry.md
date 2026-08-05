@@ -17,7 +17,7 @@ are deliberately included in their surrounding range; no source line is omitted.
 | 65–88 | M | HTML dialog becomes `infoSurface` on `bevy_panel_runtime`. |
 | 89–174 | M/R | Pick is replaced by live canonical selection; copy becomes a Bevy action using the shared clipboard writer. |
 | 175–247 | M | Detail header/panel become Bevy accordion, preview, table, and typed property rows. |
-| 248–293 | M | Selection/project/all accordions become Bevy hierarchical lists. |
+| 248–293 | M/R | Selection/project/all accordions become Bevy hierarchical lists; project rows reuse canonical checkboxes and route handle drags to existing `ui.duplicate`. |
 | 294–327 | D | DOM handle registry and eager DOM event binding are removed. |
 | 328–335 | M | Open routes through `openBevyPanelSurface('info')`. |
 | 336–394 | R | Tool latch state is owned by the common panel/tool runtimes. |
@@ -30,7 +30,7 @@ are deliberately included in their surrounding range; no source line is omitted.
 | Lines | Disposition | Bevy/canonical destination |
 |---:|:---:|---|
 | 1–23 | M/D | Only derived panel state remains in `bevy_panel_info_runtime`; timers and DOM binding flags disappear. |
-| 24–26 | D | HTML multi-value, project-view DOM, and browser drag MIME constants are retired. |
+| 24–26 | D/R | HTML multi-value and browser drag MIME constants are retired; disposable selection/drag state is owned by `bevy_panel_info_runtime` and `ui.duplicate`. |
 | 27–52 | R | Reserved envelope fields are enforced by the Atome contract; the model retains a read-only filter. |
 | 53–69 | R | Immutable envelope presentation moves to `immutableRows`. |
 | 70–70 | D | Envelope select editing is removed as unsafe. |
@@ -97,9 +97,9 @@ are deliberately included in their surrounding range; no source line is omitted.
 | 169–176 | R | Style unit formatting remains in the canonical renderer/input contracts. |
 | 177–183 | D | CSS escaping is irrelevant to the Bevy tree. |
 | 184–195 | D | Atome DOM lookup is removed from Infos. |
-| 196–213 | D | Project DOM drop-layer lookup is removed. |
-| 214–224 | D | Browser drag payload parsing is removed. |
-| 225–249 | D/R | Local project assignment mutation is removed; project relationships require canonical commands. |
+| 196–213 | D/R | Authoritative project DOM lookup is removed; drag release reads only disposable shared-canvas geometry before invoking `ui.duplicate`. |
+| 214–224 | D/R | Browser drag payload parsing is removed; BevyUI pointer intents carry selected canonical IDs without `DataTransfer`. |
+| 225–249 | D/R | Local project assignment mutation is removed; `ui.duplicate` emits typed relationship envelopes through one `Atome.commitBatch`. |
 | 250–269 | D/R | `ensureAtomeRendered` is replaced by shared WebGPU scene invalidation/preview. |
 | 270–281 | D | Media DOM target lookup is removed. |
 | 282–292 | D | Direct child removal is removed. |
@@ -120,8 +120,8 @@ are deliberately included in their surrounding range; no source line is omitted.
 | 136–263 | D/R | Pre-commit local particle/DOM mutation is removed; edits use `commitBatch` then canonical refresh. |
 | 264–290 | D | Projection-notification update wrapper is removed. |
 | 291–292 | D | Legacy particle alias is removed. |
-| 293–322 | D/R | Browser drop project assignment is removed pending a canonical relationship command. |
-| 323–352 | D | Project DOM drop listeners are removed. |
+| 293–322 | D/R | Browser drop assignment is replaced by existing `ui.duplicate` with explicit project/parent envelopes and selection-only relationship remapping. |
+| 323–352 | D/R | Project DOM drop listeners are removed; the BevyUI drag handle owns pointer press/drag/release/cancel and rejects blocked surfaces. |
 | 353–355 | D | Legacy exports disappear with the module. |
 
 ## `eVe/intuition/tools/infos_render_a.js` — 334 lines
@@ -134,11 +134,11 @@ are deliberately included in their surrounding range; no source line is omitted.
 | 54–59 | D | Manual DOM clearing is replaced by disposable Bevy tree updates. |
 | 60–64 | M | Safe IDs remain local Bevy node IDs. |
 | 65–66 | M | Row IDs are generated in the hierarchical list builder. |
-| 67–169 | M/R | HTML rows become shared hierarchical selectable-list nodes. |
+| 67–169 | M/R | HTML rows become shared hierarchical selectable-list nodes with the existing checkbox composition and render-contract-gated `drag_handle`. |
 | 170–190 | R | Row updates occur through Bevy tree refresh from canonical state. |
 | 191–206 | M | List rendering becomes hierarchy composition. |
 | 207–235 | M | Selection records derive from canonical selected IDs. |
-| 236–244 | R | Selection list updates follow the selection event. |
+| 236–244 | R | Selection count/checks update directly from the selection event; only selected records absent from the snapshot are fetched. |
 | 245–253 | M | Counts are rendered in accordion titles and selection summary. |
 | 254–282 | M | Selection status becomes `selectionSummaryNode`. |
 | 283–294 | R | Selected styling comes from the shared list component. |
@@ -171,11 +171,11 @@ are deliberately included in their surrounding range; no source line is omitted.
 | 90–94 | D | Panel cache lookup is removed. |
 | 95–149 | M/R | Detail refresh reads canonical state and drives derived Bevy state. |
 | 150–161 | R | Timer scheduling is replaced by event-driven refresh. |
-| 162–216 | M | All/project list refresh becomes one canonical `listStateCurrent` load. |
+| 162–216 | M | All/project refresh becomes a shared scroll-driven `listStateCurrent` virtual window of 200, replacing the active window without accumulating rows or exposing page buttons. |
 | 217–225 | R | List timer scheduling is removed in favor of lifecycle refresh. |
 | 226–234 | D | 400 ms detail polling is removed. |
 | 235–240 | D | Polling cleanup disappears with polling. |
-| 241–259 | R | Row selection uses `applySelectionIntent`. |
+| 241–259 | R | Row selection uses `applySelectionIntent`; checkbox rail gestures and held row drag route through the new canonical Bevy intents. |
 | 260–268 | R | Project selection synchronization stays in `selection.js`. |
 | 269–286 | M/R | Selection application becomes one canonical selection intent. |
 | 287–299 | R | Clearing remains owned by the selection runtime. |

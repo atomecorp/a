@@ -2550,14 +2550,22 @@ enum AiSRuntime {
         guard let claims = try verifyToken(token) else {
             return stateCurrentResponse(requestId: requestId, success: false, error: "Access denied")
         }
+        let projectId = normalizedOptionalString(message["project_id"] ?? message["projectId"])
+        let ownerId = stringValue(claims["sub"])
+        let excludeSystem = boolValue(message["exclude_system"] ?? message["excludeSystem"])
+        let includeTotal = boolValue(message["include_total"] ?? message["includeTotal"])
         let states = try listStateCurrent(
             db,
-            projectId: normalizedOptionalString(message["project_id"] ?? message["projectId"]),
-            ownerId: stringValue(claims["sub"]),
+            projectId: projectId,
+            ownerId: ownerId,
             limit: intValue(message["limit"], defaultValue: 1000),
-            offset: intValue(message["offset"], defaultValue: 0)
+            offset: intValue(message["offset"], defaultValue: 0),
+            excludeSystem: excludeSystem
         )
-        return stateCurrentResponse(requestId: requestId, success: true, states: states)
+        let total = includeTotal
+            ? try countStateCurrent(db, projectId: projectId, ownerId: ownerId, excludeSystem: excludeSystem)
+            : nil
+        return stateCurrentResponse(requestId: requestId, success: true, states: states, total: total)
     }
 
     private static func handleSnapshotCreate(_ message: [String: Any], db: OpaquePointer?, requestId: String?) throws -> [String: Any] {
@@ -3054,7 +3062,7 @@ enum AiSRuntime {
         return try serializeStateCurrentRow(db, row: row)
     }
 
-    private static func listStateCurrent(_ db: OpaquePointer?, projectId: String?, ownerId: String?, limit: Int64, offset: Int64) throws -> [[String: Any]] {
+    private static func listStateCurrent(_ db: OpaquePointer?, projectId: String?, ownerId: String?, limit: Int64, offset: Int64, excludeSystem: Bool = false) throws -> [[String: Any]] {
         var sql = """
             SELECT sc.atome_id, sc.owner_id, sc.project_id, sc.properties, sc.updated_at, sc.version
             FROM state_current sc
@@ -3070,6 +3078,12 @@ enum AiSRuntime {
             conditions.append("(COALESCE(sc.owner_id, a.owner_id) = ? OR COALESCE(sc.owner_id, a.owner_id) IS NULL)")
             bindings.append(.text(ownerId))
         }
+        if excludeSystem {
+            conditions.append("LOWER(COALESCE(a.atome_type, '')) NOT IN ('project','user','blackhole','tool','tool_macro','toolbox','tool_block','panel','system')")
+            conditions.append("LOWER(COALESCE(json_extract(sc.properties, '$.type'), '')) NOT IN ('project','user','blackhole','tool','tool_macro','toolbox','tool_block','panel','system')")
+            conditions.append("LOWER(COALESCE(json_extract(sc.properties, '$.kind'), '')) NOT IN ('project','user','blackhole','tool','tool_macro','toolbox','tool_block','panel','system')")
+            conditions.append("LOWER(sc.atome_id) NOT LIKE 'tool.ui.%' AND LOWER(sc.atome_id) NOT LIKE 'tool_ui.%'")
+        }
         if !conditions.isEmpty {
             sql += " WHERE " + conditions.joined(separator: " AND ")
         }
@@ -3078,6 +3092,28 @@ enum AiSRuntime {
         bindings.append(.int(offset))
         let rows = try query(db, sql, bindings)
         return try rows.map { try serializeStateCurrentRow(db, row: $0) }
+    }
+
+    private static func countStateCurrent(_ db: OpaquePointer?, projectId: String?, ownerId: String?, excludeSystem: Bool) throws -> Int64 {
+        var sql = "SELECT COUNT(DISTINCT sc.atome_id) AS total FROM state_current sc LEFT JOIN atomes a ON a.atome_id = sc.atome_id"
+        var conditions: [String] = []
+        var bindings: [SQLiteBinding] = []
+        if let projectId, !projectId.isEmpty {
+            conditions.append("sc.project_id = ?")
+            bindings.append(.text(projectId))
+        }
+        if let ownerId, !ownerId.isEmpty {
+            conditions.append("(COALESCE(sc.owner_id, a.owner_id) = ? OR COALESCE(sc.owner_id, a.owner_id) IS NULL)")
+            bindings.append(.text(ownerId))
+        }
+        if excludeSystem {
+            conditions.append("LOWER(COALESCE(a.atome_type, '')) NOT IN ('project','user','blackhole','tool','tool_macro','toolbox','tool_block','panel','system')")
+            conditions.append("LOWER(COALESCE(json_extract(sc.properties, '$.type'), '')) NOT IN ('project','user','blackhole','tool','tool_macro','toolbox','tool_block','panel','system')")
+            conditions.append("LOWER(COALESCE(json_extract(sc.properties, '$.kind'), '')) NOT IN ('project','user','blackhole','tool','tool_macro','toolbox','tool_block','panel','system')")
+            conditions.append("LOWER(sc.atome_id) NOT LIKE 'tool.ui.%' AND LOWER(sc.atome_id) NOT LIKE 'tool_ui.%'")
+        }
+        if !conditions.isEmpty { sql += " WHERE " + conditions.joined(separator: " AND ") }
+        return intValue(try query(db, sql, bindings).first?["total"], defaultValue: 0)
     }
 
     private static func loadStateCurrentEntry(_ db: OpaquePointer?, atomeId: String) throws -> StateCurrentEntry? {
@@ -3336,7 +3372,7 @@ enum AiSRuntime {
         return response
     }
 
-    private static func stateCurrentResponse(requestId: String?, success: Bool, error: String? = nil, state: [String: Any]? = nil, states: [[String: Any]]? = nil) -> [String: Any] {
+    private static func stateCurrentResponse(requestId: String?, success: Bool, error: String? = nil, state: [String: Any]? = nil, states: [[String: Any]]? = nil, total: Int64? = nil) -> [String: Any] {
         var response: [String: Any] = [
             "type": "state-current-response",
             "success": success
@@ -3345,6 +3381,7 @@ enum AiSRuntime {
         if let error { response["error"] = error }
         if let state { response["state"] = state }
         if let states { response["states"] = states }
+        if let total { response["total"] = total }
         return response
     }
 

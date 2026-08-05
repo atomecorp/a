@@ -904,6 +904,16 @@ The shared scene is not a reason to rebuild static Dashboard records when a tool
   `selection.js`, and edits from one `commitBatch` followed by
   `atome:changed`. Envelope type, parent, project, owner, and timestamps are
   read-only; Infos cannot mutate relationships as arbitrary properties.
+- Selection events update derived selected IDs immediately and fetch only
+  selected records missing from the current snapshot. Project-list checkboxes
+  still delegate to `selection.js`; the DOM never stores selection or drag
+  payloads.
+- The only clone flow is `project drag_handle` → BevyUI pointer intents →
+  `bevy_panel_info_runtime` drop validation → Tool Gateway `ui.duplicate` →
+  `tool_runtime_atome_mutation` preflight/remap → one `Atome.commitBatch` →
+  existing scene invalidation/compositor. Copies retain type-specific data and
+  relative layout; external parents rebase to the current project, and no text,
+  HTML, Finder, renderer, or persistence fallback is permitted.
 - Product projection is split between the runtime, pure record/hierarchy model,
   hidden text-input owner, and Bevy view. The view reuses shared accordions,
   selection summary, property table, text/number/switch inputs, actions, panel
@@ -918,3 +928,24 @@ The shared scene is not a reason to rebuild static Dashboard records when a tool
   classified in `todo/ui_bevy/info_html_line_migration_registry.md`. Persistent
   tests enforce line coverage, canonical mutation, DOM-free routing, file-size
   ceilings, lifecycle subscriptions, hierarchy, and shared preview ownership.
+
+# Infos virtual-window and Finder contextual-drop ownership — 2026-08-05
+
+- Each Infos accordion owns one continuous virtual scroll with one
+  replace-in-place 200-record window. Closed accordions build no hierarchy;
+  crossing a virtual boundary replaces, rather than appends, rendered records.
+  Selection snapshots missing from the window are fetched by ID into the
+  disposable selection cache only.
+- The reusable `bevy_panel_selectable_list.js` layer owns window/spacer math,
+  scroll intent and synchronous list-drag arming. It owns no record query or
+  mutation and is the required reuse point for Finder and future panel lists.
+- Project membership starts from the project-scoped canonical list and excludes
+  tool, panel and other system identities at the backend boundary plus a client
+  defence. Global Infos applies no type filter. Window-local hierarchy promotes
+  an absent parent to a window root, so no canonical record disappears.
+- Finder owns only gesture/payload lifetime. `atome_contextual_tool_drop_runtime`
+  owns contextual Bevy hit validation and insertion preview; the existing
+  footer model resolves Tool Registry compatibility and owns `footer_tools`
+  reload/commit. The preview index is derived and never persisted.
+- Atome copying remains `ui.duplicate → drag.end → Atome.commitBatch`; contextual
+  tool placement changes only the target Atome's ordered tool references.

@@ -1929,6 +1929,33 @@ The next execution tasks must refine this map by:
   boundary; AI parity is existing `adole.atomes.alter { id, properties }`
   (`atome.write`, MEDIUM). Infos exposes no envelope relationship mutation or
   unknown-property creator.
+- Project-Atome drag reuses the closed Runtime V2 `ui.duplicate` route with
+  action `drag.end`. Its internal input is `selection_ids`, `project_id`,
+  `left`, `top`, and `placement_mode: "preserve_relative"`; success returns
+  `duplicate_ids` plus `source_to_duplicate`. The owner preflights every source,
+  then emits one typed `Atome.commitBatch` carrying each new UUID, `type`,
+  `project_id`, `parent_id`, and sanitized copied properties. This is not a new
+  public API, persistence method, renderer API, or HTML drag contract.
 - Copy JSON is a local OS-clipboard output and preview/accordion/detail display
   is passive rendering, so both are explicitly MCP `not_applicable`; AI reads
   the same canonical records through the existing get/list tools.
+
+# Infos virtual loading and contextual tool placement — 2026-08-05
+
+- Infos reuses `listStateCurrent(projectId, { limit: 200, offset })` and
+  `listStateCurrent(null, { limit: 200, offset })`; active window, loading,
+  total, error and revision are private runtime state. `includeTotal` and the
+  project-only `excludeSystem` flag stay inside the existing list boundary;
+  returned arrays carry non-enumerable `totalCount` metadata. No pagination API
+  or panel store is added.
+- `bevy_panel_selectable_list.js` is the lower-level reusable UI contract for
+  scroll-driven 200-row virtual windows and list drag sessions. It emits window
+  and drag intents only; each consumer remains owner of canonical reads and
+  mutations.
+- Finder tool placement reuses the existing internal drag payload and the
+  registered contextual-edit API. It accepts only canonical Tool Registry keys
+  and persists the complete order through the existing `footer_tools` owner.
+- The contextual API additions are internal UI-runtime methods
+  (`previewToolDrop`, `commitToolDrop`, `cancelToolDrop`), not public or MCP
+  commands. No MIME, `DataTransfer`, renderer, persistence field or fallback
+  API is introduced.

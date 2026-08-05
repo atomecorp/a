@@ -148,16 +148,21 @@ async function handleStateCurrent(message, userId) {
             : errorResponse('state-current', message, 'State not found');
     }
     if (action === 'list') {
-        const states = await db.listStateCurrent(
-            message.project_id || message.projectId || null,
-            {
-                limit: message.limit,
-                offset: message.offset,
-                ownerId: userId,
-                includeShared: message.include_shared === true || message.includeShared === true
-            }
-        );
-        return response('state-current', message, true, { states });
+        const projectId = message.project_id || message.projectId || null;
+        const options = {
+            limit: message.limit,
+            offset: message.offset,
+            ownerId: userId,
+            includeShared: message.include_shared === true || message.includeShared === true,
+            excludeSystem: message.exclude_system === true || message.excludeSystem === true
+        };
+        const [states, total] = await Promise.all([
+            db.listStateCurrent(projectId, options),
+            options && (message.include_total === true || message.includeTotal === true)
+                ? db.countStateCurrent(projectId, options)
+                : Promise.resolve(null)
+        ]);
+        return response('state-current', message, true, { states, ...(total == null ? {} : { total }) });
     }
     return errorResponse('state-current', message, `Unknown state-current action: ${action || 'missing'}`);
 }

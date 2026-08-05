@@ -2134,6 +2134,16 @@ async fn handle_state_current_list(
         .and_then(|v| v.as_i64())
         .unwrap_or(1000);
     let offset = message.get("offset").and_then(|v| v.as_i64()).unwrap_or(0);
+    let include_total = message
+        .get("include_total")
+        .or_else(|| message.get("includeTotal"))
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+    let exclude_system = message
+        .get("exclude_system")
+        .or_else(|| message.get("excludeSystem"))
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
 
     // SECURITY: Get owner_id filter from message or use current user_id
     let owner_filter = message
@@ -2147,28 +2157,36 @@ async fn handle_state_current_list(
         Err(e) => return error_response(request_id, &e.to_string()),
     };
 
-    // SECURITY: Always filter by owner_id to prevent cross-user data leakage
-    let (query, params): (String, Vec<rusqlite::types::Value>) = if let Some(pid) = project_id {
-        (
-            "SELECT atome_id, owner_id, project_id, properties, updated_at, version FROM state_current WHERE project_id = ? AND (owner_id = ? OR owner_id IS NULL) ORDER BY updated_at DESC LIMIT ? OFFSET ?".to_string(),
-            vec![
-                rusqlite::types::Value::from(pid.to_string()),
-                rusqlite::types::Value::from(owner_filter.clone()),
-                rusqlite::types::Value::from(limit),
-                rusqlite::types::Value::from(offset),
-            ],
-        )
+    // SECURITY: Always filter by owner_id to prevent cross-user data leakage.
+    let mut conditions = vec!["(sc.owner_id = ? OR sc.owner_id IS NULL)".to_string()];
+    let mut scope_params = vec![rusqlite::types::Value::from(owner_filter.clone())];
+    if let Some(pid) = project_id {
+        conditions.insert(0, "sc.project_id = ?".to_string());
+        scope_params.insert(0, rusqlite::types::Value::from(pid.to_string()));
+    }
+    if exclude_system {
+        conditions.push("LOWER(COALESCE(a.atome_type, '')) NOT IN ('project','user','blackhole','tool','tool_macro','toolbox','tool_block','panel','system')".to_string());
+        conditions.push("LOWER(COALESCE(json_extract(sc.properties, '$.type'), '')) NOT IN ('project','user','blackhole','tool','tool_macro','toolbox','tool_block','panel','system')".to_string());
+        conditions.push("LOWER(COALESCE(json_extract(sc.properties, '$.kind'), '')) NOT IN ('project','user','blackhole','tool','tool_macro','toolbox','tool_block','panel','system')".to_string());
+        conditions.push("LOWER(sc.atome_id) NOT LIKE 'tool.ui.%' AND LOWER(sc.atome_id) NOT LIKE 'tool_ui.%'".to_string());
+    }
+    let where_clause = format!(" WHERE {}", conditions.join(" AND "));
+    let query = format!(
+        "SELECT sc.atome_id, sc.owner_id, sc.project_id, sc.properties, sc.updated_at, sc.version FROM state_current sc LEFT JOIN atomes a ON a.atome_id = sc.atome_id{} ORDER BY sc.updated_at DESC LIMIT ? OFFSET ?",
+        where_clause
+    );
+    let total = if include_total {
+        db.query_row(
+            &format!("SELECT COUNT(DISTINCT sc.atome_id) FROM state_current sc LEFT JOIN atomes a ON a.atome_id = sc.atome_id{}", where_clause),
+            rusqlite::params_from_iter(scope_params.clone()),
+            |row| row.get::<_, i64>(0),
+        ).unwrap_or(0)
     } else {
-        // SECURITY: When no project_id, still filter by owner to prevent listing all users' data
-        (
-            "SELECT atome_id, owner_id, project_id, properties, updated_at, version FROM state_current WHERE (owner_id = ? OR owner_id IS NULL) ORDER BY updated_at DESC LIMIT ? OFFSET ?".to_string(),
-            vec![
-                rusqlite::types::Value::from(owner_filter.clone()),
-                rusqlite::types::Value::from(limit),
-                rusqlite::types::Value::from(offset),
-            ],
-        )
+        0
     };
+    let mut params = scope_params;
+    params.push(rusqlite::types::Value::from(limit));
+    params.push(rusqlite::types::Value::from(offset));
 
     let mut stmt = match db.prepare(&query) {
         Ok(s) => s,
@@ -2194,7 +2212,11 @@ async fn handle_state_current_list(
         Err(e) => return error_response(request_id, &e),
     };
 
-    let payload = json!({ "states": states });
+    let payload = if include_total {
+        json!({ "states": states, "total": total })
+    } else {
+        json!({ "states": states })
+    };
     WsResponse {
         msg_type: "state-current-response".into(),
         request_id,
@@ -2202,7 +2224,7 @@ async fn handle_state_current_list(
         error: None,
         data: Some(payload),
         atomes: None,
-        count: None,
+        count: include_total.then_some(total),
     }
 }
 

@@ -1613,23 +1613,17 @@ export async function getStateCurrent(atomeId) {
     return projectStoredStateCurrent(row);
 }
 
-export async function listStateCurrent(projectId, options = {}) {
-    const limit = Number(options.limit) || 1000;
-    const offset = Number(options.offset) || 0;
+const stateCurrentListScope = (projectId, options = {}) => {
     const ownerId = options.ownerId || options.owner_id || null;
     const includeShared = options.includeShared === true || options.include_shared === true;
-
     const params = [];
     const conditions = [];
-
     if (projectId) {
         conditions.push('sc.project_id = ?');
         params.push(projectId);
     }
-
     if (ownerId) {
         if (includeShared) {
-            // Include rows shared in realtime via permissions.
             conditions.push(`(
                 COALESCE(sc.owner_id, a.owner_id) = ?
                 OR (
@@ -1639,12 +1633,17 @@ export async function listStateCurrent(projectId, options = {}) {
             )`);
             params.push(ownerId, ownerId);
         } else {
-            // Match Tauri behavior: allow owner_id match or NULL (shared/legacy).
             conditions.push('(COALESCE(sc.owner_id, a.owner_id) = ? OR COALESCE(sc.owner_id, a.owner_id) IS NULL)');
             params.push(ownerId);
         }
     }
-
+    if (options.excludeSystem === true || options.exclude_system === true) {
+        const excludedTypes = "('project','user','blackhole','tool','tool_macro','toolbox','tool_block','panel','system')";
+        conditions.push(`LOWER(COALESCE(a.atome_type, '')) NOT IN ${excludedTypes}`);
+        conditions.push(`LOWER(COALESCE(json_extract(sc.properties, '$.type'), '')) NOT IN ${excludedTypes}`);
+        conditions.push(`LOWER(COALESCE(json_extract(sc.properties, '$.kind'), '')) NOT IN ${excludedTypes}`);
+        conditions.push("LOWER(sc.atome_id) NOT LIKE 'tool.ui.%' AND LOWER(sc.atome_id) NOT LIKE 'tool_ui.%'");
+    }
     const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
     const join = includeShared && ownerId
         ? `LEFT JOIN atomes a ON a.atome_id = sc.atome_id
@@ -1653,17 +1652,34 @@ export async function listStateCurrent(projectId, options = {}) {
              AND p.can_read = 1
              AND (p.expires_at IS NULL OR p.expires_at > datetime('now'))`
         : 'LEFT JOIN atomes a ON a.atome_id = sc.atome_id';
+    return { join, where, params: includeShared && ownerId ? [ownerId, ...params] : params };
+};
+
+export async function listStateCurrent(projectId, options = {}) {
+    const limit = Number(options.limit) || 1000;
+    const offset = Number(options.offset) || 0;
+    const scope = stateCurrentListScope(projectId, options);
 
     const rows = await query(
         'all',
         `SELECT sc.*, a.atome_type AS atome_type, a.parent_id AS parent_id,
                 COALESCE(sc.owner_id, a.owner_id) AS owner_id
-         FROM state_current sc ${join} ${where}
+         FROM state_current sc ${scope.join} ${scope.where}
          ORDER BY sc.updated_at DESC LIMIT ? OFFSET ?`,
-        includeShared && ownerId ? [ownerId, ...params, limit, offset] : [...params, limit, offset]
+        [...scope.params, limit, offset]
     );
 
     return (rows || []).map((row) => projectStoredStateCurrent(row)).filter(Boolean);
+}
+
+export async function countStateCurrent(projectId, options = {}) {
+    const scope = stateCurrentListScope(projectId, options);
+    const row = await query(
+        'get',
+        `SELECT COUNT(DISTINCT sc.atome_id) AS total FROM state_current sc ${scope.join} ${scope.where}`,
+        scope.params
+    );
+    return Math.max(0, Number(row?.total) || 0);
 }
 
 export async function createStateSnapshot(options = {}) {
@@ -1977,6 +1993,7 @@ export default {
     rebuildStateCurrentFromEvents,
     getStateCurrent,
     listStateCurrent,
+    countStateCurrent,
     buildHistoryTransactions,
     classifyHistoryEvent,
     normalizeHistoryEvent,

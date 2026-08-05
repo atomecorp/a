@@ -25,6 +25,7 @@
   "tests/eve/bevy_panel_segmented_control_contract.test.mjs",
   "tests/eve/bevy_panel_select_contract.test.mjs",
   "tests/eve/bevy_panel_selectable_list_contract.test.mjs",
+  "tests/eve/bevy_panel_selectable_list_visual_contract.test.mjs",
   "tests/eve/bevy_panel_state_contract.test.mjs",
   "tests/eve/bevy_panel_table_contract.test.mjs",
   "tests/eve/bevy_project_renderer_guards.test.mjs",

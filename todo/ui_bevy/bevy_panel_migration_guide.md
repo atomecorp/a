@@ -31,6 +31,12 @@ Panel work.
 Use exactly one status per stage: `planned`, `in_review`, `validated`, or
 `superseded`.
 
+Product-panel workstreams use a separate, additional state vocabulary —
+`active`, `acceptance_pending`, `validated` — defined in *Parallel
+product-panel workstreams*. It describes slot occupancy only and never replaces
+a stage or package status. A package that is `acceptance_pending` as a
+workstream remains `in_review` as a package until it is approved.
+
 ## Migration packages and reusable style system
 
 The programme has two non-overlapping delivery layers:
@@ -91,7 +97,9 @@ Before implementing a package, apply the relevant layer rules:
    product-panel layer.
 
 The package order is a delivery plan, not a requirement to finish one component
-approval before beginning the next. Mobile, Tauri, iOS, and multi-viewport
+approval before beginning the next. Up to two product-panel packages may also
+progress at the same time under the two-slot rule in *Parallel product-panel
+workstreams*. Mobile, Tauri, iOS, and multi-viewport
 validation remain complete-panel gates and do not delay component work.
 
 ## Stage 1 — Empty panel foundation
@@ -862,6 +870,13 @@ validated generic component only when its panel-specific behavior is covered by
 the existing contract; otherwise it still requires its own canonical extension
 and approval.
 
+Family 17 re-entered the baseline as the Infos-owned selection summary and is no
+longer excluded. Packages 8 and 9 — Size, Font, and Layer — add **no new
+component family**: their matrix rows are fully covered by the validated
+generic baseline plus the Infos-owned Families 12, 17, and 30. This is why they
+are the two workstreams that can run now without creating shared-component
+contention.
+
 Already validated generic components (not included in the 36): text,
 separator, icon action button, single-line input, passive list row, accordion,
 select, checkbox/radio/toggle, and table/property grid. The shared PanelRoot,
@@ -870,10 +885,13 @@ existing infrastructure, not product component families.
 
 #### Active migration packages — authoritative task grouping
 
-The following six packages replace Family-by-Family delivery as the active
+The following eleven packages replace Family-by-Family delivery as the active
 task order. Family records below remain the evidence ledger for their canonical
 owner, focused tests, and real-canvas behavior; they are not separate
-product-owner approval gates.
+product-owner approval gates. Packages 8 and 11 are the two concurrent
+product-panel workstreams defined by *Parallel product-panel workstreams*;
+Package 9 is queued behind them and Package 10 is a shared component package
+that occupies no slot.
 
 ##### Package 1 — Shared controls
 
@@ -1070,10 +1088,12 @@ product-owner approval was recorded on 2026-08-04.
 
 Status: `in_review`; implementation, focused contracts, and the available
 real-canvas empty/error interaction pass. Record-backed canvas review and
-explicit product-owner acceptance remain required.
+explicit product-owner acceptance remain required. Workstream state:
+`acceptance_pending` — its slot is released, so Packages 8 and 9 may start.
 
-- Authoritative order decision: the product owner selected Infos as the next
-  panel on 2026-08-04. Timeline remains final.
+- Authoritative order decision: the product owner selected Infos on 2026-08-04.
+  Since the two-slot rule of 2026-08-04, Infos no longer holds a slot and does
+  not block the next panels. Timeline remains final.
 - Global counters at composition: 9 validated generic shared components;
   Families 12, 17, 29, and 30 have concrete Infos owners and focused technical
   coverage; 3/16 product panels remain validated; Infos is the fourth panel in
@@ -1132,12 +1152,365 @@ Infos MCP command ledger:
 | Expand/collapse, preview, immutable/complex display | disposable Bevy projection + shared compositor | none | passive UI/rendering only | `not_applicable`; no canonical mutation or external effect. |
 
 No effectful Infos function is unreviewed or `blocked`.
+
+##### Package 8 — Size then Font (workstream slot A)
+
+Status: `planned`
+
+- Scope: the routed `size` panel first, then the routed `font` panel, in one
+  workstream. They are sequential inside slot A, never parallel: both consume
+  the legacy `selection_style_apply.js` and `style_panels_visual.js` helpers,
+  which the legacy non-collision rule forbids splitting across slots.
+- Required families: Size needs 1, 4, 5, and 17; Font needs 1, 3, 4, and 17.
+  Families 1, 4, and 5 are `validated`; Family 3 is consumed as already shipped
+  by Infos; Family 17 is consumed frozen from Infos.
+- `owns`: the `size` and `font` Bevy panel compositions, their registry
+  routing, and their legacy routes `eVe/intuition/tools/size.js` and
+  `eVe/intuition/tools/font.js`.
+- `consumes`: the shared panel shell/footer/scroll/lifecycle owners, the
+  validated action button, panel state, numeric field, selectable list, and the
+  Package 1 scope chips, plus the Infos selection-summary owner. It modifies
+  none of them.
+- Component decision: Size composes the validated Family 5 numeric field —
+  stepper plus scrub drag — with scope chips for the presets. **Family 36, the
+  compact tool slider, is rejected for this package**: it remains `deferred`
+  and reusing `elastic_slider.js` would reintroduce a non-approved control.
+- Legacy retirement boundary: `selection_style_apply.js`,
+  `style_panels_visual.js`, `elastic_slider.js`, and their satellites are still
+  consumed by `couleur.js`. This package deletes only the `size` and `font`
+  dialogs, builders, styles, listeners, tests, and imports; the shared helpers
+  are retired by the workstream that migrates their last consumer.
+- MCP command ledger: required before composition. The canonical owners to map
+  are the registered panel tools `ui.size.panel` and `ui.font.panel` for
+  open/close, and the existing selection-style mutation path
+  (`invokeToolGateway` plus `updateAtomeProperties` /
+  `applySelectionStyleMutation` in `selection_style_atome.js`) for the apply
+  intents. No panel-local handler or second command path may be introduced.
+- Cross-dependency: Family 17 is frozen under Infos, so neither Size nor Font
+  may become `validated` before Infos is validated.
+- Exit criterion: each panel opens on the shared canvas through its real tool,
+  applies to the current selection through its canonical command, has focused
+  contracts and a gap-free retirement ledger, has an explicit product-owner
+  approval, and retains no parallel DOM route.
+
+##### Package 9 — Layer (workstream slot B)
+
+Status: `planned`
+
+- Scope: the routed `layer` panel — SVG layer manifest listing, layer
+  selection, and layer detail — on the shared BevyUI route.
+- Required families: 1, 3, 4, 12, 17, and 30. It is the most direct consumer of
+  what Infos just built: hierarchical depth/chevron rows (12), selection
+  summary (17), and the detail table composition (30).
+- `owns`: the `layer` Bevy panel composition, its registry routing, and its
+  legacy modules `eVe/intuition/tools/layer.js`,
+  `eVe/intuition/tools/layer_panel_styles.js`, and the panel-side use of
+  `eVe/intuition/tools/core/svg_layer_store.js`.
+- `consumes`: the shared panel shell, selectable list with hierarchical depth,
+  selection summary, and detail table owners. It modifies none of them.
+- Non-collision evidence: this legacy module set is disjoint from Package 8's
+  `size`/`font`/style-helper cluster, so both slots may run at the same time.
+- Canonical state: `core/svg_layer_store.js` and its existing
+  `SVG_LAYER_MANIFEST_*` / `SVG_LAYER_SELECTED_*` event contract remain the sole
+  owner. The panel keeps only disposable expansion and notice state; it creates
+  no second manifest, cache, or selection owner.
+- MCP command ledger: required before composition. The canonical owners to map
+  are the registered panel tool `ui.layer.panel` for open/close and the
+  existing `invokeToolGateway` layer-selection path
+  (`readProjectSelectedLayer` / `writeProjectSelectedLayer`) for the selection
+  intent. Passive manifest display needs no command.
+- Cross-dependency: Families 12, 17, and 30 are frozen under Infos, so Layer may
+  be implemented and tested now but cannot become `validated` before Infos is
+  validated.
+- Exit criterion: the panel opens on the shared canvas through its real tool,
+  lists and selects SVG layers through the canonical store, has focused
+  contracts and a gap-free retirement ledger, has an explicit product-owner
+  approval, and retains no parallel DOM route.
+
+##### Package 10 — Family 14, sortable result-column header (shared component)
+
+Status: `planned`. Shared visual component package: it occupies no workstream
+slot.
+
+- Scope: the only component family the Finder migration is actually missing.
+  Source review of
+  [bevy_panel_table.js](../../eVe/intuition/runtime/bevy_panel/bevy_panel_table.js)
+  confirms the existing table header is **passive** — plain text cells, no sort
+  direction, no pointer handler — so an interactive extension is required.
+- Legacy behaviour to cover, from `finder_view.js:187-255`: click toggles
+  `asc`/`desc` per column through `orderState`; the active column takes the
+  accent tint while the others stay at `0.7` opacity (`updateHeaderTint`); a
+  420 ms long press on the type header opens the Filters sub-panel
+  (`openTypeHeaderFilter`, `LONG_PRESS_HEADER_FILTER_DELAY_MS`); the visible
+  column set depends on the scope — `Access` and `Pseudonym` appear only in the
+  `people` scope.
+- `owns`: the new canonical contract
+  `atome/src/squirrel/components/sortable_header_contract.js`, modelled on
+  `table_contract.js` and `selectable_list_contract.js`, and the new shared
+  builder `bevy_panel_sortable_header.js`.
+- `consumes`: `BEVY_PANEL_TOKENS.table`, the native `button` primitive, and the
+  shared `registerPressGesture` gesture owner for the long press. No local
+  palette, no second renderer, no local timer.
+- Interface: it emits generic sort and long-press intents only. The consuming
+  product panel owns the sort value and the domain meaning; this package maps
+  no MCP command and records no product-data ledger impact.
+- Exit criterion: focused contracts, a cumulative state matrix in Panel Lab
+  covering idle/hover/pressed/focused/active-ascending/active-descending/
+  disabled, real-canvas evidence, and explicit product-owner approval.
+- Direction caret: the family definition requires visible direction, which the
+  legacy header never showed — it kept direction only in the invisible
+  `orderState`. The caret is therefore an addition mandated by the family, not
+  legacy parity, and reuses the Select chevron shape and geometry tokens so a
+  sorted column and an expanded Select read as one vocabulary.
+
+Current evidence — 2026-08-04, implementation complete, approval pending:
+
+- `atome/src/squirrel/components/sortable_header_contract.js` reuses
+  `normalizeTablePresentation` for column geometry, so a sorted header and the
+  rows beneath it can never resolve different widths. It adds per-column
+  `sortable`, validates the sort key against the column set, rejects any
+  direction outside `asc`/`desc`, and exposes `nextSortState` so every consumer
+  toggles identically.
+- `bevy_panel_sortable_header.js` composes native `button` cells for sortable
+  columns and passive `panel` cells otherwise, reuses the `table` header paint
+  and `select` focus/disabled tokens, and mounts no handler when disabled.
+- One named token group `EVE_PANEL_SKIN_TOKENS.bevyPanel.sortableHeader` was
+  added for the three things nothing existing expressed: the active-column
+  tint, the two label opacities, and the caret gap. Everything else reuses the
+  `table`, `select`, and control-palette tokens.
+- Accent single source: the active-column tint was a CSS-only literal
+  (`rgba(100,255,150,0.9)` in `eVe/elements/look/tokens.js`) that the canvas
+  could not read. It is now defined once as `EVE_COMMON_SKIN_TOKENS.systemAccent`
+  from integer channels, with both the GPU tuple and the CSS string derived from
+  it; the legacy token consumes that string, so no second value exists.
+- Panel Lab specimen: `bevy_panel_lab_sortable_header_runtime.js` composes two
+  rows — an interactive header carrying one deliberately non-sortable `Access`
+  column, and a `disabled` header — so idle, hover, pressed, focused,
+  active-ascending, active-descending, non-sortable, and disabled are all
+  visible in one matrix. It emits only closed `panel_lab.sortable_header.*`
+  intents, records the long press without opening anything, and resets to
+  `date`/`desc` on close or reload. It is wired into `bevy_panel_lab_surface.js`
+  through `readState`, `buildContent`, `handleEvent`, and the Lab reset.
+  Localized keys were added to both `languages_en_core.js` and
+  `languages_fr_core.js`.
+- Probe `temp/sortable_header_probe.mjs` passes 28/28 and was verified to fail
+  red when the accent single source is broken. It covers contract rejections,
+  exactly one active column, exact column-width totals and offsets, the toggle
+  rule, button-versus-passive cells, caret presence/orientation/non-overlap,
+  handler suppression when disabled, long-press routing, absence of any GPU
+  colour literal, accent GPU/CSS equivalence, specimen reset, refusal of both
+  unknown and non-sortable intents, pass-through of foreign intents, and the
+  real `panelLabSurface` composing the specimen and routing a sort intent to it.
+- `npm run check:syntax` passes; `git diff --check` is clean; the real
+  `eve_presets.js`, `base_preset.js`, `skin/index.js`, and `eVe_look.js` entries
+  still link under a real ESM import, proving the new look → skin dependency
+  introduces no cycle.
+- **Remaining gate — real-canvas acceptance.** Not yet captured. The available
+  browser instance mounts only the dashboard skeleton: `readDiagnostics()`
+  reports a single `dashboard_bevy_ui` tree with 33 overlay records and no text
+  record at all, and the bottom main menu never mounts, so Panel Lab cannot be
+  opened there. Visual confirmation of the accent tint, the caret orientation
+  and the long press therefore remains required before Package 10 may leave
+  `planned`, exactly like the record-backed gap recorded for Infos.
+
+##### Package 11 — Finder panel (workstream slot B)
+
+Status: `planned`
+
+- Scope: the routed `finder` panel — the largest remaining migration at
+  **2 694 lines across 10 modules**, plus `map.js` (341 lines).
+- Slot decision of 2026-08-04: the product owner selected Finder, so it takes
+  slot B and **Layer (Package 9) returns to the queue**. Layer was `planned`
+  and unstarted, so nothing is lost. Slot A keeps Size then Font unchanged.
+- Required families: 3, 4, 6, 13, and 14. **Family 17 is recorded
+  `not_applicable`** — see the coverage ledger below.
+- `owns`: the `finder` Bevy panel composition, its registry routing, and the
+  legacy modules `finder.js`, `finder_view.js`, `finder_record_projection.js`,
+  `finder_record_model.js`, `finder_filters.js`, `finder_refresh.js`,
+  `finder_controller.js`, `finder_data_sources.js`, `finder_row.js`,
+  `finder_state.js`, and `map.js`.
+- `consumes`: the shared panel shell/footer/scroll/lifecycle owners, scope
+  chips, selectable list, accordion, select, editable text, panel state, table,
+  and Package 10's sortable header. It modifies none of them.
+- Cross-dependency: **none.** With Family 17 `not_applicable`, Finder depends on
+  no unvalidated Infos component and may reach `validated` independently.
+
+**No search field — deliberate, not an omission.** `finder.js:121-133` builds a
+search row with `display: 'none'`, `height: '0'`, and `overflow: hidden`. It is
+intentionally invisible; the input it holds (`finder.js:145`) is only a hidden
+state carrier written from outside by `quickSearchFinder` and `setScope`
+(`finder_controller.js:82`, `:130`) — that is, by the inline finder tool. Its
+`onInput` handler can never fire. The Bevy panel therefore **composes no search
+field**; `finderState.query` stays a runtime value fed by the inline tool, and
+the hidden row, its `search.svg` icon, and the dead handler go to the deletion
+ledger rather than the migration ledger.
+
+**Composed surface**, top to bottom: four scope chips; the sortable result
+header; the results list plus an `N results` status line — currently a
+hard-coded English string at `finder_view.js:321` that **must be localized** in
+the Bevy composition; the `Filtre` toggle with its active state; and the
+expandable Filters block holding the `Name` and `Type` rows, the `+` control,
+and the custom filter rows.
+
+**Multiple filters and `+` placement.** Custom filters are multiple, not
+single: `finderState.filters` accumulates rows and `finder_view.js:135` ANDs
+them all through `filters.every(matchCondition)`, silently ignoring incomplete
+rows. The Bevy composition preserves that semantics exactly. The `+` placement
+is corrected: today it sits in a `custom` row inserted **before** the filter
+container (`finder_filters.js:93-124`), so it stays stuck above the stack. In
+the Bevy composition the `+` is **re-anchored below the last added filter row**
+after every add, so the "add another" affordance is permanently at the bottom
+of the Filters block; with zero rows it sits under `Name`/`Type`. The block
+grows downward inside the shared scroll and never covers the `Filtre` button or
+the panel footer. Each custom row keeps its own hidden `max` input revealed
+only when that row's condition becomes `between`.
+
+**Per-row delete — new, product-owner request of 2026-08-04.** The legacy panel
+has no way to remove a custom filter row: once added it only disappears on
+panel reset. Since rows are meant to be stacked, the Bevy composition adds a
+delete control on **every** custom filter row, leading the row so it stays
+aligned across the stack. It reuses the validated action button at the same
+`22 × 22 px` geometry as `+`, with the `destructive` variant. Removing a row
+drops it from `finderState.filters` and re-runs the AND filter immediately; the
+`+` re-anchors under whatever row is now last. Removing the only row returns
+the block to `Name`/`Type` plus `+`.
+
+**Native select must move in-canvas.** The condition dropdown currently renders
+as a native OS popup outside the canvas. It becomes the validated
+`bevy_panel_select.js`, rendered inside the shared canvas. This is an accepted
+visual change to confirm at review.
+
+Finder coverage ledger:
+
+| Family | Decision/evidence |
+| --- | --- |
+| 3 | `validated` selectable list, consumed for the result rows. |
+| 4 | `validated` panel state for empty/loading/error. |
+| 6 | `validated` editable text, consumed for the filter inputs and rename. |
+| 13 | `validated` scope chips, consumed for the four scopes. |
+| 14 | `planned` under Package 10; Finder is its first consumer. |
+| 17 | `not_applicable`: source review found a plain `N results` status text, not a selection summary. The validated text and state builders cover it. |
+| map presentation | `blocked`; see the map decision below. |
+
+Finder MCP command ledger:
+
+| Function/intent | Canonical owner/path | Capability | Status |
+| --- | --- | --- | --- |
+| Open/close Finder | `ui.find.panel` via `invokeToolGateway` | `ui.read` | `mapped` |
+| Quick search (query + scope) | the `quickSearchFinder` path behind the same tool | `ui.read` | `mapped` |
+| Read atomes / projects | `listStateCurrent`, `AdoleAPI.projects.list` | `atome.read` | `mapped` |
+| Read tools | `toolRegistryV2.listTools` | `tool.read` | `mapped` |
+| Read contacts | `relationship_store` + `classifyRecipients` | existing recipient policy | `mapped` |
+| Rename a record | canonical `commitBatch` | `atome.write` | `mapped` |
+| Select a row | `applySelectionIntent` (`runtime/selection.js`) | existing selection policy | `mapped` |
+| Sort, filters, accordion, `N results` status | disposable projection | passive | `not_applicable` |
+| `place` scope / map | — | — | `blocked`; see below |
+
+**Two cross-cutting integrations that must not break.**
+
+1. *Row drag is a shared protocol, not Finder code.* `FINDER_DROP_MIME` lives in
+   `eVe/intuition/shared/tool_drag.js` and is consumed by `project_drop*.js`
+   (five modules), `menu/core/toolbox_runtime_model.js`, and `finder_row.js`.
+   Bevy rows are no longer DOM `draggable` elements, so the HTML5 `dataTransfer`
+   handshake disappears: the Bevy drag must emit the **same payload** through
+   `buildFinderDragPayload` and the shared drag owner. No fork, no second MIME,
+   no deletion of `tool_drag.js`. This is the package's first regression risk.
+2. *The inline finder stays out of scope but must keep working.*
+   `runtime/eve_intuition/finder_inline_runtime.js` (407 lines) is a tool
+   surface, not a panel, and the guide excludes it. It opens the panel through
+   `openPanelWithToolContext` + `invokeTool`, so the Bevy surface must honour the
+   same tool context and scope lock (`scopeLocked`, `scopeBeforeLock`).
+
+**Map decision — 2026-08-04.** `finder.js:22` imports `./map.js`, which mounts
+Leaflet, OpenStreetMap tiles, and Nominatim geocoding directly into the Finder
+dialog DOM, hijacking `eve_finder_dialog__results_list` and `__results_status`.
+The map is blocked by its provider/privacy/cost/cross-platform contract, and
+Finder may not keep a parallel HTML/Leaflet route after migration — together
+those would block Finder forever. Source review resolves it: the map is isolated
+behind **one scope out of four** (`SCOPE_OPTIONS`, `finder_state.js:27` —
+`local` / `tools` / `place` / `people`). Only `place` activates it. Finder
+therefore migrates **without the `place` scope**: the chip leaves the Bevy
+composition, and `map.js`, `ensureEveMapStyles`, and the Leaflet/Nominatim/OSM
+dependency are deleted with the HTML route. The map returns later as its own
+feature package behind its own provider gate. This is a product decision to
+confirm at acceptance; the recorded alternative is to keep the chip visible and
+project the validated Family 4 `permission_denied` state.
+
+- Exit criterion: the panel opens on the shared canvas through its real tool,
+  the three remaining scopes list and sort their records, filters and rename
+  work through the canonical owners, row drag reaches a project drop zone, the
+  retirement ledger covers all 3,035 lines without a gap, the MCP ledger
+  has no unreviewed effectful function, product-owner approval is explicit, and
+  no parallel DOM route remains.
+
+Current evidence — 2026-08-05, implementation complete, approval pending:
+
+- Layers delivered: `bevy_panel_finder_model.js` (columns per scope, the single
+  column/sort-key table, pure sorting and filtering), `bevy_panel_finder_data.js`
+  (per-scope loaders reusing `listStateCurrent`, `AdoleAPI`, `project_security`,
+  `loadToolRecordsFromDatabase`, the relationship store and
+  `classifyRecipients`), `bevy_panel_finder_view.js`, and
+  `bevy_panel_finder_runtime.js`. `tools/finder.js` is now a 68-line bridge.
+- Reuse over rewrite: `finder_record_model.js` has zero DOM references and
+  `finder_record_projection.js` has exactly one, so both are consumed as-is.
+  Only `setSelectOptions` is retired from them.
+- Public contract preserved verbatim: `open_finder_panel`, `close_finder_panel`
+  and `__eveFinder.{setContext, quickSearch, refreshProjection}`, on which the
+  inline finder tool, the matrix runtime and the tool gateway depend.
+- `custom: true` stays on the Finder registry entry. It excludes Finder from the
+  generic panel ops because the inline finder runtime owns its open/close;
+  removing it would create a parallel open path.
+- Shared Select widening: `selectNode` hard-coded its width, which made the
+  three-across `property | condition | value` row impossible. It now accepts an
+  optional width whose default is unchanged, so existing consumers are untouched.
+- Placeholder sentinel: the legacy property dropdown used an empty-value
+  `<option>`, which the shared Select contract rejects. `FILTER_PROPERTY_NONE`
+  replaces it and is treated as unset by the filter engine.
+- Line-by-line retirement ledger:
+  `todo/ui_bevy/finder_html_line_migration_registry.md` partitions all
+  **3,035 historical lines** across the eleven modules — 1,669 migrated or
+  replaced, 461 deleted, 905 retained as canonical owners. A persistent contract
+  proves the partition has no gap or overlap and was verified to fail red on a
+  single-line gap.
+- Probe `temp/finder_migration_probe.mjs` passes 106/106 across Package 10 and
+  Package 11: contract rejections, the header and its caret, the Panel Lab
+  specimen and the real Lab surface, the model's scope/sort/filter behaviour,
+  the composed tree (no search field, no `place` scope, the 200-row cap, the
+  re-anchored `+`, the per-row delete control, the `between` reveal, in-canvas
+  selects), the runtime's intents, the scope-gated tool-drag lifecycle, the
+  race guard, and the ledger partition.
+- `npm run check:syntax` passes on 1,046 files; `git diff --check` is clean.
+- Real-canvas evidence — 2026-08-05, anonymous session on the running server:
+  the login `Essayer` route opens the project surface, the canonical
+  `open_finder_panel()` mounts `eve_bevy_panel_finder` as a second tree on the
+  **same single canvas**, and `__eveFinder` exposes `setContext`, `quickSearch`
+  and `refreshProjection`. Activating the `local` scope, sorting the `name`
+  column (mapped to `alphanumeric`/`asc`), opening Filters and adding two rows
+  produced a 79-node tree containing **no search node**, three scope chips with
+  no `place`, the `+` control ordered last after both filter rows, and one
+  delete control per row. DOM audit: one canvas, zero visible native controls,
+  and none of `#eve_finder_dialog`, `#_intuition_v2_find`,
+  `.leaflet-container`, the legacy results list or the legacy search input.
+  `window.__eveMap` is `undefined`. The browser error console is empty.
+- Record-backed listing remains blocked by the environment, not by the panel:
+  the anonymous account returns `remote_account_not_provisioned`, the same
+  limitation already recorded for Infos. The panel projected the canonical
+  `error` state rather than a silent empty list, which is the intended
+  behaviour.
+- Shell debt recorded: `map.js` is Leaflet's only consumer in eVe, so the two
+  `index.html` tags and the three library assets (~299 KB) retire with the map.
+- **Remaining gate — product-owner acceptance,** plus a record-backed listing
+  on a provisioned account to confirm row rendering, rename and the tool drag
+  against real data.
+
 #### Deferred pending Molecule migration and wider panel scope
 
 These families remain part of the 16-panel programme but are outside the active
 Calendar/Contact component backlog. They may start only after Phase 4 —
 Molecule / MTraX — is validated, or when a future source audit identifies a
-measured, non-Molecule Panel occurrence:
+measured, non-Molecule Panel occurrence. **Family 14 left this list on
+2026-08-04**: the Finder migration is exactly the measured, non-Molecule Panel
+occurrence this clause anticipates, so it is now Package 10.
 
 9. Media thumbnail/card. The current passive prototype is not evidence of a
    required Panel component; Contact only projects an existing avatar at
@@ -1150,7 +1523,6 @@ measured, non-Molecule Panel occurrence:
     file ownership.
 12. Hierarchical tree row with depth, expand/collapse, selection, and disabled
     descendants.
-14. Sortable result-column header with direction and accessible label state.
 15. History event row with current-position and grouped-section presentation.
 16. History cursor / scrubber, separate from the compact product tool slider.
 19. Conversation/thread row and message bubble projection.
@@ -1365,8 +1737,10 @@ legacy Panel geometry.
 
 #### Surface coverage matrix
 
-Calendar, Contact, Home, Infos, and Timeline are the explicitly ordered migration
-surfaces. Every other matrix row remains deferred after Phase 4 — Molecule /
+Calendar, Contact, Home, Infos, Size, Font, Finder, Layer, and Timeline are the
+explicitly ordered migration surfaces; Size, Font, Finder, and Layer entered
+scope on 2026-08-04 with the two parallel workstream slots. Every other matrix
+row remains deferred after Phase 4 — Molecule /
 MTraX. Each non-deferred
 surface may be composed only after its listed families have a recorded coverage decision
 (`validated`, `blocked`, or `not_applicable`) and every effectful function has a
@@ -1377,7 +1751,7 @@ mapped MCP command.
 | Home | 1, 2, 3, 4, 5, 6, 8, 9, 17 |
 | Contact | 1, 3, 4, 6, 18 |
 | Info | 1, 3, 4, 12, 17, 29, 30 |
-| Finder | 3, 4, 6, 13, 14, 17; map presentation remains blocked by its external provider/privacy/cost contract |
+| Finder | 3, 4, 6, 13, 14. Family 17 is `not_applicable` — source review found a plain `N results` status text, not a selection summary. The `place` scope and its map presentation stay `blocked` by the external provider/privacy/cost contract and leave the Bevy composition; see Package 11 |
 | Communicate | 1, 3, 4, 6, 9, 11, 19, 20 |
 | Delete | 1, 3, 4, 11, 17 |
 | Undo | 1, 4, 15, 16, 17 |
@@ -1393,6 +1767,77 @@ mapped MCP command.
 No legacy HTML route may be deleted until its entire matrix row is validated,
 the real panel has explicit product-owner approval, and the legacy builders,
 styles, listeners, tests, and imports have been removed with targeted evidence.
+
+### Parallel product-panel workstreams
+
+Status: `validated` — product-owner decision of 2026-08-04.
+
+Product-panel migration is no longer serialized behind a single next panel.
+Two panels may be migrated at the same time, because waiting for one panel's
+explicit acceptance before starting the next one is the programme's dominant
+delay, not its quality gate.
+
+**Two slots.** At most **two** product-panel workstreams may be `active` at the
+same time. A third concurrent panel workstream is forbidden. Shared visual
+component packages are not workstreams and do not occupy a slot.
+
+**Workstream states and slot release.** A workstream has exactly one state:
+
+- `active` — implementation, contracts, or evidence still in progress. It holds
+  its slot.
+- `acceptance_pending` — implementation, focused contracts, real-canvas
+  evidence, retirement ledger, and MCP command ledger are complete; only the
+  product owner's explicit review remains. **It releases its slot**, so the
+  next panel starts immediately.
+- `validated` — explicit product-owner approval recorded. The panel leaves the
+  slot model.
+
+A product-owner rejection returns that panel to `active`. It reclaims a slot
+with priority over starting any new panel; if both slots are then occupied, no
+new panel starts until one frees.
+
+**Shared-ownership non-collision.** Two concurrent workstreams must never
+modify the same shared builder, canonical contract, or token group. Each
+package record must declare two explicit lists:
+
+- `owns` — shared builders, contracts, and token groups this workstream may
+  modify;
+- `consumes` — shared components it only reads and composes without change.
+
+At most one workstream may own a given unvalidated shared component; the other
+consumes it frozen. A workstream that discovers it needs to modify a component
+owned by the other workstream must record the need and wait, never fork a
+second copy, a panel-local builder, or a temporary style shim.
+
+**Legacy non-collision.** Two concurrent workstreams must never own the same
+legacy module. A legacy helper shared by several panels — for example
+`selection_style_apply.js` or `style_panels_visual.js` — is deleted only by the
+workstream that retires its **last** consumer; every earlier workstream removes
+only its own dialog, builders, styles, listeners, tests, and imports. Panels
+whose legacy modules overlap therefore belong to the same slot, in sequence,
+not to two parallel slots.
+
+**Cross-dependency.** A workstream B may consume a family still `implemented`
+or `in_review` under workstream A. B may implement, run its focused contracts,
+and gather real-canvas evidence, but B cannot become `validated` before A is
+validated. The dependency, and the families it covers, must be written in B's
+package record.
+
+**Independent approvals.** Each panel keeps its own coverage ledger, MCP
+command ledger, focused contracts, real-canvas evidence, and explicit
+product-owner approval. Approving or rejecting one panel never blocks,
+invalidates, or delays the other slot.
+
+**Unchanged gates.** A partial Bevy panel and its HTML route must never be
+active in parallel **for the same panel**. HTML retirement stays strictly
+per-panel and happens only after that panel's own approval. Timeline remains
+the final migration, Finder keeps its external provider/privacy/cost gate, and
+mobile, Tauri, iOS, and multi-viewport validation remain complete-panel gates.
+
+**Reporting.** Every counter report required before a composition or an
+approval presentation must list **both slots**: panel key, workstream state,
+owned shared components, consumed shared components, and cross-dependencies,
+in addition to the existing global component, panel, and legacy-route counters.
 
 ### Mandatory MCP command mapping at panel creation
 
@@ -1433,22 +1878,25 @@ composition only when its required-component column has no gap and the MCP
 command ledger contains no unreviewed effectful function.
 
 When a migration package's component contracts are sufficient to cover the
-highest-priority product panel, recommend that panel as the next composition
-and explain the choice. Build it only from the same canonical builders, tokens,
-and intent handlers validated in Panel Lab. For a User panel request, first
+highest-priority product panels, recommend the next one or two panel
+compositions, assign them to the free workstream slots, and explain both the
+choice and their non-collision evidence. Build each only from the same
+canonical builders, tokens, and intent handlers validated in Panel Lab. For a User panel request, first
 confirm its active registry mapping (`home` currently owns `tools/user.js`) and
 its complete required-component inventory; do not assume a second unregistered
 surface.
 
 Before each panel composition and its approval presentation, report the same
 current global-task, component, product-panel, and legacy-HTML-route counters
-required by the component loop, together with the panel MCP command-ledger
-status. Open the completed composition in the actual browser, verify its visual
+required by the component loop, the state of both workstream slots, and the
+panel MCP command-ledger status. Open the completed composition in the actual
+browser, verify its visual
 hierarchy and every real interaction, exercise every mapped function through
 its canonical MCP command with its expected audit evidence, run its focused
 contracts, and submit it
 for explicit product-owner approval. If it is rejected, repair and revalidate
-the same panel. Only after functional parity and explicit approval may the
+the same panel without pausing the other active workstream. Only after
+functional parity and explicit approval may the
 visible HTML route, builders, styles, listeners, and obsolete tests be deleted.
 Then prove that only the Bevy route remains and that no visible DOM or double
 rendering survives. A partial Bevy panel and an HTML panel must never be active
@@ -1468,7 +1916,7 @@ platforms once for the complete panel when the product owner requests or when
 final platform acceptance requires it. This check is never repeated for each
 primitive component.
 
-### Authoritative next-panel decision — 2026-08-04
+### Authoritative workstream-slot decision — 2026-08-04
 
 Contact was validated by the product owner on 2026-08-02, Home on 2026-08-03,
 and Calendar on 2026-08-04; the programme therefore records **3/16 validated
@@ -1476,19 +1924,40 @@ panels**. Calendar Packages 4 to 6, including canonical Calendar–Dashboard
 synchronization and Dashboard-card opening of the existing event editor, are
 accepted on the shared BevyUI/WebGPU route.
 
-The product owner selected **Infos** as the next implementation on 2026-08-04.
-Package 7 is technically migrated and `in_review`: its focused contracts and
-3,033-line retirement ledger pass. Real-canvas opening, empty/error projection,
-accordion interaction, close, DOM audit, and console audit also pass; only the
-record-backed canvas review and explicit product-owner acceptance remain the
-gate for changing the validated panel count. The active inventory is therefore
-3/16 validated, one additional panel in review, 5 Bevy routes, and 11
-HTML-active routes.
+**Infos** was selected on 2026-08-04 and is now `acceptance_pending`. Package 7
+is technically migrated: its focused contracts and 3,033-line retirement ledger
+pass. Real-canvas opening, empty/error projection, accordion interaction,
+close, DOM audit, and console audit also pass; only the record-backed canvas
+review and explicit product-owner acceptance remain the gate for changing the
+validated panel count. Because `acceptance_pending` releases its slot, Infos no
+longer blocks any new panel. The active inventory is therefore 3/16 validated,
+one panel awaiting acceptance, 5 Bevy routes, and 11 HTML-active routes.
+
+Current slot occupancy:
+
+| Slot | Panel | State | Owns | Consumes | Cross-dependency |
+| --- | --- | --- | --- | --- | --- |
+| — | Infos (Package 7) | `acceptance_pending` | Families 12, 17, 29, 30 shared owners | shared panel/accordion/table/input/list owners | none |
+| A | Size, then Font (Package 8) | `planned` | `size`/`font` panel composition and their legacy routes | Families 1, 3, 4, 5, 17; Package 1 scope chips | Family 17 frozen under Infos |
+| B | Finder (Package 11) | `active` | `finder` panel composition, its legacy route, and `map.js` | Families 3, 4, 6, 13; Package 10's sortable header | none — Family 17 is `not_applicable` |
+| queued | Layer (Package 9) | `planned` | `layer` panel composition and its legacy route | Families 1, 3, 4, 12, 17, 30 | Families 12, 17, 30 frozen under Infos |
+
+The product owner selected Finder on 2026-08-04, so it takes slot B and Layer
+returns to the queue; Layer was `planned` and unstarted, so no work is lost.
+Package 10 delivers Family 14 as a shared component and occupies no slot.
+
+Slot A holds Size and Font in sequence, not in parallel: they share the legacy
+`selection_style_apply.js` and `style_panels_visual.js` helpers, so the legacy
+non-collision rule forbids splitting them across slots. Slot B holds Layer,
+whose legacy module set (`layer.js`, `layer_panel_styles.js`,
+`core/svg_layer_store.js`) is disjoint from both.
 
 **Timeline is the final panel migration.** Its existing Bevy route is not
 completion evidence and does not authorize early Timeline product work. The
-remaining panel order after Calendar and before Timeline must be discussed and
-recorded before each implementation. Finder retains its separate provider,
+remaining panel order after Calendar and before Timeline is recorded per freed
+slot rather than per single implementation: when a slot frees, its next panel
+is discussed and written into the slot table before implementation starts.
+Finder retains its separate provider,
 privacy, cost, and cross-platform gate and cannot retain a parallel
 HTML/Leaflet route after migration.
 

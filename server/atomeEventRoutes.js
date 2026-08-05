@@ -172,18 +172,25 @@ function registerAtomeEventRoutes({
             return reply.code(401).send({ success: false, error: 'Unauthorized' });
         }
 
-        const { project_id, limit, offset, include_shared, includeShared } = request.query || {};
+        const { project_id, limit, offset, include_shared, includeShared, exclude_system, include_total } = request.query || {};
         const includeSharedFlag = include_shared === '1' || include_shared === 'true' || includeShared === '1' || includeShared === 'true';
+        const excludeSystemFlag = exclude_system === '1' || exclude_system === 'true';
+        const includeTotalFlag = include_total === '1' || include_total === 'true';
 
         try {
-            const states = await db.listStateCurrent(project_id || null, {
+            const options = {
                 limit: limit !== undefined ? Number(limit) : undefined,
                 offset: offset !== undefined ? Number(offset) : undefined,
                 ownerId: user.id,
-                includeShared: includeSharedFlag
-            });
+                includeShared: includeSharedFlag,
+                excludeSystem: excludeSystemFlag
+            };
+            const [states, total] = await Promise.all([
+                db.listStateCurrent(project_id || null, options),
+                includeTotalFlag ? db.countStateCurrent(project_id || null, options) : Promise.resolve(null)
+            ]);
 
-            return reply.send({ success: true, states });
+            return reply.send({ success: true, states, ...(total == null ? {} : { total }) });
         } catch (error) {
             console.error('[State] List error:', error);
             return reply.code(500).send({ success: false, error: error.message });
