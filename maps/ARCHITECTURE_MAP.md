@@ -57,7 +57,11 @@ BevyUI panel architecture:
   panel-specific branches. The BevyUI runtime retains one hydrated unscrolled
   source tree and derives both the clipped overlay and hit-test tree for each
   scroll frame, so deep scrolling cannot promote a viewport projection into
-  the next frame's source. Virtual Scene `clip` maps to renderer `clip_rect`;
+  the next frame's source. A refresh may name one internal `preserveNodeId`;
+  the scroll runtime captures that node's viewport Y before rebuilding and
+  compensates its nearest scroll owner afterward. Infos selection and the
+  single drag-preview rebuild use this anchor, while later drag motion remains
+  GPU-only and does not rebuild the panel. Virtual Scene `clip` maps to renderer `clip_rect`;
   the shared Bevy core crops visible sprite/UV/shadow geometry. The footer
   stays a fixed sibling and reuses the common system-surface background and
   backdrop while omitting its external shadow; it owns no DOM mask, renderer,
@@ -948,4 +952,7 @@ The shared scene is not a reason to rebuild static Dashboard records when a tool
   footer model resolves Tool Registry compatibility and owns `footer_tools`
   reload/commit. The preview index is derived and never persisted.
 - Atome copying remains `ui.duplicate → drag.end → Atome.commitBatch`; contextual
-  tool placement changes only the target Atome's ordered tool references.
+  tool placement changes only the target Atome's ordered tool references. A
+  successful duplicate batch performs one forced reload through the existing
+  `loadProjectAtomes` owner so newly durable `state_current` rows enter the
+  shared project scene immediately; no second creation or rendering path exists.

@@ -833,6 +833,10 @@ The perceptual contract is backed by presented WebGPU frames, not JS sampling al
   math, spacer projection, scroll-to-window intent and synchronous drag-session
   contract. Infos consumes it; Finder and future panel lists must reuse the same
   owner instead of copying lazy-load or drag state machines.
+- Selection, deselection and the first drag-preview rebuild preserve the
+  manipulated row as a visual anchor. Its screen position and panel geometry
+  remain fixed within 1 px; subsequent pointer motion updates only the GPU
+  preview transform and never rebuilds the panel.
 - Project checkboxes reuse the Contacts rail gesture: one press chooses select
   or deselect mode, crossed rows receive that same mode, and cancel restores
   the initial canonical selection. Row hold and the dedicated grip share the

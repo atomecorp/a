@@ -751,3 +751,41 @@ test('Realtime atome events route project-scene patches before stale state fetch
     }]);
     assert.equal(fallbackFetches, 0);
 });
+
+test('Realtime atome events project a newly committed set from its canonical event when state refresh lags', () => {
+    const previousWindow = globalThis.window;
+    const listeners = new Map();
+    const rendered = [];
+    try {
+        globalThis.window = { addEventListener: () => null };
+        const runtime = createRealtimeAtomeEventsRuntime({
+            eventBus: { on: (name, handler) => listeners.set(name, handler) },
+            applyRealtimeProps: () => false,
+            applyProjectSceneProps: () => false,
+            removeAtomeElement: () => null,
+            ensureAtomeRenderState: (record, options) => {
+                rendered.push({ record, options });
+                return Promise.resolve(null);
+            }
+        });
+        runtime.bindRealtimeAtomeEvents();
+        listeners.get('atome:changed')?.({
+            event: {
+                kind: 'set', atome_id: 'new_drop_atom', type: 'shape',
+                project_id: 'project_a', parent_id: 'project_a',
+                payload: { props: { left: '320px', top: '260px', color: '#aabbcc', type: 'shape' } }
+            },
+            state: null
+        });
+        assert.deepEqual(rendered, [{
+            record: {
+                id: 'new_drop_atom', atome_id: 'new_drop_atom', type: 'shape',
+                project_id: 'project_a', parent_id: 'project_a',
+                properties: { left: '320px', top: '260px', color: '#aabbcc', type: 'shape' }
+            },
+            options: { forceFetch: false }
+        }]);
+    } finally {
+        globalThis.window = previousWindow;
+    }
+});

@@ -1952,6 +1952,11 @@ The next execution tasks must refine this map by:
   scroll-driven 200-row virtual windows and list drag sessions. It emits window
   and drag intents only; each consumer remains owner of canonical reads and
   mutations.
+- `preserveNodeId` is an internal BevyUI refresh option only. It changes no MCP,
+  Runtime V2, `ui.duplicate`, Atome persistence, or public panel contract.
+- A successful internal duplicate operation reloads the current project through
+  the existing `eveToolBase.loadProjectAtomes` projection owner after the single
+  atomic commit; no renderer or mutation API is added.
 - Finder tool placement reuses the existing internal drag payload and the
   registered contextual-edit API. It accepts only canonical Tool Registry keys
   and persists the complete order through the existing `footer_tools` owner.

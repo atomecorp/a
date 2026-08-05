@@ -2030,6 +2030,13 @@ This section supersedes earlier Dashboard lifecycle descriptions in this map. `e
   selection. Closed lists retain data only and build no hierarchy subtree.
 - `bevy_panel_info_drag_runtime.js`: row/handle drag session, canvas/UI rejection
   and the existing typed `ui.duplicate` invocation.
+- `bevy_ui_{runtime,scroll_runtime}.js` and `bevy_panel_runtime.js`: internal
+  `preserveNodeId` capture/compensation across a tree refresh.
+- `tool_runtime_atome_mutation.js`: after the one duplicate `commitBatch`, reuse
+  `eveToolBase.loadProjectAtomes(projectId, { force: true })` to project the new
+  durable IDs into the existing shared scene. `realtime_atome_events_runtime.js`
+  can also construct the complete set record from the canonical event while a
+  state refresh is still pending.
 - `bevy_ui_pointer_runtime.js`: shared optional `long_press` ownership transfer;
   ordinary movement remains available to the scroll runtime before the hold.
 - `bevy_panel_finder_{runtime,view}.js`: tools-scope hold/drag/release/cancel and
@@ -2040,4 +2047,5 @@ This section supersedes earlier Dashboard lifecycle descriptions in this map. `e
   rail spacing. `atome_edit_footer_{runtime,model_runtime}.js` reloads and
   persists the established `footer_tools` list.
 - Persistent evidence: `bevy_panel_info_contract.test.mjs`, pointer/Contact/touch contracts
+  `bevy_ui_layout_contract.test.mjs`, `project_scene_gesture_performance.test.mjs`
   and the Vitest manifest guard.

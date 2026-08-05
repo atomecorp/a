@@ -478,6 +478,118 @@ test('Info drag transports the selected renderable atomes through ui.duplicate a
         await blockedRuntime.surface.handleEvent({ type: 'info.drag.move', event: { client_x: 40, client_y: 40 } });
         const blocked = await blockedRuntime.surface.handleEvent({ type: 'info.drag.end', event: { client_x: 300, client_y: 250 } });
         assert.equal(blocked.cancelled, true);
+
+        for (const scenario of [
+            { name: 'menu', point: { client_x: 300, client_y: 570 }, menuHeight: 50, mode: 'project' },
+            { name: 'outside', point: { client_x: 900, client_y: 250 }, menuHeight: 0, mode: 'project' },
+            { name: 'dashboard', point: { client_x: 300, client_y: 250 }, menuHeight: 0, mode: 'dashboard' }
+        ]) {
+            let rejectedInvocations = 0;
+            globalThis.window.__eveWorkspaceMode = { mode: scenario.mode };
+            const rejectedRuntime = createInfoPanelSurface({
+                readProjectId: () => 'project_a',
+                resolveProjectSurface: () => surface,
+                readMenuHeight: () => scenario.menuHeight,
+                resolveBevyRuntime: () => ({ hitTestAtClientPoint: () => null }),
+                invokeTool: async () => { rejectedInvocations += 1; return { ok: true }; },
+                events: { on: () => () => true }
+            });
+            rejectedRuntime.state.recordsById = new Map(records.map((record) => [record.atome_id, record]));
+            rejectedRuntime.state.selectedIds = ['child_a'];
+            await rejectedRuntime.surface.handleEvent({
+                type: 'info.drag.start', id: 'child_a', event: { client_x: 20, client_y: 20 }
+            });
+            await rejectedRuntime.surface.handleEvent({
+                type: 'info.drag.move', event: { client_x: 45, client_y: 45 }
+            });
+            const rejected = await rejectedRuntime.surface.handleEvent({
+                type: 'info.drag.end', event: scenario.point
+            });
+            assert.equal(rejected.cancelled, true, `${scenario.name} must reject the drop`);
+            assert.equal(rejectedInvocations, 0, `${scenario.name} must not reach ui.duplicate`);
+        }
+    } finally {
+        globalThis.window = previousWindow;
+    }
+});
+
+test('Info drop reaches the canonical duplicate mutation once and exposes the typed clones in state_current', async () => {
+    const previousWindow = globalThis.window;
+    const projectId = 'project_atomic_drop';
+    const sources = [
+        {
+            atome_id: 'drop_shape_a', type: 'shape', project_id: projectId, parent_id: projectId,
+            properties: { left: '40px', top: '70px', width: '32px', height: '24px', color: '#aabbcc' }
+        },
+        {
+            atome_id: 'drop_text_b', type: 'text', project_id: projectId, parent_id: projectId,
+            properties: { left: '90px', top: '110px', width: '80px', height: '22px', text: 'copy me' }
+        }
+    ];
+    const stateCurrent = new Map(sources.map((record) => [record.atome_id, structuredClone(record)]));
+    const commits = [];
+    const projectionRefreshes = [];
+    const appliedSelections = [];
+    const surface = {
+        getBoundingClientRect: () => ({ left: 0, top: 0, right: 800, bottom: 600, width: 800, height: 600 }),
+        scrollLeft: 0, scrollTop: 0
+    };
+    globalThis.window = {
+        __eveWorkspaceMode: { mode: 'project', projectId },
+        Atome: {
+            getStateCurrent: async (id) => stateCurrent.get(id) || null,
+            commitBatch: async (events, options) => {
+                commits.push({ events: structuredClone(events), options: structuredClone(options) });
+                events.forEach((event) => stateCurrent.set(event.atome_id, {
+                    atome_id: event.atome_id,
+                    type: event.type,
+                    project_id: event.project_id,
+                    parent_id: event.parent_id,
+                    properties: structuredClone(event.props)
+                }));
+                return { ok: true };
+            }
+        },
+        eveToolBase: {
+            loadProjectAtomes: async (id, options) => projectionRefreshes.push({ id, options })
+        }
+    };
+    try {
+        const runtime = createInfoPanelSurface({
+            readOne: async (id) => stateCurrent.get(id) || null,
+            readSelection: () => sources.map((record) => record.atome_id),
+            selectBatch: (ids, intent) => appliedSelections.push({ ids, intent }),
+            readProjectId: () => projectId,
+            resolveProjectSurface: () => surface,
+            readMenuHeight: () => 50,
+            resolveBevyRuntime: () => ({ hitTestAtClientPoint: () => null }),
+            invokeTool: ({ tool_id: toolId, input }) => {
+                assert.equal(toolId, 'ui.duplicate');
+                return executeBootstrapDuplicateOperation(input, { mergeStack: () => ({}) });
+            },
+            renderPreview: async () => ({ ok: true, preview_url: '' }),
+            events: { on: () => () => true }
+        });
+        runtime.state.pages.project.records = sources;
+        runtime.state.recordsById = new Map(sources.map((record) => [record.atome_id, record]));
+        runtime.state.selectedIds = sources.map((record) => record.atome_id);
+        await runtime.surface.handleEvent({
+            type: 'info.drag.start', id: 'drop_shape_a', event: { client_x: 20, client_y: 20 }
+        });
+        await runtime.surface.handleEvent({ type: 'info.drag.move', event: { client_x: 50, client_y: 50 } });
+        const result = await runtime.surface.handleEvent({
+            type: 'info.drag.end', event: { client_x: 320, client_y: 260 }
+        });
+        assert.equal(result.ok, true);
+        assert.equal(commits.length, 1, 'the complete drop owns exactly one atomic commit');
+        assert.equal(commits[0].events.length, 2);
+        assert.equal(new Set(commits[0].events.map((event) => event.tx_id)).size, 1);
+        assert.deepEqual(commits[0].events.map((event) => event.type), ['shape', 'text']);
+        assert.deepEqual(commits[0].events.map((event) => event.props.left), ['320px', '370px']);
+        assert.deepEqual(commits[0].events.map((event) => event.props.top), ['260px', '300px']);
+        assert.ok(result.duplicate_ids.every((id) => stateCurrent.has(id)));
+        assert.deepEqual(appliedSelections, [{ ids: result.duplicate_ids, intent: 'replace' }]);
+        assert.deepEqual(projectionRefreshes, [{ id: projectId, options: { force: true } }]);
     } finally {
         globalThis.window = previousWindow;
     }
@@ -593,6 +705,53 @@ test('Info project checkbox rail applies one continuous mode and cancel restores
 
     nodes = runtime.surface.buildContent(runtime.surface.readState(), { emit: () => {}, bodyWidth: 430 });
     assert.ok(find(nodes, 'info_project_hierarchy_entry_1_checkbox'));
+});
+
+test('Info selection and drag refreshes preserve the manipulated project row as the viewport anchor', async () => {
+    let selected = [];
+    const refreshOptions = [];
+    const runtime = createInfoPanelSurface({
+        readAll: async () => records,
+        readOne: async (id) => records.find((record) => record.atome_id === id) || null,
+        readSelection: () => selected,
+        selectAtome: (id, intent) => {
+            selected = intent === 'replace' ? [id] : selected.includes(id)
+                ? selected.filter((entry) => entry !== id)
+                : [...selected, id];
+            return id;
+        },
+        readProjectId: () => 'project_a',
+        renderPreview: async () => ({ ok: true, preview_url: '' }),
+        events: { on: () => () => true }
+    });
+    runtime.state.pages.project.records = records;
+    runtime.state.pages.project.loaded = true;
+    runtime.state.expanded.add('project');
+    runtime.state.hierarchyExpanded.add('project_a');
+    runtime.surface.buildContent(runtime.surface.readState(), {
+        emit: () => {}, bodyWidth: 430
+    });
+    const refresh = (options) => { refreshOptions.push(options || null); };
+    await runtime.surface.handleEvent({
+        type: 'info.selection.press', id: 'parent_a',
+        event: { node_id: 'info_project_hierarchy_entry_1_checkbox', y: 2 }
+    }, { refresh });
+    await Promise.resolve();
+    assert.ok(refreshOptions.length > 0);
+    assert.ok(refreshOptions.every((options) => (
+        options?.preserveNodeId === 'info_project_hierarchy_entry_1_checkbox'
+    )));
+
+    refreshOptions.length = 0;
+    await runtime.surface.handleEvent({
+        type: 'info.drag.start', id: 'parent_a',
+        event: { node_id: 'info_project_hierarchy_entry_1_drag', client_x: 20, client_y: 20 }
+    }, { refresh });
+    await Promise.resolve();
+    assert.ok(refreshOptions.length > 0);
+    assert.ok(refreshOptions.every((options) => (
+        options?.preserveNodeId === 'info_project_hierarchy_entry_1_drag'
+    )));
 });
 
 test('Info clears a failed page, localizes account provisioning, then clears the page error on success', async () => {
