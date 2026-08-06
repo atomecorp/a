@@ -16,7 +16,7 @@ import {
     waitForAuthCheck
 } from './session.js';
 import { adapters, normalizePhone, getPrimaryBackend, getSecondaryBackend, hasToken, hasAuthenticatedToken } from './auth_core.js';
-import { meBackend, ensureBackendAvailability } from './auth_backends.js';
+import { loginBackend, meBackend, ensureBackendAvailability } from './auth_backends.js';
 import { loadFastifyLoginCache, ensureFastifyToken, markFastifyAuthValid } from './auth_fastify_token.js';
 import { transferGuestWorkspace } from './auth_workspace.js';
 import { requireAuth, normalizeSessionUser } from './auth_state.js';
