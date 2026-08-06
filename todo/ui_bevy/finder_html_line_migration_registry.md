@@ -16,10 +16,12 @@ Two dispositions in this ledger deserve their headline up front:
   row with `display:none`, `height:0` and `overflow:hidden`. Its input was never
   reachable: it only carried `finderState.query`, written from outside by
   `quickSearchFinder` and `setScope`. The Bevy panel composes no search field.
-- **The `place` scope and `map.js` are deleted with the route.** The Leaflet /
-  OpenStreetMap / Nominatim map stays blocked by its provider, privacy, cost and
-  cross-platform contract, and Finder may not keep a parallel HTML route. The map
-  returns later as its own feature package.
+- **The `place` scope is kept; Leaflet is replaced, not ported.** An earlier
+  revision of this ledger recorded the scope as deleted. That was a product
+  decision taken mid-migration and it removed a feature, so it has been
+  reversed. The map is now drawn natively in the canvas — tiles as Bevy image
+  nodes, Nominatim geocoding unchanged — and only the Leaflet plumbing, which
+  cannot exist without a DOM, is deleted. See `finder_place_map_package.md`.
 
 Two legacy modules are **not deleted** at retirement: `finder_record_model.js`
 and `finder_record_projection.js` are already renderer-neutral and are consumed
@@ -34,8 +36,8 @@ single DOM-bound helper inside them is retired.
 | 41–66 | M | The `createEveDialog` shell becomes `finderSurface` on `bevy_panel_runtime`; close routes through the shared footer and the same `state.off` gateway call. |
 | 67–120 | M | The scope toggle-button factory becomes the validated shared scope chips. |
 | 121–165 | **D** | The permanently hidden search row, its `search.svg` icon, its `createEveInput` and its unreachable `onInput` handler are removed. The query/name mirroring it contained already exists in `quickSearchFinder` and `setScope`. |
-| 166–214 | M | The scope row becomes `scopeChipGroupNode`; `place` is dropped with the map. |
-| 215–222 | D | The `place` idle status text is removed with the scope. |
+| 166–214 | M | The scope row becomes `scopeChipGroupNode`, with all four scopes: Atome, Outils, People, Lieu. |
+| 215–222 | M | The `place` idle prompt becomes the map's own status line (`placeStatusLabel`), which also reports searching, empty and failed states. |
 | 223–276 | M | The results section/status/list containers become the Bevy results column and the localized `N results` status. |
 | 277–287 | M | The five header labels become the shared sortable header's scope-driven column set. |
 | 288–324 | M/R | Header pointer handlers and the 420 ms type long press become closed sortable-header intents routed by `bevy_panel_finder_runtime`. |
@@ -44,9 +46,28 @@ single DOM-bound helper inside them is retired.
 
 ## `eVe/intuition/tools/map.js` — 341 lines
 
+**Corrected on 2026-08-05.** This file was previously recorded as deleted with
+nothing migrated, on the grounds that the `place` scope was leaving. That was a
+product decision taken during a migration, and it removed a feature. The scope
+is back and the map is drawn natively in the canvas; see
+`finder_place_map_package.md` for the ordering rule this mistake produced.
+
+Leaflet itself is not ported — it builds DOM elements that cannot exist in a
+WebGPU canvas — so the rows below distinguish the *behaviour*, which migrates,
+from the *Leaflet plumbing*, which has no meaning without a DOM.
+
 | Lines | Disposition | Bevy/canonical destination |
 |---:|:---:|---|
-| 1–341 | **D** | The entire Leaflet map, OpenStreetMap tile layer, Nominatim geocoding, attribution guard, resize observers and `window.__eveMap` bridge are deleted with the `place` scope. Nothing is migrated: the map has no approved provider, privacy, cost or cross-platform contract, and it hijacked the Finder results list and status nodes. It returns only as its own feature package. |
+| 1–30 | R | Imports and the Nominatim/tile constants move to `bevy_panel_map.js`; the tile URL now lives behind a single swappable template. |
+| 31–60 | M/D | Mutable map state becomes the disposable state of `bevy_panel_finder_place_runtime`; the DOM element handles disappear. |
+| 61–110 | **D** | Attribution-link navigation blocking, `setPrefix`, and the Leaflet control plumbing are meaningless without DOM. The attribution itself is **kept** and composed as a canvas node, as the tile policy requires. |
+| 111–150 | **D** | `invalidateSize`, resize observers and animation-frame resize refresh are replaced by the panel's own layout pass. |
+| 151–168 | M | `ensureMap` and the tile layer become `normalizeMapPresentation` plus the tile image nodes. |
+| 169–192 | M | `setActiveResult` / `focusResult` become the `finder.place.result.activate` intent, re-centring at the focus zoom and moving the marker. |
+| 193–212 | M | `renderResults` becomes `buildPlaceResultNodes`; the DOM row list disappears. |
+| 213–243 | M | `runSearch` keeps the same Nominatim call and result limit, now debounced to respect the provider's rate policy. |
+| 244–290 | M/D | Mount/unmount become the panel's scope switch; the hijacking of the Finder results list and status nodes is deleted — the map is composed in its own section. |
+| 291–341 | M/R | `resetMapState` becomes the place runtime's `reset`, which also drops the pending geocode timer; the `window.__eveMap` bridge is retired, since the panel routes intents directly. |
 
 ## `eVe/intuition/tools/finder_state.js` — 98 lines
 
@@ -54,7 +75,7 @@ single DOM-bound helper inside them is retired.
 |---:|:---:|---|
 | 1–15 | R | Module header and long-press constants move to the `sortableHeader` token group and the shared gesture owner. |
 | 16–25 | M | `CONDITIONS` becomes the localized `conditionOptions()` in `bevy_panel_finder_runtime`. |
-| 26–32 | M/D | `SCOPE_OPTIONS` becomes `scopeOptions()`; the `place` entry is deleted. |
+| 26–32 | M | `SCOPE_OPTIONS` becomes `scopeOptions()`; the `place` entry is kept and its French label corrected to `Lieu`. |
 | 33–39 | M | `ORDER_COLUMNS` is superseded by `columnsForScope()` in `bevy_panel_finder_model`. |
 | 40–72 | M/D | The mutable `finderState` becomes the runtime's disposable state; DOM timers, in-flight flags and the tools divergence signatures are dropped. |
 | 73–93 | **D** | The `finderEls` DOM handle registry has no Bevy equivalent. |
@@ -170,7 +191,7 @@ contract rather than by restoring these tags.
 | File | Lines | Migrated/Replaced | Deleted | Retained |
 |---|---:|---:|---:|---:|
 | `finder.js` | 347 | 302 | 45 | 0 |
-| `map.js` | 341 | 0 | 341 | 0 |
+| `map.js` | 341 | 251 | 90 | 0 |
 | `finder_state.js` | 98 | 77 | 21 | 0 |
 | `finder_view.js` | 384 | 350 | 34 | 0 |
 | `finder_controller.js` | 241 | 241 | 0 | 0 |
@@ -180,7 +201,7 @@ contract rather than by restoring these tags.
 | `finder_data_sources.js` | 196 | 0 | 0 | 196 |
 | `finder_record_model.js` | 344 | 0 | 0 | 344 |
 | `finder_record_projection.js` | 385 | 0 | 20 | 365 |
-| **Total** | **3,035** | **1,669** | **461** | **905** |
+| **Total** | **3,035** | **1,920** | **210** | **905** |
 
 Every range above is contiguous and non-overlapping, and the per-file totals sum
 to the historical line count of each file. A persistent contract enforces this
@@ -190,7 +211,8 @@ partition so no retired line can silently return.
 
 No file in this ledger may be deleted until the Finder panel has explicit
 product-owner approval on the real canvas. At that point the deletions are
-`finder.js`'s legacy body, `map.js`, `finder_state.js`, `finder_view.js`,
+`finder.js`'s legacy body, `map.js` (its behaviour now living in the Bevy map
+package), `finder_state.js`, `finder_view.js`,
 `finder_controller.js`, `finder_refresh.js`, `finder_filters.js`,
 `finder_row.js`, and `setSelectOptions` inside `finder_record_projection.js`,
 plus their imports, styles, listeners and obsolete tests. `finder_data_sources.js`,

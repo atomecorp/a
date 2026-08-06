@@ -49,6 +49,7 @@ Source principale:
 
 - todo/ui_bevy/bevy_panel_migration_guide.md
 - todo/ui_bevy/finder_html_line_migration_registry.md
+- todo/ui_bevy/finder_place_map_package.md
 
 Dependances et ordre:
 

@@ -21,8 +21,12 @@ layer. Home, Calendar, Contact, and Timeline currently route through BevyUI; tha
 route is not evidence that their product-panel migration is complete. The
 Timeline product panel is intentionally the final migration in this programme.
 The Finder map is a Finder feature, not an
-extra panel surface, and remains blocked until its provider, privacy, cost, and
-cross-platform contract are approved. Molecule / MTraX capabilities are also
+extra panel surface: it ships **with** the Finder panel, drawn natively in the
+canvas, and its provider stays swappable behind one constant — see
+`finder_place_map_package.md`. It was briefly recorded here as blocked, and that
+turned a hard-to-port piece into a removed feature; the ordering rule that
+mistake produced is in that package document and is binding on every panel.
+Molecule / MTraX capabilities are also
 reviewed only with their owning product migration, never inferred as generic
 Panel work.
 
