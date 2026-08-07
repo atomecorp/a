@@ -12,10 +12,34 @@ import { getABoxEventBus } from './aBoxServer.js';
 import { checkPermission, PERMISSION } from './sharing.js';
 import { FILE_ATOME_TYPES, resolveFileAtomeType, fileTypeWhere } from './file_types.js';
 
+// `owner_id` carries a foreign key onto `atomes(atome_id)`. Callers used to pass
+// the sentinel string `'anonymous'`, which has no atome behind it, so every
+// registration died on `FOREIGN KEY constraint failed` — surfacing as a 500 on
+// the wallpaper route and as a repeating watcher error. The owner is now checked
+// before any write, and an unowned file is refused with a cause the caller can
+// act on instead of a constraint violation. No shadow account is created here:
+// provisioning stays explicit, per the guest provisioning contract.
+async function resolveOwnerPrincipal(userId) {
+    const id = String(userId || '').trim();
+    if (!id || id === 'anonymous') {
+        return { ok: false, error: 'upload_identity_required' };
+    }
+    const rows = await db.query('all', 'SELECT atome_id FROM atomes WHERE atome_id = ? LIMIT 1', [id]);
+    const found = Array.isArray(rows) ? rows[0] : rows;
+    if (!found) return { ok: false, error: 'remote_account_not_provisioned' };
+    return { ok: true, ownerId: id };
+}
+
 export async function registerFileUpload(fileName, userId, options = {}) {
     const now = new Date().toISOString();
     const atomeId = options.atome_id || options.atomeId || `file-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const atomeType = resolveFileAtomeType(fileName, options);
+
+    const owner = await resolveOwnerPrincipal(userId);
+    if (!owner.ok) {
+        console.warn(`Skipping file registration for "${fileName}": ${owner.error}`);
+        return { success: false, error: owner.error };
+    }
 
     try {
         // Create atome for the file

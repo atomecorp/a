@@ -45,6 +45,24 @@ const isPhoneMatch = (user, expectedPhone) => {
     return actual === expected;
 };
 
+// Why the session was refused, not merely that it was. A backend that states no
+// phone at all is a backend defect; a backend that states a different one is the
+// security signal this guard exists for. Reporting both as `phone_mismatch` is
+// what kept an iOS-only omission hidden behind a plausible-looking rejection.
+const PHONE_CLAIM_FAULTS = {
+    requestMissing: 'phone_request_missing',
+    backendMissing: 'backend_user_phone_missing',
+    mismatch: 'phone_mismatch'
+};
+
+const classifyPhoneClaim = (user, expectedPhone) => {
+    const expected = normalizePhoneForCompare(expectedPhone);
+    if (!expected) return PHONE_CLAIM_FAULTS.requestMissing;
+    const actual = normalizePhoneForCompare(user?.phone || '');
+    if (!actual) return PHONE_CLAIM_FAULTS.backendMissing;
+    return actual === expected ? null : PHONE_CLAIM_FAULTS.mismatch;
+};
+
 const extractUser = (result) => {
     return result?.user
         || result?.data?.user
@@ -61,9 +79,13 @@ const extractToken = (result) => {
         || null;
 };
 
+// The iOS backend spells this `already_exists`, like it spells `request_id`;
+// reading only the camel form meant the client silently missed the fact.
 const extractAlreadyExists = (result) => !!(
     result?.alreadyExists
+    || result?.already_exists
     || result?.data?.alreadyExists
+    || result?.data?.already_exists
     || result?.data?.data?.alreadyExists
     || result?.result?.alreadyExists
 );
@@ -88,6 +110,7 @@ const hasAuthenticatedToken = (backend, result) => !!result?.token || hasToken(b
 
 export {
   adapters, normalizePhone, normalizeUsername, maskPhoneForLog, summarizeBackendAttempt,
-  normalizePhoneForCompare, isPhoneMatch, extractUser, extractToken, extractAlreadyExists,
+  normalizePhoneForCompare, isPhoneMatch, classifyPhoneClaim, PHONE_CLAIM_FAULTS,
+  extractUser, extractToken, extractAlreadyExists,
   normalizeUser, normalizeBackend, getPrimaryBackend, getSecondaryBackend, hasToken, hasAuthenticatedToken
 };

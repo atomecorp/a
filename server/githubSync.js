@@ -8,7 +8,11 @@
 
 import path from 'path';
 import fs from 'fs/promises';
+import { execFile } from 'child_process';
+import { promisify } from 'util';
 import { fileURLToPath } from 'url';
+
+const execFileAsync = promisify(execFile);
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -23,8 +27,30 @@ const CONFIG = {
     },
     rateLimitBackoffMs: Math.max(60000, Number(process.env.GITHUB_RATE_LIMIT_BACKOFF_MS || 900000)),
     pollIntervalMs: 60000, // 1 minute
-    versionFilePath: path.join(PROJECT_ROOT, 'src', 'version.json')
+    // The file lives under `atome/src`, not `src`. The wrong path made every
+    // read fail with ENOENT and broadcast a `0.0.0` version to every client.
+    versionFilePath: path.join(PROJECT_ROOT, 'atome', 'src', 'version.json')
 };
+
+// A sync overwrites `atome/src/**` in place. On a working copy with uncommitted
+// changes that silently destroys them, so the sync refuses to run rather than
+// clobber. Returns the dirty paths, or an empty list when the tree is clean.
+async function readDirtyWorkingTree() {
+    try {
+        const { stdout } = await execFileAsync('git', ['status', '--porcelain', '--', 'atome/src'], {
+            cwd: PROJECT_ROOT,
+            timeout: 10000
+        });
+        return String(stdout || '')
+            .split('\n')
+            .map((line) => line.trim())
+            .filter(Boolean);
+    } catch (error) {
+        // Not a git checkout, or git unavailable: treat as unknown rather than
+        // clean, because guessing "clean" is what loses work.
+        return [`__git_unavailable__:${error?.message || 'unknown'}`];
+    }
+}
 
 // State
 let lastCommitSha = null;
@@ -127,6 +153,17 @@ async function getLocalVersion() {
 async function performSync() {
     if (syncInProgress) {
         console.log('⏳ Sync already in progress, skipping...');
+        return false;
+    }
+
+    const dirty = await readDirtyWorkingTree();
+    if (dirty.length) {
+        console.warn(
+            `⛔ Auto-sync refused: ${dirty.length} uncommitted change(s) under atome/src.\n`
+            + `   Overwriting them would destroy work. Commit or stash first, `
+            + `or run with GITHUB_AUTO_SYNC=false.\n`
+            + dirty.slice(0, 10).map((entry) => `   - ${entry}`).join('\n')
+        );
         return false;
     }
 

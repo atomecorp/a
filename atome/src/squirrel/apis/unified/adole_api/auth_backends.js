@@ -1,6 +1,6 @@
 // Extracted from auth.js: per-backend operations (login/register/bootstrap/me) + anonymous creds + availability.
 import { checkBackends } from '../adole.js';
-import { adapters, extractUser, extractToken, extractAlreadyExists, normalizeUser, isPhoneMatch } from './auth_core.js';
+import { adapters, extractUser, extractToken, extractAlreadyExists, normalizeUser, classifyPhoneClaim } from './auth_core.js';
 
 const loginBackend = async (backend, { phone, password }) => {
     const adapter = adapters[backend];
@@ -19,11 +19,12 @@ const loginBackend = async (backend, { phone, password }) => {
         ok = false;
         error = 'missing_user';
     }
-    if (ok && !isPhoneMatch(user, phone)) {
+    const phoneFault = ok ? classifyPhoneClaim(user, phone) : null;
+    if (phoneFault) {
         ok = false;
         user = null;
         adapter?.clearToken?.();
-        error = 'phone_mismatch';
+        error = phoneFault;
     }
     return {
         ok,
@@ -54,11 +55,12 @@ const registerBackend = async (backend, { phone, password, username, visibility 
         ok = false;
         error = 'missing_user';
     }
-    if (ok && !isPhoneMatch(user, phone)) {
+    const phoneFault = ok ? classifyPhoneClaim(user, phone) : null;
+    if (phoneFault) {
         ok = false;
         user = null;
         adapter?.clearToken?.();
-        error = 'phone_mismatch';
+        error = phoneFault;
     }
     return {
         ok,
@@ -86,11 +88,12 @@ const bootstrapBackend = async (backend, { phone, password, username, visibility
         ok = false;
         error = 'missing_user';
     }
-    if (ok && !isPhoneMatch(user, phone)) {
+    const phoneFault = ok ? classifyPhoneClaim(user, phone) : null;
+    if (phoneFault) {
         ok = false;
         user = null;
         adapter?.clearToken?.();
-        error = 'phone_mismatch';
+        error = phoneFault;
     }
     return {
         ok,

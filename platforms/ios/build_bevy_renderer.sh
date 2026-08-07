@@ -47,7 +47,11 @@ echo "[IOS_BEVY_BUILD] rustflags=$RUSTFLAGS"
 mkdir -p "$TARGET_TEMP_DIR"
 rm -f "$TARGET_TEMP_DIR/libatome_ios_bevy_renderer.a"
 
-BUILT_LIBS=
+# Collect the built libraries as positional parameters rather than a
+# space-joined string: a string is word-split again on the way out, so a single
+# path containing a space (a DerivedData directory under "Application Support",
+# say) reached lipo as several nonexistent files.
+set --
 for ARCH in ${ARCHS:-arm64}; do
   case "${SDK_NAME:-}" in
     iphoneos*)
@@ -78,10 +82,9 @@ for ARCH in ${ARCHS:-arm64}; do
     echo "[IOS_BEVY_BUILD] fatal cargo succeeded but staticlib is missing: $BUILT_LIB" >&2
     exit 1
   fi
-  BUILT_LIBS="$BUILT_LIBS $BUILT_LIB"
+  set -- "$@" "$BUILT_LIB"
 done
 
-set -- $BUILT_LIBS
 if [ "$#" -eq 0 ]; then
   echo "[IOS_BEVY_BUILD] fatal no Rust staticlib was built for sdk=${SDK_NAME:-unknown} archs=${ARCHS:-arm64}" >&2
   exit 1

@@ -2011,13 +2011,13 @@ enum AiSRuntime {
         if username.count < 2 {
             return authResponse(requestId: requestId, success: false, error: "Username must be at least 2 characters")
         }
-        return try registerUser(message, db: db, requestId: requestId, username: username)
+        return try registerUser(message, db: db, requestId: requestId, username: username, isBootstrap: false)
     }
 
     private static func handleBootstrap(_ message: [String: Any], db: OpaquePointer?, requestId: String?) throws -> [String: Any] {
         let username = stringValue(message["username"]).trimmingCharacters(in: .whitespacesAndNewlines)
         let resolvedUsername = username.count >= 2 ? username : "user"
-        return try registerUser(message, db: db, requestId: requestId, username: resolvedUsername)
+        return try registerUser(message, db: db, requestId: requestId, username: resolvedUsername, isBootstrap: true)
     }
 
     private static func handleStartGuest(_ message: [String: Any], db: OpaquePointer?, requestId: String?) throws -> [String: Any] {
@@ -2037,7 +2037,7 @@ enum AiSRuntime {
         )
     }
 
-    private static func registerUser(_ message: [String: Any], db: OpaquePointer?, requestId: String?, username: String) throws -> [String: Any] {
+    private static func registerUser(_ message: [String: Any], db: OpaquePointer?, requestId: String?, username: String, isBootstrap: Bool) throws -> [String: Any] {
         let phone = normalizePhone(stringValue(message["phone"]))
         if phone.count < 6 {
             return authResponse(requestId: requestId, success: false, error: "Phone must be at least 6 characters")
@@ -2052,21 +2052,24 @@ enum AiSRuntime {
         let now = isoNow()
         let passwordHash = hashPassword(password)
 
+        // An account already holds this number. Fastify and the Tauri backend
+        // both verify the password before handing back a token, and both refuse
+        // a deleted account outright. This one used to skip the check entirely:
+        // knowing the number was enough to obtain a session on somebody else's
+        // account, and a soft-deleted account was revived with whatever
+        // password the caller supplied.
         if let existing = try findUserRecordByPhone(db, phone) {
-            if existing.deletedAt != nil {
-                try execute(db, """
-                    UPDATE atomes
-                    SET atome_type = 'user', deleted_at = NULL, updated_at = ?, sync_status = 'local'
-                    WHERE atome_id = ?
-                    """, [.text(now), .text(existing.userId)])
-                try upsertRequiredUserParticles(db, atomeId: existing.userId, username: username, phone: phone, passwordHash: passwordHash, visibility: visibility, now: now)
-                try assignVerifiedPhone(db, principalId: existing.userId, phone: phone, now: now)
-                try upsertOptionalParticles(db, atomeId: existing.userId, values: optional, changedBy: existing.userId, now: now)
-                try upsertStateCurrent(db, atomeId: existing.userId, ownerId: existing.userId, properties: try loadParticles(db, atomeId: existing.userId), now: now)
-                let user = try loadUserInfo(db, userId: existing.userId)
-                let token = try createToken(userId: existing.userId, username: user["username"] as? String ?? username)
-                return authResponse(requestId: requestId, success: true, user: user, token: token)
+            if !isBootstrap {
+                return authResponse(requestId: requestId, success: false, error: "Invalid credentials", alreadyExists: true)
             }
+            if existing.deletedAt != nil {
+                return authResponse(requestId: requestId, success: false, error: "Invalid credentials")
+            }
+            let storedHash = try loadParticleString(db, atomeId: existing.userId, key: "password_hash") ?? ""
+            if !verifyPassword(password, storedHash: storedHash) {
+                return authResponse(requestId: requestId, success: false, error: "Invalid credentials")
+            }
+            try execute(db, "UPDATE atomes SET updated_at = ? WHERE atome_id = ?", [.text(now), .text(existing.userId)])
             let user = try loadUserInfo(db, userId: existing.userId)
             let token = try createToken(userId: existing.userId, username: user["username"] as? String ?? username)
             return authResponse(requestId: requestId, success: true, user: user, token: token, alreadyExists: true)
@@ -2648,12 +2651,20 @@ enum AiSRuntime {
         let username = try loadParticleString(db, atomeId: userId, key: "username") ?? ""
         let rows = try query(db, "SELECT created_at FROM atomes WHERE atome_id = ? LIMIT 1", [.text(userId)])
         let createdAt = rowString(rows.first, "created_at") ?? isoNow()
-        return [
+        var info: [String: Any] = [
             "user_id": userId,
             "id": userId,
             "username": username,
             "created_at": createdAt
         ]
+        // The client refuses a session whose user carries no phone: it cannot
+        // tell that account apart from somebody else's. Fastify and the Tauri
+        // backend both state it; omitting it here made every real sign-in on
+        // iOS fail as `phone_mismatch`, leaving only the guest session usable.
+        if let phone = try readVerifiedPhone(db, principalId: userId), !phone.isEmpty {
+            info["phone"] = phone
+        }
+        return info
     }
 
     private static func findUserRecordByPhone(_ db: OpaquePointer?, _ phone: String) throws -> UserRecord? {

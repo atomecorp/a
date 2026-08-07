@@ -1072,7 +1072,11 @@ async function startServer() {
           });
           if (!registration?.success) {
             await fs.rm(resolved.filePath, { force: true });
-            reply.code(500);
+            // A missing or unprovisioned identity is the caller's situation, not
+            // a server fault: it answered 500 and told nobody what to do.
+            const identityFault = registration?.error === 'upload_identity_required'
+              || registration?.error === 'remote_account_not_provisioned';
+            reply.code(identityFault ? 401 : 500);
             return { success: false, error: registration?.error || 'file_registration_failed' };
           }
         }
@@ -4555,9 +4559,14 @@ async function startServer() {
     // 4. DÉMARRAGE
     // ===========================
 
-    // Start GitHub polling for auto-sync
-    if (process.env.GITHUB_AUTO_SYNC !== 'false') {
+    // Auto-sync rewrites `atome/src/**` from a GitHub ZIP. That is a deployment
+    // action, not a development one: enabled by default it silently overwrites
+    // whatever the developer is working on. It is now opt-in, and refuses to run
+    // on a dirty tree even when enabled.
+    if (String(process.env.GITHUB_AUTO_SYNC || '').toLowerCase() === 'true') {
       startGitHubPolling();
+    } else {
+      console.log('⏸️  GitHub auto-sync disabled (set GITHUB_AUTO_SYNC=true to enable)');
     }
 
     await server.listen({
