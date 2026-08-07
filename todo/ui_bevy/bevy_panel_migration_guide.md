@@ -17,9 +17,11 @@ both documents are updated first.
 The canonical panel registry has 16 entries, and all 16 are in scope for final
 product-panel migration: home, contact, info, finder, communicate, delete,
 undo, paste, timeline, calendar, background, couleur, size, font, detail, and
-layer. Home, Calendar, Contact, and Timeline currently route through BevyUI; that
-route is not evidence that their product-panel migration is complete. The
-Timeline product panel is intentionally the final migration in this programme.
+layer. Five are `validated` as of 2026-08-07 — contact, home, calendar, info,
+and finder — leaving **11 to migrate**. Timeline also routes through BevyUI
+already; that route is not evidence that its product-panel migration is
+complete, and the Timeline product panel is intentionally the final migration
+in this programme.
 The Finder map is a Finder feature, not an
 extra panel surface: it ships **with** the Finder panel, drawn natively in the
 canvas, and its provider stays swappable behind one constant — see
@@ -877,9 +879,9 @@ and approval.
 Family 17 re-entered the baseline as the Infos-owned selection summary and is no
 longer excluded. Packages 8 and 9 — Size, Font, and Layer — add **no new
 component family**: their matrix rows are fully covered by the validated
-generic baseline plus the Infos-owned Families 12, 17, and 30. This is why they
-are the two workstreams that can run now without creating shared-component
-contention.
+generic baseline plus the Infos-owned Families 12, 17, and 30, all `validated`
+since the Infos approval of 2026-08-07. This is why they are the two
+workstreams that run now without any shared-component contention.
 
 Already validated generic components (not included in the 36): text,
 separator, icon action button, single-line input, passive list row, accordion,
@@ -892,10 +894,12 @@ existing infrastructure, not product component families.
 The following eleven packages replace Family-by-Family delivery as the active
 task order. Family records below remain the evidence ledger for their canonical
 owner, focused tests, and real-canvas behavior; they are not separate
-product-owner approval gates. Packages 8 and 11 are the two concurrent
-product-panel workstreams defined by *Parallel product-panel workstreams*;
-Package 9 is queued behind them and Package 10 is a shared component package
-that occupies no slot.
+product-owner approval gates. Since 2026-08-07, Packages 1 to 7 and 10 to 11
+are `validated`, and **Packages 8 and 9 are the two concurrent product-panel
+workstreams** defined by *Parallel product-panel workstreams*. They are the
+only packages left in this list. Beyond Size, Font, and Layer, **eight
+registered panels still have no package written**: `background`, `couleur`,
+`detail`, `communicate`, `delete`, `undo`, `paste`, and `timeline`.
 
 ##### Package 1 — Shared controls
 
@@ -1090,11 +1094,19 @@ product-owner approval was recorded on 2026-08-04.
 
 ##### Package 7 — Infos inspection and editing
 
-Status: `in_review`; implementation, focused contracts, and the available
-real-canvas empty/error interaction pass. Record-backed canvas review and
-explicit product-owner acceptance remain required. Workstream state:
-`acceptance_pending` — its slot is released, so Packages 8 and 9 may start.
+Status: `validated` — explicit product-owner approval recorded on 2026-08-07,
+after the 2026-08-05 panel improvements. Implementation, focused contracts,
+real-canvas evidence, the 3,033-line retirement ledger, and the MCP command
+ledger are complete. Workstream state: `validated` — Infos leaves the slot
+model, and Families 12, 17, 29, and 30 are unfrozen for their consumers.
 
+- Approval consequence: Families 12, 17, and 30 stop being frozen, so the
+  cross-dependency that prevented Size, Font, and Layer from reaching
+  `validated` is lifted. The HTML retirement needs no further action — the
+  eight legacy modules and `info_panel_sync_runtime.js` were already removed
+  when the panel landed, and `tools/infos.js` is now a 23-line bridge. Verified
+  on 2026-08-07: none of `infos_state.js`, `infos_model_a/b/c.js`,
+  `infos_render_a/b/c.js`, or `info_panel_sync_runtime.js` exists on disk.
 - Authoritative order decision: the product owner selected Infos on 2026-08-04.
   Since the two-slot rule of 2026-08-04, Infos no longer holds a slot and does
   not block the next panels. Timeline remains final.
@@ -1128,8 +1140,12 @@ explicit product-owner acceptance remain required. Workstream state:
   project-context flower, expands the project hierarchy accordion, and closes
   it through the shared footer. The audit records one canvas, zero native
   controls, zero legacy Infos roots, and no warning/error console entry. The
-  current account returns a remote-provisioning error, so record-backed preview
-  and property-edit interaction remain the smallest technical acceptance gap.
+  test account returned a remote-provisioning error, so record-backed preview
+  and property-edit interaction were never exercised in the integrated browser.
+  The product owner reviewed the panel on a real account and approved it on
+  2026-08-07; that acceptance closes this gap by direct product inspection, not
+  by an automated capture. The distinction is recorded so no later reader
+  mistakes it for browser-captured evidence.
 
 Infos coverage ledger:
 
@@ -1138,10 +1154,10 @@ Infos coverage ledger:
 | 1 | `validated` shared panel shell/footer/scroll/drag/resize route. |
 | 3 | `validated` hidden single-line input; Infos uses one lifecycle-owned editor session. |
 | 4 | `validated` list-row/selectable-list paint and pointer contract. |
-| 12 | `implemented` hierarchical depth, vector chevron, expand/collapse, and canonical row selection in the shared selectable-list owner. |
-| 17 | `implemented` selection summary reused with fluid panel-owner width. |
-| 29 | `implemented` selected-Atome detail preview through the existing unified WebGPU compositor. |
-| 30 | `implemented` detail composition: immutable table, typed existing-property text/number/switch editors, passive complex values. |
+| 12 | `validated` 2026-08-07 with the panel: hierarchical depth, vector chevron, expand/collapse, and canonical row selection in the shared selectable-list owner. |
+| 17 | `validated` 2026-08-07 with the panel: selection summary reused with fluid panel-owner width. |
+| 29 | `validated` 2026-08-07 with the panel: selected-Atome detail preview through the existing unified WebGPU compositor. |
+| 30 | `validated` 2026-08-07 with the panel: detail composition — immutable table, typed existing-property text/number/switch editors, passive complex values. |
 
 Infos MCP command ledger:
 
@@ -1159,7 +1175,8 @@ No effectful Infos function is unreviewed or `blocked`.
 
 ##### Package 8 — Size then Font (workstream slot A)
 
-Status: `planned`
+Status: `active` since 2026-08-07 — slot A, unstarted. It is the next package
+to implement together with Package 9.
 
 - Scope: the routed `size` panel first, then the routed `font` panel, in one
   workstream. They are sequential inside slot A, never parallel: both consume
@@ -1190,8 +1207,13 @@ Status: `planned`
   (`invokeToolGateway` plus `updateAtomeProperties` /
   `applySelectionStyleMutation` in `selection_style_atome.js`) for the apply
   intents. No panel-local handler or second command path may be introduced.
-- Cross-dependency: Family 17 is frozen under Infos, so neither Size nor Font
-  may become `validated` before Infos is validated.
+- Cross-dependency: **none since 2026-08-07.** Family 17 was frozen under Infos;
+  the Infos approval unfroze it, so Size and Font can reach `validated` on their
+  own evidence.
+- Scope freeze before composition: write down the complete surface of each panel
+  first — every unit, preset, and mode of `size.js`, every family, weight, and
+  style control of `font.js` — and plan anything hard to port rather than
+  dropping it. This is the binding rule from `finder_place_map_package.md`.
 - Exit criterion: each panel opens on the shared canvas through its real tool,
   applies to the current selection through its canonical command, has focused
   contracts and a gap-free retirement ledger, has an explicit product-owner
@@ -1199,7 +1221,8 @@ Status: `planned`
 
 ##### Package 9 — Layer (workstream slot B)
 
-Status: `planned`
+Status: `active` since 2026-08-07 — slot B, freed by the Finder approval.
+Unstarted; it runs in parallel with Package 8.
 
 - Scope: the routed `layer` panel — SVG layer manifest listing, layer
   selection, and layer detail — on the shared BevyUI route.
@@ -1223,9 +1246,14 @@ Status: `planned`
   existing `invokeToolGateway` layer-selection path
   (`readProjectSelectedLayer` / `writeProjectSelectedLayer`) for the selection
   intent. Passive manifest display needs no command.
-- Cross-dependency: Families 12, 17, and 30 are frozen under Infos, so Layer may
-  be implemented and tested now but cannot become `validated` before Infos is
-  validated.
+- Cross-dependency: **none since 2026-08-07.** Families 12, 17, and 30 were
+  frozen under Infos; the Infos approval unfroze all three, so Layer can reach
+  `validated` on its own evidence. It remains the most direct consumer of what
+  Infos built, so its composition should reuse those owners rather than extend
+  them.
+- Scope freeze before composition: write down the complete `layer` surface —
+  manifest listing, selection, detail, and every state the SVG layer store can
+  produce — before composing. Nothing hard to port is dropped mid-migration.
 - Exit criterion: the panel opens on the shared canvas through its real tool,
   lists and selects SVG layers through the canonical store, has focused
   contracts and a gap-free retirement ledger, has an explicit product-owner
@@ -1233,8 +1261,20 @@ Status: `planned`
 
 ##### Package 10 — Family 14, sortable result-column header (shared component)
 
-Status: `planned`. Shared visual component package: it occupies no workstream
-slot.
+Status: `validated` — 2026-08-07, through its first consumer. The product owner
+approved the Finder panel, which composes this header for the three record
+scopes, so Family 14 is accepted as it ships there. Shared visual component
+package: it occupied no workstream slot.
+
+**Scope of that acceptance, stated precisely.** What was approved is the header
+as composed in Finder: the column set per scope, the sort toggle, the active
+tint and the caret. The Panel Lab specimen matrix — hover, focused, disabled,
+non-sortable — was never displayed on a real canvas, because the available
+browser instance never mounted Panel Lab. Those states are covered by the
+28/28 probe and by the shared `select`/`table` tokens they reuse, not by visual
+inspection. Panel Lab is scheduled for deletion anyway (*Panel Lab
+retirement*), so the specimen is not a durable gap; a future consumer that
+needs the disabled header should confirm it visually then.
 
 - Scope: the only component family the Finder migration is actually missing.
   Source review of
@@ -1309,17 +1349,20 @@ Current evidence — 2026-08-04, implementation complete, approval pending:
   `eve_presets.js`, `base_preset.js`, `skin/index.js`, and `eVe_look.js` entries
   still link under a real ESM import, proving the new look → skin dependency
   introduces no cycle.
-- **Remaining gate — real-canvas acceptance.** Not yet captured. The available
-  browser instance mounts only the dashboard skeleton: `readDiagnostics()`
-  reports a single `dashboard_bevy_ui` tree with 33 overlay records and no text
-  record at all, and the bottom main menu never mounts, so Panel Lab cannot be
-  opened there. Visual confirmation of the accent tint, the caret orientation
-  and the long press therefore remains required before Package 10 may leave
-  `planned`, exactly like the record-backed gap recorded for Infos.
+- **Real-canvas acceptance — closed on 2026-08-07 through Finder.** It was never
+  captured in Panel Lab: the available browser instance mounts only the
+  dashboard skeleton — `readDiagnostics()` reports a single `dashboard_bevy_ui`
+  tree with 33 overlay records and no text record, and the bottom main menu
+  never mounts, so Panel Lab cannot be opened there. The header was instead
+  reviewed where it actually ships, in the approved Finder panel. See the scope
+  note under the status above for what that acceptance does and does not cover.
 
 ##### Package 11 — Finder panel (workstream slot B)
 
-Status: `planned`
+Status: `validated` — explicit product-owner approval recorded on 2026-08-07,
+covering the panel **and** the `place` scope with its native in-canvas map.
+Slot B is released. The Finder HTML retirement recorded in
+`finder_html_line_migration_registry.md` is authorized from this date.
 
 - Scope: the routed `finder` panel — the largest remaining migration at
   **2 694 lines across 10 modules**, plus `map.js` (341 lines).
@@ -1392,9 +1435,9 @@ Finder coverage ledger:
 | 4 | `validated` panel state for empty/loading/error. |
 | 6 | `validated` editable text, consumed for the filter inputs and rename. |
 | 13 | `validated` scope chips, consumed for the four scopes. |
-| 14 | `planned` under Package 10; Finder is its first consumer. |
+| 14 | `validated` 2026-08-07 through its first consumer; see Package 10. |
 | 17 | `not_applicable`: source review found a plain `N results` status text, not a selection summary. The validated text and state builders cover it. |
-| map presentation | `blocked`; see the map decision below. |
+| map presentation | `validated` 2026-08-07: native in-canvas slippy map, owned by `finder_place_map_package.md`. No Leaflet, no DOM map, no embedded web view. |
 
 Finder MCP command ledger:
 
@@ -1408,7 +1451,8 @@ Finder MCP command ledger:
 | Rename a record | canonical `commitBatch` | `atome.write` | `mapped` |
 | Select a row | `applySelectionIntent` (`runtime/selection.js`) | existing selection policy | `mapped` |
 | Sort, filters, accordion, `N results` status | disposable projection | passive | `not_applicable` |
-| `place` scope / map | — | — | `blocked`; see below |
+| `place` scope — geocode a place name | Nominatim `fetch` behind `bevy_panel_finder_place_runtime.js`, same tool | `ui.read` | `mapped` through the Finder tool; the query carries no account, atome, or personal data |
+| `place` scope — pan/zoom, tile paint, marker | shared media texture resolver + bounded LRU cache | passive | `not_applicable`; no mutation, no persistence, no credential |
 
 **Two cross-cutting integrations that must not break.**
 
@@ -1425,29 +1469,43 @@ Finder MCP command ledger:
    `openPanelWithToolContext` + `invokeTool`, so the Bevy surface must honour the
    same tool context and scope lock (`scopeLocked`, `scopeBeforeLock`).
 
-**Map decision — 2026-08-04.** `finder.js:22` imports `./map.js`, which mounts
-Leaflet, OpenStreetMap tiles, and Nominatim geocoding directly into the Finder
-dialog DOM, hijacking `eve_finder_dialog__results_list` and `__results_status`.
-The map is blocked by its provider/privacy/cost/cross-platform contract, and
-Finder may not keep a parallel HTML/Leaflet route after migration — together
-those would block Finder forever. Source review resolves it: the map is isolated
-behind **one scope out of four** (`SCOPE_OPTIONS`, `finder_state.js:27` —
-`local` / `tools` / `place` / `people`). Only `place` activates it. Finder
-therefore migrates **without the `place` scope**: the chip leaves the Bevy
-composition, and `map.js`, `ensureEveMapStyles`, and the Leaflet/Nominatim/OSM
-dependency are deleted with the HTML route. The map returns later as its own
-feature package behind its own provider gate. This is a product decision to
-confirm at acceptance; the recorded alternative is to keep the chip visible and
-project the validated Family 4 `permission_denied` state.
+**Map decision — superseded on 2026-08-05, do not reapply.** The original
+decision recorded here dropped the `place` scope: `finder.js:22` imports
+`./map.js`, which mounts Leaflet, OpenStreetMap tiles, and Nominatim geocoding
+directly into the Finder dialog DOM, and since Finder may keep no parallel
+HTML/Leaflet route, the scope was to leave the Bevy composition and the map was
+to return later as its own feature package.
+
+**That decision is reversed.** It was taken by the migrator during the
+migration, not by the product owner, and it removed a working feature —
+locating a physical place. The judgement on Leaflet was correct; the *ordering*
+was not. The `place` scope stays, and the map is **rewritten natively in the
+canvas**, not ported: tiles as Bevy image nodes through the existing media
+texture resolver and its bounded LRU cache, Nominatim geocoding reused
+unchanged as pure `fetch`, and only the Leaflet plumbing — which cannot exist
+without a DOM — deleted. The owning package is
+[finder_place_map_package.md](finder_place_map_package.md), which also carries
+the binding ordering rule this mistake produced: **freeze a panel's complete
+scope before migrating it; a piece that cannot yet be ported is planned, never
+silently dropped.** Removing a feature is a product decision requiring explicit
+approval, exactly like deleting a file.
+
+The Bevy Finder therefore composes **four** scope chips — `local`, `tools`,
+`people`, `place`. The `place` scope replaces the record table with the map
+section (`bevy_panel_finder_view.js:130`), its own status line, and its result
+list; the sortable header is deliberately suppressed for that scope only.
 
 - Exit criterion: the panel opens on the shared canvas through its real tool,
-  the three remaining scopes list and sort their records, filters and rename
-  work through the canonical owners, row drag reaches a project drop zone, the
-  retirement ledger covers all 3,035 lines without a gap, the MCP ledger
-  has no unreviewed effectful function, product-owner approval is explicit, and
-  no parallel DOM route remains.
+  the three record scopes list and sort their records, the `place` scope
+  geocodes and draws its map in-canvas, filters and rename work through the
+  canonical owners, row drag reaches a project drop zone, the retirement ledger
+  covers all 3,035 lines without a gap, the MCP ledger has no unreviewed
+  effectful function, product-owner approval is explicit, and no parallel DOM
+  route remains.
 
-Current evidence — 2026-08-05, implementation complete, approval pending:
+Evidence at first composition — 2026-08-05. The `place` scope and its native
+map landed after this capture; see *Place scope and native map — 2026-08-05/06*
+below, then the approval record:
 
 - Layers delivered: `bevy_panel_finder_model.js` (columns per scope, the single
   column/sort-key table, pure sorting and filtering), `bevy_panel_finder_data.js`
@@ -1479,10 +1537,11 @@ Current evidence — 2026-08-05, implementation complete, approval pending:
 - Probe `temp/finder_migration_probe.mjs` passes 106/106 across Package 10 and
   Package 11: contract rejections, the header and its caret, the Panel Lab
   specimen and the real Lab surface, the model's scope/sort/filter behaviour,
-  the composed tree (no search field, no `place` scope, the 200-row cap, the
-  re-anchored `+`, the per-row delete control, the `between` reveal, in-canvas
-  selects), the runtime's intents, the scope-gated tool-drag lifecycle, the
-  race guard, and the ledger partition.
+  the composed tree (no search field, the 200-row cap, the re-anchored `+`, the
+  per-row delete control, the `between` reveal, in-canvas selects), the
+  runtime's intents, the scope-gated tool-drag lifecycle, the race guard, and
+  the ledger partition. Its `no place scope` assertion belongs to this
+  superseded capture and was replaced when the scope returned.
 - `npm run check:syntax` passes on 1,046 files; `git diff --check` is clean.
 - Real-canvas evidence — 2026-08-05, anonymous session on the running server:
   the login `Essayer` route opens the project surface, the canonical
@@ -1490,9 +1549,9 @@ Current evidence — 2026-08-05, implementation complete, approval pending:
   **same single canvas**, and `__eveFinder` exposes `setContext`, `quickSearch`
   and `refreshProjection`. Activating the `local` scope, sorting the `name`
   column (mapped to `alphanumeric`/`asc`), opening Filters and adding two rows
-  produced a 79-node tree containing **no search node**, three scope chips with
-  no `place`, the `+` control ordered last after both filter rows, and one
-  delete control per row. DOM audit: one canvas, zero visible native controls,
+  produced a 79-node tree containing **no search node**, the scope chips of that
+  day's composition, the `+` control ordered last after both filter rows, and
+  one delete control per row. DOM audit: one canvas, zero visible native controls,
   and none of `#eve_finder_dialog`, `#_intuition_v2_find`,
   `.leaflet-container`, the legacy results list or the legacy search input.
   `window.__eveMap` is `undefined`. The browser error console is empty.
@@ -1502,10 +1561,34 @@ Current evidence — 2026-08-05, implementation complete, approval pending:
   `error` state rather than a silent empty list, which is the intended
   behaviour.
 - Shell debt recorded: `map.js` is Leaflet's only consumer in eVe, so the two
-  `index.html` tags and the three library assets (~299 KB) retire with the map.
-- **Remaining gate — product-owner acceptance,** plus a record-backed listing
-  on a provisioned account to confirm row rendering, rename and the tool drag
-  against real data.
+  `index.html` tags and the three library assets (~299 KB) retire with it. The
+  native map replaces the feature, so this deletion removes payload without
+  removing behaviour.
+
+**Place scope and native map — 2026-08-05/06.** The `place` scope was restored
+and rewritten on Bevy primitives:
+`atome/src/squirrel/components/slippy_map_contract.js` owns the pure Web
+Mercator projection, tile grid, pan and zoom with no DOM and no network;
+`bevy_panel_map.js` composes tiles as image nodes with marker, attribution and
+intents; `bevy_panel_finder_place_runtime.js` owns the debounced geocoding, map
+state and navigation. `bevy_panel_finder_view.js:130` swaps the record table for
+the map section under that scope and suppresses the sortable header there only.
+Probe `temp/finder_place_map_probe.mjs` passes: nine categories including
+`Lieux`, the map composed with the header hidden, restoration of the record
+table on leaving the scope, re-centring on an activated result, refusal of an
+unknown result, and a pending search dropped on reset so a closed panel cannot
+fire one. `temp/finder_migration_probe.mjs` passes end to end and additionally
+asserts that this ledger records the reversal and no longer claims the scope was
+deleted — a guard against silently reapplying the superseded decision.
+
+**Approval — 2026-08-07.** The product owner approved the complete Finder
+panel, including the `place` scope and its native map. Package 11 is
+`validated`, slot B is released, and the deletion gate in
+`finder_html_line_migration_registry.md` is open. Record-backed listing,
+rename, and tool drag against a provisioned account were reviewed by the
+product owner directly; they were never captured in the integrated browser,
+whose anonymous account returns `remote_account_not_provisioned`. That
+distinction is recorded so it is not later read as automated evidence.
 
 #### Deferred pending Molecule migration and wider panel scope
 
@@ -1835,8 +1918,10 @@ invalidates, or delays the other slot.
 **Unchanged gates.** A partial Bevy panel and its HTML route must never be
 active in parallel **for the same panel**. HTML retirement stays strictly
 per-panel and happens only after that panel's own approval. Timeline remains
-the final migration, Finder keeps its external provider/privacy/cost gate, and
-mobile, Tauri, iOS, and multi-viewport validation remain complete-panel gates.
+the final migration, and mobile, Tauri, iOS, and multi-viewport validation
+remain complete-panel gates. Finder's former external provider/privacy/cost
+gate is closed: the map is drawn natively in the canvas and the only external
+call left is the Nominatim geocoding request the legacy panel already made.
 
 **Reporting.** Every counter report required before a composition or an
 approval presentation must list **both slots**: panel key, workstream state,
@@ -1920,50 +2005,64 @@ platforms once for the complete panel when the product owner requests or when
 final platform acceptance requires it. This check is never repeated for each
 primitive component.
 
-### Authoritative workstream-slot decision — 2026-08-04
+### Authoritative workstream-slot decision — 2026-08-07
 
 Contact was validated by the product owner on 2026-08-02, Home on 2026-08-03,
-and Calendar on 2026-08-04; the programme therefore records **3/16 validated
-panels**. Calendar Packages 4 to 6, including canonical Calendar–Dashboard
-synchronization and Dashboard-card opening of the existing event editor, are
-accepted on the shared BevyUI/WebGPU route.
+Calendar on 2026-08-04, and **Infos and Finder on 2026-08-07**. The programme
+therefore records **5/16 validated panels**. Calendar Packages 4 to 6,
+including canonical Calendar–Dashboard synchronization and Dashboard-card
+opening of the existing event editor, are accepted on the shared BevyUI/WebGPU
+route. The Finder approval covers the `place` scope and its native in-canvas
+map; Package 10's sortable header is validated through that same approval.
 
-**Infos** was selected on 2026-08-04 and is now `acceptance_pending`. Package 7
-is technically migrated: its focused contracts and 3,033-line retirement ledger
-pass. Real-canvas opening, empty/error projection, accordion interaction,
-close, DOM audit, and console audit also pass; only the record-backed canvas
-review and explicit product-owner acceptance remain the gate for changing the
-validated panel count. Because `acceptance_pending` releases its slot, Infos no
-longer blocks any new panel. The active inventory is therefore 3/16 validated,
-one panel awaiting acceptance, 5 Bevy routes, and 11 HTML-active routes.
+**Both slots are free.** Infos and Finder left the slot model together, so the
+next two panels start now. Families 12, 17, 29, and 30 are unfrozen: the
+cross-dependency that prevented Size, Font, and Layer from reaching `validated`
+no longer exists. The Infos HTML retirement was already executed when that panel
+landed; the **Finder retirement is authorized and not yet executed** — its
+legacy cluster (`finder_view.js`, `finder_controller.js`, `finder_refresh.js`,
+`finder_filters.js`, `finder_row.js`, `finder_state.js`) is a closed orphan
+island importing only itself, and `map.js` has no importer at all. Deleting
+them, plus the two Leaflet `index.html` tags and three assets, is the one
+outstanding task of Package 11.
+
+**11 panels remain**, which is where the bulk of the programme still is:
+`size`, `font`, `layer`, `background`, `couleur`, `detail`, `communicate`,
+`delete`, `undo`, `paste`, and `timeline` — every one of them a registered
+surface in `eVe/intuition/panel_definitions.js` with its own `ui.*.panel` tool
+id and its own live DOM route. A small dialog is still a panel; the registry,
+not the visual size, decides.
 
 Current slot occupancy:
 
 | Slot | Panel | State | Owns | Consumes | Cross-dependency |
 | --- | --- | --- | --- | --- | --- |
-| — | Infos (Package 7) | `acceptance_pending` | Families 12, 17, 29, 30 shared owners | shared panel/accordion/table/input/list owners | none |
-| A | Size, then Font (Package 8) | `planned` | `size`/`font` panel composition and their legacy routes | Families 1, 3, 4, 5, 17; Package 1 scope chips | Family 17 frozen under Infos |
-| B | Finder (Package 11) | `active` | `finder` panel composition, its legacy route, and `map.js` | Families 3, 4, 6, 13; Package 10's sortable header | none — Family 17 is `not_applicable` |
-| queued | Layer (Package 9) | `planned` | `layer` panel composition and its legacy route | Families 1, 3, 4, 12, 17, 30 | Families 12, 17, 30 frozen under Infos |
-
-The product owner selected Finder on 2026-08-04, so it takes slot B and Layer
-returns to the queue; Layer was `planned` and unstarted, so no work is lost.
-Package 10 delivers Family 14 as a shared component and occupies no slot.
+| A | Size, then Font (Package 8) | `active` | `size`/`font` panel composition and their legacy routes | Families 1, 3, 4, 5, 17; Package 1 scope chips | none — Family 17 unfrozen on 2026-08-07 |
+| B | Layer (Package 9) | `active` | `layer` panel composition and its legacy route | Families 1, 3, 4, 12, 17, 30 | none — Families 12, 17, 30 unfrozen on 2026-08-07 |
+| — | Infos (Package 7) | `validated` 2026-08-07 | — | — | — |
+| — | Finder (Package 11) | `validated` 2026-08-07 | — | — | — |
 
 Slot A holds Size and Font in sequence, not in parallel: they share the legacy
 `selection_style_apply.js` and `style_panels_visual.js` helpers, so the legacy
 non-collision rule forbids splitting them across slots. Slot B holds Layer,
 whose legacy module set (`layer.js`, `layer_panel_styles.js`,
-`core/svg_layer_store.js`) is disjoint from both.
+`core/svg_layer_store.js`) is disjoint from both. Both packages were written
+before Infos was approved and add **no new component family**, so they consume
+the existing baseline and start without a shared-component gate.
+
+Scope-freeze reminder, binding since `finder_place_map_package.md`: before
+either package starts composing, its complete surface — every mode, every view,
+including anything that looks hard to port — is frozen in writing. Nothing is
+dropped mid-migration.
 
 **Timeline is the final panel migration.** Its existing Bevy route is not
 completion evidence and does not authorize early Timeline product work. The
 remaining panel order after Calendar and before Timeline is recorded per freed
 slot rather than per single implementation: when a slot frees, its next panel
 is discussed and written into the slot table before implementation starts.
-Finder retains its separate provider,
-privacy, cost, and cross-platform gate and cannot retain a parallel
-HTML/Leaflet route after migration.
+Finder no longer carries a separate provider, privacy, or cost gate — it was
+approved with its native in-canvas map on 2026-08-07 — and no parallel
+HTML/Leaflet route may survive its retirement.
 
 ## Skinnability audit — 2026-07-31
 

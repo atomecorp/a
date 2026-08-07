@@ -209,8 +209,13 @@ partition so no retired line can silently return.
 
 ## Deletion gate
 
-No file in this ledger may be deleted until the Finder panel has explicit
-product-owner approval on the real canvas. At that point the deletions are
+**Open since 2026-08-07** — the product owner approved the Finder panel,
+including the `place` scope and its native in-canvas map. The deletions below
+are authorized and are the next concrete step for this package; they had not
+been executed at the time this line was written.
+
+The gate was: no file in this ledger may be deleted until the Finder panel has
+explicit product-owner approval on the real canvas. The deletions are
 `finder.js`'s legacy body, `map.js` (its behaviour now living in the Bevy map
 package), `finder_state.js`, `finder_view.js`,
 `finder_controller.js`, `finder_refresh.js`, `finder_filters.js`,

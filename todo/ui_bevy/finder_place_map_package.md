@@ -76,3 +76,17 @@ carte et **masque l'en-tête triable**, comme le legacy le faisait
 - Les assets Leaflet (~299 Ko) quittent le shell : la bibliothèque n'est plus
   utilisée, seules les tuiles le sont.
 - Approbation produit explicite sur le rendu réel avant toute suppression.
+
+## Statut — 2026-08-07
+
+`validated`. Le propriétaire du produit a approuvé le panel Finder **avec** le
+scope `place` et sa carte native. Les critères de sortie ci-dessus sont donc
+tenus côté rendu, et la suppression des assets Leaflet est autorisée : elle
+fait partie du retirement Finder, qui reste à exécuter.
+
+Ce qui n'est **pas** clos par cette approbation : le choix du fournisseur de
+tuiles. `TILE_TEMPLATE` pointe encore les tuiles OSM publiques, dont la
+politique d'usage interdit un trafic applicatif soutenu. C'est un point de
+décision produit à part entière, pas un détail d'implémentation, et il devra
+être tranché avant une mise en production réelle. La contrainte d'une seule
+constante existe précisément pour que ce basculement reste une ligne.

@@ -83,39 +83,45 @@ Dependances et ordre:
   command. A panel cannot be approved or retire its HTML route while the ledger
   contains an unmapped function.
 
-- [ ] Execute the nine active BevyUI migration packages: (1) shared controls — Families 3, 6, and 13; (2) Contact — Family 18 and complete Contact composition; (3) Home — complete Home composition and legacy-route retirement; (4) Calendar structure — Families 21 to 24; (5) Calendar events — Families 25 to 27; (6) Calendar editor and completion — Family 28 and complete Calendar composition; (7) Infos — Families 12, 17, 29, and 30 plus complete canonical inspection/editing composition; (8) workstream slot A — complete Size composition then Font composition, reusing Families 1, 3, 4, 5, and 17 and rejecting the deferred Family 36 tool slider; (9) queued — complete Layer composition, reusing Families 1, 3, 4, 12, 17, and 30; (10) shared component — Family 14, the sortable result-column header with per-column direction, accent tint, and 420 ms long-press to filters, occupying no workstream slot; (11) workstream slot B — complete Finder composition over Families 3, 4, 6, 13, and 14, with Family 17 recorded `not_applicable`, no search field composed, the `place` map scope dropped as `blocked`, a per-row delete control added to the custom filter rows, the `+` re-anchored under the last added row, and row drag preserved through the shared `tool_drag.js` payload. Families 4 and 5 remain validated shared foundations; packages 8 and 9 add no new component family, package 10 adds Family 14. Exit criterion: Home, Calendar, Contact, Infos, Size, Font, Finder, and Layer use their canonical Bevy owners, their effectful functions have a complete reviewed command/API/MCP ledger, real interactions and package/panel approvals are recorded, and none retains a parallel DOM panel route.
+- [ ] Execute the nine active BevyUI migration packages: (1) shared controls — Families 3, 6, and 13; (2) Contact — Family 18 and complete Contact composition; (3) Home — complete Home composition and legacy-route retirement; (4) Calendar structure — Families 21 to 24; (5) Calendar events — Families 25 to 27; (6) Calendar editor and completion — Family 28 and complete Calendar composition; (7) Infos — Families 12, 17, 29, and 30 plus complete canonical inspection/editing composition; (8) workstream slot A — complete Size composition then Font composition, reusing Families 1, 3, 4, 5, and 17 and rejecting the deferred Family 36 tool slider; (9) queued — complete Layer composition, reusing Families 1, 3, 4, 12, 17, and 30; (10) shared component — Family 14, the sortable result-column header with per-column direction, accent tint, and 420 ms long-press to filters, occupying no workstream slot; (11) workstream slot B — complete Finder composition over Families 3, 4, 6, 13, and 14, with Family 17 recorded `not_applicable`, no search field composed, the `place` scope **kept** and its map rewritten natively in the canvas (Leaflet deleted, Nominatim geocoding reused), a per-row delete control added to the custom filter rows, the `+` re-anchored under the last added row, and row drag preserved through the shared `tool_drag.js` payload. Families 4 and 5 remain validated shared foundations; packages 8 and 9 add no new component family, package 10 adds Family 14. Exit criterion: Home, Calendar, Contact, Infos, Size, Font, Finder, and Layer use their canonical Bevy owners, their effectful functions have a complete reviewed command/API/MCP ledger, real interactions and package/panel approvals are recorded, and none retains a parallel DOM panel route.
   Current gate — 2026-08-04: Contact, Home, and Calendar are `validated`, so
-  the programme is **3/16 validated panels**. Infos is `acceptance_pending`:
-  its Bevy route, canonical state/mutation ownership, shared WebGPU
-  preview, focused contracts, HTML retirement, and exhaustive 3,033-line
-  migration ledger are implemented; real-canvas open, empty/error projection,
-  accordion, close, DOM, and console checks pass; only the record-backed canvas
-  review and explicit product approval remain. It therefore releases its slot.
-  Slot A takes Size then Font — same slot because they share the legacy
-  `selection_style_apply.js` and `style_panels_visual.js` helpers. The product
-  owner then selected **Finder** for slot B, so Layer returns to the queue
-  unstarted. Finder is the largest remaining migration (2 694 lines over 10
-  modules plus `map.js`), it composes **no search field** — the legacy search
-  row is deliberately hidden and only carries state fed by the inline finder
-  tool — and it migrates **without the `place` scope**, whose Leaflet/OSM/
-  Nominatim map stays blocked by its provider/privacy/cost contract and is
-  deleted with the HTML route. Family 17 is `not_applicable` for Finder, so it
-  has no dependency on the unvalidated Infos work. Five Bevy routes
-  exist and 11 HTML-active routes remain. Timeline remains the final panel
-  migration.
+  the programme is **3/16 validated panels**.
+  Current gate — 2026-08-07: the product owner validated **Infos and Finder**,
+  bringing the programme to **5/16 validated panels**. Both slots are therefore
+  free, and Families 12, 17, 29, and 30 are unfrozen. The Finder approval
+  covers the `place` scope: the earlier decision to drop it was taken by the
+  migrator, not the product owner, and was reversed on 2026-08-05 — the map is
+  now drawn **natively in the canvas** (tiles as Bevy image nodes, Nominatim
+  geocoding unchanged, Leaflet deleted), owned by
+  `todo/ui_bevy/finder_place_map_package.md`. Finder still composes **no search
+  field**: the legacy search row is deliberately hidden and only carries state
+  fed by the inline finder tool. Package 10's sortable header is validated
+  through the same approval.
+  Next: slot A takes **Size then Font** — same slot because they share the
+  legacy `selection_style_apply.js` and `style_panels_visual.js` helpers — and
+  slot B takes **Layer**, whose legacy module set is disjoint from both. The
+  Infos HTML retirement was already executed when that panel landed; the
+  **Finder retirement is authorized and still to do** — its six legacy modules
+  are an orphan island, `map.js` has no importer, and ~299 KB of Leaflet shell
+  payload retires with them. **11 registered panels remain**: `size`, `font`, `layer`,
+  `background`, `couleur`, `detail`, `communicate`, `delete`, `undo`, `paste`,
+  and `timeline` — each a real surface in `eVe/intuition/panel_definitions.js`
+  with its own `ui.*.panel` tool id and its own live DOM route. Timeline remains
+  the final panel migration.
 
 Deferred after Phase 4 — complete Molecule / MTraX migration:
 
-- [ ] Resume the remaining Panel programme after Phase 4: assess Families 7 to 11, 14 to 16, 19, 20, and 36 plus any panel-specific extensions of the Infos-owned 12/17/29/30 contracts. Exit criterion: all 16 registered panels are validated, the 8 legacy HTML routes still active after Infos, Size, Font, and Layer are retired, and the temporary Panel Lab is removed.
+- [ ] Resume the remaining Panel programme after Phase 4: assess Families 7 to 11, 15, 16, 19, 20, and 36 — Family 14 left this list and was validated with Finder on 2026-08-07 — plus any panel-specific extensions of the Infos-owned 12/17/29/30 contracts. Exit criterion: all 16 registered panels are validated, the 8 legacy HTML routes still active after Size, Font, and Layer (`background`, `couleur`, `detail`, `communicate`, `delete`, `undo`, `paste`, `timeline`) are retired, and the temporary Panel Lab is removed.
 
 Critere de sortie du programme complet:
 
 - Each component has targeted evidence and real-canvas validation; each usable
   migration package and complete panel has explicit product-owner approval.
   Every effectful function of every panel
-  is mapped to its canonical MCP command and audit; Finder respects its external
-  gate; no HTML route, double composition, or temporary Panel Lab implementation
-  remains at completion.
+  is mapped to its canonical MCP command and audit; no HTML route, double
+  composition, or temporary Panel Lab implementation remains at completion.
+  Finder's former external provider gate is closed since its 2026-08-07
+  approval with a native in-canvas map.
 
 ### Reconciliation audit - original 138-entry snapshot
 
