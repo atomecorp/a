@@ -36,8 +36,6 @@ import { loadModulesSequentially } from '../utils/module_loader_runtime.js';
 
 
 
-// import('./examples/leaflet.js');
-
 // import('./examples/audio.js');
 
 // import('./examples/audio_swift.js'); // Active les boutons audio (routeButton Local/Auto/Host + C4/A4/E5/Chord)

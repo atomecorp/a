@@ -207,15 +207,51 @@ Every range above is contiguous and non-overlapping, and the per-file totals sum
 to the historical line count of each file. A persistent contract enforces this
 partition so no retired line can silently return.
 
-## Deletion gate
+## Deletion gate — executed 2026-08-07
 
-**Open since 2026-08-07** — the product owner approved the Finder panel,
-including the `place` scope and its native in-canvas map. The deletions below
-are authorized and are the next concrete step for this package; they had not
-been executed at the time this line was written.
+The product owner approved the Finder panel, including the `place` scope and
+its native in-canvas map, and **the deletions were carried out the same day**.
+
+Removed: `finder_view.js` (384 L), `map.js` (341 L), `finder_filters.js`
+(264 L), `finder_refresh.js` (262 L), `finder_controller.js` (241 L),
+`finder_row.js` (173 L), `finder_state.js` (98 L) — 1 763 lines — plus the two
+`index.html` Leaflet tags and the three assets (`leaflet.js`, `leaflet.min.js`,
+`leaflet.min.css`, 298 KB). `dashboard_project_record_bootstrap.js` (55 L) went
+with them: it was an unrelated orphan with zero references anywhere in the
+repository, found by the same audit.
+
+Also removed as Leaflet-era residue, which the gate's "plus their imports,
+styles, listeners" clause covers: `eveMapPreset` and `ensureEveMapStyles` with
+their wiring through `utility_presets.js`, `preset_ensurers.js`,
+`eve_presets.js`, and `eVe_look.js` — 82 lines of CSS preset whose selectors
+all targeted `#eve_finder_dialog__results_list`, including two dead
+`.leaflet-container` / `.leaflet-control-attribution` rules — the
+`window.__eveMap?.deactivate?.()` call in `matrix_runtime_toolstate.js`, now
+permanently a no-op, and the commented `examples/leaflet.js` toggle in
+`application/index.js`, which could no longer work without `window.L`.
+
+**One trap this ledger contained.** `finder_state.js` was listed for deletion,
+but `finder_data_sources.js` — a module this same ledger *retains* as a
+canonical owner, consumed by `bevy_panel_finder_data.js` — imported
+`finderState` and `FINDER_LIST_LIMIT` from it. Deleting the file as written
+would have broken the Bevy Finder at boot. The loader only ever used the list
+limit and two divergence-signature memo fields, so those moved into
+`finder_data_sources.js` itself and the rest of the module (the `finderEls` DOM
+handle registry and `isPanelVisible`) went with the dialog. Recorded because a
+line-by-line ledger can be complete and still be wrong about a dependency
+direction.
+
+Verification: `temp/finder_retirement_probe.mjs` passes 9/9 and was checked to
+fail red when a deleted file returns; a real ESM import of `eVe_look.js`,
+`finder.js`, `finder_data_sources.js`, `matrix_runtime_toolstate.js`, and
+`eve_presets.js` links; `npm run check:syntax` passes. In the running browser
+after a full reload: one canvas, `window.L` undefined, zero Leaflet requests
+across 250 resources, no request for any deleted module, the finder bridge
+still exporting its five public entries, the `eve_bevy_panel_finder` tree
+mounting on the shared canvas, and an empty error console.
 
 The gate was: no file in this ledger may be deleted until the Finder panel has
-explicit product-owner approval on the real canvas. The deletions are
+explicit product-owner approval on the real canvas. The deletions were
 `finder.js`'s legacy body, `map.js` (its behaviour now living in the Bevy map
 package), `finder_state.js`, `finder_view.js`,
 `finder_controller.js`, `finder_refresh.js`, `finder_filters.js`,

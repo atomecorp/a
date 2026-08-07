@@ -1581,14 +1581,129 @@ fire one. `temp/finder_migration_probe.mjs` passes end to end and additionally
 asserts that this ledger records the reversal and no longer claims the scope was
 deleted — a guard against silently reapplying the superseded decision.
 
-**Approval — 2026-08-07.** The product owner approved the complete Finder
-panel, including the `place` scope and its native map. Package 11 is
-`validated`, slot B is released, and the deletion gate in
-`finder_html_line_migration_registry.md` is open. Record-backed listing,
+**Approval and retirement — 2026-08-07.** The product owner approved the
+complete Finder panel, including the `place` scope and its native map. Package
+11 is `validated` and slot B is released. The HTML retirement was executed the
+same day: 1 818 lines and 298 KB of Leaflet shell payload removed, verified by
+`temp/finder_retirement_probe.mjs` (9/9, red-tested) and by a clean real boot
+with zero Leaflet requests. See the deletion-gate section of
+`finder_html_line_migration_registry.md`. Record-backed listing,
 rename, and tool drag against a provisioned account were reviewed by the
 product owner directly; they were never captured in the integrated browser,
 whose anonymous account returns `remote_account_not_provisioned`. That
 distinction is recorded so it is not later read as automated evidence.
+
+##### Package 12 — Interactive matrix (shared component) + project view modes
+
+Status: `in_review` — implementation complete 2026-08-07, product approval
+pending. Shared visual component plus its first consumer; it occupies **no
+workstream slot** (slot A remains Size then Font, slot B remains Layer) and
+touches none of their panels, legacy modules, or token groups.
+
+**Why a new builder rather than an extension of `tableNode`.** The validated
+table/property-grid position is *passive by contract*:
+[table_contract.js](../../atome/src/squirrel/components/table_contract.js)
+requires at least one row, `bevy_panel_table.js` mounts no handler and no scroll
+area, and Infos composes it for immutable property grids
+(`bevy_panel_info_view.js:65`). Making it interactive would break that contract
+and its tests. The matrix is therefore a sibling builder that **delegates its
+column geometry to `normalizeTablePresentation`**, so a passive table, a sortable
+header and a matrix of the same width can never resolve different column
+boundaries. No second width resolver exists.
+
+- `owns`: `atome/src/squirrel/components/matrix_contract.js` (row identity,
+  cell completeness, selection, the virtualization window) and the shared
+  builder `eVe/intuition/runtime/bevy_panel/bevy_panel_matrix.js`.
+- `consumes`: `normalizeTablePresentation` for columns, the validated Family 14
+  `sortableHeaderNode` when a sort key is supplied, `BEVY_PANEL_TOKENS.table`
+  and `.select` for paint, the native `button` primitive for rows, and the
+  `scroll_area` virtualization shape already used by the selectable list. No
+  local palette, no local renderer, no second selection owner.
+- Interaction semantics: rows are `momentary`; a row becomes a `button` **only
+  once it carries a handler**, so a selectable-but-unwired row is never a dead
+  click target painting hover and press states. Sorting reuses `nextSortState`,
+  so a second click means the same thing here as in Finder.
+- Empty result: the matrix renders zero rows without throwing, using the same
+  probe-row trick the sortable header uses to resolve columns. A project with no
+  element is a legitimate state, not a composition mistake.
+- Panel Lab specimen: `bevy_panel_lab_matrix_runtime.js` — 120 synthetic rows
+  over a 20-row page window, multi-selection, sortable header, one fixed and two
+  flexible columns — wired into `bevy_panel_lab_surface.js` through `readState`,
+  `buildContent`, `handleEvent` and the Lab reset. Localized keys added to both
+  `languages_en_core.js` and `languages_fr_core.js`.
+
+**First consumer — the project view modes.** The View palette
+(`tool.main.view` → `ui.view.mode.list` / `.table` / `.natural`) existed and was
+declared end to end but was **inert**: `kind: 'view'` fell through to the generic
+`return { ok: true, handled: true }` at the end of
+`executeBootstrapMomentaryHandler`, and — the decisive one — the menu tool
+registration publishes a handler for every menu entry *before* the bootstrap
+dispatch table gets its turn (`publishRuntimeRegisteredHandler(..., { overwrite:
+false })`), so an entry without a `touch` is inert whatever its `tool_id` maps
+to. Both layers are now wired: the `kind: 'view'` branch for the tool-runtime
+route, and a `touch` on the three menu entries for the UI route.
+
+- `natural` stays the default and is unchanged: it is the absence of the view
+  tree, not a mode of it.
+- `list` composes the **existing** selectable list
+  (`virtualizedHierarchicalSelectableListNode`) and the Infos-owned record model
+  (`hierarchyEntries`, `projectRecords`, `isProjectInfoRecord`) — no second list
+  builder. `table` composes the new matrix over the same records.
+- The view mounts one full-canvas BevyUI tree `eve_bevy_ui_project_view` on a new
+  `projectView` workspace layer (order 500). Being opaque and above every project
+  Atome, it hides the natural canvas **without touching a single Atome record**:
+  returning to `natural` is an unmount, not a reload. `WORKSPACE_PROJECT_LAYER_MAX`
+  moved from `dashboard - 1` to `projectView - 1` so an Atome carrying an
+  oversized historical z cannot climb above the view.
+- Selection stays with `eVe/intuition/runtime/selection.js`; the view holds none.
+- The mode is owned by `project_view_mode_state.js`, defaults to `natural`, and
+  persists per project through `commitBatch`. A failed mount never updates the
+  stored mode, so it cannot drift ahead of what is displayed.
+
+Current evidence — 2026-08-07:
+
+- `temp/matrix_node_probe.mjs` — column-width totals and offsets at five widths,
+  fixed-column stability, height as an exact multiple of the row rhythm, empty
+  matrix, selection paint, virtualization (200 rows built out of 5 000, spacers
+  summing to the total), page mapping from scroll offset, sortable-header
+  consumption and caret placement, and five contract rejections. Verified to run
+  **red first** — a `--red` flag inverts the geometric expectations and all of
+  them fail against the real builder, so the probe reads the builder rather than
+  itself. It caught one real defect: rows without handlers were being emitted as
+  `button`.
+- `temp/project_view_content_probe.mjs` — drives the **real** load → filter →
+  build → intent route for both modes with the canonical reader injected the way
+  Finder injects its readers. Covers intruder rejection (the project record, a
+  tool, a foreign-project Atome), a child attached by `parent_id`, expand and
+  collapse, page changes at the right offsets, real row reordering on sort (not
+  just the sort state), refusal of a non-sortable column, numeric date ordering,
+  the error state and the empty state.
+- `temp/view_tool_handler_probe.mjs` — exercises the real
+  `createToolRuntimeBootstrapPanelHandlers` factory: the three operations reach
+  the mode owner, `extra_input.view_mode` is honoured, owner refusals and import
+  failures propagate, and `arrange`/unknown `kind`s keep their previous
+  behaviour.
+- `temp/project_view_link_probe.mjs` — ESM link of 13 **entries** (not `node
+  --check`, which is per file), the dynamic loader resolving, and 19 i18n keys
+  present in both FR and EN. It caught one wrong export expectation.
+- **Real-app evidence, browser, anonymous session.** Before the fix, invoking
+  `ui.view.mode.list` through the real published handler returned
+  `{ ok: false, error: 'tool_interaction_unhandled', name_key: 'view_list' }`.
+  After it, the full `list → table → natural → list → natural` cycle returns
+  `ok: true` at every step; `eve_bevy_ui_project_view` mounts with its overlay
+  records and unmounts to zero; and a sweep of every scene runtime finds **no
+  orphan record** carrying the tree prefix. The mode owner ends in `natural`.
+- **Not captured: rendered pixels.** Same limitation this guide already records
+  for Package 10 — the available browser instance reports
+  `nativeUiEnabled: false` with no WASM module, so no widget text or panel
+  paints; the dashboard itself renders as flat bands with no text record. The
+  overlay-record projection the view is built on is verified; the pixels are not.
+  Real-canvas acceptance is what the pending product approval must cover.
+- The anonymous session cannot provision Atome commits
+  (`remote_account_not_provisioned`), so the real-app run exercised an empty
+  project. The view rendered its error state instead of throwing, which is the
+  behaviour that path is supposed to have; rows over real records are covered by
+  the content probe, not by the browser run.
 
 #### Deferred pending Molecule migration and wider panel scope
 
@@ -2018,13 +2133,12 @@ map; Package 10's sortable header is validated through that same approval.
 **Both slots are free.** Infos and Finder left the slot model together, so the
 next two panels start now. Families 12, 17, 29, and 30 are unfrozen: the
 cross-dependency that prevented Size, Font, and Layer from reaching `validated`
-no longer exists. The Infos HTML retirement was already executed when that panel
-landed; the **Finder retirement is authorized and not yet executed** — its
-legacy cluster (`finder_view.js`, `finder_controller.js`, `finder_refresh.js`,
-`finder_filters.js`, `finder_row.js`, `finder_state.js`) is a closed orphan
-island importing only itself, and `map.js` has no importer at all. Deleting
-them, plus the two Leaflet `index.html` tags and three assets, is the one
-outstanding task of Package 11.
+no longer exists. **Both HTML retirements are executed**: Infos when that panel
+landed, and Finder on 2026-08-07 — 1 818 lines removed (the seven-module legacy
+cluster plus one unrelated orphan found by the same audit) along with the two
+Leaflet `index.html` tags and three assets, 298 KB off every boot. The details,
+including the `finder_state.js` dependency trap the ledger contained, are in
+`finder_html_line_migration_registry.md`. Package 11 has no outstanding task.
 
 **11 panels remain**, which is where the bulk of the programme still is:
 `size`, `font`, `layer`, `background`, `couleur`, `detail`, `communicate`,

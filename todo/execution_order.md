@@ -99,15 +99,38 @@ Dependances et ordre:
   through the same approval.
   Next: slot A takes **Size then Font** — same slot because they share the
   legacy `selection_style_apply.js` and `style_panels_visual.js` helpers — and
-  slot B takes **Layer**, whose legacy module set is disjoint from both. The
-  Infos HTML retirement was already executed when that panel landed; the
-  **Finder retirement is authorized and still to do** — its six legacy modules
-  are an orphan island, `map.js` has no importer, and ~299 KB of Leaflet shell
-  payload retires with them. **11 registered panels remain**: `size`, `font`, `layer`,
+  slot B takes **Layer**, whose legacy module set is disjoint from both. Both
+  HTML retirements are **executed**: Infos when that panel landed, and Finder on
+  2026-08-07 — 1 818 lines plus 298 KB of Leaflet shell payload removed, guarded
+  by `temp/finder_retirement_probe.mjs` and verified on a clean real boot.
+  **11 registered panels remain**: `size`, `font`, `layer`,
   `background`, `couleur`, `detail`, `communicate`, `delete`, `undo`, `paste`,
   and `timeline` — each a real surface in `eVe/intuition/panel_definitions.js`
   with its own `ui.*.panel` tool id and its own live DOM route. Timeline remains
   the final panel migration.
+  Added 2026-08-07 — **Package 12, interactive matrix + project view modes**
+  (`in_review`, product approval pending). Slot arbitration, stated explicitly
+  because the two-slot rule is currently saturated: this package **takes no
+  slot**. It adds one shared component and its first consumer, and it touches
+  none of the panels, legacy modules, or token groups held by slot A (Size then
+  Font) or slot B (Layer) — it registers no panel at all. The new
+  `sortableHeader`-adjacent surface reuses the existing `table` and `select`
+  token groups and adds none. Work delivered: the shared `matrixNode` builder
+  plus `matrix_contract.js` (delegating column geometry to the validated
+  `table_contract.js`, never forking it), a Panel Lab specimen, a full-canvas
+  `projectView` workspace layer at order 500, the `list` and `table` project
+  view contents (the `list` mode composing the **existing** selectable list and
+  Infos record model rather than a second builder), the canonical
+  `project_view_mode_state.js` with per-project persistence, and the two missing
+  wirings that made the View palette inert — the `kind: 'view'` branch of the
+  momentary handler and a `touch` on the three menu entries. `natural` remains
+  the default and is unchanged. Evidence: four probes in `./temp`, the matrix
+  one verified red-first; real-app browser run showing the full
+  list/table/natural cycle mounting and unmounting with zero orphan overlay
+  records. **Rendered pixels are not captured** — the available browser instance
+  reports `nativeUiEnabled: false`, the same limitation already recorded for
+  Package 10 — so real-canvas acceptance is what the pending approval must
+  cover. Details in `todo/ui_bevy/bevy_panel_migration_guide.md`, Package 12.
 
 Deferred after Phase 4 — complete Molecule / MTraX migration:
 
