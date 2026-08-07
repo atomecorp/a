@@ -1705,6 +1705,117 @@ Current evidence — 2026-08-07:
   behaviour that path is supposed to have; rows over real records are covered by
   the content probe, not by the browser run.
 
+##### Package 13 — Communication panel
+
+Status: `in_review` — implementation complete 2026-08-07, product approval
+pending. The HTML route is retired and its dead code removed; the package is
+`acceptance_pending` as a workstream, which releases its slot.
+
+**Slot exception, recorded explicitly.** Both slots were occupied (A: Size then
+Font, B: Layer) when this package started, so it ran as a third concurrent
+workstream. That is a deviation from the two-slot rule, taken on an explicit
+product request to migrate Communication, and it is written here rather than
+taken silently. Non-collision held in fact: Communication owns no module, token
+group or shared builder that slot A or slot B touches — its legacy cluster
+(`communication_*`, `preset_comm_*`) is disjoint from
+`selection_style_apply.js`, `style_panels_visual.js`, `layer.js`,
+`layer_panel_styles.js` and `core/svg_layer_store.js`.
+
+**Families 19 and 20 leave the deferred list.** The clause allows it when a
+source audit finds a measured, non-Molecule Panel occurrence — the same
+precedent that promoted Family 14 with Finder. The notification table *is* that
+occurrence for Family 19, and the compose area for Family 20. Neither was a
+blank-page build: Family 19 composes `sortableHeaderNode` (validated, Family 14)
+over `normalizeTablePresentation`; Family 20 composes the validated
+`multilineInputNode` and `editableTextInputNode`.
+
+- Required families: 1, 3, 4, 6, 9, 11, 19, 20.
+
+| Family | Coverage decision |
+|---:|---|
+| 1 | `validated`, consumed — `buttonNode` for the three compose actions, the row actions and the condition controls. |
+| 3 | `validated`, consumed. |
+| 4 | `validated`, consumed — every text field routes through `textInputNode`. |
+| 6 | `validated`, consumed — the advanced panel is one `accordionNode`, not a local show/hide. |
+| 9 | **`not_applicable`** — source review found the legacy attachments render a plain text chip through `renderAttachmentList`; there is no thumbnail, no photo editor and no source field. `mediaCardNode` exists and stays unconsumed. |
+| 11 | `validated` with the panel — the compose drop target reports a typed refusal (`comm_drop_payload_unsupported`) and a visible notice instead of silently ignoring an unknown payload; file ownership stays with the canonical `getDropAttachment`. |
+| 19 | `validated` with the panel — notification row over the shared sortable header, with the unread marker as the only new token. |
+| 20 | `validated` with the panel — multiline body, attachment chips with removal, send busy state. |
+
+- `owns`: the `communicate` panel composition, its legacy cluster, the
+  `EVE_PANEL_SKIN_TOKENS.bevyPanel.comm` token group, and
+  `bevy_panel_comm_{model,data,editing,view,advanced_view,runtime}.js`.
+- `consumes`, frozen: `sortableHeaderNode`, `accordionNode`, `selectNode`,
+  `toggleableRowNode`, `multilineInputNode`, `editableTextInputNode`,
+  `textInputNode`, `panelStateNode`, `buttonNode`/`node`/`textNode`,
+  `normalizeTablePresentation`, `buildBevyPanelTree`.
+- Cross-dependency: **none.**
+
+**New token group.** `bevyPanel.comm` declares only what nothing existing
+expressed: the unread marker and row tints, the advanced two-column rhythm, and
+the chip removal geometry. Chips reuse `scopeChip`, the table reuses `table`,
+paint reuses `select` and `input`.
+
+**Scope freeze:** `communication_surface_freeze.md`, written before any code.
+**Retirement ledger:** `communication_html_line_migration_registry.md` —
+3 093 lines removed against 2 423 lines of package and neutral remainder,
+partitioned `M`/`R`/`D` with no line omitted.
+**MCP ledger:** `communication_mcp_command_ledger.md` — 11 functions complete,
+7 gaps recorded. Six of the seven predate this migration (three missing
+notification verbs, the start schedule and the property scopes the panel
+collects but never sends, the untyped condition format); the seventh is the
+Visio product decision. The ledger is required to be *complete*, not gap-free.
+
+**Six defects were frozen into scope and repaired rather than carried over.**
+D1 `recordManualRecipient` called without being imported, throwing on every
+manually typed recipient; D2 three bare `readPropertyPanel`/`writePropertyPanel`
+references making the **Write** button throw; D4 a dead empty state, now the
+shared `panelStateNode`; D5 condition rows that never wrote state while the send
+path read it, so every share went out with `condition: null`. D3, the **Visio**
+button dispatching an event nothing listens for, is preserved unchanged pending
+a product decision — a migration does not silently remove a control.
+
+**D6 is `blocked`, not migrated.** The unread badge, the message bubble and the
+pulse target `#_intuition_communicate` and `#toolbox`; neither node has been
+built since the DOM main menu was retired, so the badge had already stopped
+counting and nothing reported it. Projecting a badge onto the Bevy menu item
+needs a main-menu capability that does not exist —
+`bevy_ui_product_registry.js` exposes `setToolLatchedState` and nothing else —
+and building one from a panel workstream would violate shared-ownership
+non-collision. The unread count moves to the panel footer status line, which the
+panel owns.
+
+Current evidence — 2026-08-07:
+
+- `temp/comm_migration_probe.mjs` — 40 checks over the surface identity, the
+  model projection, and every element of the scope freeze: four sortable
+  columns, row cells and per-kind action sets, the unread marker, sort toggling
+  and flipping, the compose fields, the recipient default and its `all`
+  fallback, attachment add/remove, drop acceptance and typed refusal, the six
+  advanced sections, Start/End independence, the eight-property picker with
+  Cancel/OK/All semantics, state-backed condition rows, and the search route.
+  **Verified red first**: stubbing `buildContent` to return `[]` fails 17 of
+  them, so the probe reads the panel rather than itself.
+- `temp/comm_contract_probe.mjs` — the nine window globals, the two conditional
+  installs, setter dedup, and the aliasing invariant that `commState.compose`
+  and `commState.advanced` *are* the panel's objects, including the logout
+  reassignment path. It caught a real gap: the recipient entry could only be
+  committed by blurring the field, which loses entries on touch, so an explicit
+  add control now shares the same commit path.
+- `temp/comm_route_probe.mjs` — exercises the actual HTML/Bevy branch predicate
+  in `panel_surface_runtime.js`: unregistered before the lazy tool module loads,
+  registered after, `surface_id` carrying the `eve_bevy_panel_` prefix that the
+  atomic overlay reconciliation and the `panel` layer band key off, and no
+  `createEveDialog` left in the module graph. It also re-checks that info,
+  finder, contact and calendar did not regress.
+- Full call audit after deletion: every symbol from the six removed modules,
+  plus the eleven dead constants in `communication_base.js` and the 72 `comm*`
+  presets, has zero remaining references across `eVe/`, `atome/src/` and
+  `tests/`. One repo test importing the deleted presets was repaired.
+- **Not captured: rendered pixels.** Same limitation recorded for Packages 10
+  and 12. Real-canvas acceptance is what the pending product approval must
+  cover, together with mobile, Tauri and iOS.
+
 #### Deferred pending Molecule migration and wider panel scope
 
 These families remain part of the 16-panel programme but are outside the active
@@ -1712,24 +1823,19 @@ Calendar/Contact component backlog. They may start only after Phase 4 —
 Molecule / MTraX — is validated, or when a future source audit identifies a
 measured, non-Molecule Panel occurrence. **Family 14 left this list on
 2026-08-04**: the Finder migration is exactly the measured, non-Molecule Panel
-occurrence this clause anticipates, so it is now Package 10.
+occurrence this clause anticipates, so it is now Package 10. **Families 11, 19
+and 20 left it on 2026-08-07** for the same reason, with the Communication panel
+as their measured occurrence; **Family 9 was resolved `not_applicable`** by the
+same source audit. See Package 13.
 
-9. Media thumbnail/card. The current passive prototype is not evidence of a
-   required Panel component; Contact only projects an existing avatar at
-   `90 × 90 px` and exposes no photo editor or source field.
 7. Color field and canonical RGBA value presentation.
 8. Color-swatch grid with selected, hover, focus, and disabled states.
 10. Asset grid with selection, virtualized range, and keyboard-independent
     pointer/touch interaction.
-11. Import/drop target with explicit capability/error state and no browser-only
-    file ownership.
 12. Hierarchical tree row with depth, expand/collapse, selection, and disabled
     descendants.
 15. History event row with current-position and grouped-section presentation.
 16. History cursor / scrubber, separate from the compact product tool slider.
-19. Conversation/thread row and message bubble projection.
-20. Message composer with multiline editing, attachments, send state, and
-    delivery/error projection.
 36. **Tool slider:** the compact Intuition product-tool slider, only if Size
     selects that interaction.
 
@@ -1941,7 +2047,9 @@ legacy Panel geometry.
 
 Calendar, Contact, Home, Infos, Size, Font, Finder, Layer, and Timeline are the
 explicitly ordered migration surfaces; Size, Font, Finder, and Layer entered
-scope on 2026-08-04 with the two parallel workstream slots. Every other matrix
+scope on 2026-08-04 with the two parallel workstream slots, and **Communicate
+entered on 2026-08-07 on an explicit product request** — see the slot exception
+recorded in Package 13. Every other matrix
 row remains deferred after Phase 4 — Molecule /
 MTraX. Each non-deferred
 surface may be composed only after its listed families have a recorded coverage decision
@@ -1954,7 +2062,7 @@ mapped MCP command.
 | Contact | 1, 3, 4, 6, 18 |
 | Info | 1, 3, 4, 12, 17, 29, 30 |
 | Finder | 3, 4, 6, 13, 14. Family 17 is `not_applicable` — source review found a plain `N results` status text, not a selection summary. The `place` scope and its map presentation stay `blocked` by the external provider/privacy/cost contract and leave the Bevy composition; see Package 11 |
-| Communicate | 1, 3, 4, 6, 9, 11, 19, 20 |
+| Communicate | 1, 3, 4, 6, 11, 19, 20. Family 9 is `not_applicable` — source review found plain text attachment chips, no thumbnail and no photo source field. See Package 13 |
 | Delete | 1, 3, 4, 11, 17 |
 | Undo | 1, 4, 15, 16, 17 |
 | Paste | 1, 3, 4, 9, 10, 11, 17 |
@@ -2147,14 +2255,27 @@ surface in `eVe/intuition/panel_definitions.js` with its own `ui.*.panel` tool
 id and its own live DOM route. A small dialog is still a panel; the registry,
 not the visual size, decides.
 
+**Amended 2026-08-07, later the same day.** Communicate left that list: its
+Bevy panel is implemented and its HTML route retired (Package 13). It is
+`acceptance_pending`, not `validated`, so the counter stays at **5/16 validated
+panels** and **10 panels remain** with a live DOM route: `size`, `font`,
+`layer`, `background`, `couleur`, `detail`, `delete`, `undo`, `paste`, and
+`timeline`.
+
 Current slot occupancy:
 
 | Slot | Panel | State | Owns | Consumes | Cross-dependency |
 | --- | --- | --- | --- | --- | --- |
 | A | Size, then Font (Package 8) | `active` | `size`/`font` panel composition and their legacy routes | Families 1, 3, 4, 5, 17; Package 1 scope chips | none — Family 17 unfrozen on 2026-08-07 |
 | B | Layer (Package 9) | `active` | `layer` panel composition and its legacy route | Families 1, 3, 4, 12, 17, 30 | none — Families 12, 17, 30 unfrozen on 2026-08-07 |
+| — | Communicate (Package 13) | `acceptance_pending` 2026-08-07 | `communicate` composition, its legacy cluster, the `bevyPanel.comm` token group | Families 1, 3, 4, 6, 11, 19, 20 | none |
 | — | Infos (Package 7) | `validated` 2026-08-07 | — | — | — |
 | — | Finder (Package 11) | `validated` 2026-08-07 | — | — | — |
+
+**Communicate ran outside the two slots**, on an explicit product request, while
+A and B were both occupied. The deviation and the fact that non-collision still
+held are recorded in Package 13 rather than left implicit. It is
+`acceptance_pending`, so it holds no slot now.
 
 Slot A holds Size and Font in sequence, not in parallel: they share the legacy
 `selection_style_apply.js` and `style_panels_visual.js` helpers, so the legacy
@@ -2233,6 +2354,39 @@ the uniform scalar. Its `size_radius: Vec4` uniform is fully occupied
 uniform-layout change. No panel node currently combines `backdrop` with
 `radius_corners` — the panel shell and footer use a uniform radius — so this is
 recorded rather than emulated.
+
+#### Regressed, and fixed again — 2026-08-07
+
+**This fix had stopped working, and the probes cited as its evidence no longer
+existed.** The projection emitted `properties.corner_radii` correctly, but the
+Virtual Scene normalizer between the record and the adapter never copied it:
+`normalizeAtomeRenderNode` forwarded only `properties.material`, so
+`readCornerRadii` — which looks at `material.cornerRadii`, `material.corner_radii`
+then `node.corner_radii` — always found `null`. Every partially rounded surface
+was painting square again, including the accordion header and the table header
+row the Communication panel depends on.
+
+Found while preparing Package 13, reproduced **red first** with
+`temp/comm_p0_corner_radii_probe.mjs`, then repaired at the missing link rather
+than by widening the reader:
+
+- `render_atom.js` reads `properties.corner_radii` / `properties.cornerRadii`
+  alongside the scalar and normalizes an all-zero tuple to `null`, symmetrically
+  with `cornerRadius`;
+- `virtual_scene_contract.js` forwards it into `material.cornerRadii`, and only
+  when present, so an explicit `properties.material` still wins and the scalar
+  fallback is untouched.
+
+`temp/comm_p0b_corner_radii_e2e.mjs` verifies the whole route into
+`mapVirtualSceneNodeToBevyPayload` on four cases: a top-rounded header, a
+scalar-only node, an all-zero tuple, and explicit-`material` precedence.
+
+**The ordering lesson this produced is binding.** A geometry contract must
+assert the *projected record after normalization*, not the builder tree and not
+the projector's output in isolation — the earlier probes stopped one stage too
+early, which is why a regression in the stage between them went unnoticed. Any
+probe kept as evidence must also stay in `temp/`; a deleted probe is not
+evidence.
 
 ### Superseded correction — Calendar composition
 

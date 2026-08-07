@@ -105,9 +105,16 @@ Missing primitives must be implemented in the shared Bevy UI owner before a prod
   Calendar and Contact in Panel Lab before migrating a legacy HTML surface.
   Then migrate Paste, Font, Size, Undo, Delete, Info,
   Layer, Couleur, Background, Home, Contact, Communicate, Detail, Calendar,
-  and Finder in that order. Finder includes the map feature and remains blocked
-  until `todo/eve_features/map_localization.md` has an approved provider and
-  privacy/platform contract.
+  and Finder in that order.
+
+  **Amended 2026-08-07.** The order above is the original plan, not the record.
+  Contact, Home, Calendar, Infos and Finder are validated; Finder shipped with
+  its map drawn natively in the canvas, so its former provider/privacy gate is
+  closed. Communication was migrated out of order on an explicit product
+  request and is `acceptance_pending`, with its HTML route retired. The
+  authoritative per-panel state is the slot table in
+  `bevy_panel_migration_guide.md`; this list is kept only for the original
+  intent it records.
 
 ### 5. Calendar
 

@@ -134,7 +134,7 @@ Dependances et ordre:
 
 Deferred after Phase 4 — complete Molecule / MTraX migration:
 
-- [ ] Resume the remaining Panel programme after Phase 4: assess Families 7 to 11, 15, 16, 19, 20, and 36 — Family 14 left this list and was validated with Finder on 2026-08-07 — plus any panel-specific extensions of the Infos-owned 12/17/29/30 contracts. Exit criterion: all 16 registered panels are validated, the 8 legacy HTML routes still active after Size, Font, and Layer (`background`, `couleur`, `detail`, `communicate`, `delete`, `undo`, `paste`, `timeline`) are retired, and the temporary Panel Lab is removed.
+- [ ] Resume the remaining Panel programme after Phase 4: assess Families 7, 8, 10, 12, 15, 16, and 36 — Family 14 left this list and was validated with Finder on 2026-08-07; Families 11, 19 and 20 left it the same day, validated with Communication (Package 13), and Family 9 was resolved `not_applicable` by that package's source audit — plus any panel-specific extensions of the Infos-owned 12/17/29/30 contracts. Exit criterion: all 16 registered panels are validated, the 7 legacy HTML routes still active after Size, Font, and Layer (`background`, `couleur`, `detail`, `delete`, `undo`, `paste`, `timeline`) are retired, and the temporary Panel Lab is removed.
 
 Critere de sortie du programme complet:
 

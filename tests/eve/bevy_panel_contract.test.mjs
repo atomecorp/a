@@ -19,8 +19,6 @@ import {
 import { EVE_PANEL_CHROME_TOKENS } from '../../eVe/elements/design/panel_chrome_tokens.js';
 import { EVE_CONTROL_PRESETS } from '../../eVe/elements/look/preset_controls.js';
 import { EVE_PANEL_CHROME_PRESETS } from '../../eVe/elements/look/preset_chrome.js';
-import { EVE_COMM_TABLE_PRESETS } from '../../eVe/elements/look/preset_comm_table.js';
-import { EVE_COMM_SURFACE_PRESETS } from '../../eVe/elements/look/preset_comm_surface.js';
 import { MATRIX_VISUAL_THEME_TOKENS } from '../../eVe/intuition/matrix/visual/matrix_visual_tokens.js';
 import { RIBBON_TOKENS } from '../../eVe/intuition/ribbon/tokens.js';
 import { buildAtomeEditorStyle } from '../../eVe/intuition/tools/visual/tool_visual_tokens.js';
@@ -106,9 +104,6 @@ test('factored legacy presets remain independently mutable', () => {
     assert.notEqual(EVE_CONTROL_PRESETS.passwordGroup.css, EVE_CONTROL_PRESETS.dateTimeGroup.css);
     assert.deepEqual(EVE_CONTROL_PRESETS.checkbox.checked, EVE_CONTROL_PRESETS.radio.checked);
     assert.notEqual(EVE_CONTROL_PRESETS.checkbox.checked, EVE_CONTROL_PRESETS.radio.checked);
-    assert.deepEqual(EVE_COMM_TABLE_PRESETS.commTableCell.css, EVE_COMM_TABLE_PRESETS.commTableCellMessage.css);
-    assert.notEqual(EVE_COMM_TABLE_PRESETS.commTableCell.css, EVE_COMM_TABLE_PRESETS.commTableCellMessage.css);
-    assert.deepEqual(EVE_COMM_SURFACE_PRESETS.commPropertyTitle.css, EVE_COMM_SURFACE_PRESETS.commSearchTitle.css);
     assert.equal(EVE_PANEL_CHROME_PRESETS.header.css.textShadow, EVE_PANEL_CHROME_TOKENS.textShadow);
 });
 
