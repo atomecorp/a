@@ -18,6 +18,10 @@ const {
     SIZE_PRESETS,
     createSizePanelSurface
 } = await import('../../eVe/intuition/runtime/bevy_panel/bevy_panel_size_runtime.js');
+const { resolveBevyPanelGeometry } = await import('../../eVe/intuition/runtime/bevy_panel/bevy_panel_layout.js');
+const { setMainMenuRuntime } = await import('../../eVe/intuition/ribbon/bevy_ui_product_registry.js');
+const { resolveBevyMainMenuItemSize } = await import('../../eVe/intuition/ribbon/bevy_ui_main_menu_model.js');
+const { setAtomeContextualEditApi } = await import('../../eVe/intuition/runtime/eve_intuition/atome_contextual_edit_registry.js');
 
 const findNode = (node, id) => {
     if (Array.isArray(node)) return node.map((child) => findNode(child, id)).find(Boolean) || null;
@@ -96,6 +100,58 @@ test('Font composes the canonical selectable list and applies only known familie
         runtime.surface.onClose();
     }
     assert.equal(runtime.readState().activeFont, 'Arial');
+});
+
+test('Font opens beside the contextual toolbox without changing its bottom anchor', () => {
+    const runtime = createFontPanelSurface();
+    const surface = { getBoundingClientRect: () => ({ width: 1024, height: 768 }) };
+    const railWidth = resolveBevyMainMenuItemSize();
+    assert.equal(runtime.surface.openAtHandednessEdge, true);
+    assert.equal(runtime.surface.openBesideContextualRail, true);
+    setAtomeContextualEditApi({ readState: () => ({ menuVisible: true }) });
+    assert.equal(runtime.surface.resolveHandednessEdgeInsetPx(), railWidth);
+    setAtomeContextualEditApi(null);
+    assert.equal(runtime.surface.resolveHandednessEdgeInsetPx(), 0);
+
+    setMainMenuRuntime({ handedness: 'left', getReservedHeight: () => 74 });
+    const left = resolveBevyPanelGeometry({
+        surface,
+        defaultGeometry: runtime.surface.defaultGeometry,
+        allowMobileFloating: runtime.surface.allowMobileFloating,
+        openAtHandednessEdge: runtime.surface.openAtHandednessEdge,
+        handednessEdgeInsetPx: railWidth
+    });
+    assert.deepEqual([left.x, left.y, left.width], [railWidth, 194, 400]);
+    assert.equal(left.y + left.height, 768 - 74);
+
+    setMainMenuRuntime({ handedness: 'right', getReservedHeight: () => 74 });
+    const right = resolveBevyPanelGeometry({
+        surface,
+        defaultGeometry: runtime.surface.defaultGeometry,
+        allowMobileFloating: runtime.surface.allowMobileFloating,
+        openAtHandednessEdge: runtime.surface.openAtHandednessEdge,
+        handednessEdgeInsetPx: railWidth
+    });
+    assert.deepEqual([right.x, right.y, right.width], [1024 - railWidth - 400, 194, 400]);
+    assert.equal(right.x + right.width, 1024 - railWidth);
+
+    const withoutContextualRail = resolveBevyPanelGeometry({
+        surface,
+        defaultGeometry: runtime.surface.defaultGeometry,
+        allowMobileFloating: runtime.surface.allowMobileFloating,
+        openAtHandednessEdge: runtime.surface.openAtHandednessEdge,
+        handednessEdgeInsetPx: 0
+    });
+    assert.equal(withoutContextualRail.x + withoutContextualRail.width, 1024);
+
+    const narrow = resolveBevyPanelGeometry({
+        surface: { getBoundingClientRect: () => ({ width: 390, height: 844 }) },
+        defaultGeometry: runtime.surface.defaultGeometry,
+        allowMobileFloating: runtime.surface.allowMobileFloating,
+        openAtHandednessEdge: runtime.surface.openAtHandednessEdge,
+        handednessEdgeInsetPx: railWidth
+    });
+    assert.deepEqual([narrow.x, narrow.y, narrow.width, narrow.height], [0, 270, 390 - railWidth, 500]);
 });
 
 test('Size and Font bridges retain public tools and contain no legacy DOM route', () => {

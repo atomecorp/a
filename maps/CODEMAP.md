@@ -2004,8 +2004,11 @@ This section supersedes earlier Dashboard lifecycle descriptions in this map. `e
   and profile-domain owners remain because their responsibilities are outside
   visible Home composition.
 - `bevy_panel_layout.js` / `bevy_panel_runtime.js` own the internal
-  `openAtHandednessEdge` geometry option consumed by Home: bottom/right for
-  right-handed, bottom/left for left-handed, and full-width on mobile.
+  `openAtHandednessEdge` geometry option consumed by Home and Font. Font also
+  opts into `openBesideContextualRail`: its surface resolves an optional inset
+  from the canonical contextual-edit registry and shared main-menu item width,
+  the panel runtime forwards that number, and the layout places Font beside,
+  never under, the rail. Without a visible rail the inset is zero.
 - `dashboard_environment_watcher.js` emits a forced change for
   `eve:profile-preferences-updated`; `dashboard_bevy_ui_runtime.js` delegates the
   resulting refilter to its existing data controller.
