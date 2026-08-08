@@ -42,6 +42,18 @@ The implementation must reuse or extend existing mechanisms whenever reasonably 
 
 Creating new code is the last resort.
 
+**Named owners, not a search.** The audit is not a judgement call for the
+responsibilities that already have a single owner. Module 04, section
+*CANONICAL COMPONENT OWNERS*, names them — inline text editing, list rows,
+virtualized scrolling, column geometry, media tiles, panel shell, visual tokens.
+Consuming an owner is always allowed; writing a second one never is. When an
+owner cannot serve a need, add a parameter to it, defaulting to the existing
+behaviour.
+
+This is enforced, not trusted: `npm run check:component-reuse-guardrails`,
+wired into `check:m0`. It was added on 2026-08-07 after an audit found the
+inline text editor copied six times despite this rule already being in force.
+
 ### 3. Minimal implementation
 
 Choose the implementation introducing:

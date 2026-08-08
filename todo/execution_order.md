@@ -97,17 +97,24 @@ Dependances et ordre:
   field**: the legacy search row is deliberately hidden and only carries state
   fed by the inline finder tool. Package 10's sortable header is validated
   through the same approval.
-  Next: slot A takes **Size then Font** — same slot because they share the
-  legacy `selection_style_apply.js` and `style_panels_visual.js` helpers — and
-  slot B takes **Layer**, whose legacy module set is disjoint from both. Both
+  Completed technically on 2026-08-08: slot A delivered **Size then Font** —
+  same slot because they share the legacy `selection_style_apply.js` and
+  `style_panels_visual.js` helpers — while slot B keeps **Layer**, whose legacy
+  module set is disjoint from both. Both
   HTML retirements are **executed**: Infos when that panel landed, and Finder on
   2026-08-07 — 1 818 lines plus 298 KB of Leaflet shell payload removed, guarded
   by `temp/finder_retirement_probe.mjs` and verified on a clean real boot.
-  **11 registered panels remain**: `size`, `font`, `layer`,
-  `background`, `couleur`, `detail`, `communicate`, `delete`, `undo`, `paste`,
-  and `timeline` — each a real surface in `eVe/intuition/panel_definitions.js`
-  with its own `ui.*.panel` tool id and its own live DOM route. Timeline remains
-  the final panel migration.
+  Size and Font now use their registered shared-canvas Bevy surfaces, retain
+  their public tool ids and canonical mutation routes, and have gap-free
+  retirement ledgers. Focused suites, syntax, M0, Web, Tauri release
+  application, Bevy Cargo, iOS Simulator, and the available clean-canvas
+  browser checks pass. Tauri DMG packaging remains red in `bundle_dmg.sh`.
+  They are
+  `acceptance_pending`, not `validated`: record-backed text, visual, and
+  multi-selection gestures plus product approval remain required. Slot A is
+  released. **Eight registered panels still require implementation**:
+  `layer`, `background`, `couleur`, `detail`, `delete`, `undo`, `paste`, and
+  `timeline`. Timeline remains the final panel migration.
   Added 2026-08-07 — **Package 12, interactive matrix + project view modes**
   (`in_review`, product approval pending). Slot arbitration, stated explicitly
   because the two-slot rule is currently saturated: this package **takes no

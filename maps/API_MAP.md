@@ -233,6 +233,16 @@ localized unit, and disabled presentation. `numericFieldNode` composes native
 field intents for direct edit, stepping, and scrub drag. It exposes no
 public API, DOM control, MCP command, or durable mutation; product surfaces own
 the business value and any command mapping.
+The migrated Size and Font panels add no public API. `ui.size.panel`,
+`ui.font.panel`, `ui.size.apply`, `ui.font.apply`, the existing input aliases,
+and the `eveSizeApi` read/set bridge are preserved. Size direct/step/preset and
+scrub intents converge on `applySizeToSelection`; Font converges on
+`applyFontToSelection`. Bevy panel intentions invoke those existing public ids
+through `invokeToolGateway`; the tool handlers then enter the selection-style
+facade exactly once. The standard component runtimes expose presentation intent
+only and do not add MCP or mutation routes. Internally, persisted
+`rich_text.spans` may carry optional canonical `font_family` strings and numeric
+pixel `font_size` values alongside `bold` and `color`.
 The superseded passive Family 9/17 prototype adds two further closed Squirrel
 presentation APIs: `normalizeMediaCardPresentation` and
 `normalizeSelectionSummaryPresentation`. Their Bevy builders are passive and
@@ -912,7 +922,7 @@ Boundary rules:
 - `atome_contextual_edit_runtime.js` owns the ephemeral editing registry and exposes `enter`, `activate`, `exit`, `toggleFullscreen`, and `readState`.
 - The visible footer, outlines, rail, palette expansion and vertical slider expansion are one BevyUI tree on the shared canvas; no DOM footer lifecycle, second canvas, or window-global state is allowed.
 - Footer move/resize uses canonical `drag.*` / `resize.*` intents and commits once at gesture end. Tool actions continue through the injected canonical tool invokers and selection guards.
-- `tool_slider_builder.js` accepts horizontal or vertical orientation; vertical movement is relative, upward-positive, and collapses on release/cancel.
+- `tool_slider_builder.js` accepts horizontal or vertical orientation and owns the shared `collapsed`/`pressed`/`pinned`/`dragging` session contract with a 4 px threshold. Motion is relative and no-jump: a compact click pins open, a second compact icon/label click closes, a direct compact drag closes on release/cancel, and a rail drag from pinned state remains open.
 
 Boundary status: Closed product runtime API. Public promotion would require a product-neutral footer/tool-surface contract.
 
@@ -1149,9 +1159,10 @@ Verified responsibilities: tool definition registration/update, protected system
 
 Verified shared slider runtime responsibilities:
 
-- `atome/src/squirrel/components/tool_slider_builder.js` exports the canonical slider DOM/data-role selector contract, shared direct-drag controller, and expanding-square slider-tool runtime behavior.
+- `atome/src/squirrel/components/tool_slider_builder.js` exports the canonical slider DOM/data-role selector contract, shared direct-drag controller, 4 px click/drag threshold, pinned/transient state, and expanding-square slider-tool runtime behavior.
 - `eVe/intuition/shared/slider_tool_content.js` is the product wrapper that injects ribbon text tokens into the Atome-owned tool-slider runtime.
 - `eVe/intuition/shared/slider_tool_dom.js` is a compatibility re-export surface for existing eVe imports; the unused `slider_direct_drag.js` re-export shim was removed.
+- `eVe/intuition/shared/bevy_ui_tool_slider.js` is the canvas presentation adapter over the same canonical session transitions; it does not own a second slider behavior.
 
 Verified shared project override entry points: `createSharedProjectOverrideRuntime`, `fetchSharedOverrideAtomes`, `setSharedProjectOverride`, `getSharedProjectOverride`, `removeSharedProjectOverride`, `listSharedOverrideIdsForProject`, `resetSharedOverrides`.
 

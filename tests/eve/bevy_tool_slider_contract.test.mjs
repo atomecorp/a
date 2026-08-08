@@ -5,6 +5,7 @@ import {
     buildBevyVerticalToolSliderNode,
     closeBevyToolSliderSession,
     dragBevyToolSliderSession,
+    releaseBevyToolSliderSession,
     resolveBevyToolSliderConfig
 } from '../../eVe/intuition/shared/bevy_ui_tool_slider.js';
 import { createBevyUiPointerRuntime } from '../../eVe/domains/rendering/bevy_ui_pointer_runtime.js';
@@ -36,6 +37,44 @@ test('shared vertical tool slider renders an upward compact anchor and clamps it
     assert.equal(findNode(expanded, 'slider_value').text, '50 %');
     assert.ok(findNode(expanded, 'slider_rail'));
     assert.ok(findNode(expanded, 'slider_thumb'));
+});
+
+test('shared tool slider distinguishes pinned clicks from transient direct drags', () => {
+    const config = resolveBevyToolSliderConfig({ min: 0, max: 100, step: 1 });
+    const pressed = beginBevyToolSliderSession(50, config);
+    const pinned = releaseBevyToolSliderSession(pressed, { compactAnchor: true });
+    assert.equal(pinned.expanded, true);
+    assert.equal(pinned.pinned, true);
+
+    const pinnedPress = beginBevyToolSliderSession(pinned.value, config, {
+        expanded: pinned.expanded,
+        pinned: pinned.pinned,
+        compactAnchor: true
+    });
+    const closed = releaseBevyToolSliderSession(pinnedPress, { compactAnchor: true });
+    assert.equal(closed.expanded, false);
+    assert.equal(closed.pinned, false);
+
+    const transientPress = beginBevyToolSliderSession(50, config);
+    const jitter = dragBevyToolSliderSession(transientPress, -3, 100, config);
+    assert.equal(jitter.dragged, false);
+    assert.equal(jitter.value, 50);
+    const dragged = dragBevyToolSliderSession(jitter, -7, 100, config);
+    assert.equal(dragged.dragged, true);
+    assert.equal(dragged.value, 60);
+    const transientEnd = releaseBevyToolSliderSession(dragged);
+    assert.equal(transientEnd.expanded, false);
+    assert.equal(transientEnd.pinned, false);
+
+    const pinnedRailPress = beginBevyToolSliderSession(60, config, {
+        expanded: true,
+        pinned: true,
+        compactAnchor: false
+    });
+    const pinnedDrag = dragBevyToolSliderSession(pinnedRailPress, -10, 100, config);
+    const pinnedEnd = releaseBevyToolSliderSession(pinnedDrag, { compactAnchor: false });
+    assert.equal(pinnedEnd.expanded, true);
+    assert.equal(pinnedEnd.pinned, true);
 });
 
 test('a tool slider owns its vertical drag instead of starting panel scroll', () => {

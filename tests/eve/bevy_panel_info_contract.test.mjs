@@ -312,7 +312,7 @@ test('Info migration retires every HTML source and keeps only a DOM-free Bevy br
 
     const packageSources = [
         'eVe/intuition/runtime/bevy_panel/bevy_panel_info_model.js',
-        'eVe/intuition/runtime/bevy_panel/bevy_panel_info_editing.js',
+        'eVe/intuition/runtime/bevy_panel/bevy_panel_text_editing.js',
         'eVe/intuition/runtime/bevy_panel/bevy_panel_info_drag_runtime.js',
         'eVe/intuition/runtime/bevy_panel/bevy_panel_info_view.js',
         'eVe/intuition/runtime/bevy_panel/bevy_panel_info_runtime.js'

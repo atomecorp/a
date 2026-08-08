@@ -188,6 +188,29 @@ GPU-ready values.
 | `elements/eVe_look.js` | Drops the `eveCommPreset` import, its ensurer wiring and its export. |
 | `tests/eve/bevy_panel_contract.test.mjs` | Drops the two imports and three assertions covering the deleted presets. |
 
+## Caught by the call audit — a defect class, not one line
+
+`main_tool_latched_state_runtime.js:26-35` decided whether a menu tool paints as
+latched by looking up an HTML dialog id. A migrated panel has no DOM node, so
+`document.getElementById` returns `null` and the tool reports "not open"
+forever.
+
+**Finder and Calendar had already regressed this way**, silently, at their own
+migrations; the map still listed `eve_finder_dialog` and `eve_calendar_dialog`
+after both routes were retired. Communication would have been the third.
+
+Rather than swapping one id, the branch now keys off
+`isBevyPanelSurfaceRegistered` — the same predicate `panel_surface_runtime.js`
+uses to route the open — so the latch cannot disagree with what actually
+opened, and the next migration cannot reintroduce the bug by forgetting a map
+entry. `htmlDialogIdByMenuKey` keeps only the four surfaces that genuinely still
+have a dialog: `couleur`, `size`, `font`, `detail`.
+
+`temp/comm_latched_state_probe.mjs` covers it, verified red first against the
+old map. Its limit is stated rather than hidden: node cannot mount a surface,
+so the probe asserts the predicate and the absence of retired ids; the
+mounted → latched transition is browser coverage.
+
 ---
 
 ## Framework fix made in passing

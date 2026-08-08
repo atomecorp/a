@@ -2,14 +2,10 @@ import { $ } from '../squirrel.js';
 import { createSliderToolElements } from './tool_slider_elements.js';
 import { createDirectSliderDragController } from './tool_slider_drag.js';
 import { createSliderEmitters } from './tool_slider_emit.js';
-import {
-  VALUE_DOUBLE_CLICK_GUARD_MS,
-  CANONICAL_SLIDER_TOOL_SHELL_SELECTOR, CANONICAL_SLIDER_TOOL_HITZONE_SELECTOR,
-  CANONICAL_SLIDER_TOOL_INPUT_SELECTOR, CANONICAL_SLIDER_TOOL_VALUE_SELECTOR,
-  CANONICAL_SLIDER_TOOL_VALUE_INPUT_SELECTOR,
-  ensureString, toFiniteNumber, clamp, formatSliderValue, normalizeUnitOptions,
-  addOptionalClassNames, createNode, setStyles, resolveDesignTokens, stopBubble, stopAndPrevent
-} from './tool_slider_helpers.js';
+import { VALUE_DOUBLE_CLICK_GUARD_MS, CANONICAL_SLIDER_TOOL_SHELL_SELECTOR, CANONICAL_SLIDER_TOOL_HITZONE_SELECTOR,
+  CANONICAL_SLIDER_TOOL_INPUT_SELECTOR, CANONICAL_SLIDER_TOOL_VALUE_SELECTOR, CANONICAL_SLIDER_TOOL_VALUE_INPUT_SELECTOR,
+  ensureString, toFiniteNumber, clamp, formatSliderValue, normalizeUnitOptions, addOptionalClassNames, createNode,
+  setStyles, resolveDesignTokens, stopBubble, stopAndPrevent } from './tool_slider_helpers.js';
 
 const mountIntuitionXSliderToolContent = ({
     button,
@@ -183,6 +179,10 @@ const mountIntuitionXSliderToolContent = ({
         syncInputValue,
         commitInputValue,
         isPinned: () => expandedPinned === true,
+        pinAfterClick: () => {
+            expandedPinned = true;
+            applyExpandedState(true);
+        },
         openForTransientDrag: () => {
             if (expanded !== true) {
                 expandedPinned = false;
@@ -204,7 +204,7 @@ const mountIntuitionXSliderToolContent = ({
                 source: 'slider.direct.drag'
             });
         },
-        onEnd: ({ value, cancelled, moved, pointerType }) => {
+        onEnd: ({ value, cancelled, moved, pointerType, pinned }) => {
             if (typeof onDragEnd !== 'function') return;
             onDragEnd(value, {
                 input,
@@ -215,6 +215,7 @@ const mountIntuitionXSliderToolContent = ({
                 unit: currentUnit,
                 cancelled: cancelled === true,
                 moved: moved === true,
+                pinned: pinned === true,
                 pointerType,
                 source: 'slider.direct.drag'
             });
@@ -481,10 +482,8 @@ const mountIntuitionXSliderToolContent = ({
 };
 
 const ToolSlider = {
-    CANONICAL_SLIDER_TOOL_HITZONE_SELECTOR,
-    CANONICAL_SLIDER_TOOL_INPUT_SELECTOR,
-    CANONICAL_SLIDER_TOOL_SHELL_SELECTOR,
-    CANONICAL_SLIDER_TOOL_VALUE_INPUT_SELECTOR,
+    CANONICAL_SLIDER_TOOL_HITZONE_SELECTOR, CANONICAL_SLIDER_TOOL_INPUT_SELECTOR,
+    CANONICAL_SLIDER_TOOL_SHELL_SELECTOR, CANONICAL_SLIDER_TOOL_VALUE_INPUT_SELECTOR,
     CANONICAL_SLIDER_TOOL_VALUE_SELECTOR,
     createDirectSliderDragController,
     createSliderToolElements,
@@ -492,17 +491,9 @@ const ToolSlider = {
     mountIntuitionXSliderToolContent
 };
 
-export {
-    CANONICAL_SLIDER_TOOL_HITZONE_SELECTOR,
-    CANONICAL_SLIDER_TOOL_INPUT_SELECTOR,
-    CANONICAL_SLIDER_TOOL_SHELL_SELECTOR,
-    CANONICAL_SLIDER_TOOL_VALUE_INPUT_SELECTOR,
-    CANONICAL_SLIDER_TOOL_VALUE_SELECTOR,
-    ToolSlider,
-    createDirectSliderDragController,
-    createSliderToolElements,
-    formatSliderValue,
-    mountIntuitionXSliderToolContent
-};
+export { CANONICAL_SLIDER_TOOL_HITZONE_SELECTOR, CANONICAL_SLIDER_TOOL_INPUT_SELECTOR,
+    CANONICAL_SLIDER_TOOL_SHELL_SELECTOR, CANONICAL_SLIDER_TOOL_VALUE_INPUT_SELECTOR,
+    CANONICAL_SLIDER_TOOL_VALUE_SELECTOR, ToolSlider, createDirectSliderDragController,
+    createSliderToolElements, formatSliderValue, mountIntuitionXSliderToolContent };
 
 export default ToolSlider;

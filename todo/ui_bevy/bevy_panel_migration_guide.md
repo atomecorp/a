@@ -17,8 +17,9 @@ both documents are updated first.
 The canonical panel registry has 16 entries, and all 16 are in scope for final
 product-panel migration: home, contact, info, finder, communicate, delete,
 undo, paste, timeline, calendar, background, couleur, size, font, detail, and
-layer. Five are `validated` as of 2026-08-07 — contact, home, calendar, info,
-and finder — leaving **11 to migrate**. Timeline also routes through BevyUI
+layer. Five are `validated` as of 2026-08-08 — contact, home, calendar, info,
+and finder. Communication, Size, and Font are technically migrated and
+`acceptance_pending`, leaving **8 panels requiring implementation**. Timeline also routes through BevyUI
 already; that route is not evidence that its product-panel migration is
 complete, and the Timeline product panel is intentionally the final migration
 in this programme.
@@ -1175,8 +1176,8 @@ No effectful Infos function is unreviewed or `blocked`.
 
 ##### Package 8 — Size then Font (workstream slot A)
 
-Status: `active` since 2026-08-07 — slot A, unstarted. It is the next package
-to implement together with Package 9.
+Status: `in_review`; the Size and Font workstreams are `acceptance_pending`
+since 2026-08-08 and slot A is released. Product approval remains required.
 
 - Scope: the routed `size` panel first, then the routed `font` panel, in one
   workstream. They are sequential inside slot A, never parallel: both consume
@@ -1218,6 +1219,75 @@ to implement together with Package 9.
   applies to the current selection through its canonical command, has focused
   contracts and a gap-free retirement ledger, has an explicit product-owner
   approval, and retains no parallel DOM route.
+
+Implementation evidence, 2026-08-08:
+
+- The complete pre-composition inventory is frozen in
+  `size_font_surface_freeze.md`; the effect ledger is complete in
+  `size_font_mcp_command_ledger.md`; and the gap-free retirement ledger covers
+  **177/177 Size lines** and **133/133 Font lines** in
+  `size_font_html_line_migration_registry.md`.
+- `bevy_panel_size_runtime.js` composes the shared numeric-field interaction
+  owner, `scopeChipGroupNode`, and `selectionSummaryNode`. It preserves step
+  `1`, bounds `6..2000`, the eight `18..220 px` presets, and scrub phases
+  `start/frame/end`.
+- `bevy_panel_font_runtime.js` composes the standard selectable-list group and
+  selection summary for exactly the eight frozen families. It creates no
+  weight/style behavior and no local typography treatment for its rows.
+- `tools/size.js` and `tools/font.js` are thin Bevy bridges. Public ids
+  `ui.size.panel`, `ui.font.panel`, `ui.size.apply`, and `ui.font.apply` remain
+  unchanged; applies still traverse `applySizeToSelection` or
+  `applyFontToSelection` and the canonical gateway/mutation owners.
+- The old dialogs, selectors, listeners, Size/Font CSS, and
+  `elastic_slider.js` dependencies are absent from both routes. Helpers still
+  owned by Couleur remain until its migration.
+- Focused Vitest contracts pass **22/22** across four suites, and both route
+  probes pass, including direct entry,
+  step, preset, scrub phases, all frozen families, lifecycle reset, standard
+  component consumption, and bridge/DOM-retirement assertions. Syntax, M0,
+  Web build, Tauri release application build, Bevy Cargo check, and iOS
+  Simulator build evidence are recorded in `FRAMEWORK_STATE.md`.
+- Tauri succeeds with `--no-bundle` and produces the release application. The
+  separate DMG packaging step remains red in `bundle_dmg.sh`; this packaging
+  failure is recorded and is not presented as a source-compilation failure.
+- The widened Vitest run remains red outside Package 8: **672/700** tests pass,
+  with 28 failures across stale Panel Lab counts and unrelated geometry, text,
+  Virtual Scene, Dashboard, renderer, and accessibility contracts. Package 8
+  is not promoted to `validated` while repository-wide evidence is incomplete.
+- Integrated-browser evidence confirms one shared WebGPU canvas, real-click
+  Bevy panel open/close behavior, reload recovery, zero Size/Font legacy DOM
+  nodes, and an empty warning/error console. The available anonymous workspace
+  exposed no selectable product Atome and its import affordance did not open a
+  file chooser, so text/visual/multi-selection product gestures and explicit
+  product approval remain **To verify**. Neither panel is marked `validated`.
+
+Correction evidence, 2026-08-08:
+
+- Size and Font panel intentions now re-enter `ui.size.apply` and
+  `ui.font.apply` through `invokeToolGateway`; the public handlers enter
+  `applySizeToSelection` / `applyFontToSelection` exactly once, without the
+  previous panel-runtime recursion.
+- A non-empty active or recently blurred project text selection mutates the
+  canonical `rich_text.spans`. Deterministic split/merge preserves `bold`,
+  `color`, and the untargeted style while adding optional `font_family` and
+  numeric pixel `font_size`; without a range, whole-text fallback remains.
+- WebGPU measurement, wrapping, caret, selection, line height, and texture
+  rasterization consume the same per-span family/size contract.
+- The text rasterizer restores the canvas font after range measurement and
+  reapplies the current run font immediately before paint. A recording-canvas
+  contract proves `Hello` with `[1,4)` draws `H`/`o` in the base font and only
+  `ell` in the selected family/size, with non-overlapping measured advances.
+- The shared Atome/Squirrel slider owner now distinguishes a pinned click from
+  a direct relative drag at 4 px. A compact click pins open, a second compact
+  icon/label click closes, direct drag closes on release, and pinned rail drag
+  stays open. Bevy and DOM projections delegate to that owner.
+- New and updated focused contracts pass **12/12**, plus the real contextual
+  Size touch-surface scenario passes. Syntax, M0, Web build, Bevy Cargo check,
+  and the iOS Simulator application build pass. The execution-order audit
+  remains red only for the two unrelated unregistered todo documents already
+  recorded. The real browser retry again reached one shared canvas and an empty
+  warning/error console, but `remote_account_not_provisioned` prevented a
+  record-backed selection; product acceptance therefore remains pending.
 
 ##### Package 9 — Layer (workstream slot B)
 
@@ -1808,13 +1878,137 @@ Current evidence — 2026-08-07:
   atomic overlay reconciliation and the `panel` layer band key off, and no
   `createEveDialog` left in the module graph. It also re-checks that info,
   finder, contact and calendar did not regress.
+- `temp/comm_latched_state_probe.mjs` — covers the defect the call audit caught,
+  verified red first (see below).
 - Full call audit after deletion: every symbol from the six removed modules,
   plus the eleven dead constants in `communication_base.js` and the 72 `comm*`
   presets, has zero remaining references across `eVe/`, `atome/src/` and
   `tests/`. One repo test importing the deleted presets was repaired.
+
+**The call audit caught a defect class, and it is binding on every future
+panel.** `main_tool_latched_state_runtime.js` resolved a menu tool's latched
+state by looking up an HTML dialog id. A migrated panel has no DOM node, so the
+lookup returns `null` and the tool reports "not open" forever. **Finder and
+Calendar had already regressed this way at their own migrations** — the map
+still listed `eve_finder_dialog` and `eve_calendar_dialog` long after both
+routes were retired, and nothing reported it. The branch now keys off
+`isBevyPanelSurfaceRegistered`, the same predicate `panel_surface_runtime.js`
+uses to route the open, so the latch cannot disagree with what opened and a
+forgotten map entry cannot reintroduce the bug.
+
+Rule this produces: **a panel retirement is not complete until every map keyed
+by that panel's DOM id is re-keyed or removed.** Grepping for the removed
+module names is not enough — the id outlives the module.
+
+Applying that rule immediately surfaces **twelve further `eve_finder_dialog`
+references left by the Finder retirement**, all failing silently:
+`finder_inline_runtime.js:102,118,189`,
+`tool_runtime_finder_execution.js:14,75`,
+`panel_layout_geometry.js:178`, three CSS rules in `base_preset.js`, and three
+in `tests/probes/map_tool_attribution_contract.test.mjs`. `eve_calendar_dialog`
+and `eve_timeline_dialog` are also still the declared `surface_id`s in
+`panel_definitions.js:166,178` while both surfaces route through Bevy.
+
+**Repaired 2026-08-08** (guard: `temp/finder_dialog_id_retirement_probe.mjs`,
+red on 12 checks first). Disposition of each survivor:
+
+| Reference | Disposition |
+| --- | --- |
+| `finder_inline_runtime.js:102` `panelId: 'eve_finder_dialog'` | dropped — `openPanelWithToolContext` resolves `eve_bevy_panel_finder` from the definition, like every other panel |
+| `finder_inline_runtime.js:118` focus of `#…__search__input` | carried to the surface — the Bevy Finder owns no text field (`state.query` is fed only by `applyToolContext`), so `focus` targets the inline contenteditable, and reports `focused` honestly instead of always `true` |
+| `finder_inline_runtime.js:189` DOM search fallback | deleted — `window.__eveFinder.quickSearch` is installed beside the surface registration and is the only search route |
+| `tool_runtime_finder_execution.js:14` `resolveFinderPanelVisible` | re-keyed on the surface — `isPanelSurfaceOpen('finder')`. It answered "closed" forever, so the fallback `touch` could only re-open an open panel |
+| `tool_runtime_finder_execution.js:75` `panelFocus` fallback | dead focus removed; the fallback opens and returns `focused: false` |
+| `panel_layout_geometry.js:178` bottom clearance | deleted with `resolvePanelBottomClearancePx` and its three call sites — Finder was the map's only entry, so it returned 0 for every remaining HTML panel |
+| `base_preset.js:99,107,113` result-row CSS | deleted — the rows are Bevy nodes styled from `BEVY_PANEL_TOKENS` |
+| `tests/probes/map_tool_attribution_contract.test.mjs` | file deleted — its subject, `eVe/intuition/tools/map.js`, went with Leaflet, so the probe could not even import |
+
+`surface_id` was re-pointed for `timeline`, `calendar` **and `contact`** (the
+same defect, not previously listed) to their `eve_bevy_panel_*` ids. Re-pointing
+alone does not fix the behaviour, because the Bevy id is not a DOM node either:
+`isPanelSurfaceVisible` in `panel_tool_registration_runtime.js` now consults
+`isBevyPanelSurfaceRegistered` / `isBevyPanelSurfaceOpen` first. That predicate
+gates `toggle_on_pointer`, so **a pointer click on an open contact, timeline or
+calendar panel re-opened it instead of closing it** — the user-visible half of
+this defect class.
+
+`tool_runtime.js` reaches the predicate through the late-bound
+`runtime/panel_api.js` (`isPanelSurfaceOpen`, registered by `eVeIntuition.js`),
+not by importing `bevy_panel_runtime.js`: a direct import closes a cycle back
+through `tool_gateway.js`. Verified with a module-graph scan — the four cycles
+that remain are the pre-existing `selection ↔ tool_gateway` ones.
 - **Not captured: rendered pixels.** Same limitation recorded for Packages 10
   and 12. Real-canvas acceptance is what the pending product approval must
   cover, together with mobile, Tauri and iOS.
+
+##### Package 14 — Project view: List enriched, Matrix tiles, project-name footer
+
+Status: `in_review` — implementation complete 2026-08-07, product approval
+pending. Shared visual component plus the two project-view modes; it occupies
+**no workstream slot** and touches none of slot A's or slot B's panels, legacy
+modules or token groups.
+
+**What the modes became.** `list` and `table` had converged into two flat views
+of the same records. They now differ by purpose: `list` keeps the collapsible
+hierarchy and gains the columns the table used to own — leading preview, name,
+type, modified — while `table` (key unchanged, so persisted `view_mode`
+preferences keep resolving) draws the Dashboard's card language: a square tile
+of the element's own pixels with its name on a band underneath. Its menu label
+became **Matrix**.
+
+**The preview is a re-projection, not a capture.** There is no thumbnail capture
+for an atome — only projects have one, through
+`project_preview_runtime.js`. The tile therefore re-projects the record into its
+own box via `overlayRecord` + `overlayRecordLayout: 'node_box'`, the mechanism
+the selectable list's thumbnail already proved.
+
+- `owns`: `project_view_{matrix_content,footer,record_fields}.js`, the
+  `bevyPanel.mediaCard.tile` token group, and `tileMediaCardNode`.
+- `consumes`, frozen: `virtualizedHierarchicalSelectableListNode`,
+  `panelStateNode`, `textInputNode`, `createBevyUiTextInputSession`,
+  `createTextEditingLayout`, `BEVY_PANEL_TOKENS`.
+- Cross-dependency: **none.**
+
+**Two additive parameters on a shared component.** `hierarchicalSelectableListNode`
+gained `metaColumns` and `thumbnailPlacement`, both defaulting to the previous
+behaviour. The Infos panel, its other consumer, is untouched — asserted, not
+assumed, by a dedicated probe.
+
+**The header is gone, and with it a literal `"null"` on screen.** The count read
+`Number.isFinite(Number(total)) ? String(total) : …`; `Number(null)` is `0`, so
+the guard never fired and `String(null)` rendered. The canonical
+`virtualizedListCountLabel` already handled it correctly and was simply not
+being used. The surface now carries one footer holding the project name and
+nothing else.
+
+**Renaming reuses the canonical writer.** A double click or a 520 ms long press
+— the Dashboard's own values for the same gesture on the same object — opens an
+inline editor whose commit calls `updateProjectName`
+(`intuition/matrix/core/project_data.js`), the single owner the Dashboard and
+the Matrix view already use. It returns a bare boolean, so a `false` restores
+the previous name rather than leaving the screen claiming something the store
+does not hold.
+
+Current evidence — 2026-08-07:
+
+- `temp/project_view_list_probe.mjs` — additivity guard (no meta nodes, unchanged
+  label width and thumbnail anchor without the new options), then the opt-in
+  layout: both columns, leading preview, no overlap, hierarchy intact, and the
+  narrow-row fallback that drops columns rather than the name.
+- `temp/project_view_matrix_probe.mjs` — column count from width, virtualization
+  (500 records build under 100 tiles), full-height content, window follows
+  scroll, sub-row scroll does not repaint, the three states, tile activation.
+- `temp/project_view_footer_probe.mjs` — the footer holds one node, no header
+  survives, both gestures reach the same write path, a drag cancels the long
+  press, an unchanged or blank name writes nothing, and both a `false` and a
+  non-boolean return restore the previous name.
+- `temp/project_view_count_probe.mjs` — `totalCount: null` never renders
+  `"null"`, and the faulty pattern survives in no file.
+- `temp/project_view_content_probe.mjs` and `project_view_link_probe.mjs` —
+  Package 12's own probes, ported to the new surface rather than deleted.
+- All four new probes verified **red first** by sabotage: ignoring the writer's
+  refusal, building every tile, and reintroducing the header each fail them.
+- **Not captured: rendered pixels.** Same limitation as Packages 10, 12 and 13.
 
 #### Deferred pending Molecule migration and wider panel scope
 
@@ -2238,8 +2432,8 @@ opening of the existing event editor, are accepted on the shared BevyUI/WebGPU
 route. The Finder approval covers the `place` scope and its native in-canvas
 map; Package 10's sortable header is validated through that same approval.
 
-**Both slots are free.** Infos and Finder left the slot model together, so the
-next two panels start now. Families 12, 17, 29, and 30 are unfrozen: the
+Infos and Finder left the slot model together, so the next two panels started.
+Families 12, 17, 29, and 30 are unfrozen: the
 cross-dependency that prevented Size, Font, and Layer from reaching `validated`
 no longer exists. **Both HTML retirements are executed**: Infos when that panel
 landed, and Finder on 2026-08-07 — 1 818 lines removed (the seven-module legacy
@@ -2262,11 +2456,18 @@ panels** and **10 panels remain** with a live DOM route: `size`, `font`,
 `layer`, `background`, `couleur`, `detail`, `delete`, `undo`, `paste`, and
 `timeline`.
 
+**Amended 2026-08-08.** Size and Font are implemented on their routed Bevy
+surfaces and both legacy routes are retired. They are `acceptance_pending`, so
+the validated counter remains **5/16**. **Eight panels still require product
+implementation** — `layer`, `background`, `couleur`, `detail`, `delete`,
+`undo`, `paste`, and `timeline` — and those eight retain active legacy panel
+routes. Slot A is released.
+
 Current slot occupancy:
 
 | Slot | Panel | State | Owns | Consumes | Cross-dependency |
 | --- | --- | --- | --- | --- | --- |
-| A | Size, then Font (Package 8) | `active` | `size`/`font` panel composition and their legacy routes | Families 1, 3, 4, 5, 17; Package 1 scope chips | none — Family 17 unfrozen on 2026-08-07 |
+| — | Size, then Font (Package 8) | `acceptance_pending` 2026-08-08 | `size`/`font` Bevy composition; legacy routes retired | Families 1, 3, 4, 5, 17; Package 1 scope chips | none |
 | B | Layer (Package 9) | `active` | `layer` panel composition and its legacy route | Families 1, 3, 4, 12, 17, 30 | none — Families 12, 17, 30 unfrozen on 2026-08-07 |
 | — | Communicate (Package 13) | `acceptance_pending` 2026-08-07 | `communicate` composition, its legacy cluster, the `bevyPanel.comm` token group | Families 1, 3, 4, 6, 11, 19, 20 | none |
 | — | Infos (Package 7) | `validated` 2026-08-07 | — | — | — |
@@ -2277,13 +2478,14 @@ A and B were both occupied. The deviation and the fact that non-collision still
 held are recorded in Package 13 rather than left implicit. It is
 `acceptance_pending`, so it holds no slot now.
 
-Slot A holds Size and Font in sequence, not in parallel: they share the legacy
+Slot A held Size and Font in sequence, not in parallel: they share the legacy
 `selection_style_apply.js` and `style_panels_visual.js` helpers, so the legacy
 non-collision rule forbids splitting them across slots. Slot B holds Layer,
 whose legacy module set (`layer.js`, `layer_panel_styles.js`,
 `core/svg_layer_store.js`) is disjoint from both. Both packages were written
-before Infos was approved and add **no new component family**, so they consume
-the existing baseline and start without a shared-component gate.
+before Infos was approved and add **no new component family**, so they consumed
+the existing baseline without a shared-component gate. Package 8 released slot
+A on 2026-08-08 when both panels reached `acceptance_pending`.
 
 Scope-freeze reminder, binding since `finder_place_map_package.md`: before
 either package starts composing, its complete surface — every mode, every view,

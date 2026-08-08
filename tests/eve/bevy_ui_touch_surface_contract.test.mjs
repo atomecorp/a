@@ -421,6 +421,60 @@ test('Atome contextual runtime keeps local edits and emits one canonical homothe
     assert.equal(intents[2].commit, true);
 });
 
+test('Atome contextual Size slider pins on click and closes only after a transient direct drag', async () => {
+    const records = [{ id: 'text_a', properties: { kind: 'text', text: 'Styled', left: 20, top: 20, width: 160, height: 60 } }];
+    const scene = { project_id: 'project', records, text: null };
+    const rendered = [];
+    const invocations = [];
+    const runtime = createAtomeContextualEditRuntime({
+        legacyState: {},
+        resolveDefinitions: () => [{
+            key: 'size', label: 'Size', icon: 'volume', toolType: 'slider',
+            sliderMin: 8, sliderMax: 108, sliderStep: 1, sliderValue: 48, sliderUnit: 'px'
+        }],
+        invokeDefinition: async (_, options) => { invocations.push(options); return { ok: true }; },
+        surfaceResolver: () => ({ getBoundingClientRect: () => ({ width: 800, height: 600 }) }),
+        bevyRuntimeResolver: () => ({
+            mountTree: async ({ tree }) => rendered.push(tree),
+            updateTree: async ({ tree }) => rendered.push(tree), unmountTree: async () => null
+        }),
+        findSceneByAtomeId: (id) => id === 'text_a' ? scene : null,
+        readSceneState: () => scene, hitTestScene: () => null, readMainMenuHeight: () => 52
+    });
+    runtime.enter({ atomeId: 'text_a', kind: 'text' });
+    await runtime.render();
+    let slider = findNode(rendered.at(-1).root, 'atome_contextual_tool_size');
+    slider.on.press({ y: 26 });
+    slider.on.release();
+    await runtime.render();
+    slider = findNode(rendered.at(-1).root, 'atome_contextual_tool_size');
+    assert.equal(slider.style.size[1], 156);
+    assert.equal(invocations.length, 0);
+
+    slider.on.press({ y: 30 });
+    slider.on.drag({ delta_y: -16 });
+    slider.on.release();
+    await runtime.render();
+    slider = findNode(rendered.at(-1).root, 'atome_contextual_tool_size');
+    assert.equal(slider.style.size[1], 156);
+    assert.deepEqual(invocations.map((entry) => entry.payload.phase), ['start', 'frame', 'end']);
+
+    slider.on.press({ y: 140 });
+    slider.on.release();
+    await runtime.render();
+    slider = findNode(rendered.at(-1).root, 'atome_contextual_tool_size');
+    assert.equal(slider.style.size[1], 52);
+
+    invocations.length = 0;
+    slider.on.press({ y: 26 });
+    slider.on.drag({ delta_y: -16 });
+    slider.on.release();
+    await runtime.render();
+    slider = findNode(rendered.at(-1).root, 'atome_contextual_tool_size');
+    assert.equal(slider.style.size[1], 52);
+    assert.deepEqual(invocations.map((entry) => entry.payload.phase), ['start', 'frame', 'end']);
+});
+
 test('Dashboard mode suspends contextual edit chrome and project return restores or clears its session', async () => {
     const previousWindow = globalThis.window;
     const previousDocument = globalThis.document;

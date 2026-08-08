@@ -38,6 +38,35 @@ No implementation, refactor, cleanup, API work, UI work, tool work, persistence 
 
 Implementation may proceed only after the map check identifies the owning layer, confirms whether reusable code already exists, and determines which maps must be updated in the same task.
 
+### Canonical component owners — 2026-08-07, authoritative
+
+These responsibilities have exactly one implementation. Consuming one is always
+allowed; writing a second is never allowed. When an owner cannot serve a need,
+add a parameter to it, defaulting to the existing behaviour.
+
+| Responsibility | Single owner |
+| --- | --- |
+| Inline text editing (session, caret, selection, commit) | `eVe/intuition/runtime/bevy_panel/bevy_panel_text_editing.js` |
+| Text field node (paint, focus, alignment) | `eVe/intuition/runtime/bevy_panel/bevy_panel_editable_text.js` |
+| Text geometry, word and line ranges | `eVe/domains/rendering/text_editing_layout.js` |
+| Hidden text / IME service | `eVe/domains/rendering/hidden_text_service_runtime.js` |
+| List row, hierarchy, selection, drag | `eVe/intuition/runtime/bevy_panel/bevy_panel_selectable_list.js` |
+| Virtualized scrolling window | `eVe/intuition/runtime/bevy_panel/bevy_panel_virtual_window.js` |
+| Table column geometry | `atome/src/squirrel/components/table_contract.js` |
+| Sortable column header | `eVe/intuition/runtime/bevy_panel/bevy_panel_sortable_header.js` |
+| Media card and tile | `eVe/intuition/runtime/bevy_panel/bevy_panel_media_card.js` |
+| Panel shell, footer, scroll area | `eVe/intuition/runtime/bevy_panel/bevy_panel_tree.js` |
+| Empty / loading / error state | `eVe/intuition/runtime/bevy_panel/bevy_panel_state.js` |
+| Visual tokens | `EVE_PANEL_SKIN_TOKENS` in `eVe/elements/skin/panel_skin.js` |
+| Project name write | `eVe/intuition/matrix/core/project_data.js` (`updateProjectName`) |
+
+Enforced by `npm run check:component-reuse-guardrails`, wired into `check:m0`.
+Added after an audit found the inline text editor in six copies — 981 lines over
+a 750-line canonical stack — and the virtualized window in three, despite the
+reuse rule already being in force. Full rationale and the operative clause are
+in `.codex/modules/04-feature-work-cleanup-and-framework-reuse.md`, section
+*CANONICAL COMPONENT OWNERS*.
+
 ## Global Ownership
 
 BevyUI panel ownership:
@@ -52,7 +81,8 @@ BevyUI panel ownership:
 - `eVe/intuition/runtime/eve_intuition/atome_contextual_edit_model.js` owns the disposable Atome-edit footer tree: an exact-bounds transparent composed shell alone carries the shared exterior shadow, while the sibling selection outline remains shadow-free and cannot expand that silhouette.
 - `eVe/intuition/ribbon/bevy_ui_menu_surface.js` owns the shared Bevy footer geometry, common menu-tool content/node builders, plus the corner-resize grip and red-close constructors. Atome-edit and panel footer trees consume those shared helpers, keeping full-size hit targets while the visible grips use the skin ratio and stay anchored to their exterior lower corners.
 - `eVe/intuition/shared/bevy_ui_tool_slider.js` owns the shared canvas-only
-  vertical tool-slider presentation and pure ephemeral session transitions.
+  vertical tool-slider presentation and delegates its pure ephemeral session
+  transitions to the canonical Atome/Squirrel slider owner.
   It composes the existing BevyUI menu material, label, image, and panel
   primitives because the Rust `tool_slider` kind has no dedicated native rail,
   thumb, value, or vertical-slider widget. Contextual editing keeps canonical
@@ -121,6 +151,7 @@ BevyUI panel ownership:
 - `atome/src/squirrel/components/scope_chip_contract.js` owns renderer-neutral multi-value filter presentation. `bevy_panel_scope_chips.js` composes native buttons with Select-derived state paint; `bevy_panel_lab_scope_chip_runtime.js` owns only close-reset `events`/`todos`/`reminders` selection and closed `panel_lab.scope_chip.*` intents. It creates no public API, durable state, MCP call, or Atome mutation.
 - `atome/src/squirrel/components/panel_state_contract.js` owns the renderer-neutral passive status presentation: `empty`, `loading`, `error`, or `permission_denied`, each with required localized title and message. `bevy_panel_state.js` composes the native non-interactive `empty_state` kind from the shared panel state skin; `bevy_panel_lab_surface.js` renders all four specimens statically. It has no handler, Lab state, MCP call, Atome mutation, or DOM control.
 - `atome/src/squirrel/components/numeric_input_contract.js` owns renderer-neutral numeric-field presentation: finite caller-owned value/range/step, localized unit, and disabled state. `bevy_panel_numeric_field.js` composes the existing native `button` and `number_input` primitives; `bevy_panel_lab_numeric_field_runtime.js` owns only close-reset direct-edit, stepper, focus, and scrub-drag presentation state with closed `panel_lab.numeric_field.*` intents. It creates no MCP call, Atome mutation, public API, durable state, or DOM control.
+- `bevy_panel_numeric_field_runtime.js` is the shared numeric-field interaction owner for direct editing, standard step buttons, focus, and scrub phases; Panel Lab and the Size product surface configure that one owner. `bevy_panel_size_runtime.js` composes it with standard scope chips and the shared selection summary, while `bevy_panel_font_runtime.js` composes the standard selectable list. Their small `tools/size.js` and `tools/font.js` bridges retain the existing public panel/apply ids and register only shared-canvas Bevy surfaces. Panel intentions re-enter those public ids through `invokeToolGateway`; business writes remain in `selection_style_apply.js`.
 - `atome/src/squirrel/components/media_card_contract.js` owns passive media-card normalization for a caller-owned `ready`/`loading`/`error` status, localized title/message, media source when ready, and accessibility label. `bevy_panel_media_card.js` uses the existing shared `image` hydration route and the validated panel-state builder; it owns neither image loading nor a handler. `atome/src/squirrel/components/selection_summary_contract.js` owns a localized title/summary plus nonnegative count; `bevy_panel_selection_summary.js` is its passive canvas projection. These Family 9/17 technical prototypes have no MCP call, mutation, DOM control, or Lab state, but are superseded as active Panel-migration evidence: they are not counted or reused until their actual product owner, legacy occurrence, and measured geometry are established.
 - `bevy_panel_lab_text_input_runtime.js` owns only the Panel Lab field policy:
   consume the first enabled activation without mutating the value, preserve all
@@ -306,7 +337,8 @@ Perform tool ownership:
 
 Selection-style tool ownership:
 
-- `eVe/intuition/tools/selection_style_apply.js` owns only the public `applyColorToSelection`/`applySizeToSelection`/`applyFontToSelection`/`readSelectionCount` apply facade consumed by the couleur/size/font tools, plus the re-exported `hasTextStyleRangeSelectionIntent`/`resolveCurrentTextSizeValue`. The disabled `ATOMIC_INLINE_TEXT_SELECTION_MUTATIONS_ENABLED` inline range-mutation subsystem was removed as unreachable code; a `applyInlineStyleToActiveTextSelection` stub preserves the caller contract and must not be re-expanded into per-range DOM span mutation.
+- `eVe/intuition/tools/selection_style_apply.js` owns the public `applyColorToSelection`/`applySizeToSelection`/`applyFontToSelection`/`readSelectionCount` facade consumed by the couleur/size/font tools, plus the re-exported `hasTextStyleRangeSelectionIntent`/`resolveCurrentTextSizeValue`. For active or recently blurred project text selections it routes the remembered non-empty range into the canonical `rich_text` mutation; otherwise it applies the canonical whole-Atome property. It never derives or persists business spans from DOM state.
+- `eVe/domains/rendering/rich_text_style.js` owns deterministic rich-text normalization, range split/merge, and per-index style lookup for `bold`, `color`, `font_family`, and numeric `font_size`. Text layout, texture rasterization, caret, and selection geometry consume this owner so persisted spans and WebGPU projection cannot diverge.
 - `eVe/intuition/tools/selection_style_state.js` owns the text-selection memory / style-intent mutable state singletons and the timing/selector constants; `selection_style_ranges.js` owns the stateless DOM-range serialization and numeric/font-size helpers.
 - `eVe/intuition/tools/selection_style_context.js` owns the selection target resolvers (selection ids, focused/editing text host, text-style intent, host elements, style-tool interaction targets); `selection_style_text_selection.js` owns the live/remembered editable and preview text-range contexts and the current text-size resolution.
 - `eVe/intuition/tools/selection_style_memory.js` owns capturing/restoring the active text range selection for style tools and the selectionchange/pointerdown bridge.
@@ -344,6 +376,7 @@ Atome DOM projection ownership:
 
 Unified rendering ownership:
 
+- Rich-text raster measurement inside `bevy_media_texture_resolver.js` is paint-state neutral: temporary canvas font changes are restored, and every `fillText`/`strokeText` run explicitly reapplies its resolved family, size, and weight. This keeps half-open Font/Size ranges on their intended glyphs without overlap or style leakage to the following run.
 - `eVe/domains/rendering/` owns the closed product unified rendering projection contract for eVe Atomes: disposable `RenderAtom` normalization, render-scene ordering and hit testing, bounded project/matrix canvas surfaces, the single active `text_editing_session.js` keyboard/selection/caret owner, glyph geometry from `text_editing_layout.js`, unitless-or-pixel line-height normalization from `bevy_text_texture_style.js`, hidden text service lifecycle, first-versus-active text double-click arbitration in `surface_runtime.js`, panel interaction interception, and the shared WebGPU render-at-time compositor entry point. `atome_contextual_edit_runtime.js` refreshes disposable contextual chrome when the hidden active text editor emits input so the footer follows live measured multiline geometry.
 - `eVe/domains/rendering/render_atom.js` owns the disposable RenderAtom content projection and must consume the shared media source canonicalization contract before media reaches Bevy, so bare uploaded or recorded filenames become explicit `/api/uploads/...` or `/api/recordings/...` sources with owner scope instead of browser-relative URLs. Video RenderAtom content also normalizes the derived timeline fields `start`, `duration`, `trimIn`, `trimOut`, `offset`, `speed`, and `loop` from canonical Atome properties for renderer/decode projection; this remains disposable projection data and must not become a writable renderer state store.
 - `eVe/domains/rendering/virtual_scene_contract.js` owns the Phase 1 renderer-agnostic Virtual Scene contract: disposable `AtomeRenderNode` projection, deterministic tree construction, selected-state projection from the runtime selection table, dense render-layer assignment from the actual scene paint order, render diff operations, and dirty-flag names. It is a projection/diff contract only; it must not become an ECS, renderer, canonical Atome model, or DOM-backed state store.

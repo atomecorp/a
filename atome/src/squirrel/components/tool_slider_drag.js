@@ -1,4 +1,60 @@
-// Extracted from tool_slider_builder.js: direct pointer-drag controller for the slider tool.
+// Extracted from tool_slider_builder.js: canonical slider-tool interaction semantics.
+const TOOL_SLIDER_DRAG_THRESHOLD_PX = 4;
+const finite = (value, fallback = 0) => Number.isFinite(Number(value)) ? Number(value) : fallback;
+const clamp = (value, minimum, maximum) => Math.min(maximum, Math.max(minimum, value));
+const quantize = (value, config = {}) => {
+    const min = finite(config.min, 0);
+    const max = Math.max(min, finite(config.max, 100));
+    const step = Math.max(0.0001, finite(config.step, 1));
+    return clamp(min + (Math.round((clamp(finite(value, min), min, max) - min) / step) * step), min, max);
+};
+
+const beginToolSliderSession = (value, config = {}, options = {}) => {
+    const startValue = quantize(value, config);
+    const pinned = options.pinned === true && options.expanded === true;
+    return {
+        state: 'pressed', expanded: true, pinned, wasPinned: pinned,
+        compactAnchor: options.compactAnchor !== false,
+        value: startValue, startValue, delta: 0, dragged: false
+    };
+};
+
+const dragToolSliderSession = (session = {}, delta = 0, travelPx = 1, config = {}) => {
+    if (session.state !== 'pressed' && session.state !== 'dragging') return session;
+    const nextDelta = finite(session.delta, 0) + finite(delta, 0);
+    const dragged = session.dragged === true || Math.abs(nextDelta) >= TOOL_SLIDER_DRAG_THRESHOLD_PX;
+    if (!dragged) return { ...session, delta: nextDelta };
+    const min = finite(config.min, 0);
+    const max = Math.max(min, finite(config.max, 100));
+    const range = max - min;
+    return {
+        ...session,
+        state: 'dragging',
+        delta: nextDelta,
+        dragged: true,
+        value: quantize(finite(session.startValue, min) + ((nextDelta / Math.max(1, finite(travelPx, 1))) * range), config)
+    };
+};
+
+const releaseToolSliderSession = (session = {}, options = {}) => {
+    const cancelled = options.cancelled === true;
+    const wasPinned = session.wasPinned === true;
+    if (cancelled) {
+        return {
+            ...session, state: wasPinned ? 'pinned' : 'collapsed', expanded: wasPinned,
+            pinned: wasPinned, value: finite(session.startValue, session.value), dragged: false
+        };
+    }
+    if (session.dragged === true) {
+        return { ...session, state: wasPinned ? 'pinned' : 'collapsed', expanded: wasPinned, pinned: wasPinned };
+    }
+    const compactAnchor = options.compactAnchor ?? session.compactAnchor;
+    if (wasPinned && compactAnchor === true) {
+        return { ...session, state: 'collapsed', expanded: false, pinned: false };
+    }
+    return { ...session, state: 'pinned', expanded: true, pinned: true };
+};
+
 const createDirectSliderDragController = ({
     input,
     hitzone,
@@ -12,6 +68,7 @@ const createDirectSliderDragController = ({
     syncInputValue,
     commitInputValue,
     isPinned,
+    pinAfterClick,
     openForTransientDrag,
     collapseAfterTransientDrag,
     stopAndPrevent,
@@ -69,14 +126,10 @@ const createDirectSliderDragController = ({
             startY: Number(event?.clientY) || 0,
             startValue: quantizeSliderValue(input.value),
             trackLength: resolveTrackLength(),
-            moved: false
+            moved: false,
+            startNotified: false,
+            wasPinned: isPinned() === true
         };
-        if (typeof onStart === 'function') {
-            onStart({
-                value: dragSession.startValue,
-                pointerType: String(event?.pointerType || '').trim() || 'unknown'
-            });
-        }
         try {
             if (Number.isFinite(dragSession.pointerId)) {
                 input.setPointerCapture?.(dragSession.pointerId);
@@ -93,6 +146,16 @@ const createDirectSliderDragController = ({
     function onPointerMove(event) {
         if (!dragSession) return;
         if (Number.isFinite(dragSession.pointerId) && Number(event?.pointerId) !== dragSession.pointerId) return;
+        const dx = Number(event?.clientX) - Number(dragSession.startX || 0);
+        const dy = Number(event?.clientY) - Number(dragSession.startY || 0);
+        if (!dragSession.moved && Math.hypot(dx, dy) < TOOL_SLIDER_DRAG_THRESHOLD_PX) return;
+        if (!dragSession.startNotified && typeof onStart === 'function') {
+            dragSession.startNotified = true;
+            onStart({
+                value: dragSession.startValue,
+                pointerType: String(event?.pointerType || '').trim() || 'unknown'
+            });
+        }
         const nextValue = readValue(event?.clientX, event?.clientY);
         if (!Number.isFinite(nextValue)) return;
         dragSession.moved = true;
@@ -104,6 +167,7 @@ const createDirectSliderDragController = ({
         if (!dragSession) return;
         if (Number.isFinite(dragSession.pointerId) && Number(event?.pointerId) !== dragSession.pointerId) return;
         const moved = dragSession.moved === true;
+        const wasPinned = dragSession.wasPinned === true;
         let finalValue = quantizeSliderValue(input.value);
         if (moved) {
             stopAndPrevent(event);
@@ -111,15 +175,20 @@ const createDirectSliderDragController = ({
             finalValue = commitInputValue(Number.isFinite(nextValue) ? nextValue : input.value, 'slider.direct.drag');
         }
         clear();
+        if (!moved) {
+            if (!wasPinned) pinAfterClick?.();
+            return;
+        }
         if (typeof onEnd === 'function') {
             onEnd({
                 value: finalValue,
                 cancelled: false,
                 moved,
-                pointerType: String(event?.pointerType || '').trim() || 'unknown'
+                pointerType: String(event?.pointerType || '').trim() || 'unknown',
+                pinned: wasPinned
             });
         }
-        if (isPinned() !== true) collapseAfterTransientDrag();
+        if (!wasPinned) collapseAfterTransientDrag();
     }
 
     function onPointerCancel(event) {
@@ -127,17 +196,20 @@ const createDirectSliderDragController = ({
         if (Number.isFinite(dragSession.pointerId) && Number(event?.pointerId) !== dragSession.pointerId) return;
         stopAndPrevent(event);
         const moved = dragSession.moved === true;
-        const finalValue = quantizeSliderValue(input.value);
+        const finalValue = quantizeSliderValue(dragSession.startValue);
+        syncInputValue(finalValue, 'slider.direct.cancel');
+        const wasPinned = dragSession.wasPinned === true;
         clear();
         if (typeof onEnd === 'function') {
             onEnd({
                 value: finalValue,
                 cancelled: true,
                 moved,
-                pointerType: String(event?.pointerType || '').trim() || 'unknown'
+                pointerType: String(event?.pointerType || '').trim() || 'unknown',
+                pinned: wasPinned
             });
         }
-        if (isPinned() !== true) collapseAfterTransientDrag();
+        if (!wasPinned) collapseAfterTransientDrag();
     }
 
     const bind = () => {
@@ -152,4 +224,10 @@ const createDirectSliderDragController = ({
 };
 
 
-export { createDirectSliderDragController };
+export {
+    TOOL_SLIDER_DRAG_THRESHOLD_PX,
+    beginToolSliderSession,
+    createDirectSliderDragController,
+    dragToolSliderSession,
+    releaseToolSliderSession
+};

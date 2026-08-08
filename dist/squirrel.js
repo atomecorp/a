@@ -2408,7 +2408,9 @@
       };
   };
 
-  // Extracted from tool_slider_builder.js: direct pointer-drag controller for the slider tool.
+  // Extracted from tool_slider_builder.js: canonical slider-tool interaction semantics.
+  const TOOL_SLIDER_DRAG_THRESHOLD_PX = 4;
+
   const createDirectSliderDragController = ({
       input,
       hitzone,
@@ -2422,6 +2424,7 @@
       syncInputValue,
       commitInputValue,
       isPinned,
+      pinAfterClick,
       openForTransientDrag,
       collapseAfterTransientDrag,
       stopAndPrevent,
@@ -2479,14 +2482,10 @@
               startY: Number(event?.clientY) || 0,
               startValue: quantizeSliderValue(input.value),
               trackLength: resolveTrackLength(),
-              moved: false
+              moved: false,
+              startNotified: false,
+              wasPinned: isPinned() === true
           };
-          if (typeof onStart === 'function') {
-              onStart({
-                  value: dragSession.startValue,
-                  pointerType: String(event?.pointerType || '').trim() || 'unknown'
-              });
-          }
           try {
               if (Number.isFinite(dragSession.pointerId)) {
                   input.setPointerCapture?.(dragSession.pointerId);
@@ -2503,6 +2502,16 @@
       function onPointerMove(event) {
           if (!dragSession) return;
           if (Number.isFinite(dragSession.pointerId) && Number(event?.pointerId) !== dragSession.pointerId) return;
+          const dx = Number(event?.clientX) - Number(dragSession.startX || 0);
+          const dy = Number(event?.clientY) - Number(dragSession.startY || 0);
+          if (!dragSession.moved && Math.hypot(dx, dy) < TOOL_SLIDER_DRAG_THRESHOLD_PX) return;
+          if (!dragSession.startNotified && typeof onStart === 'function') {
+              dragSession.startNotified = true;
+              onStart({
+                  value: dragSession.startValue,
+                  pointerType: String(event?.pointerType || '').trim() || 'unknown'
+              });
+          }
           const nextValue = readValue(event?.clientX, event?.clientY);
           if (!Number.isFinite(nextValue)) return;
           dragSession.moved = true;
@@ -2514,6 +2523,7 @@
           if (!dragSession) return;
           if (Number.isFinite(dragSession.pointerId) && Number(event?.pointerId) !== dragSession.pointerId) return;
           const moved = dragSession.moved === true;
+          const wasPinned = dragSession.wasPinned === true;
           let finalValue = quantizeSliderValue(input.value);
           if (moved) {
               stopAndPrevent(event);
@@ -2521,15 +2531,20 @@
               finalValue = commitInputValue(Number.isFinite(nextValue) ? nextValue : input.value, 'slider.direct.drag');
           }
           clear();
+          if (!moved) {
+              if (!wasPinned) pinAfterClick?.();
+              return;
+          }
           if (typeof onEnd === 'function') {
               onEnd({
                   value: finalValue,
                   cancelled: false,
                   moved,
-                  pointerType: String(event?.pointerType || '').trim() || 'unknown'
+                  pointerType: String(event?.pointerType || '').trim() || 'unknown',
+                  pinned: wasPinned
               });
           }
-          if (isPinned() !== true) collapseAfterTransientDrag();
+          if (!wasPinned) collapseAfterTransientDrag();
       }
 
       function onPointerCancel(event) {
@@ -2537,17 +2552,20 @@
           if (Number.isFinite(dragSession.pointerId) && Number(event?.pointerId) !== dragSession.pointerId) return;
           stopAndPrevent(event);
           const moved = dragSession.moved === true;
-          const finalValue = quantizeSliderValue(input.value);
+          const finalValue = quantizeSliderValue(dragSession.startValue);
+          syncInputValue(finalValue, 'slider.direct.cancel');
+          const wasPinned = dragSession.wasPinned === true;
           clear();
           if (typeof onEnd === 'function') {
               onEnd({
                   value: finalValue,
                   cancelled: true,
                   moved,
-                  pointerType: String(event?.pointerType || '').trim() || 'unknown'
+                  pointerType: String(event?.pointerType || '').trim() || 'unknown',
+                  pinned: wasPinned
               });
           }
-          if (isPinned() !== true) collapseAfterTransientDrag();
+          if (!wasPinned) collapseAfterTransientDrag();
       }
 
       const bind = () => {
@@ -2777,6 +2795,10 @@
           syncInputValue,
           commitInputValue,
           isPinned: () => expandedPinned === true,
+          pinAfterClick: () => {
+              expandedPinned = true;
+              applyExpandedState(true);
+          },
           openForTransientDrag: () => {
               if (expanded !== true) {
                   expandedPinned = false;
@@ -2798,7 +2820,7 @@
                   source: 'slider.direct.drag'
               });
           },
-          onEnd: ({ value, cancelled, moved, pointerType }) => {
+          onEnd: ({ value, cancelled, moved, pointerType, pinned }) => {
               if (typeof onDragEnd !== 'function') return;
               onDragEnd(value, {
                   input,
@@ -2809,6 +2831,7 @@
                   unit: currentUnit,
                   cancelled: cancelled === true,
                   moved: moved === true,
+                  pinned: pinned === true,
                   pointerType,
                   source: 'slider.direct.drag'
               });
@@ -3075,10 +3098,8 @@
   };
 
   const ToolSlider = {
-      CANONICAL_SLIDER_TOOL_HITZONE_SELECTOR,
-      CANONICAL_SLIDER_TOOL_INPUT_SELECTOR,
-      CANONICAL_SLIDER_TOOL_SHELL_SELECTOR,
-      CANONICAL_SLIDER_TOOL_VALUE_INPUT_SELECTOR,
+      CANONICAL_SLIDER_TOOL_HITZONE_SELECTOR, CANONICAL_SLIDER_TOOL_INPUT_SELECTOR,
+      CANONICAL_SLIDER_TOOL_SHELL_SELECTOR, CANONICAL_SLIDER_TOOL_VALUE_INPUT_SELECTOR,
       CANONICAL_SLIDER_TOOL_VALUE_SELECTOR,
       createDirectSliderDragController,
       createSliderToolElements,

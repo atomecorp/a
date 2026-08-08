@@ -26,6 +26,56 @@ Strictly forbidden:
 - deleting a legacy file without dependency verification and targeted validation;
 - preserving parallel old and new implementations when the legacy surface can be removed.
 
+## CANONICAL COMPONENT OWNERS
+
+The reuse rule above has always been strict. On 2026-08-07 an audit found it
+violated anyway: the inline text editor existed in **six copies** (981 lines
+over a 750-line canonical stack), and the virtualized window in three. Two of
+those copies were written the same day, by an assistant that had read this
+module. Injunctions alone did not hold the line.
+
+What was missing is factual, not rhetorical: the rule said "reuse the canonical
+owner" without ever naming one. This section names them. It is enforced by
+`npm run check:component-reuse-guardrails`, wired into `check:m0`.
+
+| Responsibility | Single owner |
+| --- | --- |
+| Inline text editing (session, caret, selection, commit) | `eVe/intuition/runtime/bevy_panel/bevy_panel_text_editing.js` |
+| Text field node (paint, focus, alignment) | `eVe/intuition/runtime/bevy_panel/bevy_panel_editable_text.js` |
+| Text geometry, word and line ranges | `eVe/domains/rendering/text_editing_layout.js` |
+| Hidden text / IME service | `eVe/domains/rendering/hidden_text_service_runtime.js` |
+| List row, hierarchy, selection, drag | `eVe/intuition/runtime/bevy_panel/bevy_panel_selectable_list.js` |
+| Virtualized scrolling window | `eVe/intuition/runtime/bevy_panel/bevy_panel_virtual_window.js` |
+| Table column geometry | `atome/src/squirrel/components/table_contract.js` |
+| Sortable column header | `eVe/intuition/runtime/bevy_panel/bevy_panel_sortable_header.js` |
+| Media card and tile | `eVe/intuition/runtime/bevy_panel/bevy_panel_media_card.js` |
+| Panel shell, footer, scroll area | `eVe/intuition/runtime/bevy_panel/bevy_panel_tree.js` |
+| Empty / loading / error state | `eVe/intuition/runtime/bevy_panel/bevy_panel_state.js` |
+| Visual tokens | `EVE_PANEL_SKIN_TOKENS` in `eVe/elements/skin/panel_skin.js` |
+| Project name write | `eVe/intuition/matrix/core/project_data.js` (`updateProjectName`) |
+
+The operative clause, which is checkable rather than incantatory:
+
+**Adding a consumer to a canonical owner is always allowed. Writing a second
+owner never is. When an owner cannot serve a new need, the only correct answer
+is an additive parameter on that owner, defaulting to the existing behaviour.**
+
+Three consequences, all mandatory:
+
+1. A file whose name announces an owned component — `*_editing.js`,
+   `*_virtual_window.js` — may not be created. The guardrail refuses it by name,
+   before its logic is even written.
+2. A per-surface copy is not justified by "this panel is different". Every one
+   of the six text-editor copies believed that; their differences were four
+   injections and two labels.
+3. When a copy is discovered, converging it is part of the task that touched it,
+   not a follow-up. The legacy-file policy at the top of this module already
+   says so; this section removes the excuse of not knowing what to converge on.
+
+Declared debt is tracked in the guardrail's allowlist, not in prose: an entry
+there is a copy that still has to converge, and removing that entry is the
+definition of done. The list may shrink. It may never grow.
+
 ## ARCHITECTURAL AUTHORITY
 
 The authoritative architecture documentation is located under eve/application/documentations/, documentations/, and maps/. Before generating or modifying code, the assistant MUST ensure full consistency with these documents.

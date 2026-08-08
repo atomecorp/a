@@ -95,6 +95,10 @@ tests/eve/*
 !tests/eve/assistant_session_controller.test.mjs
 !tests/eve/bevy_project_renderer_guards.test.mjs
 !tests/eve/bevy_panel_contract.test.mjs
+!tests/eve/bevy_panel_size_font_contract.test.mjs
+!tests/eve/project_scene_text_style_range_contract.test.mjs
+!tests/eve/rich_text_style_contract.test.mjs
+!tests/eve/selection_style_font_size_contract.test.mjs
 !tests/eve/calendar_projection_contract.test.mjs
 !tests/eve/calendar_runtime_contract.test.mjs
 !tests/eve/calendar_persistence_contract.test.mjs
