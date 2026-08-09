@@ -36,6 +36,11 @@ const translateVoiceKey = (key) => {
     if (key.endsWith('closing_greeting')) return voiceTexts.closingGreeting;
     return 'Assistant vocal eVe';
 };
+const withMcpBridge = (api) => ({
+    orchestrator: { bridge: { kind: 'mcp' } },
+    stopListening: async () => ({ stopped: true }),
+    ...api
+});
 
 test('voice assistant speaks distinct opening, touch and closing phrases in order', async () => {
     const listening = deferred();
@@ -43,7 +48,7 @@ test('voice assistant speaks distinct opening, touch and closing phrases in orde
     const finalListening = deferred();
     let listenCount = 0;
     const calls = [];
-    const api = {
+    const api = withMcpBridge({
         ensureReady: async () => calls.push('ready'),
         createSession: async () => ({ session_id: 'voice-1' }),
         subscribe: () => () => { },
@@ -69,7 +74,7 @@ test('voice assistant speaks distinct opening, touch and closing phrases in orde
         cancelListening: async () => { },
         stopSpeaking: async () => { },
         interrupt: async () => { }
-    };
+    });
     const controller = createVoiceAssistantSessionController({
         voiceApi: api,
         ...voiceTexts
@@ -83,7 +88,7 @@ test('voice assistant speaks distinct opening, touch and closing phrases in orde
     await controller.respond();
     assert.deepEqual(calls.findLast((entry) => Array.isArray(entry) && entry[0] === 'speak'), ['speak', voiceTexts.touchResponse]);
     nextListening.resolve({ text: 'Dessine un cercle' });
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await new Promise((resolve) => setTimeout(resolve, 10));
     assert.deepEqual(calls.find((entry) => Array.isArray(entry) && entry[0] === 'execute'), ['execute', 'Dessine un cercle']);
     await controller.close();
     assert.deepEqual(calls.findLast((entry) => Array.isArray(entry) && entry[0] === 'speak'), ['speak', voiceTexts.closingGreeting]);
@@ -93,7 +98,7 @@ test('voice assistant speaks distinct opening, touch and closing phrases in orde
 test('closing the voice assistant cancels listening, speech and processing ownership', async () => {
     const listening = deferred();
     const stopped = [];
-    const api = {
+    const api = withMcpBridge({
         ensureReady: async () => true,
         createSession: async () => ({ session_id: 'voice-2' }),
         subscribe: () => () => { },
@@ -103,7 +108,7 @@ test('closing the voice assistant cancels listening, speech and processing owner
         cancelListening: async (id) => stopped.push(['listen', id]),
         stopSpeaking: async (id) => stopped.push(['speak', id]),
         interrupt: async (id) => stopped.push(['interrupt', id])
-    };
+    });
     const controller = createVoiceAssistantSessionController({ voiceApi: api, ...voiceTexts });
     await controller.open();
     await controller.close({ reason: 'test' });
@@ -113,6 +118,89 @@ test('closing the voice assistant cancels listening, speech and processing owner
         ['interrupt', 'voice-2']
     ]);
     listening.resolve({ text: 'ignored' });
+});
+
+test('voice assistant fails closed when the MCP bridge is unavailable', async () => {
+    const controller = createVoiceAssistantSessionController({
+        voiceApi: {
+            ensureReady: async () => ({ orchestrator: { bridge: { kind: 'runtime_v2' } } }),
+            createSession: async () => ({ session_id: 'forbidden-direct-session' }),
+            subscribe: () => () => { },
+            speak: async () => ({ promise: Promise.resolve({}) }),
+            startListening: async () => ({ promise: Promise.resolve({ text: '' }) }),
+            stopListening: async () => ({ stopped: true }),
+            executeUtterance: async () => ({ ok: true }),
+            cancelListening: async () => { },
+            stopSpeaking: async () => { },
+            interrupt: async () => { }
+        },
+        ...voiceTexts
+    });
+    await assert.rejects(controller.open(), /voice_mcp_bridge_unavailable/);
+    assert.equal(controller.getState().phase, 'error');
+});
+
+test('voice assistant barge-in stops speech and routes the captured turn through MCP', async () => {
+    const speech = deferred();
+    const interruptListening = deferred();
+    const interruptStarted = deferred();
+    const normalListening = deferred();
+    let listenCount = 0;
+    let listener = () => { };
+    const executions = [];
+    const stops = [];
+    const api = withMcpBridge({
+        ensureReady: async () => true,
+        createSession: async () => ({ session_id: 'voice-barge-1' }),
+        subscribe: (next) => { listener = next; return () => { }; },
+        speak: async () => ({ promise: speech.promise }),
+        startListening: async () => {
+            listenCount += 1;
+            if (listenCount === 1) {
+                interruptStarted.resolve();
+                return { promise: interruptListening.promise };
+            }
+            return { promise: normalListening.promise };
+        },
+        stopListening: async (sessionId, options) => {
+            stops.push(['listen', sessionId, options.reason]);
+            interruptListening.resolve({ text: 'Crée un carré' });
+        },
+        stopSpeaking: async (sessionId, options) => {
+            stops.push(['speak', sessionId, options.reason]);
+            speech.resolve({ interrupted: true });
+        },
+        executeUtterance: async (text, options) => {
+            executions.push({ text, options });
+            return { ok: true };
+        },
+        cancelListening: async () => { },
+        interrupt: async () => { }
+    });
+    const controller = createVoiceAssistantSessionController({
+        voiceApi: api,
+        ...voiceTexts,
+        env: {
+            __EVE_VOICE_BARGE_ARM_DELAY_MS: 0,
+            setTimeout,
+            clearTimeout
+        }
+    });
+    const opening = controller.open();
+    await interruptStarted.promise;
+    listener({
+        type: 'voice.stt.partial',
+        session_id: 'voice-barge-1',
+        payload: { text: 'Crée un carré' }
+    });
+    await opening;
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    assert.equal(stops.some((entry) => entry[0] === 'speak' && entry[2] === 'assistant_barge_in'), true);
+    assert.equal(executions[0]?.text, 'Crée un carré');
+    assert.equal(executions[0]?.options.execution_transport, 'mcp');
+    assert.equal(executions[0]?.options.autoSpeak, false);
+    await controller.close({ speakFarewell: false });
+    normalListening.resolve({ cancelled: true });
 });
 
 test('French local TTS encoder is deterministic for greeting, numbers and elisions', () => {
@@ -211,7 +299,7 @@ test('a real BevyUI long hold reopens after visual close even while the farewell
     const farewell = deferred();
     const spoken = [];
     const scheduled = [];
-    const voiceApi = {
+    const voiceApi = withMcpBridge({
         ensureReady: async () => true,
         createSession: async () => ({ session_id: `hold-session-${++sessionSequence}` }),
         subscribe: () => () => { },
@@ -225,7 +313,7 @@ test('a real BevyUI long hold reopens after visual close even while the farewell
         cancelListening: async () => ({ ok: true }),
         stopSpeaking: async () => ({ ok: true }),
         interrupt: async () => ({ ok: true })
-    };
+    });
     const runtime = createEveAssistantRuntime({
         env: { addEventListener: () => { }, performance: { now: () => clock } },
         voiceApiResolver: () => voiceApi,
@@ -310,7 +398,7 @@ test('assistant public API owns modal lifecycle, trace command, render teardown 
         await new Promise((resolve) => setTimeout(resolve, 0));
     };
     const pendingListen = () => new Promise(() => { });
-    const voiceApi = {
+    const voiceApi = withMcpBridge({
         ensureReady: async () => true,
         createSession: async () => ({ session_id: `session-${++sessionSequence}` }),
         subscribe: () => () => { },
@@ -321,7 +409,7 @@ test('assistant public API owns modal lifecycle, trace command, render teardown 
         cancelListening: async () => ({ ok: true }),
         stopSpeaking: async () => ({ ok: true }),
         interrupt: async () => ({ ok: true })
-    };
+    });
     const runtime = createEveAssistantRuntime({
         env: {
             addEventListener: (type, listener) => { listeners[type] = listener; },
@@ -391,7 +479,7 @@ test('closing during appearance speaks only the farewell and remains reopenable'
     let clock = 0;
     let frameCallback = null;
     const spokenTexts = [];
-    const voiceApi = {
+    const voiceApi = withMcpBridge({
         subscribeTtsFrames: () => () => { },
         subscribe: () => () => { },
         ensureReady: async () => true,
@@ -402,7 +490,7 @@ test('closing during appearance speaks only the farewell and remains reopenable'
         cancelListening: async () => ({ ok: true }),
         stopSpeaking: async () => ({ ok: true }),
         interrupt: async () => ({ ok: true })
-    };
+    });
     const runtime = createEveAssistantRuntime({
         env: { addEventListener: () => { } },
         voiceApiResolver: () => voiceApi,
@@ -446,7 +534,7 @@ test('assistant releases visual interaction after animation without waiting for 
     let frameCallback = null;
     let sessionSequence = 0;
     const nativeStop = deferred();
-    const voiceApi = {
+    const voiceApi = withMcpBridge({
         subscribeTtsFrames: () => () => { },
         subscribe: () => () => { },
         ensureReady: async () => true,
@@ -457,7 +545,7 @@ test('assistant releases visual interaction after animation without waiting for 
         cancelListening: async () => ({ ok: true }),
         stopSpeaking: async () => nativeStop.promise,
         interrupt: async () => ({ ok: true })
-    };
+    });
     const runtime = createEveAssistantRuntime({
         env: { addEventListener: () => { } },
         voiceApiResolver: () => voiceApi,
@@ -496,7 +584,7 @@ test('renderer warmup time is excluded from the 420 ms reveal clock', async () =
     let renderCount = 0;
     let sessionCount = 0;
     const warmup = deferred();
-    const voiceApi = {
+    const voiceApi = withMcpBridge({
         subscribeTtsFrames: () => () => { },
         subscribe: () => () => { },
         ensureReady: async () => true,
@@ -507,7 +595,7 @@ test('renderer warmup time is excluded from the 420 ms reveal clock', async () =
         cancelListening: async () => ({ ok: true }),
         stopSpeaking: async () => ({ ok: true }),
         interrupt: async () => ({ ok: true })
-    };
+    });
     const runtime = createEveAssistantRuntime({
         env: { addEventListener: () => { } },
         voiceApiResolver: () => voiceApi,
@@ -554,7 +642,7 @@ test('assistant runtime survives ten complete voiced open and close cycles with 
         await Promise.resolve();
         await new Promise((resolve) => setTimeout(resolve, 0));
     };
-    const voiceApi = {
+    const voiceApi = withMcpBridge({
         ensureReady: async () => true,
         createSession: async () => ({ session_id: `stress-session-${++sessionSequence}` }),
         subscribe: () => () => { },
@@ -568,7 +656,7 @@ test('assistant runtime survives ten complete voiced open and close cycles with 
         cancelListening: async () => ({ ok: true }),
         stopSpeaking: async () => ({ ok: true }),
         interrupt: async () => ({ ok: true })
-    };
+    });
     const runtime = createEveAssistantRuntime({
         env: { addEventListener: () => { }, console: { error: () => { } }, performance: { now: () => clock } },
         voiceApiResolver: () => voiceApi,
@@ -614,7 +702,7 @@ test('a native farewell failure cannot strand the assistant or block reopening',
         await Promise.resolve();
         await new Promise((resolve) => setTimeout(resolve, 0));
     };
-    const voiceApi = {
+    const voiceApi = withMcpBridge({
         ensureReady: async () => true,
         createSession: async () => ({ session_id: `failure-session-${++sessionSequence}` }),
         subscribe: () => () => { voiceUnsubscribeCount += 1; },
@@ -628,7 +716,7 @@ test('a native farewell failure cannot strand the assistant or block reopening',
         cancelListening: async () => ({ ok: true }),
         stopSpeaking: async () => ({ ok: true }),
         interrupt: async () => ({ ok: true })
-    };
+    });
     const runtime = createEveAssistantRuntime({
         env: {
             addEventListener: () => { },

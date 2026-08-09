@@ -63,10 +63,12 @@ export const resolveConfiguredAiProviderCredentials = async ({
     const configured = metadata
         .map((entry) => ({
             providerId: toText(entry?.provider).toLowerCase(),
-            model: toText(entry?.model)
+            model: toText(entry?.model),
+            active: entry?.active === true
         }))
         .filter((entry) => entry.providerId && AI_PROVIDER_DEFINITIONS[entry.providerId]);
-    if (!configured.length) return { ok: true, userId, items: [] };
+    const activeProviderIds = configured.filter((entry) => entry.active).map((entry) => entry.providerId);
+    if (!configured.length) return { ok: true, userId, items: [], activeProviderIds };
     const vault = securityApi || resolveSecurityApi(env);
     if (vault?.vaultStatus?.().configured !== true) {
         return { ok: false, error: 'ai_vault_locked', userId, items: [] };
@@ -86,11 +88,12 @@ export const resolveConfiguredAiProviderCredentials = async ({
             providerId: entry.providerId,
             provider: AI_PROVIDER_DEFINITIONS[entry.providerId],
             model: entry.model || AI_PROVIDER_DEFINITIONS[entry.providerId].models?.[0] || '',
+            active: entry.active,
             apiKey,
             entryId
         });
     }
-    return { ok: true, userId, items };
+    return { ok: true, userId, items, activeProviderIds };
 };
 
 export const extractJsonResponse = (text) => {
@@ -108,19 +111,22 @@ export const extractJsonResponse = (text) => {
     }
 };
 
-export const resolveFirstAiProviderConfig = async ({
+export const resolveActiveAiProviderConfig = async ({
     loadProfile = loadRuntimeUserProfile,
     securityApi = null,
     env = globalThis
 } = {}) => {
     const resolved = await resolveConfiguredAiProviderCredentials({ loadProfile, securityApi, env });
     if (!resolved?.ok) return { ok: false, error: resolved?.error || 'no_ai_key_configured' };
-    const entry = resolved.items[0];
-    if (!entry) return { ok: false, error: 'no_ai_key_configured' };
+    const activeProviderIds = Array.isArray(resolved.activeProviderIds) ? resolved.activeProviderIds : [];
+    if (activeProviderIds.length > 1) return { ok: false, error: 'ai_active_provider_ambiguous' };
+    if (!activeProviderIds.length) return { ok: false, error: 'no_active_ai_provider' };
+    const entry = resolved.items.find((item) => item.active === true);
+    if (!entry) return { ok: false, error: 'ai_active_provider_key_missing' };
     return {
         ok: true,
         ...entry,
-        source: 'profile.passkeys.keys+token_vault.first'
+        source: 'profile.passkeys.keys.active+token_vault'
     };
 };
 

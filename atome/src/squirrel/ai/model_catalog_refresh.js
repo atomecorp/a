@@ -1,5 +1,4 @@
 import {
-    AI_MODEL_CATALOG_TTL_MS,
     buildModelCatalogCacheRecord,
     getEmbeddedModelCatalogPayload,
     readModelCatalogCache,
@@ -210,11 +209,12 @@ const buildCatalogItem = ({
         recommended_models: [...definition.recommended_models],
         fallback_models: [...definition.fallback_models],
         detected_models: detected,
-        models: sortModels(unique([
-            ...definition.recommended_models,
-            ...detected,
-            ...definition.fallback_models
-        ]), definition),
+        models: source === 'remote'
+            ? sortModels(detected, definition)
+            : sortModels(unique([
+                ...definition.recommended_models,
+                ...definition.fallback_models
+            ]), definition),
         source,
         stale,
         error: toText(error)
@@ -231,6 +231,8 @@ export const refreshAiModelCatalog = async ({
 } = {}) => {
     const configured = await resolveConfiguredAiProviderKeys({ loadProfile, securityApi, env });
     const configuredByProvider = new Map((configured.items || []).map((entry) => [entry.provider, entry]));
+    const previous = readModelCatalogCache({ storage });
+    const previousByProvider = new Map((previous?.payload?.items || []).map((entry) => [entry.provider, entry]));
     const items = [];
 
     for (const definition of Object.values(AI_MODEL_PROVIDER_REGISTRY)) {
@@ -256,10 +258,11 @@ export const refreshAiModelCatalog = async ({
                 source: 'remote'
             }));
         } catch (error) {
+            const prior = previousByProvider.get(definition.id);
             items.push(buildCatalogItem({
                 definition,
-                detectedModels: [],
-                source: 'embedded',
+                detectedModels: prior?.detected_models || [],
+                source: prior?.source === 'remote' ? 'remote' : 'embedded',
                 error: toText(error?.message || error),
                 stale: true
             }));

@@ -1,7 +1,7 @@
 import {
     normalizeAiProviderError,
     requestProviderCompletion,
-    resolveFirstAiProviderConfig
+    resolveActiveAiProviderConfig
 } from '../ai/provider_client.js';
 import { defaultEnv } from './orchestrator_env.js';
 
@@ -80,7 +80,7 @@ export const createDefaultMailAiSummarizer = ({
     stats = {},
     locale = 'fr-FR'
 } = {}) => {
-        const providerConfig = await resolveFirstAiProviderConfig();
+        const providerConfig = await resolveActiveAiProviderConfig();
         if (providerConfig?.ok !== true) {
             return {
                 ok: false,

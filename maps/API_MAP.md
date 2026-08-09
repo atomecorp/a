@@ -4,6 +4,8 @@ Status: Initial API map after the Atome open / eVe closed boundary validation.
 
 Workspace entry API: `openWorkspaceDashboardWithProjectBootstrap({ source, ensureProjectReady })` in `user_workspace_surface_runtime.js` is the internal canonical orchestration route for authenticated and anonymous boot. It opens and verifies the neutral Dashboard first, invokes the supplied canonical project-readiness owner behind it, and keeps the Dashboard foregrounded when preparation completes. The ready project is revealed only by the user's explicit `toggleWorkspaceDashboardAndMainMenu` action. Bootstrap results are phase-qualified (`dashboard_open`, `project_bootstrap`); an explicit reveal failure uses `project_reveal`.
 
+Current assistant API contract (2026-08-09): the long-press assistant uses `createVoiceAssistantSessionController` over the shared `Squirrel.voice` service and requires `executionTransport: "mcp"`. Session creation fails closed with `voice_mcp_bridge_unavailable` unless `handleAtomeMCPRequestAsync` resolved the MCP bridge. AI tool steps are executed only through `mcp.toolchains.execute -> ai.tools.call`; runtime creation and modification use `atome.create` or canonical `runtime.tools.call`/`runtime.tools.batch_call`. `resolveActiveAiProviderConfig` reads only the one profile provider explicitly marked `active` and resolves its secret from the encrypted token vault; missing, ambiguous, or unconfigured active providers are errors.
+
 Current mobile performance API contract (2026-07-17; supersedes older preview/warmup details below wherever they conflict):
 
 - `AdoleAPI.projects.list(options?, callback?)` omits the heavy `preview_url` particle by default and accepts `{ includePreviewSources: true }` only as an explicit compatibility opt-in. The unified list request carries `exclude_particle_keys`; Tauri SQLite, the iOS local SQLite server, and Fastify/PostgreSQL exclude those keys before record serialization.
@@ -1113,7 +1115,7 @@ Primary sources: `atome/src/squirrel/ai/agent_gateway.js`, `atome/src/squirrel/a
 
 Exposure: `AtomeAI` tool registration, MCP protocol runtime, model catalog, provider client, trace store, and the default tools coordinator plus domain registration modules that bridge to Adole, communication services, and eVe runtime tools. The MCP public surface remains the global `handleAtomeMCPRequest` and `handleAtomeMCPRequestAsync`; the `mcp_*` modules are internal implementation owners for core state, security policy, platform bridges, resources/prompts, runtime invocation, communication helpers, and handler groups.
 
-Verified responsibilities: tool registry, audit log, proposals, idempotency, risk tiers, toolchain limits, output schemas, parameter validation, MCP events, operations, confirmations, proposals, rate limits, sandbox profiles, and security journal.
+Verified responsibilities: tool registry, audit log, proposals, idempotency, risk tiers, toolchain limits, output schemas, parameter validation, MCP events, operations, confirmations, proposals, rate limits, sandbox profiles, security journal, and provider-owned AI model catalog refresh. The latter uses each configured provider's official list endpoint hourly, on foreground return, whenever Home reopens with a stored key, and when the non-empty Home API-key field loses focus; a successful remote response is authoritative rather than combined with embedded suggestions.
 
 Boundary status: Open orchestration contract. Calls into eVe tool runtime must go through registered runtime capability boundaries.
 
@@ -1881,8 +1883,9 @@ The next execution tasks must refine this map by:
   key through the existing security API; `aiProviderVaultEntryId` scopes
   entries by authenticated stable user id and provider. Generic credentials and
   Mail authentication use separate opaque entries in the same vault. Home reuses
-  `configureVaultSecret`, `storeToken`, `readToken`, and `removeToken`; these are
-  internal extensions of existing owners, not a public API.
+  `storeToken`, `readToken`, and `removeToken`; `ensureHomeVault` establishes
+  the device-local encryption key internally. These are internal extensions of
+  existing owners, not a public API.
 - Server selection reuses `loadServerConfig.js` normalization and the existing
   Sync/RemoteCommands owners. Home persists only the selected URL and known URL
   list in the existing user preferences, then clears availability caches and

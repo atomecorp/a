@@ -3,46 +3,49 @@ import { defaultEnv, readEnv } from './orchestrator_env.js';
 const createMcpBridge = (env) => {
     const asyncHandler = readEnv(env, 'handleAtomeMCPRequestAsync');
     if (typeof asyncHandler !== 'function') return null;
+    const callMcp = async (method, params = {}, id = method) => {
+        const response = await asyncHandler({ jsonrpc: '2.0', id, method, params });
+        if (response?.error) throw new Error(response.error.message || `MCP ${method} failed`);
+        return response?.result;
+    };
     return {
         kind: 'mcp',
         async listRuntimeTools() {
-            const response = await asyncHandler({
-                jsonrpc: '2.0',
-                id: 'voice-runtime-tools-list',
-                method: 'runtime.tools.list',
-                params: {}
-            });
-            if (response?.error) {
-                throw new Error(response.error.message || 'MCP runtime.tools.list failed');
-            }
-            return Array.isArray(response?.result?.tools) ? response.result.tools : [];
+            const result = await callMcp('runtime.tools.list', {}, 'voice-runtime-tools-list');
+            return Array.isArray(result?.tools) ? result.tools : [];
         },
         async callRuntimeTool(payload = {}) {
-            const response = await asyncHandler({
-                jsonrpc: '2.0',
-                id: 'voice-runtime-tool-call',
-                method: 'runtime.tools.call',
-                params: payload
-            });
-            if (response?.error) {
-                throw new Error(response.error.message || 'MCP runtime.tools.call failed');
-            }
-            return response.result;
+            return callMcp('runtime.tools.call', payload, 'voice-runtime-tool-call');
         },
         async batchRuntimeTools(events = [], options = {}) {
-            const response = await asyncHandler({
-                jsonrpc: '2.0',
-                id: 'voice-runtime-tool-batch',
-                method: 'runtime.tools.batch_call',
-                params: {
-                    events,
-                    ...(options?.tx_id ? { tx_id: options.tx_id } : {})
-                }
-            });
-            if (response?.error) {
-                throw new Error(response.error.message || 'MCP runtime.tools.batch_call failed');
-            }
-            return response.result;
+            return callMcp('runtime.tools.batch_call', {
+                events,
+                ...(options?.tx_id ? { tx_id: options.tx_id } : {})
+            }, 'voice-runtime-tool-batch');
+        },
+        async callAiTool(request = {}) {
+            return callMcp('ai.tools.call', request, 'voice-ai-tool-call');
+        },
+        async executeAiToolchain({ steps = [], confirmation = null, ...context } = {}) {
+            const shared = {
+                actor: context.actor || {},
+                signals: context.signals || {},
+                source: context.source || {},
+                trace_id: context.trace_id || null,
+                intent_id: context.intent_id || null,
+                idempotency_key: context.idempotency_key || null
+            };
+            return callMcp('mcp.toolchains.execute', {
+                steps: steps.map((step) => ({
+                    method: 'ai.tools.call',
+                    params: { ...shared, tool_name: step.tool_name, params: step.params || {} }
+                })),
+                ...shared,
+                ...(confirmation ? {
+                    confirmed: true,
+                    confirmation_id: confirmation.confirmation_id
+                } : {})
+            }, 'voice-ai-toolchain');
         }
     };
 };

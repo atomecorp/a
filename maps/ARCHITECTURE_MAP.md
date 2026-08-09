@@ -15,6 +15,10 @@ Current mobile resource/lifecycle contract (2026-07-17; supersedes older warmup,
 
 Current inter-runtime identity contract (2026-07-30): Fastify ADOLE owns remote principals and authorizes only provisioned `user` Atomes. A local principal cannot authenticate Fastify; the only creation/link route is the explicit `/ws/api` provision operation guarded by a verified remote fingerprint, credentials, expiry, and idempotency journal. Guest principals are local UUID v4 workspace identities with no Fastify account or remote sync/share/message authority. Browser guest data is persisted in IndexedDB as projected records plus append-only events, snapshots, queue entries, and blobs. Confirmed adoption is owned by the Fastify `guest-adoption` journal; it atomically moves active ADOLE references, retains immutable guest actors in events/snapshots, stages files before finalization, and leaves a rejected workspace untouched.
 
+Current Jarvis assistant flow (2026-08-09): `Atome long hold -> eVe assistant -> shared voice service -> LLM planner -> MCP toolchain -> AtomeAI policy -> Runtime V2 -> canonical commit/history/sync`. The assistant does not use the runtime-direct bridge when configured for MCP and never writes an Atome directly. Browser and native STT share silence/final-silence endpoint parameters; assistant and Home reuse the same pause thresholds and transcript classifiers. During TTS, a second interruptible STT turn is armed after the echo guard window; actionable non-echo speech stops TTS and becomes the next turn. Home stores one explicit active provider as non-secret profile metadata and keeps provider tokens exclusively in the encrypted vault.
+
+Tauri mobile status (2026-08-09): `platforms/desktop-tauri/gen/apple` and `platforms/desktop-tauri/gen/android` are the generated mobile applications, and the vendored STT plugin supplies their native speech-recognition implementations. The iOS Rust target compiles successfully. The Android ARM64 debug APK builds successfully with API 26 minimum, API 36 target, and verified `INTERNET` plus `RECORD_AUDIO` permissions. Reqwest uses Rustls rather than a host OpenSSL dependency, and the Android minimum matches CPAL's AAudio link requirement. Bundle resources include only `atome/src` plus `eVe`, excluding renderer build outputs; a bounded lightweight Tauri bootstrap waits for the native static server instead of duplicating the product frontend as the initial asset route. Physical-device voice acceptance remains required.
+
 Purpose:
 
 - Define the cross-layer architecture contract used before future implementation work.
@@ -848,9 +852,11 @@ The shared scene is not a reason to rebuild static Dashboard records when a tool
   Dashboard category changes force the existing controller to refilter without
   making geometry the invalidation authority.
 - Generic credentials, Mail authentication, and AI provider keys remain
-  exclusively in Squirrel's encrypted token vault. Provider/model metadata may
-  remain in the sanitized profile; AI consumers resolve vault credentials
-  asynchronously. Neither the Bevy tree nor the DOM owns secrets.
+  exclusively in Squirrel's encrypted token vault. Home establishes its
+  device-local encryption key internally and never projects a vault-secret or
+  unlock interaction. Provider/model metadata may remain in the sanitized
+  profile; AI consumers resolve vault credentials asynchronously. Neither the
+  Bevy tree nor the DOM owns secrets.
 - Preferences delegates Mail, Background, Dashboard, language, and Server to
   their existing owners. Account/security contains remote control, account
   password, logout, and deletion only; it is not an AI-settings owner.

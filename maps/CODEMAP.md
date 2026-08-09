@@ -4,6 +4,8 @@ Status: Initial framework map after the Atome open / eVe closed boundary validat
 
 Current workspace-entry contract (2026-07-22; supersedes older statements that make Dashboard opening wait for project readiness): `user_workspace_surface_runtime.js` owns one Dashboard-first orchestration. It mounts and verifies the neutral Dashboard and main menu first, then invokes the existing `project_bootstrap.js` readiness owner behind that foreground and keeps the Dashboard visible after loading completes. The prepared project is revealed only when the user explicitly closes the Dashboard through `toggleWorkspaceDashboardAndMainMenu`. A project bootstrap failure leaves the mounted Dashboard intact and returns an explicit `project_bootstrap` phase; Dashboard mount failures return `dashboard_open`, while an explicit project-reveal failure returns `project_reveal`. This flow is shared by authenticated, anonymous, and `boot_runtime.js` entry; it never creates a second renderer or changes media/recording paths.
 
+Current assistant ownership (2026-08-09): `eVe/voice/assistant/` owns the closed full-screen Bevy assistant and the Atome-tool 520 ms toggle; `atome/src/squirrel/voice/assistant_session_controller.js` owns conversational turns, shared Home endpoint thresholds, anti-echo filtering, TTS barge-in, and strict MCP execution selection. `orchestrator_bridge.js` owns MCP transport, while `orchestrator_agent_toolchain.js` owns MCP AI toolchain result/confirmation normalization. `provider_client.js` owns active-provider/key resolution. Home's Bevy provider/model/key UI remains in `bevy_panel_home_{view,vault_runtime}.js`; it persists metadata in `profile.passkeys.keys` and secrets only in the token vault.
+
 Current mobile performance contract (2026-07-17; supersedes older warmup/preview-density details below wherever they conflict):
 
 - `eVe/intuition/runtime/eve_intuition/boot_runtime.js` performs no timed workspace/tool/panel/voice warmup. Capture and delete modules stay lazy through `panel_definitions.js`; camera/microphone permission is requested only by an explicit capture action. `eVe/eVe.js` does not speculatively instantiate renderer WASM.
@@ -1006,7 +1008,15 @@ Reusable APIs:
 
 - `AgentGateway`
 - Tool status, policy, and risk constants.
-- Model catalog cache and refresh contracts.
+- Model catalog cache and refresh contracts: configured providers are queried through
+  their official model-list endpoint on bootstrap, when the one-hour cache expires,
+  when the app returns to the foreground, whenever Home reopens with a stored key,
+  and immediately when the API-key field loses focus after a non-empty entry.
+  A successful remote list is authoritative for that provider; embedded suggestions
+  are only the pre-configuration/offline starting list and must never be merged back
+  into a successful remote response. Home always projects the compact model
+  selector, but omits provider-key status and save actions; its baseline list is
+  replaced as soon as the provider returns the account-specific remote list.
 - Provider client and runtime profile loading.
 - Trace store and persistent memory stores.
 - Offline mutation queue.
@@ -1669,6 +1679,12 @@ Main areas:
 - `platforms/web/bevy-renderer/`
 - `platforms/atomeOS/`
 
+Mobile Tauri bootstrap and packaging:
+
+- `platforms/desktop-tauri/bootstrap/` owns the minimal initial WebView document and bounded readiness navigation to the canonical local Axum runtime. Product UI remains in bundled `atome/src`; the bootstrap is not a second application surface.
+- `platforms/desktop-tauri/tauri.conf.json` owns the iOS permission plist merge, Android API 26 minimum, and the resource set limited to `atome/src` plus `eVe`. `platforms/desktop-tauri/gen/apple/` and `gen/android/` are the generated native projects. The generated Android Gradle minimum is kept at API 26 so its manifest cannot claim compatibility below CPAL's linked AAudio floor.
+- `platforms/desktop-tauri/Cargo.toml` keeps Reqwest on Rustls native roots for cross-target HTTP without a host OpenSSL link. Mobile debug builds resolve packaged resources even when Rust debug assertions are enabled; only desktop debug builds use the live repository path.
+
 Browser-audio artifact compatibility:
 
 - `platforms/web/audio-wasm/build.sh` builds only the browser Kira/Symphonia artifact with `-C target-feature=-reference-types`. Rust 1.95 otherwise emits WasmGC/reference-type descriptors that stable browser engines reject at instantiation (`invalid heap type 'exact'`). This scoped flag does not alter the root Rust toolchain or the native Tauri Kira build.
@@ -2017,9 +2033,11 @@ This section supersedes earlier Dashboard lifecycle descriptions in this map. `e
   API. `model_catalog_refresh.js` reuses that route and no longer reads profile
   plaintext keys.
 - `bevy_panel_home_vault.js` scopes generic credential, Mail authentication,
-  and provider-key entries by the stable authenticated principal. Provider
-  model selection remains sanitized profile metadata; the five provider keys
-  are nested under `Mot de passe et clés`, never under account/security.
+  and provider-key entries by the stable authenticated principal, and owns the
+  internal device-local encryption-key setup. Provider model selection remains
+  sanitized profile metadata; the five provider keys are directly visible under
+  `Mot de passe et clés → Intelligence artificielle`, never under
+  account/security or an unlock screen.
 - `loadServerConfig.js` keeps URL normalization and HTTP/WebSocket derivation;
   Home applies selected Server preferences through existing SyncEngine and
   RemoteCommands reconnect operations without exposing a new API.

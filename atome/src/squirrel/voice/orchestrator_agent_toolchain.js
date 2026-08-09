@@ -1,19 +1,63 @@
 import { normalizeInvocationSource, normalizeVoiceConfirmation } from './orchestrator_invocation.js';
 import { buildStructuredReplyFromPayload } from './orchestrator_reply.js';
 
-export const executeAgentToolchain = async (owner, intent, toolchain, options = {}) => {
-    const confirmation = normalizeVoiceConfirmation(options);
-    const agent = owner.env?.AtomeAI || owner.env?.window?.AtomeAI || null;
-    if (!agent || typeof agent.callTool !== 'function') {
+const executeMcpAgentToolchain = async ({ owner, intent, toolchain, options, confirmation, actor, signals, source }) => {
+    if (typeof owner.bridge?.executeAiToolchain !== 'function') {
+        return { ok: false, executed: false, transport: 'none', intent, error: 'voice_mcp_bridge_unavailable' };
+    }
+    const result = await owner.bridge.executeAiToolchain({
+        steps: toolchain.map((step) => ({ tool_name: step.tool_name, params: step.params || {} })),
+        actor,
+        signals,
+        source,
+        trace_id: options.trace_id,
+        intent_id: options.intent_id || intent.intent_id,
+        idempotency_key: confirmation?.idempotency_key || options.idempotency_key,
+        confirmation
+    });
+    const stepResults = Array.isArray(result?.steps) ? result.steps.map((step) => step?.result) : [];
+    const confirmationResult = result?.confirmation_required === true
+        ? result
+        : stepResults.find((entry) => entry?.status === 'CONFIRMATION_REQUIRED');
+    if (confirmationResult) {
         return {
-            ok: false,
+            ok: true,
             executed: false,
-            transport: 'atome_ai',
+            transport: 'mcp',
             intent,
-            error: 'voice_agent_bridge_unavailable',
-            ...(intent.assistant_reply ? { reply_text: intent.assistant_reply, spoken_reply: intent.assistant_reply } : {})
+            confirmation_required: true,
+            reason: 'confirmation_required',
+            confirmation_prompt: confirmationResult.human_summary || intent.assistant_reply || null,
+            result
         };
     }
+    const failure = stepResults.find((entry) => entry?.status && entry.status !== 'OK');
+    if (result?.ok === false || failure) {
+        return {
+            ok: false,
+            executed: stepResults.length > 0,
+            transport: 'mcp',
+            intent,
+            result,
+            error: failure?.error || failure?.status || result?.error || 'voice_toolchain_failed'
+        };
+    }
+    const reply = buildStructuredReplyFromPayload(stepResults.at(-1) || result, intent, options);
+    return {
+        ok: true,
+        executed: true,
+        transport: 'mcp',
+        intent,
+        result,
+        ...((reply || intent.assistant_reply) ? {
+            reply_text: reply || intent.assistant_reply,
+            spoken_reply: reply || intent.assistant_reply
+        } : {})
+    };
+};
+
+export const executeAgentToolchain = async (owner, intent, toolchain, options = {}) => {
+    const confirmation = normalizeVoiceConfirmation(options);
     if (!toolchain.length) {
         return {
             ok: !!intent.assistant_reply,
@@ -36,6 +80,20 @@ export const executeAgentToolchain = async (owner, intent, toolchain, options = 
     };
     const source = normalizeInvocationSource(intent, options);
     const results = [];
+    if (options.execution_transport === 'mcp') {
+        return executeMcpAgentToolchain({ owner, intent, toolchain, options, confirmation, actor, signals, source });
+    }
+    const agent = owner.env?.AtomeAI || owner.env?.window?.AtomeAI || null;
+    if (!agent || typeof agent.callTool !== 'function') {
+        return {
+            ok: false,
+            executed: false,
+            transport: 'atome_ai',
+            intent,
+            error: 'voice_agent_bridge_unavailable',
+            ...(intent.assistant_reply ? { reply_text: intent.assistant_reply, spoken_reply: intent.assistant_reply } : {})
+        };
+    }
 
     if (typeof agent.executeToolchain === 'function') {
         const toolchainResult = await agent.executeToolchain({

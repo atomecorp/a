@@ -17,6 +17,21 @@ import { executePendingConnector } from './orchestrator_tool_router_runtime.js';
 
 export const executeIntentRuntime = async (owner, intent, options = {}) => {
     const normalizedIntent = normalizeVoiceIntent(intent);
+    if (options.execution_transport === 'mcp' && owner.bridge?.kind !== 'mcp') {
+        const response = {
+            ok: false,
+            executed: false,
+            transport: 'none',
+            intent: normalizedIntent,
+            error: 'voice_mcp_bridge_unavailable',
+            reply_text: String(normalizedIntent.locale || '').toLowerCase().startsWith('en')
+                ? 'The secure MCP bridge is unavailable.'
+                : 'Le pont MCP sécurisé est indisponible.'
+        };
+        response.spoken_reply = response.reply_text;
+        owner.pushJournal('voice.intent.executed', response);
+        return response;
+    }
     // Trust-gated: mail reply confirmation is no longer forcibly disabled.
     // The trust scoring engine in tool_router handles confirmation at the result level.
     owner.bindSessionIntent(options.session_id, normalizedIntent, {

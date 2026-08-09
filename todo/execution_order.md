@@ -969,7 +969,7 @@ Every maintained todo family is assigned to an execution phase. A file may not b
 - Phase 7: remaining `todo/cleanup_architecture/` files excluding `system_ui_component_ssot.md` and `v2_full_migration_framework.md`, `todo/audits/`, `todo/rendering_graphics/`, `todo/tools/`, `todo/dev_ops/developer-experience.md`.
 - Phase 8: `todo/communication_social/user_auth.md`, `todo/eve_features/Notification_tool.md`, `todo/eve_features/eve_accessibility.md`.
 - Phase 9: `todo/ai_voice/`.
-- Phase 10: `todo/midi/`, `todo/dev_ops/`, `todo/communication_social/apple_mail_security.md`, `todo/eve_features/prompt_modification_menu_mvp_v146_ios_touch_tests.md`, `todo/tests/`, `todo/execution_order.md` follow-up documentation work.
+- Phase 10: `todo/midi/`, `todo/dev_ops/`, `todo/communication_social/apple_mail_security.md`, `todo/eve_features/prompt_modification_menu_mvp_v146_ios_touch_tests.md`, `todo/tests/`, `todo/eVe_plugin.md`, `todo/execution_order.md` follow-up documentation work.
 
 The registry is intentionally directory-based only for families that are fully governed by the corresponding phase. Any newly created todo file must be assigned here before execution.
 

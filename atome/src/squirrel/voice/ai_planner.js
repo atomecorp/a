@@ -1,7 +1,7 @@
 import {
     normalizeAiProviderError,
     requestProviderJsonCompletion,
-    resolveFirstAiProviderConfig
+    resolveActiveAiProviderConfig
 } from '../ai/provider_client.js';
 import { createAiQuotaTracker } from '../ai/quota_tracker.js';
 import { normalizeVoiceIntent } from './intent_schema.js';
@@ -345,8 +345,9 @@ export const createVoiceAiPlanner = ({
             ? quotaTracker
             : createAiQuotaTracker({ env });
         const locale = resolveLocale(options.locale || options.lang);
-        const providerConfig = await resolveFirstAiProviderConfig({
-            ...(typeof loadProfile === 'function' ? { loadProfile } : {})
+        const providerConfig = await resolveActiveAiProviderConfig({
+            ...(typeof loadProfile === 'function' ? { loadProfile } : {}),
+            env
         });
 
         if (providerConfig?.ok !== true) {

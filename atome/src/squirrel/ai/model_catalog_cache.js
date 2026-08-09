@@ -4,7 +4,8 @@ import {
 } from './model_catalog_registry.js';
 
 const STORAGE_KEY = 'eve_ai_model_catalog_cache_v1';
-export const AI_MODEL_CATALOG_TTL_MS = 24 * 60 * 60 * 1000;
+export const AI_MODEL_CATALOG_VERSION = 2;
+export const AI_MODEL_CATALOG_TTL_MS = 60 * 60 * 1000;
 
 const toText = (value) => String(value || '').trim();
 
@@ -43,7 +44,7 @@ const buildEmbeddedCatalogItems = () => {
 };
 
 const buildEmbeddedPayload = () => ({
-    version: 1,
+    version: AI_MODEL_CATALOG_VERSION,
     refreshed_at: '',
     expires_at: '',
     ttl_ms: AI_MODEL_CATALOG_TTL_MS,
@@ -66,7 +67,7 @@ const sanitizeEntry = (entry = {}) => ({
 const sanitizePayload = (payload = {}) => {
     const items = Array.isArray(payload.items) ? payload.items.map((entry) => sanitizeEntry(entry)).filter((entry) => entry.provider) : [];
     return {
-        version: Number.isFinite(Number(payload.version)) ? Number(payload.version) : 1,
+        version: Number.isFinite(Number(payload.version)) ? Number(payload.version) : AI_MODEL_CATALOG_VERSION,
         refreshed_at: toText(payload.refreshed_at),
         expires_at: toText(payload.expires_at),
         ttl_ms: Number.isFinite(Number(payload.ttl_ms)) ? Number(payload.ttl_ms) : AI_MODEL_CATALOG_TTL_MS,
@@ -106,7 +107,7 @@ export const buildModelCatalogCacheRecord = ({
         ? new Date(refreshedTime + ttl).toISOString()
         : '';
     return sanitizePayload({
-        version: 1,
+        version: AI_MODEL_CATALOG_VERSION,
         refreshed_at: toText(refreshedAt),
         expires_at: expiresAt,
         ttl_ms: ttl,
@@ -126,6 +127,14 @@ export const readModelCatalogCache = ({
             ok: true,
             source: 'embedded',
             stale: false,
+            payload: clone(embedded)
+        };
+    }
+    if (cached.version !== AI_MODEL_CATALOG_VERSION) {
+        return {
+            ok: true,
+            source: 'embedded',
+            stale: true,
             payload: clone(embedded)
         };
     }

@@ -16,6 +16,12 @@ export const startBrowserRecognition = (context, sessionId, options = {}, {
         const maxAlternatives = Number.isFinite(Number(options.maxAlternatives))
             ? Math.max(1, Number(options.maxAlternatives))
             : DEFAULT_STT_MAX_ALTERNATIVES;
+        const silenceMs = Number.isFinite(Number(options.silenceMs))
+            ? Math.max(250, Number(options.silenceMs))
+            : 8000;
+        const finalSilenceMs = Number.isFinite(Number(options.finalSilenceMs))
+            ? Math.max(100, Number(options.finalSilenceMs))
+            : 2400;
         const state = {
             session_id: sessionId,
             recognition,
@@ -25,7 +31,28 @@ export const startBrowserRecognition = (context, sessionId, options = {}, {
             final_texts: [],
             segments: [],
             confidence: null,
-            speechHints
+            speechHints,
+            endpointTimer: null
+        };
+
+        const clearEndpointTimer = () => {
+            if (state.endpointTimer === null) return;
+            const clear = context.env?.clearTimeout?.bind(context.env) || globalThis.clearTimeout.bind(globalThis);
+            clear(state.endpointTimer);
+            state.endpointTimer = null;
+        };
+        const scheduleEndpoint = (delayMs) => {
+            clearEndpointTimer();
+            const schedule = context.env?.setTimeout?.bind(context.env) || globalThis.setTimeout.bind(globalThis);
+            state.endpointTimer = schedule(() => {
+                state.endpointTimer = null;
+                if (state.settled || state.cancelled) return;
+                try {
+                    recognition.stop();
+                } catch (_) {
+                    // The recognition host may already be ending.
+                }
+            }, delayMs);
         };
 
         recognition.lang = resolvedLang;
@@ -43,6 +70,7 @@ export const startBrowserRecognition = (context, sessionId, options = {}, {
 
         recognition.onresult = (event) => {
             let partialText = '';
+            let receivedFinal = false;
             const results = Array.from(event?.results || []);
             const startIndex = Number.isFinite(event?.resultIndex) ? event.resultIndex : 0;
             for (let index = startIndex; index < results.length; index += 1) {
@@ -58,6 +86,7 @@ export const startBrowserRecognition = (context, sessionId, options = {}, {
                 if (!text) continue;
                 const confidence = Number.isFinite(selected?.confidence) ? selected.confidence : null;
                 if (result?.isFinal) {
+                    receivedFinal = true;
                     state.final_texts.push(text);
                     state.segments.push(createSegment(text, confidence));
                     if (confidence !== null) {
@@ -72,11 +101,14 @@ export const startBrowserRecognition = (context, sessionId, options = {}, {
                     text: partialText
                 });
             }
+            if (receivedFinal) scheduleEndpoint(finalSilenceMs);
+            else if (partialText) scheduleEndpoint(silenceMs);
         };
 
         recognition.onerror = (event) => {
             if (state.settled) return;
             state.settled = true;
+            clearEndpointTimer();
             context.sttSessions.delete(sessionId);
             const error = normalizeErrorMessage(event) || 'speech_recognition_error';
             context.sessionRuntime.interrupt(sessionId, {
@@ -88,6 +120,7 @@ export const startBrowserRecognition = (context, sessionId, options = {}, {
         recognition.onend = () => {
             if (state.settled) return;
             state.settled = true;
+            clearEndpointTimer();
             context.sttSessions.delete(sessionId);
             if (state.cancelled) {
                 deferred.resolve({
@@ -123,6 +156,7 @@ export const startBrowserRecognition = (context, sessionId, options = {}, {
             recognition.start();
         } catch (error) {
             state.settled = true;
+            clearEndpointTimer();
             context.sttSessions.delete(sessionId);
             const message = normalizeErrorMessage(error) || 'speech_recognition_error';
             context.sessionRuntime.interrupt(sessionId, {

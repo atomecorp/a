@@ -13,6 +13,7 @@ import {
     profileDisplayName
 } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_home_actions.js';
 import {
+    ensureHomeVault,
     lockHomeVault,
     mailVaultEntryId,
     readHomeVaultState,
@@ -20,8 +21,7 @@ import {
     removeHomeCredential,
     storeHomeAiToken,
     storeHomeCredential,
-    storeHomeMailSecret,
-    unlockHomeVault
+    storeHomeMailSecret
 } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_home_vault.js';
 import { homeSurface, readHomePanelState } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_home_runtime.js';
 import { handleHomeVaultEvent } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_home_vault_runtime.js';
@@ -36,7 +36,7 @@ import {
     readPersistedRuntimeMailPreferences
 } from '../../atome/src/squirrel/mail/runtime_preferences.js';
 import { resolveSecureMailAuth } from '../../atome/src/squirrel/mail/bootstrap_transport.js';
-import { resolveFirstAiProviderConfig } from '../../atome/src/squirrel/ai/provider_client.js';
+import { resolveActiveAiProviderConfig } from '../../atome/src/squirrel/ai/provider_client.js';
 import { resolveConfiguredAiProviderKeys } from '../../atome/src/squirrel/ai/model_catalog_refresh.js';
 import {
     classifyRetryableMutationException,
@@ -123,7 +123,7 @@ test('Home is a six-section Bevy composition with the restored nested hierarchy'
         'home_profile_passions_accordion',
         'home_profile_experiences_accordion',
         'home_passwords_accordion',
-        'home_keys_accordion',
+        'home_ai_keys_accordion',
         'home_preferences_mail_accordion',
         'home_preferences_visual_accordion',
         'home_preferences_dashboard_accordion',
@@ -134,12 +134,12 @@ test('Home is a six-section Bevy composition with the restored nested hierarchy'
     assert.ok(all.some((entry) => entry.id === 'home_handedness'));
     assert.ok(all.some((entry) => entry.id === 'home_accessibility_auditory'));
     assert.ok(all.some((entry) => entry.id === 'home_server_select'));
-    assert.equal(all.some((entry) => /professional|home_ai_/i.test(entry.id || '')), false);
+    assert.equal(all.some((entry) => /professional/i.test(entry.id || '')), false);
     assert.equal(fixed[0].id, 'home_session_exit');
     assert.equal(profileDisplayName(state.profile), 'Ada');
 });
 
-test('Passwords and keys contain the credential plus and the five canonical providers without an AI section', () => {
+test('Passwords and keys expose direct AI provider settings without a vault unlock screen', () => {
     const providers = ['openai', 'anthropic', 'mistral', 'google', 'deepseek'].map((id) => ({
         id,
         label: id,
@@ -149,7 +149,7 @@ test('Passwords and keys contain the credential plus and the five canonical prov
     const state = baseState({
         expanded: 'passkeys',
         vault: {
-            unlocked: true,
+            unlocked: false,
             credentials: [{ id: 'credential-1', name: 'Site', login: 'ada', configured: true }],
             providers,
             mailConfigured: false
@@ -161,11 +161,13 @@ test('Passwords and keys contain the credential plus and the five canonical prov
     assert.equal(credentials.children.at(-1).id, 'home_credentials_add');
     assert.equal(credentials.children.at(-2).id, 'home_credentials_credential-1');
     providers.forEach(({ id }) => {
-        assert.ok(all.some((entry) => entry.id === `home_key_${id}_model`), id);
+        assert.equal(all.some((entry) => entry.id === `home_key_${id}_model`), true, id);
         assert.ok(all.some((entry) => entry.id === `home_key_${id}_api`), id);
-        assert.ok(all.some((entry) => entry.id === `home_key_${id}_save`), id);
+        assert.equal(all.some((entry) => entry.id === `home_key_${id}_save`), false, id);
+        assert.equal(all.some((entry) => entry.id === `home_key_${id}_status`), false, id);
     });
-    assert.equal(all.some((entry) => /home_ai_|ai_accordion/i.test(entry.id || '')), false);
+    assert.ok(all.some((entry) => entry.id === 'home_ai_keys_accordion'));
+    assert.equal(all.some((entry) => /home_vault_|locked_notice/i.test(entry.id || '')), false);
 });
 
 test('the credential plus creates a stable draft above itself without touching profile persistence', async () => {
@@ -196,6 +198,52 @@ test('the credential plus creates a stable draft above itself without touching p
     assert.equal(persisted, false);
 });
 
+test('Home persists exactly one active configured AI provider and rejects providers without a key', async () => {
+    const state = baseState({
+        userId: 'ai-provider-user',
+        profile: normalizeHomeProfile({
+            passkeys: {
+                keys: [
+                    { provider: 'openai', model: 'gpt-5', active: true },
+                    { provider: 'anthropic', model: 'claude-sonnet-4-5', active: false }
+                ]
+            }
+        }, { preserveEmptyItems: true }),
+        vault: {
+            unlocked: false,
+            credentials: [],
+            mailConfigured: false,
+            providers: [
+                { id: 'openai', models: ['gpt-5'], configured: true },
+                { id: 'anthropic', models: ['claude-sonnet-4-5'], configured: true },
+                { id: 'mistral', models: ['mistral-large'], configured: false }
+            ]
+        },
+        security: { aiKeys: {}, credentialPasswords: {}, mailPassword: '' }
+    });
+    let persistCount = 0;
+    const invoke = (provider) => handleHomeVaultEvent({
+        intent: { type: 'home.key.active.set', provider },
+        state,
+        persist: async () => { persistCount += 1; return { ok: true }; },
+        refreshVault: async () => state.vault,
+        setNotice: () => { },
+        clearSecrets: () => { },
+        newRowKey: () => 'unused',
+        refresh: () => { }
+    });
+
+    const activated = await invoke('anthropic');
+    assert.equal(activated.ok, true);
+    assert.deepEqual(
+        state.profile.passkeys.keys.filter((entry) => entry.active).map((entry) => entry.provider),
+        ['anthropic']
+    );
+    const rejected = await invoke('mistral');
+    assert.equal(rejected.error, 'ai_active_provider_key_missing');
+    assert.equal(persistCount, 1);
+});
+
 test('Home normalization preserves hidden Pro values and removes every legacy secret field', () => {
     const unsafe = {
         name: 'Ada',
@@ -204,7 +252,7 @@ test('Home normalization preserves hidden Pro values and removes every legacy se
         preferences: { mail: { email: 'ada@example.test', password: 'mail-secret', auth_ref: 'mail.ref' } },
         passkeys: {
             credentials: [{ label: 'site', login: 'ada', password: 'credential-secret' }],
-            keys: [{ provider: 'openai', model: 'gpt-5', key: 'api-secret' }]
+            keys: [{ provider: 'openai', model: 'gpt-5', active: true, key: 'api-secret' }]
         }
     };
     const home = normalizeHomeProfile(unsafe);
@@ -213,7 +261,7 @@ test('Home normalization preserves hidden Pro values and removes every legacy se
     assert.equal(home.profile.competences[0].pro, true);
     assert.equal(home.preferences.mail.password, '');
     assert.equal(home.preferences.mail.auth_ref, 'mail.ref');
-    assert.deepEqual(home.passkeys.keys, [{ provider: 'openai', model: 'gpt-5' }]);
+    assert.deepEqual(home.passkeys.keys, [{ provider: 'openai', model: 'gpt-5', active: true }]);
     assert.equal('key' in home.passkeys.keys[0], false);
     assert.equal('password' in persisted, false);
     assert.equal('password' in persisted.preferences.mail, false);
@@ -335,7 +383,7 @@ test('Home applies a validated server through the existing HTTP/WebSocket and re
     }
 });
 
-test('The common vault encrypts credentials, Mail auth and five provider keys without projection leaks', async () => {
+test('Home creates its local encryption key automatically and keeps credentials, Mail auth and provider keys out of projections', async () => {
     const previousWindow = globalThis.window;
     const records = new Map();
     globalThis.window = {
@@ -348,7 +396,7 @@ test('The common vault encrypts credentials, Mail auth and five provider keys wi
         }
     };
     try {
-        assert.deepEqual(await unlockHomeVault({ userId: 'home-user', secret: 'vault-secret' }), { ok: true });
+        assert.deepEqual(ensureHomeVault({ userId: 'home-user' }), { ok: true });
         const credential = await storeHomeCredential({
             userId: 'home-user',
             credential: { name: 'Private site', login: 'ada', draft: true },
@@ -369,12 +417,11 @@ test('The common vault encrypts credentials, Mail auth and five provider keys wi
         assert.equal(snapshot.credentials[0].name, 'Private site');
         assert.deepEqual(snapshot.providers.map((provider) => provider.id), ['openai', 'anthropic', 'mistral', 'google', 'deepseek']);
         assert.ok(snapshot.providers.every((provider) => provider.configured));
-        assert.doesNotMatch(JSON.stringify(snapshot), /credential-password|mail-password|private-key|vault-secret/);
-        assert.doesNotMatch([...records.values()].join(''), /credential-password|mail-password|private-key|vault-secret/);
+        assert.doesNotMatch(JSON.stringify(snapshot), /credential-password|mail-password|private-key/);
+        assert.doesNotMatch([...records.values()].join(''), /credential-password|mail-password|private-key/);
 
         lockHomeVault();
-        assert.equal((await unlockHomeVault({ userId: 'home-user', secret: 'wrong-secret' })).ok, false);
-        assert.deepEqual(await unlockHomeVault({ userId: 'home-user', secret: 'vault-secret' }), { ok: true });
+        assert.deepEqual(ensureHomeVault({ userId: 'home-user' }), { ok: true });
         assert.equal(removeHomeCredential({ userId: 'home-user', credentialId: credential.credential.id }).ok, true);
         assert.equal(removeHomeAiToken({ userId: 'home-user', providerId: 'openai' }).ok, true);
     } finally {
@@ -395,7 +442,7 @@ test('Mail preferences persist auth_ref only and resolve the password asynchrono
     };
     globalThis.window = { localStorage };
     try {
-        await unlockHomeVault({ userId: 'mail-user', secret: 'vault-secret' });
+        assert.deepEqual(ensureHomeVault({ userId: 'mail-user' }), { ok: true });
         await storeHomeMailSecret({ userId: 'mail-user', username: 'ada', password: 'mail-secret' });
         const authRef = mailVaultEntryId({ userId: 'mail-user' });
         const saved = persistRuntimeMailPreferences(globalThis.window, {
@@ -404,7 +451,7 @@ test('Mail preferences persist auth_ref only and resolve the password asynchrono
         assert.equal(saved.password, '');
         assert.equal(saved.auth_ref, authRef);
         assert.equal(readPersistedRuntimeMailPreferences(globalThis.window).auth_ref, authRef);
-        assert.doesNotMatch([...records.values()].join(''), /mail-secret|must-not-persist|vault-secret/);
+        assert.doesNotMatch([...records.values()].join(''), /mail-secret|must-not-persist/);
         const resolved = await resolveSecureMailAuth(globalThis.window, saved);
         assert.equal(resolved.password, 'mail-secret');
     } finally {
@@ -419,7 +466,7 @@ test('AI consumers read provider secrets asynchronously from the vault, never fr
         userId: 'ai-user',
         profile: {
             passkeys: {
-                keys: [{ provider: 'openai', model: 'gpt-5', key: 'legacy-clear-key' }]
+                keys: [{ provider: 'openai', model: 'gpt-5', active: true, key: 'legacy-clear-key' }]
             }
         }
     };
@@ -428,13 +475,29 @@ test('AI consumers read provider secrets asynchronously from the vault, never fr
         readToken: async (entryId) => ({ ok: true, entry_id: entryId, value: { apiKey: 'vault-only-key' } })
     };
     const options = { loadProfile: async () => profile, securityApi };
-    const consumer = await resolveFirstAiProviderConfig(options);
+    const consumer = await resolveActiveAiProviderConfig(options);
     const catalog = await resolveConfiguredAiProviderKeys(options);
 
     assert.equal(consumer.apiKey, 'vault-only-key');
-    assert.equal(consumer.source, 'profile.passkeys.keys+token_vault.first');
+    assert.equal(consumer.source, 'profile.passkeys.keys.active+token_vault');
     assert.deepEqual(catalog.items, [{ provider: 'openai', model: 'gpt-5', apiKey: 'vault-only-key' }]);
     assert.doesNotMatch(JSON.stringify({ consumer, catalog }), /legacy-clear-key/);
+});
+
+test('AI provider resolution fails closed until exactly one configured provider is active', async () => {
+    const securityApi = {
+        vaultStatus: () => ({ configured: true }),
+        readToken: async () => ({ ok: true, value: { apiKey: 'vault-key' } })
+    };
+    const resolve = (keys) => resolveActiveAiProviderConfig({
+        loadProfile: async () => ({ ok: true, userId: 'ai-user', profile: { passkeys: { keys } } }),
+        securityApi
+    });
+    assert.equal((await resolve([{ provider: 'openai', model: 'gpt-5' }])).error, 'no_active_ai_provider');
+    assert.equal((await resolve([
+        { provider: 'openai', model: 'gpt-5', active: true },
+        { provider: 'anthropic', model: 'claude-sonnet-4', active: true }
+    ])).error, 'ai_active_provider_ambiguous');
 });
 
 test('Home security actions normalize owner exceptions without exposing a second route', async () => {
@@ -477,7 +540,6 @@ test('Guest authorization rejects every private Home intent outside the visual p
             { type: 'home.list.add', section: 'bio.biometrics' },
             { type: 'home.photo.pick' },
             { type: 'home.security.change_password.request' },
-            { type: 'home.vault.unlock' },
             { type: 'home.credential.add' },
             { type: 'home.mail.save' },
             { type: 'home.server.add' }

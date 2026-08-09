@@ -39,7 +39,7 @@ export const AI_MODEL_PROVIDER_REGISTRY = freeze({
         completion_endpoint: 'https://api.openai.com/v1/chat/completions',
         list_models_endpoint: 'https://api.openai.com/v1/models',
         docs_url: 'https://platform.openai.com/docs/models',
-        recommended_models: ['gpt-5.1', 'gpt-5', 'gpt-5-mini', 'gpt-5-nano'],
+        recommended_models: ['gpt-5.2', 'gpt-5', 'gpt-5-mini', 'gpt-5-nano'],
         fallback_models: ['gpt-4o', 'gpt-4o-mini'],
         filter: {
             exclude_preview: true,

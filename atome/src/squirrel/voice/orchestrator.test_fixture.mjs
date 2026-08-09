@@ -37,6 +37,23 @@ export const createMcpEnv = (calls = []) => ({
                 }
             };
         }
+        if (request.method === 'mcp.toolchains.execute') {
+            return {
+                jsonrpc: '2.0',
+                id: request.id,
+                result: {
+                    ok: true,
+                    steps: request.params.steps.map((step) => ({
+                        method: step.method,
+                        result: {
+                            status: 'OK',
+                            tool_name: step.params.tool_name,
+                            result: { created: true }
+                        }
+                    }))
+                }
+            };
+        }
         return {
             jsonrpc: '2.0',
             id: request.id,
