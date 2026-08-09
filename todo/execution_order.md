@@ -48,6 +48,7 @@ Actif
 Source principale:
 
 - todo/ui_bevy/bevy_panel_migration_guide.md
+- todo/ui_bevy/component_convergence.md
 - todo/ui_bevy/finder_html_line_migration_registry.md
 - todo/ui_bevy/finder_place_map_package.md
 
@@ -141,6 +142,7 @@ Dependances et ordre:
 
 Deferred after Phase 4 — complete Molecule / MTraX migration:
 
+- [ ] Converger les deux propriétaires de composants restants, inscrits dans `todo/ui_bevy/component_convergence.md` : (1) **un seul fenêtrage virtualisé** — trancher d'abord entre fenêtrage à la page et fenêtrage au viewport, la seconde option faisant gagner un facteur 12 mesuré sur Infos (1 205 nœuds construits pour ~9 lignes visibles) mais changeant le comportement d'un panel `validated`, puis extraire `bevy_panel_virtual_window.js` et supprimer les jumeaux `virtualPageIndex` / `matrixPageIndex`, identiques au caractère près ; (2) **solder la dette d'édition déclarée** dans la liste blanche de `check:component-reuse-guardrails` — `bevy_panel_numeric_field_runtime.js` appartient au slot A qui migre Size/Font et doit y être converti ou cédé, les deux runtimes du Panel Lab partent avec le retrait du Panel Lab déjà `planned`, et `bevy_ui_main_menu_inline_search_runtime.js` doit être ré-audité avant d'être présumé copie (il ne porte pas le squelette de l'éditeur). Critère de sortie : un seul propriétaire de fenêtrage consommé par la liste, la matrice et la grille de tuiles ; le comportement de défilement d'Infos vérifié inchangé en navigateur ; la liste blanche de la garde réduite aux seuls modules de session, au propriétaire canonique et à `text_bridge.js`.
 - [ ] Resume the remaining Panel programme after Phase 4: assess Families 7, 8, 10, 12, 15, 16, and 36 — Family 14 left this list and was validated with Finder on 2026-08-07; Families 11, 19 and 20 left it the same day, validated with Communication (Package 13), and Family 9 was resolved `not_applicable` by that package's source audit — plus any panel-specific extensions of the Infos-owned 12/17/29/30 contracts. Exit criterion: all 16 registered panels are validated, the 7 legacy HTML routes still active after Size, Font, and Layer (`background`, `couleur`, `detail`, `delete`, `undo`, `paste`, `timeline`) are retired, and the temporary Panel Lab is removed.
 
 Critere de sortie du programme complet:

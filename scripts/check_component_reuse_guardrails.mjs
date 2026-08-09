@@ -40,9 +40,12 @@ const RULES = [
             // edit rich text in the scene, not a panel field. Legitimate.
             'eVe/domains/rendering/text_bridge.js',
             // --- declared debt, 2026-08-07 -------------------------------
-            // These predate the canonical owner and must converge onto it.
-            // They are listed so the count cannot grow silently; removing an
-            // entry here is the definition of done for that convergence.
+            // Tracked in `todo/ui_bevy/component_convergence.md`, registered in
+            // `todo/execution_order.md`. Listed here so the count cannot grow
+            // silently; removing an entry is the definition of done.
+            // `numeric_field` belongs to workstream slot A (Size/Font); the two
+            // Panel Lab runtimes leave with the planned Panel Lab retirement;
+            // `inline_search` holds no editor skeleton and may not be a copy.
             'eVe/intuition/ribbon/bevy_ui_main_menu_inline_search_runtime.js',
             'eVe/intuition/runtime/bevy_panel/bevy_panel_lab_text_input_runtime.js',
             'eVe/intuition/runtime/bevy_panel/bevy_panel_lab_multiline_input_runtime.js',
@@ -59,6 +62,13 @@ const RULES = [
         requires: /scroll_area/,
         allow: [
             'eVe/intuition/runtime/bevy_panel/bevy_panel_virtual_window.js',
+            // --- declared debt, 2026-08-07 -------------------------------
+            // Two strategies, not three copies: the first two window by page,
+            // the third by viewport. Choosing between them is a product
+            // decision on a `validated` panel — see
+            // `todo/ui_bevy/component_convergence.md`. What is unambiguously
+            // duplicated is `virtualPageIndex` / `matrixPageIndex`, identical
+            // character for character.
             'eVe/intuition/runtime/bevy_panel/bevy_panel_selectable_list.js',
             'eVe/intuition/runtime/bevy_panel/bevy_panel_matrix.js',
             'eVe/domains/rendering/project_view_matrix_content.js'
