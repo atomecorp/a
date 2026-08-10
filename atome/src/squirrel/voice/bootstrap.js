@@ -1,21 +1,16 @@
 import { createVoiceService } from './service.js';
 import { bootstrapVoicePanel, shouldEnableVoicePanel } from './panel.js';
+import { writeVoiceDiagnostic } from './telemetry.js';
 
 const READY_PROMISE_KEY = '__SQUIRREL_VOICE_READY_PROMISE__';
 const SERVICE_KEY = '__SQUIRREL_VOICE_SERVICE__';
 const API_KEY = '__SQUIRREL_VOICE_API__';
 
-const toDebugPayload = (value) => {
-    try {
-        return JSON.stringify(value);
-    } catch (_) {
-        return String(value);
-    }
-};
-
-const debugVoiceBootstrap = (...args) => {
-    void args;
-};
+const traceVoiceBootstrap = (env, event, payload = {}) => writeVoiceDiagnostic(
+    env,
+    `voice.bootstrap.${String(event || 'event')}`,
+    payload
+);
 
 const readEnv = (env, key) => {
     if (!env || typeof env !== 'object') return null;
@@ -48,7 +43,7 @@ export const ensureVoiceBridgeModules = async ({
     if (!env || typeof env !== 'object') return [];
     const loaded = [];
     const tauri = isTauriLikeEnv(env);
-    debugVoiceBootstrap('bridge_modules:resolve', {
+    traceVoiceBootstrap(env, 'bridge_modules.resolve', {
         tauri,
         hasTauri: !!readEnv(env, '__TAURI__'),
         hasTauriInternals: !!readEnv(env, '__TAURI_INTERNALS__')
@@ -66,7 +61,7 @@ export const ensureVoiceBridgeModules = async ({
         loaded.push('stt_api');
     }
 
-    debugVoiceBootstrap('bridge_modules:loaded', {
+    traceVoiceBootstrap(env, 'bridge_modules.loaded', {
         loaded
     });
     return loaded;
@@ -111,10 +106,10 @@ export const createGlobalVoiceApi = ({
     const ensureReady = async () => {
         if (!env[READY_PROMISE_KEY]) {
             env[READY_PROMISE_KEY] = (async () => {
-                debugVoiceBootstrap('ensure_ready:start');
+                traceVoiceBootstrap(env, 'ensure_ready.start');
                 await ensureVoiceBridgeModules({ env, importModule });
                 const service = getOrCreateService(env);
-                debugVoiceBootstrap('ensure_ready:service_ready', {
+                traceVoiceBootstrap(env, 'ensure_ready.service_ready', {
                     stt: service?.providers?.stt?.selected || null,
                     tts: service?.providers?.tts?.selected || null,
                     capture: service?.providers?.capture?.selected || null
@@ -205,6 +200,17 @@ export const createGlobalVoiceApi = ({
                 unsubscribe();
             };
         },
+        subscribeInputFrames(listener) {
+            let unsubscribe = () => { };
+            let cancelled = false;
+            ensureReady().then((service) => {
+                if (!cancelled) unsubscribe = service.subscribeInputFrames(listener);
+            });
+            return () => {
+                cancelled = true;
+                unsubscribe();
+            };
+        },
         async stopSpeaking(sessionId, options = {}) {
             const service = await ensureReady();
             return service.tts.stop(sessionId, options);
@@ -268,7 +274,9 @@ export const bootstrapGlobalVoice = ({
         bootstrapVoicePanel({ env, voiceApi: api });
     }
     api.ensureReady().catch((error) => {
-        env.console?.error?.('voice_service_preload_failed', error);
+        writeVoiceDiagnostic(env, 'voice.bootstrap.preload.failed', {
+            error: error?.message || String(error)
+        });
     });
     return api;
 };

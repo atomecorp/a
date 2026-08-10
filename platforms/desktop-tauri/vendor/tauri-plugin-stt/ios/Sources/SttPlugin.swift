@@ -38,6 +38,7 @@ class SttPlugin: Plugin, SFSpeechRecognitionTaskDelegate {
     private var isManualStop = false
     private var wasListeningBeforeInterruption = false
     private var maxDurationTimer: DispatchWorkItem?
+    private var lastAudioLevelAt: CFTimeInterval = 0
     
     override init() {
         super.init()
@@ -543,7 +544,18 @@ class SttPlugin: Plugin, SFSpeechRecognitionTaskDelegate {
         }
         
         inputNode.installTap(onBus: 0, bufferSize: 1024, format: recordingFormat) { [weak self] buffer, _ in
-            self?.recognitionRequest?.append(buffer)
+            guard let self = self else { return }
+            self.recognitionRequest?.append(buffer)
+            let now = CACurrentMediaTime()
+            guard now - self.lastAudioLevelAt >= 0.08,
+                  let channel = buffer.floatChannelData?[0] else { return }
+            let frames = Int(buffer.frameLength)
+            guard frames > 0 else { return }
+            var energy: Float = 0
+            for index in 0..<frames { energy += channel[index] * channel[index] }
+            self.lastAudioLevelAt = now
+            let rms = sqrt(energy / Float(frames))
+            self.trigger("audioLevel", data: ["rms": rms] as JSObject)
         }
         NSLog("[SttPlugin] Tap installed on input node")
         

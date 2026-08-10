@@ -218,6 +218,10 @@ final class LocalHTTPServer {
                 handleUserRecordingsPost(headers: headers, body: bodyData, on: connection)
                 return
             }
+            if routePath == LocalAiProxy.routePath {
+                handleAiProviderCompletionPost(body: bodyData, on: connection)
+                return
+            }
             sendSimple(status: 404, reason: "Not Found", body: "Not Found", on: connection)
             return
         }
@@ -994,6 +998,22 @@ final class LocalHTTPServer {
         let head = "HTTP/1.1 \(status) \(reason)\r\n" + headerLines.joined(separator: "\r\n") + "\r\n\r\n"
         var out = Data(head.utf8); out.append(body)
         connection.send(content: out, completion: .contentProcessed { [weak self] _ in self?.requestCancel(connection) })
+    }
+
+    private func handleAiProviderCompletionPost(body: Data, on connection: NWConnection) {
+        LocalAiProxy.handle(body: body) { [weak self] response in
+            guard let self = self else { return }
+            self.sendRaw(
+                status: response.status,
+                reason: response.reason,
+                headers: [
+                    "Content-Type": response.contentType,
+                    "Cache-Control": "no-store"
+                ],
+                body: response.body,
+                on: connection
+            )
+        }
     }
 
     private func sendJsonResponse(_ payload: [String: Any], status: Int = 200, on connection: NWConnection) {

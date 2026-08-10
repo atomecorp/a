@@ -1,4 +1,5 @@
 import { DEFAULT_LANG, readEnv } from './service_support.js';
+import { collectProjectSceneContext } from './project_scene_collector.js';
 
 export const COMMON_SPEECH_HINTS = Object.freeze([
     'Atome',
@@ -21,6 +22,37 @@ export const compactSpeechText = (value = '') => normalizeSpeechText(value)
     .replace(/[\s'-]+/g, '')
     .trim();
 
+const speechWordSequence = (value = '') => normalizeSpeechText(value)
+    .replace(/['-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+const uniqueSpeechHints = (hints = []) => {
+    const unique = new Map();
+    for (const hint of Array.isArray(hints) ? hints : []) {
+        const canonical = String(hint || '').trim();
+        const key = speechWordSequence(canonical);
+        if (key && !unique.has(key)) unique.set(key, canonical);
+    }
+    return Array.from(unique.values());
+};
+
+export const speechEditDistance = (left = '', right = '') => {
+    const a = String(left);
+    const b = String(right);
+    const row = Array.from({ length: b.length + 1 }, (_, index) => index);
+    for (let i = 1; i <= a.length; i += 1) {
+        let diagonal = row[0];
+        row[0] = i;
+        for (let j = 1; j <= b.length; j += 1) {
+            const previous = row[j];
+            row[j] = Math.min(row[j] + 1, row[j - 1] + 1, diagonal + (a[i - 1] === b[j - 1] ? 0 : 1));
+            diagonal = previous;
+        }
+    }
+    return row[b.length];
+};
+
 export const escapeRegExp = (value = '') => String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 export const resolveSpeechLocale = (value = '') => {
@@ -39,7 +71,7 @@ export const resolveSpeechLocale = (value = '') => {
 };
 
 export const appendSpeechHintsFromValue = (target, value, depth = 0) => {
-    if (depth > 2 || value == null) return;
+    if (depth > 4 || value == null) return;
     if (typeof value === 'string' || typeof value === 'number') {
         const text = String(value || '').trim();
         if (text.length >= 2 && text.length <= 80) {
@@ -48,12 +80,12 @@ export const appendSpeechHintsFromValue = (target, value, depth = 0) => {
         return;
     }
     if (Array.isArray(value)) {
-        value.slice(0, 10).forEach((entry) => appendSpeechHintsFromValue(target, entry, depth + 1));
+        value.slice(0, 20).forEach((entry) => appendSpeechHintsFromValue(target, entry, depth + 1));
         return;
     }
     if (typeof value === 'object') {
         const preferredKeys = [
-            'name', 'title', 'label', 'subject', 'organization', 'project', 'project_name',
+            'name', 'title', 'label', 'text', 'type', 'atome_type', 'subject', 'organization', 'project', 'project_name',
             'query_text', 'reply_target', 'participant_hint', 'tool_name', 'tool_id', 'atome_id'
         ];
         preferredKeys.forEach((key) => {
@@ -67,6 +99,7 @@ export const collectSpeechHints = (env, sessionRuntime, sessionId, options = {})
     appendSpeechHintsFromValue(hints, options?.speechHints);
     appendSpeechHintsFromValue(hints, readEnv(env, '__EVE_VOICE_SPEECH_HINTS'));
     appendSpeechHintsFromValue(hints, readEnv(env, '__currentUser')?.name || readEnv(env, '__currentUser')?.first_name);
+    appendSpeechHintsFromValue(hints, collectProjectSceneContext(env)?.atomes);
 
     const workingMemory = sessionRuntime?.workingMemory || null;
     if (workingMemory) {
@@ -91,17 +124,14 @@ export const collectSpeechHints = (env, sessionRuntime, sessionId, options = {})
 
     }
 
-    return Array.from(hints)
-        .map((entry) => String(entry || '').trim())
-        .filter(Boolean)
-        .slice(0, 64);
+    return uniqueSpeechHints(Array.from(hints)).slice(0, 64);
 };
 
 export const applyHintedSpeechCorrections = (value = '', hints = []) => {
     let text = String(value || '').trim();
     if (!text) return text;
 
-    const normalizedHints = Array.isArray(hints) ? hints : [];
+    const normalizedHints = uniqueSpeechHints(hints);
     for (const hint of normalizedHints) {
         const canonical = String(hint || '').trim();
         if (!canonical) continue;
@@ -120,66 +150,124 @@ export const applyHintedSpeechCorrections = (value = '', hints = []) => {
             text = text.replace(pattern, canonical);
         }
     }
+    const commandText = speechWordSequence(text);
+    const commandLike = /\b(deplace\w*|bouge\w*|decale\w*|move\w*|selection\w*|renomme\w*)\b/.test(commandText);
+    if (commandLike) {
+        const excluded = new Set(['atome', 'eve', 'jean eric', 'text', 'texte', 'shape', 'forme', 'image', 'video', 'sound', 'son', 'audio']);
+        const fuzzyHints = normalizedHints
+            .map((canonical) => ({ canonical, normalized: speechWordSequence(canonical) }))
+            .filter((entry) => entry.normalized.length >= 5 && !entry.normalized.includes(' ') && !excluded.has(entry.normalized));
+        text = text.replace(/\b[A-Za-zÀ-ÿ0-9-]{5,}\b/gu, (word) => {
+            const normalizedWord = speechWordSequence(word);
+            if (!normalizedWord || fuzzyHints.some((entry) => entry.normalized === normalizedWord)) return word;
+            const matches = fuzzyHints
+                .map((entry) => ({ ...entry, distance: speechEditDistance(normalizedWord, entry.normalized) }))
+                .filter((entry) => entry.distance <= 2 && entry.distance / Math.max(normalizedWord.length, entry.normalized.length) <= 0.34)
+                .sort((left, right) => left.distance - right.distance);
+            if (matches.length !== 1 && matches[0]?.distance === matches[1]?.distance) return word;
+            return matches[0]?.canonical || word;
+        });
+        if (/\b(droite|gauche|haut|bas|right|left|up|down)\b/.test(speechWordSequence(text))) {
+            text = text.replace(/\btrois\s+piscines?\b/gi, 'trois cents pixels');
+        }
+    }
     return text.replace(/\s+/g, ' ').trim();
 };
 
 export const scoreSpeechCandidate = (candidate = {}, hints = []) => {
+    return evaluateSpeechCandidate(candidate, hints).selection_score;
+};
+
+export const normalizeSpeechConfidence = (value) => {
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric)) return 0;
+    if (numeric >= 0 && numeric <= 1) return numeric;
+    if (numeric <= 0) return 0;
+    return numeric / (numeric + 30);
+};
+
+export const evaluateSpeechCandidate = (candidate = {}, hints = []) => {
     const text = String(candidate?.text || '').trim();
-    if (!text) return Number.NEGATIVE_INFINITY;
-    const normalized = normalizeSpeechText(text);
+    if (!text) {
+        return {
+            text: '',
+            confidence: null,
+            normalized_confidence: 0,
+            selection_score: Number.NEGATIVE_INFINITY,
+            matched_hints: []
+        };
+    }
+    const normalized = speechWordSequence(text);
     const compact = compactSpeechText(text);
-    let score = Number.isFinite(candidate?.confidence) ? Number(candidate.confidence) : 0;
-    let matchedHints = 0;
-    for (const hint of Array.isArray(hints) ? hints : []) {
+    const confidence = Number.isFinite(candidate?.confidence) ? Number(candidate.confidence) : null;
+    const normalizedConfidence = normalizeSpeechConfidence(confidence);
+    let score = normalizedConfidence;
+    const matchedHints = [];
+    for (const hint of uniqueSpeechHints(hints)) {
         const hintText = String(hint || '').trim();
         if (!hintText) continue;
-        const hintNormalized = normalizeSpeechText(hintText);
+        const hintNormalized = speechWordSequence(hintText);
         const hintCompact = compactSpeechText(hintText);
         if (!hintNormalized) continue;
         if (normalized === hintNormalized || compact === hintCompact) {
             score += 0.85;
-            matchedHints += 1;
+            matchedHints.push(hintText);
             continue;
         }
-        if (normalized.includes(hintNormalized) || hintNormalized.includes(normalized)) {
+        if (` ${normalized} `.includes(` ${hintNormalized} `)) {
             score += 0.5;
-            matchedHints += 1;
+            matchedHints.push(hintText);
             continue;
         }
-        if (hintCompact && (compact.includes(hintCompact) || hintCompact.includes(compact))) {
+        if (hintCompact && compact === hintCompact) {
             score += 0.34;
-            matchedHints += 1;
+            matchedHints.push(hintText);
         }
     }
-    if (matchedHints > 1) score += Math.min(0.3, matchedHints * 0.08);
-    return score;
+    if (matchedHints.length > 1) score += Math.min(0.3, matchedHints.length * 0.08);
+    return {
+        text,
+        confidence,
+        normalized_confidence: normalizedConfidence,
+        selection_score: score,
+        matched_hints: matchedHints
+    };
 };
 
 export const selectBestSpeechCandidate = (candidates = [], hints = []) => {
     const normalizedCandidates = Array.isArray(candidates)
         ? candidates
-            .map((entry) => ({
+            .map((entry) => evaluateSpeechCandidate({
                 text: applyHintedSpeechCorrections(entry?.text || '', hints),
                 confidence: Number.isFinite(entry?.confidence) ? Number(entry.confidence) : null
-            }))
+            }, hints))
             .filter((entry) => entry.text)
         : [];
     if (!normalizedCandidates.length) {
         return {
             text: '',
-            confidence: null
+            confidence: null,
+            normalized_confidence: 0,
+            selection_score: Number.NEGATIVE_INFINITY,
+            matched_hints: [],
+            selection_reason: 'no_candidate',
+            alternatives: []
         };
     }
     let best = normalizedCandidates[0];
-    let bestScore = scoreSpeechCandidate(best, hints);
+    let bestScore = best.selection_score;
     for (const candidate of normalizedCandidates.slice(1)) {
-        const score = scoreSpeechCandidate(candidate, hints);
+        const score = candidate.selection_score;
         if (score > bestScore) {
             best = candidate;
             bestScore = score;
         }
     }
-    return best;
+    return {
+        ...best,
+        selection_reason: best.matched_hints.length ? 'semantic_hint' : 'normalized_confidence',
+        alternatives: normalizedCandidates
+    };
 };
 
 export const resolvePreferredSpeechVoice = (synth, {
@@ -208,6 +296,10 @@ export const resolvePreferredSpeechVoice = (synth, {
         const voiceLocale = normalizeVoiceLocale(voice?.lang);
         const voiceName = String(voice?.name || '').toLowerCase();
         const voiceUri = String(voice?.voiceURI || '').toLowerCase();
+        const localeMatches = voiceLocale === normalizedLang
+            || voiceLocale.startsWith(`${langRoot}-`)
+            || voiceLocale === langRoot;
+        if (!localeMatches) continue;
         let score = 0;
 
         if (voiceLocale === normalizedLang) score += 120;

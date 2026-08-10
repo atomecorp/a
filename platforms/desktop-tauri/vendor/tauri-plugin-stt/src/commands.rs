@@ -4,6 +4,23 @@ use crate::models::*;
 use crate::Result;
 use crate::SttExt;
 
+/// Prepare the local recognition model without opening the microphone.
+#[command]
+pub(crate) async fn prepare_model<R: Runtime>(
+    app: AppHandle<R>,
+    language: Option<LanguageCode>,
+) -> Result<()> {
+    #[cfg(desktop)]
+    {
+        return app.stt().prepare_model(language.as_deref());
+    }
+    #[cfg(mobile)]
+    {
+        let _ = (app, language);
+        Ok(())
+    }
+}
+
 /// Start listening for speech
 #[command]
 pub(crate) async fn start_listening<R: Runtime>(

@@ -1,3 +1,5 @@
+import { writeVoiceDiagnostic } from './telemetry.js';
+
 export const DEFAULT_LANG = 'fr-FR';
 export const DEFAULT_STT_SILENCE_MS = 8000;
 export const DEFAULT_STT_FINAL_SILENCE_MS = 2400;
@@ -11,9 +13,11 @@ export const toDebugPayload = (value) => {
     }
 };
 
-export const debugVoiceService = (...args) => {
-    void args;
-};
+export const debugVoiceService = (event, payload = {}, env = globalThis) => writeVoiceDiagnostic(
+    env,
+    `voice.service.${String(event || 'event')}`,
+    payload
+);
 
 export const readEnv = (env, key) => {
     if (!env || typeof env !== 'object') return null;

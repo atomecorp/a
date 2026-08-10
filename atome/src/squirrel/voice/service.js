@@ -21,6 +21,8 @@ import { startBrowserRecognition } from './service_browser_stt.js';
 import { startTauriRecognition } from './service_tauri_stt.js';
 import { settleTtsStop, startSpeechSynthesis } from './service_tts_runtime.js';
 import { createLocalTtsRuntime } from './local_tts_runtime.js';
+import { createVoiceInputMeterRuntime } from './service_input_meter.js';
+import { createVoiceSttRuntime } from './service_stt_runtime.js';
 export { VOICE_V1_PROVIDER_DECISION, resolveVoiceProviders } from './service_providers.js';
 export const createVoiceService = ({
     env = globalThis,
@@ -32,11 +34,11 @@ export const createVoiceService = ({
         stt: providers?.stt?.selected || null,
         tts: providers?.tts?.selected || null,
         capture: providers?.capture?.selected || null
-    });
+    }, env);
     const sttSessions = new Map();
     const ttsSessions = new Map();
     const processingTasks = new Map();
-    const telemetry = createVoiceLatencyTelemetry();
+    const telemetry = createVoiceLatencyTelemetry({ env });
     telemetry.attachRuntime(sessionRuntime);
     const resolvedAiPlanner = aiPlanner === null
         ? ((env?.fetch || env?.window?.fetch) ? createVoiceAiPlanner({ env }) : null)
@@ -47,6 +49,7 @@ export const createVoiceService = ({
         sessionRuntime,
         aiPlanner: resolvedAiPlanner
     });
+    telemetry.attachOrchestrator(orchestrator);
     const runtimeContext = {
         env,
         providers,
@@ -54,6 +57,12 @@ export const createVoiceService = ({
         sttSessions,
         ttsSessions
     };
+
+    const inputMeter = createVoiceInputMeterRuntime({
+        env,
+        sessionRuntime,
+        sttProvider: providers.stt.selected
+    });
     const localTts = createLocalTtsRuntime({ env });
 
     // Prefer already-registered connectors and avoid importing heavy business
@@ -170,73 +179,23 @@ export const createVoiceService = ({
         }
     };
 
-    const stt = {
-        async start(options = {}) {
-            const selectedProvider = providers.stt.selected;
-            ensureSupported('stt', selectedProvider);
-            const session = ensureSession(options);
-            if (selectedProvider === 'tauri_plugin_stt') {
-                return startTauriRecognition(runtimeContext, session.session_id, options, {
-                    provider: selectedProvider
-                });
-            }
-            if (selectedProvider === 'browser_web_speech') {
-                return startBrowserRecognition(runtimeContext, session.session_id, options, {
-                    provider: selectedProvider
-                });
-            }
-            throw new Error(`Unsupported STT provider bridge: ${selectedProvider}`);
-        },
-        async stop(sessionId, options = {}) {
-            const state = sttSessions.get(String(sessionId));
-            if (!state) {
-                return sessionRuntime.getSession(sessionId);
-            }
-            const commitPartial = options?.commitPartial === true;
-            if (state.bridge && typeof state.bridge.stop === 'function') {
-                state.stopReason = commitPartial ? 'commit' : 'manual';
-                state.stopRequested = true;
-                await state.bridge.stop();
-                return state.deferred.promise;
-            }
-            state.recognition.stop();
-            return state.deferred.promise;
-        },
-        async cancel(sessionId) {
-            const state = sttSessions.get(String(sessionId));
-            if (!state) {
-                return {
-                    session_id: sessionId,
-                    cancelled: true
-                };
-            }
-            state.cancelled = true;
-            state.stopReason = 'cancelled';
-            if (state.bridge && typeof state.bridge.stop === 'function') {
-                await state.bridge.stop();
-                sessionRuntime.publishEvent(sessionId, 'voice.cancel.requested', {
-                    source: 'stt'
-                });
-                sessionRuntime.interrupt(sessionId, {
-                    reason: 'stt_cancel'
-                });
-                await state.settleCancelled?.();
-                return state.deferred.promise;
-            }
-            if (typeof state.recognition.abort === 'function') {
-                state.recognition.abort();
-            } else {
-                state.recognition.stop();
-            }
-            sessionRuntime.publishEvent(sessionId, 'voice.cancel.requested', {
-                source: 'stt'
-            });
-            sessionRuntime.interrupt(sessionId, {
-                reason: 'stt_cancel'
-            });
-            return state.deferred.promise;
-        }
-    };
+    const stt = createVoiceSttRuntime({
+        providers,
+        sessionRuntime,
+        sttSessions,
+        ensureSession,
+        ensureSupported,
+        inputMeter,
+        runtimeContext,
+        startBrowserRecognition,
+        startTauriRecognition
+    });
+    void stt.prepare({ lang: DEFAULT_LANG }).catch((error) => {
+        telemetry.trace('voice.stt.prepare.failed', {
+            provider: providers.stt.selected,
+            error: error?.message || String(error)
+        });
+    });
 
     const tts = {
         async speak(text, options = {}) {
@@ -291,6 +250,10 @@ export const createVoiceService = ({
         capture,
         stt,
         tts,
+        subscribeInputFrames(listener) {
+            if (typeof listener !== 'function') return () => { };
+            return inputMeter.subscribe(listener);
+        },
         processing: {
             async run(sessionId, executor, payload = {}) {
                 if (typeof executor !== 'function') {

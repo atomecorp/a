@@ -1,4 +1,5 @@
 const COMMANDS: &[&str] = &[
+    "prepare_model",
     "start_listening",
     "stop_listening",
     "is_available",

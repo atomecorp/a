@@ -24,6 +24,13 @@
 			remoteGlobalIDString = 349603FE281861B500E13C15;
 			remoteInfo = webviewauv3;
 		};
+		7A10000B000000000000000B /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 349603DC2818618F00E13C15 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 349603E32818619000E13C15;
+			remoteInfo = atome;
+		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -138,16 +145,8 @@
 				6BB7DA3B2D63233600CD6691 /* LICENSE */,
 				6BB7DA3C2D63233600CD6691 /* README.md */,
 				7A1000060000000000000006 /* Tests */,
+				6BA9CDD23029B6F900066AE4 /* Recovered References */,
 			);
-			sourceTree = "<group>";
-		};
-		7A1000060000000000000006 /* Tests */ = {
-			isa = PBXGroup;
-			children = (
-				7A1000010000000000000001 /* GuestAdoptionRuntimeTests.swift */,
-			);
-			name = Tests;
-			path = ../../../tests/ios;
 			sourceTree = "<group>";
 		};
 		349603E52818619000E13C15 /* Products */ = {
@@ -158,6 +157,23 @@
 				7A1000020000000000000002 /* atomeGuestAdoptionTests.xctest */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		6BA9CDD23029B6F900066AE4 /* Recovered References */ = {
+			isa = PBXGroup;
+			children = (
+				7A1000040000000000000004 /* XCTest.framework */,
+			);
+			name = "Recovered References";
+			sourceTree = "<group>";
+		};
+		7A1000060000000000000006 /* Tests */ = {
+			isa = PBXGroup;
+			children = (
+				7A1000010000000000000001 /* GuestAdoptionRuntimeTests.swift */,
+			);
+			name = Tests;
+			path = ../../../tests/ios;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -218,7 +234,8 @@
 				7A1000090000000000000009 /* Frameworks */,
 				7A10000A000000000000000A /* Resources */,
 			);
-			buildRules = ();
+			buildRules = (
+			);
 			dependencies = (
 				7A10000C000000000000000C /* PBXTargetDependency */,
 			);
@@ -287,12 +304,47 @@
 		7A10000A000000000000000A /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
-			files = ();
+			files = (
+			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXShellScriptBuildPhase section */
+		6BARCH020000000000000001 /* Copy Atome Resource Root */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+				"$(SRCROOT)/../../../atome",
+			);
+			name = "Copy Atome Resource Root";
+			outputPaths = (
+				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/atome_open",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "set -eu\nRESOURCE_ROOT=\"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/atome_open\"\nrm -rf \"$RESOURCE_ROOT\"\nmkdir -p \"$RESOURCE_ROOT\"\nrsync -a --exclude target --exclude .git \"$SRCROOT/../../../atome/\" \"$RESOURCE_ROOT/\"\n";
+		};
+		6BARCH020000000000000002 /* Copy Atome Resource Root */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+				"$(SRCROOT)/../../../atome",
+			);
+			name = "Copy Atome Resource Root";
+			outputPaths = (
+				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/atome_open",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "set -eu\nRESOURCE_ROOT=\"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/atome_open\"\nrm -rf \"$RESOURCE_ROOT\"\nmkdir -p \"$RESOURCE_ROOT\"\nrsync -a --exclude target --exclude .git \"$SRCROOT/../../../atome/\" \"$RESOURCE_ROOT/\"\n";
+		};
 		6BBEVY020000000000000001 /* Build iOS Bevy Renderer */ = {
 			isa = PBXShellScriptBuildPhase;
 			alwaysOutOfDate = 1;
@@ -331,40 +383,6 @@
 			shellPath = /bin/sh;
 			shellScript = "sh \"$SRCROOT/../build_bevy_renderer.sh\"\n";
 		};
-		6BARCH020000000000000001 /* Copy Atome Resource Root */ = {
-			isa = PBXShellScriptBuildPhase;
-			alwaysOutOfDate = 1;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			inputPaths = (
-				"$(SRCROOT)/../../../atome",
-			);
-			name = "Copy Atome Resource Root";
-			outputPaths = (
-				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/atome_open",
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-			shellPath = /bin/sh;
-			shellScript = "set -eu\nRESOURCE_ROOT=\"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/atome_open\"\nrm -rf \"$RESOURCE_ROOT\"\nmkdir -p \"$RESOURCE_ROOT\"\nrsync -a --exclude target --exclude .git \"$SRCROOT/../../../atome/\" \"$RESOURCE_ROOT/\"\n";
-		};
-		6BARCH020000000000000002 /* Copy Atome Resource Root */ = {
-			isa = PBXShellScriptBuildPhase;
-			alwaysOutOfDate = 1;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			inputPaths = (
-				"$(SRCROOT)/../../../atome",
-			);
-			name = "Copy Atome Resource Root";
-			outputPaths = (
-				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/atome_open",
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-			shellPath = /bin/sh;
-			shellScript = "set -eu\nRESOURCE_ROOT=\"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/atome_open\"\nrm -rf \"$RESOURCE_ROOT\"\nmkdir -p \"$RESOURCE_ROOT\"\nrsync -a --exclude target --exclude .git \"$SRCROOT/../../../atome/\" \"$RESOURCE_ROOT/\"\n";
-		};
 /* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
@@ -393,13 +411,6 @@
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
-		7A10000B000000000000000B /* PBXContainerItemProxy */ = {
-			isa = PBXContainerItemProxy;
-			containerPortal = 349603DC2818618F00E13C15 /* Project object */;
-			proxyType = 1;
-			remoteGlobalIDString = 349603E32818619000E13C15;
-			remoteInfo = atome;
-		};
 		3496041F281861B500E13C15 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			target = 349603FE281861B500E13C15 /* atomeAudioUnit */;

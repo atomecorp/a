@@ -199,7 +199,7 @@ export const normalizeAiProviderError = (error) => {
         return {
             code: classify('provider_timeout'),
             message: raw || 'provider_timeout',
-            user_message: "L'IA ne repond pas.",
+            user_message: "Le fournisseur IA n'a pas répondu en 20 secondes. Vérifie la connexion puis réessaie.",
             ...diagnostics
         };
     }
@@ -224,7 +224,7 @@ export const normalizeAiProviderError = (error) => {
         return {
             code: classify('provider_auth_failed'),
             message: raw,
-            user_message: "L'IA ne repond pas.",
+            user_message: "La clé IA configurée a été refusée. Vérifie le fournisseur actif et sa clé.",
             ...diagnostics
         };
     }
@@ -272,7 +272,7 @@ export const normalizeAiProviderError = (error) => {
         return {
             code: classify('provider_invalid_response'),
             message: raw,
-            user_message: "L'IA ne repond pas.",
+            user_message: "Le fournisseur IA a renvoyé une réponse invalide. Réessaie ou choisis un autre modèle.",
             ...diagnostics
         };
     }
@@ -280,7 +280,7 @@ export const normalizeAiProviderError = (error) => {
     return {
         code: classify('provider_unreachable'),
         message: raw,
-        user_message: "L'IA ne repond pas.",
+        user_message: "Le fournisseur IA est inaccessible. Vérifie le réseau et sa configuration.",
         ...diagnostics
     };
 };

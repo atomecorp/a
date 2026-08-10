@@ -253,53 +253,105 @@ class VoiceOrchestrator {
                 locale: options.locale || null
             }
         }) || null;
-        const intent = await this.planUtterance(utterance, options);
-        const response = await this.executeIntent(intent, {
-            ...options,
-            trace_id: trace?.trace_id || options.trace_id
-        });
-        if (trace?.trace_id && this.traceStore?.finishTrace) {
-            this.traceStore.finishTrace(trace.trace_id, {
-                identity_resolution: intent?.context?.identity_resolution
-                    || options?.context?.identity_resolution
-                    || null,
-                llm_call: {
-                    provider: intent?.context?.ai_provider || null,
-                    model: intent?.context?.ai_model || null,
-                    target: intent?.execution?.target || null,
-                    prompt_tokens: intent?.context?.ai_usage?.prompt_tokens || 0,
-                    completion_tokens: intent?.context?.ai_usage?.completion_tokens || 0
-                },
-                autonomy_decision: {
-                    confirmation_required: intent?.execution?.confirmation_required === true,
-                    risk_tier: response?.result?.aggregate_risk || null
-                },
-                response: {
-                    ok: response?.ok === true,
-                    transport: response?.transport || null,
-                    reply_text: response?.reply_text || response?.spoken_reply || null
-                },
-                total_latency_ms: Math.max(0, this.now() - startedAt)
+        const traceId = trace?.trace_id || options.trace_id || null;
+        const publish = (type, payload = {}) => {
+            const sessionId = String(options.session_id || '').trim();
+            if (!sessionId || !this.sessionRuntime?.publishEvent) return;
+            this.sessionRuntime.publishEvent(sessionId, type, {
+                trace_id: traceId,
+                ...payload
             });
-        }
-        if (response?.ok === true && response?.executed === true && this.persistentMemory) {
-            try {
-                this.persistentMemory.recordWorkflowPattern({
-                    domain: response?.intent?.domain || null,
-                    action: response?.intent?.action || null
+        };
+        let intent = null;
+        let response = null;
+        publish('voice.turn.state', { state: 'started', utterance });
+        try {
+            const planningStartedAt = this.now();
+            publish('voice.planner.state', { state: 'started', utterance });
+            intent = await this.planUtterance(utterance, options);
+            publish('voice.planner.state', {
+                state: 'done',
+                elapsed_ms: Math.max(0, this.now() - planningStartedAt),
+                intent
+            });
+            const executionStartedAt = this.now();
+            publish('voice.execution.state', {
+                state: 'started',
+                intent_id: intent?.intent_id || null,
+                target: intent?.execution?.target || null,
+                toolchain: intent?.execution?.toolchain || []
+            });
+            response = await this.executeIntent(intent, {
+                ...options,
+                trace_id: traceId
+            });
+            publish('voice.execution.state', {
+                state: 'done',
+                elapsed_ms: Math.max(0, this.now() - executionStartedAt),
+                response
+            });
+            if (trace?.trace_id && this.traceStore?.finishTrace) {
+                this.traceStore.finishTrace(trace.trace_id, {
+                    identity_resolution: intent?.context?.identity_resolution
+                        || options?.context?.identity_resolution
+                        || null,
+                    llm_call: {
+                        provider: intent?.context?.ai_provider || null,
+                        model: intent?.context?.ai_model || null,
+                        target: intent?.execution?.target || null,
+                        prompt_tokens: intent?.context?.ai_usage?.prompt_tokens || 0,
+                        completion_tokens: intent?.context?.ai_usage?.completion_tokens || 0
+                    },
+                    autonomy_decision: {
+                        confirmation_required: intent?.execution?.confirmation_required === true,
+                        risk_tier: response?.result?.aggregate_risk || null
+                    },
+                    response: {
+                        ok: response?.ok === true,
+                        transport: response?.transport || null,
+                        reply_text: response?.reply_text || response?.spoken_reply || null
+                    },
+                    total_latency_ms: Math.max(0, this.now() - startedAt)
                 });
-                if (response?.intent?.domain === 'contacts') {
-                    this.persistentMemory.recordContactAffinity({
-                        contact_id: response?.intent?.entities?.current_contact_id || response?.intent?.entities?.contact_id || null,
-                        label: response?.intent?.entities?.query_text || null,
-                        channel: 'contacts'
-                    });
-                }
-            } catch (_) {
-                // Persistent memory updates stay off the critical path.
             }
+            if (response?.ok === true && response?.executed === true && this.persistentMemory) {
+                try {
+                    this.persistentMemory.recordWorkflowPattern({
+                        domain: response?.intent?.domain || null,
+                        action: response?.intent?.action || null
+                    });
+                    if (response?.intent?.domain === 'contacts') {
+                        this.persistentMemory.recordContactAffinity({
+                            contact_id: response?.intent?.entities?.current_contact_id || response?.intent?.entities?.contact_id || null,
+                            label: response?.intent?.entities?.query_text || null,
+                            channel: 'contacts'
+                        });
+                    }
+                } catch (_) {
+                    // Persistent memory updates stay off the critical path.
+                }
+            }
+            publish('voice.turn.state', {
+                state: 'done',
+                elapsed_ms: Math.max(0, this.now() - startedAt),
+                response
+            });
+            return response;
+        } catch (error) {
+            const message = error?.message || String(error);
+            if (trace?.trace_id && this.traceStore?.finishTrace) {
+                this.traceStore.finishTrace(trace.trace_id, {
+                    response: { ok: false, error: message },
+                    total_latency_ms: Math.max(0, this.now() - startedAt)
+                });
+            }
+            publish('voice.turn.state', {
+                state: 'failed',
+                elapsed_ms: Math.max(0, this.now() - startedAt),
+                error: message
+            });
+            throw error;
         }
-        return response;
     }
 
     listTraces(options = {}) {

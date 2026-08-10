@@ -1,0 +1,13 @@
+# Automatically generated - DO NOT EDIT!
+
+"$schema" = "../../schemas/schema.json"
+
+[[permission]]
+identifier = "allow-prepare-model"
+description = "Enables the prepare_model command without any pre-configured scope."
+commands.allow = ["prepare_model"]
+
+[[permission]]
+identifier = "deny-prepare-model"
+description = "Denies the prepare_model command without any pre-configured scope."
+commands.deny = ["prepare_model"]

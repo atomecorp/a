@@ -6,6 +6,12 @@ export const buildPlanningContext = (owner, sessionId, providedContext = {}) => 
     const context = providedContext && typeof providedContext === 'object'
         ? cloneValue(providedContext)
         : {};
+    try {
+        const sceneContext = collectProjectSceneContext(owner?.env);
+        if (sceneContext && !context.project_scene) context.project_scene = sceneContext;
+    } catch (_) {
+        // Ignore scene context extraction failures.
+    }
     const key = String(sessionId || '').trim();
     if (!key || !owner.sessionRuntime) return context;
     const workingMemory = owner.sessionRuntime?.workingMemory || null;
@@ -60,15 +66,6 @@ export const buildPlanningContext = (owner, sessionId, providedContext = {}) => 
         }
     } catch (_) {
         // Ignore history extraction errors.
-    }
-    // SOURCE 4: Project, scene, selection, user, recent mutations/errors.
-    try {
-        const sceneContext = collectProjectSceneContext();
-        if (sceneContext && !context.project_scene) {
-            context.project_scene = sceneContext;
-        }
-    } catch (_) {
-        // Ignore scene context extraction failures.
     }
     return context;
 }

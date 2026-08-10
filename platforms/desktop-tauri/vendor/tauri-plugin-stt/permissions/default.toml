@@ -3,6 +3,7 @@
 [default]
 description = "Default permissions for the STT plugin - allows all speech-to-text operations"
 permissions = [
+    "allow-prepare-model",
     "allow-is-available",
     "allow-get-supported-languages",
     "allow-check-permission",

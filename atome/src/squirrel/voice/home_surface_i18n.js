@@ -78,13 +78,27 @@ export const localizeExecutionError = (code = '', locale = 'fr-FR') => {
             ? 'The AI is temporarily rate-limited. Try again in a moment.'
             : "L'IA est temporairement limitée. Réessaie dans un instant.";
     case 'provider_timeout':
+        return english
+            ? 'The AI provider did not answer within 20 seconds. Check your connection and try again.'
+            : "Le fournisseur IA n'a pas répondu en 20 secondes. Vérifie la connexion puis réessaie.";
     case 'provider_auth_failed':
+        return english
+            ? 'The configured AI key was refused. Check the active provider and its key.'
+            : "La clé IA configurée a été refusée. Vérifie le fournisseur actif et sa clé.";
     case 'provider_unreachable':
+        return english
+            ? 'The AI provider cannot be reached. Check the network and provider configuration.'
+            : "Le fournisseur IA est inaccessible. Vérifie le réseau et sa configuration.";
     case 'provider_invalid_response':
+        return english
+            ? 'The AI provider returned an invalid response. Try again or select another model.'
+            : "Le fournisseur IA a renvoyé une réponse invalide. Réessaie ou choisis un autre modèle.";
     case 'voice_agent_bridge_unavailable':
     case 'voice_execution_bridge_unavailable':
+    case 'voice_mcp_bridge_unavailable':
+        return english ? 'The secure AI execution bridge is unavailable.' : "Le pont sécurisé d'exécution IA est indisponible.";
     case 'voice_toolchain_empty':
-        return english ? 'The AI is not responding.' : "L'IA ne répond pas.";
+        return english ? 'The AI request could not be executed.' : "La requête IA ne peut pas être exécutée.";
     case 'mail_connector_unavailable':
         return english ? 'I do not have access to your mail here yet.' : "Je n'ai pas encore accès à tes mails ici.";
     default:

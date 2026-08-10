@@ -56,6 +56,18 @@ impl Default for RecognitionState {
 /// A speech recognition result
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct RecognitionAlternative {
+    /// Alternative transcript text.
+    pub transcript: String,
+
+    /// Confidence reported by the recognizer.
+    #[serde(default)]
+    pub confidence: Option<f32>,
+}
+
+/// A speech recognition result
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct RecognitionResult {
     /// The recognized text
     pub transcript: String,
@@ -66,6 +78,10 @@ pub struct RecognitionResult {
     /// Confidence score (0.0 to 1.0), if available
     #[serde(default)]
     pub confidence: Option<f32>,
+
+    /// Ordered recognition alternatives, when supported by the platform.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub alternatives: Vec<RecognitionAlternative>,
 }
 
 /// Current status of speech recognition
@@ -286,11 +302,16 @@ mod tests {
             transcript: "Hello world".to_string(),
             is_final: true,
             confidence: Some(0.95),
+            alternatives: vec![RecognitionAlternative {
+                transcript: "Hello world".to_string(),
+                confidence: Some(0.95),
+            }],
         };
         let json = serde_json::to_string(&result).unwrap();
         assert!(json.contains("\"transcript\":\"Hello world\""));
         assert!(json.contains("\"isFinal\":true"));
         assert!(json.contains("\"confidence\":0.95"));
+        assert!(json.contains("\"alternatives\""));
     }
 
     #[test]

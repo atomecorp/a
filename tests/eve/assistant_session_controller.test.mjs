@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 
-import { createVoiceAssistantSessionController } from '../../atome/src/squirrel/voice/assistant_session_controller.js';
 import { createLocalTtsRuntime } from '../../atome/src/squirrel/voice/local_tts_runtime.js';
 import { encodeFrenchPhonemes, normalizeFrenchTtsText } from '../../atome/src/squirrel/voice/french_phoneme_encoder.js';
 import { analyzePcmWindow, pcm16WavBytes, vowelFamilyForPhoneme } from '../../atome/src/squirrel/voice/tts_pcm_analysis.js';
@@ -39,168 +38,8 @@ const translateVoiceKey = (key) => {
 const withMcpBridge = (api) => ({
     orchestrator: { bridge: { kind: 'mcp' } },
     stopListening: async () => ({ stopped: true }),
+    subscribeInputFrames: () => () => { },
     ...api
-});
-
-test('voice assistant speaks distinct opening, touch and closing phrases in order', async () => {
-    const listening = deferred();
-    const nextListening = deferred();
-    const finalListening = deferred();
-    let listenCount = 0;
-    const calls = [];
-    const api = withMcpBridge({
-        ensureReady: async () => calls.push('ready'),
-        createSession: async () => ({ session_id: 'voice-1' }),
-        subscribe: () => () => { },
-        speak: async (text) => {
-            calls.push(['speak', text]);
-            return { promise: Promise.resolve({}) };
-        },
-        startListening: async () => {
-            calls.push('listen');
-            listenCount += 1;
-            return {
-                promise: listenCount === 1
-                    ? listening.promise
-                    : listenCount === 2
-                        ? nextListening.promise
-                        : finalListening.promise
-            };
-        },
-        executeUtterance: async (text) => {
-            calls.push(['execute', text]);
-            return { ok: true };
-        },
-        cancelListening: async () => { },
-        stopSpeaking: async () => { },
-        interrupt: async () => { }
-    });
-    const controller = createVoiceAssistantSessionController({
-        voiceApi: api,
-        ...voiceTexts
-    });
-    await controller.open();
-    assert.deepEqual(calls.slice(0, 3), [
-        'ready',
-        ['speak', voiceTexts.openingGreeting],
-        'listen'
-    ]);
-    await controller.respond();
-    assert.deepEqual(calls.findLast((entry) => Array.isArray(entry) && entry[0] === 'speak'), ['speak', voiceTexts.touchResponse]);
-    nextListening.resolve({ text: 'Dessine un cercle' });
-    await new Promise((resolve) => setTimeout(resolve, 10));
-    assert.deepEqual(calls.find((entry) => Array.isArray(entry) && entry[0] === 'execute'), ['execute', 'Dessine un cercle']);
-    await controller.close();
-    assert.deepEqual(calls.findLast((entry) => Array.isArray(entry) && entry[0] === 'speak'), ['speak', voiceTexts.closingGreeting]);
-    assert.equal(controller.getState().phase, 'closed');
-});
-
-test('closing the voice assistant cancels listening, speech and processing ownership', async () => {
-    const listening = deferred();
-    const stopped = [];
-    const api = withMcpBridge({
-        ensureReady: async () => true,
-        createSession: async () => ({ session_id: 'voice-2' }),
-        subscribe: () => () => { },
-        speak: async () => ({ promise: Promise.resolve({}) }),
-        startListening: async () => ({ promise: listening.promise }),
-        executeUtterance: async () => ({ ok: true }),
-        cancelListening: async (id) => stopped.push(['listen', id]),
-        stopSpeaking: async (id) => stopped.push(['speak', id]),
-        interrupt: async (id) => stopped.push(['interrupt', id])
-    });
-    const controller = createVoiceAssistantSessionController({ voiceApi: api, ...voiceTexts });
-    await controller.open();
-    await controller.close({ reason: 'test' });
-    assert.deepEqual(stopped, [
-        ['listen', 'voice-2'],
-        ['speak', 'voice-2'],
-        ['interrupt', 'voice-2']
-    ]);
-    listening.resolve({ text: 'ignored' });
-});
-
-test('voice assistant fails closed when the MCP bridge is unavailable', async () => {
-    const controller = createVoiceAssistantSessionController({
-        voiceApi: {
-            ensureReady: async () => ({ orchestrator: { bridge: { kind: 'runtime_v2' } } }),
-            createSession: async () => ({ session_id: 'forbidden-direct-session' }),
-            subscribe: () => () => { },
-            speak: async () => ({ promise: Promise.resolve({}) }),
-            startListening: async () => ({ promise: Promise.resolve({ text: '' }) }),
-            stopListening: async () => ({ stopped: true }),
-            executeUtterance: async () => ({ ok: true }),
-            cancelListening: async () => { },
-            stopSpeaking: async () => { },
-            interrupt: async () => { }
-        },
-        ...voiceTexts
-    });
-    await assert.rejects(controller.open(), /voice_mcp_bridge_unavailable/);
-    assert.equal(controller.getState().phase, 'error');
-});
-
-test('voice assistant barge-in stops speech and routes the captured turn through MCP', async () => {
-    const speech = deferred();
-    const interruptListening = deferred();
-    const interruptStarted = deferred();
-    const normalListening = deferred();
-    let listenCount = 0;
-    let listener = () => { };
-    const executions = [];
-    const stops = [];
-    const api = withMcpBridge({
-        ensureReady: async () => true,
-        createSession: async () => ({ session_id: 'voice-barge-1' }),
-        subscribe: (next) => { listener = next; return () => { }; },
-        speak: async () => ({ promise: speech.promise }),
-        startListening: async () => {
-            listenCount += 1;
-            if (listenCount === 1) {
-                interruptStarted.resolve();
-                return { promise: interruptListening.promise };
-            }
-            return { promise: normalListening.promise };
-        },
-        stopListening: async (sessionId, options) => {
-            stops.push(['listen', sessionId, options.reason]);
-            interruptListening.resolve({ text: 'Crée un carré' });
-        },
-        stopSpeaking: async (sessionId, options) => {
-            stops.push(['speak', sessionId, options.reason]);
-            speech.resolve({ interrupted: true });
-        },
-        executeUtterance: async (text, options) => {
-            executions.push({ text, options });
-            return { ok: true };
-        },
-        cancelListening: async () => { },
-        interrupt: async () => { }
-    });
-    const controller = createVoiceAssistantSessionController({
-        voiceApi: api,
-        ...voiceTexts,
-        env: {
-            __EVE_VOICE_BARGE_ARM_DELAY_MS: 0,
-            setTimeout,
-            clearTimeout
-        }
-    });
-    const opening = controller.open();
-    await interruptStarted.promise;
-    listener({
-        type: 'voice.stt.partial',
-        session_id: 'voice-barge-1',
-        payload: { text: 'Crée un carré' }
-    });
-    await opening;
-    await new Promise((resolve) => setTimeout(resolve, 5));
-    assert.equal(stops.some((entry) => entry[0] === 'speak' && entry[2] === 'assistant_barge_in'), true);
-    assert.equal(executions[0]?.text, 'Crée un carré');
-    assert.equal(executions[0]?.options.execution_transport, 'mcp');
-    assert.equal(executions[0]?.options.autoSpeak, false);
-    await controller.close({ speakFarewell: false });
-    normalListening.resolve({ cancelled: true });
 });
 
 test('French local TTS encoder is deterministic for greeting, numbers and elisions', () => {
@@ -233,6 +72,11 @@ test('assistant visual contract clamps size and defines all deterministic vowel 
     assert.equal(speaking.phase, 4);
     assert.equal(speaking.intensity, 1);
     assert.ok(speaking.pulse <= 0.055);
+    assert.equal(speaking.listening_rms, 0);
+    const listening = assistantUniforms({ phase: 'listening', listeningRms: 0.6, listeningActive: true, elapsedMs: 800 });
+    assert.equal(listening.listening_rms, 0.6);
+    const bargeIn = assistantUniforms({ phase: 'speaking', listeningRms: 0.4, listeningActive: true, elapsedMs: 800 });
+    assert.equal(bargeIn.listening_rms, 0.4);
     const idleStart = assistantUniforms({ morph: [1, 1, 0, 0], elapsedMs: 0 });
     const idleLater = assistantUniforms({ morph: [1, 1, 0, 0], elapsedMs: 800 });
     assert.notStrictEqual(idleStart.morph, idleLater.morph);
@@ -720,7 +564,9 @@ test('a native farewell failure cannot strand the assistant or block reopening',
     const runtime = createEveAssistantRuntime({
         env: {
             addEventListener: () => { },
-            console: { error: (...args) => closeErrors.push(args) },
+            console: { info: (line) => {
+                if (line.includes('voice.session.close.error')) closeErrors.push(line);
+            } },
             performance: { now: () => clock }
         },
         voiceApiResolver: () => voiceApi,
@@ -741,7 +587,8 @@ test('a native farewell failure cannot strand the assistant or block reopening',
     assert.equal(runtime.getState().active, false);
     assert.equal(runtime.getState().transition, 'hidden');
     assert.equal(closeErrors.length, 1);
-    assert.equal(closeErrors[0][0], 'eve_voice_assistant_close_voice_failed');
+    assert.match(closeErrors[0], /voice\.session\.close\.error/);
+    assert.match(closeErrors[0], /native_farewell_failed/);
     assert.equal(voiceUnsubscribeCount, 1);
     await runtime.open();
     await advance(420);

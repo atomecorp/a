@@ -7,8 +7,14 @@ pub use models::*;
 
 #[cfg(desktop)]
 mod desktop;
+#[cfg(desktop)]
+mod desktop_audio;
 #[cfg(mobile)]
 mod mobile;
+#[cfg(desktop)]
+mod model_catalog;
+#[cfg(desktop)]
+mod model_download;
 
 mod commands;
 mod error;
@@ -43,6 +49,7 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
     #[cfg(desktop)]
     {
         builder = builder.invoke_handler(tauri::generate_handler![
+            commands::prepare_model,
             commands::start_listening,
             commands::stop_listening,
             commands::is_available,
@@ -57,6 +64,7 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
     #[cfg(mobile)]
     {
         builder = builder.invoke_handler(tauri::generate_handler![
+            commands::prepare_model,
             commands::start_listening,
             commands::stop_listening,
             commands::is_available,
@@ -73,6 +81,15 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
             #[cfg(desktop)]
             let stt = desktop::init(app, api)?;
             app.manage(stt);
+            #[cfg(desktop)]
+            {
+                let app_handle = app.clone();
+                std::thread::spawn(move || {
+                    let language = std::env::var("SQUIRREL_STT_PRELOAD_LANGUAGE")
+                        .unwrap_or_else(|_| "fr-FR".to_string());
+                    let _ = app_handle.stt().prepare_model(Some(&language));
+                });
+            }
             Ok(())
         })
         .build()

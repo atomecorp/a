@@ -33,12 +33,17 @@ export function normalizeRuntimeToolEntry(tool = {}) {
         : [];
     return {
         name: String(tool?.id || tool?.tool_key || '').trim() || null,
-        description: String(tool?.meta?.name || tool?.ui?.label_fallback || tool?.tool_key || tool?.id || '').trim() || null,
+        description: String(tool?.meta?.description || tool?.meta?.name || tool?.ui?.label_fallback || tool?.tool_key || tool?.id || '').trim() || null,
         source: 'runtime_v2',
         tool_id: String(tool?.id || '').trim() || null,
         tool_key: String(tool?.tool_key || '').trim() || null,
         visibility: String(tool?.visibility || '').trim() || 'visible',
-        parameters: null,
+        actions: Array.isArray(tool?.behavior?.actions)
+            ? tool.behavior.actions.map((entry) => String(entry || '').trim()).filter(Boolean)
+            : [],
+        parameters: tool?.input_schema && typeof tool.input_schema === 'object'
+            ? JSON.parse(JSON.stringify(tool.input_schema))
+            : { type: 'object', properties: {} },
         runtime: {
             execution_mode: String(tool?.runtime?.execution_mode || '').trim() || null,
             contexts,

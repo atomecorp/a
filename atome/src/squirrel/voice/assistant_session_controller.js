@@ -1,12 +1,12 @@
 import { resolveHomeVoiceConfig } from './home_surface_state.js';
 import {
-    detectInterruptCommand,
     isClearlyCompleteCommand,
     isLikelyAssistantEcho,
     isTranscriptActionable,
     mergeTranscriptFragments,
     toText
 } from './home_surface_transcript.js';
+import { writeVoiceDiagnostic } from './telemetry.js';
 
 const cloneState = (state) => ({
     active: state.active,
@@ -50,9 +50,9 @@ export const createVoiceAssistantSessionController = ({
     let pendingTranscriptPrefix = '';
     let commitRequested = false;
     let transcriptTimers = [];
-    let interruptTurn = null;
     let lastAssistantReply = '';
     let lastAssistantSpokenAt = 0;
+    let listeningAllowedAt = 0;
     const state = {
         active: false,
         error: '',
@@ -75,6 +75,19 @@ export const createVoiceAssistantSessionController = ({
         return notify();
     };
 
+    const traceEndpointDecision = (purpose, result = {}, transcript = '') => {
+        writeVoiceDiagnostic(env, 'voice.endpointing.decision', {
+            session_id: state.sessionId,
+            purpose,
+            reason: toText(result?.reason) || 'provider_final',
+            transcript: toText(transcript),
+            transcript_length: toText(transcript).length,
+            silence_ms: Number.isFinite(Number(result?.silence_ms)) ? Number(result.silence_ms) : null,
+            text_stable_ms: Number.isFinite(Number(result?.text_stable_ms)) ? Number(result.text_stable_ms) : null,
+            transcript_stable: result?.transcript_stable === true
+        });
+    };
+
     const stopActiveChannels = async (reason) => {
         if (!state.sessionId) return;
         await Promise.allSettled([
@@ -90,7 +103,7 @@ export const createVoiceAssistantSessionController = ({
     };
 
     const requestTranscriptCommit = async (force, reason) => {
-        if (!state.active || state.phase !== 'listening' || commitRequested || interruptTurn) return;
+        if (!state.active || state.phase !== 'listening' || commitRequested) return;
         const text = mergeTranscriptFragments(pendingTranscriptPrefix, transcriptDraft);
         if (!text || (!force && !isTranscriptActionable(text))) return;
         commitRequested = true;
@@ -103,7 +116,7 @@ export const createVoiceAssistantSessionController = ({
     };
 
     const scheduleTranscriptCommit = () => {
-        if (state.phase !== 'listening' || commitRequested || interruptTurn) return;
+        if (state.phase !== 'listening' || commitRequested) return;
         const text = mergeTranscriptFragments(pendingTranscriptPrefix, transcriptDraft);
         if (!text) return;
         clearTranscriptTimers();
@@ -124,29 +137,32 @@ export const createVoiceAssistantSessionController = ({
         transcriptTimers = transcriptTimers.filter(Boolean);
     };
 
-    const triggerBargeIn = (value) => {
-        if (!interruptTurn || interruptTurn.triggered || Date.now() < interruptTurn.armAt) return;
-        const text = toText(value);
-        if (!text || isLikelyAssistantEcho({
-            heard: text,
-            assistant: lastAssistantReply,
-            spokenAt: lastAssistantSpokenAt,
-            cooldownMs: voiceConfig.echoCooldownMs
-        })) return;
-        const command = detectInterruptCommand(text);
-        if (!command && !isTranscriptActionable(text)) return;
-        interruptTurn.triggered = true;
-        interruptTurn.resolve({
-            kind: 'barge',
-            command,
-            text: command ? '' : text
+    const waitForAcousticDrain = async (generation) => {
+        const delayMs = Math.max(0, listeningAllowedAt - Date.now());
+        if (delayMs > 0) {
+            writeVoiceDiagnostic(env, 'voice.duplex.guard', {
+                session_id: state.sessionId,
+                state: 'listening_delayed',
+                delay_ms: delayMs,
+                reason: 'tts_acoustic_drain'
+            });
+            await new Promise((resolve) => (env.setTimeout || globalThis.setTimeout)(resolve, delayMs));
+        }
+        if (!state.active || state.generation !== generation) return false;
+        writeVoiceDiagnostic(env, 'voice.duplex.guard', {
+            session_id: state.sessionId,
+            state: 'listening_allowed',
+            delay_ms: 0,
+            reason: 'tts_inactive'
         });
+        return true;
     };
 
-    const listenLoop = async (generation, queuedText = '') => {
-        let nextText = toText(queuedText);
+    const listenLoop = async (generation) => {
+        let nextText = '';
         while (state.active && state.generation === generation) {
             if (!nextText) {
+                if (!await waitForAcousticDrain(generation)) return;
                 transcriptDraft = '';
                 commitRequested = false;
                 setPhase('listening');
@@ -155,6 +171,7 @@ export const createVoiceAssistantSessionController = ({
                     lang: locale,
                     partial: true,
                     continuous: true,
+                    purpose: 'user_turn',
                     silenceMs: voiceConfig.sttSilenceMs,
                     finalSilenceMs: voiceConfig.sttFinalSilenceMs,
                     maxAlternatives: 5
@@ -165,6 +182,7 @@ export const createVoiceAssistantSessionController = ({
                     pendingTranscriptPrefix,
                     toText(heard?.text) || transcriptDraft
                 );
+                traceEndpointDecision('user_turn', heard, nextText);
             }
             if (!state.active || state.generation !== generation) return;
             if (!nextText) continue;
@@ -193,9 +211,17 @@ export const createVoiceAssistantSessionController = ({
                 execution_transport: executionTransport
             });
             nextText = '';
+            if (execution?.ok !== true) {
+                const failureCode = toText(execution?.error || execution?.code) || 'voice_request_failed';
+                const failureReply = toText(execution?.spoken_reply || execution?.reply_text);
+                if (failureReply && state.active && state.generation === generation) {
+                    await speak(failureReply);
+                }
+                throw new Error(failureCode);
+            }
             const reply = toText(execution?.spoken_reply || execution?.reply_text);
             if (reply && state.active && state.generation === generation) {
-                nextText = await speak(reply, generation, { allowBargeIn: true });
+                nextText = await speak(reply);
             }
         }
     };
@@ -206,11 +232,8 @@ export const createVoiceAssistantSessionController = ({
             if (!state.active || event?.session_id !== state.sessionId) return;
             if (event.type === 'voice.stt.partial' || event.type === 'voice.stt.final') {
                 const text = toText(event.payload?.text);
-                if (interruptTurn) triggerBargeIn(text);
-                else {
-                    transcriptDraft = text;
-                    scheduleTranscriptCommit();
-                }
+                transcriptDraft = text;
+                scheduleTranscriptCommit();
             }
             if (event.type === 'voice.tts.state') {
                 const next = String(event.payload?.state || '');
@@ -248,70 +271,31 @@ export const createVoiceAssistantSessionController = ({
         return true;
     };
 
-    const speak = async (text, generation, { allowBargeIn = false } = {}) => {
+    const speak = async (text) => {
         setPhase('speaking');
         lastAssistantReply = toText(text);
         lastAssistantSpokenAt = Date.now();
+        listeningAllowedAt = Number.POSITIVE_INFINITY;
+        writeVoiceDiagnostic(env, 'voice.duplex.guard', {
+            session_id: state.sessionId,
+            state: 'tts_only',
+            delay_ms: null,
+            reason: 'prevent_playback_echo'
+        });
         const startedSpeech = await voiceApi.speak(lastAssistantReply, {
             session_id: state.sessionId,
             lang: locale,
             engine: 'local_onnx'
         });
         const speechPromise = Promise.resolve(startedSpeech?.promise || startedSpeech);
-        if (!allowBargeIn) {
-            await speechPromise;
-            return '';
-        }
-        const completedImmediately = await Promise.race([
-            speechPromise.then(() => true, () => true),
-            new Promise((resolve) => (env.setTimeout || globalThis.setTimeout)(() => resolve(false), 0))
-        ]);
-        if (completedImmediately || !state.active || state.generation !== generation) return '';
-        let resolveBarge;
-        const bargePromise = new Promise((resolve) => { resolveBarge = resolve; });
-        interruptTurn = {
-            armAt: Date.now() + voiceConfig.bargeArmDelayMs,
-            resolve: resolveBarge,
-            triggered: false
-        };
-        let interruptListening = null;
-        try {
-            interruptListening = await voiceApi.startListening({
-                session_id: state.sessionId,
-                lang: locale,
-                partial: true,
-                continuous: true,
-                silenceMs: voiceConfig.interruptSttSilenceMs,
-                finalSilenceMs: voiceConfig.interruptSttFinalSilenceMs,
-                maxAlternatives: 3
-            });
-        } catch (_) {
-            interruptTurn = null;
-            await speechPromise;
-            return '';
-        }
-        const outcome = await Promise.race([
-            speechPromise.then(() => ({ kind: 'speech' }), () => ({ kind: 'speech' })),
-            bargePromise
-        ]);
-        if (outcome.kind === 'speech') {
-            interruptTurn = null;
-            await voiceApi.stopListening(state.sessionId, { commitPartial: false, reason: 'assistant_reply_done' })
-                .catch(() => { });
-            return '';
-        }
-        await Promise.allSettled([
-            voiceApi.stopSpeaking(state.sessionId, { reason: 'assistant_barge_in' }),
-            voiceApi.stopListening(state.sessionId, { commitPartial: true, reason: 'assistant_barge_in' })
-        ]);
-        const heard = await Promise.resolve(interruptListening?.promise).catch(() => null);
-        interruptTurn = null;
-        if (outcome.command || !state.active || state.generation !== generation) return '';
-        return mergeTranscriptFragments(outcome.text, toText(heard?.text));
+        await speechPromise;
+        lastAssistantSpokenAt = Date.now();
+        listeningAllowedAt = lastAssistantSpokenAt + voiceConfig.acousticDrainMs;
+        return '';
     };
 
-    const startListenLoop = (generation, queuedText = '') => {
-        void listenLoop(generation, queuedText).catch((error) => {
+    const startListenLoop = (generation) => {
+        void listenLoop(generation).catch((error) => {
             if (!state.active || state.generation !== generation) return;
             setPhase('error', error?.message || String(error));
         });
@@ -326,9 +310,9 @@ export const createVoiceAssistantSessionController = ({
             setPhase('opening');
             try {
                 if (!await createSession(generation) || !state.active) return cloneState(state);
-                const queuedText = await speak(openingGreeting, generation, { allowBargeIn: true });
+                await speak(openingGreeting);
                 if (!state.active || state.generation !== generation) return cloneState(state);
-                startListenLoop(generation, queuedText);
+                startListenLoop(generation);
                 return cloneState(state);
             } catch (error) {
                 if (state.generation !== generation) return cloneState(state);
@@ -345,9 +329,9 @@ export const createVoiceAssistantSessionController = ({
         const generation = ++state.generation;
         await stopActiveChannels('assistant_touch_response');
         if (!state.active || state.generation !== generation) return cloneState(state);
-        const queuedText = await speak(touchResponse, generation, { allowBargeIn: true });
+        await speak(touchResponse);
         if (!state.active || state.generation !== generation) return cloneState(state);
-        startListenLoop(generation, queuedText);
+        startListenLoop(generation);
         return cloneState(state);
     };
 
@@ -366,11 +350,10 @@ export const createVoiceAssistantSessionController = ({
                 }
                 await stopActiveChannels(reason);
                 if (speakFarewell && state.active && state.sessionId) {
-                    await speak(closingGreeting, generation, { allowBargeIn: false });
+                    await speak(closingGreeting);
                 }
             } finally {
                 clearTranscriptTimers();
-                interruptTurn = null;
                 state.active = false;
                 state.unsubscribe();
                 state.unsubscribe = () => { };

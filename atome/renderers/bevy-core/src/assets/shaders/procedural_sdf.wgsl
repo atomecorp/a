@@ -120,6 +120,8 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
     let attraction = clamp(material.contact.z, 0.0, 0.8);
     let stretch = clamp(material.contact.w, 0.0, 1.0);
     let gesture_velocity = clamp(material.gesture.x, 0.0, 1.0);
+    let listening_rms = clamp(material.gesture.y, 0.0, 1.0);
+    let listening_response = smoothstep(0.015, 0.42, listening_rms);
     let destructive_direction = material.destructive.xy;
     let destructive_mode = material.destructive.z;
     let destructive_progress = clamp(material.destructive.w, 0.0, 1.0);
@@ -158,9 +160,11 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
 
     let shell_point = point / ((1.0 + pulse * shell_shape_reveal) * shell_scale);
     let shell_angle = atan2(shell_point.y, shell_point.x);
+    let listening_contour = listening_response * (sin(shell_angle * 4.0 - time * 7.2) * 0.018
+        + cos(shell_angle * 2.0 + time * 4.6) * 0.010);
     let shell_wobble = sin(shell_angle * 3.0 + time * 0.38) * 0.006
         + cos(shell_angle * 2.0 - time * 0.29) * 0.004;
-    let shell_distance = length(shell_point) - (0.84 + shell_wobble);
+    let shell_distance = length(shell_point) - (0.84 + shell_wobble + listening_contour);
     let shell_mask = 1.0 - smoothstep(-0.018, 0.025, shell_distance);
     let shell_inner = smoothstep(-0.18, -0.025, shell_distance);
     let shell_edge = 1.0 - smoothstep(0.0, 0.065, abs(shell_distance));
@@ -205,6 +209,11 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
     core_color += vec3(0.10, 0.03, 0.08) * intensity * 0.22;
     let core_alpha = core_mask * (0.80 + core_edge * 0.17) * core_reveal;
 
+    let listening_band = exp(-pow((core_point.y - 0.27) / 0.055, 2.0));
+    let listening_wave = sin(core_point.x * 24.0 - time * 8.0) * (0.004 + listening_response * 0.028);
+    let listening_vein = smoothstep(0.021, 0.0, abs(core_point.y - 0.27 - listening_wave))
+        * listening_band * core_mask * listening_response * core_reveal;
+
     let highlight_point = (point - vec2(-0.36, 0.43)) / vec2(0.11, 0.28);
     let highlight = exp(-dot(highlight_point, highlight_point) * 4.0) * shell_mask * shell_shape_reveal;
     let core_highlight_point = (core_point - vec2(-0.16, 0.20)) / vec2(0.18, 0.24);
@@ -227,6 +236,7 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
     color += mix(cyan, rose, shell_mix) * halo_alpha;
     color = mix(color, shell_color, shell_alpha);
     color = mix(color, core_color, core_alpha);
+    color += cyan * listening_vein * 0.22;
     color += vec3(0.94, 1.0, 1.0) * highlight * 0.62;
     color += vec3(1.0, 0.97, 0.88) * core_highlight * 0.28;
     let alpha = clamp(base_alpha, 0.0, 1.0);

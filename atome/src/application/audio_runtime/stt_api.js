@@ -49,6 +49,9 @@
     };
 
     const stt = {
+        async prepare(language = 'fr-FR') {
+            return invoke('plugin:stt|prepare_model', { language });
+        },
         async isAvailable() {
             return invoke('plugin:stt|is_available');
         },
@@ -75,6 +78,12 @@
         },
         async onError(handler) {
             return wrapListener('plugin:stt:error', handler);
+        },
+        async onAudioLevel(handler) {
+            return wrapListener('plugin:stt:audioLevel', handler);
+        },
+        async onDiagnostic(handler) {
+            return wrapListener('plugin:stt:diagnostic', handler);
         },
         async onDownloadProgress(handler) {
             return wrapListener('stt://download-progress', handler);

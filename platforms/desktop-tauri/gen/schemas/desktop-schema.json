@@ -2535,10 +2535,10 @@
           "markdownDescription": "Denies the reveal_item_in_dir command without any pre-configured scope."
         },
         {
-          "description": "Default permissions for the STT plugin - allows all speech-to-text operations\n#### This default permission set includes:\n\n- `allow-is-available`\n- `allow-get-supported-languages`\n- `allow-check-permission`\n- `allow-request-permission`\n- `allow-start-listening`\n- `allow-stop-listening`\n- `allow-register-listener`\n- `allow-remove-listener`",
+          "description": "Default permissions for the STT plugin - allows all speech-to-text operations\n#### This default permission set includes:\n\n- `allow-prepare-model`\n- `allow-is-available`\n- `allow-get-supported-languages`\n- `allow-check-permission`\n- `allow-request-permission`\n- `allow-start-listening`\n- `allow-stop-listening`\n- `allow-register-listener`\n- `allow-remove-listener`",
           "type": "string",
           "const": "stt:default",
-          "markdownDescription": "Default permissions for the STT plugin - allows all speech-to-text operations\n#### This default permission set includes:\n\n- `allow-is-available`\n- `allow-get-supported-languages`\n- `allow-check-permission`\n- `allow-request-permission`\n- `allow-start-listening`\n- `allow-stop-listening`\n- `allow-register-listener`\n- `allow-remove-listener`"
+          "markdownDescription": "Default permissions for the STT plugin - allows all speech-to-text operations\n#### This default permission set includes:\n\n- `allow-prepare-model`\n- `allow-is-available`\n- `allow-get-supported-languages`\n- `allow-check-permission`\n- `allow-request-permission`\n- `allow-start-listening`\n- `allow-stop-listening`\n- `allow-register-listener`\n- `allow-remove-listener`"
         },
         {
           "description": "Enables the check_permission command without any pre-configured scope.",
@@ -2557,6 +2557,12 @@
           "type": "string",
           "const": "stt:allow-is-available",
           "markdownDescription": "Enables the is_available command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the prepare_model command without any pre-configured scope.",
+          "type": "string",
+          "const": "stt:allow-prepare-model",
+          "markdownDescription": "Enables the prepare_model command without any pre-configured scope."
         },
         {
           "description": "Enables the register_listener command without any pre-configured scope.",
@@ -2605,6 +2611,12 @@
           "type": "string",
           "const": "stt:deny-is-available",
           "markdownDescription": "Denies the is_available command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the prepare_model command without any pre-configured scope.",
+          "type": "string",
+          "const": "stt:deny-prepare-model",
+          "markdownDescription": "Denies the prepare_model command without any pre-configured scope."
         },
         {
           "description": "Denies the register_listener command without any pre-configured scope.",

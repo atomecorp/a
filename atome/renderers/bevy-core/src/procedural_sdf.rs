@@ -112,7 +112,7 @@ fn material_from_contract(
                 normalized.destructive_mode,
                 normalized.destructive_progress,
             ),
-            gesture: Vec4::new(normalized.gesture_velocity, 0.0, 0.0, 0.0),
+            gesture: Vec4::new(normalized.gesture_velocity, normalized.listening_rms, 0.0, 0.0),
             geometry: Vec4::new(
                 normalized.surface_size[0],
                 normalized.surface_size[1],

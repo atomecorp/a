@@ -1,3 +1,63 @@
+const SENSITIVE_FIELD = /(?:api.?key|authorization|cookie|credential|password|secret|bearer|access.?token|refresh.?token|id.?token)$/i;
+const MAX_DIAGNOSTIC_DEPTH = 6;
+const MAX_DIAGNOSTIC_ITEMS = 32;
+const MAX_DIAGNOSTIC_TEXT = 4000;
+
+export const sanitizeVoiceDiagnostic = (value, depth = 0, seen = new WeakSet()) => {
+    if (value == null || typeof value === 'boolean' || typeof value === 'number') return value;
+    if (typeof value === 'string') {
+        return value.length > MAX_DIAGNOSTIC_TEXT
+            ? `${value.slice(0, MAX_DIAGNOSTIC_TEXT)}…`
+            : value;
+    }
+    if (typeof value !== 'object') return String(value);
+    if (depth >= MAX_DIAGNOSTIC_DEPTH) return '[depth-limited]';
+    if (seen.has(value)) return '[circular]';
+    seen.add(value);
+    if (Array.isArray(value)) {
+        return value
+            .slice(0, MAX_DIAGNOSTIC_ITEMS)
+            .map((entry) => sanitizeVoiceDiagnostic(entry, depth + 1, seen));
+    }
+    const sanitized = {};
+    Object.entries(value).slice(0, MAX_DIAGNOSTIC_ITEMS).forEach(([key, entry]) => {
+        sanitized[key] = SENSITIVE_FIELD.test(key)
+            ? '[redacted]'
+            : sanitizeVoiceDiagnostic(entry, depth + 1, seen);
+    });
+    return sanitized;
+};
+
+export const writeVoiceDiagnostic = (env = globalThis, stage = 'voice.unknown', payload = {}) => {
+    if (env?.__EVE_VOICE_DIAGNOSTICS__ === false) return null;
+    const record = {
+        at: new Date().toISOString(),
+        stage: String(stage || 'voice.unknown'),
+        ...sanitizeVoiceDiagnostic(payload)
+    };
+    const line = `[voice-trace] ${JSON.stringify(record)}`;
+    env?.console?.info?.(line);
+    env?.webkit?.messageHandlers?.console?.postMessage?.(line);
+    const invoke = env?.__TAURI_INTERNALS__?.invoke || env?.__TAURI__?.invoke;
+    if (typeof invoke === 'function') {
+        try {
+            Promise.resolve(invoke('log_from_webview', {
+                payload: {
+                    level: 'info',
+                    source: 'voice_runtime',
+                    component: 'voice',
+                    request_id: record.trace_id || record.request_id || null,
+                    session_id: record.session_id || null,
+                    message: record.stage,
+                    data: record,
+                    timestamp: record.at
+                }
+            })).catch(() => { });
+        } catch (_) { }
+    }
+    return record;
+};
+
 const ensureMetricEntry = (store, sessionId) => {
     if (!store.has(sessionId)) {
         store.set(sessionId, {
@@ -9,7 +69,7 @@ const ensureMetricEntry = (store, sessionId) => {
     return store.get(sessionId);
 };
 
-export const createVoiceLatencyTelemetry = () => {
+export const createVoiceLatencyTelemetry = ({ env = globalThis } = {}) => {
     const store = new Map();
 
     const handleEvent = (event) => {
@@ -67,6 +127,12 @@ export const createVoiceLatencyTelemetry = () => {
             entry.marks.cancel_resolved_at = at;
             entry.metrics.cancel_roundtrip_ms = at - entry.marks.cancel_requested_at;
         }
+        writeVoiceDiagnostic(env, event.type, {
+            session_id: sessionId,
+            seq: event?.seq ?? null,
+            event_at: at,
+            payload: event?.payload || {}
+        });
     };
 
     return {
@@ -75,6 +141,19 @@ export const createVoiceLatencyTelemetry = () => {
                 throw new Error('A voice session runtime with subscribe() is required');
             }
             return runtime.subscribe(handleEvent);
+        },
+        attachOrchestrator(orchestrator) {
+            if (!orchestrator || typeof orchestrator.subscribe !== 'function') {
+                throw new Error('A voice orchestrator with subscribe() is required');
+            }
+            return orchestrator.subscribe((entry) => writeVoiceDiagnostic(env, entry?.type || 'voice.orchestrator', {
+                seq: entry?.seq ?? null,
+                event_at: entry?.at ?? null,
+                payload: entry?.payload || {}
+            }));
+        },
+        trace(stage, payload = {}) {
+            return writeVoiceDiagnostic(env, stage, payload);
         },
         snapshot(sessionId) {
             const entry = store.get(String(sessionId || '').trim());

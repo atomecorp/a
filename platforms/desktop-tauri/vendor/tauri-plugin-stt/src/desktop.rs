@@ -1,82 +1,37 @@
 use serde::de::DeserializeOwned;
-use std::fs::{self, File};
-use std::io::{self};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use tauri::{plugin::PluginApi, AppHandle, Emitter, Manager, Runtime};
 
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
-use reqwest::header::{CONTENT_LENGTH, CONTENT_RANGE, RANGE};
 use vosk::{Model, Recognizer};
 
+use crate::desktop_audio::{resample_linear, TARGET_SAMPLE_RATE};
+use crate::model_catalog::{
+    language_display_name, model_for_language, AVAILABLE_MODELS, DEFAULT_MODEL_NAME,
+    DEFAULT_MODEL_URL,
+};
+use crate::model_download::prepare_model_files;
 use crate::models::*;
-
-/// Default Vosk model configuration
-const DEFAULT_MODEL_NAME: &str = "vosk-model-en-us-0.42-gigaspeech";
-const DEFAULT_MODEL_URL: &str =
-    "https://alphacephei.com/vosk/models/vosk-model-en-us-0.42-gigaspeech.zip";
-const FR_FULL_MODEL_NAME: &str = "vosk-model-fr-0.22";
-const FR_FULL_MODEL_URL: &str = "https://alphacephei.com/vosk/models/vosk-model-fr-0.22.zip";
-const FR_SMALL_MODEL_NAME: &str = "vosk-model-small-fr-0.22";
-const FR_SMALL_MODEL_URL: &str = "https://alphacephei.com/vosk/models/vosk-model-small-fr-0.22.zip";
-
-/// Available Vosk models with their download URLs
-/// Using high-accuracy models for better transcription quality
-const AVAILABLE_MODELS: &[(&str, &str, &str)] = &[
-    (
-        "en-US",
-        "vosk-model-en-us-0.42-gigaspeech",
-        "https://alphacephei.com/vosk/models/vosk-model-en-us-0.42-gigaspeech.zip",
-    ),
-    (
-        "pt-BR",
-        "vosk-model-pt-fb-v0.1.1-20220516_2113",
-        "https://alphacephei.com/vosk/models/vosk-model-pt-fb-v0.1.1-20220516_2113.zip",
-    ),
-    (
-        "es-ES",
-        "vosk-model-es-0.42",
-        "https://alphacephei.com/vosk/models/vosk-model-es-0.42.zip",
-    ),
-    (
-        "fr-FR",
-        FR_FULL_MODEL_NAME,
-        FR_FULL_MODEL_URL,
-    ),
-    (
-        "de-DE",
-        "vosk-model-de-0.21",
-        "https://alphacephei.com/vosk/models/vosk-model-de-0.21.zip",
-    ),
-    (
-        "ru-RU",
-        "vosk-model-ru-0.42",
-        "https://alphacephei.com/vosk/models/vosk-model-ru-0.42.zip",
-    ),
-    (
-        "zh-CN",
-        "vosk-model-cn-0.22",
-        "https://alphacephei.com/vosk/models/vosk-model-cn-0.22.zip",
-    ),
-    (
-        "ja-JP",
-        "vosk-model-ja-0.22",
-        "https://alphacephei.com/vosk/models/vosk-model-ja-0.22.zip",
-    ),
-    (
-        "it-IT",
-        "vosk-model-it-0.22",
-        "https://alphacephei.com/vosk/models/vosk-model-it-0.22.zip",
-    ),
-];
 
 use std::sync::atomic::{AtomicU64, Ordering};
 
 /// Session counter - incremented each time a new listening session starts.
 /// Audio callbacks capture their session ID and only process audio if it matches
 /// the current session. This prevents old audio data from bleeding into new sessions.
-static CURRENT_SESSION_ID: AtomicU64 = AtomicU64::new(0);
+static SESSION_COUNTER: AtomicU64 = AtomicU64::new(0);
+static ACTIVE_SESSION_ID: AtomicU64 = AtomicU64::new(0);
+
+fn emit_audio_error<R: Runtime>(app: &AppHandle<R>, error: &cpal::StreamError) {
+    let _ = app.emit(
+        "plugin:stt:diagnostic",
+        serde_json::json!({
+            "stage": "audio.stream.error",
+            "error": error.to_string()
+        }),
+    );
+}
 
 /// Shared audio processing state that can be reused across sessions.
 /// This avoids creating new audio streams for each PTT press.
@@ -89,8 +44,12 @@ struct AudioProcessor {
     last_partial: String,
     /// Whether to emit interim results
     interim_results: bool,
-    /// Resampling step (1 = no resampling)
-    resample_step: usize,
+    /// Native device sample rate used by the streaming resampler.
+    input_sample_rate: f64,
+    /// Fractional input position carried between audio chunks.
+    resample_position: f64,
+    /// Last source sample retained for interpolation continuity.
+    resample_previous: Option<i16>,
 }
 
 struct SttState {
@@ -101,10 +60,10 @@ struct SttState {
     max_duration_ms: Option<u64>,
     /// The session ID of the current listening session (0 = not listening)
     active_session_id: u64,
-    /// Shared audio processor - reused across sessions
+    /// Audio processor owned by the currently open microphone stream.
     audio_processor: Option<Arc<Mutex<AudioProcessor>>>,
-    /// Whether the audio stream has been created
-    stream_created: bool,
+    /// The only native microphone stream; dropping it closes capture.
+    audio_stream: Option<cpal::Stream>,
 }
 
 pub fn init<R: Runtime, C: DeserializeOwned>(
@@ -119,18 +78,20 @@ pub fn init<R: Runtime, C: DeserializeOwned>(
         max_duration_ms: None,
         active_session_id: 0,
         audio_processor: None,
-        stream_created: false,
+        audio_stream: None,
     }));
 
     Ok(Stt {
         app: app.clone(),
         state,
+        model_prepare_lock: Arc::new(Mutex::new(())),
     })
 }
 
 pub struct Stt<R: Runtime> {
     app: AppHandle<R>,
     state: Arc<Mutex<SttState>>,
+    model_prepare_lock: Arc<Mutex<()>>,
 }
 
 impl<R: Runtime> Stt<R> {
@@ -142,359 +103,11 @@ impl<R: Runtime> Stt<R> {
             .join("vosk-models")
     }
 
-    fn get_downloads_dir(&self) -> PathBuf {
-        self.get_models_dir().join(".downloads")
-    }
-
-    fn resolve_download_url(&self, model_name: &str, default_url: &str) -> String {
-        if let Ok(full_url) = std::env::var("SQUIRREL_STT_MODEL_URL") {
-            let trimmed = full_url.trim();
-            if !trimmed.is_empty() {
-                return trimmed.to_string();
-            }
-        }
-
-        let env_key = format!(
-            "SQUIRREL_STT_MODEL_URL_{}",
-            model_name
-                .chars()
-                .map(|ch| if ch.is_ascii_alphanumeric() {
-                    ch.to_ascii_uppercase()
-                } else {
-                    '_'
-                })
-                .collect::<String>()
-        );
-
-        if let Ok(url) = std::env::var(&env_key) {
-            let trimmed = url.trim();
-            if !trimmed.is_empty() {
-                return trimmed.to_string();
-            }
-        }
-
-        if let Ok(base_url) = std::env::var("SQUIRREL_STT_MODEL_BASE_URL") {
-            let trimmed = base_url.trim().trim_end_matches('/');
-            if !trimmed.is_empty() {
-                let file_name = default_url
-                    .rsplit('/')
-                    .next()
-                    .unwrap_or(default_url);
-                return format!("{}/{}", trimmed, file_name);
-            }
-        }
-
-        default_url.to_string()
-    }
-
-    fn resolve_french_model(&self) -> (&'static str, &'static str) {
-        let override_value = std::env::var("SQUIRREL_STT_FR_MODEL")
-            .ok()
-            .or_else(|| std::env::var("SQUIRREL_STT_MODEL_PROFILE").ok())
-            .unwrap_or_default()
-            .to_lowercase();
-
-        if override_value == "small" {
-            return (FR_SMALL_MODEL_NAME, FR_SMALL_MODEL_URL);
-        }
-        if override_value == "full" {
-            return (FR_FULL_MODEL_NAME, FR_FULL_MODEL_URL);
-        }
-
-        (FR_FULL_MODEL_NAME, FR_FULL_MODEL_URL)
-    }
-
-    fn get_model_info_for_language(&self, language: &str) -> Option<(&'static str, &'static str)> {
-        if language == "fr-FR" || language.split('-').next() == Some("fr") {
-            let selected = self.resolve_french_model();
-            println!("Using French STT model '{}'", selected.0);
-            return Some(selected);
-        }
-
-        // First try exact match
-        if let Some((_, name, url)) = AVAILABLE_MODELS
-            .iter()
-            .find(|(lang, _, _)| *lang == language)
-        {
-            return Some((*name, *url));
-        }
-
-        // If not found, try to match by language prefix (e.g., "pt" matches "pt-BR")
-        if let Some(prefix) = language.split('-').next() {
-            if let Some((_, name, url)) = AVAILABLE_MODELS
-                .iter()
-                .find(|(lang, _, _)| lang.split('-').next() == Some(prefix))
-            {
-                return Some((*name, *url));
-            }
-        }
-
-        None
-    }
-
-    /// Download and extract a Vosk model in a separate thread to avoid tokio conflicts
-    fn download_model(&self, model_name: &str, url: &str) -> crate::Result<PathBuf> {
-        let models_dir = self.get_models_dir();
-        fs::create_dir_all(&models_dir).map_err(|e| {
-            crate::Error::Recording(format!("Failed to create models directory: {}", e))
-        })?;
-        let downloads_dir = self.get_downloads_dir();
-        fs::create_dir_all(&downloads_dir).map_err(|e| {
-            crate::Error::Recording(format!("Failed to create download cache directory: {}", e))
-        })?;
-
-        let model_path = models_dir.join(model_name);
-        let zip_path = downloads_dir.join(format!("{}.zip", model_name));
-        let part_path = downloads_dir.join(format!("{}.zip.part", model_name));
-        let resolved_url = self.resolve_download_url(model_name, url);
-
-        // If already exists, return path
-        if model_path.exists() {
-            println!("Using cached model '{}' at {:?}", model_name, model_path);
-            let _ = self.app.emit(
-                "stt://download-progress",
-                serde_json::json!({
-                    "status": "ready",
-                    "model": model_name,
-                    "progress": 100
-                }),
-            );
-            return Ok(model_path);
-        }
-
-        println!("Downloading model '{}' from {}", model_name, resolved_url);
-
-        // Emit download start event
-        let _ = self.app.emit(
-            "stt://download-progress",
-            serde_json::json!({
-                "status": "downloading",
-                "model": model_name,
-                "progress": 0
-            }),
-        );
-
-        // Download in a separate thread to avoid tokio runtime conflicts
-        let url_owned = resolved_url;
-        let model_name_owned = model_name.to_string();
-        let app_handle = self.app.clone();
-        let zip_path_owned = zip_path.clone();
-        let part_path_owned = part_path.clone();
-
-        let handle = std::thread::spawn(move || -> Result<PathBuf, String> {
-            if zip_path_owned.exists() {
-                let _ = app_handle.emit(
-                    "stt://download-progress",
-                    serde_json::json!({
-                        "status": "extracting",
-                        "model": model_name_owned,
-                        "progress": 50
-                    }),
-                );
-                return Ok(zip_path_owned);
-            }
-
-            let client = reqwest::blocking::Client::builder()
-                .timeout(std::time::Duration::from_secs(3000)) // Timeout total de 3000s
-                .build()
-                .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
-
-            use std::io::Read;
-            let existing_size = fs::metadata(&part_path_owned)
-                .map(|metadata| metadata.len())
-                .unwrap_or(0);
-            let mut request = client.get(&url_owned);
-            if existing_size > 0 {
-                request = request.header(RANGE, format!("bytes={}-", existing_size));
-            }
-
-            let mut response = request
-                .send()
-                .map_err(|e| format!("Failed to download model from {}: {}", url_owned, e))?;
-
-            let status = response.status();
-
-            if !(status.is_success() || status == reqwest::StatusCode::PARTIAL_CONTENT) {
-                return Err(format!(
-                    "Failed to download model: HTTP {} - {}",
-                    status,
-                    response
-                        .text()
-                        .unwrap_or_else(|_| "Failed to get error details".to_string())
-                ));
-            }
-
-            let resumed = status == reqwest::StatusCode::PARTIAL_CONTENT && existing_size > 0;
-            let mut file = if resumed {
-                println!(
-                    "Resuming model download '{}' from {:.2} MB",
-                    model_name_owned,
-                    existing_size as f64 / 1_048_576.0
-                );
-                std::fs::OpenOptions::new()
-                    .create(true)
-                    .append(true)
-                    .open(&part_path_owned)
-                    .map_err(|e| format!("Failed to open partial download: {}", e))?
-            } else {
-                if existing_size > 0 {
-                    println!(
-                        "Server did not accept resume for '{}', restarting download",
-                        model_name_owned
-                    );
-                }
-                File::create(&part_path_owned)
-                    .map_err(|e| format!("Failed to create partial download: {}", e))?
-            };
-
-            let total_size = if resumed {
-                response
-                    .headers()
-                    .get(CONTENT_RANGE)
-                    .and_then(|value| value.to_str().ok())
-                    .and_then(|value| value.rsplit('/').next())
-                    .and_then(|value| value.parse::<u64>().ok())
-                    .or_else(|| {
-                        response
-                            .headers()
-                            .get(CONTENT_LENGTH)
-                            .and_then(|value| value.to_str().ok())
-                            .and_then(|value| value.parse::<u64>().ok())
-                            .map(|length| existing_size + length)
-                    })
-            } else {
-                response.content_length()
-            };
-
-            let mut downloaded = if resumed { existing_size } else { 0 };
-            let chunk_size = 64 * 1024; // 64KB chunks for better performance
-            let mut chunk = vec![0u8; chunk_size];
-            let mut last_progress_percent: Option<u8> = None;
-
-            loop {
-                match response.read(&mut chunk) {
-                    Ok(0) => break, // EOF
-                    Ok(n) => {
-                        use std::io::Write;
-                        file.write_all(&chunk[..n])
-                            .map_err(|e| format!("Failed to write download chunk: {}", e))?;
-                        downloaded += n as u64;
-
-                        if let Some(total) = total_size {
-                            let progress = ((downloaded as f64 / total as f64) * 50.0)
-                                .floor()
-                                .clamp(0.0, 50.0) as u8;
-                            if last_progress_percent != Some(progress) {
-                                last_progress_percent = Some(progress);
-                                print!(
-                                    "\rProgress: {:.2} / {:.2} MB   ",
-                                    downloaded as f64 / 1_048_576.0,
-                                    total as f64 / 1_048_576.0
-                                );
-                                std::io::Write::flush(&mut std::io::stdout()).ok();
-
-                                let _ = app_handle.emit(
-                                    "stt://download-progress",
-                                    serde_json::json!({
-                                        "status": "downloading",
-                                        "model": model_name_owned,
-                                        "progress": progress
-                                    }),
-                                );
-                            }
-                        } else {
-                            print!("\rProgress: {:.2} MB   ", downloaded as f64 / 1_048_576.0);
-                            std::io::Write::flush(&mut std::io::stdout()).ok();
-                        }
-                    }
-                    Err(e) => {
-                        println!(); // New line after progress
-                        return Err(format!("Failed to read chunk: {}", e));
-                    }
-                }
-            }
-
-            file.sync_all()
-                .map_err(|e| format!("Failed to flush download to disk: {}", e))?;
-            fs::rename(&part_path_owned, &zip_path_owned)
-                .map_err(|e| format!("Failed to finalize cached model zip: {}", e))?;
-
-            println!(); // New line after progress bar
-            println!(
-                "Download complete: {:.2} MB",
-                downloaded as f64 / 1_048_576.0
-            );
-
-            // Emit extraction event
-            let _ = app_handle.emit(
-                "stt://download-progress",
-                serde_json::json!({
-                    "status": "extracting",
-                    "model": model_name_owned,
-                    "progress": 50
-                }),
-            );
-
-            Ok(zip_path_owned)
-        });
-
-        // Wait for download to complete
-        let zip_path = handle
-            .join()
-            .map_err(|_| crate::Error::Recording("Download thread panicked".to_string()))?
-            .map_err(crate::Error::Recording)?;
-
-        println!("Extracting model...");
-
-        // Extract the zip (this is fast enough to do on main thread)
-        let zip_file = File::open(&zip_path)
-            .map_err(|e| crate::Error::Recording(format!("Failed to open cached zip: {}", e)))?;
-        let mut archive = zip::ZipArchive::new(zip_file)
-            .map_err(|e| crate::Error::Recording(format!("Failed to open zip: {}", e)))?;
-
-        for i in 0..archive.len() {
-            let mut file = archive
-                .by_index(i)
-                .map_err(|e| crate::Error::Recording(format!("Failed to read zip entry: {}", e)))?;
-
-            let outpath = match file.enclosed_name() {
-                Some(path) => models_dir.join(path),
-                None => continue,
-            };
-
-            if file.name().ends_with('/') {
-                fs::create_dir_all(&outpath).ok();
-            } else {
-                if let Some(p) = outpath.parent() {
-                    if !p.exists() {
-                        fs::create_dir_all(p).ok();
-                    }
-                }
-                let mut outfile = File::create(&outpath).map_err(|e| {
-                    crate::Error::Recording(format!("Failed to create file: {}", e))
-                })?;
-                io::copy(&mut file, &mut outfile).map_err(|e| {
-                    crate::Error::Recording(format!("Failed to extract file: {}", e))
-                })?;
-            }
-        }
-
-        // Emit completion event
-        let _ = self.app.emit(
-            "stt://download-progress",
-            serde_json::json!({
-                "status": "complete",
-                "model": model_name,
-                "progress": 100
-            }),
-        );
-
-        Ok(model_path)
-    }
-
     fn ensure_model(&self, language: Option<&str>) -> crate::Result<Arc<Model>> {
+        let _prepare_guard = self.model_prepare_lock.lock().unwrap();
+        let started_at = Instant::now();
         let (model_name, model_url) = if let Some(lang) = language {
-            match self.get_model_info_for_language(lang) {
+            match model_for_language(lang) {
                 Some((name, url)) => (name, url),
                 None => (DEFAULT_MODEL_NAME, DEFAULT_MODEL_URL),
             }
@@ -508,6 +121,15 @@ impl<R: Runtime> Stt<R> {
         if let Some(current) = &state.current_model_name {
             if current == model_name {
                 if let Some(model) = &state.model {
+                    let _ = self.app.emit(
+                        "plugin:stt:diagnostic",
+                        serde_json::json!({
+                            "stage": "model.ready",
+                            "model": model_name,
+                            "cached": true,
+                            "elapsedMs": started_at.elapsed().as_millis()
+                        }),
+                    );
                     return Ok(model.clone());
                 }
             }
@@ -518,12 +140,22 @@ impl<R: Runtime> Stt<R> {
         state.current_model_name = None;
         // Also invalidate the audio processor since it has the old recognizer
         state.audio_processor = None;
-        state.stream_created = false;
+        state.audio_stream = None;
 
         drop(state);
 
+        let _ = self.app.emit(
+            "plugin:stt:diagnostic",
+            serde_json::json!({
+                "stage": "model.load.start",
+                "model": model_name,
+                "language": language
+            }),
+        );
+
         // Download model if needed
-        let model_path = self.download_model(model_name, model_url)?;
+        let model_path =
+            prepare_model_files(&self.app, self.get_models_dir(), model_name, model_url)?;
 
         if !model_path.exists() {
             return Err(crate::Error::NotAvailable(format!(
@@ -536,7 +168,15 @@ impl<R: Runtime> Stt<R> {
             .ok_or_else(|| crate::Error::Recording("Failed to load Vosk model".to_string()))?;
 
         let model = Arc::new(model);
-        println!("Loaded STT model '{}' from {:?}", model_name, model_path);
+        let _ = self.app.emit(
+            "plugin:stt:diagnostic",
+            serde_json::json!({
+                "stage": "model.ready",
+                "model": model_name,
+                "cached": false,
+                "elapsedMs": started_at.elapsed().as_millis()
+            }),
+        );
         let _ = self.app.emit(
             "stt://download-progress",
             serde_json::json!({
@@ -553,6 +193,10 @@ impl<R: Runtime> Stt<R> {
         Ok(model)
     }
 
+    pub fn prepare_model(&self, language: Option<&str>) -> crate::Result<()> {
+        self.ensure_model(language).map(|_| ())
+    }
+
     pub fn start_listening(&self, config: ListenConfig) -> crate::Result<()> {
         let model = self.ensure_model(config.language.as_deref())?;
 
@@ -563,7 +207,7 @@ impl<R: Runtime> Stt<R> {
         }
 
         // Generate a new session ID
-        let session_id = CURRENT_SESSION_ID.fetch_add(1, Ordering::SeqCst) + 1;
+        let session_id = SESSION_COUNTER.fetch_add(1, Ordering::SeqCst) + 1;
         state.active_session_id = session_id;
 
         // Store maxDuration config (in milliseconds)
@@ -576,10 +220,7 @@ impl<R: Runtime> Stt<R> {
 
         let interim_results = config.interim_results;
 
-        // Check if we need to create a new stream or can reuse existing one
-        let need_new_stream = !state.stream_created || state.audio_processor.is_none();
-
-        if need_new_stream {
+        {
             // Create new audio processor and stream
             let host = cpal::default_host();
             let device = host
@@ -592,10 +233,21 @@ impl<R: Runtime> Stt<R> {
 
             let channels = stream_config.channels() as usize;
             let sample_format = stream_config.sample_format();
-            let device_sample_rate = stream_config.sample_rate() as f32;
+            let device_sample_rate = stream_config.sample_rate() as f64;
+
+            let _ = self.app.emit(
+                "plugin:stt:diagnostic",
+                serde_json::json!({
+                    "stage": "audio.stream.config",
+                    "sampleRate": device_sample_rate,
+                    "targetSampleRate": TARGET_SAMPLE_RATE,
+                    "channels": channels,
+                    "sampleFormat": format!("{:?}", sample_format)
+                }),
+            );
 
             // Vosk expects 16kHz
-            let target_sample_rate = 16000.0;
+            let target_sample_rate = TARGET_SAMPLE_RATE as f32;
             let mut recognizer = Recognizer::new(&model, target_sample_rate).ok_or_else(|| {
                 crate::Error::Recording("Failed to create recognizer".to_string())
             })?;
@@ -603,16 +255,14 @@ impl<R: Runtime> Stt<R> {
             recognizer.set_max_alternatives(config.max_alternatives.unwrap_or(1) as u16);
             recognizer.set_partial_words(interim_results);
 
-            // Simple resampling: skip samples if device rate > 16kHz
-            let resample_step = (device_sample_rate / target_sample_rate) as usize;
-            let resample_step = resample_step.max(1);
-
             let audio_processor = Arc::new(Mutex::new(AudioProcessor {
                 buffer: Vec::new(),
                 recognizer,
                 last_partial: String::new(),
                 interim_results,
-                resample_step,
+                input_sample_rate: device_sample_rate,
+                resample_position: 0.0,
+                resample_previous: None,
             }));
 
             state.audio_processor = Some(audio_processor.clone());
@@ -622,7 +272,7 @@ impl<R: Runtime> Stt<R> {
 
             let process_audio = move |samples_i16: Vec<i16>| {
                 // Check if this callback's session is still the active one
-                let current_session = CURRENT_SESSION_ID.load(Ordering::SeqCst);
+                let current_session = ACTIVE_SESSION_ID.load(Ordering::SeqCst);
                 if current_session == 0 {
                     // Session ID 0 means not listening - skip processing
                     return;
@@ -634,7 +284,7 @@ impl<R: Runtime> Stt<R> {
                 processor.buffer.extend_from_slice(&samples_i16);
 
                 // Process when we have at least 0.1 seconds of audio after resampling
-                let required_samples = (1600 * processor.resample_step).max(3200);
+                let required_samples = (processor.input_sample_rate * 0.1).round() as usize;
 
                 if processor.buffer.len() < required_samples {
                     return;
@@ -643,16 +293,28 @@ impl<R: Runtime> Stt<R> {
                 // Take all accumulated samples
                 let samples_to_process: Vec<i16> = processor.buffer.drain(..).collect();
 
-                // Resample if needed
-                let resampled: Vec<i16> = if processor.resample_step > 1 {
-                    samples_to_process
-                        .iter()
-                        .step_by(processor.resample_step)
-                        .copied()
-                        .collect()
-                } else {
-                    samples_to_process
-                };
+                let rms = (samples_to_process
+                    .iter()
+                    .map(|sample| {
+                        let normalized = *sample as f64 / i16::MAX as f64;
+                        normalized * normalized
+                    })
+                    .sum::<f64>()
+                    / samples_to_process.len() as f64)
+                    .sqrt();
+                let _ = app_handle.emit("plugin:stt:audioLevel", serde_json::json!({ "rms": rms }));
+
+                let input_sample_rate = processor.input_sample_rate;
+                let mut resample_position = processor.resample_position;
+                let mut resample_previous = processor.resample_previous;
+                let resampled = resample_linear(
+                    &samples_to_process,
+                    input_sample_rate,
+                    &mut resample_position,
+                    &mut resample_previous,
+                );
+                processor.resample_position = resample_position;
+                processor.resample_previous = resample_previous;
 
                 // Accept waveform returns Result<DecodingState, _>
                 let result = processor.recognizer.accept_waveform(&resampled);
@@ -660,13 +322,37 @@ impl<R: Runtime> Stt<R> {
 
                 if is_final {
                     let result = processor.recognizer.result();
-                    let text = match result {
-                        vosk::CompleteResult::Single(single) => single.text.to_string(),
-                        vosk::CompleteResult::Multiple(multiple) => multiple
-                            .alternatives
-                            .first()
-                            .map(|alt| alt.text.to_string())
-                            .unwrap_or_default(),
+                    let (text, confidence, alternatives) = match result {
+                        vosk::CompleteResult::Single(single) => {
+                            let text = single.text.to_string();
+                            let alternatives = if text.is_empty() {
+                                Vec::new()
+                            } else {
+                                vec![RecognitionAlternative {
+                                    transcript: text.clone(),
+                                    confidence: None,
+                                }]
+                            };
+                            (text, None, alternatives)
+                        }
+                        vosk::CompleteResult::Multiple(multiple) => {
+                            let alternatives: Vec<RecognitionAlternative> = multiple
+                                .alternatives
+                                .iter()
+                                .map(|alternative| RecognitionAlternative {
+                                    transcript: alternative.text.to_string(),
+                                    confidence: Some(alternative.confidence),
+                                })
+                                .collect();
+                            let selected = alternatives.first();
+                            (
+                                selected
+                                    .map(|entry| entry.transcript.clone())
+                                    .unwrap_or_default(),
+                                selected.and_then(|entry| entry.confidence),
+                                alternatives,
+                            )
+                        }
                     };
 
                     if !text.is_empty() {
@@ -675,7 +361,8 @@ impl<R: Runtime> Stt<R> {
                         let result = RecognitionResult {
                             transcript: text,
                             is_final: true,
-                            confidence: Some(1.0),
+                            confidence,
+                            alternatives,
                         };
                         let _ = app_handle.emit("stt://result", &result);
                         let _ = app_handle.emit("plugin:stt:result", &result);
@@ -690,6 +377,7 @@ impl<R: Runtime> Stt<R> {
                             transcript: partial_text,
                             is_final: false,
                             confidence: None,
+                            alternatives: vec![],
                         };
                         let _ = app_handle.emit("stt://result", &result);
                         let _ = app_handle.emit("plugin:stt:result", &result);
@@ -698,69 +386,78 @@ impl<R: Runtime> Stt<R> {
             };
 
             let stream = match sample_format {
-                cpal::SampleFormat::F32 => device.build_input_stream(
-                    &stream_config.into(),
-                    move |data: &[f32], _: &cpal::InputCallbackInfo| {
-                        let mono_i16: Vec<i16> = if channels == 1 {
-                            data.iter()
-                                .map(|&s| (s.clamp(-1.0, 1.0) * 32767.0) as i16)
-                                .collect()
-                        } else {
-                            data.chunks(channels)
-                                .map(|frame| {
-                                    let avg = frame.iter().sum::<f32>() / channels as f32;
-                                    (avg.clamp(-1.0, 1.0) * 32767.0) as i16
-                                })
-                                .collect()
-                        };
-                        process_audio(mono_i16);
-                    },
-                    move |err| {
-                        eprintln!("Audio stream error: {}", err);
-                    },
-                    None,
-                ),
-                cpal::SampleFormat::I16 => device.build_input_stream(
-                    &stream_config.into(),
-                    move |data: &[i16], _: &cpal::InputCallbackInfo| {
-                        let mono_i16: Vec<i16> = if channels == 1 {
-                            data.to_vec()
-                        } else {
-                            data.chunks(channels)
-                                .map(|frame| {
-                                    let sum: i32 = frame.iter().map(|&s| s as i32).sum();
-                                    (sum / channels as i32) as i16
-                                })
-                                .collect()
-                        };
-                        process_audio(mono_i16);
-                    },
-                    move |err| {
-                        eprintln!("Audio stream error: {}", err);
-                    },
-                    None,
-                ),
-                cpal::SampleFormat::U16 => device.build_input_stream(
-                    &stream_config.into(),
-                    move |data: &[u16], _: &cpal::InputCallbackInfo| {
-                        let mono_i16: Vec<i16> = if channels == 1 {
-                            data.iter().map(|&s| (s as i32 - 32768) as i16).collect()
-                        } else {
-                            data.chunks(channels)
-                                .map(|frame| {
-                                    let avg = frame.iter().map(|&s| s as i32).sum::<i32>()
-                                        / channels as i32;
-                                    (avg - 32768) as i16
-                                })
-                                .collect()
-                        };
-                        process_audio(mono_i16);
-                    },
-                    move |err| {
-                        eprintln!("Audio stream error: {}", err);
-                    },
-                    None,
-                ),
+                cpal::SampleFormat::F32 => {
+                    let error_app = self.app.clone();
+                    device.build_input_stream(
+                        &stream_config.into(),
+                        move |data: &[f32], _: &cpal::InputCallbackInfo| {
+                            let mono_i16: Vec<i16> = if channels == 1 {
+                                data.iter()
+                                    .map(|&s| (s.clamp(-1.0, 1.0) * 32767.0) as i16)
+                                    .collect()
+                            } else {
+                                data.chunks(channels)
+                                    .map(|frame| {
+                                        let avg = frame.iter().sum::<f32>() / channels as f32;
+                                        (avg.clamp(-1.0, 1.0) * 32767.0) as i16
+                                    })
+                                    .collect()
+                            };
+                            process_audio(mono_i16);
+                        },
+                        move |error| {
+                            emit_audio_error(&error_app, &error);
+                        },
+                        None,
+                    )
+                }
+                cpal::SampleFormat::I16 => {
+                    let error_app = self.app.clone();
+                    device.build_input_stream(
+                        &stream_config.into(),
+                        move |data: &[i16], _: &cpal::InputCallbackInfo| {
+                            let mono_i16: Vec<i16> = if channels == 1 {
+                                data.to_vec()
+                            } else {
+                                data.chunks(channels)
+                                    .map(|frame| {
+                                        let sum: i32 = frame.iter().map(|&s| s as i32).sum();
+                                        (sum / channels as i32) as i16
+                                    })
+                                    .collect()
+                            };
+                            process_audio(mono_i16);
+                        },
+                        move |error| {
+                            emit_audio_error(&error_app, &error);
+                        },
+                        None,
+                    )
+                }
+                cpal::SampleFormat::U16 => {
+                    let error_app = self.app.clone();
+                    device.build_input_stream(
+                        &stream_config.into(),
+                        move |data: &[u16], _: &cpal::InputCallbackInfo| {
+                            let mono_i16: Vec<i16> = if channels == 1 {
+                                data.iter().map(|&s| (s as i32 - 32768) as i16).collect()
+                            } else {
+                                data.chunks(channels)
+                                    .map(|frame| {
+                                        let avg = frame.iter().map(|&s| s as i32).sum::<i32>()
+                                            / channels as i32;
+                                        (avg - 32768) as i16
+                                    })
+                                    .collect()
+                            };
+                            process_audio(mono_i16);
+                        },
+                        move |error| {
+                            emit_audio_error(&error_app, &error);
+                        },
+                        None,
+                    )
+                }
                 _ => {
                     return Err(crate::Error::Recording(format!(
                         "Unsupported sample format: {:?}",
@@ -774,33 +471,8 @@ impl<R: Runtime> Stt<R> {
                 .play()
                 .map_err(|e| crate::Error::Recording(format!("Failed to start stream: {}", e)))?;
 
-            state.stream_created = true;
-
-            // Keep the stream alive using mem::forget
-            // The stream callback checks the session ID and only processes audio
-            // when a session is active (session_id != 0)
-            std::mem::forget(stream);
-        } else {
-            // Reuse existing stream - just reset the audio processor state
-            if let Some(processor) = &state.audio_processor {
-                let mut proc = processor.lock().unwrap();
-                // Clear accumulated audio buffer from previous session
-                proc.buffer.clear();
-                // Clear last partial to avoid duplicate detection issues
-                proc.last_partial.clear();
-                // Reset the recognizer to clear any accumulated state
-                // Note: Vosk doesn't have a reset method, so we create a new one
-                let target_sample_rate = 16000.0;
-                if let Some(ref model) = state.model {
-                    if let Some(mut new_recognizer) = Recognizer::new(model, target_sample_rate) {
-                        new_recognizer
-                            .set_max_alternatives(config.max_alternatives.unwrap_or(1) as u16);
-                        new_recognizer.set_partial_words(interim_results);
-                        proc.recognizer = new_recognizer;
-                    }
-                }
-                proc.interim_results = interim_results;
-            }
+            ACTIVE_SESSION_ID.store(session_id, Ordering::SeqCst);
+            state.audio_stream = Some(stream);
         }
 
         state.is_listening = true;
@@ -828,11 +500,13 @@ impl<R: Runtime> Stt<R> {
                 let mut state = state_clone.lock().unwrap();
                 if state.is_listening && state.active_session_id == timer_session_id {
                     // Set session to 0 to stop audio processing
-                    CURRENT_SESSION_ID.store(0, Ordering::SeqCst);
+                    ACTIVE_SESSION_ID.store(0, Ordering::SeqCst);
                     state.is_listening = false;
                     state.listen_start_time = None;
                     state.max_duration_ms = None;
                     state.active_session_id = 0;
+                    state.audio_stream = None;
+                    state.audio_processor = None;
 
                     // Emit events
                     let _ = app_handle_timer.emit(
@@ -850,6 +524,13 @@ impl<R: Runtime> Stt<R> {
                             "code": -2
                         }),
                     );
+                    let _ = app_handle_timer.emit(
+                        "plugin:stt:diagnostic",
+                        serde_json::json!({
+                            "stage": "audio.stream.closed",
+                            "reason": "maximum_duration"
+                        }),
+                    );
                 }
             });
         }
@@ -864,14 +545,14 @@ impl<R: Runtime> Stt<R> {
             return Ok(());
         }
 
-        // Set session to 0 to signal audio callback to stop processing
-        // (but the stream itself keeps running for reuse)
-        CURRENT_SESSION_ID.store(0, Ordering::SeqCst);
+        ACTIVE_SESSION_ID.store(0, Ordering::SeqCst);
 
         state.is_listening = false;
         state.listen_start_time = None;
         state.max_duration_ms = None;
         state.active_session_id = 0;
+        state.audio_stream = None;
+        state.audio_processor = None;
 
         // Emit stateChange event
         let _ = self.app.emit(
@@ -881,6 +562,13 @@ impl<R: Runtime> Stt<R> {
                 is_available: true,
                 language: None,
             },
+        );
+        let _ = self.app.emit(
+            "plugin:stt:diagnostic",
+            serde_json::json!({
+                "stage": "audio.stream.closed",
+                "reason": "stop_listening"
+            }),
         );
 
         Ok(())
@@ -902,7 +590,7 @@ impl<R: Runtime> Stt<R> {
                 let installed = models_dir.join(model_name).exists();
                 SupportedLanguage {
                     code: code.to_string(),
-                    name: get_language_display_name(code),
+                    name: language_display_name(code),
                     installed: Some(installed),
                 }
             })
@@ -923,20 +611,5 @@ impl<R: Runtime> Stt<R> {
             microphone: PermissionStatus::Granted,
             speech_recognition: PermissionStatus::Granted,
         })
-    }
-}
-
-fn get_language_display_name(code: &str) -> String {
-    match code {
-        "en-US" => "English (United States)".to_string(),
-        "pt-BR" => "Portuguese (Brazil)".to_string(),
-        "es-ES" => "Spanish (Spain)".to_string(),
-        "fr-FR" => "French (France)".to_string(),
-        "de-DE" => "German (Germany)".to_string(),
-        "ru-RU" => "Russian (Russia)".to_string(),
-        "zh-CN" => "Chinese (Simplified)".to_string(),
-        "ja-JP" => "Japanese (Japan)".to_string(),
-        "it-IT" => "Italian (Italy)".to_string(),
-        _ => code.to_string(),
     }
 }

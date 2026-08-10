@@ -21,6 +21,7 @@ import app.tauri.annotation.TauriPlugin
 import app.tauri.plugin.Invoke
 import app.tauri.plugin.JSObject
 import app.tauri.plugin.Plugin
+import org.json.JSONArray
 import java.util.Locale
 
 @InvokeArg
@@ -225,7 +226,12 @@ class SttPlugin(private val activity: Activity) : Plugin(activity) {
                         trigger("stateChange", event)
                     }
 
-                    override fun onRmsChanged(rmsdB: Float) {}
+                    override fun onRmsChanged(rmsdB: Float) {
+                        val normalized = ((rmsdB + 2f) / 12f).coerceIn(0f, 1f)
+                        val event = JSObject()
+                        event.put("rms", normalized)
+                        trigger("audioLevel", event)
+                    }
 
                     override fun onBufferReceived(buffer: ByteArray?) {}
 
@@ -323,6 +329,16 @@ class SttPlugin(private val activity: Activity) : Plugin(activity) {
                             if (confidences != null && confidences.isNotEmpty()) {
                                 event.put("confidence", confidences[0].toDouble())
                             }
+                            val alternatives = JSONArray()
+                            matches.forEachIndexed { index, transcript ->
+                                val alternative = JSObject()
+                                alternative.put("transcript", transcript)
+                                if (confidences != null && index < confidences.size) {
+                                    alternative.put("confidence", confidences[index].toDouble())
+                                }
+                                alternatives.put(alternative)
+                            }
+                            event.put("alternatives", alternatives)
                             trigger("result", event)
                         }
 

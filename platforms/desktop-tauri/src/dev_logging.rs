@@ -72,16 +72,16 @@ pub fn init_tracing() -> Option<WorkerGuard> {
     let log_dir = resolve_log_dir();
     let file_logging_enabled = match std::fs::create_dir_all(&log_dir) {
         Ok(_) => true,
-        Err(err) => {
-            eprintln!(
-                "WARN: Unable to create log directory {:?}: {}",
-                log_dir, err
-            );
-            false
-        }
+        Err(_) => false,
     };
 
-    let env_filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("warn"));
+    let default_filter = if cfg!(debug_assertions) {
+        "warn,voice=info"
+    } else {
+        "warn"
+    };
+    let env_filter =
+        EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(default_filter));
     let stdout_layer = tracing_subscriber::fmt::layer()
         .json()
         .with_target(false)
@@ -115,7 +115,8 @@ pub fn init_tracing() -> Option<WorkerGuard> {
 #[tauri::command]
 pub fn log_from_webview(payload: WebviewLogPayload) {
     let component = payload.component.as_deref().unwrap_or("ui");
-    if !xcode_logs_enabled() {
+    let voice_diagnostics_enabled = cfg!(debug_assertions) && component == "voice";
+    if !xcode_logs_enabled() && !voice_diagnostics_enabled {
         return;
     }
 
@@ -126,6 +127,24 @@ pub fn log_from_webview(payload: WebviewLogPayload) {
     let request_id = payload.request_id.as_deref().unwrap_or("");
     let session_id = payload.session_id.as_deref().unwrap_or("");
     let data = payload.data.unwrap_or(Value::Null);
+
+    if voice_diagnostics_enabled {
+        match level {
+            "debug" => {
+                debug!(target: "voice", webview_source, webview_timestamp, request_id, session_id, message, data = ?data)
+            }
+            "warn" => {
+                warn!(target: "voice", webview_source, webview_timestamp, request_id, session_id, message, data = ?data)
+            }
+            "error" => {
+                error!(target: "voice", webview_source, webview_timestamp, request_id, session_id, message, data = ?data)
+            }
+            _ => {
+                info!(target: "voice", webview_source, webview_timestamp, request_id, session_id, message, data = ?data)
+            }
+        }
+        return;
+    }
 
     match level {
         "debug" => debug!(

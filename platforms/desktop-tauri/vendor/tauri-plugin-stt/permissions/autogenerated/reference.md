@@ -4,6 +4,7 @@ Default permissions for the STT plugin - allows all speech-to-text operations
 
 #### This default permission set includes the following:
 
+- `allow-prepare-model`
 - `allow-is-available`
 - `allow-get-supported-languages`
 - `allow-check-permission`
@@ -174,6 +175,32 @@ Enables the is_available command without any pre-configured scope.
 <td>
 
 Denies the is_available command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`stt:allow-prepare-model`
+
+</td>
+<td>
+
+Enables the prepare_model command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`stt:deny-prepare-model`
+
+</td>
+<td>
+
+Denies the prepare_model command without any pre-configured scope.
 
 </td>
 </tr>

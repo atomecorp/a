@@ -1,30 +1,20 @@
-import {
-    normalizeAiProviderError,
-    requestProviderJsonCompletion,
-    resolveActiveAiProviderConfig
-} from '../ai/provider_client.js';
+import { normalizeAiProviderError, requestProviderJsonCompletion, resolveActiveAiProviderConfig } from '../ai/provider_client.js';
 import { createAiQuotaTracker } from '../ai/quota_tracker.js';
 import { normalizeVoiceIntent } from './intent_schema.js';
-import {
-    DEFAULT_LOCALE,
-    isEnglishLocale,
-    listAtomeAiTools,
-    localizeAiFailure,
-    localizeQuotaWarning,
-    resolveLocale
-} from './ai_planner_runtime_context.js';
-
+import { DEFAULT_LOCALE, isEnglishLocale, listAtomeAiTools, localizeAiFailure, localizeQuotaWarning, localizeSceneGroundingFailure, resolveLocale } from './ai_planner_runtime_context.js';
+import { groundRuntimeToolchain } from './project_scene_targeting.js';
+import { writeVoiceDiagnostic } from './telemetry.js';
+import { compactPlannerAtomeAiTools, compactPlannerRuntimeTools } from './ai_planner_catalog.js';
+import { buildProviderRequestDiagnostic, buildProviderResponseDiagnostic } from './ai_planner_diagnostics.js';
+import { resolveDeterministicPlannerIntent } from './ai_planner_deterministic.js';
 const BUSINESS_CONNECTOR_DOMAINS = new Set(['mail', 'contacts', 'calendar']);
-
 const toText = (value) => String(value || '').trim();
-
 const cloneValue = (value) => {
     if (typeof structuredClone === 'function') {
         return structuredClone(value);
     }
     return JSON.parse(JSON.stringify(value));
 };
-
 const buildConversationHistorySection = (context, english) => {
     const turns = Array.isArray(context?.conversation_history) ? context.conversation_history : [];
     if (!turns.length) {
@@ -38,7 +28,6 @@ const buildConversationHistorySection = (context, english) => {
     });
     return `CONVERSATION_HISTORY:\n${lines.join('\n')}`;
 };
-
 const buildConversationSummariesSection = (context, english) => {
     const summaries = Array.isArray(context?.conversation_summaries) ? context.conversation_summaries : [];
     if (!summaries.length) {
@@ -52,7 +41,6 @@ const buildConversationSummariesSection = (context, english) => {
     });
     return `CONVERSATION_SUMMARIES:\n${lines.join('\n')}`;
 };
-
 const buildPersistentMemorySection = (context, english) => {
     const summary = context?.persistent_memory_summary && typeof context.persistent_memory_summary === 'object'
         ? context.persistent_memory_summary
@@ -60,9 +48,8 @@ const buildPersistentMemorySection = (context, english) => {
     if (!summary) {
         return english ? 'PERSISTENT_MEMORY:\n(none)' : 'PERSISTENT_MEMORY:\n(aucune)';
     }
-    return `PERSISTENT_MEMORY:\n${JSON.stringify(summary, null, 2)}`;
+    return `PERSISTENT_MEMORY:\n${JSON.stringify(summary)}`;
 };
-
 const buildIdentityResolutionSection = (context, english) => {
     const identity = context?.identity_resolution && typeof context.identity_resolution === 'object'
         ? context.identity_resolution
@@ -70,9 +57,8 @@ const buildIdentityResolutionSection = (context, english) => {
     if (!identity) {
         return english ? 'IDENTITY_RESOLUTION:\n(none)' : 'IDENTITY_RESOLUTION:\n(aucune)';
     }
-    return `IDENTITY_RESOLUTION:\n${JSON.stringify(identity, null, 2)}`;
+    return `IDENTITY_RESOLUTION:\n${JSON.stringify(identity)}`;
 };
-
 const buildProjectSceneSection = (context, english) => {
     const scene = context?.project_scene && typeof context.project_scene === 'object'
         ? context.project_scene
@@ -80,10 +66,9 @@ const buildProjectSceneSection = (context, english) => {
     if (!scene) {
         return english ? 'PROJECT_SCENE:\n(none)' : 'PROJECT_SCENE:\n(aucune)';
     }
-    return `PROJECT_SCENE:\n${JSON.stringify(scene, null, 2)}`;
+    return `PROJECT_SCENE:\n${JSON.stringify(scene)}`;
 };
-
-const buildPlannerPrompt = ({
+export const buildPlannerPrompt = ({
     utterance = '',
     locale = DEFAULT_LOCALE,
     context = {},
@@ -138,7 +123,7 @@ const buildPlannerPrompt = ({
             'ATOME CATEGORIES: Atomes have types. System types are: tool, code, user, project, folder, organization, share_request, share_link, share_policy. User-created content types are: shape, image, video, sound, text, document, audio_recording, video_recording, etc. When the user asks "what is on the project" or "what is on screen", they mean USER-CREATED CONTENT, not system tools. The reply formatter already filters system objects out.',
             'VISUAL AWARENESS: When adole.atomes.list returns, user-created objects include properties such as color, fill, shape, width, height, x, y. A green circle would appear as a shape atome with color:green and shape:circle. Use this data to answer questions like "is there a green circle" or "describe what you see". If properties are missing, use adole.atomes.get for full details on a specific atome.',
             'VISUAL QUERIES: When the user asks whether a specific visual object exists (e.g., "is there a green circle on screen?"), ALWAYS dispatch adole.atomes.list with the projectId. Set domain "project", action "check_atome", and include query_text with the visual description (e.g., "green circle"). The reply formatter will search the atome properties and answer yes/no. Do NOT answer "I cannot confirm" or "I do not have that information" — always call the tool and let the system check.',
-            'PROPERTY CHANGES: When the user asks to change a visual property of an atome (color, size, position, opacity, etc.), use target "atome_ai" with tool "adole.atomes.alter". Pass the atome id from PROJECT_SCENE.selection (or resolve "this", "the circle", "it" from selection). Pass the new property in the properties object. Example: "change the circle to red" -> {"domain":"project","action":"alter_atome","target":"atome_ai","reply":"Color changed.","actions":[{"target":"atome_ai","tool_name":"adole.atomes.alter","params":{"id":"<id from PROJECT_SCENE.selection>","properties":{"color":"red"}}}]}. If no atome is selected and the user refers to a specific object, first use adole.atomes.list to find it, then alter it.',
+            'PROPERTY CHANGES: Use "adole.atomes.alter" for color, size, and opacity. For a relative movement, ALWAYS use target "runtime_v2", tool_id "ui.move", action "move.relative", and numeric input atome_id, delta_x, delta_y. Resolve the id from PROJECT_SCENE; never invent it.',
             'VOICE BREVITY: All replies must be SHORT and suitable for text-to-speech. Maximum 1-3 sentences. Never dump full lists of tools, features, or capabilities. If the user asks "what tools are available", answer with a brief summary of categories (e.g., "I can help with drawing, timeline, mail, contacts, calendar, and project management."). Never output more than 50 words in reply.',
             'TOOL DISPATCH REPLY: When you dispatch a tool (target is not "none"), keep the reply field SHORT and neutral (e.g., "Done.", "Here are the results.", "Let me check."). The system will build a detailed answer from the tool result. Do NOT write a long conversational answer in reply when a tool is being called — the tool result will replace it if relevant.'
         ]
@@ -192,7 +177,7 @@ const buildPlannerPrompt = ({
             'CATEGORIES D\'ATOMES: Les types systeme sont: tool, code, user, project, folder, organization, share_request, share_link, share_policy. Les types contenu utilisateur sont: shape, image, video, sound, text, document, audio_recording, video_recording, etc. Quand l\'utilisateur demande "qu\'est-ce qu\'il y a sur le projet" ou "a l\'ecran", il parle du CONTENU CREE par l\'utilisateur, pas des outils systeme. Le formateur de reponse filtre deja les objets systeme.',
             'CONSCIENCE VISUELLE: Quand adole.atomes.list retourne des resultats, les objets utilisateur incluent des proprietes comme color, fill, shape, width, height, x, y. Un cercle vert apparaitrait comme un atome shape avec color:green et shape:circle. Utilise ces donnees pour repondre a "est-ce qu\'il y a un cercle vert" ou "decris ce que tu vois". Si les proprietes manquent, utilise adole.atomes.get pour les details complets d\'un atome specifique.',
             'REQUETES VISUELLES: Quand l\'utilisateur demande si un objet visuel existe (ex: "est-ce qu\'il y a un cercle vert a l\'ecran ?"), appelle TOUJOURS adole.atomes.list avec le projectId. Mets domain "project", action "check_atome", et inclus query_text avec la description visuelle (ex: "cercle vert"). Le formateur de reponse cherchera dans les proprietes des atomes et repondra oui/non. Ne reponds JAMAIS "je ne peux pas confirmer" ou "je n\'ai pas cette information" — appelle toujours l\'outil et laisse le systeme verifier.',
-            'MODIFICATION DE PROPRIETES: Quand l\'utilisateur demande de changer une propriete visuelle d\'un atome (couleur, taille, position, opacite, etc.), utilise la cible "atome_ai" avec l\'outil "adole.atomes.alter". Passe l\'id de l\'atome depuis PROJECT_SCENE.selection (ou resous "ca", "le cercle", "celui-la" depuis la selection). Passe la nouvelle propriete dans l\'objet properties. Exemple: "mets le cercle en rouge" -> {"domain":"project","action":"alter_atome","target":"atome_ai","reply":"Couleur changee.","actions":[{"target":"atome_ai","tool_name":"adole.atomes.alter","params":{"id":"<id depuis PROJECT_SCENE.selection>","properties":{"color":"red"}}}]}. Si aucun atome n\'est selectionne et que l\'utilisateur designe un objet specifique, utilise d\'abord adole.atomes.list pour le trouver, puis modifie-le.',
+            'MODIFICATION DE PROPRIETES: Utilise "adole.atomes.alter" pour la couleur, la taille et l\'opacite. Pour un deplacement relatif, utilise TOUJOURS target "runtime_v2", tool_id "ui.move", action "move.relative", avec atome_id, delta_x et delta_y numeriques. Resous l\'id depuis PROJECT_SCENE; ne l\'invente jamais.',
             'BRIEVETE VOCALE: Toutes les reponses doivent etre COURTES et adaptees a la synthese vocale. Maximum 1 a 3 phrases. Ne liste jamais l\'integralite des outils, fonctionnalites ou capacites. Si l\'utilisateur demande "quels outils sont disponibles", reponds avec un bref resume des categories (ex: "Je peux t\'aider pour le dessin, la timeline, le mail, les contacts, l\'agenda et la gestion de projet."). Jamais plus de 50 mots dans reply.',
             'REPONSE LORS D\'UN DISPATCH: Quand tu dispatches un outil (cible differente de "none"), garde le champ reply COURT et neutre (ex: "Fait.", "Voici les resultats.", "Je verifie."). Le systeme construira une reponse detaillee a partir du resultat de l\'outil. N\'ecris PAS une longue reponse conversationnelle dans reply quand un outil est appele — le resultat de l\'outil la remplacera si pertinent.'
         ];
@@ -202,7 +187,6 @@ const buildPlannerPrompt = ({
     const persistentMemorySection = buildPersistentMemorySection(context, english);
     const identityResolutionSection = buildIdentityResolutionSection(context, english);
     const projectSceneSection = buildProjectSceneSection(context, english);
-
     return [
         rules.join('\n'),
         '',
@@ -224,14 +208,11 @@ const buildPlannerPrompt = ({
         '',
         `UTTERANCE:\n${String(utterance || '')}`,
         '',
-        `CONTEXT:\n${JSON.stringify(context || {}, null, 2)}`,
+        `ATOME_AI_TOOLS:\n${JSON.stringify(compactPlannerAtomeAiTools(atomeAiTools, { utterance }))}`,
         '',
-        `ATOME_AI_TOOLS:\n${JSON.stringify(Array.isArray(atomeAiTools) ? atomeAiTools : [], null, 2)}`,
-        '',
-        `RUNTIME_TOOLS:\n${JSON.stringify(Array.isArray(runtimeTools) ? runtimeTools : [], null, 2)}`
+        `RUNTIME_TOOLS:\n${JSON.stringify(compactPlannerRuntimeTools(runtimeTools, { utterance }))}`
     ].join('\n');
 };
-
 const normalizeActions = (target, actions = []) => {
     const normalizedTarget = toText(target) || 'none';
     const sourceActions = Array.isArray(actions) ? actions : [];
@@ -261,7 +242,6 @@ const normalizeActions = (target, actions = []) => {
     }
     return toolchain;
 };
-
 const toCleanValue = (value) => {
     if (value === undefined || value === null) return null;
     if (Array.isArray(value)) {
@@ -281,7 +261,6 @@ const toCleanValue = (value) => {
     const text = toText(value);
     return text || null;
 };
-
 const collectPlannerEntities = (parsed = {}, rawActions = []) => {
     const entityMap = new Map([
         ['draft_text', parsed?.draft_text],
@@ -333,7 +312,6 @@ const collectPlannerEntities = (parsed = {}, rawActions = []) => {
     }
     return entities;
 };
-
 export const createVoiceAiPlanner = ({
     env = globalThis,
     loadProfile,
@@ -341,10 +319,12 @@ export const createVoiceAiPlanner = ({
     quotaTracker = null
 } = {}) => ({
     async planUtterance(utterance, options = {}) {
+        const locale = resolveLocale(options.locale || options.lang);
+        const deterministicIntent = resolveDeterministicPlannerIntent({ env, locale, options, utterance });
+        if (deterministicIntent) return deterministicIntent;
         const usageTracker = quotaTracker && typeof quotaTracker.getSummary === 'function'
             ? quotaTracker
             : createAiQuotaTracker({ env });
-        const locale = resolveLocale(options.locale || options.lang);
         const providerConfig = await resolveActiveAiProviderConfig({
             ...(typeof loadProfile === 'function' ? { loadProfile } : {}),
             env
@@ -377,21 +357,27 @@ export const createVoiceAiPlanner = ({
         }
 
         try {
+            const providerStartedAt = Date.now();
+            const systemPrompt = buildPlannerPrompt({
+                utterance,
+                locale,
+                context: options.context,
+                runtimeTools: options.runtime_tools,
+                atomeAiTools: listAtomeAiTools(env)
+            });
+            writeVoiceDiagnostic(env, 'voice.provider.request', buildProviderRequestDiagnostic({ options, providerConfig, utterance, systemPrompt }));
             const { parsed, text, usage } = await requestProviderJsonCompletion({
                 providerId: providerConfig.providerId,
                 model: providerConfig.model,
                 apiKey: providerConfig.apiKey,
-                systemPrompt: buildPlannerPrompt({
-                    utterance,
-                    locale,
-                    context: options.context,
-                    runtimeTools: options.runtime_tools,
-                    atomeAiTools: listAtomeAiTools(env)
-                }),
+                systemPrompt,
                 prompt: String(utterance || ''),
                 ...(typeof fetchImpl === 'function' ? { fetchImpl } : {}),
                 ...(options.signal ? { signal: options.signal } : {})
             });
+            writeVoiceDiagnostic(env, 'voice.provider.response', buildProviderResponseDiagnostic({
+                options, providerConfig, parsed, text, usage, elapsedMs: Date.now() - providerStartedAt
+            }));
             usageTracker.recordUsage({
                 provider: providerConfig.providerId,
                 model: providerConfig.model,
@@ -402,14 +388,24 @@ export const createVoiceAiPlanner = ({
             const quotaWarning = localizeQuotaWarning(quotaSummary.warning_code, locale);
 
             const target = toText(parsed?.target) || 'none';
-            const toolchain = normalizeActions(target, parsed?.actions);
+            const proposedToolchain = normalizeActions(target, parsed?.actions);
+            const grounding = target === 'runtime_v2'
+                ? groundRuntimeToolchain({
+                    toolchain: proposedToolchain,
+                    utterance,
+                    projectScene: options.context?.project_scene || null
+                })
+                : { ok: true, toolchain: proposedToolchain };
+            const toolchain = grounding.ok === true ? grounding.toolchain : [];
             const actionCount = toolchain.length;
             const plannedDomain = toText(parsed?.domain) || 'unknown';
             const plannedAction = toText(parsed?.action) || 'unknown';
             const hasStructuredBusinessIntent = BUSINESS_CONNECTOR_DOMAINS.has(plannedDomain)
                 && plannedAction !== 'unknown'
                 && plannedAction !== 'ai_planned';
-            const normalizedTarget = actionCount
+            const normalizedTarget = grounding.ok !== true
+                ? 'none'
+                : actionCount
                 ? target
                 : (hasStructuredBusinessIntent ? 'pending_connector' : 'none');
             const intentType = normalizedTarget === 'atome_ai'
@@ -432,18 +428,24 @@ export const createVoiceAiPlanner = ({
                     ai_model: providerConfig.model,
                     ai_source: providerConfig.source,
                     ai_usage: usage || null,
+                    ...(grounding.ok !== true ? {
+                        scene_grounding_error: grounding.error,
+                        scene_grounding_matches: grounding.matches || []
+                    } : {}),
                     ...(quotaSummary.warning_code ? {
                         ai_quota_warning_code: quotaSummary.warning_code,
                         ai_quota_warning: quotaWarning || null
                     } : {})
                 },
-                assistant_reply: toText(parsed?.reply) || '',
+                assistant_reply: grounding.ok === true
+                    ? (toText(parsed?.reply) || '')
+                    : localizeSceneGroundingFailure(grounding.error, locale),
                 llm_raw_response: text,
                 type: intentType,
                 domain: plannedDomain,
                 action: plannedAction,
                 confidence: Number.isFinite(Number(parsed?.confidence)) ? Number(parsed.confidence) : 0.85,
-                status: 'ready',
+                status: grounding.ok === true ? 'ready' : 'ambiguous',
                 entities: Object.keys(llmEntities).length ? llmEntities : undefined,
                 execution: {
                     target: normalizedTarget,
@@ -454,6 +456,11 @@ export const createVoiceAiPlanner = ({
             });
         } catch (error) {
             const normalized = normalizeAiProviderError(error);
+            writeVoiceDiagnostic(env, 'voice.provider.error', {
+                session_id: options.session_id || null, intent_id: options.intent_id || null,
+                provider: providerConfig.providerId, model: providerConfig.model,
+                code: normalized.code, message: normalized.message
+            });
             usageTracker.recordIncident({
                 provider: providerConfig.providerId,
                 model: providerConfig.model,

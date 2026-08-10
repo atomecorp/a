@@ -1,4 +1,8 @@
-import { collectSpeechHints, applyHintedSpeechCorrections, resolveSpeechLocale } from './service_speech.js';
+import {
+    collectSpeechHints,
+    resolveSpeechLocale,
+    selectBestSpeechCandidate
+} from './service_speech.js';
 import {
     DEFAULT_LANG,
     DEFAULT_STT_FINAL_SILENCE_MS,
@@ -70,6 +74,7 @@ export const startTauriRecognition = async (context, sessionId, options = {}, {
             segments: [],
             confidence: null,
             latest_text: '',
+            latest_result_at: 0,
             inactivityTimer: null,
             settleCancelled: null,
             speechHints
@@ -86,7 +91,7 @@ export const startTauriRecognition = async (context, sessionId, options = {}, {
             if (state.stopRequested || typeof bridge.stop !== 'function') return;
             state.stopRequested = true;
             state.stopReason = state.stopReason || reason;
-            debugVoiceService('tauri_stt.stop_requested', { sessionId, reason: state.stopReason });
+            debugVoiceService('tauri_stt.stop_requested', { sessionId, reason: state.stopReason }, context.env);
             try {
                 await bridge.stop();
             } catch (_) {
@@ -133,7 +138,7 @@ export const startTauriRecognition = async (context, sessionId, options = {}, {
                 }
                 debugVoiceService('tauri_stt.recover_already_listening', {
                     sessionId
-                });
+                }, context.env);
                 state.recoveringStart = true;
                 if (typeof bridge.stop === 'function') {
                     try {
@@ -160,11 +165,17 @@ export const startTauriRecognition = async (context, sessionId, options = {}, {
             state.settled = true;
             clearInactivityTimer();
             const finalText = String(result.text || state.final_texts.join(' ').trim()).trim();
+            const reason = String(result.reason || state.stopReason || 'provider_final').trim();
+            const stableForMs = state.latest_result_at > 0 ? Math.max(0, Date.now() - state.latest_result_at) : null;
             const payload = {
                 text: finalText,
                 confidence: result.confidence ?? state.confidence,
                 segments: result.segments || state.segments,
-                provider
+                provider,
+                reason,
+                silence_ms: reason === 'silence' ? stableForMs : null,
+                text_stable_ms: stableForMs,
+                transcript_stable: finalText === String(state.final_texts.join(' ').trim() || state.latest_text).trim()
             };
             if (result.skipStop !== true) {
                 await requestBridgeStop(result.reason || 'final');
@@ -211,7 +222,7 @@ export const startTauriRecognition = async (context, sessionId, options = {}, {
                 state: next,
                 stopReason: state.stopReason || null,
                 cancelled: state.cancelled === true
-            });
+            }, context.env);
             if (next === 'listening') {
                 context.sessionRuntime.startListening(sessionId, {
                     lang: resolvedLang,
@@ -224,7 +235,7 @@ export const startTauriRecognition = async (context, sessionId, options = {}, {
                 if (state.recoveringStart) {
                     debugVoiceService('tauri_stt.idle_ignored_during_recovery', {
                         sessionId
-                    });
+                    }, context.env);
                     return;
                 }
                 if (state.cancelled || state.stopReason === 'cancelled' || state.stopReason === 'manual') {
@@ -262,16 +273,38 @@ export const startTauriRecognition = async (context, sessionId, options = {}, {
         }));
 
         state.cleanup.push(await bridge.onResult((result = {}) => {
-            const text = applyHintedSpeechCorrections(String(result?.transcript || '').trim(), state.speechHints);
+            const rawCandidates = Array.isArray(result?.alternatives) && result.alternatives.length
+                ? result.alternatives
+                : [{ transcript: result?.transcript || '', confidence: result?.confidence }];
+            const candidates = rawCandidates.map((entry) => ({
+                text: String(entry?.transcript || entry?.text || '').trim(),
+                confidence: Number.isFinite(Number(entry?.confidence)) ? Number(entry.confidence) : null
+            })).filter((entry) => entry.text);
+            const selected = selectBestSpeechCandidate(candidates, state.speechHints);
+            const text = selected.text;
             if (!text) return;
             state.latest_text = text;
-            const confidence = Number.isFinite(result?.confidence) ? result.confidence : null;
+            state.latest_result_at = Date.now();
+            const confidence = Number.isFinite(selected.confidence) ? selected.confidence : null;
+            context.sessionRuntime.publishEvent(sessionId, 'voice.stt.candidates', {
+                raw_transcript: String(result?.transcript || '').trim(),
+                alternatives: selected.alternatives,
+                selected: {
+                    text,
+                    confidence,
+                    normalized_confidence: selected.normalized_confidence,
+                    selection_score: selected.selection_score,
+                    matched_hints: selected.matched_hints,
+                    reason: selected.selection_reason
+                },
+                is_final: result?.isFinal === true
+            });
             debugVoiceService('tauri_stt.result', {
                 sessionId,
                 text,
                 isFinal: result?.isFinal === true,
                 confidence
-            });
+            }, context.env);
             if (result?.isFinal) {
                 state.final_texts.push(text);
                 state.segments.push(createSegment(text, confidence));
@@ -291,11 +324,20 @@ export const startTauriRecognition = async (context, sessionId, options = {}, {
             scheduleSilenceStop(silenceMs);
         }));
 
+        if (typeof bridge.onDiagnostic === 'function') {
+            state.cleanup.push(await bridge.onDiagnostic((diagnostic = {}) => {
+                debugVoiceService(`tauri_stt.native.${String(diagnostic?.stage || 'event')}`, {
+                    sessionId,
+                    ...diagnostic
+                }, context.env);
+            }));
+        }
+
         state.cleanup.push(await bridge.onError((error = {}) => {
             debugVoiceService('tauri_stt.error', {
                 sessionId,
                 error: error?.message || error?.code || String(error)
-            });
+            }, context.env);
             void settleError(error);
         }));
 
@@ -306,7 +348,7 @@ export const startTauriRecognition = async (context, sessionId, options = {}, {
                     status: String(progress?.status || '').trim() || 'downloading',
                     model: String(progress?.model || '').trim() || null,
                     progress: Number.isFinite(Number(progress?.progress)) ? Number(progress.progress) : null
-                });
+                }, context.env);
                 context.sessionRuntime.publishEvent(sessionId, 'voice.stt.download_progress', {
                     status: String(progress?.status || '').trim() || 'downloading',
                     model: String(progress?.model || '').trim() || null,

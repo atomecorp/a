@@ -8,6 +8,7 @@ const LEGACY_HISTORY_STORAGE_KEY = 'eve_dilas_voice_history_v1';
 export const MAX_HISTORY_ITEMS = 80;
 
 const DEFAULTS = {
+    acousticDrainMs: 320,
     bargeArmDelayMs: 180,
     bargeRestartDelayMs: 24,
     bargeVadThreshold: 0.045,
@@ -19,7 +20,7 @@ const DEFAULTS = {
     sttSilenceMs: 8000,
     sttFinalSilenceMs: 2400,
     interruptSttSilenceMs: 2600,
-    interruptSttFinalSilenceMs: 900
+    interruptSttFinalSilenceMs: 1800
 };
 
 export const debugVoice = () => {};
@@ -37,6 +38,7 @@ export const resolveHomeVoiceConfig = (env = globalThis) => {
     const pauseCommitMs = numericSetting(env?.__EVE_VOICE_PAUSE_COMMIT_MS, DEFAULTS.pauseCommitMs, fastCommitMs);
     const forceCommitMs = numericSetting(env?.__EVE_VOICE_FORCE_COMMIT_MS, DEFAULTS.forceCommitMs, pauseCommitMs);
     return {
+        acousticDrainMs: numericSetting(env?.__EVE_VOICE_ACOUSTIC_DRAIN_MS, DEFAULTS.acousticDrainMs),
         echoCooldownMs: numericSetting(env?.__EVE_VOICE_ECHO_COOLDOWN_MS, DEFAULT_ECHO_COOLDOWN_MS),
         bargeArmDelayMs: numericSetting(env?.__EVE_VOICE_BARGE_ARM_DELAY_MS, DEFAULTS.bargeArmDelayMs),
         bargeRestartDelayMs: numericSetting(env?.__EVE_VOICE_BARGE_RESTART_DELAY_MS, DEFAULTS.bargeRestartDelayMs),
