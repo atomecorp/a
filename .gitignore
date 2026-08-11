@@ -95,6 +95,7 @@ tests/eve/*
 !tests/eve/assistant_session_controller.test.mjs
 !tests/eve/assistant_turn_taking.test.mjs
 !tests/eve/assistant_voice_runtime.test.mjs
+!tests/eve/tool_runtime_home_lazy_load.test.mjs
 !tests/eve/tool_runtime_move_relative.test.mjs
 !tests/eve/bevy_project_renderer_guards.test.mjs
 !tests/eve/bevy_panel_contract.test.mjs

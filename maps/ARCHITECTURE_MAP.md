@@ -832,7 +832,10 @@ The shared scene is not a reason to rebuild static Dashboard records when a tool
 - Home has one active product-panel route:
   `tool.main.home` → `ui.home.panel` → session-aware window owner → registered
   Bevy surface `home` → `eve_bevy_panel_home` on the shared project canvas.
-  The generic panel bootstrap does not bypass this session owner.
+  The generic panel bootstrap does not bypass this session owner. Before its
+  first window-owner call, Runtime V2 resolves the definition's existing lazy
+  `home` module, so direct authenticated or Guest workspace boot cannot race a
+  missing `open_home_panel` function.
 - Authenticated and Guest sessions compose Home in Bevy. Unauthenticated login
   and registration remain the existing authorized application-shell surface;
   that shell is not a Home fallback, second panel renderer, or state owner.

@@ -1876,6 +1876,10 @@ The next execution tasks must refine this map by:
   `runtime.audit.list` remain the existing MCP invocation/audit surfaces for
   Home open/close. `runtime_owner: 'window'` makes the established
   `open_home_panel` session gate authoritative before the Bevy surface opens.
+  Its internal Runtime V2 configuration retains `module_key: 'home'`; the
+  registered-handler owner calls the existing `ensureToolModule('home')`
+  loader before invoking the window function and reports the shared typed
+  import failure when loading fails.
 - Profile read/write uses only `loadUserProfile` / `upsertUserProfile` and the
   existing sanitized `Atome.commit` path. Visibility continues through
   `AdoleAPI.auth.setVisibility`; visual, handedness, locale, accessibility,

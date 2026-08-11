@@ -8,7 +8,8 @@ const viewSource = readFileSync('eVe/intuition/runtime/bevy_panel/bevy_panel_hom
 const definitions = readFileSync('eVe/intuition/panel_definitions.js', 'utf8');
 
 assert.match(userSource, /window\.open_home_panel = open_home_panel/);
-assert.match(userSource, /bevy_panel_surfaces\.js/);
+assert.match(userSource, /bevy_panel_home_runtime\.js/);
+assert.doesNotMatch(userSource, /bevy_panel_surfaces\.js/);
 assert.match(routeSource, /openBevyPanelSurface\('home'/);
 assert.match(routeSource, /ensureSharedLoginSequence/);
 assert.match(routeSource, /api\.security\.startGuest/);
@@ -22,8 +23,8 @@ assert.match(viewSource, /id: `home_\$\{key\}_accordion`/);
 assert.match(viewSource, /id: 'home_session_exit'/);
 assert.match(viewSource, /id: 'home_credentials_add'/);
 assert.match(viewSource, /id: 'home_passwords_accordion'/);
-assert.match(viewSource, /id: 'home_keys_accordion'/);
-assert.doesNotMatch(viewSource, /home_ai_|home_professional|eve\.user\.pro\.label/);
+assert.match(viewSource, /id: 'home_ai_keys_accordion'/);
+assert.doesNotMatch(viewSource, /home_professional|eve\.user\.pro\.label/);
 
 assert.match(surfaceSource, /persistHomeProfile/);
 assert.match(surfaceSource, /changeHomePassword/);

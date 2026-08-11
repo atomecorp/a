@@ -93,6 +93,7 @@
   "tests/eve/selection_style_font_size_contract.test.mjs",
   "tests/eve/text_creation_handoff_contract.test.mjs",
   "tests/eve/text_editing_session_contract.test.mjs",
+  "tests/eve/tool_runtime_home_lazy_load.test.mjs",
   "tests/eve/tool_runtime_move_relative.test.mjs",
   "tests/eve/unified_rendering_contract.test.mjs",
   "tests/eve/user_profile_events.test.mjs",
