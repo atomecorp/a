@@ -9,6 +9,7 @@ the established solution before attempting a new implementation.
 | Symptom | Folder |
 | --- | --- |
 | An imported video plays audio once, then later playbacks are silent | [media-video-audio-replay](media-video-audio-replay/README.md) |
+| Projects disappear, project views look empty, or legacy media returns 404 after identity migration | [project-state-media-identity-reconciliation](project-state-media-identity-reconciliation/README.md) |
 
 ## Maintenance rules
 

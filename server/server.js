@@ -667,6 +667,10 @@ async function startServer() {
       try {
         await db.initDatabase();
         await ensureOpaquePrincipalIdentity(db.getDataSourceAdapter());
+        const globalScopeRepair = await db.repairGlobalStateCurrentScopes();
+        if (globalScopeRepair.repaired_ids.length) {
+          console.log('[ADOLE] Repaired account-global projections:', globalScopeRepair.repaired_ids.length);
+        }
         console.log('✅ Connexion à la base de données établie (SQLite/LibSQL)');
       } catch (error) {
         console.error('❌ Database initialization failed:', error.message);

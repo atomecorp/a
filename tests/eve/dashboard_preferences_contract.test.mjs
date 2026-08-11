@@ -177,6 +177,31 @@ test('dashboard data controller never stores a late project response in the next
     assert.equal(state.itemsByCategory.has('calendar'), false, 'late project A data must not become visible in project B');
 });
 
+test('dashboard projects cache is account-global and invalidates across project switches', async () => {
+    let loads = 0;
+    const state = { dataProjectId: 'project_a' };
+    const data = createDashboardDataController({
+        state,
+        constants: { dashboard: { categories: [{ id: 'projects', label_key: 'eve.dashboard.category.projects', color_family: 'green', title: 'Projects' }] } },
+        adapters: {
+            listMany: async () => {
+                loads += 1;
+                return new Map([['projects', [{ id: 'project_1', preview_url: 'data:image/webp;base64,AA==' }]]]);
+            }
+        }
+    });
+    const categories = await data.loadCategories();
+    await data.loadVisibleItems(categories);
+    state.dataProjectId = 'project_b';
+    await data.loadVisibleItems(categories);
+    assert.equal(loads, 1);
+    assert.equal(data.hasCategoryCache('projects'), true);
+    data.invalidateCache({ projectId: 'project_b', categoryIds: ['projects'], reset: false });
+    assert.equal(data.hasCategoryCache('projects'), false);
+    await data.loadVisibleItems(categories);
+    assert.equal(loads, 2);
+});
+
 test('dashboard preference events refilter categories even when geometry is unchanged', async () => {
     const dom = new JSDOM('<!doctype html><html><body><canvas id="surface"></canvas></body></html>', { url: 'http://localhost/' });
     const surface = dom.window.document.getElementById('surface');

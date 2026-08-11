@@ -86,6 +86,7 @@
   "tests/eve/project_scene_text_edit_contract.test.mjs",
   "tests/eve/project_scene_text_style_range_contract.test.mjs",
   "tests/eve/project_scene_unified_rendering_contract.test.mjs",
+  "tests/eve/project_view_real_server_shape.test.mjs",
   "tests/eve/project_workspace_activation_contract.test.mjs",
   "tests/eve/render_surface_size_contract.test.mjs",
   "tests/eve/rich_text_style_contract.test.mjs",

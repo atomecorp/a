@@ -92,6 +92,23 @@ async function ensurePrincipalIdentityTables(query) {
         failure_code TEXT,
         CHECK(status IN ('prepared', 'completed', 'failed'))
     )`);
+    await query('run', `CREATE TABLE IF NOT EXISTS principal_file_migrations (
+        migration_id INTEGER PRIMARY KEY AUTOINCREMENT,
+        atome_id TEXT NOT NULL,
+        legacy_principal_id TEXT NOT NULL,
+        principal_id TEXT NOT NULL,
+        source_path TEXT NOT NULL,
+        target_path TEXT NOT NULL,
+        content_digest TEXT,
+        status TEXT NOT NULL,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        completed_at TEXT,
+        failure_code TEXT,
+        UNIQUE(atome_id, source_path, target_path),
+        FOREIGN KEY(atome_id) REFERENCES atomes(atome_id) ON DELETE CASCADE,
+        FOREIGN KEY(principal_id) REFERENCES atomes(atome_id) ON DELETE CASCADE,
+        CHECK(status IN ('prepared', 'completed', 'failed'))
+    )`);
     await query('run', `CREATE TABLE IF NOT EXISTS account_provision_operations (
         operation_digest TEXT PRIMARY KEY,
         principal_id TEXT NOT NULL,

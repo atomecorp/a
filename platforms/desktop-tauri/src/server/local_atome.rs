@@ -2262,12 +2262,22 @@ fn normalize_event_input(
         .and_then(|v| v.as_str())
         .map(String::from);
 
-    let project_id = event
-        .get("project_id")
-        .and_then(|v| v.as_str())
-        .map(String::from);
+    let global_scope = event.get("scope").and_then(|v| v.as_str()) == Some("global");
+    let project_id = if global_scope {
+        None
+    } else {
+        event
+            .get("project_id")
+            .and_then(|v| v.as_str())
+            .map(String::from)
+    };
 
-    let payload = resolve_event_payload(event);
+    let mut payload = resolve_event_payload(event);
+    if global_scope {
+        let mut object = payload.and_then(|value| value.as_object().cloned()).unwrap_or_default();
+        object.insert("scope".to_string(), JsonValue::String("global".to_string()));
+        payload = Some(JsonValue::Object(object));
+    }
 
     let actor = event
         .get("actor")
@@ -2606,10 +2616,21 @@ fn apply_event_to_state_current(
     }
 
     let next_version = existing.as_ref().map(|row| row.1 + 1).unwrap_or(1);
-    let project_id = event
-        .project_id
-        .clone()
-        .or_else(|| existing.as_ref().and_then(|row| row.2.clone()));
+    let global_scope = event
+        .payload
+        .as_ref()
+        .and_then(|payload| payload.as_object())
+        .and_then(|payload| payload.get("scope"))
+        .and_then(|scope| scope.as_str())
+        == Some("global");
+    let project_id = if global_scope {
+        None
+    } else {
+        event
+            .project_id
+            .clone()
+            .or_else(|| existing.as_ref().and_then(|row| row.2.clone()))
+    };
 
     let owner_id = owner_id_from_patch
         .or_else(|| {
@@ -2630,7 +2651,7 @@ fn apply_event_to_state_current(
 
     if existing.is_some() {
         db.execute(
-            "UPDATE state_current SET properties = ?1, updated_at = ?2, version = ?3, project_id = COALESCE(?4, project_id), owner_id = COALESCE(?5, owner_id) WHERE atome_id = ?6",
+            "UPDATE state_current SET properties = ?1, updated_at = ?2, version = ?3, project_id = ?4, owner_id = COALESCE(?5, owner_id) WHERE atome_id = ?6",
             rusqlite::params![props_json, event.ts, next_version, project_id, owner_id, atome_id],
         )
         .map_err(|e| e.to_string())?;

@@ -135,6 +135,25 @@ async function moveActiveReferences(dataSource, legacyId, principalId) {
         ['UPDATE sync_state SET atome_id = ? WHERE atome_id = ?', [principalId, legacyId]]
     ];
     for (const [sql, params] of updates) await rows(dataSource, sql, params);
+    for (const key of ['owner_id', 'ownerId', 'creator_id', 'creatorId']) {
+        await rows(dataSource, `UPDATE particles SET particle_value = ?, updated_at = ?
+            WHERE particle_key = ? AND particle_value = ?`, [
+            JSON.stringify(principalId), nowIso(), key, JSON.stringify(legacyId)
+        ]);
+    }
+    await rows(dataSource, `UPDATE state_current SET properties = json_set(
+            properties,
+            '$.owner_id', CASE WHEN json_extract(properties, '$.owner_id') = ? THEN ? ELSE json_extract(properties, '$.owner_id') END,
+            '$.ownerId', CASE WHEN json_extract(properties, '$.ownerId') = ? THEN ? ELSE json_extract(properties, '$.ownerId') END,
+            '$.creator_id', CASE WHEN json_extract(properties, '$.creator_id') = ? THEN ? ELSE json_extract(properties, '$.creator_id') END,
+            '$.creatorId', CASE WHEN json_extract(properties, '$.creatorId') = ? THEN ? ELSE json_extract(properties, '$.creatorId') END
+        ) WHERE json_extract(properties, '$.owner_id') = ?
+            OR json_extract(properties, '$.ownerId') = ?
+            OR json_extract(properties, '$.creator_id') = ?
+            OR json_extract(properties, '$.creatorId') = ?`, [
+        legacyId, principalId, legacyId, principalId, legacyId, principalId, legacyId, principalId,
+        legacyId, legacyId, legacyId, legacyId
+    ]);
 }
 
 async function isCredentiallessLegacyUser(dataSource, legacyId) {
@@ -199,7 +218,10 @@ async function cloneLegacyUser(dataSource, legacy, principalId, phone) {
 async function migrateLegacyUser(dataSource, legacy) {
     const existing = await one(dataSource, `SELECT principal_id, status FROM principal_identity_migrations
         WHERE legacy_principal_id = ?`, [legacy.atome_id]);
-    if (existing?.status === 'completed') return existing.principal_id;
+    if (existing?.status === 'completed') {
+        await moveActiveReferences(dataSource, legacy.atome_id, existing.principal_id);
+        return existing.principal_id;
+    }
     const principalId = existing?.principal_id || generateOpaquePrincipalId();
     const now = nowIso();
     if (!existing) {

@@ -169,6 +169,18 @@ export async function getFileMetadata(identifier, options = {}) {
             }
         }
 
+        const current = await db.query('get', `
+            SELECT properties FROM state_current WHERE atome_id = ?
+        `, [atome.atome_id]);
+        if (current?.properties) {
+            try {
+                const properties = JSON.parse(current.properties);
+                if (typeof properties?.file_path === 'string' && properties.file_path.trim()) {
+                    meta.file_path = properties.file_path;
+                }
+            } catch (_) { }
+        }
+
         return meta;
 
     } catch (error) {

@@ -2855,18 +2855,18 @@ enum AiSRuntime {
         return stringValue(parseJSONValue(raw))
     }
 
-    private static func upsertStateCurrent(_ db: OpaquePointer?, atomeId: String, ownerId: String, projectId: String? = nil, properties: [String: Any], now: String) throws {
+    private static func upsertStateCurrent(_ db: OpaquePointer?, atomeId: String, ownerId: String, projectId: String? = nil, clearProjectId: Bool = false, properties: [String: Any], now: String) throws {
         let encoded = try jsonString(properties)
         try execute(db, """
             INSERT INTO state_current (atome_id, owner_id, project_id, properties, updated_at, version)
             VALUES (?, ?, ?, ?, ?, 1)
             ON CONFLICT(atome_id) DO UPDATE SET
                 owner_id = excluded.owner_id,
-                project_id = COALESCE(excluded.project_id, state_current.project_id),
+                project_id = CASE WHEN ? THEN NULL ELSE COALESCE(excluded.project_id, state_current.project_id) END,
                 properties = excluded.properties,
                 updated_at = excluded.updated_at,
                 version = state_current.version + 1
-            """, [.text(atomeId), .text(ownerId), projectId.map(SQLiteBinding.text) ?? .null, .text(encoded), .text(now)])
+            """, [.text(atomeId), .text(ownerId), projectId.map(SQLiteBinding.text) ?? .null, .text(encoded), .text(now), .int(clearProjectId ? 1 : 0)])
     }
 
     private static func normalizeEventInput(_ event: [String: Any], defaultActorId: String?) throws -> [String: Any] {
@@ -2884,8 +2884,15 @@ enum AiSRuntime {
             "kind": kind
         ]
         if let atomeId { normalized["atome_id"] = atomeId }
-        if let projectId = normalizedOptionalString(event["project_id"] ?? event["projectId"]) { normalized["project_id"] = projectId }
-        if let payload = resolveEventPayload(event) { normalized["payload"] = payload }
+        let globalScope = normalizedOptionalString(event["scope"]) == "global"
+        if !globalScope, let projectId = normalizedOptionalString(event["project_id"] ?? event["projectId"]) { normalized["project_id"] = projectId }
+        if globalScope {
+            var payload = (resolveEventPayload(event) as? [String: Any]) ?? [:]
+            payload["scope"] = "global"
+            normalized["payload"] = payload
+        } else if let payload = resolveEventPayload(event) {
+            normalized["payload"] = payload
+        }
         if let txId = normalizedOptionalString(event["tx_id"] ?? event["txId"]) { normalized["tx_id"] = txId }
         if let gestureId = normalizedOptionalString(event["gesture_id"] ?? event["gestureId"]) { normalized["gesture_id"] = gestureId }
         if let ownerId = normalizedOptionalString(event["owner_id"] ?? event["ownerId"] ?? event["owner"]) { normalized["owner_id"] = ownerId }
@@ -3022,7 +3029,9 @@ enum AiSRuntime {
             if nextProps["parent_id"] == nil { nextProps["parent_id"] = parentId }
             if nextProps["parentId"] == nil { nextProps["parentId"] = parentId }
         }
-        let projectId = firstNonEmptyString([
+        let payloadObject = event["payload"] as? [String: Any]
+        let globalScope = normalizedOptionalString(payloadObject?["scope"]) == "global"
+        let projectId = globalScope ? nil : firstNonEmptyString([
             normalizedOptionalString(event["project_id"] ?? event["projectId"]),
             normalizedOptionalString(patch["project_id"] ?? patch["projectId"]),
             existingState?.projectId
@@ -3037,7 +3046,7 @@ enum AiSRuntime {
             existingState?.ownerId,
             resolvedOwnerId
         ]) ?? resolvedOwnerId
-        try upsertStateCurrent(db, atomeId: atomeId, ownerId: stateOwnerId, projectId: projectId, properties: nextProps, now: ts)
+        try upsertStateCurrent(db, atomeId: atomeId, ownerId: stateOwnerId, projectId: projectId, clearProjectId: globalScope, properties: nextProps, now: ts)
         return try getStateCurrent(db, atomeId: atomeId)
     }
 

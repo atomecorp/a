@@ -68,4 +68,14 @@ assert.equal(event.delta, undefined);
 assert.equal(event.parent_id, 'project_a');
 assert.equal(event.parentId, undefined);
 
+const globalEvent = __ATOME_COMMIT_TEST_ONLY__.normalizeEventInput({
+    kind: 'set',
+    atome_id: 'user_a',
+    scope: 'global',
+    props: { current_project_id: 'project_a' }
+});
+assert.equal(globalEvent.project_id, null);
+assert.equal(globalEvent.scope, 'global');
+assert.equal(globalEvent.payload.scope, 'global');
+
 console.log('atome_commit_sanitization: ok');

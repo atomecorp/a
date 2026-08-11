@@ -9,6 +9,7 @@ import db from '../database/adole.js';
 import { sanitizeFileName, ensureUserDownloadsDir, normalizeUserRelativePath, resolveUserAssetPath, resolveUserFilePath } from './fileStorage.js';
 import { getAccessibleFiles, getFileMetadata, canAccessFile } from './userFiles.js';
 import { pickDisplayName } from './server_utils.js';
+import { reconcilePrincipalFilePath } from './principal_file_migration.js';
 
 const DATABASE_ENABLED = Boolean(process.env.SQLITE_PATH || process.env.LIBSQL_URL);
 
@@ -302,6 +303,16 @@ export async function resolveDownloadTarget(fileParam, userId) {
         : safeName;
       const rawPath = meta.file_path || meta.filePath || null;
       if (rawPath) {
+        const reconciled = await reconcilePrincipalFilePath({
+          projectRoot,
+          meta,
+          authenticatedPrincipalId: userId
+        });
+        if (reconciled?.error) return reconciled;
+        if (reconciled?.filePath) {
+          await fs.access(reconciled.filePath);
+          return { filePath: reconciled.filePath, downloadName, meta: { ...meta, file_path: reconciled.canonicalPath } };
+        }
         const normalizedRelative = normalizeUserRelativePath(rawPath, meta.owner_id || userId);
         if (normalizedRelative) {
           const resolved = await resolveUserAssetPath(

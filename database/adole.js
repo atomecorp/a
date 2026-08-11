@@ -1241,8 +1241,12 @@ function normalizeEventInput(event, options = {}) {
     const id = event.id || event.event_id || uuidv4();
     const ts = event.ts || event.timestamp || options.ts || now;
     const atomeId = event.atome_id || event.atomeId || null;
-    const projectId = event.project_id || event.projectId || null;
-    const payload = resolveEventPayload(event);
+    const scope = event.scope || options.scope || null;
+    const projectId = scope === 'global' ? null : (event.project_id || event.projectId || null);
+    const rawPayload = resolveEventPayload(event);
+    const payload = scope === 'global'
+        ? { ...(rawPayload && typeof rawPayload === 'object' ? rawPayload : {}), scope: 'global' }
+        : rawPayload;
     const actor = event.actor ?? null;
     const txId = event.tx_id || event.txId || options.txId || null;
     const gestureId = event.gesture_id || event.gestureId || null;
@@ -1325,12 +1329,13 @@ async function applyEventToStateCurrent(event, options = {}) {
     const currentProps = parsed && typeof parsed === 'object' ? parsed : {};
     const nextProps = { ...currentProps, ...sanitizeAtomeProperties(patch) };
     const nextVersion = (existing?.version || 0) + 1;
-    const projectId = event.project_id || existing?.project_id || null;
+    const globalScope = event.payload?.scope === 'global';
+    const projectId = globalScope ? null : (event.project_id || existing?.project_id || null);
 
     if (existing) {
         await query(
             'run',
-            'UPDATE state_current SET properties = ?, updated_at = ?, version = ?, project_id = COALESCE(?, project_id), owner_id = COALESCE(?, owner_id) WHERE atome_id = ?',
+            'UPDATE state_current SET properties = ?, updated_at = ?, version = ?, project_id = ?, owner_id = COALESCE(?, owner_id) WHERE atome_id = ?',
             [JSON.stringify(nextProps), ts, nextVersion, projectId, resolvedOwnerId, atomeId]
         );
     } else {
@@ -1529,6 +1534,78 @@ export async function appendEvents(events, options = {}) {
     }
 
     return results;
+}
+
+export async function repairGlobalStateCurrentScopes() {
+    const rows = await query('all', `SELECT sc.atome_id, COALESCE(sc.owner_id, a.owner_id) AS owner_id
+        FROM state_current sc
+        LEFT JOIN atomes a ON a.atome_id = sc.atome_id
+        WHERE sc.project_id IS NOT NULL AND (
+            LOWER(COALESCE(a.atome_type, '')) = 'user'
+            OR LOWER(sc.atome_id) LIKE 'tool.ui.%'
+            OR LOWER(sc.atome_id) LIKE 'tool_ui.%'
+            OR LOWER(COALESCE(json_extract(sc.properties, '$.tool_scope'), '')) = 'catalog'
+            OR json_extract(sc.properties, '$.atome_tool') = 1
+        )`);
+    const repaired = [];
+    for (const row of rows || []) {
+        const event = await appendEvent({
+            id: `global_scope_repair_v1:${row.atome_id}`,
+            kind: 'set',
+            atome_id: row.atome_id,
+            scope: 'global',
+            actor: row.owner_id ? { type: 'user', id: row.owner_id } : null,
+            payload: { props: {}, scope: 'global' }
+        });
+        repaired.push(event.atome_id);
+    }
+    return { ok: true, repaired_ids: repaired };
+}
+
+export async function preparePrincipalFileMigration(values = {}) {
+    const now = new Date().toISOString();
+    await query('run', `INSERT INTO principal_file_migrations
+        (atome_id, legacy_principal_id, principal_id, source_path, target_path, status, created_at)
+        VALUES (?, ?, ?, ?, ?, 'prepared', ?)
+        ON CONFLICT(atome_id, source_path, target_path) DO UPDATE SET
+            status = CASE WHEN principal_file_migrations.status = 'completed' THEN 'completed' ELSE 'prepared' END,
+            failure_code = NULL`, [
+        values.atomeId,
+        values.legacyPrincipalId,
+        values.principalId,
+        values.sourcePath,
+        values.targetPath,
+        now
+    ]);
+}
+
+export async function completePrincipalFileMigration(values = {}) {
+    const now = new Date().toISOString();
+    return withTransaction(async () => {
+        await appendEvent({
+            id: `principal_file_migration_v1:${values.atomeId}:${values.digest}`,
+            kind: 'set',
+            atome_id: values.atomeId,
+            actor: { type: 'user', id: values.principalId },
+            payload: { props: { file_path: values.canonicalPath } }
+        });
+        await query('run', `UPDATE principal_file_migrations
+            SET status = 'completed', content_digest = ?, completed_at = ?, failure_code = NULL
+            WHERE atome_id = ? AND source_path = ? AND target_path = ?`, [
+            values.digest,
+            now,
+            values.atomeId,
+            values.sourcePath,
+            values.targetPath
+        ]);
+    });
+}
+
+export async function failPrincipalFileMigration(values = {}, error = null) {
+    await query('run', `UPDATE principal_file_migrations SET status = 'failed', failure_code = ?
+        WHERE atome_id = ? AND source_path = ? AND target_path = ?`, [
+        String(error?.message || error), values.atomeId, values.sourcePath, values.targetPath
+    ]);
 }
 
 export async function listEvents(options = {}) {
@@ -1988,6 +2065,10 @@ export default {
     // Event log + projection
     appendEvent,
     appendEvents,
+    repairGlobalStateCurrentScopes,
+    preparePrincipalFileMigration,
+    completePrincipalFileMigration,
+    failPrincipalFileMigration,
     listEvents,
     getEvent,
     rebuildStateCurrentFromEvents,

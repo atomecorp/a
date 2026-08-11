@@ -50,6 +50,9 @@ tests/database/*
 !tests/database/adole_history_transactions.test.mjs
 !tests/database/adole_legacy_snapshot_event_restore.test.mjs
 !tests/database/adole_restart_safe_interactions.test.mjs
+!tests/server/
+tests/server/*
+!tests/server/principal_file_migration.test.mjs
 !tests/shared/
 tests/shared/*
 !tests/shared/accessible_atom_node.test.mjs
@@ -62,10 +65,14 @@ tests/shared/*
 !tests/eve/
 tests/eve/*
 !tests/eve/atome_commit.sanitization.test.mjs
+!tests/eve/atome_record_projection_project_id.test.mjs
 !tests/eve/capture_recording_bevy_feedback.test.mjs
 !tests/eve/dashboard_mockup_design_contract.test.mjs
 !tests/eve/dashboard_focus_color_contract.test.mjs
 !tests/eve/dashboard_preferences_contract.test.mjs
+!tests/eve/project_order_runtime.test.mjs
+!tests/eve/project_view_real_server_shape.test.mjs
+!tests/eve/selected_project_media_playback_runtime.test.mjs
 !tests/eve/bevy_panel_home_contract.test.mjs
 !tests/eve/bevy_panel_info_contract.test.mjs
 !tests/eve/dashboard_records.test.mjs
