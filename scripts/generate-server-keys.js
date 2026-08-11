@@ -23,61 +23,21 @@
  * @module scripts/generate-server-keys
  */
 
-import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import readline from 'readline';
+import {
+    computeServerIdentityFingerprint,
+    createServerIdentityId,
+    createServerIdentityKeyPair
+} from '../server/serverIdentity.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // Default output directory
 const DEFAULT_OUTPUT_DIR = path.join(__dirname, '..', 'server', 'certificates');
-
-// RSA key parameters
-const KEY_SIZE = 2048; // bits (2048 is secure, 4096 for extra security)
-const PUBLIC_EXPONENT = 65537;
-
-/**
- * Generate RSA key pair
- */
-function generateKeyPair() {
-    console.log(`\n🔐 Generating ${KEY_SIZE}-bit RSA key pair...\n`);
-
-    const { publicKey, privateKey } = crypto.generateKeyPairSync('rsa', {
-        modulusLength: KEY_SIZE,
-        publicExponent: PUBLIC_EXPONENT,
-        publicKeyEncoding: {
-            type: 'spki',
-            format: 'pem'
-        },
-        privateKeyEncoding: {
-            type: 'pkcs8',
-            format: 'pem'
-        }
-    });
-
-    return { publicKey, privateKey };
-}
-
-/**
- * Compute SHA-256 fingerprint of public key
- */
-function computeFingerprint(publicKeyPem) {
-    const keyObj = crypto.createPublicKey(publicKeyPem);
-    const keyDer = keyObj.export({ type: 'spki', format: 'der' });
-    const hash = crypto.createHash('sha256').update(keyDer).digest('hex');
-    return `sha256:${hash}`;
-}
-
-/**
- * Generate a random server ID
- */
-function generateServerId() {
-    const randomPart = crypto.randomBytes(4).toString('hex');
-    return `squirrel-server-${randomPart}`;
-}
 
 /**
  * Interactive prompt
@@ -133,7 +93,7 @@ async function main() {
     }
 
     // Generate server ID
-    const defaultServerId = generateServerId();
+    const defaultServerId = createServerIdentityId();
     console.log('\n📝 Server Configuration');
     console.log('────────────────────────────────────────');
 
@@ -141,8 +101,9 @@ async function main() {
     const serverName = await prompt('Enter server name [Squirrel Server]: ') || 'Squirrel Server';
 
     // Generate keys
-    const { publicKey, privateKey } = generateKeyPair();
-    const fingerprint = computeFingerprint(publicKey);
+    console.log('\n🔐 Generating server identity RSA key pair...\n');
+    const { publicKey, privateKey } = createServerIdentityKeyPair();
+    const fingerprint = computeServerIdentityFingerprint(publicKey);
 
     // Create output directory
     fs.mkdirSync(outputDir, { recursive: true });

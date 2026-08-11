@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 
 import { execSync } from 'child_process';
-import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { verifyDeployedSource } from './verify_deployed_source.js';
+import { backupServerIdentity, ensureProductionSecureConfig } from './server_secure_config.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -122,62 +122,6 @@ function writeText(filePath, content, mode) {
     fs.writeFileSync(filePath, content, { mode });
 }
 
-function isWeakEnvSecret(value) {
-    const secret = String(value || '').trim();
-    return secret.length < 32 || secret.includes('change_me') || secret.includes('change_in_production');
-}
-
-function generateEnvSecret() {
-    return crypto.randomBytes(32).toString('hex');
-}
-
-function readEnvValue(content, key) {
-    const line = content
-        .split(/\r?\n/)
-        .find((candidate) => candidate.startsWith(`${key}=`));
-    return line ? line.slice(key.length + 1).trim() : '';
-}
-
-function upsertEnvValue(content, key, value) {
-    const lines = content.split(/\r?\n/);
-    let replaced = false;
-    const nextLines = lines.map((line) => {
-        if (line.startsWith(`${key}=`)) {
-            replaced = true;
-            return `${key}=${value}`;
-        }
-        return line;
-    });
-
-    if (!replaced) {
-        if (nextLines.length > 0 && nextLines[nextLines.length - 1] !== '') {
-            nextLines.push('');
-        }
-        nextLines.push(`${key}=${value}`);
-    }
-
-    return nextLines.join('\n').replace(/\n*$/, '\n');
-}
-
-function ensureProductionEnvSecret(envFile, key) {
-    const content = fileExists(envFile) ? readText(envFile) : '';
-    const current = readEnvValue(content, key);
-    if (!isWeakEnvSecret(current)) {
-        log(`${key} is configured`);
-        return;
-    }
-
-    const nextContent = upsertEnvValue(content, key, generateEnvSecret());
-    writeText(envFile, nextContent, 0o600);
-    fs.chmodSync(envFile, 0o600);
-    log(`${key} generated in ${envFile}`);
-}
-
-function ensureProductionEnvSecrets(envFile) {
-    ensureProductionEnvSecret(envFile, 'JWT_SECRET');
-    ensureProductionEnvSecret(envFile, 'COOKIE_SECRET');
-}
-
 function nowStamp() {
     const d = new Date();
     const pad = (n) => String(n).padStart(2, '0');
@@ -266,7 +210,12 @@ function ensureEnvFile({ envDir, envFile, appEnvExample, appEnvFallback }) {
         log(`Created default env file: ${envFile}`);
     }
 
-    ensureProductionEnvSecrets(envFile);
+    ensureProductionSecureConfig({
+        envFile,
+        identityDir: path.join(envDir, 'identity'),
+        projectRoot,
+        log
+    });
 }
 
 function ensureSystemdUnit({ serviceName, envFile }) {
@@ -320,6 +269,7 @@ function backupPaths({ backupRoot, envFile, pathsToBackup }) {
         fs.copyFileSync(envFile, envBackup);
         fs.chmodSync(envBackup, 0o600);
     }
+    backupServerIdentity({ envFile, backupDir, projectRoot });
 
     const tarPath = path.join(backupDir, 'backup.tgz');
     const existing = pathsToBackup.filter((p) => fileExists(p));
@@ -484,7 +434,6 @@ async function main() {
     log('Done.');
 }
 
-export { ensureProductionEnvSecrets };
 
 if (process.argv[1] && path.resolve(process.argv[1]) === __filename) {
     main().catch((error) => {

@@ -26,6 +26,8 @@ const __dirname = path.dirname(__filename);
 const ALGORITHM = 'RSA-SHA256';
 const SIGNATURE_PADDING = crypto.constants.RSA_PKCS1_PSS_PADDING;
 const SALT_LENGTH = 32;
+const KEY_SIZE = 2048;
+const PUBLIC_EXPONENT = 65537;
 
 // Server identity state
 let privateKey = null;
@@ -81,8 +83,8 @@ export function initServerIdentity() {
         privateKey = fs.readFileSync(resolvedPrivatePath, 'utf8');
         publicKey = fs.readFileSync(resolvedPublicPath, 'utf8');
 
-        // Compute public key fingerprint (for client verification)
-        publicKeyFingerprint = computeFingerprint(publicKey);
+        // Validate the pair before exposing its public fingerprint.
+        publicKeyFingerprint = validateServerIdentityKeyPair(privateKey, publicKey).fingerprint;
 
         console.log(`🔐 Server identity initialized:`);
         console.log(`   ID: ${serverId}`);
@@ -105,11 +107,44 @@ export function initServerIdentity() {
  * @param {string} publicKeyPem - Public key in PEM format
  * @returns {string} Fingerprint in format "sha256:hexstring"
  */
-function computeFingerprint(publicKeyPem) {
+export function computeServerIdentityFingerprint(publicKeyPem) {
     const keyObj = crypto.createPublicKey(publicKeyPem);
     const keyDer = keyObj.export({ type: 'spki', format: 'der' });
     const hash = crypto.createHash('sha256').update(keyDer).digest('hex');
     return `sha256:${hash}`;
+}
+
+export function createServerIdentityId() {
+    return `squirrel-server-${crypto.randomBytes(8).toString('hex')}`;
+}
+
+export function createServerIdentityKeyPair() {
+    return crypto.generateKeyPairSync('rsa', {
+        modulusLength: KEY_SIZE,
+        publicExponent: PUBLIC_EXPONENT,
+        publicKeyEncoding: {
+            type: 'spki',
+            format: 'pem'
+        },
+        privateKeyEncoding: {
+            type: 'pkcs8',
+            format: 'pem'
+        }
+    });
+}
+
+export function validateServerIdentityKeyPair(privateKeyPem, publicKeyPem) {
+    const privateKeyObject = crypto.createPrivateKey(privateKeyPem);
+    const derivedPublicKey = crypto.createPublicKey(privateKeyObject).export({
+        type: 'spki',
+        format: 'pem'
+    });
+    const configuredFingerprint = computeServerIdentityFingerprint(publicKeyPem);
+    const derivedFingerprint = computeServerIdentityFingerprint(derivedPublicKey);
+    if (configuredFingerprint !== derivedFingerprint) {
+        throw new Error('server_identity_key_pair_mismatch');
+    }
+    return { fingerprint: configuredFingerprint };
 }
 
 /**
@@ -231,5 +266,9 @@ export default {
     signChallenge,
     getServerIdentity,
     verifySignature,
-    isConfigured
+    isConfigured,
+    computeServerIdentityFingerprint,
+    createServerIdentityId,
+    createServerIdentityKeyPair,
+    validateServerIdentityKeyPair
 };

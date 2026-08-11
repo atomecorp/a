@@ -15,6 +15,8 @@ Current mobile performance API contract (2026-07-17; supersedes older preview/wa
 
 Current account-provisioning contract (2026-07-30): Fastify owns the sole remote account creation/link action, `auth/account-provision`, on `/ws/api`. It requires `account_provision` intent, a bounded-expiry idempotency operation id, Fastify credentials, and the configured server-identity fingerprint; it never accepts a local principal as remote authentication. `AdoleAPI.auth.provisionAccount` is the open adapter entry. `startGuest` and `leaveGuest` are local-runtime entries: a guest UUID v4 is local only and has no Fastify token. Confirmed `adoptGuestWorkspace` uses the `guest-adoption` WebSocket family (`prepare`, `import`, `stage-file`, `finalize`) with one UUID v4 operation, manifest and payload digests. Fastify persists the journal through `prepared`, `importing`, `committed`, and `completed`; file staging is explicit and collision-safe.
 
+Current production identity API contract (2026-08-10): `ensureProductionSecureConfig` is the updater's only entry for JWT/cookie secrets and the persistent account-provision signing identity; `ensureServerIdentity` validates or creates that identity, and `backupServerIdentity` copies the validated pair into the update backup. These are deployment-internal APIs. Runtime and tooling reuse `createServerIdentityKeyPair`, `createServerIdentityId`, `computeServerIdentityFingerprint`, and `validateServerIdentityKeyPair` from `server/serverIdentity.js`; no updater or generator may implement a parallel key/fingerprint algorithm.
+
 Purpose:
 
 - Identify verified API families, ownership, and stable entry points.
@@ -1576,7 +1578,8 @@ Entry points:
 - `normalizeUserRelativePath`, `sanitizeFileName`, `ensureUserDownloadsDir`, `resolveUserUploadPath`, `resolveUserAssetPath`, `resolveUserFilePath`, `ensureSharedFileLink`, `removeSharedFileLink` in `server/fileStorage.js`.
 - `buildUserExportZip`, `inspectUserExportZip`, `importUserExportZip` in `server/userExportImport.js`.
 - `createVisioService` in `server/visio.js`.
-- `initServerIdentity`, `signChallenge`, `getServerIdentity`, `verifySignature`, `isConfigured` in `server/serverIdentity.js`.
+- `initServerIdentity`, `signChallenge`, `getServerIdentity`, `verifySignature`, `isConfigured`, `createServerIdentityKeyPair`, `createServerIdentityId`, `computeServerIdentityFingerprint`, `validateServerIdentityKeyPair` in `server/serverIdentity.js`.
+- `ensureProductionSecureConfig`, `ensureServerIdentity`, `backupServerIdentity` in `scripts/server_secure_config.js` for production updater infrastructure only.
 - `startFileSyncWatcher`, `getSyncEventBus` in `server/sync/fileSyncWatcher.js`.
 - `normalizeWsApiRequest` in `server/ws_api_schema.js`.
 

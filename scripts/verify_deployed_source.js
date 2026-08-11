@@ -67,9 +67,14 @@ const REQUIRED_MARKERS = [
         label: 'package-lock top-level @emnapi runtime peer resolution',
     },
     {
-        file: 'scripts/server_update.js',
-        marker: "ensureProductionEnvSecrets(envFile);",
+        file: 'scripts/server_secure_config.js',
+        marker: "ensureEnvSecret(envFile, 'JWT_SECRET', log);",
         label: 'production env auth secret provisioning',
+    },
+    {
+        file: 'scripts/server_update.js',
+        marker: 'ensureProductionSecureConfig({',
+        label: 'production server identity provisioning',
     },
     {
         file: 'scripts/server_update.js',

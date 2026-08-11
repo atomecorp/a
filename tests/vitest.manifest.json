@@ -116,6 +116,7 @@
   "tests/probes/project_scene_inline_edit_accessibility_bridge_smoke.test.mjs",
   "tests/probes/project_scene_z_order_media_regression.test.mjs",
   "tests/probes/render_atom_persistent_media_cache.test.mjs",
+  "tests/probes/server_identity_deployment_contract.test.mjs",
   "tests/probes/tauri_bevy_native_permission.test.mjs",
   "tests/probes/video_recording_failure_lifecycle.test.mjs"
 ]
