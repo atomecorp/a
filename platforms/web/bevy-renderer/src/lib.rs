@@ -655,6 +655,14 @@ fn window_resize_event_logical_size(world: &World, event: &WindowResized) -> (f3
     let resolution = &window.resolution;
     let physical_width = resolution.physical_width() as f32;
     let physical_height = resolution.physical_height() as f32;
+    if let Some(current) = world.get_resource::<AtomeBevyRendererConfig>() {
+        let configured_backing_matches =
+            (physical_width - current.pixel_width as f32).abs() <= 1.0
+                && (physical_height - current.pixel_height as f32).abs() <= 1.0;
+        if configured_backing_matches {
+            return (current.width, current.height);
+        }
+    }
     if (event.width - physical_width).abs() <= 1.0 && (event.height - physical_height).abs() <= 1.0
     {
         let logical = (resolution.width(), resolution.height());
@@ -683,32 +691,48 @@ fn apply_browser_window_resize_to_surface(world: &mut World) {
     let Some((width, height)) = next_size else {
         return;
     };
-    let current = world.resource::<AtomeBevyRendererConfig>();
-    if (current.width - width).abs() < f32::EPSILON
-        && (current.height - height).abs() < f32::EPSILON
-    {
-        return;
-    }
-    let (pixel_width, pixel_height, device_pixel_ratio) = world
-        .query::<&Window>()
-        .iter(world)
-        .next()
-        .map(|window| {
-            let device_pixel_ratio = window.resolution.scale_factor();
-            (
-                width * device_pixel_ratio,
-                height * device_pixel_ratio,
-                device_pixel_ratio,
-            )
-        })
-        .unwrap_or_else(|| {
-            let current = world.resource::<AtomeBevyRendererConfig>();
+    let (configured_width, configured_height, configured_surface) = {
+        let current = world.resource::<AtomeBevyRendererConfig>();
+        (
+            current.width,
+            current.height,
             (
                 current.pixel_width as f32,
                 current.pixel_height as f32,
                 current.device_pixel_ratio,
-            )
-        });
+            ),
+        )
+    };
+    let configured_size_unchanged = (configured_width - width).abs() < f32::EPSILON
+        && (configured_height - height).abs() < f32::EPSILON;
+    let window_surface_matches = world.query::<&Window>().iter(world).next().is_some_and(|window| {
+        let resolution = &window.resolution;
+        (resolution.width() - configured_width).abs() <= 1.0
+            && (resolution.height() - configured_height).abs() <= 1.0
+            && (resolution.physical_width() as f32 - configured_surface.0).abs() <= 1.0
+            && (resolution.physical_height() as f32 - configured_surface.1).abs() <= 1.0
+            && (resolution.scale_factor() - configured_surface.2).abs() <= 0.01
+    });
+    if configured_size_unchanged && window_surface_matches {
+        return;
+    }
+    let (pixel_width, pixel_height, device_pixel_ratio) = if configured_size_unchanged {
+        configured_surface
+    } else {
+        world
+            .query::<&Window>()
+            .iter(world)
+            .next()
+            .map(|window| {
+                let device_pixel_ratio = window.resolution.scale_factor();
+                (
+                    width * device_pixel_ratio,
+                    height * device_pixel_ratio,
+                    device_pixel_ratio,
+                )
+            })
+            .unwrap_or(configured_surface)
+    };
     if let Err(error) = apply_surface(
         world,
         AtomeSurfacePatch {

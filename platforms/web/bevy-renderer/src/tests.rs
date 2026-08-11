@@ -24,6 +24,7 @@ fn shape_node(id: &str) -> AtomeRenderNode {
         layer: 3,
         opacity: 1.0,
         corner_radius: 0.0,
+        corner_radii: None,
         color: Some([0.1, 0.2, 0.3, 1.0]),
         shadow: None,
         backdrop: None,
@@ -245,6 +246,60 @@ fn browser_backing_store_resize_event_keeps_configured_logical_surface() {
     let config = app.world().resource::<AtomeBevyRendererConfig>();
     assert_eq!(config.width, 1280.0);
     assert_eq!(config.height, 820.0);
+}
+
+#[test]
+fn browser_native_dpr_drift_restores_capped_surface_scale() {
+    let mut app = App::new();
+    app.add_message::<WindowResized>();
+    app.add_message::<RequestRedraw>();
+    app.insert_resource(AtomeBevyRendererConfig::with_surface_metrics(
+        800.0,
+        568.0,
+        1200.0,
+        852.0,
+        1.5,
+        AtomeRenderScene {
+            nodes: Vec::new(),
+            effects: Vec::new(),
+            selection_style: None,
+        },
+    ));
+    app.insert_resource(AtomeEntityTable::default());
+    app.insert_resource(AtomeRendererDiagnostics::default());
+    app.insert_resource(Assets::<Image>::default());
+    app.world_mut()
+        .spawn((Camera2d, atome_camera_projection(800.0, 568.0)));
+    let window = app
+        .world_mut()
+        .spawn(Window {
+            resolution: WindowResolution::new(1200, 852),
+            ..default()
+        })
+        .id();
+    app.world_mut()
+        .entity_mut(window)
+        .get_mut::<Window>()
+        .unwrap()
+        .resolution
+        .set_scale_factor(2.0);
+
+    app.world_mut().write_message(WindowResized {
+        window,
+        width: 600.0,
+        height: 426.0,
+    });
+    apply_browser_window_resize_to_surface(app.world_mut());
+
+    let config = app.world().resource::<AtomeBevyRendererConfig>();
+    assert_eq!(config.width, 800.0);
+    assert_eq!(config.height, 568.0);
+    assert_eq!(config.device_pixel_ratio, 1.5);
+    let window = app.world().get::<Window>(window).unwrap();
+    assert_eq!(window.resolution.width(), 800.0);
+    assert_eq!(window.resolution.height(), 568.0);
+    assert_eq!(window.resolution.physical_width(), 1200);
+    assert_eq!(window.resolution.physical_height(), 852);
 }
 
 #[test]

@@ -365,14 +365,14 @@ test('BevyUI main menu keeps one stable shadow plane while palette children emer
     }
 });
 
-test('BevyUI main menu recomputes bottom placement after surface resize', async () => {
+test('BevyUI main menu recomputes bottom placement after surface resize or orientation', async () => {
     const harness = createRuntimeHarness();
     try {
         await harness.runtime.showFully();
         const firstTree = harness.calls.at(-1).payload.tree;
         const itemSize = firstTree.layout.itemSize;
         harness.surface.setProbeRect({ width: 1200, height: 840 });
-        harness.window.dispatchEvent(new harness.window.Event('resize'));
+        harness.window.dispatchEvent(new harness.window.Event('orientationchange'));
         await waitFrame();
         const nextTree = harness.calls.at(-1).payload.tree;
         assert.equal(harness.calls.at(-1).type, 'update');

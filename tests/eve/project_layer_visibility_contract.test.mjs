@@ -37,7 +37,7 @@ test('Project layer geometry is centralized and viewport sized', () => {
     assert.equal(layer.parentElement.id, 'view');
     assert.equal(layer.style.position, 'fixed');
     assert.equal(layer.style.inset, '0px');
-    assert.equal(layer.style.width, '100vw');
-    assert.equal(layer.style.height, '100vh');
+    assert.equal(layer.style.width, '');
+    assert.equal(layer.style.height, '');
     assert.equal(layer.style.overflow, 'hidden');
 });

@@ -2,16 +2,10 @@ import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { JSDOM } from 'jsdom';
 
-import {
-    clearAllProjectScenes,
-    renderProjectScene
-} from '../../eVe/domains/rendering/project_scene_runtime.js';
+import { clearAllProjectScenes, renderProjectScene } from '../../eVe/domains/rendering/project_scene_runtime.js';
 import { ensureRenderSurface } from '../../eVe/domains/rendering/surface_runtime.js';
 import { resolveRenderSurfaceSize } from '../../eVe/domains/rendering/surface_size_runtime.js';
-import {
-    mountActiveTextEditor,
-    unmountActiveTextEditor
-} from '../../eVe/domains/rendering/hidden_text_service_runtime.js';
+import { mountActiveTextEditor, unmountActiveTextEditor } from '../../eVe/domains/rendering/hidden_text_service_runtime.js';
 import { resolveEffectivePanelViewport } from '../../eVe/intuition/runtime/eve_intuition/panel_layout_geometry.js';
 
 const setBox = (element, width, height) => {
@@ -415,7 +409,7 @@ test('Project surface size uses viewport root instead of stale canvas dimensions
     assert.equal(size.pixelHeight, 920);
 });
 
-test('Project render surface reacts to visualViewport resize', async () => {
+test('Project render surface follows whichever viewport source actually changed', async () => {
     const dom = new JSDOM('<!doctype html><html><body><div id="view"><div id="project_view_alpha"></div></div></body></html>');
     globalThis.document = dom.window.document;
     globalThis.window = dom.window;
@@ -431,8 +425,8 @@ test('Project render surface reacts to visualViewport resize', async () => {
 
     const view = dom.window.document.getElementById('view');
     const host = dom.window.document.getElementById('project_view_alpha');
-    setBox(view, 0, 0);
-    setBox(host, 0, 0);
+    setBox(view, 800, 600);
+    setBox(host, 800, 600);
     const intents = [];
     const surface = ensureRenderSurface({
         zone: 'project',
@@ -445,13 +439,19 @@ test('Project render surface reacts to visualViewport resize', async () => {
     assert.equal(surface.style.width, '800px');
     Object.defineProperty(dom.window, 'innerWidth', { configurable: true, value: 1200 });
     Object.defineProperty(dom.window, 'innerHeight', { configurable: true, value: 700 });
-    Object.defineProperty(visualViewport, 'width', { configurable: true, value: 1200 });
-    Object.defineProperty(visualViewport, 'height', { configurable: true, value: 700 });
-    visualViewport.dispatchEvent(new dom.window.Event('resize'));
+    setBox(view, 1200, 700);
+    setBox(host, 1200, 700);
+    dom.window.dispatchEvent(new dom.window.Event('resize'));
     await new Promise((resolve) => dom.window.setTimeout(resolve, 20));
 
     assert.equal(surface.style.width, '1200px');
     assert.equal(surface.style.height, '700px');
+    Object.defineProperty(visualViewport, 'width', { configurable: true, value: 390 });
+    Object.defineProperty(visualViewport, 'height', { configurable: true, value: 463 });
+    visualViewport.dispatchEvent(new dom.window.Event('resize'));
+    await new Promise((resolve) => dom.window.setTimeout(resolve, 20));
+    assert.equal(surface.style.width, '390px');
+    assert.equal(surface.style.height, '463px');
     assert.equal(intents.some((intent) => intent.kind === 'surface.resize'), true);
 });
 

@@ -271,18 +271,6 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
             } catch(e){ console.warn('atome http helper error', e); }
             return false;
         };
-                // Resize observer to keep body matched to visualViewport height (handles rotation & dynamic bars)
-                (function(){
-                    function applyVH(){
-                        if(!document.body) return;
-                        var h = (window.visualViewport ? window.visualViewport.height : window.innerHeight);
-                        document.body.style.minHeight = h + 'px';
-                        document.documentElement.style.minHeight = h + 'px';
-                    }
-                    ['resize','orientationchange'].forEach(ev=>window.addEventListener(ev, applyVH));
-                    if(window.visualViewport) window.visualViewport.addEventListener('resize', applyVH);
-                    setTimeout(applyVH,0); setTimeout(applyVH,150); setTimeout(applyVH,600);
-                })();
         """
 
     let contentController = webView.configuration.userContentController

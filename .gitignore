@@ -79,6 +79,7 @@ tests/eve/*
 !tests/eve/debug_runtime_webgpu_probe.test.mjs
 !tests/eve/bevy_panel_state_contract.test.mjs
 !tests/eve/bevy_panel_passive_batch_contract.test.mjs
+!tests/eve/bevy_panel_geometry_contract.test.mjs
 !tests/eve/bevy_ui_runtime_contract.test.mjs
 !tests/eve/input_event_runtime_contract.test.mjs
 !tests/eve/media_persistence_service.sanitization.test.mjs
