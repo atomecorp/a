@@ -18,10 +18,20 @@ import { appendEvent } from '../database/adole.js';
 import { normalizePhone, requireConfiguredAuthSecret, generateOpaquePrincipalId, hashPassword, verifyPassword, hashRefreshSecret, createRefreshSecret } from './auth_crypto.js';
 import { createUserAtome, findUserByPhone, findUserById, listAllUsers, updateUserParticle, deleteUserAtome, syncUserToTauri } from './auth_users.js';
 import { getUserOptionalParticles, ensureUserAtomeType, repairMistypedUserAtomes, upsertUserStateCurrent, normalizeUserOptional, normalizeAccessValue } from './auth_user_particles.js';
-import { generateOTP, storeOTP, verifyOTP, readClientRateKey, enforceAuthIdentityRateLimit, enforceAuthRateLimit, sendSMS } from './auth_otp.js';
+import { generateOTP, sendSMS } from './auth_otp.js';
 import { readRefreshTokenFromRequest, readRefreshSessions, writeRefreshSessions, createRefreshSession, consumeRefreshSession, revokeRefreshToken, setAuthCookies } from './auth_sessions.js';
 import { ensureOpaquePrincipalIdentity } from './auth_identity.js';
-export { generateOTP, storeOTP, verifyOTP, sendSMS, enforceAuthIdentityRateLimit } from './auth_otp.js';
+export {
+    consumePhoneVerification,
+    enforceAuthIdentityRateLimit,
+    generateOTP,
+    isAuthOtpBypassEnabled,
+    markPhoneVerification,
+    requestPhoneVerificationDelivery,
+    sendSMS,
+    storeOTP,
+    verifyOTP
+} from './auth_otp.js';
 import { registerCoreAuthRoutes } from './auth_routes_core.js';
 import { registerRegisterRoutes } from './auth_routes_register.js';
 import { registerAccountRoutes } from './auth_routes_account.js';

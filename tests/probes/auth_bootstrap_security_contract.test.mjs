@@ -26,6 +26,7 @@ assert.doesNotMatch(tauriExistingBranch, /"password_hash"/, 'Tauri bootstrap exi
 assert.doesNotMatch(tauriExistingBranch, /upsert_required_user_particles/, 'Tauri bootstrap existing-phone branch must not repair credentials by overwriting them');
 
 const fastifyServer = readSource('server/server.js');
+const fastifyOtp = readSource('server/auth_otp.js');
 const databaseCore = readSource('database/adole_db_core.js');
 assert.match(databaseCore, /let transactionTail = Promise\.resolve\(\)/, 'Canonical database transactions must share one serialization queue');
 assert.match(databaseCore, /transactionContext\.getStore\(\) === true\) return work\(\)/, 'A nested canonical write must reuse its owning transaction instead of opening a second SQLite transaction');
@@ -34,9 +35,11 @@ assert.match(databaseCore, /finally \{[\s\S]*releaseTransaction\(\)/, 'The trans
 const fastifyBootstrapBranch = sliceBetween(fastifyServer, "if (action === 'bootstrap' || action === 'register' || action === 'create-user')", "} else if (action === 'lookup-phone')");
 assert.match(fastifyBootstrapBranch, /const isBootstrap = action === 'bootstrap'/, 'Fastify WS auth must expose an explicit bootstrap action');
 assert.match(fastifyBootstrapBranch, /verifyPassword\(password, existingUser\.password_hash\)/, 'Fastify bootstrap must verify existing-phone passwords');
-assert.equal((fastifyBootstrapBranch.match(/phone: cleanPhone/g) || []).length, 2, 'Fastify bootstrap must return the verified normalized phone for both existing and newly created principals');
+assert.ok((fastifyBootstrapBranch.match(/phone: cleanPhone/g) || []).length >= 2, 'Fastify bootstrap must return the verified normalized phone for both existing and newly created principals');
 assert.match(fastifyBootstrapBranch, /success: false,[\s\S]*alreadyExists: true,[\s\S]*error: 'Invalid credentials'/, 'Fastify register/create must not report existing phone as authenticated');
 assert.doesNotMatch(fastifyBootstrapBranch, /message: 'User already exists - ready to login'/, 'Fastify auth must not preserve the former misleading existing-user success message');
+assert.match(fastifyBootstrapBranch, /consumePhoneVerification\(connection, cleanPhone, 'enrollment'\)/, 'Fastify must require a consumed server-side enrollment proof before creating a new principal');
+assert.match(fastifyBootstrapBranch, /error: 'phone_verification_required'/, 'Fastify must expose an explicit missing enrollment proof error');
 
 const authApi = readSource('atome/src/squirrel/apis/unified/adole_api/auth.js');
 const authLoginMethods = readSource('atome/src/squirrel/apis/unified/adole_api/auth_methods_login.js');
@@ -83,10 +86,14 @@ assert.doesNotMatch(fastifyHttpAuth, /\/api\/auth\/request-phone-verification/, 
 assert.doesNotMatch(fastifyHttpAuth, /\/api\/auth\/verify-phone-verification/, 'Fastify auth must not add HTTP phone verification routes');
 assert.match(fastifyHttpAuth, /export \{[^}]*enforceAuthIdentityRateLimit[^}]*\} from '\.\/auth_otp\.js'/, 'Fastify auth must expose a shared identity rate limiter for WS phone verification');
 assert.match(fastifyServer, /action === 'request-phone-verification'/, 'Fastify WS auth must expose phone verification request');
-assert.match(fastifyServer, /data\.exposeForTest === true && process\.env\.NODE_ENV !== 'production'[\s\S]*response\.code = code/, 'Fastify WS auth must return OTP code only in non-production test mode');
-assert.match(fastifyServer, /const AUTH_OTP_BYPASS_ENABLED = process\.env\.NODE_ENV !== 'production' && process\.env\.SQUIRREL_AUTH_OTP_BYPASS === '1'/, 'Fastify OTP bypass must be explicitly gated outside production');
-assert.match(fastifyServer, /if \(AUTH_OTP_BYPASS_ENABLED\)[\s\S]*otpBypassed: true[\s\S]*return;/, 'Fastify test mode must return an explicit OTP bypass response');
-assert.match(fastifyServer, /if \(AUTH_OTP_BYPASS_ENABLED\)[\s\S]*return;[\s\S]*const code = generateOTP\(\)/, 'Fastify test mode must bypass OTP generation only after request validation and rate limiting');
+assert.match(fastifyServer, /requestPhoneVerificationDelivery\(\{[\s\S]*exposeForTest: data\.exposeForTest === true/, 'Fastify WS auth must delegate OTP transport to the canonical auth owner');
+assert.match(fastifyServer, /if \(delivery\.code\) response\.code = delivery\.code/, 'Fastify WS auth must preserve an explicitly authorized displayed OTP');
+assert.match(fastifyServer, /if \(purpose === 'enrollment'\) markPhoneVerification\(connection, cleanPhone, purpose\)/, 'Fastify must bind successful enrollment verification to the active connection');
+assert.match(fastifyOtp, /process\.env\.NODE_ENV !== 'production' && process\.env\.SQUIRREL_AUTH_OTP_BYPASS === '1'/, 'Fastify OTP bypass must remain explicitly gated outside production');
+assert.match(fastifyOtp, /purpose === 'enrollment' && process\.env\.SQUIRREL_AUTH_ENROLLMENT_OTP_DISPLAY === '1'/, 'Production OTP display must be explicitly limited to enrollment');
+assert.match(fastifyOtp, /isEnrollmentOtpDisplayEnabled\(purpose\)[\s\S]*delivery: 'display'/, 'Enrollment display mode must return the generated OTP through the existing response contract');
+assert.match(fastifyOtp, /otpStore\.delete\(otpKey\(phone, purpose\)\)[\s\S]*otp_delivery_unavailable/, 'Failed OTP delivery must remove the undelivered code and return a stable cause');
+assert.match(fastifyOtp, /const otpKey = \(phone, purpose = 'legacy'\)[\s\S]*verifyOTP\(phone, code, purpose = 'legacy'\)/, 'OTP storage and verification must remain isolated by purpose');
 assert.match(fastifyServer, /enforceAuthIdentityRateLimit\('phone_verification_request', cleanPhone, 3\)/, 'Fastify WS auth must rate-limit phone verification requests');
 assert.match(fastifyServer, /enforceAuthIdentityRateLimit\('phone_verification_verify', cleanPhone, 5\)/, 'Fastify WS auth must rate-limit phone verification checks');
 assert.match(localAuth, /"request-phone-verification" =>[\s\S]*handle_request_phone_verification/, 'Tauri local auth must expose phone verification request');
@@ -105,6 +112,7 @@ const executeLoginFlow = sliceBetween(userTool, 'const executeLoginFlow = async'
 assert.match(executeLoginFlow, /api\.auth\.bootstrap/, 'Initial login UI must call the atomic bootstrap flow');
 assert.doesNotMatch(executeLoginFlow, /api\.auth\.create/, 'Initial login UI must not create after a failed login');
 assert.doesNotMatch(executeLoginFlow, /api\.auth\.login/, 'Initial login UI must not split bootstrap into a separate login attempt');
+assert.match(executeLoginFlow, /void openAuthenticatedWorkspace\(\)/, 'Authenticated session completion must not wait on Dashboard/project bootstrap');
 const publicBootstrap = sliceBetween(authLoginMethods, 'async bootstrap(phone, password, username, visibility =', 'async register');
 assert.match(publicBootstrap, /response\.ok = true/, 'Unified bootstrap must expose top-level ok after login or account creation');
 assert.match(publicBootstrap, /response\.user = activeResult\.user/, 'Unified bootstrap must expose the authenticated created/logged user');

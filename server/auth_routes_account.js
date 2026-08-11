@@ -97,7 +97,7 @@ export function registerAccountRoutes(server, { dataSource, isProduction }) {
 
             // Generate and store OTP
             const code = generateOTP();
-            storeOTP(cleanPhone, code);
+            storeOTP(cleanPhone, code, 'recovery');
 
             // Send SMS
             await sendSMS(cleanPhone, `Your Squirrel verification code is: ${code}`);
@@ -135,7 +135,7 @@ export function registerAccountRoutes(server, { dataSource, isProduction }) {
         }
 
         // Verify OTP
-        const otpResult = verifyOTP(cleanPhone, code);
+        const otpResult = verifyOTP(cleanPhone, code, 'recovery');
         if (!otpResult.valid) {
             return reply.code(400).send({ success: false, error: otpResult.error });
         }
@@ -262,7 +262,7 @@ export function registerAccountRoutes(server, { dataSource, isProduction }) {
 
             // Generate and store OTP for the NEW phone
             const code = generateOTP();
-            storeOTP(cleanPhone, code);
+            storeOTP(cleanPhone, code, 'change');
 
             // Send SMS to NEW phone
             await sendSMS(cleanPhone, `Your Squirrel verification code is: ${code}`);
@@ -307,7 +307,7 @@ export function registerAccountRoutes(server, { dataSource, isProduction }) {
             }
 
             // Verify OTP
-            const otpResult = verifyOTP(cleanPhone, code);
+            const otpResult = verifyOTP(cleanPhone, code, 'change');
             if (!otpResult.valid) {
                 return reply.code(400).send({ success: false, error: otpResult.error });
             }

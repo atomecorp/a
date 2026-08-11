@@ -70,7 +70,22 @@ import {
   getABoxWatcherHandle,
   getABoxEventBus
 } from './aBoxServer.js';
-import { createUserAtome, findUserByPhone, findUserById, listAllUsers, updateUserParticle, deleteUserAtome, hashPassword, generateOpaquePrincipalId, normalizePhone, generateOTP, storeOTP, verifyOTP, sendSMS, enforceAuthIdentityRateLimit } from './auth.js';
+import {
+  consumePhoneVerification,
+  createUserAtome,
+  deleteUserAtome,
+  enforceAuthIdentityRateLimit,
+  findUserById,
+  findUserByPhone,
+  generateOpaquePrincipalId,
+  hashPassword,
+  listAllUsers,
+  markPhoneVerification,
+  normalizePhone,
+  requestPhoneVerificationDelivery,
+  updateUserParticle,
+  verifyOTP
+} from './auth.js';
 import { ensureOpaquePrincipalIdentity, replaceVerifiedPhone, removeVerifiedPhone } from './auth_identity.js';
 import { handleWsApiAccountProvision } from './wsApiAuthProvisioning.js';
 import { handleWsApiGuestAdoption } from './wsApiGuestAdoption.js';
@@ -376,7 +391,6 @@ setLogServer(server);
 
 const PORT = process.env.PORT || 3001;
 const HOST = process.env.HOST || (process.env.NODE_ENV === 'production' ? '127.0.0.1' : '0.0.0.0');
-const AUTH_OTP_BYPASS_ENABLED = process.env.NODE_ENV !== 'production' && process.env.SQUIRREL_AUTH_OTP_BYPASS === '1';
 const DATABASE_ENABLED = DB_CONFIGURED;
 const DB_REQUIRED_MESSAGE = 'Database not configured. Set SQLITE_PATH or LIBSQL_URL/LIBSQL_AUTH_TOKEN.';
 
@@ -2739,7 +2753,7 @@ async function startServer() {
                 const normalizeAccessValue = (value) => (String(value || '').toLowerCase() === 'public' ? 'public' : 'private');
                 const incomingAccess = data.access ?? data.visibility;
                 const visibility = normalizeAccessValue(incomingAccess || 'public');
-                console.log(`[ws/api] Register request access=${incomingAccess ?? 'n/a'} resolvedVisibility=${visibility}`);
+                console.log(`[auth] bootstrap_started action=${action} access=${visibility} request_id=${requestId || 'missing'}`);
                 if ((!isBootstrap && !requestedUsername) || !phone || !password) {
                   safeSend({
                     type: 'auth-response',
@@ -2841,6 +2855,7 @@ async function startServer() {
                     },
                     message: 'User authenticated successfully'
                   });
+                  console.log(`[auth] bootstrap_succeeded account=existing request_id=${requestId || 'missing'}`);
 
                   attachWsApiClientToUser(connection, existingUser.user_id);
                   try {
@@ -2857,6 +2872,17 @@ async function startServer() {
                   return;
                 }
 
+                if (!consumePhoneVerification(connection, cleanPhone, 'enrollment')) {
+                  safeSend({
+                    type: 'auth-response',
+                    requestId,
+                    success: false,
+                    error: 'phone_verification_required'
+                  });
+                  console.warn(`[auth] bootstrap rejected reason=phone_verification_required request_id=${requestId || 'missing'}`);
+                  return;
+                }
+
                 // Hash password and create user
                 // visibility: 'public' = visible in user_list (default), 'private' = hidden
                 const passwordHash = await hashPassword(password);
@@ -2870,10 +2896,10 @@ async function startServer() {
                       [userId, 'access']
                     );
                     const storedAccess = accessRows?.[0]?.particle_value ? JSON.parse(accessRows[0].particle_value) : null;
-                    console.log(`[ws/api] Register stored access=${storedAccess ?? 'unknown'} userId=${userId}`);
+                    console.log(`[auth] bootstrap_persisted access=${storedAccess ?? 'unknown'} request_id=${requestId || 'missing'}`);
                   } catch (error) {
                     console.warn("[server] operation failed", error);
-                    console.log(`[ws/api] Register stored access=unknown userId=${userId}`);
+                    console.log(`[auth] bootstrap_persisted access=unknown request_id=${requestId || 'missing'}`);
                   }
                 } catch (err) {
                   const message = err?.message || String(err);
@@ -2936,6 +2962,7 @@ async function startServer() {
                   },
                   message: 'User created successfully'
                 });
+                console.log(`[auth] bootstrap_succeeded account=created request_id=${requestId || 'missing'}`);
 
                 attachWsApiClientToUser(connection, userId);
                 try {
@@ -2991,20 +3018,14 @@ async function startServer() {
                   });
                   return;
                 }
-                if (AUTH_OTP_BYPASS_ENABLED) {
-                  safeSend({
-                    type: 'auth-response',
-                    requestId,
-                    success: true,
-                    ok: true,
-                    purpose,
-                    otpBypassed: true
-                  });
-                  return;
+                const delivery = await requestPhoneVerificationDelivery({
+                  phone: cleanPhone,
+                  purpose,
+                  exposeForTest: data.exposeForTest === true
+                });
+                if (delivery.otpBypassed === true) {
+                  markPhoneVerification(connection, cleanPhone, purpose);
                 }
-                const code = generateOTP();
-                storeOTP(cleanPhone, code);
-                await sendSMS(cleanPhone, `Your Atome verification code is: ${code}`);
                 const response = {
                   type: 'auth-response',
                   requestId,
@@ -3012,9 +3033,9 @@ async function startServer() {
                   ok: true,
                   purpose
                 };
-                if (data.exposeForTest === true && process.env.NODE_ENV !== 'production') {
-                  response.code = code;
-                }
+                if (delivery.code) response.code = delivery.code;
+                if (delivery.otpBypassed === true) response.otpBypassed = true;
+                console.log(`[auth] phone_verification_requested purpose=${purpose} delivery=${delivery.delivery} request_id=${requestId || 'missing'}`);
                 safeSend(response);
               } else if (action === 'verify-phone-verification') {
                 const rawPhone = data.phone;
@@ -3050,7 +3071,7 @@ async function startServer() {
                   });
                   return;
                 }
-                const result = verifyOTP(cleanPhone, code);
+                const result = verifyOTP(cleanPhone, code, purpose);
                 if (!result.valid) {
                   safeSend({
                     type: 'auth-response',
@@ -3061,6 +3082,8 @@ async function startServer() {
                   });
                   return;
                 }
+                if (purpose === 'enrollment') markPhoneVerification(connection, cleanPhone, purpose);
+                console.log(`[auth] phone_verification_confirmed purpose=${purpose} request_id=${requestId || 'missing'}`);
                 safeSend({
                   type: 'auth-response',
                   requestId,
@@ -3082,7 +3105,7 @@ async function startServer() {
                   safeSend({ type: 'auth-response', requestId, success: false, error: 'Verified phone and code are required' });
                   return;
                 }
-                const verified = verifyOTP(cleanPhone, code);
+                const verified = verifyOTP(cleanPhone, code, purpose);
                 if (!verified.valid) {
                   safeSend({ type: 'auth-response', requestId, success: false, error: verified.error || 'Invalid verification code' });
                   return;
