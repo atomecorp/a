@@ -20,13 +20,14 @@ test('state-current list metadata preserves exact filtered totals without changi
 });
 
 test('Adole framework Atome APIs route durable writes through event commit', async () => {
-    const [atomesSource, authEntry, authLogin, authSession, sharingSource, adapterSource] = await Promise.all([
+    const [atomesSource, authEntry, authLogin, authSession, sharingSource, adapterSource, transportSource] = await Promise.all([
         readSource('atome/src/squirrel/apis/unified/adole_api/atomes.js'),
         readSource('atome/src/squirrel/apis/unified/adole_api/auth.js'),
         readSource('atome/src/squirrel/apis/unified/adole_api/auth_methods_login.js'),
         readSource('atome/src/squirrel/apis/unified/adole_api/auth_methods_session_account.js'),
         readSource('atome/src/squirrel/apis/unified/adole_api/sharing.js'),
-        readSource('atome/src/squirrel/apis/unified/adole_adapter_atome.js')
+        readSource('atome/src/squirrel/apis/unified/adole_adapter_atome.js'),
+        readSource('eVe/core/atome_commit_transport.js')
     ]);
     // The auth API surface is split across the facade entry + its two method-group modules.
     const authSource = `${authEntry}\n${authLogin}\n${authSession}`;
@@ -47,6 +48,10 @@ test('Adole framework Atome APIs route durable writes through event commit', asy
     assert.match(atomesSource, /\.atome\.commit\(/);
     assert.match(authSource, /\.atome\.commit\(/);
     assert.match(sharingSource, /\.atome\.commit\(/);
+    assert.match(authSession, /error === 'remote_account_not_provisioned'/);
+    assert.match(authSession, /FastifyAdapter\?\.clearToken\?\.\(\);[\s\S]*clearSessionState\(\)/);
+    assert.match(transportSource, /isInvalidFastifyPrincipalResponse\(wsResponse\)/);
+    assert.match(transportSource, /message === 'remote_account_not_provisioned'/);
 });
 
 test('repository enforces the WebSocket-only Atome transport boundary', () => {

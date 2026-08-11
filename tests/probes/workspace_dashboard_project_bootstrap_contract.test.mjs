@@ -29,7 +29,8 @@ window.eveDashboardBevyUiRuntime = {
         window.eveDashboardBevyUiRuntime.state = {
             active: true,
             suspended: false,
-            sceneProjectId: input.sceneProjectId
+            sceneProjectId: input.sceneProjectId,
+            dataProjectId: input.dataProjectId
         };
         return { ok: true };
     },
@@ -65,14 +66,17 @@ assert.equal(opened.ok, true, JSON.stringify(opened));
 assert.equal(opened.projectId, 'project_ready');
 assert.equal(calls[0].name, 'dashboard', 'Dashboard must mount before project preparation starts');
 assert.equal(calls[1].name, 'project', 'project preparation must run behind the mounted Dashboard');
-assert.equal(calls.length, 2, 'preparing a project must never hide the Dashboard automatically');
+assert.equal(calls.length, 3, 'project preparation must retarget the mounted Dashboard exactly once');
 assert.equal(calls[0].input.sceneProjectId, '__eve_dashboard_workspace__');
+assert.equal(calls[2].name, 'dashboard');
+assert.equal(calls[2].input.dataProjectId, 'project_ready');
+assert.equal(calls[2].input.preserveMountedTree, true, 'project retargeting must preserve the visible Dashboard tree');
 assert.equal(window.eveDashboardBevyUiRuntime.state.active, true, 'Dashboard stays foregrounded after project preparation');
 assert.equal(window.eveDashboardBevyUiRuntime.state.suspended, false, 'Dashboard must not flicker or suspend during preparation');
 assert.equal(window.__eveWorkspaceMode.mode, 'dashboard');
 
 await toggleWorkspaceDashboardAndMainMenu({ source: 'contract_explicit_hide' });
-assert.equal(calls[2].name, 'dashboard_close', 'only the explicit Dashboard action may close it');
+assert.equal(calls[3].name, 'dashboard_close', 'only the explicit Dashboard action may close it');
 assert.equal(window.__eveWorkspaceMode.mode, 'project');
 assert.equal(window.__eveWorkspaceMode.projectId, 'project_ready');
 

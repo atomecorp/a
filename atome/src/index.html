@@ -18,11 +18,6 @@
        Consumers read these only at interaction time (animations -> window.gsap).
        Leaflet is gone: the Finder place map is drawn natively in the canvas. -->
   <script defer src="js/gsap.min.js"></script>
-  <!-- Preload the deepest dynamically-imported entries so their fetch/parse overlaps
-       boot instead of being discovered late in the serial import chain (no execution
-       until spark imports them). -->
-  <link rel="modulepreload" href="/application/index.js">
-  <link rel="modulepreload" href="/eVe/eVe.js">
   <script type="module" src="squirrel/spark.js"></script>
 
 </head>

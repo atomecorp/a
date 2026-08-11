@@ -359,8 +359,14 @@ test('legacy Timeline module no longer creates an HTML dialog', () => {
 test('Calendar bridge and app shell cannot restore the retired DOM/vendor route', () => {
     const bridge = readFileSync(join(repoRoot, 'eVe/intuition/tools/calendar.js'), 'utf8');
     const shell = readFileSync(join(repoRoot, 'atome/src/index.html'), 'utf8');
+    const spark = readFileSync(join(repoRoot, 'atome/src/squirrel/spark.js'), 'utf8');
+    const application = readFileSync(join(repoRoot, 'atome/src/application/index.js'), 'utf8');
     assert.doesNotMatch(bridge, /createEveDialog|calendar_panel_dom|calendar_panel_init|innerHTML|createElement/);
     assert.doesNotMatch(shell, /event-calendar|eventCalendar/);
+    assert.doesNotMatch(shell, /rel=["']modulepreload["'][^>]+(?:application\/index\.js|eVe\/eVe\.js)/, 'deferred app modules must not be preloaded long before their canonical owner imports them');
+    assert.match(spark, /applicationEntryModule\s*=\s*\[\{[^}]*path:\s*['"]\.\.\/application\/index\.js['"]/, 'spark must keep ownership of the deferred application import');
+    assert.match(spark, /modules:\s*applicationEntryModule/, 'spark must load the application only at its canonical boot stage');
+    assert.match(application, /modules:\s*\[\{[^}]*path:\s*['"]\.\.\/\.\.\/\.\.\/eVe\/eVe\.js['"]/, 'application boot must keep ownership of the deferred eVe import');
 });
 
 test('Panel Lab is development-gated and uses the shared panel skin', async () => {

@@ -59,7 +59,14 @@ window.__authCheckResult = {
 };
 
 const { createMainMenuAuthRuntime } = await import('../../eVe/intuition/runtime/eve_intuition/main_menu_auth_runtime.js');
-const { installEveIntuitionBootRuntime } = await import('../../eVe/intuition/runtime/eve_intuition/boot_runtime.js');
+const {
+    installEveIntuitionBootRuntime,
+    isTerminalWorkspaceBootFailure
+} = await import('../../eVe/intuition/runtime/eve_intuition/boot_runtime.js');
+
+assert.equal(isTerminalWorkspaceBootFailure({ error: 'remote_account_not_provisioned' }), true);
+assert.equal(isTerminalWorkspaceBootFailure({ error: new Error('remote_account_not_provisioned') }), true);
+assert.equal(isTerminalWorkspaceBootFailure({ error: 'bevy_surface_not_ready' }), false);
 
 const kickstartSource = readFileSync(new URL('../../atome/src/squirrel/kickstart.js', import.meta.url), 'utf8');
 const intuitionSource = readFileSync(new URL('../../eVe/intuition/eVeIntuition.js', import.meta.url), 'utf8');

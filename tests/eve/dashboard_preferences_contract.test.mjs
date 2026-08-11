@@ -300,6 +300,55 @@ test('dashboard opening does not wait for current-project preview regeneration',
     });
 });
 
+test('dashboard retargets prepared project data without unmounting its visible tree', async () => {
+    const dom = new JSDOM('<!doctype html><html><body><div id="view"></div><canvas id="eve_surface_project"></canvas></body></html>', { url: 'http://localhost/' });
+    const surface = dom.window.document.getElementById('eve_surface_project');
+    surface.getBoundingClientRect = () => ({ width: 1200, height: 720 });
+    let unmountCount = 0;
+    const treeState = new Map();
+    await withGlobals({
+        window: dom.window,
+        document: dom.window.document,
+        HTMLElement: dom.window.HTMLElement,
+        CustomEvent: dom.window.CustomEvent,
+        innerWidth: 1200,
+        innerHeight: 720
+    }, async () => {
+        const runtime = createDashboardBevyUiRuntime({
+            constants: { dashboard: { categories: dashboardPreferenceCategories } },
+            adapters: { listMany: async () => new Map() },
+            uiRuntime: {
+                state: { trees: treeState },
+                mountTree: async ({ id, tree }) => {
+                    treeState.set(id, tree);
+                    return { ok: true };
+                },
+                unmountTree: async (id) => {
+                    unmountCount += 1;
+                    treeState.delete(id);
+                    return { ok: true };
+                },
+                setTreeOpacity: async () => ({ ok: true }),
+                setTreeSuspended: async () => ({ ok: true }),
+                readDiagnostics: () => ({ mounted_nodes: 1 })
+            }
+        });
+        await runtime.open({
+            sceneProjectId: DASHBOARD_WORKSPACE_PROJECT_ID,
+            dataProjectId: DASHBOARD_WORKSPACE_PROJECT_ID
+        });
+        await runtime.open({
+            sceneProjectId: DASHBOARD_WORKSPACE_PROJECT_ID,
+            dataProjectId: 'prepared_project',
+            refresh: true,
+            preserveMountedTree: true
+        });
+
+        assert.equal(runtime.state.dataProjectId, 'prepared_project');
+        assert.equal(unmountCount, 0, 'retargeting must preserve the already visible Dashboard tree and headers');
+    });
+});
+
 test('dashboard starts current-project preview hydration before non-critical categories', async () => {
     const dom = new JSDOM('<!doctype html><html><body><div id="view"></div></body></html>', { url: 'http://localhost/' });
     let releaseNonCritical;

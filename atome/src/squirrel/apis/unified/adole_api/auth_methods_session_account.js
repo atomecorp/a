@@ -23,6 +23,13 @@ import { requireAuth, normalizeSessionUser } from './auth_state.js';
 import { auth } from './auth.js';
 import { isTauriRuntime } from './runtime.js';
 
+const isAuthoritativeFastifySessionRefusal = (result) => {
+    const error = String(result?.error || result?.raw?.error || '').trim().toLowerCase();
+    return result?.raw?.authenticated === false
+        || result?.raw?.status === 401
+        || error === 'remote_account_not_provisioned';
+};
+
 export const sessionAccountMethods = {
     async logout() {
         await TauriAdapter?.auth?.logout?.();
@@ -134,8 +141,9 @@ export const sessionAccountMethods = {
 
             // Fastify cookie auth is authoritative for browser refreshes. Clear
             // only when the server explicitly refuses the restored session.
-            const primaryRefusedAuth = me?.raw?.authenticated === false || me?.raw?.status === 401;
+            const primaryRefusedAuth = isAuthoritativeFastifySessionRefusal(me);
             if (primary === 'fastify' && primaryRefusedAuth) {
+                FastifyAdapter?.clearToken?.();
                 clearSessionState();
                 return { authenticated: false, user: null };
             }
