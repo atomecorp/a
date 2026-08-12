@@ -133,7 +133,7 @@ fn web_surface_resize_observer_physical_size_stays_logical_through_scale_factor(
 }
 
 #[test]
-fn browser_window_resize_event_reprojects_shared_surface_in_logical_units() {
+fn browser_window_resize_event_preserves_canonical_surface_config() {
     let mut app = App::new();
     app.add_message::<WindowResized>();
     app.add_message::<RequestRedraw>();
@@ -165,17 +165,17 @@ fn browser_window_resize_event_reprojects_shared_surface_in_logical_units() {
     apply_browser_window_resize_to_surface(app.world_mut());
 
     let config = app.world().resource::<AtomeBevyRendererConfig>();
-    assert_eq!(config.width, 320.0);
-    assert_eq!(config.height, 240.0);
+    assert_eq!(config.width, 640.0);
+    assert_eq!(config.height, 480.0);
     let window = app.world().get::<Window>(window).unwrap();
     assert_eq!(window.resolution.physical_width(), 640);
     assert_eq!(window.resolution.physical_height(), 480);
-    assert_eq!(window.resolution.width(), 320.0);
-    assert_eq!(window.resolution.height(), 240.0);
+    assert_eq!(window.resolution.width(), 640.0);
+    assert_eq!(window.resolution.height(), 480.0);
 }
 
 #[test]
-fn browser_physical_window_resize_event_reprojects_shared_surface_in_logical_units() {
+fn browser_physical_window_resize_event_cannot_replace_canonical_surface_config() {
     let mut app = App::new();
     app.add_message::<WindowResized>();
     app.add_message::<RequestRedraw>();
@@ -207,8 +207,8 @@ fn browser_physical_window_resize_event_reprojects_shared_surface_in_logical_uni
     apply_browser_window_resize_to_surface(app.world_mut());
 
     let config = app.world().resource::<AtomeBevyRendererConfig>();
-    assert_eq!(config.width, 1280.0);
-    assert_eq!(config.height, 960.0);
+    assert_eq!(config.width, 640.0);
+    assert_eq!(config.height, 480.0);
 }
 
 #[test]

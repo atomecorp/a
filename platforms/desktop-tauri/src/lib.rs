@@ -4,6 +4,7 @@ mod dev_logging;
 mod native_contacts;
 mod runtime_logging;
 mod server;
+mod viewport_runtime;
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -165,6 +166,7 @@ pub fn run() {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_stt::init())
+        .on_window_event(viewport_runtime::publish_native_viewport)
         .invoke_handler(tauri::generate_handler![
             dev_logging::log_from_webview,
             native_contacts::macos_contacts_snapshot,
@@ -296,6 +298,8 @@ pub fn run() {
                 if let Err(err) = win.navigate(url) {
                     eprintln!("[tauri] Unable to navigate main window to local Axum server: {}", err);
                 }
+                std::thread::sleep(std::time::Duration::from_millis(350));
+                viewport_runtime::publish_current_webview_viewport(&win);
             });
 
             {

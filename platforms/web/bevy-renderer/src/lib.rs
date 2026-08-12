@@ -648,91 +648,43 @@ fn drain_ui_events_for_web(world: &mut World) {
     WEB_DRAINED_UI_EVENTS.with(|cell| cell.borrow_mut().extend(drained));
 }
 
-fn window_resize_event_logical_size(world: &World, event: &WindowResized) -> (f32, f32) {
-    let Some(window) = world.get::<Window>(event.window) else {
-        return (event.width, event.height);
-    };
-    let resolution = &window.resolution;
-    let physical_width = resolution.physical_width() as f32;
-    let physical_height = resolution.physical_height() as f32;
-    if let Some(current) = world.get_resource::<AtomeBevyRendererConfig>() {
-        let configured_backing_matches =
-            (physical_width - current.pixel_width as f32).abs() <= 1.0
-                && (physical_height - current.pixel_height as f32).abs() <= 1.0;
-        if configured_backing_matches {
-            return (current.width, current.height);
-        }
-    }
-    if (event.width - physical_width).abs() <= 1.0 && (event.height - physical_height).abs() <= 1.0
-    {
-        let logical = (resolution.width(), resolution.height());
-        if (logical.0 - event.width).abs() > 1.0 || (logical.1 - event.height).abs() > 1.0 {
-            return logical;
-        }
-    }
-    if let Some(current) = world.get_resource::<AtomeBevyRendererConfig>() {
-        let width_ratio = event.width / current.width.max(1.0);
-        let height_ratio = event.height / current.height.max(1.0);
-        if width_ratio > 1.25 && (width_ratio - height_ratio).abs() <= 0.05 {
-            return (current.width, current.height);
-        }
-    }
-    (event.width, event.height)
-}
-
 fn apply_browser_window_resize_to_surface(world: &mut World) {
-    let next_size = world
+    let has_valid_resize = world
         .resource::<Messages<WindowResized>>()
         .iter_current_update_messages()
         .filter(|event| event.width.is_finite() && event.height.is_finite())
         .filter(|event| event.width > 0.0 && event.height > 0.0)
-        .last()
-        .map(|event| window_resize_event_logical_size(world, event));
-    let Some((width, height)) = next_size else {
+        .next()
+        .is_some();
+    if !has_valid_resize {
         return;
-    };
-    let (configured_width, configured_height, configured_surface) = {
+    }
+    let (width, height, pixel_width, pixel_height, device_pixel_ratio) = {
         let current = world.resource::<AtomeBevyRendererConfig>();
         (
             current.width,
             current.height,
-            (
-                current.pixel_width as f32,
-                current.pixel_height as f32,
-                current.device_pixel_ratio,
-            ),
+            current.pixel_width as f32,
+            current.pixel_height as f32,
+            current.device_pixel_ratio,
         )
     };
-    let configured_size_unchanged = (configured_width - width).abs() < f32::EPSILON
-        && (configured_height - height).abs() < f32::EPSILON;
-    let window_surface_matches = world.query::<&Window>().iter(world).next().is_some_and(|window| {
-        let resolution = &window.resolution;
-        (resolution.width() - configured_width).abs() <= 1.0
-            && (resolution.height() - configured_height).abs() <= 1.0
-            && (resolution.physical_width() as f32 - configured_surface.0).abs() <= 1.0
-            && (resolution.physical_height() as f32 - configured_surface.1).abs() <= 1.0
-            && (resolution.scale_factor() - configured_surface.2).abs() <= 0.01
-    });
-    if configured_size_unchanged && window_surface_matches {
-        return;
-    }
-    let (pixel_width, pixel_height, device_pixel_ratio) = if configured_size_unchanged {
-        configured_surface
-    } else {
+    let window_surface_matches =
         world
             .query::<&Window>()
             .iter(world)
             .next()
-            .map(|window| {
-                let device_pixel_ratio = window.resolution.scale_factor();
-                (
-                    width * device_pixel_ratio,
-                    height * device_pixel_ratio,
-                    device_pixel_ratio,
-                )
-            })
-            .unwrap_or(configured_surface)
-    };
+            .is_some_and(|window| {
+                let resolution = &window.resolution;
+                (resolution.width() - width).abs() <= 1.0
+                    && (resolution.height() - height).abs() <= 1.0
+                    && (resolution.physical_width() as f32 - pixel_width).abs() <= 1.0
+                    && (resolution.physical_height() as f32 - pixel_height).abs() <= 1.0
+                    && (resolution.scale_factor() - device_pixel_ratio).abs() <= 0.01
+            });
+    if window_surface_matches {
+        return;
+    }
     if let Err(error) = apply_surface(
         world,
         AtomeSurfacePatch {

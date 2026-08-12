@@ -9,6 +9,7 @@ mod dev_logging;
 mod native_contacts;
 mod runtime_logging;
 mod server;
+mod viewport_runtime;
 use std::fs;
 use std::path::{Path, PathBuf};
 use tauri::{Manager, State}; // pour get_webview_window
@@ -170,6 +171,7 @@ fn main() {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_stt::init())
+        .on_window_event(viewport_runtime::publish_native_viewport)
         .invoke_handler(tauri::generate_handler![
             dev_logging::log_from_webview,
             native_contacts::macos_contacts_snapshot,
@@ -303,6 +305,8 @@ fn main() {
                 if let Err(err) = win.navigate(url) {
                     eprintln!("[tauri] Unable to navigate main window to local Axum server: {}", err);
                 }
+                std::thread::sleep(std::time::Duration::from_millis(350));
+                viewport_runtime::publish_current_webview_viewport(&win);
             });
 
             // Exposed port 3000 to the front (allows dataFetcher to use http://127.0.0.1:3000/...)
