@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Atome — Songlist prototype V7 — zone temporelle multipiste</title>
+<style>
+*{box-sizing:border-box}
+html,body{margin:0;min-height:100%;font-family:Arial,Helvetica,sans-serif;background:#fff;color:#111}
+:root{--tool:min(10.5vw,7.6vh,64px);--row:calc(var(--tool)/2);--line:#111;--rail:#111}
+body{min-height:100vh;display:grid;place-items:center}
+.screen{position:relative;width:calc(var(--tool)*9);height:calc(var(--tool)*12);border:1px solid var(--line);overflow:hidden;background:#fff}
+.workspace{position:absolute;inset:0 var(--tool) var(--tool) 0}
+.context-band{position:absolute;left:0;right:var(--tool);bottom:var(--tool);height:var(--row);border-top:1px solid var(--line);display:flex;align-items:center;padding:0 calc(var(--row)*.35);font-size:calc(var(--tool)*.15);white-space:nowrap;overflow:hidden}
+.songlist{position:absolute;left:0;right:0;bottom:var(--row);max-height:calc(100% - var(--row));overflow:auto;border-top:1px solid var(--line)}
+.row{height:var(--row);display:grid;grid-template-columns:var(--row) var(--row) var(--tool) 1fr;border-bottom:1px solid var(--line);position:relative;background:#fff}
+.row.depth1{padding-left:var(--row)}
+.row.depth2{padding-left:calc(var(--row)*2)}
+/* Depth rails align exactly with accordion-column boundaries. */
+.row.depth1::before,.row.depth2::before,.row.depth2::after{content:"";position:absolute;top:-1px;bottom:-1px;width:2px;background:var(--rail);pointer-events:none;z-index:2}
+.row.depth1::before,.row.depth2::before{left:calc(var(--row) - 1px)}
+.row.depth2::after{left:calc(var(--row)*2 - 1px)}
+.cell{display:flex;align-items:center;justify-content:center;border-right:1px solid var(--line);min-width:0;overflow:hidden;background:#fff}
+.preview{justify-content:flex-start;border-right:0}
+.name,.group{font-size:calc(var(--tool)*.14);white-space:nowrap}
+.tri{width:0;height:0;border-top:calc(var(--row)*.16) solid transparent;border-bottom:calc(var(--row)*.16) solid transparent;border-left:calc(var(--row)*.22) solid #111}
+.wave{width:100%;height:100%}
+.multitrack-temporal{position:absolute;left:0;right:0;bottom:var(--row);height:calc(var(--row)*2);display:none;grid-template-rows:repeat(2,var(--row));overflow:hidden;border-top:1px solid var(--line);background:#fff;z-index:3}
+.temporal-row{height:var(--row);border-bottom:1px solid var(--line)}
+.marker-rail{padding-left:calc(var(--tool)*3)}
+.time-ruler{display:grid;grid-template-columns:calc(var(--tool)*3) 1fr}
+.timebase{display:flex;align-items:center;justify-content:center;border-right:1px solid var(--line);font-size:calc(var(--tool)*.10);white-space:nowrap}
+.temporal-field{position:relative;min-width:0;height:100%}
+.temporal-point,.timecode,.marker-zone{position:absolute;white-space:nowrap;font-size:calc(var(--tool)*.09)}
+.temporal-point{top:50%;transform:translateY(-50%);border-left:1px solid var(--line);padding-left:calc(var(--tool)*.025)}
+.point-start{left:1%}.point-loop-in{left:14%}.point-punch-in{left:27%}.point-punch-out{left:65%}.point-loop-out{left:79%}
+.point-end{left:auto;right:1%;border-left:0;border-right:1px solid var(--line);padding-left:0;padding-right:calc(var(--tool)*.025)}
+.marker-zone{left:40%;width:14%;top:24%;bottom:24%;display:flex;align-items:center;justify-content:center;border-left:1px solid var(--line);border-right:1px solid var(--line);border-bottom:1px solid var(--line)}
+.playhead{position:absolute;left:58%;top:0;height:calc(var(--row)*2);border-left:1px solid var(--line);z-index:4;pointer-events:none}
+.timecode{top:50%;transform:translate(-50%,-50%);border-left:1px solid var(--line);padding-left:calc(var(--tool)*.025)}
+.timecode-start{left:1%;transform:translateY(-50%)}.timecode-5{left:34%}.timecode-10{left:67%}.timecode-end{left:auto;right:1%;transform:translateY(-50%);border-left:0;border-right:1px solid var(--line);padding-left:0;padding-right:calc(var(--tool)*.025)}
+.right-tools{position:absolute;top:0;right:0;bottom:var(--tool);width:var(--tool);border-left:1px solid var(--line)}
+.activity{position:absolute;bottom:0;width:var(--tool);height:var(--tool);border-top:1px solid var(--line);display:grid;place-items:center;font-size:calc(var(--tool)*.12);text-align:center}
+.context-list{position:absolute;left:0;right:0;bottom:var(--tool);display:flex;flex-direction:column-reverse}
+.ct{width:var(--tool);height:var(--tool);border-top:1px solid var(--line);display:grid;place-items:center;font-size:calc(var(--tool)*.12);text-align:center}
+.ct.multitrack-only{display:none}
+.bottom-tools{position:absolute;left:0;bottom:0;width:calc(var(--tool)*9);height:var(--tool);border-top:1px solid var(--line);display:grid;grid-template-columns:repeat(9,var(--tool))}
+.bt{width:var(--tool);height:var(--tool);border-right:1px solid var(--line);display:grid;place-items:center;font-size:calc(var(--tool)*.22)}
+.record{width:calc(var(--tool)*.30);height:calc(var(--tool)*.30);border-radius:50%;background:#d00}
+.atom{width:calc(var(--tool)*.38);height:calc(var(--tool)*.38);border:1px solid #111;border-radius:50%}
+input{position:absolute;opacity:0;pointer-events:none}
+.hit{cursor:pointer;width:100%;height:100%;display:grid;place-items:center}
+.section,.tracks,.new-song,.new-section,.new-track,.multitrack-temporal{display:none}
+#song1:checked~.screen .section{display:grid}
+#song1:checked~.screen .song1tri{transform:rotate(90deg)}
+#song1:checked~#section1:checked~.screen .tracks{display:grid}
+#song1:checked~#section1:checked~.screen .sec1tri{transform:rotate(90deg)}
+/* Record creates the Song without expanding its hierarchy automatically. */
+#recordNewSong:checked~.screen .new-song{display:grid}
+#recordNewSong:checked~#newSongOpen:checked~.screen .new-section{display:grid}
+#recordNewSong:checked~#newSongOpen:checked~.screen .new-song-tri{transform:rotate(90deg)}
+#recordNewSong:checked~#newSongOpen:checked~#newSectionOpen:checked~.screen .new-track{display:grid}
+#recordNewSong:checked~#newSongOpen:checked~#newSectionOpen:checked~.screen .new-sec-tri{transform:rotate(90deg)}
+#song1:checked~#section1:checked~.screen .multitrack-temporal,
+#recordNewSong:checked~#newSongOpen:checked~#newSectionOpen:checked~.screen .multitrack-temporal{display:grid}
+#song1:checked~#section1:checked~.screen .ct.multitrack-only,
+#recordNewSong:checked~#newSongOpen:checked~#newSectionOpen:checked~.screen .ct.multitrack-only{display:grid}
+#song1:checked~#section1:checked~.screen .songlist,
+#recordNewSong:checked~#newSongOpen:checked~#newSectionOpen:checked~.screen .songlist{bottom:calc(var(--row)*3);max-height:calc(100% - var(--row)*3)}
+.ctx::before{content:"Songlist"}
+#song1:checked~.screen .ctx::before{content:"Song 1"}
+#song1:checked~#section1:checked~.screen .ctx::before{content:"Song 1 › Couplet › Pistes"}
+#recordNewSong:checked~.screen .ctx::before{content:"Song 7"}
+#recordNewSong:checked~#newSongOpen:checked~.screen .ctx::before{content:"Song 7 › Section 1"}
+#recordNewSong:checked~#newSongOpen:checked~#newSectionOpen:checked~.screen .ctx::before{content:"Song 7 › Section 1 › Pistes"}
+</style>
+</head>
+<body>
+<input type="checkbox" id="song1">
+<input type="checkbox" id="section1">
+<input type="checkbox" id="recordNewSong">
+<input type="checkbox" id="newSongOpen">
+<input type="checkbox" id="newSectionOpen">
+<main class="screen">
+<section class="workspace">
+<div class="songlist">
+  <div class="row">
+    <div class="cell"><label class="hit" for="song1"><span class="tri song1tri"></span></label></div>
+    <div class="cell group">G</div><div class="cell name">Song 1</div>
+    <div class="cell preview"><svg class="wave" viewBox="0 0 600 32" preserveAspectRatio="none"><polyline points="0,16 50,8 100,23 150,10 200,21 250,7 300,25 350,11 400,18 450,8 500,21 550,10 600,16" fill="none" stroke="#111" stroke-width="1.2"/></svg></div>
+  </div>
+  <div class="row depth1 section">
+    <div class="cell"><label class="hit" for="section1"><span class="tri sec1tri"></span></label></div>
+    <div class="cell group">G</div><div class="cell name">Couplet</div><div class="cell preview"></div>
+  </div>
+  <div class="row depth2 tracks">
+    <div class="cell"><span class="tri"></span></div><div class="cell group">G</div><div class="cell name">Piste 1</div>
+    <div class="cell preview"><svg class="wave" viewBox="0 0 600 32" preserveAspectRatio="none"><polyline points="0,16 50,8 100,23 150,10 200,21 250,7 300,25 350,11 400,18 450,8 500,21 550,10 600,16" fill="none" stroke="#111" stroke-width="1.2"/></svg></div>
+  </div>
+
+  <div class="row"><div class="cell"><span class="tri"></span></div><div class="cell group">G</div><div class="cell name">Song 2</div><div class="cell preview"></div></div>
+  <div class="row"><div class="cell"><span class="tri"></span></div><div class="cell group">G</div><div class="cell name">Song 3</div><div class="cell preview"></div></div>
+  <div class="row"><div class="cell"><span class="tri"></span></div><div class="cell group">G</div><div class="cell name">Song 4</div><div class="cell preview"></div></div>
+  <div class="row"><div class="cell"><span class="tri"></span></div><div class="cell group">G</div><div class="cell name">Song 5</div><div class="cell preview"></div></div>
+  <div class="row"><div class="cell"><span class="tri"></span></div><div class="cell group">G</div><div class="cell name">Song 6</div><div class="cell preview"></div></div>
+
+  <!-- Mock Record creates Song 7 collapsed; this waveform is only its single-track preview. -->
+  <div class="row new-song">
+    <div class="cell"><label class="hit" for="newSongOpen"><span class="tri new-song-tri"></span></label></div>
+    <div class="cell group">G</div><div class="cell name">Song 7</div>
+    <div class="cell preview"><svg class="wave" viewBox="0 0 600 32" preserveAspectRatio="none"><polyline points="0,17 30,12 60,21 90,8 120,23 160,9 200,19 240,6 280,24 320,11 360,20 400,7 440,22 480,10 520,18 560,9 600,16" fill="none" stroke="#111" stroke-width="1.2"/></svg></div>
+  </div>
+  <div class="row depth1 new-section">
+    <div class="cell"><label class="hit" for="newSectionOpen"><span class="tri new-sec-tri"></span></label></div><div class="cell group">G</div><div class="cell name">Section 1</div><div class="cell preview"></div>
+  </div>
+  <div class="row depth2 new-track">
+    <div class="cell"><span class="tri"></span></div><div class="cell group">G</div><div class="cell name">Piste 1</div>
+    <div class="cell preview"><svg class="wave" viewBox="0 0 600 32" preserveAspectRatio="none"><polyline points="0,17 30,12 60,21 90,8 120,23 160,9 200,19 240,6 280,24 320,11 360,20 400,7 440,22 480,10 520,18 560,9 600,16" fill="none" stroke="#111" stroke-width="1.2"/></svg></div>
+  </div>
+</div>
+<!-- One timebase is visible at once: SMPTE here; the same ruler switches to samples in an audio context. -->
+<div class="multitrack-temporal">
+  <div class="temporal-row marker-rail">
+    <div class="temporal-field">
+      <span class="temporal-point point-start">START</span>
+      <span class="temporal-point point-loop-in">L IN</span>
+      <span class="temporal-point point-punch-in">P IN</span>
+      <span class="marker-zone">M1</span>
+      <span class="temporal-point point-punch-out">P OUT</span>
+      <span class="temporal-point point-loop-out">L OUT</span>
+      <span class="temporal-point point-end">END</span>
+      <span class="playhead" title="Playhead"></span>
+    </div>
+  </div>
+  <div class="temporal-row time-ruler">
+    <div class="timebase" title="Mode audio : précision au sample près">SMPTE · 25 fps</div>
+    <div class="temporal-field">
+      <span class="timecode timecode-start">00:00:00:00</span>
+      <span class="timecode timecode-5">00:00:05:00</span>
+      <span class="timecode timecode-10">00:00:10:00</span>
+      <span class="timecode timecode-end">00:00:15:00</span>
+    </div>
+  </div>
+</div>
+</section>
+<div class="context-band ctx"></div>
+<aside class="right-tools">
+  <div class="context-list"><div class="ct">▶</div><div class="ct">MET</div><div class="ct">VIEW</div><div class="ct">IMPORT</div><div class="ct">FX</div><div class="ct multitrack-only">CROP</div><div class="ct multitrack-only">SPLIT</div><div class="ct multitrack-only">JOIN</div><div class="ct multitrack-only">GRAB</div><div class="ct multitrack-only">LOOP</div></div>
+  <div class="activity">activité</div>
+</aside>
+<nav class="bottom-tools">
+  <div class="bt">＋</div><div class="bt">V</div><div class="bt">U</div><div class="bt">⌁</div><div class="bt">◷</div>
+  <div class="bt"><label class="hit" for="recordNewSong"><span class="record"></span></label></div>
+  <div class="bt">⌕</div><div class="bt">○</div><div class="bt"><span class="atom"></span></div>
+</nav>
+</main>
+</body>
+</html>
