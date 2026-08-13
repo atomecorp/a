@@ -2,7 +2,13 @@ import { $ } from '../squirrel.js';
 import { buttonTemplates, buttonStyles, buttonSizes } from './button_builder_templates.js';
 import { applyTemplate, applyTemplateEffects } from './button_builder_template_effects.js';
 import { attachButtonContentAndMethods, exposeButtonHandlerProperties } from './button_builder_content.js';
-import { getNextStateIndex, createPrimaryButton, createSecondaryButton, createSuccessButton, createDangerButton, createWarningButton, createIconButton, createOutlineButton, materialSwitch } from './button_builder_presets.js';
+import {
+  getNextStateIndex,
+  buttonConfigForVariant,
+  iconButtonConfig,
+  outlineButtonConfig,
+  materialSwitchConfig
+} from './button_builder_presets.js';
 
 /**
  * Composant Button skinnable avec HyperSquirrel
@@ -438,6 +444,15 @@ const createButton = (config = {}) => {
 
   return button;
 };
+
+const createPrimaryButton = (config) => createButton(buttonConfigForVariant(config, 'primary'));
+const createSecondaryButton = (config) => createButton(buttonConfigForVariant(config, 'secondary'));
+const createSuccessButton = (config) => createButton(buttonConfigForVariant(config, 'success'));
+const createDangerButton = (config) => createButton(buttonConfigForVariant(config, 'danger'));
+const createWarningButton = (config) => createButton(buttonConfigForVariant(config, 'warning'));
+const createIconButton = (config) => createButton(iconButtonConfig(config));
+const createOutlineButton = (config) => createButton(outlineButtonConfig(config));
+const materialSwitch = (config) => createButton(materialSwitchConfig(config));
 
 
 // === API STATIQUE POUR LES TEMPLATES ===

@@ -23,8 +23,8 @@ const buildTimeline = () => {
         project_id: 'proj_scene',
         owner_atome_id: 'grp_scene'
     });
-    timeline = addTrack(timeline, { track_id: 'track_video', kind: 'video', name: 'video', order: 10 });
-    timeline = addTrack(timeline, { track_id: 'track_audio', kind: 'audio', name: 'audio', order: 20 });
+    timeline = addTrack(timeline, { track_id: 'track_video', section_id: 'tl_scene:section:1', kind: 'video', name: 'video', order: 10 });
+    timeline = addTrack(timeline, { track_id: 'track_audio', section_id: 'tl_scene:section:1', kind: 'audio', name: 'audio', order: 20 });
     timeline = addClip(timeline, {
         clip_id: 'clip_a', track_id: 'track_video', kind: 'video',
         source: { type: 'atome', atome_id: 'atome_a' },
@@ -45,7 +45,10 @@ test('projection places lanes, clips and playhead on the molecule layer with sec
     assert.ok(records.every((record) => record.properties.layer === MOLECULE_SCENE_LAYER));
 
     const lanes = records.filter((record) => record.id.startsWith('mol:lane:'));
-    assert.equal(lanes.length, 2, 'one lane per track');
+    assert.equal(lanes.length, 3, 'one lane per track, including the stable trailing empty track');
+    assert.ok(lanes.every((lane) => lane.properties.selectable === false), 'lane surfaces never become draggable blocks');
+    const surface = records.find((record) => record.id === 'mol:surface');
+    assert.equal(surface.properties.fill, '#17191f', 'an opaque Molecule surface hides durable project Atomes below the timeline');
 
     const clipA = records.find((record) => record.id === 'mol:clip:clip_a');
     assert.equal(clipA.properties.left, 1 * PX, 'clip x derives from start_seconds');
@@ -60,7 +63,7 @@ test('projection places lanes, clips and playhead on the molecule layer with sec
 
     const playhead = records.find((record) => record.id === 'mol:playhead');
     assert.equal(playhead.properties.left, 3 * PX, 'playhead x derives from transport.playhead_seconds');
-    assert.equal(playhead.properties.height, 2 * LANE_H, 'playhead spans every lane');
+    assert.equal(playhead.properties.height, 3 * LANE_H + 48, 'playhead spans every lane and both time bands');
     assert.ok(playhead.properties.zIndex > clipA.properties.zIndex, 'playhead renders above clips');
 });
 
@@ -88,8 +91,8 @@ test('per-clip filter and transition flow to render material only when present',
 test('projection feeds the canonical virtual scene chain and scrub is a single playhead transform', () => {
     const before = setPlayhead(buildTimeline(), { playhead_seconds: 1 });
     const sceneBefore = createMoleculeTimelineScene(before);
-    // 2 lanes + 2 clips + 1 playhead.
-    assert.equal(sceneBefore.nodes.length, 5);
+    // Opaque surface, 3 lanes, 2 clips, crop handles, 2 time bands, ruler ticks and one playhead.
+    assert.equal(sceneBefore.nodes.length, 19);
     assert.ok(sceneBefore.nodes.every((node) => node.layer === MOLECULE_SCENE_LAYER));
 
     const after = setPlayhead(before, { playhead_seconds: 4 });

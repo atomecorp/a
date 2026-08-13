@@ -8,9 +8,9 @@ import {
     musicalToSeconds,
     secondsToMusical,
     setPlayhead,
-    setTempo
+    setTempo,
+    validateTimeline
 } from '../../eVe/intuition/tools/molecule/kernel/index.js';
-import { migrateMoleculeTimelineSnapshot } from '../../eVe/intuition/tools/molecule/persistence/index.js';
 
 const createTrackTimeline = () => addTrack(createTimeline({
     timeline_id: 'timeline_dual_time',
@@ -18,6 +18,7 @@ const createTrackTimeline = () => addTrack(createTimeline({
     owner_atome_id: 'owner_dual_time'
 }), {
     track_id: 'track_video',
+    section_id: 'timeline_dual_time:section:1',
     kind: 'video',
     name: 'Video',
     order: 10
@@ -112,33 +113,16 @@ test('Molecule tempo map resolves seconds and musical positions deterministicall
     assert.equal(timeline.transport.playhead_frame, 240000);
 });
 
-test('Molecule snapshot migration adds dual time model fields', () => {
-    const timeline = migrateMoleculeTimelineSnapshot({
-        source: {
-            id: 'timeline_migrated_time',
-            project_id: 'project_migrated_time',
-            owner_atome_id: 'owner_migrated_time',
-            tracks: [{ id: 'track_video', type: 'video', label: 'Video', index: 10 }],
-            clips: [{
-                id: 'clip_migrated',
-                trackId: 'track_video',
-                type: 'video',
-                atomeId: 'video_source',
-                start: 2,
-                duration: 4,
-                source_in_seconds: 0,
-                source_out_seconds: 4
-            }],
-            playheadSeconds: 2
-        }
-    });
-    assert.deepEqual(timeline.transport.playhead_time, {
-        seconds: 2,
-        musical: { bar: 2, beat: 1, tick: 0 }
-    });
-    assert.deepEqual(timeline.clips[0].timeline.start_time, {
-        seconds: 2,
-        musical: { bar: 2, beat: 1, tick: 0 }
-    });
-    assert.equal(timeline.clips[0].timeline.start_frame, 96000);
+test('Molecule v2 rejects historical snapshots instead of migrating them', () => {
+    const historical = {
+        schema: 'molecule_timeline',
+        schema_version: 1,
+        timeline_id: 'timeline_historical',
+        project_id: 'project_historical',
+        owner_atome_id: 'owner_historical'
+    };
+    assert.throws(
+        () => validateTimeline(historical),
+        (error) => error.code === 'molecule_kernel/invalid_timeline'
+    );
 });

@@ -30,6 +30,7 @@ export const normalizeKiraPlayInstancePayload = (input = {}) => {
         startSeconds: Math.max(0, finiteNumber(source.startSeconds ?? source.start_seconds ?? source.start, 0)),
         durationSeconds: optionalPositiveNumber(source.durationSeconds ?? source.duration_seconds ?? source.duration),
         gain: clamp(source.gain ?? 1, 0.000001, 16),
+        pan: clamp(source.pan ?? 0, -1, 1),
         rate: Math.max(0.0001, finiteNumber(source.rate, 1)),
         loopStartSeconds: optionalNonNegativeNumber(source.loopStartSeconds ?? source.loop_start_seconds),
         loopEndSeconds: optionalNonNegativeNumber(source.loopEndSeconds ?? source.loop_end_seconds)
@@ -56,6 +57,7 @@ export const buildTauriKiraAudioPayload = (command = '', input = {}) => {
             startSeconds: payload.startSeconds,
             durationSeconds: payload.durationSeconds,
             gain: payload.gain,
+            pan: payload.pan,
             rate: payload.rate,
             loopStartSeconds: payload.loopStartSeconds,
             loopEndSeconds: payload.loopEndSeconds
@@ -78,6 +80,7 @@ export const buildFacadeKiraAudioPayload = (command = '', input = {}) => {
             start_seconds: payload.startSeconds,
             duration_seconds: payload.durationSeconds,
             gain: payload.gain,
+            pan: payload.pan,
             rate: payload.rate,
             loop_start_seconds: payload.loopStartSeconds,
             loop_end_seconds: payload.loopEndSeconds

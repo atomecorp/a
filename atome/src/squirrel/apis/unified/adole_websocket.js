@@ -26,102 +26,101 @@ class TauriWebSocket {
         this.requestCounter = 0;
         this.reconnectTimer = null;
         this.pingTimer = null;
+        this.connectionTimer = null;
+        this.connectionPromise = null;
+        this.disposed = false;
     }
 
     async connect() {
+        if (this.disposed) return false;
+        if (this.socket?.readyState === WebSocket.OPEN) {
+            this.isConnected = true;
+            this.isConnecting = false;
+            return true;
+        }
+        if (this.connectionPromise) return this.connectionPromise;
+
+        const attempt = this.openConnection();
+        this.connectionPromise = attempt;
+        try {
+            return await attempt;
+        } finally {
+            if (this.connectionPromise === attempt) this.connectionPromise = null;
+        }
+    }
+
+    async openConnection() {
         if (this.backend === 'fastify') {
             const online = await checkConnection('fastify');
-            if (!online) {
-                return false;
-            }
+            if (!online || this.disposed) return false;
+        }
+        if (this.disposed) return false;
+        if (this.socket?.readyState === WebSocket.OPEN) {
+            this.isConnected = true;
+            return true;
         }
 
+        this.isConnecting = true;
         return new Promise((resolve) => {
-            if (this.isConnected) {
-                resolve(true);
-                return;
-            }
-            if (this.isConnecting) {
-                // Wait for existing connection attempt
-                const checkInterval = setInterval(() => {
-                    if (this.isConnected) {
-                        clearInterval(checkInterval);
-                        resolve(true);
-                    }
-                }, 100);
-                setTimeout(() => {
-                    clearInterval(checkInterval);
-                    resolve(false);
-                }, 5000);
-                return;
-            }
-
-            this.isConnecting = true;
-
             try {
-                const _xlog = (msg) => { void msg; };
-                _xlog('Creating WebSocket to ' + this.url);
-                this.socket = new WebSocket(this.url);
+                const socket = new WebSocket(this.url);
+                this.socket = socket;
 
-                this.socket.onopen = () => {
-                    _xlog('onopen fired, readyState=' + this.socket.readyState);
+                socket.onopen = () => {
+                    if (this.disposed || this.socket !== socket) return;
+                    this.clearConnectionTimer();
                     this.isConnecting = false;
                     this.isConnected = true;
                     this.startPing();
                     resolve(true);
                 };
 
-                this.socket.onclose = (evt) => {
-                    _xlog('onclose fired, code=' + evt.code + ' reason=' + evt.reason + ' wasClean=' + evt.wasClean);
-                    // Don't trigger handleDisconnect on normal close
-                    // Only schedule silent reconnect
-                    this.isConnected = false;
-                    this.isConnecting = false;
-                    this.stopPing();
+                socket.onclose = () => {
+                    if (this.socket !== socket) return;
+                    this.handleDisconnect({ socket });
                     resolve(false);
                 };
 
-                this.socket.onerror = (evt) => {
-                    _xlog('onerror fired: ' + String(evt?.message || evt?.type || 'unknown'));
-                    // Silent - don't call handleDisconnect to avoid cascading reconnects
-                    this.isConnecting = false;
+                socket.onerror = () => {
+                    if (this.socket !== socket) return;
+                    if (socket.readyState !== WebSocket.OPEN) this.handleDisconnect({ socket });
                     resolve(false);
                 };
 
-                this.socket.onmessage = (event) => {
-                    _xlog('onmessage: ' + String(event.data).substring(0, 120));
+                socket.onmessage = (event) => {
+                    if (this.disposed || this.socket !== socket) return;
                     this.handleMessage(event.data);
                 };
 
-                // Timeout connection attempt
-                setTimeout(() => {
-                    if (this.isConnecting) {
-                        this.isConnecting = false;
-                        resolve(false);
-                    }
+                this.clearConnectionTimer();
+                this.connectionTimer = setTimeout(() => {
+                    this.connectionTimer = null;
+                    if (this.socket !== socket || !this.isConnecting) return;
+                    this.handleDisconnect({ socket });
+                    try { socket.close(); } catch (_) { }
+                    resolve(false);
                 }, 3000);
-
-            } catch (e) {
+            } catch (_) {
                 this.isConnecting = false;
                 resolve(false);
             }
         });
     }
 
-    handleDisconnect() {
+    handleDisconnect({ socket = this.socket, scheduleReconnect = true } = {}) {
+        if (socket && this.socket !== socket) return;
+        this.clearConnectionTimer();
         this.isConnected = false;
         this.isConnecting = false;
         this.stopPing();
 
-        // Reject all pending requests
-        for (const [id, pending] of this.pendingRequests) {
+        for (const pending of this.pendingRequests.values()) {
             clearTimeout(pending.timeout);
-            pending.reject({ ok: false, success: false, error: 'Connection lost', offline: true });
+            pending.resolve({ ok: false, success: false, error: 'Connection lost', offline: true, status: 0 });
         }
         this.pendingRequests.clear();
 
-        // Schedule silent reconnect (no logging, no error on failure)
-        if (!this.reconnectTimer) {
+        if (scheduleReconnect && !this.disposed && !this.reconnectTimer) {
             this.reconnectTimer = setTimeout(() => {
                 this.reconnectTimer = null;
                 this.silentConnect();
@@ -131,56 +130,8 @@ class TauriWebSocket {
 
     // Silent connect - no error logging on failure
     async silentConnect() {
-        if (this.isConnected || this.isConnecting) return;
-        this.isConnecting = true;
-
-        if (this.backend === 'fastify') {
-            const online = await checkConnection('fastify');
-            if (!online) {
-                this.isConnecting = false;
-                return;
-            }
-        }
-
-        try {
-            this.socket = new WebSocket(this.url);
-
-            this.socket.onopen = () => {
-                this.isConnecting = false;
-                this.isConnected = true;
-                this.startPing();
-            };
-
-            this.socket.onclose = () => {
-                this.isConnecting = false;
-                this.isConnected = false;
-                this.stopPing();
-                // Silent retry after delay
-                if (!this.reconnectTimer) {
-                    this.reconnectTimer = setTimeout(() => {
-                        this.reconnectTimer = null;
-                        this.silentConnect();
-                    }, 10000);
-                }
-            };
-
-            this.socket.onerror = () => {
-                // Silent - no error logging for reconnect attempts
-            };
-
-            this.socket.onmessage = (event) => {
-                this.handleMessage(event.data);
-            };
-
-            setTimeout(() => {
-                if (this.isConnecting) {
-                    this.isConnecting = false;
-                }
-            }, 3000);
-
-        } catch (e) {
-            this.isConnecting = false;
-        }
+        if (this.disposed || this.isConnected || this.isConnecting) return;
+        await this.connect();
     }
 
     startPing() {
@@ -199,15 +150,42 @@ class TauriWebSocket {
         }
     }
 
+    clearConnectionTimer() {
+        if (!this.connectionTimer) return;
+        clearTimeout(this.connectionTimer);
+        this.connectionTimer = null;
+    }
+
+    dispose() {
+        if (this.disposed) return;
+        this.disposed = true;
+        if (this.reconnectTimer) {
+            clearTimeout(this.reconnectTimer);
+            this.reconnectTimer = null;
+        }
+        this.clearConnectionTimer();
+        this.handleDisconnect({ scheduleReconnect: false });
+        const socket = this.socket;
+        this.socket = null;
+        if (socket) {
+            socket.onopen = null;
+            socket.onclose = null;
+            socket.onerror = null;
+            socket.onmessage = null;
+            try { socket.close(); } catch (_) { }
+        }
+    }
+
     async send(message) {
         const isAuthMessage = message?.type === 'auth';
         void isAuthMessage;
         const connected = await this.connect();
-        if (!connected) {
+        if (!connected || this.socket?.readyState !== WebSocket.OPEN) {
+            if (this.isConnected) this.handleDisconnect();
             return { ok: false, success: false, error: 'Server unreachable', offline: true, status: 0 };
         }
 
-        return new Promise((resolve, reject) => {
+        return new Promise((resolve) => {
             const requestId = `ws_${++this.requestCounter}_${Date.now()}`;
             message.requestId = requestId;
 
@@ -216,7 +194,7 @@ class TauriWebSocket {
                 resolve({ ok: false, success: false, error: 'Request timeout', status: 0 });
             }, 10000);
 
-            this.pendingRequests.set(requestId, { resolve, reject, timeout });
+            this.pendingRequests.set(requestId, { resolve, timeout });
 
             try {
                 this.socket.send(JSON.stringify(message));
@@ -230,7 +208,7 @@ class TauriWebSocket {
 
     async sendFireAndForget(message) {
         const connected = await this.connect();
-        if (!connected) {
+        if (!connected || this.socket?.readyState !== WebSocket.OPEN) {
             return { ok: false, success: false, error: 'Server unreachable', offline: true, status: 0 };
         }
 
@@ -309,7 +287,7 @@ function getTauriWs() {
 
     const wsUrl = getTauriWsUrl();
     if (!_tauriWs || _tauriWs.url !== wsUrl) {
-        try { _tauriWs?.socket?.close?.(); } catch (_) { }
+        _tauriWs?.dispose?.();
         _tauriWs = new TauriWebSocket(wsUrl, 'tauri');
     }
     return _tauriWs;
@@ -322,7 +300,7 @@ function getFastifyWs() {
     }
 
     if (!_fastifyWs || _fastifyWs.url !== wsUrl) {
-        try { _fastifyWs?.socket?.close?.(); } catch (_) { }
+        _fastifyWs?.dispose?.();
         _fastifyWs = new TauriWebSocket(wsUrl, 'fastify');
     }
 

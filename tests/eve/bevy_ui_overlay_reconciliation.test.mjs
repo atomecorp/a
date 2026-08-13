@@ -30,6 +30,18 @@ const waitFor = async (predicate) => {
     throw new Error('overlay_reconciliation_probe_timeout');
 };
 
+const locateNodeBox = (node, nodeId, parentBox = null, forcedBox = null) => {
+    if (!node) return null;
+    const box = nodeBox(node, parentBox, forcedBox);
+    if (node.id === nodeId) return box;
+    const layout = layoutForNodeCached(node, box);
+    for (let index = 0; index < (node.children || []).length; index += 1) {
+        const found = locateNodeBox(node.children[index], nodeId, box, layout.childBoxes[index]);
+        if (found) return found;
+    }
+    return null;
+};
+
 test('BevyUI overlay remount reconciles from an exact empty baseline after a projection failure', async () => {
     const surface = createSurface();
     let rect = { width: 240, height: 240 };
@@ -196,20 +208,9 @@ test('Calendar deep scroll keeps late-hour grid records mounted through the real
         runtime.state.trees.get(panelTree.id)?.tree?.root,
         'eve_bevy_panel_calendar_body'
     );
-    const locateBox = (node, nodeId, parentBox = null, forcedBox = null) => {
-        if (!node) return null;
-        const box = nodeBox(node, parentBox, forcedBox);
-        if (node.id === nodeId) return box;
-        const layout = layoutForNodeCached(node, box);
-        for (let index = 0; index < (node.children || []).length; index += 1) {
-            const found = locateBox(node.children[index], nodeId, box, layout.childBoxes[index]);
-            if (found) return found;
-        }
-        return null;
-    };
     const projectedRoot = runtime.state.trees.get(panelTree.id)?.tree?.root;
-    const hour23Box = locateBox(projectedRoot, 'calendar_hour_23');
-    const bodyBox = locateBox(projectedRoot, 'eve_bevy_panel_calendar_body');
+    const hour23Box = locateNodeBox(projectedRoot, 'calendar_hour_23');
+    const bodyBox = locateNodeBox(projectedRoot, 'eve_bevy_panel_calendar_body');
     const recordsAtBottom = getProjectSceneState('__eve_dashboard_workspace__').records;
     const bottomCalendarIds = recordsAtBottom
         .map((record) => record.id)
@@ -254,11 +255,24 @@ test('Calendar empty geometry receives real double-clicks in month, week, and da
     const runtime = createEveBevyUiRuntime({
         imageResolverFactory: () => async () => ({ width: 1, height: 1, rgba: [255, 255, 255, 255] })
     });
-    const pointForNode = (nodeId) => {
-        for (let y = 70; y < 720; y += 4) {
-            for (let x = 200; x < 1100; x += 4) {
-                const hit = runtime.hitTestAtClientPoint({ surface, clientX: x, clientY: y });
-                if (hit?.nodeId === nodeId) return { x, y };
+    const pointForNode = (treeId, nodeId) => {
+        const root = runtime.state.trees.get(treeId)?.tree?.root;
+        const box = locateNodeBox(root, nodeId);
+        if (!box) return null;
+        const accepts = (point) => runtime.hitTestAtClientPoint({
+            surface, clientX: point.x, clientY: point.y
+        })?.nodeId === nodeId;
+        const fractions = [0.25, 0.5, 0.75, 0.99, 0.01];
+        for (const yRatio of fractions) {
+            for (const xRatio of fractions) {
+                const point = { x: box.x + (box.width * xRatio), y: box.y + (box.height * yRatio) };
+                if (accepts(point)) return point;
+            }
+        }
+        for (let y = box.y + 2; y < box.y + box.height; y += 12) {
+            for (let x = box.x + 2; x < box.x + box.width; x += 12) {
+                const point = { x, y };
+                if (accepts(point)) return point;
             }
         }
         return null;
@@ -283,7 +297,7 @@ test('Calendar empty geometry receives real double-clicks in month, week, and da
             mounted = true;
         }
         const targetId = view === 'month' ? 'calendar_month_day_10' : 'calendar_time_grid';
-        const point = pointForNode(targetId);
+        const point = pointForNode(tree.id, targetId);
         assert.ok(point, `${view} empty geometry is reachable through the mounted Bevy hit-test`);
         surface.dispatchEvent(new dom.window.MouseEvent('dblclick', {
             bubbles: true, cancelable: true, clientX: point.x, clientY: point.y, detail: 2

@@ -134,6 +134,7 @@ pub fn audio_play_instance(
     start_seconds: f64,
     duration_seconds: Option<f64>,
     gain: f64,
+    pan: f64,
     rate: f64,
     loop_start_seconds: Option<f64>,
     loop_end_seconds: Option<f64>,
@@ -144,6 +145,7 @@ pub fn audio_play_instance(
         start_seconds,
         duration_seconds,
         gain,
+        pan,
         rate,
         loop_start_seconds,
         loop_end_seconds,
@@ -177,6 +179,12 @@ pub fn audio_destroy_clip(id: String) -> Result<Value, String> {
 pub fn audio_set_volume(id: String, db: f64) -> Result<Value, String> {
     playback::set_volume(&id, db)?;
     Ok(json!({ "success": true, "id": id }))
+}
+
+#[tauri::command]
+pub fn audio_set_pan(id: String, pan: f64) -> Result<Value, String> {
+    playback::set_pan(&id, pan)?;
+    Ok(json!({ "success": true, "id": id, "pan": pan }))
 }
 
 #[tauri::command]

@@ -68,7 +68,7 @@ test('Panel Lab mounts the two independent passive families as one static batch 
         const summaryDivider = body.findIndex((node) => node.id === 'panel_lab_selection_summary_divider');
         const summaryGroup = body.findIndex((node) => node.id === 'panel_lab_selection_summary_group');
 
-        assert.equal(body.length, 41);
+        assert.equal(body.length, 45);
         assert.equal(numericField, stateIndex + 2);
         assert.equal(mediaDivider, numericField + 1);
         assert.equal(mediaGroup, mediaDivider + 1);

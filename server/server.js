@@ -156,6 +156,8 @@ import { SERVER_VERSION, EVE_VERSION, loadServerVersion, loadEveVersion, refresh
 import { logger, logStructured, setLogServer, MINIMAL_LOGS } from './server_logger.js';
 import { recentErrors, recordRecentError, isDuplicateWsRequest, isDuplicateAtomeCreate } from './server_dedup.js';
 import { uploadsDir, resolveUploadsDir, listUserDownloadsSnapshot, listAnonymousUploads, listUserDownloads, listUploadsForUser, resolveDownloadTarget } from './server_uploads.js';
+import { createSyncQueueWorker } from './sync_queue_worker.js';
+import { classifyHttpLifecycleError } from './http_error_classification.js';
 
 // Database imports - Using SQLite/libSQL (ADOLE data layer)
 import db from '../database/adole.js';
@@ -311,6 +313,13 @@ async function processSyncQueue() {
     }
   }
 }
+
+const syncQueueWorker = createSyncQueueWorker({
+  drain: processSyncQueue,
+  onError: (error) => {
+    console.warn('⚠️  Sync queue processing failed:', error?.message || error);
+  }
+});
 
 try {
   mkdirSync(LOG_DIR, { recursive: true });
@@ -510,6 +519,7 @@ async function startServer() {
     });
 
     server.addHook('onError', async (request, reply, error) => {
+      const lifecycle = classifyHttpLifecycleError({ error, request, reply });
       const details = {
         timestamp: new Date().toISOString(),
         request_id: request?.id || null,
@@ -518,6 +528,15 @@ async function startServer() {
         status_code: reply?.statusCode,
         message: error?.message || String(error)
       };
+      if (lifecycle.reportAsError !== true) {
+        logStructured('debug', {
+          component: 'http',
+          request_id: request?.id || null,
+          message: lifecycle.kind,
+          data: details
+        });
+        return;
+      }
       recordRecentError(details);
       logStructured('error', {
         component: 'http',
@@ -4607,14 +4626,7 @@ async function startServer() {
 
     if (SYNC_REMOTE_ENABLED) {
       console.log(`🔁 Sync queue enabled → ${TAURI_SYNC_URL}`);
-      setTimeout(() => processSyncQueue().catch((err) => {
-        console.warn('⚠️  Sync queue processing failed:', err?.message || err);
-      }), 500);
-      setInterval(() => {
-        processSyncQueue().catch((err) => {
-          console.warn('⚠️  Sync queue processing failed:', err?.message || err);
-        });
-      }, 2000);
+      syncQueueWorker.start();
     }
 
   } catch (error) {
@@ -4644,6 +4656,7 @@ async function stopFileWatcher() {
 process.on('SIGINT', async () => {
   console.log('\n🛑 Server stopping...');
   try {
+    syncQueueWorker.stop();
     await server.close();
     await stopFileWatcher();
     console.log('✅ Server stopped cleanly');
@@ -4657,6 +4670,7 @@ process.on('SIGINT', async () => {
 process.on('SIGTERM', async () => {
   console.log('\n🛑 Signal SIGTERM received, stopping...');
   try {
+    syncQueueWorker.stop();
     await server.close();
     await stopFileWatcher();
     console.log('✅ Server stopped cleanly');

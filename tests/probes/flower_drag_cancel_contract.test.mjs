@@ -204,8 +204,25 @@ assert.equal(
 );
 
 const surfaceRuntimeSource = await readFile(
-    new URL('../../eVe/domains/rendering/surface_runtime.js', import.meta.url),
+    new URL('../../eVe/domains/rendering/surface_interaction_runtime.js', import.meta.url),
     'utf8'
+);
+const projectLayerRuntimeSource = await readFile(
+    new URL('../../eVe/core/atome_events/project_layer_runtime.js', import.meta.url),
+    'utf8'
+);
+assert.equal(
+    projectLayerRuntimeSource.includes('if (ev.defaultPrevented === true) return;')
+        && projectLayerRuntimeSource.indexOf('if (ev.defaultPrevented === true) return;')
+            < projectLayerRuntimeSource.indexOf('markFlowerPointerGestureArmed(ev.pointerId)'),
+    true,
+    'project background must not re-arm Flower after a higher-priority canvas interceptor consumed the press'
+);
+assert.equal(
+    surfaceRuntimeSource.includes("eventTarget.addEventListener('pointerdown'")
+        && surfaceRuntimeSource.includes('clearFlowerPointerGestureArmed(readPointerId(event))'),
+    true,
+    'every reused pointer id must clear stale Flower arming before a new surface press'
 );
 assert.equal(
     surfaceRuntimeSource.includes('isFlowerPointerInteractionActive(session.pointer_id)')

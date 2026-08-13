@@ -58,7 +58,7 @@ test('Panel Lab projects all four passive localized states after the selectable 
         const groupIndex = body.findIndex((node) => node.id === 'panel_lab_state_group');
         const group = body[groupIndex];
 
-        assert.equal(body.length, 41);
+        assert.equal(body.length, 45);
         assert.equal(dividerIndex, scopeChipIndex + 1);
         assert.equal(groupIndex, dividerIndex + 1);
         assert.deepEqual(group.style.size, [358, 300]);

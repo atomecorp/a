@@ -34,6 +34,7 @@ const createArmedSession = ({ trackKind = 'audio' } = {}) => {
     });
     timeline = addTrack(timeline, {
         track_id: `track_${trackKind}`,
+        section_id: 'timeline_recording_probe:section:1',
         kind: trackKind,
         name: trackKind,
         order: 10,
@@ -160,7 +161,7 @@ test('Molecule recording commits one frame-exact Atome clip through the active s
     assert.equal(session.getState().clips[0].timeline.start_frame, START_FRAME - ROUNDTRIP_LATENCY_FRAMES);
     assert.equal(session.getState().clips[0].timeline.duration_frames, FRAME_COUNT);
     assert.equal(events.length, 1);
-    assert.equal(events[0].event_type, 'molecule.clip.add');
+    assert.equal(events[0].event_type, 'molecule.clip.record_replace');
     assert.equal(commits.length, 1);
     assert.equal(recording.read().status, 'idle');
 

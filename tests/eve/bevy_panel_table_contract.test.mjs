@@ -225,7 +225,7 @@ test('Panel Lab appends the table after the validated Select and keeps it passiv
         const dividerIndex = body.findIndex((node) => node.id === 'panel_lab_table_divider');
         const tableIndex = body.findIndex((node) => node.id === 'panel_lab_table');
 
-        assert.equal(body.length, 41);
+        assert.equal(body.length, 45);
         assert.equal(tableIndex < body.findIndex((node) => node.id === 'panel_lab_action_button_group'), true);
         assert.equal(tableIndex, dividerIndex + 1);
         assert.equal(dividerIndex > body.findIndex((node) => node.id === 'panel_lab_select'), true);

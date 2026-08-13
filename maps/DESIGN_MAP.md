@@ -846,6 +846,21 @@ The perceptual contract is backed by presented WebGPU frames, not JS sampling al
   or deselect mode, crossed rows receive that same mode, and cancel restores
   the initial canonical selection. Row hold and the dedicated grip share the
   same drag intent; pre-hold vertical motion remains scroll.
+
+# Molecule v2 Bevy design contract — 2026-08-12
+
+- Timeline lanes sit above one opaque `surfaceFill` record, so durable project Atomes never bleed through previews or waveforms. Lane fills, ruler ticks, Record regions, crop handles and the playhead remain skinnable projection palette values.
+- Mix channel strips consume the `bevyPanel.moleculeMix` token group (`strip*`, `control*`, meter and group/rest surfaces). Stable ids `molecule_mix_gain_<track>` and `molecule_mix_pan_<track>` identify the two canonical sliders for future skins without local style discovery. Both sliders stay vertically centred in the usable strip body so mobile navigation rails cannot cover either control.
+
+- The fixed main menu order is Atom, Home, Finder, Record, Time, Communication, Mode, View, Create. Create opens the functional Text, Draw, Code and Page entries; generator entries exist only when backed by a registered generator.
+- List is a virtualized `Molecule → Section → Track` hierarchy. Rows use half a main-tool square, proper names only, a hierarchy affordance, Group field, name crest and real-content preview. Derived Section/Track identities never become Atomes.
+- Handedness mirrors hierarchy affordances, indentation, columns, contextual rails, panels and tools through shared owners. Ruler, playhead, clip geometry, crop and loop direction never mirror and remain left-to-right.
+- Timeline content is Bevy-only: Track lanes, type-derived previews, non-destructive crop handles, Section boundaries, armed Record regions and exactly two lower time bands. The playhead crosses Tracks and both bands.
+- Track groups are mix buses only. Loop In/Out, repeat count, continuation, group route, mute and Track quantization are canonical Track properties exposed through the existing Info workflow; no new contextual menu is introduced.
+- A Molecule hierarchy selection opens the established handed contextual rail with only functional Lecture, Import, Info and Activité tools; Track selections additionally expose Groupe and Mute. Activité expands to Liste, Mixage and the implemented Phase-2 Timeline projection.
+- The ruler uses visible one-second ticks with stronger four-second marks, Record regions use a distinct armed red material, and the time axis remains left-to-right in both handed modes.
+- Automated visual acceptance covers right/left handedness at desktop, tablet and phone dimensions with DPR 1, 2 and 3. It performs mouse gestures on desktop and native Playwright touchscreen taps on emulated mobile, then requires two successive captures to stay within max channel delta 2, changed pixels 0.3% and mean absolute channel delta 0.01.
+- The 30-minute endurance journey remains visually interactive: it alternates Liste, Mixage and Timeline, toggles Lecture through the contextual rail and performs a real armed Record capture before entering the cycle. A hidden or API-only transport loop is not an acceptable substitute.
 - While a Finder tool crosses the active contextual rail, the rail inserts one
   item-sized derived gap at the computed index, so neighbouring icons separate
   before release. Leave, cancel and invalid drop remove the gap immediately.

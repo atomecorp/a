@@ -660,6 +660,43 @@ test('Bevy media texture resolver honors per-node image texture scale', async ()
     assert.equal(canvases.length, 2);
 });
 
+test('Bevy media texture resolver rejects an image whose decode error already settled', async () => {
+    clearBevyMediaTextureCache();
+    let listenerRegistrations = 0;
+    const documentRef = {
+        defaultView: { devicePixelRatio: 1 },
+        createElement: (tagName) => {
+            if (tagName === 'img') {
+                return {
+                    complete: true,
+                    naturalWidth: 0,
+                    naturalHeight: 0,
+                    decode: async () => { throw new Error('decode_failed'); },
+                    addEventListener: () => { listenerRegistrations += 1; },
+                    removeEventListener: () => {}
+                };
+            }
+            throw new Error(`unexpected_element:${tagName}`);
+        }
+    };
+    const resolver = createBrowserBevyMediaTextureResolver({ documentRef });
+    const resolution = resolver({
+        id: 'already_failed_image',
+        kind: 'image',
+        bounds: { x: 0, y: 0, width: 40, height: 20 },
+        content: { source: 'data:image/png;base64,invalid' }
+    });
+
+    await assert.rejects(
+        Promise.race([
+            resolution,
+            new Promise((_resolve, reject) => setTimeout(() => reject(new Error('image_resolution_stalled')), 50))
+        ]),
+        /bevy_media_texture_image_decode_failed:already_failed_image/
+    );
+    assert.equal(listenerRegistrations, 0, 'a settled image error must not install listeners that can never fire');
+});
+
 test('Bevy external-video shader linearizes the sampled frame before the sRGB target', () => {
     const shader = readSource('atome/renderers/bevy-core/assets/shaders/video_external.wgsl');
     // External textures sample display-encoded sRGB; Bevy's 2d target re-applies the

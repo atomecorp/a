@@ -228,6 +228,9 @@ CREATE TABLE IF NOT EXISTS sync_queue (
 
 CREATE INDEX IF NOT EXISTS idx_sync_queue_status ON sync_queue(status);
 CREATE INDEX IF NOT EXISTS idx_sync_queue_next_retry ON sync_queue(next_retry_at);
+CREATE INDEX IF NOT EXISTS idx_sync_queue_dispatch
+    ON sync_queue(target_server, created_at)
+    WHERE status IN ('pending', 'error');
 
 -- ============================================================================
 -- 9. Principal identity and credential aliases

@@ -200,6 +200,61 @@ test('BevyUI runtime sends mount/update/unmount ops without creating component D
     });
 });
 
+test('BevyUI scale reconciliation cannot supersede a newer product tree with stale source', async () => {
+    const surface = createSurface();
+    Object.defineProperty(surface, 'clientWidth', { configurable: true, value: 100 });
+    let viewportWidth = 100;
+    let nextFrameId = 0;
+    const frames = new Map();
+    const module = {
+        apply_atome_bevy_ui_ops: () => {},
+        read_atome_bevy_web_diagnostics: () => ({ ui_viewport_width: viewportWidth }),
+        drain_atome_bevy_ui_events: () => []
+    };
+    const runtime = createEveBevyUiRuntime({
+        moduleProvider: async () => module,
+        nativeUiEnabled: true,
+        requestFrame: (callback) => {
+            nextFrameId += 1;
+            frames.set(nextFrameId, callback);
+            return nextFrameId;
+        },
+        cancelFrame: (frameId) => frames.delete(frameId)
+    });
+    const tree = (childId) => ({
+        id: 'scale_race_tree',
+        root: {
+            id: 'scale_race_root',
+            kind: 'root',
+            style: { size: [100, 100] },
+            children: [{ id: childId, kind: 'panel', style: { size: [20, 20] } }]
+        }
+    });
+
+    await runtime.mountTree({ id: 'scale_race_tree', surface, tree: tree('old_child') });
+    const scaleWatchFrameId = runtime.state.scaleWatchFrames.get('scale_race_tree');
+    const scaleWatch = frames.get(scaleWatchFrameId);
+    assert.equal(typeof scaleWatch, 'function');
+
+    viewportWidth = 200;
+    const productUpdate = runtime.updateTree({ id: 'scale_race_tree', surface, tree: tree('new_child') });
+    scaleWatch(16);
+    await productUpdate;
+    await Promise.resolve();
+    const rescheduledFrameId = runtime.state.scaleWatchFrames.get('scale_race_tree');
+    const rescheduledScaleWatch = frames.get(rescheduledFrameId);
+    assert.equal(typeof rescheduledScaleWatch, 'function');
+    rescheduledScaleWatch(32);
+    while (runtime.state.renderQueues.has('scale_race_tree')) {
+        await runtime.state.renderQueues.get('scale_race_tree');
+        await Promise.resolve();
+    }
+
+    assert.equal(runtime.state.sourceTrees.get('scale_race_tree').tree.root.children[0].id, 'new_child');
+    assert.equal(runtime.state.renderScales.get('scale_race_tree'), 2);
+    await runtime.unmountTree('scale_race_tree');
+});
+
 test('BevyUI runtime uses the project overlay path without native WASM UI ops by default', async () => {
     const surface = createSurface();
     let moduleRequested = false;

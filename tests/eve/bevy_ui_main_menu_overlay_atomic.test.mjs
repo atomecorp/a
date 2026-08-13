@@ -530,7 +530,7 @@ test('BevyUI main menu projects one semantic accent capsule per palette group', 
     const records = projectedState.records;
     const projectedAccent = records.find((record) => record.id.endsWith(`_${captureAccentId}`));
     assert.equal(projectedAccent?.properties?.width, 174);
-    assert.equal(projectedAccent?.properties?.height, 4);
+    assert.equal(projectedAccent?.properties?.height, tokens.thicknessPx);
     assert.equal(projectedAccent?.properties?.color, 'rgba(255,107,107,1)');
 
     compositorCalls.length = 0;

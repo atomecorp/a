@@ -18,6 +18,13 @@
        Consumers read these only at interaction time (animations -> window.gsap).
        Leaflet is gone: the Finder place map is drawn natively in the canvas. -->
   <script defer src="js/gsap.min.js"></script>
+  <script type="importmap">
+    {
+      "imports": {
+        "#squirrel/": "./squirrel/"
+      }
+    }
+  </script>
   <script type="module" src="squirrel/spark.js"></script>
 
 </head>

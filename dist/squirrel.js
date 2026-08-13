@@ -3826,9 +3826,9 @@
     });
   }
 
-  // Extracted from button_builder.js: multi-state index helper, common variant factory functions,
-  // and the preset system (materialSwitch). Variant/preset factories call createButton only at
-  // call-time → safe circular import with the entry module.
+  // Extracted from button_builder.js: multi-state index helper and pure preset configuration.
+  // This module deliberately does not import the button constructor: the entry module owns
+  // instantiation, which keeps the component dependency graph acyclic.
 
   // === FONCTION UTILITAIRE POUR CALCULER LE PROCHAIN ÉTAT ===
   function getNextStateIndex(current, total, mode, direction = 1) {

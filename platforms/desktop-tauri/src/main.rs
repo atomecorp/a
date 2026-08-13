@@ -6,6 +6,7 @@
 mod audio_engine;
 mod bevy_backend;
 mod dev_logging;
+mod local_http_navigation;
 mod native_contacts;
 mod runtime_logging;
 mod server;
@@ -185,6 +186,7 @@ fn main() {
             audio_engine::bridge::audio_stop_instance,
             audio_engine::bridge::audio_destroy_clip,
             audio_engine::bridge::audio_set_volume,
+            audio_engine::bridge::audio_set_pan,
             audio_engine::bridge::audio_set_playback_rate,
             audio_engine::bridge::audio_record_start,
             audio_engine::bridge::audio_record_stop,
@@ -293,7 +295,14 @@ fn main() {
 
             let navigation_handle = app.handle().clone();
             std::thread::spawn(move || {
-                std::thread::sleep(std::time::Duration::from_millis(250));
+                let address = std::net::SocketAddr::from(([127, 0, 0, 1], TAURI_LOCAL_HTTP_PORT));
+                if !local_http_navigation::wait_for_local_http(
+                    address,
+                    std::time::Duration::from_secs(15),
+                ) {
+                    eprintln!("[tauri] Local Axum server was not ready within 15 seconds");
+                    return;
+                }
                 let Some(win) = navigation_handle.get_webview_window("main") else {
                     eprintln!("[tauri] Unable to navigate main window: window not found");
                     return;

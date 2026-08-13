@@ -2108,6 +2108,23 @@ This section supersedes earlier Dashboard lifecycle descriptions in this map. `e
   lifetime of the existing active Tool Registry payload.
 - `atome_contextual_tool_drop_runtime.js`: contextual-tree hit validation,
   insertion index, reorder/deduplication and atomic ordered-list commit.
+
+# Molecule v2 code map — 2026-08-12
+
+- Canonical schema primitives: `eVe/intuition/tools/molecule/kernel/schemas.js`; complete snapshot validation: `kernel/timeline_validator.js`; clean v2 construction: `kernel/timeline_factory.js`.
+- Structural reducers: `kernel/structure.js`; clip/crop/Record replacement reducers: `kernel/reducers.js`; frame/sample and musical projections: `kernel/time_model.js`.
+- Durable routing and undo/batch: `session/session.js` and `session/timeline_operations.js`; persistence: `persistence/index.js`; runtime/API bridge: `runtime.js`, `eVe/intuition/tools/timeline_actions.js`, and `atome/src/squirrel/ai/default_tools_timeline.js`.
+- Bevy projection and semantic gesture bridge: `render/timeline_scene.js` and `eVe/intuition/runtime/molecule_timeline_scene_bridge.js`; the Timeline surface occludes visually and for hit-testing, lanes are non-draggable, technical handles are excluded from lasso, and crop/zoom/split route to kernel operations.
+- Mix channel-strip ownership: `eVe/domains/rendering/project_view_molecule_mix_content.js` reuses canonical Bevy tool-slider gestures for persisted `gain`/`pan`, centres both controls in the usable strip body for mobile actionability, blocks lasso on the Mix surface, and consumes the `bevyPanel.moleculeMix` skin group from `panel_skin.js`.
+- Molecule List projection reuses `project_view_list_content.js`, `bevy_panel_selectable_list.js`, and the extracted shared `bevy_panel_virtual_list.js` window math; main Create palette ownership remains `main_menu_content_runtime.js` plus the canonical registered Text, Draw, Code and Page tools.
+- `project_view_molecule_info.js` projects Molecule/Section/Track properties into the existing Info runtime and enters the existing contextual rail in rail-only mode; `atome_contextual_edit_runtime.js` owns that generic disposable virtual-target seam.
+- `runtime_transport.js` owns both scoped Molecule playback and the ephemeral ordered List sequence projection. `runtime.js` coordinates existing Record schedulers at the returned List offsets; `timeline_actions.js` owns the UI action registrations.
+- `render/timeline_scene.js` owns the two time bands, left-to-right ruler ticks, Section boundaries, Record regions, non-destructive crop handles, block-loop repetitions and the shared playhead projection.
+- Removed code: `eVe/intuition/tools/molecule/panel/index.js`, `footer_tools_contract.js`, and `migrateMoleculeTimelineSnapshot`.
+- Focused coverage: `tests/probes/molecule_v2_structure.test.mjs` plus the maintained `npm run test:molecule` manifest.
+- Exhaustive acceptance: `tests/probes/molecule_eve_ui_acceptance_probe.mjs` owns one real UI journey and its optional audio/video Record/playback endurance; `molecule_ui_acceptance_support.mjs` owns canvas-to-client hit geometry plus real mouse/touch move, crop, lasso, zoom and split routing; `scripts/run_molecule_ui_{matrix,repeat}.mjs` compose deterministic visual and repetition campaigns; `tests/performance/molecule_acceptance_performance.mjs` owns the 30-run kernel/virtualization budgets.
+- `scripts/run_molecule_acceptance_repeat.mjs` runs the complete acceptance three times without retry and writes one machine-readable campaign report while assigning distinct visual and endurance evidence tags to every pass.
+- Platform acceptance: `platforms/desktop-tauri/src/local_http_navigation.rs` owns bounded local-listener readiness for both `main.rs` and `lib.rs`; `build:molecule:tauri` builds the current debug `.app`; `build:molecule:ios` builds the app and AUv3 extension for the Simulator; and `build:molecule:ios:device` signs the generic iPhoneOS app plus embedded AUv3 extension without claiming physical-device interaction.
 - `atome_contextual_edit_{runtime,model}.js`: transient preview index and Bevy
   rail spacing. `atome_edit_footer_{runtime,model_runtime}.js` reloads and
   persists the established `footer_tools` list.

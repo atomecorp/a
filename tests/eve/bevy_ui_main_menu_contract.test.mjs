@@ -988,6 +988,7 @@ test('BevyUI palette projects complete content before motion and coalesces GPU b
     const scheduledFrames = [];
     const pendingMotions = [];
     const submitted = [];
+    let renderCount = 0;
     const requestFrame = (callback) => {
         scheduledFrames.push(callback);
         return scheduledFrames.length;
@@ -998,6 +999,7 @@ test('BevyUI palette projects complete content before motion and coalesces GPU b
         state,
         buildTree: () => buildBevyMainMenuTree({ content, surface, handedness: 'right', itemSize: 60, state }),
         render: async () => {
+            renderCount += 1;
             structuralTree = controller.decorateTree(buildBevyMainMenuTree({
                 content, surface, handedness: 'right', itemSize: 60, state
             }));
@@ -1062,6 +1064,11 @@ test('BevyUI palette projects complete content before motion and coalesces GPU b
     pendingMotions.shift()();
     await flush();
     assert.equal(controller.active, false);
+    assert.equal(renderCount, 2, 'settlement must reconcile the final visual and hit-test tree once');
+    assert.deepEqual(
+        findNode(structuralTree.root, childId).style.position,
+        motion.targets.find((target) => target.id === childId).finalPosition
+    );
     controller.cancel();
 });
 

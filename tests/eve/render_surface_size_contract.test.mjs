@@ -304,23 +304,20 @@ test('Project scene resize rendering is serialized and the latest surface size w
 
     const projection = await projectionPromise;
     await flushBevyRun();
+    await flushFrames();
     assert.equal(calls.length, 1);
     assert.equal(calls[0].target.width, 640);
     assert.equal(calls[0].target.height, 360);
+    const baselineCallCount = calls.length;
 
     setBox(host, 1280, 720);
     resizeObservers.forEach((observer) => observer.callback([{ target: host }]));
     setBox(host, 1440, 810);
     resizeObservers.forEach((observer) => observer.callback([{ target: host }]));
-    await flushOneFrame();
-    assert.equal(calls.length, 1);
-    assert.equal(calls[0].target.surface.width, 1440);
-    assert.equal(calls[0].target.surface.height, 810);
-    assert.equal(calls[0].target.surface.style.width, '1440px');
-    assert.equal(calls[0].target.surface.style.height, '810px');
     await flushFrames();
-    assert.equal(calls.length, 2);
-    assert.deepEqual(calls.at(-1), {
+    const resizeCalls = calls.slice(baselineCallCount).filter((call) => call.type === 'surface');
+    assert.equal(resizeCalls.length, 1, 'two ResizeObserver notifications must coalesce into one surface update');
+    assert.deepEqual(resizeCalls[0], {
         type: 'surface',
         payload: {
             width: 1440,

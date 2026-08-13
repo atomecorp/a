@@ -132,6 +132,7 @@ import { installSharedAVContracts } from './av_contracts.js';
   audio.set_param = (arg = {}) => {
     const id = arg && (arg.id || arg.clip_id || arg.clipId || arg.voiceId || arg.voice_id);
     if (arg?.paramId === 'volume' || arg?.paramId === 'gain') return coreCall('setVoiceGain', id ? { voiceId: id, gain: arg.value } : arg);
+    if (arg?.paramId === 'pan' || arg?.paramId === 'panning') return coreCall('setVoicePan', id ? { voiceId: id, pan: arg.value } : arg);
     if (arg?.paramId === 'playback_rate' || arg?.paramId === 'speed') return coreCall('setVoiceRate', id ? { voiceId: id, rate: arg.value } : arg);
     return callBackendMethod('set_param', arg);
   };

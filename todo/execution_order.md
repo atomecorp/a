@@ -169,6 +169,13 @@ Sources principales:
 - todo/cleanup_architecture/file_size_inventory_2026-07-14.md
 - todo/dev_ops/developer-experience.md
 - todo/molecule/PROJET_MOLECULE_DEBUG.md
+- todo/New work/atome_songlist_full_spec.md
+- todo/New work/atome_toolbox_addons_spec.md
+- todo/audit_execution_plan.md
+- todo/context_tools.md
+- todo/perf_audit_2026-08-09.md
+- todo/perf_parity_html.md
+- todo/remote_session_audit.md
 - done/molecule/molecule-status-2026-04-28.md
 - todo/rendering_graphics/robust_bevy_regression_fix_prompt_en.md
 - todo/sharing_search_monitoring/tool_monitor.md
@@ -259,6 +266,8 @@ checked (42.86%).
 
 Sources principales:
 
+- todo/1- condition.md
+- todo/2- Granularity_Validation.md
 - todo/cleanup_architecture/file_size_and_coding_standards_remediation.md
 
 Ces regles s'appliquent a toutes les phases restantes ci-dessous:
@@ -713,12 +722,15 @@ Sources principales:
 Taches:
 
 - [ ] Traiter les bugs Molecule dans l'ordre du guide trouble solving.
-- [ ] Ajouter ou mettre a jour les probes/tests Molecule.
-- [ ] Inventorier les noms mtrack, mtrax, mtracks, hmtracks.
-- [ ] Lancer le renommage progressif Molecule seulement apres stabilisation fonctionnelle.
-- [ ] Garder les aliases legacy uniquement aux frontieres publiques documentees.
-- [ ] Migrer le chrome visible Molecule vers Bevy et supprimer son panel DOM selon V2.12 apres la phase 3 ter.
-- [ ] Restaurer le contrat canonique marqueurs -> sections -> Cells par piste de V2.13, puis supprimer toute implementation Cells DOM ou etat parallele restant.
+- [x] Ajouter et maintenir les probes/tests Molecule v2, l'UI reelle, le visuel, la performance, l'endurance et les builds de plateforme dans un manifeste d'acceptation unique.
+- [x] Inventorier puis retirer de la route active les noms mtrack, mtrax, mtracks et hmtracks devenus incompatibles avec le contrat v2.
+- [x] Stabiliser directement le nom Molecule sur la route v2, sans migration de donnees ni renommage progressif de l'ancien format.
+- [x] Retirer les aliases legacy de la route Molecule v2 conformement au contrat sans compatibilite historique.
+- [x] Migrer le chrome visible Molecule vers Bevy et supprimer son panel DOM et le contrat footer orphelin selon V2.12.
+- [x] Remplacer le contrat Marker/Cell par le schema Molecule v2 canonique `Molecule -> Section -> Piste`, sans compatibilite historique; supprimer le convertisseur v1, le panel DOM et son footer orphelin; ajouter Sections, Pistes, groupes, regions Record, crop, boucles, quantification et les outils API correspondants.
+- [x] Terminer l'acceptation executable Molecule v2: interactions Liste, rail Info editable, capture generique et Record region, transports scopes, Mixage, UI/visuel WebGPU, Tauri natif, builds iOS/AUv3, performance et endurance.
+- [x] Ajouter l'activite Timeline continue et les boucles Apple-style par bloc comme projections du meme snapshot v2.
+- [ ] Valider les portes physiques restantes sur iPhone et iPad connectes, puis le chemin exact `plugin_input` dans un vrai hote AUv3 avec le composant installe; aucune preuve Simulator/Web/Tauri ne peut fermer cette ligne.
 
 Rapports d'avancement Phase 4:
 
@@ -963,10 +975,10 @@ Taches:
 Every maintained todo family is assigned to an execution phase. A file may not be executed outside its assigned phase.
 
 - Phase 3 ter: `todo/ui_bevy/`, `todo/eve_features/menu_interactions.md`, `todo/eve_features/calendar_todos.md`, `todo/eve_features/map_localization.md`, `todo/communication_social/matrix_flower_context_menu.md`, `todo/rendering_graphics/robust_bevy_regression_fix_prompt_en.md`, `todo/cleanup_architecture/system_ui_component_ssot.md`, `todo/cleanup_architecture/v2_full_migration_framework.md`.
-- Phase 4: `todo/molecule/`, `todo/media_handling/MTraX_edition.md`, `todo/media_handling/RUNNING_VIDEO_AUDIO_SYNC_PLAN.md`.
+- Phase 4: `todo/molecule/`, `todo/New work/`, `todo/media_handling/MTraX_edition.md`, `todo/media_handling/RUNNING_VIDEO_AUDIO_SYNC_PLAN.md`.
 - Phase 5: `todo/media_handling/`.
 - Phase 6: `todo/sharing_search_monitoring/`, `todo/communication_social/mail.md`, `todo/communication_social/matrix.md`, `todo/communication_social/matrix_flower_context_menu.md`, `todo/communication_social/social_network_tool.md`.
-- Phase 7: remaining `todo/cleanup_architecture/` files excluding `system_ui_component_ssot.md` and `v2_full_migration_framework.md`, `todo/audits/`, `todo/rendering_graphics/`, `todo/tools/`, `todo/dev_ops/developer-experience.md`.
+- Phase 7: remaining `todo/cleanup_architecture/` files excluding `system_ui_component_ssot.md` and `v2_full_migration_framework.md`, `todo/audits/`, `todo/rendering_graphics/`, `todo/tools/`, `todo/dev_ops/developer-experience.md`, `todo/1- condition.md`, `todo/2- Granularity_Validation.md`. The two root documents are transverse specifications only; they do not authorize implementation until an executable Phase 7 task and its exit criteria are registered.
 - Phase 8: `todo/communication_social/user_auth.md`, `todo/eve_features/Notification_tool.md`, `todo/eve_features/eve_accessibility.md`.
 - Phase 9: `todo/ai_voice/`.
 - Phase 10: `todo/midi/`, `todo/dev_ops/`, `todo/communication_social/apple_mail_security.md`, `todo/eve_features/prompt_modification_menu_mvp_v146_ios_touch_tests.md`, `todo/tests/`, `todo/eVe_plugin.md`, `todo/execution_order.md` follow-up documentation work.

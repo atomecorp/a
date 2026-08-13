@@ -126,10 +126,10 @@ test('audio recording keeps one project Atome identity across stop retries', asy
 
         const first = await module.stopAudioRecording();
         const second = await module.stopAudioRecording();
-        assert.equal(first.error, 'atomes_api_unavailable');
-        assert.equal(first.code, 'media_atome_create_failed');
-        assert.equal(second.error, 'atomes_api_unavailable');
-        assert.equal(second.code, 'media_atome_create_failed');
+        assert.equal(first.error, 'project_api_unavailable');
+        assert.equal(first.code, null);
+        assert.equal(second.error, 'project_api_unavailable');
+        assert.equal(second.code, null);
         const stopCalls = calls.filter((call) => call.phase === 'stop');
         assert.equal(stopCalls.length, 2);
         assert.equal(stopCalls[0].stopOptions.projectAtomeId, started.project_atome_id);

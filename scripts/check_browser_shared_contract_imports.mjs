@@ -7,6 +7,7 @@ const SOURCE_ROOTS = ['eVe', 'atome/src'];
 const IGNORED_DIRS = new Set(['node_modules', '.git', 'dist', 'build', 'temp', 'coverage']);
 const SHARED_CONTRACT_IMPORT_RE = /from\s+['"`]([^'"`]*atome\/shared\/atome_contract\.js|[^'"`]*shared\/atome_contract\.js)['"`]/g;
 const BROWSER_SHARED_CONTRACT_RE = /(?:^|\/)atome\/src\/shared\/atome_contract\.js$|(?:^|\/)src\/shared\/atome_contract\.js$/;
+const DUPLICATE_SQUIRREL_IMPORT_RE = /(?:from\s+|import\s*\(\s*)['"`]([^'"`]*atome\/src\/squirrel\/[^'"`]+)['"`]/g;
 
 const walk = (dir, files = []) => {
     if (!fs.existsSync(dir)) return files;
@@ -49,6 +50,16 @@ export function findBrowserSharedContractImportViolations(text, file = '<inline>
     return violations;
 }
 
+export function findDuplicateSquirrelAuthorityImports(text, file = '<inline>') {
+    if (!String(file).replace(/\\/g, '/').startsWith('eVe/')) return [];
+    return [...text.matchAll(DUPLICATE_SQUIRREL_IMPORT_RE)].map((match) => ({
+        file,
+        line: lineForIndex(text, match.index || 0),
+        rule: 'canonical_squirrel_module_url',
+        message: 'eVe modules must import #squirrel/* so browser and Node runtimes share one Squirrel module authority.'
+    }));
+}
+
 export function scanBrowserSharedContractImports(root = ROOT) {
     const violations = [];
     for (const sourceRoot of SOURCE_ROOTS) {
@@ -56,6 +67,7 @@ export function scanBrowserSharedContractImports(root = ROOT) {
             const rel = path.relative(root, file).split(path.sep).join('/');
             const text = fs.readFileSync(file, 'utf8');
             violations.push(...findBrowserSharedContractImportViolations(text, rel));
+            violations.push(...findDuplicateSquirrelAuthorityImports(text, rel));
         }
     }
     return violations;

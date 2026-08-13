@@ -123,6 +123,11 @@ extension AppNativeAudioController {
                     let gain = self.gainToLinear(
                         self.resolveDouble(payload, ["gain"], fallback: 1)
                     )
+                    let pan = Float(self.clamp(
+                        self.resolveDouble(payload, ["pan"], fallback: 0),
+                        min: -1,
+                        max: 1
+                    ))
                     let durationSeconds = self.resolveOptionalDouble(
                         payload,
                         ["durationSeconds", "duration_seconds"]
@@ -140,6 +145,7 @@ extension AppNativeAudioController {
                     let rateNode = AVAudioUnitVarispeed()
                     rateNode.rate = rate
                     playerNode.volume = gain
+                    playerNode.pan = pan
                     let playbackFormat: AVAudioFormat
                     if clip.isAudioFile, let format = clip.processingFormat {
                         playbackFormat = format
@@ -295,6 +301,24 @@ extension AppNativeAudioController {
                     if let voice = self.voices[id] {
                         voice.playerNode.volume = self.decibelsToLinear(decibels)
                         self.complete(completion, payload: ["success": true, "id": id])
+                    } else {
+                        self.complete(
+                            completion,
+                            payload: ["success": false, "id": id],
+                            error: "Voice '\(id)' not found"
+                        )
+                    }
+
+                case "audio_set_pan":
+                    let id = self.resolveString(payload, ["id"])
+                    let pan = Float(self.clamp(
+                        self.resolveDouble(payload, ["pan"], fallback: 0),
+                        min: -1,
+                        max: 1
+                    ))
+                    if let voice = self.voices[id] {
+                        voice.playerNode.pan = pan
+                        self.complete(completion, payload: ["success": true, "id": id, "pan": pan])
                     } else {
                         self.complete(
                             completion,

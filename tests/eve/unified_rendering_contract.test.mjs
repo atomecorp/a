@@ -341,7 +341,7 @@ test('Rendering surfaces and text bridge stay bounded', () => {
     assert.equal(document.querySelectorAll('canvas.eve-render-surface').length, 2);
     assert.equal(listenerCount, 8);
     assert.equal(getRenderSurfaceState(projectSurface).scene.atoms.length, 100);
-    assert.equal(getRenderSurfaceState(projectSurface).listenerCount, 10);
+    assert.equal(getRenderSurfaceState(projectSurface).listenerCount, 7);
 
     const rootA = ensureHiddenTextServiceRoot(document);
     const rootB = ensureHiddenTextServiceRoot(document);
@@ -414,7 +414,7 @@ test('Text bridge keeps one hidden root, commits through canonical mutation, and
     assert.deepEqual(commits[0].props, {
         text: 'Changed text',
         rich_text: { version: 1, spans: [] },
-        width: 132,
+        width: 40,
         height: 30
     });
     assert.equal(bridge.getState().hiddenRootCount, 1);

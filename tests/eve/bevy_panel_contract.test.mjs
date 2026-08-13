@@ -29,6 +29,28 @@ import {
     normalizeActionButtonHandlers,
     normalizeActionButtonPresentation
 } from '../../atome/src/squirrel/components/action_button_contract.js';
+import {
+    BEVY_CORNER_RESIZE_GRIP_ICON_SOURCE,
+    BEVY_MENU_TOKENS
+} from '../../eVe/intuition/ribbon/bevy_ui_menu_surface.js';
+import { EVE_BUTTON_SKIN_TOKENS } from '../../eVe/elements/skin/button_skin.js';
+import { resolveBevyIconButtonSurface } from '../../eVe/intuition/shared/bevy_ui_icon_button.js';
+
+// Load the panel application graph once outside individual timeout budgets.
+// Some legacy Squirrel modules inspect HTMLElement during evaluation, so the
+// import environment needs the same minimal browser contract as the tests.
+const importDom = new JSDOM('<!doctype html><html><body></body></html>');
+globalThis.window = importDom.window;
+globalThis.document = importDom.window.document;
+globalThis.HTMLElement = importDom.window.HTMLElement;
+globalThis.CustomEvent = importDom.window.CustomEvent;
+const { createPanelSurfaceRuntime } = await import('../../eVe/intuition/runtime/eve_intuition/panel_surface_runtime.js');
+const { bevyPanelRuntimeState, registerBevyPanelSurface } = await import('../../eVe/intuition/runtime/bevy_panel/bevy_panel_runtime.js');
+const { contactSurface } = await import('../../eVe/intuition/runtime/bevy_panel/bevy_panel_contact_runtime.js');
+const { createInfoPanelSurface } = await import('../../eVe/intuition/runtime/bevy_panel/bevy_panel_info_runtime.js');
+const { registerBevyPanelSurfaces } = await import('../../eVe/intuition/runtime/bevy_panel/bevy_panel_surfaces.js');
+const { panelLabSurface, panelLabSurfaceDefinition } = await import('../../eVe/intuition/runtime/bevy_panel/bevy_panel_lab_surface.js');
+const { EVE_COMMON_SKIN_TOKENS } = await import('../../eVe/elements/skin/index.js');
 
 const repoRoot = dirname(dirname(dirname(fileURLToPath(import.meta.url))));
 
@@ -158,8 +180,6 @@ test('Bevy panel contract removes tools dock and keeps system controls in footer
         load: async () => [],
         onUpdate: () => () => false
     };
-    const { createPanelSurfaceRuntime } = await import('../../eVe/intuition/runtime/eve_intuition/panel_surface_runtime.js');
-    const { bevyPanelRuntimeState } = await import('../../eVe/intuition/runtime/bevy_panel/bevy_panel_runtime.js');
     bevyPanelRuntimeState.runtime = null;
     bevyPanelRuntimeState.mounted.clear();
 
@@ -257,7 +277,6 @@ test('Bevy panel contract removes tools dock and keeps system controls in footer
     assert.equal(accent.style.border, undefined);
     assert.equal(accent.on, undefined);
     assert.ok(findNode(tree, 'eve_bevy_panel_timeline_footer_close_indicator').style.z_index > accent.style.z_index);
-    const { BEVY_CORNER_RESIZE_GRIP_ICON_SOURCE } = await import('../../eVe/intuition/ribbon/bevy_ui_menu_surface.js');
     const leftGripIcon = findNode(tree, 'eve_bevy_panel_timeline_footer_resize_left_icon');
     const rightGripIcon = findNode(tree, 'eve_bevy_panel_timeline_footer_resize_icon');
     const footerTitle = findNode(tree, 'eve_bevy_panel_timeline_footer_status');
@@ -296,10 +315,6 @@ test('Calendar Contact and Info panel surfaces route to Bevy UI instead of legac
         },
         unmountTree: async (id) => ({ id })
     };
-    const { createPanelSurfaceRuntime } = await import('../../eVe/intuition/runtime/eve_intuition/panel_surface_runtime.js');
-    const { bevyPanelRuntimeState, registerBevyPanelSurface } = await import('../../eVe/intuition/runtime/bevy_panel/bevy_panel_runtime.js');
-    const { contactSurface } = await import('../../eVe/intuition/runtime/bevy_panel/bevy_panel_contact_runtime.js');
-    const { createInfoPanelSurface } = await import('../../eVe/intuition/runtime/bevy_panel/bevy_panel_info_runtime.js');
     bevyPanelRuntimeState.runtime = null;
     bevyPanelRuntimeState.mounted.clear();
     registerBevyPanelSurface(contactSurface);
@@ -378,12 +393,6 @@ test('Panel Lab is development-gated and uses the shared panel skin', async () =
         updateTree: async ({ tree }) => { mounted.push(tree); return tree; },
         unmountTree: async (id) => ({ id })
     };
-    const { registerBevyPanelSurfaces } = await import('../../eVe/intuition/runtime/bevy_panel/bevy_panel_surfaces.js');
-    const { panelLabSurface, panelLabSurfaceDefinition } = await import('../../eVe/intuition/runtime/bevy_panel/bevy_panel_lab_surface.js');
-    const { bevyPanelRuntimeState, registerBevyPanelSurface } = await import('../../eVe/intuition/runtime/bevy_panel/bevy_panel_runtime.js');
-    const { createPanelSurfaceRuntime } = await import('../../eVe/intuition/runtime/eve_intuition/panel_surface_runtime.js');
-    const { EVE_COMMON_SKIN_TOKENS, EVE_PANEL_SKIN_TOKENS } = await import('../../eVe/elements/skin/index.js');
-    const { BEVY_MENU_TOKENS } = await import('../../eVe/intuition/ribbon/bevy_ui_menu_surface.js');
     bevyPanelRuntimeState.runtime = null;
     bevyPanelRuntimeState.mounted.clear();
     registerBevyPanelSurfaces();
@@ -476,8 +485,6 @@ test('Panel Lab is development-gated and uses the shared panel skin', async () =
     assert.deepEqual(actionDestructive.style.background, BEVY_PANEL_TOKENS.actionButton.destructiveBackground);
     assert.equal(actionBusy.style.opacity, BEVY_PANEL_TOKENS.actionButton.busyOpacity);
     assert.equal(actionDisabled.style.opacity, BEVY_PANEL_TOKENS.actionButton.disabledOpacity);
-    const { EVE_BUTTON_SKIN_TOKENS } = await import('../../eVe/elements/skin/button_skin.js');
-    const { resolveBevyIconButtonSurface } = await import('../../eVe/intuition/shared/bevy_ui_icon_button.js');
     const buttonTokens = EVE_BUTTON_SKIN_TOKENS.bevyButton;
     assert.equal(actionNeutral.style.radius, buttonTokens.radiusPx);
     assert.equal(actionNeutral.style.shadow, buttonTokens.surface.shadow);

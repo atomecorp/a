@@ -373,6 +373,13 @@ import {
           emitError('set_volume(' + id + ')', e);
           throw e;
         });
+      } else if (arg.paramId === 'pan' || arg.paramId === 'panning') {
+        return ensureRuntimeMode({ audioManager: false }).then(function () {
+          return invoke('audio_set_pan', { id: id, pan: Number(arg.value) || 0 });
+        }).catch(function (e) {
+          emitError('set_pan(' + id + ')', e);
+          throw e;
+        });
       } else if (arg.paramId === 'playback_rate' || arg.paramId === 'speed') {
         return ensureRuntimeMode({ audioManager: false }).then(function () {
           return invoke('audio_set_playback_rate', { id: id, rate: arg.value || 1 });

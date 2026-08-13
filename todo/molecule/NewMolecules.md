@@ -1,219 +1,272 @@
-# NewMolecules — Cahier des charges: the Molecule timeline editor, rebuilt on Bevy/WebGPU
+# Molecule v2 — Canonical Product And Implementation Specification
 
-Status: Active specification and implementation backlog. V1 and V2.3 items marked `DONE` describe verified implementation; unchecked V2/V3 items remain active work.
+Status: active and authoritative.
 
-Historical companion: [`full_bevy_renderer.md`](../../done/full_bevy_renderer.md). This document is the active work backlog for reintegrating the **Molecule timeline editor** (the system formerly known as MTrax) entirely on the single Bevy/WebGPU project canvas `#eve_surface_project`, by **reusing** the already-present, mtrax-free building blocks rather than rewriting from zero.
+This document replaces the former Molecule/MTraX editor backlog. It defines a
+clean v2 product model. Schema-v1 timelines, Marker/Cell models, MTraX aliases,
+and historical compatibility paths are not supported.
 
-Legend: `- [ ]` todo · `- [x]` done · `- [~]` in progress.
+## 1. Product definition
 
----
+A Molecule is an explicitly identified complex Atome that owns structured
+content. A song, video edit, graphic group, page, or mixed-media composition is
+a use of Molecule rather than a competing object type.
 
-## 0. Decisions locked with the product owner (2026-06-19)
-These came out of the post-deletion audit + a two-round scoping study. They are binding for this spec.
-
-| # | Decision | Choice |
-|---|----------|--------|
-| D1 | **Foundation** | **REUSE** the guarded kernel `eVe/intuition/tools/molecule/` (functional, tested, no mtrax dependency, and connected to the group runtime). Build rendering + interaction on Bevy *on top of it*. Do **not** rewrite from zero. |
-| D2 | **Data format** | **REUSE** the canonical format of `documentations/Molecules.md` (`eve.timeline` / `…automation` / `…effect`), already implemented in `tools/molecule/kernel/schemas.js`. |
-| D3 | **API/MCP-first** | EVERY editor operation (cut/copy/paste/split/erase, move/trim, automation, track ops, transport…) is exposed as a programmatic **API + MCP tool** — scriptable, **batchable**, AI-drivable. No operation is UI-only. |
-| D4 | **Modular tracks** | A **track-type registry** so new kinds (chords, tablature, script-launch, timeline-trigger, …) plug in without touching the core. |
-| D5 | **Time model** | **Musical time (tempo / bars / beats) + seconds**, dual reference. **Kira stays the project playback master clock**; video follows. Exact recording additionally requires a capture source proven to share its declared render clock and locked epoch. |
-| D6 | **History** | Every edit is a **reversible command on eVe's deterministic Time Machine log**; batched API/MCP calls are **atomic** (all-or-nothing → a single undo point). |
-| D7 | **Phasing** | **v1 → v2** (ship a usable, fully-scriptable core editor first; advanced track types after). |
-| D8 | **Exact recording** | Exact overdub is fail-closed and explicitly requested. It is supported only for AUv3 `plugin_input`: capture uses `clock_id="auv3.render"` / `clock_reference="record_start_render_quantum"`, timeline origin uses `timeline_clock_id="auv3.host_transport"`, and both share one locked `clock_epoch`. Generic recording remains a separate contract. |
-
-## 1. Non-negotiable invariants (inherited from `full_bevy_renderer.md` + `.codex/AGENTS.md`)
-- **ONE renderer (Bevy/WebGPU), ONE canvas** `#eve_surface_project`. Every track/clip/overlay/handle and the visible editor chrome render through the shared Bevy UI route. No second surface, no DOM compositor beside Bevy, no offscreen→readback. The only browser exceptions are the minimal application shell and documented hidden text/accessibility services.
-- **Kira is the sole audio engine + master clock**; video follows via `setBevyVideoDecodePlayback` seeks. No rate loop, no unmute.
-- **Recorded clip placement uses integer frames.** Seconds are derived views. Generic recorder metadata must never be promoted to exact timing without the shared-clock capability proof in D8.
-- **No alternate route, no patch/bricolage.** Clean, factored, modular code. Delete anything that can be deleted; reuse existing functions before writing new ones.
-- **API/MCP parity**: anything the UI can do, the API + MCP can do, and vice-versa.
-- Comments/docs in English; temp probes only under `./temp`; persistent tests only under `./tests`; Git read-only.
-
-## 2. Foundation inventory — what already exists (REUSE, do not recreate)
-### 2.1 The guarded kernel `eVe/intuition/tools/molecule/` — **wired**
-| Module | L | Provides |
-|--------|---|----------|
-| `kernel/reducers.js` | 498 | State transitions (the edit operations as pure reducers) |
-| `kernel/schemas.js` | 220 | Data model = the `eve.timeline` format (D2) |
-| `kernel/time_model.js` | 189 | Tempo map + seconds/musical dual-time conversion and snapshot normalization |
-| `kernel/collisions.js`, `kernel/errors.js`, `kernel/index.js` | 142 | Overlap resolution, typed errors, public kernel exports |
-| `track_types/index.js` | 122 | Track-type registry + built-in video/audio/image/text/automation definitions |
-| `session/{session,registry,errors,index,timeline_operations}.js` | 700 | Session lifecycle, multi-session registry, timeline verb aliases, clipboard edits, and atomic operation batches |
-| `persistence/index.js` | 165 | Load/save of molecule state |
-| `recording/index.js` | 500 | Exact recording coordinator: `read/start/stop/cancel/dispose`, clock/epoch validation, persisted-Atome clip commit |
-| `gestures/index.js` | 120 | Interaction logic |
-| `panel/index.js` | 264 | Legacy panel UI, scheduled for retirement in V2.12 |
-| `media/index.js` | 139 | Media clip handling (note: still references a `canvas_webgpu_preview` channel to re-point at Bevy) |
-| `nested/index.js`, `multi_instance/index.js` | 312 | Nested molecules + multiple instances |
-| `runtime.js` | 240 | Entry `installMoleculeGroupTimelineRuntime` + open group timeline API bridge |
-| `index.js` | 10 | `MOLECULE_ENGINE_ID='eve.molecule'`, schema v1, `status: 'guarded_bootstrap'` |
-
-Status confirmed by audit: imports **no** deleted mtrax code; `molecule_session_history` probe **passes**; guarded by `check_molecule_guardrails`; group runtime, recording coordinator, persistence, and Bevy scene bridge are connected.
-
-### 2.2 Already done on Bevy (reuse directly)
-- **M1** per-clip color filters (`video_external.wgsl`, `types.rs`, `video_external_texture.rs`, `bevy_projection_adapter.js`).
-- **M2** built-in transitions (fade/wipe/slide/dissolve/dip).
-- **Decode playback**: `setBevyVideoDecodePlayback` (`bevy_video_decode_source_runtime.js`) drives video frames → external texture; Kira owns audio.
-
-### 2.3 Surviving audio engine (do NOT touch as part of this work)
-- `eVe/core/media_engine/molecule.{js,api,native,scenarios}.js` = the **Kira** audio-session engine (audio-only; video composited by Bevy). Distinct from the editor kernel above.
-
-### 2.4 Wiring seam already reserved
-- `eVe/intuition/runtime/layer_contract.js` already defines `intuition_molecule_layer` (role `molecule`) — the z-order slot on the project scene consumed by the active Intuition runtime and tool genesis paths.
-
-## 3. Architecture pillars
-### A. Track-type registry (D4 — the modularity backbone)
-- A registry mapping `track_type → { schema, reducer ops, Bevy renderer, API/MCP verbs, hit-test, time-domain }`.
-- Built-in (v1): `video`, `audio`, `image`, `text`, `automation`.
-- Plug-in (v2): `chord`, `tablature`, `script_launch`, `timeline_trigger`, `waveform`(overlay).
-- **Adding a track type = registering one module; the core stays closed for modification.**
-
-### B. Data model (D2 + D5)
-- Schemas reused/extended from `kernel/schemas.js`, format per `Molecules.md` (`eve.timeline` / automation / effect).
-- **Dual time** on every time-bearing entity: `{ seconds, musical: { bar, beat, tick } }` resolved through a **tempo map** (BPM + time-signature changes). Seconds remain the render/seek truth (Kira clock); musical time is the editing/quantization layer for chord/tablature/automation.
-- Exact recorded clips additionally persist safe-integer `start_frame`, `duration_frames`, `source_in_frame`, and `source_out_frame`. Their seconds fields are derived from the timeline sample rate and are never the exact-placement authority.
-- Persist through `persistence/` + the sanitized project store.
-
-### C. API + MCP surface (D3 — every operation)
-- **Reuse the existing tool plumbing**: `Agent.registerTool` in `atome/src/squirrel/ai/default_tools.js`, the runtime tool gateway (`invokeRuntimeDefaultTool` → `ui.*`), and the MCP ACL in `atome/src/squirrel/atome/mcp.js`. (These replace the deleted `eve.mtrack.clip.move/crop` tools.)
-- **Namespaces**: AI tools `eve.timeline.*`; runtime tools `ui.timeline.*`.
-- **Verb inventory (non-exhaustive, all batchable)**:
-  - Clips: `clip.move`, `clip.trim`, `clip.split`, `clip.cut`, `clip.copy`, `clip.paste`, `clip.erase`, `clip.duplicate`.
-  - Tracks: `track.add`, `track.remove`, `track.reorder`, `track.set_type`, `track.mute`, `track.solo`.
-  - Automation: `automation.keyframe.add/move/edit/remove`, `automation.curve.set`.
-  - Transport: `transport.play/pause/stop/scrub/seek` (musical or seconds).
-  - Effects/transitions: `effect.set`, `transition.set` (reuse M1/M2).
-  - Advanced (v2): `track.script.attach/launch`, `track.timeline.trigger`, `track.chord.set`, `track.tab.set`, `clip.timestretch`, `clip.set_speed`.
-- **Batch**: `eve.timeline.batch([op, …])` is **atomic** (all-or-nothing) and produces **one** Time Machine entry (D6).
-- Each tool carries `parameters` schema + `capabilities` + `risk_tier`, exposed over MCP with the existing confirmation/ACL policy (mirrors the calendar/bank/contacts tools).
-
-### D. Rendering on Bevy (the single canvas — §1 invariant)
-| Track/feature | Bevy path |
-|---|---|
-| video / image clips | existing material path (M1 filters + M2 transitions) via `bevy_projection_adapter.js` + `setBevyVideoDecodePlayback` |
-| selection / transform handles | new/extended `selection_overlay.rs` (M4) |
-| audio waveform | new/extended `waveform_playback_overlay.rs` (M5.2) |
-| text / karaoke | Bevy text route (M5.1) |
-| chords / tablature | new Bevy overlays (v2), musical-time laid out |
-| playhead / track grid | Bevy overlay driven by transport + tempo map |
-
-All driven from kernel state → `virtual_scene_contract.js` diff → Bevy nodes (the existing projection chain). No DOM rendering of timeline content.
-
-### E. Transport & clock (D5)
-- Kira master clock; `setBevyVideoDecodePlayback` follows for video frames; scrub/seek drive both. Musical↔seconds via the tempo map. A/V-sync logic stays where `full_bevy_renderer.md` mandates (Kira + decode-source seeks).
-- Exact overdub does not infer alignment from Kira/UI time. The capture adapter must prove one supported common clock, the exact integer timeline origin, and a locked epoch. Unsupported sources remain available only through generic recording.
-- **Time-stretch**: clip speed / stretch-to-tempo *without pitch artifacts*, as a processing stage feeding Kira, backed by an **external library** (decision pending — §7, task V2.10). Tempo edits in musical time drive it.
-
-### F. History (D6)
-- Each kernel mutation emits a **reversible command** on eVe's Time Machine deterministic log (replayable identically). A `batch` wraps its ops into one atomic, single-undo entry. This is the contract that makes AI/script batch manipulation safe.
-
-### G. Exact recording coordinator (D8)
-
-- One coordinator is created per open group timeline and exposed through `readGroupTimelineRecording`, `startGroupTimelineRecording`, `stopGroupTimelineRecording`, and `cancelGroupTimelineRecording`.
-- `start` selects exactly one compatible armed track, validates the timeline sample rate and integer frame origin, requires exact capability, then locks the start `clock_epoch`.
-- `stop` accepts only matching render/host-transport clocks, reference, epoch, origin and sample rate; a real earlier `playback_start_frame`; `playback_observed_frame == recording_start_frame`; a positive integer frame count; strictly positive latency fields; and zero overrun/discontinuity. Host compensation is exact and frame-based: `roundtrip_latency_frames = input_latency_frames + output_latency_frames`, and `record_offset_frames_applied` must equal `roundtrip_latency_frames`.
-- Clip placement is `timeline_origin_frame - roundtrip_latency_frames`, clamped with matching source-in trimming. The real playback-start lead is timing evidence and is not applied again.
-- The capture controller persists the recorded media as an Atome first. The coordinator requires that Atome id before applying the single canonical `molecule.clip.add` mutation; persistence and Bevy rendering follow from the normal session commit.
-- `cancel` discards without a clip. `dispose` waits for an in-flight start and cancels any active capture; group close calls it before clearing the scene and disposing the session.
-- Exact capability is currently limited to an explicitly requested AUv3 `plugin_input` take (`auv3.render` capture / `auv3.host_transport` timeline origin / locked epoch). Browser, desktop/Tauri, iOS app, AUv3 microphone, AUv3 plug-in output/mix, and video exact requests are rejected with `av_sample_accurate_overdub_unsupported`. Their supported generic recorder paths remain usable.
-- Video stays exact-unsupported until every video/container PTS has a validated mapping to the audio sample timeline in that locked epoch.
-
-### H. Marker-defined sections and track Cells (restored product invariant)
-
-The former production Molecule editor had a `loop_cells` system. Its product behavior is mandatory for the rebuilt editor and must be restored as canonical model logic, not recreated as DOM state.
+The shared hierarchy is:
 
 ```text
-ordered timeline markers
-  -> marker-defined sections (the intervals between adjacent boundaries)
-    -> one Cell per section × track
-      -> operations on the real clips, automation, recording targets, and playback state in that interval
+Molecule list
+  -> Molecule
+    -> Section
+      -> Track
+        -> referenced content Atomes
 ```
 
-Rules:
+The Molecule owner is an Atome. Sections and Tracks are canonical structures
+inside its `molecule_timeline` snapshot. Referenced media and creative content
+remain real Atomes. No Cell object or copied interval content exists.
 
-- Markers are the canonical temporal boundaries. A timeline start boundary and end boundary complete the partition when no explicit marker exists at either edge.
-- A section is derived from adjacent ordered marker identities, never from a DOM position, local layout cache, or copied clip list.
-- A Cell is the projection of one section on one track. Its stable identity derives from the section boundary marker ids and `track_id`; it has no independent start/end authority.
-- Creating, deleting, reordering, moving, or renaming a marker recomputes the affected sections and Cells in one deterministic mutation. Moving a marker changes the temporal extent of its neighbouring Cells immediately.
-- Renaming a marker updates the labels of the affected section/Cells. Marker labels are presentation and navigation names; their ids remain stable references.
-- Activating, disabling, coloring, arming, selecting, or assigning a recording behavior to a Cell is persisted against its canonical Cell identity. Stale Cell configuration is pruned when its boundary markers or track disappear.
-- A Cell always acts on the real content of its track interval. Editing a Cell must atomically modify the actual clips, automation, media regions, record target, or playback behavior in that interval; it must never create a shadow Cell-owned copy of track content.
-- Recording into one or many armed Cells writes to their explicit track/section targets through the canonical recording pipeline. Multi-Cell operations are one atomic history entry.
-- Playback, follow/repeat, launching, and future sampler behavior may target a Cell, but their runtime state remains derived from the canonical marker/section/Cell model.
-- API/MCP parity is mandatory: marker and Cell operations are available programmatically and batchable; no Cell behavior is UI-only.
+The list shows Molecules only. It stays visually shallow until the user opens
+the hierarchy. Technical level labels are not shown: rows display only their
+own names, initially `Molecule 1`, `Section 1`, and `Track 1` through i18n.
 
-The old `entryId::trackId` convention is evidence of the former behavior, not the target schema. The rebuilt model must expose explicit `marker_id`, derived `section_id`, and `cell_id` semantics so ownership, migration, replay, and validation remain unambiguous.
+## 2. Non-negotiable architecture
 
-Required operations:
+- One shared Bevy/WebGPU compositor and the active `#eve_surface_project`.
+- No visible Molecule DOM, canvas-per-item, private renderer, or fallback.
+- `molecule_timeline` on the owner Atome is the sole durable snapshot.
+- All durable writes use the canonical commit pipeline and deterministic Time
+  Machine history.
+- The Molecule kernel remains pure. Views, transport, media resources, and
+  caches are disposable projections or bounded runtime state.
+- Every user operation has API and MCP parity and supports atomic batches.
+- Kira remains the playback clock. Integer frames/samples are canonical;
+  seconds and musical positions are derived projections.
+- Existing Squirrel controls, Bevy list primitives, menu, contextual rail,
+  media controllers, and render adapters must be reused.
+- There is no schema-v1 reader, migration, compatibility alias, or shim.
 
-- `marker.create/update/move/rename/delete`
-- `section.list/read`
-- `cell.list/read/select/activate/deactivate/arm/unarm/color/record.configure`
-- `cell.content.split/clear/duplicate/move/transform`
-- `cell.play/stop/follow/repeat`
-- `cell.record.start/stop`
+## 3. Canonical v2 snapshot
 
-All operations that change boundaries or content must update the marker/section/Cell projection and the affected real track content in the same canonical transaction.
+The snapshot schema is `eve.molecule.timeline`, version `2`, with:
 
-## 4. Phase v1 — Core editor on Bevy (usable + fully scriptable)
-- [x] **V1.0 Finish the deletion (pre-work cleanup). DONE 2026-06-19.** Removed only the deleted-file contracts + the 2 orphaned `mtrack_perf_*` scripts + stale selectors + 249 build artifacts; kept the legitimate molecule-purity / anti-reintroduction guards. The audit had found stale tooling referencing deleted mtrax files that **broke governance**:
-  - `scripts/check_molecule_guardrails.mjs` (l.13-14, 95-98) requires deleted `domains/mtrax/ui/{styles,preview_styles}.js` → `check:molecule-guardrails` **FAILS**. Re-point the contract at the new molecule surface (or drop it).
-  - `scripts/check_no_fallbacks.mjs` carries the same stale contract → `check:no-fallbacks` **FAILS**. Fix.
-  - Delete orphaned `scripts/mtrack_perf_guard.mjs` + `scripts/mtrack_perf_suite_summary.mjs`; fix `scripts/export_dom_subtrees.mjs:36` (`.eve-mtrack-timeline`).
-  - Clear stale build artifacts (249 files under `platforms/**/target/**/eVe/domains/mtrax/`) via `cargo clean`/rebuild.
-  - **Exit MET ✅**: `check:molecule-guardrails` (19) + `check:no-fallbacks` (19) + `check:mutation-ownership-guardrails` + `check:syntax` (673) + `export_dom_subtrees` test all green.
-- [x] **V1.1 Wire the kernel. DONE 2026-06-19.** `installMoleculeGroupTimelineRuntime(window)` is called from the `tool_genesis.js` boot block → API registered into the group-timeline registry consumed by `tool_genesis` + `group_visual_runtime`. Boot probe PASS (`window.eveMoleculeTimelineApi` = object, `getActiveGroupTimelineId()` = `''`, 0 console errors, Bevy canvas intact). _Layer binding + `canvas_webgpu_preview` re-point re-scoped to V1.5 (render-path); `moleculeStores` → V1.4._
-- [x] **V1.2 Track-type registry. DONE 2026-06-19.** Added `track_types/index.js` as the pure registry owner with built-in `video/audio/image/text/automation` types, kept the existing aggregate `mixed` type explicit, and made `kernel/schemas.js` + `kernel/reducers.js` consume the registry for track kinds and clip compatibility. Validation: `node --test tests/probes/molecule_track_type_registry.test.mjs` PASS 3/3; `npm run test:molecule` PASS 4 suites; `npm run check:molecule-guardrails` PASS 20 files; `npm run check:no-fallbacks` PASS 20 files.
-- [x] **V1.3 Dual time model. DONE 2026-06-19.** Added `kernel/time_model.js` as the pure tempo-map owner, with deterministic seconds↔musical conversion and `normalizeTimelineTimeModel(...)`; `kernel/schemas.js` now validates `timebase.tempo_map`, transport loop/playhead dual references, clip time references, and marker time references; reducers normalize edited timeline snapshots after clip/transport/marker/tempo edits; persistence reload/migration upgrades existing snapshots into the dual-time model. Validation: `node --test tests/probes/molecule_dual_time_model.test.mjs` PASS 4/4; `npm run test:molecule` PASS 5 suites; `npm run check:molecule-guardrails` PASS 21 files; `npm run check:no-fallbacks` PASS 21 files; `npm run check:syntax` PASS 735 files.
-- [x] **V1.4 API + MCP surface. DONE 2026-06-19.** Session operations now normalize `eve.timeline.*` / `ui.timeline.*` verbs into the existing kernel reducers, expose `clip.copy/cut/paste/duplicate` through session-local clipboard state, and keep modifying batches atomic with one `molecule.batch` undo point. `window.eveMoleculeTimelineApi` exposes read/single-operation/batch APIs for the active group timeline; `atome/src/squirrel/ai/default_tools_timeline.js` registers `eve.timeline.*`; `eVe/intuition/tools/timeline_actions.js` registers canonical `ui.timeline.*` runtime tools outside the Molecule module; `mcp_security_policy.js` gates `eve.timeline.*` and `ui.timeline.*` with `timeline.read`/`timeline.write`. Validation: `node --test tests/probes/molecule_session_history.test.mjs atome/src/squirrel/ai/default_tools_timeline.test.mjs atome/src/squirrel/atome/mcp.timeline_policy.test.mjs` PASS 7/7; `node --test atome/src/squirrel/atome/mcp.security_surface.test.mjs atome/src/squirrel/atome/mcp.platform_surface.test.mjs` PASS 2/2; `npm run test:molecule` PASS 5 suites; `npm run check:molecule-guardrails` PASS 22 files; `npm run check:no-fallbacks` PASS 22 files; `npm run check:syntax` PASS 738 files.
-- [x] **V1.5 Render** multitrack + clips + playhead + scrub on `#eve_surface_project` (M3); reuse M1/M2 for filters/transitions. **DONE 2026-06-20.** Pure projection owner `eVe/intuition/tools/molecule/render/timeline_scene.js` maps a timeline snapshot to flat render records (track lanes, clip blocks, single playhead) on the dedicated `molecule` layer via the canonical `virtual_scene_contract.js` seam (no renderer of its own; seconds drive x-layout per D5; clip blocks are `shape` records carrying `clip_kind` so the Bevy projection filter cannot drop source-less clips; per-clip filter/transition forward to the M1/M2 material path when present). Canvas wiring `eVe/intuition/runtime/molecule_timeline_scene_bridge.js` pushes the records onto `#eve_surface_project` through the new batch `project_scene_runtime.js` `updateProjectSceneRecords`, reconciling stale records and clearing on close; exposed as `window.eveMoleculeTimelineApi.renderTimelineScene`/`clearTimelineScene`. **Real-app validation** (`temp/molecule_timeline_render_probe.mjs`, visible Chromium + WebGPU): logged in sans compte, rendered a multitrack timeline onto the Bevy canvas (1 lane + 3 clip blocks + playhead, all on the `molecule` layer, in the project scene state), **scrub moved the playhead 0→240px** (3s×80px) confirmed in scene state and the two screenshots (`temp/molecule_timeline_render_playhead0.png`/`_playhead3.png`), clear removed all 5 records, 0 console errors. Node coverage `tests/probes/molecule_timeline_scene.test.mjs` + `molecule_timeline_scene_bridge.test.mjs` PASS 7/7; `npm run test:molecule` PASS 7 suites; Bevy/project-scene contracts 22/22; `check:molecule-guardrails` 23, `check:no-fallbacks` 23, `check:syntax` 740. _Note:_ clip blocks render as colored shapes; binding decoded media textures/waveforms into clips (video frames via the decode-source runtime, waveform overlay) rides on V2.2/media wiring, and full visual filter/transition validation needs a media-bound clip — the projection already forwards them to the existing M1/M2 material seam.
-- [x] **V1.6 Selection + transform handles + hit-testing** on the canvas (M4) via `selection_overlay.rs` (uniform-scale + viewport-center origin parity). _Render side DONE 2026-06-20:_ because clip blocks are first-class project-scene records, selection visuals and hit-testing apply to them through the existing project-scene path with no new code — clip records are `selectable` while lanes/playhead are emitted `selectable:false`. Real-app validation `temp/molecule_timeline_selection_probe.mjs` (visible Chromium/WebGPU): clip `selectable:true`, lane/playhead `selectable:false`, selecting a clip via `window.__selectedAtomeIds` + re-render set `visual.selected:true`, and the screenshot `temp/molecule_timeline_selection.png` shows the dashed selection rectangle drawn on the selected clip on `#eve_surface_project`; 0 console errors. _Edit path + on-canvas drag DONE 2026-06-20:_ with the V1.8 store foundation in place, clip edits via the API (`clip.move`, real collision checks) apply through the session and re-render on the canvas. On-canvas **pointer drag** is wired: `molecule_timeline_scene_bridge.js` registers a project-scene commit interceptor (`setProjectSceneRecordCommitInterceptor`) that translates a `mol:clip` drag into `clip.move` (scene px → seconds), skipping the generic atome commit. Real-app validation `temp/molecule_timeline_drag_probe.mjs`: a click selected a clip on the canvas (hit-test), then a real mouse drag moved it from start 4s → 12s (collision-checked, re-rendered authoritatively; screenshot `temp/molecule_drag_after.png` shows the clip relocated with a gap left behind); node coverage in `molecule_timeline_scene_bridge.test.mjs` (px→seconds translation + claim/skip). `clip.trim` is fully functional via API/AI/MCP (validated in the V1.9 full-session probe: f_b duration 4→2s, re-rendered). `selection_overlay.rs` already renders the clip selection (dashed overlay, validated). _Remaining (UX refinement only, non-blocking):_ on-canvas resize-edge **gesture** → `clip.trim` — the project scene's resize gesture is a uniform 2D scale that doesn't map 1:1 to a single-edge timeline trim, so an edge-aware handler is a focused follow-up; the trim operation itself is complete.
-- [x] **V1.7 Automation** keyframes (data + render + API). **DONE 2026-06-20.** Data: `timeline.automation` lanes `{ automation_id, target_id, param, keyframes:[{ keyframe_id, time_seconds, value, curve }] }` validated in `kernel/schemas.js` (`AUTOMATION_CURVES` linear/hold/smooth) and created empty by `createTimeline`. Pure reducers in `kernel/automation.js` (add/remove lane, add/move/edit/remove keyframe; keyframes kept time-ordered; typed errors). Session dispatch + durable ops + verb aliases (`automation.lane.*`/`automation.keyframe.*` → `molecule.automation.*`); API/MCP/AI parity via the named `eve.timeline.automation.*`/`ui.timeline.automation.*` tools (gated `timeline.write`) plus the generic operation tool. Render: keyframe dots on the target track lane (time→x, value 0..1→y, above clips/below playhead) in `render/timeline_scene.js`. Node coverage `tests/probes/molecule_automation.test.mjs` PASS 4/4 (lifecycle ordering, invalid-command codes, dot projection). Real-app `temp/molecule_automation_probe.mjs`: lane+2 keyframes added via the API render on the canvas at x=160(t2)/top(v1) and x=480(t6); `automation.keyframe.move` relocated the dot 160→320; 0 console errors. _Remaining (refinement, not blocking):_ connecting curve line between keyframes; keyframe drag on canvas.
-- [x] **V1.8 Time Machine integration** (reversible commands + atomic batch, D6). **Store foundation DONE 2026-06-20 (decision: canonical in the Atome).** Product owner chose option 1: a Molecule timeline persists canonically inside the Atome model. `eVe/intuition/runtime/molecule_stores.js` provides `window.Atome.moleculeStores` — `projectStore.saveTimeline` writes the snapshot as the owner group atome's `molecule_timeline` property via `window.Atome.commit` (one deterministic Time Machine entry per edit), `loadTimeline` reads it via `getStateCurrent`, `eventStore.append` emits each kernel history event on eVe's deterministic bus. Installed at boot in `tool_genesis_bootstrap_runtime.js`. `openGroupTimeline` now runs the real session, persists, and renders on the Bevy canvas; `onStateCommitted` re-persists + re-renders on every committed edit. **Real-app validation** `temp/molecule_timeline_session_edit_probe.mjs`: opened a group timeline (persist+render), applied `clip.move` (real collision detection rejected an overlapping target, accepted a free one), the clip re-rendered on the canvas (0→960px, screenshot `temp/molecule_session_after_move.png`), the session state reflected it, the edit emitted `molecule_timeline` set events into eVe's deterministic log on the owner atome (`setEventCount:6`, persisted `start:12`), and close cleared the overlay; 0 console errors. Node coverage `tests/probes/molecule_stores.test.mjs` PASS 5/5. **Undo/redo DONE 2026-06-20:** `undoGroupTimeline`/`redoGroupTimeline` added to the group API delegate to the session (which re-persists + re-renders via `onStateCommitted`); validated live in the same probe — undo returned the clip to 0px, redo back to 960px on the Bevy canvas, deterministic. **MCP/AI parity + batch atomicity DONE 2026-06-20:** registered `eve.timeline.history.undo`/`redo` (AI) and `ui.timeline.history.undo`/`redo` (runtime) tools, gated `timeline.write`. Real-app `temp/molecule_batch_undo_probe.mjs`: an atomic batch of two `clip.move` ops applied both (a 0→12, b 4→16), then a **single undo reverted both** (one Time Machine entry), and the undo/redo AI+API tools are exposed; 0 console errors. **V1.8 complete.**
-- [x] **V1.9 Validate**: drive a full edit session by **API + MCP + batch + an AI**; scrub/edit render on the canvas; undo/redo deterministic; `check:*` green; boot probe + GPU probe. **DONE 2026-06-20.** Real-app `temp/molecule_full_session_probe.mjs` drove one session through every path: API single op (`clip.move`), `clip.trim` (f_b duration 4→2s), an **atomic batch** of two moves, **automation** (lane + keyframe), **undo** (reverted the last op — keyframe dot disappeared, scene records 6→5), and the **AI gateway** (`AtomeAI.callTool('eve.timeline.read')` → status OK, 3 clips) — all rendering on `#eve_surface_project` and persisting to the deterministic log on the owner atome; 0 console errors. MCP policy gating is covered by `mcp.timeline_policy`/`mcp.security_surface` tests; `check:syntax`/`check:molecule-guardrails`/`check:no-fallbacks` green; boot probe PASS. _Note:_ Kira A/V sync is the deferred playback-polish item (out of the editor-core scope, tracked for after cleanup).
+- immutable timeline, project, and owner identities;
+- timebase: sample rate, frame rate, ticks, tempo map, and meter map;
+- Sections ordered by `order`;
+- Tracks owned by one `section_id`;
+- clips referencing Atomes, media references, or nested Molecules;
+- automation lanes;
+- persistent armed Record regions;
+- one transport state;
+- global quantization and metronome settings.
 
-## 5. Phase v2 — Rich + advanced track types (modular plug-ins)
-- [ ] **V2.1** Text / karaoke (active-line bg, scroll, per-line weight/alpha) — M5.1.
-- [ ] **V2.2** Audio waveform overlay — `waveform_playback_overlay.rs` (M5.2).
-- [x] **V2.3 Recording into the timeline. DONE 2026-07-19.** `runtime.js` creates one recording coordinator per open group and exposes read/start/stop/cancel; close awaits coordinator `dispose()` before scene/session teardown. The Bevy audio/video/detail tools reach real controllers, with an active Molecule taking the exact coordinator route and other use remaining generic. Exact clip creation is frame-based and fail-closed: explicit exact mode, integer origin/sample rate, `auv3.render` capture, `auv3.host_transport` timeline origin, locked `clock_epoch`, real earlier playback start, `playback_observed_frame == recording_start_frame`, strictly positive latency, zero overrun/discontinuity, exact host round-trip compensation (`input_latency_frames + output_latency_frames = roundtrip_latency_frames = record_offset_frames_applied`), `timeline_origin_frame - roundtrip_latency_frames` placement, and a persisted media Atome id are all required before `molecule.clip.add`. If that final session mutation fails, `commit_failed` retains the same validated clip/media identity and a later stop retries only `session.apply`, never capture finalization or persistence. The delivered exact source is AUv3 `plugin_input`. Browser, desktop/Tauri, iOS app, AUv3 microphone, AUv3 plug-in output/mix, and video exact requests return `av_sample_accurate_overdub_unsupported`; generic capture remains available. Exact video remains blocked until video/container PTS is mapped and validated against the audio sample timeline. Generic video recording adds no DOM `<video>`/`<img>`, native overlay, or synthesized WebGPU viewfinder beside the single Bevy/WebGPU canvas.
-- [x] **V2.4** Nested molecules + multi-instances (wire `nested/` + `multi_instance/`). **DONE 2026-06-20.** Nested: wired `createMoleculeNestedResolver` + `renderNestedMoleculePreview` into the runtime as `window.eveMoleculeTimelineApi.resolveGroupTimelineNested({ group_id, clip_id })` — resolves a `molecule`/`molecule_ref` clip to its referenced timeline (via `moleculeStores.projectStore.loadTimeline`) plus a window-mapped preview of its clips, and rejects cycles. Node coverage `tests/probes/molecule_nested.test.mjs` 3/3 (resolve, cycle rejection, preview windowing). Multi-instances: multiple timelines are already openable simultaneously through the group registry (`sessionsByGroup` + `listOpenGroupTimelines`), which is the multi-instance capability. (Live nested resolution uses the canonical `loadTimeline`/`getStateCurrent`, which materializes for real group atomes; node-tested with a fake store since synthetic probe atomes don't materialize `state_current`.)
-- [ ] **V2.5** **Script-launch track** — place + launch script objects from the timeline (capabilities/sandbox via MCP risk tiers).
-- [ ] **V2.6** **Timeline-trigger track** — trigger other timelines from a timeline (sub-timeline scheduling).
-- [ ] **V2.7** **Chord track** — chord symbols on musical time.
-- [ ] **V2.8** **Tablature track** — fret/string notation on musical time.
-- [ ] **V2.9** Validate each plug-in: API/MCP verbs + Bevy render + musical-time quantization; registry stays the only touch-point.
-- [ ] **V2.10 Time-stretch** — integrate the chosen external library (§7) as a stretch/speed stage feeding Kira (no pitch artifacts, stretch-to-tempo); expose `clip.timestretch` / `clip.set_speed` over API + MCP; validate quality + A/V sync + latency on web (WASM) and native (Rust/Tauri/iOS).
-- [ ] **V2.11 Professional export** — pin the canonical timeline snapshot, render deterministically through Bevy/WebGPU, support an editable project package, an open archival master, and delivery profiles such as MP4; add checkpointed resume, atomic output publication, typed failures, and post-export frame/sample/A/V validation. The codec/container decision remains open until the AV audit evaluates quality, metadata, licensing, WASM/native support, and interoperability.
-- [ ] **V2.12 Bevy editor chrome and DOM retirement** — migrate the Molecule panel, controls, tool bands, inspector, transport chrome, resize/drag affordances, and panel-local interaction state to the shared Bevy UI contract; delete `tools/molecule/panel/` DOM rendering, DOM geometry/layout observers, and obsolete panel lifecycle routes only after Web/Tauri/iOS parity passes.
-- [ ] **V2.13 Marker-defined Cells** — restore the former production `loop_cells` behavior as the canonical marker → section → Cell model in §3H: deterministic Cell projection per track, marker-driven recomputation, Cell activation/selection/color/arming/recording, real-content batch operations, follow/repeat/playback hooks, API/MCP parity, migration of valid legacy Cell configuration, and removal of the old DOM-only Cells implementation.
+A Section is either:
 
-## 6. Phase v3 — Cross-platform validation (M7)
-- [ ] Web (:3001), Tauri (:3000), iOS app, and iOS/AUv3 parity: compositing + filters + transitions + selection + scrub + A/V sync on a looping molecule. Validate generic capture positively on each supported backend; validate exact requests negatively on Web/Tauri/iOS app/video; validate exact AUv3 `plugin_input` overdub against the shared render epoch over long takes (`feedback_validate_real_mechanism`). _Absorbs the extracted validation tasks from the (cleanup) `full_bevy_renderer_remaining.md`: **R40** "Validate Web M7.1 on :3001 (montage compositing, filters, transitions, selection, scrub, A/V sync on the project canvas)" — the Web part is satisfied by the V1.9 full-session validation except live montage A/V sync; **R41** "Validate Tauri/iOS/AUv3 M7.2 (same scenario, Kira A/V sync on a looping montage)" — this V3 line. Both are editor validation, not cleanup, so they live here with the editor work._
+- structural: `duration_frames` is absent;
+- temporal: positive `duration_frames`, with its absolute start derived from
+  the ordered durations of preceding temporal Sections.
 
-## 7. Open questions (resolve during the relevant phase)
-- **Chord notation model**: chord symbols vs MIDI vs both? Rendering (text glyphs vs Bevy-drawn)?
-- **Tablature model**: instrument tuning / string count / fret representation.
-- **Script-launch security**: which scripts, what capabilities/sandbox — map to existing MCP risk tiers + ACL.
-- **Panel UI**: resolved. The complete editor chrome migrates to the shared Bevy UI route in V2.12; the former DOM panel is deleted after parity validation.
-- **Effect rack** beyond M1/M2: scope of `eve.timeline.effect`.
-- **Time-stretch library (V2.10)**: decide between **Signalsmith Stretch**, **Bungee**, **Rubber Band** after a **complete audit** — current preference **Signalsmith**. Audit criteria: stretch + pitch/formant quality, latency, **license** (Rubber Band = GPL / commercial dual-license — check compatibility; Bungee = Apache-2.0; Signalsmith = MIT-style), **WASM + native build** feasibility (Rust/Tauri/iOS targets), and the **Kira integration** path (processing node vs pre-roll).
+Temporal Sections are contiguous. Resizing or reordering a Section moves all
+later Sections and their content atomically. Adding the first temporal medium
+to a structural Section gives it the medium extent. Removing its last temporal
+medium returns it to structural form when non-temporal content remains.
 
-## 8. Validation strategy (per phase)
-- Reuse + keep green `tests/molecule/run_molecule_tests.mjs` (mount/multitrack/session-history probes); add **API/MCP batch + atomicity** tests and an **AI-driven** edit test.
-- Keep the recording session/runtime/adapter probes green: explicit exact-mode gating; render/host-transport clocks; actual playback-start and same-quantum observation; `timeline_origin_frame - roundtrip_latency_frames` placement; strictly positive latency with sum/applied-offset equality; Atome-before-clip ordering; close-time cancellation; overrun rejection; and unsupported exact audio/video capability gates.
-- A GPU probe under `./temp` for every new Bevy overlay (selection, waveform, chord, tab) — screenshot ground truth, not `drawImage` readback.
-- Boot probe on the real app; `check:syntax`, `check:molecule-guardrails`, `check:no-fallbacks`, `cargo:bevy:check` green; existing deletion guard tests stay enforcing (they must keep asserting mtrax/old-renderer absence).
+Tracks are local to Sections. Each deepest Section owns exactly one canonical
+empty content Track at the end. Filling it creates the next empty Track in the
+same transaction. Group/bus Tracks appear before that trailing Track.
 
-## 9. Seam map (where each piece plugs in)
-- **Kernel/state/format**: `eVe/intuition/tools/molecule/` (reuse) · audio: `eVe/core/media_engine/molecule.*` (Kira).
-- **Layer slot**: `eVe/intuition/runtime/layer_contract.js` (`intuition_molecule_layer`).
-- **Projection chain**: `render_atom.js` → `virtual_scene_contract.js` → `bevy_projection_adapter.js` → `bevy_{web,native}_renderer_runtime.js` → Rust `apply_style`.
-- **Material/render (Rust)**: `video_external.wgsl`, `types.rs`, `video_external_texture.rs`; new `selection_overlay.rs`, `waveform_playback_overlay.rs`.
-- **Playback/clock**: `bevy_video_decode_source_runtime.js` (`setBevyVideoDecodePlayback`) + Kira.
-- **Recording**: `tools/molecule/recording/index.js` → `domains/media/api/audio_api.js` capture adapter → `audio_runtime/sample_accurate_recording.js`; generic video remains in `domains/media/api/video_recording_controller.js` until an exact audio-sample PTS mapping exists.
-- **API/MCP**: `atome/src/squirrel/ai/default_tools.js`, `atome/src/squirrel/atome/mcp.js`, the runtime tool gateway (`invokeRuntimeDefaultTool`, `tool_gateway.js`).
+A Track may explicitly continue beyond its Section. Without that option,
+out-of-bounds content is virtually clipped and remains recoverable.
 
----
+Removing content detaches its reference and never deletes the source Atome.
+Removing a Molecule's last real content deletes the Molecule structure. If the
+first Create or Record action fails or is cancelled, its empty Molecule,
+Section, and Track are rolled back atomically.
 
-*This document supersedes the former pre-Bevy media-editor proposal. Its V1 and V2.3 implementations are complete as recorded above; the remaining V2/V3 items stay active backlog.*
+## 4. List, focus, and handedness
+
+The Molecule list extends the shared Bevy hierarchical virtualized list. A row
+contains an accordion, group cell, name shield, and playable preview. Its
+height is exactly half the canonical square tool size.
+
+Gestures are fixed:
+
+- accordion: expand/collapse only;
+- name shield click: select;
+- stationary long press on the shield: rename;
+- shield drag: reorder or transfer;
+- preview tap: Play/Stop;
+- preview double tap: deep focus.
+
+The breadcrumb contains interactive names only. The last focus and playhead
+are restored per Molecule as workspace state; global selection and every
+accordion state are not persisted.
+
+The existing handedness setting mirrors accordion, group, name, preview,
+indentation, contextual rail, panels, controls, and hit zones. Time always
+flows left to right; ruler, clips, Record regions, crop, loops, and playhead are
+never reversed.
+
+Sections and Tracks can move atomically between Molecules. A Section inserts
+at the targeted order. A Track that exceeds its destination Section is
+virtually clipped. A group route is retained only when its bus moves with it;
+otherwise the Track returns to direct output.
+
+## 5. Main menu and contextual Info
+
+The fixed main menu order from the handedness edge is:
+
+1. Atom
+2. Home
+3. Finder
+4. Record
+5. Time
+6. Communication
+7. Mode
+8. View
+9. Create
+
+Create v1 contains Text, Draw, Code, and Page. Generator appears only when a
+real generator capability is registered. Destination follows current focus:
+
+- list -> Molecule + Section + Track;
+- Molecule -> Section + Track;
+- Section or Track level -> parallel Track.
+
+Code and Page immediately open their canonical editor or surface.
+
+No new contextual menu is created. The existing contextual rail and Info tool
+own selection options. Track Info includes name, kind, mute, group route,
+Section-end behavior, continuation, Loop In/Out, repetition, quantization, and
+kind-specific properties.
+
+V1 activities are List and Mix. The rail shows only working Play, Import,
+Info, Activity, and required group/mute actions.
+
+## 6. Mix groups
+
+Group means an audio/visual mix bus only. A Track can route to a group Track in
+the same Section.
+
+- unassigned group-cell click: no action;
+- assigned group-cell click: mute/unmute the bus;
+- group-cell long press: choose or create a group Track.
+
+There are no linked instances, generic line groups, or content propagation.
+
+## 7. Time, ruler, and transport
+
+The Mix surface ends with exactly two temporal bands:
+
+1. Section boundaries/names and Record regions;
+2. time ruler.
+
+One playhead crosses both. Section boundaries are directly draggable. No third
+band, mini-toolbar, permanent legend, or decorative controls are allowed.
+
+Molecule time settings include tempo, meter, metronome, pre-roll, and global
+quantization. Sections may change tempo or meter. Tracks may override
+quantization through Info. Quantization supports Off, bars, beats, and musical
+subdivisions and applies to placement, move, resize, Record, crop, and loops.
+
+Each Molecule has one transport:
+
+- Molecule preview plays all Sections;
+- Section preview plays all its Tracks;
+- Track preview plays only that Track;
+- list Play sequences Molecules.
+
+A new play request within a Molecule replaces its current playback.
+
+## 8. Record regions
+
+Record without an armed region creates the focused structure when needed and
+records freely until Stop. The resulting Section uses the actual take length.
+
+Dragging a selected Record source onto a Track creates a typed, armed,
+persistent region. Initial Home defaults are:
+
+- audio: four bars;
+- video/screen: fill empty space;
+- pre-roll: one bar;
+- independent settings per media type.
+
+Fill empty space extends from the drop point to the next content or Section
+end. Placement avoids existing content unless a fixed default or explicit
+resize overlaps it. Only the interval actually recorded replaces content;
+outside pieces remain referenced and recoverable.
+
+During capture, target-Track content is silent under the region and audible
+outside it. Other Tracks keep playing. A short take replaces only its actual
+duration. A successful take consumes the Record region and projects the real
+media. Unconsumed regions survive reload armed.
+
+Record starts with pre-roll before the first armed region. Compatible regions
+can capture together as one transaction. Normal forward playback of the list,
+Molecule, or Section triggers armed regions when the playhead reaches them.
+Manual scrub never triggers capture. Starting transport inside a region begins
+capture at that offset. Each region stops at its own end.
+
+A region beyond Section end enables Track continuation. Web, Tauri, and iOS
+app captures remain canonical generic captures explicitly marked non-exact.
+Only the validated AUv3 `plugin_input` path may claim sample-accurate overdub.
+
+Photo uses a timed Record region. One photo is captured at its start and the
+resulting image occupies the region duration. Starting normal transport exactly
+on the boundary triggers it. Import uses the canonical picker and inserts the
+chosen media at its real duration without a Record region.
+
+## 9. Crop, loops, and previews
+
+Crop is non-destructive. Start/end handles change source projection without
+discarding source data and produce one reversible mutation.
+
+V1 Track loops are configured in Info with independent Loop In/Out, finite or
+continuous repetition, and quantization. Independent lengths support
+polyrhythm.
+
+V1 previews use the existing unified render pipeline:
+
+- audio waveform;
+- video frame;
+- image/photo thumbnail;
+- typographic text preview;
+- composed Draw/Page preview;
+- minimal neutral registered presentation for other types.
+
+Molecule and Section previews are derived compositions of real Track content,
+never copied state or a second renderer.
+
+## 10. Phase 2
+
+Add Timeline as a third activity. It unfolds every Section left-to-right on one
+continuous projection of the same snapshot.
+
+Add Apple-style per-block looping by extending a block edge. Repetitions are
+visible, non-destructive, quantized, tempo-aware, and compatible with crop.
+List, Mix, and Timeline remain synchronized projections of one canonical state.
+
+## 11. API and acceptance
+
+Extend `eve.timeline.*` and `ui.timeline.*` for Section, Track, group, Record
+region, transport, crop, loop, and contextual creation operations. Every UI
+operation is programmatic, policy-gated, batchable, traceable, and reversible.
+
+Required validation:
+
+- pure kernel tests for Section topology, structural/temporal transitions,
+  trailing empty Track, continuation, virtual clipping, transfer, groups,
+  deletion, and rollback;
+- Record tests for defaults, fill, overlap, short takes, multi-region,
+  pre-roll, forward-play versus scrub, Photo, generic capture, and AUv3 exact
+  capability;
+- API/MCP parity, atomic batch, and single-point undo/redo tests;
+- Bevy tests for nine menu tools, handedness, hierarchy gestures, breadcrumb,
+  Info, two-band time surface, crop, loops, and previews;
+- real pointer interactions on `#eve_surface_project`, Bevy diagnostics,
+  screenshots, and clean browser/runtime logs;
+- Molecule, syntax, architecture, DOM, renderer, and no-fallback guardrails.
+
+Completion requires zero active v1/MTraX/Marker/Cell compatibility in the
+touched route, zero visible Molecule DOM, no dead tool, no duplicate authority,
+and no temporary diagnostic residue.

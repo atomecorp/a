@@ -111,7 +111,10 @@ mod tests {
             layer: 2,
             opacity: 1.0,
             corner_radius: 0.0,
+            corner_radii: None,
             shadow: None,
+            backdrop: None,
+            presentation: false,
             color: Some([0.24, 0.55, 0.92, 1.0]),
             text: None,
             source: None,
@@ -123,6 +126,7 @@ mod tests {
             selected: None,
             filters: None,
             transition: None,
+            procedural: None,
         }
     }
 
@@ -141,7 +145,8 @@ mod tests {
         app.world_mut().run_schedule(Startup);
 
         let mut camera_query = app.world_mut().query::<&Camera2d>();
-        assert_eq!(camera_query.iter(app.world()).count(), 1);
+        // Shared core owns one presentation camera plus capture and two-pass blur cameras.
+        assert_eq!(camera_query.iter(app.world()).count(), 4);
 
         let mut node_query = app
             .world_mut()

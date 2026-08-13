@@ -7,6 +7,12 @@ import { isBevyPanelMobileSurface, resolveBevyPanelGeometry } from '../../eVe/in
 import { buildBevyPanelTree } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_tree.js';
 import { BEVY_PANEL_TOKENS } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_tokens.js';
 import { setAtomeContextualEditApi } from '../../eVe/intuition/runtime/eve_intuition/atome_contextual_edit_registry.js';
+import {
+    bevyPanelRuntimeState,
+    closeBevyPanelSurface,
+    openBevyPanelSurface,
+    registerBevyPanelSurface
+} from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_runtime.js';
 
 const findNode = (tree, id) => {
     let found = null;
@@ -163,12 +169,6 @@ test('A docked Contact-style panel unlocks its footer drag and resize handles on
         unmountTree: async (id) => ({ id })
     };
     setMainMenuRuntime({ showFully: async () => true, getReservedHeight: () => 74, handedness: 'left' }, dom.window);
-    const {
-        bevyPanelRuntimeState,
-        closeBevyPanelSurface,
-        openBevyPanelSurface,
-        registerBevyPanelSurface
-    } = await import('../../eVe/intuition/runtime/bevy_panel/bevy_panel_runtime.js');
     bevyPanelRuntimeState.runtime = null;
     bevyPanelRuntimeState.mounted.clear();
     bevyPanelRuntimeState.geometryBySurfaceKey.clear();
@@ -253,12 +253,6 @@ test('Bevy panel restores its pre-keyboard position after the iOS viewport expan
         getReservedHeight: () => 74,
         measure: () => ({ active: true, treeMounted: true })
     }, dom.window);
-    const {
-        bevyPanelRuntimeState,
-        closeBevyPanelSurface,
-        openBevyPanelSurface,
-        registerBevyPanelSurface
-    } = await import('../../eVe/intuition/runtime/bevy_panel/bevy_panel_runtime.js');
     bevyPanelRuntimeState.runtime = null;
     bevyPanelRuntimeState.mounted.clear();
     bevyPanelRuntimeState.geometryBySurfaceKey.clear();
@@ -322,12 +316,6 @@ test('structural viewport resize and orientation reanchor every open Bevy panel 
     const lifecycle = [];
     dom.window.addEventListener('eve:surface-state', (event) => lifecycle.push(event.detail));
     setMainMenuRuntime({ showFully: async () => true, getReservedHeight: () => 74 }, dom.window);
-    const {
-        bevyPanelRuntimeState,
-        closeBevyPanelSurface,
-        openBevyPanelSurface,
-        registerBevyPanelSurface
-    } = await import('../../eVe/intuition/runtime/bevy_panel/bevy_panel_runtime.js');
     bevyPanelRuntimeState.runtime = null;
     bevyPanelRuntimeState.mounted.clear();
     bevyPanelRuntimeState.geometryBySurfaceKey.clear();
@@ -421,12 +409,6 @@ test('the panel runtime reserves the contextual rail only while it is visible', 
     setMainMenuRuntime({ handedness: 'right', showFully: async () => true, getReservedHeight: () => 74 }, dom.window);
     let menuVisible = true;
     setAtomeContextualEditApi({ readState: () => ({ menuVisible }) });
-    const {
-        bevyPanelRuntimeState,
-        closeBevyPanelSurface,
-        openBevyPanelSurface,
-        registerBevyPanelSurface
-    } = await import('../../eVe/intuition/runtime/bevy_panel/bevy_panel_runtime.js');
     const surfaceKey = 'contextual_rail_fixture';
     bevyPanelRuntimeState.runtime = null;
     bevyPanelRuntimeState.mounted.clear();

@@ -14,6 +14,7 @@ export const PLAY_RECORD_API_CONTRACT = Object.freeze({
         Object.freeze({ name: 'destroyAsset', effect: 'persistent', command_action: 'SOFT_DELETE' }),
         Object.freeze({ name: 'releaseTransientAsset', effect: 'ephemeral', command_action: 'PATCH' }),
         Object.freeze({ name: 'setVoiceGain', effect: 'ephemeral', command_action: 'PATCH' }),
+        Object.freeze({ name: 'setVoicePan', effect: 'ephemeral', command_action: 'PATCH' }),
         Object.freeze({ name: 'setVoiceRate', effect: 'ephemeral', command_action: 'PATCH' }),
         Object.freeze({ name: 'recordStart', effect: 'persistent', command_action: 'PATCH' }),
         Object.freeze({ name: 'recordStop', effect: 'persistent', command_action: 'PATCH' })

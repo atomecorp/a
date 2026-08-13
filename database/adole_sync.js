@@ -40,15 +40,26 @@ export function createAdoleSyncApi({ getAtome }) {
 
     async function listSyncQueue({ target_server, limit = 50 } = {}) {
         const now = new Date().toISOString();
+        if (target_server) {
+            return await query(
+                'all',
+                `SELECT * FROM sync_queue
+         WHERE status IN ('pending', 'error')
+           AND (next_retry_at IS NULL OR next_retry_at <= ?)
+           AND target_server = ?
+         ORDER BY created_at ASC
+         LIMIT ?`,
+                [now, target_server, limit]
+            );
+        }
         return await query(
             'all',
             `SELECT * FROM sync_queue
          WHERE status IN ('pending', 'error')
            AND (next_retry_at IS NULL OR next_retry_at <= ?)
-           AND (? IS NULL OR target_server = ?)
          ORDER BY created_at ASC
          LIMIT ?`,
-            [now, target_server || null, target_server || null, limit]
+            [now, limit]
         );
     }
 

@@ -1,0 +1,10 @@
+{
+  "quality_static": ["check:syntax", "check:m0", "check:execution-order", "check:master-cleanup"],
+  "core": ["test:molecule", "test:run"],
+  "ui_real": ["test:molecule:ui", "test:molecule:ui:repeat"],
+  "visual": ["test:molecule:ui:matrix"],
+  "performance": ["test:molecule:performance", "test:molecule:endurance"],
+  "platforms": ["build:all", "cargo:bevy:check", "cargo:bevy:test", "test:molecule:tauri-startup", "build:molecule:webgpu", "build:molecule:tauri", "build:molecule:ios", "build:molecule:ios:device"],
+  "orchestration": ["quality:acceptance", "quality:acceptance:repeat"],
+  "blocking_external": ["physical iPhone", "physical iPad", "real AUv3 host plugin_input"]
+}

@@ -16,7 +16,7 @@ import { projectTimelineToSceneRecords } from '../../eVe/intuition/tools/molecul
 
 const base = () => {
     let tl = createTimeline({ timeline_id: 'tl_a', project_id: 'p', owner_atome_id: 'g' });
-    tl = addTrack(tl, { track_id: 'track_video', kind: 'video', name: 'video', order: 10 });
+    tl = addTrack(tl, { track_id: 'track_video', section_id: 'tl_a:section:1', kind: 'video', name: 'video', order: 10 });
     return tl;
 };
 

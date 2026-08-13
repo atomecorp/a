@@ -46,6 +46,23 @@ describe('execution order governance', () => {
         expect(formatExecutionOrderReport(result)).toContain('status: PASS');
     });
 
+    it('registers canonical todo paths whose directory names contain spaces', () => {
+        const root = createRoot({
+            order: [
+                '# Order',
+                'todo/New work/spec.md',
+                '### Phase 1 - Feature',
+                'Statut:',
+                'Specification',
+                '- [ ] Implement the specification.'
+            ].join('\n'),
+            todos: { 'todo/New work/spec.md': '# Specification' }
+        });
+        const result = inspectExecutionOrder({ rootDir: root });
+        expect(result.errors).toEqual([]);
+        expect(result.references).toContain('todo/New work/spec.md');
+    });
+
     it('rejects drift in paths, statuses, duplicates, and unregistered todos', () => {
         const root = createRoot({
             order: [

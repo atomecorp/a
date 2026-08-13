@@ -153,6 +153,7 @@ delete window.__eveWorkspaceMode;
 
 const workspaceOpenCalls = [];
 const readinessCalls = [];
+const activitiesWarmupCalls = [];
 let workspaceOpenAttempts = 0;
 window.__eveWorkspaceWarmupsStarted = false;
 delete window.__currentProject;
@@ -196,7 +197,7 @@ installEveIntuitionBootRuntime({
     closeCanonicalHomePanel() {},
     createEditableTextAtome() {},
     destroyLayerInvariantObserver() {},
-    ensureActivitiesModule() {},
+    ensureActivitiesModule() { activitiesWarmupCalls.push('activities'); },
     ensureBackgroundPanelModule() {},
     ensureCalendarPanelModule() {},
     ensureCaptureModule() {},
@@ -274,6 +275,7 @@ assert.equal(workspaceOpenCalls.length, 2, 'a transient Dashboard/main-menu read
 assert.equal(workspaceOpenCalls[0]?.source, 'boot_workspace');
 assert.equal(workspaceOpenCalls[1]?.source, 'boot_workspace');
 assert.deepEqual(readinessCalls, ['ready'], 'only the successful retry must prepare the project through canonical bootstrap');
+assert.deepEqual(activitiesWarmupCalls, ['activities'], 'workspace warmup must load contextual Activity before Molecule selection events');
 window.dispatchEvent(new window.CustomEvent('squirrel:project-changed', {
     detail: { id: 'boot_project_valid' }
 }));

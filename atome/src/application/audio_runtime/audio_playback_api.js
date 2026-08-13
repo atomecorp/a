@@ -70,6 +70,7 @@ export class AudioPlaybackAPI {
     setVoiceParam(input = {}) {
         const param = String(input.paramId || input.param_id || input.param || '').trim();
         if (param === 'gain' || param === 'volume') return this.core.setVoiceGain(input);
+        if (param === 'pan' || param === 'panning') return this.core.setVoicePan(input);
         if (param === 'rate' || param === 'playback_rate' || param === 'speed') return this.core.setVoiceRate(input);
         throw createUnsupportedCapabilityError({
             capability: param || 'voice_param',

@@ -179,6 +179,7 @@ struct RemoteAudioPlaybackPlayRequest {
     #[serde(rename = "durationSeconds")]
     duration_seconds_camel: Option<f64>,
     gain: Option<f64>,
+    pan: Option<f64>,
     rate: Option<f64>,
 }
 
@@ -1211,6 +1212,7 @@ async fn remote_audio_playback_play_handler(
         .unwrap_or(0.0);
     let duration_seconds = payload.duration_seconds.or(payload.duration_seconds_camel);
     let gain = payload.gain.unwrap_or(1.0);
+    let pan = payload.pan.unwrap_or(0.0);
     let rate = payload.rate.unwrap_or(1.0);
     match crate::audio_engine::playback::play_instance(
         &id,
@@ -1218,6 +1220,7 @@ async fn remote_audio_playback_play_handler(
         start_seconds,
         duration_seconds,
         gain,
+        pan,
         rate,
         None,
         None,

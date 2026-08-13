@@ -1,7 +1,6 @@
-// Extracted from button_builder.js: multi-state index helper, common variant factory functions,
-// and the preset system (materialSwitch). Variant/preset factories call createButton only at
-// call-time → safe circular import with the entry module.
-import { createButton } from './button_builder.js';
+// Extracted from button_builder.js: multi-state index helper and pure preset configuration.
+// This module deliberately does not import the button constructor: the entry module owns
+// instantiation, which keeps the component dependency graph acyclic.
 import { buttonStyles } from './button_builder_templates.js';
 
 // === FONCTION UTILITAIRE POUR CALCULER LE PROCHAIN ÉTAT ===
@@ -19,15 +18,11 @@ function getNextStateIndex(current, total, mode, direction = 1) {
   }
 }
 
-// === FACTORY FUNCTIONS POUR VARIANTES COMMUNES ===
+// === CONFIGURATIONS POUR VARIANTES COMMUNES ===
 
-const createPrimaryButton = (config) => createButton({ ...config, variant: 'primary' });
-const createSecondaryButton = (config) => createButton({ ...config, variant: 'secondary' });
-const createSuccessButton = (config) => createButton({ ...config, variant: 'success' });
-const createDangerButton = (config) => createButton({ ...config, variant: 'danger' });
-const createWarningButton = (config) => createButton({ ...config, variant: 'warning' });
+const buttonConfigForVariant = (config = {}, variant) => ({ ...config, variant });
 
-const createIconButton = (config) => createButton({
+const iconButtonConfig = (config = {}) => ({
   ...config,
   text: '',
   skin: {
@@ -36,7 +31,7 @@ const createIconButton = (config) => createButton({
   }
 });
 
-const createOutlineButton = (config) => createButton({
+const outlineButtonConfig = (config = {}) => ({
   ...config,
   variant: 'outline',
   skin: {
@@ -101,13 +96,12 @@ const buttonPresets = {
 };
 
 // Ajout d'une méthode utilitaire sur Button pour le preset
-function materialSwitch(config) {
-  return createButton(buttonPresets.materialSwitch(config));
-}
+const materialSwitchConfig = (config = {}) => buttonPresets.materialSwitch(config);
 
 export {
   getNextStateIndex,
-  createPrimaryButton, createSecondaryButton, createSuccessButton,
-  createDangerButton, createWarningButton, createIconButton, createOutlineButton,
-  materialSwitch
+  buttonConfigForVariant,
+  iconButtonConfig,
+  outlineButtonConfig,
+  materialSwitchConfig
 };

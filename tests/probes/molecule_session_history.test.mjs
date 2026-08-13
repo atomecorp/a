@@ -30,6 +30,7 @@ const createFixtureTimeline = () => {
     });
     timeline = addTrack(timeline, {
         track_id: 'track_video',
+        section_id: 'timeline_history:section:1',
         kind: 'video',
         name: 'Video',
         order: 10

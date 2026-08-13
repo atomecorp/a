@@ -976,3 +976,17 @@ The shared scene is not a reason to rebuild static Dashboard records when a tool
   successful duplicate batch performs one forced reload through the existing
   `loadProjectAtomes` owner so newly durable `state_current` rows enter the
   shared project scene immediately; no second creation or rendering path exists.
+
+# Canonical Molecule v2 ownership — 2026-08-12
+
+- `todo/molecule/NewMolecules.md` is the canonical product contract. Historical Marker/Cell and MTraX compatibility requirements are retired; `Section × Track` is derived and has no persistent identity.
+- One owner Atome persists one strict `molecule_timeline` schema-v2 snapshot. Ordered Sections, Section-local content/group Tracks, clips, Record regions, transport, tempo, meter, quantization and automation remain internal snapshot data and mutate only through the Molecule session and canonical Atome commit path.
+- `eVe/intuition/tools/molecule/kernel/structure.js` owns Section/Track/group/Record-region invariants, including exactly one stable trailing empty content Track per Section. `reducers.js` owns clips, crop and atomic Record-range replacement. There is no v1 reader, converter, alias, shim or fallback.
+- `timeline_scene.js` derives an opaque hit-test-occluding Timeline surface, Section offsets, non-draggable Track lanes, clips, previews, crop handles, Record regions, the Section band, the ruler and playhead into ordinary project-scene records. `molecule_timeline_scene_bridge.js` translates clip/crop/Section-boundary drags, Ctrl/Command-wheel zoom, and Alt-double-click split back into timeline operations. The single `#eve_surface_project` Bevy/WebGPU surface remains the only visible renderer.
+- Track `gain` and `pan` are canonical schema-v2 fields. Mix projects both through identifiable BevyUI slider ids and `bevyPanel.moleculeMix` skin tokens; transport forwards them to the shared audio engine, whose Web/Tauri Kira and iOS AVAudioEngine paths own actual panning.
+- The shared project List derives `Molecule → Section → Track` rows from the owner snapshot without creating Section or Track Atomes. The shared selectable-list owner supplies virtualization and handed mirroring; the time axis always remains left-to-right.
+- Derived Molecule selections reuse the existing Atome contextual Bevy rail through its rail-only virtual projection contract. The transient record and tool definitions remain disposable UI state; Info edits still commit through the Molecule session and no second rail, footer, or project-record authority is created.
+- List transport projects ordered open Molecules into one ephemeral Kira sequence. Its per-Molecule offsets arm the existing Record scheduler at natural boundaries; it creates no durable sequence snapshot and no second media engine.
+- The obsolete DOM Molecule panel and its orphan footer-tool contract are deleted and may not return.
+- The acceptance owner is `scripts/molecule_acceptance_manifest.json` plus the composable `quality:*` package commands. UI/visual coverage stays on the official server and the shared canvas; endurance reuses that same real journey for 30 minutes and records heap, overlay, scene, canvas, transport and Record evidence without a test-only product seam.
+- Desktop navigation waits for an actual TCP listener through `platforms/desktop-tauri/src/local_http_navigation.rs` before loading the local URL. The former fixed 250 ms sleep is retired, so native startup readiness belongs to the local HTTP boundary rather than machine timing.

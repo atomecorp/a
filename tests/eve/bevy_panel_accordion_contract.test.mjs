@@ -87,7 +87,7 @@ test('Panel Lab appends the accordion, toggles it through an intent, and resets 
         const dividerIndex = closed.findIndex((node) => node.id === 'panel_lab_accordion_divider');
         const accordionIndex = closed.findIndex((node) => node.id === 'panel_lab_accordion');
 
-        assert.equal(closed.length, 41);
+        assert.equal(closed.length, 45);
         assert.equal(dividerIndex, 15);
         assert.equal(accordionIndex, dividerIndex + 1);
         assert.equal(panelLabSurface.readState().accordion.expanded, false);

@@ -22,7 +22,7 @@ const makeStore = (timelines) => ({
 
 const childTimeline = () => {
     let tl = createTimeline({ timeline_id: 'tl_child', project_id: 'p', owner_atome_id: 'child' });
-    tl = addTrack(tl, { track_id: 'tk', kind: 'video', name: 'v', order: 10 });
+    tl = addTrack(tl, { track_id: 'tk', section_id: 'tl_child:section:1', kind: 'video', name: 'v', order: 10 });
     tl = addClip(tl, { clip_id: 'c1', track_id: 'tk', kind: 'video', source: { type: 'atome', atome_id: 'a1' }, timeline: { start_seconds: 0, duration_seconds: 4, source_in_seconds: 0, source_out_seconds: 4 } });
     tl = addClip(tl, { clip_id: 'c2', track_id: 'tk', kind: 'video', source: { type: 'atome', atome_id: 'a2' }, timeline: { start_seconds: 4, duration_seconds: 4, source_in_seconds: 0, source_out_seconds: 4 } });
     return tl;

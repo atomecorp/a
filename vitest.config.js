@@ -17,6 +17,11 @@ const manifest = JSON.parse(
 
 export default defineConfig({
     test: {
+        // The suites exercise timer-heavy JSDOM runtimes and global browser
+        // authorities. Unbounded worker fan-out starves their real 5 s
+        // contracts on loaded hosts; two isolated workers keep the suite
+        // deterministic without retries or relaxed timeouts.
+        maxWorkers: 2,
         include: manifest,
         exclude: [
             '**/node_modules/**',

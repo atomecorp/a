@@ -421,6 +421,35 @@ test('Atome contextual runtime keeps local edits and emits one canonical homothe
     assert.equal(intents[2].commit, true);
 });
 
+test('Atome contextual runtime reuses its handed rail for virtual Molecule selections without editor chrome', async () => {
+    const rendered = [];
+    const invocations = [];
+    const runtime = createAtomeContextualEditRuntime({
+        legacyState: {}, resolveDefinitions: () => [], invokeDefinition: async () => ({ ok: true }),
+        surfaceResolver: () => ({ getBoundingClientRect: () => ({ width: 800, height: 600 }) }),
+        bevyRuntimeResolver: () => ({
+            mountTree: async ({ tree }) => rendered.push(tree),
+            updateTree: async ({ tree }) => rendered.push(tree), unmountTree: async () => null
+        }),
+        findSceneByAtomeId: () => null, readMainMenuHeight: () => 52
+    });
+    const entered = runtime.enterVirtual({
+        atomeId: 'molecule-track:one', kind: 'molecule_track', projectId: 'project',
+        record: { id: 'molecule-track:one', properties: { name: 'Piste 1' } },
+        definitions: [{ key: 'molecule_info', label: 'Info', icon: 'info', toolType: 'tool' }],
+        invokeDefinition: async (definition) => { invocations.push(definition.key); return { ok: true }; }
+    });
+    assert.equal(entered.rail_only, true);
+    await runtime.render();
+    const root = rendered.at(-1).root;
+    assert.ok(findNode(root, 'atome_contextual_tool_molecule_info'));
+    assert.equal(findNode(root, 'atome_contextual_edit_molecule-track_one_footer'), null);
+    findNode(root, 'atome_contextual_tool_molecule_info').on.activate();
+    await Promise.resolve();
+    assert.deepEqual(invocations, ['molecule_info']);
+    assert.equal(runtime.readState().menuVisible, true);
+});
+
 test('Atome contextual Size slider pins on click and closes only after a transient direct drag', async () => {
     const records = [{ id: 'text_a', properties: { kind: 'text', text: 'Styled', left: 20, top: 20, width: 160, height: 60 } }];
     const scene = { project_id: 'project', records, text: null };

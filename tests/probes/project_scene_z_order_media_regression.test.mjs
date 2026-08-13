@@ -375,7 +375,7 @@ test('Bevy web runtime rejects a second canvas after the web event loop is owned
     assert.equal(readBevyWebRendererState(secondSurface), null);
 });
 
-test('Project reconcile restarts Bevy after a failed projection instead of diffing against an invalid baseline', async () => {
+test('Project reconcile retries a pre-run Bevy failure instead of diffing against an invalid baseline', async () => {
     const dom = new JSDOM('<!doctype html><html><body><div id="project_view_failed_projection"></div></body></html>');
     const host = dom.window.document.getElementById('project_view_failed_projection');
     host.getBoundingClientRect = () => ({
@@ -386,13 +386,14 @@ test('Project reconcile restarts Bevy after a failed projection instead of diffi
         right: 1681,
         bottom: 960
     });
-    let failRun = true;
+    let failInit = true;
     const calls = [];
     const wasmModule = {
-        default: async () => undefined,
+        default: async () => {
+            if (failInit) throw new Error('bevy_safari_initial_projection_failed');
+        },
         run_atome_bevy_renderer: (_selector, _width, _height, _surfaceMetrics, initialScene) => {
             calls.push({ type: 'run', ids: initialScene.nodes.map((node) => node.id) });
-            if (failRun) throw new Error('bevy_safari_initial_projection_failed');
         },
         apply_atome_bevy_spawn: (node) => calls.push({ type: 'spawn', id: node.id }),
         apply_atome_bevy_surface: (payload) => calls.push({ type: 'surface', payload })
@@ -413,7 +414,7 @@ test('Project reconcile restarts Bevy after a failed projection instead of diffi
     assert.equal(failed.ok, false);
     assert.equal(readBevyWebRendererState(host.querySelector('#eve_surface_project'))?.started, false);
 
-    failRun = false;
+    failInit = false;
     const recovered = await reconcileProjectSceneRecordsByPrefix({
         projectId: 'failed_projection',
         prefix: '__eve_dashboard_',

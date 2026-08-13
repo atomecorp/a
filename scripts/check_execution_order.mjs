@@ -12,7 +12,7 @@ const ALLOWED_PHASE_STATUSES = new Set([
     'Termine verifie'
 ]);
 const ADMINISTRATIVE_CHECKBOX_RE = /^(?:completed|non commencee?s?|partiellement commencee|terminee?)\.?$/i;
-const TODO_REFERENCE_RE = /\b(?:todo|done|maps)\/[A-Za-z0-9_.\/-]+(?:\.md|\/)/g;
+const TODO_REFERENCE_RE = /\b(?:todo|done|maps)\/(?:(?:[A-Za-z0-9_.-]+(?: [A-Za-z0-9_.-]+)*\/)*[A-Za-z0-9_.-]+(?: [A-Za-z0-9_.-]+)*\.md|(?:[A-Za-z0-9_.-]+(?: [A-Za-z0-9_.-]+)*\/)+)/g;
 
 const normalizePath = (value = '') => String(value).replace(/\\/g, '/').replace(/[),.;:]+$/g, '');
 const normalizeTask = (value = '') => String(value)

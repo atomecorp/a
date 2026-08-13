@@ -493,6 +493,26 @@ export class PlayRecordCore {
         return { ok: true, id, gain: normalizedGain };
     }
 
+    async setVoicePan(voiceId = '', pan = 0) {
+        const source = (voiceId && typeof voiceId === 'object') ? voiceId : null;
+        const id = safeString(source ? (source.voiceId || source.voice_id || source.id || source.clipId || source.clip_id) : voiceId);
+        if (!id) return { ok: true, skipped: true };
+        const normalizedPan = Math.min(1, Math.max(-1, Number(source ? source.pan : pan) || 0));
+        this.dispatchIntent('setVoicePan', { voiceId: id, pan: normalizedPan });
+        await this.init();
+        const runtime = this.runtime();
+        if (runtime.playback === 'tauri_native_kira' || runtime.playback === 'ios_native_kira') {
+            const result = await this.invoke()('audio_set_pan', { id, pan: normalizedPan });
+            return { ok: true, result, id, pan: normalizedPan };
+        }
+        const facade = this.facade();
+        if (typeof facade.__call_backend_method !== 'function') {
+            throw new Error('play_record_facade_backend_call_unavailable');
+        }
+        await Promise.resolve(facade.__call_backend_method('set_param', { id, paramId: 'pan', value: normalizedPan }));
+        return { ok: true, id, pan: normalizedPan };
+    }
+
     async setVoiceRate(voiceId = '', rate = 1) {
         const source = (voiceId && typeof voiceId === 'object') ? voiceId : null;
         const id = safeString(source ? (source.voiceId || source.voice_id || source.id || source.clipId || source.clip_id) : voiceId);

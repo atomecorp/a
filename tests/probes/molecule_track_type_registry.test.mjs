@@ -17,7 +17,7 @@ const createBaseTimeline = () => createTimeline({
     owner_atome_id: 'owner_track_types'
 });
 
-test('Molecule track type registry exposes built-in v1 track types', () => {
+test('Molecule track type registry exposes built-in track types', () => {
     const kinds = DEFAULT_MOLECULE_TRACK_TYPE_REGISTRY.trackKinds();
     for (const kind of requiredTrackTypes) {
         assert.equal(kinds.includes(kind), true, `missing track type ${kind}`);
@@ -46,6 +46,7 @@ test('Molecule kernel consumes the registry for track and clip compatibility', (
     let timeline = createBaseTimeline();
     timeline = addTrack(timeline, {
         track_id: 'image_track',
+        section_id: 'timeline_track_types:section:1',
         kind: 'image',
         name: 'Images',
         order: 10

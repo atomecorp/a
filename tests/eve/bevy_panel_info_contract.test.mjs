@@ -117,6 +117,37 @@ test('Info property mutations use one canonical commit batch and never mutate th
     assert.equal(canonical[2].properties.locked, true);
 });
 
+test('Info edits a contextual Molecule Track through its canonical mutation callback', async () => {
+    const calls = [];
+    const runtime = createInfoPanelSurface({
+        readSelection: () => [],
+        renderPreview: async () => { throw new Error('contextual preview must stay disabled'); },
+        events: { on: () => () => true }
+    });
+    await runtime.showContextualRecord({
+        atome_id: 'molecule-track:timeline_a:voice',
+        type: 'molecule_track', kind: 'track', project_id: 'project_a',
+        properties: { name: 'Voice', track_type: 'audio', mute: false },
+        contextual_info: {
+            no_preview: true,
+            readonly_fields: ['track_type'],
+            commit_property: async (key, value) => {
+                calls.push({ key, value });
+                return { properties: { name: 'Voice', track_type: 'audio', mute: value } };
+            }
+        }
+    });
+    const before = runtime.surface.readState();
+    assert.equal(before.primary.id, 'molecule-track:timeline_a:voice');
+    assert.equal(before.properties.find((entry) => entry.key === 'track_type').editable, false);
+    await runtime.load();
+    assert.equal(runtime.surface.readState().primary.id, 'molecule-track:timeline_a:voice');
+    const result = await runtime.surface.handleEvent({ type: 'info.field.boolean', key: 'mute', value: true });
+    assert.equal(result.ok, true);
+    assert.deepEqual(calls, [{ key: 'mute', value: true }]);
+    assert.equal(runtime.surface.readState().properties.find((entry) => entry.key === 'mute').value, true);
+});
+
 test('Info hierarchy preserves depth and only reveals descendants of expanded parents', () => {
     const collapsed = hierarchyEntries(records, new Set(), ['child_a']);
     assert.deepEqual(collapsed.map((entry) => entry.id), ['project_a']);
@@ -249,7 +280,7 @@ test('shared Bevy list virtualizes a bounded window and resolves scroll pages fo
     visit(result.node, (candidate) => {
         if (/^shared_records_entry_\d+$/.test(candidate.id || '')) rows += 1;
     });
-    assert.equal(rows, 200, 'the shared tree never constructs records outside the active window');
+    assert.ok(rows > 0 && rows <= 20, 'the shared tree constructs only the viewport plus bounded overscan');
     result.node.on.scroll({ scroll_offset_y: 7400, scroll_viewport_height: 320 });
     assert.deepEqual(windows, [1]);
     assert.equal(virtualizedListCountLabel({ totalCount: 450 }, 200), '450');

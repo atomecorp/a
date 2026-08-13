@@ -1,6 +1,6 @@
 /* tslint:disable */
 /* eslint-disable */
-export function audio_shutdown(): void;
+export function audio_destroy_clip(id: string): void;
 /**
  * Load an audio clip from raw bytes (WAV, MP3, OGG).
  * In WASM, we cannot read files from disk so JS must pass the bytes.
@@ -9,10 +9,11 @@ export function audio_load_clip_from_bytes(id: string, data: Uint8Array): void;
 export function audio_play(id: string): void;
 export function audio_set_volume(id: string, db: number): void;
 export function audio_init(): void;
+export function audio_set_pan(id: string, pan: number): void;
 export function audio_set_playback_rate(id: string, rate: number): void;
-export function audio_destroy_clip(id: string): void;
 export function audio_stop_instance(voice_id: string): void;
-export function audio_play_instance(asset_id: string, voice_id: string, start_seconds: number, duration_seconds: number | null | undefined, gain: number, rate: number, loop_start_seconds?: number | null, loop_end_seconds?: number | null): void;
+export function audio_shutdown(): void;
+export function audio_play_instance(asset_id: string, voice_id: string, start_seconds: number, duration_seconds: number | null | undefined, gain: number, pan: number, rate: number, loop_start_seconds?: number | null, loop_end_seconds?: number | null): void;
 export function audio_stop(id: string): void;
 /**
  * Format that each sample has. Usually, this corresponds to the sampling
@@ -110,7 +111,8 @@ export interface InitOutput {
   readonly audio_init: () => [number, number];
   readonly audio_load_clip_from_bytes: (a: number, b: number, c: number, d: number) => [number, number];
   readonly audio_play: (a: number, b: number) => [number, number];
-  readonly audio_play_instance: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number, m: number) => [number, number];
+  readonly audio_play_instance: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number, m: number, n: number) => [number, number];
+  readonly audio_set_pan: (a: number, b: number, c: number) => [number, number];
   readonly audio_set_playback_rate: (a: number, b: number, c: number) => [number, number];
   readonly audio_set_volume: (a: number, b: number, c: number) => [number, number];
   readonly audio_shutdown: () => [number, number];

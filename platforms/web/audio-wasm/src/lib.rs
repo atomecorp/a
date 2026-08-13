@@ -4,7 +4,7 @@
 
 use kira::backend::cpal::CpalBackend;
 use kira::sound::static_sound::{StaticSoundData, StaticSoundHandle, StaticSoundSettings};
-use kira::{AudioManager, AudioManagerSettings, Decibels, Frame, PlaybackRate, Tween};
+use kira::{AudioManager, AudioManagerSettings, Decibels, Frame, Panning, PlaybackRate, Tween};
 use std::collections::HashMap;
 use std::io::Cursor;
 use std::sync::Mutex;
@@ -233,7 +233,7 @@ pub fn audio_load_clip_from_bytes(id: &str, data: &[u8]) -> Result<(), JsValue> 
 
 #[wasm_bindgen]
 pub fn audio_play(id: &str) -> Result<(), JsValue> {
-    audio_play_instance(id, id, 0.0, None, 1.0, 1.0, None, None)
+    audio_play_instance(id, id, 0.0, None, 1.0, 0.0, 1.0, None, None)
 }
 
 fn gain_to_decibels(gain: f64) -> Decibels {
@@ -248,6 +248,7 @@ pub fn audio_play_instance(
     start_seconds: f64,
     duration_seconds: Option<f64>,
     gain: f64,
+    pan: f64,
     rate: f64,
     loop_start_seconds: Option<f64>,
     loop_end_seconds: Option<f64>,
@@ -299,6 +300,7 @@ pub fn audio_play_instance(
 
     sound_data = sound_data
         .volume(gain_to_decibels(gain))
+        .panning(Panning(pan.clamp(-1.0, 1.0) as f32))
         .playback_rate(PlaybackRate(requested_rate));
 
     let manager = ensure_audio_manager(engine)?;
@@ -356,6 +358,25 @@ pub fn audio_set_volume(id: &str, db: f64) -> Result<(), JsValue> {
             duration: Duration::from_millis(50),
             ..Default::default()
         },
+    );
+    Ok(())
+}
+
+#[wasm_bindgen]
+pub fn audio_set_pan(id: &str, pan: f64) -> Result<(), JsValue> {
+    let mut guard = ENGINE
+        .lock()
+        .map_err(|e| JsValue::from_str(&format!("Lock error: {e}")))?;
+    let engine = guard
+        .as_mut()
+        .ok_or_else(|| JsValue::from_str("Audio engine not initialized"))?;
+    let voice = engine
+        .voices
+        .get_mut(id)
+        .ok_or_else(|| JsValue::from_str(&format!("Voice '{id}' not found")))?;
+    voice.handle.set_panning(
+        Panning(pan.clamp(-1.0, 1.0) as f32),
+        Tween { duration: Duration::from_millis(50), ..Default::default() },
     );
     Ok(())
 }
