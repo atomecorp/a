@@ -196,14 +196,22 @@ Ces tests couvrent les scénarios §7 n° 1, 2, 3, 6, 7, 8, 11, 12, 14, 15, 16, 
 **Aucun.** L'audit n'a pas trouvé de défaut de granularité justifiant un changement.
 C'est le résultat attendu du §17.3 : ne pas sur-concevoir ce qui fonctionne.
 
-Un seul manque a été relevé pendant l'audit, et il concerne la tâche 1 et non la
+Un seul manque a été relevé pendant l'audit, et il concernait la tâche 1 et non la
 granularité : l'absence d'un mécanisme de règle de confidentialité s'appliquant à
-**tout lecteur**. Traité séparément (voir `granularity_progress.md`).
+**tout lecteur**. **Livré depuis** — `database/adole_privacy_rules.js`, table
+`property_privacy_rules`, consultée dans `canRead` et restrictive uniquement. Il étend
+la granularité sans la modifier : la règle porte sur une `particle_key`, à la même
+échelle que le reste.
 
 ## Risques restants
 
-1. Les 24 scénarios manuels du §7 n'ont pas été rejoués dans cette passe ; les tests
-   automatisés en couvrent 18.
+1. Les 24 scénarios manuels du §7 n'ont pas été rejoués ; les tests automatisés en
+   couvrent 18. Les six restants — 4 et 5 (undo/redo local), 9 (condition temporelle),
+   10 (condition de profil/relation), 13 (reload), 24 (condition modifiée
+   dynamiquement) — **manquent de tests, pas de code** : les mécanismes ont été
+   exercés directement et répondent correctement (temporel avant/pendant/après,
+   relation contact/non-contact, recalcul après changement de condition, propriétaire
+   d'historique par propriété).
 2. La frontière de granularité des structures imbriquées est la clé de premier niveau :
    modifier un champ profond réécrit le JSON de cette clé. Acceptable et documenté,
    mais à revoir si un module manipule de gros objets imbriqués à haute fréquence.
