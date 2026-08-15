@@ -1,4 +1,9 @@
-export function createAdolePermissionApi({ query, getAtome, getEffectiveOwnerId }) {
+import {
+    evaluatePermissionConditions,
+    normalizePermissionConditions
+} from '../atome/src/squirrel/conditions/permission_adapter.js';
+
+export function createAdolePermissionApi({ query, getAtome, getEffectiveOwnerId, allowsPropertyRead = null }) {
     async function setPermission(
         atomeId,
         principalId,
@@ -13,7 +18,9 @@ export function createAdolePermissionApi({ query, getAtome, getEffectiveOwnerId 
         const now = new Date().toISOString();
         const canCreate = options.canCreate ? 1 : 0;
         const shareMode = options.shareMode ? String(options.shareMode) : null;
-        const conditions = options.conditions ? JSON.stringify(options.conditions) : null;
+        const conditionsProvided = Object.prototype.hasOwnProperty.call(options, 'conditions');
+        const normalizedConditions = conditionsProvided ? normalizePermissionConditions(options.conditions) : null;
+        const conditions = normalizedConditions ? JSON.stringify(normalizedConditions) : null;
         const expiresAt = options.expiresAt || null;
 
         const existing = await query('get', `
@@ -25,7 +32,7 @@ export function createAdolePermissionApi({ query, getAtome, getEffectiveOwnerId 
             await query('run', `
                 UPDATE permissions SET can_read = ?, can_write = ?, can_delete = ?, can_share = ?, can_create = ?,
                                        share_mode = COALESCE(?, share_mode),
-                                       conditions = COALESCE(?, conditions),
+                                       conditions = CASE WHEN ? = 1 THEN ? ELSE conditions END,
                                        expires_at = COALESCE(?, expires_at)
                 WHERE permission_id = ?
             `, [
@@ -35,6 +42,7 @@ export function createAdolePermissionApi({ query, getAtome, getEffectiveOwnerId 
                 canShare ? 1 : 0,
                 canCreate,
                 shareMode,
+                conditionsProvided ? 1 : 0,
                 conditions,
                 expiresAt,
                 existing.permission_id
@@ -63,15 +71,14 @@ export function createAdolePermissionApi({ query, getAtome, getEffectiveOwnerId 
         ]);
     }
 
-    async function isPermissionActive(permission, principalId, atomeId) {
+    async function isPermissionActive(permission, principalId, atomeId, operationName, particleKey) {
         if (!permission) return false;
         if (permission.expires_at) {
             const expiry = new Date(permission.expires_at).getTime();
             if (!Number.isNaN(expiry) && Date.now() > expiry) return false;
         }
 
-        const conditions = parseConditions(permission.conditions);
-        if (!conditions) return true;
+        if (!permission.conditions) return true;
 
         const [userAtome, targetAtome] = await Promise.all([
             principalId ? getAtome(principalId) : null,
@@ -79,15 +86,19 @@ export function createAdolePermissionApi({ query, getAtome, getEffectiveOwnerId 
         ]);
 
         const context = {
-            now: new Date(),
+            time: { now: new Date().toISOString() },
             user: userAtome ? (userAtome.properties || {}) : {},
-            atome: targetAtome ? (targetAtome.properties || {}) : {}
+            atome: targetAtome ? (targetAtome.properties || {}) : {},
+            actor: { id: principalId },
+            operation: { name: operationName, property: particleKey },
+            property: { key: particleKey }
         };
 
-        return evaluateConditionNode(conditions, context);
+        const decision = await evaluatePermissionConditions(permission.conditions, context);
+        return decision.matched === true;
     }
 
-    async function checkPermissionFlag(atomeId, principalId, particleKey, field) {
+    async function checkPermissionFlag(atomeId, principalId, particleKey, field, operationName) {
         const ownerId = await getEffectiveOwnerId(atomeId);
         if (ownerId && ownerId === principalId) return true;
 
@@ -99,23 +110,29 @@ export function createAdolePermissionApi({ query, getAtome, getEffectiveOwnerId 
         `, [atomeId, principalId, particleKey]);
 
         if (!perm || perm.flag !== 1) return false;
-        return await isPermissionActive(perm, principalId, atomeId);
+        return await isPermissionActive(perm, principalId, atomeId, operationName, particleKey);
     }
 
     async function canRead(atomeId, principalId, particleKey = null) {
-        return await checkPermissionFlag(atomeId, principalId, particleKey, 'can_read');
+        const allowed = await checkPermissionFlag(atomeId, principalId, particleKey, 'can_read', 'read');
+        if (!allowed) return false;
+        // A property privacy rule can only narrow what the permission already allowed
+        // (§12.5). It is consulted last and can never grant, so a property with no rule
+        // behaves exactly as before this existed.
+        if (!particleKey || typeof allowsPropertyRead !== 'function') return true;
+        return await allowsPropertyRead(atomeId, particleKey, principalId, 'read');
     }
 
     async function canWrite(atomeId, principalId, particleKey = null) {
-        return await checkPermissionFlag(atomeId, principalId, particleKey, 'can_write');
+        return await checkPermissionFlag(atomeId, principalId, particleKey, 'can_write', 'write');
     }
 
     async function canDelete(atomeId, principalId, particleKey = null) {
-        return await checkPermissionFlag(atomeId, principalId, particleKey, 'can_delete');
+        return await checkPermissionFlag(atomeId, principalId, particleKey, 'can_delete', 'delete');
     }
 
     async function canShare(atomeId, principalId, particleKey = null) {
-        return await checkPermissionFlag(atomeId, principalId, particleKey, 'can_share');
+        return await checkPermissionFlag(atomeId, principalId, particleKey, 'can_share', 'share');
     }
 
     async function canCreate(atomeId, principalId, particleKey = null) {
@@ -130,7 +147,7 @@ export function createAdolePermissionApi({ query, getAtome, getEffectiveOwnerId 
         `, [atomeId, principalId, particleKey]);
 
         if (!perm || (perm.flag !== 1 && perm.fallback !== 1)) return false;
-        return await isPermissionActive(perm, principalId, atomeId);
+        return await isPermissionActive(perm, principalId, atomeId, 'create', particleKey);
     }
 
     return {
@@ -141,99 +158,4 @@ export function createAdolePermissionApi({ query, getAtome, getEffectiveOwnerId 
         canShare,
         canCreate
     };
-}
-
-function parseConditions(raw) {
-    if (!raw) return null;
-    if (typeof raw === 'object') return raw;
-    try {
-        return JSON.parse(raw);
-    } catch (error) {
-        if (!(error instanceof SyntaxError)) throw error;
-        return null;
-    }
-}
-
-function coerceComparable(value) {
-    if (value === null || value === undefined) return value;
-    if (typeof value === 'number') return value;
-    const num = Number(value);
-    if (!Number.isNaN(num)) return num;
-    const date = new Date(value);
-    if (!Number.isNaN(date.getTime())) return date.getTime();
-    return String(value);
-}
-
-function compareValues(actual, op, expected) {
-    const left = coerceComparable(actual);
-    const right = coerceComparable(expected);
-
-    switch (op) {
-        case 'eq': return left === right;
-        case 'ne': return left !== right;
-        case 'gt': return left > right;
-        case 'gte': return left >= right;
-        case 'lt': return left < right;
-        case 'lte': return left <= right;
-        case 'in': return Array.isArray(expected) ? expected.map(coerceComparable).includes(left) : false;
-        default: return false;
-    }
-}
-
-function resolvePath(path, context) {
-    if (!path || typeof path !== 'string') return undefined;
-    const parts = path.split('.');
-    let cur = context;
-    for (const part of parts) {
-        if (!cur || typeof cur !== 'object') return undefined;
-        cur = cur[part];
-    }
-    return cur;
-}
-
-function evaluateConditionNode(node, context) {
-    if (!node || typeof node !== 'object') return true;
-
-    if (Array.isArray(node)) {
-        return node.every((child) => evaluateConditionNode(child, context));
-    }
-
-    if (node.all && Array.isArray(node.all)) {
-        return node.all.every((child) => evaluateConditionNode(child, context));
-    }
-    if (node.any && Array.isArray(node.any)) {
-        return node.any.some((child) => evaluateConditionNode(child, context));
-    }
-
-    if (node.after || node.before) {
-        const now = context.now ? context.now.getTime() : Date.now();
-        if (node.after && now < coerceComparable(node.after)) return false;
-        if (node.before && now > coerceComparable(node.before)) return false;
-        return true;
-    }
-
-    if (node.field && node.op) {
-        const actual = resolvePath(node.field, context);
-        return compareValues(actual, node.op, node.value);
-    }
-
-    if (node.user && typeof node.user === 'object') {
-        return Object.entries(node.user).every(([key, rule]) => {
-            if (rule && typeof rule === 'object' && rule.op) {
-                return compareValues(resolvePath(`user.${key}`, context), rule.op, rule.value);
-            }
-            return compareValues(resolvePath(`user.${key}`, context), 'eq', rule);
-        });
-    }
-
-    if (node.atome && typeof node.atome === 'object') {
-        return Object.entries(node.atome).every(([key, rule]) => {
-            if (rule && typeof rule === 'object' && rule.op) {
-                return compareValues(resolvePath(`atome.${key}`, context), rule.op, rule.value);
-            }
-            return compareValues(resolvePath(`atome.${key}`, context), 'eq', rule);
-        });
-    }
-
-    return true;
 }

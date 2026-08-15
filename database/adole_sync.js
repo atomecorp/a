@@ -47,7 +47,7 @@ export function createAdoleSyncApi({ getAtome }) {
          WHERE status IN ('pending', 'error')
            AND (next_retry_at IS NULL OR next_retry_at <= ?)
            AND target_server = ?
-         ORDER BY created_at ASC
+         ORDER BY created_at ASC, queue_id ASC
          LIMIT ?`,
                 [now, target_server, limit]
             );
@@ -57,7 +57,7 @@ export function createAdoleSyncApi({ getAtome }) {
             `SELECT * FROM sync_queue
          WHERE status IN ('pending', 'error')
            AND (next_retry_at IS NULL OR next_retry_at <= ?)
-         ORDER BY created_at ASC
+         ORDER BY created_at ASC, queue_id ASC
          LIMIT ?`,
             [now, limit]
         );

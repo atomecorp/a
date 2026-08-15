@@ -8,7 +8,11 @@ import {
 } from './session.js';
 import { normalizePhone, normalizeUsername, getPrimaryBackend, getSecondaryBackend, hasAuthenticatedToken } from './auth_core.js';
 import { loginBackend, registerBackend, bootstrapBackend, ensureBackendAvailability } from './auth_backends.js';
-import { persistFastifyLoginCache, markFastifyAuthValid } from './auth_fastify_token.js';
+import {
+    persistFastifyLoginCache,
+    markFastifyAuthValid,
+    configureTauriRemoteSync
+} from './auth_fastify_token.js';
 
 const markValidFastifySession = (backend, result) => {
     if (backend === 'fastify' && hasAuthenticatedToken('fastify', result)) markFastifyAuthValid();
@@ -105,6 +109,7 @@ export const loginMethods = {
             user: activeResult.user,
             backend: activeBackend
         });
+        response.sync = await configureTauriRemoteSync();
         response.ok = true;
         response.user = activeResult.user;
         response.token = activeResult.token || null;
@@ -206,6 +211,7 @@ export const loginMethods = {
                 user: activeResult.user,
                 backend: activeBackend
             });
+            response.sync = await configureTauriRemoteSync();
         } else if (activeResult?.ok) {
             response[activeBackend] = {
                 success: false,
@@ -293,6 +299,7 @@ export const loginMethods = {
                 user: loggedUser,
                 backend: activeBackend
             });
+            response.sync = await configureTauriRemoteSync();
         }
 
         return response;

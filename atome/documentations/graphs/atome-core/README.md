@@ -12,6 +12,8 @@ Ce dossier cartographie le bloc atome-core pour faciliter le debug des mutations
 
 - eVe/core/atome_commit.js
 - eVe/core/atome_timeline.js
+- eVe/core/atome_timeline_history.js
+- eVe/core/atome_timeline_history_contract.js
 - eVe/core/event_bus.js
 - eVe/intuition/runtime/selection.js
 - atome/src/squirrel/atome/atome.js
@@ -19,8 +21,20 @@ Ce dossier cartographie le bloc atome-core pour faciliter le debug des mutations
 - atome/src/squirrel/apis/unified/adole_apis.js
 - atome/src/squirrel/apis/unified/adole_api/atomes.js
 - database/adole.js
+- database/adole_event_contract.js
+- database/adole_event_mutation.js
 - database/schema.sql
 - server/atomeRoutes.orm.js
+- server/atomeHistoryCommands.js
+- server/atomePropertySecurity.js
+- server/atomeRealtime.js
+- server/wsAtomeRealtimeOperation.js
+- server/wsAtomeDeleteOperation.js
+- server/wsSyncSecurity.js
+- server/wsAtomeOperations.js
+- platforms/desktop-tauri/src/server/local_atome_security.rs
+- platforms/desktop-tauri/src/server/local_atome_sync_worker.rs
+- platforms/desktop-tauri/src/server/local_atome_remote_projection.rs
 
 ## Main entry points
 
@@ -34,6 +48,9 @@ Ce dossier cartographie le bloc atome-core pour faciliter le debug des mutations
 - `dispatchSelectionEvent` - eVe/intuition/runtime/selection.js:94
 - `createAtome` - database/adole.js:494
 - `commitAtomeEvent` - server/atomeRoutes.orm.js:362
+- `handleWsAtomeRealtimeOperation` - server/wsAtomeRealtimeOperation.js
+- `executeAtomeHistoryCommand` - server/atomeHistoryCommands.js
+- `handleWsAtomeDeleteOperation` - server/wsAtomeDeleteOperation.js
 
 ## Main risks found
 
@@ -41,6 +58,11 @@ Ce dossier cartographie le bloc atome-core pour faciliter le debug des mutations
 - RISK-002: `ASYNC_RISK` sur mirroring Fastify non bloquant depuis Tauri.
 - RISK-003: `CONFLICT` entre selection globals et SelectionAPI.
 - RISK-004: `PERFORMANCE_BLOCKER` possible sur commit high-frequency gestures.
+- RISK-005: realtime gesture previews must authorize every touched property and
+  project the patch separately for each recipient before delivery.
+- RISK-006: a durable timeline transition spanning several source transactions
+  is rejected until the server can execute the whole range atomically; snapshot
+  rewriting is not an authorized fallback.
 
 ## Graphs
 

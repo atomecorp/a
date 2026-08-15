@@ -221,7 +221,7 @@ export async function handleShareMessage(message, userId) {
                     }
 
                     if (inboxId) await commitSharingAtomePatch(inboxId, updates, userId);
-                    if (outboxId) await commitSharingAtomePatch(outboxId, updates, userId);
+                    if (outboxId) await commitSharingAtomePatch(outboxId, updates, sharerId);
 
                     if (!outboxId && requestIdResolved) {
                         const related = await loadShareRequestsByRequestId(requestIdResolved);
@@ -229,7 +229,7 @@ export async function handleShareMessage(message, userId) {
                             if (String(atomeOwnerIdOf(item) || '') !== String(sharerId)) continue;
                             const id = atomeIdOf(item);
                             if (!id) continue;
-                            await commitSharingAtomePatch(id, updates, userId);
+                            await commitSharingAtomePatch(id, updates, sharerId);
                         }
                     }
 
@@ -315,6 +315,34 @@ export async function handleShareMessage(message, userId) {
                 }
                 const policyId = await upsertSharePolicy(userId, peerUserId, policy, permissions);
                 return { requestId, success: true, policyId };
+            }
+
+            // §12.5 — output rules on one's own data. Restrictive only: the rule is
+            // consulted after a permission already allowed the read and can only turn
+            // it into a refusal, never a grant.
+            case 'privacy-rule-set': {
+                const { atome_id, particle_key, conditions } = message;
+                if (!atome_id || !particle_key) {
+                    return { requestId, success: false, error: 'Missing atome_id or particle_key' };
+                }
+                const result = await db.setPropertyPrivacyRule(
+                    atome_id,
+                    particle_key,
+                    conditions === undefined ? null : conditions,
+                    userId
+                );
+                return result.ok
+                    ? { requestId, success: true, ...result }
+                    : { requestId, success: false, error: result.error };
+            }
+
+            case 'privacy-rule-list': {
+                const { atome_id } = message;
+                if (!atome_id) return { requestId, success: false, error: 'Missing atome_id' };
+                const result = await db.listPropertyPrivacyRules(atome_id, userId);
+                return result.ok
+                    ? { requestId, success: true, rules: result.rules }
+                    : { requestId, success: false, error: result.error };
             }
 
             case 'create': {

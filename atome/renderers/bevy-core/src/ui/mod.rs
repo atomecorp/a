@@ -11,7 +11,7 @@ use bevy::prelude::*;
 use bevy::text::{Font, FontSize, FontSource};
 use bevy::ui::{
     percent, px, widget::ImageNode, BoxShadow, GlobalZIndex, RelativeCursorPosition,
-    ScrollPosition, ShadowStyle,
+    IsDefaultUiCamera, ScrollPosition, ShadowStyle,
 };
 use crate::workspace_backdrop::FLOWER_PRESENTATION_LAYER;
 
@@ -578,16 +578,30 @@ fn update_tree(world: &mut World, tree: AtomeUiTree) -> Result<(), String> {
     mount_tree(world, tree)
 }
 
-// The UI pass targets the camera's physical viewport, which can differ from
-// the CSS canvas size: exposing it lets the JS runtime pre-scale logical
-// trees by the exact effective ratio.
-fn ui_viewport_size(world: &mut World) -> (u32, u32) {
-    let mut query = world.query::<&Camera>();
-    query
-        .iter(world)
-        .find_map(|camera| camera.physical_viewport_size())
-        .map(|size| (size.x, size.y))
-        .unwrap_or((0, 0))
+// The UI pass targets `IsDefaultUiCamera`, not whichever camera happens to be
+// first in ECS iteration order. The renderer also owns reduced-resolution
+// offscreen cameras for backdrop capture and blur; using one of those here
+// would publish (and then apply) its downscale to the whole product UI.
+//
+// Standalone core consumers may not install a default UI camera. Preserve the
+// historical first-camera fallback only when the marker is genuinely absent;
+// if the marked camera exists but is not initialized yet, report zero so the
+// JS runtime keeps its neutral scale until Bevy has computed the real target.
+pub fn ui_viewport_size(world: &mut World) -> (u32, u32) {
+    let default_camera = {
+        let mut query = world.query_filtered::<&Camera, With<IsDefaultUiCamera>>();
+        query.iter(world).next().map(|camera| camera.physical_viewport_size())
+    };
+    let size = match default_camera {
+        Some(size) => size,
+        None => {
+            let mut query = world.query::<&Camera>();
+            query
+                .iter(world)
+                .find_map(|camera| camera.physical_viewport_size())
+        }
+    };
+    size.map(|value| (value.x, value.y)).unwrap_or((0, 0))
 }
 
 // Temporary-turned-permanent ground-truth diagnostic: exposes the real

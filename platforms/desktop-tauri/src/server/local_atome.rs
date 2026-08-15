@@ -4,10 +4,8 @@
 // WebSocket-first operations with HTTP parity handlers.
 // Schema: atomes + particles (unified with Fastify, source: database/schema.sql)
 // =============================================================================
-
 use crate::server::broadcast_sync_event;
 use chrono::Utc;
-use futures_util::{SinkExt, StreamExt};
 use rusqlite::{Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Map as JsonMap, Value as JsonValue};
@@ -17,8 +15,6 @@ use std::{
     path::{Path, PathBuf},
     sync::{Arc, Mutex},
 };
-use tokio::time::{sleep, timeout, Duration};
-use tokio_tungstenite::{connect_async, tungstenite::Message as TungsteniteMessage};
 use uuid::Uuid;
 
 macro_rules! println {
@@ -71,41 +67,31 @@ pub fn filter_sync_event_for_user(
         .or_else(|| payload.pointer("/atome/atome_id"))
         .and_then(|value| value.as_str())?;
     let db = state.db.lock().ok()?;
-    let owner_id = db
-        .query_row(
-            "SELECT owner_id FROM atomes WHERE atome_id = ?1",
-            [atome_id],
-            |row| row.get::<_, Option<String>>(0),
-        )
-        .optional()
-        .ok()
-        .flatten()
-        .flatten();
-    if owner_id.as_deref() != Some(user_id) {
-        let permission = db
-            .query_row(
-                "SELECT can_read, share_mode FROM permissions
-                 WHERE atome_id = ?1 AND principal_id = ?2
-                   AND can_read = 1
-                   AND (expires_at IS NULL OR expires_at > datetime('now'))
-                 LIMIT 1",
-                rusqlite::params![atome_id, user_id],
-                |row| Ok((row.get::<_, i64>(0)?, row.get::<_, Option<String>>(1)?)),
-            )
-            .optional()
-            .ok()
-            .flatten()?;
-        let mode = permission.1.unwrap_or_default().to_lowercase();
-        if permission.0 != 1 || !matches!(mode.as_str(), "" | "real-time" | "realtime") {
+    let mut atome = payload.get("atome").cloned().unwrap_or(JsonValue::Null);
+    if let Some(object) = atome.as_object_mut() {
+        let source = object.get("properties").or_else(|| object.get("data")).cloned().unwrap_or_else(|| json!({}));
+        let projected = source.as_object().map(|properties| {
+            properties.iter().filter_map(|(key, value)| {
+                super::local_atome_security::can_observe(&db, atome_id, user_id, key)
+                    .then(|| (key.clone(), value.clone()))
+            }).collect::<JsonMap<_, _>>()
+        }).unwrap_or_default();
+        if projected.is_empty() {
             return None;
         }
+        object.insert("properties".to_string(), JsonValue::Object(projected.clone()));
+        if object.contains_key("data") {
+            object.insert("data".to_string(), JsonValue::Object(projected));
+        }
+    } else if !super::local_atome_security::can_read(&db, atome_id, user_id, None) {
+        return None;
     }
     Some(json!({
         "type": "event",
         "eventType": event_type,
         "payload": {
             "atome_id": atome_id,
-            "atome": payload.get("atome").cloned().unwrap_or(JsonValue::Null)
+            "atome": atome
         },
         "timestamp": Utc::now().to_rfc3339()
     }))
@@ -121,6 +107,48 @@ pub struct LocalAtomeState {
     storage_root: PathBuf,
     pub recent_request_ids: Arc<Mutex<DedupeCache>>,
     pub recent_fingerprints: Arc<Mutex<FingerprintCache>>,
+    pub(crate) remote_sync_credentials: Arc<Mutex<HashMap<String, RemoteSyncCredential>>>,
+}
+
+#[derive(Clone)]
+pub(crate) struct RemoteSyncCredential {
+    pub(crate) remote_user_id: String,
+    pub(crate) token: String,
+}
+
+pub(crate) fn configure_remote_sync_credential(
+    state: &LocalAtomeState,
+    local_user_id: &str,
+    remote_user_id: &str,
+    token: &str,
+) -> Result<(), String> {
+    if local_user_id.trim().is_empty() || remote_user_id.trim().is_empty() || token.trim().is_empty() {
+        return Err("invalid_remote_sync_credential".to_string());
+    }
+    let mut credentials = state
+        .remote_sync_credentials
+        .lock()
+        .map_err(|_| "remote_sync_credentials_unavailable".to_string())?;
+    credentials.insert(
+        local_user_id.to_string(),
+        RemoteSyncCredential {
+            remote_user_id: remote_user_id.to_string(),
+            token: token.to_string(),
+        },
+    );
+    Ok(())
+}
+
+pub(crate) fn clear_remote_sync_credential(
+    state: &LocalAtomeState,
+    local_user_id: &str,
+) -> Result<(), String> {
+    let mut credentials = state
+        .remote_sync_credentials
+        .lock()
+        .map_err(|_| "remote_sync_credentials_unavailable".to_string())?;
+    credentials.remove(local_user_id);
+    Ok(())
 }
 
 fn move_guest_downloads(storage_root: &Path, from_owner_id: &str, to_owner_id: &str) -> Result<(), String> {
@@ -366,6 +394,7 @@ pub fn init_database(data_dir: &PathBuf) -> Result<Connection, rusqlite::Error> 
     ensure_permissions_columns(&conn)?;
     ensure_snapshot_columns(&conn)?;
     ensure_state_current_columns(&conn)?;
+    super::local_atome_remote_projection::ensure_schema(&conn)?;
 
     println!(
         "ADOLE v3.0 database initialized (schema hash={}): {:?}",
@@ -851,7 +880,7 @@ pub async fn handle_state_current_message(
         .map(String::from);
 
     match action {
-        "get" => handle_state_current_get(message, state, request_id).await,
+        "get" => handle_state_current_get(message, user_id, state, request_id).await,
         "list" => handle_state_current_list(message, user_id, state, request_id).await,
         _ => WsResponse {
             msg_type: "state-current-response".into(),
@@ -1723,24 +1752,24 @@ async fn handle_alter(
 // =============================================================================
 
 #[derive(Debug, Clone)]
-struct EventRecord {
-    id: String,
-    ts: String,
-    atome_id: Option<String>,
-    project_id: Option<String>,
-    kind: String,
-    payload: Option<JsonValue>,
-    actor: Option<JsonValue>,
-    tx_id: Option<String>,
-    gesture_id: Option<String>,
+pub(super) struct EventRecord {
+    pub(super) id: String,
+    pub(super) ts: String,
+    pub(super) atome_id: Option<String>,
+    pub(super) project_id: Option<String>,
+    pub(super) kind: String,
+    pub(super) payload: Option<JsonValue>,
+    pub(super) actor: Option<JsonValue>,
+    pub(super) tx_id: Option<String>,
+    pub(super) gesture_id: Option<String>,
 }
 
 #[derive(Debug, Clone)]
-struct SyncQueueItem {
-    queue_id: i64,
-    payload: String,
-    attempts: i64,
-    max_attempts: i64,
+pub(super) struct SyncQueueItem {
+    pub(super) queue_id: i64,
+    pub(super) payload: String,
+    pub(super) attempts: i64,
+    pub(super) max_attempts: i64,
 }
 
 fn sync_event_type(kind: &str) -> &'static str {
@@ -1819,6 +1848,10 @@ async fn handle_event_commit(
     };
 
     let result = with_transaction(&db, |conn| {
+        let decision = super::local_atome_security::authorize_event(conn, &normalized, user_id, None);
+        if !decision.allowed {
+            return Err(format!("{}:{}", decision.reason, decision.denied_keys.join(",")));
+        }
         let inserted = insert_event_record(conn, &normalized)?;
         if inserted {
             let _ = apply_event_to_state_current(conn, &normalized)?;
@@ -1887,6 +1920,13 @@ async fn handle_event_commit_batch(
     };
 
     let result = with_transaction(&db, |conn| {
+        let create_ids = super::local_atome_security::batch_create_ids(conn, &normalized_events, user_id);
+        for evt in normalized_events.iter() {
+            let decision = super::local_atome_security::authorize_event(conn, evt, user_id, Some(&create_ids));
+            if !decision.allowed {
+                return Err(format!("{}:{}", decision.reason, decision.denied_keys.join(",")));
+            }
+        }
         for evt in normalized_events.iter() {
             let inserted = insert_event_record(conn, evt)?;
             if inserted {
@@ -1934,7 +1974,7 @@ async fn handle_event_commit_batch(
 
 async fn handle_event_list(
     message: JsonValue,
-    _user_id: &str,
+    user_id: &str,
     state: &LocalAtomeState,
     request_id: Option<String>,
 ) -> WsResponse {
@@ -2053,7 +2093,12 @@ async fn handle_event_list(
         .map_err(|e| e.to_string());
 
     let events = match rows {
-        Ok(iter) => iter.filter_map(|r| r.ok()).collect::<Vec<_>>(),
+        Ok(iter) => iter
+            .filter_map(|row| row.ok())
+            .filter_map(|event| {
+                super::local_atome_security::project_event_for_read(&db, &event, user_id)
+            })
+            .collect::<Vec<_>>(),
         Err(e) => return error_response(request_id, &e),
     };
 
@@ -2071,6 +2116,7 @@ async fn handle_event_list(
 
 async fn handle_state_current_get(
     message: JsonValue,
+    user_id: &str,
     state: &LocalAtomeState,
     request_id: Option<String>,
 ) -> WsResponse {
@@ -2097,16 +2143,29 @@ async fn handle_state_current_get(
         .optional()
         .unwrap_or(None);
 
-    let state_payload = row.map(
+    let state_payload = row.and_then(
         |(id, owner_id, project_id, properties, updated_at, version)| {
-            json!({
+            let properties = parse_json_value(properties.as_ref());
+            let projected = super::local_atome_security::project_properties_for_read(
+                &db, &id, user_id, &properties
+            );
+            let keys = projected.as_object()
+                .map(|value| value.keys().cloned().collect::<Vec<_>>())
+                .unwrap_or_default();
+            if keys.is_empty() {
+                return None;
+            }
+            Some(json!({
                 "atome_id": id,
                 "owner_id": owner_id,
                 "project_id": project_id,
-                "properties": parse_json_value(properties.as_ref()),
+                "properties": projected,
+                "capabilities": super::local_atome_security::project_capabilities_for_read(
+                    &db, &id, user_id, keys.into_iter()
+                ),
                 "updated_at": updated_at,
                 "version": version
-            })
+            }))
         },
     );
 
@@ -2145,21 +2204,22 @@ async fn handle_state_current_list(
         .and_then(|v| v.as_bool())
         .unwrap_or(false);
 
-    // SECURITY: Get owner_id filter from message or use current user_id
-    let owner_filter = message
-        .get("owner_id")
-        .and_then(|v| v.as_str())
-        .map(String::from)
-        .unwrap_or_else(|| user_id.to_string());
-
     let db = match state.db.lock() {
         Ok(d) => d,
         Err(e) => return error_response(request_id, &e.to_string()),
     };
 
-    // SECURITY: Always filter by owner_id to prevent cross-user data leakage.
-    let mut conditions = vec!["(sc.owner_id = ? OR sc.owner_id IS NULL)".to_string()];
-    let mut scope_params = vec![rusqlite::types::Value::from(owner_filter.clone())];
+    let mut conditions = vec![
+        "(sc.owner_id = ? OR EXISTS (
+            SELECT 1 FROM permissions p
+            WHERE p.atome_id = sc.atome_id AND p.principal_id = ?
+              AND p.can_read = 1
+        ))".to_string()
+    ];
+    let mut scope_params = vec![
+        rusqlite::types::Value::from(user_id.to_string()),
+        rusqlite::types::Value::from(user_id.to_string())
+    ];
     if let Some(pid) = project_id {
         conditions.insert(0, "sc.project_id = ?".to_string());
         scope_params.insert(0, rusqlite::types::Value::from(pid.to_string()));
@@ -2175,15 +2235,6 @@ async fn handle_state_current_list(
         "SELECT sc.atome_id, sc.owner_id, sc.project_id, sc.properties, sc.updated_at, sc.version FROM state_current sc LEFT JOIN atomes a ON a.atome_id = sc.atome_id{} ORDER BY sc.updated_at DESC LIMIT ? OFFSET ?",
         where_clause
     );
-    let total = if include_total {
-        db.query_row(
-            &format!("SELECT COUNT(DISTINCT sc.atome_id) FROM state_current sc LEFT JOIN atomes a ON a.atome_id = sc.atome_id{}", where_clause),
-            rusqlite::params_from_iter(scope_params.clone()),
-            |row| row.get::<_, i64>(0),
-        ).unwrap_or(0)
-    } else {
-        0
-    };
     let mut params = scope_params;
     params.push(rusqlite::types::Value::from(limit));
     params.push(rusqlite::types::Value::from(offset));
@@ -2208,9 +2259,27 @@ async fn handle_state_current_list(
         .map_err(|e| e.to_string());
 
     let states = match rows {
-        Ok(iter) => iter.filter_map(|r| r.ok()).collect::<Vec<_>>(),
+        Ok(iter) => iter.filter_map(|row| row.ok()).filter_map(|mut current| {
+            let atome_id = current.get("atome_id")?.as_str()?.to_string();
+            let projected = super::local_atome_security::project_properties_for_read(
+                &db,
+                &atome_id,
+                user_id,
+                current.get("properties").unwrap_or(&JsonValue::Null),
+            );
+            let keys = projected.as_object()?.keys().cloned().collect::<Vec<_>>();
+            if keys.is_empty() {
+                return None;
+            }
+            current["properties"] = projected;
+            current["capabilities"] = super::local_atome_security::project_capabilities_for_read(
+                &db, &atome_id, user_id, keys.into_iter()
+            );
+            Some(current)
+        }).collect::<Vec<_>>(),
         Err(e) => return error_response(request_id, &e),
     };
+    let total = states.len() as i64;
 
     let payload = if include_total {
         json!({ "states": states, "total": total })
@@ -2279,10 +2348,7 @@ fn normalize_event_input(
         payload = Some(JsonValue::Object(object));
     }
 
-    let actor = event
-        .get("actor")
-        .cloned()
-        .or_else(|| Some(json!({ "type": "user", "id": user_id })));
+    let actor = Some(json!({ "type": "user", "id": user_id }));
 
     let tx_id = event
         .get("tx_id")
@@ -2375,9 +2441,10 @@ fn enqueue_sync_event(
     Ok(())
 }
 
-fn list_sync_queue(
+pub(super) fn list_sync_queue_for_actor(
     db: &Connection,
     target_server: &str,
+    actor_id: &str,
     limit: i64,
 ) -> Result<Vec<SyncQueueItem>, String> {
     let mut stmt = db
@@ -2385,15 +2452,16 @@ fn list_sync_queue(
             "SELECT queue_id, payload, attempts, max_attempts
              FROM sync_queue
              WHERE target_server = ?1
+               AND json_extract(payload, '$.actor.id') = ?2
                AND status IN ('pending', 'error')
                AND (next_retry_at IS NULL OR next_retry_at <= datetime('now'))
-             ORDER BY created_at ASC
-             LIMIT ?2",
+             ORDER BY created_at ASC, queue_id ASC
+             LIMIT ?3",
         )
         .map_err(|e| e.to_string())?;
 
     let rows = stmt
-        .query_map(rusqlite::params![target_server, limit], |row| {
+        .query_map(rusqlite::params![target_server, actor_id, limit], |row| {
             Ok(SyncQueueItem {
                 queue_id: row.get(0)?,
                 payload: row.get(1)?,
@@ -2406,7 +2474,7 @@ fn list_sync_queue(
     Ok(rows.filter_map(|r| r.ok()).collect())
 }
 
-fn mark_sync_queue_syncing(db: &Connection, queue_id: i64, attempts: i64) -> Result<(), String> {
+pub(super) fn mark_sync_queue_syncing(db: &Connection, queue_id: i64, attempts: i64) -> Result<(), String> {
     db.execute(
         "UPDATE sync_queue SET status = 'syncing', attempts = ?1, last_attempt_at = datetime('now') WHERE queue_id = ?2",
         rusqlite::params![attempts, queue_id],
@@ -2415,7 +2483,7 @@ fn mark_sync_queue_syncing(db: &Connection, queue_id: i64, attempts: i64) -> Res
     Ok(())
 }
 
-fn mark_sync_queue_error(
+pub(super) fn mark_sync_queue_error(
     db: &Connection,
     queue_id: i64,
     attempts: i64,
@@ -2432,7 +2500,7 @@ fn mark_sync_queue_error(
     Ok(())
 }
 
-fn mark_sync_queue_done(db: &Connection, queue_id: i64) -> Result<(), String> {
+pub(super) fn mark_sync_queue_done(db: &Connection, queue_id: i64) -> Result<(), String> {
     db.execute(
         "DELETE FROM sync_queue WHERE queue_id = ?1",
         rusqlite::params![queue_id],
@@ -2882,6 +2950,92 @@ mod state_current_owner_tests {
     }
 }
 
+#[cfg(test)]
+mod property_commit_security_tests {
+    use super::*;
+
+    fn state() -> LocalAtomeState {
+        let db = Connection::open_in_memory().expect("memory db");
+        db.execute_batch(ADOLE_SCHEMA_SQL).expect("schema");
+        for (id, owner) in [("owner", "owner"), ("member", "member"), ("secure", "owner")] {
+            db.execute(
+                "INSERT INTO atomes (atome_id, atome_type, owner_id, creator_id) VALUES (?1, 'shape', ?2, ?2)",
+                rusqlite::params![id, owner],
+            ).expect("atome fixture");
+        }
+        db.execute(
+            "INSERT INTO state_current (atome_id, owner_id, properties, version) VALUES ('secure', 'owner', '{\"content\":\"before\",\"secret\":\"sealed\"}', 1)",
+            [],
+        ).expect("state fixture");
+        db.execute(
+            "INSERT INTO permissions (atome_id, particle_key, principal_id, can_read, can_write) VALUES ('secure', 'content', 'member', 1, 1)",
+            [],
+        ).expect("permission fixture");
+        LocalAtomeState {
+            db: Arc::new(Mutex::new(db)),
+            storage_root: PathBuf::new(),
+            recent_request_ids: Arc::new(Mutex::new(DedupeCache::new(32))),
+            recent_fingerprints: Arc::new(Mutex::new(FingerprintCache::new(32, 750))),
+            remote_sync_credentials: Arc::new(Mutex::new(HashMap::new())),
+        }
+    }
+
+    fn commit_message(id: &str, props: JsonValue) -> JsonValue {
+        json!({
+            "type": "events",
+            "action": "commit",
+            "sync_target": "fastify",
+            "event": {
+                "id": id,
+                "kind": "set",
+                "atome_id": "secure",
+                "actor": { "id": "owner" },
+                "payload": { "props": props }
+            }
+        })
+    }
+
+    #[tokio::test]
+    async fn denied_mixed_commit_has_no_event_state_or_queue_side_effect() {
+        let state = state();
+        let allowed = handle_events_message(
+            commit_message("allowed-event", json!({"content":"after"})),
+            "member",
+            &state,
+        ).await;
+        assert!(allowed.success, "allowed property commit: {:?}", allowed.error);
+        assert_eq!(
+            allowed.data.as_ref().and_then(|data| data.pointer("/event/actor/id")).and_then(JsonValue::as_str),
+            Some("member"),
+            "the authenticated principal owns the audit identity"
+        );
+
+        let denied = handle_events_message(
+            commit_message("denied-event", json!({"content":"partial","secret":"leak"})),
+            "member",
+            &state,
+        ).await;
+        assert!(!denied.success);
+        assert!(denied.error.as_deref().unwrap_or_default().starts_with("property_write_denied:secret"));
+
+        let db = state.db.lock().unwrap();
+        let properties: String = db.query_row(
+            "SELECT properties FROM state_current WHERE atome_id = 'secure'", [], |row| row.get(0)
+        ).unwrap();
+        let properties = serde_json::from_str::<JsonValue>(&properties).unwrap();
+        assert_eq!(properties.get("content"), Some(&json!("after")));
+        assert_eq!(properties.get("secret"), Some(&json!("sealed")));
+        let denied_events: i64 = db.query_row(
+            "SELECT COUNT(*) FROM events WHERE id = 'denied-event'", [], |row| row.get(0)
+        ).unwrap();
+        let queued: i64 = db.query_row(
+            "SELECT COUNT(*) FROM sync_queue", [], |row| row.get(0)
+        ).unwrap();
+        assert_eq!(denied_events, 0);
+        assert_eq!(queued, 1, "only the authorized commit reaches the sync queue");
+    }
+}
+
 fn apply_event_to_atomes(
     db: &Connection,
     event: &EventRecord,
@@ -3249,202 +3403,6 @@ fn load_atome_with_deleted_excluding(
     })
 }
 
-#[derive(Debug)]
-struct PermissionRow {
-    can_read: i64,
-    can_write: i64,
-    can_delete: i64,
-    can_share: i64,
-    can_create: i64,
-    expires_at: Option<String>,
-    conditions: Option<String>,
-}
-
-fn parse_conditions(raw: &Option<String>) -> Option<serde_json::Value> {
-    let value = raw.as_ref()?.trim();
-    if value.is_empty() {
-        return None;
-    }
-    serde_json::from_str(value).ok()
-}
-
-fn coerce_number(value: &serde_json::Value) -> Option<f64> {
-    match value {
-        serde_json::Value::Number(n) => n.as_f64(),
-        serde_json::Value::Bool(b) => Some(if *b { 1.0 } else { 0.0 }),
-        serde_json::Value::String(s) => {
-            if let Ok(num) = s.parse::<f64>() {
-                return Some(num);
-            }
-            if let Ok(dt) = chrono::DateTime::parse_from_rfc3339(s) {
-                return Some(dt.timestamp_millis() as f64);
-            }
-            None
-        }
-        _ => None,
-    }
-}
-
-fn coerce_string(value: &serde_json::Value) -> String {
-    match value {
-        serde_json::Value::String(s) => s.clone(),
-        _ => value.to_string(),
-    }
-}
-
-fn resolve_path<'a>(path: &str, context: &'a serde_json::Value) -> Option<&'a serde_json::Value> {
-    let mut current = context;
-    for part in path.split('.') {
-        match current {
-            serde_json::Value::Object(map) => {
-                current = map.get(part)?;
-            }
-            _ => return None,
-        }
-    }
-    Some(current)
-}
-
-fn compare_values(
-    actual: Option<&serde_json::Value>,
-    op: &str,
-    expected: &serde_json::Value,
-) -> bool {
-    let actual = match actual {
-        Some(val) => val,
-        None => {
-            return match op {
-                "eq" => expected.is_null(),
-                "ne" => !expected.is_null(),
-                _ => false,
-            };
-        }
-    };
-
-    if op == "in" {
-        if let serde_json::Value::Array(values) = expected {
-            let left_num = coerce_number(actual);
-            if let Some(left) = left_num {
-                return values
-                    .iter()
-                    .filter_map(coerce_number)
-                    .any(|candidate| candidate == left);
-            }
-            let left_str = coerce_string(actual);
-            return values
-                .iter()
-                .any(|candidate| coerce_string(candidate) == left_str);
-        }
-        return false;
-    }
-
-    let left_num = coerce_number(actual);
-    let right_num = coerce_number(expected);
-    if let (Some(left), Some(right)) = (left_num, right_num) {
-        return match op {
-            "eq" => left == right,
-            "ne" => left != right,
-            "gt" => left > right,
-            "gte" => left >= right,
-            "lt" => left < right,
-            "lte" => left <= right,
-            _ => false,
-        };
-    }
-
-    let left_str = coerce_string(actual);
-    let right_str = coerce_string(expected);
-    match op {
-        "eq" => left_str == right_str,
-        "ne" => left_str != right_str,
-        "gt" => left_str > right_str,
-        "gte" => left_str >= right_str,
-        "lt" => left_str < right_str,
-        "lte" => left_str <= right_str,
-        _ => false,
-    }
-}
-
-fn evaluate_condition_node(node: &serde_json::Value, context: &serde_json::Value) -> bool {
-    if node.is_null() {
-        return true;
-    }
-
-    if let serde_json::Value::Array(children) = node {
-        return children
-            .iter()
-            .all(|child| evaluate_condition_node(child, context));
-    }
-
-    let obj = match node.as_object() {
-        Some(map) => map,
-        None => return true,
-    };
-
-    if let Some(serde_json::Value::Array(children)) = obj.get("all") {
-        return children
-            .iter()
-            .all(|child| evaluate_condition_node(child, context));
-    }
-
-    if let Some(serde_json::Value::Array(children)) = obj.get("any") {
-        return children
-            .iter()
-            .any(|child| evaluate_condition_node(child, context));
-    }
-
-    if obj.get("after").is_some() || obj.get("before").is_some() {
-        let now = Utc::now().timestamp_millis() as f64;
-        if let Some(after) = obj.get("after").and_then(coerce_number) {
-            if now < after {
-                return false;
-            }
-        }
-        if let Some(before) = obj.get("before").and_then(coerce_number) {
-            if now > before {
-                return false;
-            }
-        }
-        return true;
-    }
-
-    if let (Some(field), Some(op)) = (obj.get("field"), obj.get("op")) {
-        if let (Some(field_str), Some(op_str)) = (field.as_str(), op.as_str()) {
-            let actual = resolve_path(field_str, context);
-            let expected = obj.get("value").unwrap_or(&serde_json::Value::Null);
-            return compare_values(actual, op_str, expected);
-        }
-    }
-
-    if let Some(serde_json::Value::Object(user_rules)) = obj.get("user") {
-        return user_rules.iter().all(|(key, rule)| {
-            let actual = resolve_path(&format!("user.{}", key), context);
-            if let Some(rule_obj) = rule.as_object() {
-                if let Some(op) = rule_obj.get("op").and_then(|v| v.as_str()) {
-                    let expected = rule_obj.get("value").unwrap_or(&serde_json::Value::Null);
-                    return compare_values(actual, op, expected);
-                }
-            }
-            compare_values(actual, "eq", rule)
-        });
-    }
-
-    if let Some(serde_json::Value::Object(atome_rules)) = obj.get("atome") {
-        return atome_rules.iter().all(|(key, rule)| {
-            let actual = resolve_path(&format!("atome.{}", key), context);
-            if let Some(rule_obj) = rule.as_object() {
-                if let Some(op) = rule_obj.get("op").and_then(|v| v.as_str()) {
-                    let expected = rule_obj.get("value").unwrap_or(&serde_json::Value::Null);
-                    return compare_values(actual, op, expected);
-                }
-            }
-            compare_values(actual, "eq", rule)
-        });
-    }
-
-    true
-}
-
 fn get_pending_owner_id(db: &Connection, atome_id: &str) -> Option<String> {
     let raw: Result<String, _> = db.query_row(
         "SELECT particle_value FROM particles WHERE atome_id = ?1 AND particle_key = '_pending_owner_id' LIMIT 1",
@@ -3573,16 +3531,6 @@ fn get_owner_id(db: &Connection, atome_id: &str) -> Option<String> {
     } else {
         get_pending_owner_id(db, atome_id)
     }
-}
-
-fn get_creator_id(db: &Connection, atome_id: &str) -> Option<String> {
-    db.query_row(
-        "SELECT creator_id FROM atomes WHERE atome_id = ?1 AND deleted_at IS NULL",
-        rusqlite::params![atome_id],
-        |row| row.get::<_, Option<String>>(0),
-    )
-    .ok()
-    .flatten()
 }
 
 fn upsert_permission(
@@ -3762,153 +3710,20 @@ fn inherit_permissions_from_parent(
     Ok(())
 }
 
-fn fetch_permission(db: &Connection, atome_id: &str, principal_id: &str) -> Option<PermissionRow> {
-    db.query_row(
-        "SELECT can_read, can_write, can_delete, can_share, can_create, expires_at, conditions
-         FROM permissions
-         WHERE atome_id = ?1 AND principal_id = ?2 AND (particle_key IS NULL OR particle_key = '')
-         ORDER BY particle_key DESC LIMIT 1",
-        rusqlite::params![atome_id, principal_id],
-        |row| {
-            Ok(PermissionRow {
-                can_read: row.get(0)?,
-                can_write: row.get(1)?,
-                can_delete: row.get(2)?,
-                can_share: row.get(3)?,
-                can_create: row.get(4)?,
-                expires_at: row.get(5)?,
-                conditions: row.get(6)?,
-            })
-        },
-    )
-    .ok()
-}
-
-fn is_permission_active(
-    db: &Connection,
-    permission: &PermissionRow,
-    principal_id: &str,
-    atome_id: &str,
-) -> bool {
-    if let Some(expires_at) = &permission.expires_at {
-        if let Ok(expiry) = chrono::DateTime::parse_from_rfc3339(expires_at) {
-            if Utc::now() > expiry.with_timezone(&Utc) {
-                return false;
-            }
-        }
-    }
-
-    let conditions = match parse_conditions(&permission.conditions) {
-        Some(value) => value,
-        None => return true,
-    };
-
-    let user_data = load_atome_with_deleted(db, principal_id, None, true)
-        .map(|atome| atome.data)
-        .unwrap_or_else(|_| serde_json::json!({}));
-    let atome_data = load_atome_with_deleted(db, atome_id, None, true)
-        .map(|atome| atome.data)
-        .unwrap_or_else(|_| serde_json::json!({}));
-
-    let context = serde_json::json!({
-        "now": Utc::now().timestamp_millis(),
-        "user": user_data,
-        "atome": atome_data
-    });
-
-    evaluate_condition_node(&conditions, &context)
-}
-
 fn can_read(db: &Connection, atome_id: &str, principal_id: &str) -> bool {
-    if let Some(owner_id) = get_owner_id(db, atome_id) {
-        if owner_id == principal_id {
-            return true;
-        }
-    }
-    if let Some(creator_id) = get_creator_id(db, atome_id) {
-        if creator_id == principal_id {
-            return true;
-        }
-    }
-
-    let perm = match fetch_permission(db, atome_id, principal_id) {
-        Some(row) => row,
-        None => return false,
-    };
-
-    if perm.can_read != 1 {
-        return false;
-    }
-    is_permission_active(db, &perm, principal_id, atome_id)
+    super::local_atome_security::can_read(db, atome_id, principal_id, None)
 }
 
 fn can_write(db: &Connection, atome_id: &str, principal_id: &str) -> bool {
-    if let Some(owner_id) = get_owner_id(db, atome_id) {
-        if owner_id == principal_id {
-            return true;
-        }
-    }
-    if let Some(creator_id) = get_creator_id(db, atome_id) {
-        if creator_id == principal_id {
-            return true;
-        }
-    }
-
-    let perm = match fetch_permission(db, atome_id, principal_id) {
-        Some(row) => row,
-        None => return false,
-    };
-
-    if perm.can_write != 1 {
-        return false;
-    }
-    is_permission_active(db, &perm, principal_id, atome_id)
+    super::local_atome_security::can_write(db, atome_id, principal_id, None)
 }
 
 fn can_delete(db: &Connection, atome_id: &str, principal_id: &str) -> bool {
-    if let Some(owner_id) = get_owner_id(db, atome_id) {
-        if owner_id == principal_id {
-            return true;
-        }
-    }
-    if let Some(creator_id) = get_creator_id(db, atome_id) {
-        if creator_id == principal_id {
-            return true;
-        }
-    }
-
-    let perm = match fetch_permission(db, atome_id, principal_id) {
-        Some(row) => row,
-        None => return false,
-    };
-
-    if perm.can_delete != 1 {
-        return false;
-    }
-    is_permission_active(db, &perm, principal_id, atome_id)
+    super::local_atome_security::can_delete(db, atome_id, principal_id, None)
 }
 
 fn can_create(db: &Connection, atome_id: &str, principal_id: &str) -> bool {
-    if let Some(owner_id) = get_owner_id(db, atome_id) {
-        if owner_id == principal_id {
-            return true;
-        }
-    }
-    if let Some(creator_id) = get_creator_id(db, atome_id) {
-        if creator_id == principal_id {
-            return true;
-        }
-    }
-
-    let perm = match fetch_permission(db, atome_id, principal_id) {
-        Some(row) => row,
-        None => return false,
-    };
-
-    if perm.can_create != 1 && perm.can_share != 1 {
-        return false;
-    }
-    is_permission_active(db, &perm, principal_id, atome_id)
+    super::local_atome_security::can_create(db, atome_id, principal_id)
 }
 
 fn error_response(request_id: Option<String>, error: &str) -> WsResponse {
@@ -3934,177 +3749,6 @@ pub fn create_state(data_dir: PathBuf, storage_root: PathBuf) -> LocalAtomeState
         storage_root,
         recent_request_ids: Arc::new(Mutex::new(DedupeCache::new(2000))),
         recent_fingerprints: Arc::new(Mutex::new(FingerprintCache::new(5000, 750))),
-    }
-}
-
-fn compute_backoff_ms(attempts: i64) -> i64 {
-    let base_ms = std::env::var("SQUIRREL_SYNC_BACKOFF_MS")
-        .ok()
-        .and_then(|v| v.parse::<i64>().ok())
-        .unwrap_or(1000);
-    let max_ms = std::env::var("SQUIRREL_SYNC_BACKOFF_MAX_MS")
-        .ok()
-        .and_then(|v| v.parse::<i64>().ok())
-        .unwrap_or(60000);
-    if attempts <= 1 {
-        return base_ms;
-    }
-    let next = base_ms.saturating_mul(2_i64.pow((attempts - 1) as u32));
-    next.min(max_ms)
-}
-
-pub async fn run_sync_worker(state: LocalAtomeState, remote_url: String) {
-    if remote_url.trim().is_empty() {
-        return;
-    }
-
-    let target = "fastify";
-    let sync_token = std::env::var("SQUIRREL_SYNC_TOKEN").ok();
-
-    loop {
-        let items = match state.db.lock() {
-            Ok(db) => list_sync_queue(&db, target, 50).unwrap_or_default(),
-            Err(_) => Vec::new(),
-        };
-
-        if items.is_empty() {
-            sleep(Duration::from_millis(2000)).await;
-            continue;
-        }
-
-        for item in items {
-            let attempts = item.attempts + 1;
-            if let Ok(db) = state.db.lock() {
-                let _ = mark_sync_queue_syncing(&db, item.queue_id, attempts);
-            }
-
-            let payload: JsonValue = match serde_json::from_str(&item.payload) {
-                Ok(v) => v,
-                Err(_) => {
-                    if let Ok(db) = state.db.lock() {
-                        let _ = mark_sync_queue_error(
-                            &db,
-                            item.queue_id,
-                            attempts,
-                            "Invalid payload",
-                            None,
-                            true,
-                        );
-                    }
-                    continue;
-                }
-            };
-
-            if !payload.is_object() {
-                if let Ok(db) = state.db.lock() {
-                    let _ = mark_sync_queue_error(
-                        &db,
-                        item.queue_id,
-                        attempts,
-                        "Invalid payload",
-                        None,
-                        true,
-                    );
-                }
-                continue;
-            }
-
-            let request_id = Uuid::new_v4().to_string();
-            let ws_url = format!(
-                "{}/ws/api",
-                remote_url
-                    .trim_end_matches('/')
-                    .replacen("https://", "wss://", 1)
-                    .replacen("http://", "ws://", 1)
-            );
-            let request = json!({
-                "type": "events",
-                "action": "commit",
-                "requestId": request_id,
-                "token": sync_token.as_deref().unwrap_or(""),
-                "sync_source": "axum",
-                "event": payload
-            });
-            let result = timeout(Duration::from_secs(10), async {
-                let (mut socket, _) = connect_async(&ws_url).await.map_err(|error| error.to_string())?;
-                socket
-                    .send(TungsteniteMessage::Text(request.to_string()))
-                    .await
-                    .map_err(|error| error.to_string())?;
-                while let Some(message) = socket.next().await {
-                    let message = message.map_err(|error| error.to_string())?;
-                    let TungsteniteMessage::Text(text) = message else { continue };
-                    let response: JsonValue = serde_json::from_str(&text).map_err(|error| error.to_string())?;
-                    if response.get("requestId").and_then(|value| value.as_str()) == Some(request_id.as_str()) {
-                        return if response.get("success").and_then(|value| value.as_bool()) == Some(true) {
-                            Ok(())
-                        } else {
-                            Err(response.get("error").and_then(|value| value.as_str()).unwrap_or("WebSocket sync failed").to_string())
-                        };
-                    }
-                }
-                Err("WebSocket connection closed".to_string())
-            }).await;
-
-            match result {
-                Ok(Ok(())) => {
-                    if let Ok(db) = state.db.lock() {
-                        let _ = mark_sync_queue_done(&db, item.queue_id);
-                    }
-                }
-                Ok(Err(msg)) => {
-                    let final_fail = attempts >= item.max_attempts;
-                    let retry_at = if final_fail {
-                        None
-                    } else {
-                        Some(
-                            chrono::Utc::now()
-                                .checked_add_signed(chrono::Duration::milliseconds(
-                                    compute_backoff_ms(attempts),
-                                ))
-                                .unwrap_or_else(chrono::Utc::now)
-                                .to_rfc3339(),
-                        )
-                    };
-                    if let Ok(db) = state.db.lock() {
-                        let _ = mark_sync_queue_error(
-                            &db,
-                            item.queue_id,
-                            attempts,
-                            if msg.is_empty() { "Sync failed" } else { &msg },
-                            retry_at,
-                            final_fail,
-                        );
-                    }
-                }
-                Err(err) => {
-                    let final_fail = attempts >= item.max_attempts;
-                    let retry_at = if final_fail {
-                        None
-                    } else {
-                        Some(
-                            chrono::Utc::now()
-                                .checked_add_signed(chrono::Duration::milliseconds(
-                                    compute_backoff_ms(attempts),
-                                ))
-                                .unwrap_or_else(chrono::Utc::now)
-                                .to_rfc3339(),
-                        )
-                    };
-                    if let Ok(db) = state.db.lock() {
-                        let _ = mark_sync_queue_error(
-                            &db,
-                            item.queue_id,
-                            attempts,
-                            &err.to_string(),
-                            retry_at,
-                            final_fail,
-                        );
-                    }
-                }
-            }
-        }
-
-        sleep(Duration::from_millis(2000)).await;
+        remote_sync_credentials: Arc::new(Mutex::new(HashMap::new())),
     }
 }

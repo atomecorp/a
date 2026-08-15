@@ -25,7 +25,9 @@ let _loadPromise = null;
 
 function shouldBlockFastifyPrimaryOnLocalAxumPage() {
     if (typeof window === 'undefined') return false;
-    return isLocalAxumPage() && !canUseFastifyPrimaryOnLocalAxumPage();
+    return !isInTauriRuntime()
+        && isLocalAxumPage()
+        && !canUseFastifyPrimaryOnLocalAxumPage();
 }
 
 function isCrossOriginLoopbackFastifyBaseForBrowser(base) {

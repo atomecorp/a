@@ -86,11 +86,11 @@ export async function applyShareAcceptance({ sharerId, targetUserId, particles }
 
     console.log('[Share] Linked share - granting permissions only (no copies created)');
     const permissionPayload = {
-        can_read: !!permissions.read,
-        can_write: !!permissions.alter,
-        can_delete: !!permissions.delete,
+        can_read: !!(permissions.read || permissions.can_read || permissions.canRead),
+        can_write: !!(permissions.alter || permissions.write || permissions.can_write || permissions.canWrite),
+        can_delete: !!(permissions.delete || permissions.can_delete || permissions.canDelete),
         can_share: false,
-        can_create: !!permissions.create
+        can_create: !!(permissions.create || permissions.can_create || permissions.canCreate)
     };
 
     for (const atomeId of atomeIds) {
@@ -167,7 +167,7 @@ export async function createShareRequest({ sharerId, targetUserId, targetPhone, 
         mode: mode || 'real-time',
         share_type: shareType || 'linked',
         property_overrides: propertyOverrides || {},
-        project_id: projectId,
+        source_project_id: projectId,
         timestamp: new Date().toISOString()
     };
 
@@ -195,7 +195,7 @@ export async function createShareRequest({ sharerId, targetUserId, targetPhone, 
     try {
         if (inboxId || outboxId) {
             const linkPayload = { inbox_id: inboxId, outbox_id: outboxId };
-            if (inboxId) await commitSharingAtomePatch(inboxId, linkPayload, sharerId);
+            if (inboxId) await commitSharingAtomePatch(inboxId, linkPayload, targetUserId);
             if (outboxId) await commitSharingAtomePatch(outboxId, linkPayload, sharerId);
         }
     } catch (error) {

@@ -38,6 +38,9 @@ function createWebSocketAdapter(tokenKey, backend = 'tauri') {
         setToken: (token) => setToken(tokenKey, token),
         clearToken: () => clearToken(tokenKey),
         ws: {
+            // Bumped by the transport on every successful open. Consumers that must
+            // re-declare per-connection state after a reconnection read it from here.
+            get connectionGeneration() { return getWs().connectionGeneration ?? -1; },
             send: (message) => getWs().send(message),
             sendFireAndForget: (message) => {
                 const ws = getWs();
@@ -202,6 +205,14 @@ function createWebSocketAdapter(tokenKey, backend = 'tauri') {
         atome: buildAtomeApi({ getWs, tokenKey }),
 
         share: {
+            async inbox(data = {}) {
+                return getWs().send({
+                    type: 'share',
+                    action: 'inbox',
+                    box: data.box || 'inbox',
+                    status: data.status || data.statuses || null
+                });
+            },
             async request(data) {
                 return getWs().send({
                     type: 'share',
@@ -232,6 +243,23 @@ function createWebSocketAdapter(tokenKey, backend = 'tauri') {
                     action: 'publish',
                     request_atome_id: data.request_atome_id || data.requestAtomeId || data.atome_id || null,
                     request_id: data.request_id || data.requestId || null
+                });
+            },
+            // §12.5 privacy rules: owner-only, restrictive-only.
+            async privacyRuleSet(data) {
+                return getWs().send({
+                    type: 'share',
+                    action: 'privacy-rule-set',
+                    atome_id: data.atome_id || data.atomeId || null,
+                    particle_key: data.particle_key || data.particleKey || null,
+                    conditions: data.conditions ?? null
+                });
+            },
+            async privacyRuleList(data) {
+                return getWs().send({
+                    type: 'share',
+                    action: 'privacy-rule-list',
+                    atome_id: data.atome_id || data.atomeId || null
                 });
             },
             async policy(data) {
@@ -367,6 +395,24 @@ function createWebSocketAdapter(tokenKey, backend = 'tauri') {
         },
 
         sync: {
+            async configureRemote(data = {}) {
+                const token = getToken(tokenKey);
+                return getWs().send({
+                    type: 'sync',
+                    action: 'configure-remote',
+                    token,
+                    remote_user_id: data.remote_user_id || data.remoteUserId || null,
+                    remote_token: data.remote_token || data.remoteToken || null
+                });
+            },
+            async clearRemote() {
+                const token = getToken(tokenKey);
+                return getWs().send({
+                    type: 'sync',
+                    action: 'clear-remote',
+                    token
+                });
+            },
             async getPending() {
                 const token = getToken(tokenKey);
                 return getWs().send({ type: 'sync', action: 'get-pending', token });

@@ -4,6 +4,8 @@ import {
     atomeOwnerIdOf,
     atomeTypeOf
 } from './sharingAtomeAccessors.js';
+import { normalizePermissionConditions } from '../atome/src/squirrel/conditions/permission_adapter.js';
+import { canReadAnyAtomeProperty } from './atomePropertySecurity.js';
 
 export const PERMISSION = {
     NONE: 0,
@@ -46,13 +48,23 @@ export async function createShare(grantorId, atomeId, principalId, permission, o
     const flags = permissionToFlags(permission);
     const now = new Date().toISOString();
     const resolvedShareMode = shareMode || permission?.share_mode || permission?.shareMode || null;
-    const resolvedConditions = conditions || permission?.conditions || null;
+    const conditionsProvided = Object.prototype.hasOwnProperty.call(options, 'conditions')
+        || Boolean(permission && typeof permission === 'object' && Object.prototype.hasOwnProperty.call(permission, 'conditions'));
+    const rawConditions = Object.prototype.hasOwnProperty.call(options, 'conditions')
+        ? conditions
+        : (permission?.conditions ?? null);
+    let resolvedConditions = null;
+    try {
+        resolvedConditions = rawConditions ? normalizePermissionConditions(rawConditions) : null;
+    } catch (error) {
+        return { success: false, error: error.message };
+    }
 
     try {
         const existing = await db.query('get', `
             SELECT permission_id FROM permissions
-            WHERE atome_id = ? AND principal_id = ? AND (particle_key IS NULL OR particle_key = ?)
-        `, [atomeId, principalId, particleKey]);
+            WHERE atome_id = ? AND principal_id = ? AND (particle_key = ? OR (particle_key IS NULL AND ? IS NULL))
+        `, [atomeId, principalId, particleKey, particleKey]);
 
         let permissionId;
 
@@ -68,7 +80,7 @@ export async function createShare(grantorId, atomeId, principalId, permission, o
                     granted_at = ?,
                     expires_at = ?,
                     share_mode = COALESCE(?, share_mode),
-                    conditions = COALESCE(?, conditions)
+                    conditions = CASE WHEN ? = 1 THEN ? ELSE conditions END
                 WHERE permission_id = ?
             `, [
                 flags.can_read,
@@ -80,6 +92,7 @@ export async function createShare(grantorId, atomeId, principalId, permission, o
                 now,
                 expiresAt,
                 resolvedShareMode,
+                conditionsProvided ? 1 : 0,
                 resolvedConditions ? JSON.stringify(resolvedConditions) : null,
                 existing.permission_id
             ]);
@@ -106,8 +119,9 @@ export async function createShare(grantorId, atomeId, principalId, permission, o
 
             const inserted = await db.query('get', `
                 SELECT permission_id FROM permissions
-                WHERE atome_id = ? AND principal_id = ? ORDER BY permission_id DESC LIMIT 1
-            `, [atomeId, principalId]);
+                WHERE atome_id = ? AND principal_id = ? AND (particle_key = ? OR (particle_key IS NULL AND ? IS NULL))
+                ORDER BY permission_id DESC LIMIT 1
+            `, [atomeId, principalId, particleKey, particleKey]);
             permissionId = inserted?.permission_id;
         }
 
@@ -237,7 +251,7 @@ export async function getAccessibleAtomes(userId, atomeType = null) {
     for (const row of rows) {
         const id = row?.atome_id ? String(row.atome_id) : null;
         if (!id) continue;
-        const allowed = await db.canRead(id, userId);
+        const allowed = await canReadAnyAtomeProperty(id, userId);
         if (allowed) filtered.push(row);
     }
     return filtered;

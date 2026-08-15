@@ -3,60 +3,52 @@
 import { sanitizeAtomeProperties } from '../../../shared/atome_contract.js';
 import { getToken } from './adole_connection.js';
 
+const normalizeCommitEvent = (event = {}) => {
+    const rawProps = event.props || event.properties || event.patch || event.delta || event.payload?.props || null;
+    const sourcePayload = event.payload && typeof event.payload === 'object' ? event.payload : {};
+    const normalizedEvent = {
+        ...event,
+        kind: event.kind || event.event || 'set',
+        atome_id: event.atome_id || event.atomeId || event.id || null,
+        project_id: event.project_id || event.projectId || null,
+        ...(event.parent_id || event.parentId ? { parent_id: event.parent_id || event.parentId } : {}),
+        payload: {
+            ...sourcePayload,
+            props: rawProps && typeof rawProps === 'object' ? sanitizeAtomeProperties(rawProps) : {},
+            delete_keys: sourcePayload.delete_keys || sourcePayload.deleteKeys || event.delete_keys || event.deleteKeys || [],
+            expected_versions: sourcePayload.expected_versions || sourcePayload.expectedVersions
+                || event.expected_versions || event.expectedVersions || {}
+        }
+    };
+    delete normalizedEvent.id;
+    delete normalizedEvent.atomeId;
+    delete normalizedEvent.projectId;
+    delete normalizedEvent.parentId;
+    delete normalizedEvent.props;
+    delete normalizedEvent.properties;
+    delete normalizedEvent.patch;
+    delete normalizedEvent.delta;
+    delete normalizedEvent.delete_keys;
+    delete normalizedEvent.deleteKeys;
+    delete normalizedEvent.expected_versions;
+    delete normalizedEvent.expectedVersions;
+    return normalizedEvent;
+};
+
 export const buildAtomeApi = ({ getWs, tokenKey }) => ({
             async commit(event = {}) {
                 const token = getToken(tokenKey);
-                const rawProps = event.props || event.properties || event.patch || event.delta || event.payload?.props || null;
-                const normalizedEvent = {
-                    ...event,
-                    kind: event.kind || event.event || 'set',
-                    atome_id: event.atome_id || event.atomeId || event.id || null,
-                    project_id: event.project_id || event.projectId || null,
-                    ...(event.parent_id || event.parentId ? { parent_id: event.parent_id || event.parentId } : {}),
-                    payload: rawProps && typeof rawProps === 'object'
-                        ? { props: sanitizeAtomeProperties(rawProps) }
-                        : event.payload
-                };
-                delete normalizedEvent.id;
-                delete normalizedEvent.atomeId;
-                delete normalizedEvent.projectId;
-                delete normalizedEvent.parentId;
-                delete normalizedEvent.props;
-                delete normalizedEvent.properties;
-                delete normalizedEvent.patch;
-                delete normalizedEvent.delta;
                 return getWs().send({
                     type: 'events',
                     action: 'commit',
                     token,
-                    event: normalizedEvent
+                    event: normalizeCommitEvent(event)
                 });
             },
             async commitBatch(events = []) {
                 const token = getToken(tokenKey);
                 const normalizedEvents = Array.isArray(events)
-                    ? events.map((event) => {
-                        const rawProps = event?.props || event?.properties || event?.patch || event?.delta || event?.payload?.props || null;
-                        const normalizedEvent = {
-                            ...event,
-                            kind: event?.kind || event?.event || 'set',
-                            atome_id: event?.atome_id || event?.atomeId || event?.id || null,
-                            project_id: event?.project_id || event?.projectId || null,
-                            ...(event?.parent_id || event?.parentId ? { parent_id: event.parent_id || event.parentId } : {}),
-                            payload: rawProps && typeof rawProps === 'object'
-                                ? { props: sanitizeAtomeProperties(rawProps) }
-                                : event?.payload
-                        };
-                        delete normalizedEvent.id;
-                        delete normalizedEvent.atomeId;
-                        delete normalizedEvent.projectId;
-                        delete normalizedEvent.parentId;
-                        delete normalizedEvent.props;
-                        delete normalizedEvent.properties;
-                        delete normalizedEvent.patch;
-                        delete normalizedEvent.delta;
-                        return normalizedEvent;
-                    })
+                    ? events.map(normalizeCommitEvent)
                     : [];
                 return getWs().send({
                     type: 'events',
@@ -203,6 +195,22 @@ export const buildAtomeApi = ({ getWs, tokenKey }) => ({
                     atome_id: id
                 });
             },
+            async undo(sourceTxId, requestId) {
+                const token = getToken(tokenKey);
+                return getWs().send({
+                    type: 'history', action: 'undo', token,
+                    source_tx_id: sourceTxId,
+                    requestId
+                });
+            },
+            async redo(sourceTxId, requestId) {
+                const token = getToken(tokenKey);
+                return getWs().send({
+                    type: 'history', action: 'redo', token,
+                    source_tx_id: sourceTxId,
+                    requestId
+                });
+            },
             async restore(id, data) {
                 const token = getToken(tokenKey);
                 return getWs().send({
@@ -251,6 +259,15 @@ export const buildAtomeApi = ({ getWs, tokenKey }) => ({
                     order: params.order,
                     limit: params.limit,
                     offset: params.offset
+                });
+            },
+            async conditions(params = {}) {
+                const token = getToken(tokenKey);
+                return getWs().send({
+                    type: 'conditions',
+                    action: params.action || 'once',
+                    token,
+                    request: params.request || params
                 });
             },
             async createSnapshot(params = {}) {

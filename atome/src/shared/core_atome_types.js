@@ -181,6 +181,70 @@ export const CORE_ATOME_TYPE_DEFINITIONS = Object.freeze([
             updated_iso: { type: 'string' },
             span: { type: 'number' }
         }
+    }),
+    defineType({
+        type: 'condition_set',
+        kind: 'data_model',
+        traits: ['data', 'conditional', 'reusable'],
+        schema: {
+            name: { type: 'string' },
+            schema_version: { type: 'number' },
+            revision: { type: 'number' },
+            root: { type: 'object' },
+            created_by: { type: 'string' },
+            created_at: { type: 'string' },
+            updated_at: { type: 'string' }
+        }
+    }),
+    defineType({
+        type: 'condition_binding',
+        kind: 'data_model',
+        traits: ['data', 'conditional', 'binding'],
+        schema: {
+            condition_set_id: { type: 'string' },
+            condition_set_revision: { type: 'number' },
+            domain: { type: 'string' },
+            target: { type: 'object' },
+            unknown_policy: { type: 'string' },
+            enabled: { type: 'boolean' },
+            authorized_revision: { type: 'number' }
+        }
+    }),
+    defineType({
+        type: 'condition_computed_property',
+        kind: 'data_model',
+        traits: ['data', 'conditional', 'computed'],
+        schema: {
+            name: { type: 'string' },
+            schema_version: { type: 'number' },
+            result_type: { type: 'string' },
+            unit: { type: 'string' },
+            expression: { type: 'object' },
+            scope: { type: 'object' },
+            revision: { type: 'number' },
+            created_by: { type: 'string' },
+            created_at: { type: 'string' },
+            updated_at: { type: 'string' }
+        }
+    }),
+    defineType({
+        type: 'condition_list',
+        kind: 'data_model',
+        traits: ['data', 'conditional', 'collection'],
+        schema: {
+            name: { type: 'string' },
+            schema_version: { type: 'number' },
+            mode: { type: 'string' },
+            scope: { type: 'object' },
+            condition_set_id: { type: 'string' },
+            member_ids: { type: 'array' },
+            sort: { type: 'object' },
+            projection: { type: 'array' },
+            revision: { type: 'number' },
+            created_by: { type: 'string' },
+            created_at: { type: 'string' },
+            updated_at: { type: 'string' }
+        }
     })
 ]);
 

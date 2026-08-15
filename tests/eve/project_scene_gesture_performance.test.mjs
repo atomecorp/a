@@ -688,6 +688,12 @@ test('Realtime dedupe rejects delayed authored geometry echo for recent project-
         }
     };
 
+    assert.equal(shouldIgnoreRealtimePatch('same_account_other_session_atom', {
+        color: '#d94b4b'
+    }, {
+        authorId: 'current_user'
+    }), false);
+
     assert.equal(shouldIgnoreRealtimePatch('delayed_echo_atom', {
         left: 60,
         top: 70
@@ -702,6 +708,26 @@ test('Realtime dedupe rejects delayed authored geometry echo for recent project-
         authorId: 'transport_echo_author',
         gestureId: 'project_drag_delayed_echo_atom_1'
     }), true);
+});
+
+test('Realtime dedupe preserves repeated values from distinct durable transactions', () => {
+    resetRealtimeDedup();
+    const dom = new JSDOM('<!doctype html><html><body></body></html>');
+    globalThis.document = dom.window.document;
+    globalThis.window = dom.window;
+
+    assert.equal(shouldIgnoreRealtimePatch('durable_alternating_atom', {
+        color: '#1abc9c'
+    }, { eventId: 'event-green-1', txId: 'tx-green-1' }), false);
+    assert.equal(shouldIgnoreRealtimePatch('durable_alternating_atom', {
+        color: '#e74c3c'
+    }, { eventId: 'event-red-1', txId: 'tx-red-1' }), false);
+    assert.equal(shouldIgnoreRealtimePatch('durable_alternating_atom', {
+        color: '#1abc9c'
+    }, { eventId: 'event-green-2', txId: 'tx-green-2' }), false);
+    assert.equal(shouldIgnoreRealtimePatch('durable_alternating_atom', {
+        color: '#1abc9c'
+    }, { eventId: 'event-green-2', txId: 'tx-green-2' }), true);
 });
 
 test('Realtime atome events route project-scene patches before stale state fetch fallback', () => {

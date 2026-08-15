@@ -5,6 +5,15 @@ import {
     commitAtomeEvents
 } from './atomeRoutes.orm.js';
 import { isWsApiPrincipalProvisioned, resolveWsApiPrincipal } from './wsApiIdentity.js';
+import {
+    projectAtomeCapabilitiesForRead,
+    projectAtomePropertyVersionsForRead,
+    projectAtomePropertiesForRead,
+    projectEventForRead
+} from './atomePropertySecurity.js';
+import { createServerConditionAuthority } from './conditionsQueryAuthority.js';
+import { executeAtomeHistoryCommand } from './atomeHistoryCommands.js';
+import { broadcastCommittedAtomeEvent } from './atomeRealtime.js';
 
 const MUTATING_ACTIONS = new Set([
     'events:commit',
@@ -13,7 +22,9 @@ const MUTATING_ACTIONS = new Set([
     'snapshot:restore',
     'user-data:delete-all',
     'sync:push',
-    'sync:ack'
+    'sync:ack',
+    'history:undo',
+    'history:redo'
 ]);
 
 function requestIdOf(message) {
@@ -83,10 +94,60 @@ async function canWriteTarget(userId, targetId) {
 async function filterReadableEvents(events, userId) {
     const result = [];
     for (const event of events) {
-        const targetId = event?.atome_id || event?.project_id || null;
-        if (await canReadTarget(userId, targetId)) result.push(event);
+        const projected = await projectEventForRead(event, userId);
+        if (projected) result.push(projected);
     }
     return result;
+}
+
+async function projectStateForRead(state, userId) {
+    const atomeId = state?.atome_id || state?.id || null;
+    if (!atomeId) return null;
+    const properties = await projectAtomePropertiesForRead(atomeId, state.properties || {}, userId);
+    if (!Object.keys(properties).length) return null;
+    const propertyVersions = await projectAtomePropertyVersionsForRead(
+        atomeId,
+        Object.keys(properties),
+        userId
+    );
+    const capabilities = await projectAtomeCapabilitiesForRead(
+        atomeId,
+        Object.keys(properties),
+        userId
+    );
+    return { ...state, properties, property_versions: propertyVersions, capabilities };
+}
+
+async function conditionAuthorityFor(userId) {
+    const loadStates = async (scope = {}, request = {}) => {
+        const projectId = scope.projectId || scope.project_id || request.projectId || request.project_id || null;
+        const rawStates = await db.listStateCurrent(projectId, {
+            ownerId: userId,
+            includeShared: scope.includeShared === true || request.includeShared === true,
+            excludeSystem: request.excludeSystem === true,
+            limit: request.candidateLimit || 10000
+        });
+        const projected = (await Promise.all(rawStates.map((state) => projectStateForRead(state, userId)))).filter(Boolean);
+        const allowedTypes = new Set((scope.types || []).map((entry) => String(entry).toLowerCase()));
+        return allowedTypes.size
+            ? projected.filter((state) => allowedTypes.has(String(state.type || state.atome_type || '').toLowerCase()))
+            : projected;
+    };
+    const readState = async (id) => projectStateForRead(await db.getStateCurrent(id), userId);
+    return createServerConditionAuthority({ loadStates, readState });
+}
+
+async function handleConditions(message, userId) {
+    const action = actionOf(message);
+    const authority = await conditionAuthorityFor(userId);
+    const request = message.request && typeof message.request === 'object' ? message.request : message;
+    if (action === 'properties-discover') {
+        return response('conditions', message, true, { items: await authority.discover(request) });
+    }
+    if (action === 'once') {
+        return response('conditions', message, true, await authority.once(request));
+    }
+    return errorResponse('conditions', message, `Unknown conditions action: ${action || 'missing'}`);
 }
 
 async function handleEvents(message, connection, userId) {
@@ -98,6 +159,13 @@ async function handleEvents(message, connection, userId) {
             authenticatedUserId: userId,
             syncSource: message.sync_source || event?.sync_source || ''
         });
+        if (result.ok && result.inserted) {
+            await broadcastCommittedAtomeEvent({
+                event: result.event,
+                senderUserId: userId,
+                senderConnection: connection
+            });
+        }
         return response('events', message, result.ok, result.ok
             ? { event: result.event }
             : { error: result.error || 'commit_failed' });
@@ -111,6 +179,16 @@ async function handleEvents(message, connection, userId) {
             txId: message.tx_id || message.txId || null,
             syncSource: message.sync_source || ''
         });
+        if (result.ok && result.inserted_count > 0) {
+            for (const committedEvent of result.events || []) {
+                if (!db.wasEventInserted(committedEvent)) continue;
+                await broadcastCommittedAtomeEvent({
+                    event: committedEvent,
+                    senderUserId: userId,
+                    senderConnection: connection
+                });
+            }
+        }
         return response('events', message, result.ok, result.ok
             ? { events: result.events }
             : { error: result.error || 'commit_batch_failed' });
@@ -139,10 +217,7 @@ async function handleStateCurrent(message, userId) {
     if (action === 'get') {
         const atomeId = message.atome_id || message.atomeId || null;
         if (!atomeId) return errorResponse('state-current', message, 'Missing atome_id');
-        if (!await canReadTarget(userId, atomeId)) {
-            return errorResponse('state-current', message, 'Access denied');
-        }
-        const state = await db.getStateCurrent(atomeId);
+        const state = await projectStateForRead(await db.getStateCurrent(atomeId), userId);
         return state
             ? response('state-current', message, true, { state })
             : errorResponse('state-current', message, 'State not found');
@@ -156,13 +231,10 @@ async function handleStateCurrent(message, userId) {
             includeShared: message.include_shared === true || message.includeShared === true,
             excludeSystem: message.exclude_system === true || message.excludeSystem === true
         };
-        const [states, total] = await Promise.all([
-            db.listStateCurrent(projectId, options),
-            options && (message.include_total === true || message.includeTotal === true)
-                ? db.countStateCurrent(projectId, options)
-                : Promise.resolve(null)
-        ]);
-        return response('state-current', message, true, { states, ...(total == null ? {} : { total }) });
+        const rawStates = await db.listStateCurrent(projectId, options);
+        const states = (await Promise.all(rawStates.map((state) => projectStateForRead(state, userId)))).filter(Boolean);
+        const includeTotal = message.include_total === true || message.includeTotal === true;
+        return response('state-current', message, true, { states, ...(includeTotal ? { total: states.length } : {}) });
     }
     return errorResponse('state-current', message, `Unknown state-current action: ${action || 'missing'}`);
 }
@@ -253,20 +325,32 @@ async function handleSnapshot(message, userId) {
 async function handleAtomeHistory(message, userId) {
     const atomeId = message.atome_id || message.atomeId || message.id || null;
     if (!atomeId) return errorResponse('atome', message, 'Missing atome_id');
-    if (!await canReadTarget(userId, atomeId)) {
-        return errorResponse('atome', message, 'Access denied');
-    }
     const events = await db.listEvents({
         atomeId,
         limit: message.limit || 100,
         offset: message.offset,
         order: message.order || 'desc'
     });
+    const projected = await filterReadableEvents(events, userId);
+    if (!projected.length) return errorResponse('atome', message, 'Access denied');
     return response('atome', message, true, {
-        history: events,
-        versions: events,
-        events
+        history: projected,
+        versions: projected,
+        events: projected
     });
+}
+
+async function handleHistoryCommand(message, userId) {
+    const action = actionOf(message);
+    const result = await executeAtomeHistoryCommand({
+        operation: action,
+        sourceTxId: message.source_tx_id || message.sourceTxId || null,
+        requestId: requestIdOf(message),
+        authenticatedUserId: userId
+    });
+    return result.ok
+        ? response('history', message, true, { events: result.events })
+        : errorResponse('history', message, result.error);
 }
 
 async function handleUserData(message, userId) {
@@ -274,11 +358,14 @@ async function handleUserData(message, userId) {
     const rows = await db.getAtomesByOwner(userId, { limit: 10000 });
     const ownedIds = rows.map((row) => row.atome_id).filter((id) => id && id !== userId);
     if (action === 'export') {
-        const atomes = [];
-        for (const id of ownedIds) {
-            const atome = await db.getAtome(id);
-            if (atome) atomes.push(atome);
-        }
+        const rawStates = await db.listStateCurrent(null, {
+            ownerId: userId,
+            includeShared: true,
+            limit: Number(message.limit) || 10000
+        });
+        const atomes = (await Promise.all(
+            rawStates.map((state) => projectStateForRead(state, userId))
+        )).filter(Boolean);
         const events = await filterReadableEvents(await db.listEvents({
             limit: Number(message.limit) || 10000,
             order: 'asc'
@@ -371,6 +458,8 @@ export async function handleWsAtomeOperation(message, connection) {
         || type === 'snapshot'
         || type === 'user-data'
         || type === 'sync'
+        || type === 'history'
+        || type === 'conditions'
         || (type === 'atome' && action === 'history');
     if (!supported) return null;
 
@@ -386,6 +475,8 @@ export async function handleWsAtomeOperation(message, connection) {
         else if (type === 'snapshot') result = await handleSnapshot(message, auth.userId);
         else if (type === 'user-data') result = await handleUserData(message, auth.userId);
         else if (type === 'sync') result = await handleSync(message, auth.userId);
+        else if (type === 'conditions') result = await handleConditions(message, auth.userId);
+        else if (type === 'history') result = await handleHistoryCommand(message, auth.userId);
         else result = await handleAtomeHistory(message, auth.userId);
         return rememberMutation(connection, message, result);
     } catch (error) {

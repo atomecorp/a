@@ -1,7 +1,7 @@
 # Atome/eVe total audit — canonical execution plan
 
 Created: 2026-08-12  
-Status: **Phase 1 consolidated; Gate G1 pending explicit user approval**  
+Status: **Phase 1 consolidated; Gate G1 pending explicit user approval; separately authorized Granularity remediation blocked at cross-runtime gate 12 on 2026-08-14**
 Canonical owner: this file. It contains the method, evidence snapshot, execution order, gates, finding schema, and completion locks.  
 The superseded Phase 1 draft was absorbed into this plan and removed after parity validation.
 
@@ -1042,6 +1042,151 @@ Remaining risks: <none or precise list>
 Completion claim: <one sentence proving all gates passed>
 ~~~
 
+## Granularity remediation status at the requested stop — 2026-08-14
+
+This status concerns the separately authorized implementation programme in
+`todo/2- Granularity_Validation.md`. It does not approve or bypass G1/G2 for the
+total A0-A13 audit described by this file. Execution was stopped at the user's
+explicit request after the report below was recorded.
+
+### Current position
+
+```text
+active_gate: 11 — real Web to Web acceptance
+last_validated_gate: 10
+validated_gates: 1, 2, 3, 5, 6, 7, 8, 9, 10
+validated_percentage: 45
+gate_4: partial — Fastify LAN binding proved, physical iPhone reachability not proved
+gate_11: in progress — first real durable property flow passed; full scenario and pixel matrix incomplete
+overall_verdict: GRANULARITY VALIDATION: FAIL — corrections required
+execution_state: stopped at user request, not completed and not blocked
+```
+
+### Work already implemented
+
+1. The controlling granularity specification now contains the 20 gates,
+   Web/Tauri/iOS direction matrix, same-account matrix, progressive
+   property-scope matrix, latency budgets, acceptance locks, and canonical
+   anti-drift checkpoint.
+2. QA isolation and repeatable fixture coverage were added for separate owner
+   and receiver accounts, projects, shape, text, image, video target, custom
+   value, complex value, and exact `left`/`top` shares. The active live QA
+   database is `/private/tmp/gv-web-web.db`; it contains disposable QA data
+   only and is retained for exact resumption. No production database was used.
+3. Canonical property authorization now evaluates every property touched by a
+   commit or batch inside the transaction. Mixed allowed/denied writes fail
+   atomically, exact property rows do not widen global ACL rows, unsupported
+   conditions fail closed, and denial results do not expose protected values.
+4. Current-state, event/history, sync, reconnect, export/search-facing, custom,
+   and complex-value consumers now use recipient-specific property projection.
+   Empty projections are suppressed and revoked permissions are re-evaluated.
+5. Property versions, expected-version conflicts, rollback, durable sync queue,
+   idempotent event IDs/request IDs, delete/restore, and canonical undo/redo
+   were covered and corrected at the existing ADOLE/event/history owners.
+6. Obsolete server event/CRUD route ownership was converged into the canonical
+   WebSocket event path; application mutation remains on `/ws/api` through
+   `commit`/`commitBatch` rather than a new transport or state authority.
+7. A newly confirmed realtime defect was corrected: `events:commit` and
+   `events:commit-batch` previously persisted successfully but emitted no live
+   recipient update. Inserted committed events now emit a durable
+   recipient-projected `share-sync`; retries of an already inserted event do
+   not rebroadcast, the sender connection is excluded, and another session of
+   the sender's account receives the update.
+8. The unified WebSocket client now preserves `delete_keys`, property versions,
+   event/transaction/gesture identifiers, and the durable marker. A projected
+   property deletion forces reconstruction from canonical state instead of
+   inventing a local deletion authority.
+9. The authenticated workspace handoff was repaired without retaining a
+   parallel UI path. Login again closes immediately after the canonical session
+   is installed while Dashboard/project preparation continues asynchronously;
+   failures remain observable. When a project was prepared behind the neutral
+   Dashboard but has no resident surface, the existing canonical
+   `loadProjectAtomes` route is forced once to reconstruct it. Explicitly
+   retained WebGPU scenes are no longer removed by bulk visual cleanup.
+
+Principal implementation owners touched by this programme include:
+
+- `database/adole.js`, `database/adole_permissions.js`,
+  `database/adole_event_contract.js`, `database/adole_event_mutation.js`, and
+  `database/adole_sync.js`;
+- `server/atomeRoutes.orm.js`, `server/wsAtomeOperations.js`,
+  `server/atomePropertySecurity.js`, `server/atomeRealtime.js`,
+  `server/atomeHistoryCommands.js`, `server/wsSyncSecurity.js`, and
+  `server/sharingPermissionService.js`;
+- `atome/src/squirrel/apis/unified/adole_adapter_atome.js` and
+  `atome/src/squirrel/apis/unified/adole_websocket_message.js`;
+- `eVe/core/atome_commit.js`, `eVe/core/atome_timeline.js`, the extracted
+  timeline history owners, `eVe/intuition/runtime/realtime_atome_events_runtime.js`,
+  `eVe/intuition/tools/user_workspace_surface_runtime.js`, and
+  `eVe/domains/rendering/project_scene_runtime.js`.
+
+The worktree already contained other user changes. The status/diff was inspected
+without Git writes; this report does not attribute unrelated modified files to
+the granularity programme.
+
+### Executable evidence obtained
+
+- Focused storage/security/history/reconnect/consumer baseline: **24/24 passed**
+  across the granularity, property-security, lifecycle, resilience, fixture,
+  persistence-boundary, ADOLE invariant, and timeline-history tests recorded in
+  the checkpoint of `todo/2- Granularity_Validation.md`.
+- Durable realtime/client projection regression set:
+  `node --test tests/server/granularity_protocol_defects.test.mjs tests/eve/adole_commit_boundary.test.mjs tests/probes/project_render_legacy_sync_runtime.test.mjs`
+  — **19/19 passed**.
+- Authenticated workspace handoff set:
+  `node --test tests/probes/user_login_workspace_handoff_contract.test.mjs tests/probes/user_login_boot_order_contract.test.mjs tests/probes/workspace_dashboard_project_bootstrap_contract.test.mjs tests/probes/user_workspace_surface_runtime_contract.test.mjs`
+  — **4/4 passed**.
+- Unified project-scene rendering contract:
+  `npx vitest run tests/eve/project_scene_unified_rendering_contract.test.mjs`
+  — **17/17 passed**.
+- Real Fastify network proof on three simultaneous `/ws/api` connections:
+  one owner sender, one different-user receiver, and one second session of the
+  owner. A canonical durable `left` commit produced exactly one projected
+  receiver message, exactly one owner-other-session message, zero sender
+  echoes, one durable event visible to the receiver, `left=241` after reload,
+  and property version `2`. The single observed end-to-end probe was 225 ms;
+  it is encouraging but is not the required 20-sample performance result.
+- Real UI login was replayed in two browser origins after the handoff repair.
+  Both reached the authenticated WebGPU Dashboard through real pointer and
+  keyboard actions. Expanding the Projects lane still rendered no project
+  cards, so object-level pixel propagation has not yet been accepted.
+- Root and eVe `diff --check` passed. The temporary Dashboard diagnostic script
+  was removed and the Fastify QA server was stopped cleanly at this checkpoint.
+
+### Exact incomplete scope
+
+- Gate 11 still needs the complete Web-to-Web shape, text, image, video,
+  lifecycle, batch, undo/redo, negative-property, concurrency, offline,
+  reconnect, reload, network, database, and WebGPU-pixel matrix. The first
+  durable `left` case is not sufficient to validate the gate.
+- The empty Projects lane after successful login must be isolated at its first
+  divergent layer (session identity, project-list projection, Dashboard data
+  controller, or WebGPU card projection) before widening UI tests.
+- Gate 4 needs a signed physical iPhone reaching the same LAN Fastify instance.
+- Gates 12-14 require real Web/Tauri/iOS directional runs; gates 13-14 require
+  physical iOS evidence, not a simulator.
+- Gate 15 must repeat all seven directions with the same account.
+- Gate 16 needs real five-second video capture, poster, audio, persistence,
+  remote playback, revocation, and file-integrity evidence.
+- Gate 17 needs isolated local-production-local server switching and proof that
+  tokens, caches, queues, and databases do not cross server identities.
+- Gate 18 needs the final GV-T01-GV-T28 and wider guardrail replay; gate 19 needs
+  final maps/contracts/State File convergence; gate 20 needs diagnostic cleanup
+  and the complete final matrix replay.
+- The required performance distributions (at least 20 samples per class) and
+  regression comparisons have not been collected.
+
+### Exact resumption point
+
+Resume the same task at gate 11. Restart Fastify with the retained isolated QA
+database, reproduce the empty authenticated Projects lane in one Web session,
+and inspect the first divergence between the authenticated session principal,
+`api.projects.list`, `loadProjectList`, Dashboard `itemsByCategory`, the mounted
+BevyUI tree, and visible pixels. Add the smallest red regression at that owner,
+repair it, replay the 24-test baseline, then continue the remaining Web-to-Web
+matrix. Do not start Tauri/iOS acceptance or broaden tests until that minimal Web
+reproduction is understood.
+
 ## Journal
 
 | Date | Item | Status | Evidence/decision |
@@ -1050,3 +1195,5 @@ Completion claim: <one sentence proving all gates passed>
 | 2026-08-12 | Plan review and consolidation | Passed | Phase 1 evidence/method absorbed; contradictions corrected; superseded file removed after parity/reference validation |
 | 2026-08-12 | G1 | **Pending** | Explicit user approval still required before A0 |
 | 2026-08-12 | G2 | **Pending** | Requires the Phase 2 report and approved implementation order |
+| 2026-08-14 | Granularity remediation checkpoint | **Stopped by explicit user request at gate 11; 45% validated** | Gates 1,2,3,5-10 green; gate 4 partial; first real Web-to-Web durable property flow green; complete Web pixel matrix and gates 12-20 remain |
+| 2026-08-14 | Granularity Gate 12 resumed checkpoint | **Blocked at gate 12; 55% validated** | Blank Tauri UI fixed by default-camera viewport ownership; 781/781 Vitest, 51/51 focused Granularity, 55/55 Tauri, 2/2 topology and cargo check green. Real WKWebView pointer delivery is rejected by macOS and physical iOS hardware remains unavailable, so no gate is overstated. |

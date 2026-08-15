@@ -35,6 +35,8 @@ const DEFAULT_ACTOR_CAPABILITIES = Object.freeze([
     'contacts.write',
     'calendar.read',
     'calendar.write',
+    'conditions.read',
+    'conditions.write',
     'bank.read',
     'voice.read',
     'ai.read',

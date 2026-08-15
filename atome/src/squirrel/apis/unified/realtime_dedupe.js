@@ -354,14 +354,17 @@ export function shouldIgnoreRealtimePatch(atomeId, payload, options = {}) {
     }
 
     const authorId = options.authorId || payload?.authorId || payload?.author_id || null;
-    if (authorId && isFromCurrentUser(authorId)) {
-        logRealtimeDedup('ignore_patch', {
-            reason: 'same_author',
-            ...baseLog,
-            author_id: String(authorId || '')
-        });
-        return true;
-    }
+    const eventIdentity = String(
+        options?.eventId
+        || options?.event_id
+        || options?.txId
+        || options?.tx_id
+        || payload?.eventId
+        || payload?.event_id
+        || payload?.txId
+        || payload?.tx_id
+        || ''
+    ).trim();
 
     const fingerprint = buildFingerprint(payload);
     if (!fingerprint) {
@@ -402,6 +405,23 @@ export function shouldIgnoreRealtimePatch(atomeId, payload, options = {}) {
     }
 
     const now = Date.now();
+    if (eventIdentity) {
+        for (const alias of aliases) {
+            const eventKey = `${alias}:event:${eventIdentity}`;
+            if (dedupMap.has(eventKey)) {
+                logRealtimeDedup('ignore_patch', {
+                    reason: 'event_identity_duplicate',
+                    ...baseLog,
+                    event_identity: eventIdentity
+                });
+                return true;
+            }
+        }
+        aliases.forEach((alias) => {
+            dedupMap.set(`${alias}:event:${eventIdentity}`, now);
+        });
+        return false;
+    }
     for (const alias of aliases) {
         const key = `${alias}:${fingerprint}`;
         const last = dedupMap.get(key) || 0;

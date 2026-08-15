@@ -735,10 +735,14 @@ Le contexte détermine :
 
 - les types de conditions proposés en priorité ;
 - les valeurs possibles ;
-- les labels ;
 - les données disponibles ;
 - les actions éventuelles ;
 - le résumé affiché.
+
+Le sélecteur reste cependant agnostique et plat : il affiche uniquement le nom
+de chaque propriété accessible. Il n'affiche ni rubrique, ni catégorie, ni
+préfixe de source ou de contexte. Le contexte peut influer sur l'ordre et les
+opérateurs compatibles, jamais altérer le nom visible de la propriété.
 
 Le moteur reste identique.
 
@@ -2223,3 +2227,69 @@ Fournis enfin un rapport indiquant :
 ```
 
 Le but final est que **Conditions devienne une primitive transverse du framework eVe**, au même titre que les autres briques fondamentales, tout en restant presque invisible pour l’utilisateur tant qu’il n’en a pas besoin.
+
+---
+
+# 56. État d’implémentation vérifié — 2026-08-14
+
+Implémenté dans les propriétaires canoniques :
+
+- contrat versionné `schemaVersion: 1`, groupes `and/or/not` et états
+  `true/false/unknown` ;
+- découverte automatique des schémas, particules réellement présentes,
+  propriétés personnalisées, chemins relationnels autorisés jusqu’à trois
+  relations, critères calculés et fournisseurs live ;
+- registre extensible de propriétés, opérateurs et sources, sans catalogue
+  fermé par module ;
+- critères calculés persistés en AST sûr, sans JavaScript utilisateur ;
+- évaluation ponctuelle et requêtes réactives à dépendances ciblées ;
+- listes `condition_list` figées et dynamiques, une liste dynamique conservant
+  la référence vivante vers la dernière révision de sa ConditionSet ;
+- ensembles sauvegardés et bindings persistés comme Atomes canoniques, avec
+  révisions et réautorisation obligatoire pour les domaines de sécurité ;
+- même évaluateur pour les conditions ACL ADOLE, avec rejet/deny des schémas
+  invalides ;
+- autorisation atomique de chaque propriété écrite et projection par
+  destinataire/propriété des états, historiques et événements temps réel ;
+- autorité de requête serveur avec filtrage ACL avant évaluation et projection,
+  sans retour des propriétés privées utilisées pour décider ;
+- API globale, WebSocket et MCP Conditions sous les capacités/politiques
+  existantes ;
+- composant BevyUI générique, compact et repliable, consommé par Finder,
+  Contacts, Communication/Share et Calendar/alarmes, avec recherche de
+  propriétés, saisie directe des conditions, groupes, compteur live et trois
+  actions finales, sans action « Créer un critère » ni éditeur secondaire ;
+- sélecteur de propriétés agnostique et plat : seul le nom de propriété est
+  visible ; Conditions est un bloc autonome dans Communication et ne dépend pas
+  de l'ouverture de l'accordéon Avancé ;
+- ouverture créant immédiatement la première ligne éditable ; la propriété se
+  saisit directement et l'autocomplétion est alimentée par la découverte
+  autorisée locale et distante, sans catalogue fermé `Name/Email/Distance`,
+  rubrique ni boîte « Créer un critère » ;
+- `+ Ajouter` reste visible sur la ligne du groupe et toute nouvelle condition
+  choisit immédiatement un opérateur compatible avec sa propriété découverte ;
+- fournisseurs temps, présence, session, localisation et santé ; échéances
+  temporelles exactes sans polling, expiration vers `UNKNOWN`, libération des
+  abonnements et connecteur HealthKit compilé pour simulateur iOS ;
+- documentation développeur dans `atome/documentations/conditions.md` et tests
+  permanents dans `tests/`.
+
+# 57. §12.5 livré — 2026-08-15
+
+Profile/Info expose désormais une règle conditionnelle, **appliquée par le serveur**.
+Le blocage précédent était réel — `permissions.principal_id` est `NOT NULL` avec clé
+étrangère, donc aucune ligne ne peut viser « tout lecteur ». Il est levé par une table
+dédiée `property_privacy_rules`, consultée dans `canRead` après la permission.
+
+Invariant de sécurité : la règle **restreint uniquement**. Elle ne peut pas accorder,
+son absence ne change rien, une règle corrompue refuse, le propriétaire n'est jamais
+masqué de ses propres données, et seul lui peut écrire ou énumérer ses règles.
+Couvert par `temp/conditions_privacy_rule_probe.mjs` (9 sections).
+
+Limites restantes, non présentées comme acceptées :
+- l’acceptation navigateur visible authentifié desktop/mobile reste à réaliser ;
+- HealthKit reste à valider sur appareil physique avec permission et vraie
+  mesure ; la compilation simulateur ne constitue pas cette preuve ;
+- la validation de granularité est **livrée** :
+  `todo/audits/granularity_validation_report.md`, verdict `GRANULARITY VALIDATION: PASS`,
+  matrice complète et preuves fichier+ligne, sans correctif nécessaire.

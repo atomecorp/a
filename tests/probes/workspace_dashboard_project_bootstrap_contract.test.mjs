@@ -19,7 +19,6 @@ setMainMenuRuntime({
 window.eveBevyUiRuntime = {
     readOverlayDiagnostics: () => null
 };
-
 const calls = [];
 window.eveDashboardBevyUiRuntime = {
     state: { active: false, suspended: false, sceneProjectId: '' },
@@ -42,6 +41,12 @@ window.eveDashboardBevyUiRuntime = {
             suspended: true
         };
         return { ok: true };
+    }
+};
+window.eveToolBase = {
+    loadProjectAtomes: async (projectId, options) => {
+        calls.push({ name: 'project_load', projectId, options });
+        return [{ id: 'prepared_shape', atome_id: 'prepared_shape', type: 'shape', project_id: projectId, properties: { left: 10, top: 20 } }];
     }
 };
 
@@ -77,6 +82,8 @@ assert.equal(window.__eveWorkspaceMode.mode, 'dashboard');
 
 await toggleWorkspaceDashboardAndMainMenu({ source: 'contract_explicit_hide' });
 assert.equal(calls[3].name, 'dashboard_close', 'only the explicit Dashboard action may close it');
+assert.equal(calls[4].name, 'project_load', 'a project prepared behind the neutral Dashboard must be reloaded onto the foreground canvas');
+assert.equal(calls[4].options.forceProjectSurface, true);
 assert.equal(window.__eveWorkspaceMode.mode, 'project');
 assert.equal(window.__eveWorkspaceMode.projectId, 'project_ready');
 

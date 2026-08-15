@@ -259,8 +259,9 @@ Baseline after the 2026-07-13 renderer-decision cleanup: 61/138 checked tasks (4
 Reconciled state after the 2026-07-16 audit and subsequent documentation decisions: 61/148 executable tasks checked (41.22%). The current denominator includes the completed reconciliation, the WebSocket-only transport decision, secure browser/native authentication-token storage remediation, the OVHcloud production SMS provider boundary, stable user identity independent of phone, explicit cross-runtime account provisioning with preserved isolated guest mode, Argon2id migration of legacy bcrypt password verifiers, trusted-device and Recovery-Kit account recovery, snapshot-accelerated rebuild, two ordered Time Machine historical-branching tasks, reopened `/ws/sync` security validation, persistent sender auto-accept UI, true manual-linked sharing, append-only last-write-wins offline conflict handling, and private-by-default directory contact data. The full original 138-entry decision ledger remains `done/planning_audit/execution_order_reconciliation_2026-07-16.md`.
 
 Current governance audit after splitting the Priority 1 BevyUI panel migration
-programme into essential and post-Molecule work: 66/154 executable tasks
-checked (42.86%).
+programme into essential and post-Molecule work and registering the transverse
+Conditions implementation and the executable Granularity Validation programme:
+75/160 executable tasks checked (46.88%).
 
 ## Gardes-fous transverses obligatoires
 
@@ -843,6 +844,8 @@ Sources principales:
 - todo/cleanup_architecture/ios_fullscreen_surface_compliance.md
 - todo/tools/tool_sanitisation.md
 - todo/dev_ops/developer-experience.md
+- todo/1- condition.md
+- todo/2- Granularity_Validation.md
 
 Regles obligatoires de cette phase:
 
@@ -852,6 +855,13 @@ Regles obligatoires de cette phase:
 
 Taches:
 
+- [ ] Executer integralement le programme Granularity Validation de `todo/2- Granularity_Validation.md`, section 27, avant de poursuivre l'extension transverse de Conditions: etablir les fixtures QA isolees et le Fastify LAN canonique; reproduire puis corriger GV-T01 a GV-T28 aux proprietaires ADOLE/commit/projection/realtime/history existants; valider ACL, revocation, reconnexion, concurrence, offline, idempotence, recherche/export, custom/collections et medias; executer les sept directions Web-Web, Web-Tauri, Tauri-Web, Web-iOS, iOS-Web, Tauri-iOS et iOS-Tauri avec deux utilisateurs puis le meme compte; reutiliser exclusivement `server_config.json`, `/ws/api`, `/ws/sync`, `window.Atome.commit`/`commitBatch`, les controleurs media et la scene Bevy/WebGPU. Critere de sortie: les 20 portes de la section 27 sont vertes, les budgets p95 sont mesures, aucun payload interdit n'est observe, l'iPhone physique signe est valide, les mutations DOM/voies paralleles concernees sont supprimees, les cartes/contrats/State File sont actuels, les diagnostics sont nettoyes et le verdict devient `GRANULARITY VALIDATION: PASS`.
+- [ ] Implementer le moteur transverse Conditions v1 et son composant Bevy contextuel unique apres gel des regressions de granularite et de securite; reutiliser les autorites Atome, permissions, commit, partage, Finder, Calendar et temps reel; migrer puis supprimer les evaluateurs locaux; critere de sortie: schemas versionnes, logique TRUE/FALSE/UNKNOWN fail-closed pour la securite, references sauvegardees vivantes avec reautorisation des usages sensibles, granularite propriete/custom, projections serveur sans fuite, integrations Finder/Contacts/Communication/Share/Info/Profil/Calendar, nettoyage des watchers, cartes et documentation sont valides par tests permanents Web/Tauri/iOS sans moteur, etat DOM, renderer ou voie de mutation parallele.
+  Etat 2026-08-14: moteur dynamique, discovery, computed AST, query/watch,
+  listes figées/dynamiques, autorité serveur, Finder/Contacts/Communication/
+  Calendar, UI Bevy et bridge HealthKit implémentés et validés par tests ciblés;
+  la case reste ouverte pour Profile/Info, l'acceptation visible desktop/mobile
+  authentifiée et la validation HealthKit sur appareil physique.
 - [ ] Executer le nettoyage profond de conformite des fichiers source: tailles, annotations verbeuses, duplication verifiee via les maps, recherche de code mort/inoperant/problematique, factorisation, simplification sans regression, et unification stricte des styles systeme partages a partir de eVe/elements/system_ui_tokens.js sans doubler les sources de couleurs, blur, shadow ou fonds derives.
 - [ ] Supprimer progressivement les bridges eveGoeyMenuApi.
 - [ ] Supprimer l'alias legacy new_menu.

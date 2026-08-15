@@ -17,7 +17,12 @@ import {
 } from './session.js';
 import { adapters, normalizePhone, getPrimaryBackend, getSecondaryBackend, hasToken, hasAuthenticatedToken } from './auth_core.js';
 import { loginBackend, meBackend, ensureBackendAvailability } from './auth_backends.js';
-import { loadFastifyLoginCache, ensureFastifyToken, markFastifyAuthValid } from './auth_fastify_token.js';
+import {
+    loadFastifyLoginCache,
+    ensureFastifyToken,
+    markFastifyAuthValid,
+    configureTauriRemoteSync
+} from './auth_fastify_token.js';
 import { transferGuestWorkspace } from './auth_workspace.js';
 import { requireAuth, normalizeSessionUser } from './auth_state.js';
 import { auth } from './auth.js';
@@ -32,6 +37,9 @@ const isAuthoritativeFastifySessionRefusal = (result) => {
 
 export const sessionAccountMethods = {
     async logout() {
+        if (isTauriRuntime()) {
+            try { await TauriAdapter?.sync?.clearRemote?.(); } catch (_) { }
+        }
         await TauriAdapter?.auth?.logout?.();
         await FastifyAdapter?.auth?.logout?.();
         TauriAdapter?.clearToken?.();
@@ -95,6 +103,7 @@ export const sessionAccountMethods = {
                     user,
                     backend
                 });
+                await configureTauriRemoteSync();
                 return { authenticated: true, user };
             };
 

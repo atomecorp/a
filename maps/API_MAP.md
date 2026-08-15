@@ -2,6 +2,34 @@
 
 Status: Initial API map after the Atome open / eVe closed boundary validation.
 
+Current native collaboration contract (2026-08-14): Tauri keeps Axum as its
+primary local data API and exposes Fastify only as the configured collaboration
+target. `TauriAdapter.sync.configureRemote({ remote_user_id, remote_token })`
+binds one authenticated local principal to one authenticated Fastify principal;
+`clearRemote()` removes that in-memory binding. The remote bearer is never
+returned by the command, written to SQLite, or logged. A surviving WebView
+cookie is insufficient after a native restart: `ensureFastifyToken()` obtains
+an explicit per-user Fastify token and reconfigures the existing native worker.
+Local and Fastify UUIDs may therefore differ without weakening either
+authentication boundary. `AdoleAPI.projects.setCurrent` stores the preference
+under the authenticated logical session even when an already-authorized native
+project projection reports its mapped local owner UUID.
+
+Current Conditions API contract (2026-08-14): the same frozen open service is
+available as `window.atome.conditions` and `window.Squirrel.conditions`. It
+exposes `properties.discover`, `sources.register/list`,
+`computedProperties.save/list/remove`, `query.once/watch`,
+`lists.create/get/list/resolve/watch/freeze/remove`, `sets.*`, `bindings.*`,
+and the lower-level evaluation compatibility surface. Sets, computed criteria,
+lists and bindings persist as canonical Atomes. Server queries and discovery
+use `Atome.queryConditions` over the existing WebSocket authority, with ACL
+filtering before evaluation/projection. Security bindings are revision-pinned
+and require explicit reauthorization. MCP exposes the corresponding discovery,
+query, computed, list, set, binding and evaluation operations under
+`conditions.read`/`conditions.write`; mutations keep the existing confirmation,
+proposal, audit, capability and idempotency policy. Full schema and examples:
+`atome/documentations/conditions.md`.
+
 Current project/global-state and playback API contract (2026-08-11): `Atome.commit({ scope: "global", ... })` explicitly persists an event outside every project. The marker is stored in the event payload and clears `state_current.project_id` in Fastify, Tauri, and iOS, so a rebuild reproduces the same global projection; omitting `scope` retains current-project inference. `readSelectedProjectMediaPlaybackState(atomeIds)` is the closed eVe playback reader and returns `playableIds`, `activeIds`, `anyPlaying`, and `allPlaying`. `SELECTED_PROJECT_MEDIA_PLAYBACK_STATE_EVENT` is the sole projection-refresh event for Flower and the contextual footer. `stopProjectMediaPlaybackForProject(projectId)` is the media-reader-owned project transition entry and stops only media belonging to the outgoing project.
 
 Current legacy-principal file API contract (2026-08-11): `reconcilePrincipalFilePath` accepts `data/users/<legacy-id>/...` only when `principal_identity_aliases` maps that exact legacy id to the authenticated owner. It atomically copies into the canonical principal home, retains the source, updates `file_path`, and records an idempotent `principal_file_migrations` journal. It never searches by basename or accepts a foreign alias.
@@ -18,6 +46,92 @@ Current mobile performance API contract (2026-07-17; supersedes older preview/wa
 - iOS `FileSyncCoordinator.syncAll(force:)` remains the internal explicit propagation boundary. `FileSystemBridgeDeletion.swift` delegates to `FileSystemDeletionTransaction.swift`, which requires coordinator access, successful `removeItem`, and confirmed absence before it may report success, create a tombstone, or request one sync; partial multi-delete marks only confirmed removals. The periodic `startAutoSync`/`stopAutoSync` surface is removed; ordinary local HTTP GET delivery cannot invoke filesystem synchronization.
 
 Current account-provisioning contract (2026-07-30): Fastify owns the sole remote account creation/link action, `auth/account-provision`, on `/ws/api`. It requires `account_provision` intent, a bounded-expiry idempotency operation id, Fastify credentials, and the configured server-identity fingerprint; it never accepts a local principal as remote authentication. `AdoleAPI.auth.provisionAccount` is the open adapter entry. `startGuest` and `leaveGuest` are local-runtime entries: a guest UUID v4 is local only and has no Fastify token. Confirmed `adoptGuestWorkspace` uses the `guest-adoption` WebSocket family (`prepare`, `import`, `stage-file`, `finalize`) with one UUID v4 operation, manifest and payload digests. Fastify persists the journal through `prepared`, `importing`, `committed`, and `completed`; file staging is explicit and collision-safe.
+
+Current surface-registry contract (2026-08-15): `server/wsSurfaceOperations.js` owns the
+`surface` family on `/ws/api` (`announce`, `list`, `ping`, `retire`) and the
+`surface-presence` push; `server/wsApiState.js` owns the registry itself
+(`wsApiSurfacesByUserId`, `attachWsApiSurface`, `detachWsApiSurface`,
+`listWsApiSurfacesForUser`, `wsSendJsonToSurface`) alongside the connection registry it
+refines. A surface is one renderable device seat identified by a client-persisted UUID v4
+that survives reload and reconnection — `connection._wsApiConnectionId` is not that
+identity and stays server-internal. A surface id is only ever interpreted inside the
+announcing principal's namespace, never accepted as an identity of its own, so it cannot
+address or impersonate another account's seat. The newest socket announcing a given id
+owns it; a stale socket closing afterwards cannot evict the live entry. The registry is
+in-memory and Fastify-only: local Tauri/iOS servers see a single device and cannot relay,
+so `AdoleAPI.surfaces` (`atome/src/squirrel/apis/unified/adole_api/surfaces.js`) always
+speaks to `FastifyAdapter`. It re-announces once per transport `connectionGeneration`,
+on `squirrel:user-logged-in`, and on a 30 s generation-comparison heartbeat; anonymous and
+guest sessions never announce.
+
+Current teleport contract (2026-08-15): `atome/src/shared/teleport_state.js` is the sole
+owner of teleport state semantics — 8 states, an explicit transition table that refuses
+any unlisted jump, and pure patch builders. It is shared, not server-side, because the
+server decides transitions while the renderer decides whether a surface paints the object
+or a residual proxy; a second copy would let them disagree about where an object is.
+`server/wsTeleportOperations.js` owns the `teleport` family and the pending-offer map;
+`atome/src/squirrel/teleport/teleport_manager.js` is the renderer-side owner and never
+mutates teleport properties itself. Teleport state is carried by `teleport_*` particles
+committed through `commitAtomeEvent`, so per-property ACL, history, undo and realtime
+broadcast are inherited rather than reimplemented — no table and no transport is added.
+Two-phase is mandatory: `offer` writes `TELEPORT_PREPARING` but must not touch
+`teleport_surface_id`; only an ACK from the addressed surface moves it, and
+`LOCAL → REMOTE` is not a legal transition. `cancel` is bound to the source surface and
+`decline` to the target surface — a same-account teleport has one principal on both ends,
+so principal-level checks are insufficient. Losing a surface rolls back offers addressed
+to it and marks objects it hosted `DISCONNECTED`; it never returns them silently.
+Cross-user teleport is refused with `teleport_cross_user_not_authorized` until the
+permission model exists.
+
+Current remote-control contract (2026-08-15): `server/wsRemoteControlOperations.js` owns
+the `remote-control` family and its in-memory session map. Remote control is a separate
+brick from teleport and must stay one: a surface can drive another with nothing
+teleported, and the two meet only through the surface registry. A session id is not a
+capability — every relayed input event re-checks that the sender's principal *and*
+surface are the session's controller, so a captured envelope replayed from another
+socket does nothing. Revocation is immediate with no grace period, the controlled
+surface may always revoke, only granted capabilities are forwarded, sessions expire, and
+no session survives the loss of either surface. Same-account sessions are granted on
+request (§11.1) but the controlled surface is always notified; cross-user control is
+refused with `remote_control_cross_user_not_authorized` until the permission model
+exists. `atome/src/squirrel/teleport/remote_control_manager.js` owns the renderer side
+and coalesces pointer deltas (summed, never dropped); `eVe/intuition/tools/trackpad.js`
+is the toolbox tool and must never create a surface, open a panel, or request
+fullscreen.
+Remote preview is on-demand only: one `preview-request` yields exactly one still from
+the controlled surface (`atome/src/squirrel/teleport/remote_preview.js`), bounded to
+2 MB. There is no subscription and no cadence — repeating it is the caller's decision,
+which is what keeps §30 ("not a screen-share clone") true by construction. Only the
+target may send a frame; a controller cannot push an image onto the screen it drives.
+Remote keyboard is applied to the focused element and is opt-in on the controlled
+surface (`setRemoteKeyboardEnabled`, default off): a granted capability authorises the
+sender, it does not force the receiver to accept synthetic keystrokes.
+
+Current cross-user surface-grant contract (2026-08-15): `server/surfaceGrants.js` owns
+the capability vocabulary and `hasSurfaceCapability`, the single authorization point for
+every cross-account teleport or remote-control action; `server/wsSurfaceGrantOperations.js`
+owns the `surface-grant` family. Grants live in their own `surface_grants` table, not in
+`permissions`: that table is atome-scoped and its `conditions` column belongs to the
+versioned Conditions schema, which would normalise capability payloads away. The seven
+capabilities (`teleport_receive`, `teleport_display`, `teleport_manipulate`,
+`teleport_persist`, `teleport_return`, `remote_pointer`, `remote_surface`) are checked
+independently — accepting an object never confers control of the device. Only the surface
+owner decides, may grant less than was requested but never more, and may revoke at any
+time; a pending request authorizes nothing and a denial is recorded rather than
+forgotten. `hasSurfaceCapability` must consider every live grant, not the most recent
+one: concurrent grants carry different capabilities and reading only the latest silently
+revokes the others.
+
+Current property-privacy contract (2026-08-15): `database/adole_privacy_rules.js` owns
+profile output rules (§12.5 of `todo/1- condition.md`) in the dedicated
+`property_privacy_rules` table. `permissions` cannot express them: `principal_id` is NOT
+NULL with a foreign key, so every row names one reader, while a profile rule applies to
+whoever reads. The rule is consulted by `canRead` **after** a permission already allowed
+the read and is **restrictive only** — it can narrow, never grant, or a privacy feature
+would become a privilege-escalation path. Absence of a rule changes nothing; a corrupted
+rule fails closed; the owner is never hidden from their own data; only the owner may set
+or enumerate rules. Wire actions: `share/privacy-rule-set`, `share/privacy-rule-list`;
+client entries `AdoleAPI.sharing.setPrivacyRule` / `listPrivacyRules`.
 
 Current production identity API contract (2026-08-10): `ensureProductionSecureConfig` is the updater's only entry for JWT/cookie secrets and the persistent account-provision signing identity; `ensureServerIdentity` validates or creates that identity, and `backupServerIdentity` copies the validated pair into the update backup. These are deployment-internal APIs. Runtime and tooling reuse `createServerIdentityKeyPair`, `createServerIdentityId`, `computeServerIdentityFingerprint`, and `validateServerIdentityKeyPair` from `server/serverIdentity.js`; no updater or generator may implement a parallel key/fingerprint algorithm.
 
@@ -159,6 +273,8 @@ Exposure:
 - WASM exports: `apply_atome_bevy_ui_ops(...)`, `read_atome_bevy_ui_diagnostics()`, `drain_atome_bevy_ui_events()`, and the internal browser input bridge `queue_atome_bevy_ui_events(...)`.
 
 Boundary status: Squirrel UI definitions remain the canonical source of UI structure and handlers. BevyUI receives normalized disposable trees, hydrates standalone `icon` / `image` sources into WebGPU texture payloads through the shared browser texture resolver before renderer submission, while Dashboard card-media overlay nodes explicitly defer generic hydration so project previews cannot block the structural Dashboard mount and are resolved once by the shared WebGPU deferred-media path, stores the interaction tree in logical CSS pixels, versions and queues overlay renders per tree so only the latest requested render may update the shared project scene and failed operations remain caller-owned without orphan queue rejections, projects the visible product path through non-selectable WebGPU project overlay records under the centralized `__eve_bevy_ui_` prefix, and returns UI intentions such as `activate`, `change`, `input`, `focus`, `blur`, `open`, `close`, `select`, `hover`, `hover_leave`, `press`, `release`, `drag`, `double_click`, and `wheel`; any durable mutation must still route through existing handlers and then `window.Atome.commit` / `commitBatch` when canonical state changes. Browser canvas input is translated by `bevy_ui_runtime.js` through its normalized interaction tree and submitted to the WASM event queue with `queue_atome_bevy_ui_events(...)`, so `drain_atome_bevy_ui_events()` remains the single web drain surface for native BevyUI events. Native BevyUI WASM op submission is opt-in; the default product path must not call `apply_atome_bevy_ui_ops(...)` while the visible route is the project overlay. Prehydrated overlay textures must remain attached through Virtual Scene projection and must not be replaced by re-resolving the original source. BevyUI overlay records are ephemeral, excluded from project preview captures, and overlay updates must not clear existing Dashboard/project scene effects unless an explicit `effects` array is supplied. Overlay projection targets the current foreground workspace scene and removes that tree's stale overlay ids from inactive scenes, so a main-menu remount after a project switch cannot leave records attached to a previous project. The main menu tree is reconciled atomically by prefix so its icon/label records cannot be committed as a stable partial batch. After a geometry remount clears overlay records, bookkeeping is updated immediately and `bevy_ui_overlay_reconciliation.js` schedules one queued reconciliation from an empty overlay baseline if projection fails, while keeping the error observable in runtime diagnostics. Panel `pointer_capture` boundaries consume every canvas interaction phase before project hit-testing without making the full-screen tree root blocking. The runtime must not create a DOM node per component; hidden HTML text editing/accessibility bridges are allowed only for the one active text-entry session.
+
+Viewport diagnostic contract: `read_atome_bevy_web_diagnostics().ui_viewport_width/height` and native UI diagnostics describe the physical viewport of the `IsDefaultUiCamera` used by BevyUI. Offscreen workspace-capture and blur targets are not valid UI viewports even when they were spawned first. The JavaScript render-scale consumer treats a zero pre-initialization value as neutral and may scale only from this canonical camera measurement.
 
 ### eVe BevyUI Panel API
 
@@ -1347,8 +1463,12 @@ Public route families:
 - File and upload routes: `/api/uploads`, `/api/uploads/chunk`, `/api/uploads/complete`, `/api/uploads/:file`, `/api/files/my-files`, `/api/files/accessible`, `/api/files/share`, `/api/files/unshare`, `/api/files/visibility`, `/api/files/stats`, `/api/recordings/:file`, `/api/extract-audio/:file`.
 - Admin binary archive and database diagnostics: `/api/admin/users/export`, `/api/admin/users/import`, `/api/admin/apply-update`, `/api/admin/batch-update`, `/api/admin/sync-from-zip`, `/api/admin/sync-clients`, `/api/db/status`, `/api/db/stats`. Export/import endpoints are explicit archive-byte transfer boundaries and must not become general Atome query/mutation APIs.
 - WebSocket routes: `/ws/api`, `/ws/sync`, `/ws/visio`; Tauri also exposes local-only `/ws/control`.
-- WebSocket `/ws/api` action families: auth/account, Atome CRUD/history, events, `state-current`, snapshot/restore, sharing/permissions, sync request/response, and user-data.
+- WebSocket `/ws/api` action families: auth/account, Atome CRUD/history, events, `state-current`, snapshot/restore, sharing/permissions, sync request/response, user-data, and `surface`.
 - WebSocket auth actions on `/ws/api`: `request-phone-verification`, `verify-phone-verification`.
+- WebSocket `surface` actions on `/ws/api`: `announce`, `list`, `ping`, `retire`; reply type `surface-response`, server push `surface-presence`.
+- WebSocket `teleport` actions on `/ws/api`: `offer`, `accept`, `decline`, `cancel`, `return`, `persist`, `state`; reply type `teleport-response`, server pushes `teleport-offer`, `teleport-arrived`, `teleport-cancelled`.
+- WebSocket `remote-control` actions on `/ws/api`: `request`, `revoke`, `deny`, `list`, `pointer`, `gesture`, `key`, `preview-request`, `preview-frame`, `preview-stop`; reply type `remote-control-response`, server pushes `remote-control-started`, `remote-control-input`, `remote-control-ended`, `remote-control-preview-request`, `remote-control-preview-frame`, `remote-control-preview-stopped`.
+- WebSocket `surface-grant` actions on `/ws/api`: `request`, `accept`, `deny`, `revoke`, `list`; reply type `surface-grant-response`, server pushes `surface-grant-request`, `surface-grant-granted`, `surface-grant-denied`, `surface-grant-revoked`.
 - Visio routes: `/contacts/request`, `/contacts/respond`, `/contacts`, `/rooms`, `/rooms/:room_id`, `/rooms/:room_id/invite`, `/rooms/:room_id/join`.
 
 Owner: Atome open server infrastructure when product-neutral.

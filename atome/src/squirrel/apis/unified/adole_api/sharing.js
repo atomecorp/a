@@ -207,8 +207,34 @@ export async function share_policy(payload = {}, callback) {
     return with_callback(res, callback);
 }
 
+/** §12.5 — attach a ConditionSet to one of my own properties. The rule restricts an
+ *  existing read; it cannot grant, and only the owner may set it. */
+export async function set_property_privacy_rule({ atomeId, particleKey, conditions = null } = {}, callback) {
+    const authCheck = requireAuthenticatedUser();
+    if (!authCheck.ok) return with_callback({ ok: false, error: authCheck.error }, callback);
+    if (!atomeId || !particleKey) {
+        return with_callback({ ok: false, error: 'missing_atome_or_property' }, callback);
+    }
+    const res = await FastifyAdapter.share.privacyRuleSet({
+        atome_id: String(atomeId),
+        particle_key: String(particleKey),
+        conditions
+    });
+    return with_callback(res, callback);
+}
+
+export async function list_property_privacy_rules(atomeId, callback) {
+    const authCheck = requireAuthenticatedUser();
+    if (!authCheck.ok) return with_callback({ ok: false, error: authCheck.error, rules: [] }, callback);
+    if (!atomeId) return with_callback({ ok: false, error: 'missing_atome_id', rules: [] }, callback);
+    const res = await FastifyAdapter.share.privacyRuleList({ atome_id: String(atomeId) });
+    return with_callback(res, callback);
+}
+
 export default {
     share_atome,
+    set_property_privacy_rule,
+    list_property_privacy_rules,
     share_request,
     share_respond,
     share_publish,

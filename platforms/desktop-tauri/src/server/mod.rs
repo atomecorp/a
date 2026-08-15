@@ -60,6 +60,9 @@ pub mod local_auth;
 // Local atome storage module
 pub mod local_atome;
 mod local_atome_extended;
+mod local_atome_remote_projection;
+mod local_atome_security;
+mod local_atome_sync_worker;
 mod remote_control;
 mod remote_control_ws;
 
@@ -5235,7 +5238,7 @@ pub async fn start_server(static_dir: PathBuf, uploads_dir: PathBuf, data_dir: P
         if let Some(atome_state) = state.atome_state.clone() {
             if !remote_url.trim().is_empty() {
                 println!("🔁 Sync queue enabled → {}", remote_url);
-                tokio::spawn(local_atome::run_sync_worker(atome_state, remote_url));
+                tokio::spawn(local_atome_sync_worker::run(atome_state, remote_url));
             }
         }
     }

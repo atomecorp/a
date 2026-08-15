@@ -2,6 +2,94 @@
 
 Status: Initial framework map after the Atome open / eVe closed boundary validation.
 
+Current native granularity ownership (2026-08-14):
+`platforms/desktop-tauri/src/server/local_atome_security.rs` owns local
+property ACL decisions and recipient projections;
+`local_atome.rs` owns transactional commit/batch enforcement;
+`local_atome_extended.rs` owns authenticated sync configuration and projected
+history/state commands; `local_atome_sync_worker.rs` owns per-principal
+outbound/inbound transport; and `local_atome_remote_projection.rs` owns durable
+recipient-scoped Fastify projection, cursors, revocation and remote lifecycle.
+`atome/src/squirrel/apis/unified/adole_api/auth_fastify_token.js` owns the
+WebView-to-native credential handoff and restart reconfiguration. No token or
+remote credential is persisted by these owners.
+
+Current surface/teleport ownership (2026-08-15, in progress —
+`todo/teleport/`): `server/wsApiState.js` owns the surface registry next to the
+connection registry it refines; `server/wsSurfaceOperations.js` owns the `surface`
+wire family and its authorization;
+`atome/src/squirrel/apis/unified/adole_api/surfaces.js` owns the client-persisted
+surface identity, its descriptor, and the announce lifecycle. No second surface
+registry may be created: teleport, remote control and destination pickers all consume
+these. `atome/src/shared/teleport_state.js` is the sole owner of teleport state
+semantics for both boundaries; `server/wsTeleportOperations.js` owns the `teleport`
+wire family and pending-offer lifecycle; `atome/src/squirrel/teleport/teleport_manager.js`
+is the renderer-side owner and only ever *requests* transitions.
+`eVe/domains/rendering/teleport_residual_projection.js` owns the residual proxy, applied
+inside `normalizeProjectSceneRecords` — the single funnel every record crosses before the
+canvas — so an object hosted by another surface becomes a proxy on every path, not only
+the teleport tool's. The proxy keeps the record id (one object, never a copy), drops the
+media source, and uses a fixed badge size that must not be routed through
+`normalizeAtomeSizeToMaxAxis` (that helper rescales instead of clamping). Ephemeral scene
+records are excluded. The rendering domain never reads the API layer: the manager pushes
+surface identity and destination labels through `squirrel:teleport-surface-context`.
+`eVe/intuition/tools/teleport.js` owns the four contextual teleport actions and
+`hiddenTeleportToolKeysFor`, the sole visibility rule consumed by
+`resolveAtomeEditFooterToolDefinitionsForOptions`. Teleport adds no panel and no menu.
+That module must keep loading the Teleport Manager through a lazy `import()`: a static
+import makes the whole Adole API graph an eager dependency of the contextual footer
+(+28 modules per boot), which the mobile performance contract forbids.
+`teleport_edge_intent_runtime.js` owns edge-intent detection and its thresholds; it
+consumes the clamp the existing drag already applies (desired position past the clamp =
+push against the border) and adds no geometry of its own. `teleport_destination_picker.js`
+owns multi-destination selection and must keep using the contextual editor's
+`enterVirtual` rail — teleport may not introduce a device-picker surface of its own.
+`server/wsRemoteControlOperations.js`, `atome/src/squirrel/teleport/remote_control_manager.js`
+and `eVe/intuition/tools/trackpad.js` own remote control end to end. It is deliberately
+independent of teleport and must stay so. The trackpad owns no surface: no element
+creation, no panel, no fullscreen — it is a latching toolbox tool that reads pointer
+events from the surface already present. `server/surfaceGrants.js` and
+`server/wsSurfaceGrantOperations.js` own cross-user authorization through the dedicated
+`surface_grants` table; `hasSurfaceCapability` is the only gate teleport and remote
+control may call for a cross-account action.
+`atome/src/squirrel/teleport/surface_grant_manager.js` is the renderer-side grant owner
+and never auto-accepts across accounts; `eVe/intuition/tools/teleport_grant_notifications.js`
+feeds the existing inbox rather than adding a second alert surface.
+`eVe/intuition/tools/teleport_feedback.js` owns the §20 no-destination signal and the
+§11.1 active-session indicator as ephemeral scene records — no modal, no permanent
+chrome. `atome/src/squirrel/teleport/remote_preview.js` owns the on-demand still.
+`atome/src/squirrel/apis/unified/adole_api/surfaces.js` exports
+`ensureRemoteSurfacePrincipal`, which every teleport/remote-control/grant request must
+pass: a Tauri or iOS session may be authenticated only against the local backend, and
+the relay lives on Fastify. The audit that scoped this work is `todo/teleport/00_audit.md`; it records that
+`RemoteCommands`/`BuiltinHandlers` do not exist (dead dispatch in
+`adole_websocket_message.js`, infinite retry timers in
+`eVe/intuition/tools/communication_remote_commands.js`) and that
+`platforms/desktop-tauri/src/server/remote_control_ws.rs` is loopback-only with six
+audio actions — neither is a cross-device transport.
+
+Current property-privacy ownership (2026-08-15): `database/adole_privacy_rules.js` owns
+profile output rules and `eVe/intuition/runtime/bevy_panel/bevy_panel_home_privacy.js`
+owns their UI, reusing the shared Conditions component rather than adding a second
+editor. Rules live in `property_privacy_rules`, are gated inside `canRead`, and are
+restrictive only. Granularity validation is delivered:
+`todo/audits/granularity_validation_report.md` records verdict `PASS` with a 20-line
+conformity matrix and file+line proofs; no corrective change was required.
+
+Current Conditions ownership (2026-08-14): `atome/src/squirrel/conditions/`
+owns the sole versioned schema, dynamic property/source registry, safe computed
+AST, three-state engine, dependency-aware query lifecycle, static/dynamic lists,
+persisted sets/bindings and ADOLE permission adapter.
+`database/adole_event_contract.js` owns canonical event-patch extraction and
+`server/atomePropertySecurity.js` owns per-property commit authorization and
+read projection; `server/conditionsQueryAuthority.js` owns remote discovery and
+one-shot query projection. `bevy_panel_conditions.js`,
+`bevy_panel_conditions_runtime.js` and projection-only
+`bevy_panel_conditions_view.js` are the sole closed eVe Conditions UI;
+Finder, Contacts, Communication and Calendar configure that shared component
+without local evaluators or DOM authority. Developer contract and current
+acceptance boundary: `atome/documentations/conditions.md`.
+
 Current project/media repair ownership (2026-08-11): `server/principal_file_migration.js` owns alias-authorized legacy media reconciliation; `database/adole.js` owns its canonical `file_path` event and the `principal_file_migrations` journal; `server/server_uploads.js` invokes reconciliation only after canonical ACL approval. `project_order_runtime.js` owns deterministic per-user slot reconciliation, while `project_data.js` owns the raw project read, creation/rename, and project activation. `dashboard_data_controller.js` owns the account-global `projects` cache. `atome_record_utils.js` owns project/parent/owner extraction across root, `properties`, and `meta`. `selected_project_media_playback_runtime.js` owns aggregate playback state and audio lifecycle; `media_reader_tool_runtime.js` alone bridges video decoder transport. Flower and the Atome footer are projections of that state.
 
 Current workspace-entry contract (2026-07-22; supersedes older statements that make Dashboard opening wait for project readiness): `user_workspace_surface_runtime.js` owns one Dashboard-first orchestration. It mounts and verifies the neutral Dashboard and main menu first, then invokes the existing `project_bootstrap.js` readiness owner behind that foreground and keeps the Dashboard visible after loading completes. The prepared project is revealed only when the user explicitly closes the Dashboard through `toggleWorkspaceDashboardAndMainMenu`. A project bootstrap failure leaves the mounted Dashboard intact and returns an explicit `project_bootstrap` phase; Dashboard mount failures return `dashboard_open`, while an explicit project-reveal failure returns `project_reveal`. This flow is shared by authenticated, anonymous, and `boot_runtime.js` entry; it never creates a second renderer or changes media/recording paths.
@@ -1438,6 +1526,7 @@ Reusable APIs:
 - The historical DOM footer renderer (`intuition/footer/runtime.js`, `footer/tool_row_runtime.js`, `ribbon/menu.js` and its private DOM helpers) is deleted. The shared `menu_model.js`, `tokens.js`, and `menu_scroll_runtime.js` remain because active Bevy/projection consumers use them; they must not be expanded into another visible footer renderer.
 - `eVe/intuition/ribbon/bevy_ui_main_menu_model.js` owns BevyUI main-menu order, expandable-child projection, fixed item sizing, handedness-aware bottom layout, explicit canvas positions used by motion and hit-testing, Atome edge order, overflow metrics, icon/label shape, semantic palette-group accent projection, and disposable tree structure. Accent geometry and family mapping belong to the shared Bevy menu skin; colors resolve from the shared semantic families. `bevy_ui_main_menu_palette_motion.js` owns deterministic sampling of the complete 180 ms expansion, bounded outward 6–14 px / 70 ms overshoot, and exact 120 ms settlement, plus its single interruptible `updateTreeMotion` controller, affected-node filtering, latest-only renderer-backpressure coalescing, and reduced-motion path. `bevy_ui_main_menu_scroll_runtime.js` owns wheel/drag scrolling and activation suppression; `bevy_ui_main_menu_hold_runtime.js` owns hold timing. `bevy_ui_main_menu_runtime.js` owns mount/update/unmount, reserved-height reporting, palette and tool visual state, invocation, Atome Dashboard toggle, frame-coalesced cosmetic renders, and structural palette-render priority; `bevy_ui_main_menu_resize_runtime.js` observes surface, window, visual viewport, and orientation changes, cancels stale palette motion, and emits at most one reanchor render per animation frame. The shared BevyUI runtime applies progressive image hydration only to fresh mounts; live main-menu updates reuse the final typed texture cache without frame-budget waits. `bevy_ui_product_registry.js` owns lightweight internal per-window access and geometry readers; `bevy_ui_product_runtime.js` composes and registers the menu and Flower. No browser menu alias or DOM main-menu factory exists.
 - `eVe/domains/rendering/bevy_ui_runtime.js` owns the internal JavaScript BevyUI facade while `bevy_ui_runtime_state.js` owns its bounded state construction and overlay diagnostics `window.eveBevyUiRuntime`: it normalizes Squirrel-owned UI trees, stores the interaction tree in CSS pixels, binds the shared canvas with `touch-action: none` so mobile pointer drags remain on the BevyUI route, versions and queues overlay renders per tree so stale async texture hydration cannot overwrite newer UI records and queue cleanup cannot create an orphan rejection, exposes overlay diagnostics for menu/workspace guards, projects the visible product path through non-selectable WebGPU project overlay records, and must not create DOM nodes per component. Native BevyUI WASM op submission is explicitly opt-in so overlay-backed product surfaces do not emit unused Bevy UI events or double-render over their WebGPU overlay. Focused helpers keep the rendering concerns closed: `bevy_ui_hit_test_runtime.js` owns pure Bevy UI node geometry hit-testing for the JS event router; `bevy_ui_image_runtime.js` hydrates standalone `icon` / `image` sources and label textures into RGBA payloads through the shared Bevy media texture resolver, but skips Dashboard card-media nodes explicitly marked by `dashboard_bevy_ui_tree.js` because `bevy_ui_project_overlay_runtime.js` forwards those records to the shared deferred-media path; this prevents project thumbnails from blocking Dashboard mount while the remaining ImageNode work uses the exported `DEFERRED_TEXTURE_BATCH_SIZE` from `bevy_media_resource_runtime.js`; `bevy_ui_render_scale.js` keeps the submitted UI tree in logical BevyUI units; `bevy_ui_project_overlay_runtime.js` projects the same disposable BevyUI tree as stable non-selectable WebGPU records under the centralized `__eve_bevy_ui_` prefix, targets the current foreground workspace scene or Dashboard-to-project transition target, forwards canonical `overlayRecord` payloads exactly with prefixed ids, writes replacement records before clearing the same tree's stale overlay ids from inactive project scenes, applies large overlay trees in 20-record batches across animation frames so static dashboard mount stays under the T3.5 frame budget, and reconciles the fixed BevyUI main-menu tree atomically by prefix so its icon/label set cannot become a stable partial batch; `bevy_ui_overlay_reconciliation.js` owns overlay geometry signatures, observable projection errors, and same-id overlay updates across geometry changes so Dashboard header/card text records are not cleared between resize/remount frames; `project_scene_record_projection.js` classifies that prefix as ephemeral; `project_preview_runtime.js` excludes it from project preview captures; `project_scene_runtime.updateProjectSceneOverlay(...)` preserves existing scene effects when no explicit `effects` array is supplied; `virtual_scene_contract.js` preserves prehydrated overlay `bevyTexture` payloads and resource signatures through the Virtual Scene; `bevy_media_resource_runtime.js` owns deferred media texture resolution, queue ordering, and the shared `DEFERRED_TEXTURE_BATCH_SIZE` budget, and must not re-resolve nodes that already carry a Bevy texture; `bevy_ui_value_runtime.js` owns scalar/color/id normalization. `atome/renderers/bevy-core/src/ui/mod.rs` owns the corresponding native BevyUI ECS tree, image-node texture spawning, diagnostics, and event queue, while `ui/types.rs` owns the serializable UI op/node contracts, `ui/tests.rs` owns the focused Rust UI tests, and `platforms/web/bevy-renderer/src/exports.rs` exposes the opt-in native exports `apply_atome_bevy_ui_ops`, `read_atome_bevy_ui_diagnostics`, and `drain_atome_bevy_ui_events`.
+- Native BevyUI viewport diagnostics are resolved by `atome/renderers/bevy-core/src/ui/mod.rs::ui_viewport_size()` from the single `IsDefaultUiCamera`. Quarter-resolution backdrop capture and Gaussian blur cameras are deliberately excluded. `platforms/web/bevy-renderer/src/lib.rs` publishes that same value to the web diagnostics consumed by `bevy_ui_render_scale.js`; it must never use unfiltered ECS camera iteration, because doing so applies the blur downscale to the whole Dashboard and main menu.
 - BevyUI overflow responsibilities are split into stable focused owners:
   `bevy_ui_layout_runtime.js` calculates flex boxes, natural content sizes,
   scroll ranges and inherited clips for both projection and hit-testing;

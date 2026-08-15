@@ -79,6 +79,8 @@ final class FullscreenWebViewController: UIViewController {
                     payload: payload,
                     completion: completion
                 )
+            } else if AppNativeHealthController.canHandle(command: command) {
+                AppNativeHealthController.shared.handle(command: command, payload: payload, completion: completion)
             } else if AppNativeBevyRendererController.canHandle(command: command) {
                 AppNativeBevyRendererController.shared.handle(
                     command: command,
@@ -94,6 +96,7 @@ final class FullscreenWebViewController: UIViewController {
             }
         }
         AppNativeMediaCaptureController.shared.attachPreviewHost(webView: webView)
+        AppNativeHealthController.shared.attach(webView: webView)
         view.insetsLayoutMarginsFromSafeArea = true
         webView.scrollView.contentInsetAdjustmentBehavior = .automatic
         webView.scrollView.contentInset = .zero

@@ -196,10 +196,6 @@ export async function set_current_project(projectId, projectName = null, ownerId
     const currentUserId = getCurrentUserId();
     if (!currentUserId || isLoggedOut() || !projectId) return false;
 
-    if (ownerId && String(ownerId) !== String(currentUserId)) {
-        return false;
-    }
-
     const payload = {
         id: String(projectId),
         name: projectName || null,
@@ -212,7 +208,10 @@ export async function set_current_project(projectId, projectName = null, ownerId
     }
 
     updateWindowProject(payload);
-    dispatchProjectChanged(payload);
+    dispatchProjectChanged({
+        ...payload,
+        ownerId: ownerId ? String(ownerId) : null
+    });
     return true;
 }
 

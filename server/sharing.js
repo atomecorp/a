@@ -65,11 +65,12 @@ export async function commitSharingAtomeCreate({
     properties = {}
 }) {
     const atomeId = id || uuidv4();
-    await commitAtomeEvent({
-        authenticatedUserId: creator || owner,
+    const principalId = owner || creator;
+    const result = await commitAtomeEvent({
+        authenticatedUserId: principalId,
         event: {
             atome_id: atomeId,
-            project_id: properties.project_id || properties.projectId || parent || null,
+            project_id: parent || null,
             kind: 'set',
             payload: {
                 props: {
@@ -80,9 +81,12 @@ export async function commitSharingAtomeCreate({
                     ...(owner ? { owner_id: owner } : {})
                 }
             },
-            actor: { type: 'user', id: creator || owner }
+            actor: { type: 'user', id: principalId }
         }
     });
+    if (!result?.ok) {
+        throw new Error(result?.error || 'sharing_atome_create_failed');
+    }
     return {
         id: atomeId,
         type,

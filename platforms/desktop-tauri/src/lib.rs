@@ -13,6 +13,11 @@ use tauri::{Manager, State};
 
 const TAURI_LOCAL_HTTP_PORT: u16 = 3000;
 const TAURI_LOCAL_HTTP_URL: &str = "http://127.0.0.1:3000/";
+const TAURI_RUNTIME_INIT_SCRIPT: &str = concat!(
+    "window.__SQUIRREL_FORCE_TAURI_RUNTIME__=true;",
+    "window.__ATOME_LOCAL_HTTP_PORT__=3000;",
+    "window.__SQUIRREL_TAURI_CANONICAL_URL__='http://127.0.0.1:3000/';"
+);
 
 macro_rules! println {
     ($($arg:tt)*) => {
@@ -166,6 +171,7 @@ pub fn run() {
     let _log_guard = dev_logging::init_tracing();
 
     tauri::Builder::default()
+        .append_invoke_initialization_script(TAURI_RUNTIME_INIT_SCRIPT)
         .plugin(tauri_plugin_stt::init())
         .on_window_event(viewport_runtime::publish_native_viewport)
         .invoke_handler(tauri::generate_handler![

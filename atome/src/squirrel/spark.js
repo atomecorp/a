@@ -98,6 +98,7 @@ const sparkCoreModules = [
   { id: 'ai.default_tools', path: './ai/default_tools.js' },
   { id: 'ai.model_catalog_refresh', path: './ai/model_catalog_refresh.js' },
   { id: 'security.bootstrap', path: './security/bootstrap.js' },
+  { id: 'conditions.bootstrap', path: './conditions/bootstrap.js' },
   { id: 'bank.bootstrap', path: './bank/bootstrap.js' },
   { id: 'calendar.bootstrap', path: './calendar/bootstrap.js' },
   { id: 'contacts.bootstrap', path: './contacts/bootstrap.js' },

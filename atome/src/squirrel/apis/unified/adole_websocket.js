@@ -29,6 +29,11 @@ class TauriWebSocket {
         this.connectionTimer = null;
         this.connectionPromise = null;
         this.disposed = false;
+        // Incremented on every successful open. Consumers that must re-declare
+        // per-connection state after a reconnection (the surface registry does)
+        // compare against this instead of guessing from `isConnected`, which is
+        // also true for the socket they already announced on.
+        this.connectionGeneration = 0;
     }
 
     async connect() {
@@ -71,6 +76,7 @@ class TauriWebSocket {
                     this.clearConnectionTimer();
                     this.isConnecting = false;
                     this.isConnected = true;
+                    this.connectionGeneration += 1;
                     this.startPing();
                     resolve(true);
                 };
@@ -233,6 +239,8 @@ let _tauriWs = null;
 let _fastifyWs = null;
 
 const _noTauriWs = {
+    // -1 marks "never opened", so per-connection state is never treated as declared.
+    connectionGeneration: -1,
     async connect() { return false; },
     async isAvailable() { return false; },
     async send() {
@@ -256,6 +264,7 @@ const _noTauriWs = {
 };
 
 const _noFastifyWs = {
+    connectionGeneration: -1,
     async connect() { return false; },
     async isAvailable() { return false; },
     async send() {

@@ -171,6 +171,43 @@ export function resolveAccessPolicy(method, params = {}) {
         sensitive: false,
         idempotent: false
     };
+    if (
+        normalizedMethod === 'conditions.evaluate'
+        || normalizedMethod === 'conditions.properties.discover'
+        || normalizedMethod === 'conditions.query.once'
+        || normalizedMethod === 'conditions.computed.list'
+        || normalizedMethod === 'conditions.lists.list'
+        || normalizedMethod === 'conditions.lists.get'
+        || normalizedMethod === 'conditions.lists.resolve'
+        || normalizedMethod === 'conditions.sets.list'
+        || normalizedMethod === 'conditions.sets.get'
+        || normalizedMethod === 'conditions.bindings.list'
+        || normalizedMethod === 'conditions.bindings.evaluate'
+    ) {
+        return {
+            ...defaultPolicy,
+            subject: normalizedMethod,
+            required_capabilities: ['conditions.read']
+        };
+    }
+    if (
+        normalizedMethod.startsWith('conditions.sets.')
+        || normalizedMethod.startsWith('conditions.bindings.')
+        || normalizedMethod.startsWith('conditions.computed.')
+        || normalizedMethod.startsWith('conditions.lists.')
+    ) {
+        return {
+            ...defaultPolicy,
+            scope: 'tool',
+            subject: normalizedMethod,
+            access: 'confirm',
+            required_capabilities: ['conditions.write'],
+            confirmation_required: true,
+            proposal_required: true,
+            sensitive: true,
+            idempotent: true
+        };
+    }
     if (normalizedMethod === 'mcp.resources.read') {
         const uri = String(params?.uri || params?.resource || params?.resource_uri || '').trim();
         const known = listMcpResourceEntries().some((entry) => entry.uri === uri);

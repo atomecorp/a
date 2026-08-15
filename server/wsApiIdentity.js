@@ -20,27 +20,32 @@ function decodedUserId(decoded) {
 
 export function resolveWsApiPrincipal(connection, message = {}, options = {}) {
     const now = Date.now();
+    const token = typeof message?.token === 'string' ? message.token.trim() : '';
+    if (token) {
+        const decoded = jwt.verify(token, requiredJwtSecret());
+        const userId = decodedUserId(decoded);
+        if (!userId) return null;
+
+        // The signed token carried by the request is the current authority.
+        // A WebSocket may have been opened with a stale cookie or may survive an
+        // explicit account switch; retaining that attached principal would make
+        // the server authorize the request as the wrong account.
+        if (options.registerClient !== false) {
+            attachWsApiClientToUser(connection, userId);
+        } else {
+            connection._wsApiUserId = userId;
+        }
+        connection._wsApiAuthExpMs = typeof decoded.exp === 'number' ? decoded.exp * 1000 : null;
+        return userId;
+    }
+
     const attachedId = connection?._wsApiUserId ? String(connection._wsApiUserId) : null;
     const attachedExpiry = Number(connection?._wsApiAuthExpMs);
     if (attachedId && (!Number.isFinite(attachedExpiry) || attachedExpiry > now)) {
         return attachedId;
     }
     if (attachedId) detachWsApiClient(connection);
-
-    const token = typeof message?.token === 'string' ? message.token.trim() : '';
-    if (!token) return null;
-
-    const decoded = jwt.verify(token, requiredJwtSecret());
-    const userId = decodedUserId(decoded);
-    if (!userId) return null;
-
-    if (options.registerClient !== false) {
-        attachWsApiClientToUser(connection, userId);
-    } else {
-        connection._wsApiUserId = userId;
-    }
-    connection._wsApiAuthExpMs = typeof decoded.exp === 'number' ? decoded.exp * 1000 : null;
-    return userId;
+    return null;
 }
 
 export async function isWsApiPrincipalProvisioned(principalId) {

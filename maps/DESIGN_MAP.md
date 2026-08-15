@@ -2,6 +2,25 @@
 
 Status: Initial design map after the Atome open / eVe closed boundary validation.
 
+Current mapped-principal project-selection contract (2026-08-14): a project
+card returned by an authenticated native projection may carry the local storage
+principal as `owner_id` while the logical session carries the corresponding
+Fastify principal. Selecting that card is allowed to enter the existing
+canonical project loader; cache ownership remains the logical session and all
+project reads/mutations remain server-authorized. This changes no control,
+layout, DOM surface, renderer, or visual state authority.
+
+Current Conditions UI contract (2026-08-14):
+`bevy_panel_conditions.js`, `bevy_panel_conditions_runtime.js` and its
+projection-only view are the single closed eVe presentation owner. Compatible
+panels place one compact, repliable `Conditions N >` row beneath their content.
+When open it shows property search, `Toutes/Au moins une/Aucune`, typed rows,
+live count, safe visual criterion creation, and only `Utiliser une fois`,
+`Liste figée`, `Liste dynamique`. Saved lists reuse the canonical selectable,
+virtualized Bevy list and carry a discreet mode label. The component reuses
+canonical text/select/button/skin tokens and introduces no node graph, permanent
+toolbox item, DOM projection, validation dialog or panel-local engine.
+
 Current mobile rendering-density contract (2026-07-17; supersedes older scale/PNG/reusable-iframe details below wherever they conflict):
 
 - Shared project/Dashboard backing resolution is capped at DPR 1.5. Dashboard text and icons rasterize at scale 2; card media rasterizes between 1 and 1.5. The decoded RGBA cache retains at most 16 MiB and 96 entries.
@@ -515,6 +534,7 @@ Role:
 - Ribbon tokens define handle icons, tool sizes, flower metrics, drag thresholds, and animation timing.
 - The visible main menu is the BevyUI runtime mounted on the shared project WebGPU canvas. Its internal per-window runtime registry is consumed by eVe owners; no browser global, DOM ribbon, projection, or fallback is retained.
 - BevyUI is the rendering target for the main menu and the foundation for later panels, mounted through `eVe/domains/rendering/bevy_ui_runtime.js`. The visible product route is the shared project WebGPU overlay path; native BevyUI WASM ops remain opt-in until a native BevyUI surface owns visible rendering directly. Squirrel/toolbox definitions remain the canonical UI source; BevyUI trees are disposable render targets and must not create DOM nodes per component. SVG icon sources are resolved to RGBA textures by the shared WebGPU texture resolver and rendered as BevyUI image nodes, not as DOM `img` or inline SVG elements. The main-menu overlay must be projected into whichever workspace scene currently owns the shared canvas, and Dashboard/project transitions must project menu records into the target scene before clearing records from the previous scene. Visibility checks must require those scene records instead of trusting menu active state alone. The bound shared canvas owns `touch-action: none` for BevyUI pointer gestures so mobile dashboard/menu drags do not depend on browser page scroll.
+- Dashboard and main-menu geometry is expressed in logical canvas units and may be converted to physical BevyUI units only from the presentation/default UI camera. The quarter-resolution backdrop/blur targets are visual-effect implementation details; using their size to scale product UI is a blocking design violation because it compresses every control into the upper-left portion of the canvas.
 - The minimal BevyUI component vocabulary covers layout roots/panels/rows/columns/stacks/spacers/scroll areas/dividers, controls such as buttons/icon buttons/toggles/checkboxes/radios/segmented controls, panel navigation such as tabs/accordions/collapsible groups, forms including text/search/number/password inputs and selects, value controls such as sliders/steppers/color swatches, data views such as lists/tables/property grids, and runtime interaction states for hover, pressed, selected, disabled, focused, scroll, drag/resize handles, and tooltips.
 - The old DOM footer ribbon and its private helpers are deleted. The visible contextual rail and footer are BevyUI-only.
 - The three visible BevyUI menu surfaces share `EVE_TOOL_SKIN_TOKENS.bevyMenu` through `bevy_ui_menu_surface.js`. Their material and standard radius alias `EVE_BUTTON_SKIN_TOKENS.bevyButton`; menu tokens own only 60 px tool geometry, content contrast, interaction paint, palette accents, and the explicit circular Flower radius. The shared tool constructor separates the transparent interaction shell, material background, and icon/label content into stable relative planes. Main-menu and contextual standard surfaces therefore remain on one common surface plane with every Gaussian shadow below every neighboring surface; palette children alone use a lower emergence plane so their complete content starts behind the parent without cross-tool shadow bleed. Their complete trees are presentation content and excluded from workspace capture. Main-menu tools are rounded squares, Flower petals explicitly override the standard radius to remain circular, and contextual tools form a vertical rail. Palette accents resolve only through `EVE_SEMANTIC_COLOR_FAMILIES`.

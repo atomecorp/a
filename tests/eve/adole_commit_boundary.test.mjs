@@ -36,6 +36,10 @@ test('Adole framework Atome APIs route durable writes through event commit', asy
     assert.match(adapterSource, /action: 'commit'/);
     assert.match(adapterSource, /async commitBatch\(events = \[\]\)/);
     assert.match(adapterSource, /action: 'commit-batch'/);
+    assert.match(adapterSource, /delete_keys/);
+    assert.match(adapterSource, /expected_versions/);
+    assert.match(adapterSource, /async undo\(sourceTxId, requestId\)/);
+    assert.match(adapterSource, /async redo\(sourceTxId, requestId\)/);
     assert.match(adapterSource, /from '\.\.\/\.\.\/\.\.\/shared\/atome_contract\.js'/);
     assert.doesNotMatch(adapterSource, /RESERVED_ATOME_PROPERTY_KEYS/);
     assert.doesNotMatch(adapterSource, /const sanitizeAtomeProperties = \(/);
@@ -109,6 +113,66 @@ test('Unified client normalization accepts native typed response payloads', asyn
     const normalized = await result;
     assert.equal(normalized.snapshot_id, 9);
     assert.deepEqual(normalized.events, [{ id: 'native-event' }]);
+});
+
+test('durable share-sync messages preserve projected event metadata for canonical consumers', () => {
+    const dispatched = [];
+    const previousWindow = globalThis.window;
+    const previousCustomEvent = globalThis.CustomEvent;
+    globalThis.CustomEvent = class CustomEvent {
+        constructor(type, init = {}) {
+            this.type = type;
+            this.detail = init.detail;
+        }
+    };
+    globalThis.window = {
+        __currentUser: { id: 'gv_receiver' },
+        dispatchEvent(event) {
+            dispatched.push(event);
+        }
+    };
+    try {
+        messageHandlerMixin.handleMessage.call(
+            { pendingRequests: new Map() },
+            JSON.stringify({
+                type: 'console-message',
+                from: { userId: 'gv_sender' },
+                message: JSON.stringify({
+                    command: 'share-sync',
+                    params: {
+                        atomeId: 'gv_shape',
+                        particles: { left: 24 },
+                        delete_keys: ['color'],
+                        property_versions: { left: 4, color: 7 },
+                        event_id: 'gv_event',
+                        tx_id: 'gv_tx',
+                        durable: true
+                    }
+                })
+            })
+        );
+        assert.equal(dispatched.length, 1);
+        assert.equal(dispatched[0].type, 'squirrel:atome-updated');
+        assert.deepEqual(dispatched[0].detail, {
+            id: 'gv_shape',
+            atome_id: 'gv_shape',
+            properties: { left: 24 },
+            delete_keys: ['color'],
+            property_versions: { left: 4, color: 7 },
+            event_id: 'gv_event',
+            tx_id: 'gv_tx',
+            gesture_id: null,
+            author_id: 'gv_sender',
+            durable: true,
+            source: 'realtime',
+            origin: 'adole:share-sync',
+            realtime_dedup_checked: true,
+            realtime_dedup_ignore: false
+        });
+    } finally {
+        globalThis.window = previousWindow;
+        globalThis.CustomEvent = previousCustomEvent;
+    }
 });
 
 async function withWsServer(onConnection, callback) {

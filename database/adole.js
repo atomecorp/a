@@ -38,6 +38,7 @@ import {
     projectStoredStateCurrent
 } from './adole_storage_projection.js';
 import { createAdolePermissionApi } from './adole_permissions.js';
+import { createAdolePrivacyRuleApi } from './adole_privacy_rules.js';
 import { createAdoleSyncApi } from './adole_sync.js';
 import { createAdoleSnapshotsApi } from './adole_snapshots.js';
 import { buildStateSnapshotRestoreEvents } from './state_snapshot_restore.js';
@@ -52,6 +53,14 @@ import {
     selectRedoTransaction,
     selectUndoTransaction
 } from './adole_history_transactions.js';
+import {
+    assertIdempotentEventReplay,
+    eventDeletedPropertyKeys,
+    extractEventPatch,
+    resolveEventPayload,
+    stripEventMetaPatch
+} from './adole_event_contract.js';
+import { createAdoleEventMutationApi } from './adole_event_mutation.js';
 
 export {
     HISTORY_EVENT_CLASS,
@@ -73,56 +82,25 @@ export {
     closeDatabase
 } from './adole_db_core.js';
 
-const permissions = createAdolePermissionApi({
+const privacyRules = createAdolePrivacyRuleApi({
     query,
     getAtome,
     getEffectiveOwnerId
 });
 
-function resolveEventPayload(event) {
-    if (!event || typeof event !== 'object') return null;
-    if (event.payload !== undefined) return event.payload;
-    const props = event.props || event.properties || event.patch || null;
-    if (props && typeof props === 'object') {
-        return { props };
-    }
-    return null;
+const permissions = createAdolePermissionApi({
+    query,
+    getAtome,
+    getEffectiveOwnerId,
+    allowsPropertyRead: privacyRules.allowsPropertyRead
+});
+
+const eventMutations = createAdoleEventMutationApi({ query });
+const insertedEventResults = new WeakSet();
+
+export function wasEventInserted(event) {
+    return Boolean(event && insertedEventResults.has(event));
 }
-
-function extractEventPatch(kind, payload, ts) {
-    if (!kind) return null;
-    if (kind === 'delete') {
-        return { __deleted: true, deleted_at: ts };
-    }
-
-    const payloadObj = safeParseJson(payload);
-    if (!payloadObj || typeof payloadObj !== 'object') return null;
-
-    const patch =
-        payloadObj.props ||
-        payloadObj.properties ||
-        payloadObj.patch ||
-        payloadObj.delta ||
-        null;
-
-    if (patch && typeof patch === 'object') {
-        return patch;
-    }
-
-    return null;
-}
-
-const EVENT_META_PARTICLE_KEYS = new Set([
-    'type',
-    'atome_type',
-    'kind',
-    'parent_id',
-    'parentId',
-    'project_id',
-    'projectId',
-    '__deleted',
-    'deleted_at'
-]);
 
 function resolveActorId(actor) {
     if (!actor || typeof actor !== 'object') return null;
@@ -139,16 +117,6 @@ function resolveEventParentId(patch) {
     return patch.parent_id || patch.parentId || patch.project_id || patch.projectId || null;
 }
 
-function stripEventMetaPatch(patch) {
-    if (!patch || typeof patch !== 'object') return {};
-    const filtered = {};
-    for (const [key, value] of Object.entries(patch)) {
-        if (EVENT_META_PARTICLE_KEYS.has(key)) continue;
-        filtered[key] = value;
-    }
-    return sanitizeAtomeProperties(filtered);
-}
-
 async function upsertAtomeFromEvent({
     atomeId,
     atomeType,
@@ -156,6 +124,7 @@ async function upsertAtomeFromEvent({
     ownerId,
     ts,
     deleted,
+    restored,
     properties,
     writeParticles = true
 }) {
@@ -276,6 +245,9 @@ async function upsertAtomeFromEvent({
         if (deleted) {
             updates.push('deleted_at = ?');
             values.push(now);
+        } else if (restored) {
+            updates.push('deleted_at = ?');
+            values.push(null);
         }
         if (updates.length > 0) {
             updates.push('updated_at = ?');
@@ -689,7 +661,11 @@ async function getPendingOwnerId(atomeId) {
 }
 
 async function getEffectiveOwnerId(atomeId) {
-    const atome = await getAtomeById(atomeId);
+    const atome = await query(
+        'get',
+        'SELECT owner_id FROM atomes WHERE atome_id = ?',
+        [atomeId]
+    );
     if (!atome) return null;
     if (atome.owner_id) return atome.owner_id;
     return await getPendingOwnerId(atomeId);
@@ -703,7 +679,7 @@ export async function getAtome(id) {
     if (!atome) return null;
 
     const particles = await query('all',
-        'SELECT particle_key, particle_value, value_type FROM particles WHERE atome_id = ?',
+        "SELECT particle_key, particle_value, value_type FROM particles WHERE atome_id = ? AND value_type != 'deleted'",
         [id]
     );
 
@@ -1111,10 +1087,10 @@ export async function setParticles(atomeId, particles, author = null) {
  */
 export async function getParticle(atomeId, key) {
     const row = await query('get',
-        'SELECT particle_value FROM particles WHERE atome_id = ? AND particle_key = ?',
+        "SELECT particle_value, value_type FROM particles WHERE atome_id = ? AND particle_key = ?",
         [atomeId, key]
     );
-    if (!row) return null;
+    if (!row || row.value_type === 'deleted') return null;
     try {
         return JSON.parse(row.particle_value);
     } catch {
@@ -1127,7 +1103,7 @@ export async function getParticle(atomeId, key) {
  */
 export async function getParticles(atomeId) {
     const rows = await query('all',
-        'SELECT particle_key, particle_value FROM particles WHERE atome_id = ?',
+        "SELECT particle_key, particle_value FROM particles WHERE atome_id = ? AND value_type != 'deleted'",
         [atomeId]
     );
     const result = {};
@@ -1139,13 +1115,6 @@ export async function getParticles(atomeId) {
         }
     }
     return result;
-}
-
-/**
- * Delete a particle
- */
-export async function deleteParticle(atomeId, key) {
-    await query('run', 'DELETE FROM particles WHERE atome_id = ? AND particle_key = ?', [atomeId, key]);
 }
 
 // ============================================================================
@@ -1162,26 +1131,6 @@ export async function getParticleHistory(atomeId, key, limit = 50) {
 		ORDER BY version DESC
 		LIMIT ?
 	`, [atomeId, key, limit]);
-}
-
-/**
- * Restore a particle to a specific version
- */
-export async function restoreParticleVersion(atomeId, key, version, author = null) {
-    const versionRow = await query('get', `
-		SELECT new_value FROM particles_versions
-		WHERE atome_id = ? AND particle_key = ? AND version = ?
-	`, [atomeId, key, version]);
-
-    if (!versionRow) throw new Error(`Version ${version} not found for particle ${key}`);
-
-    let value;
-    try {
-        value = JSON.parse(versionRow.new_value);
-    } catch {
-        value = versionRow.new_value;
-    }
-    await setParticle(atomeId, key, value, author);
 }
 
 /**
@@ -1279,7 +1228,9 @@ async function applyEventToStateCurrent(event, options = {}) {
     const patchType = resolveEventType(patch);
     const patchParent = resolveEventParentId(patch);
     const deleted = patch.__deleted === true;
-    const particlePatch = stripEventMetaPatch(patch);
+    const restored = patch.__deleted === false && String(event.kind || '').toLowerCase() === 'restore';
+    const particlePatch = sanitizeAtomeProperties(stripEventMetaPatch(patch));
+    const deletedKeys = eventDeletedPropertyKeys(event);
 
     const ownerFromEvent = eventOwnerId || patchOwnerId || actorId || null;
     await upsertAtomeFromEvent({
@@ -1289,9 +1240,18 @@ async function applyEventToStateCurrent(event, options = {}) {
         ownerId: ownerFromEvent,
         ts,
         deleted,
+        restored,
         properties: particlePatch,
         writeParticles: options.writeParticles !== false
     });
+    if (options.writeParticles !== false && deletedKeys.length) {
+        await eventMutations.applyDeletes({
+            atomeId,
+            keys: deletedKeys,
+            author: actorId,
+            timestamp: ts
+        });
+    }
 
     if (patch.type == null && patch.atome_type == null && patch.kind == null) {
         const row = await query(
@@ -1328,6 +1288,7 @@ async function applyEventToStateCurrent(event, options = {}) {
     const parsed = safeParseJson(existing?.properties);
     const currentProps = parsed && typeof parsed === 'object' ? parsed : {};
     const nextProps = { ...currentProps, ...sanitizeAtomeProperties(patch) };
+    deletedKeys.forEach((key) => delete nextProps[key]);
     const nextVersion = (existing?.version || 0) + 1;
     const globalScope = event.payload?.scope === 'global';
     const projectId = globalScope ? null : (event.project_id || existing?.project_id || null);
@@ -1420,9 +1381,7 @@ export async function rebuildStateCurrentFromEvents(options = {}) {
 }
 
 export async function appendEvent(event, options = {}) {
-    const normalized = normalizeEventInput(event, options);
-    const payloadJson = serializeJson(normalized.payload);
-    const actorJson = serializeJson(normalized.actor);
+    let normalized = normalizeEventInput(event, options);
     const syncTarget = options.syncTarget || options.target_server || null;
     const skipQueue = options.skipQueue === true;
     let inserted = false;
@@ -1430,10 +1389,16 @@ export async function appendEvent(event, options = {}) {
     await withTransaction(async () => {
         const existing = await query(
             'get',
-            'SELECT 1 FROM events WHERE id = ?',
+            'SELECT * FROM events WHERE id = ?',
             [normalized.id]
         );
-        if (existing) return;
+        if (existing) {
+            assertIdempotentEventReplay(existing, normalized);
+            return;
+        }
+        normalized = await eventMutations.prepare(normalized);
+        const payloadJson = serializeJson(normalized.payload);
+        const actorJson = serializeJson(normalized.actor);
         await query(
             'run',
             `INSERT INTO events (id, ts, atome_id, project_id, kind, payload, actor, tx_id, gesture_id)
@@ -1456,16 +1421,17 @@ export async function appendEvent(event, options = {}) {
             ...normalized,
             payload: normalized.payload
         });
+        if (syncTarget && !skipQueue) {
+            await enqueueSyncOperation({
+                atome_id: normalized.atome_id,
+                operation: 'events:commit',
+                payload: normalized,
+                target_server: syncTarget
+            });
+        }
     });
 
-    if (inserted && syncTarget && !skipQueue) {
-        await enqueueSyncOperation({
-            atome_id: normalized.atome_id,
-            operation: 'events:commit',
-            payload: normalized,
-            target_server: syncTarget
-        });
-    }
+    if (inserted) insertedEventResults.add(normalized);
 
     return normalized;
 }
@@ -1483,19 +1449,22 @@ export async function appendEvents(events, options = {}) {
 
     await withTransaction(async () => {
         for (const evt of events) {
-            const normalized = normalizeEventInput(evt, { txId });
-            const payloadJson = serializeJson(normalized.payload);
-            const actorJson = serializeJson(normalized.actor);
+            let normalized = normalizeEventInput(evt, { txId });
 
             const existing = await query(
                 'get',
-                'SELECT 1 FROM events WHERE id = ?',
+                'SELECT * FROM events WHERE id = ?',
                 [normalized.id]
             );
             if (existing) {
+                assertIdempotentEventReplay(existing, normalized);
                 results.push(normalized);
                 continue;
             }
+
+            normalized = await eventMutations.prepare(normalized);
+            const payloadJson = serializeJson(normalized.payload);
+            const actorJson = serializeJson(normalized.actor);
 
             await query(
                 'run',
@@ -1519,19 +1488,21 @@ export async function appendEvents(events, options = {}) {
                 payload: normalized.payload
             });
 
+            if (syncTarget && !skipQueue) {
+                await enqueueSyncOperation({
+                    atome_id: normalized.atome_id,
+                    operation: 'events:commit',
+                    payload: normalized,
+                    target_server: syncTarget
+                });
+            }
+
             created.push(normalized);
             results.push(normalized);
         }
     });
 
-    if (created.length && syncTarget && !skipQueue) {
-        await Promise.all(created.map((normalized) => enqueueSyncOperation({
-            atome_id: normalized.atome_id,
-            operation: 'events:commit',
-            payload: normalized,
-            target_server: syncTarget
-        })));
-    }
+    created.forEach((event) => insertedEventResults.add(event));
 
     return results;
 }
@@ -1705,7 +1676,6 @@ const stateCurrentListScope = (projectId, options = {}) => {
                 COALESCE(sc.owner_id, a.owner_id) = ?
                 OR (
                     p.principal_id = ?
-                    AND (p.share_mode IS NULL OR LOWER(p.share_mode) IN ('real-time', 'realtime'))
                 )
             )`);
             params.push(ownerId, ownerId);
@@ -1739,7 +1709,7 @@ export async function listStateCurrent(projectId, options = {}) {
 
     const rows = await query(
         'all',
-        `SELECT sc.*, a.atome_type AS atome_type, a.parent_id AS parent_id,
+        `SELECT DISTINCT sc.*, a.atome_type AS atome_type, a.parent_id AS parent_id,
                 COALESCE(sc.owner_id, a.owner_id) AS owner_id
          FROM state_current sc ${scope.join} ${scope.where}
          ORDER BY sc.updated_at DESC LIMIT ? OFFSET ?`,
@@ -1941,9 +1911,7 @@ export const setProperty = setParticle;
 export const setProperties = setParticles;
 export const getProperty = getParticle;
 export const getProperties = getParticles;
-export const deleteProperty = deleteParticle;
 export const getPropertyHistory = getParticleHistory;
-export const restorePropertyVersion = restoreParticleVersion;
 
 // ============================================================================
 // DATASOURCE ADAPTER (for auth.js compatibility)
@@ -2046,11 +2014,9 @@ export default {
     setParticles,
     getParticle,
     getParticles,
-    deleteParticle,
 
     // Versions
     getParticleHistory,
-    restoreParticleVersion,
     getChangesSince,
 
     // Snapshots
@@ -2065,6 +2031,7 @@ export default {
     // Event log + projection
     appendEvent,
     appendEvents,
+    wasEventInserted,
     repairGlobalStateCurrentScopes,
     preparePrincipalFileMigration,
     completePrincipalFileMigration,
@@ -2088,6 +2055,9 @@ export default {
     // Permissions
     setPermission,
     canRead,
+    setPropertyPrivacyRule: privacyRules.setPropertyPrivacyRule,
+    listPropertyPrivacyRules: privacyRules.listPropertyPrivacyRules,
+    allowsPropertyRead: privacyRules.allowsPropertyRead,
     canWrite,
     canDelete,
     canShare,
@@ -2119,9 +2089,7 @@ export default {
     setProperties,
     getProperty,
     getProperties,
-    deleteProperty,
     getPropertyHistory,
-    restorePropertyVersion,
 
     // Debug
     getTableNames,

@@ -34,29 +34,11 @@ fn can_access(state: &LocalAtomeState, atome_id: &str, user_id: &str, write: boo
     let Ok(db) = state.db.lock() else {
         return false;
     };
-    let owner = db
-        .query_row(
-            "SELECT owner_id FROM atomes WHERE atome_id = ?1",
-            [atome_id],
-            |row| row.get::<_, Option<String>>(0),
-        )
-        .optional()
-        .ok()
-        .flatten()
-        .flatten();
-    if owner.as_deref() == Some(user_id) {
-        return true;
+    if write {
+        super::local_atome_security::can_write(&db, atome_id, user_id, None)
+    } else {
+        super::local_atome_security::can_read(&db, atome_id, user_id, None)
     }
-    let column = if write { "can_write" } else { "can_read" };
-    db.query_row(
-        &format!(
-            "SELECT 1 FROM permissions WHERE atome_id = ?1 AND principal_id = ?2
-             AND {column} = 1 AND (expires_at IS NULL OR expires_at > datetime('now')) LIMIT 1"
-        ),
-        rusqlite::params![atome_id, user_id],
-        |_| Ok(()),
-    )
-    .is_ok()
 }
 
 pub async fn handle_history_message(
@@ -69,7 +51,7 @@ pub async fn handle_history_message(
         .or_else(|| message.get("id"))
         .and_then(|value| value.as_str())
         .unwrap_or("");
-    if atome_id.is_empty() || !can_access(state, atome_id, user_id, false) {
+    if atome_id.is_empty() {
         return response("atome", &message, false, None, Some("Access denied".into()));
     }
     let events = handle_events_message(
@@ -422,6 +404,46 @@ pub async fn handle_sync_message(
         .and_then(|value| value.as_str())
         .unwrap_or("");
     match action {
+        "configure-remote" => {
+            let remote_user_id = message
+                .get("remote_user_id")
+                .or_else(|| message.get("remoteUserId"))
+                .and_then(|value| value.as_str())
+                .unwrap_or("");
+            let remote_token = message
+                .get("remote_token")
+                .or_else(|| message.get("remoteToken"))
+                .and_then(|value| value.as_str())
+                .unwrap_or("");
+            match super::local_atome::configure_remote_sync_credential(
+                state,
+                user_id,
+                remote_user_id,
+                remote_token,
+            ) {
+                Ok(()) => response(
+                    "sync",
+                    &message,
+                    true,
+                    Some(json!({
+                        "configured": true,
+                        "remote_user_id": remote_user_id
+                    })),
+                    None,
+                ),
+                Err(error) => response("sync", &message, false, None, Some(error)),
+            }
+        }
+        "clear-remote" => match super::local_atome::clear_remote_sync_credential(state, user_id) {
+            Ok(()) => response(
+                "sync",
+                &message,
+                true,
+                Some(json!({ "configured": false })),
+                None,
+            ),
+            Err(error) => response("sync", &message, false, None, Some(error)),
+        },
         "push" => {
             let committed = handle_events_message(
                 json!({

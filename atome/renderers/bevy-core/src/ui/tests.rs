@@ -1,9 +1,10 @@
 use super::*;
 use crate::types::AtomeTexture;
+use bevy::camera::Viewport;
 use bevy::input::touch::TouchPhase;
 use bevy::prelude::*;
 use bevy::text::FontSource;
-use bevy::ui::widget::ImageNode;
+use bevy::ui::{widget::ImageNode, IsDefaultUiCamera};
 
 fn sample_tree() -> AtomeUiTree {
     AtomeUiTree {
@@ -28,6 +29,30 @@ fn sample_tree() -> AtomeUiTree {
             }],
         },
     }
+}
+
+#[test]
+fn ui_viewport_uses_default_ui_camera_instead_of_downscaled_capture_camera() {
+    let mut world = World::new();
+    world.spawn(Camera {
+        viewport: Some(Viewport {
+            physical_size: UVec2::new(300, 213),
+            ..default()
+        }),
+        ..default()
+    });
+    world.spawn((
+        Camera {
+            viewport: Some(Viewport {
+                physical_size: UVec2::new(1200, 852),
+                ..default()
+            }),
+            ..default()
+        },
+        IsDefaultUiCamera,
+    ));
+
+    assert_eq!(ui_viewport_size(&mut world), (1200, 852));
 }
 
 fn image_tree() -> AtomeUiTree {

@@ -55,6 +55,40 @@ const markFastifyAuthValid = () => {
     if (typeof window !== 'undefined') window.__SQUIRREL_FASTIFY_AUTH_INVALID__ = false;
 };
 
+const configureTauriRemoteSync = async () => {
+    if (!isTauriRuntime()) return { ok: true, reason: 'not_tauri_runtime' };
+    const remoteToken = FastifyAdapter?.getToken?.();
+    const localToken = TauriAdapter?.getToken?.();
+    if (!remoteToken || !localToken) {
+        return { ok: false, reason: 'sync_identity_token_missing' };
+    }
+    const [localSession, remoteSession] = await Promise.all([
+        meBackend('tauri'),
+        meBackend('fastify')
+    ]);
+    const localUserId = localSession?.user?.id ? String(localSession.user.id) : null;
+    const remoteUserId = remoteSession?.user?.id ? String(remoteSession.user.id) : null;
+    if (!localSession?.ok || !remoteSession?.ok || !localUserId || !remoteUserId) {
+        return { ok: false, reason: 'sync_identity_principal_missing' };
+    }
+    const configured = await TauriAdapter?.sync?.configureRemote?.({
+        remote_user_id: remoteUserId,
+        remote_token: remoteToken
+    });
+    if (!configured || configured.ok === false || configured.success === false) {
+        return {
+            ok: false,
+            reason: configured?.error || 'sync_identity_configuration_failed'
+        };
+    }
+    return {
+        ok: true,
+        reason: 'sync_identity_configured',
+        local_user_id: localUserId,
+        remote_user_id: remoteUserId
+    };
+};
+
 const readNow = () => Date.now();
 
 const blockFastifyRelogin = (reason, durationMs) => {
@@ -93,7 +127,13 @@ const ensureFastifyTokenLocal = async () => {
         const resolvedUserId = cookieSession?.user?.id ? String(cookieSession.user.id) : null;
         if (cookieSession?.ok && resolvedUserId && (!expectedUserId || resolvedUserId === expectedUserId)) {
             markFastifyAuthValid();
-            return { ok: true, reason: 'cookie_session' };
+            // A browser can keep using the authenticated cookie, but the
+            // native sync worker cannot: it needs the per-user bearer token
+            // passed through the existing configure-remote authority. After a
+            // Tauri restart the WebView cookie may survive while adapter
+            // memory does not, so continue to the credential-backed login and
+            // rebuild that in-memory bridge.
+            if (!isTauriRuntime()) return { ok: true, reason: 'cookie_session' };
         }
     } catch (_) {
         // Continue with token bridge or cached credentials.
@@ -173,7 +213,12 @@ const ensureFastifyToken = async () => {
         try {
             const result = await ensureFastifyTokenLocal();
             if (result?.ok) {
-                return { ok: true, reason: result?.reason || 'token_obtained' };
+                const sync = await configureTauriRemoteSync();
+                return {
+                    ok: true,
+                    reason: result?.reason || 'token_obtained',
+                    ...(isTauriRuntime() ? { sync } : {})
+                };
             }
             return {
                 ok: false,
@@ -192,4 +237,11 @@ const ensureFastifyToken = async () => {
 };
 
 
-export { loadFastifyLoginCache, persistFastifyLoginCache, ensureFastifyTokenLocal, ensureFastifyToken, markFastifyAuthValid };
+export {
+    loadFastifyLoginCache,
+    persistFastifyLoginCache,
+    ensureFastifyTokenLocal,
+    ensureFastifyToken,
+    markFastifyAuthValid,
+    configureTauriRemoteSync
+};

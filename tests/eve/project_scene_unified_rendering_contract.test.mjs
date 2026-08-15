@@ -7,6 +7,7 @@ import { DASHBOARD_VISUAL_TOKENS } from '../../eVe/domains/dashboard/dashboard_t
 import { normalizeRenderAtoms } from '../../eVe/domains/rendering/render_atom.js';
 import { recordsForBevyProjection } from '../../eVe/domains/rendering/project_scene_record_projection.js';
 import {
+    clearAllProjectSceneVisuals,
     clearAllProjectScenes,
     clearProjectSceneVisuals,
     emitProjectSceneIntent,
@@ -357,6 +358,29 @@ test('Project scene visual clear despawns previous Bevy nodes before dropping th
     assert.equal(cleared, true);
     assert.deepEqual(despawned, ['clear_shape', 'clear_text']);
     assert.equal(getProjectSceneState('project_clear_visuals').record_count, 0);
+});
+
+test('Bulk visual cleanup preserves explicitly retained workspace scenes', async () => {
+    clearAllProjectScenes();
+    const dom = installDom('<!doctype html><html><body><main id="view"><section id="dashboard"></section><section id="project"></section></main></body></html>');
+    await renderProjectScene({
+        projectId: '__eve_dashboard_workspace__',
+        records: [makeRecord('dashboard_lane', 'shape', 1)],
+        host: dom.window.document.getElementById('dashboard'),
+        compositor: createTestCompositor()
+    });
+    await renderProjectScene({
+        projectId: 'previous_user_project',
+        records: [makeRecord('private_shape', 'shape', 1)],
+        host: dom.window.document.getElementById('project'),
+        compositor: createTestCompositor(),
+        keepForeground: true
+    });
+
+    await clearAllProjectSceneVisuals({ preserveProjectIds: ['__eve_dashboard_workspace__'] });
+
+    assert.equal(getProjectSceneState('__eve_dashboard_workspace__').record_count, 1);
+    assert.equal(getProjectSceneState('previous_user_project').record_count, 0);
 });
 
 test('Dashboard overlay records stay non-selectable in the project hit-test scene', () => {

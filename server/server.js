@@ -89,6 +89,10 @@ import {
 import { ensureOpaquePrincipalIdentity, replaceVerifiedPhone, removeVerifiedPhone } from './auth_identity.js';
 import { handleWsApiAccountProvision } from './wsApiAuthProvisioning.js';
 import { handleWsApiGuestAdoption } from './wsApiGuestAdoption.js';
+import { announceWsSurfaceDisconnect, handleWsSurfaceOperation } from './wsSurfaceOperations.js';
+import { handleTeleportSurfaceLoss, handleWsTeleportOperation } from './wsTeleportOperations.js';
+import { handleRemoteControlSurfaceLoss, handleWsRemoteControlOperation } from './wsRemoteControlOperations.js';
+import { handleWsSurfaceGrantOperation } from './wsSurfaceGrantOperations.js';
 import { registerServerIdentityRoutes } from './auth_routes_server.js';
 import { initServerIdentity } from './serverIdentity.js';
 import { isWsApiPrincipalProvisioned } from './wsApiIdentity.js';
@@ -132,10 +136,10 @@ import {
 } from './wsApiState.js';
 import {
   inheritPermissionsFromParent,
-  broadcastAtomeCreate,
-  broadcastAtomeDelete,
-  broadcastAtomeRealtimePatch
+  broadcastAtomeCreate
 } from './atomeRealtime.js';
+import { handleWsAtomeRealtimeOperation } from './wsAtomeRealtimeOperation.js';
+import { handleWsAtomeDeleteOperation } from './wsAtomeDeleteOperation.js';
 import { executeShellCommand } from './shell.js';
 import { ensureUserHome } from './userHome.js';
 import { createVisioService } from './visio.js';
@@ -158,6 +162,10 @@ import { recentErrors, recordRecentError, isDuplicateWsRequest, isDuplicateAtome
 import { uploadsDir, resolveUploadsDir, listUserDownloadsSnapshot, listAnonymousUploads, listUserDownloads, listUploadsForUser, resolveDownloadTarget } from './server_uploads.js';
 import { createSyncQueueWorker } from './sync_queue_worker.js';
 import { classifyHttpLifecycleError } from './http_error_classification.js';
+import {
+  canReadAnyAtomeProperty,
+  projectAtomePropertiesForRead
+} from './atomePropertySecurity.js';
 
 // Database imports - Using SQLite/libSQL (ADOLE data layer)
 import db from '../database/adole.js';
@@ -2039,6 +2047,31 @@ async function startServer() {
             return;
           }
 
+          const surfaceOperationResponse = await handleWsSurfaceOperation(data, connection);
+          if (surfaceOperationResponse) {
+            safeSend(surfaceOperationResponse);
+            return;
+          }
+
+          const teleportOperationResponse = await handleWsTeleportOperation(data, connection);
+          if (teleportOperationResponse) {
+            safeSend(teleportOperationResponse);
+            return;
+          }
+
+          const surfaceGrantResponse = await handleWsSurfaceGrantOperation(data, connection);
+          if (surfaceGrantResponse) {
+            safeSend(surfaceGrantResponse);
+            return;
+          }
+
+          if (String(data?.type || '') === 'remote-control') {
+            const remoteControlResponse = await handleWsRemoteControlOperation(data, connection);
+            // Input events may opt out of a reply; the family still handled them.
+            if (remoteControlResponse) safeSend(remoteControlResponse);
+            return;
+          }
+
           // Debug: broadcast probe (no auth) - echoes to ALL ws/api clients
           // if (data && data.type === 'broadcast-probe') {
           //   const nowIso = new Date().toISOString();
@@ -3709,76 +3742,10 @@ async function startServer() {
                   atome
                 });
               } else if (action === 'realtime') {
-                // ADOLE v3.0: broadcast-only realtime patch (no DB write)
-                // Used for continuous drag so other collaborators see movement immediately.
-                const atomeId = data.atome_id || data.id;
-                const particles = data.particles || data.properties;
-
-                if (!atomeId) {
-                  safeSend({
-                    type: 'atome-response',
-                    requestId,
-                    success: false,
-                    error: 'Missing atome id'
-                  });
-                  return;
-                }
-
-                if (!particles || typeof particles !== 'object') {
-                  safeSend({
-                    type: 'atome-response',
-                    requestId,
-                    success: false,
-                    error: 'Missing or invalid particles data'
-                  });
-                  return;
-                }
-
-                if (!requesterId) {
-                  safeSend({
-                    type: 'atome-response',
-                    requestId,
-                    success: false,
-                    ok: false,
-                    error: 'Unauthenticated (token required)'
-                  });
-                  return;
-                }
-
-                const allowed = await db.canWrite(atomeId, requesterId);
-                if (!allowed) {
-                  safeSend({
-                    type: 'atome-response',
-                    requestId,
-                    success: false,
-                    ok: false,
-                    error: 'Access denied'
-                  });
-                  return;
-                }
-
-                // Broadcast to recipients (including other tabs of the same user)
-                try {
-                  await broadcastAtomeRealtimePatch({
-                    atomeId,
-                    particles,
-                    senderUserId: requesterId,
-                    senderConnection: connection
-                  });
-                } catch (error) {
-                  console.warn("[server] operation failed", error);
-                }
-
-                if (data.noReply === true) {
-                  return;
-                }
-
-                safeSend({
-                  type: 'atome-response',
-                  requestId,
-                  success: true,
-                  message: 'Realtime patch broadcasted'
+                const response = await handleWsAtomeRealtimeOperation({
+                  data, connection, requesterId, requestId
                 });
+                if (response) safeSend(response);
                 return;
               } else if (action === 'update') {
                 const atomeId = data.atome_id;
@@ -3823,18 +3790,7 @@ async function startServer() {
                   return;
                 }
 
-                const allowed = await db.canWrite(atomeId, requesterId);
-                if (!allowed) {
-                  safeSend({
-                    type: 'atome-response',
-                    requestId,
-                    success: false,
-                    error: 'Access denied'
-                  });
-                  return;
-                }
-
-                await commitAtomeEvent({
+                const committed = await commitAtomeEvent({
                   authenticatedUserId: requesterId,
                   event: {
                     atome_id: atomeId,
@@ -3843,6 +3799,10 @@ async function startServer() {
                     actor: { type: 'user', id: author || requesterId }
                   }
                 });
+                if (!committed.ok) {
+                  safeSend({ type: 'atome-response', requestId, success: false, error: committed.error });
+                  return;
+                }
                 const currentAtome = await db.getAtome(atomeId).catch(() => null);
 
                 // Realtime collaboration: broadcast patch to share recipients
@@ -3905,19 +3865,7 @@ async function startServer() {
                   return;
                 }
 
-                const allowed = await db.canWrite(atomeId, requesterId);
-                if (!allowed) {
-                  safeSend({
-                    type: 'atome-response',
-                    requestId,
-                    success: false,
-                    ok: false,
-                    error: 'Access denied'
-                  });
-                  return;
-                }
-
-                await commitAtomeEvent({
+                const committed = await commitAtomeEvent({
                   authenticatedUserId: requesterId,
                   event: {
                     atome_id: atomeId,
@@ -3926,6 +3874,10 @@ async function startServer() {
                     actor: { type: 'user', id: requesterId }
                   }
                 });
+                if (!committed.ok) {
+                  safeSend({ type: 'atome-response', requestId, success: false, ok: false, error: committed.error });
+                  return;
+                }
                 const currentAtome = await db.getAtome(atomeId).catch(() => null);
 
                 // Realtime collaboration: broadcast patch to share recipients
@@ -4042,58 +3994,11 @@ async function startServer() {
                   data: result
                 });
               } else if (action === 'delete' || action === 'soft-delete') {
-                // Support both: { id } and { atome_id }
-                // Note: This is a SOFT delete (sets deleted_at)
-                const atomeId = data.atome_id || data.id;
-
-                if (!requesterId) {
-                  safeSend({
-                    type: 'atome-response',
-                    requestId,
-                    success: false,
-                    ok: false,
-                    error: 'Unauthenticated (token required)'
-                  });
-                  return;
-                }
-
-                if (atomeId) {
-                  const allowed = await db.canDelete(atomeId, requesterId);
-                  if (!allowed) {
-                    safeSend({
-                      type: 'atome-response',
-                      requestId,
-                      success: false,
-                      ok: false,
-                      error: 'Access denied'
-                    });
-                    return;
-                  }
-                }
-
-                await db.deleteAtome(atomeId);
-
-                try {
-                  await broadcastAtomeDelete({
-                    atomeId,
-                    senderUserId: requesterId,
-                    senderConnection: connection
-                  });
-                } catch (error) {
-                  console.warn("[server] operation failed", error);
-                }
-
-                try {
-                  syncAtomeViaWebSocket({ atome_id: atomeId }, 'delete');
-                } catch (error) {
-                  console.warn("[server] operation failed", error);
-                }
-
+                const result = await handleWsAtomeDeleteOperation({ data, requesterId, connection });
                 safeSend({
                   type: 'atome-response',
                   requestId,
-                  success: true,
-                  message: 'Atome deleted'
+                  ...result
                 });
               } else if (action === 'list') {
                 const { owner_id, user_id, atome_type, limit, offset, include_deleted, since } = data;
@@ -4258,7 +4163,7 @@ async function startServer() {
                     for (const atome of atomes) {
                       const id = atome?.atome_id;
                       if (!id) continue;
-                      const allowed = await db.canRead(id, requesterId);
+                      const allowed = await canReadAnyAtomeProperty(id, requesterId);
                       if (allowed) filtered.push(atome);
                     }
                     atomes = filtered;
@@ -4313,6 +4218,31 @@ async function startServer() {
                   atomes = [];
                 }
 
+                if (!isUserDirectoryRequest && requesterId) {
+                  const projectedAtomes = await Promise.all(atomes.map(async (atome) => {
+                    if (String(atome.owner_id || '') === String(requesterId)) return atome;
+                    const properties = await projectAtomePropertiesForRead(
+                      atome.atome_id,
+                      await db.getParticles(atome.atome_id),
+                      requesterId
+                    );
+                    if (!Object.keys(properties).length) return null;
+                    return {
+                      atome_id: atome.atome_id,
+                      atome_type: atome.atome_type,
+                      parent_id: atome.parent_id,
+                      owner_id: atome.owner_id,
+                      creator_id: atome.creator_id,
+                      created_at: atome.created_at,
+                      updated_at: atome.updated_at,
+                      deleted_at: atome.deleted_at,
+                      ...properties,
+                      properties
+                    };
+                  }));
+                  atomes = projectedAtomes.filter(Boolean);
+                }
+
                 if (excludedParticleKeys.size) {
                   atomes.forEach((atome) => {
                     excludedParticleKeys.forEach((key) => {
@@ -4331,7 +4261,7 @@ async function startServer() {
                 });
               } else if (action === 'set-particle') {
                 const { atome_id, key, value, author } = data;
-                await commitAtomeEvent({
+                const committed = await commitAtomeEvent({
                   authenticatedUserId: requesterId || author,
                   event: {
                     atome_id,
@@ -4340,6 +4270,10 @@ async function startServer() {
                     actor: { type: 'user', id: requesterId || author }
                   }
                 });
+                if (!committed.ok) {
+                  safeSend({ type: 'atome-response', requestId, success: false, error: committed.error });
+                  return;
+                }
 
                 safeSend({
                   type: 'atome-response',
@@ -4349,6 +4283,10 @@ async function startServer() {
                 });
               } else if (action === 'get-particle') {
                 const { atome_id, key } = data;
+                if (!await db.canRead(atome_id, requesterId, key)) {
+                  safeSend({ type: 'atome-response', requestId, success: false, error: 'Access denied' });
+                  return;
+                }
                 const value = await db.getParticle(atome_id, key);
 
                 safeSend({
@@ -4359,7 +4297,15 @@ async function startServer() {
                 });
               } else if (action === 'get-particles') {
                 const { atome_id } = data;
-                const particles = await db.getParticles(atome_id);
+                const particles = await projectAtomePropertiesForRead(
+                  atome_id,
+                  await db.getParticles(atome_id),
+                  requesterId
+                );
+                if (!Object.keys(particles).length) {
+                  safeSend({ type: 'atome-response', requestId, success: false, error: 'Access denied' });
+                  return;
+                }
 
                 safeSend({
                   type: 'atome-response',
@@ -4368,14 +4314,11 @@ async function startServer() {
                   particles
                 });
               } else if (action === 'delete-particle') {
-                const { atome_id, key } = data;
-                await db.deleteParticle(atome_id, key);
-
                 safeSend({
                   type: 'atome-response',
                   requestId,
-                  success: true,
-                  message: 'Particle deleted'
+                  success: false,
+                  error: 'particle_delete_requires_canonical_event'
                 });
               } else {
                 safeSend({
@@ -4500,7 +4443,23 @@ async function startServer() {
           try { wsApiConnections.delete(connection); } catch (error) {
             console.warn("[server] operation failed", error);
           }
+          // Announce before detaching the client: the presence broadcast needs the
+          // principal still attached to this connection to reach its other surfaces.
+          const lostUserId = connection?._wsApiUserId ? String(connection._wsApiUserId) : null;
+          let lostSurface = null;
+          try { lostSurface = announceWsSurfaceDisconnect(connection); } catch (error) {
+            console.warn("[server] surface disconnect announce failed", error);
+          }
           detachWsApiClient(connection);
+
+          // A destination that vanished must not leave an object in limbo: pending
+          // offers roll back and hosted objects become DISCONNECTED, never lost.
+          if (lostSurface && lostUserId) {
+            try { handleRemoteControlSurfaceLoss({ userId: lostUserId, surfaceId: lostSurface.surface_id }); }
+            catch (error) { console.warn("[server] remote control surface loss failed", error); }
+            handleTeleportSurfaceLoss({ userId: lostUserId, surfaceId: lostSurface.surface_id })
+              .catch((error) => console.warn("[server] teleport surface loss failed", error));
+          }
         });
       });
     });

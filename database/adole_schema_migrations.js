@@ -1,3 +1,5 @@
+import { normalizePermissionConditions } from '../atome/src/squirrel/conditions/permission_adapter.js';
+
 async function ensureColumn({ query, table, column, ddl }) {
     const columns = await query('all', `PRAGMA table_info(${table})`);
     const names = new Set((columns || []).map((col) => col.name));
@@ -23,6 +25,22 @@ async function ensurePermissionsColumns(query) {
         column: 'conditions',
         ddl: "ALTER TABLE permissions ADD COLUMN conditions TEXT"
     });
+}
+
+async function migratePermissionConditions(query) {
+    const rows = await query('all', 'SELECT permission_id, conditions FROM permissions WHERE conditions IS NOT NULL');
+    for (const row of rows || []) {
+        let migrated;
+        try {
+            migrated = normalizePermissionConditions(row.conditions);
+        } catch {
+            migrated = { schemaVersion: 1, invalid: true, reason: 'legacy_condition_unmigratable' };
+        }
+        const serialized = JSON.stringify(migrated);
+        if (serialized !== row.conditions) {
+            await query('run', 'UPDATE permissions SET conditions = ? WHERE permission_id = ?', [serialized, row.permission_id]);
+        }
+    }
 }
 
 async function ensureSnapshotColumns(query) {
@@ -109,6 +127,58 @@ async function ensurePrincipalIdentityTables(query) {
         FOREIGN KEY(principal_id) REFERENCES atomes(atome_id) ON DELETE CASCADE,
         CHECK(status IN ('prepared', 'completed', 'failed'))
     )`);
+    // Property privacy rules — §12.5 of `todo/1- condition.md`.
+    //
+    // `permissions` cannot express "my photo, for whoever reads it": `principal_id` is
+    // NOT NULL with a foreign key, so every row targets one reader. A profile rule
+    // targets *all* readers, which is a different shape and gets its own table.
+    //
+    // A rule is strictly RESTRICTIVE: it can only narrow an access that already exists.
+    // Its absence changes nothing, and it can never grant what a permission refused —
+    // otherwise a privacy feature would become a privilege-escalation path.
+    await query('run', `CREATE TABLE IF NOT EXISTS property_privacy_rules (
+        rule_id TEXT PRIMARY KEY,
+        atome_id TEXT NOT NULL,
+        particle_key TEXT NOT NULL,
+        owner_id TEXT NOT NULL,
+        conditions TEXT NOT NULL,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        UNIQUE(atome_id, particle_key),
+        FOREIGN KEY(atome_id) REFERENCES atomes(atome_id) ON DELETE CASCADE,
+        FOREIGN KEY(owner_id) REFERENCES atomes(atome_id) ON DELETE CASCADE
+    )`);
+    await query('run', 'CREATE INDEX IF NOT EXISTS idx_privacy_rules_atome ON property_privacy_rules(atome_id, particle_key)');
+
+    // Surface grants — cross-user teleport and remote-control authorization.
+    //
+    // Not stored in `permissions`: that table is atome-scoped, and its `conditions`
+    // column belongs to the versioned Conditions schema. A grant here is a different
+    // thing — one principal authorising another to act on a *device seat*, with the
+    // separate capabilities §11.3 requires. Bending `conditions` into that shape would
+    // both misuse the Conditions owner and be normalised away by it.
+    //
+    // `grantee_id` is the principal receiving the authorization; `owner_id` owns the
+    // surface and is the only one who can grant. `status` keeps a refused request
+    // visible rather than deleting it, so a refusal is not silently re-askable.
+    await query('run', `CREATE TABLE IF NOT EXISTS surface_grants (
+        grant_id TEXT PRIMARY KEY,
+        owner_id TEXT NOT NULL,
+        surface_id TEXT NOT NULL,
+        grantee_id TEXT NOT NULL,
+        capabilities TEXT NOT NULL,
+        status TEXT NOT NULL,
+        requested_at TEXT NOT NULL DEFAULT (datetime('now')),
+        decided_at TEXT,
+        revoked_at TEXT,
+        expires_at TEXT,
+        FOREIGN KEY(owner_id) REFERENCES atomes(atome_id) ON DELETE CASCADE,
+        FOREIGN KEY(grantee_id) REFERENCES atomes(atome_id) ON DELETE CASCADE,
+        CHECK(status IN ('pending', 'granted', 'denied', 'revoked'))
+    )`);
+    await query('run', 'CREATE INDEX IF NOT EXISTS idx_surface_grants_owner ON surface_grants(owner_id, surface_id)');
+    await query('run', 'CREATE INDEX IF NOT EXISTS idx_surface_grants_grantee ON surface_grants(grantee_id, status)');
+
     await query('run', `CREATE TABLE IF NOT EXISTS account_provision_operations (
         operation_digest TEXT PRIMARY KEY,
         principal_id TEXT NOT NULL,
@@ -173,6 +243,7 @@ async function refreshUsersView(query) {
 
 async function runAdoleSchemaMigrations(query) {
     await ensurePermissionsColumns(query);
+    await migratePermissionConditions(query);
     await ensureSnapshotColumns(query);
     await ensureEventColumns(query);
     await ensureStateCurrentColumns(query);

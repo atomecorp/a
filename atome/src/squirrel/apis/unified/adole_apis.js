@@ -32,12 +32,24 @@ import {
 } from './adole_api/activities.js';
 import {
   share_atome,
+  set_property_privacy_rule,
+  list_property_privacy_rules,
   share_request,
   share_respond,
   share_publish,
   share_policy,
   grant_share_permission
 } from './adole_api/sharing.js';
+import {
+  announceSurface,
+  describeLocalSurface,
+  ensureSurfaceAnnounced,
+  getLocalSurfaceId,
+  listSurfaces,
+  pingSurface,
+  retireSurface,
+  setLocalSurfaceLabel
+} from './adole_api/surfaces.js';
 import { getSessionState, waitForAuthCheck } from './adole_api/session.js';
 
 // Kick off auth bootstrap immediately so UI waits on a single source of truth.
@@ -111,13 +123,25 @@ export const AdoleAPI = {
     alter: alter_atome,
     realtimePatch: realtime_patch
   },
+  surfaces: {
+    localId: getLocalSurfaceId,
+    describeLocal: describeLocalSurface,
+    setLabel: setLocalSurfaceLabel,
+    announce: announceSurface,
+    ensureAnnounced: ensureSurfaceAnnounced,
+    list: listSurfaces,
+    ping: pingSurface,
+    retire: retireSurface
+  },
   sharing: {
     share: share_atome,
     request: share_request,
     respond: share_respond,
     publish: share_publish,
     policy: share_policy,
-    grantPermission: grant_share_permission
+    grantPermission: grant_share_permission,
+    setPrivacyRule: set_property_privacy_rule,
+    listPrivacyRules: list_property_privacy_rules
   },
   sync: {
     sync: auth.sync,

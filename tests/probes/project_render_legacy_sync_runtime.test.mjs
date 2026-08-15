@@ -110,12 +110,26 @@ test('realtime atome events runtime sanitizes media text patches and routes even
         assert.equal(applied[0].atomeId, 'media_a');
         assert.equal(applied[0].meta.source, 'event_bus:set');
 
+        listeners.get('squirrel:atome-updated')({
+            type: 'squirrel:atome-updated',
+            detail: {
+                id: 'media_a',
+                source: 'realtime',
+                properties: { width: 240 },
+                delete_keys: ['color'],
+                durable: true
+            }
+        });
+        assert.deepEqual(ensured, [{
+            record: { id: 'media_a', atome_id: 'media_a' },
+            options: { forceFetch: true }
+        }]);
+
         listeners.get('squirrel:atome-deleted')({
             type: 'squirrel:atome-deleted',
             detail: { id: 'media_a' }
         });
         assert.deepEqual(removed, ['media_a']);
-        assert.deepEqual(ensured, []);
     } finally {
         globalThis.window = originalWindow;
         globalThis.document = originalDocument;
@@ -249,23 +263,39 @@ test('tool genesis delegates shared project override ownership outside the legac
     assert.equal(toolGenesisSource.includes('const fetchSharedOverrideAtomes ='), false);
 });
 
-test('shared project override runtime persists overrides and prunes stale remote records', async () => {
+test('shared project override runtime loads canonical overrides and prunes stale remote records', async () => {
     const originalWindow = globalThis.window;
     const originalLocalStorage = globalThis.localStorage;
     const originalGetToken = FastifyAdapter.getToken;
     const originalAtomeGet = FastifyAdapter.atome.get;
+    const originalShareInbox = FastifyAdapter.share.inbox;
     try {
-        const storage = new Map();
         const fetches = [];
         const logs = [];
+        let storageReads = 0;
+        let storageWrites = 0;
         globalThis.window = {};
         globalThis.localStorage = {
-            getItem: (key) => storage.get(key) || null,
-            setItem: (key, value) => {
-                storage.set(key, String(value));
+            getItem: () => {
+                storageReads += 1;
+                return null;
+            },
+            setItem: () => {
+                storageWrites += 1;
             }
         };
         FastifyAdapter.getToken = () => 'token_a';
+        FastifyAdapter.share.inbox = async () => ({
+            ok: true,
+            data: [{
+                properties: {
+                    status: 'active',
+                    share_type: 'linked',
+                    receiver_project_id: 'project_a',
+                    atome_ids: ['shared_a', 'stale_a']
+                }
+            }]
+        });
         FastifyAdapter.atome.get = async (id) => {
             fetches.push(String(id));
             if (String(id) === 'shared_a') {
@@ -312,9 +342,8 @@ test('shared project override runtime persists overrides and prunes stale remote
         assert.ok(fetches.includes('stale_a'));
         assert.equal(runtime.getSharedProjectOverride('stale_a'), null);
         assert.equal(runtime.getSharedProjectOverride('shared_a'), 'project_a');
-        assert.deepEqual(JSON.parse(storage.get('eve_shared_project_overrides_owner_a')), {
-            shared_a: 'project_a'
-        });
+        assert.equal(storageReads, 0);
+        assert.equal(storageWrites, 0);
         assert.equal(logs.length, 1);
         assert.equal(logs[0][0], '[AtomeRender] pruned stale shared overrides');
         assert.deepEqual(logs[0][1].ids, ['stale_a']);
@@ -323,5 +352,6 @@ test('shared project override runtime persists overrides and prunes stale remote
         globalThis.localStorage = originalLocalStorage;
         FastifyAdapter.getToken = originalGetToken;
         FastifyAdapter.atome.get = originalAtomeGet;
+        FastifyAdapter.share.inbox = originalShareInbox;
     }
 });

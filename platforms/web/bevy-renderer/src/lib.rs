@@ -1,7 +1,8 @@
 use atome_bevy_renderer_core::{
-    apply_render_ops, apply_surface, apply_ui_ops, register_ui_font, AtomeBevyRendererConfig,
-    AtomeBevyRendererPlugin, AtomeRenderOp, AtomeRenderScene, AtomeRendererDiagnostics,
-    AtomeStylePatch, AtomeSurfacePatch, AtomeUiDiagnostics, AtomeUiEvent, AtomeUiOp,
+    apply_render_ops, apply_surface, apply_ui_ops, register_ui_font, ui_viewport_size,
+    AtomeBevyRendererConfig, AtomeBevyRendererPlugin, AtomeRenderOp, AtomeRenderScene,
+    AtomeRendererDiagnostics, AtomeStylePatch, AtomeSurfacePatch, AtomeUiDiagnostics, AtomeUiEvent,
+    AtomeUiOp,
 };
 use bevy::platform::time::Instant;
 use bevy::{
@@ -82,19 +83,15 @@ fn web_frame_probe_end(world: &mut World) {
     if WEB_WAKE_COALESCED.with(|cell| cell.replace(false)) {
         wake_web_renderer();
     }
-    // The UI pass renders into the camera's physical viewport; the JS UI
-    // runtime needs the effective size to pre-scale logical trees exactly.
-    let ui_viewport = {
-        let mut query = world.query::<&Camera>();
-        query
-            .iter(world)
-            .find_map(|camera| camera.physical_viewport_size())
-    };
-    if let Some(size) = ui_viewport {
+    // Read the same canonical default camera that BevyUI itself targets. The
+    // world also contains quarter-resolution blur cameras, so an unfiltered
+    // camera query would intermittently publish their viewport instead.
+    let (ui_viewport_width, ui_viewport_height) = ui_viewport_size(world);
+    if ui_viewport_width > 0 && ui_viewport_height > 0 {
         WEB_DIAGNOSTICS.with(|cell| {
             let mut diagnostics = cell.borrow_mut();
-            diagnostics.ui_viewport_width = size.x;
-            diagnostics.ui_viewport_height = size.y;
+            diagnostics.ui_viewport_width = ui_viewport_width;
+            diagnostics.ui_viewport_height = ui_viewport_height;
         });
     }
     WEB_FRAME_PROBE.with(|cell| {

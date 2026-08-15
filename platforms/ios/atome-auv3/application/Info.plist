@@ -59,6 +59,10 @@
     <string>Atome utilise la caméra pour capturer des photos et enregistrer des vidéos dans vos projets.</string>
     <key>NSMicrophoneUsageDescription</key>
     <string>Atome utilise le microphone pour enregistrer du son et l'audio des vidéos.</string>
+    <key>NSHealthShareUsageDescription</key>
+    <string>Atome utilise les mesures de fréquence cardiaque que vous autorisez pour alimenter vos critères dynamiques.</string>
+    <key>NSHealthUpdateUsageDescription</key>
+    <string>Atome ne modifie pas vos données de santé.</string>
     <key>NSPhotoLibraryUsageDescription</key>
     <string>Atome peut accéder aux photos pour charger des samples audio</string>
     <key>NSPhotoLibraryAddUsageDescription</key>
