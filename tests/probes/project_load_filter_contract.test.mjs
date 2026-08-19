@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict';
 import { installMockBrowserEnv } from '../strangler_v2/_env.mjs';
 import { createToolGenesisProjectLoadRuntime } from '../../eVe/intuition/runtime/tool_genesis_project_load_runtime.js';
+import {
+    __testClearPrefetch,
+    __testSetCommitLoader
+} from '../../eVe/domains/rendering/project_view_mode_state.js';
 
 const { window, document } = installMockBrowserEnv();
 globalThis.window = window;
@@ -39,6 +43,7 @@ window.Atome = {
 };
 
 const rendered = [];
+let restoreCount = 0;
 const runtime = createToolGenesisProjectLoadRuntime({
     clearProjectLoadInFlightIfCurrent: () => {},
     dispatchProjectRenderDone: () => {},
@@ -55,7 +60,14 @@ const runtime = createToolGenesisProjectLoadRuntime({
     },
     fetchSharedOverrideAtomes: async () => [],
     filterAtomesByOwner: (records) => records,
-    getAdoleApi: () => ({ atomes: { list: async () => ({ atomes: [] }) } }),
+    getAdoleApi: () => ({ atomes: { list: async () => ({ atomes: [{
+        id: 'remote_atom',
+        atome_id: 'remote_atom',
+        type: 'shape',
+        project_id: projectId,
+        owner_id: userId,
+        properties: { kind: 'shape', width: 10, height: 10 }
+    }] }) } }),
     getProjectLoadInFlight: () => null,
     getRecentProjectCache: () => null,
     getSharedProjectOverride: () => null,
@@ -67,19 +79,29 @@ const runtime = createToolGenesisProjectLoadRuntime({
     perfLog: () => {},
     perfNowMs: () => 0,
     persistenceDiagLog: () => {},
-    pickAuthoritativeAtomes: () => [],
+    pickAuthoritativeAtomes: (result) => result?.atomes || [],
     rememberProjectAtomes: () => {},
     renderProjectScene: async ({ records }) => { rendered.push(records); return { ok: true }; },
     resolveAtomeProperties: (record) => record?.properties || {},
     resolveCurrentUserId: () => userId,
     resolveToolShortcutRole: () => false,
     setProjectLoadInFlight: () => {},
-    summarizePersistenceRecords: () => []
+    summarizePersistenceRecords: () => [],
+    prefetchViewMode: () => Promise.resolve('list'),
+    restoreViewModeAfterLoad: () => { restoreCount += 1; }
 });
 
+__testSetCommitLoader(async () => ({ getStateCurrent: () => new Promise(() => {}) }));
+__testClearPrefetch();
+const nonBlockingStart = Date.now();
 const loaded = await runtime.loadProjectAtomes(projectId, { force: true, staleFirst: false });
+assert.ok(Date.now() - nonBlockingStart < 120, 'project load must not await view projection restoration');
+__testSetCommitLoader();
+__testClearPrefetch();
 
-assert.deepEqual(loaded.map((record) => record.id || record.atome_id), ['visible_atom']);
-assert.deepEqual(rendered.at(-1).map((record) => record.id || record.atome_id), ['visible_atom']);
+assert.deepEqual(loaded.map((record) => record.id || record.atome_id), ['remote_atom', 'visible_atom']);
+assert.deepEqual(rendered.at(-1).map((record) => record.id || record.atome_id), ['remote_atom', 'visible_atom']);
+assert.equal(rendered.length, 2, 'local quick paint and authoritative merged paint are both exercised');
+assert.equal(restoreCount, 1, 'local and final project paints must restore the project view exactly once');
 
 console.log('project_load_filter_contract.test: PASS');

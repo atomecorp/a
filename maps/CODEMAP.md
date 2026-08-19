@@ -2220,3 +2220,11 @@ This section supersedes earlier Dashboard lifecycle descriptions in this map. `e
 - Persistent evidence: `bevy_panel_info_contract.test.mjs`, pointer/Contact/touch contracts
   `bevy_ui_layout_contract.test.mjs`, `project_scene_gesture_performance.test.mjs`
   and the Vitest manifest guard.
+
+# Workspace presentation ownership — 2026-08-18
+
+- `eVe/domains/rendering/surface_runtime.js` is the only workspace-size observer and publishes distinct stabilized sizes through `subscribeRenderSurfaceSize`. Dashboard, main menu and structured project views subscribe to it and must not add viewport or surface resize observers of their own.
+- `bevy_ui_render_queue_runtime.js` owns per-tree latest-wins generations and abort signals; image hydration and overlay reconciliation consume that signal. `bevy_ui_unmount_runtime.js` owns final disposal. Product runtimes may cancel a stale tree through `cancelTreeRender` but may not create another queue.
+- `project_view_mode_state.js` owns latest user intent without per-project FIFO. `project_view_surface_context_runtime.js` owns the contextual rail and `project_view_surface_events.js` owns canonical change/size subscriptions.
+- `tool_genesis_project_load_runtime.js` restores a saved view exactly once after final authoritative projection. `project_data.js` consumes that projection and does not render the complete scene again during workspace activation.
+- `dashboard_bevy_ui_runtime.js` owns complete-data-before-presentation; `dashboard_presentation_runtime.js` owns the cancellable GPU fade and `dashboard_bevy_ui_diagnostics.js` owns readiness diagnostics. Closing cancels pending tree work before suspension.

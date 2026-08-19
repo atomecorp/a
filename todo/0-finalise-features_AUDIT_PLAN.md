@@ -373,3 +373,131 @@ Ce que **aucune** probe ne remplace : l'application n'a pas été lancée. Tout 
 | aucun contrôle MVP ne reste un placeholder mort | ✅ | 3 supprimés (`import > audio/modules/projects`), `load`/`save` marqués Post-MVP |
 
 **Verdict : le §17 n'est pas atteint.** Deux critères bloquent — le thème (lot 8 audité mais non appliqué) et le time stretch (SDK indisponible). Un troisième est réservé : la persistance n'a pas été éprouvée dans l'application réelle.
+
+
+---
+
+# 17 août 2026 — Reprise : rail contextuel, thème, stretch audible
+
+Périmètre arbitré par l'utilisateur : **le menu principal n'est pas touché**, et
+tout ce qui s'y rapporte est reporté (dont l'entrée `Generator` de la palette
+Create, inerte parce que le ruban n'ouvre qu'un niveau de palette). En
+contrepartie, une exigence nouvelle : le rail contextuel latéral doit être
+ouvert et alimenté en modes liste et matrice.
+
+## J. Rail contextuel en liste et matrice (exigence nouvelle)
+
+Probe : `temp/contextual_rail_views_probe.mjs`, **rouge d'abord** — 13 échecs
+correspondant à quatre manques réels.
+
+| Manque | Correctif |
+|---|---|
+| le rail ne prévenait personne quand il s'ouvrait ou se fermait, donc la vue ne rebâtissait jamais son arbre et le contenu s'étendait **sous** le rail | `ATOME_CONTEXTUAL_EDIT_CHANGED_EVENT` émis depuis `syncLegacyState()`, seul point par lequel passe toute mutation de cible ; la surface s'y abonne |
+| rien n'ouvrait le rail à l'entrée dans une vue | `syncContextualRail()` appelée après chaque rendu réussi |
+| rien ne le réalimentait au changement de niveau | même fonction : elle compare une signature `level:` / `item:` et n'agit que si la cible a changé — c'est aussi ce qui empêche la notification de boucler |
+| un atome simple sélectionné n'alimentait pas le rail | `project_view_contextual_rail.js`, propriétaire unique du routage ligne → rail |
+
+Règle appliquée : **le niveau courant par défaut, l'élément dès qu'il est
+sélectionné**, retour au niveau à la désélection.
+
+Réutilisation plutôt que création :
+
+- un atome réel prend `enter` — *exactement* la route du double-clic en mode
+  naturel, donc les mêmes outils, le même rail ;
+- une molécule / section / piste garde `presentMoleculeInfo` → `enterVirtual` ;
+- `resolveAtomeContextualRecordKind` / `normalizeAtomeContextualKind` sortent de
+  `boot_runtime.js` vers `atome_contextual_kind.js` : la scène n'est plus le seul
+  point d'entrée du rail, et deux copies auraient fini par diverger sur le nom
+  d'un atome audio.
+
+Deux corrections tombées de là :
+
+- la matrice lisait sa sélection en retour de `getCurrentSelectionIds()`, un
+  module qui ignore les lignes de molécule — elle laissait donc le rail sans
+  cible. Elle applique maintenant la même règle que la liste ;
+- en repassant en naturel, le conteneur virtuel est retiré du rail
+  (`releaseContainerRail`) ; un atome sélectionné, lui, y reste légitimement.
+
+## K. Thème (§2) — 145 → 102 valeurs en dur
+
+Rapport : [`todo/audits/theme_integration_audit_2026-08-17.md`](audits/theme_integration_audit_2026-08-17.md).
+
+**Plus aucune surface ne peint hors du thème.** Les trois qui ne consommaient
+aucune source de tokens consomment `elements/skin` :
+
+| Surface | Avant | Après |
+|---|---:|---:|
+| outils de dessin (`tools/core`) | 25 | **0** |
+| timeline (`molecule/render`) | 18 | **0** |
+| générateur (`tools/generator`) | 5 | 4 (les `hsl()` **produits** par les générateurs — du contenu, pas du chrome) |
+
+Deux ajouts au skin : `EVE_TOOL_SKIN_TOKENS.timeline` (les kinds de clip mappés
+sur les familles sémantiques — audio = violet, vidéo = bleu, image = vert) et
+`EVE_TOOL_SKIN_TOKENS.drawing`, qui sépare explicitement `content` (la couleur
+avec laquelle un atome **naît**) de `handle` (le chrome d'édition vectorielle).
+
+**Hors périmètre** : la toolbox principale (22, reportée) et l'unification de
+`look` + `skin` + `system_ui`, qui reste un refactor large interdit par §1 — et
+dont la question du nom « Elastic » n'est toujours pas tranchée.
+
+## L. Time stretch audible (§7.3)
+
+Le vrai trou n'était pas le SDK : c'était que **rien ne jouait le stretch**.
+`apply()` renvoyait un `playback_rate` qu'aucun appelant ne lisait, et
+`runtime_transport.js` projetait ses clips vers le moteur média **sans taux**.
+
+1. **Audible partout.** `resolveClipStretchPlayback(clip)` traduit un
+   `clip.stretch` persisté en ce qu'on dit au backend ; le transport le
+   consomme. La plomberie existait déjà sur les trois plateformes
+   (`set_param('playback_rate')` → `audio_set_playback_rate` en WASM, en Tauri
+   et en natif iOS) : elle n'était simplement jamais atteinte.
+2. **Hauteur préservée.** Moteur `rubberband`, rendu **hors ligne** :
+   décodage → `rubberband_study` puis `rubberband_process` → WAV 16 bits →
+   `loadTransientAsset`. Un buffer déjà étiré se joue à vitesse 1 — appliquer le
+   ratio par-dessus l'étirerait deux fois.
+3. **iOS compris, sans code natif neuf.** `loadTransientAsset` route déjà vers
+   `audio_load_clip_from_bytes`, commande qui **existe déjà** dans
+   `AppNativeAudioCommands.swift` et qui écrit elle-même le fichier temporaire.
+   La contrainte « iOS exige un chemin local » était donc déjà levée.
+4. **Résolution par défaut.** `resolveStretchEngine('')` préfère désormais un
+   moteur qui préserve la hauteur ; le varispeed n'est retenu que s'il est seul.
+   Un clip déjà persisté garde **son** moteur : l'id est une donnée.
+5. **Rien n'est remplacé en douce.** Le slot `zplane_elastique` reste déclaré
+   `available: false` avec sa raison. Un rendu pas encore prêt s'annonce
+   `pending: true, preserves_pitch: false` au lieu de mentir.
+
+> ⚠️ **Licence.** Rubber Band est GPL-v2+ ou commerciale. Le risque a été
+> signalé, le choix a été maintenu par le propriétaire du produit, et la
+> conséquence est consignée dans `THIRD_PARTY_LICENSES.md` : distribuer Atome
+> avec cette bibliothèque oblige à publier Atome sous GPL, sauf achat de la
+> licence commerciale.
+
+## M. État du §17 après cette passe
+
+| Critère §17 | Avant | Après |
+|---|---|---|
+| thème intégré de façon cohérente | ❌ | ⚠️ **partiel** — plus aucune surface ne peint hors du thème (145 → 102), mais il reste trois systèmes de tokens au lieu d'un |
+| audio **time stretch** | ⚠️ modèle seul | ✅ **audible** — varispeed sur les 3 plateformes, hauteur préservée par Rubber Band |
+| tout persiste après save/reload | ⚠️ modèle | ⚠️ inchangé — toujours pas éprouvé dans l'application lancée |
+
+Le §17 n'est donc **toujours pas atteint**, sur deux points désormais : les trois
+systèmes de tokens, et la vérification bout-en-bout en conditions réelles. Le
+time stretch, lui, n'est plus bloquant.
+
+## Preuves
+
+```
+contextual_rail_views_probe.mjs      OK   (rouge d'abord : 13 échecs)
+audio_edit_probe.mjs                 OK   106 checks
+generator_container_probe.mjs        OK   96 checks
+vector_freehand_roundtrip_probe.mjs  OK   47 checks
+toolbox_visible_audit.mjs            OK   28 entrées visibles, 28 saines
+theme_audit.mjs                      145 -> 102 valeurs en dur
+check:component-reuse-guardrails     ok (4 rules)
+check:no-fallbacks                   ok (39 fichiers)
+```
+
+**Réserve inchangée : l'application n'a pas été lancée.** Tout ce qui précède est
+vérifié par probes sur les vrais modules. Restent à éprouver à l'écran : le rail
+en liste/matrice, la cohérence visuelle après le passage au thème, et surtout
+**écouter** un clip étiré.

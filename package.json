@@ -180,6 +180,7 @@
     "onnxruntime-web": "^1.27.0",
     "pino": "^9.5.0",
     "pino-pretty": "^13.0.0",
+    "rubberband-wasm": "^3.3.0",
     "three": "^0.181.2",
     "tone": "^15.1.22",
     "tslib": "^2.8.1",

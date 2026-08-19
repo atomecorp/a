@@ -92,6 +92,46 @@ test('BevyUI image prewarming hydrates without mounting or projecting a tree', a
     assert.equal(runtime.readOverlayDiagnostics().treeCount, 0);
 });
 
+test('BevyUI latest render cancels image hydration from the superseded tree', async () => {
+    const surface = createSurface();
+    let oldResolverStarted = false;
+    const runtime = createEveBevyUiRuntime({
+        imageResolverFactory: () => async (node) => {
+            if (node.id === 'blocked_image') {
+                oldResolverStarted = true;
+                return new Promise(() => {});
+            }
+            return { width: 1, height: 1, rgba: new Uint8ClampedArray([255, 255, 255, 255]) };
+        },
+        overlayProjector: {
+            clear: async () => null,
+            project: async () => ['latest_record']
+        },
+        requestFrame: () => 0
+    });
+    const blocked = runtime.mountTree({
+        id: 'latest_tree',
+        surface,
+        tree: {
+            id: 'latest_tree',
+            root: { id: 'blocked_root', kind: 'root', children: [{
+                id: 'blocked_image', kind: 'image', image: { source: 'blocked-latest.png' }, style: { size: [8, 8] }
+            }] }
+        }
+    });
+    while (!oldResolverStarted) await Promise.resolve();
+    const latest = runtime.updateTree({
+        id: 'latest_tree',
+        surface,
+        tree: { id: 'latest_tree', root: { id: 'latest_root', kind: 'root', children: [] } }
+    });
+    await latest;
+    await blocked;
+
+    assert.equal(runtime.state.sourceTrees.get('latest_tree')?.tree?.root?.id, 'latest_root');
+    assert.equal(runtime.state.renderQueues.has('latest_tree'), false);
+});
+
 test('BevyUI label hydration retains its requested global content tint', async () => {
     const hydrated = await hydrateImageTree({
         surface: createSurface(),

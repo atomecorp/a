@@ -452,7 +452,8 @@ test('Project render surface follows whichever viewport source actually changed'
     await new Promise((resolve) => dom.window.setTimeout(resolve, 20));
     assert.equal(surface.style.width, '800px');
     assert.equal(surface.style.height, '568px');
-    assert.equal(intents.some((intent) => intent.force_surface_reconcile === true), true);
+    assert.equal(intents.length, 3, 'each distinct stabilized size must be published once');
+    assert.equal(intents.some((intent) => intent.force_surface_reconcile === true), false);
 });
 test('Project render surface and panel follow the iOS keyboard viewport while text editing is active', async () => {
     const dom = new JSDOM('<!doctype html><html><body><div id="view"><div id="project_view_alpha"></div></div></body></html>');
@@ -491,7 +492,8 @@ test('Project render surface and panel follow the iOS keyboard viewport while te
     visualViewport.dispatchEvent(new dom.window.Event('resize'));
     await new Promise((resolve) => dom.window.setTimeout(resolve, 200));
     assert.equal(surface.style.height, '463px');
-    assert.equal(intents.some((intent) => intent.force_surface_reconcile === true), true);
+    assert.equal(intents.length, 1, 'the settled duplicate must not publish a second resize');
+    assert.equal(intents.some((intent) => intent.force_surface_reconcile === true), false);
 
     unmountActiveTextEditor();
 });

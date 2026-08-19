@@ -540,6 +540,31 @@ Run at least:
 
 ---
 
+# 16bis. Périmètre reporté — décision du 17 août 2026
+
+Le **menu principal** est hors périmètre jusqu'à nouvel ordre. Tout ce qui s'y
+rapporte est reporté, notamment :
+
+- §3 — l'audit et la complétion des outils de la **toolbox principale** ;
+- §9/§10 — l'entrée **Generator** dans la palette Create : elle est déclarée et
+  son registre est extensible, mais le bouton reste inerte parce que le ruban
+  n'ouvre qu'un seul niveau de palette. Le corriger = toucher au menu ;
+- §2 — la surface `eVe/intuition/ribbon` de l'intégration du thème (22 valeurs
+  visuelles en dur, non traitées).
+
+En contrepartie, exigence ajoutée le même jour et **livrée** : le menu
+contextuel latéral doit être **ouvert et alimenté** en modes liste et matrice —
+le niveau courant par défaut, l'élément dès qu'il est sélectionné — et garder en
+mode naturel son comportement actuel (double-clic sur un atome ou une molécule).
+
+Reste également **Post-MVP, bloqué par une dépendance externe** :
+
+- §7.3 — **zplane élastique** : SDK commercial sous licence, absent du dépôt. Le
+  slot reste déclaré `available: false`. Le stretch est désormais audible et
+  préserve la hauteur via **Rubber Band** (GPL — voir `THIRD_PARTY_LICENSES.md`),
+  enregistré derrière la même interface : basculer sur élastique reste un seul
+  appel `registerStretchEngine`.
+
 # 17. Definition of Done
 
 This file is complete when:

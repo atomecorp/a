@@ -886,3 +886,11 @@ The perceptual contract is backed by presented WebGPU frames, not JS sampling al
   before release. Leave, cancel and invalid drop remove the gap immediately.
 - The source Finder catalogue never changes. A tool already in the contextual
   menu moves to the displayed index and never gains a duplicate visual entry.
+
+# Atomic workspace boot and view presentation — 2026-08-18, authoritative
+
+This section supersedes the no-animation opening rule dated 2026-07-17. The first visible Dashboard frame contains every known category, card, label and the complete main menu at their final geometry. Dashboard records mount at zero opacity only after menu height and stabilized WebGPU surface size are known, then appear through one short GPU fade over the background. Slow media may refine a resident texture later but may not add a card, change layout or reveal an empty placeholder. On reopening, the resident menu stays visible and only the complete Dashboard tree fades in.
+
+List, Matrix and Natural are presentations of one canonical project scene. A change is latest-wins: the previous complete presentation stays visible until the requested structured prefix is ready for atomic replacement; Natural hides the structured prefix immediately. No fresh Dashboard or project-view tree exposes frame-separated batches, blanks the shared canvas or waits behind stale hydration. A suspended Dashboard cannot publish records, textures or opacity after close.
+
+All workspace layout consumes the single distinct-size publication from `surface_runtime.js`. One physical resize produces at most one layout reconstruction and one WebGPU presentation per active tree; an identical settled measurement produces no reconcile.

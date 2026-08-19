@@ -43,12 +43,11 @@ const RULES = [
             // Tracked in `todo/ui_bevy/component_convergence.md`, registered in
             // `todo/execution_order.md`. Listed here so the count cannot grow
             // silently; removing an entry is the definition of done.
-            // `numeric_field` belongs to workstream slot A (Size/Font); the two
-            // Panel Lab runtimes leave with the planned Panel Lab retirement;
+            // `numeric_field` belongs to workstream slot A (Size/Font);
             // `inline_search` holds no editor skeleton and may not be a copy.
+            // The two Panel Lab runtimes left with the Panel Lab retirement
+            // (2026-08-16) and are struck from this list — done, not deferred.
             'eVe/intuition/ribbon/bevy_ui_main_menu_inline_search_runtime.js',
-            'eVe/intuition/runtime/bevy_panel/bevy_panel_lab_text_input_runtime.js',
-            'eVe/intuition/runtime/bevy_panel/bevy_panel_lab_multiline_input_runtime.js',
             'eVe/intuition/runtime/bevy_panel/bevy_panel_numeric_field_runtime.js'
         ]
     }),
@@ -73,6 +72,18 @@ const RULES = [
             'eVe/intuition/runtime/bevy_panel/bevy_panel_matrix.js',
             'eVe/domains/rendering/project_view_matrix_content.js'
         ]
+    }),
+    rule({
+        id: 'record-preview',
+        owner: 'eVe/intuition/runtime/bevy_panel/bevy_panel_record_preview.js',
+        what: 'a record preview inside a frame',
+        // On 2026-08-17 the list and the Matrix each carried their own copy of
+        // this recipe. Both stretched the record to the frame, so images came
+        // out deformed and text kept its scene font size — invisible in a 26px
+        // row, truncated in a 104px tile. The recipe is the tell: pinning a
+        // record to a node's box is what a preview does.
+        pattern: /overlayRecordLayout\s*:/,
+        allow: ['eVe/intuition/runtime/bevy_panel/bevy_panel_record_preview.js']
     }),
     rule({
         id: 'column-widths',

@@ -41,7 +41,6 @@ test('Project workspace activation restores the project surface and main menu', 
     };
 
     const calls = [];
-    let renderedRecords = null;
     let menuActive = false;
     window.__eveWorkspaceMode = { mode: 'transition', projectId: 'project_alpha', targetMode: 'project', transitioning: true };
     setMainMenuRuntime({
@@ -91,7 +90,6 @@ test('Project workspace activation restores the project surface and main menu', 
         }),
         renderProjectScene: async ({ projectId, records, host }) => {
             calls.push({ name: 'renderProjectScene', projectId, hostId: host?.id || null });
-            renderedRecords = records;
             return { ok: true };
         }
     };
@@ -121,18 +119,11 @@ test('Project workspace activation restores the project surface and main menu', 
     assert.equal(menuActive, true);
     assert.deepEqual(
         calls.find((entry) => entry.name === 'loadProjectAtomes')?.options,
-        { force: true, staleFirst: false, forceProjectSurface: true }
+        { force: true, staleFirst: false, forceProjectSurface: true, reason: 'workspace_activation' }
     );
-    assert.deepEqual(
-        renderedRecords?.map((record) => record.id),
-        ['media_alpha'],
-        'activation must project loaded project records, not stale overlay-only scene records'
-    );
-    assert.equal(
-        calls.find((entry) => entry.name === 'renderProjectScene')?.hostId,
-        'project_view_project_alpha'
-    );
-    assert.deepEqual(calls.map((entry) => entry.name), ['setCurrent', 'commit', 'loadProjectAtomes', 'showFully', 'renderProjectScene']);
+    assert.equal(calls.some((entry) => entry.name === 'renderProjectScene'), false,
+        'activation must reuse the authoritative projection owned by loadProjectAtomes');
+    assert.deepEqual(calls.map((entry) => entry.name), ['setCurrent', 'commit', 'loadProjectAtomes', 'showFully']);
 }, 10_000);
 
 test('Project workspace activation from dashboard claims the project surface instead of the dashboard surface', async () => {
@@ -249,7 +240,7 @@ test('Project workspace activation from dashboard claims the project surface ins
     assert.equal(menuActive, true);
     assert.deepEqual(
         calls.find((entry) => entry.name === 'loadProjectAtomes')?.options,
-        { force: true, staleFirst: false, forceProjectSurface: true }
+        { force: true, staleFirst: false, forceProjectSurface: true, reason: 'workspace_activation' }
     );
     assert.deepEqual(calls.map((entry) => entry.name), [
         'destroyDashboard',

@@ -28,8 +28,12 @@ export const sanitizeVoiceDiagnostic = (value, depth = 0, seen = new WeakSet()) 
     return sanitized;
 };
 
+// Opt-in, not opt-out. Every voice stage, every microphone level sample and
+// every provider round-trip funnels through here, so leaving it on by default
+// meant the console was full of `[voice-trace]` lines before the user had done
+// anything. Set `window.__EVE_VOICE_DIAGNOSTICS__ = true` to get them back.
 export const writeVoiceDiagnostic = (env = globalThis, stage = 'voice.unknown', payload = {}) => {
-    if (env?.__EVE_VOICE_DIAGNOSTICS__ === false) return null;
+    if (env?.__EVE_VOICE_DIAGNOSTICS__ !== true) return null;
     const record = {
         at: new Date().toISOString(),
         stage: String(stage || 'voice.unknown'),

@@ -324,7 +324,7 @@ test('BevyUI main menu overlay projects the 70px menu atomically without droppin
     assert.equal(recordsById.has('__eve_bevy_ui_eve_bevy_ui_main_menu_eve_bevy_ui_main_menu_tool_capture_label_text'), true);
     assert.equal(recordsById.has('__eve_bevy_ui_eve_bevy_ui_main_menu_eve_bevy_ui_main_menu_tool_atome_icon_image'), true);
 });
-test('BevyUI progressive overlay keeps mounted structure while adding detail records', async () => {
+test('BevyUI dashboard overlay replaces its complete snapshot atomically', async () => {
     clearAllProjectScenes();
     const dom = projectDom();
     const host = dom.window.document.getElementById('project');
@@ -385,7 +385,7 @@ test('BevyUI progressive overlay keeps mounted structure while adding detail rec
         previousIds: firstIds
     });
     const records = new Map(getProjectSceneState('__eve_dashboard_workspace__').records.map((record) => [record.id, record]));
-    assert.equal(records.get('__eve_bevy_ui_dashboard_bevy_ui___eve_dashboard_background')?.properties?.color, '#ff0000');
+    assert.equal(records.get('__eve_bevy_ui_dashboard_bevy_ui___eve_dashboard_background')?.properties?.color, '#0000ff');
     assert.equal(records.get('__eve_bevy_ui_dashboard_bevy_ui___eve_dashboard_header_projects')?.properties?.text, 'Projects');
     assert.equal(secondIds.length, 2);
 });
@@ -491,7 +491,12 @@ test('BevyUI main menu projects one semantic accent capsule per palette group', 
         ]
     );
 
+    compositorCalls.length = 0;
     const closedIds = await projectBevyUiTreeOverlay({ tree: closedTree, documentRef: dom.window.document, previousIds: [] });
+    assert.equal(compositorCalls.some((call) => call.type === 'run'), false,
+        'a first atomic BevyUI prefix must not rebuild the resident cold scene');
+    assert.equal(compositorCalls.filter((call) => Array.isArray(call.ops)).length, 1,
+        'a first atomic BevyUI prefix must spawn in one direct renderer batch');
     const pressedTree = buildBevyMainMenuTree({
         content,
         surface,
