@@ -15,6 +15,7 @@ import {
     stopAllSelectedProjectMediaPlayback
 } from '../../eVe/domains/media/selected_project_media_playback_runtime.js';
 import { registerMediaReaderToolRuntime } from '../../eVe/intuition/runtime/eve_intuition/media_reader_tool_runtime.js';
+import { setBevyVideoDecodePlayback } from '../../eVe/domains/rendering/bevy_video_decode_source_runtime.js';
 import {
     rememberProjectAudioDurationForId,
     readProjectAudioPlaybackProgressForId
@@ -149,8 +150,8 @@ test('aggregate playback state drives mixed Play, all-active Stop, and project-s
             audio: {
                 playback: { loadAsset: async () => ({ ok: true }) },
                 play_instance: async () => ({ ok: true }),
-                stop_instance: async () => ({ ok: true }),
                 play: async () => ({ ok: true }),
+                stop_instance: async () => ({ ok: true }),
                 stop: async () => ({ ok: true })
             }
         }
@@ -326,6 +327,181 @@ test('selected project audio playback does not pass API routes as native local p
     assert.equal(calls[0].payload.native_audio_path, undefined);
 
     await stopAllSelectedProjectMediaPlayback(dom.window);
+});
+
+test('recorded video replays durable extracted audio instead of a revoked preview URL', async () => {
+    const dom = await createProjectHost([
+        {
+            id: 'recorded_video_with_audio',
+            type: 'video_recording',
+            properties: {
+                kind: 'video_recording',
+                media_url: 'blob:temporary-recording-preview',
+                file_name: 'recorded-video.mp4',
+                file_path: 'data/users/user_a/recordings/recorded-video.mp4',
+                media_user_id: 'user_a',
+                audio_track_count: 1,
+                left: 10,
+                top: 12,
+                width: 160,
+                height: 90
+            }
+        }
+    ]);
+    const calls = [];
+    dom.window.Squirrel = {
+        av: {
+            audio: {
+                playback: {
+                    loadAsset: async (payload) => {
+                        calls.push({ type: 'load', payload });
+                        return { ok: true };
+                    }
+                },
+                play_instance: async () => ({ ok: true }),
+                play: async () => ({ ok: true }),
+                stop_instance: async () => ({ ok: true }),
+                stop: async () => ({ ok: true })
+            }
+        }
+    };
+
+    const result = await runSelectedProjectMediaPlaybackAction({
+        action: 'play',
+        atomeIds: ['recorded_video_with_audio'],
+        windowRef: dom.window,
+        documentRef: dom.window.document,
+        projectTimelineAction: async () => ({ ok: true })
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(calls.length, 1);
+    assert.equal(
+        calls[0].payload.media_url,
+        '/api/extract-audio/recorded-video.mp4?source=recording&media_user_id=user_a'
+    );
+    assert.equal(calls[0].payload.native_audio_path, 'data/users/user_a/recordings/recorded-video.mp4');
+});
+
+test('recorded video with a declared audio track fails instead of masking a Kira load error', async () => {
+    const dom = await createProjectHost([
+        {
+            id: 'recorded_video_audio_failure',
+            type: 'video_recording',
+            properties: {
+                kind: 'video_recording',
+                media_url: '/api/recordings/recorded-failure.mp4?media_user_id=user_a',
+                audio_track_count: 1,
+                left: 10,
+                top: 12,
+                width: 160,
+                height: 90
+            }
+        }
+    ]);
+    dom.window.Squirrel = {
+        av: {
+            audio: {
+                playback: { loadAsset: async () => ({ ok: false, error: 'kira_audio_load_failed' }) },
+                play: async () => ({ ok: true }),
+                stop: async () => ({ ok: true })
+            }
+        }
+    };
+
+    const timelineActions = [];
+    const result = await runSelectedProjectMediaPlaybackAction({
+        action: 'play',
+        atomeIds: ['recorded_video_audio_failure'],
+        windowRef: dom.window,
+        documentRef: dom.window.document,
+        projectTimelineAction: async ({ action }) => {
+            timelineActions.push(action);
+            return { ok: true };
+        }
+    });
+
+    assert.equal(result.ok, false);
+    assert.equal(result.results[0].error, 'kira_audio_load_failed');
+    assert.equal(timelineActions.includes('play'), false);
+    assert.equal(readSelectedProjectMediaPlaybackState(['recorded_video_audio_failure']).anyPlaying, false);
+});
+
+test('recorded video rolls its timeline back before publishing when the Kira voice refuses to start', async () => {
+    const dom = await createProjectHost([
+        {
+            id: 'recorded_video_voice_failure',
+            type: 'video_recording',
+            properties: {
+                kind: 'video_recording',
+                media_url: 'blob:revoked-recording-preview',
+                file_name: 'recorded-voice-failure.mp4',
+                file_path: 'data/users/user_a/recordings/recorded-voice-failure.mp4',
+                media_user_id: 'user_a',
+                has_audio: true,
+                audio_track_count: 1,
+                left: 10,
+                top: 12,
+                width: 160,
+                height: 90
+            }
+        }
+    ]);
+    const calls = [];
+    const playbackEvents = [];
+    const decoder = dom.window.document.querySelector('#eve_bevy_video_decode_root video');
+    Object.defineProperty(decoder, 'pause', { configurable: true, value: () => {} });
+    Object.defineProperty(decoder, 'play', { configurable: true, value: async () => {} });
+    dom.window.addEventListener('eve:selected-project-media-playback-state', (event) => {
+        playbackEvents.push(event.detail);
+    });
+    dom.window.Squirrel = {
+        av: {
+            audio: {
+                playback: {
+                    loadAsset: async (payload) => {
+                        calls.push({ type: 'load', payload });
+                        return { ok: true };
+                    }
+                },
+                play_instance: async (payload) => {
+                    calls.push({ type: 'play_instance', payload });
+                    return { ok: false, error: 'kira_voice_start_failed' };
+                },
+                stop_instance: async (payload) => {
+                    calls.push({ type: 'stop_instance', payload });
+                    return { ok: true };
+                },
+                play: async () => ({ ok: true }),
+                stop: async (payload) => {
+                    calls.push({ type: 'stop', payload });
+                    return { ok: true };
+                }
+            }
+        }
+    };
+    const timelineActions = [];
+    const result = await runSelectedProjectMediaPlaybackAction({
+        action: 'play',
+        atomeIds: ['recorded_video_voice_failure'],
+        windowRef: dom.window,
+        documentRef: dom.window.document,
+        projectTimelineAction: async ({ action }) => {
+            timelineActions.push(action);
+            return { ok: true };
+        }
+    });
+
+    assert.equal(result.ok, false);
+    assert.equal(result.results[0].error, 'kira_voice_start_failed');
+    assert.equal(result.results[0].rollback.ok, true);
+    assert.deepEqual(timelineActions.slice(-2), ['play', 'stop']);
+    const loadCall = calls.find((entry) => entry.type === 'load');
+    assert.equal(loadCall.payload.media_url, '/api/extract-audio/recorded-voice-failure.mp4?source=recording&media_user_id=user_a');
+    assert.equal(loadCall.payload.native_audio_path, 'data/users/user_a/recordings/recorded-voice-failure.mp4');
+    assert.equal(calls.some((entry) => entry.type === 'stop_instance'), true);
+    assert.equal(playbackEvents.some((event) => event.reason === 'play'), false);
+    assert.equal(readSelectedProjectMediaPlaybackState(['recorded_video_voice_failure']).anyPlaying, false);
 });
 
 test('selected project audio toggle stops and restarts from zero', async () => {
@@ -519,6 +695,66 @@ test('selected project live video playback source contains no CPU frame extracti
     assert.doesNotMatch(source, /\bdrawImage\b/);
     assert.doesNotMatch(source, /\bgetImageData\b/);
     assert.doesNotMatch(source, /\btoDataURL\b/);
+});
+
+test('an intentional decoder stop suppresses only its cancelled play promise', async () => {
+    const dom = await createProjectHost([
+        {
+            id: 'video_cancelled_play',
+            type: 'video',
+            properties: {
+                kind: 'video',
+                media_url: '/api/uploads/video-cancelled-play.mp4',
+                left: 10,
+                top: 12,
+                width: 160,
+                height: 90
+            }
+        },
+        {
+            id: 'video_active_refusal',
+            type: 'video',
+            properties: {
+                kind: 'video',
+                media_url: '/api/uploads/video-active-refusal.mp4',
+                left: 180,
+                top: 12,
+                width: 160,
+                height: 90
+            }
+        }
+    ]);
+    const decoderVideos = Array.from(dom.window.document.querySelectorAll('#eve_bevy_video_decode_root video'));
+    const cancelledVideo = decoderVideos.find((video) => video.src.includes('video-cancelled-play.mp4'));
+    const activeVideo = decoderVideos.find((video) => video.src.includes('video-active-refusal.mp4'));
+    assert.ok(cancelledVideo);
+    assert.ok(activeVideo);
+    let rejectCancelled = null;
+    Object.defineProperty(cancelledVideo, 'play', {
+        configurable: true,
+        value: () => new Promise((_, reject) => { rejectCancelled = reject; })
+    });
+    Object.defineProperty(cancelledVideo, 'pause', { configurable: true, value: () => {} });
+    Object.defineProperty(activeVideo, 'play', {
+        configurable: true,
+        value: () => Promise.reject(new dom.window.DOMException('blocked', 'NotAllowedError'))
+    });
+    Object.defineProperty(activeVideo, 'pause', { configurable: true, value: () => {} });
+    const warnings = [];
+    const originalWarn = console.warn;
+    console.warn = (...args) => warnings.push(args);
+    try {
+        setBevyVideoDecodePlayback(['video_cancelled_play'], true);
+        setBevyVideoDecodePlayback(['video_cancelled_play'], false);
+        rejectCancelled(new dom.window.DOMException('cancelled', 'AbortError'));
+        setBevyVideoDecodePlayback(['video_active_refusal'], true);
+        await Promise.resolve();
+        await Promise.resolve();
+    } finally {
+        console.warn = originalWarn;
+    }
+    assert.equal(warnings.some((args) => args.includes('video_cancelled_play')), false);
+    assert.equal(warnings.some((args) => args.includes('video_active_refusal') && args.includes('play_refused')), true);
 });
 
 test('selected project video playback is owned by the project timeline without CPU frame extraction', async () => {
