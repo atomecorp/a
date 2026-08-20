@@ -9,6 +9,8 @@
   static.
 - A recorded video with a confirmed audio track can show moving video while
   eVe playback has no audio.
+- An imported video without persisted duration reaches its final frame but the
+  List remains in Play and never advances to the next item.
 
 ## Confirmed ownership and correction
 
@@ -23,7 +25,10 @@
   replaces projected records in place.
 - `selected_project_media_playback_runtime.js` resolves a durable recorded
   video source from final file properties. Browser playback keeps owner identity
-  on the extraction URL; native Kira retains the canonical local path. Required
+  on the extraction URL. Native playback must not trust legacy relative values
+  such as `recordings/video.mp4`: it reconstructs
+  `data/users/<media_user_id>/recordings/video.mp4`, while new recordings persist
+  that canonical path directly. Required
   audio is loaded before the video timeline starts. The active state is only
   published after the video and its Kira voice both start; either failure rolls
   back the paired transport before the List queue can remove its Visualizer or
@@ -34,6 +39,11 @@
   clears completed sessions, and reuses one stable voice id per media Atome.
 - `project_view_playback_runtime.js` defensively awaits the canonical stop for
   every refused media start while its projected playback id is still visible.
+  Decoder completion is resolved through `playback_source_atome_id`, because a
+  List thumbnail, Matrix tile, or Visualizer has a projected id different from
+  its media Atome. The source session is stopped before the queue advances.
+  A Stop received while `startItem` is still pending also stops the item as soon
+  as that start resolves instead of leaving it outside the `started` set.
   An `AbortError` is silent only when it belongs to that intentional decoder
   cancellation; an active decoder refusal remains reported.
 
@@ -44,6 +54,7 @@ Run:
 ```sh
 npx vitest run \
   tests/eve/atome_edit_footer_delete_cold_start.test.mjs \
+  tests/eve/media_persistence_service.sanitization.test.mjs \
   tests/eve/project_view_playback_regressions.test.mjs \
   tests/eve/selected_project_media_playback_runtime.test.mjs
 ```
@@ -51,7 +62,9 @@ npx vitest run \
 The tests cover cold Delete registration, a 201-item playback scope, terminal
 queue state, A-to-B-to-C mirror replacement, durable video extraction source,
 required-audio preload failure, voice-start rollback, queue ordering, and
-intentional decoder cancellation.
+intentional decoder cancellation. They also cover legacy relative recording
+paths, projected `ended`, durationless queue advancement, manual Stop, random
+loop re-entry, and terminal transport reset.
 
 ## Required platform acceptance
 

@@ -15,7 +15,10 @@ import {
     stopAllSelectedProjectMediaPlayback
 } from '../../eVe/domains/media/selected_project_media_playback_runtime.js';
 import { registerMediaReaderToolRuntime } from '../../eVe/intuition/runtime/eve_intuition/media_reader_tool_runtime.js';
-import { setBevyVideoDecodePlayback } from '../../eVe/domains/rendering/bevy_video_decode_source_runtime.js';
+import {
+    BEVY_VIDEO_DECODE_STATE_EVENT,
+    setBevyVideoDecodePlayback
+} from '../../eVe/domains/rendering/bevy_video_decode_source_runtime.js';
 import {
     rememberProjectAudioDurationForId,
     readProjectAudioPlaybackProgressForId
@@ -338,7 +341,7 @@ test('recorded video replays durable extracted audio instead of a revoked previe
                 kind: 'video_recording',
                 media_url: 'blob:temporary-recording-preview',
                 file_name: 'recorded-video.mp4',
-                file_path: 'data/users/user_a/recordings/recorded-video.mp4',
+                file_path: 'recordings/recorded-video.mp4',
                 media_user_id: 'user_a',
                 audio_track_count: 1,
                 left: 10,
@@ -381,6 +384,99 @@ test('recorded video replays durable extracted audio instead of a revoked previe
         '/api/extract-audio/recorded-video.mp4?source=recording&media_user_id=user_a'
     );
     assert.equal(calls[0].payload.native_audio_path, 'data/users/user_a/recordings/recorded-video.mp4');
+});
+
+test('a projected WhatsApp video end stops its source Atome even without persisted duration', async () => {
+    const mediaUrl = '/api/uploads/WhatsApp_Video_2026-04-28_at_21.27.38.mp4?media_user_id=user_a';
+    const dom = await createProjectHost([
+        {
+            id: 'whatsapp_video_source',
+            type: 'video',
+            properties: {
+                kind: 'video',
+                media_url: mediaUrl,
+                file_path: 'Downloads/WhatsApp_Video_2026-04-28_at_21.27.38.mp4',
+                media_user_id: 'user_a',
+                left: 10,
+                top: 12,
+                width: 160,
+                height: 90
+            }
+        },
+        {
+            id: '__eve_bevy_ui_whatsapp_visual',
+            type: 'video',
+            properties: {
+                kind: 'video',
+                media_url: mediaUrl,
+                playback_source_atome_id: 'whatsapp_video_source',
+                ephemeral: true,
+                left: 180,
+                top: 12,
+                width: 160,
+                height: 90
+            }
+        },
+        {
+            id: '__eve_bevy_ui_whatsapp_list_thumbnail',
+            type: 'video',
+            properties: {
+                kind: 'video',
+                media_url: mediaUrl,
+                playback_source_atome_id: 'whatsapp_video_source',
+                ephemeral: true,
+                left: 350,
+                top: 12,
+                width: 160,
+                height: 90
+            }
+        }
+    ]);
+    const audioCalls = [];
+    dom.window.Squirrel = {
+        av: {
+            audio: {
+                playback: { loadAsset: async () => ({ ok: true }) },
+                play_instance: async () => ({ ok: true }),
+                stop_instance: async (payload) => {
+                    audioCalls.push({ action: 'stop_instance', payload });
+                    return { ok: true };
+                },
+                play: async () => ({ ok: true }),
+                stop: async (payload) => {
+                    audioCalls.push({ action: 'stop', payload });
+                    return { ok: true };
+                }
+            }
+        }
+    };
+    const timelineActions = [];
+    const projectTimelineAction = async ({ action, atomeIds }) => {
+        timelineActions.push({ action, atomeIds });
+        return { ok: true };
+    };
+    const started = await runSelectedProjectMediaPlaybackAction({
+        action: 'play',
+        atomeIds: ['whatsapp_video_source'],
+        windowRef: dom.window,
+        documentRef: dom.window.document,
+        projectTimelineAction
+    });
+    assert.equal(started.ok, true);
+    assert.equal(readSelectedProjectMediaPlaybackState(['whatsapp_video_source']).anyPlaying, true);
+
+    dom.window.dispatchEvent(new dom.window.CustomEvent(BEVY_VIDEO_DECODE_STATE_EVENT, {
+        detail: { id: '__eve_bevy_ui_whatsapp_visual', state: 'ended' }
+    }));
+    await new Promise((resolve) => setImmediate(resolve));
+    dom.window.dispatchEvent(new dom.window.CustomEvent(BEVY_VIDEO_DECODE_STATE_EVENT, {
+        detail: { id: '__eve_bevy_ui_whatsapp_list_thumbnail', state: 'ended' }
+    }));
+    await new Promise((resolve) => setImmediate(resolve));
+
+    assert.equal(readSelectedProjectMediaPlaybackState(['whatsapp_video_source']).anyPlaying, false);
+    assert.equal(timelineActions.filter(({ action }) => action === 'stop').length, 2);
+    assert.equal(audioCalls.some(({ action }) => action === 'stop_instance'), true);
 });
 
 test('recorded video with a declared audio track fails instead of masking a Kira load error', async () => {

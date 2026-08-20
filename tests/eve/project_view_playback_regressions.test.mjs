@@ -112,6 +112,123 @@ test('a refused media start is stopped before its Visualizer id is removed or th
     assert.deepEqual(runtime.readState(), { playing: false, scope: '', playingIds: [] });
 });
 
+test('a durationless video advances after its media owner reports natural completion', async () => {
+    const calls = [];
+    const active = new Set();
+    const runtime = createProjectViewPlaybackRuntime({
+        runMediaAction: async ({ action, atomeIds }) => {
+            const id = atomeIds[0];
+            calls.push(`${action}:${id}`);
+            if (action === 'play') active.add(id);
+            if (action === 'stop') active.delete(id);
+            return { ok: true };
+        },
+        readMediaState: (ids) => ({ anyPlaying: ids.some((id) => active.has(id)) }),
+        readMediaDuration: (record) => record.id === 'queue_after_whatsapp' ? 0.001 : null,
+        setTimer: (callback, delayMs) => {
+            if (delayMs === 250 && active.has('whatsapp_without_duration')) {
+                active.delete('whatsapp_without_duration');
+            }
+            queueMicrotask(callback);
+            return 1;
+        },
+        clearTimer: () => {}
+    });
+    const whatsapp = {
+        id: 'whatsapp_without_duration',
+        type: 'video',
+        properties: {
+            kind: 'video',
+            media_url: '/api/uploads/WhatsApp_Video_2026-04-28_at_21.27.38.mp4'
+        }
+    };
+    const result = await runtime.toggleLevel({
+        level: { entity: 'project', id: 'project_whatsapp_queue' },
+        projectId: 'project_whatsapp_queue',
+        children: [whatsapp, mediaRecord('queue_after_whatsapp')],
+        rule: { mode: 'sequential', loop: false }
+    });
+    assert.equal(result.ok, true);
+    for (let attempt = 0; attempt < 20 && runtime.readState().playing; attempt += 1) {
+        await new Promise((resolve) => setImmediate(resolve));
+    }
+    assert.deepEqual(calls, [
+        'play:whatsapp_without_duration',
+        'stop:whatsapp_without_duration',
+        'play:queue_after_whatsapp',
+        'stop:queue_after_whatsapp'
+    ]);
+    assert.deepEqual(runtime.readState(), { playing: false, scope: '', playingIds: [] });
+});
+
+test('manual Stop releases a durationless video and resets the transport state', async () => {
+    const calls = [];
+    let pendingTimer = null;
+    const runtime = createProjectViewPlaybackRuntime({
+        runMediaAction: async ({ action, atomeIds }) => {
+            calls.push(`${action}:${atomeIds[0]}`);
+            return { ok: true };
+        },
+        readMediaState: () => ({ anyPlaying: true }),
+        readMediaDuration: () => null,
+        setTimer: (callback) => {
+            pendingTimer = callback;
+            return 1;
+        },
+        clearTimer: () => { pendingTimer = null; }
+    });
+    const level = { entity: 'project', id: 'project_manual_video_stop' };
+    const children = [{
+        id: 'durationless_manual_stop',
+        type: 'video',
+        properties: { kind: 'video', media_url: '/api/uploads/manual-stop.mp4' }
+    }];
+    await runtime.toggleLevel({ level, projectId: level.id, children, rule: { mode: 'sequential', loop: false } });
+    const stopped = await runtime.toggleLevel({ level, projectId: level.id, children, rule: { mode: 'sequential', loop: false } });
+    assert.equal(stopped.playing, false);
+    assert.equal(pendingTimer, null);
+    assert.deepEqual(calls, ['play:durationless_manual_stop', 'stop:durationless_manual_stop']);
+    assert.deepEqual(runtime.readState(), { playing: false, scope: '', playingIds: [] });
+});
+
+test('loop playback can leave and re-enter a durationless video without retaining its prior session', async () => {
+    const calls = [];
+    const active = new Set();
+    const runtime = createProjectViewPlaybackRuntime({
+        runMediaAction: async ({ action, atomeIds }) => {
+            const id = atomeIds[0];
+            calls.push(`${action}:${id}`);
+            if (action === 'play') active.add(id);
+            if (action === 'stop') active.delete(id);
+            return { ok: true };
+        },
+        readMediaState: (ids) => ({ anyPlaying: ids.some((id) => active.has(id)) }),
+        readMediaDuration: () => null,
+        setTimer: (callback) => {
+            const handle = setImmediate(() => {
+                active.clear();
+                callback();
+            });
+            return handle;
+        },
+        clearTimer: (handle) => clearImmediate(handle)
+    });
+    const level = { entity: 'project', id: 'project_loop_video_end' };
+    const children = [{
+        id: 'durationless_loop_video',
+        type: 'video',
+        properties: { kind: 'video', media_url: '/api/uploads/loop-video.mp4' }
+    }];
+    await runtime.toggleLevel({ level, projectId: level.id, children, rule: { mode: 'random', loop: true } });
+    for (let attempt = 0; attempt < 20 && calls.filter((entry) => entry.startsWith('play:')).length < 2; attempt += 1) {
+        await new Promise((resolve) => setImmediate(resolve));
+    }
+    await runtime.stop();
+    assert.equal(calls.filter((entry) => entry === 'play:durationless_loop_video').length >= 2, true);
+    assert.equal(calls.filter((entry) => entry === 'stop:durationless_loop_video').length >= 2, true);
+    assert.deepEqual(runtime.readState(), { playing: false, scope: '', playingIds: [] });
+});
+
 test('playback mirror invalidation follows A to B to C source replacement at stable projection ids', () => {
     const runtime = {
         project_revision: 7,

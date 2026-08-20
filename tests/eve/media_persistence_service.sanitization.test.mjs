@@ -114,8 +114,8 @@ const result = await ensureProjectMediaAtome({
     kind: 'video',
     fileName: 'video_1779220000000.webm',
     result: {
-        file_path: 'data/users/user_a/recordings/video_1779220000000.webm',
-        path: 'data/users/user_a/recordings/video_1779220000000.webm',
+        file_path: 'recordings/video_1779220000000.webm',
+        path: 'recordings/video_1779220000000.webm',
         duration_sec: 1.5,
         mime_type: 'video/webm',
         container: 'webm',
@@ -141,6 +141,7 @@ assert.equal(sceneRecords().length, 1);
 assert.equal(commits[0].project_id, 'project_a');
 assertNoEnvelopeOrAliasProps(commits[0].props);
 assert.equal(commits[0].props.media_user_id, 'user_a');
+assert.equal(commits[0].props.file_path, 'data/users/user_a/recordings/video_1779220000000.webm');
 assert.equal(commits[0].props.media_kind, 'video');
 assert.equal(commits[0].props.storage_root, 'recordings');
 assert.equal(commits[0].props.mime_type, 'video/webm');
