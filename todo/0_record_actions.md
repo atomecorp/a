@@ -216,3 +216,88 @@ temps. Suite complète : 146 assertions vertes, 39 modules liés en ESM.
 - L'outil `tool.dashboard.goals` et son entrée persistée en base subsistent : les
   retirer touche le catalogue d'outils persisté, ce qui demande un backend pour
   être vérifié. La rubrique, elle, a bien disparu.
+
+---
+
+# Journal d'exécution — 20 août 2026
+
+Symptôme signalé : « après un record de mes actions sur une liste, quand je la
+mets en lecture elle s'exécute de façon séquentielle sans tenir compte de mes
+actions ». Ce n'était pas un malentendu sur le cahier des charges — c'était
+**quatre défauts réels**, dont le dernier vidait le §11 de son sens.
+
+| # | Défaut | Correctif |
+|---|---|---|
+| 1 | **Toucher une ligne ne déclenchait rien.** Un tap valait `project_view.list.select` : une sélection, rien de plus. La photo ne s'affichait pas, le son ne partait pas — le Record n'avait donc aucune lecture à mesurer. | `project_view_record_trigger.js` : pendant Record, **toucher, c'est déclencher**. Un seul propriétaire de la règle, appelé par la Liste *et* la Matrice (§11). |
+| 2 | **Aucune exclusivité.** Déclencher la vidéo n'arrêtait pas l'audio en cours. | `projectViewPlayback.triggerChild()` coupe d'abord, puis allume. La règle est vraie à la CAPTURE, donc le rejeu la reproduit. |
+| 3 | **La durée d'un objet fixe était inventée** (2 s forfaitaires) au lieu de venir du geste. | Un objet fixe n'a pas de fin naturelle : il reste annoncé jusqu'au geste suivant. Sa durée est mesurée, pas supposée. Un média, lui, s'arrête seul et c'est cette fin qui est mesurée. |
+| 4 | **Lecture ignorait la capture.** La molecule écrite par Record existait bien, mais rien ne disait au niveau que c'était SA chorégraphie : Lecture enchaînait le contenu en séquentiel. | Mode de lecture `performance` : le niveau retient l'identifiant de la molecule capturée (`playback_performance_id`) et Lecture rejoue son transport. Une performance **ne s'hérite pas** — elle désigne un niveau précis. |
+
+Effet de bord évité : un objet déclenché s'annonce avant que la sélection ne
+suive, donc le Record ne l'enregistre **pas deux fois** (une fois mesuré, une
+fois avec la temporisation par défaut). Une sélection qui ne déclenche rien
+reste capturée : c'est la seule règle qui a changé.
+
+Ajouté au rail : l'option **Performance** sous l'appui long sur Lecture, et elle
+disparaît quand aucune chorégraphie n'existe — pas de bouton mort (§15 de
+`0 -finalise-features`). Basculer en Séquentiel **ne perd pas** la capture.
+
+## Régression corrigée au passage (Matrice)
+
+`state.selectedIds` était relu de `getCurrentSelectionIds()`, un module qui
+ignore les lignes de molecule : il répondait vide et **le rail contextuel restait
+sans cible** alors qu'une tuile venait d'être touchée. Le commentaire au-dessus
+du code disait déjà l'inverse de ce que faisait le code. La tuile touchée EST la
+sélection de la vue, mot pour mot comme la liste.
+
+## Vérification
+
+```
+record_performance_replay_probe.mjs   OK   21 checks (dont le rejeu par la vraie route du rail)
+contextual_rail_views_probe.mjs       OK   (cible matrice = "a1", conteneur libéré, atome conservé)
+lot14_record_interactions_probe.mjs   OK
+lot15_record_tool_dashboard_probe.mjs OK
+link_check.mjs                        OK   50/50 modules liés en ESM
+check:no-fallbacks                    ok   (39 fichiers)
+check:component-reuse-guardrails      ok   (4 rules)
+```
+
+Chorégraphie capturée par la probe : `photo@2/3 son@5/3 film@8/5` — la
+temporalité vient bien du geste.
+
+Trois assertions du probe de rail étaient devenues **fausses sans que le
+mécanisme soit cassé** : elles greppaient le texte de
+`project_view_surface_runtime.js`, dont le câblage a été extrait dans deux
+modules dédiés. L'une d'elles passait même grâce à un COMMENTAIRE. Elles
+interrogent maintenant le mécanisme là où il vit, et celle sur le rail est
+vérifiée en le FAISANT.
+
+## Vérifié dans l'application réelle (serveur de test, port 3002)
+
+Les modules réels chargés par la page, pilotés par la vraie route d'intention
+`project_view.list.select` :
+
+| Mesure | Résultat |
+|---|---|
+| hors Record, toucher une ligne | `-` — ne déclenche rien, la navigation est inchangée |
+| pendant Record, toucher la photo | `ph1` — elle s'affiche et **reste** |
+| pendant Record, toucher le texte | `tx1` — le précédent s'est éteint, celui-ci reste |
+| événements capturés | `ph1:play au1:play tx1:play` — trois gestes, trois clips, **zéro doublon** |
+| cible du rail en Matrice | `ph1` — parité avec la liste rétablie |
+
+**Un cinquième défaut, trouvé par l'app et raté par la probe Node.** Le premier
+essai a rendu `ph1:play au1:play au1:select` : `au1` comptait DEUX fois. La
+déduplication portait sur « ce qui joue encore » ; or si la lecture du média se
+termine ou échoue avant que la sélection n'arrive, l'objet n'est plus en cours
+et le doublon passait — un clip mesuré *plus* un clip de 2 s pour un seul geste.
+La règle porte désormais sur le dernier objet **déclenché**, pas sur ce qui joue
+encore. Assertion de non-régression ajoutée à la probe.
+
+## Reste
+
+- **§6, la capture spatiale du mode Naturel** — toujours non traitée.
+- **Le parcours complet à l'écran** (importer de vrais médias, Record depuis le
+  rail, save/reopen du projet) reste à faire : `startGuest` force toujours
+  `backend: 'local_guest'`, qui attend Tauri. « Essayer » ne peut donc pas écrire
+  depuis un navigateur, même avec `--test` — il faut un compte connecté. Ce qui
+  précède est vérifié sur les modules réels dans l'app, avec des records injectés.

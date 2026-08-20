@@ -138,6 +138,8 @@ test('Bevy project renderer guards lock canvas ownership, drag, and video playba
     assert.match(mediaResourceRuntime, /createBrowserBevyMediaTextureResolver/);
     assert.match(mediaResourceRuntime, /resumeDeferredTextureQueue/);
     assert.match(mediaResourceRuntime, /deferredNodeIsCurrent/);
+    assert.match(mediaResourceRuntime, /bevy\.media\.deferred\.discarded/);
+    assert.doesNotMatch(mediaResourceRuntime, /console\.warn\('\[eVe\] bevy_media_texture_deferred_discarded/);
     assert.match(previewCaptureAdapter, /warmBevyProjectPreviewCapture[\s\S]*ensureFrameRuntime/);
     assert.doesNotMatch(previewCaptureAdapter, /iframe\?\.remove|destroyFrameRuntime/);
     assert.match(previewCaptureFrame, /project-preview-transparent-surface-v1/);

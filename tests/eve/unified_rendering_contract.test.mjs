@@ -9,6 +9,7 @@ import {
     normalizeRenderAtom,
     normalizeRenderAtoms
 } from '../../eVe/domains/rendering/render_atom.js';
+import { normalizeApiMediaRouteSource } from '../../eVe/domains/media/shared/media_source.js';
 import {
     createCanonicalIntentDispatcher, createRenderScene, createSurfaceEventRouter, hitTestRenderScene
 } from '../../eVe/domains/rendering/scene_graph.js';
@@ -163,6 +164,60 @@ test('RenderAtom normalization keeps render data disposable and cacheable', () =
     assert.match(buildTextureCacheKey(image), /^texture:eve\.renderatom\.v1:image:/);
     assert.match(buildTextureCacheKey(video), /^texture:eve\.renderatom\.v1:video:/);
     assert.match(buildWaveformCacheKey(audio), /^waveform:eve\.renderatom\.v1:/);
+});
+
+test('RenderAtom media projection keeps the canonical record owner over stale media query ownership', () => {
+    const atom = normalizeRenderAtom({
+        id: 'shared_audio',
+        type: 'audio_recording',
+        owner_id: 'canonical_owner',
+        properties: {
+            kind: 'audio_recording',
+            media_url: '/api/recordings/shared.wav?media_user_id=stale_owner',
+            media_user_id: 'stale_owner',
+            width: 100,
+            height: 40
+        }
+    });
+    assert.equal(atom.content.source, '/api/recordings/shared.wav?media_user_id=canonical_owner');
+});
+
+test('RenderAtom keeps a downloaded audio filename on the upload route', () => {
+    const atom = normalizeRenderAtom({
+        id: 'downloaded_audio',
+        type: 'sound',
+        owner_id: 'canonical_owner',
+        properties: {
+            kind: 'sound',
+            file_name: 'audio_1786640153885.wav',
+            file_path: 'data/users/canonical_owner/Downloads/audio_1786640153885.wav',
+            media_url: '/api/recordings/audio_1786640153885.wav?media_user_id=stale_owner',
+            width: 100,
+            height: 40
+        }
+    });
+    assert.equal(atom.content.source, '/api/uploads/audio_1786640153885.wav?media_user_id=canonical_owner');
+});
+
+test('protected media routes use the active Tauri local media port', () => {
+    const previousWindow = globalThis.window;
+    try {
+        globalThis.window = {
+            __SQUIRREL_FORCE_TAURI_RUNTIME__: true,
+            location: { protocol: 'tauri:', hostname: 'tauri.localhost', href: 'tauri://localhost/' }
+        };
+        assert.equal(
+            normalizeApiMediaRouteSource('/api/recordings/audio.wav', { sourceKind: 'recording' }),
+            'http://127.0.0.1:3000/api/recordings/audio.wav'
+        );
+        assert.equal(
+            normalizeApiMediaRouteSource('/api/extract-audio/video.mov?source=recording', { normalizeExtractAudio: true }),
+            'http://127.0.0.1:3000/api/extract-audio/video.mov?source=recording'
+        );
+    } finally {
+        if (previousWindow === undefined) delete globalThis.window;
+        else globalThis.window = previousWindow;
+    }
 });
 
 test('RenderAtom normalizes CSS-sized text records for shared Bevy projections', () => {

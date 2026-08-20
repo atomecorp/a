@@ -277,6 +277,47 @@ test('selected project audio playback can use runtime waveform duration without 
     await stopAllSelectedProjectMediaPlayback(dom.window);
 });
 
+test('selected project audio playback completes from the canonical Kira load duration', async () => {
+    const dom = await createProjectHost([{
+        id: 'audio_kira_duration',
+        type: 'sound',
+        owner_id: 'user_a',
+        properties: {
+            kind: 'sound',
+            media_url: '/api/recordings/audio_1786640153885.wav?media_user_id=stale_owner',
+            file_path: 'data/users/user_a/Downloads/audio_1786640153885.wav',
+            left: 10,
+            top: 12,
+            width: 160,
+            height: 48
+        }
+    }]);
+    dom.window.Squirrel = {
+        av: {
+            audio: {
+                playback: {
+                    loadAsset: async () => ({ ok: true, result: { duration_seconds: 0.01 } })
+                },
+                play: async () => ({ ok: true }),
+                stop: async () => ({ ok: true })
+            }
+        }
+    };
+
+    const result = await runSelectedProjectMediaPlaybackAction({
+        action: 'play',
+        atomeIds: ['audio_kira_duration'],
+        windowRef: dom.window,
+        documentRef: dom.window.document
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(result.results[0].audio.source, '/api/uploads/audio_1786640153885.wav?media_user_id=user_a');
+    assert.equal(readSelectedProjectMediaPlaybackState(['audio_kira_duration']).anyPlaying, true);
+    await new Promise((resolve) => dom.window.setTimeout(resolve, 60));
+    assert.equal(readSelectedProjectMediaPlaybackState(['audio_kira_duration']).anyPlaying, false);
+});
+
 test('selected project audio playback does not pass API routes as native local paths', async () => {
     const dom = await createProjectHost([
         {
