@@ -629,3 +629,54 @@ d'identifiant disparaît pour ce cas.
 Si le texte apparaît, c'est réglé. S'il n'apparaît toujours pas, la faute est isolée
 sans ambiguïté au rendu des **records d'overlay** — puisque la primitive voisine peint
 dans le même arbre, avec la même forme de record — et il ne restera plus rien à écarter.
+
+---
+
+# Journal — 10ᵉ tour : supprimer depuis la liste, et rendre les outils à leur contexte
+
+## Les cinq outils suspects ne sont pas inutiles — ils sont hors sujet
+
+| Vu à l'écran | Clé | Ce que ça fait vraiment |
+|---|---|---|
+| rapatrier | `teleport_return` | ramener un objet **hébergé sur une autre surface** |
+| laisser | `teleport_persist` | le laisser là-bas définitivement |
+| déplacer | `teleport_retarget` | le pousser vers une autre surface |
+| aperçu | `teleport_preview` | voir l'écran distant qui l'héberge |
+| plan | `z_order` | devant / monter / descendre / derrière |
+
+Les supprimer aurait cassé la téléportation et le z-order en mode Naturel. Ils sont
+**masqués là où ils n'ont rien à dire**, pas supprimés.
+
+**Pourquoi ils apparaissaient** : la règle existe (`hiddenTeleportToolKeysFor` : « un
+objet local ne peut qu'être envoyé »), mais son appelant partait en silence quand il ne
+trouvait pas les propriétés — `if (!properties) return []`, c'est-à-dire **ne rien
+masquer**. Or en Liste/Matrice l'atome n'est pas monté sur le canevas : aucune propriété
+trouvée, donc les quatre verbes s'affichaient sur un objet qui n'avait jamais bougé.
+
+| Lot | État | Ce qui a changé |
+|---|---|---|
+| Supprimer | **fait** | La clé `delete` rejoint chaque type et la liste de repli — aucun type ne doit enfermer l'utilisateur. |
+| Le rail AGIT | **fait** | Piège trouvé en vérifiant : `tool.main.delete` est configuré `{ kind: 'panel' }` → il **ouvre le panneau de suppression** au lieu de supprimer. Sur la barre principale c'est juste (on y choisit quoi jeter) ; dans le rail d'un objet la cible est déjà désignée. `ACTING_TOOL_ID_BY_KEY` pointe donc vers `ui.delete.selection`, le verbe que le menu flower du Dashboard emploie déjà avec une cible explicite. |
+| La ligne disparaît vraiment | **fait** | Second piège : supprimer reparente l'atome vers le **trou noir**, donc le commit porte le projet du trou noir. Le rechargement de la vue filtrait sur le seul projet courant → l'événement était ignoré et **la ligne restait affichée**. Le rechargement se déclenche désormais aussi quand le changement **nomme une ligne affichée** — vrai pour toute sortie de projet, pas seulement la suppression. |
+| Téléportation | **fait** | Ne rien savoir, c'est être local : le repli retombe sur `hiddenTeleportToolKeysFor({})` au lieu de tout montrer. Et `feedContextualRailWithRow` passe désormais le record qu'il tenait déjà, pour que la règle décide sur l'état réel plutôt que sur un repli. |
+| `plan` (z_order) | **fait** | Filtré quand le rail est alimenté par une vue structurée. Le signal existait déjà (`enter({ railOnly: true })`), il n'était simplement pas transmis au résolveur. Rien ne change en Naturel. |
+
+`teleport` lui-même reste offert : envoyer un objet vers une autre surface a du sens
+depuis une liste.
+
+## Vérification
+
+Probe `rail_delete_and_context_tools_probe.mjs`, **rouge d'abord** (12 échecs), verte
+ensuite — dont l'assertion décisive « supprimer une ligne affichée recharge la vue »,
+qui rendait `0` sur le code d'avant. La règle de téléportation est **exercée**, pas
+seulement lue : `hiddenTeleportToolKeysFor({})` masque bien les quatre verbes
+contextuels et laisse `teleport`.
+
+Sweep : **25 probes vertes, 0 rouge** ; les modules touchés se lient en ESM.
+`contextual_rail_views_probe` reste rouge avec ses 3 échecs **antérieurs** (elle grep
+des symboles que l'extraction du 3ᵉ tour a déplacés) — inchangée par ce tour.
+
+## Note
+
+La suppression est **réversible** : l'atome part au trou noir avec `__deleted: true` et
+`restoreAtomeToProject` existe. C'est la suppression du produit, pas un effacement.
