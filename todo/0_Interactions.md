@@ -181,3 +181,38 @@ Le développement est considéré comme correct si :
 - les actions spatiales du mode Naturel peuvent être enregistrées puis rejouées ;
 - le comportement reste cohérent entre Liste, Matrice et Naturel ;
 - aucune seconde couche d’historique ou de données métier n’est créée inutilement.
+
+---
+
+# Journal d'exécution — 19 août 2026
+
+Périmètre de ce tour : la **boucle complète en Liste/Matrice** (§3, §4, §5, §10) et
+la fusion Objectifs → Projets (§1.2). La capture spatiale du mode Naturel (§6) n'est
+pas traitée.
+
+| Point | État | Ce qui a été fait |
+|---|---|---|
+| §1.2 — projet et objectif, une seule entité | **fait** | La rubrique `goals` disparaît du Dashboard, qui expose désormais les six rubriques du §1. Vérifié avant de toucher quoi que ce soit : aucune référence JavaScript, aucun atome de ce type en base — la fusion est déclarative et sans perte. |
+| §3 — Record là où Play se trouve | **fait** | `container_record` dans le rail des modes Liste et Matrice, allumé pendant qu'il enregistre. Le mode Naturel garde son Record de média : ne pas le doubler avant le §6. |
+| §4, §7, §8, §9 — capture | **fait** | `project_view_interaction_recorder.js` : T0 sur une horloge monotone, temps relatifs, durée **mesurée sur le geste**. Il ÉCOUTE les signaux existants — la file de lecture, la sélection, `atome:changed` — et n'instrumente aucun appel métier : aucune seconde source de vérité (§9). |
+| §5, §10, §11 — timeline générée | **fait** | `project_view_capture_to_timeline.js` : chaque événement devient un clip à son instant, avec sa durée. Les événements qui se chevauchent prennent des pistes distinctes, ceux qui se suivent partagent la leur. **L'édition et le rejeu n'ont rien demandé** : ce sont les opérations de timeline et le transport qui existaient déjà. |
+| §6 — mode Naturel | **non traité** | Il reste à décider comment un déplacement ou un redimensionnement devient un événement rejouable : le schéma de molecule ne porte aucune géométrie visuelle, seulement un ordre temporel. |
+
+## Vérification
+
+23 assertions dédiées, dont l'exemple du §4 rejoué à l'identique : trois chansons,
+une vidéo tenue 5 s, un texte tenu 2 s — et des clips qui portent exactement ces
+temps. Suite complète : 146 assertions vertes, 39 modules liés en ESM.
+
+**Non vérifié à l'écran** : le démarrage s'arrête toujours sur
+`remote_account_not_provisioned`, en amont de tout ce qui a été modifié.
+
+## Restes
+
+- §6, la capture spatiale du mode Naturel.
+- Un événement de sélection ou de changement de propriété n'a pas de durée
+  mesurable : il reçoit la temporisation par défaut de 2 s. Une durée réelle
+  demanderait un signal de « fin d'affichage » qui n'existe pas.
+- L'outil `tool.dashboard.goals` et son entrée persistée en base subsistent : les
+  retirer touche le catalogue d'outils persisté, ce qui demande un backend pour
+  être vérifié. La rubrique, elle, a bien disparu.

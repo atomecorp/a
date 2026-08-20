@@ -238,4 +238,394 @@ en ESM. La forme réelle des enregistrements (image, texte, forme) a été lue d
   virtualisé, qui se détruit au défilement. L'image bouge dans le Visuel.
 - L'outil Lecture ne s'allume pas pendant qu'il joue.
 - Un atome-groupe enfant est compté comme sauté, jamais joué en propre.
-- **Dette** : `project_view_list_content.js` atteint 713 lignes (norme < 500).
+- ~~**Dette** : `project_view_list_content.js` atteint 713 lignes~~ → **réglée** :
+  découpé en trois, 713 → **451 lignes**. `project_view_list_drag_runtime.js` (206 L)
+  porte la machine à états du geste — réordonner, absorber, déplacer une section ;
+  `project_view_list_view.js` (132 L) porte le dessin. Les deux reçoivent un
+  contrôleur partagé et résolvent leurs dépendances à l'APPEL, ce qui évite l'ordre
+  de définition impossible entre un contenu et ses deux moitiés. Chacun refuse un
+  contrôleur incomplet en nommant ce qui manque, plutôt que de casser plus loin.
+  Aucun changement de comportement : les 116 assertions existantes restent vertes,
+  plus 7 nouvelles sur la découpe elle-même.
+
+---
+
+# Journal — 4ᵉ tour : visualiseur et menu flower
+
+| Point | État | Ce qui a changé |
+|---|---|---|
+| Ratio déformé | **corrigé** | Les enregistrements portent leurs tailles en chaînes CSS (`"333px"`). Le moteur les lit avec `parseFloat`, le module d'aperçu les lisait avec `Number` : il obtenait `NaN`, concluait « taille inconnue » et renonçait au cadrage proportionnel — donc étirait. Même lecture des deux côtés. Panneau, tuile et ligne s'accordent désormais sur le même rapport. |
+| Rien dans le visualiseur | **piste corrigée** | Le panneau demandait son aperçu avec un `placeholder` que la tuile ne demande pas : un carré gris indiscernable d'un aperçu absent. Il demande maintenant exactement ce que demande la tuile de la Matrice, qui fonctionne. |
+| Vidéo figée sur Tauri | **instrumenté, non deviné** | Aucune modification de la route vidéo native (`NATIVE_TEXTURE_KINDS`, côté Rust) : elle marche ailleurs. Trois traces nommées, une par cause, là où la demande peut mourir — demande sans décodeur, décodeur créé, lecture refusée. Le prochain lancement nommera la cause. |
+| Flower hors écran | **corrigé** | `openAt` résolvait le centre avant la surface : le menu s'ouvrait tel quel, donc à moitié dehors près d'un bord. La surface est résolue d'abord, et le centre est ramené pour que toute la corolle (rayon + un pétale, 175 px) tienne. Une surface plus petite que la corolle la centre au lieu de la coller à un bord. |
+| Flower sur un item du Dashboard | **fait** | Quatre verbes — information, supprimer, renommer, dupliquer — sur **appui long**, pas sur clic simple : le clic simple ouvre déjà un projet, un événement ou l'éditeur de libellé. Aucun verbe n'est réécrit : `ui.delete.selection` et `ui.duplicate` acceptent déjà une cible explicite, le panneau Info a son ouverture, et renommer passe par l'éditeur de libellé du Dashboard. Le geste réutilise la machine à états d'appui long des en-têtes plutôt qu'une seconde. |
+
+## Vérification
+
+167 assertions vertes, 44 modules liés en ESM. Le Lot ratio touche un module
+partagé par la ligne, la tuile et le panneau : les probes existantes des trois
+surfaces restent vertes.
+
+## Vignettes vidéo : le travail pour rien
+
+Toute vidéo cachée était créée avec `preload = 'auto'`, puis `load()`. Une vignette
+de 26 px téléchargeait donc le fichier **entier** — dix vidéos dans une liste, dix
+téléchargements complets pour dix carrés. La première image, elle, ne vient pas du
+préchargement mais du seek fait juste après la création : `metadata` suffit.
+
+Le défaut passe à `metadata`, et une surface dont la lecture est déjà demandée
+charge d'emblée. `applyEntryPlayback` remonte à `auto` dès que la lecture démarre —
+la mécanique existait, elle n'était simplement jamais le point de départ.
+
+La trace `decoder_created` a été retirée : elle parlait du fonctionnement normal.
+`play_refused` et `requested_before_decoder` restent — elles ne parlent qu'en panne.
+
+## « métadonnées en attente », pour toujours
+
+Une vidéo ne porte pas ses dimensions réelles dans son enregistrement : elles
+n'existent qu'une fois le fichier ouvert. Le moteur les découvrait bien, et les
+écrivait sur le record de **scène**. Mais un aperçu projeté est reconstruit à chaque
+rendu depuis les propriétés de l'**atome** — la découverte était donc effacée au
+rendu suivant, et la projection de la vidéo refusée à chaque fois
+(`bevy_media_texture_video_metadata_pending`). Une boucle qui ne convergeait jamais.
+
+La taille découverte est désormais retenue **par source** — le même fichier a les
+mêmes dimensions quelle que soit la surface qui le montre — et réinjectée à chaque
+reconstruction de l'aperçu. Même mécanique que la durée audio, déjà retenue ainsi.
+Effet de bord bienvenu : le ratio d'un aperçu vidéo suit enfin la vidéo.
+
+## Restes
+
+- `bevy_video_decode_source_runtime.js` fait 511 lignes (norme 500). Il dépassait
+  déjà avant l'instrumentation ; je ne l'ai pas découpé, n'y ayant ajouté que des
+  traces.
+- Le menu du Dashboard est sur appui long. Si le clic simple est vraiment voulu, il
+  faudra décider ce que devient l'ouverture de projet, qui l'occupe aujourd'hui.
+
+---
+
+# Journal — 5ᵉ tour : la vidéo ne partait jamais, et Lecture ne disait pas qu'il jouait
+
+Deux symptômes, une même famille de cause : **personne ne demandait à la vidéo de
+jouer**, et **personne ne disait que ça jouait**.
+
+## Pourquoi la vidéo ne s'affichait pas en Liste / Matrice
+
+Une vidéo n'est jamais texturée comme une image : elle est dessinée en texture
+externe depuis un `<video>` caché, et une entrée **non activée** reste en
+`preload='metadata'`, en pause — donc sous `HAVE_CURRENT_DATA`, donc **rien à
+dessiner**.
+
+- En **Naturel**, `media_reader_tool_runtime` active le décodeur avec les
+  **identifiants d'atome**, qui sont exactement ceux des nœuds de scène. Ça joue.
+- En **Liste / Matrice**, le seul pilote demandait la surface à
+  `projectViewVisualPanel.videoNodeIdsFor`, qui refuse tant que le sujet du Visuel
+  n'est pas l'objet concerné. Or la file **annonçait l'objet APRÈS l'avoir
+  démarré**, et le sujet n'était posé qu'au rendu suivant : au moment de la
+  demande, la réponse était « nulle part ».
+
+L'échec était **muet** : sans cible, `projectTimelineAction` répondait quand même
+`ok: true`. Le lecteur média concluait que la vidéo jouait, sa piste audio partait
+bel et bien — d'où l'impression que ça marchait — et son image ne démarrait
+jamais. C'est aussi pourquoi rien n'est jamais remonté en console.
+
+Preuve par l'asymétrie, mesurée : sur le code d'avant, la probe montre
+`{"ids":["v1"],"targets":0}` au **démarrage** puis `targets:1` à l'**arrêt**.
+L'arrêt résolvait la surface, le démarrage non.
+
+Le 2ᵉ tour affirmait « l'image bouge dans le Visuel ». **Elle n'a jamais bougé.**
+
+| Lot | État | Ce qui a changé |
+|---|---|---|
+| 1 — annoncer avant de démarrer | **fait** | `setPlayingIds` passe AVANT `startItem` (séquentiel et ensemble), et l'événement pose le sujet du Visuel **synchronement**, plus au rendu suivant. La demande porte enfin le bon identifiant ; le mécanisme d'attente (`requestedActiveIds`) fait le reste. |
+| 2 — les trois surfaces, pas une | **fait** | Le résolveur combine l'identifiant **calculé** du Visuel (pur, donc utilisable avant le rendu) et `playbackMirrorsFor`, l'index déjà écrit pour la tête de lecture audio. Vignette de ligne et tuile de Matrice sont couvertes par la même règle — c'était le reste connu « une vidéo en vignette n'anime pas », attribué à tort au défilement. |
+| 3 — l'échec est visible | **fait** | Zéro surface résolue pour une lecture = `ok:false` + `project_view_video_surface_unresolved`, nommé une seule fois en console. Un arrêt sans cible reste un succès : il n'y avait rien à couper. |
+| 4 — clé de la taille naturelle | **fait** | Mémorisée sous la source **routée**, elle était relue sous la source **brute** : les deux ne coïncident que pour `/assets/…`. Pour un enregistrement réel (`…/api/recordings/x.mp4?media_user_id=…`) la découverte n'était jamais retrouvée — l'aperçu gardait le ratio de sa BOÎTE (mesuré : 50×200 au lieu de 200×112,5). Les deux clés sont tentées, la routée d'abord. |
+| 5 — Lecture ↔ Stop | **fait** | `container_play` porte son état : `stop` + libellé Stop + outil enfoncé pendant la lecture. Le rail est réalimenté sur `eve:project-view-playback-state`. Le transport d'une molecule n'est pas réécrit, son **état** est adopté (`adoptDelegatedTransport`) pour qu'il n'y ait qu'un propriétaire. Un clic pendant la lecture arrête tout : file, transport délégué, et média lancé depuis l'outil d'un atome. |
+| — commentaire trompeur | **corrigé** | « la première image vient du seek fait juste après la création » est faux : à `t=0` le seek est un no-op (écart sous 25 ms). Elle vient de `metadata` + `loadeddata`. Ce commentaire a coûté deux diagnostics. |
+
+## Vérification
+
+3 probes dans `./temp`, **33 assertions vertes**, et 9 modules liés en **ESM**
+(le lien de l'entrée, pas `node --check`).
+
+Chaque correctif a été mesuré **rouge d'abord**, en remettant le code d'origine :
+3 échecs sur l'ordre d'annonce et l'échec masqué, 6 sur la clé de taille naturelle
+et sur Lecture/Stop.
+
+Probes existantes du domaine : 11 vertes. **4 rouges, toutes antérieures** —
+`project_view_footer`, `project_view_matrix`, `project_view_list` et
+`contextual_rail_views` cherchent des symboles (`releaseContainerRail`,
+`syncContextualRail`, `state.railContainerId`, `ATOME_CONTEXTUAL_EDIT_CHANGED_EVENT`)
+que l'extraction du 3ᵉ tour a **déplacés** dans `project_view_surface_events.js` et
+`project_view_surface_context_runtime.js`. Le diff de ce tour ne touche aucune de
+ces lignes. À remettre à jour, elles ne prouvent plus rien.
+
+**Non vérifié à l'écran** : l'environnement n'ouvre pas d'espace de travail ici.
+Le diagnostic à faire au premier lancement, console ouverte, Liste + Visuel
+déployé, lecture lancée :
+
+```js
+const id = '__eve_bevy_ui_eve_bevy_ui_project_view_project_view_visual_preview_visual';
+({ presentable: window.__EVE_BEVY_VIDEO_PRESENTABLE_FOR_ID__?.(id),
+   active: window.__EVE_BEVY_VIDEO_ACTIVE_FOR_ID__?.(id) })
+```
+
+Attendu : `active: true` et `presentable: true`. Si `active` est faux, la demande
+ne part toujours pas ; si `presentable` est faux alors qu'`active` est vrai, c'est
+le décodeur qui ne rend pas de frame (piste `preload`, distincte).
+
+## Restes connus (mis à jour)
+
+- ~~Une vidéo en vignette de liste n'anime pas~~ → couvert par le résolveur de
+  miroirs, **à confirmer à l'écran** (la virtualisation détruit le nœud au
+  défilement : l'entrée est alors retirée puis recréée).
+- ~~L'outil Lecture ne s'allume pas pendant qu'il joue~~ → **réglé**.
+- Un atome-groupe enfant reste compté comme sauté, jamais joué en propre.
+- L'outil Lecture d'un **atome sélectionné** (`play` du rail) dépend de
+  `activeSelectionIds`, que la sélection en Liste/Matrice ne publie pas : le tour
+  suivant devra vérifier que cet outil apparaît bien sur une vidéo sélectionnée.
+- Glisser de tuile en Matrice (elle montre l'ordre, ne le change pas).
+- Les 4 probes périmées ci-dessus.
+
+---
+
+# Journal — 6ᵉ tour : le texte n'apparaissait pas dans le Visualiseur
+
+La vidéo joue désormais dans le Visualiseur, le texte n'y apparaissait pas.
+
+## Ce que ce n'était pas
+
+Vérifié en poussant le vrai enregistrement de texte (lu en base) dans le vrai
+pipeline, pas en supposant :
+
+- l'aperçu EST construit (`hasRecordPreview` vrai, géométrie `kind: 'text'`) ;
+- le record projeté EST de type `text`, avec son contenu, sa taille remise à
+  l'échelle du cadre et sa couleur ;
+- la texture EST peinte : `fillText("Fixture code")` à l'intérieur du cadre, aux
+  trois tailles — panneau 1000×300, tuile 104×104, vignette 26×26.
+
+Tout était donc correct jusqu'au diff de scène.
+
+## La cause
+
+**Le diff de scène ne recrée jamais une entité dont le TYPE change.**
+`pushUpdateOps` compare la transformation, le style, le contenu, le texte — mais
+jamais `kind`. Or le Visualiseur n'a qu'UN identifiant de nœud
+(`…project_view_visual_preview_visual`) et lui fait montrer tantôt une vidéo,
+tantôt une image, tantôt un texte.
+
+Le renderer, lui, branche sur le type que l'entité avait **à sa création** :
+pousser un texte sur une entité image ne dessine rien. Pire, `updateResource` est
+explicitement sauté quand la cible est un texte — sa texture n'était donc même pas
+demandée. Mesuré, avant correctif :
+
+```
+image -> text  (kind image -> text)   ops: updateTransform, updateStyle, updateText, updateAccessibility
+video -> text  (kind video -> text)   ops: updateTransform, updateStyle, updateText, updateAccessibility
+image -> video (kind image -> video)  ops: updateResource
+```
+
+Aucun `despawn`/`spawn`. L'entité restait ce qu'elle était au premier affichage —
+c'est pourquoi le premier type montré marchait et les suivants non.
+
+Ce n'est pas un cas de bord du panneau : **une ligne virtualisée réemploie son
+identifiant en défilant**. Une liste mêlant images, sons et textes tombait sur le
+même mur.
+
+| Lot | État | Ce qui a changé |
+|---|---|---|
+| Diff de scène : le type fait partie de l'identité | **fait** | `diffVirtualSceneTrees` émet `despawn` + `spawn` quand `before.kind !== after.kind`, au lieu de patcher une entité du mauvais type. Une seule règle, à l'endroit qui appartient à tout le monde — le panneau, les lignes et les tuiles en profitent sans rien savoir. |
+
+Le décodeur vidéo n'est pas perturbé : l'identifiant ne change pas, donc
+`syncBevyVideoDecodeSources` conserve son entrée sur un re-spawn, et la retire
+seulement quand le nœud cesse d'être une vidéo.
+
+## Vérification
+
+Probe `visual_panel_kind_change_probe.mjs` : 4 transitions
+(image→texte, vidéo→texte, texte→vidéo, image→vidéo), **rouges d'abord** sur les
+quatre, vertes après. Deux probes d'instruction préalables gardées comme preuve
+que la projection et la texture, elles, étaient saines
+(`visual_panel_text_probe.mjs`, `visual_panel_text_texture_probe.mjs`).
+
+Sweep de non-régression : **18 probes vertes, 0 rouge** (lecture, aperçus, ratio,
+rails, extraction de liste, requêtes vidéo, taille naturelle), plus le lien ESM.
+
+---
+
+# Journal — 7ᵉ tour : rendre la panne audible
+
+Le texte ne s'affiche toujours pas dans le Visualiseur. **Correction du 6ᵉ tour** : le
+changement de `kind` dans le diff de scène était un vrai bug, **mais pas celui-ci**.
+Et l'hypothèse « atome texte vide » est écartée par l'usage : le système supprime tout
+atome texte sans contenu à la sortie d'édition.
+
+## Ce qui a été exercé et éliminé
+
+Aperçu construit · record projeté bien de type `text` avec son contenu · **texture
+réellement peinte** (`fillText` du texte, dans le cadre, en 1743×270, 104×104 et
+26×26, sous un canvas 2D instrumenté) · diff correct · `updateText` re-rasterise ·
+le spawn texture le texte · Rust dessine le sprite. Tous ces maillons sont bons.
+
+Le « Text » en gros sous le panneau est le **fil d'Ariane** de la liste, pas un aperçu.
+
+## Pourquoi le diagnostic était impossible
+
+Trois verrous, chacun un défaut en soi, mesurés rouges :
+
+1. **`text` n'était pas rattrapable.** `canSkipTextureFailure` n'acceptait que
+   `{image, video, audio_waveform}` — une étiquette illisible relançait donc l'erreur.
+2. **Le filet ne couvrait que la RÉSOLUTION** (`bevy_media_texture_*`). La
+   **projection** jette les siennes juste après, dans le même `try`
+   (`bevy_projection_texture_rgba_length_invalid`…) : elles passaient à travers.
+   Mesuré : **un seul** nœud fautif faisait rejeter le lot entier — 0 nœud appliqué
+   sur 3.
+3. **Le rendu mort était avalé sans un mot** (`catch(() => null)` dans
+   l'ordonnanceur). L'échec était rangé dans `lastError` et personne ne le lisait.
+
+Cumulés : une texture fautive tue tout le rendu de la vue **en silence**, la dernière
+image valide reste à l'écran, et la sélection continue de s'allumer parce qu'elle passe
+par le chemin de patch ciblé, qui ne remappe aucun spawn. C'est exactement le
+screenshot — et c'est pourquoi deux tours ont conclu juste sur la forme et faux sur la
+cause.
+
+| Lot | État | Ce qui a changé |
+|---|---|---|
+| A1 — `text` rattrapable | **fait** | `MEDIA_TEXTURE_KINDS` accueille `text`. Portée vérifiée : `isMediaTextureKind` n'a qu'un appelant. `PENDING_DEFERRED_MEDIA_KINDS` n'est pas touché — différer une texture de texte la ferait apparaître en retard. |
+| A2 — le filet couvre la projection | **fait** | `SKIPPABLE_TEXTURE_ERROR` = `bevy_(media_texture\|projection_texture)_*`. Le nœud fautif est sauté et **nommé**, les autres s'appliquent. |
+| A3 — un rendu mort se nomme | **fait** | `reportRenderFailure` dans l'ordonnanceur, au point où l'erreur est captée — donc valable pour `schedule` comme pour `renderNow`, quels que soient les `catch(() => null)` des appelants. Une cause n'est dite qu'une fois. |
+
+Ce lot ne corrige pas l'affichage du texte. Il fait parler la seule chose qui ne
+parlait pas, et répare trois vrais défauts au passage.
+
+## Vérification
+
+Probe `texture_failure_is_audible_probe.mjs`, **rouge d'abord** (8 échecs sur le code
+d'avant), verte ensuite — écrite contre le vrai `createBevyMediaResourceRuntime` et le
+vrai ordonnanceur, avec un résolveur de textures injecté qui jette.
+
+Sweep de non-régression : **21 probes vertes, 0 rouge**, plus le lien ESM.
+
+## Prochaine étape — le diagnostic
+
+Relancer, passer en Liste, sélectionner la ligne `Text`, lire la console.
+
+- **Une cause nommée** (`[eVe] bevy_media_texture_skipped text …` ou
+  `[eVe] project_scene_render_failed …`) → la cause est identifiée, le correctif suit.
+- **Console muette et texte toujours absent** → le rendu n'échoue pas, donc le contenu
+  n'arrive pas jusqu'à l'aperçu ; la ligne de vérification de la donnée est dans le
+  plan (`window.Atome.listStateCurrent`).
+
+---
+
+# Journal — 8ᵉ tour : mesurer sur les VRAIES données
+
+Le Lot A a servi : les logs sont muets sur le texte et sur les formes d'onde. Ni
+texture en échec, ni rendu mort. Les deux branches « ça plante » sont closes.
+
+## Ce qui a enfin été mesuré, et non déduit
+
+Le store du Tauri n'est pas celui du dépôt — il est dans
+`~/Library/Application Support/com.squirrel.desktop/squirrel/Data/adole.db`. En le
+lisant, on obtient enfin les vrais enregistrements.
+
+**L'atome texte** (`atome_1787139230950_f085c5ab9147f`) :
+`text = "Hello jeezs"`, `rich_text = {"spans":[],"version":1}`, `width = 93`
+(nombre, pas `"93px"`). Poussé tel quel dans la chaîne complète — `recordPreviewNode`
+→ projection d'overlay → scène virtuelle → `drawTextTexture` — **dans un vrai
+navigateur, avec un vrai canvas** : la texture du panneau fait 3486×540 et porte
+**243 572 pixels encrés**. Le JS est donc juste de bout en bout, sur la vraie donnée.
+
+**Les deux fichiers audio** se servent (HTTP 200) et se décodent tous les deux :
+`riff_3.m4a` en 2574 ms, l'enregistrement en **21 ms avec 252 points non nuls**. Les
+points de la forme d'onde absente sont donc calculés correctement, et vite.
+
+Conclusion commune : pour le texte comme pour la forme d'onde, **la texture est
+produite et correcte ; elle meurt entre la texture et l'écran.** Fait notable : celle
+qui met 2,5 s s'affiche, celle qui met 21 ms non — une inversion qui sent la course,
+pas la panne de calcul.
+
+| Lot | État | Ce qui a changé |
+|---|---|---|
+| Surbrillance | **corrigé** | Un état de ligne TEINTAIT en remplaçant : `scopedBackground` est à 20 % d'opacité quand une ligne au repos est opaque. « Tout sélectionner » ne surlignait donc pas la liste, il la rendait **transparente** — elle pâlissait au lieu de s'allumer. `panelStateBackground` compose l'état sur le fond et rend une couleur opaque ; appliqué aux lignes **et** aux tuiles de Matrice. |
+| Rejet différé muet | **nommé** | Une texture différée qui aboutit puis se fait jeter était le pire cas : travail fait, objet vide, silence. `bevy_media_texture_deferred_discarded` dit désormais le nœud et la raison (`noeud_absent_de_la_scene` / `contenu_change_depuis`), une fois par nœud. |
+| Lisibilité d'un aperçu texte 26 px | **mesuré, non modifié** | À 6 px, « Hello jeezs » n'encre que 191 pixels sur 2704 (7 %) — indiscernable d'une vignette absente. Monter le plancher à 11 px porte l'encre à 297 px et rend le début lisible, **mais casse le contrat « le texte entier tient en largeur »** que `record_preview_probe` verrouille. C'est un arbitrage de conception, pas un correctif : la mesure est consignée dans le code, le changement n'est pas pris. |
+
+## Vérification
+
+Probe `list_states_and_text_legibility_probe.mjs`, **rouge d'abord** (4 échecs :
+trois états translucides, un plancher), verte ensuite.
+
+`lot7_playback_feedback_probe` a été mis à jour : il comparait la teinte de ligne à la
+valeur **brute** du jeton, c'est-à-dire qu'il verrouillait précisément la version
+translucide qui faisait pâlir la liste. Il vérifie maintenant l'intention — teinte du
+skin, composée, opaque.
+
+Sweep : **23 probes vertes, 0 rouge**.
+
+## Ce qui reste, et ce qu'il faudra regarder
+
+Le texte et la forme d'onde d'enregistrement ont une texture correcte qui n'arrive pas
+à l'écran. Les deux prochaines pistes, dans l'ordre :
+
+1. le rejet différé, désormais nommé : s'il apparaît pour la forme d'onde, la course
+   est confirmée et le correctif est dans `deferredNodeIsCurrent` ;
+2. l'environnement de mesure a manqué : le renderer Bevy ne démarre pas dans le
+   panneau navigateur (`bevy_renderer_initial_present_timeout`), donc aucun test de
+   pixels n'a pu être fait ici. Le prochain tour doit se faire dans l'app réelle.
+
+---
+
+# Journal — 9ᵉ tour : la route qui peint, la garde qui ne sert à rien, le bandeau en trop
+
+La surbrillance est validée à l'usage. Trois points traités.
+
+| Lot | État | Ce qui a changé |
+|---|---|---|
+| Bandeau de nom | **retiré** | C'était le **fil d'Ariane** de la liste : avec un seul niveau sélectionné il n'affichait qu'un nom, déjà donné par la ligne et par la bande basse. Retiré avec son intent devenu sans émetteur et l'import qu'il seul utilisait. |
+| Aperçu de texte | **change de route** | Il empruntait `overlayRecord` — un record d'atome complet reprojeté puis rasterisé — et restait invisible alors que sa texture était **mesurée correcte** (243 572 pixels encrés sur le vrai enregistrement). Il passe maintenant par `textNode`, la primitive qui peint **chaque libellé de ligne, la bande basse et les initiales d'un contact** dans ce même arbre. |
+| Garde vidéo | **levée** | `mapVideoResourceOp` exigeait la taille naturelle pour tout patch vidéo. Or elle ne sert **qu'à** convertir un rognage, et ce cas est déjà gardé en amont (`readMediaUvRect` jette `source_rect_texture_size_required`). Sans rognage, `texture_size` n'est lu par personne. La garde refusait le patch pour rien, réessayait quatre fois sur 1,8 s puis abandonnait — et cet abandon **était** le `bevy_media_texture_video_metadata_pending` en console. |
+| Reconnaissance d'un texte | **alignée** | Un texte rangé sous `content`/`value` sans type déclaré était reconnu par `hasRecordPreview` et par `normalizeType` du moteur, **mais pas** par `isTextRecord` : sa géométrie repartait sur la branche média et n'était jamais mise à l'échelle. Même règle des deux côtés. |
+
+## Pourquoi cette route-là
+
+Les deux routes cohabitent dans le même arbre, à quelques pixels l'une de l'autre :
+`textNode` → `textRecord` peint, `overlayRecord` → record d'atome rasterisé ne peint
+pas. Un aperçu de texte n'a besoin ni d'une projection d'atome, ni d'une texture de
+3486×540 : d'une chaîne, d'une taille, d'une couleur.
+
+Piège évité de justesse : `colorToCss` ne convertit qu'un tableau `[r,g,b,a]` — passer
+la couleur CSS de l'atome telle quelle (`'rgba(248, 252, 255, 0.98)'`) aurait rendu le
+texte **transparent**. Elle passe par `parseBevyProjectionColor`, avec repli sur le
+jeton du panneau si le moteur ne sait pas la lire (un nom CSS, par exemple).
+
+Preuve de forme : le record projeté de l'aperçu est **structurellement identique** à
+celui d'un libellé de ligne — même type, même `text_style`, couleur opaque ; seules les
+valeurs diffèrent.
+
+**Perdu et assumé** : le style par intervalle (`rich_text.spans`) dans les aperçus.
+L'échelle continue de MESURER les intervalles à leur propre taille, donc le run le plus
+gros est pris en compte et la largeur rendue à taille unique est forcément inférieure :
+la garantie anti-« Hel » du 4ᵉ tour est plus forte qu'avant, pas plus faible.
+
+## Vérification
+
+Probe `text_preview_and_video_guard_probe.mjs`, **rouge d'abord** (7 échecs), verte
+ensuite. Sweep : **24 probes vertes, 0 rouge** ; les modules touchés se lient en ESM.
+
+Quatre probes ont été mises à jour parce qu'elles verrouillaient l'ancienne route —
+`lot10_preview_pipeline`, `record_preview`, `project_view_content`,
+`visual_panel_kind_change`. Chacune vérifie désormais l'intention (« la tuile MONTRE
+son record », par l'une ou l'autre route) au lieu du mécanisme.
+
+Effet de bord bienvenu : le nœud d'un aperçu texte a un identifiant distinct de celui
+d'un aperçu média (`…_visual_text` contre `…_visual`), donc passer d'une image à un
+texte dans le Visuel produit un despawn + spawn naturel — le risque de réemploi
+d'identifiant disparaît pour ce cas.
+
+## Ce que ce tour tranche
+
+Si le texte apparaît, c'est réglé. S'il n'apparaît toujours pas, la faute est isolée
+sans ambiguïté au rendu des **records d'overlay** — puisque la primitive voisine peint
+dans le même arbre, avec la même forme de record — et il ne restera plus rien à écarter.
