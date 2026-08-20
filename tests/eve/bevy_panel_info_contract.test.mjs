@@ -12,6 +12,7 @@ import { createAtomeEditFooterModelRuntime } from '../../eVe/intuition/runtime/e
 import { createFinderPanelSurface } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_finder_runtime.js';
 import {
     createSelectableListDragSession,
+    hierarchicalSelectableListNode,
     virtualizedHierarchicalSelectableListNode,
     virtualizedListCountLabel
 } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_selectable_list.js';
@@ -321,6 +322,42 @@ test('shared Bevy list drag owns move and cancel lifecycle for Infos, Finder and
     drag.cancel();
     assert.deepEqual(calls, [['move', 'tool'], ['cancel', 'tool']]);
     assert.equal(state.sharedDrag, null);
+});
+
+test('shared Bevy list drag preserves the pointer anchor when its drop target changes', () => {
+    const state = {};
+    const refreshes = [];
+    const drag = createSelectableListDragSession({
+        state,
+        resolvePayload: () => ({ ok: true }),
+        onMove: () => ({ ok: true, refresh: true })
+    });
+    drag.begin('item_a', { client_x: 5, client_y: 5, node_id: 'project_view_list_entry_0_name' });
+    drag.move({ client_x: 25, client_y: 25 }, {
+        refresh: (options) => refreshes.push(options)
+    });
+    drag.move({ client_x: 35, client_y: 35 }, {
+        refresh: (options) => refreshes.push(options)
+    });
+    assert.deepEqual(refreshes, [
+        { preserveNodeId: 'project_view_list_entry_0_name' },
+        { preserveNodeId: 'project_view_list_entry_0_name' }
+    ]);
+});
+
+test('shared Bevy list exposes a visible insertion gap and source fade during reorder', () => {
+    const result = hierarchicalSelectableListNode({
+        id: 'reorder_list', width: 300, rowHeight: 32,
+        entries: [
+            { id: 'first', value: 'first', label: 'First', dragging: true },
+            { id: 'second', value: 'second', label: 'Second', dropTarget: true },
+            { id: 'third', value: 'third', label: 'Third' }
+        ]
+    });
+    const [first, second, third] = result.node.children;
+    assert.equal(first.style.opacity, 0.38);
+    assert.equal(second.style.border[0], 3);
+    assert.ok(third.style.position[1] > 64, 'the target leaves an insertion gap before the following row');
 });
 
 test('Info migration retires every HTML source and keeps only a DOM-free Bevy bridge', () => {
