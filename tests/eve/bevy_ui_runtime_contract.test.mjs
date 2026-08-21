@@ -729,11 +729,13 @@ test('BevyUI emits one activation for pointer input and ignores delayed compatib
             Object.defineProperty(event, 'timeStamp', { value: timeStamp });
             return event;
         };
-        const pointer = (type, { pointerId, pointerType, timeStamp }) => {
+        const pointer = (type, { pointerId, pointerType, timeStamp, button = 0, isPrimary = true }) => {
             const event = new dom.window.Event(type, { bubbles: true, cancelable: true });
             Object.defineProperties(event, {
                 pointerId: { value: pointerId },
                 pointerType: { value: pointerType },
+                button: { value: button },
+                isPrimary: { value: isPrimary },
                 clientX: { value: 40 },
                 clientY: { value: 40 },
                 timeStamp: { value: timeStamp }
@@ -751,6 +753,24 @@ test('BevyUI emits one activation for pointer input and ignores delayed compatib
             timeStamp: 110
         }));
         assert.deepEqual(received, ['press', 'release', 'activate'], 'a real mouse pointer cycle activates once');
+
+        surface.dispatchEvent(pointer('pointerdown', {
+            pointerId: 2,
+            pointerType: 'mouse',
+            button: 2,
+            timeStamp: 200
+        }));
+        surface.dispatchEvent(pointer('pointerup', {
+            pointerId: 2,
+            pointerType: 'mouse',
+            button: 2,
+            timeStamp: 210
+        }));
+        assert.deepEqual(
+            received,
+            ['press', 'release', 'activate'],
+            'a secondary pointer cycle must never activate the underlying BevyUI control'
+        );
 
         for (const [index, delayMs] of [0, 48, 100, 300, 700].entries()) {
             const pointerId = 10 + index;

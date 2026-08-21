@@ -4,6 +4,7 @@ import { createDashboardLayout } from '../../eVe/domains/dashboard/dashboard_lay
 import { buildDashboardRecords, dashboardRecordId } from '../../eVe/domains/dashboard/dashboard_records.js';
 import { DASHBOARD_FONT_FAMILY, mergeDashboardTokens } from '../../eVe/domains/dashboard/dashboard_tokens.js';
 import { createBevyMediaTextureCacheKey } from '../../eVe/domains/rendering/bevy_media_texture_cache.js';
+import { workspaceSceneLayerOrder } from '../../eVe/domains/rendering/workspace_scene_layers.js';
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 
@@ -20,6 +21,37 @@ const expectedDashboardLabelBackdropHeight = (height) => Math.min(
     Math.max(1, Number(height || 0)),
     Math.max(1, Math.min(42, Math.max(24, Math.round(Number(height || 0) * 0.24))))
 );
+
+test('dashboard records stay inside their workspace layer below Flower', () => {
+    const tokens = mergeDashboardTokens();
+    const layout = createDashboardLayout({
+        width: 960,
+        height: 640,
+        toolboxHeight: 80,
+        categories: [{
+            id: 'projects',
+            label_key: 'eve.dashboard.category.projects',
+            color: '#4b7bec',
+            visible: true
+        }],
+        itemsByCategory: new Map([
+            ['projects', [{ id: 'project_1', title: 'Project 1', category_id: 'projects', span: 1 }]]
+        ]),
+        tokens
+    });
+    const records = buildDashboardRecords({ layout, tokens });
+    const dashboardLayer = workspaceSceneLayerOrder('dashboard');
+    const flowerLayer = workspaceSceneLayerOrder('flower');
+
+    assert.ok(records.length > 0);
+    assert.equal(records.every((record) => record.properties?.layer === 'dashboard'), true);
+    assert.equal(records.every((record) => record.properties.renderLayer >= dashboardLayer), true);
+    assert.equal(
+        records.every((record) => record.properties.renderLayer < flowerLayer),
+        true,
+        'Dashboard records must never cover the Flower presentation layer'
+    );
+});
 
 test('dashboard fullscreen item renders only the selected item summary', () => {
     const tokens = mergeDashboardTokens();

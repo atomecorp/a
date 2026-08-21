@@ -292,6 +292,32 @@ const makeFlowerPointerEvent = (type, properties = {}) => {
     }).forEach(([key, value]) => Object.defineProperty(event, key, { configurable: true, value }));
     return event;
 };
+window.eveDashboardBevyUiRuntime = {
+    readFlowerTargetAtPoint: ({ clientX, clientY }) => (
+        clientX === 140 && clientY === 120 ? { kind: 'item', atomeId: 'dashboard_project_a' } : null
+    )
+};
+flowerInteraction.open = false;
+const dashboardRightClick = makeFlowerPointerEvent('contextmenu', { button: 2, pointerType: 'mouse' });
+projectCanvas.dispatchEvent(dashboardRightClick);
+assert.equal(dashboardRightClick.defaultPrevented, true, 'Dashboard secondary click must still suppress the browser menu');
+await delay(1);
+assert.equal(flowerInteraction.open, true, 'Dashboard secondary click must open Flower');
+assert.equal(flowerInteraction.openCount, 1, 'Dashboard secondary click must open Flower exactly once');
+flowerInteraction.open = false;
+const dashboardLongPress = makeFlowerPointerEvent('pointerdown', { pointerId: 72, pointerType: 'touch' });
+projectCanvas.addEventListener('pointerdown', (event) => event.preventDefault(), { once: true });
+projectCanvas.dispatchEvent(dashboardLongPress);
+assert.equal(dashboardLongPress.defaultPrevented, true, 'Dashboard BevyUI must be represented as the pointerdown owner');
+await delay(10);
+assert.equal(flowerInteraction.open, true, 'Dashboard card long press must open Flower');
+assert.equal(flowerInteraction.openCount, 2, 'Dashboard card long press must open Flower exactly once');
+projectCanvas.dispatchEvent(makeFlowerPointerEvent('pointerup', { pointerId: 72, pointerType: 'touch' }));
+delete window.eveDashboardBevyUiRuntime;
+flowerInteraction.closeCount = 0;
+flowerInteraction.openCount = 0;
+flowerInteraction.open = true;
+projectCanvas.dispatchEvent(makeFlowerPointerEvent('pointerdown', { button: 2, pointerType: 'mouse' }));
 const rightClickWhileOpen = makeFlowerPointerEvent('contextmenu', { button: 2, pointerType: 'mouse' });
 projectCanvas.dispatchEvent(rightClickWhileOpen);
 assert.equal(rightClickWhileOpen.defaultPrevented, true, 'a right-click must suppress the browser context menu while Flower is open');
