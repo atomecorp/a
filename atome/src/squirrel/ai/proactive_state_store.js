@@ -1,11 +1,7 @@
+import { cloneStructured as cloneValue, nowIso } from '../shared/scalars.js';
 const PROACTIVE_STATE_STORAGE_KEY = 'eve_ai_proactive_state_v1';
 
-const cloneValue = (value) => {
-    if (typeof structuredClone === 'function') return structuredClone(value);
-    return JSON.parse(JSON.stringify(value));
-};
 
-const nowIso = () => new Date().toISOString();
 
 const createDefaultState = () => ({
     version: 1,

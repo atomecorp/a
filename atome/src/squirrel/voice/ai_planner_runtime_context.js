@@ -1,6 +1,6 @@
+import { readEnv, toText } from '../shared/scalars.js';
 export const DEFAULT_LOCALE = 'fr-FR';
 
-const toText = (value) => String(value || '').trim();
 
 export const resolveLocale = (locale = null) => {
     const runtimeLocale = globalThis?.AtomeLocale?.get?.()
@@ -101,12 +101,6 @@ export const localizeRelativeMoveReply = (locale) => (
     isEnglishLocale(locale) ? 'Moved.' : 'Déplacement effectué.'
 );
 
-const readEnv = (env, key) => {
-    if (!env || typeof env !== 'object') return null;
-    if (key in env) return env[key];
-    if (env.window && typeof env.window === 'object' && key in env.window) return env.window[key];
-    return null;
-};
 
 export const listAtomeAiTools = (env = globalThis) => {
     const agent = readEnv(env, 'AtomeAI') || readEnv(env, 'window')?.AtomeAI || null;

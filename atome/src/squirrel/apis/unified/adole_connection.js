@@ -13,6 +13,7 @@ import {
     getFastifyHttpBaseUrl,
     shouldAttemptFastify
 } from './adole_backend.js';
+import { makeId } from '../../shared/scalars.js';
 
 async function checkFastifyViaTauri(fastifyBaseUrl) {
     const localBase = getLocalServerUrl();
@@ -211,7 +212,7 @@ function generateUUID() {
  * @returns {string} Client ID
  */
 function generateClientId() {
-    return `client_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    return makeId('client');
 }
 
 // ============================================

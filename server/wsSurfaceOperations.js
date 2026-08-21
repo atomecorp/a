@@ -21,31 +21,14 @@ import {
 } from './wsApiState.js';
 import { isWsApiPrincipalProvisioned, resolveWsApiPrincipal } from './wsApiIdentity.js';
 import { handleTeleportSurfaceReconnect } from './wsTeleportOperations.js';
+import { wsResponse, wsErrorResponse, actionOf } from './wsResponse.js';
+
+// Family-bound aliases over the shared envelope (server/wsResponse.js).
+const response = (message, success, fields) => wsResponse('surface', message, success, fields);
+const errorResponse = (message, error) => wsErrorResponse('surface', message, error);
+
 
 const SUPPORTED_ACTIONS = new Set(['announce', 'list', 'ping', 'retire']);
-
-function requestIdOf(message) {
-    return message?.requestId || message?.request_id || null;
-}
-
-function actionOf(message) {
-    return String(message?.action || message?.op || '').trim().toLowerCase();
-}
-
-function response(message, success, fields = {}) {
-    return {
-        type: 'surface-response',
-        requestId: requestIdOf(message),
-        success,
-        ...fields
-    };
-}
-
-function errorResponse(message, error) {
-    return response(message, false, {
-        error: error instanceof Error ? error.message : String(error)
-    });
-}
 
 function broadcastPresence(userId, connection, event, surface) {
     if (!surface) return;

@@ -1,3 +1,6 @@
+import { cloneStructured as cloneValue, readEnv } from '../shared/scalars.js';
+// Re-exported: the local duplicate now lives in the shared scalars module.
+export { cloneValue, readEnv };
 export const defaultEnv = () => (typeof window !== 'undefined' ? window : globalThis);
 
 export const resolveHostEnv = (env = null) => {
@@ -67,20 +70,6 @@ export const hasExplicitBusinessConnectorHost = (env = null) => {
         || env?.atome?.calendar
         || env?.atome?.messages
     );
-};
-
-export const cloneValue = (value) => {
-    if (typeof structuredClone === 'function') {
-        return structuredClone(value);
-    }
-    return JSON.parse(JSON.stringify(value));
-};
-
-export const readEnv = (env, key) => {
-    if (!env || typeof env !== 'object') return null;
-    if (key in env) return env[key];
-    if (env.window && typeof env.window === 'object' && key in env.window) return env.window[key];
-    return null;
 };
 
 export const dispatchWindowEvent = (env, name, detail) => {

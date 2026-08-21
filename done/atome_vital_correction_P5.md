@@ -18,7 +18,7 @@ Etat vérifié au départ de P5
 
 Blocage restant observé
 
-La validation Chrome/Fastify finale échoue encore dans `tests/probes/browser_media_acceptance_probe.test.mjs`.
+La validation Chrome/Fastify finale échoue encore dans `tests/probes/browser_media_acceptance_probe.probe.mjs`.
 
 Symptôme principal :
 
@@ -34,10 +34,10 @@ Commandes de validation déjà utiles
 ```sh
 node scripts/check_dom_projection_guardrails.mjs --paths tests/fixtures/dom,tests/atom_matrix_example.dom,tests/atome_project_example.dom
 node scripts/check_squirrel_dom_adapter_guardrails.mjs
-node --test tests/scripts/check_dom_projection_guardrails.test.mjs tests/scripts/export_dom_subtrees.test.mjs
+node --test tests/scripts/check_dom_projection_guardrails.probe.mjs tests/scripts/export_dom_subtrees.probe.mjs
 node check-syntax.mjs
-ADOLE_TEST_URL=http://127.0.0.1:3001 node tests/probes/browser_media_acceptance_probe.test.mjs
-node tests/probes/media_import_probe.test.mjs
+ADOLE_TEST_URL=http://127.0.0.1:3001 node tests/probes/browser_media_acceptance_probe.probe.mjs
+node tests/probes/media_import_probe.probe.mjs
 ```
 
 Regle de travail
@@ -62,7 +62,7 @@ Quand un media est ouvert dans MTrack puis ferme, le groupe desktop correspondan
 
 Symptome observe
 
-Dans `browser_media_acceptance_probe.test.mjs`, le premier cas image echoue cote MTrack :
+Dans `browser_media_acceptance_probe.probe.mjs`, le premier cas image echoue cote MTrack :
 
 - `open`: ok ;
 - `ready`: ok ;
@@ -82,7 +82,7 @@ Fichiers a inspecter
 - `eVe/intuition/eVeIntuition.js`
 - `eVe/domains/mtrax/ui/panel_lifecycle_runtime.js`
 - `eVe/intuition/runtime/tool_genesis.js`
-- `tests/probes/browser_media_acceptance_probe.test.mjs`
+- `tests/probes/browser_media_acceptance_probe.probe.mjs`
 - `temp/probe_reports/browser_media_acceptance_probe/0000.png_mtrack.json`
 
 A faire
@@ -100,7 +100,7 @@ A faire
 Validation
 
 ```sh
-ADOLE_TEST_URL=http://127.0.0.1:3001 node tests/probes/browser_media_acceptance_probe.test.mjs
+ADOLE_TEST_URL=http://127.0.0.1:3001 node tests/probes/browser_media_acceptance_probe.probe.mjs
 ```
 
 La probe doit passer les 5 cas desktop et les 5 cas MTrack.
@@ -126,8 +126,8 @@ Scenarios a verifier
 
 Fichiers et zones probables
 
-- `tests/probes/media_import_probe.test.mjs`
-- `tests/probes/browser_media_acceptance_probe.test.mjs`
+- `tests/probes/media_import_probe.probe.mjs`
+- `tests/probes/browser_media_acceptance_probe.probe.mjs`
 - `eVe/domains/media/media_diagnostics.js`
 - `eVe/domains/media/asset_box.js`
 - `eVe/intuition/tools/project_drop.js`
@@ -140,7 +140,7 @@ Fichiers et zones probables
 
 A faire
 
-1. Relancer `media_import_probe.test.mjs` et lire :
+1. Relancer `media_import_probe.probe.mjs` et lire :
    - `temp/probe_reports/media_import_probe/run.log`;
    - `temp/probe_reports/media_import_probe/suite.json`;
    - les screenshots si disponibles.
@@ -158,8 +158,8 @@ A faire
 Validation
 
 ```sh
-node tests/probes/media_import_probe.test.mjs
-ADOLE_TEST_URL=http://127.0.0.1:3001 node tests/probes/browser_media_acceptance_probe.test.mjs
+node tests/probes/media_import_probe.probe.mjs
+ADOLE_TEST_URL=http://127.0.0.1:3001 node tests/probes/browser_media_acceptance_probe.probe.mjs
 ```
 
 La console Chrome ne doit pas contenir d'erreur ni warning applicatif.
@@ -245,10 +245,10 @@ Commandes
 node check-syntax.mjs
 node scripts/check_dom_projection_guardrails.mjs --paths tests/fixtures/dom,tests/atom_matrix_example.dom,tests/atome_project_example.dom
 node scripts/check_squirrel_dom_adapter_guardrails.mjs
-node --test tests/scripts/check_dom_projection_guardrails.test.mjs tests/scripts/export_dom_subtrees.test.mjs
-node --test atome/shared/atome_contract.test.mjs tests/eve/media_atom_integrity.test.mjs tests/eve/media_projection_state.dom_contract.test.mjs
-node tests/probes/media_import_probe.test.mjs
-ADOLE_TEST_URL=http://127.0.0.1:3001 node tests/probes/browser_media_acceptance_probe.test.mjs
+node --test tests/scripts/check_dom_projection_guardrails.probe.mjs tests/scripts/export_dom_subtrees.probe.mjs
+node --test atome/shared/atome_contract.probe.mjs tests/eve/media_atom_integrity.probe.mjs tests/eve/media_projection_state.dom_contract.probe.mjs
+node tests/probes/media_import_probe.probe.mjs
+ADOLE_TEST_URL=http://127.0.0.1:3001 node tests/probes/browser_media_acceptance_probe.probe.mjs
 ```
 
 Validation navigateur

@@ -106,11 +106,11 @@ acceptance:
 ## Task UI-TEST-008: Full Stack Media, Session, and Project Acceptance
 status: IN_PROGRESS
 files:
-  - tests/probes/ui_full_stack_acceptance_test8_probe.test.mjs
-  - tests/probes/audio_recording_bevy_capture_probe.test.mjs
-  - tests/probes/video_recording_audio_integrity_probe.test.mjs
+  - tests/probes/ui_full_stack_acceptance_test8_probe.probe.mjs
+  - tests/probes/audio_recording_bevy_capture_probe.probe.mjs
+  - tests/probes/video_recording_audio_integrity_probe.probe.mjs
   - tests/probes/tauri_recorded_video_mtrack_probe.test.mjs
-  - tests/probes/atome_persistence_probe.test.mjs
+  - tests/probes/atome_persistence_probe.probe.mjs
 description:
   - Run autonomous DebugUI/Playwright checks for browser and Tauri runtimes.
   - Cover account creation, audio recording/playback, video recording/playback, MTraX preview diagnostics, session refresh persistence, and project atome persistence.

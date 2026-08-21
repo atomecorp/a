@@ -30,6 +30,10 @@ final class WKWebViewFactory {
         let webView = WKWebView(frame: frame, configuration: config)
         // FIX: Set isOpaque to true to prevent rendering artifacts/black screens in AUv3
         // especially when multiple instances are loaded.
+        // The product draws its own context menu. The native long-press link preview
+        // is the one WebKit affordance CSS and `preventDefault` cannot reach, so it
+        // is turned off at the view.
+        webView.allowsLinkPreview = false
         webView.isOpaque = true
         webView.backgroundColor = .black
         webView.scrollView.backgroundColor = .black

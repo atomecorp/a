@@ -1,13 +1,8 @@
+import { cloneStructured as cloneValue, nowIso, toText as normalizeText } from '../shared/scalars.js';
 const MEMORY_STORAGE_KEY = 'eve_ai_persistent_memory_v1';
 
-const cloneValue = (value) => {
-    if (typeof structuredClone === 'function') return structuredClone(value);
-    return JSON.parse(JSON.stringify(value));
-};
 
-const nowIso = () => new Date().toISOString();
 
-const normalizeText = (value) => String(value || '').trim();
 
 const createDefaultState = () => ({
     version: 1,

@@ -358,6 +358,7 @@ extension auv3Utils {
                 return analysis?["first_peak_frame"] as? Int
             }()
             let peakValue: Any = analysis?["peak"] ?? NSNull()
+            let waveformPeaks: Any = analysis?["waveform_peaks"] ?? []
             let firstPeakValue: Any = computedFirstPeakFrame ?? NSNull()
             let playbackFramePayload: Any = playbackStartFrameValue ?? NSNull()
             let recordingFramePayload: Any = recordingStartFrameValue ?? NSNull()
@@ -380,6 +381,8 @@ extension auv3Utils {
                 "overrun_frames": overrunFrames,
                 "size_bytes": fileSize,
                 "peak": peakValue,
+                "peaks": waveformPeaks,
+                "waveform_peaks": waveformPeaks,
                 "first_peak_frame": firstPeakValue,
                 "playback_start_frame": playbackFramePayload,
                 "playback_observed_frame": playbackObservedPayload,

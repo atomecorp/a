@@ -2,8 +2,8 @@ import {
     CALENDAR_V1_ARCHITECTURE_DECISION,
     createCalendarConnectorContract
 } from './connector_contract.js';
+import { toText as normalizeText } from '../shared/scalars.js';
 
-const normalizeText = (value) => String(value || '').trim();
 
 const toDate = (value) => {
     if (!value) return null;

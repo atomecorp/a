@@ -32,7 +32,7 @@ import {
     assertCanonicalPropertyKey,
     normalizeCanonicalAtome,
     sanitizeAtomeProperties
-} from '../atome/shared/atome_contract.js';
+} from '../atome/src/shared/atome_contract.js';
 import {
     projectStoredAtome,
     projectStoredStateCurrent

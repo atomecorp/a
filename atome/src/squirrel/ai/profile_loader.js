@@ -1,4 +1,4 @@
-const toText = (value) => String(value || '').trim();
+import { toText } from '../shared/scalars.js';
 
 const readEnv = (env, key) => {
     if (!env || typeof env !== 'object') return null;

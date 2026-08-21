@@ -38,6 +38,9 @@ final class FullscreenWebViewController: UIViewController {
         userContentController.addUserScript(preScript)
         config.setValue(false, forKey: "drawsBackground")
         webView = WKWebView(frame: root.bounds, configuration: config)
+        // Same rule as the AUv3 factory: no native long-press link preview, the
+        // product owns every context menu.
+        webView.allowsLinkPreview = false
         webView.isOpaque = false
         if #available(iOS 15.0, *) {
             webView.underPageBackgroundColor = .clear

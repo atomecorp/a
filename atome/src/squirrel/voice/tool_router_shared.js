@@ -1,14 +1,11 @@
 // Extracted from tool_router.js: shared voice-router primitives — locale, offline detection/queueing,
 // connector-call wrapper, and voice-mutation security normalization.
 import { createStructuredResult } from './semantic_contract.js';
+import { cloneStructured as cloneValue } from '../shared/scalars.js';
 
 const isEnglish = (locale) => String(locale || '').toLowerCase().startsWith('en');
 const OFFLINE_MUTATION_OPERATIONS = new Set(['create', 'update', 'delete']);
 
-const cloneValue = (value) => {
-    if (typeof structuredClone === 'function') return structuredClone(value);
-    return JSON.parse(JSON.stringify(value));
-};
 
 const isOfflineLikeFailure = (value) => {
     if (!value) return false;

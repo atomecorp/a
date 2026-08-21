@@ -1,5 +1,6 @@
 import { normalizeLocalVoiceCommand } from './session_runtime.js';
 import { normalizeSTTUtterance } from './stt_normalizer.js';
+import { cloneStructured as cloneValue } from '../shared/scalars.js';
 
 export const VOICE_INTENT_SCHEMA_VERSION = '2.0.0';
 export const VOICE_INTENT_TYPES = Object.freeze([
@@ -43,10 +44,6 @@ const normalizeText = (value) => String(value || '')
     .replace(/\s+/g, ' ')
     .trim();
 
-const cloneValue = (value) => {
-    if (typeof structuredClone === 'function') return structuredClone(value);
-    return JSON.parse(JSON.stringify(value));
-};
 
 const uniqueStrings = (values = []) => Array.from(new Set(
     (Array.isArray(values) ? values : [values])

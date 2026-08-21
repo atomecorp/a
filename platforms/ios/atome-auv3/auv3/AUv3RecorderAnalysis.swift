@@ -457,12 +457,19 @@ extension auv3Utils {
             }
 
             var peak: Float = 0
+            let waveformPeakCount = min(256, frameCount)
+            var waveformPeaks = Array(repeating: Float(0), count: waveformPeakCount)
             for frame in 0..<frameCount {
                 var framePeak: Float = 0
                 for channel in 0..<channels {
                     framePeak = max(framePeak, abs(sampleValue(frame: frame, channel: channel)))
                 }
-                peak = max(peak, framePeak)
+                let normalizedPeak = min(1, max(0, framePeak))
+                peak = max(peak, normalizedPeak)
+                if waveformPeakCount > 0 {
+                    let bucket = min(waveformPeakCount - 1, (frame * waveformPeakCount) / frameCount)
+                    waveformPeaks[bucket] = max(waveformPeaks[bucket], normalizedPeak)
+                }
             }
 
             let adaptiveThreshold = max(0.05, peak * 0.5)
@@ -480,7 +487,9 @@ extension auv3Utils {
 
             return [
                 "peak": peak,
-                "first_peak_frame": firstPeakFrame as Any
+                "first_peak_frame": firstPeakFrame as Any,
+                "waveform_peaks": waveformPeaks.map(Double.init),
+                "peaks": waveformPeaks.map(Double.init)
             ]
         } catch {
             AUv3Diagnostics.log("AUv3: failed to analyze recorded file at \(url.path): \(error.localizedDescription)")

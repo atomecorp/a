@@ -1,5 +1,6 @@
 import { $ } from '../squirrel.js';
 import { tableStyles } from './table_visual_contract.js';
+import { makeId } from '../shared/scalars.js';
 
 const createTable = (config = {}) => {
   const {
@@ -19,7 +20,7 @@ const createTable = (config = {}) => {
     ...otherProps
   } = config;
 
-  const tableId = id || `table_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
+  const tableId = id || makeId('table');
 
   const defaultStyling = {
     rowHeight: 40,

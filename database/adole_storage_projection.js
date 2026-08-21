@@ -1,4 +1,4 @@
-import { normalizeCanonicalAtome, sanitizeAtomeProperties } from '../atome/shared/atome_contract.js';
+import { normalizeCanonicalAtome, sanitizeAtomeProperties } from '../atome/src/shared/atome_contract.js';
 
 const hasObjectShape = (value) => !!value && typeof value === 'object' && !Array.isArray(value);
 

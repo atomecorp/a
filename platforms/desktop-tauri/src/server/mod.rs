@@ -5152,6 +5152,19 @@ pub async fn start_server(static_dir: PathBuf, uploads_dir: PathBuf, data_dir: P
         (axum::http::StatusCode::INTERNAL_SERVER_ERROR, "Erreur eVe")
     });
 
+    let serve_dir_rubberband = ServeDir::new(
+        project_root.join("node_modules/rubberband-wasm/dist"),
+    )
+    .precompressed_br()
+    .precompressed_gzip();
+    let rubberband_service = get_service(serve_dir_rubberband).handle_error(|error| async move {
+        println!("Erreur /vendor/rubberband-wasm: {:?}", error);
+        (
+            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+            "Erreur Rubber Band",
+        )
+    });
+
     // Service fichiers (correspond à dataFetcher: /file/<path>).
     // User media is project-relative (data/users/...), not static-dir-relative.
     let serve_dir_file = ServeDir::new(project_root.clone());
@@ -5331,6 +5344,7 @@ pub async fn start_server(static_dir: PathBuf, uploads_dir: PathBuf, data_dir: P
         .nest_service("/src", src_service)
         .nest_service("/atome", atome_service)
         .nest_service("/eVe", eve_service)
+        .nest_service("/vendor/rubberband-wasm", rubberband_service)
         .nest_service("/", root_service)
         .nest_service("/file", file_service)
         .nest_service("/text", text_service)

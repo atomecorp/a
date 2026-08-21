@@ -2,14 +2,13 @@ import {
     AI_MODEL_PROVIDER_REGISTRY,
     listAiModelProviders
 } from './model_catalog_registry.js';
+import { cloneJson as clone, toText } from '../shared/scalars.js';
 
 const STORAGE_KEY = 'eve_ai_model_catalog_cache_v1';
 export const AI_MODEL_CATALOG_VERSION = 2;
 export const AI_MODEL_CATALOG_TTL_MS = 60 * 60 * 1000;
 
-const toText = (value) => String(value || '').trim();
 
-const clone = (value) => JSON.parse(JSON.stringify(value));
 
 const isStorageLike = (value) => !!(
     value

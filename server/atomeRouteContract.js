@@ -1,7 +1,7 @@
 import {
     formatCanonicalAtome,
     normalizeCanonicalAtome
-} from '../atome/shared/atome_contract.js';
+} from '../atome/src/shared/atome_contract.js';
 
 function sanitizeBoundaryAtomeProperties(record = {}) {
     const source = record && typeof record === 'object' ? record : {};

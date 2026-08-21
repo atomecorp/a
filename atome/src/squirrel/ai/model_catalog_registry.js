@@ -1,6 +1,6 @@
+import { cloneJson as clone } from '../shared/scalars.js';
 const freeze = (value) => Object.freeze(value);
 
-const clone = (value) => JSON.parse(JSON.stringify(value));
 
 const createProviderDefinition = ({
     id,

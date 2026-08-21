@@ -7,8 +7,8 @@ import {
     evaluateComputedExpression,
     validateComputedExpression
 } from './computed_expression.js';
+import { cloneJson as clone } from '../shared/scalars.js';
 
-const clone = (value) => value == null ? value : JSON.parse(JSON.stringify(value));
 
 const propertiesOf = (record = {}) => record.properties || record.props || {};
 const typeOf = (record = {}) => record.type || record.atome_type || propertiesOf(record).type || null;

@@ -2,8 +2,8 @@ import {
     CONTACTS_V1_ARCHITECTURE_DECISION,
     createContactsConnectorContract
 } from './connector_contract.js';
+import { toText as normalizeText } from '../shared/scalars.js';
 
-const normalizeText = (value) => String(value || '').trim();
 const isNodeRuntime = () => typeof process !== 'undefined' && !!process.versions?.node;
 
 const toFiniteNumber = (value, fallback = null) => {

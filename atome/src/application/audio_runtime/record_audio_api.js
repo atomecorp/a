@@ -49,6 +49,29 @@ import {
         return 'mic';
     }
 
+    function normalizeWaveformPeaks(value) {
+        if (!Array.isArray(value)) return [];
+        return value
+            .map((peak) => Number(peak))
+            .filter((peak) => Number.isFinite(peak))
+            .map((peak) => Math.max(0, Math.min(1, Math.abs(peak))))
+            .slice(0, 256);
+    }
+
+    function waveformPeaksFromResult(result) {
+        const sources = [
+            result?.waveform_peaks,
+            result?.peaks,
+            result?.waveformPeaks,
+            result?.waveform?.peaks
+        ];
+        for (const source of sources) {
+            const peaks = normalizeWaveformPeaks(source);
+            if (peaks.length) return peaks;
+        }
+        return [];
+    }
+
     function detectContext() {
         const runtime = resolveAudioRuntime(window);
         if (runtime.runtime === 'tauri_native') return 'tauri';
@@ -176,6 +199,11 @@ import {
                     channels: Number(detail.channels || entry.channels || 0),
                     provider: entry.provider || 'native_audio_recorder'
                 };
+                const waveformPeaks = waveformPeaksFromResult(detail);
+                if (waveformPeaks.length) {
+                    resolved.waveform_peaks = waveformPeaks;
+                    resolved.peaks = waveformPeaks;
+                }
                 if (entry.sampleAccurateRequest) {
                     try {
                         resolved.sample_timing = normalizeSampleAccurateRecordingResult(entry.sampleAccurateRequest, resolved);
@@ -404,6 +432,11 @@ import {
                     channels: Number(result?.channels || entry.channels || 0),
                     provider: entry.provider
                 };
+                const waveformPeaks = waveformPeaksFromResult(result);
+                if (waveformPeaks.length) {
+                    resolved.waveform_peaks = waveformPeaks;
+                    resolved.peaks = waveformPeaks;
+                }
                 const monitoring = reportRecordingOverrun(resolved, entry);
                 return monitoring ? { ...resolved, monitoring } : resolved;
             } finally {

@@ -3,6 +3,7 @@ import {
     persistRuntimeMailPreferences,
     readPersistedRuntimeMailPreferences
 } from './runtime_preferences.js';
+import { readEnv } from '../shared/scalars.js';
 
 const FASTIFY_FALLBACK = 'http://127.0.0.1:3001';
 const TAURI_LOCAL_FALLBACK = 'http://127.0.0.1:3000';
@@ -36,12 +37,6 @@ const isNodeRuntime = (env = globalThis) => {
     return typeof process !== 'undefined' && !!process.versions?.node;
 };
 
-const readEnv = (env, key) => {
-    if (!env || typeof env !== 'object') return null;
-    if (key in env) return env[key];
-    if (env.window && typeof env.window === 'object' && key in env.window) return env.window[key];
-    return null;
-};
 
 const resolveLoopbackOrigin = (env) => {
     const host = resolveTransportHost(env);

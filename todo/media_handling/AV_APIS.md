@@ -987,7 +987,7 @@ Completed:
 
 Validated:
 
-- `node --test src/application/audio_runtime/play_record_core.test.mjs src/application/audio_runtime/av_api_boundaries.test.mjs` passed.
+- `node --test src/application/audio_runtime/play_record_core.probe.mjs src/application/audio_runtime/av_api_boundaries.probe.mjs` passed.
 - `npm run check:syntax` passed.
 - `rustfmt --check` on touched Rust audio engine files passed.
 - `cargo check` passed.
@@ -996,19 +996,19 @@ Validated:
 - `xcodebuild -list -project platforms/ios/atome-auv3/atome.xcodeproj` passed and identified the `atomeAudioUnit` scheme.
 - `xcodebuild -project platforms/ios/atome-auv3/atome.xcodeproj -scheme atomeAudioUnit -configuration Debug -sdk iphonesimulator build` passed.
 - `xcodebuild -project platforms/ios/atome-auv3/atome.xcodeproj -scheme atomeAudioUnit -configuration Debug -sdk iphonesimulator build` passed after the AUv3 native recorder backend change.
-- `node --test src/application/audio_runtime/play_record_core.test.mjs src/application/audio_runtime/av_api_boundaries.test.mjs` passed after the MediaPersistenceService extraction.
+- `node --test src/application/audio_runtime/play_record_core.probe.mjs src/application/audio_runtime/av_api_boundaries.probe.mjs` passed after the MediaPersistenceService extraction.
 - `npm run check:syntax` passed after the MediaPersistenceService extraction.
-- `node --test src/application/audio_runtime/play_record_core.test.mjs src/application/audio_runtime/av_api_boundaries.test.mjs` passed after the preview stream service extraction.
+- `node --test src/application/audio_runtime/play_record_core.probe.mjs src/application/audio_runtime/av_api_boundaries.probe.mjs` passed after the preview stream service extraction.
 - `npm run check:syntax` passed after the preview stream service extraction.
-- `node --test src/application/audio_runtime/play_record_core.test.mjs src/application/audio_runtime/av_api_boundaries.test.mjs` passed after the preview panel service extraction.
+- `node --test src/application/audio_runtime/play_record_core.probe.mjs src/application/audio_runtime/av_api_boundaries.probe.mjs` passed after the preview panel service extraction.
 - `npm run check:syntax` passed after the preview panel service extraction.
-- `node --test src/application/audio_runtime/play_record_core.test.mjs src/application/audio_runtime/av_api_boundaries.test.mjs` passed after adding AV monitoring overrun reports.
+- `node --test src/application/audio_runtime/play_record_core.probe.mjs src/application/audio_runtime/av_api_boundaries.probe.mjs` passed after adding AV monitoring overrun reports.
 - `npm run check:syntax` passed after adding AV monitoring overrun reports.
-- `node --test src/application/audio_runtime/play_record_core.test.mjs src/application/audio_runtime/av_api_boundaries.test.mjs` passed after adding `AVClock`.
+- `node --test src/application/audio_runtime/play_record_core.probe.mjs src/application/audio_runtime/av_api_boundaries.probe.mjs` passed after adding `AVClock`.
 - `npm run check:syntax` passed after adding `AVClock`.
-- `node --test src/application/audio_runtime/play_record_core.test.mjs src/application/audio_runtime/av_api_boundaries.test.mjs` passed after replacing marker/region stores with Atome-backed persistence.
+- `node --test src/application/audio_runtime/play_record_core.probe.mjs src/application/audio_runtime/av_api_boundaries.probe.mjs` passed after replacing marker/region stores with Atome-backed persistence.
 - `npm run check:syntax` passed after replacing marker/region stores with Atome-backed persistence.
-- `node --test src/application/audio_runtime/play_record_core.test.mjs src/application/audio_runtime/av_api_boundaries.test.mjs` passed after adding shared AV device, latency, codec, graph, video metrics, and offline export contracts.
+- `node --test src/application/audio_runtime/play_record_core.probe.mjs src/application/audio_runtime/av_api_boundaries.probe.mjs` passed after adding shared AV device, latency, codec, graph, video metrics, and offline export contracts.
 - `npm run check:syntax` passed after adding shared AV device, latency, codec, graph, video metrics, and offline export contracts.
 - `xcodebuild -quiet -project platforms/ios/atome-auv3/atome.xcodeproj -scheme atomeAudioUnit -configuration Debug -sdk iphonesimulator build` passed after splitting AUv3 diagnostics and transport observer modules.
 - `xcodebuild -quiet -project platforms/ios/atome-auv3/atome.xcodeproj -scheme atomeAudioUnit -configuration Debug -sdk iphonesimulator build` passed after completing the AUv3 render, playback, decoder, JavaScript audio, recorder, transport, and diagnostics split.

@@ -1,3 +1,5 @@
+import { cloneStructured as cloneValue } from '../shared/scalars.js';
+import { makeId } from '../shared/scalars.js';
 // Extracted from session_runtime.js: voice-session constants + stateless helpers (clone/id/utterance/local-command/window-event/task/snapshot/intent helpers).
 
 const DEFAULT_UI_EVENT_NAME = 'squirrel:voice';
@@ -28,18 +30,12 @@ const VOICE_LOCAL_COMMANDS = Object.freeze({
     REPLY: 'reply'
 });
 
-const cloneValue = (value) => {
-    if (typeof structuredClone === 'function') {
-        return structuredClone(value);
-    }
-    return JSON.parse(JSON.stringify(value));
-};
 
 const defaultIdFactory = (prefix = 'voice') => {
     if (globalThis?.crypto?.randomUUID) {
         return `${prefix}_${globalThis.crypto.randomUUID()}`;
     }
-    return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+    return makeId(prefix);
 };
 
 const normalizeUtterance = (value) => String(value || '')

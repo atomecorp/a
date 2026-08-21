@@ -1,4 +1,7 @@
 import { MAIL_V1_ARCHITECTURE_DECISION } from './connector_contract.js';
+import { toText as normalizeText } from '../shared/scalars.js';
+// Re-exported: the local duplicate now lives in the shared scalars module.
+export { normalizeText };
 
 export const DEFAULT_REMOTE_MAILBOX = 'INBOX';
 export const DEFAULT_LOCAL_MAILBOX = 'inbox';
@@ -6,8 +9,6 @@ export const DEFAULT_REMOTE_ARCHIVE_MAILBOX = 'Archive';
 export const DEFAULT_REMOTE_TRASH_MAILBOX = 'Trash';
 export const DEFAULT_LOCAL_ARCHIVE_MAILBOX = 'archive';
 export const DEFAULT_LOCAL_TRASH_MAILBOX = 'trash';
-
-export const normalizeText = (value) => String(value || '').trim();
 
 export const normalizeRemoteMailbox = (value) => normalizeText(value).toUpperCase() || DEFAULT_REMOTE_MAILBOX;
 export const normalizeLocalMailbox = (value) => normalizeText(value).toLowerCase() || DEFAULT_LOCAL_MAILBOX;

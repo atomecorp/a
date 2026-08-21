@@ -78,7 +78,7 @@ This report is generated from a deterministic static scan. It separates confirme
 - `src/squirrel/apis/unified/adole.js`: 1794 lines
 - `src/squirrel/voice/home_surface.js`: 1749 lines
 - `tests/application/examples/record_audio.js`: 1698 lines
-- `tests/comprehensive_campaign.test.mjs`: 1675 lines
+- `tests/comprehensive_campaign.probe.mjs`: 1675 lines
 - `eVe/intuition/runtime/mtrack_dock_controller.js`: 1672 lines
 - `server/sharing.js`: 1660 lines
 - `src-tauri/src/server/local_auth.rs`: 1645 lines
@@ -161,7 +161,7 @@ This report is generated from a deterministic static scan. It separates confirme
 - `src/squirrel/apis/unified/adole.js`: 1794 lines
 - `src/squirrel/voice/home_surface.js`: 1749 lines
 - `tests/application/examples/record_audio.js`: 1698 lines
-- `tests/comprehensive_campaign.test.mjs`: 1675 lines
+- `tests/comprehensive_campaign.probe.mjs`: 1675 lines
 - `eVe/intuition/runtime/mtrack_dock_controller.js`: 1672 lines
 - `server/sharing.js`: 1660 lines
 - `src-tauri/src/server/local_auth.rs`: 1645 lines
@@ -244,7 +244,7 @@ This report is generated from a deterministic static scan. It separates confirme
 - `src/squirrel/apis/unified/adole.js`: 1794 lines
 - `src/squirrel/voice/home_surface.js`: 1749 lines
 - `tests/application/examples/record_audio.js`: 1698 lines
-- `tests/comprehensive_campaign.test.mjs`: 1675 lines
+- `tests/comprehensive_campaign.probe.mjs`: 1675 lines
 - `eVe/intuition/runtime/mtrack_dock_controller.js`: 1672 lines
 - `server/sharing.js`: 1660 lines
 - `src-tauri/src/server/local_auth.rs`: 1645 lines
@@ -327,7 +327,7 @@ This report is generated from a deterministic static scan. It separates confirme
 - `src/squirrel/apis/unified/adole.js`: 1794 lines
 - `src/squirrel/voice/home_surface.js`: 1749 lines
 - `tests/application/examples/record_audio.js`: 1698 lines
-- `tests/comprehensive_campaign.test.mjs`: 1675 lines
+- `tests/comprehensive_campaign.probe.mjs`: 1675 lines
 - `eVe/intuition/runtime/mtrack_dock_controller.js`: 1672 lines
 - `server/sharing.js`: 1660 lines
 - `src-tauri/src/server/local_auth.rs`: 1645 lines
@@ -399,11 +399,11 @@ This report is generated from a deterministic static scan. It separates confirme
 - `index.js`: `database/index.js`, `dev/daemon/index.js`, `src/application/aBox/index.js`, `eVe/core/event_store/index.js`, `eVe/core/media_engine/index.js`, `eVe/core/media_store/index.js`, `eVe/core/project_store/index.js`, `eVe/intuition/atome/index.js`, `eVe/intuition/atome/visual/index.js`, `eVe/intuition/components/index.js`, `eVe/intuition/components/ui/index.js`, `eVe/intuition/components/visual/index.js`, `eVe/intuition/contracts/index.js`, `eVe/intuition/flower/index.js`, `eVe/intuition/index.js`, `eVe/intuition/matrix/core/index.js`, `eVe/intuition/matrix/index.js`, `eVe/intuition/matrix/ui/index.js`, `eVe/intuition/matrix/visual/index.js`, `eVe/intuition/menu/index.js`, `eVe/intuition/panels/index.js`, `eVe/intuition/panels/ui/index.js`, `eVe/intuition/panels/visual/index.js`, `eVe/intuition/runtime/index.js`, `eVe/intuition/tools/imports_exports/index.js`, `eVe/intuition/tools/index.js`, `eVe/intuition/tools/molecule/gestures/index.js`, `eVe/intuition/tools/molecule/index.js`, `eVe/intuition/tools/molecule/kernel/index.js`, `eVe/intuition/tools/molecule/media/index.js`, `eVe/intuition/tools/molecule/multi_instance/index.js`, `eVe/intuition/tools/molecule/nested/index.js`, `eVe/intuition/tools/molecule/panel/index.js`, `eVe/intuition/tools/molecule/persistence/index.js`, `eVe/intuition/tools/molecule/recording/index.js`, `eVe/intuition/tools/molecule/session/index.js`, `eVe/intuition/tools/ui/index.js`, `eVe/intuition/tools/visual/index.js`, `src/application/index.js`, `src/application/jeezs/index.js`, `src/application/lyrix/index.js`, `src/application/vie/index.js`, `src/squirrel/bank/index.js`, `src/squirrel/calendar/index.js`, `src/squirrel/components/intuition_builder/index.js`, `src/squirrel/contacts/index.js`, `src/squirrel/mail/index.js`, `src/squirrel/security/index.js`, `src/squirrel/voice/index.js`
 - `README.md`: `README.md`, `atome-os/builder/README.md`, `atome-os/builder/installer/desktop/README.md`, `atome-os/builder/installer/sbc/README.md`, `platforms/ios/atome-auv3/README.md`, `server/README.md`, `eVe/README.md`, `eVe/concept/README.md`
 - `bootstrap.js`: `eVe/intuition/bootstrap.js`, `src/squirrel/bank/bootstrap.js`, `src/squirrel/calendar/bootstrap.js`, `src/squirrel/contacts/bootstrap.js`, `src/squirrel/mail/bootstrap.js`, `src/squirrel/security/bootstrap.js`, `src/squirrel/voice/bootstrap.js`
-- `bootstrap.test.mjs`: `src/squirrel/bank/bootstrap.test.mjs`, `src/squirrel/calendar/bootstrap.test.mjs`, `src/squirrel/contacts/bootstrap.test.mjs`, `src/squirrel/mail/bootstrap.test.mjs`, `src/squirrel/security/bootstrap.test.mjs`, `src/squirrel/voice/bootstrap.test.mjs`
+- `bootstrap.probe.mjs`: `src/squirrel/bank/bootstrap.probe.mjs`, `src/squirrel/calendar/bootstrap.probe.mjs`, `src/squirrel/contacts/bootstrap.probe.mjs`, `src/squirrel/mail/bootstrap.probe.mjs`, `src/squirrel/security/bootstrap.probe.mjs`, `src/squirrel/voice/bootstrap.probe.mjs`
 - `errors.js`: `eVe/core/event_store/errors.js`, `eVe/core/media_store/errors.js`, `eVe/core/project_store/errors.js`, `eVe/intuition/tools/molecule/kernel/errors.js`, `eVe/intuition/tools/molecule/session/errors.js`
 - `style.js`: `eVe/intuition/atome/image/visual/style.js`, `eVe/intuition/atome/shape/visual/style.js`, `eVe/intuition/atome/text/visual/style.js`, `eVe/intuition/atome/video/visual/style.js`, `src/application/lyrix/src/components/style.js`
 - `service.js`: `src/squirrel/bank/service.js`, `src/squirrel/calendar/service.js`, `src/squirrel/contacts/service.js`, `src/squirrel/mail/service.js`, `src/squirrel/voice/service.js`
-- `service.test.mjs`: `src/squirrel/bank/service.test.mjs`, `src/squirrel/calendar/service.test.mjs`, `src/squirrel/contacts/service.test.mjs`, `src/squirrel/mail/service.test.mjs`, `src/squirrel/voice/service.test.mjs`
+- `service.probe.mjs`: `src/squirrel/bank/service.probe.mjs`, `src/squirrel/calendar/service.probe.mjs`, `src/squirrel/contacts/service.probe.mjs`, `src/squirrel/mail/service.probe.mjs`, `src/squirrel/voice/service.probe.mjs`
 - `Contents.json`: `platforms/ios/atome-auv3/application/Assets.xcassets/AccentColor.colorset/Contents.json`, `platforms/ios/atome-auv3/application/Assets.xcassets/AppIcon.appiconset/Contents.json`, `platforms/ios/atome-auv3/application/Assets.xcassets/Contents.json`, `platforms/ios/atome-auv3/application/Assets.xcassets/LaunchLogo.imageset/Contents.json`
 - `api.js`: `eVe/core/event_store/api.js`, `eVe/core/media_store/api.js`, `eVe/core/project_store/api.js`, `eVe/intuition/matrix/core/api.js`
 - `constants.js`: `eVe/domains/mtrax/shared/constants.js`, `eVe/intuition/contracts/constants.js`, `eVe/intuition/matrix/core/constants.js`, `src/application/lyrix/src/core/constants.js`
@@ -625,29 +625,29 @@ This report is generated from a deterministic static scan. It separates confirme
 - `eVe/domains/mtrax/visual/patch_apply_runtime.js`
 - `eVe/domains/mtrax/visual/patch_helpers.js`
 - `src/squirrel/components/template_builder.js`
-- `tests/probes/atome_persistence_probe.test.mjs`
+- `tests/probes/atome_persistence_probe.probe.mjs`
 - `tests/probes/audio_recording_quick_capture_probe.test.mjs`
-- `tests/probes/browser_media_acceptance_probe.test.mjs`
-- `tests/probes/eve_ai_mcp_visual_validation.test.mjs`
-- `tests/probes/eve_business_validation.test.mjs`
-- `tests/probes/eve_llm_e2e_suite.test.mjs`
-- `tests/probes/eve_runtime_calendar_crud_probe.test.mjs`
-- `tests/probes/eve_runtime_comm_calendar_probe.test.mjs`
-- `tests/probes/eve_runtime_coverage.test.mjs`
-- `tests/probes/eve_runtime_creative_probe.test.mjs`
-- `tests/probes/eve_runtime_integrity.test.mjs`
+- `tests/probes/browser_media_acceptance_probe.probe.mjs`
+- `tests/probes/eve_ai_mcp_visual_validation.probe.mjs`
+- `tests/probes/eve_business_validation.probe.mjs`
+- `tests/probes/eve_llm_e2e_suite.probe.mjs`
+- `tests/probes/eve_runtime_calendar_crud_probe.probe.mjs`
+- `tests/probes/eve_runtime_comm_calendar_probe.probe.mjs`
+- `tests/probes/eve_runtime_coverage.probe.mjs`
+- `tests/probes/eve_runtime_creative_probe.probe.mjs`
+- `tests/probes/eve_runtime_integrity.probe.mjs`
 - `tests/probes/eve_runtime_main_panel_probe.test.mjs`
-- `tests/probes/eve_runtime_registered_handler_audit.test.mjs`
-- `tests/probes/eve_runtime_selection_transform_probe.test.mjs`
-- `tests/probes/eve_runtime_transport_capture_probe.test.mjs`
-- `tests/probes/eve_runtime_transport_record_reveal_probe.test.mjs`
-- `tests/probes/eve_strangler_integration.test.mjs`
-- `tests/probes/eve_tauri_llm_routing_probe.test.mjs`
-- `tests/probes/fastify_debug.test.mjs`
-- `tests/probes/media_api_suite_probe.test.mjs`
-- `tests/probes/media_import_probe.test.mjs`
-- `tests/probes/molecule_multitrack_timeline_probe.test.mjs`
-- `tests/probes/molecule_webgpu_visual_probe.test.mjs`
+- `tests/probes/eve_runtime_registered_handler_audit.probe.mjs`
+- `tests/probes/eve_runtime_selection_transform_probe.probe.mjs`
+- `tests/probes/eve_runtime_transport_capture_probe.probe.mjs`
+- `tests/probes/eve_runtime_transport_record_reveal_probe.probe.mjs`
+- `tests/probes/eve_strangler_integration.probe.mjs`
+- `tests/probes/eve_tauri_llm_routing_probe.probe.mjs`
+- `tests/probes/fastify_debug.probe.mjs`
+- `tests/probes/media_api_suite_probe.probe.mjs`
+- `tests/probes/media_import_probe.probe.mjs`
+- `tests/probes/molecule_multitrack_timeline_probe.probe.mjs`
+- `tests/probes/molecule_webgpu_visual_probe.probe.mjs`
 - `tests/probes/mtrack_current_video_preview_probe.test.mjs`
 - `tests/probes/mtrack_drag_perf_probe.test.mjs`
 - `tests/probes/mtrack_interaction_diag.test.mjs`
@@ -658,7 +658,7 @@ This report is generated from a deterministic static scan. It separates confirme
 - `tests/probes/mtrack_zoom_slider_perf_probe.test.mjs`
 - `tests/probes/photo_video_capture_fullscreen_probe.test.mjs`
 - `tests/probes/tauri_recorded_video_mtrack_probe.test.mjs`
-- `tests/probes/video_recording_audio_integrity_probe.test.mjs`
+- `tests/probes/video_recording_audio_integrity_probe.probe.mjs`
 
 ## Long Function Candidates
 
@@ -683,7 +683,7 @@ This report is generated from a deterministic static scan. It separates confirme
 - `eVe/domains/mtrax/media/element_runtime.js:10`: approx. 1199 lines
 - `eVe/domains/mtrax/transport/transport_gestures_runtime.js:11`: approx. 1177 lines
 - `eVe/domains/mtrax/ui/styles.js:19`: approx. 1140 lines
-- `tests/probes/eve_ai_mcp_visual_validation.test.mjs:41`: approx. 1122 lines
+- `tests/probes/eve_ai_mcp_visual_validation.probe.mjs:41`: approx. 1122 lines
 - `src/application/examples/AI.js:1`: approx. 1099 lines
 - `tests/application/examples/AI.js:1`: approx. 1099 lines
 - `src/application/lyrix/src/components/songLibraryModal.js:261`: approx. 1094 lines
@@ -709,7 +709,7 @@ This report is generated from a deterministic static scan. It separates confirme
 - `eVe/domains/mtrax/clips/deletion_runtime.js:18`: approx. 694 lines
 - `src/application/examples/ios_file_browser.js:1479`: approx. 685 lines
 - `tests/application/examples/ios_file_browser.js:1443`: approx. 685 lines
-- `tests/probes/eve_llm_e2e_suite.test.mjs:198`: approx. 681 lines
+- `tests/probes/eve_llm_e2e_suite.probe.mjs:198`: approx. 681 lines
 - `eVe/domains/mtrax/media/position_runtime.js:6`: approx. 676 lines
 - `eVe/domains/mtrax/ui/controls_runtime.js:1`: approx. 660 lines
 - `eVe/domains/mtrax/tracks/render_tracks_runtime.js:3`: approx. 649 lines
@@ -757,7 +757,7 @@ This report is generated from a deterministic static scan. It separates confirme
 - `atome-os/builder/docs/architecture.md`
 - `atome-os/builder/installer/sbc/README.md`
 - `database/adole.js`
-- `database/adole.user_classification.test.mjs`
+- `database/adole.user_classification.probe.mjs`
 - `database/index.js`
 - `documentations/ADOLE.md`
 - `documentations/AI.md`
@@ -932,7 +932,7 @@ This report is generated from a deterministic static scan. It separates confirme
 - `eVe/todo/cpal_Kira_integration.md`
 - `eVe/todo/native_atome_audio_engine.md`
 - `src/application/index.js`
-- `src/squirrel/voice/service.test.mjs`
+- `src/squirrel/voice/service.probe.mjs`
 
 ### gateways
 
@@ -940,21 +940,21 @@ This report is generated from a deterministic static scan. It separates confirme
 - `documentations/code&tools.md`
 - `scripts/phase9_ui_regression_suite.mjs`
 - `server/mailRoutes.js`
-- `server/mailRoutes.test.mjs`
+- `server/mailRoutes.probe.mjs`
 - `eVe/documentations/atome_concepts.md`
 - `eVe/documentations/done.md`
 - `eVe/documentations/strangler.md`
 - `eVe/documentations/tools.md`
 - `eVe/documentations/tools_cahier_des_charges.md`
 - `eve/eVe_essentials.md`
-- `eVe/intuition/tools/core/tool_interaction.finder_action_mapping.test.mjs`
+- `eVe/intuition/tools/core/tool_interaction.finder_action_mapping.probe.mjs`
 - `eVe/intuition/tools/project_drop.js`
 - `eVe/todo/eVe_AI.md`
 - `eVe/todo/molecule_architecture_and_rebuild_plan.md`
 - `src/application/thermUSS/infra_en.md`
 - `src/application/thermUSS/infra_fr.md`
-- `tests/probes/eve_business_validation.test.mjs`
-- `tests/probes/eve_strangler_integration.test.mjs`
+- `tests/probes/eve_business_validation.probe.mjs`
+- `tests/probes/eve_strangler_integration.probe.mjs`
 
 ### registries
 
@@ -980,9 +980,9 @@ This report is generated from a deterministic static scan. It separates confirme
 - `eVe/domains/media/preview/native_frame_video_preview_renderer.js`
 - `eve/eVe_essentials.md`
 - `eVe/intuition/runtime/tool.js`
-- `eVe/intuition/tools/core/tool_registry.deferred_persistence.test.mjs`
-- `eVe/intuition/tools/core/tool_registry.strict_persistence.test.mjs`
-- `eVe/intuition/tools/core/tool_runtime.bootstrap_auth_transition_persistence.test.mjs`
+- `eVe/intuition/tools/core/tool_registry.deferred_persistence.probe.mjs`
+- `eVe/intuition/tools/core/tool_registry.strict_persistence.probe.mjs`
+- `eVe/intuition/tools/core/tool_runtime.bootstrap_auth_transition_persistence.probe.mjs`
 - `eVe/intuition/tools/core/tool_runtime.js`
 - `eVe/intuition/tools/finder.js`
 - `eVe/intuition/tools/molecule/multi_instance/index.js`
@@ -995,11 +995,11 @@ This report is generated from a deterministic static scan. It separates confirme
 - `eVe/todo/molecule_architecture_and_rebuild_plan.md`
 - `eVe/todo/strict_dry_menu_refactor_plan.md`
 - `atome/security/trusted_keys.js`
-- `src/squirrel/ai/model_catalog_registry.test.mjs`
+- `src/squirrel/ai/model_catalog_registry.probe.mjs`
 - `src/squirrel/apis/essentials.js`
 - `src/squirrel/apis/shortcut.js`
-- `src/squirrel/atome/mcp.platform_surface.test.mjs`
-- `src/squirrel/calendar/service.test.mjs`
+- `src/squirrel/atome/mcp.platform_surface.probe.mjs`
+- `src/squirrel/calendar/service.probe.mjs`
 - `src/squirrel/components/editor_builder.js`
 - `src-tauri/src/dev_logging.rs`
 - `todos/developer-experience.md`
@@ -1129,7 +1129,7 @@ This report is generated from a deterministic static scan. It separates confirme
 - `eVe/intuition/runtime/index.js`
 - `eVe/intuition/runtime/tool_genesis.js`
 - `eVe/intuition/tools/core/mtrax_renderer_webgpu_adapter.js`
-- `eVe/intuition/tools/core/tool_runtime.implicit_v2_flows.test.mjs`
+- `eVe/intuition/tools/core/tool_runtime.implicit_v2_flows.probe.mjs`
 - `eVe/intuition/tools/core/tool_runtime.js`
 - `eVe/intuition/tools/project_bootstrap.js`
 - `eVe/todo/AUDIT.md`
@@ -1142,13 +1142,13 @@ This report is generated from a deterministic static scan. It separates confirme
 - `src/js/opal.min.js`
 - `src/js/three.core.min.js`
 - `src/js/three.min.js`
-- `src/squirrel/ai/default_tools.runtime_trace_integration.test.mjs`
+- `src/squirrel/ai/default_tools.runtime_trace_integration.probe.mjs`
 - `src/squirrel/apis/unified/adole.js`
-- `src/squirrel/atome/mcp.communication_surface.test.mjs`
+- `src/squirrel/atome/mcp.communication_surface.probe.mjs`
 - `src/squirrel/atome/mcp.js`
-- `src/squirrel/atome/mcp.platform_surface.test.mjs`
-- `src/squirrel/atome/mcp.runtime_bridge.test.mjs`
-- `src/squirrel/atome/mcp.security_surface.test.mjs`
+- `src/squirrel/atome/mcp.platform_surface.probe.mjs`
+- `src/squirrel/atome/mcp.runtime_bridge.probe.mjs`
+- `src/squirrel/atome/mcp.security_surface.probe.mjs`
 - `src/squirrel/components/dropDown_builder.js`
 - `src/squirrel/components/editor_builder.js`
 - `src/squirrel/components/intuition_builder/index.js`
@@ -1156,9 +1156,9 @@ This report is generated from a deterministic static scan. It separates confirme
 - `src/squirrel/voice/ai_planner.js`
 - `src/squirrel/voice/orchestrator.js`
 - `tests/application/examples/ios_apis.js`
-- `tests/probes/eve_business_validation.test.mjs`
-- `tests/probes/eve_runtime_selection_transform_probe.test.mjs`
-- `tests/probes/eve_strangler_integration.test.mjs`
+- `tests/probes/eve_business_validation.probe.mjs`
+- `tests/probes/eve_runtime_selection_transform_probe.probe.mjs`
+- `tests/probes/eve_strangler_integration.probe.mjs`
 - `todos/eve_atome_master_cleanup_plan.md`
 - `todos/video_recording_and_preview.md`
 
@@ -1192,7 +1192,7 @@ This report is generated from a deterministic static scan. It separates confirme
 - `src/application/audio_runtime/backend.kira.js`
 - `src/application/audio_runtime/record_audio_api.js`
 - `src/application/audio_runtime/tauri_audio_bridge.js`
-- `eVe/core/atome_commit.fastify_auth_invalid.test.mjs`
+- `eVe/core/atome_commit.fastify_auth_invalid.probe.mjs`
 - `eVe/core/atome_commit.js`
 - `eVe/core/atome_events/drag_runtime.js`
 - `eVe/core/atome_events/project_layer_runtime.js`
@@ -1565,17 +1565,17 @@ This report is generated from a deterministic static scan. It separates confirme
 - `eVe/intuition/tools/core/finder_tools_projection.js`
 - `eVe/intuition/tools/core/svg_draw_runtime.js`
 - `eVe/intuition/tools/core/svg_vector_edit_runtime.js`
-- `eVe/intuition/tools/core/tool_definition_ssot.long_press.test.mjs`
-- `eVe/intuition/tools/core/tool_gateway.finder_target_id_mapping.test.mjs`
+- `eVe/intuition/tools/core/tool_definition_ssot.long_press.probe.mjs`
+- `eVe/intuition/tools/core/tool_gateway.finder_target_id_mapping.probe.mjs`
 - `eVe/intuition/tools/core/tool_instances.js`
 - `eVe/intuition/tools/core/tool_interaction.js`
-- `eVe/intuition/tools/core/tool_interaction.selection_ids_propagation.test.mjs`
+- `eVe/intuition/tools/core/tool_interaction.selection_ids_propagation.probe.mjs`
 - `eVe/intuition/tools/core/tool_latch_aliases.js`
-- `eVe/intuition/tools/core/tool_latch_aliases.test.mjs`
-- `eVe/intuition/tools/core/tool_registry.deferred_persistence.test.mjs`
+- `eVe/intuition/tools/core/tool_latch_aliases.probe.mjs`
+- `eVe/intuition/tools/core/tool_registry.deferred_persistence.probe.mjs`
 - `eVe/intuition/tools/core/tool_registry.js`
-- `eVe/intuition/tools/core/tool_registry.strict_persistence.test.mjs`
-- `eVe/intuition/tools/core/tool_runtime.canonical_persistence_flows.test.mjs`
+- `eVe/intuition/tools/core/tool_registry.strict_persistence.probe.mjs`
+- `eVe/intuition/tools/core/tool_runtime.canonical_persistence_flows.probe.mjs`
 
 ### webgpuEntryPoints
 
@@ -1610,9 +1610,9 @@ This report is generated from a deterministic static scan. It separates confirme
 - `eVe/todo/new Mtrax engine.md`
 - `tests/mtrack_decode_test.mjs`
 - `tests/mtrack_diag_test.mjs`
-- `tests/probes/browser_media_acceptance_probe.test.mjs`
-- `tests/probes/media_api_suite_probe.test.mjs`
-- `tests/probes/molecule_webgpu_visual_probe.test.mjs`
+- `tests/probes/browser_media_acceptance_probe.probe.mjs`
+- `tests/probes/media_api_suite_probe.probe.mjs`
+- `tests/probes/molecule_webgpu_visual_probe.probe.mjs`
 - `tests/probes/mtrack_media_play_ui_probe.test.mjs`
 - `tests/probes/photo_video_capture_fullscreen_probe.test.mjs`
 - `todos/eve_atome_master_cleanup_plan.md`
@@ -1798,7 +1798,7 @@ This report is generated from a deterministic static scan. It separates confirme
 - `atome-os/builder/scripts/preflight.sh`
 - `check-syntax.mjs`
 - `database/adole.js`
-- `database/adole.user_classification.test.mjs`
+- `database/adole.user_classification.probe.mjs`
 - `database/driver.js`
 - `dev/daemon/index.js`
 - `documentations/Voice_recog.md`
@@ -2020,13 +2020,13 @@ This report is generated from a deterministic static scan. It separates confirme
 - `eVe/intuition/tools/communication.js`
 - `eVe/intuition/tools/copy.js`
 - `eVe/intuition/tools/core/svg_draw_runtime.js`
-- `eVe/intuition/tools/core/tool_interaction.selection_ids_propagation.test.mjs`
-- `eVe/intuition/tools/core/tool_registry.deferred_persistence.test.mjs`
+- `eVe/intuition/tools/core/tool_interaction.selection_ids_propagation.probe.mjs`
+- `eVe/intuition/tools/core/tool_registry.deferred_persistence.probe.mjs`
 - `eVe/intuition/tools/core/tool_registry.js`
-- `eVe/intuition/tools/core/tool_registry.strict_persistence.test.mjs`
+- `eVe/intuition/tools/core/tool_registry.strict_persistence.probe.mjs`
 - `eVe/intuition/tools/core/tool_runtime.js`
-- `eVe/intuition/tools/core/tool_runtime.latch_selection_propagation.test.mjs`
-- `eVe/intuition/tools/core/tool_runtime.ui_latch_bridge_selection_propagation.test.mjs`
+- `eVe/intuition/tools/core/tool_runtime.latch_selection_propagation.probe.mjs`
+- `eVe/intuition/tools/core/tool_runtime.ui_latch_bridge_selection_propagation.probe.mjs`
 - `eVe/intuition/tools/couleur.js`
 - `eVe/intuition/tools/delete.js`
 - `eVe/intuition/tools/detail.js`
@@ -2042,7 +2042,7 @@ This report is generated from a deterministic static scan. It separates confirme
 - `RECORDING_INTEGRATION_PLAN.md`
 - `atome-os/builder/packages/base.yml`
 - `database/adole.js`
-- `database/adole.user_classification.test.mjs`
+- `database/adole.user_classification.probe.mjs`
 - `database/driver.js`
 - `database/index.js`
 - `documentations/ADOLE.md`
@@ -2095,7 +2095,7 @@ This report is generated from a deterministic static scan. It separates confirme
 - `server/visio.js`
 - `src/application/aBox/index.js`
 - `src/application/audio_runtime/record_audio_api.js`
-- `eVe/core/atome_commit.fastify_auth_invalid.test.mjs`
+- `eVe/core/atome_commit.fastify_auth_invalid.probe.mjs`
 - `eVe/core/atome_commit.js`
 - `eVe/core/browser_store/indexeddb_backend.js`
 - `eVe/core/ios_store/ios_sqlite_backend.js`
@@ -2197,7 +2197,7 @@ This report is generated from a deterministic static scan. It separates confirme
 - `server/auth.js`
 - `server/githubSync.js`
 - `server/mailRoutes.js`
-- `server/mailRoutes.test.mjs`
+- `server/mailRoutes.probe.mjs`
 - `server/server.js`
 
 ## AI-Debt Indicators
@@ -2206,7 +2206,7 @@ This report is generated from a deterministic static scan. It separates confirme
 
 - `check-syntax.mjs`
 - `database/adole.js`
-- `database/adole.user_classification.test.mjs`
+- `database/adole.user_classification.probe.mjs`
 - `database/driver.js`
 - `dev/daemon/index.js`
 - `documentations/AUv3_API_Reference.md`
@@ -2277,7 +2277,7 @@ This report is generated from a deterministic static scan. It separates confirme
 - `server/fileStorage.js`
 - `server/githubSync.js`
 - `server/mailRoutes.js`
-- `server/mailRoutes.test.mjs`
+- `server/mailRoutes.probe.mjs`
 - `server/notificationStack.js`
 - `server/server.js`
 - `server/serverIdentity.js`
@@ -2372,7 +2372,7 @@ This report is generated from a deterministic static scan. It separates confirme
 
 - `check-syntax.mjs`
 - `database/adole.js`
-- `database/adole.user_classification.test.mjs`
+- `database/adole.user_classification.probe.mjs`
 - `database/driver.js`
 - `dev/daemon/index.js`
 - `documentations/Problems solving/MTRACK_AUDIO_DURATION_NATIVE_REGRESSION.md`
@@ -2912,7 +2912,7 @@ This report is generated from a deterministic static scan. It separates confirme
 - `atome-os/builder/scripts/preflight.sh`
 - `auv3.sh`
 - `database/adole.js`
-- `database/adole.user_classification.test.mjs`
+- `database/adole.user_classification.probe.mjs`
 - `database/index.js`
 - `dev/daemon/index.js`
 - `dev/log_schema.json`
@@ -3180,7 +3180,7 @@ This report is generated from a deterministic static scan. It separates confirme
 - `server/auth.js`
 - `server/fileStorage.js`
 - `server/githubSync.js`
-- `server/mailRoutes.test.mjs`
+- `server/mailRoutes.probe.mjs`
 - `server/notificationStack.js`
 - `server/server.js`
 - `server/serverIdentity.js`
@@ -3194,10 +3194,10 @@ This report is generated from a deterministic static scan. It separates confirme
 - `server/wsApiState.js`
 - `server/wsSend.js`
 - `src/application/audio_runtime/demo.example.js`
-- `src/application/audio_runtime/runtime_audio_backend.strict_native.test.mjs`
-- `eVe/core/atome_commit.fastify_auth_invalid.test.mjs`
+- `src/application/audio_runtime/runtime_audio_backend.strict_native.probe.mjs`
+- `eVe/core/atome_commit.fastify_auth_invalid.probe.mjs`
 - `eVe/documentations/debug_UI.md`
-- `eVe/domains/media/shared/media_source.test.mjs`
+- `eVe/domains/media/shared/media_source.probe.mjs`
 - `eVe/domains/mtrax/api/transport_api_runtime.js`
 
 ### temporaryDebugPrints
@@ -3393,7 +3393,7 @@ This report is generated from a deterministic static scan. It separates confirme
 - `server/auth.js`
 - `server/fileStorage.js`
 - `server/githubSync.js`
-- `server/mailRoutes.test.mjs`
+- `server/mailRoutes.probe.mjs`
 - `server/notificationStack.js`
 - `server/server.js`
 - `server/serverIdentity.js`
@@ -3407,16 +3407,16 @@ This report is generated from a deterministic static scan. It separates confirme
 - `server/wsApiState.js`
 - `server/wsSend.js`
 - `src/application/audio_runtime/demo.example.js`
-- `src/application/audio_runtime/runtime_audio_backend.strict_native.test.mjs`
-- `eVe/core/atome_commit.fastify_auth_invalid.test.mjs`
+- `src/application/audio_runtime/runtime_audio_backend.strict_native.probe.mjs`
+- `eVe/core/atome_commit.fastify_auth_invalid.probe.mjs`
 - `eVe/documentations/debug_UI.md`
-- `eVe/domains/media/shared/media_source.test.mjs`
+- `eVe/domains/media/shared/media_source.probe.mjs`
 - `eVe/domains/mtrax/api/transport_api_runtime.js`
 
 ### swallowedErrors
 
 - `database/adole.js`
-- `database/adole.user_classification.test.mjs`
+- `database/adole.user_classification.probe.mjs`
 - `dev/daemon/index.js`
 - `documentations/Problems solving/MTRACK_AUDIO_DURATION_NATIVE_REGRESSION.md`
 - `documentations/Problems solving/MTRACK_PURE_AUDIO_RECORDING_DURATION_NATIVE_REGRESSION.md`
@@ -3585,7 +3585,7 @@ This report is generated from a deterministic static scan. It separates confirme
 - `src/application/examples/tables.js`
 - `tests/application/examples/record_audio.js`
 - `tests/application/examples/tables.js`
-- `tests/probes/eve_llm_e2e_suite.test.mjs`
+- `tests/probes/eve_llm_e2e_suite.probe.mjs`
 
 ## Security Indicators
 
@@ -3602,7 +3602,7 @@ This report is generated from a deterministic static scan. It separates confirme
 - `atome-os/builder/scripts/preflight.sh`
 - `check-syntax.mjs`
 - `database/adole.js`
-- `database/adole.user_classification.test.mjs`
+- `database/adole.user_classification.probe.mjs`
 - `database/driver.js`
 - `dev/daemon/index.js`
 - `documentations/Voice_recog.md`
@@ -3745,7 +3745,7 @@ This report is generated from a deterministic static scan. It separates confirme
 - `src/application/aBox/index.js`
 - `src/application/audio_runtime/backend.kira.js`
 - `src/application/audio_runtime/runtime_audio_backend.js`
-- `src/application/audio_runtime/runtime_audio_backend.strict_native.test.mjs`
+- `src/application/audio_runtime/runtime_audio_backend.strict_native.probe.mjs`
 - `eVe/concept/eVe.html`
 - `eVe/core/atome_commit.js`
 - `eVe/core/media_engine/molecule.api.js`
@@ -3973,7 +3973,7 @@ This report is generated from a deterministic static scan. It separates confirme
 - `src/application/audio_runtime/record_audio_api.js`
 - `src/application/audio_runtime/stt_api.js`
 - `src/application/audio_runtime/tauri_audio_bridge.js`
-- `eVe/core/atome_commit.fastify_auth_invalid.test.mjs`
+- `eVe/core/atome_commit.fastify_auth_invalid.probe.mjs`
 - `eVe/core/atome_commit.js`
 - `eVe/core/atome_events/drag_runtime.js`
 - `eVe/core/atome_events/local_interaction_edit_runtime.js`
@@ -4032,8 +4032,8 @@ This report is generated from a deterministic static scan. It separates confirme
 - `server/shell.js`
 - `server/visio.js`
 - `src/application/aBox/index.js`
-- `src/application/audio_runtime/runtime_audio_backend.strict_native.test.mjs`
-- `eVe/core/atome_commit.fastify_auth_invalid.test.mjs`
+- `src/application/audio_runtime/runtime_audio_backend.strict_native.probe.mjs`
+- `eVe/core/atome_commit.fastify_auth_invalid.probe.mjs`
 - `eVe/core/atome_commit.js`
 - `eVe/core/media_engine/molecule.api.js`
 - `eVe/core/media_engine/molecule.js`
@@ -4073,7 +4073,7 @@ This report is generated from a deterministic static scan. It separates confirme
 - `eVe/intuition/tools/core/mtrax_renderer_webgpu_adapter.js`
 - `eVe/intuition/tools/core/svg_draw_runtime.js`
 - `eVe/intuition/tools/core/svg_vector_model.js`
-- `eVe/intuition/tools/core/tool_registry.deferred_persistence.test.mjs`
+- `eVe/intuition/tools/core/tool_registry.deferred_persistence.probe.mjs`
 - `eVe/intuition/tools/core/tool_registry.js`
 - `eVe/intuition/tools/core/tool_runtime.js`
 - `eVe/intuition/tools/imports_exports/index.js`
@@ -4110,7 +4110,7 @@ This report is generated from a deterministic static scan. It separates confirme
 - `server/aBoxServer.js`
 - `server/auth.js`
 - `server/mailRoutes.js`
-- `server/mailRoutes.test.mjs`
+- `server/mailRoutes.probe.mjs`
 - `server/server.js`
 - `server/serverIdentity.js`
 - `eVe/core/atome_commit.js`
@@ -4141,9 +4141,9 @@ This report is generated from a deterministic static scan. It separates confirme
 - `src/application/thermUSS/securite_fr.md`
 - `src/application/thermUSS/security_en.md`
 - `src/squirrel/ai/model_catalog_refresh.js`
-- `src/squirrel/ai/model_catalog_refresh.test.mjs`
+- `src/squirrel/ai/model_catalog_refresh.probe.mjs`
 - `src/squirrel/ai/provider_client.js`
-- `src/squirrel/ai/provider_client.test.mjs`
+- `src/squirrel/ai/provider_client.probe.mjs`
 - `src/squirrel/apis/unified/adole.js`
 - `src/squirrel/apis/unified/adole_api/auth.js`
 - `src/squirrel/apis/unified/adole_apis.js`
@@ -4151,24 +4151,24 @@ This report is generated from a deterministic static scan. It separates confirme
 - `src/squirrel/bank/bootstrap.js`
 - `src/squirrel/calendar/bootstrap.js`
 - `src/squirrel/calendar/node_protocol_clients.js`
-- `src/squirrel/calendar/node_protocol_clients.test.mjs`
-- `src/squirrel/contacts/bootstrap.connector.test.mjs`
+- `src/squirrel/calendar/node_protocol_clients.probe.mjs`
+- `src/squirrel/contacts/bootstrap.connector.probe.mjs`
 - `src/squirrel/contacts/bootstrap.js`
 - `src/squirrel/contacts/icloud_connector.js`
-- `src/squirrel/contacts/icloud_connector.test.mjs`
+- `src/squirrel/contacts/icloud_connector.probe.mjs`
 - `src/squirrel/contacts/node_protocol_clients.js`
-- `src/squirrel/contacts/node_protocol_clients.test.mjs`
-- `src/squirrel/mail/bootstrap.connector.test.mjs`
+- `src/squirrel/contacts/node_protocol_clients.probe.mjs`
+- `src/squirrel/mail/bootstrap.connector.probe.mjs`
 - `src/squirrel/mail/bootstrap.js`
-- `src/squirrel/mail/bootstrap.remote_archive_delete.test.mjs`
-- `src/squirrel/mail/bootstrap.remote_mark_read.test.mjs`
-- `src/squirrel/mail/bootstrap.remote_send.test.mjs`
-- `src/squirrel/mail/bootstrap.remote_sync.test.mjs`
-- `src/squirrel/mail/bootstrap.tauri_sync_target.test.mjs`
+- `src/squirrel/mail/bootstrap.remote_archive_delete.probe.mjs`
+- `src/squirrel/mail/bootstrap.remote_mark_read.probe.mjs`
+- `src/squirrel/mail/bootstrap.remote_send.probe.mjs`
+- `src/squirrel/mail/bootstrap.remote_sync.probe.mjs`
+- `src/squirrel/mail/bootstrap.tauri_sync_target.probe.mjs`
 - `src/squirrel/mail/icloud_connector.js`
-- `src/squirrel/mail/icloud_connector.test.mjs`
+- `src/squirrel/mail/icloud_connector.probe.mjs`
 - `src/squirrel/mail/node_protocol_clients.js`
-- `src/squirrel/mail/node_protocol_transport.integration.test.mjs`
+- `src/squirrel/mail/node_protocol_transport.integration.probe.mjs`
 
 ### localStorageUsage
 
@@ -4181,7 +4181,7 @@ This report is generated from a deterministic static scan. It separates confirme
 - `scripts/reset_Framework.sh`
 - `src/application/aBox/index.js`
 - `src/application/audio_runtime/record_audio_api.js`
-- `eVe/core/atome_commit.fastify_auth_invalid.test.mjs`
+- `eVe/core/atome_commit.fastify_auth_invalid.probe.mjs`
 - `eVe/core/atome_commit.js`
 - `eVe/core/media_engine/molecule.test.mjs`
 - `eVe/documentations/strangler.md`
@@ -4234,14 +4234,14 @@ This report is generated from a deterministic static scan. It separates confirme
 - `atome/security/syncQueue.js`
 - `src/squirrel/ai/model_catalog_cache.js`
 - `src/squirrel/ai/model_catalog_refresh.js`
-- `src/squirrel/ai/model_catalog_refresh.test.mjs`
+- `src/squirrel/ai/model_catalog_refresh.probe.mjs`
 - `src/squirrel/ai/offline_mutation_queue.js`
 - `src/squirrel/ai/persistent_memory.js`
-- `src/squirrel/ai/persistent_memory.test.mjs`
+- `src/squirrel/ai/persistent_memory.probe.mjs`
 - `src/squirrel/ai/proactive_state_store.js`
 - `src/squirrel/ai/quota_tracker.js`
 - `src/squirrel/ai/trace_store.js`
-- `src/squirrel/ai/trace_store.test.mjs`
+- `src/squirrel/ai/trace_store.probe.mjs`
 - `src/squirrel/apis/loadServerConfig.js`
 - `src/squirrel/apis/loader.js`
 - `src/squirrel/apis/unified/adole.js`
@@ -4320,11 +4320,11 @@ This report is generated from a deterministic static scan. It separates confirme
 - `src/squirrel/apis/unified/adole.js`
 - `src/squirrel/apis/unified/adole_api/sharing.js`
 - `src/squirrel/atome/mcp.js`
-- `src/squirrel/atome/mcp.security_surface.test.mjs`
+- `src/squirrel/atome/mcp.security_surface.probe.mjs`
 - `src/squirrel/mail/node_protocol_clients.js`
 - `src/squirrel/voice/home_surface.js`
 - `src/squirrel/voice/orchestrator.js`
-- `src/squirrel/voice/orchestrator.test.mjs`
+- `src/squirrel/voice/orchestrator.probe.mjs`
 - `src/squirrel/voice/service.js`
 - `src-tauri/capabilities/default.json`
 - `src-tauri/src/server/local_atome.rs`
@@ -4352,7 +4352,7 @@ This report is generated from a deterministic static scan. It separates confirme
 - `atome-os/builder/scripts/preflight.sh`
 - `check-syntax.mjs`
 - `database/adole.js`
-- `database/adole.user_classification.test.mjs`
+- `database/adole.user_classification.probe.mjs`
 - `database/driver.js`
 - `database/index.js`
 - `dev/daemon/index.js`
@@ -4440,7 +4440,7 @@ This report is generated from a deterministic static scan. It separates confirme
 - `eVe/domains/media/media_diagnostics.js`
 - `eVe/intuition/shared/svg_runtime.js`
 - `eVe/intuition/tools/core/svg_vector_model.js`
-- `eVe/intuition/tools/core/tool_target_id.unique_resolution.test.mjs`
+- `eVe/intuition/tools/core/tool_target_id.unique_resolution.probe.mjs`
 - `eVe/intuition/tools/imports_exports/index.js`
 - `eVe/todo/MCP_voice_control.md`
 - `src/js/codemirror.bundle.js`
@@ -4458,7 +4458,7 @@ This report is generated from a deterministic static scan. It separates confirme
 - `src-tauri/src/server/local_auth.rs`
 - `src-tauri/src/server/mod.rs`
 - `tests/probes/tauri_recorded_video_mtrack_probe.test.mjs`
-- `tests/probes/video_recording_audio_integrity_probe.test.mjs`
+- `tests/probes/video_recording_audio_integrity_probe.probe.mjs`
 - `todos/AI_Integration.md`
 
 ### unsafeEvalUsage
@@ -4473,13 +4473,13 @@ This report is generated from a deterministic static scan. It separates confirme
 - `src/wasm/squirrel_audio_wasm.js`
 - `src-tauri/src/lib.rs`
 - `src-tauri/src/main.rs`
-- `tests/probes/fastify_debug.test.mjs`
+- `tests/probes/fastify_debug.probe.mjs`
 - `tests/ui/test_wasm_audio.mjs`
 
 ### dynamicImportRisks
 
 - `database/adole.js`
-- `database/adole.user_classification.test.mjs`
+- `database/adole.user_classification.probe.mjs`
 - `database/driver.js`
 - `documentations/debug_mode.md`
 - `scripts/install_dependencies.sh`
@@ -4493,7 +4493,7 @@ This report is generated from a deterministic static scan. It separates confirme
 - `server/visio.js`
 - `src/application/audio_runtime/backend.kira.js`
 - `src/application/audio_runtime/record_audio_api.js`
-- `eVe/core/atome_commit.fastify_auth_invalid.test.mjs`
+- `eVe/core/atome_commit.fastify_auth_invalid.probe.mjs`
 - `eVe/default/shortcuts.js`
 - `eVe/documentations/debug_UI.md`
 - `eVe/domains/media/api/video_recording_controller.js`
@@ -4501,8 +4501,8 @@ This report is generated from a deterministic static scan. It separates confirme
 - `eVe/domains/mtrax/media/atome_runtime.js`
 - `eVe/domains/mtrax/preview/preview_export_runtime.surface_capture.test.mjs`
 - `eVe/domains/mtrax/ui/panel_lifecycle_runtime.close_state.test.mjs`
-- `eVe/elements/design/dialog_runtime.background_drag.test.mjs`
-- `eVe/elements/design/dialog_runtime.reveal_mobile.test.mjs`
+- `eVe/elements/design/dialog_runtime.background_drag.probe.mjs`
+- `eVe/elements/design/dialog_runtime.reveal_mobile.probe.mjs`
 - `eVe/intuition/eVeIntuition.js`
 - `eVe/intuition/footer/runtime.sync_placement.test.mjs`
 - `eVe/intuition/panel_definitions.js`
@@ -4512,20 +4512,20 @@ This report is generated from a deterministic static scan. It separates confirme
 - `eVe/intuition/tools/capture.js`
 - `eVe/intuition/tools/contact.js`
 - `eVe/intuition/tools/core/mtrax_renderer_runtime.js`
-- `eVe/intuition/tools/core/tool_gateway.finder_target_id_mapping.test.mjs`
-- `eVe/intuition/tools/core/tool_interaction.selection_ids_propagation.test.mjs`
-- `eVe/intuition/tools/core/tool_registry.deferred_persistence.test.mjs`
-- `eVe/intuition/tools/core/tool_runtime.bootstrap_auth_transition_persistence.test.mjs`
-- `eVe/intuition/tools/core/tool_runtime.canonical_persistence_flows.test.mjs`
-- `eVe/intuition/tools/core/tool_runtime.finder_inline_open_guard.test.mjs`
-- `eVe/intuition/tools/core/tool_runtime.finder_pointer_click_open_guard.test.mjs`
-- `eVe/intuition/tools/core/tool_runtime.finder_ui_runtime_flows.test.mjs`
-- `eVe/intuition/tools/core/tool_runtime.finder_v2_flows.test.mjs`
-- `eVe/intuition/tools/core/tool_runtime.implicit_v2_flows.test.mjs`
+- `eVe/intuition/tools/core/tool_gateway.finder_target_id_mapping.probe.mjs`
+- `eVe/intuition/tools/core/tool_interaction.selection_ids_propagation.probe.mjs`
+- `eVe/intuition/tools/core/tool_registry.deferred_persistence.probe.mjs`
+- `eVe/intuition/tools/core/tool_runtime.bootstrap_auth_transition_persistence.probe.mjs`
+- `eVe/intuition/tools/core/tool_runtime.canonical_persistence_flows.probe.mjs`
+- `eVe/intuition/tools/core/tool_runtime.finder_inline_open_guard.probe.mjs`
+- `eVe/intuition/tools/core/tool_runtime.finder_pointer_click_open_guard.probe.mjs`
+- `eVe/intuition/tools/core/tool_runtime.finder_ui_runtime_flows.probe.mjs`
+- `eVe/intuition/tools/core/tool_runtime.finder_v2_flows.probe.mjs`
+- `eVe/intuition/tools/core/tool_runtime.implicit_v2_flows.probe.mjs`
 - `eVe/intuition/tools/core/tool_runtime.js`
-- `eVe/intuition/tools/core/tool_runtime.latch_selection_propagation.test.mjs`
+- `eVe/intuition/tools/core/tool_runtime.latch_selection_propagation.probe.mjs`
 - `eVe/intuition/tools/core/tool_runtime.mtrack_panel_mount_contract.test.mjs`
-- `eVe/intuition/tools/core/tool_runtime.ui_latch_bridge_selection_propagation.test.mjs`
+- `eVe/intuition/tools/core/tool_runtime.ui_latch_bridge_selection_propagation.probe.mjs`
 - `eVe/intuition/tools/detail.js`
 - `eVe/intuition/tools/perform.js`
 - `eVe/intuition/tools/project_drop.js`
@@ -4546,14 +4546,14 @@ This report is generated from a deterministic static scan. It separates confirme
 - `src/application/vie/vie.js`
 - `src/js/tone.min.js`
 - `src/squirrel/ai/default_tools.js`
-- `src/squirrel/ai/default_tools.runtime_bridge.test.mjs`
-- `src/squirrel/ai/default_tools.runtime_trace_integration.test.mjs`
+- `src/squirrel/ai/default_tools.runtime_bridge.probe.mjs`
+- `src/squirrel/ai/default_tools.runtime_trace_integration.probe.mjs`
 - `src/squirrel/apis/unified/adole_api/atomes.local_auth_headers.test.mjs`
 - `src/squirrel/apis/unified/adole_api/session.current_project.test.mjs`
-- `src/squirrel/atome/mcp.communication_surface.test.mjs`
-- `src/squirrel/atome/mcp.platform_surface.test.mjs`
-- `src/squirrel/atome/mcp.runtime_bridge.test.mjs`
-- `src/squirrel/atome/mcp.security_surface.test.mjs`
+- `src/squirrel/atome/mcp.communication_surface.probe.mjs`
+- `src/squirrel/atome/mcp.platform_surface.probe.mjs`
+- `src/squirrel/atome/mcp.runtime_bridge.probe.mjs`
+- `src/squirrel/atome/mcp.security_surface.probe.mjs`
 - `src/squirrel/calendar/bootstrap.js`
 - `src/squirrel/calendar/calendar_api_source.js`
 - `src/squirrel/components/editor_builder.js`
@@ -4603,7 +4603,7 @@ This report is generated from a deterministic static scan. It separates confirme
 - `README.md`
 - `RECORDING_INTEGRATION_PLAN.md`
 - `database/adole.js`
-- `database/adole.user_classification.test.mjs`
+- `database/adole.user_classification.probe.mjs`
 - `documentations/AUv3_API_Reference.md`
 - `documentations/Adole apis.md`
 - `documentations/Eden atome Database.md`
@@ -4750,9 +4750,9 @@ This report is generated from a deterministic static scan. It separates confirme
 - `eVe/intuition/tools/core/svg_vector_model.js`
 - `eVe/intuition/tools/core/tool_interaction.js`
 - `eVe/intuition/tools/core/tool_latch_aliases.js`
-- `eVe/intuition/tools/core/tool_registry.deferred_persistence.test.mjs`
-- `eVe/intuition/tools/core/tool_runtime.bootstrap_auth_transition_persistence.test.mjs`
-- `eVe/intuition/tools/core/tool_runtime.canonical_persistence_flows.test.mjs`
+- `eVe/intuition/tools/core/tool_registry.deferred_persistence.probe.mjs`
+- `eVe/intuition/tools/core/tool_runtime.bootstrap_auth_transition_persistence.probe.mjs`
+- `eVe/intuition/tools/core/tool_runtime.canonical_persistence_flows.probe.mjs`
 - `eVe/intuition/tools/detail.js`
 - `eVe/intuition/tools/infos.js`
 - `eVe/intuition/tools/molecule/runtime.js`
@@ -4770,7 +4770,7 @@ This report is generated from a deterministic static scan. It separates confirme
 - `RUNNING_VIDEO_AUDIO_SYNC_PLAN.md`
 - `check-syntax.mjs`
 - `database/adole.js`
-- `database/adole.user_classification.test.mjs`
+- `database/adole.user_classification.probe.mjs`
 - `database/driver.js`
 - `database/index.js`
 - `dev/daemon/index.js`
@@ -4891,9 +4891,9 @@ This report is generated from a deterministic static scan. It separates confirme
 - `eVe/domains/media/asset_box.js`
 - `eVe/domains/media/media_diagnostics.js`
 - `eVe/domains/media/preview/native_frame_video_preview_renderer.js`
-- `eVe/domains/media/shared/media_identifier.test.mjs`
+- `eVe/domains/media/shared/media_identifier.probe.mjs`
 - `eVe/domains/media/shared/media_source.js`
-- `eVe/domains/media/shared/media_source.test.mjs`
+- `eVe/domains/media/shared/media_source.probe.mjs`
 - `eVe/domains/mtrax/api/api_record_media_runtime.js`
 - `eVe/domains/mtrax/api/transport_api_runtime.js`
 - `eVe/domains/mtrax/api/window_api_runtime.js`
@@ -4980,7 +4980,7 @@ This report is generated from a deterministic static scan. It separates confirme
 - `eVe/domains/user/profile_api.js`
 - `eve/eVe_essentials.md`
 - `eVe/elements/design/dialog_runtime.js`
-- `eVe/elements/design/dialog_runtime.reveal_mobile.test.mjs`
+- `eVe/elements/design/dialog_runtime.reveal_mobile.probe.mjs`
 - `eVe/elements/design.js`
 - `eVe/intuition/core/dom.js`
 - `eVe/intuition/eVeIntuition.js`
@@ -5006,7 +5006,7 @@ This report is generated from a deterministic static scan. It separates confirme
 - `eVe/intuition/tools/core/mtrax_renderer_webgpu_adapter.js`
 - `eVe/intuition/tools/core/svg_draw_runtime.js`
 - `eVe/intuition/tools/core/svg_vector_edit_runtime.js`
-- `eVe/intuition/tools/core/tool_runtime.canonical_persistence_flows.test.mjs`
+- `eVe/intuition/tools/core/tool_runtime.canonical_persistence_flows.probe.mjs`
 - `eVe/intuition/tools/core/tool_runtime.js`
 - `eVe/intuition/tools/detail.js`
 - `eVe/intuition/tools/finder.js`
@@ -5028,9 +5028,9 @@ This report is generated from a deterministic static scan. It separates confirme
 - `eVe/domains/mtrax/ui/ensure_bridge_runtime.js`
 - `eVe/domains/mtrax/ui/ensure_runtime.js`
 - `eVe/domains/mtrax/ui/panel_lifecycle_runtime.js`
-- `eVe/elements/design/dialog_runtime.background_drag.test.mjs`
+- `eVe/elements/design/dialog_runtime.background_drag.probe.mjs`
 - `eVe/elements/design/dialog_runtime.js`
-- `eVe/elements/design/dialog_runtime.reveal_mobile.test.mjs`
+- `eVe/elements/design/dialog_runtime.reveal_mobile.probe.mjs`
 - `eVe/elements/design.js`
 - `eVe/elements/eVe_look.js`
 - `eVe/intuition/eVeIntuition.js`
@@ -5131,9 +5131,9 @@ This report is generated from a deterministic static scan. It separates confirme
 - `eVe/domains/mtrax/ui/styles.js`
 - `eVe/domains/mtrax/visual/descriptor_capture_runtime.js`
 - `eVe/domains/mtrax/visual/patch_apply_runtime.js`
-- `eVe/elements/design/dialog_runtime.background_drag.test.mjs`
+- `eVe/elements/design/dialog_runtime.background_drag.probe.mjs`
 - `eVe/elements/design/dialog_runtime.js`
-- `eVe/elements/design/dialog_runtime.reveal_mobile.test.mjs`
+- `eVe/elements/design/dialog_runtime.reveal_mobile.probe.mjs`
 - `eVe/elements/design/i18n_bindings.js`
 - `eVe/elements/design/panel_chrome.js`
 - `eVe/elements/design.js`

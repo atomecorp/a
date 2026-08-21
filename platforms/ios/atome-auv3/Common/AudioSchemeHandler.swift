@@ -225,6 +225,8 @@ document.getElementById('player').addEventListener('error', e => {
             rel = "eVe/" + String(rel.dropFirst("eVe/".count))
         } else if rel.hasPrefix("atome/") {
             rel = "atome_open/" + String(rel.dropFirst("atome/".count))
+        } else if rel.hasPrefix("vendor/rubberband-wasm/") {
+            rel = "atome_open/vendor/rubberband-wasm/" + String(rel.dropFirst("vendor/rubberband-wasm/".count))
         } else if rel == "server_config.json" || rel == "version.txt" {
             // Keep bundle-root files unprefixed.
         } else if !rel.hasPrefix("src/") && !rel.hasPrefix("eVe/") && !rel.hasPrefix("atome/") {

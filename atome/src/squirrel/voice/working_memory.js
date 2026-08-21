@@ -1,3 +1,4 @@
+import { cloneStructured as cloneValue } from '../shared/scalars.js';
 /**
  * Canonical session working memory for voice/text assistant flows.
  *
@@ -11,10 +12,6 @@
  * This keeps one authoritative memory interface for the assistant runtime.
  */
 
-const cloneValue = (value) => {
-    if (typeof structuredClone === 'function') return structuredClone(value);
-    return JSON.parse(JSON.stringify(value));
-};
 
 const defaultNow = () => Date.now();
 

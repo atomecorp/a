@@ -78,8 +78,8 @@ La règle du dépôt interdit une seconde implémentation quand un propriétaire
 |---|---|
 | Aides UI canoniques | `tests/probes/molecule_ui_acceptance_support.mjs` — `waitFor`, `recordCenter`, `visibleMenuTool`, `clickCanvasTarget`, `findBevyUiNodeTarget` |
 | Plus petit exemple correct | `temp/finder_ui_acceptance_probe.mjs` |
-| WebKit déjà câblé | `tests/probes/project_surface_safari_reload_probe.test.mjs` |
-| Client WebSocket | `tests/probes/remote_account_not_provisioned_ws_runtime_probe.test.mjs` |
+| WebKit déjà câblé | `tests/probes/project_surface_safari_reload_probe.probe.mjs` |
+| Client WebSocket | `tests/probes/remote_account_not_provisioned_ws_runtime_probe.probe.mjs` |
 | Acceptance UI de référence | `npm run test:molecule:ui` |
 
 **Deux pièges documentés :**
@@ -247,7 +247,7 @@ de la **présentation**.
 La restauration est maintenant lancée après la projection sans retenir
 `loadProjectAtomes()`. Le préchargement reste au début du chargement ; la probe
 `temp/view_mode_restore_flash_probe.mjs` vérifie ce contrat au lieu d'interdire
-le non-bloquant. Le contrat Node `project_load_filter_contract.test.mjs` garde
+le non-bloquant. Le contrat Node `project_load_filter_contract.probe.mjs` garde
 une lecture de préférence non résolue et prouve que le chargement rend la main.
 Validation locale : probe ciblée, syntaxe des deux runtimes, garde de réutilisation
 et garde sans fallback vertes. WebKit/Tauri/iOS restent à vérifier (voir état de

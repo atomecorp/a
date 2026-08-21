@@ -1,9 +1,4 @@
-const cloneValue = (value) => {
-    if (typeof structuredClone === 'function') {
-        return structuredClone(value);
-    }
-    return JSON.parse(JSON.stringify(value));
-};
+import { cloneStructured as cloneValue } from '../shared/scalars.js';
 
 export const createMailSyncState = ({
     now = () => Date.now()

@@ -1,5 +1,6 @@
 import { $, define } from '../squirrel.js';
 import { normalizeTextInputPresentation } from './input_contract.js';
+import { makeId } from '../shared/scalars.js';
 
 define('input-container', {
     tag: 'input',
@@ -95,7 +96,7 @@ const createInput = (config = {}) => {
     } = applyTemplate(config, templateName);
     const presentation = normalizeTextInputPresentation({ value, placeholder, disabled, readOnly });
 
-    const inputId = id || `input_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const inputId = id || makeId('input');
     const baseCss = {
         ...(css || {})
     };

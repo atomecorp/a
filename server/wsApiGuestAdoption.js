@@ -2,15 +2,15 @@ import crypto from 'crypto';
 import { withTransaction } from '../database/adole.js';
 import { isWsApiPrincipalProvisioned, resolveWsApiPrincipal } from './wsApiIdentity.js';
 import { adoptionFiles, completeAdoptionFiles, declareAdoptionFiles, ensureAdoptionFilesStaged, stageAdoptionFile } from './wsApiGuestAdoptionFiles.js';
+import { wsResponse } from './wsResponse.js';
 
 const MAX_ADOPTION_TTL_MS = 15 * 60 * 1000;
 const DIGEST_RE = /^[a-f0-9]{64}$/i;
 const UUID_V4_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const operationLocks = new Map();
 
-function response(message, success, fields = {}) {
-    return { type: 'guest-adoption-response', requestId: message.requestId || message.request_id || null, success, ok: success, ...fields };
-}
+// Family-bound alias over the shared envelope (server/wsResponse.js).
+const response = (message, success, fields) => wsResponse('guest-adoption', message, success, fields);
 
 function digest(value) {
     return crypto.createHash('sha256').update(typeof value === 'string' ? value : JSON.stringify(value)).digest('hex');

@@ -62,7 +62,7 @@ Execution requirements:
 
 Reproduce each regression first with the narrowest available probe or targeted runtime validation.
 Prefer existing probes first:
-media_import_probe.test.mjs
+media_import_probe.probe.mjs
 molecule_open_raw_media_request_probe.test.mjs
 If text disappearance lacks a focused probe, add one targeted regression test for the touched slice before or alongside the fix.
 Do not begin with broad repo exploration. Find the owning control path for each failure and work locally from there.

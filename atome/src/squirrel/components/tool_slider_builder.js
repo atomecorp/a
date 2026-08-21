@@ -96,13 +96,21 @@ const mountIntuitionXSliderToolContent = ({
     };
     const destroyUnitEditor = () => {
         if (!unitEditorSelect) return;
-        try { unitEditorSelect.remove(); } catch (_) { }
+        try {
+            unitEditorSelect.remove();
+        } catch (_) {
+            // Already detached by a re-render: removing twice is a no-op, not a fault.
+        }
         unitEditorSelect = null;
         syncValueVisual();
     };
     const destroyValueEditor = () => {
         if (!valueEditorInput) return;
-        try { valueEditorInput.remove(); } catch (_) { }
+        try {
+            valueEditorInput.remove();
+        } catch (_) {
+            // Already detached by a re-render: removing twice is a no-op, not a fault.
+        }
         valueEditorInput = null;
         setStyles(valueButton, {
             display: 'inline-flex'
@@ -233,7 +241,10 @@ const mountIntuitionXSliderToolContent = ({
             if (Number.isFinite(valueDragSession.pointerId)) {
                 valueButton.releasePointerCapture?.(valueDragSession.pointerId);
             }
-        } catch (_) { }
+        } catch (_) {
+            // The browser drops pointer capture on its own when the pointer is lost;
+            // releasing an id it no longer holds throws and means the job is done.
+        }
         valueDragSession = null;
     };
     const readDraggedValue = (clientX, clientY) => {
@@ -347,7 +358,10 @@ const mountIntuitionXSliderToolContent = ({
         try {
             valueEditorInput.focus();
             valueEditorInput.select();
-        } catch (_) { }
+        } catch (_) {
+            // Focusing a node detached between creation and this frame throws;
+            // there is nothing to focus, and nothing downstream depends on it.
+        }
     };
     const beginUnitEditor = (event) => {
         stopAndPrevent(event);
@@ -409,7 +423,9 @@ const mountIntuitionXSliderToolContent = ({
         unitEditorSelect.addEventListener('blur', () => commit(), true);
         try {
             unitEditorSelect.focus();
-        } catch (_) { }
+        } catch (_) {
+            // Same as the value editor: a detached node cannot take focus.
+        }
     };
     directSliderDragController.bind();
     hitzone.addEventListener('click', stopAndPrevent, true);
@@ -445,7 +461,10 @@ const mountIntuitionXSliderToolContent = ({
             if (Number.isFinite(valueDragSession.pointerId)) {
                 valueButton.setPointerCapture?.(valueDragSession.pointerId);
             }
-        } catch (_) { }
+        } catch (_) {
+            // Capture is refused when the pointer was already released; the drag
+            // then simply runs without capture instead of aborting.
+        }
         if (typeof window !== 'undefined') {
             window.addEventListener('pointermove', onValuePointerMove, true);
             window.addEventListener('pointerup', onValuePointerUp, true);

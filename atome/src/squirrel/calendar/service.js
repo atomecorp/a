@@ -1,4 +1,5 @@
 import { createCalendarApiSource } from './calendar_api_source.js';
+import { toText } from '../shared/scalars.js';
 
 const DEFAULT_LIMIT = 50;
 
@@ -14,7 +15,6 @@ const toIso = (value) => {
     return date ? date.toISOString() : null;
 };
 
-const toText = (value) => String(value || '').trim();
 
 const toLimit = (value, fallback = DEFAULT_LIMIT) => {
     const number = Number(value);

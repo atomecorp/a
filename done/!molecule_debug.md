@@ -717,7 +717,7 @@ Statut: traité le 2026-05-27.
 
 Reproductions exécutées:
 
-* `tests/probes/media_fixture_import_playback_probe.test.mjs` — OK après exécution Playwright hors sandbox; import et playback média valides, sans requête média brute fautive.
+* `tests/probes/media_fixture_import_playback_probe.probe.mjs` — OK après exécution Playwright hors sandbox; import et playback média valides, sans requête média brute fautive.
 * `tests/probes/molecule_open_raw_media_request_probe.test.mjs` — OK avec le compte de test `55555556`; import/ouverture `Vampire.m4v`, panneau visible, clips vidéo/audio présents, aucune requête brute vers le média.
 * Probe temporaire ciblé `temp/molecule_partial_session_probe.mjs` — reproduction de la création partielle sur échec WebGPU:
   * avant correction: `before_sessions: 0`, puis `after_sessions: 2` après deux appels `mountVisual()` échoués;
@@ -756,7 +756,7 @@ Corrections appliquées:
 * `eVe/core/media_engine/molecule.js`
   * `MoleculeSession.dispose()` ne passe plus par le chemin `stop()`/`renderFrame()` quand le renderer n'a jamais été monté.
   * Le dispose d'une session partiellement initialisée nettoie transport, voix, vidéos, boucle RAF, clips runtime et renderer.
-* `tests/probes/molecule_mount_visual_transaction.test.mjs`
+* `tests/probes/molecule_mount_visual_transaction.probe.mjs`
   * Test de régression permanent ajouté.
   * Vérifie qu'un échec WebGPU de `mountVisual()` ne laisse ni session, ni binding asset.
 
@@ -775,7 +775,7 @@ Validation ciblée après correction:
 
 Validations finales:
 
-* `node tests/probes/molecule_mount_visual_transaction.test.mjs` — OK.
+* `node tests/probes/molecule_mount_visual_transaction.probe.mjs` — OK.
 * `node --check` sur les fichiers Molecule/MTraX touchés — OK.
 * `rg TEMP_DEBUG_MOLECULE/createTempDebugMoleculeCreationId/logTempDebugMolecule eVe tests` — OK, aucune instrumentation temporaire restante dans le code ou les tests.
 * `npm run check:syntax` — OK.

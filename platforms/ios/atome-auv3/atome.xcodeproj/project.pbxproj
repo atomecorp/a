@@ -326,7 +326,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "set -eu\nRESOURCE_ROOT=\"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/atome_open\"\nrm -rf \"$RESOURCE_ROOT\"\nmkdir -p \"$RESOURCE_ROOT\"\nrsync -a --exclude target --exclude .git \"$SRCROOT/../../../atome/\" \"$RESOURCE_ROOT/\"\n";
+			shellScript = "set -eu\nRESOURCE_ROOT=\"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/atome_open\"\nrm -rf \"$RESOURCE_ROOT\"\nmkdir -p \"$RESOURCE_ROOT\"\nrsync -a --exclude target --exclude .git \"$SRCROOT/../../../atome/\" \"$RESOURCE_ROOT/\"\nmkdir -p \"$RESOURCE_ROOT/vendor/rubberband-wasm\"\nrsync -a --delete \"$SRCROOT/../../../node_modules/rubberband-wasm/dist/\" \"$RESOURCE_ROOT/vendor/rubberband-wasm/\"\n";
 		};
 		6BARCH020000000000000002 /* Copy Atome Resource Root */ = {
 			isa = PBXShellScriptBuildPhase;
@@ -343,7 +343,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "set -eu\nRESOURCE_ROOT=\"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/atome_open\"\nrm -rf \"$RESOURCE_ROOT\"\nmkdir -p \"$RESOURCE_ROOT\"\nrsync -a --exclude target --exclude .git \"$SRCROOT/../../../atome/\" \"$RESOURCE_ROOT/\"\n";
+			shellScript = "set -eu\nRESOURCE_ROOT=\"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/atome_open\"\nrm -rf \"$RESOURCE_ROOT\"\nmkdir -p \"$RESOURCE_ROOT\"\nrsync -a --exclude target --exclude .git \"$SRCROOT/../../../atome/\" \"$RESOURCE_ROOT/\"\nmkdir -p \"$RESOURCE_ROOT/vendor/rubberband-wasm\"\nrsync -a --delete \"$SRCROOT/../../../node_modules/rubberband-wasm/dist/\" \"$RESOURCE_ROOT/vendor/rubberband-wasm/\"\n";
 		};
 		6BBEVY020000000000000001 /* Build iOS Bevy Renderer */ = {
 			isa = PBXShellScriptBuildPhase;

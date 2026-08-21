@@ -76,7 +76,7 @@ Rendering must become a projection of that structure. Runtime/editor/session sta
 - Removed the eVe-local `eVe/core/atome_property_sanitizer.js` authority and switched `eVe/core/atome_commit.js`, `eVe/intuition/runtime/tool_genesis.js`, and `atome/src/squirrel/apis/unified/adole_api/atomes.js` to the shared `atome/shared/atome_contract.js` sanitizer.
 - Extended the shared contract reserved-property list to cover `media_type`, `visualType`, `selected`, and `selection`, keeping media aliases and UI selection state out of canonical Atome properties unless explicitly modeled elsewhere.
 - Consolidated `properties` / `particles` / `data` normalization in `server/atomeRoutes.orm.js` behind a single boundary adapter helper, so those aliases do not remain ordinary route-level working contracts.
-- Added `tests/server/atome_persistence_boundary.test.mjs` as a guard against reintroducing the removed direct server persistence calls or local sanitizer duplication.
+- Added `tests/server/atome_persistence_boundary.probe.mjs` as a guard against reintroducing the removed direct server persistence calls or local sanitizer duplication.
 - Removed obsolete local reserved-property sanitizer duplicates from active Atome mutation surfaces and routed them to the shared `atome/src/shared/atome_contract.js` owner:
   - `eVe/domains/media/api/media_persistence_service.js`
   - `eVe/domains/media/asset_box.js`
@@ -98,7 +98,7 @@ Rendering must become a projection of that structure. Runtime/editor/session sta
   - `eVe/intuition/runtime/selection.js`
   - `eVe/intuition/runtime/tool_genesis.js`
   - `eVe/intuition/tools/core/tool_runtime.js`
-  - `tests/eve/selection.sanitization.test.mjs`
+  - `tests/eve/selection.sanitization.probe.mjs`
 - Confirmed selection remains transient UI state in this pass: the existing selection sanitization guard still proves `syncSelectionState` does not call persistence helpers, and the new guard prevents reintroducing `dataset.toolShortcut`, `data-tool-shortcut`, `data-atome-role`, `dataset.atomeRole`, or `dataset.atomeKind` as selection/tool-runtime authority.
 - Sanitized the active tool runtime duplicate selection/text cleanup boundary so tool-host filtering and empty-text cleanup read runtime state for role, kind, project, and tool-shortcut decisions instead of DOM dataset mirrors.
 - Sanitized the active `tool_genesis.js` realtime/render patch fallback path so role, tool-shortcut, and SVG kind decisions read the runtime state helpers instead of `element.dataset` mirrors.
@@ -185,30 +185,30 @@ Rendering must become a projection of that structure. Runtime/editor/session sta
 
 Validation completed:
 
-- `node --test atome/shared/atome_contract.test.mjs tests/server/atome_persistence_boundary.test.mjs tests/eve/atome_commit.sanitization.test.mjs tests/eve/adole_commit_boundary.test.mjs`
+- `node --test atome/shared/atome_contract.probe.mjs tests/server/atome_persistence_boundary.probe.mjs tests/eve/atome_commit.sanitization.probe.mjs tests/eve/adole_commit_boundary.probe.mjs`
 - `npx vitest run tests/server/share_notifications.test.js tests/server/notification_stack.test.js tests/server/state_current_shared.test.js`
 - `node --check` on the modified server, runtime, and client modules.
-- `node --test atome/shared/atome_contract.test.mjs database/adole.sanitization.test.mjs database/adole.event_projection_invariants.test.mjs tests/server/atome_persistence_boundary.test.mjs tests/eve/adole_commit_boundary.test.mjs tests/eve/atome_commit.sanitization.test.mjs atome/src/application/audio_runtime/av_api_boundaries.test.mjs`
+- `node --test atome/shared/atome_contract.probe.mjs database/adole.sanitization.probe.mjs database/adole.event_projection_invariants.probe.mjs tests/server/atome_persistence_boundary.probe.mjs tests/eve/adole_commit_boundary.probe.mjs tests/eve/atome_commit.sanitization.probe.mjs atome/src/application/audio_runtime/av_api_boundaries.probe.mjs`
 - `npm run test:run -- tests/eve/media_persistence_service.sanitization.test.mjs tests/eve/media_asset_box.sanitization.test.mjs tests/eve/atome_property_sanitizer_ownership.test.mjs`
 - `node --check` on the modified media, AV, ADOLE, Matrix, clipboard, and selection-style modules.
-- `node --test eVe/core/atome_events/placement_runtime.test.mjs eVe/core/atome_events/text_fit_runtime.test.mjs`
+- `node --test eVe/core/atome_events/placement_runtime.probe.mjs eVe/core/atome_events/text_fit_runtime.probe.mjs`
 - `npm run test:run -- tests/eve/project_layer_canvas_lasso_selection.test.mjs`
 - `node --check` on the modified Atome event and `tool_genesis.js` modules.
-- `node --test tests/eve/selection.sanitization.test.mjs`
+- `node --test tests/eve/selection.sanitization.probe.mjs`
 - `node --check eVe/intuition/runtime/selection.js`
 - `node --check eVe/intuition/tools/core/tool_runtime.js`
 - `node --check eVe/intuition/runtime/tool_genesis.js`
-- `node --test tests/eve/project_drop_tool_instance_contract.test.mjs`
+- `node --test tests/eve/project_drop_tool_instance_contract.probe.mjs`
 - `node --check eVe/intuition/flower/context_target.js`
 - `node --check eVe/intuition/tools/contextual/flower_menu_context.js`
 - `node --check eVe/intuition/tools/perform.js`
-- `node --test tests/probes/flower_menu_modules.test.mjs`
+- `node --test tests/probes/flower_menu_modules.probe.mjs`
 - `node --check eVe/core/atome_events/selection_context_runtime.js`
 - `node --check eVe/core/atome_events/host_binding_runtime.js`
 - `node --check eVe/core/atome_events/trace_runtime.js`
 - `node --check eVe/intuition/matrix/core/matrix_runtime.js`
 - `node --check eVe/intuition/tools/capture.js`
-- `node --test tests/probes/matrix_rendering_migration_contract.test.mjs`
+- `node --test tests/probes/matrix_rendering_migration_contract.probe.mjs`
 - `node --check eVe/domains/mtrax/project/project_playback_mirror_runtime.js`
 - `node --check eVe/domains/mtrax/project/project_playback_target_runtime.js`
 - `node --check eVe/domains/mtrax/project/project_playback_automation_bundle_runtime.js`
@@ -217,7 +217,7 @@ Validation completed:
 - `node --check eVe/domains/mtrax/timeline/play_runtime.js`
 - `node --test tests/probes/mtrax_play_resume_position.test.mjs`
 - `node --check eVe/intuition/eVeIntuition.js`
-- `node --test tests/probes/flower_menu_modules.test.mjs tests/probes/mtrax_play_resume_position.test.mjs tests/probes/matrix_rendering_migration_contract.test.mjs`
+- `node --test tests/probes/flower_menu_modules.probe.mjs tests/probes/mtrax_play_resume_position.test.mjs tests/probes/matrix_rendering_migration_contract.probe.mjs`
 - `node --check eVe/intuition/runtime/tool_genesis.js`
 - `node --check eVe/intuition/tools/project_drop.js`
 - `node --check eVe/intuition/matrix/core/matrix_runtime.js`
@@ -241,14 +241,14 @@ Validation completed:
 - `node --check eVe/core/media_engine/molecule.api.js`
 - `node --check eVe/domains/media/shared/media_projection_state.js`
 - `node --check eVe/intuition/shared/group_state_runtime.js`
-- `node --test tests/eve/selection.sanitization.test.mjs eVe/core/atome_events/placement_runtime.test.mjs eVe/core/atome_events/text_fit_runtime.test.mjs`
-- `node --test tests/eve/selection.sanitization.test.mjs tests/probes/mtrax_play_resume_position.test.mjs tests/probes/matrix_rendering_migration_contract.test.mjs`
-- `node --test tests/eve/selection.sanitization.test.mjs tests/eve/project_drop_tool_instance_contract.test.mjs tests/probes/flower_menu_modules.test.mjs`
+- `node --test tests/eve/selection.sanitization.probe.mjs eVe/core/atome_events/placement_runtime.probe.mjs eVe/core/atome_events/text_fit_runtime.probe.mjs`
+- `node --test tests/eve/selection.sanitization.probe.mjs tests/probes/mtrax_play_resume_position.test.mjs tests/probes/matrix_rendering_migration_contract.probe.mjs`
+- `node --test tests/eve/selection.sanitization.probe.mjs tests/eve/project_drop_tool_instance_contract.probe.mjs tests/probes/flower_menu_modules.probe.mjs`
 - `npm run test:run -- tests/eve/project_layer_canvas_lasso_selection.test.mjs`
 - `node --check eVe/intuition/tools/selection_style_apply.js`
 - `node --check eVe/intuition/shared/tool_shortcut_visual.js`
 - `node --check eVe/intuition/tools/user.js`
-- `node --test tests/eve/selection.sanitization.test.mjs tests/eve/project_drop_tool_instance_contract.test.mjs`
+- `node --test tests/eve/selection.sanitization.probe.mjs tests/eve/project_drop_tool_instance_contract.probe.mjs`
 - `node --check eVe/intuition/runtime/selection_snapshot.js`
 - `node --check eVe/intuition/runtime/mtrack_dock_controller.js`
 - `node --check eVe/intuition/runtime/eve_intuition/mtrax_bridge_runtime.js`
@@ -256,7 +256,7 @@ Validation completed:
 - `node --check eVe/intuition/tools/project_drop.js`
 - `npm run test:run -- tests/eve/project_layer_canvas_lasso_selection.test.mjs`
 - `node --check eVe/intuition/eVeIntuition.js`
-- `node --test tests/probes/flower_menu_modules.test.mjs tests/probes/mtrax_play_resume_position.test.mjs tests/probes/matrix_rendering_migration_contract.test.mjs`
+- `node --test tests/probes/flower_menu_modules.probe.mjs tests/probes/mtrax_play_resume_position.test.mjs tests/probes/matrix_rendering_migration_contract.probe.mjs`
 
 Closed in current pass:
 
@@ -275,7 +275,7 @@ These files define whether Atome data is clean before it reaches the rest of the
   - Action: decide where transitional aliases are accepted and ensure aliases never escape normalized boundaries.
   - Action: add type/schema hooks for `properties`.
 
-- [atome/shared/atome_contract.test.mjs](../atome/shared/atome_contract.test.mjs)
+- [atome/shared/atome_contract.probe.mjs](../atome/shared/atome_contract.probe.mjs)
   - Action: cover canonical envelope formatting, alias rejection, property sanitization, unknown-property handling, immutable `id`, and renderer-as-hint behavior.
 
 - [database/adole.js](../database/adole.js)
@@ -546,12 +546,12 @@ Each sanitized area must gain or update tests for:
 
 Candidate existing tests to extend:
 
-- [atome/shared/atome_contract.test.mjs](../atome/shared/atome_contract.test.mjs)
-- [database/adole.sanitization.test.mjs](../database/adole.sanitization.test.mjs)
-- [eVe/core/atome_events/placement_runtime.test.mjs](../eVe/core/atome_events/placement_runtime.test.mjs)
-- [eVe/domains/media/api/media_persistence_service.test.mjs](../eVe/domains/media/api/media_persistence_service.test.mjs)
-- [tests/probes/atome_persistence_probe.test.mjs](../tests/probes/atome_persistence_probe.test.mjs)
-- [tests/probes/media_import_probe.test.mjs](../tests/probes/media_import_probe.test.mjs)
+- [atome/shared/atome_contract.probe.mjs](../atome/shared/atome_contract.probe.mjs)
+- [database/adole.sanitization.probe.mjs](../database/adole.sanitization.probe.mjs)
+- [eVe/core/atome_events/placement_runtime.probe.mjs](../eVe/core/atome_events/placement_runtime.probe.mjs)
+- [eVe/domains/media/api/media_persistence_service.probe.mjs](../eVe/domains/media/api/media_persistence_service.probe.mjs)
+- [tests/probes/atome_persistence_probe.probe.mjs](../tests/probes/atome_persistence_probe.probe.mjs)
+- [tests/probes/media_import_probe.probe.mjs](../tests/probes/media_import_probe.probe.mjs)
 - [tests/probes/tauri_recorded_video_mtrack_probe.test.mjs](../tests/probes/tauri_recorded_video_mtrack_probe.test.mjs)
 
 ## Execution Rule

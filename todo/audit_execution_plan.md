@@ -1131,10 +1131,10 @@ the granularity programme.
   persistence-boundary, ADOLE invariant, and timeline-history tests recorded in
   the checkpoint of `todo/2- Granularity_Validation.md`.
 - Durable realtime/client projection regression set:
-  `node --test tests/server/granularity_protocol_defects.test.mjs tests/eve/adole_commit_boundary.test.mjs tests/probes/project_render_legacy_sync_runtime.test.mjs`
+  `node --test tests/server/granularity_protocol_defects.probe.mjs tests/eve/adole_commit_boundary.probe.mjs tests/probes/project_render_legacy_sync_runtime.probe.mjs`
   — **19/19 passed**.
 - Authenticated workspace handoff set:
-  `node --test tests/probes/user_login_workspace_handoff_contract.test.mjs tests/probes/user_login_boot_order_contract.test.mjs tests/probes/workspace_dashboard_project_bootstrap_contract.test.mjs tests/probes/user_workspace_surface_runtime_contract.test.mjs`
+  `node --test tests/probes/user_login_workspace_handoff_contract.probe.mjs tests/probes/user_login_boot_order_contract.probe.mjs tests/probes/workspace_dashboard_project_bootstrap_contract.probe.mjs tests/probes/user_workspace_surface_runtime_contract.probe.mjs`
   — **4/4 passed**.
 - Unified project-scene rendering contract:
   `npx vitest run tests/eve/project_scene_unified_rendering_contract.test.mjs`

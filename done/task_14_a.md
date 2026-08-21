@@ -255,7 +255,7 @@ Each new owner must be documented with:
 Run at minimum:
 
 ```text
-node --test tests/probes/tool_genesis_create_atome_order.test.mjs tests/probes/matrix_rendering_migration_contract.test.mjs tests/probes/project_render_legacy_audit.test.mjs
+node --test tests/probes/tool_genesis_create_atome_order.probe.mjs tests/probes/matrix_rendering_migration_contract.probe.mjs tests/probes/project_render_legacy_audit.probe.mjs
 npm run test:run -- tests/eve/unified_rendering_contract.test.mjs
 npm run test:run -- tests/eve/project_audio_waveform_renderer.test.mjs
 npm run check:syntax
@@ -283,7 +283,7 @@ Task 14A is complete only when:
 Completion validation run on 2026-06-01:
 
 ```text
-node --test tests/probes/tool_genesis_create_atome_order.test.mjs tests/probes/matrix_rendering_migration_contract.test.mjs tests/probes/project_render_legacy_audit.test.mjs
+node --test tests/probes/tool_genesis_create_atome_order.probe.mjs tests/probes/matrix_rendering_migration_contract.probe.mjs tests/probes/project_render_legacy_audit.probe.mjs
 PASS: 34 tests
 
 npm run test:run -- tests/eve/unified_rendering_contract.test.mjs tests/eve/project_audio_waveform_renderer.test.mjs

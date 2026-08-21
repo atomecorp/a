@@ -7,14 +7,8 @@ import { writeVoiceDiagnostic } from './telemetry.js';
 import { compactPlannerAtomeAiTools, compactPlannerRuntimeTools } from './ai_planner_catalog.js';
 import { buildProviderRequestDiagnostic, buildProviderResponseDiagnostic } from './ai_planner_diagnostics.js';
 import { resolveDeterministicPlannerIntent } from './ai_planner_deterministic.js';
+import { cloneStructured as cloneValue, toText } from '../shared/scalars.js';
 const BUSINESS_CONNECTOR_DOMAINS = new Set(['mail', 'contacts', 'calendar']);
-const toText = (value) => String(value || '').trim();
-const cloneValue = (value) => {
-    if (typeof structuredClone === 'function') {
-        return structuredClone(value);
-    }
-    return JSON.parse(JSON.stringify(value));
-};
 const buildConversationHistorySection = (context, english) => {
     const turns = Array.isArray(context?.conversation_history) ? context.conversation_history : [];
     if (!turns.length) {

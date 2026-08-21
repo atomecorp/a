@@ -7,6 +7,7 @@
 import { $, define } from '../squirrel.js';
 import { sliderVariants, sliderSizes, sliderPresets } from './slider_builder_data.js';
 import { setupSliderBehavior } from './slider_builder_behavior.js';
+import { makeId } from '../shared/scalars.js';
 
 // === DÉFINITION DES TEMPLATES DE BASE ===
 
@@ -114,7 +115,7 @@ const createSlider = (config = {}) => {
   } = config;
 
   // Génération d'ID unique si non fourni
-  const sliderId = id || `slider_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
+  const sliderId = id || makeId('slider');
 
   // Validation des valeurs
   const currentValue = Math.max(min, Math.min(max, value));

@@ -9,6 +9,7 @@ import {
   outlineButtonConfig,
   materialSwitchConfig
 } from './button_builder_presets.js';
+import { makeId } from '../shared/scalars.js';
 
 /**
  * Composant Button skinnable avec HyperSquirrel
@@ -53,7 +54,7 @@ const createButton = (config = {}) => {
   } = config;
 
   // Génération d'ID unique si non fourni
-  const buttonId = id || `btn_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
+  const buttonId = id || makeId('btn');
 
   // Résoudre le nom du template
   const templateName = template || templates;

@@ -34,6 +34,12 @@ import {
     readTeleportState
 } from '../atome/src/shared/teleport_state.js';
 import { SURFACE_CAPABILITIES, hasSurfaceCapability } from './surfaceGrants.js';
+import { wsResponse, wsErrorResponse } from './wsResponse.js';
+
+// Family-bound aliases over the shared envelope (server/wsResponse.js).
+const response = (message, success, fields) => wsResponse('teleport', message, success, fields);
+const errorResponse = (message, error) => wsErrorResponse('teleport', message, error);
+
 
 const SUPPORTED_ACTIONS = new Set(['offer', 'accept', 'decline', 'cancel', 'return', 'persist', 'state']);
 
@@ -49,20 +55,6 @@ export const TELEPORT_OFFER_TIMEOUT_MS = (() => {
 
 // sessionId -> { atomeId, ownerId, targetUserId, targetSurfaceId, sourceSurfaceId, timer }
 const pendingOffers = new Map();
-
-function requestIdOf(message) {
-    return message?.requestId || message?.request_id || null;
-}
-
-function response(message, success, fields = {}) {
-    return { type: 'teleport-response', requestId: requestIdOf(message), success, ...fields };
-}
-
-function errorResponse(message, error) {
-    return response(message, false, {
-        error: error instanceof Error ? error.message : String(error)
-    });
-}
 
 async function readAtomeProperties(atomeId) {
     const atome = await db.getAtome(atomeId);

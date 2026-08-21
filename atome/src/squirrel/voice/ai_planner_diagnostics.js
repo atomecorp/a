@@ -1,4 +1,4 @@
-const toText = (value) => String(value || '').trim();
+import { toText } from '../shared/scalars.js';
 
 export const buildProviderRequestDiagnostic = ({ options = {}, providerConfig = {}, utterance = '', systemPrompt = '' } = {}) => ({
     session_id: options.session_id || null,

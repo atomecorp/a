@@ -1,10 +1,10 @@
 import { createCalendarRequest, createMailRequest } from '../voice/semantic_contract.js';
+import { toText as normalizeText } from '../shared/scalars.js';
 
 const DEFAULT_COOLDOWN_MS = 5 * 60 * 1000;
 const DEFAULT_COALESCE_WINDOW_MS = 60 * 1000;
 const DEFAULT_CONFIDENCE_THRESHOLD = 0.8;
 
-const normalizeText = (value) => String(value || '').trim();
 
 const isEnglish = (locale) => normalizeText(locale).toLowerCase().startsWith('en');
 

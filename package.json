@@ -3,7 +3,9 @@
   "version": "1.0.0",
   "type": "module",
   "imports": {
-    "#squirrel/*": "./atome/src/squirrel/*"
+    "#squirrel/*": "./atome/src/squirrel/*",
+    "#shared/*": "./atome/src/shared/*",
+    "#utils/*": "./atome/src/utils/*"
   },
   "description": "Hybrid JavaScript framework with Tauri and Axum runtimes",
   "main": "dist/squirrel.js",
@@ -11,7 +13,6 @@
   "browser": "dist/squirrel.umd.js",
   "unpkg": "dist/squirrel.min.js",
   "jsdelivr": "dist/squirrel.min.js",
-  "types": "dist/types/index.d.ts",
   "exports": {
     ".": {
       "import": "./dist/squirrel.esm.js",
@@ -34,15 +35,15 @@
     "frontend",
     "squirrel"
   ],
-  "author": "Your Name <your.email@example.com>",
+  "author": "Jean-Eric Godard <jeezs@jeezs.net>",
   "license": "MIT",
-  "homepage": "https://github.com/your-org/squirrel-framework",
+  "homepage": "https://github.com/atomecorp/a#readme",
   "repository": {
     "type": "git",
-    "url": "https://github.com/your-org/squirrel-framework.git"
+    "url": "git+https://github.com/atomecorp/a.git"
   },
   "bugs": {
-    "url": "https://github.com/your-org/squirrel-framework/issues"
+    "url": "https://github.com/atomecorp/a/issues"
   },
   "scripts": {
     "setup": "node scripts/setup/cli/run.mjs",
@@ -50,16 +51,10 @@
     "setup:bootstrap": "./setup.sh",
     "dev": "./run.sh",
     "dev:windows": "./scripts/setup/run_windows.sh",
-    "build": "rollup -c scripts/rollup.config.npm.js",
-    "build:npm": "rollup -c scripts/rollup.config.npm.js",
-    "build:cdn": "rollup -c scripts/rollup.config.cdn.js",
-    "build:all": "npm run build:cdn && npm run build:npm",
+    "build": "rollup -c scripts/rollup.config.js",
     "build:codemirror": "node scripts/bundle-codemirror.js",
     "prepublishOnly": "npm run build:npm",
     "scan:components": "echo 'Scan skipped - using static imports'",
-    "prebuild": "echo 'Prebuild complete - no scan needed'",
-    "prebuild:cdn": "echo 'CDN prebuild complete - no scan needed'",
-    "prebuild:npm": "echo 'NPM prebuild complete - no scan needed'",
     "cdn:upload": "echo 'TODO: Upload to CDN (AWS S3, Cloudflare, etc.)'",
     "start:server": "cd server && node server.js",
     "serve": "node scripts/static_file_server.mjs 8000 .",
@@ -71,7 +66,7 @@
     "postinstall": "./scripts/fix_node_modules.sh",
     "tauri:dev": "cd platforms/desktop-tauri && tauri dev --features bevy_renderer_core",
     "debug-bundle": "node debug-bundle.mjs",
-    "build:minimal": "npm run build:npm",
+    "build:minimal": "npm run build",
     "check:syntax": "node check-syntax.mjs",
     "check:eve-ai-guardrails": "node scripts/check_eve_ai_guardrails.mjs",
     "check:dom-projection-guardrails": "node scripts/check_dom_projection_guardrails.mjs",
@@ -85,8 +80,7 @@
     "check:molecule-guardrails": "node scripts/check_molecule_guardrails.mjs",
     "check:execution-order": "node scripts/check_execution_order.mjs",
     "check:master-cleanup": "vitest run tests/governance/master_cleanup_governance.test.mjs",
-    "check:palette-ssot": "node tests/strangler_v2/palette_ssot_guard.test.mjs",
-    "check:m0": "npm run check:component-reuse-guardrails && npm run check:no-fallbacks && npm run check:tauri-fs-boundary && npm run check:molecule-guardrails",
+    "check:m0": "npm run check:component-reuse-guardrails && npm run check:no-fallbacks && npm run check:tauri-fs-boundary && npm run check:molecule-guardrails && npm run check:canonical-dom-attributes && npm run check:websocket-only-transport && npm run check:browser-shared-contract-imports && npm run check:empty-catch-budget",
     "test:molecule": "node tests/molecule/run_molecule_tests.mjs",
     "test:molecule:ui": "node tests/probes/molecule_eve_ui_acceptance_probe.mjs",
     "test:molecule:ui:matrix": "node scripts/run_molecule_ui_matrix.mjs",
@@ -119,16 +113,20 @@
     "test:server-verification": "node scripts/test-server-verification.js",
     "dev:logs": "node dev/daemon/index.js",
     "dev:test-ui": "node tests/ui/runner/run-scenario.js",
-    "probe:media-fixtures": "node tests/probes/media_fixture_import_playback_probe.test.mjs",
-    "probe:opaque-principal-identity": "node tests/probes/opaque_principal_identity_runtime_probe.test.mjs",
-    "probe:guest-adoption": "node tests/probes/guest_adoption_runtime_probe.test.mjs",
-    "probe:guest-adoption-recovery": "node tests/probes/guest_adoption_recovery_runtime_probe.test.mjs",
-    "probe:guest-workspace-indexeddb": "node tests/probes/guest_workspace_indexeddb_runtime_probe.test.mjs",
-    "probe:guest-workspace-lifecycle": "node tests/probes/guest_workspace_lifecycle_runtime_probe.test.mjs",
-    "probe:remote-account-not-provisioned-ws": "node tests/probes/remote_account_not_provisioned_ws_runtime_probe.test.mjs",
+    "probe:media-fixtures": "node tests/probes/media_fixture_import_playback_probe.probe.mjs",
+    "probe:opaque-principal-identity": "node tests/probes/opaque_principal_identity_runtime_probe.probe.mjs",
+    "probe:guest-adoption": "node tests/probes/guest_adoption_runtime_probe.probe.mjs",
+    "probe:guest-adoption-recovery": "node tests/probes/guest_adoption_recovery_runtime_probe.probe.mjs",
+    "probe:guest-workspace-indexeddb": "node tests/probes/guest_workspace_indexeddb_runtime_probe.probe.mjs",
+    "probe:guest-workspace-lifecycle": "node tests/probes/guest_workspace_lifecycle_runtime_probe.probe.mjs",
+    "probe:remote-account-not-provisioned-ws": "node tests/probes/remote_account_not_provisioned_ws_runtime_probe.probe.mjs",
     "test:explicit-provisioning-guest": "vitest run tests/probes/explicit_provisioning_guest_contract.test.mjs",
-    "probe:browser-media-acceptance": "node tests/probes/browser_media_acceptance_probe.test.mjs",
-    "probe:ui-full-stack-test8": "node tests/probes/ui_full_stack_acceptance_test8_probe.test.mjs"
+    "probe:browser-media-acceptance": "node tests/probes/browser_media_acceptance_probe.probe.mjs",
+    "probe:ui-full-stack-test8": "node tests/probes/ui_full_stack_acceptance_test8_probe.probe.mjs",
+    "check:canonical-dom-attributes": "node scripts/check_canonical_dom_attributes.mjs",
+    "check:empty-catch-budget": "node scripts/check_empty_catch_budget.mjs",
+    "probes": "node scripts/run_probes.mjs",
+    "probes:list": "node scripts/run_probes.mjs --list"
   },
   "devDependencies": {
     "@rollup/plugin-commonjs": "^28.0.6",

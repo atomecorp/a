@@ -21,22 +21,14 @@ import {
     normalizeSurfaceId,
     wsSendJsonToUser
 } from './wsApiState.js';
+import { wsResponse, wsErrorResponse } from './wsResponse.js';
+
+// Family-bound aliases over the shared envelope (server/wsResponse.js).
+const response = (message, success, fields) => wsResponse('surface-grant', message, success, fields);
+const errorResponse = (message, error) => wsErrorResponse('surface-grant', message, error);
+
 
 const SUPPORTED_ACTIONS = new Set(['request', 'accept', 'deny', 'revoke', 'list']);
-
-function requestIdOf(message) {
-    return message?.requestId || message?.request_id || null;
-}
-
-function response(message, success, fields = {}) {
-    return { type: 'surface-grant-response', requestId: requestIdOf(message), success, ...fields };
-}
-
-function errorResponse(message, error) {
-    return response(message, false, {
-        error: error instanceof Error ? error.message : String(error)
-    });
-}
 
 // Notifications go to the *principal*, not to one surface: the owner must be able to
 // answer from whichever device they are actually holding.

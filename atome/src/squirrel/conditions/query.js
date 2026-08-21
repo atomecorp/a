@@ -1,6 +1,6 @@
 import { normalizeConditionScope } from './contract.js';
+import { cloneJson as clone } from '../shared/scalars.js';
 
-const clone = (value) => value == null ? value : JSON.parse(JSON.stringify(value));
 const normalizeId = (value) => String(value == null ? '' : value).trim();
 const candidateId = (candidate = {}) => normalizeId(candidate.id || candidate.atome_id || candidate.atomeId);
 

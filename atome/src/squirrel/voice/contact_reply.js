@@ -1,4 +1,4 @@
-const toText = (value) => String(value || '').trim();
+import { toText } from '../shared/scalars.js';
 
 const normalizeText = (value) => toText(value)
     .normalize('NFD')

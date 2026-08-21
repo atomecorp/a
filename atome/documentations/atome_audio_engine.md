@@ -123,8 +123,8 @@ does not make the browser recorder share Kira's clock.
 | `platforms/web/audio-wasm/src/lib.rs` | WASM build of the engine |
 | `atome/src/application/audio_runtime/backend.kira.js` | JS backend for Rust / native engine usage |
 | `atome/src/application/audio_runtime/audio.facade.js` | Public audio facade |
-| `tests/atome/audio_sample_accurate_recording.test.mjs` | exact capability, clock, latency, and placement contract |
-| `tests/atome/record_audio_auv3_clock_contract.test.mjs` | AUv3 event timing and terminal cleanup contract |
+| `tests/atome/audio_sample_accurate_recording.probe.mjs` | exact capability, clock, latency, and placement contract |
+| `tests/atome/record_audio_auv3_clock_contract.probe.mjs` | AUv3 event timing and terminal cleanup contract |
 | `platforms/ios/atome-auv3/Common/WebViewManager.swift` | shared WebView setup/composition state and injected native bridge bootstrap |
 | `platforms/ios/atome-auv3/Common/WebViewManagerScriptMessages.swift` | WK script-message dispatch and local media-path normalization |
 | `platforms/ios/atome-auv3/Common/WebViewManagerAudioTransport.swift` | audio/MIDI commands, PCM injection, and host time/transport streams |
@@ -554,7 +554,7 @@ For this document to be usable as a real migration spec, the first rule is to na
 | Shared media persistence | `eVe/domains/media/api/media_api_shared.js` | remain the canonical helper layer for project/user/storage resolution |
 | Media Atome persistence/rendering | `eVe/domains/media/api/media_persistence_service.js`, `eVe/domains/media/rendering/project_media_atome_renderer.js` | all media Atomes use one durable association and project projection boundary |
 | AUv3 native bridge | `platforms/ios/atome-auv3/Common/WebViewManager.swift`, `platforms/ios/atome-auv3/auv3/AUv3Recorder.swift`, `platforms/ios/atome-auv3/auv3/AUv3RenderEngine.swift`, `platforms/ios/atome-auv3/auv3/utils.swift` | exact `plugin_input` reference implementation |
-| Contract validation | `tests/atome/audio_sample_accurate_recording.test.mjs`, `tests/atome/record_audio_auv3_clock_contract.test.mjs` | executable exact assertions apply only to advertised `plugin_input` capability |
+| Contract validation | `tests/atome/audio_sample_accurate_recording.probe.mjs`, `tests/atome/record_audio_auv3_clock_contract.probe.mjs` | executable exact assertions apply only to advertised `plugin_input` capability |
 | Molecule integration | `eVe/intuition/tools/molecule/runtime.js`, `eVe/intuition/tools/molecule/recording/index.js` | timeline recording consumes the unified engine clock and canonical capture adapter |
 
 ### Meaning of "Migrated"
@@ -967,7 +967,7 @@ Status legend:
 
 | Module / file | Current owner | Target owner | Required migration action | Validation | Status |
 |---------------|---------------|--------------|---------------------------|------------|--------|
-| `tests/atome/audio_sample_accurate_recording.test.mjs`, `record_audio_auv3_clock_contract.test.mjs` | maintained executable contracts | canonical validation harness | validate production payload invariants and typed unsupported outcomes | valid exact fixtures normalize to the expected integer-frame placement | `target` |
+| `tests/atome/audio_sample_accurate_recording.probe.mjs`, `record_audio_auv3_clock_contract.probe.mjs` | maintained executable contracts | canonical validation harness | validate production payload invariants and typed unsupported outcomes | valid exact fixtures normalize to the expected integer-frame placement | `target` |
 | AUv3 native timing payloads | native record-stop analysis | canonical runtime timing contract | expose clock id/reference/epoch, sample rate, frame count, start frames, measured input/output/round-trip latency, matching applied offset and overrun/discontinuity | exact `plugin_input` result passes strict normalization | `target` |
 | ad hoc media debug paths | fragmented feature-level diagnostics | shared engine-observing diagnostics | remove or demote any debug tooling that does not observe the production signal path | meters and debug panels match audible output | `retire` |
 

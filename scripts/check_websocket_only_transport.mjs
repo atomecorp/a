@@ -32,8 +32,12 @@ for (const root of CLIENT_ROOTS) {
     }
 }
 
+// Scan the whole Node server, not a whitelist of four composition files: the
+// forbidden `/api/auth/*` routes used to live in server/auth_routes_*.js, which
+// the whitelist never looked at -- the guard reported "passed" while 21 HTTP
+// business routes were declared in the repository.
 const compositionFiles = [
-    'server/server.js',
+    ...filesUnder('server').map((file) => path.relative(ROOT, file)),
     'platforms/desktop-tauri/src/server/mod.rs',
     'platforms/desktop-tauri/src/server/local_atome.rs',
     'platforms/ios/atome-auv3/Common/LocalHTTPServer.swift'

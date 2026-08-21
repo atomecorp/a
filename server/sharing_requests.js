@@ -30,6 +30,7 @@ import {
     extractShareMeta,
     extractAtomeIdsFromRequest
 } from './sharing.js';
+import { makeId } from '../atome/src/squirrel/shared/scalars.js';
 
 export async function applyShareAcceptance({ sharerId, targetUserId, particles }) {
     console.log('[Share] applyShareAcceptance called:', { sharerId, targetUserId, particles: JSON.stringify(particles) });
@@ -135,7 +136,7 @@ export async function createShareRequest({ sharerId, targetUserId, targetPhone, 
         return { ok: false, error: 'blocked' };
     }
 
-    const requestId = `share_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
+    const requestId = makeId('share');
     const status = (policyValue === 'always')
         ? (mode === 'real-time' ? 'active' : 'accepted')
         : (policyValue === 'never' ? 'rejected' : 'pending');

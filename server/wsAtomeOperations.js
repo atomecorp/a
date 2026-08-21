@@ -14,6 +14,8 @@ import {
 import { createServerConditionAuthority } from './conditionsQueryAuthority.js';
 import { executeAtomeHistoryCommand } from './atomeHistoryCommands.js';
 import { broadcastCommittedAtomeEvent } from './atomeRealtime.js';
+import { wsResponse as response, wsErrorResponse as errorResponse, requestIdOf } from './wsResponse.js';
+
 
 const MUTATING_ACTIONS = new Set([
     'events:commit',
@@ -27,27 +29,8 @@ const MUTATING_ACTIONS = new Set([
     'history:redo'
 ]);
 
-function requestIdOf(message) {
-    return message?.requestId || message?.request_id || null;
-}
-
 function actionOf(message) {
     return String(message?.action || message?.action_type || message?.op || '').trim();
-}
-
-function response(type, message, success, fields = {}) {
-    return {
-        type: `${type}-response`,
-        requestId: requestIdOf(message),
-        success,
-        ...fields
-    };
-}
-
-function errorResponse(type, message, error) {
-    return response(type, message, false, {
-        error: error instanceof Error ? error.message : String(error)
-    });
 }
 
 function requestCache(connection) {

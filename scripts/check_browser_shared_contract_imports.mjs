@@ -6,7 +6,9 @@ const ROOT = process.cwd();
 const SOURCE_ROOTS = ['eVe', 'atome/src'];
 const IGNORED_DIRS = new Set(['node_modules', '.git', 'dist', 'build', 'temp', 'coverage']);
 const SHARED_CONTRACT_IMPORT_RE = /from\s+['"`]([^'"`]*atome\/shared\/atome_contract\.js|[^'"`]*shared\/atome_contract\.js)['"`]/g;
-const BROWSER_SHARED_CONTRACT_RE = /(?:^|\/)atome\/src\/shared\/atome_contract\.js$|(?:^|\/)src\/shared\/atome_contract\.js$/;
+// `#shared/` is the canonical alias for atome/src/shared (package.json imports +
+// the importmap in atome/src/index.html), so it is the same authority as the path.
+const BROWSER_SHARED_CONTRACT_RE = /(?:^|\/)atome\/src\/shared\/atome_contract\.js$|(?:^|\/)src\/shared\/atome_contract\.js$|^#shared\/atome_contract\.js$/;
 const DUPLICATE_SQUIRREL_IMPORT_RE = /(?:from\s+|import\s*\(\s*)['"`]([^'"`]*atome\/src\/squirrel\/[^'"`]+)['"`]/g;
 
 const walk = (dir, files = []) => {
@@ -44,7 +46,7 @@ export function findBrowserSharedContractImportViolations(text, file = '<inline>
             file,
             line: lineForIndex(text, match.index || 0),
             rule: 'browser_shared_contract_import',
-            message: 'Browser-served eVe and atome/src modules must not import atome/shared/atome_contract.js; use a browser-local adapter instead.'
+            message: 'Browser-served eVe and atome/src modules must not import atome/src/shared/atome_contract.js; use a browser-local adapter instead.'
         });
     }
     return violations;

@@ -164,8 +164,11 @@ export function runEditorCode(state, container) {
                     // Compile Ruby to JavaScript
                     const compiled = Opal.compile(code);
 
-                    // Execute compiled code
-                    const result = eval(compiled);
+                    // `new Function` and not a direct `eval`: a direct eval runs in the
+                    // lexical scope of THIS module, so user code could read and rewrite
+                    // every internal binding here. `new Function` compiles in global
+                    // scope, like the JavaScript branch above already does.
+                    const result = new Function(compiled)();
                     displayOutput();
                     displayResult(result);
                 } catch (error) {

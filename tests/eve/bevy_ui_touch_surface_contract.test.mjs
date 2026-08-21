@@ -18,6 +18,8 @@ import { EVE_COMMON_SKIN_TOKENS } from '../../eVe/elements/skin/tokens.js';
 import { buildBevyUiFlowerTree } from '../../eVe/intuition/ribbon/bevy_ui_flower_model.js';
 import { buildBevyMainMenuTree } from '../../eVe/intuition/ribbon/bevy_ui_main_menu_model.js';
 import { createAtomeContextualEditRuntime } from '../../eVe/intuition/runtime/eve_intuition/atome_contextual_edit_runtime.js';
+import { createAtomeEditFooterModelRuntime } from '../../eVe/intuition/runtime/eve_intuition/atome_edit_footer_model_runtime.js';
+import { projectViewPlayback } from '../../eVe/domains/rendering/project_view_playback_runtime.js';
 import {
     markDashboardWorkspaceMode,
     markProjectWorkspaceMode
@@ -380,6 +382,69 @@ test('Atome contextual rail projects visible tool records inside the lateral rai
     assert.equal(centeredTitleHit?.nodeId, 'atome_contextual_edit_a_drag', 'centered title must not obstruct the drag target');
     const outerGripHit = runtime.hitTestAtClientPoint({ surface, clientX: 42, clientY: 172 });
     assert.equal(outerGripHit?.nodeId, 'atome_contextual_edit_a_resize_left', 'reduced grip artwork must preserve the full resize target');
+});
+
+test('structured List and Matrix rows carry persistent Play through production rail resolution into the Bevy tree', async () => {
+    const records = ['video', 'sound', 'image', 'text', 'shape', 'group'].map((kind, index) => ({
+        id: `${kind}_row`, type: kind, project_id: 'structured_project',
+        properties: { kind, left: 20 + (index * 10), top: 20, width: 120, height: 70 }
+    }));
+    const scene = { project_id: 'structured_project', records, scene: { byId: new Map() } };
+    const rendered = [];
+    const model = createAtomeEditFooterModelRuntime({
+        mainToolIdByKey: { detail: 'ui.detail.panel', delete: 'ui.delete.selection', play: 'ui.play' },
+        intuitionContent: {
+            detail: { tool_id: 'ui.detail.panel', label: 'Detail' },
+            delete: { tool_id: 'ui.delete.selection', label: 'Delete' },
+            play: { tool_id: 'ui.play', label: 'Play', action: 'toggle', latch: true }
+        },
+        normalizeMainToolKey: (key) => String(key || '').trim().toLowerCase(),
+        normalizeCatalogToolEntry: ({ key, def }) => ({ key, toolId: def.tool_id, label: def.label, toolType: 'standard', actionMode: def.action, latch: def.latch }),
+        normalizeRecordActionRecordSource: () => null, resolveCanonicalMainToolId: (id) => id,
+        resolveCurrentTextSizeValue: (value) => value, isSelectionRequiredToolKey: () => false,
+        getAtomeElement: () => null, getAtomeRuntimeState: () => ({}), translate: (_key, fallback) => fallback
+    });
+    const observed = [];
+    const runtime = createAtomeContextualEditRuntime({
+        legacyState: {},
+        resolveDefinitions: ({ atomeId, kind, railOnly, record }) => {
+            const structuredContext = record?.structured_context === true;
+            observed.push({ atomeId, kind, railOnly, structuredContext });
+            const keys = model.resolveAtomeEditFooterToolKeysForAtome({
+                atomeId, kind, toolKeys: ['detail', 'delete', 'play'],
+                hasProjectAutomation: structuredContext === true, railOnly
+            });
+            return keys.map((key) => model.resolveAtomeEditFooterToolDefinition(key, { structuredContext, record }));
+        },
+        invokeDefinition: async () => ({ ok: true }),
+        surfaceResolver: () => ({ getBoundingClientRect: () => ({ width: 800, height: 600 }) }),
+        bevyRuntimeResolver: () => ({
+            mountTree: async ({ tree }) => rendered.push(tree), updateTree: async ({ tree }) => rendered.push(tree), unmountTree: async () => null
+        }),
+        findSceneByAtomeId: (id) => records.some((record) => record.id === id) ? scene : null,
+        readMainMenuHeight: () => 52
+    });
+    for (const record of records) {
+        runtime.enter({ atomeId: record.id, kind: record.type, railOnly: true, record: { ...record, structured_context: true } });
+        await runtime.render();
+        const tree = rendered.at(-1);
+        const play = findNode(tree.root, 'atome_contextual_tool_play');
+        assert.ok(play, `${record.type} must project Play into the persistent rail`);
+        assert.equal(play.kind, 'icon_button');
+        assert.equal(findNode(tree.root, 'atome_contextual_edit_' + record.id + '_footer'), null);
+        assert.equal(JSON.stringify(play).includes('tooltip'), false);
+        assert.equal(JSON.stringify(play).includes('popup'), false);
+        if (record.type === 'video') {
+            await projectViewPlayback.triggerChild({ record, projectId: record.project_id });
+            await runtime.render();
+            const stopped = findNode(rendered.at(-1).root, 'atome_contextual_tool_play');
+            assert.equal(JSON.stringify(stopped).includes('Stop'), true);
+            await projectViewPlayback.stop();
+            await runtime.render();
+            assert.equal(JSON.stringify(findNode(rendered.at(-1).root, 'atome_contextual_tool_play')).includes('Play'), true);
+        }
+    }
+    assert.equal(observed.every((entry) => entry.railOnly && entry.structuredContext), true);
 });
 
 test('Atome contextual runtime keeps local edits and emits one canonical homothetic resize commit', async () => {

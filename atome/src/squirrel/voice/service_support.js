@@ -1,4 +1,7 @@
 import { writeVoiceDiagnostic } from './telemetry.js';
+import { readEnv } from '../shared/scalars.js';
+// Re-exported: the local duplicate now lives in the shared scalars module.
+export { readEnv };
 
 export const DEFAULT_LANG = 'fr-FR';
 export const DEFAULT_STT_SILENCE_MS = 8000;
@@ -18,13 +21,6 @@ export const debugVoiceService = (event, payload = {}, env = globalThis) => writ
     `voice.service.${String(event || 'event')}`,
     payload
 );
-
-export const readEnv = (env, key) => {
-    if (!env || typeof env !== 'object') return null;
-    if (key in env) return env[key];
-    if (env.window && typeof env.window === 'object' && key in env.window) return env.window[key];
-    return null;
-};
 
 export const getSpeechRecognitionCtor = (env) => readEnv(env, 'SpeechRecognition') || readEnv(env, 'webkitSpeechRecognition') || null;
 

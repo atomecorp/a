@@ -1,5 +1,6 @@
 import { PANEL_ID, createVoicePanelView } from './panel_view.js';
 import { createVoiceProbeController } from './panel_probe.js';
+import { cloneJson as cloneValue } from '../shared/scalars.js';
 
 const readLocalStorage = (env, key) => {
     try {
@@ -34,7 +35,6 @@ const truncate = (value, limit = 18) => {
     return `${text.slice(0, limit - 3)}...`;
 };
 
-const cloneValue = (value) => JSON.parse(JSON.stringify(value));
 
 const inferFallbackSuggestions = (intent = {}) => {
     const normalized = String(intent?.utterance?.normalized || '').trim();

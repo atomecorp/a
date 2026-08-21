@@ -2129,4 +2129,23 @@ The next execution tasks must refine this map by:
 - Persistence accepts schema v2 only. `migrateMoleculeTimelineSnapshot` is deleted; historical snapshots fail validation explicitly.
 - `window.eveMoleculeTimelineApi.toggleGroupTimelineListTransport` / `stopGroupTimelineListTransport` and `ui.timeline.transport.list.toggle|stop` expose ordered List playback through the same Molecule transport runtime and Kira engine. The projection is ephemeral; each Molecule keeps its own canonical snapshot and armed Record scheduler.
 - `getAtomeContextualEditApi().enterVirtual(...)` is an internal UI-only extension of the established Bevy contextual rail. It accepts a disposable record, functional definitions and an injected canonical invoker; it exposes no public mutation authority and renders no Atome editor footer chrome.
+
+## iOS waveform and performance-record API delta — 2026-08-21
+
+- Native audio stop payloads accept `waveform_peaks` as the canonical finite, normalized array (maximum 256 entries); `peaks` is a compatibility alias. The JavaScript recorder adapter preserves both names before the existing canonical media persistence call.
+- `ui.timeline.batch` accepts the internal `owner_properties` batch metadata only through the existing Molecule runtime. The runtime folds it into the owner timeline `Atome.commitBatch` event, preserving the established ACL, history and synchronization route rather than exposing a second persistence API.
+- `ui.timeline.performance.delete` is the minimal closed timeline command for clearing a performance. It deletes owner clips and sets `playback_mode` to `sequential` in the same canonical batch. A `performance` rule lacking usable timeline clips returns `project_view_performance_clips_required`; it never silently changes to sequential playback.
 - Acceptance does not add a product API. `tests/probes/molecule_eve_ui_acceptance_probe.mjs` installs fixtures and reads diagnostics through existing canonical surfaces only; every product mutation in the journey is still triggered by a real canvas click, touch, drag or keyboard action. Its optional 30-minute mode also drives Lecture and consumes an armed Record region through the same public UI path.
+
+# Canonical Molecule parentage delta — 2026-08-21
+
+- `createCanonicalMolecule`, `absorbCanonicalMolecule`,
+  `ungroupCanonicalMolecule`, `deleteCanonicalMolecule`, and
+  `transformCanonicalMolecule` remain closed product commands in
+  `tool_runtime_atome_mutation.js`. Each preflights the existing ACL/command
+  route and commits direct `parent_id` changes through the existing atomic
+  `commitRuntimeSetBatch` boundary; no public grouping API or alternate
+  membership payload was added.
+- List, Matrix, Natural, lasso, Flowers Ungroup, and Delete are UI intent
+  callers of those existing commands. `group_visual_runtime.js` is preview-only
+  and exposes neither a membership reader/writer nor a compatibility command.

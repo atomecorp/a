@@ -10,8 +10,8 @@ import { createComputedPropertyService } from './computed_properties.js';
 import { createConditionListService } from './lists.js';
 import { discoverConditionProperties } from './property_catalog.js';
 import { createConditionQueryService } from './query.js';
+import { cloneJson as clone } from '../shared/scalars.js';
 
-const clone = (value) => value == null ? value : JSON.parse(JSON.stringify(value));
 
 const setProps = (conditionSet) => ({
     name: conditionSet.name,

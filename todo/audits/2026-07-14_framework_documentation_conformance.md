@@ -15,7 +15,7 @@ The target architecture remains: canonical Atome description outside the DOM, du
 
 - `atome/src/shared/core_atome_types.js:166-184` registers the core `record` type with `kind: 'data'`.
 - `atome/src/shared/atome_universal_contract.js:3-23` validates every registered kind against `UNIVERSAL_KINDS`; `data` is absent.
-- `node --test tests/shared/core_atome_types.test.mjs` fails three registry tests with `Unsupported universal Atome kind: data`.
+- `node --test tests/shared/core_atome_types.probe.mjs` fails three registry tests with `Unsupported universal Atome kind: data`.
 - `done/full_atome_architecture.md` marks T15 and T18 complete with this suite green, so that completion evidence is stale.
 
 **Required remediation**
@@ -27,7 +27,7 @@ The target architecture remains: canonical Atome description outside the DOM, du
 **Acceptance**
 
 - `registerCoreAtomeTypes()` is idempotent and succeeds.
-- `tests/shared/core_atome_types.test.mjs` passes with the project-supported runner.
+- `tests/shared/core_atome_types.probe.mjs` passes with the project-supported runner.
 - A regression assertion covers the selected record-kind contract.
 
 **Resolution**

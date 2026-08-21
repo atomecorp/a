@@ -22,6 +22,12 @@ import {
     wsSendJsonToSurface
 } from './wsApiState.js';
 import { hasSurfaceCapability } from './surfaceGrants.js';
+import { wsResponse, wsErrorResponse } from './wsResponse.js';
+
+// Family-bound aliases over the shared envelope (server/wsResponse.js).
+const response = (message, success, fields) => wsResponse('remote-control', message, success, fields);
+const errorResponse = (message, error) => wsErrorResponse('remote-control', message, error);
+
 
 const SUPPORTED_ACTIONS = new Set([
     'request', 'grant', 'deny', 'revoke', 'list', 'pointer', 'gesture', 'key',
@@ -45,20 +51,6 @@ export const REMOTE_CONTROL_SESSION_TTL_MS = (() => {
 
 // sessionId -> session
 const sessions = new Map();
-
-function requestIdOf(message) {
-    return message?.requestId || message?.request_id || null;
-}
-
-function response(message, success, fields = {}) {
-    return { type: 'remote-control-response', requestId: requestIdOf(message), success, ...fields };
-}
-
-function errorResponse(message, error) {
-    return response(message, false, {
-        error: error instanceof Error ? error.message : String(error)
-    });
-}
 
 function publicSession(session) {
     return {

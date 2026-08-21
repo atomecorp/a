@@ -1,6 +1,6 @@
+import { toText as normalizeText } from '../shared/scalars.js';
 const DEFAULT_TIMEOUT_MS = 15000;
 
-const normalizeText = (value) => String(value || '').trim();
 const isIpLikeHost = (value) => /^(\d{1,3}\.){3}\d{1,3}$/.test(String(value || '')) || String(value || '').includes(':');
 const resolveServername = (transport = {}) => {
     const explicit = normalizeText(transport.servername || '');

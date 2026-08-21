@@ -1,12 +1,13 @@
 import { createMailIndex } from './local_index.js';
 import { createMailSyncState } from './sync_state.js';
+import { makeId } from '../shared/scalars.js';
 
 const toLimit = (value, fallback = 50) => {
     const number = Number(value);
     return Number.isFinite(number) ? Math.max(1, Math.round(number)) : fallback;
 };
 
-const defaultDraftIdFactory = () => `mail_draft_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+const defaultDraftIdFactory = () => makeId('mail_draft');
 
 const buildReplySubject = (subject = '') => {
     const normalized = String(subject || '').trim();

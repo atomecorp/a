@@ -1,11 +1,7 @@
+import { cloneStructured as cloneValue, nowIso } from '../shared/scalars.js';
 const QUOTA_TRACKER_STORAGE_KEY = 'eve_ai_quota_tracker_v1';
 
-const cloneValue = (value) => {
-    if (typeof structuredClone === 'function') return structuredClone(value);
-    return JSON.parse(JSON.stringify(value));
-};
 
-const nowIso = () => new Date().toISOString();
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 const createDefaultState = () => ({

@@ -1,4 +1,5 @@
-const normalizeText = (value) => String(value || '').trim();
+import { toText as normalizeText } from '../shared/scalars.js';
+import { makeId } from '../shared/scalars.js';
 
 const xmlDecode = (value) => String(value || '')
     .replace(/&lt;/g, '<')
@@ -30,7 +31,7 @@ const resolveUrl = (base, href) => {
     }
 };
 
-const makeGeneratedUid = () => `eve-contact-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+const makeGeneratedUid = () => makeId('eve-contact');
 
 export {
     normalizeText,

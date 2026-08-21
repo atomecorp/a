@@ -599,21 +599,21 @@ Point treated: Phase 3 — Reproduction.
 
 Reproduced and validated scenarios:
 
-* Molecule undo/redo and persistence: `node tests/probes/molecule_session_history.test.mjs` passed.
-* Molecule undo/redo and persistence with `TEMP_DEBUG_ATOME`: `node --input-type=module -e "globalThis.__TEMP_DEBUG_ATOME__=true; await import('./tests/probes/molecule_session_history.test.mjs');"` passed and emitted mutation, history, persistence, and session lifecycle traces.
+* Molecule undo/redo and persistence: `node tests/probes/molecule_session_history.probe.mjs` passed.
+* Molecule undo/redo and persistence with `TEMP_DEBUG_ATOME`: `node --input-type=module -e "globalThis.__TEMP_DEBUG_ATOME__=true; await import('./tests/probes/molecule_session_history.probe.mjs');"` passed and emitted mutation, history, persistence, and session lifecycle traces.
 * MTraX project duplication guard: `node tests/eve/mtrax_project_duplication.sanitization.test.mjs` passed.
-* Project drop tool instance contract: `node tests/eve/project_drop_tool_instance_contract.test.mjs` passed.
-* ADOLE canonical property persistence: `TEMP_DEBUG_ATOME=1 node database/adole.sanitization.test.mjs` passed and emitted creation/projection traces.
-* ADOLE user/project classification: `TEMP_DEBUG_ATOME=1 node database/adole.user_classification.test.mjs` passed and emitted creation/projection traces.
+* Project drop tool instance contract: `node tests/eve/project_drop_tool_instance_contract.probe.mjs` passed.
+* ADOLE canonical property persistence: `TEMP_DEBUG_ATOME=1 node database/adole.sanitization.probe.mjs` passed and emitted creation/projection traces.
+* ADOLE user/project classification: `TEMP_DEBUG_ATOME=1 node database/adole.user_classification.probe.mjs` passed and emitted creation/projection traces.
 * Direct database creation, mutation, and deletion: a focused `node --input-type=module` scenario passed and emitted create/update/delete/projection traces.
 
 Reproducible blockers found:
 
 * `npm run test:molecule` fails because `eVe/tests/molecule/run_molecule_tests.mjs` is missing.
-* `node tests/eve/atome_commit.sanitization.test.mjs` fails in direct Node mode because an import resolves to `/atome/shared/atome_contract.js`; the same file prints its own success line under Vitest but Vitest reports no declared test suite.
-* `node tests/probes/eve_runtime_selection_transform_probe.test.mjs` fails because it imports `eve/application/tests/strangler_v2/_env.mjs`, which is absent in this workspace path.
+* `node tests/eve/atome_commit.sanitization.probe.mjs` fails in direct Node mode because an import resolves to `/atome/shared/atome_contract.js`; the same file prints its own success line under Vitest but Vitest reports no declared test suite.
+* `node tests/probes/eve_runtime_selection_transform_probe.probe.mjs` fails because it imports `eve/application/tests/strangler_v2/_env.mjs`, which is absent in this workspace path.
 * Browser probes needing Playwright may fail in the sandbox with Chromium Mach port permission errors.
-* `node tests/probes/media_import_probe.test.mjs` reaches the app but fails on a 404 for `eve/application/domains/media/media_diagnostics.js`.
+* `node tests/probes/media_import_probe.probe.mjs` reaches the app but fails on a 404 for `eve/application/domains/media/media_diagnostics.js`.
 * `node tests/probes/mtrack_clip_drag_invariant_probe.test.mjs` had to be stopped after a long run; it emitted an `ok:false` report with repeated `webgpu_no_adapter` diagnostics.
 
 Concrete Atome inconsistency reproduced:
@@ -691,7 +691,7 @@ getStateCurrent('child_before_owner').owner_id = "owner_late"
 
 Regression test added:
 
-* `database/adole.sanitization.test.mjs` — `ADOLE pending owner resolution keeps state_current owner coherent`.
+* `database/adole.sanitization.probe.mjs` — `ADOLE pending owner resolution keeps state_current owner coherent`.
 
 Map updates:
 
@@ -708,10 +708,10 @@ Final validation:
 * `node --check database/adole.js`;
 * `node --check eVe/core/atome_commit.js`;
 * `node --check server/atomeRoutes.orm.js`;
-* `node database/adole.sanitization.test.mjs`;
-* `node tests/probes/molecule_session_history.test.mjs`;
+* `node database/adole.sanitization.probe.mjs`;
+* `node tests/probes/molecule_session_history.probe.mjs`;
 * `node tests/eve/mtrax_project_duplication.sanitization.test.mjs`;
-* `node tests/eve/project_drop_tool_instance_contract.test.mjs`;
+* `node tests/eve/project_drop_tool_instance_contract.probe.mjs`;
 * focused reproduction script confirming `atome_owner_id` and `state_owner_id` both equal `"owner_late"`;
 * `npm run check:syntax`.
 

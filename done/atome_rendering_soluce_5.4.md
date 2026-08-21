@@ -28,7 +28,7 @@ The analysis is based on the following sources:
 - `eVe/intuition/runtime/tool_genesis.js`
 - `eVe/intuition/runtime/selection.js`
 - `eVe/elements/eVe_look.js`
-- `tests/eve/atome_dom_projection_contract.test.mjs`
+- `tests/eve/atome_dom_projection_contract.probe.mjs`
 - `done/atome_vital_correction_P8.md`
 - `done/atome_vital_correction_P10.md`
 
@@ -331,7 +331,7 @@ Classes such as:
 
 are useful if they stay generic and visual.
 
-The tests in `tests/eve/atome_dom_projection_contract.test.mjs` already validate this direction.
+The tests in `tests/eve/atome_dom_projection_contract.probe.mjs` already validate this direction.
 
 ## Canonical design principles for the target solution
 

@@ -6,7 +6,7 @@ import ToolSlider from '../atome/src/squirrel/components/tool_slider_builder.js'
 import Badge from '../atome/src/squirrel/components/badge_builder.js';
 import Button from '../atome/src/squirrel/components/button_builder.js';
 import Draggable, { makeDraggable, makeDraggableWithDrop, makeDropZone } from '../atome/src/squirrel/components/draggable_builder.js';
-import List from '../atome/src/squirrel/components/List_builder.js';
+import List from '../atome/src/squirrel/components/list_builder.js';
 import Matrix from '../atome/src/squirrel/components/matrix_builder.js';
 import Menu from '../atome/src/squirrel/components/menu_builder.js';
 import Minimal from '../atome/src/squirrel/components/minimal_builder.js';

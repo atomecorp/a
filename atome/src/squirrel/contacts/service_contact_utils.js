@@ -1,5 +1,6 @@
-export const toText = (value) => String(value || '').trim();
-
+import { toText } from '../shared/scalars.js';
+// Re-exported: the local duplicate now lives in the shared scalars module.
+export { toText };
 export const normalizePhoneKey = (value) => toText(value).replace(/[^\d+]/g, '');
 
 export const normalizeEmailKey = (value) => toText(value).toLowerCase();

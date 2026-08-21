@@ -11,18 +11,18 @@ Etat verifie au depart de P6
 - `node check-syntax.mjs` passe.
 - `node scripts/check_dom_projection_guardrails.mjs --paths tests/fixtures/dom,tests/atom_matrix_example.dom,tests/atome_project_example.dom` passe.
 - `node scripts/check_squirrel_dom_adapter_guardrails.mjs` passe.
-- `node --test tests/scripts/check_dom_projection_guardrails.test.mjs tests/scripts/export_dom_subtrees.test.mjs` passe.
-- `node --test atome/shared/atome_contract.test.mjs tests/eve/media_atom_integrity.test.mjs tests/eve/media_projection_state.dom_contract.test.mjs` passe.
-- `node tests/probes/media_import_probe.test.mjs` echoue.
-- `ADOLE_TEST_URL=http://127.0.0.1:3001 node tests/probes/browser_media_acceptance_probe.test.mjs` echoue.
+- `node --test tests/scripts/check_dom_projection_guardrails.probe.mjs tests/scripts/export_dom_subtrees.probe.mjs` passe.
+- `node --test atome/shared/atome_contract.probe.mjs tests/eve/media_atom_integrity.probe.mjs tests/eve/media_projection_state.dom_contract.probe.mjs` passe.
+- `node tests/probes/media_import_probe.probe.mjs` echoue.
+- `ADOLE_TEST_URL=http://127.0.0.1:3001 node tests/probes/browser_media_acceptance_probe.probe.mjs` echoue.
 
 Etat apres correction du 2026-05-28
 
-- [x] Etape 1 terminee : `node tests/probes/media_import_probe.test.mjs` sort avec code 0.
+- [x] Etape 1 terminee : `node tests/probes/media_import_probe.probe.mjs` sort avec code 0.
   - Suite courante : `{ "ok": 4, "warning": 0, "error": 0, "missing": 0 }`.
   - Le timeout `window.eveMediaDiagnostics.runFullSuite(...)` est corrige.
   - La probe verifie maintenant explicitement les compteurs de suite et sort proprement apres le teardown navigateur.
-- [x] Etape 2 terminee : `ADOLE_TEST_URL=http://127.0.0.1:3001 node tests/probes/browser_media_acceptance_probe.test.mjs` passe les 5 cas desktop.
+- [x] Etape 2 terminee : `ADOLE_TEST_URL=http://127.0.0.1:3001 node tests/probes/browser_media_acceptance_probe.probe.mjs` passe les 5 cas desktop.
   - `0000.png` n'est plus absent de l'inventaire desktop.
   - `Jeezs's fire.m4v` n'est plus absent de l'inventaire desktop.
 - [x] Etape 3 terminee : le cas MTrack `atome.svg` passe.
@@ -37,15 +37,15 @@ Validations executees avec succes apres correction
 node check-syntax.mjs
 node scripts/check_dom_projection_guardrails.mjs --paths tests/fixtures/dom,tests/atom_matrix_example.dom,tests/atome_project_example.dom
 node scripts/check_squirrel_dom_adapter_guardrails.mjs
-node --test tests/scripts/check_dom_projection_guardrails.test.mjs tests/scripts/export_dom_subtrees.test.mjs
-node --test atome/shared/atome_contract.test.mjs tests/eve/media_atom_integrity.test.mjs tests/eve/media_projection_state.dom_contract.test.mjs
-node tests/probes/media_import_probe.test.mjs
-ADOLE_TEST_URL=http://127.0.0.1:3001 node tests/probes/browser_media_acceptance_probe.test.mjs
+node --test tests/scripts/check_dom_projection_guardrails.probe.mjs tests/scripts/export_dom_subtrees.probe.mjs
+node --test atome/shared/atome_contract.probe.mjs tests/eve/media_atom_integrity.probe.mjs tests/eve/media_projection_state.dom_contract.probe.mjs
+node tests/probes/media_import_probe.probe.mjs
+ADOLE_TEST_URL=http://127.0.0.1:3001 node tests/probes/browser_media_acceptance_probe.probe.mjs
 ```
 
 Resultats observes le 2026-05-28
 
-`media_import_probe.test.mjs`
+`media_import_probe.probe.mjs`
 
 - L'application demarre et l'auth Fastify passe.
 - L'import cree bien 4 atomes :
@@ -61,7 +61,7 @@ Resultats observes le 2026-05-28
 - Le run precedent dans `temp/probe_reports/media_import_probe/suite.json` contenait deja :
   - `{ "ok": false, "error": "page_eval_timeout_180000ms" }`.
 
-`browser_media_acceptance_probe.test.mjs`
+`browser_media_acceptance_probe.probe.mjs`
 
 - L'import initial cree 5 atomes.
 - La console ne rapporte pas d'erreurs applicatives dans `report.json`.
@@ -103,7 +103,7 @@ Chaque correction doit :
 
 ---
 
-Etape 1 — Debloquer `media_import_probe.test.mjs`
+Etape 1 — Debloquer `media_import_probe.probe.mjs`
 
 Objectif
 
@@ -115,7 +115,7 @@ Symptome observe
 
 Fichiers et zones a inspecter
 
-- `tests/probes/media_import_probe.test.mjs`
+- `tests/probes/media_import_probe.probe.mjs`
 - `eVe/domains/media/media_diagnostics.js`
 - `eVe/domains/media/asset_box.js`
 - `eVe/intuition/tools/project_drop.js`
@@ -127,7 +127,7 @@ Fichiers et zones a inspecter
 
 A faire
 
-1. Relancer `node tests/probes/media_import_probe.test.mjs`.
+1. Relancer `node tests/probes/media_import_probe.probe.mjs`.
 2. Identifier quelle sous-etape de `runFullSuite(...)` ne resout jamais.
 3. Ajouter une instrumentation temporaire ou un journal structure dans le rapport de probe si necessaire.
 4. Verifier si le blocage vient :
@@ -145,14 +145,14 @@ A faire
 Validation
 
 ```sh
-node tests/probes/media_import_probe.test.mjs
+node tests/probes/media_import_probe.probe.mjs
 ```
 
 La commande doit sortir avec code 0.
 
 ---
 
-Etape 2 — Corriger les entrees desktop manquantes dans `browser_media_acceptance_probe.test.mjs`
+Etape 2 — Corriger les entrees desktop manquantes dans `browser_media_acceptance_probe.probe.mjs`
 
 Objectif
 
@@ -169,7 +169,7 @@ Dans `temp/probe_reports/browser_media_acceptance_probe/report.json` :
 
 Fichiers et zones a inspecter
 
-- `tests/probes/browser_media_acceptance_probe.test.mjs`
+- `tests/probes/browser_media_acceptance_probe.probe.mjs`
 - `eVe/domains/media/media_diagnostics.js`
 - `eVe/domains/media/asset_box.js`
 - `eVe/intuition/tools/project_drop.js`
@@ -194,7 +194,7 @@ A faire
 Validation
 
 ```sh
-ADOLE_TEST_URL=http://127.0.0.1:3001 node tests/probes/browser_media_acceptance_probe.test.mjs
+ADOLE_TEST_URL=http://127.0.0.1:3001 node tests/probes/browser_media_acceptance_probe.probe.mjs
 ```
 
 Les cas desktop `0000.png` et `Jeezs's fire.m4v` ne doivent plus echouer avec `desktop_entry_missing`.
@@ -226,7 +226,7 @@ La restauration desktop apres fermeture MTrack semble fonctionner pour ce cas, m
 
 Fichiers et zones a inspecter
 
-- `tests/probes/browser_media_acceptance_probe.test.mjs`
+- `tests/probes/browser_media_acceptance_probe.probe.mjs`
 - `eVe/domains/mtrax/ui/panel_lifecycle_runtime.js`
 - `eVe/domains/mtrax/media/atome_runtime.js`
 - `eVe/domains/mtrax/media/drop_runtime.js`
@@ -246,7 +246,7 @@ A faire
 Validation
 
 ```sh
-ADOLE_TEST_URL=http://127.0.0.1:3001 node tests/probes/browser_media_acceptance_probe.test.mjs
+ADOLE_TEST_URL=http://127.0.0.1:3001 node tests/probes/browser_media_acceptance_probe.probe.mjs
 ```
 
 Le cas MTrack `atome.svg` doit passer.
@@ -274,12 +274,12 @@ Fichiers et zones a inspecter
 - `eVe/intuition/eVeIntuition.js`
 - `eVe/domains/mtrax/ui/panel_lifecycle_runtime.js`
 - `eVe/intuition/runtime/tool_genesis.js`
-- `tests/probes/browser_media_acceptance_probe.test.mjs`
+- `tests/probes/browser_media_acceptance_probe.probe.mjs`
 
 Validation
 
 ```sh
-ADOLE_TEST_URL=http://127.0.0.1:3001 node tests/probes/browser_media_acceptance_probe.test.mjs
+ADOLE_TEST_URL=http://127.0.0.1:3001 node tests/probes/browser_media_acceptance_probe.probe.mjs
 ```
 
 Les 5 cas MTrack doivent passer.
@@ -363,10 +363,10 @@ P6 est termine seulement quand toutes les commandes suivantes passent :
 node check-syntax.mjs
 node scripts/check_dom_projection_guardrails.mjs --paths tests/fixtures/dom,tests/atom_matrix_example.dom,tests/atome_project_example.dom
 node scripts/check_squirrel_dom_adapter_guardrails.mjs
-node --test tests/scripts/check_dom_projection_guardrails.test.mjs tests/scripts/export_dom_subtrees.test.mjs
-node --test atome/shared/atome_contract.test.mjs tests/eve/media_atom_integrity.test.mjs tests/eve/media_projection_state.dom_contract.test.mjs
-node tests/probes/media_import_probe.test.mjs
-ADOLE_TEST_URL=http://127.0.0.1:3001 node tests/probes/browser_media_acceptance_probe.test.mjs
+node --test tests/scripts/check_dom_projection_guardrails.probe.mjs tests/scripts/export_dom_subtrees.probe.mjs
+node --test atome/shared/atome_contract.probe.mjs tests/eve/media_atom_integrity.probe.mjs tests/eve/media_projection_state.dom_contract.probe.mjs
+node tests/probes/media_import_probe.probe.mjs
+ADOLE_TEST_URL=http://127.0.0.1:3001 node tests/probes/browser_media_acceptance_probe.probe.mjs
 ```
 
 Validation navigateur
@@ -380,8 +380,8 @@ Definition de termine
 
 P6 est termine seulement si :
 
-- `media_import_probe.test.mjs` termine sans timeout ;
-- `browser_media_acceptance_probe.test.mjs` passe les 5 cas desktop et les 5 cas MTrack ;
+- `media_import_probe.probe.mjs` termine sans timeout ;
+- `browser_media_acceptance_probe.probe.mjs` passe les 5 cas desktop et les 5 cas MTrack ;
 - `0000.png` et `Jeezs's fire.m4v` ne sont plus absents de l'inventaire desktop ;
 - `atome.svg` passe l'acceptance MTrack ;
 - la restauration desktop apres fermeture MTrack reste valide ;
@@ -398,8 +398,8 @@ Lis `todo/atome_vital_correction_P6.md` et traite la tache de bout en bout.
 
 Commence par relancer :
 
-1. `node tests/probes/media_import_probe.test.mjs`
-2. `ADOLE_TEST_URL=http://127.0.0.1:3001 node tests/probes/browser_media_acceptance_probe.test.mjs`
+1. `node tests/probes/media_import_probe.probe.mjs`
+2. `ADOLE_TEST_URL=http://127.0.0.1:3001 node tests/probes/browser_media_acceptance_probe.probe.mjs`
 
 Utilise les rapports dans `temp/probe_reports/media_import_probe/` et `temp/probe_reports/browser_media_acceptance_probe/`.
 

@@ -9,6 +9,7 @@ import { executeBootstrapDuplicateOperation } from '../../eVe/intuition/tools/co
 import { buildAtomeContextualEditTree, ATOME_CONTEXTUAL_EDIT_TREE_ID } from '../../eVe/intuition/runtime/eve_intuition/atome_contextual_edit_model.js';
 import { createAtomeContextualToolDropRuntime } from '../../eVe/intuition/runtime/eve_intuition/atome_contextual_tool_drop_runtime.js';
 import { createAtomeEditFooterModelRuntime } from '../../eVe/intuition/runtime/eve_intuition/atome_edit_footer_model_runtime.js';
+import { projectViewPlayback } from '../../eVe/domains/rendering/project_view_playback_runtime.js';
 import { createFinderPanelSurface } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_finder_runtime.js';
 import {
     createSelectableListDragSession,
@@ -1053,4 +1054,66 @@ test('footer_tools reload and commit use the established canonical property owne
     } finally {
         globalThis.window = previousWindow;
     }
+});
+
+test('structured List and Matrix contexts always expose the persistent rail Play tool without an inline item control', () => {
+    const model = createAtomeEditFooterModelRuntime({
+        mainToolIdByKey: { detail: 'ui.detail.panel', delete: 'ui.delete.selection', play: 'ui.play' },
+        intuitionContent: {
+            detail: { tool_id: 'ui.detail.panel', label: 'Detail' },
+            delete: { tool_id: 'ui.delete.selection', label: 'Delete' },
+            play: { tool_id: 'ui.play', label: 'Play', action: 'toggle', latch: true }
+        },
+        normalizeMainToolKey: (key) => String(key || '').trim().toLowerCase(),
+        normalizeCatalogToolEntry: ({ key, def }) => ({ key, toolId: def.tool_id, label: def.label, toolType: 'standard', actionMode: def.action, latch: def.latch }),
+        normalizeRecordActionRecordSource: () => null, resolveCanonicalMainToolId: (id) => id,
+        resolveCurrentTextSizeValue: (value) => value, isSelectionRequiredToolKey: () => false,
+        getAtomeElement: () => null, getAtomeRuntimeState: () => ({}), translate: (_key, fallback) => fallback
+    });
+    ['sound', 'video', 'image', 'text', 'shape', 'group', 'unknown'].forEach((kind) => {
+        const keys = model.resolveAtomeEditFooterToolKeysForAtome({
+            atomeId: `${kind}_row`, kind, toolKeys: ['detail', 'delete', 'play'], hasProjectAutomation: true, railOnly: true
+        });
+        assert.equal(keys.includes('play'), true, `${kind} lacks rail Play`);
+        const definition = model.resolveAtomeEditFooterToolDefinition('play', { structuredContext: true });
+        assert.equal(definition?.toolId, 'ui.play');
+        assert.equal(definition?.label, 'Play');
+        assert.equal(Object.prototype.hasOwnProperty.call(definition, 'tooltip'), false);
+        assert.equal(Object.prototype.hasOwnProperty.call(definition, 'popup'), false);
+    });
+});
+
+test('structured item and container Play presentation read the project playback facade', async () => {
+    const model = createAtomeEditFooterModelRuntime({
+        mainToolIdByKey: { play: 'ui.play' }, intuitionContent: { play: { tool_id: 'ui.play', label: 'Play', icon: 'play' } },
+        normalizeMainToolKey: (key) => String(key || '').trim().toLowerCase(),
+        normalizeCatalogToolEntry: ({ key, def }) => ({ key, toolId: def.tool_id, label: def.label, toolType: 'standard' }),
+        normalizeRecordActionRecordSource: () => null, resolveCanonicalMainToolId: (id) => id,
+        resolveCurrentTextSizeValue: (value) => value, isSelectionRequiredToolKey: () => false,
+        getAtomeElement: () => null, getAtomeRuntimeState: () => ({}), translate: (_key, fallback) => fallback
+    });
+    const records = ['video', 'audio', 'image', 'text', 'shape'].map((kind) => ({
+        id: `${kind}_row`, type: kind, project_id: 'structured_project', properties: { kind }
+    }));
+    for (const record of records) {
+        assert.equal(model.resolveAtomeEditFooterToolDefinition('play', { structuredContext: true, record }).label, 'Play');
+        await projectViewPlayback.triggerChild({ record, projectId: record.project_id });
+        const active = model.resolveAtomeEditFooterToolDefinition('play', { structuredContext: true, record });
+        assert.equal(active.label, 'Stop');
+        assert.equal(active.icon, 'stop');
+        assert.equal(active.active, true);
+        assert.equal(projectViewPlayback.isPlayingTarget({ record }), true);
+        await projectViewPlayback.stop();
+        assert.equal(model.resolveAtomeEditFooterToolDefinition('play', { structuredContext: true, record }).label, 'Play');
+    }
+    const molecule = {
+        id: 'molecule_row', type: 'group', project_id: 'structured_project',
+        properties: { kind: 'group', molecule_entity: 'molecule' }
+    };
+    projectViewPlayback.adoptDelegatedTransport({ level: { entity: 'molecule', id: molecule.id }, playing: true });
+    assert.equal(projectViewPlayback.isPlayingTarget({ record: molecule }), true);
+    assert.equal(projectViewPlayback.isPlayingTarget({ level: { entity: 'molecule', id: molecule.id } }), true);
+    assert.equal(model.resolveAtomeEditFooterToolDefinition('play', { structuredContext: true, record: molecule }).label, 'Stop');
+    await projectViewPlayback.stop();
+    assert.equal(model.resolveAtomeEditFooterToolDefinition('play', { structuredContext: true, record: molecule }).label, 'Play');
 });

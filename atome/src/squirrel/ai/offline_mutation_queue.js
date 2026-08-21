@@ -1,12 +1,8 @@
+import { cloneStructured as cloneValue, nowIso } from '../shared/scalars.js';
 const OFFLINE_MUTATION_STORAGE_KEY = 'eve_ai_offline_mutation_queue_v1';
 const MAX_PENDING_MUTATIONS = 200;
 
-const cloneValue = (value) => {
-    if (typeof structuredClone === 'function') return structuredClone(value);
-    return JSON.parse(JSON.stringify(value));
-};
 
-const nowIso = () => new Date().toISOString();
 
 const makeId = (prefix = 'offline_mutation') => {
     if (globalThis?.crypto?.randomUUID) return `${prefix}_${globalThis.crypto.randomUUID()}`;

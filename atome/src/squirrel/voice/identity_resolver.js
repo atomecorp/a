@@ -1,3 +1,4 @@
+import { cloneStructured as cloneValue } from '../shared/scalars.js';
 const normalizeText = (value) => String(value || '')
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
@@ -6,10 +7,6 @@ const normalizeText = (value) => String(value || '')
     .replace(/\s+/g, ' ')
     .trim();
 
-const cloneValue = (value) => {
-    if (typeof structuredClone === 'function') return structuredClone(value);
-    return JSON.parse(JSON.stringify(value));
-};
 
 const EXACT_REFERENCE_TOKENS = new Set([
     'it', 'this', 'that', 'them', 'celui', 'celle', 'ce', 'cet', 'cette', 'ça', 'ca', 'cela',

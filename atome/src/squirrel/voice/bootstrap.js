@@ -1,6 +1,7 @@
 import { createVoiceService } from './service.js';
 import { bootstrapVoicePanel, shouldEnableVoicePanel } from './panel.js';
 import { writeVoiceDiagnostic } from './telemetry.js';
+import { readEnv } from '../shared/scalars.js';
 
 const READY_PROMISE_KEY = '__SQUIRREL_VOICE_READY_PROMISE__';
 const SERVICE_KEY = '__SQUIRREL_VOICE_SERVICE__';
@@ -12,12 +13,6 @@ const traceVoiceBootstrap = (env, event, payload = {}) => writeVoiceDiagnostic(
     payload
 );
 
-const readEnv = (env, key) => {
-    if (!env || typeof env !== 'object') return null;
-    if (key in env) return env[key];
-    if (env.window && typeof env.window === 'object' && key in env.window) return env.window[key];
-    return null;
-};
 
 const defaultImportModule = (path) => import(path);
 

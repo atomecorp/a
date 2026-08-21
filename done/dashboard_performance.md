@@ -92,7 +92,7 @@ La clé de cache inclut `node.id` ([bevy_media_texture_resolver.js:158](eVe/doma
 
 ## 3. Plan de tâches
 
-Conventions d'exécution (mémoire projet) : travailler dans le repo principal (jamais de worktree) ; une probe ciblée dans `./temp` par modification, **rouge d'abord**, puis confirmation en boot navigateur réel ; validation ESM par import de l'entry, pas seulement `node --check` ; rebuild WASM via `platforms/web/bevy-renderer/build.sh` (le `wasm-opt -Oz` doit garder `--all-features`) puis redémarrer le serveur ; probe de non-régression existante : `tests/probes/project_scene_canvas_regression_probe.test.mjs` et baseline `temp/perf_baseline_probe.mjs`.
+Conventions d'exécution (mémoire projet) : travailler dans le repo principal (jamais de worktree) ; une probe ciblée dans `./temp` par modification, **rouge d'abord**, puis confirmation en boot navigateur réel ; validation ESM par import de l'entry, pas seulement `node --check` ; rebuild WASM via `platforms/web/bevy-renderer/build.sh` (le `wasm-opt -Oz` doit garder `--all-features`) puis redémarrer le serveur ; probe de non-régression existante : `tests/probes/project_scene_canvas_regression_probe.probe.mjs` et baseline `temp/perf_baseline_probe.mjs`.
 
 ### Phase 0 — Instrumentation & baselines (préalable, ~½ journée)
 
@@ -147,7 +147,7 @@ Conventions d'exécution (mémoire projet) : travailler dans le repo principal (
 ### Phase 7 — Finitions & non-régression (~½ j)
 
 - [ ] **T7.1 Micro-coûts du chemin chaud** : mémoïser `resolveLayout`/`getBoundingClientRect` par frame ([dashboard_runtime.js:85-106](eVe/domains/dashboard/dashboard_runtime.js:85)) ; court-circuiter `diffDashboardRecords` pendant les gestes (fast-path) ; `JSON.stringify` des effects par render ([project_scene_runtime.js:59](eVe/domains/rendering/project_scene_runtime.js:59)) → comparaison structurelle ou signature.
-- [ ] **T7.2 Suite de probes complète.** Re-jouer : `temp/perf_baseline_probe.mjs`, `tests/probes/project_scene_canvas_regression_probe.test.mjs` (luma_range, 0 erreur), probes dashboard existantes (z_order, handle_stability, reload_stability, workspace_stress), + T0.1 final. Exercer les vraies routes : ouvrir/fermer/rouvrir, changer de projet, scroll les deux axes, resize, édition de label, mode gaucher.
+- [ ] **T7.2 Suite de probes complète.** Re-jouer : `temp/perf_baseline_probe.mjs`, `tests/probes/project_scene_canvas_regression_probe.probe.mjs` (luma_range, 0 erreur), probes dashboard existantes (z_order, handle_stability, reload_stability, workspace_stress), + T0.1 final. Exercer les vraies routes : ouvrir/fermer/rouvrir, changer de projet, scroll les deux axes, resize, édition de label, mode gaucher.
 - [ ] **T7.3 Rapport final chiffré** dans ce fichier : tableau avant/après par symptôme (ouverture ms, latence scroll ms, latence resize ms), et déplacer ce fichier vers `./done` quand tout est coché.
 
 ---

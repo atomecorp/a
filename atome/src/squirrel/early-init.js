@@ -11,3 +11,13 @@ if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator
         navigator.serviceWorker.register('/sw.js').catch(function () { /* optimization only */ });
     });
 }
+
+// The native WebView context menu is never part of the product. It is suppressed
+// here, before any module runs, so no surface can leak it: right click on desktop,
+// long-press callout on iOS, and the derived contextmenu of a completed long press.
+// Only the default action is cancelled — propagation must continue, because the
+// Flower context runtime listens for the same event in capture to open the radial
+// menu (eVe/intuition/flower/context.js).
+document.addEventListener('contextmenu', function (event) {
+    event.preventDefault();
+}, true);

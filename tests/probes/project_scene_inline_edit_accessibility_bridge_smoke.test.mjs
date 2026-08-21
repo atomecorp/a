@@ -9,9 +9,9 @@ import {
     getProjectSceneState,
     renderProjectScene
 } from '../../eVe/domains/rendering/project_scene_runtime.js';
-import { buildAtomGraph } from '../../atome/shared/atom_graph.js';
-import { buildAccessibilityGraph } from '../../atome/shared/accessibility_graph.js';
-import { buildAccessibilityBridgeProjection } from '../../atome/shared/accessibility_bridge_contract.js';
+import { buildAtomGraph } from '../../atome/src/shared/atom_graph.js';
+import { buildAccessibilityGraph } from '../../atome/src/shared/accessibility_graph.js';
+import { buildAccessibilityBridgeProjection } from '../../atome/src/shared/accessibility_bridge_contract.js';
 
 const createTestCompositor = (calls = []) => ({
     default: async () => calls.push({ type: 'init' }),

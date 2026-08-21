@@ -97,12 +97,12 @@ Goal: make MCP use the real execution layer already present in the app.
 
 - [x] MCP lists the runtime tool surface instead of a hand-made subset
   - Done on 2026-03-12.
-  - Result: `runtime.tools.list` is sourced from `toolRuntimeV2.listTools()` and validated in `mcp.runtime_bridge.test.mjs`.
+  - Result: `runtime.tools.list` is sourced from `toolRuntimeV2.listTools()` and validated in `mcp.runtime_bridge.probe.mjs`.
 - [x] A runtime UI tool can be invoked through MCP without a custom wrapper
   - Done on 2026-03-12.
 - [x] One unique execution path is visible in logs
   - Done on 2026-03-12.
-  - Result: `runtime.audit.list` exposes runtime command-bus events, and `default_tools.runtime_trace_integration.test.mjs` validates that `trace_id` and AI source metadata survive the `AtomeAI default tool -> runtime V2 -> command bus` path.
+  - Result: `runtime.audit.list` exposes runtime command-bus events, and `default_tools.runtime_trace_integration.probe.mjs` validates that `trace_id` and AI source metadata survive the `AtomeAI default tool -> runtime V2 -> command bus` path.
 - [x] No remaining legacy `runTool` dependency in the MCP path
   - Done on 2026-03-12.
 
@@ -112,7 +112,7 @@ Goal: prove that the whole interface can really be controlled remotely.
 
 - [x] Build the coverage matrix by tool family
   - Done on 2026-03-12.
-  - Result: `tests/probes/eve_runtime_coverage.test.mjs` now exports a family-based runtime coverage report to `temp/probe_reports/eve_runtime_coverage.json`.
+  - Result: `tests/probes/eve_runtime_coverage.probe.mjs` now exports a family-based runtime coverage report to `temp/probe_reports/eve_runtime_coverage.json`.
 - [x] List all critical tool ids and their execution path
   - Done on 2026-03-12.
   - Result: the runtime coverage report now includes the catalog with `tool_id`, `tool_key`, `execution_mode`, contexts, selection requirements, disabled state, and visibility.
@@ -127,40 +127,40 @@ Goal: prove that the whole interface can really be controlled remotely.
   - Result: Finder now has a headless-safe runtime fallback, so the main/panel probe is fully green.
 - [x] Verify selection, multi-selection, lasso, and target resolution
   - Done on 2026-03-12.
-  - Result: `tests/probes/eve_runtime_selection_transform_probe.test.mjs` validates `ui.select`, `ui.multi_select`, `ui.lasso_select`, `ui.clear_selection`, `ui.move`, `ui.drag`, `ui.resize`, `ui.scale`, and `ui.rotate` in headless runtime, and `runtime_selection_explicit_target_precedence.test.mjs` locks explicit target precedence against stale selection snapshots.
+  - Result: `tests/probes/eve_runtime_selection_transform_probe.probe.mjs` validates `ui.select`, `ui.multi_select`, `ui.lasso_select`, `ui.clear_selection`, `ui.move`, `ui.drag`, `ui.resize`, `ui.scale`, and `ui.rotate` in headless runtime, and `runtime_selection_explicit_target_precedence.test.mjs` locks explicit target precedence against stale selection snapshots.
 - [x] Verify draw tools
   - Done on 2026-03-12.
-  - Result: `tests/probes/eve_runtime_creative_probe.test.mjs` validates draw latch and draw mode routing for `ui.draw.edit`, `ui.draw.mode.brush`, `ui.draw.mode.rect`, and `ui.draw.mode.ellipse`.
+  - Result: `tests/probes/eve_runtime_creative_probe.probe.mjs` validates draw latch and draw mode routing for `ui.draw.edit`, `ui.draw.mode.brush`, `ui.draw.mode.rect`, and `ui.draw.mode.ellipse`.
 - [x] Verify vector tools
   - Done on 2026-03-12.
-  - Result: `tests/probes/eve_runtime_creative_probe.test.mjs` validates `ui.vector.edit` latch on/off in headless runtime.
+  - Result: `tests/probes/eve_runtime_creative_probe.probe.mjs` validates `ui.vector.edit` latch on/off in headless runtime.
 - [x] Verify text tools
   - Done on 2026-03-12.
-  - Result: `tests/probes/eve_runtime_creative_probe.test.mjs` validates `ui.text.create`, `ui.text_input`, and `ui.circle`, including headless atome creation flow.
+  - Result: `tests/probes/eve_runtime_creative_probe.probe.mjs` validates `ui.text.create`, `ui.text_input`, and `ui.circle`, including headless atome creation flow.
 - [x] Verify transport and media reader tools
   - Done on 2026-03-12.
-  - Result: `tests/probes/eve_runtime_transport_capture_probe.test.mjs` validates `ui.play`, `ui.pause`, and `ui.stop`, and `tests/probes/eve_runtime_transport_record_reveal_probe.test.mjs` plus `runtime_transport_record_reveal.test.mjs` validate `ui.media.reader` and `ui.animation.reader` through runtime V2 in headless mode.
+  - Result: `tests/probes/eve_runtime_transport_capture_probe.probe.mjs` validates `ui.play`, `ui.pause`, and `ui.stop`, and `tests/probes/eve_runtime_transport_record_reveal_probe.probe.mjs` plus `runtime_transport_record_reveal.test.mjs` validate `ui.media.reader` and `ui.animation.reader` through runtime V2 in headless mode.
 - [x] Verify MTrack and timeline tools
   - Done on 2026-03-12.
-  - Result: `tests/probes/eve_runtime_transport_capture_probe.test.mjs` validates `ui.mtrax.open`, `ui.timeline_scrub`, `ui.split`, `ui.crop`, `ui.mute`, and `ui.solo`, and `tests/probes/eve_runtime_transport_record_reveal_probe.test.mjs` validates `ui.join`, `ui.automation`, and `ui.detail.record.toggle` in headless runtime.
+  - Result: `tests/probes/eve_runtime_transport_capture_probe.probe.mjs` validates `ui.mtrax.open`, `ui.timeline_scrub`, `ui.split`, `ui.crop`, `ui.mute`, and `ui.solo`, and `tests/probes/eve_runtime_transport_record_reveal_probe.probe.mjs` validates `ui.join`, `ui.automation`, and `ui.detail.record.toggle` in headless runtime.
 - [x] Verify capture audio/video/photo/screen tools
   - Done on 2026-03-12.
-  - Result: `tests/probes/eve_runtime_transport_capture_probe.test.mjs` validates `ui.capture.audio`, `ui.capture.video`, `ui.capture.preview`, `ui.capture.photo`, `ui.capture.import`, `ui.capture.screen`, and `ui.capture.validation` through runtime V2 in headless mode.
+  - Result: `tests/probes/eve_runtime_transport_capture_probe.probe.mjs` validates `ui.capture.audio`, `ui.capture.video`, `ui.capture.preview`, `ui.capture.photo`, `ui.capture.import`, `ui.capture.screen`, and `ui.capture.validation` through runtime V2 in headless mode.
 - [x] Verify perform mode tools
   - Done on 2026-03-12.
-  - Result: `runtime_registered_handlers.test.mjs` validates `tool.main.perform`, and `tests/probes/eve_runtime_transport_record_reveal_probe.test.mjs` validates `ui.palette.reveal`, covering the current perform/reveal runtime surface in headless mode.
+  - Result: `runtime_registered_handlers.test.mjs` validates `tool.main.perform`, and `tests/probes/eve_runtime_transport_record_reveal_probe.probe.mjs` validates `ui.palette.reveal`, covering the current perform/reveal runtime surface in headless mode.
 - [x] Verify communication tools and panels
   - Done on 2026-03-12.
-  - Result: `tests/probes/eve_runtime_comm_calendar_probe.test.mjs` validates `tool.main.communicate`, `ui.comm.panel`, and `ui.contact.panel` in headless runtime, confirming the current communication surface is panel-level through runtime V2.
+  - Result: `tests/probes/eve_runtime_comm_calendar_probe.probe.mjs` validates `tool.main.communicate`, `ui.comm.panel`, and `ui.contact.panel` in headless runtime, confirming the current communication surface is panel-level through runtime V2.
 - [x] Verify calendar tools
   - Done on 2026-03-12.
-  - Result: `tests/probes/eve_runtime_comm_calendar_probe.test.mjs` validates `tool.main.time` and `ui.calendar.panel`, and `tests/probes/eve_runtime_calendar_crud_probe.test.mjs` plus `runtime_calendar_api.test.mjs` validate runtime calendar CRUD tools (`calendar.list_events`, `calendar.get_event`, `calendar.create_event`, `calendar.update_event`, `calendar.delete_event`, `calendar.ensure_calendar`) in headless mode.
+  - Result: `tests/probes/eve_runtime_comm_calendar_probe.probe.mjs` validates `tool.main.time` and `ui.calendar.panel`, and `tests/probes/eve_runtime_calendar_crud_probe.probe.mjs` plus `runtime_calendar_api.test.mjs` validate runtime calendar CRUD tools (`calendar.list_events`, `calendar.get_event`, `calendar.create_event`, `calendar.update_event`, `calendar.delete_event`, `calendar.ensure_calendar`) in headless mode.
 - [x] Identify orphan or duplicated tool ids
   - Done on 2026-03-12.
-  - Result: `tests/probes/eve_runtime_integrity.test.mjs` reports zero duplicate `tool_id`, zero duplicate `tool_key`, 13 uncategorized runtime ids, and no broken AtomeAI runtime wrappers.
+  - Result: `tests/probes/eve_runtime_integrity.probe.mjs` reports zero duplicate `tool_id`, zero duplicate `tool_key`, 13 uncategorized runtime ids, and no broken AtomeAI runtime wrappers.
 - [x] Fix missing registrations
   - Done on 2026-03-12.
-  - Result: `tests/probes/eve_runtime_registered_handler_audit.test.mjs` now validates 64/64 `v2_registered_handler` tools in headless runtime after projecting the remaining latent legacy handlers into the runtime V2 catalog.
+  - Result: `tests/probes/eve_runtime_registered_handler_audit.probe.mjs` now validates 64/64 `v2_registered_handler` tools in headless runtime after projecting the remaining latent legacy handlers into the runtime V2 catalog.
 - [x] Add headless tests for every critical family
   - Done on 2026-03-12.
   - Result: dedicated headless tests now cover finder, selection/transform, creative, transport/capture/MTrack, communication/calendar, perform, and the global `v2_registered_handler` audit path.
@@ -169,7 +169,7 @@ Goal: prove that the whole interface can really be controlled remotely.
 
 - [x] Finder / project navigation
   - Done on 2026-03-12.
-  - Result: `tests/probes/eve_runtime_main_panel_probe.test.mjs` plus `tool_runtime.finder_v2_flows.test.mjs` validate the Finder main/panel path and target selection/move flows in runtime V2.
+  - Result: `tests/probes/eve_runtime_main_panel_probe.test.mjs` plus `tool_runtime.finder_v2_flows.probe.mjs` validate the Finder main/panel path and target selection/move flows in runtime V2.
 - [x] Selection / lasso / move / resize / rotate / scale
   - Done on 2026-03-12.
   - Result: the selection/transform probe is fully green in `temp/probe_reports/eve_runtime_selection_transform_probe.json`.
@@ -187,7 +187,7 @@ Goal: prove that the whole interface can really be controlled remotely.
   - Result: headless probes/tests now cover `ui.mtrax.open`, `ui.timeline_scrub`, `ui.split`, `ui.join`, `ui.automation`, `ui.crop`, `ui.mute`, `ui.solo`, and `ui.detail.record.toggle`.
 - [x] Panels / info / ai / comm / calendar / home / contact
   - Done on 2026-03-12.
-  - Result: `tests/probes/eve_runtime_main_panel_probe.test.mjs` plus `tests/probes/eve_runtime_comm_calendar_probe.test.mjs` now cover home, info, ai, comm, calendar, and contact panel surfaces in headless runtime.
+  - Result: `tests/probes/eve_runtime_main_panel_probe.test.mjs` plus `tests/probes/eve_runtime_comm_calendar_probe.probe.mjs` now cover home, info, ai, comm, calendar, and contact panel surfaces in headless runtime.
 - [x] Perform / fullscreen / UI reveal
   - Done on 2026-03-12.
   - Result: headless probes/tests now cover `tool.main.perform` plus `ui.palette.reveal`, which is the current standalone perform/reveal runtime surface; there is still no separate fullscreen tool id in the catalog.
@@ -246,13 +246,13 @@ Goal: ship the hard real-time voice base first.
   - Result: `src/squirrel/voice/panel.js` now mounts a floating launcher and live voice runtime panel with session creation, listen/speak/stop/capture controls, local command injection, followup consumption, and interruption probing.
 - [x] Add automated UI coverage for the voice panel and bootstrap path
   - Done on 2026-03-12.
-  - Result: `src/squirrel/voice/panel.test.mjs` and `src/squirrel/voice/bootstrap.test.mjs` now validate the mounted panel controls and the global/bootstrap bridge path.
+  - Result: `src/squirrel/voice/panel.probe.mjs` and `src/squirrel/voice/bootstrap.probe.mjs` now validate the mounted panel controls and the global/bootstrap bridge path.
 
 ### Phase 2 validation
 
 - [x] The user can interrupt speech instantly
   - Done on 2026-03-13.
-  - Result: `src/squirrel/voice/panel_interrupt_real_path.test.mjs` now validates the stop path through the real `bootstrap -> panel -> service -> runtime` chain, with immediate transition to the interrupted session state.
+  - Result: `src/squirrel/voice/panel_interrupt_real_path.probe.mjs` now validates the stop path through the real `bootstrap -> panel -> service -> runtime` chain, with immediate transition to the interrupted session state.
 - [x] Audio playback stops without waiting for the full message
   - Done on 2026-03-13.
   - Result: the real-path panel interrupt integration now validates that the shared speech synthesis backend is cancelled immediately and that the probe reports a stopped speech path rather than waiting for natural completion.
@@ -265,8 +265,8 @@ Goal: ship the hard real-time voice base first.
 
 Notes:
 
-- Automated integration coverage exists in `src/squirrel/voice/interrupt_integration.test.mjs` for the four validation points above.
-- The four validation points are now also covered through the real `bootstrap -> panel -> service -> runtime` UI path in `src/squirrel/voice/panel_interrupt_real_path.test.mjs`.
+- Automated integration coverage exists in `src/squirrel/voice/interrupt_integration.probe.mjs` for the four validation points above.
+- The four validation points are now also covered through the real `bootstrap -> panel -> service -> runtime` UI path in `src/squirrel/voice/panel_interrupt_real_path.probe.mjs`.
 - A live desktop smoke test remains part of the manual validation checklist in Phase 9.
 
 ## Phase 3 - Voice orchestration on top of MCP
@@ -334,7 +334,7 @@ Goal: support iCloud mail during the transition without depending on Mail.app.
   - Result: `src/squirrel/mail/icloud_connector.js` now normalizes iCloud IMAP/SMTP configuration and payloads behind injected transport factories, so the mail stack has a single protocol-facing connector contract.
 - [x] Implement iCloud IMAP read access
   - Done on 2026-03-13.
-  - Result: `src/squirrel/mail/node_protocol_clients.js` now provides a real Node IMAP-over-TLS client, and `src/squirrel/mail/node_protocol_transport.integration.test.mjs` validates initial mailbox fetch plus cursor-based incremental fetch through the iCloud connector.
+  - Result: `src/squirrel/mail/node_protocol_clients.js` now provides a real Node IMAP-over-TLS client, and `src/squirrel/mail/node_protocol_transport.integration.probe.mjs` validates initial mailbox fetch plus cursor-based incremental fetch through the iCloud connector.
 - [x] Implement local mail index
   - Done on 2026-03-13.
   - Result: `src/squirrel/mail/local_index.js` now provides normalized local storage primitives for ingest/read/list/search/next-unread over mail records.
@@ -343,7 +343,7 @@ Goal: support iCloud mail during the transition without depending on Mail.app.
   - Result: `src/squirrel/mail/service.js` now exposes `mailList`, `mailRead`, `mailSearch`, and `mailNextUnread` over the local index, validated by dedicated tests.
 - [x] Implement AI summaries
   - Done on 2026-03-13.
-  - Result: `mailSummarize()` now produces local inbox summaries from the normalized mail index, and the summary path is covered by `src/squirrel/mail/service.test.mjs`.
+  - Result: `mailSummarize()` now produces local inbox summaries from the normalized mail index, and the summary path is covered by `src/squirrel/mail/service.probe.mjs`.
 - [x] Implement reply draft flow
   - Done on 2026-03-13.
   - Result: `src/squirrel/mail/service.js` now builds reply drafts from indexed source messages with reply subjecting, recipient inference, and quoted-source context.
@@ -355,7 +355,7 @@ Goal: support iCloud mail during the transition without depending on Mail.app.
   - Result: `src/squirrel/mail/service.js` and `src/squirrel/mail/bootstrap.js` now expose connector status, connector configuration, initial sync, incremental sync, and connector-backed send while preserving the previous local-only fallback.
 - [x] Implement iCloud SMTP send/reply
   - Done on 2026-03-13.
-  - Result: `src/squirrel/mail/node_protocol_clients.js` now provides a real Node SMTP client with STARTTLS and AUTH LOGIN, and `src/squirrel/mail/node_protocol_transport.integration.test.mjs` validates confirmed delivery through the iCloud connector.
+  - Result: `src/squirrel/mail/node_protocol_clients.js` now provides a real Node SMTP client with STARTTLS and AUTH LOGIN, and `src/squirrel/mail/node_protocol_transport.integration.probe.mjs` validates confirmed delivery through the iCloud connector.
 - [x] Add incremental sync for incoming mail
   - Done on 2026-03-13.
   - Result: the concrete Node IMAP transport now feeds `fetchDelta()` into `src/squirrel/mail/service.js` / `syncState`, so incremental mailbox sync is exercised end-to-end in the connector transport integration tests.
@@ -364,10 +364,10 @@ Goal: support iCloud mail during the transition without depending on Mail.app.
   - Result: the global mail bootstrap now exposes `buildReadout()` and `voiceReadout()`, so indexed mail can be rendered as speech text and spoken through the shared voice API.
 - [x] Expose mail tools through MCP
   - Done on 2026-03-13.
-  - Result: `src/squirrel/atome/mcp.js` now exposes `mail.list`, `mail.read`, `mail.search`, `mail.next_unread`, `mail.summarize`, `mail.reply_draft`, and `mail.send` over the shared local mail service, validated by `src/squirrel/atome/mcp.runtime_bridge.test.mjs`.
+  - Result: `src/squirrel/atome/mcp.js` now exposes `mail.list`, `mail.read`, `mail.search`, `mail.next_unread`, `mail.summarize`, `mail.reply_draft`, and `mail.send` over the shared local mail service, validated by `src/squirrel/atome/mcp.runtime_bridge.probe.mjs`.
 - [x] Add connector integration tests
   - Done on 2026-03-13.
-  - Result: `src/squirrel/mail/icloud_connector.test.mjs`, `src/squirrel/mail/service.connector_integration.test.mjs`, and `src/squirrel/mail/bootstrap.connector.test.mjs` validate initial IMAP sync, incremental sync, and confirmed SMTP delivery against injected protocol transports.
+  - Result: `src/squirrel/mail/icloud_connector.probe.mjs`, `src/squirrel/mail/service.connector_integration.probe.mjs`, and `src/squirrel/mail/bootstrap.connector.probe.mjs` validate initial IMAP sync, incremental sync, and confirmed SMTP delivery against injected protocol transports.
 
 ### Target mail tools
 
@@ -399,13 +399,13 @@ Goal: unify legacy Apple calendars with the new Tauri-owned calendar source.
 
 - [x] Stabilize the existing internal calendar domain
   - Done on 2026-03-13.
-  - Result: the existing eVe calendar panel and `CalendarAPI` are now wrapped by `src/squirrel/calendar/calendar_api_source.js` and validated in `src/squirrel/calendar/calendar_api_source.test.mjs`, so the new calendar stack grafts onto the current implementation instead of replacing it.
+  - Result: the existing eVe calendar panel and `CalendarAPI` are now wrapped by `src/squirrel/calendar/calendar_api_source.js` and validated in `src/squirrel/calendar/calendar_api_source.probe.mjs`, so the new calendar stack grafts onto the current implementation instead of replacing it.
 - [x] Choose the v1 CalDAV server architecture
   - Done on 2026-03-13.
   - Result: `src/squirrel/calendar/connector_contract.js` and `eVe/documentations/calendar_v1_architecture.md` now lock the v1 calendar decision to `CalendarAPI` as the Tauri-owned primary source with legacy Apple/iCloud read sources beside it.
 - [x] Implement legacy Apple/iCloud read access
   - Done on 2026-03-13.
-  - Result: `src/squirrel/calendar/icloud_legacy_connector.js` now provides a read-only iCloud legacy CalDAV connector with a concrete Node CalDAV client in `src/squirrel/calendar/node_protocol_clients.js`, validated by `node_protocol_clients.test.mjs` and `icloud_legacy_connector.test.mjs`.
+  - Result: `src/squirrel/calendar/icloud_legacy_connector.js` now provides a read-only iCloud legacy CalDAV connector with a concrete Node CalDAV client in `src/squirrel/calendar/node_protocol_clients.js`, validated by `node_protocol_clients.probe.mjs` and `icloud_legacy_connector.test.mjs`.
 - [x] Implement unified multi-source calendar view
   - Done on 2026-03-13.
   - Result: `src/squirrel/calendar/service.js` now aggregates multiple calendar sources, resolves a normalized unified view, and exposes list/search/today/next reads over the shared service.
@@ -414,16 +414,16 @@ Goal: unify legacy Apple calendars with the new Tauri-owned calendar source.
   - Result: the unified calendar service now tags each event with `source_id/role/writable/provider`, exposes hidden alternates on conflicts, and resolves duplicates with the policy `prefer_primary_then_latest_update`.
 - [x] Implement event creation in the Tauri main calendar
   - Done on 2026-03-13.
-  - Result: `calendarCreate()` now routes writes to the writable primary source backed by the existing `CalendarAPI` create path, validated in `src/squirrel/calendar/service.test.mjs` and `src/squirrel/calendar/bootstrap.test.mjs`.
+  - Result: `calendarCreate()` now routes writes to the writable primary source backed by the existing `CalendarAPI` create path, validated in `src/squirrel/calendar/service.probe.mjs` and `src/squirrel/calendar/bootstrap.probe.mjs`.
 - [x] Implement event update flow
   - Done on 2026-03-13.
   - Result: `calendarUpdate()` now routes updates to the owning writable source, while read-only legacy sources fail cleanly with `calendar_source_read_only`.
 - [x] Add incoming Apple-side transition sync
   - Done on 2026-03-13.
-  - Result: the shared calendar service and bootstrap now expose `syncInitial`, `syncIncremental`, `syncPull`, and `syncStatus` over legacy sources, and the iCloud legacy connector now tracks sync cursors plus delta removals through CalDAV `sync-collection`, validated by `service.connector_integration.test.mjs` and `bootstrap.connector.test.mjs`.
+  - Result: the shared calendar service and bootstrap now expose `syncInitial`, `syncIncremental`, `syncPull`, and `syncStatus` over legacy sources, and the iCloud legacy connector now tracks sync cursors plus delta removals through CalDAV `sync-collection`, validated by `service.connector_integration.probe.mjs` and `bootstrap.connector.probe.mjs`.
 - [x] Expose calendar tools through MCP
   - Done on 2026-03-13.
-  - Result: `src/squirrel/atome/mcp.js` now exposes `calendar.sources`, `calendar.search`, `calendar.today`, `calendar.next`, `calendar.create`, and `calendar.update` over the shared calendar service, validated in `src/squirrel/atome/mcp.runtime_bridge.test.mjs`.
+  - Result: `src/squirrel/atome/mcp.js` now exposes `calendar.sources`, `calendar.search`, `calendar.today`, `calendar.next`, `calendar.create`, and `calendar.update` over the shared calendar service, validated in `src/squirrel/atome/mcp.runtime_bridge.probe.mjs`.
 
 ### Target calendar tools
 
@@ -479,7 +479,7 @@ Goal: reach a real MCP platform surface, not only tool calls.
   - Result: `src/squirrel/atome/mcp.js` now exposes `mcp.toolchains.execute`, batching runtime-only chains through `runtime.tools.batch_call` and executing mixed chains sequentially with MCP-level progress reporting.
 - [x] Add local MCP integration tests
   - Done on 2026-03-13.
-  - Result: `src/squirrel/atome/mcp.platform_surface.test.mjs` now validates unified tool discovery, resource/prompt discovery, deferred operations, progress/event logging, and MCP cancellation.
+  - Result: `src/squirrel/atome/mcp.platform_surface.probe.mjs` now validates unified tool discovery, resource/prompt discovery, deferred operations, progress/event logging, and MCP cancellation.
 
 ## Phase 7 - Banking
 
@@ -647,29 +647,29 @@ Goal: verify the product as a system, not feature by feature only.
 - 2026-03-12: AtomeAI calendar default tools now route through runtime V2 with trace propagation, and MCP now exposes `runtime.audit.list` over the runtime command bus.
 - 2026-03-12: AgentGateway now stamps and preserves `trace_id/intent_id/source` across validation, policy, proposals, approvals, rejections, and execution, and runtime command-bus events now expose matching audit fields.
 - 2026-03-12: canonical AI/MCP/runtime entrypoint rules documented in `documentations/runtime_ai_mcp_entrypoints.md`.
-- 2026-03-12: `src/squirrel/voice/session_runtime.js` added the first executable voice foundation with canonical session phases, capture lifecycle, local interruption commands, abortable backend channels, followup queueing, and UI/MCP event fan-out, validated by `src/squirrel/voice/session_runtime.test.mjs`.
-- 2026-03-12: `src/squirrel/voice/service.js` added the first host bridge over the voice session runtime, with explicit STT/TTS backend selection, browser-host STT partial streaming, immediate `speechSynthesis` stop, and high-level `voice.listen()` behavior validated by `src/squirrel/voice/service.test.mjs`.
+- 2026-03-12: `src/squirrel/voice/session_runtime.js` added the first executable voice foundation with canonical session phases, capture lifecycle, local interruption commands, abortable backend channels, followup queueing, and UI/MCP event fan-out, validated by `src/squirrel/voice/session_runtime.probe.mjs`.
+- 2026-03-12: `src/squirrel/voice/service.js` added the first host bridge over the voice session runtime, with explicit STT/TTS backend selection, browser-host STT partial streaming, immediate `speechSynthesis` stop, and high-level `voice.listen()` behavior validated by `src/squirrel/voice/service.probe.mjs`.
 - 2026-03-12: `src/squirrel/voice/vad.js` and `src/squirrel/voice/telemetry.js` completed the remaining technical Phase 2 foundation by adding reusable speech/silence detection and runtime-derived latency metrics for STT, TTS, and interruption flows.
-- 2026-03-12: `src/squirrel/voice/interrupt_integration.test.mjs` added mocked end-to-end coverage for instant TTS interruption, backend abort propagation, and immediate follow-up command acceptance; the corresponding product validation checkboxes remain open pending real UI/Tauri verification.
+- 2026-03-12: `src/squirrel/voice/interrupt_integration.probe.mjs` added mocked end-to-end coverage for instant TTS interruption, backend abort propagation, and immediate follow-up command acceptance; the corresponding product validation checkboxes remain open pending real UI/Tauri verification.
 - 2026-03-12: `src/squirrel/voice/bootstrap.js` now binds the singleton voice service globally and auto-loads the Tauri recorder bridge modules, closing the previous gap where the native iPlug recorder bridge existed in sources but was not automatically activated from the Squirrel entrypoint.
-- 2026-03-12: `src/squirrel/voice/panel.js` now exposes a real in-app voice control surface over the singleton voice service, and `src/squirrel/voice/panel.test.mjs` plus `bootstrap.test.mjs` validate the UI/bootstrap path.
-- 2026-03-13: `src/squirrel/voice/panel_interrupt_real_path.test.mjs` now validates the four Phase 2 interruption requirements through the real `bootstrap -> panel -> service -> runtime` chain, allowing the voice foundation phase to close while keeping the desktop smoke test in Phase 9.
-- 2026-03-12: `src/squirrel/voice/intent_schema.js` introduced the first canonical voice intent schema and classifier, covering local interruption commands, runtime UI/calendar routing, and future mail/bank connector placeholders, validated by `src/squirrel/voice/intent_schema.test.mjs`.
-- 2026-03-12: `src/squirrel/voice/orchestrator.js` added the first executable `voice -> intent -> MCP/runtime` orchestration layer, with runtime catalog loading, MCP batch/single execution, and pending connector planning, validated by `src/squirrel/voice/orchestrator.test.mjs`.
+- 2026-03-12: `src/squirrel/voice/panel.js` now exposes a real in-app voice control surface over the singleton voice service, and `src/squirrel/voice/panel.probe.mjs` plus `bootstrap.probe.mjs` validate the UI/bootstrap path.
+- 2026-03-13: `src/squirrel/voice/panel_interrupt_real_path.probe.mjs` now validates the four Phase 2 interruption requirements through the real `bootstrap -> panel -> service -> runtime` chain, allowing the voice foundation phase to close while keeping the desktop smoke test in Phase 9.
+- 2026-03-12: `src/squirrel/voice/intent_schema.js` introduced the first canonical voice intent schema and classifier, covering local interruption commands, runtime UI/calendar routing, and future mail/bank connector placeholders, validated by `src/squirrel/voice/intent_schema.probe.mjs`.
+- 2026-03-12: `src/squirrel/voice/orchestrator.js` added the first executable `voice -> intent -> MCP/runtime` orchestration layer, with runtime catalog loading, MCP batch/single execution, and pending connector planning, validated by `src/squirrel/voice/orchestrator.probe.mjs`.
 - 2026-03-12: the voice orchestrator now keeps its own intent/execution journal, adding audit-friendly replay/subscription of `voice.intent.planned` and `voice.intent.executed` entries.
 - 2026-03-12: the voice orchestrator now enforces explicit confirmation on sensitive intents before runtime execution, preventing destructive toolchains from firing without approval.
 - 2026-03-13: voice sessions now keep the active intent context, contextual followups can resolve `next/previous/summarize/reply` against that context, and plain interruption can resume the previously bound intent through `resume_interrupted`.
 - 2026-03-13: the voice panel now surfaces an explicit ambiguity fallback UI with suggested reformulations when intent planning cannot safely resolve a command.
-- 2026-03-13: `src/squirrel/voice/priority_flows.test.mjs` now locks the eight priority voice flows for mail, calendar, bank, and local interruption/context commands.
+- 2026-03-13: `src/squirrel/voice/priority_flows.probe.mjs` now locks the eight priority voice flows for mail, calendar, bank, and local interruption/context commands.
 - 2026-03-13: the first mail v1 foundation is in place with an explicit IMAP/SMTP architecture decision, a normalized local mail index, and a local mail service for list/read/search/next-unread.
 - 2026-03-13: the local mail service now also supports reply draft generation and an explicit confirmation gate before any send transition.
 - 2026-03-13: mail is now bootstrapped globally and exposed through MCP plus AtomeAI default tools, covering `mail_list`, `mail_read`, `mail_search`, `mail_next_unread`, `mail_summarize`, `mail_reply_draft`, and a local-only gated `mail_send`.
 - 2026-03-13: mail readout is now available for voice through the shared mail bootstrap and the global voice API.
 - 2026-03-13: the mail stack now includes a pluggable iCloud connector abstraction plus connector-backed initial sync, incremental sync, and confirmed send flows validated against injected IMAP/SMTP transports; at that point, concrete protocol bindings were the last open gap in Phase 4.
-- 2026-03-13: Phase 4 is now backed by real Node IMAP TLS and SMTP STARTTLS protocol clients, validated locally end-to-end against mock servers through `node_protocol_transport.integration.test.mjs`; a live iCloud smoke test remains open in Phase 9.
+- 2026-03-13: Phase 4 is now backed by real Node IMAP TLS and SMTP STARTTLS protocol clients, validated locally end-to-end against mock servers through `node_protocol_transport.integration.probe.mjs`; a live iCloud smoke test remains open in Phase 9.
 - 2026-03-13: the calendar v1 stack now grafts onto the existing eVe calendar panel and `CalendarAPI`, exposing a unified multi-source service, primary-source create/update, source tagging/conflict handling, and MCP/AtomeAI/bootstrap bridges without introducing a second calendar UI.
 - 2026-03-13: Phase 5 is now backed by a read-only iCloud legacy CalDAV connector plus concrete Node CalDAV `calendar-query` / `sync-collection` transport, with service/bootstrap sync integration and a live iCloud calendar smoke test left open in Phase 9.
-- 2026-03-13: the MCP bridge now exposes unified tool/resource/prompt discovery plus tracked deferred operations, progress, cancellation, and event streaming, validated by `src/squirrel/atome/mcp.platform_surface.test.mjs`.
+- 2026-03-13: the MCP bridge now exposes unified tool/resource/prompt discovery plus tracked deferred operations, progress, cancellation, and event streaming, validated by `src/squirrel/atome/mcp.platform_surface.probe.mjs`.
 - 2026-03-13: Phase 6 is now closed with MCP-level ACL, one-shot confirmation records for critical actions, and `mcp.toolchains.execute` for clean multi-step toolchains.
 - 2026-03-13: Phase 7 is now closed with a local normalized banking analytics layer plus MCP/AtomeAI/bootstrap exposure for account, balance, transaction, payer, recurring, period, and merchant flows.
 - 2026-03-13: Phase 8 is now closed with an encrypted token vault, capability-based MCP security policy, proposal/confirmation journaling, idempotent sensitive writes, rate limits, sandbox gates, and a written v1 failure-mode review.

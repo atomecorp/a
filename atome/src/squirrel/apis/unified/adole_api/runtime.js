@@ -1,3 +1,6 @@
+import { nowIso } from '../../../shared/scalars.js';
+// Re-exported: the local duplicate now lives in the shared scalars module.
+export { nowIso };
 export const isTauriRuntime = () => {
     if (typeof window === 'undefined') return false;
     if (window.__SQUIRREL_FORCE_FASTIFY__ === true) return false;
@@ -17,5 +20,3 @@ export const isTauriRuntime = () => {
     if (typeof navigator !== 'undefined' && /tauri/i.test(navigator.userAgent || '')) return true;
     return false;
 };
-
-export const nowIso = () => new Date().toISOString();

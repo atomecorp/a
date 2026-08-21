@@ -39,37 +39,37 @@ Completed Work
   * Updated Molecule media mounting, Intuition media rendering, project media hydration, media diagnostics, MTraX descriptor capture, communication media creation, AUv3 host playback, and the Atome example media host path to stop writing or reading `data-eve-media-source`, `data-eve-media-identifier`, or `data-media-src` as active state.
   * Kept migration reads and cleanup inside `media_projection_state.js` only, so old DOM captures can still be sanitized while new projection paths do not serialize media source truth into attributes.
   * Extended the DOM projection guardrail to reject `data-media-src`.
-  * Validation run: `node --test tests/eve/media_projection_state.dom_contract.test.mjs`, `node --test tests/eve/media_persistence_service.sanitization.test.mjs`, `node --test tests/scripts/check_dom_projection_guardrails.test.mjs`, `node --test atome/src/application/audio_runtime/auv3_host_playback.test.mjs`, and `npm run check:syntax`.
+  * Validation run: `node --test tests/eve/media_projection_state.dom_contract.probe.mjs`, `node --test tests/eve/media_persistence_service.sanitization.test.mjs`, `node --test tests/scripts/check_dom_projection_guardrails.probe.mjs`, `node --test atome/src/application/audio_runtime/auv3_host_playback.probe.mjs`, and `npm run check:syntax`.
   * Remaining known debt: two probes still inspect old media-source DOM attributes for diagnostic output and should be migrated when the related probe expectations are updated.
 * 25%: Defined and enforced the media atom integrity contract at the project media persistence boundary.
   * Added `eVe/domains/media/shared/media_atom_integrity.js` as the shared validator and normalizer for persisted media Atomes.
   * Closed audio and video Atomes now require stable source references, media kind, duration, visual references, and visual cache status before project media persistence can commit them.
   * Audio Atomes receive waveform visual refs and video Atomes receive thumbnail visual refs outside the DOM, with `visual_status` tracked as model data.
   * Pending import and recording placeholders remain allowed as incomplete transient Atomes until the final source and duration are available.
-  * Validation run: `node --test tests/eve/media_atom_integrity.test.mjs`, `node --test tests/eve/media_persistence_service.sanitization.test.mjs`, `node --test tests/eve/project_audio_waveform_renderer.test.mjs`, and `npm run check:syntax`.
+  * Validation run: `node --test tests/eve/media_atom_integrity.probe.mjs`, `node --test tests/eve/media_persistence_service.sanitization.test.mjs`, `node --test tests/eve/project_audio_waveform_renderer.test.mjs`, and `npm run check:syntax`.
   * Remaining known debt: broader fixture-driven import and recording restoration coverage still needs to prove every media entry path produces a complete persisted media Atome.
 * 32%: Added fixture-driven import and recording restoration coverage for maintained audio/video media fixtures.
-  * Added `tests/eve/media_fixture_restore_contract.test.mjs` to run every maintained audio/video fixture under `tests/fixtures/media` through the project media persistence boundary.
+  * Added `tests/eve/media_fixture_restore_contract.probe.mjs` to run every maintained audio/video fixture under `tests/fixtures/media` through the project media persistence boundary.
   * The fixture contract verifies persisted media source refs, duration, media kind, waveform or thumbnail visual refs, visual status, and absence of DOM-backed media truth fields in committed properties.
   * The fixture contract simulates DOM teardown by validating reconstruction from JSON-cloned canonical properties while DOM lookup functions throw if read.
-  * Corrected `tests/eve/media_atom_integrity.test.mjs` so the throwing assertion passes invalid media properties rather than a validation result object.
+  * Corrected `tests/eve/media_atom_integrity.probe.mjs` so the throwing assertion passes invalid media properties rather than a validation result object.
   * `maps/CODEMAP.md` and `maps/ARCHITECTURE_MAP.md` document the new local fixture restoration guard and its relationship to browser playback probes.
-  * Validation run: `node --test tests/eve/media_fixture_restore_contract.test.mjs`, `node --test tests/eve/media_atom_integrity.test.mjs`, `node --test tests/eve/media_persistence_service.sanitization.test.mjs`, and `npm run check:syntax`.
+  * Validation run: `node --test tests/eve/media_fixture_restore_contract.probe.mjs`, `node --test tests/eve/media_atom_integrity.probe.mjs`, `node --test tests/eve/media_persistence_service.sanitization.test.mjs`, and `npm run check:syntax`.
   * Remaining known debt: full refresh/reload/reboot browser acceptance still depends on the higher-level media fixture probe with a running server and authenticated app context.
 * 40%: Added DOM teardown and canonical reconstruction coverage across mixed project content.
-  * Added `tests/eve/project_dom_teardown_reconstruction.test.mjs` to reconstruct normal Atomes, grouped Atomes, audio/video media Atomes, timeline tracks, clips, waveform refs, and thumbnail refs from serialized canonical records after DOM teardown.
+  * Added `tests/eve/project_dom_teardown_reconstruction.probe.mjs` to reconstruct normal Atomes, grouped Atomes, audio/video media Atomes, timeline tracks, clips, waveform refs, and thumbnail refs from serialized canonical records after DOM teardown.
   * The reconstruction guard verifies grouped step/timeline state is restored through non-serialized host-local helpers after reading canonical properties, not stale `data-*` payloads.
   * Media Atomes in the reconstruction scenario are revalidated through the media integrity contract after teardown.
   * `maps/CODEMAP.md` and `maps/ARCHITECTURE_MAP.md` document the mixed-content teardown reconstruction guard.
-  * Validation run: `node --test tests/eve/project_dom_teardown_reconstruction.test.mjs`, `node --test tests/eve/group_state_runtime.dom_contract.test.mjs`, `node --test tests/eve/media_fixture_restore_contract.test.mjs`, and `npm run check:syntax`.
+  * Validation run: `node --test tests/eve/project_dom_teardown_reconstruction.probe.mjs`, `node --test tests/eve/group_state_runtime.dom_contract.probe.mjs`, `node --test tests/eve/media_fixture_restore_contract.probe.mjs`, and `npm run check:syntax`.
   * Remaining known debt: browser-level refresh, reload, and reboot reconstruction should still be exercised later with a running app context.
 * 47%: Reduced Matrix DOM weight through logical slot virtualization.
   * Added `eVe/intuition/matrix/ui/matrix_virtual_slots.js` as the Matrix logical slot owner.
   * `renderMatrixTiles` now renders project tiles and the first actionable empty creation tile instead of materializing every repeated empty slot as a DOM node.
   * Matrix layout now positions rendered tiles by logical slot using `gridColumnStart` and `gridRowStart`, preserving sparse slot placement while keeping empty capacity in layout math.
-  * Added `tests/eve/matrix_virtual_slots.test.mjs` to guard collision handling, first-empty-slot detection, sparse slot placement, and DOM node count reduction.
+  * Added `tests/eve/matrix_virtual_slots.probe.mjs` to guard collision handling, first-empty-slot detection, sparse slot placement, and DOM node count reduction.
   * `maps/CODEMAP.md`, `maps/ARCHITECTURE_MAP.md`, and `maps/DESIGN_MAP.md` document Matrix logical slot virtualization.
-  * Validation run: `node --test tests/eve/matrix_virtual_slots.test.mjs` and `npm run check:syntax`.
+  * Validation run: `node --test tests/eve/matrix_virtual_slots.probe.mjs` and `npm run check:syntax`.
   * Remaining known debt: dense Matrix background marks are still CSS-grid based; Canvas/WebGPU background rendering and browser node-count probes remain future work.
 * 55%: Reduced timeline DOM weight by moving repeated ruler ticks to a canvas-backed renderer.
   * Added `eVe/domains/mtrax/timeline/ruler_canvas_runtime.js` for major-step selection, visible tick-window calculation, and canvas-backed tick drawing.
@@ -82,40 +82,40 @@ Completed Work
 * 63%: Added mutation ownership guardrails for the canonical commit pipeline.
   * Added `scripts/check_mutation_ownership_guardrails.mjs` to reject direct client/runtime mutation of `state_current` and direct event-commit transport calls outside canonical commit/server owners.
   * Exposed the checker as `npm run check:mutation-ownership-guardrails`.
-  * Added `tests/scripts/check_mutation_ownership_guardrails.test.mjs`.
+  * Added `tests/scripts/check_mutation_ownership_guardrails.probe.mjs`.
   * Fixed the broken absolute import in `atome/src/squirrel/apis/unified/adole_api/atomes.js` so Node tests can import the Adole Atome API boundary consistently.
   * `maps/CODEMAP.md`, `maps/API_MAP.md`, and `maps/ARCHITECTURE_MAP.md` document the mutation ownership guardrail.
-  * Validation run: `npm run check:mutation-ownership-guardrails`, `node --test tests/scripts/check_mutation_ownership_guardrails.test.mjs`, `node --test tests/eve/atome_commit.sanitization.test.mjs`, and `npm run check:syntax`.
+  * Validation run: `npm run check:mutation-ownership-guardrails`, `node --test tests/scripts/check_mutation_ownership_guardrails.probe.mjs`, `node --test tests/eve/atome_commit.sanitization.probe.mjs`, and `npm run check:syntax`.
   * Remaining known debt: deterministic replay-state construction and realtime patch replay tests still need deeper behavioral coverage in later cleanup.
 * 70%: Added events, particles, and state_current projection invariants.
-  * Added `database/adole.event_projection_invariants.test.mjs` to verify append-only event dedupe, projection versioning, event-to-particle projection, and `state_current` coherence.
+  * Added `database/adole.event_projection_invariants.probe.mjs` to verify append-only event dedupe, projection versioning, event-to-particle projection, and `state_current` coherence.
   * Fixed `database/adole.js` so event patches are sanitized before being merged into `state_current.properties`, matching the particles contract and preventing reserved envelope fields such as `owner_id` and `type` from becoming projected properties.
   * The new invariant verifies duplicate event ids do not advance `state_current.version` or overwrite projected values.
   * `maps/CODEMAP.md`, `maps/API_MAP.md`, and `maps/ARCHITECTURE_MAP.md` document the event projection invariant boundary.
-  * Validation run: `node --test database/adole.event_projection_invariants.test.mjs`, `node --test database/adole.sanitization.test.mjs`, `node --test tests/server/atome_persistence_boundary.test.mjs`, and `npm run check:syntax`.
+  * Validation run: `node --test database/adole.event_projection_invariants.probe.mjs`, `node --test database/adole.sanitization.probe.mjs`, `node --test tests/server/atome_persistence_boundary.probe.mjs`, and `npm run check:syntax`.
   * Remaining known debt: full replay from historical event ranges and snapshot comparison still belongs to the snapshot/restoration phase.
 * 78%: Unified controlled state snapshot restore through event replay.
   * Added `restoreStateSnapshot` in `database/adole.js` as the controlled restore path for `state_current` snapshots.
   * Snapshot records are normalized into `set` events and replayed through `appendEvents`, so restore passes through the same sanitized projection pipeline as normal mutations.
-  * Added `database/adole.snapshot_restore_invariants.test.mjs` to prove snapshot restore emits events, restores projected state, and keeps reserved envelope fields out of durable properties.
+  * Added `database/adole.snapshot_restore_invariants.probe.mjs` to prove snapshot restore emits events, restores projected state, and keeps reserved envelope fields out of durable properties.
   * `maps/CODEMAP.md`, `maps/API_MAP.md`, and `maps/ARCHITECTURE_MAP.md` document the controlled restore boundary and classify legacy `restoreSnapshot` as migration debt.
-  * Validation run: `node --test database/adole.snapshot_restore_invariants.test.mjs`, `node --test database/adole.event_projection_invariants.test.mjs`, `node --test database/adole.sanitization.test.mjs`, and `npm run check:syntax`.
+  * Validation run: `node --test database/adole.snapshot_restore_invariants.probe.mjs`, `node --test database/adole.event_projection_invariants.probe.mjs`, `node --test database/adole.sanitization.probe.mjs`, and `npm run check:syntax`.
   * Remaining known debt: legacy `restoreSnapshot` still performs direct particle replacement and must stay classified as a migration adapter until the legacy snapshot path is contained.
 * 86%: Contained legacy Squirrel DOM-first Atome behavior with a persistent guardrail.
   * Added `scripts/check_squirrel_dom_adapter_guardrails.mjs` and `npm run check:squirrel-dom-adapter-guardrails`.
   * The guardrail classifies `this.element` and local `element` handles in Squirrel Atome code as DOM projection adapters only.
   * It rejects canonical model/business state writes such as `properties`, `state`, `model`, `timeline`, media refs, sync, permissions, and serialized `JSON.stringify(...)` model payloads on HTMLElement properties or model-shaped `data-*` attributes.
-  * Added `tests/scripts/check_squirrel_dom_adapter_guardrails.test.mjs` with clean and dirty fixture coverage.
+  * Added `tests/scripts/check_squirrel_dom_adapter_guardrails.probe.mjs` with clean and dirty fixture coverage.
   * `maps/CODEMAP.md`, `maps/API_MAP.md`, and `maps/ARCHITECTURE_MAP.md` document the Squirrel DOM adapter containment boundary.
-  * Validation run: `npm run check:squirrel-dom-adapter-guardrails`, `node --test tests/scripts/check_squirrel_dom_adapter_guardrails.test.mjs`, and `npm run check:syntax`.
+  * Validation run: `npm run check:squirrel-dom-adapter-guardrails`, `node --test tests/scripts/check_squirrel_dom_adapter_guardrails.probe.mjs`, and `npm run check:syntax`.
   * Remaining known debt: broader legacy Squirrel components still use DOM elements for interaction and visual projection; this step contains canonical state leakage rather than removing all DOM adapter behavior.
 * 94%: Expanded and enforced DOM projection guardrails on maintained DOM fixtures.
   * Extended `scripts/check_dom_projection_guardrails.mjs` with node-count, inline-style, canvas-count, and video-count thresholds in addition to forbidden data attributes, oversized attributes, local source leaks, duplicate ids, and nested document roots.
   * Added `tests/fixtures/dom/maintained_projection.dom` as the clean maintained fixture scanned by the default guardrail target.
-  * Updated `tests/scripts/check_dom_projection_guardrails.test.mjs` with configured threshold failures for dense DOM projections.
+  * Updated `tests/scripts/check_dom_projection_guardrails.probe.mjs` with configured threshold failures for dense DOM projections.
   * The default guardrail now scans `tests/fixtures/dom`; explicit `--paths` remains available for auditing legacy captures such as `tests/atom_matrix_example.dom`, which is still intentionally dirty and not promoted as a maintained passing fixture.
   * `maps/CODEMAP.md`, `maps/API_MAP.md`, `maps/ARCHITECTURE_MAP.md`, and `maps/DESIGN_MAP.md` document the expanded DOM projection guardrail boundary.
-  * Validation run: `npm run check:dom-projection-guardrails`, `node --test tests/scripts/check_dom_projection_guardrails.test.mjs`, `npm run check:squirrel-dom-adapter-guardrails`, and `npm run check:syntax`.
+  * Validation run: `npm run check:dom-projection-guardrails`, `node --test tests/scripts/check_dom_projection_guardrails.probe.mjs`, `npm run check:squirrel-dom-adapter-guardrails`, and `npm run check:syntax`.
   * Remaining known debt: legacy captured DOM files still contain old serialized projection state and should be regenerated or retained only as failing audit evidence.
 * 97%: Synchronized architecture documentation and maps for all structural changes completed so far.
   * `maps/CODEMAP.md` now records maintained DOM fixtures, Squirrel DOM adapter containment, DOM density guardrails, snapshot restore replay, event projection invariants, media integrity, reconstruction, Matrix virtualization, and timeline canvas ownership.
@@ -126,7 +126,7 @@ Completed Work
   * Remaining known debt: final validation still needs to re-run the consolidated targeted suite and record the completion state.
 * 100%: Completed final validation for the full remediation plan.
   * Final guardrails passed: `npm run check:dom-projection-guardrails`, `npm run check:mutation-ownership-guardrails`, and `npm run check:squirrel-dom-adapter-guardrails`.
-  * Final targeted tests passed: `tests/scripts/check_dom_projection_guardrails.test.mjs`, `tests/scripts/check_mutation_ownership_guardrails.test.mjs`, `tests/scripts/check_squirrel_dom_adapter_guardrails.test.mjs`, `database/adole.event_projection_invariants.test.mjs`, `database/adole.snapshot_restore_invariants.test.mjs`, `database/adole.sanitization.test.mjs`, `tests/eve/media_atom_integrity.test.mjs`, `tests/eve/media_fixture_restore_contract.test.mjs`, `tests/eve/project_dom_teardown_reconstruction.test.mjs`, `tests/eve/matrix_virtual_slots.test.mjs`, `tests/eve/mtrax_ruler_canvas_runtime.test.mjs`, `tests/eve/group_state_runtime.dom_contract.test.mjs`, and `tests/eve/media_projection_state.dom_contract.test.mjs`.
+  * Final targeted tests passed: `tests/scripts/check_dom_projection_guardrails.probe.mjs`, `tests/scripts/check_mutation_ownership_guardrails.probe.mjs`, `tests/scripts/check_squirrel_dom_adapter_guardrails.probe.mjs`, `database/adole.event_projection_invariants.probe.mjs`, `database/adole.snapshot_restore_invariants.probe.mjs`, `database/adole.sanitization.probe.mjs`, `tests/eve/media_atom_integrity.probe.mjs`, `tests/eve/media_fixture_restore_contract.probe.mjs`, `tests/eve/project_dom_teardown_reconstruction.probe.mjs`, `tests/eve/matrix_virtual_slots.probe.mjs`, `tests/eve/mtrax_ruler_canvas_runtime.test.mjs`, `tests/eve/group_state_runtime.dom_contract.probe.mjs`, and `tests/eve/media_projection_state.dom_contract.probe.mjs`.
   * Final syntax validation passed: `npm run check:syntax` over 628 files.
   * Remaining known debt is explicitly documented in the completed bullets: browser-level authenticated refresh/reload probes, broader Canvas/WebGPU consolidation for long waveform/thumbnail strips, legacy dirty DOM captures, and legacy migration adapters.
 

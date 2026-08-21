@@ -2,29 +2,14 @@ import {
     CONTACTS_V1_ARCHITECTURE_DECISION,
     createContactsConnectorContract
 } from './connector_contract.js';
+import { cloneLenient as cloneValue, toText } from '../shared/scalars.js';
 
-const toText = (value) => String(value || '').trim();
 
 const normalizeLabel = (value) => toText(value).toLowerCase();
 
 const normalizePhoneKey = (value) => toText(value).replace(/[^\d+]/g, '');
 const normalizeEmailKey = (value) => toText(value).toLowerCase();
 
-const cloneValue = (value) => {
-    if (value === undefined) return undefined;
-    try {
-        if (typeof structuredClone === 'function') {
-            return structuredClone(value);
-        }
-    } catch (_) {
-        // Fall through.
-    }
-    try {
-        return JSON.parse(JSON.stringify(value));
-    } catch (_) {
-        return null;
-    }
-};
 
 const ensureArray = (value) => (Array.isArray(value) ? value : []);
 const hasFiniteLimit = (value) => value !== null && value !== undefined && String(value).trim() !== '' && Number.isFinite(Number(value));

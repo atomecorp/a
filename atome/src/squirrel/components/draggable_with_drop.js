@@ -1,3 +1,4 @@
+import { makeId } from '../shared/scalars.js';
 /**
  * Fonction de drag avancée avec support drag & drop HTML5
  * @param {HTMLElement} element - L'élément à rendre draggable
@@ -60,7 +61,7 @@ function makeDraggableWithDrop(element, options = {}) {
         uniqueTransferData = {
           ...transferData,
           dragStartTime: Date.now(),
-          dragId: transferData.dragId || Math.random().toString(36).substr(2, 9)
+          dragId: transferData.dragId || makeId('drag')
         };
         e.dataTransfer.setData('application/json', JSON.stringify(uniqueTransferData));
       }

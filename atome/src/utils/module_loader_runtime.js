@@ -65,21 +65,30 @@ export const loadModulesSequentially = async ({
 // their default export after all have resolved). The fetch/compile of every module
 // starts in one batch instead of a serial waterfall, which removes per-module
 // round-trips on cold start.
+// `settle: true` keeps the surviving modules of a batch instead of losing all of
+// them to one rejection (Promise.all), which used to cascade into
+// `bootstrapSpark().catch()` and kill the whole boot for one optional module.
+// The caller decides which ids are critical by looking at what is missing.
 export const loadModulesConcurrently = async ({
     modules = [],
     baseUrl,
     logPrefix = '[Runtime]',
     onModuleLoaded,
-    onModuleError
+    onModuleError,
+    settle = false
 } = {}) => {
     const loadedModules = {};
 
-    const results = await Promise.all(modules.map((entry) => loadSingleModule({
+    const settled = await Promise.allSettled(modules.map((entry) => loadSingleModule({
         entry, baseUrl, logPrefix, onModuleLoaded, onModuleError
     })));
 
-    for (const { moduleId, moduleNamespace } of results) {
-        loadedModules[moduleId] = moduleNamespace;
+    const rejected = settled.filter((result) => result.status === 'rejected');
+    if (!settle && rejected.length) throw rejected[0].reason;
+
+    for (const result of settled) {
+        if (result.status !== 'fulfilled') continue;
+        loadedModules[result.value.moduleId] = result.value.moduleNamespace;
     }
 
     return loadedModules;

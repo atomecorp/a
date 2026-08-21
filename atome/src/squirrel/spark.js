@@ -89,59 +89,87 @@ const startSparkApplicationLoad = ({
 
 const sparkBootstrapStartMs = perfNowMs();
 
-// Core/bootstrap modules keep sequential ordering because several install runtime
-// side effects on import and later reads depend on that deterministic order.
-const sparkCoreModules = [
-  { id: 'atome.atome', path: './atome/atome.js' },
-  { id: 'atome.mcp', path: './atome/mcp.js' },
-  { id: 'ai.agent_gateway', path: './ai/agent_gateway.js' },
-  { id: 'ai.default_tools', path: './ai/default_tools.js' },
-  { id: 'ai.model_catalog_refresh', path: './ai/model_catalog_refresh.js' },
-  { id: 'security.bootstrap', path: './security/bootstrap.js' },
-  { id: 'conditions.bootstrap', path: './conditions/bootstrap.js' },
-  { id: 'bank.bootstrap', path: './bank/bootstrap.js' },
-  { id: 'calendar.bootstrap', path: './calendar/bootstrap.js' },
-  { id: 'contacts.bootstrap', path: './contacts/bootstrap.js' },
-  { id: 'mail.bootstrap', path: './mail/bootstrap.js' },
-  { id: 'voice.bootstrap', path: './voice/bootstrap.js' },
-  { id: 'apis.essentials', path: './apis/essentials.js' },
-  { id: 'apis.utils', path: './apis/utils.js' },
-  { id: 'apis.loader', path: './apis/loader.js' },
-  { id: 'apis.shortcut', path: './apis/shortcut.js' },
-  { id: 'apis.adole_apis', path: './apis/unified/adole_apis.js' },
-  { id: 'apis.loadServerConfig', path: './apis/loadServerConfig.js' },
-  { id: 'apis.dragdrop', path: './apis/dragdrop.js' },
-  { id: 'squirrel.core', path: './squirrel.js' }
+// Boot waves. Everything inside a wave loads concurrently; waves themselves stay
+// ordered, because the later ones read globals the earlier ones install on import.
+// The previous shape was a single 20-deep serial waterfall justified by "several
+// install runtime side effects on import" -- true for the atome/ai prefix, false
+// for the independent domain bootstraps, which now share one round-trip.
+const SPARK_BOOT_WAVES = [
+  // The atome graph installs the globals every later module reads.
+  [
+    { id: 'atome.atome', path: './atome/atome.js' },
+    { id: 'atome.mcp', path: './atome/mcp.js', critical: true }
+  ],
+  // default_tools registers into the gateway; the catalog refresh reads both.
+  [
+    { id: 'ai.agent_gateway', path: './ai/agent_gateway.js', critical: true },
+    { id: 'ai.default_tools', path: './ai/default_tools.js', critical: true },
+    { id: 'ai.model_catalog_refresh', path: './ai/model_catalog_refresh.js', critical: true }
+  ],
+  // Independent domains: no import-time reads between them.
+  [
+    { id: 'security.bootstrap', path: './security/bootstrap.js' },
+    { id: 'conditions.bootstrap', path: './conditions/bootstrap.js' },
+    { id: 'bank.bootstrap', path: './bank/bootstrap.js' },
+    { id: 'calendar.bootstrap', path: './calendar/bootstrap.js' },
+    { id: 'contacts.bootstrap', path: './contacts/bootstrap.js' },
+    { id: 'mail.bootstrap', path: './mail/bootstrap.js' },
+    { id: 'voice.bootstrap', path: './voice/bootstrap.js' }
+  ],
+  // apis.loader reads what essentials/utils put on window.
+  [
+    { id: 'apis.essentials', path: './apis/essentials.js', critical: true },
+    { id: 'apis.utils', path: './apis/utils.js', critical: true }
+  ],
+  [
+    { id: 'apis.loader', path: './apis/loader.js', critical: true },
+    { id: 'apis.shortcut', path: './apis/shortcut.js' },
+    { id: 'apis.adole_apis', path: './apis/unified/adole_apis.js', critical: true },
+    { id: 'apis.loadServerConfig', path: './apis/loadServerConfig.js', critical: true },
+    { id: 'apis.dragdrop', path: './apis/dragdrop.js', critical: true },
+    { id: 'squirrel.core', path: './squirrel.js', critical: true }
+  ]
 ];
 
-// Pure component/builder modules are order-independent: they are only read through
-// their default export after the batch resolves, so their fetch/compile can run
-// concurrently instead of as a serial waterfall.
-const sparkComponentModules = [
-  { id: 'components.button', path: './components/button_builder.js' },
-  { id: 'components.slider', path: './components/slider_builder.js' },
-  { id: 'components.toolSlider', path: './components/tool_slider_builder.js' },
-  { id: 'components.input', path: './components/input_builder.js' },
-  { id: 'components.table', path: './components/table_builder.js' },
-  { id: 'components.matrix', path: './components/matrix_builder.js' },
-  { id: 'components.list', path: './components/List_builder.js' },
-  { id: 'components.menu', path: './components/menu_builder.js' },
-  { id: 'components.console', path: './components/console_builder.js' },
-  { id: 'components.unit', path: './components/unit_builder.js' },
-  { id: 'components.draggable', path: './components/draggable_builder.js' },
-  { id: 'components.badge', path: './components/badge_builder.js' },
-  { id: 'components.dropdown', path: './components/dropDown_builder.js' },
-  { id: 'components.tooltip', path: './components/tooltip_builder.js' },
-  { id: 'components.template', path: './components/template_builder.js' },
-  { id: 'components.minimal', path: './components/minimal_builder.js' },
-  { id: 'components.slice', path: './components/slice_builder.js' }
+// One table instead of three. Adding a component used to mean editing the module
+// list, a destructuring line and a registry assignment; forgetting one produced no
+// error, just a component missing from the registry at runtime.
+const SPARK_COMPONENT_MODULES = [
+  { id: 'components.button', path: './components/button_builder.js', registry: { Button: 'default' } },
+  { id: 'components.slider', path: './components/slider_builder.js', registry: { Slider: 'default' } },
+  { id: 'components.toolSlider', path: './components/tool_slider_builder.js', registry: { ToolSlider: 'default' } },
+  { id: 'components.input', path: './components/input_builder.js', registry: { Input: 'default' } },
+  { id: 'components.table', path: './components/table_builder.js', registry: { Table: 'default' } },
+  { id: 'components.matrix', path: './components/matrix_builder.js', registry: { Matrix: 'default' } },
+  { id: 'components.list', path: './components/list_builder.js', registry: { List: 'default' } },
+  { id: 'components.menu', path: './components/menu_builder.js', registry: { Menu: 'default' } },
+  {
+    id: 'components.unit',
+    path: './components/unit_builder.js',
+    registry: { Unit: 'default' },
+    statics: ['selectUnits', 'getSelectedUnits', 'deleteUnit', 'connectUnits',
+      'disconnectUnits', 'getAllConnections', 'getUnit', 'getAllUnits']
+  },
+  {
+    id: 'components.draggable',
+    path: './components/draggable_builder.js',
+    registry: {
+      Draggable: 'default',
+      makeDraggable: 'makeDraggable',
+      makeDraggableWithDrop: 'makeDraggableWithDrop',
+      makeDropZone: 'makeDropZone'
+    }
+  },
+  { id: 'components.badge', path: './components/badge_builder.js', registry: { Badge: 'default' } },
+  { id: 'components.dropdown', path: './components/dropdown_builder.js', registry: { dropDown: 'default' } },
+  { id: 'components.tooltip', path: './components/tooltip_builder.js', registry: { Tooltip: 'default' } },
+  { id: 'components.template', path: './components/template_builder.js', registry: { Template: 'default' } },
+  { id: 'components.minimal', path: './components/minimal_builder.js', registry: { Minimal: 'default' } },
+  { id: 'components.slice', path: './components/slice_builder.js', registry: { Slice: 'default', createSlice: 'createSlice' } }
 ];
 
 const kickstartModule = [{ id: 'kickstart', path: './kickstart.js' }];
 const applicationEntryModule = [{ id: 'application.index', path: '../application/index.js' }];
-
-const squirrelComponentRegistry = {
-};
 
 const emitSparkPerf = (stage, data = {}) => {
   perfLog(`[Perf] spark.${String(stage || 'stage')}`, data);
@@ -149,12 +177,7 @@ const emitSparkPerf = (stage, data = {}) => {
 };
 
 const trackModuleLoad = (stage) => ({ moduleId, modulePath, totalMs }) => {
-  emitSparkPerf(stage, {
-    ok: true,
-    moduleId,
-    path: modulePath,
-    totalMs
-  });
+  emitSparkPerf(stage, { ok: true, moduleId, path: modulePath, totalMs });
 };
 
 const trackModuleError = (stage) => ({ moduleId, modulePath, totalMs, error }) => {
@@ -167,107 +190,68 @@ const trackModuleError = (stage) => ({ moduleId, modulePath, totalMs, error }) =
   });
 };
 
-// Legacy overlay layer removed.
+// A wave used to be a `Promise.all`: one optional module failing killed the whole
+// batch, and `bootstrapSpark().catch()` then killed the boot. Only modules marked
+// `critical` may do that now.
+const loadBootWave = async (wave) => {
+  const loaded = await loadModulesConcurrently({
+    modules: wave,
+    baseUrl: import.meta.url,
+    logPrefix: '[Squirrel]',
+    onModuleLoaded: trackModuleLoad('boot_module'),
+    onModuleError: trackModuleError('boot_module'),
+    settle: true
+  });
+  for (const descriptor of wave) {
+    if (descriptor.critical && !loaded[descriptor.id]) {
+      throw new Error(`critical boot module failed: ${descriptor.id}`);
+    }
+  }
+  return loaded;
+};
+
+const readModuleExport = (moduleNamespace, exportName) => (
+  exportName === 'default' ? moduleNamespace.default : moduleNamespace[exportName]
+);
+
+const buildComponentRegistry = (loadedModules) => {
+  const registry = {};
+  for (const descriptor of SPARK_COMPONENT_MODULES) {
+    const moduleNamespace = loadedModules[descriptor.id];
+    if (!moduleNamespace) continue;
+    for (const [registryKey, exportName] of Object.entries(descriptor.registry || {})) {
+      registry[registryKey] = readModuleExport(moduleNamespace, exportName);
+    }
+  }
+  return registry;
+};
+
+const collectComponentStatics = (loadedModules) => {
+  const statics = {};
+  for (const descriptor of SPARK_COMPONENT_MODULES) {
+    const moduleNamespace = loadedModules[descriptor.id];
+    if (!moduleNamespace) continue;
+    for (const name of descriptor.statics || []) statics[name] = moduleNamespace[name];
+  }
+  return statics;
+};
 
 const bootstrapSpark = async () => {
-  const coreModules = await loadModulesSequentially({
-    modules: sparkCoreModules,
-    baseUrl: import.meta.url,
-    logPrefix: '[Squirrel]',
-    onModuleLoaded: trackModuleLoad('boot_module'),
-    onModuleError: trackModuleError('boot_module')
-  });
-
-  const componentModules = await loadModulesConcurrently({
-    modules: sparkComponentModules,
-    baseUrl: import.meta.url,
-    logPrefix: '[Squirrel]',
-    onModuleLoaded: trackModuleLoad('boot_module'),
-    onModuleError: trackModuleError('boot_module')
-  });
-
-  const loadedModules = { ...coreModules, ...componentModules };
+  const loadedModules = {};
+  for (const wave of SPARK_BOOT_WAVES) {
+    Object.assign(loadedModules, await loadBootWave(wave));
+  }
+  Object.assign(loadedModules, await loadBootWave(SPARK_COMPONENT_MODULES));
 
   const { bootstrapAiModelCatalogRefresh } = loadedModules['ai.model_catalog_refresh'];
   const { AdoleAPI } = loadedModules['apis.adole_apis'];
   const { loadServerConfigOnce } = loadedModules['apis.loadServerConfig'];
-  const DragDrop = loadedModules['apis.dragdrop'].default;
   const { $, define, observeMutations } = loadedModules['squirrel.core'];
-  const Button = loadedModules['components.button'].default;
-  const Slider = loadedModules['components.slider'].default;
-  const ToolSlider = loadedModules['components.toolSlider'].default;
-  const Input = loadedModules['components.input'].default;
-  const Table = loadedModules['components.table'].default;
-  const Matrix = loadedModules['components.matrix'].default;
-  const List = loadedModules['components.list'].default;
-  const Menu = loadedModules['components.menu'].default;
-  const Console = loadedModules['components.console'].default;
-  const UnitModule = loadedModules['components.unit'];
-  const DraggableModule = loadedModules['components.draggable'];
-  const Badge = loadedModules['components.badge'].default;
-  const dropDown = loadedModules['components.dropdown'].default;
-  const Tooltip = loadedModules['components.tooltip'].default;
-  const Template = loadedModules['components.template'].default;
-  const Minimal = loadedModules['components.minimal'].default;
-  const SliceModule = loadedModules['components.slice'];
-
-  const Unit = UnitModule.default;
-  const {
-    selectUnits,
-    getSelectedUnits,
-    deleteUnit,
-    connectUnits,
-    disconnectUnits,
-    getAllConnections,
-    getUnit,
-    getAllUnits
-  } = UnitModule;
-  const {
-    default: Draggable,
-    makeDraggable,
-    makeDraggableWithDrop,
-    makeDropZone
-  } = DraggableModule;
-  const {
-    default: Slice,
-    createSlice
-  } = SliceModule;
 
   bootstrapAiModelCatalogRefresh({ env: globalThis?.window || globalThis });
 
-  squirrelComponentRegistry.Button = Button;
-  squirrelComponentRegistry.Slider = Slider;
-  squirrelComponentRegistry.ToolSlider = ToolSlider;
-  squirrelComponentRegistry.Input = Input;
-  squirrelComponentRegistry.Table = Table;
-  squirrelComponentRegistry.Matrix = Matrix;
-  squirrelComponentRegistry.List = List;
-  squirrelComponentRegistry.Menu = Menu;
-  squirrelComponentRegistry.Console = Console;
-  squirrelComponentRegistry.Unit = Unit;
-  squirrelComponentRegistry.Draggable = Draggable;
-  squirrelComponentRegistry.makeDraggable = makeDraggable;
-  squirrelComponentRegistry.makeDraggableWithDrop = makeDraggableWithDrop;
-  squirrelComponentRegistry.makeDropZone = makeDropZone;
-  squirrelComponentRegistry.Badge = Badge;
-  squirrelComponentRegistry.dropDown = dropDown;
-  squirrelComponentRegistry.Tooltip = Tooltip;
-  squirrelComponentRegistry.Template = Template;
-  squirrelComponentRegistry.Minimal = Minimal;
-  squirrelComponentRegistry.Slice = Slice;
-  squirrelComponentRegistry.createSlice = createSlice;
-  squirrelComponentRegistry.DragDrop = DragDrop;
-
-  const unitStaticMethods = {
-    selectUnits,
-    getSelectedUnits,
-    deleteUnit,
-    connectUnits,
-    disconnectUnits,
-    getAllConnections,
-    getUnit,
-    getAllUnits
-  };
+  const squirrelComponentRegistry = buildComponentRegistry(loadedModules);
+  squirrelComponentRegistry.DragDrop = loadedModules['apis.dragdrop'].default;
 
   exposeSparkGlobals({
     AdoleAPI,
@@ -275,8 +259,8 @@ const bootstrapSpark = async () => {
     define,
     observeMutations,
     componentRegistry: squirrelComponentRegistry,
-    Unit,
-    unitStaticMethods
+    Unit: squirrelComponentRegistry.Unit,
+    unitStaticMethods: collectComponentStatics(loadedModules)
   });
 
   await loadModulesSequentially({
@@ -303,8 +287,6 @@ const bootstrapSpark = async () => {
 
   const loadServerConfigMs = await loadSparkServerConfig(loadServerConfigOnce);
 
-  const optionalIntegrationMs = 0;
-
   startSparkApplicationLoad({
     emitSparkPerf,
     importApplication: async () => {
@@ -317,7 +299,7 @@ const bootstrapSpark = async () => {
       });
     },
     loadServerConfigMs,
-    optionalIntegrationMs,
+    optionalIntegrationMs: 0,
     sparkBootstrapStartMs
   });
 };

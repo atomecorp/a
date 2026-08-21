@@ -44,10 +44,10 @@ the physical terminal file; failed deletion remains explicit and retryable.
 
 Focused contracts include:
 
-- `tests/probes/ios_app_native_audio_recording_contract.test.mjs`
-- `tests/probes/native_audio_scope_contract.test.mjs`
-- `tests/probes/native_video_bevy_preview_contract.test.mjs`
-- `tests/probes/native_video_terminal_metadata_contract.test.mjs`
+- `tests/probes/ios_app_native_audio_recording_contract.probe.mjs`
+- `tests/probes/native_audio_scope_contract.probe.mjs`
+- `tests/probes/native_video_bevy_preview_contract.probe.mjs`
+- `tests/probes/native_video_terminal_metadata_contract.probe.mjs`
 - `tests/probes/native_video_recording_recovery_contract.test.mjs`
 - `tests/probes/native_video_public_commit_ack_contract.test.mjs`
 - `tests/eve/media_recording_atomic_commit_contract.test.mjs`

@@ -1,6 +1,6 @@
 import { CALENDAR_V1_ARCHITECTURE_DECISION } from './connector_contract.js';
+import { toText as normalizeText } from '../shared/scalars.js';
 
-const normalizeText = (value) => String(value || '').trim();
 
 const xmlDecode = (value) => String(value || '')
     .replace(/&lt;/g, '<')

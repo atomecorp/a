@@ -11,6 +11,7 @@ import db from '../database/adole.js';
 import { getABoxEventBus } from './aBoxServer.js';
 import { checkPermission, PERMISSION } from './sharing.js';
 import { FILE_ATOME_TYPES, resolveFileAtomeType, fileTypeWhere } from './file_types.js';
+import { makeId } from '../atome/src/squirrel/shared/scalars.js';
 
 // `owner_id` carries a foreign key onto `atomes(atome_id)`. Callers used to pass
 // the sentinel string `'anonymous'`, which has no atome behind it, so every
@@ -32,7 +33,7 @@ async function resolveOwnerPrincipal(userId) {
 
 export async function registerFileUpload(fileName, userId, options = {}) {
     const now = new Date().toISOString();
-    const atomeId = options.atome_id || options.atomeId || `file-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const atomeId = options.atome_id || options.atomeId || makeId('file');
     const atomeType = resolveFileAtomeType(fileName, options);
 
     const owner = await resolveOwnerPrincipal(userId);

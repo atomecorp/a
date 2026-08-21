@@ -1,26 +1,11 @@
+import { cloneLenient as cloneValue, toText as normalizeText } from '../shared/scalars.js';
 const DEFAULT_PREFIX = 'squirrel.token_vault.';
 const KEY_DERIVATION_ITERATIONS = 120000;
 
 const textEncoder = new TextEncoder();
 const textDecoder = new TextDecoder();
 
-const normalizeText = (value) => String(value || '').trim();
 
-const cloneValue = (value) => {
-    if (value === undefined) return undefined;
-    try {
-        if (typeof structuredClone === 'function') {
-            return structuredClone(value);
-        }
-    } catch (_) {
-        // Fall through to JSON clone below.
-    }
-    try {
-        return JSON.parse(JSON.stringify(value));
-    } catch (_) {
-        return null;
-    }
-};
 
 const createMemoryStorage = () => {
     const map = new Map();

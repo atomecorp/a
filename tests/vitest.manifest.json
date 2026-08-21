@@ -100,6 +100,7 @@
   "tests/eve/project_scene_unified_rendering_contract.test.mjs",
   "tests/eve/project_view_playback_regressions.test.mjs",
   "tests/eve/project_view_real_server_shape.test.mjs",
+  "tests/eve/project_view_surface_context_refresh.test.mjs",
   "tests/eve/project_workspace_activation_contract.test.mjs",
   "tests/eve/render_surface_size_contract.test.mjs",
   "tests/eve/rich_text_style_contract.test.mjs",

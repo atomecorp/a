@@ -7,12 +7,12 @@ import {
     findUserById
 } from './auth_users.js';
 import { hashPassword, normalizePhone, verifyPassword } from './auth_crypto.js';
+import { wsResponse } from './wsResponse.js';
 
 const MAX_PROVISIONING_TTL_MS = 15 * 60 * 1000;
 
-function response(requestId, success, fields = {}) {
-    return { type: 'auth-response', requestId, success, ok: success, ...fields };
-}
+// Family-bound alias over the shared envelope (server/wsResponse.js).
+const response = (requestId, success, fields) => wsResponse('auth', requestId, success, fields);
 
 function operationDigest(operationId) {
     return crypto.createHash('sha256').update(String(operationId)).digest('hex');

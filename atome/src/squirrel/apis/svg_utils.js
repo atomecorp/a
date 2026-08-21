@@ -1,7 +1,95 @@
+import { makeId } from '../shared/scalars.js';
 // SVG utilities extracted from loader.js for clarity
 
-// Lightweight sanitizer kept as identity to avoid ReferenceErrors.
-export function sanitizeSVG(raw) { return raw; }
+// --- SVG sanitizer -----------------------------------------------------------
+// Policy: an SVG string coming from anywhere other than the repository's own
+// assets is untrusted. `sanitizeSVG` keeps only presentational SVG markup and
+// drops every vector that can execute script:
+//   - non-whitelisted elements (`script`, `foreignObject`, `handler`, HTML nodes...)
+//   - every `on*` event attribute
+//   - URI attributes whose scheme is not `#`, `http:`, `https:` or `data:image/`
+//   - `<animate>` / `<set>` retargeting a URI attribute (classic href bypass)
+// It needs a DOM parser: it is a browser-side guard, and throws instead of
+// silently returning the input when no parser is available -- an identity
+// sanitizer is worse than none because callers believe they are protected.
+
+const SANITIZE_ALLOWED_TAGS = new Set([
+  'svg', 'g', 'defs', 'symbol', 'use', 'title', 'desc', 'metadata', 'style', 'switch', 'a',
+  'path', 'rect', 'circle', 'ellipse', 'line', 'polyline', 'polygon',
+  'text', 'tspan', 'textpath', 'tref',
+  'marker', 'pattern', 'mask', 'clippath', 'image', 'view',
+  'lineargradient', 'radialgradient', 'stop',
+  'filter', 'fedropshadow', 'fegaussianblur', 'feoffset', 'feblend', 'fecolormatrix',
+  'fecomponenttransfer', 'fecomposite', 'feconvolvematrix', 'fediffuselighting',
+  'fedisplacementmap', 'feflood', 'fefunca', 'fefuncb', 'fefuncg', 'fefuncr',
+  'feimage', 'femerge', 'femergenode', 'femorphology', 'fespecularlighting',
+  'fetile', 'feturbulence', 'fedistantlight', 'fepointlight', 'fespotlight',
+  'animate', 'animatemotion', 'animatetransform', 'set', 'mpath'
+]);
+
+const SANITIZE_URI_ATTRS = new Set(['href', 'xlink:href', 'src', 'xlink:base', 'action', 'formaction', 'poster']);
+const SANITIZE_SAFE_SCHEME = /^(?:https?:|mailto:|tel:|data:image\/(?:png|jpeg|gif|webp|svg\+xml)[;,])/i;
+const SANITIZE_ANIMATION_TAGS = new Set(['animate', 'animatemotion', 'animatetransform', 'set']);
+// Whitespace and control characters the URL parser ignores: "java\tscript:" is a
+// live URL for the browser, so they must be stripped before the scheme test.
+const SANITIZE_IGNORED_CHARS = /[\u0000-\u0020\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\ufeff]/g;
+
+function sanitizeIsSafeUri(value) {
+  const cleaned = String(value).replace(SANITIZE_IGNORED_CHARS, '');
+  if (cleaned === '') return true;
+  if (cleaned.startsWith('#')) return true;
+  if (/^[a-z][a-z0-9+.-]*:/i.test(cleaned)) return SANITIZE_SAFE_SCHEME.test(cleaned);
+  // Scheme-relative (`//host/...`) escapes the document origin; relative paths are fine.
+  return !cleaned.startsWith('//');
+}
+
+function sanitizeElement(element) {
+  const localName = String(element.localName || element.nodeName || '').toLowerCase();
+  if (!SANITIZE_ALLOWED_TAGS.has(localName)) {
+    element.remove();
+    return;
+  }
+  for (const attribute of Array.from(element.attributes || [])) {
+    const name = String(attribute.name || '').toLowerCase();
+    const value = String(attribute.value == null ? '' : attribute.value);
+    if (name.startsWith('on')) { element.removeAttribute(attribute.name); continue; }
+    if (SANITIZE_URI_ATTRS.has(name) && !sanitizeIsSafeUri(value)) { element.removeAttribute(attribute.name); continue; }
+    // CSS payloads such as `background:url(javascript:...)` carried by style/attrs.
+    if (/url\s*\(/i.test(value) && /(?:javascript|vbscript)\s*:/i.test(value.replace(SANITIZE_IGNORED_CHARS, ''))) {
+      element.removeAttribute(attribute.name);
+    }
+  }
+  if (SANITIZE_ANIMATION_TAGS.has(localName)) {
+    const target = String(element.getAttribute('attributeName') || '').toLowerCase();
+    if (SANITIZE_URI_ATTRS.has(target)) { element.remove(); return; }
+  }
+  if (localName === 'use') {
+    // `use` pulling from another document is an inclusion/exfiltration vector:
+    // restrict it to same-document fragments.
+    for (const name of ['href', 'xlink:href']) {
+      const value = element.getAttribute(name);
+      if (value != null && !String(value).trim().startsWith('#')) element.removeAttribute(name);
+    }
+  }
+  for (const child of Array.from(element.children || [])) sanitizeElement(child);
+}
+
+export function sanitizeSVG(raw) {
+  if (raw == null) return '';
+  const source = String(raw);
+  if (source.trim() === '') return '';
+  const ParserCtor = (typeof DOMParser !== 'undefined' && DOMParser)
+    || (typeof window !== 'undefined' && window.DOMParser)
+    || null;
+  if (!ParserCtor) {
+    throw new Error('sanitizeSVG requires a DOM environment (DOMParser); refusing to return unsanitized markup');
+  }
+  const parsed = new ParserCtor().parseFromString(`<div>${source}</div>`, 'text/html');
+  const host = parsed.body && parsed.body.firstElementChild;
+  if (!host) return '';
+  for (const child of Array.from(host.children)) sanitizeElement(child);
+  return host.innerHTML;
+}
 
 // render_svg: inserts an SVG string.
 // Extended signature: sizeMode (last param) can be:
@@ -11,10 +99,10 @@ export function render_svg(svgcontent, id, parent_id = 'view', top = '0px', left
   const parent = document.getElementById(parent_id);
   if (!parent || !svgcontent) return null;
   const tmp = document.createElement('div');
-  tmp.innerHTML = String(svgcontent).trim();
+  tmp.innerHTML = sanitizeSVG(String(svgcontent).trim());
   const svgEl = tmp.querySelector('svg');
   if (!svgEl) return null;
-  const finalId = id && String(id).trim() ? String(id).trim() : 'svg_' + Math.random().toString(36).slice(2);
+  const finalId = id && String(id).trim() ? String(id).trim() : makeId('svg');
   svgEl.id = finalId;
   svgEl.style.position = 'absolute';
   svgEl.style.top = top; svgEl.style.left = left;
@@ -25,8 +113,10 @@ export function render_svg(svgcontent, id, parent_id = 'view', top = '0px', left
   const heightIsPercent = /%$/.test(heightStr);
   const responsive = (sizeMode === 'responsive' || sizeMode === '%' || widthIsPercent || heightIsPercent);
 
-  const targetW = typeof width === 'number' ? width : parseFloat(width) || 200;
-  const targetH = typeof height === 'number' ? height : parseFloat(height) || 200;
+  const parsedW = typeof width === 'number' ? width : parseFloat(width);
+  const parsedH = typeof height === 'number' ? height : parseFloat(height);
+  const targetW = Number.isFinite(parsedW) ? parsedW : 200;
+  const targetH = Number.isFinite(parsedH) ? parsedH : 200;
 
   const existingViewBox = svgEl.getAttribute('viewBox');
   const attrW = parseFloat(svgEl.getAttribute('width')) || null;

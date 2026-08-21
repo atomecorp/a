@@ -10,14 +10,13 @@ import {
 } from './model_catalog_registry.js';
 import { loadRuntimeUserProfile } from './profile_loader.js';
 import { resolveConfiguredAiProviderCredentials } from './provider_client.js';
+import { cloneJson as clone, toText } from '../shared/scalars.js';
 
 const REFRESH_INTERVAL_MS = 60 * 60 * 1000;
 const DEFAULT_TIMEOUT_MS = 15000;
 const BOOTSTRAP_KEY = '__EVE_AI_MODEL_CATALOG_REFRESH__';
 
-const toText = (value) => String(value || '').trim();
 
-const clone = (value) => JSON.parse(JSON.stringify(value));
 
 const unique = (items = []) => Array.from(new Set(items.map((item) => toText(item)).filter(Boolean)));
 

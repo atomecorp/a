@@ -220,7 +220,8 @@ test('Tauri terminal payload keeps a positive file size through the JavaScript r
                 size_bytes: 96_044,
                 frame_count: 48_000,
                 sample_rate: 48_000,
-                channels: 1
+                channels: 1,
+                waveform_peaks: [0, -0.25, 2, Number.NaN, 0.5]
             };
         }
         if (command === 'audio_get_scope') return { available: false };
@@ -250,6 +251,8 @@ test('Tauri terminal payload keeps a positive file size through the JavaScript r
     assert.equal(terminal.size_bytes, 96_044);
     assert.equal(terminal.frame_count, 48_000);
     assert.equal(terminal.sample_rate, 48_000);
+    assert.deepEqual(terminal.waveform_peaks, [0, 0.25, 1, 0.5]);
+    assert.deepEqual(terminal.peaks, [0, 0.25, 1, 0.5]);
     assert.equal(invoke.mock.calls.filter(([command]) => command === 'audio_get_scope').length >= 0, true);
 });
 

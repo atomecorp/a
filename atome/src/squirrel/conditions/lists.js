@@ -3,8 +3,8 @@ import {
     CONDITION_LIST_SCHEMA_VERSION,
     normalizeConditionList
 } from './contract.js';
+import { cloneJson as clone } from '../shared/scalars.js';
 
-const clone = (value) => value == null ? value : JSON.parse(JSON.stringify(value));
 const propsOf = (record = {}) => record.properties || record.props || {};
 const typeOf = (record = {}) => record.type || record.atome_type || propsOf(record).type || null;
 

@@ -1,4 +1,7 @@
 import { VOICE_LOCAL_COMMANDS, normalizeLocalVoiceCommand } from './session_runtime.js';
+import { toText } from '../shared/scalars.js';
+// Re-exported: the local duplicate now lives in the shared scalars module.
+export { toText };
 
 export const DEFAULT_ECHO_COOLDOWN_MS = 1200;
 
@@ -86,8 +89,6 @@ const INTERRUPT_COMMANDS = new Set([
     VOICE_LOCAL_COMMANDS.STOP,
     VOICE_LOCAL_COMMANDS.CANCEL
 ]);
-
-export const toText = (value) => String(value || '').trim();
 
 export const normalizeComparisonText = (value = '') => toText(value)
     .normalize('NFD')

@@ -1,9 +1,9 @@
 import { buildLocalApiUrl, isTauri } from '../apis/serverUrls.js';
+import { toText } from '../shared/scalars.js';
 
 const DEFAULT_TIMEOUT_MS = 20000;
 const LOCAL_AI_PROXY_PATH = '/api/eve/ai/provider-completion';
 
-const toText = (value) => String(value || '').trim();
 const normalizeUsage = (usage = {}) => ({
     prompt_tokens: Number.isFinite(Number(usage?.prompt_tokens)) ? Number(usage.prompt_tokens) : 0,
     completion_tokens: Number.isFinite(Number(usage?.completion_tokens)) ? Number(usage.completion_tokens) : 0,

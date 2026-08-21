@@ -1,5 +1,20 @@
 const safeString = (value) => String(value ?? '').trim();
 
+/**
+ * Numeric field of an inbound contract, read once from either spelling.
+ * `a || b || 0` treated a legitimate `0` as "absent" — `timestamp_seconds: 0`
+ * (stream start) became `Date.now()/1000`, and `sample_rate: 0` was
+ * indistinguishable from a missing one. `??` only falls through on null/undefined.
+ */
+const safeNumber = (...candidates) => {
+    for (const candidate of candidates) {
+        if (candidate === null || candidate === undefined || candidate === '') continue;
+        const parsed = Number(candidate);
+        if (Number.isFinite(parsed)) return parsed;
+    }
+    return null;
+};
+
 const RESERVED_ATOME_PROPERTY_KEYS = new Set([
     'id', 'atome_id', 'atomeId',
     'type', 'atome_type', 'atomeType',
@@ -57,9 +72,9 @@ export class AVClock {
         this.id = safeString(id) || 'default';
         this.schema_version = AV_API_SCHEMA_VERSION;
         this.kind = safeString(kind) || 'monotonic';
-        this.sample_rate = Number(sampleRate || 0) || 0;
+        this.sample_rate = safeNumber(sampleRate) ?? 0;
         this.tempo = Number(tempo || 120) || 120;
-        this.origin_seconds = Number(originSeconds || 0) || 0;
+        this.origin_seconds = safeNumber(originSeconds) ?? 0;
         Object.freeze(this);
     }
 
@@ -376,9 +391,9 @@ export class AVMonitoringStore {
             session_id: safeString(input.session_id || input.sessionId),
             backend: safeString(input.backend || input.provider || input.runtime_backend || input.runtimeBackend),
             overrun_frames: Number.isFinite(frames) && frames > 0 ? frames : 0,
-            sample_rate: Number(input.sample_rate || input.sampleRate || 0) || 0,
-            channels: Number(input.channels || 0) || 0,
-            timestamp_seconds: Number(input.timestamp_seconds || input.timestampSeconds || 0) || Date.now() / 1000,
+            sample_rate: safeNumber(input.sample_rate, input.sampleRate) ?? 0,
+            channels: safeNumber(input.channels) ?? 0,
+            timestamp_seconds: safeNumber(input.timestamp_seconds, input.timestampSeconds) ?? (Date.now() / 1000),
             created_at: nowIso()
         });
         this.streamReports.push(report);
@@ -428,8 +443,8 @@ export class AVDeviceRegistry {
             direction: safeString(input.direction || input.kind || 'input') || 'input',
             label: safeString(input.label || input.name || id),
             backend: safeString(input.backend || input.runtime_backend || input.runtimeBackend),
-            channels: Number(input.channels || 0) || 0,
-            sample_rate: Number(input.sample_rate || input.sampleRate || 0) || 0,
+            channels: safeNumber(input.channels) ?? 0,
+            sample_rate: safeNumber(input.sample_rate, input.sampleRate) ?? 0,
             created_at: nowIso()
         });
         this.devices.set(device.id, device);
@@ -479,10 +494,10 @@ export class AVLatencyRegistry {
             media_kind: safeString(input.media_kind || input.mediaKind || 'audio') || 'audio',
             scope: safeString(input.scope || 'session') || 'session',
             object_id: safeString(input.object_id || input.objectId || input.session_id || input.sessionId),
-            input_latency_ms: Number(input.input_latency_ms || input.inputLatencyMs || 0) || 0,
-            output_latency_ms: Number(input.output_latency_ms || input.outputLatencyMs || 0) || 0,
-            codec_latency_ms: Number(input.codec_latency_ms || input.codecLatencyMs || 0) || 0,
-            bridge_latency_ms: Number(input.bridge_latency_ms || input.bridgeLatencyMs || 0) || 0,
+            input_latency_ms: safeNumber(input.input_latency_ms, input.inputLatencyMs) ?? 0,
+            output_latency_ms: safeNumber(input.output_latency_ms, input.outputLatencyMs) ?? 0,
+            codec_latency_ms: safeNumber(input.codec_latency_ms, input.codecLatencyMs) ?? 0,
+            bridge_latency_ms: safeNumber(input.bridge_latency_ms, input.bridgeLatencyMs) ?? 0,
             created_at: nowIso()
         });
         this.reports.push(report);
@@ -508,10 +523,10 @@ export class AVCodecRegistry {
             media_kind: safeString(input.media_kind || input.mediaKind || 'audio') || 'audio',
             codec: safeString(input.codec),
             container: safeString(input.container),
-            sample_rate: Number(input.sample_rate || input.sampleRate || 0) || 0,
-            channels: Number(input.channels || 0) || 0,
-            bit_depth: Number(input.bit_depth || input.bitDepth || 0) || 0,
-            bitrate: Number(input.bitrate || 0) || 0,
+            sample_rate: safeNumber(input.sample_rate, input.sampleRate) ?? 0,
+            channels: safeNumber(input.channels) ?? 0,
+            bit_depth: safeNumber(input.bit_depth, input.bitDepth) ?? 0,
+            bitrate: safeNumber(input.bitrate) ?? 0,
             created_at: nowIso()
         });
         this.profiles.set(profile.id, profile);
@@ -596,12 +611,12 @@ export class AVVideoMetricsStore {
             schema_version: AV_API_SCHEMA_VERSION,
             media_kind: 'video',
             object_id: safeString(input.object_id || input.objectId || input.session_id || input.sessionId),
-            frame_rate: Number(input.frame_rate || input.frameRate || 0) || 0,
-            dropped_frames: Number(input.dropped_frames || input.droppedFrames || 0) || 0,
-            jitter_ms: Number(input.jitter_ms || input.jitterMs || 0) || 0,
-            decode_latency_ms: Number(input.decode_latency_ms || input.decodeLatencyMs || 0) || 0,
-            render_latency_ms: Number(input.render_latency_ms || input.renderLatencyMs || 0) || 0,
-            av_drift_ms: Number(input.av_drift_ms || input.avDriftMs || 0) || 0,
+            frame_rate: safeNumber(input.frame_rate, input.frameRate) ?? 0,
+            dropped_frames: safeNumber(input.dropped_frames, input.droppedFrames) ?? 0,
+            jitter_ms: safeNumber(input.jitter_ms, input.jitterMs) ?? 0,
+            decode_latency_ms: safeNumber(input.decode_latency_ms, input.decodeLatencyMs) ?? 0,
+            render_latency_ms: safeNumber(input.render_latency_ms, input.renderLatencyMs) ?? 0,
+            av_drift_ms: safeNumber(input.av_drift_ms, input.avDriftMs) ?? 0,
             created_at: nowIso()
         });
         this.reports.push(report);

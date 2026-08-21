@@ -1,6 +1,6 @@
 import { createBankIndex } from './local_index.js';
+import { toText as normalizeText } from '../shared/scalars.js';
 
-const normalizeText = (value) => String(value || '').trim();
 
 const toTimestamp = (value, fallback = null) => {
     if (value === null || value === undefined || value === '') return fallback;

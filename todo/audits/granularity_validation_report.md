@@ -179,14 +179,14 @@ granularité existaient déjà, non recensés dans le cahier des charges.
 
 | Test | Ce qu'il prouve |
 | --- | --- |
-| `tests/server/atome_property_security.test.mjs` (6 cas) | autorisation et projection par propriété |
-| `granularity_lifecycle_contract.test.mjs` | suppression de propriétés et rejet atomique des versions périmées |
-| `granularity_protocol_defects.test.mjs` | le temps réel exclut l'émetteur et autorise **chaque** propriété |
-| `granularity_consumer_projection.test.mjs` | recherche, export, propriétés custom et collections préservent la portée exacte |
-| `granularity_reconnect_projection.test.mjs` | reconnexion et événements retardés réautorisent la portée courante |
-| `granularity_resilience.test.mjs` | rollback, idempotence, ordre et conflits de révision restent atomiques |
+| `tests/server/atome_property_security.probe.mjs` (6 cas) | autorisation et projection par propriété |
+| `granularity_lifecycle_contract.probe.mjs` | suppression de propriétés et rejet atomique des versions périmées |
+| `granularity_protocol_defects.probe.mjs` | le temps réel exclut l'émetteur et autorise **chaque** propriété |
+| `granularity_consumer_projection.probe.mjs` | recherche, export, propriétés custom et collections préservent la portée exacte |
+| `granularity_reconnect_projection.probe.mjs` | reconnexion et événements retardés réautorisent la portée courante |
+| `granularity_resilience.probe.mjs` | rollback, idempotence, ordre et conflits de révision restent atomiques |
 | `granularity_qa_fixtures.test.mjs` | jeux de données de validation |
-| `granularity_lan_config.test.mjs` (3 cas) | configuration multi-postes |
+| `granularity_lan_config.probe.mjs` (3 cas) | configuration multi-postes |
 
 Ces tests couvrent les scénarios §7 n° 1, 2, 3, 6, 7, 8, 11, 12, 14, 15, 16, 17, 18, 19,
 20, 21, 22, 23.

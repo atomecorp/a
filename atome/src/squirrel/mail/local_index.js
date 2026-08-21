@@ -1,6 +1,6 @@
+import { toText as normalizeText } from '../shared/scalars.js';
 const DEFAULT_MAILBOX = 'inbox';
 
-const normalizeText = (value) => String(value || '').trim();
 
 const decodeBytesToText = (bytes, charset = 'utf-8') => {
     const normalizedCharset = String(charset || 'utf-8').trim().toLowerCase();

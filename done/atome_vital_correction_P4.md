@@ -16,11 +16,11 @@ Les garde-fous et plusieurs tests existent et passent, mais les exports DOM d'ex
 Commandes exécutées pendant l'audit :
 
 ```sh
-node --test tests/scripts/check_dom_projection_guardrails.test.mjs tests/scripts/export_dom_subtrees.test.mjs tests/eve/project_dom_teardown_reconstruction.test.mjs tests/eve/media_projection_state.dom_contract.test.mjs tests/probes/tool_genesis_create_atome_order.test.mjs tests/eve/group_state_runtime.dom_contract.test.mjs tests/eve/media_atom_integrity.test.mjs tests/eve/adole_commit_boundary.test.mjs
+node --test tests/scripts/check_dom_projection_guardrails.probe.mjs tests/scripts/export_dom_subtrees.probe.mjs tests/eve/project_dom_teardown_reconstruction.probe.mjs tests/eve/media_projection_state.dom_contract.probe.mjs tests/probes/tool_genesis_create_atome_order.probe.mjs tests/eve/group_state_runtime.dom_contract.probe.mjs tests/eve/media_atom_integrity.probe.mjs tests/eve/adole_commit_boundary.probe.mjs
 node scripts/check_dom_projection_guardrails.mjs
 node scripts/check_dom_projection_guardrails.mjs --paths tests/fixtures/dom,tests/atom_matrix_example.dom,tests/atome_project_example.dom
 node scripts/check_squirrel_dom_adapter_guardrails.mjs
-node --test atome/shared/atome_contract.test.mjs tests/eve/atome_commit.sanitization.test.mjs tests/eve/media_persistence_service.sanitization.test.mjs
+node --test atome/shared/atome_contract.probe.mjs tests/eve/atome_commit.sanitization.probe.mjs tests/eve/media_persistence_service.sanitization.test.mjs
 ```
 
 Résultats importants :
@@ -95,8 +95,8 @@ Fichiers concernés
 - `tests/atome_project_example.dom`
 - `scripts/check_dom_projection_guardrails.mjs`
 - `scripts/export_dom_subtrees.mjs`
-- `tests/scripts/check_dom_projection_guardrails.test.mjs`
-- `tests/scripts/export_dom_subtrees.test.mjs`
+- `tests/scripts/check_dom_projection_guardrails.probe.mjs`
+- `tests/scripts/export_dom_subtrees.probe.mjs`
 
 À faire
 
@@ -415,7 +415,7 @@ Déjà validé
 Le test statique suivant passe :
 
 ```sh
-node --test tests/probes/tool_genesis_create_atome_order.test.mjs
+node --test tests/probes/tool_genesis_create_atome_order.probe.mjs
 ```
 
 Il vérifie que :
@@ -478,9 +478,9 @@ Fichiers probables
 - `eVe/intuition/tools/core/tool_runtime.js`
 - `eVe/intuition/eVeIntuition.js`
 - `eVe/domains/mtrax/transport/transport_gestures_runtime.js`
-- `tests/probes/atome_persistence_probe.test.mjs`
-- `tests/probes/media_import_probe.test.mjs`
-- `tests/probes/browser_media_acceptance_probe.test.mjs`
+- `tests/probes/atome_persistence_probe.probe.mjs`
+- `tests/probes/media_import_probe.probe.mjs`
+- `tests/probes/browser_media_acceptance_probe.probe.mjs`
 
 Validation
 
@@ -493,10 +493,10 @@ tests/probes/tool_genesis_create_atome_runtime_order.test.mjs
 La validation finale P3 doit passer avec :
 
 ```sh
-node --test tests/probes/tool_genesis_create_atome_order.test.mjs
-node tests/probes/atome_persistence_probe.test.mjs
-node tests/probes/media_import_probe.test.mjs
-node tests/probes/browser_media_acceptance_probe.test.mjs
+node --test tests/probes/tool_genesis_create_atome_order.probe.mjs
+node tests/probes/atome_persistence_probe.probe.mjs
+node tests/probes/media_import_probe.probe.mjs
+node tests/probes/browser_media_acceptance_probe.probe.mjs
 ```
 
 Si un probe nécessite un serveur local, documenter la commande exacte de démarrage et l'URL testée.
@@ -568,7 +568,7 @@ Validation
 Créer ou renforcer :
 
 ```txt
-tests/eve/project_dom_teardown_reconstruction.test.mjs
+tests/eve/project_dom_teardown_reconstruction.probe.mjs
 tests/eve/dom_projection_cannot_mutate_canonical_state.test.mjs
 ```
 
@@ -1446,18 +1446,18 @@ Commandes minimales
 node scripts/check_dom_projection_guardrails.mjs
 node scripts/check_dom_projection_guardrails.mjs --paths tests/fixtures/dom,tests/atom_matrix_example.dom,tests/atome_project_example.dom
 node scripts/check_squirrel_dom_adapter_guardrails.mjs
-node --test tests/scripts/check_dom_projection_guardrails.test.mjs tests/scripts/export_dom_subtrees.test.mjs
-node --test tests/eve/project_dom_teardown_reconstruction.test.mjs tests/eve/media_projection_state.dom_contract.test.mjs tests/eve/group_state_runtime.dom_contract.test.mjs tests/eve/media_atom_integrity.test.mjs
-node --test tests/probes/tool_genesis_create_atome_order.test.mjs
-node --test atome/shared/atome_contract.test.mjs tests/eve/atome_commit.sanitization.test.mjs tests/eve/media_persistence_service.sanitization.test.mjs tests/eve/adole_commit_boundary.test.mjs
+node --test tests/scripts/check_dom_projection_guardrails.probe.mjs tests/scripts/export_dom_subtrees.probe.mjs
+node --test tests/eve/project_dom_teardown_reconstruction.probe.mjs tests/eve/media_projection_state.dom_contract.probe.mjs tests/eve/group_state_runtime.dom_contract.probe.mjs tests/eve/media_atom_integrity.probe.mjs
+node --test tests/probes/tool_genesis_create_atome_order.probe.mjs
+node --test atome/shared/atome_contract.probe.mjs tests/eve/atome_commit.sanitization.probe.mjs tests/eve/media_persistence_service.sanitization.test.mjs tests/eve/adole_commit_boundary.probe.mjs
 ```
 
 Commandes runtime à ajouter si environnement disponible
 
 ```sh
-node tests/probes/atome_persistence_probe.test.mjs
-node tests/probes/media_import_probe.test.mjs
-node tests/probes/browser_media_acceptance_probe.test.mjs
+node tests/probes/atome_persistence_probe.probe.mjs
+node tests/probes/media_import_probe.probe.mjs
+node tests/probes/browser_media_acceptance_probe.probe.mjs
 ```
 
 Seuils finaux

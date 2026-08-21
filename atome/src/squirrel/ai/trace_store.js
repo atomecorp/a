@@ -1,11 +1,8 @@
+import { cloneStructured as cloneValue } from '../shared/scalars.js';
 const TRACE_STORAGE_KEY = 'eve_ai_trace_store_v1';
 const MAX_TRACES = 200;
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-const cloneValue = (value) => {
-    if (typeof structuredClone === 'function') return structuredClone(value);
-    return JSON.parse(JSON.stringify(value));
-};
 
 const toIso = () => new Date().toISOString();
 const toTimestamp = (value) => {

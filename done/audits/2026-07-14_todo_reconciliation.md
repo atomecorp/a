@@ -13,7 +13,7 @@ The following completed work was extracted into this immutable reconciliation re
 
 ## Stale completion evidence reopened
 
-`done/full_atome_architecture.md` records T15/T18 (core type registry) as complete and verifies `tests/shared/core_atome_types.test.mjs` as green. The same suite now fails because `record` uses the unsupported `data` universal kind. The work is therefore reopened in `todo/audits/2026-07-14_framework_documentation_conformance.md`; the old done record is retained for traceability rather than rewritten.
+`done/full_atome_architecture.md` records T15/T18 (core type registry) as complete and verifies `tests/shared/core_atome_types.probe.mjs` as green. The same suite now fails because `record` uses the unsupported `data` universal kind. The work is therefore reopened in `todo/audits/2026-07-14_framework_documentation_conformance.md`; the old done record is retained for traceability rather than rewritten.
 
 `done/atome_urgent_treatment.md` and `done/full_atome_architecture.md` record a passing mutation-ownership guardrail. That command now fails after commit-pipeline modularization, and the repair is likewise reopened in the audit backlog.
 

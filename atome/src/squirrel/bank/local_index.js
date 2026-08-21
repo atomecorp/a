@@ -1,4 +1,4 @@
-const normalizeText = (value) => String(value || '').trim();
+import { toText as normalizeText } from '../shared/scalars.js';
 
 const toFiniteNumber = (value, fallback = 0) => {
     const number = Number(value);

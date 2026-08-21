@@ -1,4 +1,5 @@
 import { RISK_TIERS, DEFAULT_OUTPUT_SCHEMA, DEFAULT_TIMEOUT_MS } from './agent_gateway_state.js';
+import { cloneStructured as cloneValue } from '../shared/scalars.js';
 
 const toIso = () => new Date().toISOString();
 
@@ -9,12 +10,6 @@ const makeId = (prefix) => {
   return `${prefix}_${Date.now()}_${Math.random().toString(16).slice(2)}`;
 };
 
-const cloneValue = (value) => {
-  if (typeof structuredClone === 'function') {
-    return structuredClone(value);
-  }
-  return JSON.parse(JSON.stringify(value));
-};
 
 const stableStringify = (value) => {
   if (value === null || value === undefined) return String(value);

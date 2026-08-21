@@ -2,8 +2,8 @@ import {
     CONTACTS_V1_ARCHITECTURE_DECISION,
     createContactsConnectorContract
 } from './connector_contract.js';
+import { toText } from '../shared/scalars.js';
 
-const toText = (value) => String(value || '').trim();
 
 const getTauriInvoke = () => {
     if (typeof window === 'undefined') return null;

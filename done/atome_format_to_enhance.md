@@ -33,7 +33,7 @@ Réalisé :
 - `server/sharingPermissionService.js` isole les primitives de partage/permissions (`createShare`, `revokeShare`, checks et listings ACL) hors de l'orchestrateur WebSocket.
 - `server/sharingAtomeAccessors.js` isole les lectures canoniques d'Atomes utilisées par le partage, sans supposer la forme SQL comme contrat d'Atome.
 - Les maps `API_MAP`, `CODEMAP` et `ARCHITECTURE_MAP` ont été mises à jour pour les nouveaux propriétaires.
-- Le test d'acceptation `tests/eve/code_tool.registry_identity_repair.test.mjs` existe et passe.
+- Le test d'acceptation `tests/eve/code_tool.registry_identity_repair.probe.mjs` existe et passe.
 
 Reste à faire :
 
@@ -41,17 +41,17 @@ Reste à faire :
 
 Validations exécutées :
 
-- `node --test atome/shared/atome_contract.test.mjs database/adole.event_projection_invariants.test.mjs tests/eve/tool_instance_projection_store.test.mjs eVe/intuition/tools/core/tool_registry.strict_persistence.test.mjs` : PASS, 15 tests.
-- `node --test atome/shared/atome_contract.test.mjs tests/eve/adole_storage_projection_contract.test.mjs database/adole.event_projection_invariants.test.mjs database/adole.sanitization.test.mjs database/adole.snapshot_restore_invariants.test.mjs database/adole.user_classification.test.mjs` : PASS, 21 tests.
-- `node --test tests/eve/code_tool.registry_identity_repair.test.mjs eVe/intuition/tools/core/tool_registry.strict_persistence.test.mjs tests/eve/tool_instance_projection_store.test.mjs` : PASS, 3 tests.
+- `node --test atome/shared/atome_contract.probe.mjs database/adole.event_projection_invariants.probe.mjs tests/eve/tool_instance_projection_store.probe.mjs eVe/intuition/tools/core/tool_registry.strict_persistence.probe.mjs` : PASS, 15 tests.
+- `node --test atome/shared/atome_contract.probe.mjs tests/eve/adole_storage_projection_contract.probe.mjs database/adole.event_projection_invariants.probe.mjs database/adole.sanitization.probe.mjs database/adole.snapshot_restore_invariants.probe.mjs database/adole.user_classification.probe.mjs` : PASS, 21 tests.
+- `node --test tests/eve/code_tool.registry_identity_repair.probe.mjs eVe/intuition/tools/core/tool_registry.strict_persistence.probe.mjs tests/eve/tool_instance_projection_store.probe.mjs` : PASS, 3 tests.
 - `npm run check:syntax` : PASS, 660 fichiers.
-- `node --test atome/shared/atome_contract.test.mjs tests/eve/adole_storage_projection_contract.test.mjs database/adole.event_projection_invariants.test.mjs database/adole.sanitization.test.mjs database/adole.snapshot_restore_invariants.test.mjs database/adole.user_classification.test.mjs tests/eve/code_tool.registry_identity_repair.test.mjs eVe/intuition/tools/core/tool_registry.strict_persistence.test.mjs tests/eve/tool_instance_projection_store.test.mjs tests/scripts/check_browser_shared_contract_imports.test.mjs tests/eve/adole_commit_boundary.test.mjs tests/server/atome_persistence_boundary.test.mjs tests/scripts/check_mutation_ownership_guardrails.test.mjs` : PASS, 29 tests.
+- `node --test atome/shared/atome_contract.probe.mjs tests/eve/adole_storage_projection_contract.probe.mjs database/adole.event_projection_invariants.probe.mjs database/adole.sanitization.probe.mjs database/adole.snapshot_restore_invariants.probe.mjs database/adole.user_classification.probe.mjs tests/eve/code_tool.registry_identity_repair.probe.mjs eVe/intuition/tools/core/tool_registry.strict_persistence.probe.mjs tests/eve/tool_instance_projection_store.probe.mjs tests/scripts/check_browser_shared_contract_imports.probe.mjs tests/eve/adole_commit_boundary.probe.mjs tests/server/atome_persistence_boundary.probe.mjs tests/scripts/check_mutation_ownership_guardrails.probe.mjs` : PASS, 29 tests.
 - `npm run check:mutation-ownership-guardrails` : PASS.
 - `npm run check:m0` : PASS.
 - `npm run test:server-verification` : PASS.
 - `npm run check:syntax` : PASS, 665 fichiers.
 - `node --check` sur `database/adole.js`, `database/adole_permissions.js`, `server/sharing.js`, `server/sharingPermissionService.js`, `server/sharingAtomeAccessors.js`, `server/userFiles.js` et `server/server.js` : PASS.
-- `node --test atome/shared/atome_contract.test.mjs tests/eve/adole_storage_projection_contract.test.mjs database/adole.event_projection_invariants.test.mjs database/adole.sanitization.test.mjs database/adole.snapshot_restore_invariants.test.mjs database/adole.user_classification.test.mjs tests/eve/code_tool.registry_identity_repair.test.mjs eVe/intuition/tools/core/tool_registry.strict_persistence.test.mjs tests/eve/tool_instance_projection_store.test.mjs tests/scripts/check_browser_shared_contract_imports.test.mjs tests/eve/adole_commit_boundary.test.mjs tests/server/atome_persistence_boundary.test.mjs tests/scripts/check_mutation_ownership_guardrails.test.mjs` : PASS, 29 tests.
+- `node --test atome/shared/atome_contract.probe.mjs tests/eve/adole_storage_projection_contract.probe.mjs database/adole.event_projection_invariants.probe.mjs database/adole.sanitization.probe.mjs database/adole.snapshot_restore_invariants.probe.mjs database/adole.user_classification.probe.mjs tests/eve/code_tool.registry_identity_repair.probe.mjs eVe/intuition/tools/core/tool_registry.strict_persistence.probe.mjs tests/eve/tool_instance_projection_store.probe.mjs tests/scripts/check_browser_shared_contract_imports.probe.mjs tests/eve/adole_commit_boundary.probe.mjs tests/server/atome_persistence_boundary.probe.mjs tests/scripts/check_mutation_ownership_guardrails.probe.mjs` : PASS, 29 tests.
 - `npm run check:mutation-ownership-guardrails` : PASS.
 - `npm run test:server-verification` : PASS.
 - `npm run check:m0` : PASS.
@@ -768,11 +768,11 @@ Le travail est terminé quand :
 7. Les tests ciblés passent :
 
 ```sh
-node --test atome/shared/atome_contract.test.mjs
-node --test database/adole.event_projection_invariants.test.mjs
-node --test tests/eve/tool_instance_projection_store.test.mjs
-node --test tests/eve/code_tool.registry_identity_repair.test.mjs
-node --test eVe/intuition/tools/core/tool_registry.strict_persistence.test.mjs
+node --test atome/shared/atome_contract.probe.mjs
+node --test database/adole.event_projection_invariants.probe.mjs
+node --test tests/eve/tool_instance_projection_store.probe.mjs
+node --test tests/eve/code_tool.registry_identity_repair.probe.mjs
+node --test eVe/intuition/tools/core/tool_registry.strict_persistence.probe.mjs
 ```
 
 8. De nouveaux tests couvrent explicitement le format Atome enrichi.

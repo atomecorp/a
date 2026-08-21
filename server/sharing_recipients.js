@@ -8,7 +8,7 @@
 
 import db from '../database/adole.js';
 import { wsSendJsonToUser } from './wsApiState.js';
-import { isPublicAccess } from '../atome/shared/recipient_access.js';
+import { isPublicAccess } from '../atome/src/shared/recipient_access.js';
 import { findSharePolicy } from './sharing.js';
 
 export async function loadShareRequestById(requestAtomeId) {

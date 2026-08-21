@@ -11,8 +11,12 @@ import {
 } from '../../eVe/domains/rendering/project_scene_runtime.js';
 import { createTestCompositor, installDom } from './unified_rendering_test_helpers.mjs';
 
+const previewRuntime = vi.hoisted(() => ({
+    warmProjectPreviewCapture: vi.fn(async () => ({ ok: true }))
+}));
+
 vi.mock('../../eVe/domains/rendering/project_preview_runtime.js', () => ({
-    warmProjectPreviewCapture: async () => ({ ok: true })
+    warmProjectPreviewCapture: previewRuntime.warmProjectPreviewCapture
 }));
 
 
@@ -125,6 +129,60 @@ test('Project workspace activation restores the project surface and main menu', 
         'activation must reuse the authoritative projection owned by loadProjectAtomes');
     assert.deepEqual(calls.map((entry) => entry.name), ['setCurrent', 'commit', 'loadProjectAtomes', 'showFully']);
 }, 10_000);
+
+test('Project workspace activation records preview warmup failure without delaying the project', async () => {
+    const { window, document } = installMockBrowserEnv();
+    globalThis.window = window;
+    globalThis.document = document;
+    window.requestAnimationFrame = (callback) => {
+        callback();
+        return 0;
+    };
+    const view = document.createElement('div');
+    view.id = 'view';
+    document.body.appendChild(view);
+    setMainMenuRuntime({
+        showFully: async () => true,
+        measure: () => ({ active: true, treeMounted: true })
+    });
+    window.AdoleAPI = {
+        auth: { getCurrentInfo: () => ({ id: 'user_preview_failure' }) },
+        projects: {
+            setCurrent: async (id, name, ownerId) => {
+                window.__currentProject = { id, name, owner_id: ownerId };
+                return { ok: true };
+            }
+        }
+    };
+    window.Atome = { commit: async () => ({ ok: true }) };
+    window.eveToolBase = {
+        loadProjectAtomes: async (projectId) => {
+            const layer = document.createElement('div');
+            layer.id = `project_view_${projectId}`;
+            layer.appendChild(document.createElement('canvas'));
+            view.appendChild(layer);
+            return [];
+        }
+    };
+    const { clearRuntimeErrors, getRuntimeErrors } = await import('../../atome/src/squirrel/runtime_errors.js');
+    clearRuntimeErrors();
+    previewRuntime.warmProjectPreviewCapture.mockRejectedValueOnce(new Error('bevy_project_preview_frame_runtime_timeout'));
+
+    const { activateProjectWorkspace } = await import('../../eVe/intuition/matrix/core/project_data.js');
+    const result = await activateProjectWorkspace({
+        id: 'project_preview_failure',
+        name: 'Preview Failure',
+        owner_id: 'user_preview_failure'
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    assert.equal(result.ok, true);
+    assert.ok(getRuntimeErrors().some((entry) => (
+        entry.context === 'eve:project-preview:warmup'
+        && entry.details?.projectId === 'project_preview_failure'
+        && entry.details?.capture === 'bevy_iframe'
+    )));
+});
 
 test('Project workspace activation from dashboard claims the project surface instead of the dashboard surface', async () => {
     const { window, document } = installMockBrowserEnv();
