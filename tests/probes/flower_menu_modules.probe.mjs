@@ -36,6 +36,7 @@ const {
     resolveFlowerTransportSelectionIds,
     resolveFlowerSelectionMode
 } = await import('../../eVe/intuition/flower/context_selection.js');
+const { createFlowerContextItemsRuntime } = await import('../../eVe/intuition/runtime/eve_intuition/flower_context_items_runtime.js');
 const {
     computeFlowerLayout,
     computeFlowerSubmenuLayout
@@ -190,6 +191,51 @@ const audioWaveformSelectionMode = resolveFlowerSelectionMode({
 });
 assert.deepEqual(audioWaveformSelectionMode.activeIds, ['audio_atom']);
 assert.equal(audioWaveformSelectionMode.kind, 'audio');
+
+const surfaceItemsRuntime = createFlowerContextItemsRuntime({
+    applyDeleteSelection: async () => ({ ok: true }),
+    cloneToolExtraInput: (value) => value,
+    getAtomeElement: () => null,
+    getAtomeKindFromElement: () => '',
+    getDefaultContent: () => ({}),
+    hasProjectAutomationForAtomeSync: () => false,
+    invokeProjectMediaImport: async () => ({ ok: true }),
+    invokeUnifiedContextTool: async () => ({ ok: true }),
+    isWorkspaceActive: () => true,
+    normalizeMainToolKey: (key) => String(key || '').trim(),
+    readSelectionSnapshot: () => ({ selectedIds: [] }),
+    resolveCanonicalMainToolId: (_toolId, key) => `ui.${key}`,
+    resolveMainToolKeyFromToolId: (toolId) => String(toolId || '').replace(/^ui\./, ''),
+    translate: (_key, fallback) => fallback,
+    triggerMainToolInteraction: async () => ({ ok: true })
+});
+assert.deepEqual(
+    surfaceItemsRuntime.resolveFlowerContextItems({
+        type: 'surface_item',
+        atomeId: 'surface_project_a',
+        onRename: () => ({ ok: true })
+    }).map((item) => item.key),
+    ['rename', 'duplicate', 'copy', 'paste', 'delete', 'info'],
+    'Dashboard cards, List rows, and Matrix cells must share the complete surface-item Flower menu'
+);
+let dashboardProjectDeleteCount = 0;
+const previousPublishAtomeSelection = window.eveToolBase?.publishAtomeSelection;
+window.eveToolBase = {
+    ...(window.eveToolBase || {}),
+    publishAtomeSelection: () => 'surface_project_a'
+};
+const dashboardProjectDelete = surfaceItemsRuntime.resolveFlowerContextItems({
+    type: 'surface_item',
+    atomeId: 'surface_project_a',
+    onDelete: async () => {
+        dashboardProjectDeleteCount += 1;
+        return { ok: true, owner: 'project' };
+    }
+}).find((item) => item.key === 'delete');
+assert.deepEqual(await dashboardProjectDelete.onSelect({}), { ok: true, owner: 'project' });
+assert.equal(dashboardProjectDeleteCount, 1, 'Dashboard project Delete must use the context project owner, not generic Atome deletion');
+if (previousPublishAtomeSelection === undefined) delete window.eveToolBase.publishAtomeSelection;
+else window.eveToolBase.publishAtomeSelection = previousPublishAtomeSelection;
 
 const panel = document.createElement('div');
 panel.dataset.evePanel = 'true';
