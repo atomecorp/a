@@ -429,6 +429,7 @@ Canonical extension points:
 - `eVe/intuition/tools/core/` for tool registry, runtime, interaction, and tool definition SSOT.
 - `eVe/intuition/tools/` for product tools.
 - `eVe/intuition/tools/clipboard/` for shared closed copy/paste state, clipboard payload normalization, system clipboard bridge behavior, and paste event generation behind the copy/paste product tools.
+- Project cards do not own a second Flower or clipboard: their `surface_item` context delegates Delete, Duplicate, Copy and Paste to `matrix/core/project_data.js`. Delete removes the card only after the authoritative project-list confirmation; duplicate and paste create a sibling through the existing project-order owner and clone captured content through `executeBootstrapDuplicateOperation`, which remaps internal parent and structural references.
 - `eVe/elements/` for product design factories, tokens, and i18n-bound UI construction.
 - `eVe/domains/*/api/` for closed domain APIs.
 - `eVe/core/*_store/` for closed product store adapters.

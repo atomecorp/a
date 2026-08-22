@@ -37,6 +37,7 @@ const {
     resolveFlowerSelectionMode
 } = await import('../../eVe/intuition/flower/context_selection.js');
 const { createFlowerContextItemsRuntime } = await import('../../eVe/intuition/runtime/eve_intuition/flower_context_items_runtime.js');
+const { executeBootstrapDuplicateOperation } = await import('../../eVe/intuition/tools/core/tool_runtime_atome_mutation.js');
 const {
     computeFlowerLayout,
     computeFlowerSubmenuLayout
@@ -219,6 +220,7 @@ assert.deepEqual(
     'Dashboard cards, List rows, and Matrix cells must share the complete surface-item Flower menu'
 );
 let dashboardProjectDeleteCount = 0;
+const dashboardProjectActionCounts = { duplicate: 0, copy: 0, paste: 0 };
 const previousPublishAtomeSelection = window.eveToolBase?.publishAtomeSelection;
 window.eveToolBase = {
     ...(window.eveToolBase || {}),
@@ -234,6 +236,51 @@ const dashboardProjectDelete = surfaceItemsRuntime.resolveFlowerContextItems({
 }).find((item) => item.key === 'delete');
 assert.deepEqual(await dashboardProjectDelete.onSelect({}), { ok: true, owner: 'project' });
 assert.equal(dashboardProjectDeleteCount, 1, 'Dashboard project Delete must use the context project owner, not generic Atome deletion');
+for (const key of ['duplicate', 'copy', 'paste']) {
+    const item = surfaceItemsRuntime.resolveFlowerContextItems({
+        type: 'surface_item',
+        atomeId: 'surface_project_a',
+        [key === 'duplicate' ? 'onDuplicate' : (key === 'copy' ? 'onCopy' : 'onPaste')]: async () => {
+            dashboardProjectActionCounts[key] += 1;
+            return { ok: true, owner: 'project', action: key };
+        }
+    }).find((entry) => entry.key === key);
+    assert.deepEqual(await item.onSelect({}), { ok: true, owner: 'project', action: key });
+}
+assert.deepEqual(dashboardProjectActionCounts, { duplicate: 1, copy: 1, paste: 1 }, 'surface actions must delegate to their supplied canonical owner');
+
+const duplicateCommits = [];
+window.Atome = {
+    getStateCurrent: async () => {
+        throw new Error('Copy/Paste must duplicate the supplied snapshot, not reread live source state');
+    },
+    commitBatch: async (events) => {
+        duplicateCommits.push(...events);
+        return { ok: true };
+    }
+};
+const snapshotDuplicate = await executeBootstrapDuplicateOperation({
+    selection_ids: ['copied_parent', 'copied_child'],
+    source_states: [{
+        id: 'copied_parent', type: 'group', project_id: 'source_project', parent_id: 'source_project',
+        properties: { left: 30, top: 40, children: ['copied_child'] }
+    }, {
+        id: 'copied_child', type: 'shape', project_id: 'source_project', parent_id: 'copied_parent',
+        properties: { left: 50, top: 70 }
+    }],
+    project_id: 'pasted_project',
+    placement_mode: 'preserve_relative',
+    left: 0,
+    top: 0
+}, { mergeStack: () => ({}) });
+assert.equal(snapshotDuplicate.ok, true);
+assert.equal(duplicateCommits.length, 2);
+const pastedParent = duplicateCommits.find((event) => event.type === 'group');
+const pastedChild = duplicateCommits.find((event) => event.type === 'shape');
+assert.equal(pastedParent.project_id, 'pasted_project');
+assert.equal(pastedParent.parent_id, 'pasted_project');
+assert.equal(pastedChild.parent_id, pastedParent.atome_id, 'internal parent relations must be remapped');
+assert.deepEqual(pastedParent.props.children, [pastedChild.atome_id], 'internal structural relations must be remapped');
 if (previousPublishAtomeSelection === undefined) delete window.eveToolBase.publishAtomeSelection;
 else window.eveToolBase.publishAtomeSelection = previousPublishAtomeSelection;
 
