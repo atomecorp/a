@@ -126,6 +126,20 @@ test('RenderAtom normalization keeps render data disposable and cacheable', () =
             mime_type: 'image/svg+xml'
         }
     });
+    const inlineSvg = normalizeRenderAtom({
+        ...makeRecord('svg_inline', 'shape', 6),
+        properties: {
+            ...makeRecord('svg_inline', 'shape', 6).properties,
+            svg_markup: '<svg viewBox="0 0 10 10"><path d="M0 0L10 10"/></svg>'
+        }
+    });
+    const labelledShape = normalizeRenderAtom({
+        ...makeRecord('shape_labelled', 'shape', 7),
+        properties: {
+            ...makeRecord('shape_labelled', 'shape', 7).properties,
+            text: 'secondary label'
+        }
+    });
 
     assert.equal(text.type, 'text');
     assert.equal(image.type, 'image');
@@ -133,6 +147,10 @@ test('RenderAtom normalization keeps render data disposable and cacheable', () =
     assert.equal(audio.type, 'audio_waveform');
     assert.equal(droppedSound.type, 'audio_waveform');
     assert.equal(svg.type, 'image');
+    assert.equal(inlineSvg.type, 'image');
+    assert.match(inlineSvg.content.source, /^data:image\/svg\+xml;charset=utf-8,/);
+    assert.equal(decodeURIComponent(inlineSvg.content.source.split(',')[1]), '<svg viewBox="0 0 10 10"><path d="M0 0L10 10"/></svg>');
+    assert.equal(labelledShape.type, 'shape');
     assert.equal(text.capabilities.editable, true);
     assert.equal(video.capabilities.playable, true);
     const croppedVideo = normalizeRenderAtom({

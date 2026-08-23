@@ -197,6 +197,28 @@ const ensureFastifyTokenLocal = async () => {
     return { ok: true, reason: 'cache_login_success' };
 };
 
+// `me` travels over the WebSocket, so an unreachable socket and a request that
+// timed out both come back as `ok:false` — exactly like a refused token. The
+// old code read that as "the token is dead", cleared it, and (with no cached
+// password to re-login with) left the session credential-less until the next
+// manual login. That is why a working feature kept turning itself off: a single
+// transport hiccup destroyed a perfectly valid credential. Only a verdict that
+// actually comes FROM the server may clear it now.
+const isTransportFailure = (result) => {
+    if (!result || result.ok) return false;
+    const raw = result.raw || {};
+    if (raw.offline === true) return true;
+    if (raw.status === 0) return true;
+    const error = String(result.error || raw.error || '').trim().toLowerCase();
+    return error === 'request timeout'
+        || error === 'server unreachable'
+        || error === 'auth_unavailable'
+        || error.includes('unreachable')
+        || error.includes('timeout')
+        || error.includes('not configured')
+        || error.includes('not available');
+};
+
 const ensureFastifyToken = async () => {
     if (fastifyTokenEnsurePromise) return fastifyTokenEnsurePromise;
     fastifyTokenEnsurePromise = (async () => {
@@ -206,6 +228,12 @@ const ensureFastifyToken = async () => {
             if (me?.ok) {
                 markFastifyAuthValid();
                 return { ok: true, reason: 'token_valid' };
+            }
+            if (isTransportFailure(me)) {
+                // Unproven, not invalid: keep the credential and let the actual
+                // request be the judge — it answers 401 if the token is dead,
+                // and that path re-mints it.
+                return { ok: true, reason: 'token_validation_unavailable', unverified: true };
             }
             FastifyAdapter?.clearToken?.();
             if (typeof window !== 'undefined') window.__SQUIRREL_FASTIFY_AUTH_INVALID__ = true;
@@ -238,6 +266,7 @@ const ensureFastifyToken = async () => {
 
 
 export {
+    isTransportFailure,
     loadFastifyLoginCache,
     persistFastifyLoginCache,
     ensureFastifyTokenLocal,

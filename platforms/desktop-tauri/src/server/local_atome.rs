@@ -2134,17 +2134,17 @@ async fn handle_state_current_get(
         Err(e) => return error_response(request_id, &e.to_string()),
     };
 
-    let row: Option<(String, Option<String>, Option<String>, Option<String>, String, i64)> = db
+    let row: Option<(String, Option<String>, Option<String>, Option<String>, String, i64, Option<String>)> = db
         .query_row(
-            "SELECT atome_id, owner_id, project_id, properties, updated_at, version FROM state_current WHERE atome_id = ?1",
+            "SELECT sc.atome_id, sc.owner_id, sc.project_id, sc.properties, sc.updated_at, sc.version, a.parent_id FROM state_current sc LEFT JOIN atomes a ON a.atome_id = sc.atome_id WHERE sc.atome_id = ?1",
             rusqlite::params![atome_id],
-            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?, row.get(5)?)),
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?, row.get(5)?, row.get(6)?)),
         )
         .optional()
         .unwrap_or(None);
 
     let state_payload = row.and_then(
-        |(id, owner_id, project_id, properties, updated_at, version)| {
+        |(id, owner_id, project_id, properties, updated_at, version, parent_id)| {
             let properties = parse_json_value(properties.as_ref());
             let projected = super::local_atome_security::project_properties_for_read(
                 &db, &id, user_id, &properties
@@ -2159,6 +2159,7 @@ async fn handle_state_current_get(
                 "atome_id": id,
                 "owner_id": owner_id,
                 "project_id": project_id,
+                "parent_id": parent_id,
                 "properties": projected,
                 "capabilities": super::local_atome_security::project_capabilities_for_read(
                     &db, &id, user_id, keys.into_iter()
@@ -2232,7 +2233,7 @@ async fn handle_state_current_list(
     }
     let where_clause = format!(" WHERE {}", conditions.join(" AND "));
     let query = format!(
-        "SELECT sc.atome_id, sc.owner_id, sc.project_id, sc.properties, sc.updated_at, sc.version FROM state_current sc LEFT JOIN atomes a ON a.atome_id = sc.atome_id{} ORDER BY sc.updated_at DESC LIMIT ? OFFSET ?",
+        "SELECT sc.atome_id, sc.owner_id, sc.project_id, sc.properties, sc.updated_at, sc.version, a.parent_id FROM state_current sc LEFT JOIN atomes a ON a.atome_id = sc.atome_id{} ORDER BY sc.updated_at DESC LIMIT ? OFFSET ?",
         where_clause
     );
     let mut params = scope_params;
@@ -2251,6 +2252,7 @@ async fn handle_state_current_list(
                 "atome_id": row.get::<_, String>(0)?,
                 "owner_id": row.get::<_, Option<String>>(1)?,
                 "project_id": row.get::<_, Option<String>>(2)?,
+                "parent_id": row.get::<_, Option<String>>(6)?,
                 "properties": parse_json_value(properties.as_ref()),
                 "updated_at": row.get::<_, String>(4)?,
                 "version": row.get::<_, i64>(5)?
@@ -2342,6 +2344,17 @@ fn normalize_event_input(
     };
 
     let mut payload = resolve_event_payload(event);
+    // `parent_id` is structural event metadata, never an Atome property. Preserve
+    // it in the envelope so Axum applies it to `atomes.parent_id` and projects it
+    // at the root of state_current. Without this normalization, a Tauri batch can
+    // create a Molecule while silently leaving its members at the project root.
+    if let Some(parent_id) = event.get("parent_id").and_then(|value| value.as_str()) {
+        let mut object = payload
+            .and_then(|value| value.as_object().cloned())
+            .unwrap_or_default();
+        object.insert("parent_id".to_string(), JsonValue::String(parent_id.to_string()));
+        payload = Some(JsonValue::Object(object));
+    }
     if global_scope {
         let mut object = payload.and_then(|value| value.as_object().cloned()).unwrap_or_default();
         object.insert("scope".to_string(), JsonValue::String("global".to_string()));
@@ -2384,6 +2397,14 @@ fn resolve_event_payload(event: &JsonValue) -> Option<JsonValue> {
         .or_else(|| event.get("patch"))
         .or_else(|| event.get("delta"));
     props.map(|value| json!({ "props": value.clone() }))
+}
+
+fn event_parent_id(event: &EventRecord) -> Option<&str> {
+    event
+        .payload
+        .as_ref()?
+        .get("parent_id")?
+        .as_str()
 }
 
 fn resolve_sync_target(message: &JsonValue) -> Option<String> {
@@ -2640,26 +2661,16 @@ fn apply_event_to_state_current(
         && !patch.contains_key("atome_type")
         && !patch.contains_key("kind")
     {
-        let meta: Result<Option<(Option<String>, Option<String>)>, _> = db
+        let meta: Result<Option<Option<String>>, _> = db
             .query_row(
-                "SELECT atome_type, parent_id FROM atomes WHERE atome_id = ?1",
+                "SELECT atome_type FROM atomes WHERE atome_id = ?1",
                 rusqlite::params![atome_id],
-                |row| {
-                    Ok((
-                        row.get::<_, Option<String>>(0)?,
-                        row.get::<_, Option<String>>(1)?,
-                    ))
-                },
+                |row| row.get::<_, Option<String>>(0),
             )
             .optional();
-        if let Ok(Some((meta_type, meta_parent))) = meta {
+        if let Ok(Some(meta_type)) = meta {
             if let Some(meta_type) = meta_type {
                 patch.insert("type".to_string(), JsonValue::String(meta_type));
-            }
-            if let Some(meta_parent) = meta_parent {
-                if !patch.contains_key("parent_id") {
-                    patch.insert("parent_id".to_string(), JsonValue::String(meta_parent));
-                }
             }
         }
     }
@@ -3034,6 +3045,106 @@ mod property_commit_security_tests {
         assert_eq!(denied_events, 0);
         assert_eq!(queued, 1, "only the authorized commit reaches the sync queue");
     }
+
+    #[tokio::test]
+    async fn batch_parent_id_creates_persistent_molecule_membership() {
+        let state = state();
+        {
+            let db = state.db.lock().expect("database lock");
+            for id in ["project", "image", "sound"] {
+                db.execute(
+                    "INSERT INTO atomes (atome_id, atome_type, owner_id, creator_id) VALUES (?1, 'shape', 'owner', 'owner')",
+                    rusqlite::params![id],
+                )
+                .expect("fixture atome");
+            }
+        }
+
+        let response = handle_events_message(
+            json!({
+                "type": "events",
+                "action": "commit-batch",
+                "events": [
+                    {
+                        "id": "molecule-create",
+                        "kind": "set",
+                        "atome_id": "molecule",
+                        "project_id": "project",
+                        "parent_id": "project",
+                        "type": "group",
+                        "payload": { "props": { "kind": "group" } }
+                    },
+                    {
+                        "id": "image-absorb",
+                        "kind": "set",
+                        "atome_id": "image",
+                        "project_id": "project",
+                        "parent_id": "molecule",
+                        "payload": { "props": {} }
+                    },
+                    {
+                        "id": "sound-absorb",
+                        "kind": "set",
+                        "atome_id": "sound",
+                        "project_id": "project",
+                        "parent_id": "molecule",
+                        "payload": { "props": {} }
+                    }
+                ]
+            }),
+            "owner",
+            &state,
+        )
+        .await;
+        assert!(response.success, "molecule batch failed: {:?}", response.error);
+
+        {
+            let db = state.db.lock().expect("database lock");
+            for id in ["image", "sound"] {
+                let properties: String = db
+                    .query_row(
+                        "SELECT properties FROM state_current WHERE atome_id = ?1",
+                        rusqlite::params![id],
+                        |row| row.get(0),
+                    )
+                    .expect("state_current properties");
+                let atome_parent: String = db
+                    .query_row(
+                        "SELECT parent_id FROM atomes WHERE atome_id = ?1",
+                        rusqlite::params![id],
+                        |row| row.get(0),
+                    )
+                    .expect("atome parent");
+                assert_eq!(atome_parent, "molecule");
+                assert!(
+                    !parse_json_value(Some(&properties)).get("parent_id").is_some(),
+                    "parent_id must remain envelope metadata"
+                );
+            }
+        }
+
+        let listed = handle_state_current_list(
+            json!({ "project_id": "project", "include_total": true }),
+            "owner",
+            &state,
+            None,
+        )
+        .await;
+        assert!(listed.success, "state_current list failed: {:?}", listed.error);
+        let states = listed
+            .data
+            .as_ref()
+            .and_then(|data| data.get("states"))
+            .and_then(JsonValue::as_array)
+            .expect("state_current states");
+        for id in ["image", "sound"] {
+            let state = states
+                .iter()
+                .find(|entry| entry.get("atome_id").and_then(JsonValue::as_str) == Some(id))
+                .expect("member state");
+            assert_eq!(state.get("parent_id"), Some(&json!("molecule")));
+        }
+    }
 }
 
 fn apply_event_to_atomes(
@@ -3082,10 +3193,9 @@ fn apply_event_to_atomes(
         }
     }
 
-    let parent_id = patch
-        .get("parent_id")
-        .and_then(|v| v.as_str())
-        .map(|v| v.to_string());
+    let parent_id = event_parent_id(event)
+        .or_else(|| patch.get("parent_id").and_then(JsonValue::as_str))
+        .map(String::from);
 
     let existing: Option<(String, String)> = db
         .query_row(

@@ -4748,6 +4748,43 @@ async fn ws_api_handler(ws: WebSocketUpgrade, State(state): State<AppState>) -> 
     ws.on_upgrade(move |socket| handle_ws_api(socket, state))
 }
 
+/// A reply the browser is waiting on is matched by `requestId`; a frame without
+/// one is dropped by the transport, which then waits out its full ten-second
+/// timeout and reports `Request timeout`. The refusal the server had already
+/// answered never reached the caller, so a dead token read as a hang and the
+/// dashboard never opened. Every envelope built here therefore carries the id
+/// back, plus the `success`/`ok`/`error` fields the transport reads to tell a
+/// refusal from an answer — `message` alone was decoded as a success.
+fn ws_reply_envelope(mut value: JsonValue, request_id: Option<&str>) -> JsonValue {
+    if let Some(object) = value.as_object_mut() {
+        if let Some(request_id) = request_id {
+            object.insert(
+                "requestId".to_string(),
+                JsonValue::String(request_id.to_string()),
+            );
+            object.insert(
+                "request_id".to_string(),
+                JsonValue::String(request_id.to_string()),
+            );
+        }
+        if !object.contains_key("success") {
+            object.insert("success".to_string(), JsonValue::Bool(false));
+        }
+        if !object.contains_key("ok") {
+            object.insert("ok".to_string(), JsonValue::Bool(false));
+        }
+        if !object.contains_key("error") {
+            let text = object
+                .get("message")
+                .and_then(|value| value.as_str())
+                .unwrap_or("ws_request_failed")
+                .to_string();
+            object.insert("error".to_string(), JsonValue::String(text));
+        }
+    }
+    value
+}
+
 fn ws_authenticated_user(data: &JsonValue, state: &AppState) -> Result<String, JsonValue> {
     let auth_state = state
         .auth_state
@@ -4776,7 +4813,11 @@ async fn handle_ws_api(mut socket: WebSocket, state: AppState) {
                     Err(_) => {
                         let _ = socket
                             .send(Message::Text(
-                                json!({"type": "error", "message": "Invalid JSON"}).to_string(),
+                                ws_reply_envelope(
+                                    json!({"type": "error", "message": "Invalid JSON"}),
+                                    None,
+                                )
+                                .to_string(),
                             ))
                             .await;
                         continue;
@@ -4784,6 +4825,12 @@ async fn handle_ws_api(mut socket: WebSocket, state: AppState) {
                 };
 
                 let msg_type = data.get("type").and_then(|v| v.as_str()).unwrap_or("");
+                let request_id = data
+                    .get("requestId")
+                    .or_else(|| data.get("request_id"))
+                    .and_then(|value| value.as_str())
+                    .map(|value| value.to_string());
+                let request_id = request_id.as_deref();
 
                 // Handle ping/pong
                 if msg_type == "ping" {
@@ -4799,7 +4846,11 @@ async fn handle_ws_api(mut socket: WebSocket, state: AppState) {
                         let user_id = match ws_authenticated_user(&data, &state) {
                             Ok(user_id) => user_id,
                             Err(response) => {
-                                let _ = socket.send(Message::Text(response.to_string())).await;
+                                let _ = socket
+                                    .send(Message::Text(
+                                        ws_reply_envelope(response, request_id).to_string(),
+                                    ))
+                                    .await;
                                 continue;
                             }
                         };
@@ -4816,8 +4867,11 @@ async fn handle_ws_api(mut socket: WebSocket, state: AppState) {
                     } else {
                         let _ = socket
                             .send(Message::Text(
-                                json!({"type": "error", "message": "Atome state not initialized"})
-                                    .to_string(),
+                                ws_reply_envelope(
+                                    json!({"type": "error", "message": "Atome state not initialized"}),
+                                    request_id,
+                                )
+                                .to_string(),
                             ))
                             .await;
                     }
@@ -4830,7 +4884,11 @@ async fn handle_ws_api(mut socket: WebSocket, state: AppState) {
                         let user_id = match ws_authenticated_user(&data, &state) {
                             Ok(user_id) => user_id,
                             Err(response) => {
-                                let _ = socket.send(Message::Text(response.to_string())).await;
+                                let _ = socket
+                                    .send(Message::Text(
+                                        ws_reply_envelope(response, request_id).to_string(),
+                                    ))
+                                    .await;
                                 continue;
                             }
                         };
@@ -4844,8 +4902,11 @@ async fn handle_ws_api(mut socket: WebSocket, state: AppState) {
                     } else {
                         let _ = socket
                             .send(Message::Text(
-                                json!({"type": "error", "message": "Atome state not initialized"})
-                                    .to_string(),
+                                ws_reply_envelope(
+                                    json!({"type": "error", "message": "Atome state not initialized"}),
+                                    request_id,
+                                )
+                                .to_string(),
                             ))
                             .await;
                     }
@@ -4858,7 +4919,11 @@ async fn handle_ws_api(mut socket: WebSocket, state: AppState) {
                         let user_id = match ws_authenticated_user(&data, &state) {
                             Ok(user_id) => user_id,
                             Err(response) => {
-                                let _ = socket.send(Message::Text(response.to_string())).await;
+                                let _ = socket
+                                    .send(Message::Text(
+                                        ws_reply_envelope(response, request_id).to_string(),
+                                    ))
+                                    .await;
                                 continue;
                             }
                         };
@@ -4873,8 +4938,11 @@ async fn handle_ws_api(mut socket: WebSocket, state: AppState) {
                     } else {
                         let _ = socket
                             .send(Message::Text(
-                                json!({"type": "error", "message": "Atome state not initialized"})
-                                    .to_string(),
+                                ws_reply_envelope(
+                                    json!({"type": "error", "message": "Atome state not initialized"}),
+                                    request_id,
+                                )
+                                .to_string(),
                             ))
                             .await;
                     }
@@ -4886,7 +4954,11 @@ async fn handle_ws_api(mut socket: WebSocket, state: AppState) {
                         let user_id = match ws_authenticated_user(&data, &state) {
                             Ok(user_id) => user_id,
                             Err(response) => {
-                                let _ = socket.send(Message::Text(response.to_string())).await;
+                                let _ = socket
+                                    .send(Message::Text(
+                                        ws_reply_envelope(response, request_id).to_string(),
+                                    ))
+                                    .await;
                                 continue;
                             }
                         };
@@ -4897,6 +4969,16 @@ async fn handle_ws_api(mut socket: WebSocket, state: AppState) {
                         };
                         let _ = socket
                             .send(Message::Text(serde_json::to_string(&response).unwrap_or_default()))
+                            .await;
+                    } else {
+                        let _ = socket
+                            .send(Message::Text(
+                                ws_reply_envelope(
+                                    json!({"type": "error", "message": "Atome state not initialized"}),
+                                    request_id,
+                                )
+                                .to_string(),
+                            ))
                             .await;
                     }
                     continue;
@@ -4914,8 +4996,11 @@ async fn handle_ws_api(mut socket: WebSocket, state: AppState) {
                     } else {
                         let _ = socket
                             .send(Message::Text(
-                                json!({"type": "error", "message": "Auth state not initialized"})
-                                    .to_string(),
+                                ws_reply_envelope(
+                                    json!({"type": "error", "message": "Auth state not initialized"}),
+                                    request_id,
+                                )
+                                .to_string(),
                             ))
                             .await;
                     }
@@ -4931,7 +5016,11 @@ async fn handle_ws_api(mut socket: WebSocket, state: AppState) {
                 // Unknown message type
                 let _ = socket
                     .send(Message::Text(
-                        json!({"type": "error", "message": "Unknown message type"}).to_string(),
+                        ws_reply_envelope(
+                            json!({"type": "error", "message": "Unknown message type"}),
+                            request_id,
+                        )
+                        .to_string(),
                     ))
                     .await;
             }

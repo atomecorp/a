@@ -85,6 +85,7 @@ export const AdoleAPI = {
     tryAutoLogin: auth.tryAutoLogin,
     setVisibility: auth.setVisibility,
     ensureFastifyToken: auth.ensureFastifyToken,
+    clearFastifyToken: auth.clearFastifyToken,
     isAuthenticated: () => getSessionState().mode === 'authenticated',
     getAuthenticatedUser: () => (getSessionState().mode === 'authenticated' ? getSessionState().user : null),
     requireAuth: auth.requireAuth

@@ -30,10 +30,17 @@ import {
 import {
     PROJECT_VIEW_ABSORB_DELAY_MS,
     absorbInto,
+    armStationaryAbsorb,
+    clearStationaryAbsorb,
     hasStationaryAbsorbOverlap,
-    trackStationaryOverlap
+    orderedIdsAfterInsertion,
+    reconcilePendingLevelOrder,
+    beginPendingLevelOrder,
+    resolveStructuredDropIntent
 } from '../../eVe/domains/rendering/project_view_reorder_runtime.js';
+import { followSelectionWhilePlaying } from '../../eVe/domains/rendering/project_view_playback_follow.js';
 import { invokeFlowerMoleculeUngroup } from '../../eVe/intuition/runtime/eve_intuition/flower_context_items_runtime.js';
+import { playMoleculeContextualOwner } from '../../eVe/domains/rendering/project_view_molecule_info.js';
 
 const mediaRecord = (id) => ({
     id,
@@ -94,7 +101,182 @@ test('sequential playback starts and stops the final item of a complete queue', 
     assert.equal(stopped.length, children.length);
     assert.equal(started.at(-1), 'queue_200');
     assert.equal(stopped.at(-1), 'queue_200');
-    assert.deepEqual(runtime.readState(), { playing: false, scope: '', playingIds: [] });
+    assert.deepEqual(runtime.readState(), {
+        playing: false, scope: '', playingIds: [], playingRecords: [],
+        armed: false, armedProjectId: ''
+    });
+});
+
+test('a Molecule plays every direct member once in sequential and random modes', async () => {
+    const owner = {
+        id: 'molecule_owner', type: 'group',
+        properties: {
+            kind: 'group',
+            molecule_timeline: { schema_version: 2, owner_atome_id: 'molecule_owner' }
+        }
+    };
+    const members = [mediaRecord('member_one'), mediaRecord('member_two')]
+        .map((record) => ({ ...record, parent_id: 'molecule_owner' }));
+    const run = async (mode, shuffle = (items) => items) => {
+        const calls = [];
+        const runtime = createProjectViewPlaybackRuntime({
+            runMediaAction: async ({ action, atomeIds }) => {
+                calls.push(`${action}:${atomeIds[0]}`);
+                return { ok: true };
+            },
+            readMediaDuration: () => 0.001,
+            readMoleculeMembers: async ({ moleculeId }) => moleculeId === 'molecule_owner' ? members : [],
+            resolveMoleculeRule: async () => ({ mode, loop: false }),
+            setTimer: (callback) => { queueMicrotask(callback); return 1; },
+            clearTimer: () => {},
+            shuffle
+        });
+        const result = await runtime.toggleLevel({
+            level: { entity: 'project', id: `project_${mode}` }, projectId: `project_${mode}`,
+            children: [owner], rule: { mode: 'sequential', loop: false }
+        });
+        assert.equal(result.ok, true);
+        for (let attempt = 0; attempt < 30 && runtime.readState().playing; attempt += 1) {
+            await new Promise((resolve) => setImmediate(resolve));
+        }
+        assert.equal(runtime.readState().playing, false);
+        return calls;
+    };
+
+    assert.deepEqual(await run('sequential'), [
+        'play:member_one', 'stop:member_one', 'play:member_two', 'stop:member_two'
+    ]);
+    assert.deepEqual(await run('random', (items) => [items[1], items[0]]), [
+        'play:member_two', 'stop:member_two', 'play:member_one', 'stop:member_one'
+    ]);
+});
+
+test('a Molecule in Ensemble mode delegates one transport for its canonical owner', async () => {
+    const calls = [];
+    const owner = {
+        id: 'molecule_ensemble', type: 'group',
+        properties: {
+            kind: 'group',
+            molecule_timeline: { schema_version: 2, owner_atome_id: 'molecule_ensemble' }
+        }
+    };
+    const runtime = createProjectViewPlaybackRuntime({
+        timelineApi: () => ({
+            listOpenGroupTimelines: () => ({ timelines: [] }),
+            openGroupTimeline: async ({ group_id }) => calls.push(`open:${group_id}`),
+            stopGroupTimelineTransport: async ({ group_id }) => calls.push(`stop:${group_id}`),
+            toggleGroupTimelineTransport: async ({ group_id }) => {
+                calls.push(`play:${group_id}`);
+                return { playing: true, duration: 0.001 };
+            }
+        }),
+        readMoleculeMembers: async () => [mediaRecord('member_one'), mediaRecord('member_two')],
+        resolveMoleculeRule: async () => ({ mode: 'layer', loop: false }),
+        setTimer: (callback) => { queueMicrotask(callback); return 1; },
+        clearTimer: () => {}
+    });
+    await runtime.toggleLevel({
+        level: { entity: 'project', id: 'project_ensemble' }, projectId: 'project_ensemble',
+        children: [owner], rule: { mode: 'sequential', loop: false }
+    });
+    for (let attempt = 0; attempt < 30 && runtime.readState().playing; attempt += 1) {
+        await new Promise((resolve) => setImmediate(resolve));
+    }
+    assert.deepEqual(calls, [
+        'open:molecule_ensemble', 'stop:molecule_ensemble', 'play:molecule_ensemble', 'stop:molecule_ensemble'
+    ]);
+});
+
+test('the selected Molecule contextual Play action forwards every requested playback mode to the canonical runtime', async () => {
+    const timeline = { schema_version: 2, project_id: 'project_contextual_modes', owner_atome_id: 'molecule_modes' };
+    const calls = [];
+    const transportCalls = [];
+    const timelineApi = {
+        listOpenGroupTimelines: () => ({ timelines: [] }),
+        openGroupTimeline: async ({ group_id }) => transportCalls.push(`open:${group_id}`),
+        toggleGroupTimelineTransport: async ({ group_id }) => {
+            transportCalls.push(`play:${group_id}`);
+            return { ok: true, playing: true, mode: 'layer' };
+        },
+        stopGroupTimelineTransport: async ({ group_id }) => transportCalls.push(`stop:${group_id}`)
+    };
+    const adopted = [];
+    for (const mode of ['sequential', 'random', 'layer']) {
+        const result = await playMoleculeContextualOwner({
+            ownerId: 'molecule_modes', moleculeId: 'molecule_modes', projectId: timeline.project_id,
+            timeline, ownerState: { properties: { name: 'Modes' } },
+            resolveRule: async () => ({ mode, loop: false }),
+            timelineApi,
+            playback: {
+                toggleLevel: async (input) => {
+                    calls.push(input);
+                    return { ok: true, mode: input.rule.mode };
+                },
+                adoptDelegatedTransport: (input) => adopted.push(input)
+            }
+        });
+        assert.equal(result.ok, true);
+        assert.equal(result.mode, mode);
+    }
+    assert.deepEqual(calls.map((call) => ({
+        mode: call.rule.mode,
+        scope: `${call.level.entity}:${call.level.id}`,
+        childId: call.children[0].atome_id,
+        timeline: call.children[0].properties.molecule_timeline
+    })), ['sequential', 'random'].map((mode) => ({
+        mode, scope: 'molecule:molecule_modes', childId: 'molecule_modes', timeline
+    })));
+    assert.deepEqual(transportCalls, ['open:molecule_modes', 'play:molecule_modes']);
+    assert.equal(adopted.length, 1);
+    assert.equal(adopted[0].level.entity, 'molecule');
+    assert.equal(adopted[0].playing, true);
+});
+
+test('the contextual Ensemble action keeps the Molecule runtime playing until explicit Stop', async () => {
+    const timeline = { schema_version: 2, project_id: 'project_contextual_layer', owner_atome_id: 'molecule_layer' };
+    const runtime = createProjectViewPlaybackRuntime();
+    const transportCalls = [];
+    const started = await playMoleculeContextualOwner({
+        ownerId: 'molecule_layer', moleculeId: 'molecule_layer', projectId: timeline.project_id, timeline,
+        resolveRule: async () => ({ mode: 'layer', loop: false }), playback: runtime,
+        timelineApi: {
+            listOpenGroupTimelines: () => ({ timelines: [{ group_id: 'molecule_layer' }] }),
+            toggleGroupTimelineTransport: async () => {
+                transportCalls.push('play');
+                return { ok: true, playing: true, duration: 0 };
+            },
+            stopGroupTimelineTransport: async () => transportCalls.push('stop')
+        }
+    });
+    assert.equal(started.playing, true);
+    assert.deepEqual(runtime.readState(), {
+        playing: true, scope: 'molecule:molecule_layer', playingIds: [], playingRecords: [],
+        armed: false, armedProjectId: ''
+    });
+    await runtime.stop();
+    assert.deepEqual(transportCalls, ['play', 'stop']);
+    assert.equal(runtime.readState().playing, false);
+});
+
+test('a delegated Molecule transport releases the shared playback state at its natural duration', () => {
+    const timers = [];
+    const runtime = createProjectViewPlaybackRuntime({
+        setTimer: (callback, delayMs) => { timers.push({ callback, delayMs }); return timers.length; },
+        clearTimer: () => {}
+    });
+    runtime.adoptDelegatedTransport({
+        level: { entity: 'molecule', id: 'molecule_natural_end' },
+        playing: true,
+        duration: 2
+    });
+    assert.equal(runtime.readState().playing, true);
+    assert.equal(timers.length, 1);
+    assert.equal(timers[0].delayMs, 2000);
+    timers[0].callback();
+    assert.deepEqual(runtime.readState(), {
+        playing: false, scope: '', playingIds: [], playingRecords: [],
+        armed: false, armedProjectId: ''
+    });
 });
 
 test('a queue jump restarts the chosen item and preserves the frozen random order', async () => {
@@ -152,8 +334,9 @@ test('item-context Play starts the selected item, preserves a frozen queue, and 
 });
 
 test('item-context Play starts a still record through the project runtime instead of the global transport latch', async () => {
+    const timers = [];
     const runtime = createProjectViewPlaybackRuntime({
-        setTimer: () => 1,
+        setTimer: (callback, delayMs) => { timers.push({ callback, delayMs }); return timers.length; },
         clearTimer: () => {}
     });
     const result = await runtime.playChild({
@@ -163,10 +346,17 @@ test('item-context Play starts a still record through the project runtime instea
     assert.deepEqual(result, {
         ok: true, playing: true, id: 'caption', kind: 'still', scope: 'trigger:caption'
     });
+    assert.equal(timers[0].delayMs, 2000);
+    timers[0].callback();
+    for (let attempt = 0; attempt < 10 && runtime.readState().playing; attempt += 1) {
+        await new Promise((resolve) => setImmediate(resolve));
+    }
+    assert.equal(runtime.readState().playing, false);
+    assert.equal(runtime.readState().armed, true);
     await runtime.stop();
 });
 
-test('the structured playback facade returns to Play after completion and a failed start', async () => {
+test('structured item playback stays armed after completion and a failed next selection', async () => {
     const timers = [];
     const runtime = createProjectViewPlaybackRuntime({
         runMediaAction: async ({ action, atomeIds }) => ({ ok: action !== 'play' || atomeIds[0] !== 'failed_video' }),
@@ -182,10 +372,22 @@ test('the structured playback facade returns to Play after completion and a fail
         await new Promise((resolve) => setImmediate(resolve));
     }
     assert.equal(runtime.isPlayingTarget({ record: video }), false);
+    assert.equal(runtime.isItemPlaybackArmed({ record: video, projectId: 'facade_project' }), true);
     const failed = mediaRecord('failed_video');
-    const failedResult = await runtime.playChild({ record: failed, projectId: 'facade_project' });
+    const failedResult = await followSelectionWhilePlaying({
+        record: failed, projectId: 'facade_project'
+    }, { playback: runtime });
     assert.equal(failedResult.ok, false);
     assert.equal(runtime.isPlayingTarget({ record: failed }), false);
+    assert.equal(runtime.readState().armed, true);
+    const next = mediaRecord('next_video');
+    const nextResult = await followSelectionWhilePlaying({
+        record: next, projectId: 'facade_project'
+    }, { playback: runtime });
+    assert.equal(nextResult.ok, true);
+    assert.equal(runtime.isPlayingTarget({ record: next }), true);
+    const stopped = await runtime.stop();
+    assert.equal(stopped.armed, false);
 });
 
 test('a refused media start is stopped before its Visualizer id is removed or the queue advances', async () => {
@@ -224,7 +426,10 @@ test('a refused media start is stopped before its Visualizer id is removed or th
     ]);
     assert.deepEqual(calls[1].playingIds, ['queue_refused']);
     assert.equal(calls.some(({ action, id }) => action === 'stop' && id === 'queue_next'), true);
-    assert.deepEqual(runtime.readState(), { playing: false, scope: '', playingIds: [] });
+    assert.deepEqual(runtime.readState(), {
+        playing: false, scope: '', playingIds: [], playingRecords: [],
+        armed: false, armedProjectId: ''
+    });
 });
 
 test('a durationless video advances after its media owner reports natural completion', async () => {
@@ -273,7 +478,10 @@ test('a durationless video advances after its media owner reports natural comple
         'play:queue_after_whatsapp',
         'stop:queue_after_whatsapp'
     ]);
-    assert.deepEqual(runtime.readState(), { playing: false, scope: '', playingIds: [] });
+    assert.deepEqual(runtime.readState(), {
+        playing: false, scope: '', playingIds: [], playingRecords: [],
+        armed: false, armedProjectId: ''
+    });
 });
 
 test('manual Stop releases a durationless video and resets the transport state', async () => {
@@ -303,7 +511,10 @@ test('manual Stop releases a durationless video and resets the transport state',
     assert.equal(stopped.playing, false);
     assert.equal(pendingTimer, null);
     assert.deepEqual(calls, ['play:durationless_manual_stop', 'stop:durationless_manual_stop']);
-    assert.deepEqual(runtime.readState(), { playing: false, scope: '', playingIds: [] });
+    assert.deepEqual(runtime.readState(), {
+        playing: false, scope: '', playingIds: [], playingRecords: [],
+        armed: false, armedProjectId: ''
+    });
 });
 
 test('loop playback can leave and re-enter a durationless video without retaining its prior session', async () => {
@@ -341,7 +552,10 @@ test('loop playback can leave and re-enter a durationless video without retainin
     await runtime.stop();
     assert.equal(calls.filter((entry) => entry === 'play:durationless_loop_video').length >= 2, true);
     assert.equal(calls.filter((entry) => entry === 'stop:durationless_loop_video').length >= 2, true);
-    assert.deepEqual(runtime.readState(), { playing: false, scope: '', playingIds: [] });
+    assert.deepEqual(runtime.readState(), {
+        playing: false, scope: '', playingIds: [], playingRecords: [],
+        armed: false, armedProjectId: ''
+    });
 });
 
 test('playback mirror invalidation follows A to B to C source replacement at stable projection ids', () => {
@@ -528,6 +742,27 @@ test('canonical absorb creates, absorbs, and flattens Molecules through direct p
     assert.equal(batches[3].events[0].props.molecule_timeline.clips[0].source.atome_id, 'child_a');
 });
 
+test('canonical absorb uses visible canonical records when its second list read is empty', async () => {
+    const batches = [];
+    const source = atomeState('persisted_image');
+    const target = atomeState('persisted_file', 'project_molecules', { left: '20px', top: '30px' });
+    const result = await absorbCanonicalMolecule({
+        projectId: 'project_molecules', sourceId: 'persisted_image', targetId: 'persisted_file'
+    }, {
+        readList: async () => [],
+        knownRecords: [source, target],
+        commitBatch: async (events, options) => {
+            batches.push({ events, options });
+            return { ok: true };
+        }
+    });
+    assert.equal(result.ok, true);
+    assert.equal(result.operation, 'create');
+    assert.equal(batches.length, 1);
+    assert.deepEqual(new Set(batches[0].events.slice(1).map((event) => event.atome_id)),
+        new Set(['persisted_file', 'persisted_image']));
+});
+
 test('canonical ungroup and delete operate on direct members in one history transaction', async () => {
     const batches = [];
     const ungrouped = await ungroupCanonicalMolecule({
@@ -555,13 +790,37 @@ test('canonical ungroup and delete operate on direct members in one history tran
     ]);
 });
 
-test('List and Matrix stationary overlap routes to the shared canonical Molecule command after 500ms', async () => {
-    const session = { hoverId: '' };
-    trackStationaryOverlap(session, 'target', 100);
-    assert.equal(hasStationaryAbsorbOverlap(session, 'target', 100 + PROJECT_VIEW_ABSORB_DELAY_MS - 1), false);
-    assert.equal(hasStationaryAbsorbOverlap(session, 'target', 100 + PROJECT_VIEW_ABSORB_DELAY_MS), true);
-    trackStationaryOverlap(session, 'different_target', 900);
-    assert.equal(hasStationaryAbsorbOverlap(session, 'target', 1400), false);
+test('an armed overlap survives normal movement inside the same target', async () => {
+    const timers = [];
+    const setTimer = (callback, delayMs) => timers.push({ callback, delayMs }) - 1;
+    const clearTimer = (handle) => { if (timers[handle]) timers[handle] = null; };
+    const fire = () => timers.filter(Boolean).forEach((timer) => timer.callback());
+
+    let now = 1000;
+    const session = { hoverId: '', sourceId: 'source' };
+    const armed = [];
+    armStationaryAbsorb({
+        session, targetId: 'target', onArmed: (id) => armed.push(id), setTimer, clearTimer,
+        now: () => now
+    });
+    assert.equal(timers.filter(Boolean)[0].delayMs, PROJECT_VIEW_ABSORB_DELAY_MS);
+    assert.equal(hasStationaryAbsorbOverlap(session, 'target'), false);
+    now += PROJECT_VIEW_ABSORB_DELAY_MS;
+    assert.equal(hasStationaryAbsorbOverlap(session, 'target'), true);
+    fire();
+    assert.deepEqual(armed, ['target']);
+    assert.equal(hasStationaryAbsorbOverlap(session, 'target'), true);
+
+    armStationaryAbsorb({
+        session, targetId: 'target', onArmed: () => {}, setTimer, clearTimer
+    });
+    assert.equal(hasStationaryAbsorbOverlap(session, 'target'), true);
+
+    // Moving on disarms: the previous target must not stay armed behind the finger.
+    armStationaryAbsorb({ session, targetId: 'different_target', onArmed: () => {}, setTimer, clearTimer });
+    assert.equal(hasStationaryAbsorbOverlap(session, 'target'), false);
+    clearStationaryAbsorb(session, clearTimer);
+    assert.equal(hasStationaryAbsorbOverlap(session, 'different_target'), false);
 
     const calls = [];
     const result = await absorbInto({
@@ -573,6 +832,60 @@ test('List and Matrix stationary overlap routes to the shared canonical Molecule
     });
     assert.equal(result.operation, 'merge');
     assert.deepEqual(calls, [{ projectId: 'project_molecules', sourceId: 'source', targetId: 'target' }]);
+});
+
+test('structured drop geometry separates exact insertion slots from the shared overlap delay', () => {
+    const box = { x: 10, y: 20, width: 200, height: 100 };
+    assert.deepEqual(resolveStructuredDropIntent({
+        layout: 'list', sourceId: 'source', targetId: 'target', targetIndex: 3,
+        point: { x: 100, y: 30 }, box
+    }).slotIndex, 3);
+    assert.equal(resolveStructuredDropIntent({
+        layout: 'list', sourceId: 'source', targetId: 'target', targetIndex: 3,
+        point: { x: 100, y: 70 }, box
+    }).kind, 'overlap');
+    assert.deepEqual(resolveStructuredDropIntent({
+        layout: 'list', sourceId: 'source', targetId: 'target', targetIndex: 3,
+        point: { x: 100, y: 115 }, box
+    }).slotIndex, 4);
+    assert.equal(resolveStructuredDropIntent({
+        layout: 'matrix', sourceId: 'source', targetId: 'target', targetIndex: 2,
+        point: { x: 110, y: 70 }, box
+    }).kind, 'overlap');
+    assert.equal(resolveStructuredDropIntent({
+        layout: 'matrix', sourceId: 'source', targetId: 'target', targetIndex: 2,
+        point: { x: 12, y: 70 }, box
+    }).kind, 'insert');
+
+    const timers = [];
+    armStationaryAbsorb({
+        session: { sourceId: 'source' }, targetId: 'target', point: { x: 50, y: 50 },
+        delayMs: PROJECT_VIEW_ABSORB_DELAY_MS,
+        setTimer: (callback, delayMs) => timers.push({ callback, delayMs }) - 1,
+        clearTimer: () => {}
+    });
+    assert.equal(timers[0].delayMs, 500);
+});
+
+test('exact insertion order is protected until the canonical read confirms it', () => {
+    assert.deepEqual(orderedIdsAfterInsertion(['a', 'b', 'c'], 'a', 3), ['b', 'c', 'a']);
+    assert.deepEqual(orderedIdsAfterInsertion(['a', 'b', 'c'], 'c', 0), ['c', 'a', 'b']);
+    const oldRecords = ['a', 'b', 'c'].map((id, index) => ({
+        id, properties: { hierarchy_order: index }
+    }));
+    beginPendingLevelOrder({
+        projectId: 'pending_project', containerId: 'pending_project',
+        orderedIds: ['b', 'c', 'a'], txId: 'tx_pending'
+    });
+    const stale = reconcilePendingLevelOrder({
+        records: oldRecords, projectId: 'pending_project', containerId: 'pending_project'
+    });
+    assert.equal(stale.pending, true);
+    assert.deepEqual(stale.records.map((record) => record.properties.hierarchy_order), [2, 0, 1]);
+    const confirmed = reconcilePendingLevelOrder({
+        records: stale.records, projectId: 'pending_project', containerId: 'pending_project'
+    });
+    assert.equal(confirmed.confirmed, true);
 });
 
 test('Flower contextual Ungroup routes the selected Molecule to the canonical transaction', async () => {

@@ -2,6 +2,15 @@
 
 Status: Initial design map after the Atome open / eVe closed boundary validation.
 
+Current List/Matrix drag and Play presentation (2026-08-22): a contextual item
+Play remains visually Stop while its mode is armed even when no media is
+currently moving. Only `playingIds` paints live rows and controls Visualizer
+priority. List insertion opens the shared selectable-list gap without tinting a
+neighbor; Matrix insertion paints a thin token-owned slot marker. The central
+overlap region shows no insertion gap and only gains the existing playing tint,
+border, and focus shadow once the 2,000 ms fusion deadline is reached. A release
+before that deadline has no visual or mutation result.
+
 Current mapped-principal project-selection contract (2026-08-14): a project
 card returned by an authenticated native projection may carry the local storage
 principal as `owner_id` while the logical session carries the corresponding
@@ -873,6 +882,11 @@ The perceptual contract is backed by presented WebGPU frames, not JS sampling al
 - Mix channel strips consume the `bevyPanel.moleculeMix` token group (`strip*`, `control*`, meter and group/rest surfaces). Stable ids `molecule_mix_gain_<track>` and `molecule_mix_pan_<track>` identify the two canonical sliders for future skins without local style discovery. Both sliders stay vertically centred in the usable strip body so mobile navigation rails cannot cover either control.
 
 - The fixed main menu order is Atom, Home, Finder, Record, Time, Communication, Mode, View, Create. Create opens the functional Text, Draw, Code and Page entries; generator entries exist only when backed by a registered generator.
+- Text, Draw, Code and Page are mutually exclusive visible latches whose shared WebGPU shell uses the blue active fill and restores the initial fill on shutdown. Natural Text waits for an empty-canvas click and repeats placement while armed; List/Matrix Text creates immediately, reveals the row/tile, opens Visual and focuses the shared hidden editor. Structured Draw and Page also create one immediate canonical draft row/tile, then the first valid Visual gesture fills that same `shape` or `group`; Natural Draw/Page still wait for the first valid gesture. Page is a canonical `group`; entering it never recenters, masks or moves the Natural project and merely changes the shared current insertion container. Code is centered within the usable application layer on every open and remains movable/resizable.
+- Because the main menu and project can share the same WebGPU canvas, the canonical BevyUI hit-test has priority over empty-project Text/lasso routing; listener installation order is not a UI ownership signal.
+- Visual is the interactive presentation of the source Atome, not an editable copy. Its optional interaction map sends scene-space selection, text edit, drag, resize, navigation, playback and Flower intentions to existing natural owners. List/Matrix thumbnails remain passive, and playback regains subject priority when the temporary create/edit pin ends.
+- A selected List/Matrix row or cell exposes one contextual Record action for live user-action recording. It must not open or reveal the key/audio/video capture palette already available from the main menu.
+- SVG Atomes retain their editable vector identity, but their visible Natural/List/Matrix projection uses the shared SVG-to-RGBA WebGPU texture route. A generic shape is never rendered as an SVG merely because it has text metadata, and no visible DOM SVG fallback is allowed.
 - List is a virtualized `Molecule → Section → Track` hierarchy. Rows use half a main-tool square, proper names only, a hierarchy affordance, Group field, name crest and real-content preview. Derived Section/Track identities never become Atomes.
 - Handedness mirrors hierarchy affordances, indentation, columns, contextual rails, panels and tools through shared owners. Ruler, playhead, clip geometry, crop and loop direction never mirror and remain left-to-right.
 - Timeline content is Bevy-only: Track lanes, type-derived previews, non-destructive crop handles, Section boundaries, armed Record regions and exactly two lower time bands. The playhead crosses Tracks and both bands.

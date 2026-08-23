@@ -346,19 +346,23 @@ test('shared Bevy list drag preserves the pointer anchor when its drop target ch
     ]);
 });
 
-test('shared Bevy list exposes a visible insertion gap and source fade during reorder', () => {
+test('shared Bevy list exposes an insertion marker without moving row hit geometry', () => {
     const result = hierarchicalSelectableListNode({
         id: 'reorder_list', width: 300, rowHeight: 32,
+        insertionSlot: 2,
         entries: [
             { id: 'first', value: 'first', label: 'First', dragging: true },
-            { id: 'second', value: 'second', label: 'Second', dropTarget: true },
+            { id: 'second', value: 'second', label: 'Second' },
             { id: 'third', value: 'third', label: 'Third' }
         ]
     });
-    const [first, second, third] = result.node.children;
+    const [first, second, third, marker] = result.node.children;
     assert.equal(first.style.opacity, 0.38);
-    assert.equal(second.style.border[0], 3);
-    assert.ok(third.style.position[1] > 64, 'the target leaves an insertion gap before the following row');
+    assert.equal(second.style.border, undefined, 'an insertion slot never illuminates a row');
+    assert.equal(third.style.position[1], second.style.position[1] * 2,
+        'the insertion hint must not move the row under the pointer');
+    assert.equal(marker.id, 'reorder_list_insertion_marker');
+    assert.equal(marker.style.position[1] + (marker.style.size[1] / 2), third.style.position[1]);
 });
 
 test('Info migration retires every HTML source and keeps only a DOM-free Bevy bridge', () => {
@@ -1058,11 +1062,19 @@ test('footer_tools reload and commit use the established canonical property owne
 
 test('structured List and Matrix contexts always expose the persistent rail Play tool without an inline item control', () => {
     const model = createAtomeEditFooterModelRuntime({
-        mainToolIdByKey: { detail: 'ui.detail.panel', delete: 'ui.delete.selection', play: 'ui.play' },
+        mainToolIdByKey: { detail: 'ui.detail.panel', delete: 'ui.delete.selection', play: 'ui.play', record_action: 'ui.detail.record.toggle' },
         intuitionContent: {
             detail: { tool_id: 'ui.detail.panel', label: 'Detail' },
             delete: { tool_id: 'ui.delete.selection', label: 'Delete' },
-            play: { tool_id: 'ui.play', label: 'Play', action: 'toggle', latch: true }
+            play: { tool_id: 'ui.play', label: 'Play', action: 'toggle', latch: true },
+            record_action: {
+                tool_id: 'ui.detail.record.toggle', label: 'Record', icon: 'record', type: 'palette',
+                selection_required: true, children: ['record_action_key', 'record_action_live', 'record_action_audio', 'record_action_video']
+            },
+            record_action_live: {
+                tool_id: 'ui.detail.record.toggle', label: 'Live', icon: 'false', type: 'tool',
+                action: 'toggle', latch: true, selection_required: true, extra_input: { mode: 'live' }
+            }
         },
         normalizeMainToolKey: (key) => String(key || '').trim().toLowerCase(),
         normalizeCatalogToolEntry: ({ key, def }) => ({ key, toolId: def.tool_id, label: def.label, toolType: 'standard', actionMode: def.action, latch: def.latch }),
@@ -1072,14 +1084,22 @@ test('structured List and Matrix contexts always expose the persistent rail Play
     });
     ['sound', 'video', 'image', 'text', 'shape', 'group', 'unknown'].forEach((kind) => {
         const keys = model.resolveAtomeEditFooterToolKeysForAtome({
-            atomeId: `${kind}_row`, kind, toolKeys: ['detail', 'delete', 'play'], hasProjectAutomation: true, railOnly: true
+            atomeId: `${kind}_row`, kind, toolKeys: ['detail', 'delete', 'play', 'record_action'], hasProjectAutomation: true, railOnly: true
         });
         assert.equal(keys.includes('play'), true, `${kind} lacks rail Play`);
+        assert.equal(keys.includes('record_action'), true, `${kind} lacks rail action Record`);
         const definition = model.resolveAtomeEditFooterToolDefinition('play', { structuredContext: true });
         assert.equal(definition?.toolId, 'ui.play');
         assert.equal(definition?.label, 'Play');
         assert.equal(Object.prototype.hasOwnProperty.call(definition, 'tooltip'), false);
         assert.equal(Object.prototype.hasOwnProperty.call(definition, 'popup'), false);
+        const recordDefinition = model.resolveAtomeEditFooterToolDefinition('record_action', { structuredContext: true });
+        assert.equal(recordDefinition?.label, 'Record');
+        assert.equal(recordDefinition?.icon, 'record');
+        assert.equal(recordDefinition?.toolType, 'standard');
+        assert.equal(recordDefinition?.latch, true);
+        assert.deepEqual(recordDefinition?.extraInput, { mode: 'live' });
+        assert.deepEqual(recordDefinition?.children, []);
     });
 });
 
@@ -1116,4 +1136,17 @@ test('structured item and container Play presentation read the project playback 
     assert.equal(model.resolveAtomeEditFooterToolDefinition('play', { structuredContext: true, record: molecule }).label, 'Stop');
     await projectViewPlayback.stop();
     assert.equal(model.resolveAtomeEditFooterToolDefinition('play', { structuredContext: true, record: molecule }).label, 'Play');
+
+    const still = { id: 'armed_still', type: 'image', project_id: 'structured_project', properties: { kind: 'image' } };
+    await projectViewPlayback.playChild({ record: still, projectId: 'structured_project' });
+    await projectViewPlayback.stop({ disarm: false });
+    assert.equal(projectViewPlayback.readState().playing, false);
+    assert.equal(projectViewPlayback.readState().armed, true);
+    assert.equal(model.resolveAtomeEditFooterToolDefinition('play', {
+        structuredContext: true, record: still
+    }).label, 'Stop');
+    await projectViewPlayback.stop();
+    assert.equal(model.resolveAtomeEditFooterToolDefinition('play', {
+        structuredContext: true, record: still
+    }).label, 'Play');
 });

@@ -256,6 +256,16 @@ export const sessionAccountMethods = {
         return ensureFastifyToken();
     },
 
+    // A caller that just saw the server refuse the stored bearer needs the dead
+    // credential gone from every layer — localStorage, sessionStorage AND the
+    // in-memory cache — before asking for a new one. Removing the storage keys
+    // by hand leaves the memory copy behind, and the next getToken() hands the
+    // refused token straight back.
+    clearFastifyToken() {
+        FastifyAdapter?.clearToken?.();
+        return { ok: true };
+    },
+
     async lookupPhone(phone) {
         const cleanPhone = normalizePhone(phone);
         if (!cleanPhone) return { ok: false, success: false, error: 'missing_phone' };

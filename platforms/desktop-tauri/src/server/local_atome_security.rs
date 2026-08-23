@@ -31,10 +31,21 @@ fn event_patch(event: &EventRecord) -> Option<&JsonMap<String, JsonValue>> {
         .and_then(JsonValue::as_object)
 }
 
+fn event_parent_id(event: &EventRecord) -> Option<&str> {
+    event
+        .payload
+        .as_ref()?
+        .get("parent_id")?
+        .as_str()
+}
+
 pub(super) fn event_touched_property_keys(event: &EventRecord) -> Vec<String> {
     let mut keys = HashSet::new();
     if let Some(patch) = event_patch(event) {
         keys.extend(patch.keys().cloned());
+    }
+    if event_parent_id(event).is_some() {
+        keys.insert("parent_id".to_string());
     }
     if let Some(deleted) = event
         .payload
@@ -330,10 +341,10 @@ pub(super) fn authorize_event(
         if requested_owner != principal_id {
             return AuthorizationDecision { allowed: false, reason: "create_owner_mismatch", denied_keys: vec![] };
         }
-        let parent_id = ["parent_id", "parentId", "project_id", "projectId"]
+        let parent_id = event_parent_id(event).or_else(|| ["parent_id", "parentId", "project_id", "projectId"]
             .iter()
             .find_map(|key| patch.get(*key).and_then(JsonValue::as_str))
-            .or(event.project_id.as_deref());
+        ).or(event.project_id.as_deref());
         if let Some(parent_id) = parent_id {
             let created_in_batch = batch_create_ids.map(|ids| ids.contains(parent_id)).unwrap_or(false);
             if !created_in_batch && !can_create(db, parent_id, principal_id) {

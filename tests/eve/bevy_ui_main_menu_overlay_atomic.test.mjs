@@ -520,7 +520,11 @@ test('BevyUI main menu projects one semantic accent capsule per palette group', 
         previousIds: pressedIds
     });
     assert.equal(closedIds.every((id) => expandedIds.includes(id)), true);
-    assert.equal(expandedIds.length, closedIds.length + 6, 'only the two new palette controls may spawn');
+    assert.equal(
+        expandedIds.length,
+        closedIds.length + 7,
+        'only the two new palette controls and the newly painted active parent shell may spawn'
+    );
     const openingBatches = compositorCalls.filter((call) => Array.isArray(call.ops));
     const openingOps = openingBatches.flatMap((call) => call.ops);
     assert.equal(openingBatches.length, 1, 'moving records and new palette records must share one renderer batch');
@@ -566,7 +570,11 @@ test('BevyUI main menu projects one semantic accent capsule per palette group', 
     const closingOps = closingBatches.flatMap((call) => call.ops);
     const restoredState = getProjectSceneState('__eve_dashboard_workspace__');
     assert.equal(closingBatches.length, 1, 'palette closing must stay one atomic renderer batch');
-    assert.equal(closingOps.filter((operation) => operation.type === 'despawn').length, 6);
+    assert.equal(
+        closingOps.filter((operation) => operation.type === 'despawn').length,
+        7,
+        'closing removes the two palette controls and the active parent shell paint'
+    );
     assert.equal(closingOps.some((operation) => String(operation.id || operation.payload?.id || '').includes('__eve_dashboard_sentinel')), false);
     assert.equal(restoredState.projection?.render_result?.direct_prefix, true);
     assert.equal(restoredState.records.some((record) => record.id === '__eve_dashboard_sentinel'), true);

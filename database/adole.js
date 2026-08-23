@@ -216,7 +216,9 @@ async function upsertAtomeFromEvent({
             updates.push('atome_type = ?');
             values.push(atomeType);
         }
-        if (!existing.parent_id && parentId && parentId !== atomeId) {
+        // An explicit event parent replaces the current parent. Membership lives
+        // in this column as structural envelope data, not as an ordinary particle.
+        if (parentId && parentId !== atomeId && parentId !== existing.parent_id) {
             const parentExists = await query('get', 'SELECT 1 FROM atomes WHERE atome_id = ?', [parentId]);
             if (parentExists) {
                 updates.push('parent_id = ?');
@@ -1192,10 +1194,20 @@ function normalizeEventInput(event, options = {}) {
     const atomeId = event.atome_id || event.atomeId || null;
     const scope = event.scope || options.scope || null;
     const projectId = scope === 'global' ? null : (event.project_id || event.projectId || null);
+    const parentId = event.parent_id || event.parentId || null;
     const rawPayload = resolveEventPayload(event);
-    const payload = scope === 'global'
+    const scopedPayload = scope === 'global'
         ? { ...(rawPayload && typeof rawPayload === 'object' ? rawPayload : {}), scope: 'global' }
         : rawPayload;
+    const payload = parentId
+        ? {
+            ...(scopedPayload && typeof scopedPayload === 'object' ? scopedPayload : {}),
+            props: {
+                ...(scopedPayload?.props && typeof scopedPayload.props === 'object' ? scopedPayload.props : {}),
+                parent_id: parentId
+            }
+        }
+        : scopedPayload;
     const actor = event.actor ?? null;
     const txId = event.tx_id || event.txId || options.txId || null;
     const gestureId = event.gesture_id || event.gestureId || null;
@@ -1205,6 +1217,7 @@ function normalizeEventInput(event, options = {}) {
         ts,
         atome_id: atomeId,
         project_id: projectId,
+        ...(parentId ? { parent_id: parentId } : {}),
         kind,
         payload,
         actor,

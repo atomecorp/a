@@ -157,6 +157,8 @@ Cleanup and permanent logging rules:
 
 For eVe UI interaction debugging, Playwright tool activation failures, runtime readiness issues, hit-testing failures, or selector/actionability problems, the agent MUST read and apply the canonical procedure in [../../atome/documentations/how_debug_UI.md](../../atome/documentations/how_debug_UI.md) before inventing new diagnostics or changing product code.
 
+The same mandatory read applies to every user request phrased as UI verification, visual verification, or visual acceptance. The agent MUST follow the complete procedure and MUST NOT infer visible success from internal state, contracts, or non-pixel evidence alone. A short entry link is maintained at [../how_debug_UI.md](../how_debug_UI.md).
+
 Mandatory takeaways from the validated procedure:
 
 - Do not use `domcontentloaded`, `networkidle`, or `document.readyState` alone as the UI readiness gate.

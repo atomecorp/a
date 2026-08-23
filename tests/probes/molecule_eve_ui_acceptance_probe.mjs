@@ -3,9 +3,11 @@ import path from 'node:path';
 import { chromium } from 'playwright';
 
 import { createRichMoleculeFixture } from '../fixtures/molecule/canonical_v2_fixtures.mjs';
+import { runMoleculeDropAcceptance } from './molecule_ui_drop_acceptance_scenarios.mjs';
 import {
     analyzePngSignal,
     assert,
+    awaitBevyUiNodeTarget,
     clickCanvasTarget,
     diffPng,
     exerciseMixerLassoBlock, exerciseTimelineEditingGestures,
@@ -14,7 +16,6 @@ import {
     readBevyUiHit,
     recordCenter,
     runSetupStep,
-    sceneRecords,
     visibleMenuTool,
     wait,
     waitFor,
@@ -37,6 +38,7 @@ const ENDURANCE_MIN_CYCLES = Math.max(
     1,
     Number.parseInt(process.env.MOLECULE_UI_ENDURANCE_MIN_CYCLES || '100', 10) || 100
 );
+const DROP_ONLY = process.env.MOLECULE_UI_DROP_ONLY === '1';
 const OUT_DIR = path.resolve('temp/probe_reports/molecule_eve_ui_acceptance', REPORT_TAG);
 const REPORT_FILE = path.join(OUT_DIR, 'report.json');
 
@@ -111,18 +113,11 @@ const enterProvisionedWorkspace = async (page) => {
     });
 };
 
-const projectViewNode = (page, projectId, nodeId) => {
-    const visualNodeId = nodeId.endsWith('_name')
-        ? `${nodeId.slice(0, -'_name'.length)}_label_text`
-        : nodeId.endsWith('_preview')
-            ? `${nodeId.slice(0, -'_preview'.length)}_thumbnail`
-            : nodeId;
-    return recordCenter(
-        page,
-        projectId,
-        (record) => record.id.includes(`eve_bevy_ui_project_view_${visualNodeId}`)
-    );
-};
+const projectViewNode = (page, _projectId, nodeId) => findBevyUiNodeTarget(page, {
+    nodeId,
+    treeId: 'eve_bevy_ui_project_view',
+    step: 2
+});
 
 const installCanonicalFixture = (page, projectId) => page.evaluate(async ({ pid, fixtureTimeline }) => {
     const timeline = fixtureTimeline;
@@ -205,6 +200,7 @@ const main = async () => {
         ok: false,
         checks: [],
         console_errors: [],
+        molecule_drop_logs: [],
         page_errors: [],
         websocket_events: [],
         screenshots: [],
@@ -273,7 +269,9 @@ const main = async () => {
             report.websocket_events.push({ event: 'closed', request_id: event.requestId });
         });
         page.on('console', (message) => {
-            if (message.type() === 'error') report.console_errors.push(message.text());
+            const text = message.text();
+            if (message.type() === 'error') report.console_errors.push(text);
+            if (text.startsWith('[eVe][molecule-drop]')) report.molecule_drop_logs.push(text);
         });
         page.on('pageerror', (error) => report.page_errors.push(error?.stack || error?.message || String(error)));
 
@@ -328,15 +326,39 @@ const main = async () => {
             const { getMainMenuRuntime } = await import('/eVe/intuition/ribbon/bevy_ui_product_registry.js');
             const menu = getMainMenuRuntime()?.measure?.() || null;
             const records = window.eveToolBase?.getProjectSceneState?.(pid)?.records || [];
+            const ids = records.map((record) => String(record.id || ''));
+            const mainMenuTree = (window.eveBevyUiRuntime?.readOverlayDiagnostics?.()?.trees || [])
+                .find((tree) => tree.id === 'eve_bevy_ui_main_menu');
+            // Un compte de lignes ne dit pas POURQUOI l'attente echoue. Quand ce
+            // predicat expire, son dernier retour est le seul indice qui parvient
+            // au rapport : il doit donc porter DE QUOI conclure — dans quelle
+            // scene le menu s'est projete, et ce que celle-ci contient vraiment.
+            const overlay = window.eveBevyUiRuntime?.readOverlayDiagnostics?.() || {};
             return {
                 ok: menu?.active === true
                     && menu?.treeMounted === true
                     && Number(menu?.reservedHeight || 0) > 0
-                    && records.some((record) => String(record.id || '').includes('main_menu_tool_view_background')),
+                    && Number(mainMenuTree?.overlayRecordCount || 0) > 0,
                 menu,
-                record_count: records.length
+                record_count: ids.length,
+                menu_record_count: ids.filter((id) => id.startsWith('__eve_bevy_ui_')).length,
+                sample_record_ids: ids.slice(0, 12),
+                workspace_mode: window.__eveWorkspaceMode || null,
+                foreground_project_id: window.eveToolBase?.getProjectSceneState?.(pid)?.sceneProjectId || null,
+                overlay_trees: (overlay.trees || []).map((tree) => ({
+                    id: tree.id,
+                    surface: tree.surfaceId,
+                    records: tree.overlayRecordCount,
+                    suspended: tree.suspended
+                })),
+                overlay_error: overlay.lastOverlayError || null
             };
         }, project.id));
+        if (DROP_ONLY) {
+            await runMoleculeDropAcceptance({
+                page, report, check, ensureProject, outDir: OUT_DIR
+            });
+        } else {
         report.measurements.viewport_geometry = await page.evaluate(() => {
             const canvas = document.getElementById('eve_surface_project');
             const view = document.getElementById('view');
@@ -373,9 +395,12 @@ const main = async () => {
         });
 
         await check('the fixed menu exposes the required tool order', async () => {
-            const records = await sceneRecords(page, project.id);
             const expected = ['atome', 'home', 'find', 'capture', 'time', 'communicate', 'mode', 'view', 'create'];
-            const projected = expected.map((key) => records.find((record) => record.id.includes(`main_menu_tool_${key}_background`))?.id || null);
+            const projected = [];
+            for (const key of expected) {
+                const target = await visibleMenuTool(page, project.id, key);
+                projected.push(target?.id || null);
+            }
             assert(projected.every(Boolean), `missing_menu_tools:${JSON.stringify(projected)}`);
             return { expected, projected };
         });
@@ -388,7 +413,11 @@ const main = async () => {
                 const value = getMainMenuRuntime()?.measure?.() || null;
                 return { ok: value?.activePaletteKey === 'create' && value?.paletteMotionActive === false, value };
             });
-            const children = ['text_create', 'draw', 'code_create', 'page_create'];
+            // Les cles sont celles que le produit declare dans
+            // `main_menu_create_content_runtime.js`. `draw` a ete renomme
+            // `draw_create` : la sonde le demandait encore sous l'ancien nom et
+            // signalait un menu introuvable la ou il n'y avait qu'un renommage.
+            const children = ['text_create', 'draw_create', 'code_create', 'page_create'];
             const targets = [];
             for (const child of children) targets.push((await visibleMenuTool(page, project.id, child)).id);
             assert(!targets.some((id) => id.includes('generator')), `unexpected_generator:${JSON.stringify(targets)}`);
@@ -410,16 +439,19 @@ const main = async () => {
             const hit = await readBevyUiHit(page, list);
             assert(String(hit.nodeId || '').endsWith('view__view_list'), `view_list_hit_mismatch:${JSON.stringify({ list, hit })}`);
             await clickMenuTarget(page, list);
-            return waitFor(page, async ({ pid }) => {
+            const opened = await waitFor(page, async () => {
                 const { readProjectViewSurfaceState } = await import('/eVe/domains/rendering/project_view_surface_runtime.js');
                 const state = readProjectViewSurfaceState();
-                const records = window.eveToolBase?.getProjectSceneState?.(pid)?.records || [];
                 return {
-                    ok: state.mode === 'list' && records.some((record) => String(record.id || '').includes('project_view_list_entry_0')),
+                    ok: state.mode === 'list' && (state.content?.entries || []).length > 0,
                     mode: state.mode,
-                    record_count: state.content?.recordCount || 0
+                    record_count: state.content?.recordCount || 0,
+                    entry_count: state.content?.entries?.length || 0
                 };
-            }, { pid: project.id });
+            });
+            assert(await projectViewNode(page, project.id, 'project_view_list_entry_0_name'),
+                'project_view_first_list_row_not_actionable');
+            return opened;
         });
         await waitForStableScene(page, project.id);
 
@@ -451,10 +483,16 @@ const main = async () => {
             assert(String(sectionHit.nodeId || '').includes(`project_view_list_entry_${expandedMolecule.sectionIndex}_hierarchy_chevron`),
                 `section_chevron_hit_mismatch:${JSON.stringify({ sectionChevron, sectionHit })}`);
             await clickCanvasTarget(page, sectionChevron);
-            const expandedSection = await waitFor(page, async () => {
+            const expandedSection = await waitFor(page, async (owner) => {
                 const { readProjectViewSurfaceState } = await import('/eVe/domains/rendering/project_view_surface_runtime.js');
                 const entries = readProjectViewSurfaceState().content?.entries || [];
-                const index = entries.findIndex((entry) => entry.visualRecord?.properties?.molecule_entity === 'track');
+                const ownerState = await window.Atome.getStateCurrent(owner);
+                const timeline = ownerState?.molecule_timeline || ownerState?.props?.molecule_timeline || ownerState?.properties?.molecule_timeline;
+                const contentTrackIds = new Set((timeline?.clips || []).map((clip) => String(clip?.track_id || '')).filter(Boolean));
+                const index = entries.findIndex((entry) => (
+                    entry.visualRecord?.properties?.molecule_entity === 'track'
+                    && contentTrackIds.has(String(entry.visualRecord?.properties?.track_id || ''))
+                ));
                 return {
                     ok: index >= 0,
                     trackIndex: index,
@@ -463,19 +501,35 @@ const main = async () => {
                         entity: entry.visualRecord?.properties?.molecule_entity || null
                     }))
                 };
-            });
+            }, fixture.ownerId);
             trackEntryIndex = expandedSection.trackIndex;
-            await waitFor(page, ({ pid, index }) => {
-                const ids = (window.eveToolBase?.getProjectSceneState?.(pid)?.records || [])
-                    .map((record) => String(record.id || ''));
+            assert(await awaitBevyUiNodeTarget(page, {
+                nodeId: `project_view_list_entry_${trackEntryIndex}_name`,
+                treeId: 'eve_bevy_ui_project_view'
+            }), `project_view_track_row_not_actionable:${trackEntryIndex}`);
+            const trackChevron = await projectViewNode(page, project.id, `project_view_list_entry_${trackEntryIndex}_hierarchy_chevron`);
+            await clickCanvasTarget(page, trackChevron);
+            const expandedTrack = await waitFor(page, async ({ owner, index }) => {
+                const { readProjectViewSurfaceState } = await import('/eVe/domains/rendering/project_view_surface_runtime.js');
+                const ownerState = await window.Atome.getStateCurrent(owner);
+                const timeline = ownerState?.molecule_timeline || ownerState?.props?.molecule_timeline || ownerState?.properties?.molecule_timeline;
+                const entries = readProjectViewSurfaceState().content?.entries || [];
+                const track = entries[index]?.visualRecord?.properties?.track_id || '';
+                const sourceIds = new Set((timeline?.clips || [])
+                    .filter((clip) => String(clip?.track_id || '') === String(track))
+                    .map((clip) => String(clip?.source?.atome_id || '')).filter(Boolean));
+                const memberEntries = entries.filter((entry) => sourceIds.has(String(entry.id || '')));
                 return {
-                    ok: ids.some((id) => id.includes(`project_view_list_entry_${index}_label_text`)),
-                    project_view_record_count: ids.filter((id) => id.includes('project_view_list_entry_')).length,
-                    sample: ids.filter((id) => id.includes('project_view_list_entry_')).slice(0, 80)
+                    ok: memberEntries.length > 0 && memberEntries.every((entry) => Number(entry.depth) >= 3),
+                    memberEntries: memberEntries.map((entry) => ({ id: entry.id, label: entry.label, depth: entry.depth })),
+                    looseRootMembers: entries.filter((entry) => sourceIds.has(String(entry.id || '')) && Number(entry.depth) === 0)
+                        .map((entry) => entry.id)
                 };
-            }, { pid: project.id, index: trackEntryIndex });
+            }, { owner: fixture.ownerId, index: trackEntryIndex });
+            assert(expandedTrack.looseRootMembers.length === 0,
+                `molecule_member_still_at_root:${JSON.stringify(expandedTrack)}`);
             await wait(500);
-            return expandedSection;
+            return { ...expandedSection, expandedTrack };
         });
 
         await check('real selection and double click retain a canonical focus', async () => {
@@ -543,41 +597,65 @@ const main = async () => {
             return focused;
         });
 
+        await check('selecting a Molecule exposes the canonical Delete action in its contextual rail', async () => {
+            const molecule = await projectViewNode(page, project.id, 'project_view_list_entry_0_name');
+            await clickCanvasTarget(page, molecule);
+            const remove = await awaitBevyUiNodeTarget(page, {
+                nodeId: 'atome_contextual_tool_delete',
+                treeId: 'eve_bevy_panel_atome_contextual_edit'
+            });
+            assert(remove, 'molecule_delete_not_actionable');
+            const hit = await readBevyUiHit(page, remove);
+            assert(String(hit.nodeId || '').endsWith('atome_contextual_tool_delete'),
+                `molecule_delete_hit_mismatch:${JSON.stringify({ remove, hit })}`);
+
+            // Keep the established track selection for the following contextual
+            // track, mix and timeline checks.
+            const track = await projectViewNode(page, project.id, `project_view_list_entry_${trackEntryIndex}_name`);
+            await clickCanvasTarget(page, track);
+            await waitFor(page, async (pid) => {
+                const { readActiveMoleculeTarget } = await import('/eVe/domains/rendering/project_view_molecule_workspace_state.js');
+                const target = readActiveMoleculeTarget(pid);
+                return { ok: target?.entity_type === 'track', target };
+            }, project.id);
+            return { node: remove.id, hit };
+        });
+
         await check('the contextual rail does not cover visible Molecule row content', async () => {
             const readyRail = await waitFor(page, async () => {
                 const registry = await import('/eVe/intuition/runtime/eve_intuition/atome_contextual_edit_registry.js');
                 const rail = registry.getAtomeContextualEditApi()?.readState?.()?.railLayout || null;
                 return { ok: !!rail, rail };
             });
-            const geometry = await page.evaluate(({ pid, rail }) => {
-                const records = window.eveToolBase?.getProjectSceneState?.(pid)?.records || [];
-                const candidates = records.filter((record) => {
-                    const id = String(record?.id || '');
-                    return id.includes('eve_bevy_ui_project_view_project_view_list_entry_')
-                        && (id.endsWith('_label_text') || id.endsWith('_thumbnail') || id.endsWith('_hierarchy_chevron'));
-                }).map((record) => ({
-                    id: String(record.id || ''),
-                    left: Number(record.properties?.left || 0),
-                    top: Number(record.properties?.top || 0),
-                    width: Number(record.properties?.width || 0),
-                    height: Number(record.properties?.height || 0)
-                }));
-                return { rail, candidates };
-            }, { pid: project.id, rail: readyRail.rail });
+            const entryCount = await page.evaluate(async () => {
+                const { readProjectViewSurfaceState } = await import('/eVe/domains/rendering/project_view_surface_runtime.js');
+                return readProjectViewSurfaceState().content?.entries?.length || 0;
+            });
+            const candidates = [];
+            for (let index = 0; index < entryCount; index += 1) {
+                for (const suffix of ['name', 'preview', 'hierarchy_chevron']) {
+                    const target = await projectViewNode(page, project.id, `project_view_list_entry_${index}_${suffix}`);
+                    if (target) candidates.push({ id: target.id, x: target.x, y: target.y });
+                }
+            }
+            const geometry = { rail: readyRail.rail, candidates };
             assert(geometry.rail, 'contextual_rail_layout_missing');
             const rail = geometry.rail;
-            const overlaps = geometry.candidates.filter((box) => (
-                box.left < rail.x + rail.itemSize
-                && box.left + box.width > rail.x
-                && box.top < rail.y + rail.railHeight
-                && box.top + box.height > rail.y
+            assert(geometry.candidates.length > 0, 'contextual_rail_row_targets_missing');
+            const overlaps = geometry.candidates.filter((target) => (
+                target.x >= rail.x && target.x <= rail.x + rail.itemSize
+                && target.y >= rail.y && target.y <= rail.y + rail.railHeight
             ));
             assert(overlaps.length === 0, `contextual_rail_overlap:${JSON.stringify({ rail, overlaps })}`);
             return { rail, checked_boxes: geometry.candidates.length };
         });
 
         await check('a real Info click opens the canonical track property panel', async () => {
-            const info = await findBevyUiNodeTarget(page, {
+            // Attendre la projection plutot que de la supposer : un seul balayage
+            // repondait `null` quand le panneau contextuel n'etait pas encore
+            // peint, ce qui arrive sur le rasteriseur logiciel d'un run headless.
+            // L'assertion est inchangee — seule la patience l'est.
+            const info = await awaitBevyUiNodeTarget(page, {
                 nodeId: 'atome_contextual_tool_molecule_info',
                 treeId: 'eve_bevy_panel_atome_contextual_edit'
             });
@@ -590,14 +668,18 @@ const main = async () => {
                 const records = window.eveToolBase?.getProjectSceneState?.(pid)?.records || [];
                 const ids = records.map((record) => String(record.id || ''));
                 const infoRecords = ids.filter((id) => id.includes('eve_bevy_panel_info'));
+                const infoTree = (window.eveBevyUiRuntime?.readOverlayDiagnostics?.()?.trees || [])
+                    .some((tree) => tree.id === 'eve_bevy_panel_info');
                 const { infoRuntime } = await import('/eVe/intuition/runtime/bevy_panel/bevy_panel_info_runtime.js');
                 const properties = infoRuntime.surface.readState()?.primary?.properties || {};
                 return {
-                    ok: infoRecords.some((id) => id.includes('eve_bevy_panel_info_panel'))
-                        && properties.track_type
+                    ok: (infoRecords.some((id) => id.includes('eve_bevy_panel_info_panel')) || infoTree)
+                        // This context is the Molecule owner, not one of its
+                        // tracks. Track-only fields must not be required here.
+                        && Object.hasOwn(properties, 'tempo')
                         && Object.hasOwn(properties, 'quantization')
-                        && Object.hasOwn(properties, 'loop_enabled'),
-                    properties,
+                        && Object.hasOwn(properties, 'metronome'),
+                    properties, info_tree: infoTree,
                     info_record_count: infoRecords.length
                 };
             }, project.id);
@@ -608,10 +690,10 @@ const main = async () => {
             });
             assert(close, 'molecule_info_close_not_actionable');
             await clickCanvasTarget(page, close);
-            await waitFor(page, (pid) => ({
-                ok: !(window.eveToolBase?.getProjectSceneState?.(pid)?.records || [])
-                    .some((record) => String(record.id || '').includes('eve_bevy_panel_info_panel'))
-            }), project.id);
+            await waitFor(page, () => ({
+                ok: !(window.eveBevyUiRuntime?.readOverlayDiagnostics?.()?.trees || [])
+                    .some((tree) => tree.id === 'eve_bevy_panel_info')
+            }));
             return opened;
         });
 
@@ -645,18 +727,15 @@ const main = async () => {
             assert(String(mixHit.nodeId || '').endsWith('activity__molecule_activity_mix'),
                 `molecule_mix_hit_mismatch:${JSON.stringify({ mix, mixHit })}`);
             await clickMenuTarget(page, mix);
-            const projected = await waitFor(page, (pid) => {
-                const records = window.eveToolBase?.getProjectSceneState?.(pid)?.records || [];
-                const ids = records.map((record) => String(record.id || ''));
-                const routing = (window.atome?.tools?.gatewayRoutingLog || [])
-                    .filter((entry) => entry.tool_id === 'ui.timeline.activity.mix').slice(-6);
-                return { ok: ids.some((id) => id.includes('molecule_mix_mute_')), routing, ids };
-            }, project.id);
-            const mute = await findBevyUiNodeTarget(page, {
+            const mute = await awaitBevyUiNodeTarget(page, {
                 nodePrefix: 'molecule_mix_mute_',
                 treeId: 'eve_bevy_ui_project_view'
             });
             assert(mute, 'molecule_mix_mute_not_actionable');
+            const projected = await page.evaluate(() => ({
+                routing: (window.atome?.tools?.gatewayRoutingLog || [])
+                    .filter((entry) => entry.tool_id === 'ui.timeline.activity.mix').slice(-6)
+            }));
             const trackId = mute.id.match(/molecule_mix_mute_(.+)$/)?.[1] || '';
             assert(trackId, `molecule_mix_track_id_missing:${mute.id}`);
             const muteHit = await readBevyUiHit(page, mute);
@@ -681,7 +760,7 @@ const main = async () => {
                 const gain = Number(timeline?.tracks?.find((track) => track.track_id === id)?.gain ?? 1); return { ok: gain !== prior, gain, track_id: id };
             }, { owner: fixture.ownerId, id: trackId, prior: gainBefore });
             const lassoBlock = await exerciseMixerLassoBlock(page); const mixShot = path.join(OUT_DIR, 'mix_controls.png'); await page.screenshot({ path: mixShot, animations: 'disabled' }); report.screenshots.push(mixShot);
-            return { projected_records: projected.ids.length, committed, gainCommitted, pan_control: panControl.id, lassoBlock };
+            return { projected, committed, gainCommitted, pan_control: panControl.id, lassoBlock };
         });
 
         await check('real Activity and Timeline clicks project sections, lanes, clips, crop and loop handles', async () => {
@@ -924,6 +1003,11 @@ const main = async () => {
             assert(finalEmptyBySection.every((count) => count === 1), `empty_track_invariant:${finalEmptyBySection.join(',')}`);
             return { finalEmptyBySection, mounted_trees: state.mounted_trees };
         });
+
+        await runMoleculeDropAcceptance({
+            page, report, check, ensureProject, outDir: OUT_DIR
+        });
+        }
 
         await check('the browser console and page error channels are clean', async () => {
             assert(report.console_errors.length === 0, report.console_errors.slice(0, 3).join(' | '));

@@ -55,6 +55,7 @@
   "tests/eve/capture_recording_bevy_feedback.test.mjs",
   "tests/eve/conditions_integrations.test.mjs",
   "tests/eve/contact_model_identity_contract.test.mjs",
+  "tests/eve/create_tools_modes_contract.test.mjs",
   "tests/eve/dashboard_bevy_ui_lifecycle_contract.test.mjs",
   "tests/eve/dashboard_bevy_ui_runtime_contract.test.mjs",
   "tests/eve/dashboard_data_adapters.test.mjs",

@@ -178,6 +178,8 @@ updated whenever a recurring issue receives a confirmed root-cause repair.
 
 When the task concerns eVe UI readiness, missing tool handles, Playwright click failures, hit-testing, overlays, pointer routing, or selector/actionability problems, reading `atome/documentations/how_debug_UI.md` is mandatory.
 
+This obligation also applies whenever the user asks to **verify the UI**, perform a **visual verification**, or confirm that something works **visually**, even if no debugging symptom is named. The direct `.codex` entry point is [how_debug_UI.md](how_debug_UI.md); it links to the single canonical procedure and must be followed before defining or running the validation.
+
 Minimum mandatory takeaways:
 
 - do not use `domcontentloaded`, `networkidle`, or `document.readyState` alone as the UI readiness gate;

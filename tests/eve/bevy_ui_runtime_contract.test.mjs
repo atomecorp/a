@@ -361,7 +361,8 @@ test('BevyUI explicit vertical drag handlers take priority over ancestor scrolli
                             press: () => received.push('press'),
                             drag: () => received.push('drag'),
                             release: () => received.push('release'),
-                            cancel: () => received.push('cancel')
+                            cancel: () => received.push('cancel'),
+                            long_press: () => received.push('long_press')
                         }
                     }, {
                         id: 'drag_over_scroll_content', kind: 'panel', style: { size: [200, 300] }

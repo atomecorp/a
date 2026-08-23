@@ -83,8 +83,25 @@ export async function authorizeAtomeEventWrite(event, principalId, { batchCreate
         };
     }
 
+    const parentId = event.parent_id || event.parentId || null;
+    if (parentId) {
+        if (String(parentId) === String(atomeId)) {
+            return { allowed: false, reason: 'parent_cycle_forbidden', deniedKeys: [] };
+        }
+        const parentCreatedByBatch = batchCreateIds?.has(String(parentId));
+        if (!parentCreatedByBatch && !await db.canCreate(parentId, principalId)) {
+            return { allowed: false, reason: 'parent_create_denied', deniedKeys: [] };
+        }
+        if (!await db.canWrite(atomeId, principalId)) {
+            return { allowed: false, reason: 'parent_write_denied', deniedKeys: ['parent_id'] };
+        }
+    }
+
     const keys = eventTouchedPropertyKeys(event);
     if (!keys.length) {
+        if (parentId) {
+            return { allowed: true, reason: 'parent_write_allowed', deniedKeys: [] };
+        }
         return { allowed: false, reason: 'missing_property_patch', deniedKeys: [] };
     }
 

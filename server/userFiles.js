@@ -20,7 +20,7 @@ import { makeId } from '../atome/src/squirrel/shared/scalars.js';
 // before any write, and an unowned file is refused with a cause the caller can
 // act on instead of a constraint violation. No shadow account is created here:
 // provisioning stays explicit, per the guest provisioning contract.
-async function resolveOwnerPrincipal(userId) {
+export async function resolveOwnerPrincipal(userId) {
     const id = String(userId || '').trim();
     if (!id || id === 'anonymous') {
         return { ok: false, error: 'upload_identity_required' };

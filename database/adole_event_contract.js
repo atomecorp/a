@@ -111,6 +111,7 @@ export function eventIdempotencyIntent(event) {
         kind: String(event?.kind || ''),
         atome_id: event?.atome_id || event?.atomeId || null,
         project_id: event?.project_id || event?.projectId || null,
+        parent_id: event?.parent_id || event?.parentId || null,
         tx_id: event?.tx_id || event?.txId || null,
         gesture_id: event?.gesture_id || event?.gestureId || null,
         actor_id: actorIdentity(event?.actor),

@@ -45,6 +45,14 @@ test('Molecule List derives names-only Molecule, Section and Track rows from sch
     ]);
     assert.equal(content.readState().entries.find((entry) => entry.label === 'Piste 1').meta.group, 'Bus 1');
 
+    const trackId = 'molecule-track:timeline_list:track_audio';
+    await content.handleEvent({ type: 'project_view.list.toggle', id: trackId });
+    assert.deepEqual(content.readState().entries.map((entry) => entry.label), [
+        'Molécule 1', 'Section 1', 'Piste 1', 'Take', 'Bus 1', 'Piste 2', 'Not a Molecule'
+    ]);
+    assert.equal(content.readState().entries.some((entry) => entry.id === 'audio_source' && entry.depth === 0), false,
+        'a Molecule member must not remain a loose project-root row');
+
     const tree = content.build({ width: 720, height: 480, emit: () => {} })[0];
     const nodes = flatten(tree);
     const moleculeRowIndex = content.readState().entries.findIndex((entry) => entry.id === 'molecule_owner');

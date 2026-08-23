@@ -277,6 +277,24 @@ export const findBevyUiNodeTarget = (page, {
     })
 );
 
+// Le meme balayage, mais PATIENT. `findBevyUiNodeTarget` regarde une seule fois :
+// si l'arbre n'est pas encore projete, il repond `null` et l'appelant conclut a
+// tort que la cible n'existe pas. Sur un rasteriseur logiciel — tout run headless
+// passe par SwiftShader — une projection prend visiblement plus de temps que sur
+// un vrai GPU, et c'est exactement la que ce faux negatif apparait.
+//
+// La patience ne relache aucune assertion : la cible doit toujours etre trouvee,
+// et trouvee par le VRAI hit-test. On lui laisse seulement le temps d'exister.
+export const awaitBevyUiNodeTarget = async (page, options = {}, { timeoutMs = 8000, intervalMs = 200 } = {}) => {
+    const deadline = Date.now() + Math.max(0, Number(timeoutMs) || 0);
+    let found = await findBevyUiNodeTarget(page, options);
+    while (!found && Date.now() < deadline) {
+        await wait(intervalMs);
+        found = await findBevyUiNodeTarget(page, options);
+    }
+    return found;
+};
+
 export const playwrightPointForSurfaceTarget = ({ target, canvasBounds, surfaceSize } = {}) => {
     if (target?.coordinate_source === 'scene') {
         return { x: Number(target.x || 0), y: Number(target.y || 0) };
@@ -300,6 +318,23 @@ export const playwrightPointForClientTarget = async (page, target, canvasBounds 
 export const visibleMenuTool = async (page, projectId, toolKey) => {
     const diagnostics = [];
     for (let attempt = 0; attempt < 12; attempt += 1) {
+        const paletteKey = await page.evaluate(async () => {
+            const module = await import('/eVe/intuition/ribbon/bevy_ui_product_registry.js');
+            return String(module.getMainMenuRuntime()?.measure?.()?.activePaletteKey || '');
+        });
+        const directNodeIds = [
+            `eve_bevy_ui_main_menu_tool_${toolKey}`,
+            ...(paletteKey ? [`eve_bevy_ui_main_menu_tool_${paletteKey}__${toolKey}`] : [])
+        ];
+        for (const nodeId of directNodeIds) {
+            const direct = await findBevyUiNodeTarget(page, {
+                nodeId, treeId: 'eve_bevy_ui_main_menu', step: 2
+            });
+            if (direct) {
+                await waitForSettledMainMenu(page);
+                return direct;
+            }
+        }
         let target = null;
         try { target = await menuTool(page, projectId, toolKey); }
         catch (_) {
@@ -338,11 +373,26 @@ export const visibleMenuTool = async (page, projectId, toolKey) => {
         diagnostics.push({ attempt, target, viewport, wheelX });
         await wait(220);
     }
-    const measure = await page.evaluate(async () => {
+    // Douze tentatives infructueuses ne disent pas si l'outil est CACHE ou s'il
+    // n'existe simplement plus sous ce nom. Un renommage produit — `draw` devenu
+    // `draw_create` — se lisait jusqu'ici comme une panne de defilement du menu.
+    // On rend donc les cles REELLEMENT projetees, pour que la reponse tienne dans
+    // le message d'echec.
+    const context = await page.evaluate(async (pid) => {
         const module = await import('/eVe/intuition/ribbon/bevy_ui_product_registry.js');
-        return module.getMainMenuRuntime()?.measure?.() || null;
-    });
-    throw new Error(`menu_tool_not_revealed:${toolKey}:${JSON.stringify({ measure, diagnostics })}`);
+        const records = window.eveToolBase?.getProjectSceneState?.(pid)?.records || [];
+        const prefix = '__eve_bevy_ui_eve_bevy_ui_main_menu_eve_bevy_ui_main_menu_tool_';
+        return {
+            measure: module.getMainMenuRuntime()?.measure?.() || null,
+            available_tool_keys: [...new Set(records
+                .map((record) => String(record.id || ''))
+                .filter((id) => id.startsWith(prefix))
+                .map((id) => id.slice(prefix.length)
+                    .replace(/_(background|icon_image|label_text)$/, '')
+                    .split('__').at(-1)))].sort()
+        };
+    }, projectId);
+    throw new Error(`menu_tool_not_revealed:${toolKey}:${JSON.stringify({ ...context, diagnostics })}`);
 };
 
 export const clickCanvasTarget = async (page, target, { double = false } = {}) => {
