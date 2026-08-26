@@ -8,6 +8,7 @@ import { createMainMenuCreateContent } from '../../eVe/intuition/runtime/eve_int
 import { createContextToolInvocationRuntime } from '../../eVe/intuition/runtime/eve_intuition/context_tool_invocation_runtime.js';
 import { normalizeToolEntry } from '../../eVe/intuition/ribbon/menu_model.js';
 import { resolvePageFrame } from '../../eVe/domains/rendering/project_view_creation_geometry.js';
+import { resolveInsertionTarget } from '../../eVe/domains/rendering/project_view_insertion_target.js';
 import { resolveVisualSourcePoint } from '../../eVe/domains/rendering/project_view_visual_geometry.js';
 import { createProjectViewVisualInteractionRuntime } from '../../eVe/domains/rendering/project_view_visual_interaction_runtime.js';
 import { createProjectViewCreateDraftRuntime } from '../../eVe/domains/rendering/project_view_create_draft_runtime.js';
@@ -73,10 +74,8 @@ test('the real Bevy invocation keeps Create exclusive even when the gateway enve
     const enabled = await invocation.invokeIntuitionXMainRibbonToolDefinition(
         definition, 'pointer.click', { source: 'bevy_ui_main_menu', previousLatched: false }
     );
-    assert.deepEqual(invocations.slice(0, 4), [
+    assert.deepEqual(invocations, [
         ['tool.main.draw', 'state.off'],
-        ['ui.code.editor', 'state.off'],
-        ['ui.page.create', 'state.off'],
         ['ui.text.create', 'state.on']
     ]);
     assert.equal(active.text, true);
@@ -91,6 +90,36 @@ test('the real Bevy invocation keeps Create exclusive even when the gateway enve
     assert.deepEqual(invocations, [['ui.text.create', 'state.off']]);
     assert.equal(latches.get('ui.text.create'), false);
     assert.equal(disabled.nextLatched, false);
+});
+
+test('activating Text never wakes a lazy inactive Code toggle', async () => {
+    const dom = new JSDOM('<!doctype html><body></body>');
+    globalThis.window = dom.window;
+    globalThis.document = dom.window.document;
+    globalThis.HTMLElement = dom.window.HTMLElement;
+    globalThis.window.__eveTextTool = { isActive: () => false };
+    globalThis.window.__eveDrawTool = { isActive: () => false };
+    globalThis.window.eveProjectViewCreationApi = { isPageToolActive: () => false };
+    const invocations = [];
+    const content = createMainMenuCreateContent({
+        translate: (_key, fallback) => fallback,
+        createToolId: 'tool.main.create',
+        drawToolId: 'tool.main.draw'
+    });
+    const definition = normalizeToolEntry('text_create', content.text_create, content);
+    const invocation = createContextToolInvocationRuntime({
+        getFinderToolEl: () => null,
+        handleFinderTouch: () => null,
+        invokeToolFromUiButton: async (input) => {
+            invocations.push([input.toolId, input.actionOverride]);
+            return { ok: true, active: input.actionOverride === 'state.on' };
+        }
+    });
+    await invocation.invokeIntuitionXMainRibbonToolDefinition(
+        definition, 'pointer.click', { source: 'bevy_ui_main_menu', previousLatched: false }
+    );
+    assert.deepEqual(invocations, [['ui.text.create', 'state.on']]);
+    assert.equal(globalThis.window.eveCodeToolApi, undefined);
 });
 
 test('the latched Create state changes the real WebGPU tool background and restores it when off', () => {
@@ -191,6 +220,21 @@ test('Page is a latch and resolves a canonical frame regardless of drag directio
     });
 });
 
+test('a Create action inside a Molecule keeps parent_id membership and the temporal clip target', () => {
+    assert.deepEqual(resolveInsertionTarget({
+        projectId: 'project_text', containerId: 'molecule_text', containerEntity: 'molecule', ownerId: 'molecule_text'
+    }), {
+        projectId: 'project_text',
+        parentId: 'molecule_text',
+        temporal: {
+            ownerId: 'molecule_text', sectionId: null, trackId: null, entity: 'molecule'
+        }
+    });
+    assert.equal(resolveInsertionTarget({
+        projectId: 'project_text', containerId: 'track_text', containerEntity: 'track', ownerId: 'molecule_text'
+    }).parentId, 'project_text');
+});
+
 test('Visual interaction maps preview coordinates back to canonical scene coordinates', () => {
     assert.deepEqual(resolveVisualSourcePoint(
         { x: 110, y: 70 },
@@ -201,13 +245,15 @@ test('Visual interaction maps preview coordinates back to canonical scene coordi
 
 test('Visual double-click edits the displayed source inline and never creates a second Text from its margin', async () => {
     const intents = [];
+    const railTargets = [];
     let parasiteCreates = 0;
     globalThis.window = {
         __eveTextTool: { isActive: () => true },
         eveProjectViewCreationApi: { createTextAtPoint: () => { parasiteCreates += 1; } }
     };
     const runtime = createProjectViewVisualInteractionRuntime({
-        emitIntent: async ({ intent }) => { intents.push(intent); return { ok: true }; }
+        emitIntent: async ({ intent }) => { intents.push(intent); return { ok: true }; },
+        feedRail: async (payload) => { railTargets.push(payload); return { ok: true }; }
     });
     const record = {
         id: 'text_inline', atome_id: 'text_inline', type: 'text', project_id: 'project_inline',
@@ -218,11 +264,25 @@ test('Visual double-click edits the displayed source inline and never creates a 
     await runtime.doubleClick({ event: { x: 2, y: 2 }, record, width: 400, height: 180 });
 
     assert.equal(parasiteCreates, 0);
-    assert.deepEqual(intents.slice(-3).map((intent) => intent.kind), [
-        'select', 'atome.edit.enter', 'text.edit.begin'
-    ]);
-    assert.equal(intents.at(-2).atome_id, 'text_inline');
-    assert.equal(intents.at(-2).rail_only, true);
+    assert.deepEqual(intents.slice(-2).map((intent) => intent.kind), ['select', 'text.edit.begin']);
+    assert.equal(railTargets.length, 1);
+    assert.equal(railTargets[0].projectId, 'project_inline');
+    assert.equal(railTargets[0].target.id, 'text_inline');
+});
+
+test('Visual long-press opens the canonical Atome Flower context so text style tools remain available', async () => {
+    const menus = [];
+    const runtime = createProjectViewVisualInteractionRuntime({
+        openAtomeMenu: async (payload) => { menus.push(payload); return { ok: true }; }
+    });
+    await runtime.longPress({
+        event: { client_x: 42, client_y: 84 },
+        record: { id: 'text_flower', type: 'text', project_id: 'project_flower' }
+    });
+    assert.deepEqual(menus, [{
+        event: { client_x: 42, client_y: 84 },
+        atomeId: 'text_flower', kind: 'text', projectId: 'project_flower'
+    }]);
 });
 
 test('shared previews stay passive by default and expose the canonical edit caret only when interactive', () => {
@@ -237,6 +297,8 @@ test('shared previews stay passive by default and expose the canonical edit care
         id: 'interactive', record, width: 120, height: 60, interaction: { press: () => true }
     });
     assert.equal(passive.on, undefined);
+    assert.equal(passive.kind, 'panel');
+    assert.equal(interactive.kind, 'pointer_capture');
     assert.equal(typeof interactive.on.press, 'function');
     assert.equal(interactive.children[0].children.some((child) => child.id === 'interactive_visual_caret'), true);
 });

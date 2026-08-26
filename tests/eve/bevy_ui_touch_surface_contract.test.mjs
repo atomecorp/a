@@ -427,6 +427,7 @@ test('structured List and Matrix rows carry persistent Play through production r
     for (const record of records) {
         runtime.enter({ atomeId: record.id, kind: record.type, railOnly: true, record: { ...record, structured_context: true } });
         await runtime.render();
+        assert.equal(runtime.readState().railOnly, true);
         const tree = rendered.at(-1);
         const play = findNode(tree.root, 'atome_contextual_tool_play');
         assert.ok(play, `${record.type} must project Play into the persistent rail`);

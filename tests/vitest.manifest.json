@@ -110,6 +110,8 @@
   "tests/eve/server_http_error_classification.test.mjs",
   "tests/eve/text_creation_handoff_contract.test.mjs",
   "tests/eve/text_editing_session_contract.test.mjs",
+    "tests/eve/text_tool_background_runtime_contract.test.mjs",
+    "tests/eve/tool_genesis_create_parent_contract.test.mjs",
   "tests/eve/tool_runtime_home_lazy_load.test.mjs",
   "tests/eve/tool_runtime_move_relative.test.mjs",
   "tests/eve/unified_rendering_contract.test.mjs",

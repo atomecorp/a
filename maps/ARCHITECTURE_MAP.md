@@ -70,6 +70,17 @@ public mutation facade delegates shared state/commit plumbing to
 `tool_runtime_atome_duplicate.js`; neither extracted module is a second
 membership authority.
 
+Current Molecule member-mutation contract (2026-08-26):
+`tool_runtime_atome_mutation.js` is a stable public facade;
+`tool_runtime_molecule_mutation.js` owns absorb, extract, member Delete and
+survivor reindexing, `tool_runtime_molecule_timeline.js` owns derived clip
+normalization, and `tool_runtime_molecule_structure.js` owns backfill, ungroup,
+whole-owner Delete and transforms. Every reorder set carries the member's
+canonical `parent_id` envelope together with `hierarchy_order` and visual depth,
+so an order-only batch cannot detach a member. `deleteCanonicalMoleculeMember`
+removes one member and its clip atomically, then deletes the owner in the same
+logical batch when no live member remains.
+
 Current project-view stabilization contract (2026-08-24):
 `project_view_mode_state.js` is the sole per-project List/Matrix/Natural
 preference and surface-transition owner. Workspace activation reads that
@@ -90,6 +101,17 @@ closes the existing group-timeline API so transport and timeline projections are
 disposed. Structured project records reject canonical deletion tombstones, and
 the contextual rail only lazy-loads the existing `ui.delete.selection` action;
 none of these steps introduces another delete or membership authority.
+
+Current structured-text contract (2026-08-26): activating Create Text does not
+import or toggle an inactive lazy sibling such as Code. The single hidden text
+service owns Return while its canonical session is active, so Return inserts
+`\n` into the same Atome and never reaches background creation. Interactive
+Visual previews are hit-testable `pointer_capture` BevyUI nodes. Their
+double-click selects the source and starts the existing text session in
+`rail_only` mode without Natural chrome; Escape cancels, while a pointer on
+another project-view node commits and closes. Visual long press opens the
+canonical Atome Flower context, preserving the existing Couleur/Font tools and
+their `rich_text` range pipeline.
 
 Current Tauri property-security and collaboration flow (2026-08-14): local
 event and batch commits authorize every touched `particle_key` inside the same

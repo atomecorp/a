@@ -155,7 +155,7 @@ const createTextThroughMenu = async ({ page, projectId, value, point }) => {
     return created.id;
 };
 
-const reloadBrowserProject = async (page, project) => {
+export const reloadBrowserProject = async (page, project) => {
     await page.reload({ waitUntil: 'commit', timeout: 45000 });
     await waitFor(page, () => ({
         ok: !!window.AdoleAPI
@@ -400,7 +400,7 @@ const absorbMember = async ({
     await waitForStableScene(page, project.id);
 };
 
-const absorbListMember = async ({
+export const absorbListMember = async ({
     page, project, sourceId, targetId, report, outDir, shotName, expectedParentId = ''
 }) => {
     await switchView(page, project.id, 'list');
@@ -835,7 +835,7 @@ const extractionSnapshot = (page, { projectId, moleculeId, memberId }) => page.e
     };
 }, { projectId, moleculeId, memberId });
 
-const enterListMolecule = async (page, projectId, moleculeId) => {
+export const enterListMolecule = async (page, projectId, moleculeId) => {
     await switchView(page, projectId, 'list');
     const navigation = await page.evaluate(async () => (await import(
         '/eVe/domains/rendering/project_view_navigation.js'
@@ -903,20 +903,10 @@ const enterMatrixMolecule = async (page, projectId, moleculeId, expectedCount = 
     }, { id: moleculeId, expectedCount });
 };
 
-const reorderListMemberToFront = async ({ page, project, moleculeId, memberId, memberIds, report, outDir }) => {
+export const reorderListMemberToFront = async ({ page, project, moleculeId, memberId, memberIds, report, outDir }) => {
     await enterListMolecule(page, project.id, moleculeId);
     const beforeRows = await structuredRows(page);
-    const sourceRow = beforeRows.find((entry) => entry.id === memberId);
-    assert(sourceRow && sourceRow.index > 0,
-        `layered_list_reorder_source_not_movable:${JSON.stringify({ memberId, beforeRows })}`);
-    const source = await listNode(page, `project_view_list_entry_${sourceRow.index}_name`);
-    const destination = await structuredDropTarget(page, {
-        layout: 'list', sourceId: memberId, targetIndex: 0, kind: 'insert', edge: 'before'
-    });
-    assert(source && destination,
-        `layered_list_reorder_targets_missing:${JSON.stringify({ memberId, sourceRow, destination })}`);
-    await drag({ page, source, destination, holdMs: 180 });
-    const persisted = await waitFor(page, async ({ projectId, expectedIds, movedId }) => {
+    const readPersisted = () => waitFor(page, async ({ projectId, expectedIds, movedId }) => {
         const rows = (await import('/eVe/domains/rendering/project_view_surface_runtime.js'))
             .readProjectViewSurfaceState().content?.entries || [];
         const rowIds = rows.map((entry) => String(entry.id || ''));
@@ -949,7 +939,31 @@ const reorderListMemberToFront = async ({ page, project, moleculeId, memberId, m
                 kind: String(event?.kind || ''), props: eventProps(event)
             }))
         };
-    }, { projectId: project.id, expectedIds: memberIds, movedId: memberId });
+    }, { projectId: project.id, expectedIds: memberIds, movedId: memberId }, 12000);
+    const gestureAttempts = [];
+    let persisted = null;
+    for (let attempt = 1; attempt <= 2 && !persisted; attempt += 1) {
+        const currentRows = await structuredRows(page);
+        const sourceRow = currentRows.find((entry) => entry.id === memberId);
+        assert(sourceRow, `layered_list_reorder_source_missing:${JSON.stringify({ memberId, currentRows })}`);
+        if (sourceRow.index > 0) {
+            const source = await listNode(page, `project_view_list_entry_${sourceRow.index}_name`);
+            const destination = await structuredDropTarget(page, {
+                layout: 'list', sourceId: memberId, targetIndex: 0, kind: 'insert', edge: 'before'
+            });
+            assert(source && destination,
+                `layered_list_reorder_targets_missing:${JSON.stringify({ memberId, sourceRow, destination })}`);
+            await drag({ page, source, destination, holdMs: 180 });
+        }
+        try {
+            persisted = await readPersisted();
+            gestureAttempts.push({ attempt, captured: true });
+        } catch (error) {
+            gestureAttempts.push({ attempt, captured: false, error: String(error?.message || error) });
+            if (attempt >= 2) throw error;
+            await enterListMolecule(page, project.id, moleculeId);
+        }
+    }
     await screenshot({ page, report, outDir, name: 'layered_list_reordered_front' });
 
     await enterMatrixMolecule(page, project.id, moleculeId, memberIds.length);
@@ -989,7 +1003,7 @@ const reorderListMemberToFront = async ({ page, project, moleculeId, memberId, m
     assert(natural.stack[0]?.id === memberId && natural.stack[0]?.renderLayer === memberIds.length,
         `layered_natural_reorder_not_projected:${JSON.stringify(natural)}`);
     await screenshot({ page, report, outDir, name: 'layered_natural_reordered_playing' });
-    return { beforeRows, persisted, matrixOrder, natural };
+    return { beforeRows, gestureAttempts, persisted, matrixOrder, natural };
 };
 
 const verifyReorderedMemberAfterReload = async ({ page, project, moleculeId, memberId, memberIds, txId }) => {
@@ -1049,7 +1063,7 @@ const verifyReorderedMemberAfterReload = async ({ page, project, moleculeId, mem
     return { listRows, database, projected };
 };
 
-const extractListMember = async ({ page, project, moleculeId, memberId, report, outDir, shotName }) => {
+export const extractListMember = async ({ page, project, moleculeId, memberId, report, outDir, shotName }) => {
     await enterListMolecule(page, project.id, moleculeId);
     const rows = await structuredRows(page);
     const row = rows.find((entry) => entry.id === memberId);

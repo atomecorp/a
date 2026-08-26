@@ -3,6 +3,7 @@ import { validateListMoleculeDrop } from './molecule_ui_drop_list.mjs';
 import { validateMatrixMoleculeDrop } from './molecule_ui_drop_matrix.mjs';
 import { validateNaturalMoleculeDrop } from './molecule_ui_drop_natural.mjs';
 import { runLayeredMediaMoleculeAcceptance } from './molecule_ui_layered_media.mjs';
+import { runMoleculeOrderTextRegressions } from './molecule_ui_order_text_regressions.mjs';
 
 const SCENARIOS = Object.freeze([
     ['natural', validateNaturalMoleculeDrop],
@@ -11,6 +12,9 @@ const SCENARIOS = Object.freeze([
 ]);
 
 export const runMoleculeDropAcceptance = async ({ page, report, check, ensureProject, outDir }) => {
+    if (process.env.MOLECULE_UI_ORDER_TEXT_ONLY === '1') {
+        return runMoleculeOrderTextRegressions({ page, report, check, ensureProject, outDir });
+    }
     const layeredOnly = process.env.MOLECULE_UI_LAYERED_MEDIA_ONLY === '1';
     if (!layeredOnly) {
     const requestedView = String(process.env.MOLECULE_UI_DROP_VIEW || '').trim();

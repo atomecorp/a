@@ -45,6 +45,7 @@ const {
     absorbCanonicalMolecule,
     buildCanonicalMoleculeTimeline,
     deleteCanonicalMolecule,
+    deleteCanonicalMoleculeMember,
     extractCanonicalMoleculeMember,
     transformCanonicalMolecule,
     ungroupCanonicalMolecule
@@ -56,6 +57,7 @@ const {
     clearStationaryAbsorb,
     hasStationaryAbsorbOverlap,
     orderedIdsAfterInsertion,
+    preserveListInsertionIntent,
     persistLevelOrder,
     reconcilePendingLevelOrder,
     beginPendingLevelOrder,
@@ -1037,12 +1039,13 @@ test('canonical absorb places a newly added member on the first visible row and 
     assert.equal(result.ok, true);
     assert.deepEqual(batches[0].events.slice(1).map((event) => ({
         id: event.atome_id,
+        parentId: event.parent_id,
         hierarchy: event.props.hierarchy_order,
         z: event.props.z_index
-    })), [{ id: 'text_new', hierarchy: 0, z: 3 }, {
-        id: 'video_existing', hierarchy: 1, z: 2
+    })), [{ id: 'text_new', parentId: 'molecule_target', hierarchy: 0, z: 3 }, {
+        id: 'video_existing', parentId: 'molecule_target', hierarchy: 1, z: 2
     }, {
-        id: 'audio_existing', hierarchy: 2, z: 1
+        id: 'audio_existing', parentId: 'molecule_target', hierarchy: 2, z: 1
     }]);
     assert.deepEqual(batches[0].events[1], {
         atome_id: 'text_new',
@@ -1108,6 +1111,118 @@ test('canonical ungroup and delete operate on direct members in one history tran
     assert.deepEqual(batches[1].events, [
         { kind: 'delete', atome_id: 'one', project_id: 'project_molecules', props: {} },
         { kind: 'delete', atome_id: 'two', project_id: 'project_molecules', props: {} },
+        { kind: 'delete', atome_id: 'molecule', project_id: 'project_molecules', props: {} }
+    ]);
+});
+
+test('deleting a direct Molecule member removes its clip and reindexes survivors atomically', async () => {
+    const one = atomeState('one', 'molecule', { duration_sec: 2, hierarchy_order: 0 });
+    const two = atomeState('two', 'molecule', { duration_sec: 3, hierarchy_order: 1 });
+    const three = atomeState('three', 'molecule', { duration_sec: 4, hierarchy_order: 2 });
+    const timeline = buildCanonicalMoleculeTimeline({
+        projectId: 'project_molecules', moleculeId: 'molecule', members: [one, two, three]
+    });
+    const batches = [];
+    const adopted = [];
+    const result = await deleteCanonicalMoleculeMember({
+        projectId: 'project_molecules', moleculeId: 'molecule', memberId: 'two'
+    }, {
+        readList: async () => [
+            moleculeState('molecule', 'project_molecules', { molecule_timeline: timeline }), one, two, three
+        ],
+        commitBatch: async (events, options) => { batches.push({ events, options }); return { ok: true }; },
+        timelineApi: {
+            listOpenGroupTimelines: () => ({ timelines: [{ group_id: 'molecule' }] }),
+            adoptCommittedGroupTimelineSnapshot: async (detail) => { adopted.push(detail); return { ok: true }; }
+        }
+    });
+    assert.equal(result.ok, true);
+    assert.equal(result.molecule_deleted, false);
+    assert.deepEqual(result.remaining_member_ids, ['one', 'three']);
+    assert.deepEqual(result.timeline.clips.map((clip) => clip.source.atome_id), ['one', 'three']);
+    assert.equal(batches.length, 1);
+    assert.deepEqual(batches[0].events.filter((event) => event.kind === 'delete').map((event) => event.atome_id), ['two']);
+    assert.deepEqual(batches[0].events.filter((event) => ['one', 'three'].includes(event.atome_id)).map((event) => ({
+        id: event.atome_id,
+        hierarchy: event.props.hierarchy_order,
+        z: event.props.z_index
+    })), [
+        { id: 'one', hierarchy: 0, z: 2 },
+        { id: 'three', hierarchy: 1, z: 1 }
+    ]);
+    assert.equal(adopted.length, 1);
+    assert.equal(adopted[0].timeline, result.timeline);
+});
+
+test('member deletion reconciles a stale timeline from canonical parent membership before removing the clip', async () => {
+    const one = atomeState('one', 'molecule', { duration_sec: 2, hierarchy_order: 0 });
+    const two = atomeState('two', 'molecule', { duration_sec: 3, hierarchy_order: 1 });
+    const staleTimeline = buildCanonicalMoleculeTimeline({
+        projectId: 'project_molecules', moleculeId: 'molecule', members: [one]
+    });
+    const batches = [];
+    const result = await deleteCanonicalMoleculeMember({
+        projectId: 'project_molecules', moleculeId: 'molecule', memberId: 'two'
+    }, {
+        readList: async () => [
+            moleculeState('molecule', 'project_molecules', { molecule_timeline: staleTimeline }), one, two
+        ],
+        commitBatch: async (events, options) => { batches.push({ events, options }); return { ok: true }; }
+    });
+    assert.equal(result.ok, true);
+    assert.deepEqual(result.timeline.clips.map((clip) => clip.source.atome_id), ['one']);
+    assert.deepEqual(batches[0].events.filter((event) => event.kind === 'delete').map((event) => event.atome_id), ['two']);
+});
+
+test('deleting the final direct member deletes the empty Molecule and closes its timeline atomically', async () => {
+    const only = atomeState('only', 'molecule', { duration_sec: 1 });
+    const timeline = buildCanonicalMoleculeTimeline({
+        projectId: 'project_molecules', moleculeId: 'molecule', members: [only]
+    });
+    const batches = [];
+    const closed = [];
+    const result = await deleteCanonicalMoleculeMember({
+        projectId: 'project_molecules', moleculeId: 'molecule', memberId: 'only'
+    }, {
+        readList: async () => [
+            moleculeState('molecule', 'project_molecules', { molecule_timeline: timeline }), only
+        ],
+        commitBatch: async (events, options) => { batches.push({ events, options }); return { ok: true }; },
+        closeTimeline: async (id) => { closed.push(id); return { ok: true, closed: true }; }
+    });
+    assert.equal(result.ok, true);
+    assert.equal(result.molecule_deleted, true);
+    assert.deepEqual(batches[0].events, [
+        { kind: 'delete', atome_id: 'only', project_id: 'project_molecules', props: {} },
+        { kind: 'delete', atome_id: 'molecule', project_id: 'project_molecules', props: {} }
+    ]);
+    assert.deepEqual(closed, ['molecule']);
+});
+
+test('a deleted member tombstone is never counted as a surviving Molecule child', async () => {
+    const deleted = {
+        ...atomeState('deleted', 'molecule', { hierarchy_order: 0 }),
+        deleted_at: '2026-08-26T18:00:00.000Z'
+    };
+    const only = atomeState('only', 'molecule', { duration_sec: 1, hierarchy_order: 1 });
+    const timeline = buildCanonicalMoleculeTimeline({
+        projectId: 'project_molecules', moleculeId: 'molecule', members: [only]
+    });
+    const batches = [];
+    const result = await deleteCanonicalMoleculeMember({
+        projectId: 'project_molecules', moleculeId: 'molecule', memberId: 'only'
+    }, {
+        readList: async () => [
+            moleculeState('molecule', 'project_molecules', { molecule_timeline: timeline }), deleted, only
+        ],
+        commitBatch: async (events, options) => { batches.push({ events, options }); return { ok: true }; },
+        closeTimeline: async () => ({ ok: true, closed: true })
+    });
+    assert.equal(result.ok, true);
+    assert.equal(result.molecule_deleted, true);
+    assert.deepEqual(result.remaining_member_ids, []);
+    assert.deepEqual(batches[0].events, [
+        { kind: 'delete', atome_id: 'only', project_id: 'project_molecules', props: {} },
         { kind: 'delete', atome_id: 'molecule', project_id: 'project_molecules', props: {} }
     ]);
 });
@@ -1188,6 +1303,22 @@ test('extracting the final member deletes the empty Molecule in the same batch',
     assert.deepEqual(closed, ['molecule']);
 });
 
+test('List keeps the last valid insertion intent across an in-canvas preview refresh sample', () => {
+    const previousIntent = { kind: 'insert', targetId: 'front', slotIndex: 0, edge: 'before' };
+    assert.equal(preserveListInsertionIntent({
+        previousIntent,
+        nextIntent: { kind: 'none' },
+        point: { x: 640, y: 420 },
+        surface: { width: 1440, height: 980 }
+    }), previousIntent);
+    assert.deepEqual(preserveListInsertionIntent({
+        previousIntent,
+        nextIntent: { kind: 'none' },
+        point: { x: 1500, y: 420 },
+        surface: { width: 1440, height: 980 }
+    }), { kind: 'none' });
+});
+
 test('an armed overlap survives normal movement inside the same target', async () => {
     const timers = [];
     const setTimer = (callback, delayMs) => timers.push({ callback, delayMs }) - 1;
@@ -1250,14 +1381,15 @@ test('member reordering persists the first row as the front visual layer in one 
     assert.equal(batches.length, 1);
     assert.deepEqual(batches[0].events.map((event) => ({
         id: event.atome_id,
+        parentId: event.parent_id,
         hierarchy: event.props.hierarchy_order,
         z: event.props.z_index,
         renderLayer: event.props.renderLayer,
         render_layer: event.props.render_layer
     })), [
-        { id: 'text', hierarchy: 0, z: 3, renderLayer: 3, render_layer: 3 },
-        { id: 'video', hierarchy: 1, z: 2, renderLayer: 2, render_layer: 2 },
-        { id: 'audio', hierarchy: 2, z: 1, renderLayer: 1, render_layer: 1 }
+        { id: 'text', parentId: 'molecule', hierarchy: 0, z: 3, renderLayer: 3, render_layer: 3 },
+        { id: 'video', parentId: 'molecule', hierarchy: 1, z: 2, renderLayer: 2, render_layer: 2 },
+        { id: 'audio', parentId: 'molecule', hierarchy: 2, z: 1, renderLayer: 1, render_layer: 1 }
     ]);
 });
 

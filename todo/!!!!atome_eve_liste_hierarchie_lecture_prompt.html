@@ -1,0 +1,955 @@
+<!doctype html>
+<html lang="fr">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <title>squirrel — hiérarchie interactive</title>
+  <style>
+    :root {
+      --bg: #2a2d31;
+      --panel: #34383d;
+      --text: #d6d9dd;
+
+      --u: 44px;
+      --name-w: calc(var(--u) * 3);
+      --bottom-h: 76px;
+      --container-h: 48px;
+    }
+
+    * {
+      box-sizing: border-box
+    }
+
+    html,
+    body {
+      margin: 0;
+      height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
+    }
+
+    body {
+      overflow: hidden
+    }
+
+    button {
+      font: inherit;
+      color: inherit;
+      appearance: none;
+      -webkit-appearance: none;
+      outline: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    .app {
+      position: relative;
+      width: 100%;
+      height: 100dvh;
+      max-width: 980px;
+      margin: 0 auto;
+      background: var(--bg);
+    }
+
+    /* ---------- preview ---------- */
+    .preview {
+      position: absolute;
+      left: 12px;
+      right: 100px;
+      top: 12px;
+      height: 30vh;
+      min-height: 210px;
+      max-height: 360px;
+      border: 0;
+      border-radius: 8px;
+      overflow: hidden;
+      background: var(--panel);
+    }
+
+    .preview svg {
+      width: 100%;
+      height: 100%;
+      display: block
+    }
+
+    /* ---------- liste ---------- */
+    .list-shell {
+      position: absolute;
+      left: 12px;
+      right: 100px;
+      top: calc(30vh + 24px);
+      bottom: calc(var(--bottom-h) + var(--container-h) + 20px);
+      overflow: hidden;
+      border-radius: 0;
+    }
+
+    .list {
+      position: absolute;
+      inset: 0;
+      overflow: auto;
+      scrollbar-width: none;
+      background: #30343a;
+    }
+
+    .list::-webkit-scrollbar {
+      display: none
+    }
+
+    /* IMPORTANT : le hidden HTML doit réellement battre display:grid */
+    .row[hidden] {
+      display: none !important;
+    }
+
+    .row {
+      --current: #777;
+      --parent: #777;
+      --veil: rgba(255, 255, 255, .025);
+
+      position: relative;
+      display: grid;
+      grid-template-columns: var(--u) var(--u) var(--u) var(--name-w) minmax(0, 1fr);
+      width: 100%;
+      height: var(--u);
+      min-height: var(--u);
+      max-height: var(--u);
+      background: linear-gradient(90deg, var(--veil), transparent 74%);
+    }
+
+    .row>.hierarchy,
+    .row>.solo,
+    .row>.mute,
+    .row>.name,
+    .row>.media {
+      border-bottom: 1px solid #0b0c0e;
+    }
+
+    .hierarchy,
+    .solo,
+    .mute {
+      width: var(--u);
+      min-width: var(--u);
+      max-width: var(--u);
+      height: var(--u);
+      min-height: var(--u);
+      max-height: var(--u);
+      margin: 0;
+      padding: 0;
+      border: 0;
+      border-radius: 0;
+      position: relative;
+      display: grid;
+      place-items: center;
+      cursor: pointer;
+      user-select: none;
+      overflow: hidden;
+      box-shadow: inset -1px 0 0 rgba(220, 224, 229, .16);
+    }
+
+    .hierarchy {
+      background: var(--current);
+    }
+
+    .hierarchy-fill {
+      position: absolute;
+      inset: 0;
+      background: var(--current);
+      pointer-events: none;
+    }
+
+    .parent-strip {
+      position: absolute;
+      left: 0;
+      top: 0;
+      bottom: 0;
+      width: 18%;
+      background: var(--parent);
+      pointer-events: none;
+    }
+
+    .root .parent-strip {
+      background: var(--current);
+    }
+
+    .triangle-layer {
+      position: absolute;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      pointer-events: none;
+    }
+
+    .triangle {
+      width: 0;
+      height: 0;
+      border-top: 6px solid transparent;
+      border-bottom: 6px solid transparent;
+      border-left: 9px solid rgba(255, 255, 255, .96);
+      transform-origin: 50% 50%;
+      transition: transform .12s ease;
+    }
+
+    /* fermé = droite ; ouvert = bas */
+    .row.open .triangle {
+      transform: rotate(90deg);
+    }
+
+    /* feuille = jamais de triangle */
+    .row.leaf .triangle {
+      display: none;
+    }
+
+    .solo,
+    .mute {
+      background: #30343a;
+      color: #d6d9dd;
+      font-size: 14px;
+      font-weight: 700;
+    }
+
+    .solo.active,
+    .mute.active {
+      background: #454a50;
+      color: #fff;
+    }
+
+    .name {
+      width: var(--name-w);
+      height: var(--u);
+      display: flex;
+      align-items: center;
+      padding: 0 10px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      background: #30343a;
+      color: #d6d9dd;
+      font-size: 13px;
+      font-weight: 500;
+    }
+
+    .media {
+      position: relative;
+      min-width: 0;
+      height: var(--u);
+      overflow: hidden;
+      background: #30343a;
+    }
+
+    .wave {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      gap: 1px;
+      padding: 3px 0;
+    }
+
+    .wave i {
+      flex: 1 1 0;
+      min-width: 1px;
+      height: var(--h);
+      max-height: 100%;
+      background: color-mix(in srgb, var(--current) 82%, white 6%);
+      opacity: .88;
+    }
+
+    .thumb-strip {
+      position: absolute;
+      inset: 0;
+      display: grid;
+      grid-auto-flow: column;
+      grid-auto-columns: 25%;
+    }
+
+    .thumb {
+      background:
+        linear-gradient(150deg, rgba(255, 220, 160, .55), transparent 35%),
+        radial-gradient(circle at 58% 45%, #6c8293 0 12%, transparent 13%),
+        linear-gradient(170deg, #59656a 0 38%, #273923 39% 60%, #121b18 61%);
+      border-right: 1px solid #0b0c0e;
+    }
+
+    .thumb:nth-child(2) {
+      filter: brightness(.83)
+    }
+
+    .thumb:nth-child(3) {
+      filter: brightness(1.06)
+    }
+
+    .thumb:nth-child(4) {
+      filter: brightness(.72)
+    }
+
+    .image-preview {
+      position: absolute;
+      inset: 0;
+      background:
+        radial-gradient(circle at 64% 34%, rgba(255, 255, 255, .25), transparent 8%),
+        linear-gradient(165deg, transparent 0 47%, #38533b 48% 63%, #1a2a22 64%),
+        linear-gradient(20deg, #112a2b, #49735a 55%, #7f9b82);
+    }
+
+    .text-preview {
+      position: absolute;
+      inset: 0;
+      padding: 5px 8px;
+      overflow: hidden;
+      color: #d6d9dd;
+      font-size: 8px;
+      line-height: 1.25;
+    }
+
+    /* sélection sans bordure */
+    .row.selected {
+      filter: brightness(1.08);
+    }
+
+    /* ---------- outils droite ---------- */
+    .context {
+      position: absolute;
+      right: 8px;
+      bottom: calc(var(--bottom-h) + var(--container-h) + 20px);
+      width: 84px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .tool {
+      width: 80px;
+      height: 80px;
+      padding: 8px 4px 7px;
+      border: 0;
+      border-radius: 7px;
+      background: #30343a;
+      display: grid;
+      grid-template-rows: 1fr auto;
+      place-items: center;
+      cursor: pointer;
+    }
+
+    .tool.active {
+      background: #3a3f46
+    }
+
+    .tool .icon {
+      font-size: 25px;
+      line-height: 1;
+      color: #d6d9dd
+    }
+
+    .tool .label {
+      font-size: 11px;
+      color: #c8ccd1
+    }
+
+    .tool.active .icon,
+    .tool.active .label {
+      color: #e0e3e7
+    }
+
+    /* ---------- projet ---------- */
+    .project {
+      position: absolute;
+      left: 12px;
+      right: 12px;
+      bottom: var(--bottom-h);
+      height: var(--container-h);
+      border: 0;
+      border-radius: 7px;
+      background: #30343a;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 14px;
+      color: #d6d9dd;
+      font-size: 14px;
+    }
+
+    /* ---------- navigation ---------- */
+    .bottom {
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      height: var(--bottom-h);
+      background: #2d3035;
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      padding-bottom: env(safe-area-inset-bottom);
+    }
+
+    .nav {
+      min-width: 0;
+      display: grid;
+      place-items: center;
+      align-content: center;
+      gap: 4px;
+      color: #cfd3d8;
+      font-size: 10px;
+    }
+
+    .nav .ni {
+      font-size: 22px;
+      line-height: 1
+    }
+
+    .nav.active {
+      color: #e0e3e7
+    }
+
+    @media(max-width:720px) {
+      :root {
+        --u: 38px;
+        --bottom-h: 70px;
+        --container-h: 44px;
+      }
+
+      .preview {
+        right: 84px;
+        height: 29vh;
+        min-height: 180px
+      }
+
+      .list-shell {
+        right: 84px;
+        top: calc(29vh + 24px)
+      }
+
+      .context {
+        right: 6px;
+        width: 70px
+      }
+
+      .tool {
+        width: 66px;
+        height: 66px
+      }
+
+      .name {
+        padding: 0 7px;
+        font-size: 11px
+      }
+
+      .solo,
+      .mute {
+        font-size: 12px
+      }
+    }
+
+    @media(max-width:520px) {
+      :root {
+        --u: 34px;
+        --name-w: calc(var(--u) * 3);
+      }
+
+      .preview {
+        left: 8px;
+        right: 76px;
+        top: 8px;
+        height: 28vh
+      }
+
+      .list-shell {
+        left: 8px;
+        right: 76px;
+        top: calc(28vh + 18px)
+      }
+
+      .context {
+        right: 4px;
+        width: 68px
+      }
+
+      .tool {
+        width: 62px;
+        height: 62px
+      }
+
+      .tool .label {
+        font-size: 8px
+      }
+
+      .name {
+        font-size: 10px
+      }
+
+      .nav {
+        font-size: 8px
+      }
+
+      .nav .ni {
+        font-size: 19px
+      }
+    }
+
+    /* ===== TRACKS ONLY ===== */
+
+    :root {
+      --container-h: 48px;
+      --bottom-h: 0px;
+    }
+
+    .app {
+      position: relative;
+      width: 100%;
+      height: 100dvh;
+      max-width: 980px;
+      margin: 0 auto;
+      background: var(--bg);
+    }
+
+    .preview,
+    .context,
+    .bottom {
+      display: none !important;
+    }
+
+    .list-shell {
+      position: absolute;
+      left: 12px;
+      right: 12px;
+      top: 12px;
+      bottom: calc(var(--container-h) + 12px);
+      overflow: hidden;
+      border-radius: 0;
+    }
+
+    .project {
+      position: absolute;
+      left: 12px;
+      right: 12px;
+      bottom: 12px;
+      height: var(--container-h);
+      border: 0;
+      border-radius: 0;
+      background: #30343a;
+      display: grid;
+      grid-template-columns: var(--container-h) 1fr var(--container-h);
+      align-items: center;
+      padding: 0;
+      color: #d6d9dd;
+      box-shadow: inset 0 1px 0 #0b0c0e;
+    }
+
+    .project-title {
+      text-align: center;
+      font-size: 14px;
+      font-weight: 500;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .project-spacer {
+      width: var(--container-h);
+      height: var(--container-h);
+    }
+
+    .back-square {
+      width: var(--container-h);
+      height: var(--container-h);
+      min-width: var(--container-h);
+      min-height: var(--container-h);
+      max-width: var(--container-h);
+      max-height: var(--container-h);
+      margin: 0;
+      padding: 0;
+      border: 0;
+      border-radius: 0;
+      background: #a43d45;
+      display: grid;
+      place-items: center;
+      appearance: none;
+      -webkit-appearance: none;
+      outline: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    .back-triangle {
+      width: 0;
+      height: 0;
+      border-top: 6px solid transparent;
+      border-bottom: 6px solid transparent;
+      border-right: 9px solid rgba(255, 255, 255, .96);
+    }
+
+    @media(max-width:720px) {
+      :root {
+        --container-h: 44px;
+      }
+
+      .list-shell {
+        left: 8px;
+        right: 8px;
+        top: 8px;
+        bottom: calc(var(--container-h) + 8px);
+      }
+
+      .project {
+        left: 8px;
+        right: 8px;
+        bottom: 8px;
+      }
+    }
+
+    @media(max-width:520px) {
+      :root {
+        --container-h: 42px;
+      }
+
+      .project-title {
+        font-size: 13px;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="app">
+    <main class="list-shell">
+      <div class="list">
+
+        <!-- =========================
+           RACINE 1 / BLEU
+           profondeur maximale = 4
+           ========================= -->
+        <div class="row root" data-id="blue-root" data-parent=""
+          style="--current:#1f5fbf;--parent:#1f5fbf;--veil:rgba(31,95,191,.06)">
+          <button class="hierarchy">
+            <span class="hierarchy-fill"></span>
+            <span class="parent-strip"></span>
+            <span class="triangle-layer"><span class="triangle"></span></span>
+          </button>
+          <button class="solo">S</button>
+          <button class="mute">M</button>
+          <div class="name">Piste bleue</div>
+          <div class="media">
+            <div class="wave" data-wave="1"></div>
+          </div>
+        </div>
+
+        <div class="row" data-id="blue-l2" data-parent="blue-root"
+          style="--current:#3479d6;--parent:#1f5fbf;--veil:rgba(52,121,214,.05)">
+          <button class="hierarchy">
+            <span class="hierarchy-fill"></span>
+            <span class="parent-strip"></span>
+            <span class="triangle-layer"><span class="triangle"></span></span>
+          </button>
+          <button class="solo">S</button>
+          <button class="mute">M</button>
+          <div class="name">Bleu niveau 2</div>
+          <div class="media">
+            <div class="thumb-strip">
+              <div class="thumb"></div>
+              <div class="thumb"></div>
+              <div class="thumb"></div>
+              <div class="thumb"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="row" data-id="blue-l3" data-parent="blue-l2"
+          style="--current:#5c96e5;--parent:#3479d6;--veil:rgba(92,150,229,.04)">
+          <button class="hierarchy">
+            <span class="hierarchy-fill"></span>
+            <span class="parent-strip"></span>
+            <span class="triangle-layer"><span class="triangle"></span></span>
+          </button>
+          <button class="solo">S</button>
+          <button class="mute">M</button>
+          <div class="name">Bleu niveau 3</div>
+          <div class="media">
+            <div class="wave" data-wave="2"></div>
+          </div>
+        </div>
+
+        <div class="row leaf" data-id="blue-l4a" data-parent="blue-l3"
+          style="--current:#83b1ee;--parent:#5c96e5;--veil:rgba(131,177,238,.035)">
+          <button class="hierarchy">
+            <span class="hierarchy-fill"></span>
+            <span class="parent-strip"></span>
+            <span class="triangle-layer"><span class="triangle"></span></span>
+          </button>
+          <button class="solo">S</button>
+          <button class="mute">M</button>
+          <div class="name">Bleu niveau 4 A</div>
+          <div class="media">
+            <div class="text-preview">Feuille — pas de triangle.</div>
+          </div>
+        </div>
+
+        <div class="row leaf" data-id="blue-l4b" data-parent="blue-l3"
+          style="--current:#83b1ee;--parent:#5c96e5;--veil:rgba(131,177,238,.035)">
+          <button class="hierarchy">
+            <span class="hierarchy-fill"></span>
+            <span class="parent-strip"></span>
+            <span class="triangle-layer"><span class="triangle"></span></span>
+          </button>
+          <button class="solo">S</button>
+          <button class="mute">M</button>
+          <div class="name">Bleu niveau 4 B</div>
+          <div class="media">
+            <div class="image-preview"></div>
+          </div>
+        </div>
+
+        <!-- =========================
+           RACINE 2 / VERT
+           ========================= -->
+        <div class="row root" data-id="green-root" data-parent=""
+          style="--current:#287447;--parent:#287447;--veil:rgba(40,116,71,.06)">
+          <button class="hierarchy">
+            <span class="hierarchy-fill"></span>
+            <span class="parent-strip"></span>
+            <span class="triangle-layer"><span class="triangle"></span></span>
+          </button>
+          <button class="solo">S</button>
+          <button class="mute">M</button>
+          <div class="name">Piste verte</div>
+          <div class="media">
+            <div class="wave" data-wave="3"></div>
+          </div>
+        </div>
+
+        <div class="row" data-id="green-l2" data-parent="green-root"
+          style="--current:#3f9660;--parent:#287447;--veil:rgba(63,150,96,.05)">
+          <button class="hierarchy">
+            <span class="hierarchy-fill"></span>
+            <span class="parent-strip"></span>
+            <span class="triangle-layer"><span class="triangle"></span></span>
+          </button>
+          <button class="solo">S</button>
+          <button class="mute">M</button>
+          <div class="name">Vert niveau 2</div>
+          <div class="media">
+            <div class="image-preview" style="filter:hue-rotate(35deg) brightness(.82)"></div>
+          </div>
+        </div>
+
+        <div class="row leaf" data-id="green-l3a" data-parent="green-l2"
+          style="--current:#63b57b;--parent:#3f9660;--veil:rgba(99,181,123,.04)">
+          <button class="hierarchy">
+            <span class="hierarchy-fill"></span>
+            <span class="parent-strip"></span>
+            <span class="triangle-layer"><span class="triangle"></span></span>
+          </button>
+          <button class="solo">S</button>
+          <button class="mute">M</button>
+          <div class="name">Vert niveau 3 A</div>
+          <div class="media">
+            <div class="text-preview">Feuille verte.</div>
+          </div>
+        </div>
+
+        <div class="row leaf" data-id="green-l3b" data-parent="green-l2"
+          style="--current:#63b57b;--parent:#3f9660;--veil:rgba(99,181,123,.04)">
+          <button class="hierarchy">
+            <span class="hierarchy-fill"></span>
+            <span class="parent-strip"></span>
+            <span class="triangle-layer"><span class="triangle"></span></span>
+          </button>
+          <button class="solo">S</button>
+          <button class="mute">M</button>
+          <div class="name">Vert niveau 3 B</div>
+          <div class="media">
+            <div class="wave" data-wave="4"></div>
+          </div>
+        </div>
+
+        <!-- =========================
+           RACINE 3 / ROUGE
+           ========================= -->
+        <div class="row root" data-id="red-root" data-parent=""
+          style="--current:#a43d45;--parent:#a43d45;--veil:rgba(164,61,69,.06)">
+          <button class="hierarchy">
+            <span class="hierarchy-fill"></span>
+            <span class="parent-strip"></span>
+            <span class="triangle-layer"><span class="triangle"></span></span>
+          </button>
+          <button class="solo">S</button>
+          <button class="mute">M</button>
+          <div class="name">Piste rouge</div>
+          <div class="media">
+            <div class="thumb-strip">
+              <div class="thumb"></div>
+              <div class="thumb"></div>
+              <div class="thumb"></div>
+              <div class="thumb"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="row leaf" data-id="red-l2a" data-parent="red-root"
+          style="--current:#c65f68;--parent:#a43d45;--veil:rgba(198,95,104,.045)">
+          <button class="hierarchy">
+            <span class="hierarchy-fill"></span>
+            <span class="parent-strip"></span>
+            <span class="triangle-layer"><span class="triangle"></span></span>
+          </button>
+          <button class="solo">S</button>
+          <button class="mute">M</button>
+          <div class="name">Rouge niveau 2 A</div>
+          <div class="media">
+            <div class="wave" data-wave="5"></div>
+          </div>
+        </div>
+
+        <div class="row leaf" data-id="red-l2b" data-parent="red-root"
+          style="--current:#c65f68;--parent:#a43d45;--veil:rgba(198,95,104,.045)">
+          <button class="hierarchy">
+            <span class="hierarchy-fill"></span>
+            <span class="parent-strip"></span>
+            <span class="triangle-layer"><span class="triangle"></span></span>
+          </button>
+          <button class="solo">S</button>
+          <button class="mute">M</button>
+          <div class="name">Rouge niveau 2 B</div>
+          <div class="media">
+            <div class="text-preview">Feuille rouge.</div>
+          </div>
+        </div>
+
+      </div>
+    </main>
+    <div class="project">
+      <button class="back-square" aria-label="Retour">
+        <span class="back-triangle"></span>
+      </button>
+      <span class="project-title">Songs numéro 1</span>
+      <span class="project-spacer"></span>
+    </div>
+  </div>
+
+  <script>
+    (() => {
+      const rows = [...document.querySelectorAll('.row')];
+
+      // ---------- Aperçus audio ----------
+      document.querySelectorAll('.wave').forEach((wave, wi) => {
+        const n = 78;
+        for (let i = 0; i < n; i++) {
+          const bar = document.createElement('i');
+          const h =
+            18 +
+            Math.abs(Math.sin((i + wi * 8) * 0.39)) * 58 +
+            Math.abs(Math.sin(i * 0.12)) * 18;
+          bar.style.setProperty('--h', Math.min(94, h) + '%');
+          wave.appendChild(bar);
+        }
+      });
+
+      // ---------- Arbre ----------
+      function childrenOf(id) {
+        return rows.filter(row => row.dataset.parent === id);
+      }
+
+      function hasChildren(row) {
+        return childrenOf(row.dataset.id).length > 0;
+      }
+
+      function allDescendants(id) {
+        const result = [];
+        const queue = [...childrenOf(id)];
+
+        while (queue.length) {
+          const row = queue.shift();
+          result.push(row);
+          queue.push(...childrenOf(row.dataset.id));
+        }
+        return result;
+      }
+
+      function hideAllDescendants(id) {
+        allDescendants(id).forEach(row => {
+          row.hidden = true;
+        });
+      }
+
+      function showDirectChildren(id) {
+        childrenOf(id).forEach(row => {
+          row.hidden = false;
+
+          // Si le sous-parent est fermé, ses propres enfants restent masqués.
+          if (!row.classList.contains('open')) {
+            hideAllDescendants(row.dataset.id);
+          }
+        });
+      }
+
+      // Etat initial :
+      // seulement les 3 racines sont visibles, toutes fermées.
+      rows.forEach(row => {
+        if (row.dataset.parent === '') {
+          row.hidden = false;
+          row.classList.remove('open');
+        } else {
+          row.hidden = true;
+          row.classList.remove('open');
+        }
+
+        if (hasChildren(row)) {
+          row.classList.remove('leaf');
+        } else {
+          row.classList.add('leaf');
+          row.classList.remove('open');
+        }
+      });
+
+      // Clic sur le carré Hiérarchie.
+      document.querySelectorAll('.hierarchy').forEach(button => {
+        button.addEventListener('click', event => {
+          event.preventDefault();
+          event.stopPropagation();
+
+          const row = button.closest('.row');
+
+          // Une feuille n'a rien à ouvrir.
+          if (!hasChildren(row)) return;
+
+          const isOpening = !row.classList.contains('open');
+
+          if (isOpening) {
+            row.classList.add('open');
+            showDirectChildren(row.dataset.id);
+          } else {
+            row.classList.remove('open');
+            hideAllDescendants(row.dataset.id);
+          }
+        });
+      });
+
+      // Solo / Mute
+      document.querySelectorAll('.solo,.mute').forEach(button => {
+        button.addEventListener('click', event => {
+          event.preventDefault();
+          event.stopPropagation();
+          button.classList.toggle('active');
+        });
+      });
+
+      // Sélection
+      rows.forEach(row => {
+        row.addEventListener('click', () => {
+          rows.forEach(r => r.classList.remove('selected'));
+          row.classList.add('selected');
+        });
+      });
+    });
+    const backButton = document.querySelector('.back-square');
+    if (backButton) {
+      backButton.addEventListener('click', () => {
+        backButton.animate(
+          [{ filter: 'brightness(1)' }, { filter: 'brightness(1.25)' }, { filter: 'brightness(1)' }],
+          { duration: 180 }
+        );
+      });
+    }
+}) ();
+  </script>
+</body>
+
+</html>

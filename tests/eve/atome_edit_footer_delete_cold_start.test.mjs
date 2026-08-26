@@ -13,6 +13,7 @@ test('footer Delete prepares its lazy canonical handler before unified invocatio
     globalThis.HTMLElement = dom.window.HTMLElement;
     let loaded = false;
     const calls = [];
+    const payloadOptions = [];
     const runtime = createAtomeEditFooterDefinitionInvocationRuntime({
         state: { activeAtomeId: 'selected_a' },
         ensureDeletePanelModule: async () => { loaded = true; },
@@ -25,7 +26,10 @@ test('footer Delete prepares its lazy canonical handler before unified invocatio
             return loaded ? { ok: true } : { ok: false, error: 'tool_handler_missing_v2' };
         },
         resolveDefinitionToolId: (definition) => definition.toolId,
-        buildToolExtraInput: () => ({ selection_ids: ['selected_a'] }),
+        buildToolExtraInput: (options) => {
+            payloadOptions.push(options);
+            return { selection_ids: options.preferActiveAtomeOnly ? [options.activeAtomeId] : ['stale_a', 'selected_a'] };
+        },
         isContextBoundTransportToolId: () => false
     });
 
@@ -37,6 +41,7 @@ test('footer Delete prepares its lazy canonical handler before unified invocatio
     assert.equal(loaded, true);
     assert.equal(calls.length, 1);
     assert.deepEqual(calls[0].extraInput.selection_ids, ['selected_a']);
+    assert.equal(payloadOptions[0].preferActiveAtomeOnly, true);
     dom.window.close();
     delete globalThis.window;
     delete globalThis.document;

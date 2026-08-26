@@ -14,15 +14,25 @@ and supplies `project_id`, `tx_id`, `refreshState`, and `realtimeBroadcast`.
 BevyUI hit results now expose their logical surface point alongside the hit box;
 neither value is persistent state.
 
-Canonical Molecule creation/absorb/ungroup/delete remain public module exports
-of `tool_runtime_atome_mutation.js`. The extracted
-`tool_runtime_atome_mutation_shared.js` and `tool_runtime_atome_duplicate.js`
-are internal factorization boundaries and do not expose a parallel mutation
-path. `deleteCanonicalMolecule` closes the registered group-timeline API only
-after its canonical owner/member batch succeeds; contextual Molecule Delete
-loads and invokes the existing `ui.delete.selection` owner rather than exposing
-another deletion endpoint. Structured List/Matrix readers never expose
-`__deleted`/`deleted_at` tombstones as project items.
+Canonical Molecule creation/absorb/extract/ungroup/delete remain public module
+exports of `tool_runtime_atome_mutation.js`, including
+`deleteCanonicalMoleculeMember({ projectId, moleculeId, memberId })`. The
+internal `tool_runtime_molecule_mutation.js`,
+`tool_runtime_molecule_timeline.js`, `tool_runtime_molecule_structure.js`,
+`tool_runtime_atome_mutation_shared.js`, and
+`tool_runtime_atome_duplicate.js` are cohesive implementation boundaries and
+do not expose parallel mutation paths. Member Delete removes its clip and
+reindexes survivors in one batch; deleting the final live member also deletes
+the owner and closes its registered timeline. Structured List/Matrix readers
+never expose `__deleted`/`deleted_at` tombstones as project items.
+
+Visual text editing reuses `text.edit.begin`, `text.edit.commit`, the single
+hidden editor and the existing Atome contextual rail. Its public contextual
+state exposes `railOnly`; an outside hit in the `eve_bevy_ui_project_view` tree
+commits unless the hit remains inside `project_view_visual`, while Flower and
+style-panel hits keep the edit session alive. `openProjectViewAtomeMenu` is the
+Visual gesture adapter to the canonical Flower context; List/Matrix item menus
+retain `openProjectViewItemMenu` and their surface-item action set.
 
 Project activation is an internal latest-wins operation owned by
 `activateProjectWorkspace`. It prepares the persisted representation through
