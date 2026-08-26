@@ -104,15 +104,15 @@ test('Bevy project renderer guards lock canvas ownership, drag, and video playba
     assert.doesNotMatch(syncBody, /setSourcePlayback\s*\(/);
     // The MTrax domain (and its timeline playback driver) was deleted. The project
     // transport now drives Bevy video decode from the eVeIntuition media reader
-    // and from the structured project-view queue that resolves the currently
-    // projected List/Matrix surfaces. Guard that no other stray caller appears
-    // outside those two canonical transport owners and the defining runtime.
+    // and the shared project-view item model used by every structured queue.
+    // Guard that no other stray caller appears outside those two canonical
+    // transport owners and the defining runtime.
     const setBevyCallers = jsFilesUnder('eVe')
         .filter((file) => /setBevyVideoDecodePlayback/.test(readFileSync(file, 'utf8')))
         .map((file) => file.slice(repoRoot.length + 1).replaceAll('\\', '/'))
         .filter((file) => file !== 'eVe/domains/rendering/bevy_video_decode_source_runtime.js');
     assert.deepEqual(setBevyCallers, [
-        'eVe/domains/rendering/project_view_playback_runtime.js',
+        'eVe/domains/rendering/project_view_playback_item_model.js',
         'eVe/intuition/runtime/eve_intuition/media_reader_tool_runtime.js'
     ]);
 
