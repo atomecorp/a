@@ -264,7 +264,13 @@ import {
         }
         if ((mode === 'tauri' || mode === 'wasm') && bytes) {
           if (mode === 'wasm' && wasm && typeof wasm.audio_load_clip_from_bytes === 'function') {
-            try { wasm.audio_load_clip_from_bytes(id, bytes); return true; }
+            try {
+              var durationSeconds = Number(wasm.audio_load_clip_from_bytes(id, bytes));
+              return {
+                success: true,
+                duration_seconds: Number.isFinite(durationSeconds) && durationSeconds > 0 ? durationSeconds : null
+              };
+            }
             catch (e) { emitError('wasm load(' + id + ')', e); throw e; }
           }
           return invoke('audio_load_clip_from_bytes', { id: id, bytes: Array.from(bytes) }).catch(function (e) {

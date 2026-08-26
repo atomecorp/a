@@ -8,11 +8,24 @@ import {
 } from './molecule_ui_acceptance_support.mjs';
 
 export const structuredRows = (page) => page.evaluate(async () => {
-    const { readProjectViewSurfaceState } = await import('/eVe/domains/rendering/project_view_surface_runtime.js');
+    const [{ readProjectViewSurfaceState }, navigation] = await Promise.all([
+        import('/eVe/domains/rendering/project_view_surface_runtime.js'),
+        import('/eVe/domains/rendering/project_view_navigation.js')
+    ]);
     const state = readProjectViewSurfaceState();
-    return (state.content?.entries || []).map((entry, index) => ({
-        index, id: String(entry.id || ''), depth: Number(entry.depth || 0),
-        entity: String(entry.visualRecord?.properties?.molecule_entity || ''), label: String(entry.label || '')
+    if (Array.isArray(state.content?.entries)) {
+        return state.content.entries.map((entry, index) => ({
+            index, id: String(entry.id || ''), depth: Number(entry.depth || 0),
+            entity: String(entry.visualRecord?.properties?.molecule_entity || ''), label: String(entry.label || '')
+        }));
+    }
+    const records = window.eveToolBase?.getProjectSceneState?.(state.projectId)?.records || [];
+    return navigation.containerChildren(records).map((record, index) => ({
+        index,
+        id: String(record?.id || record?.atome_id || ''),
+        depth: 0,
+        entity: String(record?.properties?.molecule_entity || ''),
+        label: String(record?.properties?.name || record?.name || '')
     }));
 });
 
@@ -26,29 +39,38 @@ export const listIndex = async (page, id) => (
 
 export const expandCanonicalListMolecule = async (page, memberIds) => {
     const clickChevronFor = async (predicate) => {
-        const rows = await structuredRows(page);
-        const row = rows.find(predicate);
-        assert(row, `list_expand_row_missing:${JSON.stringify(rows)}`);
-        const target = await listNode(page, `project_view_list_entry_${row.index}_hierarchy_chevron`);
-        assert(target, `list_expand_chevron_missing:${row.index}`);
-        await clickCanvasTarget(page, target);
-        await wait(250);
-        return row;
+        let lastRows = [];
+        for (let attempt = 0; attempt < 3; attempt += 1) {
+            const rows = await structuredRows(page);
+            lastRows = rows;
+            const row = rows.find(predicate);
+            assert(row, `list_expand_row_missing:${JSON.stringify(rows)}`);
+            const alreadyExpanded = rows.some((candidate, index) => (
+                index > row.index && candidate.depth === row.depth + 1 && memberIds.includes(candidate.id)
+            ));
+            if (alreadyExpanded) return row;
+            const target = await listNode(page, `project_view_list_entry_${row.index}_hierarchy_chevron`);
+            assert(target, `list_expand_chevron_missing:${row.index}`);
+            await clickCanvasTarget(page, target);
+            for (let sample = 0; sample < 20; sample += 1) {
+                await wait(100);
+                const projected = await structuredRows(page);
+                lastRows = projected;
+                if (projected.some((candidate, index) => (
+                    index > row.index && candidate.depth === row.depth + 1 && memberIds.includes(candidate.id)
+                ))) return row;
+            }
+        }
+        throw new Error(`list_expand_direct_members_missing:${JSON.stringify(lastRows)}`);
     };
     await clickChevronFor((row) => row.entity === 'molecule');
-    await clickChevronFor((row) => row.entity === 'section');
-    let rows = await structuredRows(page);
-    for (const track of rows.filter((row) => row.entity === 'track')) {
-        const target = await listNode(page, `project_view_list_entry_${track.index}_hierarchy_chevron`);
-        if (target) { await clickCanvasTarget(page, target); await wait(180); }
-        rows = await structuredRows(page);
-        if (memberIds.every((id) => rows.some((row) => row.id === id))) break;
-    }
-    rows = await structuredRows(page);
-    assert(memberIds.every((id) => rows.some((row) => row.id === id && row.depth >= 3)),
+    const rows = await structuredRows(page);
+    assert(memberIds.every((id) => rows.some((row) => row.id === id && row.depth === 1)),
         `list_members_not_expanded:${JSON.stringify(rows)}`);
     assert(memberIds.every((id) => !rows.some((row) => row.id === id && row.depth === 0)),
         `list_member_floating_at_root:${JSON.stringify(rows)}`);
+    assert(!rows.some((row) => row.entity === 'section' || row.entity === 'track'),
+        `list_internal_timeline_leaked:${JSON.stringify(rows)}`);
     return rows;
 };
 
@@ -62,10 +84,19 @@ export const contextualTool = async (page, ids) => {
     return null;
 };
 
-export const moleculePlayTool = (page) => contextualTool(page, [
-    'atome_contextual_tool_container_play', 'atome_contextual_tool_play',
-    'atome_contextual_tool_molecule_play'
-]);
+export const moleculePlayTool = async (page) => {
+    const ids = [
+        'atome_contextual_tool_container_play', 'atome_contextual_tool_play',
+        'atome_contextual_tool_molecule_play'
+    ];
+    await waitFor(page, (expectedIds) => {
+        const tree = (window.eveBevyUiRuntime?.readOverlayDiagnostics?.()?.trees || [])
+            .find((entry) => entry.id === 'eve_bevy_panel_atome_contextual_edit');
+        const interactive = (tree?.interactiveNodes || []).map((entry) => String(entry.id || entry));
+        return { ok: expectedIds.some((id) => interactive.includes(id)), interactive };
+    }, ids);
+    return contextualTool(page, ids);
+};
 
 export const memberPlayTool = async (page) => {
     await waitFor(page, async () => {
@@ -78,8 +109,24 @@ export const memberPlayTool = async (page) => {
 };
 
 export const selectListRow = async (page, id) => {
-    const index = await listIndex(page, id);
-    assert(index >= 0, `list_select_row_missing:${id}`);
+    const located = await waitFor(page, async (expectedId) => {
+        const { readProjectViewSurfaceState } = await import('/eVe/domains/rendering/project_view_surface_runtime.js');
+        const state = readProjectViewSurfaceState();
+        const rows = (state.content?.entries || []).map((entry, index) => ({
+            index, id: String(entry.id || ''), depth: Number(entry.depth || 0), label: String(entry.label || '')
+        }));
+        const index = rows.find((row) => row.id === expectedId)?.index ?? -1;
+        return {
+            ok: index >= 0,
+            index,
+            mode: state.mode,
+            projectId: state.projectId,
+            contentProjectId: state.content?.projectId || '',
+            recordCount: Number(state.content?.recordCount || 0),
+            rows
+        };
+    }, id);
+    const index = located.index;
     const target = await listNode(page, `project_view_list_entry_${index}_name`);
     assert(target, `list_select_target_missing:${id}`);
     const before = await page.evaluate(async (expected) => {

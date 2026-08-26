@@ -2,12 +2,37 @@ import assert from 'node:assert/strict';
 import { test, vi } from 'vitest';
 import {
     createProjectViewWindowState,
-    loadProjectViewPage
+    loadProjectViewPage,
+    resetProjectViewWindowState
 } from '../../eVe/domains/rendering/project_view_records.js';
 import { createProjectViewMatrixContent } from '../../eVe/domains/rendering/project_view_matrix_content.js';
 import { createProjectViewListContent } from '../../eVe/domains/rendering/project_view_list_content.js';
 import { createProjectViewListDragRuntime } from '../../eVe/domains/rendering/project_view_list_drag_runtime.js';
 import { createProjectViewMatrixDragRuntime } from '../../eVe/domains/rendering/project_view_matrix_drag_runtime.js';
+import {
+    enterProjectViewLevel,
+    resetProjectViewNavigation
+} from '../../eVe/domains/rendering/project_view_navigation.js';
+import { readCurrentInsertionTarget } from '../../eVe/domains/rendering/project_view_insertion_target.js';
+import { buildCanonicalMoleculeTimeline } from '../../eVe/intuition/tools/core/tool_runtime_atome_mutation.js';
+
+test('a new project import cannot inherit the previous project temporal insertion level', () => {
+    resetProjectViewNavigation('project_old', 'Old');
+    enterProjectViewLevel({
+        id: 'track_old',
+        properties: {
+            molecule_entity: 'track',
+            owner_atome_id: 'molecule_old',
+            section_id: 'section_old',
+            track_id: 'track_old'
+        }
+    });
+    assert.deepEqual(readCurrentInsertionTarget({ projectId: 'project_new' }), {
+        projectId: 'project_new',
+        parentId: 'project_new',
+        temporal: null
+    });
+});
 
 test('List and Matrix keep the real meta.project_id sound and exclude system projections', async () => {
     const projectId = 'audio_prj2';
@@ -51,6 +76,47 @@ test('project pages retain a child whose ancestor is outside the page when its c
     assert.equal(result.ok, true);
     assert.deepEqual(result.records.map((record) => record.id), ['child_without_local_parent']);
     assert.equal(windowState.hasNext, false, 'an exact final page must not create a phantom next page');
+});
+
+test('resetting a project view window retires an in-flight read from the previous project', async () => {
+    const windowState = createProjectViewWindowState();
+    let resolveRead;
+    const pending = loadProjectViewPage({
+        projectId: 'project_old',
+        windowState,
+        readList: () => new Promise((resolve) => { resolveRead = resolve; })
+    });
+    const replacement = resetProjectViewWindowState(windowState);
+    resolveRead({ records: [] });
+    const result = await pending;
+    assert.equal(result.stale, true);
+    assert.equal(replacement.revision, 0);
+    assert.equal(replacement.loaded, false);
+});
+
+test('project pages never project canonical deletion tombstones', async () => {
+    const result = await loadProjectViewPage({
+        projectId: 'project_deleted_rows',
+        windowState: createProjectViewWindowState(),
+        readList: async () => ({
+            records: [{
+                atome_id: 'deleted_molecule', atome_type: 'group',
+                meta: { project_id: 'project_deleted_rows' },
+                properties: { kind: 'group', __deleted: true }
+            }, {
+                atome_id: 'deleted_child', atome_type: 'audio',
+                meta: { project_id: 'project_deleted_rows' },
+                properties: { kind: 'audio', deleted_at: '2026-08-24T00:00:00Z' }
+            }, {
+                atome_id: 'visible_child', atome_type: 'image',
+                meta: { project_id: 'project_deleted_rows' },
+                properties: { kind: 'image' }
+            }],
+            totalCount: 3
+        })
+    });
+    assert.equal(result.ok, true);
+    assert.deepEqual(result.records.map((record) => record.id), ['visible_child']);
 });
 
 test('Matrix never paints a rejected canonical selection as selected', async () => {
@@ -377,6 +443,72 @@ test('List overlap reaches the canonical Molecule owner after the same 500ms rel
         assert.deepEqual(new Set(batches[0].slice(1).map((event) => event.atome_id)), new Set(['first', 'second']));
     } finally {
         vi.useRealTimers();
+        globalThis.window = previousWindow;
+    }
+});
+
+test('dropping a direct List member on the footer Back button runs one canonical extraction batch', async () => {
+    const previousWindow = globalThis.window;
+    const batches = [];
+    const projectId = 'project_list_extract';
+    const members = ['first', 'middle', 'last'].map((id, hierarchy_order) => ({
+        atome_id: id, type: 'shape', project_id: projectId, parent_id: 'molecule_extract',
+        properties: { hierarchy_order, duration_sec: hierarchy_order + 1 }
+    }));
+    const timeline = buildCanonicalMoleculeTimeline({
+        projectId, moleculeId: 'molecule_extract', members
+    });
+    const owner = {
+        atome_id: 'molecule_extract', type: 'group', project_id: projectId, parent_id: projectId,
+        properties: { kind: 'group', molecule_timeline: timeline }
+    };
+    const records = [owner, ...members];
+    const entries = members.map((record) => ({
+        id: record.atome_id,
+        label: record.atome_id,
+        visualRecord: { ...record, id: record.atome_id, properties: { ...record.properties, molecule_entity: 'atome' } }
+    }));
+    globalThis.window = {
+        addEventListener: () => {}, removeEventListener: () => {}, dispatchEvent: () => {},
+        CustomEvent: class CustomEvent {},
+        eveBevyUiRuntime: {
+            hitTestAtClientPoint: () => ({
+                nodeId: 'project_view_footer_back',
+                box: { x: 0, y: 0, width: 48, height: 48 }, point: { x: 24, y: 24 }
+            })
+        },
+        Atome: {
+            commitBatch: async (events, options) => { batches.push({ events, options }); return { ok: true }; }
+        },
+        eveMoleculeTimelineApi: { listOpenGroupTimelines: () => ({ timelines: [] }) }
+    };
+    try {
+        resetProjectViewNavigation(projectId, 'Extract');
+        enterProjectViewLevel({
+            id: owner.atome_id,
+            properties: { name: 'Molecule', molecule_entity: 'molecule', owner_atome_id: owner.atome_id }
+        });
+        const state = {
+            projectId, entries, records,
+            selectedIds: [], primaryId: null, dragSession: null, dragPreview: null,
+            readList: async () => records
+        };
+        const runtime = createProjectViewListDragRuntime({
+            state,
+            entryFor: (id) => entries.find((entry) => entry.id === id) || null,
+            load: async () => ({ ok: true }), requestRefresh: async () => {},
+            rebuildEntries: () => {}, timelineApi: () => globalThis.window.eveMoleculeTimelineApi
+        });
+        runtime.listDrag.begin('middle', { client_x: 10, client_y: 10 });
+        runtime.listDrag.move({ client_x: 24, client_y: 24 });
+        const result = await runtime.listDrag.end({ client_x: 24, client_y: 24 });
+        assert.equal(result.ok, true);
+        assert.equal(result.operation, 'extract');
+        assert.equal(result.member_id, 'middle');
+        assert.equal(batches.length, 1);
+        assert.equal(batches[0].events.find((event) => event.atome_id === 'middle').parent_id, projectId);
+        assert.deepEqual(result.timeline.clips.map((clip) => clip.source.atome_id), ['first', 'last']);
+    } finally {
         globalThis.window = previousWindow;
     }
 });

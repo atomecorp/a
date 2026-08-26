@@ -84,6 +84,42 @@ export const diffPng = (leftPath, rightPath) => {
     };
 };
 
+export const diffPngRegion = (leftPath, rightPath, region = {}) => {
+    const left = readPng(leftPath);
+    const right = readPng(rightPath);
+    if (left.width !== right.width || left.height !== right.height) {
+        return { same_size: false, differing_pixel_ratio: 1, max_channel_delta: 255, mean_absolute_channel_delta: 255 };
+    }
+    const startX = Math.max(0, Math.floor(Number(region.x) || 0));
+    const startY = Math.max(0, Math.floor(Number(region.y) || 0));
+    const endX = Math.min(left.width, Math.ceil(startX + Math.max(1, Number(region.width) || 1)));
+    const endY = Math.min(left.height, Math.ceil(startY + Math.max(1, Number(region.height) || 1)));
+    let differingPixels = 0;
+    let maxChannelDelta = 0;
+    let absoluteDelta = 0;
+    for (let y = startY; y < endY; y += 1) {
+        for (let x = startX; x < endX; x += 1) {
+            const index = ((y * left.width) + x) * 4;
+            let differs = false;
+            for (let channel = 0; channel < 4; channel += 1) {
+                const delta = Math.abs(left.data[index + channel] - right.data[index + channel]);
+                absoluteDelta += delta;
+                maxChannelDelta = Math.max(maxChannelDelta, delta);
+                if (delta > 0) differs = true;
+            }
+            if (differs) differingPixels += 1;
+        }
+    }
+    const pixelCount = Math.max(1, (endX - startX) * (endY - startY));
+    return {
+        same_size: true,
+        region: { x: startX, y: startY, width: endX - startX, height: endY - startY },
+        differing_pixel_ratio: differingPixels / pixelCount,
+        max_channel_delta: maxChannelDelta,
+        mean_absolute_channel_delta: absoluteDelta / (pixelCount * 4)
+    };
+};
+
 export const waitFor = async (page, predicate, argument = null, timeoutMs = 30000) => {
     const startedAt = Date.now();
     let last = null;
@@ -155,19 +191,30 @@ export const recordCenter = async (
             .filter((id) => id.includes('molecule') || id.includes('main_menu')).slice(0, 60);
         throw new Error(`record_missing:${relevantIds.join(',')}`);
     }
-    const client = sceneCoordinates ? await page.evaluate(async ({ recordId }) => {
-        const surface = document.getElementById('eve_surface_project');
-        const { getRenderSurfaceState, readRenderSurfaceSize } = await import('/eVe/domains/rendering/surface_runtime.js');
-        const { surfaceTargetClientRect } = await import('/eVe/domains/rendering/surface_hit_target_runtime.js');
-        const runtime = getRenderSurfaceState(surface);
-        const atom = runtime?.scene?.byId?.get?.(recordId)
-            || runtime?.scene?.atoms?.find?.((entry) => entry.id === recordId);
-        const rect = surfaceTargetClientRect(surface, atom, readRenderSurfaceSize(surface));
-        return rect ? {
-            left: rect.left, top: rect.top, width: rect.width, height: rect.height,
-            atom_bounds: atom?.bounds || null
-        } : { atom_bounds: atom?.bounds || null };
-    }, { recordId: record.id }) : null;
+    let client = null;
+    if (sceneCoordinates) {
+        const deadline = Date.now() + 8000;
+        do {
+            client = await page.evaluate(async ({ recordId }) => {
+                const surface = document.getElementById('eve_surface_project');
+                const { getRenderSurfaceState, readRenderSurfaceSize } = await import('/eVe/domains/rendering/surface_runtime.js');
+                const { surfaceTargetClientRect } = await import('/eVe/domains/rendering/surface_hit_target_runtime.js');
+                const runtime = getRenderSurfaceState(surface);
+                const atom = runtime?.scene?.byId?.get?.(recordId)
+                    || runtime?.scene?.atoms?.find?.((entry) => entry.id === recordId);
+                const rect = surfaceTargetClientRect(surface, atom, readRenderSurfaceSize(surface));
+                return rect ? {
+                    left: rect.left, top: rect.top, width: rect.width, height: rect.height,
+                    atom_bounds: atom?.bounds || null
+                } : { atom_bounds: atom?.bounds || null };
+            }, { recordId: record.id });
+            if (client?.left != null) break;
+            await wait(100);
+        } while (Date.now() < deadline);
+        if (client?.left == null) {
+            throw new Error(`record_not_projected:${record.id}:${JSON.stringify(client || {})}`);
+        }
+    }
     const properties = record.properties || {};
     const left = client?.left ?? Number(properties.left || 0);
     const top = client?.top ?? Number(properties.top || 0);
@@ -277,6 +324,38 @@ export const findBevyUiNodeTarget = (page, {
     })
 );
 
+export const findBevyUiNodeTargets = (page, {
+    nodePrefix = '', treeId = '', step = 3
+} = {}) => (
+    page.evaluate(({ expectedPrefix, expectedTree, stride }) => {
+        const surface = document.getElementById('eve_surface_project');
+        const runtime = window.eveBevyUiRuntime;
+        const rect = surface?.getBoundingClientRect?.();
+        if (!surface || !runtime?.hitTestAtClientPoint || !rect) return [];
+        const increment = Math.max(1, Number(stride) || 3);
+        const targets = new Map();
+        for (let y = rect.top + 1; y < rect.bottom; y += increment) {
+            for (let x = rect.left + 1; x < rect.right; x += increment) {
+                const hit = runtime.hitTestAtClientPoint({ surface, clientX: x, clientY: y });
+                const nodeId = String(hit?.nodeId || '');
+                if (!hit || (expectedTree && hit.treeId !== expectedTree)
+                    || (expectedPrefix && !nodeId.startsWith(expectedPrefix))
+                    || targets.has(nodeId)) continue;
+                targets.set(nodeId, {
+                    id: nodeId, x, y, width: increment, height: increment,
+                    coordinate_source: 'scene', hit: {
+                        nodeId, treeId: hit.treeId, box: hit.box || null
+                    }
+                });
+            }
+        }
+        return [...targets.values()];
+    }, {
+        expectedPrefix: String(nodePrefix || ''),
+        expectedTree: String(treeId || ''), stride: step
+    })
+);
+
 // Le meme balayage, mais PATIENT. `findBevyUiNodeTarget` regarde une seule fois :
 // si l'arbre n'est pas encore projete, il repond `null` et l'appelant conclut a
 // tort que la cible n'existe pas. Sur un rasteriseur logiciel — tout run headless
@@ -346,6 +425,21 @@ export const visibleMenuTool = async (page, projectId, toolKey) => {
         const expectedNodeId = target.id.startsWith(recordPrefix)
             ? target.id.slice(recordPrefix.length).replace(/_background$/, '')
             : `eve_bevy_ui_main_menu_tool_${toolKey}`;
+        const recordPoint = await playwrightPointForClientTarget(page, target);
+        const recordHit = await readBevyUiHit(page, recordPoint);
+        if (recordHit.nodeId === expectedNodeId && recordHit.treeId === 'eve_bevy_ui_main_menu') {
+            await waitForSettledMainMenu(page);
+            const settledTarget = await menuTool(page, projectId, toolKey);
+            const settledPoint = await playwrightPointForClientTarget(page, settledTarget);
+            const settledHit = await readBevyUiHit(page, settledPoint);
+            if (settledHit.nodeId === expectedNodeId && settledHit.treeId === 'eve_bevy_ui_main_menu') {
+                return {
+                    id: expectedNodeId, x: settledPoint.x, y: settledPoint.y,
+                    width: 1, height: 1, coordinate_source: 'scene',
+                    hit: settledHit
+                };
+            }
+        }
         const interactive = await findBevyUiNodeTarget(page, {
             nodeId: expectedNodeId,
             treeId: 'eve_bevy_ui_main_menu', step: 3, hint: target
@@ -378,12 +472,21 @@ export const visibleMenuTool = async (page, projectId, toolKey) => {
     // `draw_create` — se lisait jusqu'ici comme une panne de defilement du menu.
     // On rend donc les cles REELLEMENT projetees, pour que la reponse tienne dans
     // le message d'echec.
-    const context = await page.evaluate(async (pid) => {
+    const context = await page.evaluate(async ({ pid, point }) => {
         const module = await import('/eVe/intuition/ribbon/bevy_ui_product_registry.js');
         const records = window.eveToolBase?.getProjectSceneState?.(pid)?.records || [];
         const prefix = '__eve_bevy_ui_eve_bevy_ui_main_menu_eve_bevy_ui_main_menu_tool_';
+        const surface = document.getElementById('eve_surface_project');
+        const hit = Number.isFinite(point?.x) && Number.isFinite(point?.y)
+            ? window.eveBevyUiRuntime?.hitTestAtClientPoint?.({
+                surface, clientX: point.x, clientY: point.y
+            }) : null;
+        const tree = (window.eveBevyUiRuntime?.readOverlayDiagnostics?.()?.trees || [])
+            .find((entry) => entry.id === 'eve_bevy_ui_main_menu');
         return {
             measure: module.getMainMenuRuntime()?.measure?.() || null,
+            hit_at_record_target: hit ? { nodeId: hit.nodeId, treeId: hit.treeId, box: hit.box || null } : null,
+            interactive_node_ids: (tree?.interactiveNodes || []).map((entry) => String(entry?.id || entry)),
             available_tool_keys: [...new Set(records
                 .map((record) => String(record.id || ''))
                 .filter((id) => id.startsWith(prefix))
@@ -391,14 +494,33 @@ export const visibleMenuTool = async (page, projectId, toolKey) => {
                     .replace(/_(background|icon_image|label_text)$/, '')
                     .split('__').at(-1)))].sort()
         };
-    }, projectId);
+    }, { pid: projectId, point: diagnostics.at(-1)?.target || null });
     throw new Error(`menu_tool_not_revealed:${toolKey}:${JSON.stringify({ ...context, diagnostics })}`);
 };
 
 export const clickCanvasTarget = async (page, target, { double = false } = {}) => {
     const canvas = page.locator('#eve_surface_project');
-    const bounds = await canvas.boundingBox();
-    assert(bounds, 'canvas_bounds_missing');
+    let bounds = await canvas.boundingBox();
+    for (let attempt = 0; !bounds && attempt < 30; attempt += 1) {
+        await wait(100);
+        bounds = await canvas.boundingBox();
+    }
+    if (!bounds) {
+        const evidence = await page.evaluate(() => {
+            const surface = document.getElementById('eve_surface_project');
+            const style = surface ? getComputedStyle(surface) : null;
+            const rect = surface?.getBoundingClientRect?.();
+            return {
+                connected: surface?.isConnected === true,
+                rect: rect ? { x: rect.x, y: rect.y, width: rect.width, height: rect.height } : null,
+                display: style?.display || '', visibility: style?.visibility || '', opacity: style?.opacity || '',
+                workspaceMode: window.__eveWorkspaceMode || null,
+                currentProjectId: window.__currentProject?.id || '',
+                dashboardActive: window.eveDashboardBevyUiRuntime?.state?.active === true
+            };
+        });
+        throw new Error(`canvas_bounds_missing:${JSON.stringify({ target, evidence })}`);
+    }
     let resolvedTarget = target;
     let point = await playwrightPointForClientTarget(page, resolvedTarget, bounds);
     const expectedNodeId = String(target?.hit?.nodeId || '');

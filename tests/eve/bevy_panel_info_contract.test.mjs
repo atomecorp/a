@@ -1035,6 +1035,33 @@ test('Finder tools expose hold, drag, release and cancel with the shared active 
     assert.equal(calls[0][1].tool_key, 'code');
 });
 
+test('Finder project activation delegates the selected identity to the canonical workspace owner', async () => {
+    const selected = [];
+    const activated = [];
+    const runtime = createFinderPanelSurface({
+        selectAtome: async (intent) => selected.push(intent),
+        activateProject: async (project) => {
+            activated.push(project);
+            return { ok: true, projectId: project.id };
+        },
+        events: { on: () => () => true }
+    });
+    runtime.state.records = [{
+        id: 'project_real_2', type: 'project', name: '2', owner_id: 'user_real',
+        properties: { type: 'project', owner_id: 'user_real' }
+    }];
+
+    const result = await runtime.handleEvent({
+        type: 'finder.row.activate', key: 'id:project_real_2', id: 'project_real_2'
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(result.projectId, 'project_real_2');
+    assert.equal(runtime.state.selectedKey, 'id:project_real_2');
+    assert.deepEqual(activated.map(({ id }) => id), ['project_real_2']);
+    assert.deepEqual(selected, [], 'project rows must not stop at generic Atome selection');
+});
+
 test('footer_tools reload and commit use the established canonical property owner', async () => {
     const previousWindow = globalThis.window;
     const writes = [];

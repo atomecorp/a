@@ -53,6 +53,7 @@
     "dev:windows": "./scripts/setup/run_windows.sh",
     "build": "rollup -c scripts/rollup.config.js",
     "build:codemirror": "node scripts/bundle-codemirror.js",
+    "bundle:basic-pitch": "node scripts/bundle-basic-pitch.js",
     "prepublishOnly": "npm run build:npm",
     "scan:components": "echo 'Scan skipped - using static imports'",
     "cdn:upload": "echo 'TODO: Upload to CDN (AWS S3, Cloudflare, etc.)'",
@@ -131,6 +132,7 @@
   "devDependencies": {
     "@rollup/plugin-commonjs": "^28.0.6",
     "@rollup/plugin-node-resolve": "^16.0.3",
+    "@spotify/basic-pitch": "^1.0.1",
     "@tauri-apps/cli": "^2.11.1",
     "@testing-library/dom": "^9.3.1",
     "esbuild": "^0.27.1",

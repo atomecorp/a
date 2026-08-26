@@ -564,6 +564,55 @@ test('recorded video with a declared audio track fails instead of masking a Kira
     assert.equal(readSelectedProjectMediaPlaybackState(['recorded_video_audio_failure']).anyPlaying, false);
 });
 
+test('a video dispatches its prepared Kira voice before starting the visual timeline', async () => {
+    const dom = await createProjectHost([{
+        id: 'video_simultaneous_start',
+        type: 'video',
+        properties: {
+            kind: 'video',
+            media_url: '/api/uploads/simultaneous.mp4',
+            audio_track_count: 1,
+            left: 10,
+            top: 12,
+            width: 160,
+            height: 90
+        }
+    }]);
+    const order = [];
+    let releaseVoice = null;
+    dom.window.Squirrel = {
+        av: {
+            audio: {
+                playback: { loadAsset: async () => ({ ok: true }) },
+                play_instance: () => {
+                    order.push('kira_voice');
+                    return new Promise((resolve) => { releaseVoice = resolve; });
+                },
+                stop_instance: async () => ({ ok: true }),
+                play: async () => ({ ok: true }),
+                stop: async () => ({ ok: true })
+            }
+        }
+    };
+    const pending = runSelectedProjectMediaPlaybackAction({
+        action: 'play',
+        atomeIds: ['video_simultaneous_start'],
+        windowRef: dom.window,
+        documentRef: dom.window.document,
+        projectTimelineAction: async ({ action }) => {
+            order.push(`video_${action}`);
+            return { ok: true };
+        }
+    });
+
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.deepEqual(order, ['video_stop', 'kira_voice', 'video_play']);
+    releaseVoice({ ok: true });
+    const result = await pending;
+    assert.equal(result.ok, true);
+    await stopAllSelectedProjectMediaPlayback(dom.window);
+});
+
 test('recorded video rolls its timeline back before publishing when the Kira voice refuses to start', async () => {
     const dom = await createProjectHost([
         {
@@ -941,6 +990,19 @@ test('selected project video playback is owned by the project timeline without C
     assert.equal(dom.document.querySelectorAll('canvas').length, 1);
     assert.equal(dom.document.querySelectorAll('#eve_bevy_video_decode_root video').length, 1);
     assert.equal(typeof dom.__EVE_BEVY_VIDEO_SOURCE_FOR_ID__, 'function');
+    const decodeVideo = dom.document.querySelector('#eve_bevy_video_decode_root video');
+    assert.equal(dom.__EVE_BEVY_VIDEO_SOURCE_FOR_ID__('video_gpu_a'), null);
+    Object.defineProperties(decodeVideo, {
+        readyState: { configurable: true, value: 2 },
+        videoWidth: { configurable: true, value: 160 },
+        videoHeight: { configurable: true, value: 90 },
+        getVideoPlaybackQuality: {
+            configurable: true,
+            value: () => ({ totalVideoFrames: 1 })
+        },
+        pause: { configurable: true, value: () => {} }
+    });
+    decodeVideo.dispatchEvent(new dom.Event('loadeddata'));
     assert.equal(dom.__EVE_BEVY_VIDEO_SOURCE_FOR_ID__('video_gpu_a')?.tagName, 'VIDEO');
     assert.equal(dom.__EVE_BEVY_VIDEO_ACTIVE_FOR_ID__('video_gpu_a'), false);
     assert.equal(calls.some((call) => call.type === 'unregister_video'), false);
@@ -1193,4 +1255,52 @@ test('selected project video playback does not fall back to CPU posters when tim
     assert.equal(result.succeeded, 0);
     assert.equal(result.results[0].error, 'selected_project_video_timeline_required');
     assert.equal(cpuCanvasTouched, false);
+});
+
+test('a required voice failure rolls back every voice in the shared media batch', async () => {
+    const dom = await createProjectHost([
+        {
+            id: 'atomic_audio_ok', type: 'audio_recording',
+            properties: { kind: 'audio_recording', media_url: '/api/recordings/atomic-ok.wav', duration_sec: 4 }
+        },
+        {
+            id: 'atomic_audio_fail', type: 'audio_recording',
+            properties: { kind: 'audio_recording', media_url: '/api/recordings/atomic-fail.wav', duration_sec: 4 }
+        }
+    ]);
+    const calls = [];
+    dom.window.Squirrel = {
+        av: {
+            audio: {
+                playback: { loadAsset: async (payload) => { calls.push({ type: 'load', payload }); return { ok: true }; } },
+                play_instance: async (payload) => {
+                    calls.push({ type: 'play_instance', payload });
+                    return payload.assetId.includes('atomic_audio_fail')
+                        ? { ok: false, error: 'atomic_voice_failure' }
+                        : { ok: true };
+                },
+                stop_instance: async (payload) => { calls.push({ type: 'stop_instance', payload }); return { ok: true }; },
+                stop: async (payload) => { calls.push({ type: 'stop', payload }); return { ok: true }; }
+            }
+        }
+    };
+
+    const result = await runSelectedProjectMediaPlaybackAction({
+        action: 'play',
+        atomeIds: ['atomic_audio_ok', 'atomic_audio_fail'],
+        windowRef: dom.window,
+        documentRef: dom.window.document
+    });
+
+    assert.equal(result.ok, false);
+    assert.equal(result.succeeded, 0);
+    assert.equal(result.failed, 2);
+    assert.equal(result.results.find(({ atome_id }) => atome_id === 'atomic_audio_fail').error, 'atomic_voice_failure');
+    assert.equal(
+        result.results.find(({ atome_id }) => atome_id === 'atomic_audio_ok').error,
+        'selected_project_media_batch_start_rolled_back'
+    );
+    assert.equal(calls.filter(({ type }) => type === 'play_instance').length, 2);
+    assert.equal(calls.filter(({ type }) => type === 'stop_instance').length, 2);
+    assert.equal(readSelectedProjectMediaPlaybackState(['atomic_audio_ok', 'atomic_audio_fail']).anyPlaying, false);
 });

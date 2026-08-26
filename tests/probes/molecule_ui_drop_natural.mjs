@@ -27,26 +27,56 @@ export const validateNaturalMoleculeDrop = async ({ page, project, fixture, repo
     const source = await recordCenter(page, project.id, (record) => record.id === fixture.imageId, { sceneCoordinates: true });
     const target = await recordCenter(page, project.id, (record) => record.id === fixture.audioId, { sceneCoordinates: true });
     let armed = null;
-    await drag({
+    const dragTrace = await drag({
         page, source, destination: target, holdMs: 700,
         armedShot: async () => {
-            await screenshot({ page, report, outDir, name: 'drop_natural_armed_before_release' });
-            armed = await page.evaluate(async () => {
+            const pointBeforeScreenshot = await page.evaluate(async () => {
                 const { getRenderSurfaceState } = await import('/eVe/domains/rendering/surface_runtime.js');
-                const session = getRenderSurfaceState(document.getElementById('eve_surface_project'))?.pointerSession || null;
+                const session = getRenderSurfaceState(document.getElementById('eve_surface_project'))?.pointerSession;
+                return session?.last || null;
+            });
+            await screenshot({
+                page, report, outDir, name: 'drop_natural_armed_before_release', preservePointer: true
+            });
+            armed = await page.evaluate(async ({ expectedTargetId, pointBeforeScreenshot }) => {
+                const { getRenderSurfaceState } = await import('/eVe/domains/rendering/surface_runtime.js');
+                const { readRenderSurfaceSize } = await import('/eVe/domains/rendering/surface_runtime.js');
+                const { hitTestRenderScene } = await import('/eVe/domains/rendering/scene_graph.js');
+                const surface = document.getElementById('eve_surface_project');
+                const runtime = getRenderSurfaceState(surface);
+                const session = runtime?.pointerSession || null;
+                const point = session?.last || null;
+                const beneath = point ? hitTestRenderScene(runtime?.scene || null, point, {
+                    excludeId: session?.atome_id
+                }) : null;
+                const expectedTarget = runtime?.scene?.byId?.get?.(expectedTargetId) || null;
                 return session ? {
                     atomeId: session.atome_id, moved: session.moved === true,
+                    start: session.start || null,
+                    pointBeforeScreenshot,
                     targetId: String(session.overlap_target_id || ''),
                     stationaryMs: session.overlap_target_id
                         ? Date.now() - Number(session.overlap_started_at || Date.now()) : 0,
-                    targetCount: Array.isArray(session.targets) ? session.targets.length : 0
+                    targetCount: Array.isArray(session.targets) ? session.targets.length : 0,
+                    point,
+                    beneath: beneath ? {
+                        id: String(beneath.id || ''), bounds: beneath.bounds || null,
+                        selectable: beneath.capabilities?.selectable !== false,
+                        occluder: beneath.capabilities?.hitTestOccluder === true
+                    } : null,
+                    expectedTarget: expectedTarget ? {
+                        id: String(expectedTarget.id || ''), bounds: expectedTarget.bounds || null,
+                        transform: expectedTarget.transform || null
+                    } : null,
+                    surfaceSize: readRenderSurfaceSize(surface),
+                    surfaceRect: surface?.getBoundingClientRect?.().toJSON?.() || null
                 } : null;
-            });
+            }, { expectedTargetId: fixture.audioId, pointBeforeScreenshot });
         }
     });
     assert(armed?.moved === true && armed?.targetId === fixture.audioId
         && armed?.stationaryMs >= 500 && armed?.targetCount === 1,
-    `natural_absorb_not_armed:${JSON.stringify({ armed, fixture })}`);
+    `natural_absorb_not_armed:${JSON.stringify({ armed, dragTrace, source, target, fixture })}`);
     const molecule = await waitForMolecule(page, { sourceId: fixture.imageId, targetId: fixture.audioId });
     await reloadProjection(page, project.id);
     await screenshot({ page, report, outDir, name: 'drop_natural_after_reload' });

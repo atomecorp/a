@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import path from 'node:path';
 
 import {
@@ -77,12 +78,37 @@ export const switchView = async (page, projectId, mode) => {
         const state = readProjectViewSurfaceState();
         return { ok: state.mode === expected, mode: state.mode, content: state.content };
     }, mode);
+    if (mode === 'list' || mode === 'table') {
+        await waitFor(page, async ({ expectedMode, expectedProjectId }) => {
+            const { readProjectViewSurfaceState } = await import('/eVe/domains/rendering/project_view_surface_runtime.js');
+            const state = readProjectViewSurfaceState();
+            return {
+                ok: state.mode === expectedMode
+                    && state.content?.projectId === expectedProjectId
+                    && Number(state.content?.recordCount || 0) > 0,
+                mode: state.mode,
+                content: state.content
+            };
+        }, { expectedMode: mode, expectedProjectId: projectId });
+    }
     await waitForStableScene(page, projectId);
 };
 
-export const screenshot = async ({ page, report, outDir, name }) => {
+export const screenshot = async ({ page, report, outDir, name, preservePointer = false }) => {
     const file = path.join(outDir, `${name}.png`);
-    await page.screenshot({ path: file, animations: 'disabled' });
+    if (preservePointer) {
+        const session = await page.context().newCDPSession(page);
+        try {
+            const captured = await session.send('Page.captureScreenshot', {
+                format: 'png', captureBeyondViewport: false
+            });
+            fs.writeFileSync(file, Buffer.from(captured.data, 'base64'));
+        } finally {
+            await session.detach();
+        }
+    } else {
+        await page.screenshot({ path: file, animations: 'disabled' });
+    }
     const signal = analyzePngSignal(file);
     assert(signal.non_black_pixel_ratio > 0.2 && signal.sampled_color_count > 32,
         `visual_signal_missing:${name}:${JSON.stringify(signal)}`);
@@ -92,12 +118,16 @@ export const screenshot = async ({ page, report, outDir, name }) => {
 
 export const drag = async ({
     page, source, destination, holdMs = 0, armedShot = null, steps = 16,
-    postArmOffset = null
+    postArmOffset = null, waypoint = null
 }) => {
     const from = await playwrightPointForClientTarget(page, source);
     const to = await playwrightPointForClientTarget(page, destination);
     await page.mouse.move(from.x, from.y);
     await page.mouse.down();
+    if (waypoint) {
+        const via = await playwrightPointForClientTarget(page, waypoint);
+        await page.mouse.move(via.x, via.y, { steps: Math.max(2, Math.round((Number(steps) || 16) / 2)) });
+    }
     await page.mouse.move(to.x, to.y, { steps: Math.max(1, Number(steps) || 1) });
     if (holdMs > 0) {
         await wait(holdMs);

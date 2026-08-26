@@ -1,51 +1,156 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import { test } from 'vitest';
 
-import {
+Object.defineProperty(globalThis, 'localStorage', {
+    configurable: true,
+    value: {
+        getItem: () => null,
+        setItem: () => {},
+        removeItem: () => {},
+        clear: () => {}
+    }
+});
+Object.defineProperty(globalThis, 'window', {
+    configurable: true,
+    value: {
+        localStorage: globalThis.localStorage,
+        addEventListener: () => {},
+        removeEventListener: () => {},
+        dispatchEvent: () => true
+    }
+});
+
+const {
     createProjectViewWindowState,
     loadProjectViewRecordsForPlayback
-} from '../../eVe/domains/rendering/project_view_records.js';
-import { createProjectViewPlaybackRuntime } from '../../eVe/domains/rendering/project_view_playback_runtime.js';
-import {
+} = await import('../../eVe/domains/rendering/project_view_records.js');
+const { createProjectViewPlaybackRuntime } = await import('../../eVe/domains/rendering/project_view_playback_runtime.js');
+const {
     invalidatePlaybackMirrorIndex,
     playbackMirrorsFor
-} from '../../eVe/domains/rendering/project_scene_invalidation_runtime.js';
-import {
+} = await import('../../eVe/domains/rendering/project_scene_invalidation_runtime.js');
+const {
     applyCaptureToTimeline,
     normalizeCapturedEvents
-} from '../../eVe/domains/rendering/project_view_capture_to_timeline.js';
-import {
+} = await import('../../eVe/domains/rendering/project_view_capture_to_timeline.js');
+const {
     PERFORMANCE_MODE,
     hasUsablePerformanceClips,
     readPlaybackRuleOverride,
     resolvePlaybackRule,
     writePlaybackRuleOverride
-} from '../../eVe/domains/rendering/project_view_playback_rules.js';
-import {
+} = await import('../../eVe/domains/rendering/project_view_playback_rules.js');
+const {
     absorbCanonicalMolecule,
+    buildCanonicalMoleculeTimeline,
     deleteCanonicalMolecule,
+    extractCanonicalMoleculeMember,
     transformCanonicalMolecule,
     ungroupCanonicalMolecule
-} from '../../eVe/intuition/tools/core/tool_runtime_atome_mutation.js';
-import {
+} = await import('../../eVe/intuition/tools/core/tool_runtime_atome_mutation.js');
+const {
     PROJECT_VIEW_ABSORB_DELAY_MS,
     absorbInto,
     armStationaryAbsorb,
     clearStationaryAbsorb,
     hasStationaryAbsorbOverlap,
     orderedIdsAfterInsertion,
+    persistLevelOrder,
     reconcilePendingLevelOrder,
     beginPendingLevelOrder,
     resolveStructuredDropIntent
-} from '../../eVe/domains/rendering/project_view_reorder_runtime.js';
-import { followSelectionWhilePlaying } from '../../eVe/domains/rendering/project_view_playback_follow.js';
-import { invokeFlowerMoleculeUngroup } from '../../eVe/intuition/runtime/eve_intuition/flower_context_items_runtime.js';
-import { playMoleculeContextualOwner } from '../../eVe/domains/rendering/project_view_molecule_info.js';
+} = await import('../../eVe/domains/rendering/project_view_reorder_runtime.js');
+const { followSelectionWhilePlaying } = await import('../../eVe/domains/rendering/project_view_playback_follow.js');
+const { invokeFlowerMoleculeUngroup } = await import('../../eVe/intuition/runtime/eve_intuition/flower_context_items_runtime.js');
+const {
+    deleteMoleculeContextualOwner,
+    playMoleculeContextualOwner
+} = await import('../../eVe/domains/rendering/project_view_molecule_info.js');
+const { clipKindFor } = await import('../../eVe/intuition/tools/molecule/runtime_creation.js');
+const {
+    resolveRecordCompositePreviewLayout
+} = await import('../../eVe/intuition/runtime/bevy_panel/bevy_panel_record_composite_preview.js');
+const { resolveProjectViewVisualSubject } = await import('../../eVe/domains/rendering/project_view_visual_subject.js');
 
 const mediaRecord = (id) => ({
     id,
     type: 'sound',
     properties: { kind: 'sound', media_url: `/api/recordings/${id}.wav`, duration_sec: 0.001 }
+});
+
+test('Natural mode retains the canonical video mirror resolver after structured view teardown', () => {
+    const source = fs.readFileSync(new URL(
+        '../../eVe/domains/rendering/project_view_surface_runtime.js', import.meta.url
+    ), 'utf8');
+    const unmountSource = source.slice(
+        source.indexOf('const unmountProjectViewSurface'),
+        source.indexOf('const mountProjectViewSurface')
+    );
+    assert.match(unmountSource, /projectViewPlayback\.setVideoNodeResolver\(videoSurfaceIdsFor\)/);
+    assert.doesNotMatch(unmountSource, /projectViewPlayback\.stop\(\)/,
+        'switching from List or Matrix to Natural must not implicitly stop playback');
+    assert.match(unmountSource, /preserveMoleculeTransportRail[\s\S]*contextRuntime\.openCurrentLevel\(\)/,
+        'an active Molecule must keep its explicit Stop control across the Natural transition');
+    assert.match(unmountSource, /activeKind[\s\S]*molecule_molecule[\s\S]*preserveMoleculeSelectionRail/,
+        'a Molecule selected in List must keep its Molecule rail when Natural takes the canvas');
+    assert.match(unmountSource, /!preserveMoleculeTransportRail && !preserveMoleculeSelectionRail[\s\S]*promoteActiveToCanvas/,
+        'Natural must not downgrade a selected Molecule to generic group tools');
+    assert.match(unmountSource, /state\.projectId = targetProjectId/,
+        'Natural must retain the project owner used by its video-surface resolver');
+    assert.doesNotMatch(unmountSource, /projectViewPlayback\.setVideoNodeResolver\(null\)/);
+    assert.match(unmountSource, /await reconcileNaturalProjectSurface\(\)/,
+        'Natural transition must rebuild durable records after removing the structured prefix');
+    assert.match(source, /runtime\.forceSurfaceReconcile = true[\s\S]*renderScheduler\?\.renderNow/,
+        'Natural transition must wait for the canonical surface reconcile before reporting readiness');
+    assert.match(source, /currentProjectId\(\)[\s\S]*PROJECT_SCENES\.get\(targetProjectId\)/,
+        'Natural must resolve the canonical current-project runtime when the foreground pointer trails');
+    assert.match(source, /currentProjectId\(\)[\s\S]*claimProjectSceneForeground\(runtime\.project_id\)[\s\S]*forceSurfaceReconcile/,
+        'Natural must claim the verified current project before the engine background guard runs');
+    assert.match(unmountSource, /allowNaturalSceneUnavailable && reconciled\?\.error === 'project_view_natural_scene_unavailable'/,
+        'only an explicit workspace activation may defer the first Natural scene paint to its loader');
+    const projectActivationSource = fs.readFileSync(new URL(
+        '../../eVe/intuition/matrix/core/project_data.js', import.meta.url
+    ), 'utf8');
+    assert.match(projectActivationSource,
+        /setProjectViewMode\(preparedViewMode\.mode,[\s\S]*allowNaturalSceneUnavailable: true[\s\S]*loadProjectAtomes/,
+        'workspace activation must opt into the pre-loader Natural transition explicitly');
+    assert.ok(
+        unmountSource.indexOf('await reconcileNaturalProjectSurface()')
+        < unmountSource.lastIndexOf('state.mode = MODES.NATURAL'),
+        'Natural mode must not be published before its canonical surface is ready'
+    );
+    assert.match(source, /foreground\?\.records\?\.has\?\.\(id\) \? \[id\] : \[\]/,
+        'the Natural video Atome itself must be a playback surface, not only its mirrors');
+});
+
+test('structured views reset shared navigation before resolving content for a new project', () => {
+    const source = fs.readFileSync(new URL(
+        '../../eVe/domains/rendering/project_view_surface_runtime.js', import.meta.url
+    ), 'utf8');
+    const mountSource = source.slice(source.indexOf('const mountProjectViewSurface'));
+    assert.match(mountSource, /readNavigationState\(\)\.projectId !== target/);
+    assert.match(mountSource, /resetProjectViewNavigation\(target, currentProjectName\(\)\)/);
+    assert.ok(
+        mountSource.indexOf('resetProjectViewNavigation(target, currentProjectName())')
+        < mountSource.indexOf('const content = activeContent()'),
+        'stale Detail state must not choose the content runtime for the next project'
+    );
+});
+
+test('Natural absorption resolves a visible member hit to its canonical Molecule owner', () => {
+    const source = fs.readFileSync(new URL(
+        '../../eVe/domains/rendering/project_scene_engine.js', import.meta.url
+    ), 'utf8');
+    assert.match(source, /resolveMoleculeAbsorbTargetId\(runtime, overlapTargetId\)/);
+    assert.match(source, /if \(isMoleculeRecord\(record\)\) return currentId/);
+    assert.match(source, /sourceId, targetId: canonicalTargetId/);
+});
+
+test('canonical sound records become audio clips even when their top-level type is generic', () => {
+    assert.equal(clipKindFor({ type: 'atome', properties: { kind: 'sound' } }), 'audio');
+    assert.equal(clipKindFor({ properties: { media_kind: 'sound' } }), 'audio');
+    assert.equal(clipKindFor({ properties: { kind: 'image' } }), 'image');
 });
 
 test('playback loads every canonical page instead of only the visible List window', async () => {
@@ -105,6 +210,30 @@ test('sequential playback starts and stops the final item of a complete queue', 
         playing: false, scope: '', playingIds: [], playingRecords: [],
         armed: false, armedProjectId: ''
     });
+});
+
+test('sequential playback publishes the canonical selection target for each item without changing transport', async () => {
+    const announcements = [];
+    const runtime = createProjectViewPlaybackRuntime({
+        publish: (detail) => announcements.push(detail),
+        runMediaAction: async () => ({ ok: true }),
+        readMediaDuration: () => 0.001,
+        setTimer: (callback) => { queueMicrotask(callback); return 1; },
+        clearTimer: () => {}
+    });
+    const children = [mediaRecord('selection_one'), mediaRecord('selection_two'), mediaRecord('selection_three')];
+    await runtime.toggleLevel({
+        level: { entity: 'project', id: 'project_selection_follow' },
+        projectId: 'project_selection_follow', children,
+        rule: { mode: 'sequential', loop: false }
+    });
+    for (let attempt = 0; attempt < 30 && runtime.readState().playing; attempt += 1) {
+        await new Promise((resolve) => setImmediate(resolve));
+    }
+    assert.deepEqual(announcements.map((detail) => detail.followSelectionId).filter(Boolean), [
+        'selection_one', 'selection_two', 'selection_three'
+    ]);
+    assert.equal(runtime.readState().playing, false);
 });
 
 test('a Molecule plays every direct member once in sequential and random modes', async () => {
@@ -212,7 +341,7 @@ test('the selected Molecule contextual Play action forwards every requested play
                     calls.push(input);
                     return { ok: true, mode: input.rule.mode };
                 },
-                adoptDelegatedTransport: (input) => adopted.push(input)
+                adoptDelegatedMoleculeTransport: async (input) => adopted.push(input)
             }
         });
         assert.equal(result.ok, true);
@@ -230,6 +359,38 @@ test('the selected Molecule contextual Play action forwards every requested play
     assert.equal(adopted.length, 1);
     assert.equal(adopted[0].level.entity, 'molecule');
     assert.equal(adopted[0].playing, true);
+});
+
+test('cold Molecule Play unlocks Web Kira before rule resolution and timeline opening', async () => {
+    const calls = [];
+    const previousSquirrel = globalThis.window.Squirrel;
+    globalThis.window.Squirrel = {
+        av: { audio: {
+            get_runtime: () => ({ playback: 'web_wasm_kira' }),
+            unlockPlayback: () => { calls.push('unlock'); return Promise.resolve(true); }
+        } }
+    };
+    try {
+        const result = await playMoleculeContextualOwner({
+            ownerId: 'molecule_cold', moleculeId: 'molecule_cold', projectId: 'project_cold',
+            timeline: { schema_version: 2, project_id: 'project_cold', owner_atome_id: 'molecule_cold' },
+            resolveRule: async () => { calls.push('rule'); return { mode: 'layer', loop: false }; },
+            playback: {
+                toggleLevel: async () => ({ ok: true }),
+                adoptDelegatedMoleculeTransport: async () => calls.push('adopt')
+            },
+            timelineApi: {
+                listOpenGroupTimelines: () => ({ timelines: [] }),
+                openGroupTimeline: async () => calls.push('open'),
+                toggleGroupTimelineTransport: async () => { calls.push('play'); return { ok: true, playing: true }; },
+                stopGroupTimelineTransport: async () => {}
+            }
+        });
+        assert.equal(result.ok, true);
+        assert.deepEqual(calls, ['unlock', 'rule', 'open', 'play', 'adopt']);
+    } finally {
+        globalThis.window.Squirrel = previousSquirrel;
+    }
 });
 
 test('the contextual Ensemble action keeps the Molecule runtime playing until explicit Stop', async () => {
@@ -258,6 +419,25 @@ test('the contextual Ensemble action keeps the Molecule runtime playing until ex
     assert.equal(runtime.readState().playing, false);
 });
 
+test('Molecule contextual Delete loads its canonical action owner before invoking the selected owner', async () => {
+    const calls = [];
+    const result = await deleteMoleculeContextualOwner({
+        ownerId: 'molecule_delete_owner',
+        projectId: 'project_delete_owner',
+        loadDeleteModule: async () => calls.push('load'),
+        invokeDelete: async (input) => {
+            calls.push('invoke');
+            return { ok: true, input };
+        }
+    });
+    assert.deepEqual(calls, ['load', 'invoke']);
+    assert.deepEqual(result.input.extraInput, {
+        atome_id: 'molecule_delete_owner',
+        selection_ids: ['molecule_delete_owner'],
+        project_id: 'project_delete_owner'
+    });
+});
+
 test('a delegated Molecule transport releases the shared playback state at its natural duration', () => {
     const timers = [];
     const runtime = createProjectViewPlaybackRuntime({
@@ -277,6 +457,100 @@ test('a delegated Molecule transport releases the shared playback state at its n
         playing: false, scope: '', playingIds: [], playingRecords: [],
         armed: false, armedProjectId: ''
     });
+});
+
+test('a delegated Molecule publishes every member without replacing its canonical composition order', async () => {
+    const image = { id: 'visual_image', type: 'image', properties: { kind: 'image', media_url: '/image.png' } };
+    const audio = mediaRecord('audible_sound');
+    const announcements = [];
+    const runtime = createProjectViewPlaybackRuntime({
+        readMoleculeMembers: async () => [audio, image],
+        publish: (state) => announcements.push(state),
+        setTimer: () => 1,
+        clearTimer: () => {}
+    });
+    await runtime.adoptDelegatedMoleculeTransport({
+        level: { entity: 'molecule', id: 'composite' },
+        projectId: 'project', moleculeId: 'composite', playing: true, duration: 4
+    });
+    assert.deepEqual(runtime.readState().playingIds, ['audible_sound', 'visual_image']);
+    assert.deepEqual(runtime.readState().playingRecords, [audio, image]);
+    assert.equal(announcements.at(-1).playing, true);
+});
+
+test('Molecule composite preview preserves member layout and canonical z order', () => {
+    const video = {
+        id: 'video_low', type: 'video',
+        properties: { kind: 'video', media_url: '/video.mp4', left: 0, top: 0, width: 200, height: 100, z_index: 2 }
+    };
+    const text = {
+        id: 'text_high', type: 'text',
+        properties: { kind: 'text', text: 'Visible', left: 100, top: 50, width: 100, height: 20, z_index: 9 }
+    };
+    const layout = resolveRecordCompositePreviewLayout({ records: [text, video], width: 400, height: 200 });
+    assert.equal(layout.scale, 2);
+    assert.deepEqual(layout.entries.map((entry) => entry.id), ['video_low', 'text_high']);
+    assert.deepEqual(
+        layout.entries.map(({ id, x, y, width, height }) => ({ id, x, y, width, height })),
+        [
+            { id: 'video_low', x: 0, y: 0, width: 400, height: 200 },
+            { id: 'text_high', x: 200, y: 100, width: 200, height: 40 }
+        ]
+    );
+});
+
+test('Molecule visual subject refreshes a moved member from the current project records', () => {
+    const owner = { id: 'molecule_owner', type: 'group', properties: { kind: 'group' } };
+    const stale = {
+        id: 'member_text', parent_id: 'molecule_owner', type: 'text',
+        properties: { text: 'Move me', left: 10, top: 20, width: 80, height: 20 }
+    };
+    const moved = { ...stale, properties: { ...stale.properties, left: 140, top: 75 } };
+    const subject = resolveProjectViewVisualSubject({
+        content: {
+            contextualTarget: () => ({ id: owner.id, record: owner }),
+            levelChildren: () => [owner],
+            recordsFor: () => [moved]
+        },
+        playingIds: [stale.id],
+        playingRecords: [stale],
+        playbackScope: 'molecule:molecule_owner'
+    });
+    assert.equal(subject.record, owner);
+    assert.equal(subject.records[0], moved);
+    assert.equal(subject.records[0].properties.left, 140);
+});
+
+test('delegated Molecule video uses the shared projected decoder and stops at natural end', async () => {
+    const timers = [];
+    const videoCalls = [];
+    const video = {
+        id: 'composite_video', parent_id: 'composite', type: 'video',
+        properties: { kind: 'video', media_url: '/video.mp4' }
+    };
+    const text = {
+        id: 'composite_text', parent_id: 'composite', type: 'text',
+        properties: { kind: 'text', text: 'Visible' }
+    };
+    const runtime = createProjectViewPlaybackRuntime({
+        readMoleculeMembers: async () => [text, video],
+        driveVideoPlayback: (nodeIds, active) => {
+            videoCalls.push({ nodeIds, active });
+            return { ok: true };
+        },
+        setTimer: (callback, delayMs) => { timers.push({ callback, delayMs }); return timers.length; },
+        clearTimer: () => {}
+    });
+    runtime.setVideoNodeResolver((atomeId) => [`visual_${atomeId}`]);
+    await runtime.adoptDelegatedMoleculeTransport({
+        level: { entity: 'molecule', id: 'composite' },
+        projectId: 'project', moleculeId: 'composite', playing: true, duration: 3
+    });
+    assert.deepEqual(videoCalls, [{ nodeIds: ['visual_composite_video'], active: true }]);
+    assert.equal(timers[0].delayMs, 3000);
+    timers[0].callback();
+    assert.deepEqual(videoCalls.at(-1), { nodeIds: ['visual_composite_video'], active: false });
+    assert.equal(runtime.readState().playing, false);
 });
 
 test('a queue jump restarts the chosen item and preserves the frozen random order', async () => {
@@ -714,7 +988,8 @@ test('canonical absorb creates, absorbs, and flattens Molecules through direct p
     }, mutationDependencies([atomeState('atom'), moleculeState('molecule_target')], batches));
     assert.equal(intoMolecule.operation, 'absorb');
     assert.deepEqual(batches[1].events.at(-1), {
-        atome_id: 'atom', project_id: 'project_molecules', parent_id: 'molecule_target', props: {}
+        atome_id: 'atom', project_id: 'project_molecules', parent_id: 'molecule_target',
+        props: { hierarchy_order: 0, zIndex: 1, z_index: 1, order: 1, render_order: 1, renderOrder: 1 }
     });
     assert.equal(batches[1].events[0].props.molecule_timeline.clips[0].source.atome_id, 'atom');
 
@@ -725,7 +1000,10 @@ test('canonical absorb creates, absorbs, and flattens Molecules through direct p
     ], batches));
     assert.equal(moleculeOntoAtom.operation, 'absorb');
     assert.deepEqual(batches[2].events.slice(1), [
-        { atome_id: 'atom_target', project_id: 'project_molecules', parent_id: 'molecule_source', props: {} }
+        {
+            atome_id: 'atom_target', project_id: 'project_molecules', parent_id: 'molecule_source',
+            props: { hierarchy_order: 0, zIndex: 1, z_index: 1, order: 1, render_order: 1, renderOrder: 1 }
+        }
     ]);
     assert.equal(batches[2].events[0].props.molecule_timeline.clips[0].source.atome_id, 'atom_target');
 
@@ -736,10 +1014,47 @@ test('canonical absorb creates, absorbs, and flattens Molecules through direct p
     ], batches));
     assert.equal(merge.operation, 'merge');
     assert.deepEqual(batches[3].events.slice(1), [
-        { atome_id: 'child_a', project_id: 'project_molecules', parent_id: 'molecule_target', props: {} },
+        {
+            atome_id: 'child_a', project_id: 'project_molecules', parent_id: 'molecule_target',
+            props: { hierarchy_order: 0, zIndex: 1, z_index: 1, order: 1, render_order: 1, renderOrder: 1 }
+        },
         { kind: 'delete', atome_id: 'molecule_source', project_id: 'project_molecules', props: {} }
     ]);
     assert.equal(batches[3].events[0].props.molecule_timeline.clips[0].source.atome_id, 'child_a');
+});
+
+test('canonical absorb places a newly added member on the first visible row and preserves one visual order', async () => {
+    const batches = [];
+    const result = await absorbCanonicalMolecule({
+        projectId: 'project_molecules', sourceId: 'text_new', targetId: 'molecule_target'
+    }, mutationDependencies([
+        moleculeState('molecule_target'),
+        atomeState('video_existing', 'molecule_target', { zIndex: 1, order: 4 }),
+        atomeState('audio_existing', 'molecule_target', { z_index: 2, render_order: 5 }),
+        atomeState('text_new')
+    ], batches));
+
+    assert.equal(result.ok, true);
+    assert.deepEqual(batches[0].events.slice(1).map((event) => ({
+        id: event.atome_id,
+        hierarchy: event.props.hierarchy_order,
+        z: event.props.z_index
+    })), [{ id: 'text_new', hierarchy: 0, z: 3 }, {
+        id: 'video_existing', hierarchy: 1, z: 2
+    }, {
+        id: 'audio_existing', hierarchy: 2, z: 1
+    }]);
+    assert.deepEqual(batches[0].events[1], {
+        atome_id: 'text_new',
+        project_id: 'project_molecules',
+        parent_id: 'molecule_target',
+        props: {
+            hierarchy_order: 0,
+            zIndex: 3, z_index: 3, order: 3, render_order: 3, renderOrder: 3
+        }
+    });
+    assert.equal(batches[0].events[0].props.molecule_timeline.clips.length, 3);
+    assert.equal(batches[0].events[0].props.molecule_timeline.clips.every((clip) => clip.timeline.start_frame === 0), true);
 });
 
 test('canonical absorb uses visible canonical records when its second list read is empty', async () => {
@@ -765,6 +1080,7 @@ test('canonical absorb uses visible canonical records when its second list read 
 
 test('canonical ungroup and delete operate on direct members in one history transaction', async () => {
     const batches = [];
+    const closedTimelines = [];
     const ungrouped = await ungroupCanonicalMolecule({
         projectId: 'project_molecules', moleculeId: 'molecule'
     }, mutationDependencies([
@@ -777,17 +1093,99 @@ test('canonical ungroup and delete operate on direct members in one history tran
         { kind: 'delete', atome_id: 'molecule', project_id: 'project_molecules', props: {} }
     ]);
 
+    const deleteDependencies = mutationDependencies([
+        moleculeState('molecule'), atomeState('one', 'molecule'), atomeState('two', 'molecule')
+    ], batches);
+    deleteDependencies.closeTimeline = async (moleculeId) => {
+        closedTimelines.push(moleculeId);
+        return { ok: true, closed: true };
+    };
     const deleted = await deleteCanonicalMolecule({
         projectId: 'project_molecules', moleculeId: 'molecule'
-    }, mutationDependencies([
-        moleculeState('molecule'), atomeState('one', 'molecule'), atomeState('two', 'molecule')
-    ], batches));
+    }, deleteDependencies);
     assert.equal(deleted.ok, true);
+    assert.deepEqual(closedTimelines, ['molecule']);
     assert.deepEqual(batches[1].events, [
         { kind: 'delete', atome_id: 'one', project_id: 'project_molecules', props: {} },
         { kind: 'delete', atome_id: 'two', project_id: 'project_molecules', props: {} },
         { kind: 'delete', atome_id: 'molecule', project_id: 'project_molecules', props: {} }
     ]);
+});
+
+test('canonical member extraction preserves other clips, gains, ownership and the active transport snapshot', async () => {
+    const one = atomeState('one', 'molecule', { duration_sec: 2, hierarchy_order: 0 });
+    const two = atomeState('two', 'molecule', { duration_sec: 4, hierarchy_order: 1 });
+    const three = atomeState('three', 'molecule', { duration_sec: 3, hierarchy_order: 2 });
+    const timeline = buildCanonicalMoleculeTimeline({
+        projectId: 'project_molecules', moleculeId: 'molecule', members: [one, two, three]
+    });
+    const firstTrackId = timeline.clips.find((clip) => clip.source.atome_id === 'one').track_id;
+    const thirdTrackId = timeline.clips.find((clip) => clip.source.atome_id === 'three').track_id;
+    timeline.tracks = timeline.tracks.map((track) => {
+        if (track.track_id === firstTrackId) return { ...track, gain: 0.25, mute: true };
+        if (track.track_id === thirdTrackId) return { ...track, gain: 1.5 };
+        return track;
+    });
+    const batches = [];
+    const adopted = [];
+    const result = await extractCanonicalMoleculeMember({
+        projectId: 'project_molecules', moleculeId: 'molecule', memberId: 'two'
+    }, {
+        readList: async () => [
+            moleculeState('molecule', 'project_molecules', { hierarchy_order: 4, molecule_timeline: timeline }),
+            one, two, three
+        ],
+        commitBatch: async (events, options) => { batches.push({ events, options }); return { ok: true }; },
+        timelineApi: {
+            listOpenGroupTimelines: () => ({ timelines: [{ group_id: 'molecule' }] }),
+            adoptCommittedGroupTimelineSnapshot: async (detail) => { adopted.push(detail); return { ok: true }; }
+        }
+    });
+    assert.equal(result.ok, true);
+    assert.equal(result.molecule_deleted, false);
+    assert.deepEqual(result.remaining_member_ids, ['one', 'three']);
+    assert.deepEqual(result.timeline.clips.map((clip) => clip.source.atome_id), ['one', 'three']);
+    assert.equal(result.timeline.tracks.find((track) => track.track_id === firstTrackId).gain, 0.25);
+    assert.equal(result.timeline.tracks.find((track) => track.track_id === firstTrackId).mute, true);
+    assert.equal(result.timeline.tracks.find((track) => track.track_id === thirdTrackId).gain, 1.5);
+    assert.equal(result.timeline.duration_seconds, 3);
+    assert.equal(batches.length, 1);
+    assert.equal(batches[0].events.find((event) => event.atome_id === 'two').parent_id, 'project_molecules');
+    assert.deepEqual(batches[0].events.filter((event) => ['one', 'three'].includes(event.atome_id)).map((event) => ({
+        id: event.atome_id,
+        hierarchy: event.props.hierarchy_order,
+        z: event.props.z_index
+    })), [
+        { id: 'one', hierarchy: 0, z: 2 },
+        { id: 'three', hierarchy: 1, z: 1 }
+    ]);
+    assert.equal(adopted.length, 1);
+    assert.equal(adopted[0].timeline, result.timeline);
+});
+
+test('extracting the final member deletes the empty Molecule in the same batch', async () => {
+    const only = atomeState('only', 'molecule', { duration_sec: 1 });
+    const timeline = buildCanonicalMoleculeTimeline({
+        projectId: 'project_molecules', moleculeId: 'molecule', members: [only]
+    });
+    const batches = [];
+    const closed = [];
+    const result = await extractCanonicalMoleculeMember({
+        projectId: 'project_molecules', moleculeId: 'molecule', memberId: 'only'
+    }, {
+        readList: async () => [
+            moleculeState('molecule', 'project_molecules', { hierarchy_order: 7, molecule_timeline: timeline }), only
+        ],
+        commitBatch: async (events) => { batches.push(events); return { ok: true }; },
+        closeTimeline: async (id) => { closed.push(id); return { ok: true, closed: true }; }
+    });
+    assert.equal(result.ok, true);
+    assert.equal(result.molecule_deleted, true);
+    assert.deepEqual(batches[0], [
+        { atome_id: 'only', project_id: 'project_molecules', parent_id: 'project_molecules', props: { hierarchy_order: 7 } },
+        { kind: 'delete', atome_id: 'molecule', project_id: 'project_molecules', props: {} }
+    ]);
+    assert.deepEqual(closed, ['molecule']);
 });
 
 test('an armed overlap survives normal movement inside the same target', async () => {
@@ -832,6 +1230,49 @@ test('an armed overlap survives normal movement inside the same target', async (
     });
     assert.equal(result.operation, 'merge');
     assert.deepEqual(calls, [{ projectId: 'project_molecules', sourceId: 'source', targetId: 'target' }]);
+});
+
+test('member reordering persists the first row as the front visual layer in one batch', async () => {
+    const batches = [];
+    const records = [
+        atomeState('text', 'molecule', { hierarchy_order: 1, z_index: 1 }),
+        atomeState('video', 'molecule', { hierarchy_order: 0, z_index: 2 }),
+        atomeState('audio', 'molecule', { hierarchy_order: 2, z_index: 0 })
+    ];
+    const result = await persistLevelOrder({
+        projectId: 'project_molecules',
+        records,
+        orderedIds: ['text', 'video', 'audio'],
+        visualStack: true,
+        commitBatch: async (events, options) => { batches.push({ events, options }); return { ok: true }; }
+    });
+    assert.equal(result.ok, true);
+    assert.equal(batches.length, 1);
+    assert.deepEqual(batches[0].events.map((event) => ({
+        id: event.atome_id,
+        hierarchy: event.props.hierarchy_order,
+        z: event.props.z_index,
+        renderLayer: event.props.renderLayer,
+        render_layer: event.props.render_layer
+    })), [
+        { id: 'text', hierarchy: 0, z: 3, renderLayer: 3, render_layer: 3 },
+        { id: 'video', hierarchy: 1, z: 2, renderLayer: 2, render_layer: 2 },
+        { id: 'audio', hierarchy: 2, z: 1, renderLayer: 1, render_layer: 1 }
+    ]);
+});
+
+test('member Plan commands project the same persisted visual order immediately', () => {
+    const source = fs.readFileSync(new URL(
+        '../../eVe/intuition/tools/z_order_actions.js', import.meta.url
+    ), 'utf8');
+    assert.match(source, /persistLevelOrder\([\s\S]*updateProjectSceneRecords\(/,
+        'the canonical order batch must be followed by its disposable project-scene projection');
+    assert.match(source, /projectRecordsWithOrder\(siblings, orderedIds, \{ visualStack: true \}\)/,
+        'Plan and List must project the same first-row-is-front ordering');
+    assert.match(source, /record\.meta\?\.parent_id/,
+        'Plan must recognize canonical Molecule membership carried by the record envelope');
+    assert.match(source, /projectedOwner \|\|[\s\S]*Atome\?\.getStateCurrent\?\.\(parentId\)/,
+        'Plan must resolve a non-visual Molecule owner from canonical Atome state');
 });
 
 test('structured drop geometry separates exact insertion slots from the shared overlap delay', () => {

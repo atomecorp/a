@@ -45,16 +45,21 @@ host.style.width = '320px';
 host.style.height = '180px';
 document.body.appendChild(host);
 
-await assert.rejects(
-    () => api.mountVisual(host, {
-        id: 'molecule_transaction_probe_video',
-        kind: 'video',
-        src: '/api/uploads/Vampire.m4v',
-        mediaUrl: '/api/uploads/Vampire.m4v',
-        duration: 1
-    }),
-    /Video metadata load failed/i
-);
+const mounted = await api.mountVisual(host, {
+    id: 'molecule_transaction_probe_video',
+    kind: 'video',
+    src: '/api/uploads/Vampire.m4v',
+    mediaUrl: '/api/uploads/Vampire.m4v',
+    duration: 1
+});
 
-assert.equal(engine.sessions.size, 0, 'failed mountVisual must rollback the registered Molecule session');
-assert.equal(api.getAssetState('molecule_transaction_probe_video'), null, 'failed mountVisual must not leave an asset binding');
+assert.equal(mounted.ok, true);
+assert.equal(mounted.renderer, 'webgpu');
+assert.equal(mounted.duration, 1, 'the explicit scheduler duration must not be replaced by decoder metadata');
+assert.equal(host.querySelectorAll('video, canvas').length, 0,
+    'Molecule mounting must not create a hidden video decoder or a second canvas');
+assert.equal(engine.sessions.size, 1);
+assert.equal(api.getAssetState('molecule_transaction_probe_video').duration, 1);
+await api.disposeAsset('molecule_transaction_probe_video');
+assert.equal(engine.sessions.size, 0, 'dispose must release the audio-only scheduler session');
+assert.equal(api.getAssetState('molecule_transaction_probe_video'), null);

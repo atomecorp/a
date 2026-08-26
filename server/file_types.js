@@ -11,7 +11,7 @@ import path from 'path';
 export const FILE_ATOME_TYPES = Object.freeze([
     'file', 'image', 'video', 'sound',
     'audio_recording', 'video_recording',
-    'text', 'shape', 'raw'
+    'text', 'shape', 'midi', 'raw'
 ]);
 const FILE_ATOME_TYPES_SQL = FILE_ATOME_TYPES.map(() => '?').join(', ');
 const FILE_ATOME_TYPES_SET = new Set(FILE_ATOME_TYPES);
@@ -22,6 +22,14 @@ const VIDEO_EXTENSIONS = new Set(['.mp4', '.mov', '.webm', '.mkv', '.avi', '.mpe
 const SOUND_EXTENSIONS = new Set(['.mp3', '.wav', '.ogg', '.flac', '.aac', '.m4a', '.aiff', '.aif', '.opus', '.weba']);
 const TEXT_EXTENSIONS = new Set(['.txt', '.md', '.markdown', '.csv', '.tsv', '.log']);
 const TEXT_MIME_TYPES = new Set(['text/plain', 'text/markdown', 'text/csv', 'text/tab-separated-values']);
+// MIDI : type de fichier à part entière. Le MIME `audio/midi` commence par `audio/`
+// sans qu'un `.mid` contienne du son — le classer `sound` ferait passer un fichier
+// injouable pour un média audio, rendu en forme d'onde et proposé à la lecture.
+// `atomes.atome_type` est un TEXT sans contrainte, donc ce type n'exige aucune
+// migration ; il permet à l'atome dérivé de porter son identité réelle.
+const MIDI_EXTENSIONS = new Set(['.mid', '.midi', '.smf']);
+const MIDI_MIME_TYPES = new Set(['audio/midi', 'audio/x-midi', 'audio/sp-midi', 'application/x-midi']);
+
 
 function normalizeMimeType(mimeType) {
     return typeof mimeType === 'string' ? mimeType.trim().toLowerCase() : '';
@@ -40,6 +48,8 @@ function inferFileAtomeType(fileName, mimeType) {
     const ext = normalizeExtension(fileName);
     const mime = normalizeMimeType(mimeType);
 
+    // Avant le test `audio/` : sinon `audio/midi` tomberait dans `sound`.
+    if (MIDI_EXTENSIONS.has(ext) || MIDI_MIME_TYPES.has(mime)) return 'midi';
     if (SHAPE_EXTENSIONS.has(ext) || mime === 'image/svg+xml') return 'shape';
     if (IMAGE_EXTENSIONS.has(ext) || (mime.startsWith('image/') && mime !== 'image/svg+xml')) return 'image';
     if (VIDEO_EXTENSIONS.has(ext) || mime.startsWith('video/')) return 'video';

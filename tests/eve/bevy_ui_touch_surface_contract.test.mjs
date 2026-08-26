@@ -515,6 +515,36 @@ test('Atome contextual runtime reuses its handed rail for virtual Molecule selec
     assert.equal(runtime.readState().menuVisible, true);
 });
 
+test('Structured member context promotes in place to canvas tools when Natural view returns', async () => {
+    const rendered = [];
+    const record = { id: 'video_member', type: 'video', properties: { kind: 'video', left: 20, top: 20, width: 160, height: 90 } };
+    const scene = { project_id: 'project', records: [record], scene: { byId: new Map() } };
+    const runtime = createAtomeContextualEditRuntime({
+        legacyState: {},
+        resolveDefinitions: ({ railOnly }) => railOnly ? [] : [{ key: 'z_order', label: 'Plan', icon: 'modules', toolType: 'tool' }],
+        invokeDefinition: async () => ({ ok: true }),
+        surfaceResolver: () => ({ getBoundingClientRect: () => ({ width: 800, height: 600 }) }),
+        bevyRuntimeResolver: () => ({
+            mountTree: async ({ tree }) => rendered.push(tree),
+            updateTree: async ({ tree }) => rendered.push(tree), unmountTree: async () => null
+        }),
+        findSceneByAtomeId: (id) => id === record.id ? scene : null,
+        readMainMenuHeight: () => 52
+    });
+    runtime.enterVirtual({
+        atomeId: record.id, kind: 'video', projectId: 'project', record,
+        definitions: [{ key: 'structured_info', label: 'Info', icon: 'info', toolType: 'tool' }],
+        invokeDefinition: async () => ({ ok: true })
+    });
+    await runtime.render();
+    assert.ok(findNode(rendered.at(-1).root, 'atome_contextual_tool_structured_info'));
+    assert.deepEqual(runtime.promoteActiveToCanvas(), { ok: true, atome_id: record.id, rail_only: false });
+    await runtime.render();
+    assert.ok(findNode(rendered.at(-1).root, 'atome_contextual_tool_z_order'));
+    assert.equal(findNode(rendered.at(-1).root, 'atome_contextual_tool_structured_info'), null);
+    assert.equal(runtime.readState().activeAtomeId, record.id);
+});
+
 test('Atome contextual Size slider pins on click and closes only after a transient direct drag', async () => {
     const records = [{ id: 'text_a', properties: { kind: 'text', text: 'Styled', left: 20, top: 20, width: 160, height: 60 } }];
     const scene = { project_id: 'project', records, text: null };

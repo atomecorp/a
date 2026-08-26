@@ -1,0 +1,818 @@
+Prompt — Intégration de Basic Pitch comme outil standard eVe
+
+Fichier cible : audio2midi_converter_tool.md
+
+Tu travailles sur atome/eVe.
+
+L’objectif est d’intégrer Spotify Basic Pitch comme un outil standard eVe permettant de convertir un média Audio existant en MIDI, avec une priorité à la simplicité, au fonctionnement 100 % local/offline et à la compatibilité iOS / WKWebView.
+
+Le résultat ne doit pas être un prototype isolé ou une page spécifique : il doit s’intégrer dans l’architecture normale des outils eVe.
+
+────────
+
+1. Objectif utilisateur
+
+Lorsqu’un utilisateur sélectionne un média de type Audio dans eVe et ouvre son menu Flower, un nouvel outil doit être disponible :
+
+Audio to MIDI
+
+Cet outil analyse le fichier audio sélectionné avec Basic Pitch et génère un nouveau média MIDI exploitable dans eVe.
+
+Cas d’usage prioritaire :
+
+• convertir une ligne de basse isolée en MIDI ;
+• convertir une guitare, une voix ou un autre instrument en MIDI ;
+• convertir un fichier audio déjà présent dans eVe ;
+• conserver le traitement entièrement local sur l’appareil.
+
+Le traitement n’a pas besoin d’être temps réel.
+
+────────
+
+2. Contraintes absolues
+
+JavaScript uniquement
+
+Le code eVe doit rester en JavaScript pur.
+
+Ne pas introduire de TypeScript dans le projet.
+
+Le dépôt source basic-pitch-ts est écrit en TypeScript, mais le package officiel @spotify/basic-pitch publie déjà des builds JavaScript :
+
+• ESM ;
+• CommonJS.
+
+Utiliser directement le build JavaScript/ESM distribué.
+
+Ne pas recopier les sources TypeScript dans eVe.
+
+Offline
+
+Le traitement doit fonctionner sans connexion Internet après installation de l’application.
+
+Le modèle Basic Pitch et toutes les ressources nécessaires doivent être embarqués avec eVe.
+
+Aucun upload audio.
+
+Aucun appel à une API Spotify.
+
+Aucun serveur externe.
+
+Aucune dépendance à la démo Web de Basic Pitch.
+
+iOS
+
+La première implémentation doit fonctionner directement dans l’environnement Web de eVe :
+
+• Safari/WebKit pour le test Web ;
+• WKWebView dans eVe sur iOS ;
+• navigateur desktop pour le développement.
+
+Ne pas ajouter CoreML, Swift, Python, serveur local ou bridge natif tant que la version JavaScript/TensorFlow.js fonctionne correctement sur les appareils iOS cibles.
+
+Le but de cette première intégration est précisément de vérifier que cette voie Web suffit.
+
+────────
+
+3. Framework à utiliser
+
+Utiliser le package officiel :
+
+@spotify/basic-pitch
+
+Projet officiel :
+
+https://github.com/spotify/basic-pitch-ts
+
+Projet principal :
+
+https://github.com/spotify/basic-pitch
+
+Licence :
+
+Apache License 2.0
+
+Basic Pitch est un système de transcription automatique audio → notes MIDI. Il supporte notamment :
+
+• notes polyphoniques ;
+• plusieurs types d’instruments ;
+• vélocité/amplitude ;
+• pitch bends ;
+• traitement offline d’un AudioBuffer.
+
+La version JavaScript utilise actuellement TensorFlow.js pour l’inférence.
+
+────────
+
+4. Principe d’intégration
+
+Ne pas créer une architecture spéciale pour Basic Pitch.
+
+Avant de coder :
+
+1. inspecter l’architecture actuelle d’eVe ;
+2. trouver un outil existant accessible depuis le Flower menu d’un média ;
+3. identifier comment eVe déclare qu’un outil est compatible avec un type de média ;
+4. identifier comment eVe récupère le contenu audio d’un média ;
+5. identifier comment eVe crée un nouveau média dérivé ;
+6. identifier le système existant de progression / notification / erreur ;
+7. reproduire exactement ces conventions.
+
+Ne pas inventer une nouvelle API eVe si une API existante peut être utilisée.
+
+Si les noms réels des fonctions ou objets eVe diffèrent des exemples de ce document, utiliser les API existantes du projet.
+
+────────
+
+5. Apparition dans le Flower menu
+
+L’outil doit apparaître uniquement lorsque le contexte sélectionné contient un média compatible de type :
+
+Audio
+
+Nom visible :
+
+Audio to MIDI
+
+Le Flower menu doit simplement déclencher l’outil.
+
+Ne pas ajouter de panneau permanent à l’interface.
+
+Pour la première version, le workflow doit être volontairement très simple :
+
+Sélection Audio → Flower → Audio to MIDI → Convert → nouveau média MIDI
+
+────────
+
+6. Interface minimale
+
+Lors de l’ouverture de l’outil, afficher uniquement les éléments nécessaires.
+
+Obligatoire
+
+• nom : Audio to MIDI
+• média audio source
+• bouton Convert
+• progression de l’analyse
+• bouton/état Cancel si l’architecture eVe permet déjà l’annulation
+• résultat ou erreur
+
+Réglages optionnels
+
+Pour la V1, ne pas créer une interface complexe.
+
+Si Basic Pitch expose facilement les paramètres nécessaires, proposer seulement :
+
+• Minimum pitch
+• Maximum pitch
+• Onset threshold
+• Frame threshold
+• Minimum note length
+
+Prévoir un preset simple :
+
+Bass
+
+Le preset Bass doit limiter la plage de notes à une plage cohérente pour une basse afin de réduire les détections parasites, mais ne doit pas empêcher l’utilisateur de modifier cette plage.
+
+Ne pas sur-optimiser la V1.
+
+La conversion fonctionnelle est prioritaire.
+
+────────
+
+7. Chargement de l’audio
+
+Utiliser le fichier audio déjà associé au média eVe.
+
+Transformer l’audio en AudioBuffer avec les APIs Web Audio déjà disponibles dans l’environnement WebKit.
+
+Schéma logique :
+
+```text
+eVe Audio Media
+      ↓
+raw audio data / Blob / ArrayBuffer
+      ↓
+AudioContext.decodeAudioData()
+      ↓
+AudioBuffer
+      ↓
+Basic Pitch
+```
+
+Réutiliser le pipeline audio existant d’eVe lorsqu’il existe.
+
+Éviter les conversions inutiles de fichiers.
+
+Ne jamais envoyer l’audio sur le réseau.
+
+────────
+
+8. Chargement de Basic Pitch
+
+Importer le build ESM JavaScript du package officiel.
+
+Conceptuellement :
+
+```js
+import {
+  BasicPitch,
+  outputToNotesPoly,
+  addPitchBendsToNoteEvents,
+  noteFramesToTime
+} from '@spotify/basic-pitch';
+```
+
+Adapter les imports à la version réellement installée du package.
+
+Ne pas utiliser les fichiers .ts du dépôt.
+
+Le modèle doit être stocké dans les assets locaux d’eVe et chargé par une URL locale compatible WKWebView.
+
+Vérifier que le modèle ne déclenche aucune requête Internet.
+
+────────
+
+9. Inférence
+
+Le flux Basic Pitch attendu est conceptuellement :
+
+```js
+const basicPitch = new BasicPitch(localModel);
+
+await basicPitch.evaluateModel(
+  audioBuffer,
+  (frames, onsets, contours) => {
+    // accumuler les sorties
+  },
+  progress => {
+    // progression eVe
+  }
+);
+```
+
+Puis convertir les sorties du modèle en événements de notes avec les fonctions officielles de Basic Pitch.
+
+Conceptuellement :
+
+```js
+const notes = noteFramesToTime(
+  addPitchBendsToNoteEvents(
+    contours,
+    outputToNotesPoly(
+      frames,
+      onsets,
+      onsetThreshold,
+      frameThreshold,
+      minimumNoteLength
+    )
+  )
+);
+```
+
+Vérifier la signature exacte avec la version de @spotify/basic-pitch installée.
+
+Ne pas figer aveuglément les exemples ci-dessus si l’API officielle a évolué.
+
+────────
+
+10. Création du MIDI
+
+Transformer les événements retournés par Basic Pitch en données MIDI.
+
+Utiliser en priorité les utilitaires déjà présents dans Basic Pitch ou les dépendances qu’il fournit.
+
+Le MIDI généré doit conserver autant que possible :
+
+• pitch ;
+• début de note ;
+• durée ;
+• vélocité ;
+• pitch bend lorsque disponible.
+
+Pour une première version, un seul fichier MIDI standard est suffisant.
+
+────────
+
+11. Intégration du résultat dans eVe
+
+La conversion ne doit pas seulement télécharger un .mid.
+
+Elle doit créer un nouveau média MIDI eVe à partir du résultat.
+
+Le média généré doit :
+
+• posséder un nom dérivé du média source ;
+• être clairement relié au média audio source si le modèle de données eVe possède déjà une notion de parent/source/derivation ;
+• être immédiatement disponible pour les outils MIDI de eVe ;
+• pouvoir être sauvegardé dans le projet ;
+• pouvoir être exporté comme fichier .mid.
+
+Nom par défaut suggéré :
+
+```text
+<source-name> - MIDI
+```
+
+Exemple :
+
+```text
+bass_take_01.wav
+→
+bass_take_01 - MIDI
+```
+
+Ne pas inventer de nouvelle structure de relation si eVe dispose déjà d’un mécanisme pour les médias dérivés.
+
+────────
+
+12. Traitement asynchrone et UI
+
+La conversion peut prendre plusieurs secondes.
+
+Elle ne doit pas bloquer l’interface.
+
+Afficher la progression fournie par evaluateModel() dans le système de progression standard eVe.
+
+Au minimum :
+
+```text
+Preparing audio…
+Loading model…
+Analyzing… 0–100 %
+Creating MIDI…
+Done
+```
+
+Le modèle doit idéalement rester en mémoire après une première conversion afin d’éviter de le recharger pour chaque fichier, tant que cela reste raisonnable pour la mémoire disponible.
+
+Sur iOS, surveiller particulièrement :
+
+• consommation mémoire ;
+• crash WKWebView ;
+• temps de chargement du modèle ;
+• gros fichiers audio ;
+• mise en arrière-plan de l’application.
+
+────────
+
+13. Gestion des fichiers longs
+
+Ne pas compliquer immédiatement la V1.
+
+Commencer par vérifier des fichiers courts et moyens.
+
+Si WKWebView rencontre des problèmes de mémoire avec de longs fichiers, ajouter ensuite un traitement par segments/chunks.
+
+Ne pas construire le système de chunking avant d’avoir démontré qu’il est nécessaire.
+
+────────
+
+14. Compatibilité basse
+
+Le premier test fonctionnel doit être effectué avec une ligne de basse isolée, car c’est le cas d’usage prioritaire.
+
+Tester notamment :
+
+• notes graves ;
+• attaques franches ;
+• notes longues ;
+• glissés ;
+• hammer-on / pull-off si présents ;
+• silences ;
+• répétitions rapides.
+
+Vérifier spécialement la détection autour des notes graves usuelles de basse.
+
+Basic Pitch descend jusqu’à la plage grave utile pour une basse standard ; le problème principal à valider est donc la qualité de transcription, pas simplement l’accès aux fréquences graves.
+
+Prévoir le preset Bass uniquement comme filtre/post-traitement de plage de notes, pas comme modèle IA différent.
+
+────────
+
+15. Licence
+
+Basic Pitch est publié sous Apache License 2.0.
+
+L’intégration dans eVe est donc compatible avec une utilisation et une distribution dans un produit, sous réserve de respecter les obligations de la licence.
+
+À faire :
+
+• conserver les notices de copyright ;
+• inclure la licence Apache 2.0 de Basic Pitch dans les licences tierces de eVe ;
+• conserver les notices requises lors de la redistribution ;
+• identifier également les licences des dépendances effectivement embarquées, notamment TensorFlow.js et @tonejs/midi.
+
+Ne pas utiliser le logo Spotify ou présenter Basic Pitch comme une technologie officiellement approuvée par Spotify au-delà de l’attribution factuelle nécessaire.
+
+────────
+
+16. Dépendances
+
+La première implémentation doit chercher à utiliser les dépendances du package officiel telles quelles.
+
+Ne pas remplacer TensorFlow.js par une autre runtime ML pendant ce premier travail.
+
+Ne pas porter le modèle en Rust.
+
+Ne pas convertir le modèle vers CoreML.
+
+Ne pas créer de backend Python.
+
+Ces pistes pourront être évaluées uniquement si le prototype JavaScript échoue pour des raisons mesurables de performances, mémoire ou compatibilité iOS.
+
+────────
+
+17. Tests obligatoires
+
+Test Web
+
+Tester dans un navigateur moderne avec connexion Internet désactivée après chargement de l’application.
+
+La conversion doit continuer à fonctionner.
+
+Test iOS
+
+Tester dans la WKWebView réelle de eVe, pas uniquement dans Safari.
+
+Minimum :
+
+1. lancer eVe ;
+2. sélectionner un média Audio ;
+3. ouvrir Flower ;
+4. choisir Audio to MIDI ;
+5. convertir ;
+6. obtenir le média MIDI ;
+7. lire/utiliser le MIDI dans eVe ;
+8. refaire le test en mode avion.
+
+Tests audio
+
+Tester au minimum :
+
+• basse isolée ;
+• guitare isolée ;
+• voix ;
+• fichier WAV ;
+• un autre format audio déjà pris en charge par eVe.
+
+Tests erreurs
+
+Vérifier :
+
+• fichier audio invalide ;
+• fichier vide ;
+• modèle inaccessible ;
+• mémoire insuffisante ;
+• conversion annulée ;
+• format non décodable par Web Audio.
+
+────────
+
+18. Critères d’acceptation V1
+
+La tâche est considérée terminée lorsque :
+
+☐ Audio to MIDI apparaît dans Flower pour les médias Audio.
+☐ L’outil n’apparaît pas pour les médias incompatibles.
+☐ Le fichier audio est traité localement.
+☐ Basic Pitch et son modèle fonctionnent sans Internet.
+☐ Aucun TypeScript n’est ajouté au code source eVe.
+☐ Aucun serveur externe n’est nécessaire.
+☐ Aucun bridge Swift/CoreML n’est nécessaire.
+☐ La progression est visible.
+☐ Une ligne de basse isolée produit des notes MIDI exploitables.
+☐ Le résultat devient un média MIDI eVe standard.
+☐ Le MIDI peut être exporté.
+☐ Le workflow fonctionne dans WKWebView sur iOS.
+☐ Le workflow fonctionne en mode avion.
+☐ Les licences tierces nécessaires sont ajoutées au projet.
+
+────────
+
+19. Priorité d’implémentation
+
+Procéder exactement dans cet ordre :
+
+Étape 1 — Inspection
+
+Trouver dans le projet eVe :
+
+• le système Flower ;
+• la déclaration des outils ;
+• un outil existant appliqué à un média ;
+• le système de création de média ;
+• le pipeline audio ;
+• le système de progression.
+
+Étape 2 — Prototype interne minimal
+
+Sans interface élaborée :
+
+```text
+AudioBuffer
+→ Basic Pitch local
+→ événements MIDI
+```
+
+Valider cela dans le navigateur.
+
+Étape 3 — Test WKWebView iOS
+
+Faire exactement la même conversion dans eVe sur iOS.
+
+C’est le test décisif.
+
+Étape 4 — Création du média MIDI eVe
+
+Connecter le résultat au modèle de données eVe.
+
+Étape 5 — Flower
+
+Ajouter l’entrée Audio to MIDI.
+
+Étape 6 — UI minimale
+
+Ajouter progression, erreur et éventuellement le preset Bass.
+
+Étape 7 — Offline
+
+Tester en mode avion et vérifier dans les outils réseau qu’aucune ressource Basic Pitch n’est demandée à Internet.
+
+Étape 8 — Optimisation uniquement si nécessaire
+
+Ne commencer les optimisations mémoire, workers, chunking ou runtime alternatif qu’après mesure d’un problème réel.
+
+────────
+
+20. Ce qu’il ne faut PAS faire
+
+Ne pas :
+
+• introduire TypeScript dans eVe ;
+• installer Python dans l’application ;
+• envoyer les fichiers audio vers un serveur ;
+• utiliser une API cloud de transcription ;
+• créer une dépendance réseau ;
+• porter immédiatement Basic Pitch en Rust ;
+• créer immédiatement un bridge Swift/CoreML ;
+• faire du temps réel ;
+• transformer cette tâche en AUv3 ;
+• construire une grosse UI ;
+• réécrire Basic Pitch ;
+• inventer de nouvelles abstractions eVe avant d’avoir examiné celles qui existent ;
+• optimiser avant d’avoir un prototype fonctionnel.
+
+────────
+
+21. Architecture cible V1
+
+```text
+              eVe
+               │
+        Audio media selected
+               │
+            Flower
+               │
+        ┌───────────────┐
+        │ Audio to MIDI │
+        └───────────────┘
+               │
+               ▼
+       eVe audio resource
+               │
+               ▼
+          AudioBuffer
+               │
+               ▼
+   @spotify/basic-pitch
+       + local model
+       + TensorFlow.js
+               │
+               ▼
+         Note events
+               │
+               ▼
+           MIDI data
+               │
+               ▼
+       eVe MIDI media
+```
+
+Tout ce bloc doit fonctionner localement dans WKWebView.
+
+────────
+
+22. Résultat attendu du développeur / agent
+
+À la fin du travail, fournir :
+
+1. les fichiers créés/modifiés ;
+2. l’emplacement où l’outil est enregistré dans Flower ;
+3. la manière dont Basic Pitch et son modèle sont bundlés ;
+4. la preuve qu’aucun accès réseau n’est nécessaire ;
+5. le test réalisé sur navigateur ;
+6. le test réalisé dans WKWebView iOS ;
+7. le test réalisé avec une ligne de basse ;
+8. les éventuels problèmes de performance observés, avec mesures ;
+9. les licences tierces ajoutées ;
+10. uniquement si la solution JS échoue réellement sur iOS, une description précise de la cause avant de proposer une architecture plus complexe.
+
+La priorité est :
+
+faire fonctionner le chemin le plus simple possible, entièrement local, en JavaScript, dans eVe sur iOS.
+────────
+
+23. Journal d'implémentation — 25 août 2026
+
+Lots 1 à 7 livrés. 5 probes, 152 vérifications, toutes vertes.
+
+Fichiers créés
+
+• scripts/basic-pitch-entry.js, scripts/bundle-basic-pitch.js (+ script npm `bundle:basic-pitch`)
+• atome/src/assets/vendor/basic-pitch/  → basic_pitch.bundle.js (1,16 Mo), model/ (917 Ko), LICENSE
+• eVe/intuition/tools/audio_to_midi/  → index, runtime, engine, context, result_media, midi_writer, presets, feedback
+• temp/audio_to_midi_{offline,engine,flower_items,media,storage_contract}_probe.mjs
+
+Fichiers modifiés
+
+• eVe/intuition/bootstrap.js — import de l'outil
+• eVe/intuition/runtime/eve_intuition/main_menu_content_runtime.js — entrée `audio_to_midi`
+• eVe/intuition/runtime/eve_intuition/flower_context_items_runtime.js — jeu audio-seul
+• eVe/i18n/languages_{en,fr}_core.js — libellé, étapes, 12 codes d'erreur
+• THIRD_PARTY_LICENSES.md — attributions Apache 2.0 / MIT
+• package.json — devDependency + script
+• eVe/domains/media/asset_box_media.js et server/file_types.js — cf. « bug corrigé » ci-dessous
+
+Bundling : zéro déclaration de plateforme
+
+Le build ESM amont n'est pas chargeable par un navigateur (réexports relatifs sans
+extension, `@tensorflow/tfjs` en spécificateur nu) → bundle esbuild committé, sur le
+modèle de scripts/bundle-codemirror.js. Posé sous `atome/src/assets/vendor/`, il est servi
+tel quel par les quatre cibles : Fastify `/atome/`, axum `nest_service("/atome")`, et pour
+iOS **et AUv3** la réécriture `atome/` → `atome_open/` du AudioSchemeHandler alimentée par
+le rsync de la phase de build Xcode. Aucune importmap, aucune route, aucun Swift touché —
+contrairement à rubberband-wasm qui avait coûté 4 déclarations à synchroniser.
+
+Bug corrigé (trouvé par la probe de contrat de stockage)
+
+`audio/midi` commence par `audio/`, donc `inferUploadAtomeType` ET `resolveFileAtomeType`
+classaient le `.mid` produit en `sound`. Conséquences : le MIDI dérivé serait rendu en
+forme d'onde, proposé à la lecture, et **l'outil se serait offert à son propre résultat**.
+Les deux classificateurs excluent désormais explicitement les extensions/MIME MidI avant
+le test `audio/`, et rendent `raw`. Aucune régression : `.wav/.mp3/.m4a/.aiff/.flac`
+restent `sound`, `.svg` `shape`, `.mp4` `video`. Aucun `.mid` n'existait auparavant dans
+eVe, donc l'exclusion n'a aucun effet rétroactif.
+⚠️ Le serveur Fastify doit être redémarré pour que le correctif de server/file_types.js
+prenne effet.
+
+Backend : l'ordre a été inversé APRÈS mesure
+
+Mesuré sur la page eVe réelle (canvas Bevy 1920×1080 actif), 4 s d'audio :
+
+    backend   1re passe   2e passe
+    cpu        8 199 ms    7 033 ms
+    webgl      8 434 ms    9 000 ms   (+ ~13 s de compilation de shaders au 1er appel)
+
+`cpu` gagne : le modèle est petit, ses convolutions ne saturent pas le GPU et le transfert
+CPU↔GPU par lot domine. Préférer `cpu` supprime en prime le risque de contention avec le
+canvas Bevy. L'ordre par défaut est donc ['cpu','webgl'] — mais il reste surchargeable
+(`input.backend`) car ce classement vient d'un Mac et peut s'inverser sur iOS/AUv3.
+
+Coût mesuré et garde-fou
+
+10 s d'audio → 16,4 s de calcul (≈1,6× temps réel), pic TensorFlow 58 Mo, sorties JS
+accumulées 2,9 Mo. Le coût est linéaire : ≈38 k nombres par seconde d'audio, tous gardés
+en mémoire jusqu'à la fin. Pour 5 minutes → ≈90 Mo de sorties JS seules, au-delà de ce
+qu'une extension AUv3 peut se permettre. D'où un refus explicite au-delà de 180 s
+(`AUDIO_TO_MIDI_MAX_SECONDS`, surchargeable, avec durée/borne/coût estimé dans l'erreur)
+plutôt qu'un plafond silencieux. §13 respecté : pas de chunking avant besoin démontré.
+
+Vérifié
+
+☑ Bundle et modèle servis en 200 par Fastify, MIME corrects
+☑ Offline structurel : 0 CDN, 0 backend à ressource externe, poids en chemin relatif
+☑ Pipeline complet en navigateur : WAV 48 kHz stéréo → 22 050 mono → 6 notes → MIDI `MThd`
+☑ Hauteurs identiques en cpu (Node) et webgl (navigateur) : 40, 45, 52, 57 sur une basse
+☑ Boot d'eVe propre, `eveAudioEditApi` intact, moteur NON chargé au boot (paresseux)
+☑ Entrée présente dans le contenu VIVANT du menu de l'app (« Audio vers MIDI », latch)
+☑ Absente pour vidéo/image/texte/shape/group/molecule/raw, le projet et l'item de surface
+☑ Refus du runtime dans l'app : codes stables, rien ne jette, moteur non chargé
+☑ Annulation en cours de route : le calcul s'interrompt vraiment
+☑ 3 mutations sur le moteur, 2 sur le Flower, 2 sur le média → toutes rouges
+
+Reste à vérifier (NON fait)
+
+☐ Bout-en-bout avec création réelle du média : la session du navigateur est `local_guest`
+  et n'a aucun principal serveur, donc tout écrit cloud 401. Nécessite une session
+  authentifiée. Le maillon serveur est prouvé isolément (probe de contrat de stockage),
+  le maillon importeur seulement par capture d'appel.
+☐ iOS WKWebView, et AUv3 — le test décisif (mémoire, temps, arrière-plan, mode avion)
+☐ Tauri
+☐ Mode avion réel
+☐ Matériel audio réel : basse isolée, guitare, voix, formats variés
+
+────────
+
+24. Journal — passe menus Flower, type MIDI, verbes, code mort (25 août 2026)
+
+8 probes, 293 vérifications, toutes vertes, chacune mutée pour prouver qu'elle peut être
+rouge.
+
+Type MIDI de première classe
+
+`atomes.atome_type` étant un TEXT sans contrainte CHECK, aucune migration n'a été
+nécessaire. `midi` est ajouté à `FILE_ATOME_TYPES` (serveur) et rendu par les deux
+classificateurs. Le créateur le laisse passer : `CREATOR_RENDERABLE_KINDS` le contenait
+pas, et sans lui `normalizeCreatorKind` ramenait le type à `raw` — l'atome aurait perdu
+son identité, donc son menu.
+
+Le point dur : identité ≠ rendu
+
+`scene.byId` contient les renderAtoms, dont `type` est le type de RENDU. Un `.svg` y est
+`image`, un `sound` un `audio_waveform`, et un `midi` — que le moteur ne sait pas peindre
+— retombe sur `text`. Le Flower lisait ce champ : un atome MIDI aurait donc hérité du
+menu du TEXTE. Déclarer un kind `midi` au renderer n'était pas une option non plus :
+`assertRendererAdapterKind` JETTE sur un kind inconnu, ce qui ferait tomber la scène
+entière.
+
+Le renderAtom porte désormais `atomeType` (ce que l'objet EST) à côté de `type` (comment
+le dessiner), et `context_target.js` lit `atomeType` en priorité sur ses DEUX chemins
+(scène et hit-test). La confusion existait avant ce travail — elle était invisible parce
+que rendu et identité coïncidaient presque partout.
+
+Jeux Flower par type d'objet
+
+Cascade de ternaires remplacée par une table `kind → clés`. Vérifiés au jeu exact, et
+chaque retrait vérifié nommément :
+
+    sound/audio   copy, delete, info, couleur, communicate, play, audio_to_midi
+    video         copy, delete, info, couleur, communicate, play
+    image         copy, delete, info, communicate
+    shape         copy, delete, info, communicate
+    text          copy, delete, info, couleur, font, communicate
+    midi          copy, delete, info, couleur, communicate, play
+    molecule      inchangé, moins detail        (défaut) inchangé, moins detail
+
+⚠️ `play` sur le MIDI est déclaré mais reste INVISIBLE : `readSelectedProjectMediaPlaybackState`
+n'admet que `audio` et `video`. Décision actée — l'entrée apparaîtra d'elle-même le jour
+où une lecture MIDI existera, sans rien changer à la table.
+⚠️ En vue liste et matrice, un atome ouvre le menu « item de surface » (rename, duplicate,
+copy, paste, delete, info), commun à toutes les surfaces. Le jeu par type s'applique dans
+la vue projet. Ce comportement est antérieur et n'a pas été modifié.
+
+Panneau Detail : supprimé, pas débranché
+
+`readKaraokeHostApi()` était un `() => null` en dur et aucun module ne fournissait sa
+source de données : le panneau n'a jamais pu afficher autre chose que son état vide.
+9 fichiers, ~2 570 lignes supprimées, plus ses déclarations dans 13 fichiers
+(panel_definitions, tool_runtime, tool_runtime_bootstrap, defs_a/b, tool_latch_aliases,
+panel_tool_registration, panel_module_loaders, panel_actions, main_menu_content,
+main_menu_runtime, main_tool_interaction, main_tool_latched_state, eVeIntuition,
+boot_runtime) et ses clés i18n.
+
+Ce qui n'était PAS mort et devait survivre : `ui.detail.record.toggle`, utilisé par le
+rail rec, `draw_record_live` et le footer d'atome. Réhébergé dans
+`tools/core/record_action_tool.js` sur `record_action_state.js`, qui était déjà le
+propriétaire réel de cet état. Vérifié à travers la VRAIE passerelle : mode `key` et
+`live` répondent `bridged: 'registered_handler'` et basculent l'état.
+Correction au passage : `record_source` était silencieusement perdu par l'ancien handler
+alors que le footer d'atome le lit — il est désormais transmis.
+
+Aussi retiré : `detail` était le PREMIER outil du footer contextuel d'atome pour les
+7 kinds (non vu au plan) ; l'entrée de menu `play_stop`, orpheline de toute palette et
+sans aucune autre référence dans le dépôt ; `FLOWER_MEDIA_PLAY_KINDS`, devenu inutile
+après avoir fait porter la garde anti-doublon de `play` sur le jeu lui-même.
+
+Libellés et internationalisation
+
+L'audit a trouvé 5 entrées sans aucune clé i18n (`play`, `pause`, `stop`, `select`, plus
+`couleur`/`size`/`font`), puis la probe-garde en a révélé 17 autres — dont les
+`z_order_*`, dont les libellés en dur étaient en FRANÇAIS et s'affichaient donc en
+français même en anglais. Toutes corrigées, EN et FR.
+
+    communicate  communiquer      couleur  colorer          size   redimensionner
+    font         changer la police  play   lire             stop   arrêter
+    import       importer         info     infos (reste un nom, décision actée)
+    audio_to_midi  EN « to midi » / FR « vers MIDI »
+
+`temp/tool_labels_i18n_probe.mjs` est la garde durable : toute entrée atteignable doit
+avoir un `labelKey` présent dans les DEUX catalogues, et aucun libellé ne doit être écrit
+en dur.
+
+Vérifié
+
+☑ Boot de l'app propre, aucune ressource en échec sur 250, aucune requête vers tools/detail
+☑ `detail` et `play_stop` absents du contenu VIVANT du menu ; `window.open_detail_panel` disparu
+☑ Le bouton rec fonctionne à travers la passerelle réelle (modes key et live)
+☑ Libellés traduits dans l'app : colorer, redimensionner, lire, communiquer, infos, vers MIDI
+☑ `atomeType` : midi→(text, midi), svg→(image, shape), sound→(audio_waveform, sound)
+☑ Le MIDI apparaît au niveau projet ET dans une molecule ; aucune vue ne filtre par type
+
+Reste à vérifier (inchangé)
+
+☐ Bout-en-bout avec création réelle du média (session navigateur = local_guest)
+☐ iOS WKWebView, AUv3, Tauri, mode avion
+☐ Aucun rendu MIDI : l'atome s'affiche comme un bloc « <nom> · N notes ». Piano roll = lot séparé.
+☐ Aucune lecture MIDI : `play` déclaré, volontairement inactif.

@@ -5,7 +5,7 @@ export function audio_destroy_clip(id: string): void;
  * Load an audio clip from raw bytes (WAV, MP3, OGG).
  * In WASM, we cannot read files from disk so JS must pass the bytes.
  */
-export function audio_load_clip_from_bytes(id: string, data: Uint8Array): void;
+export function audio_load_clip_from_bytes(id: string, data: Uint8Array): number;
 export function audio_play(id: string): void;
 export function audio_set_volume(id: string, db: number): void;
 export function audio_init(): void;
@@ -109,7 +109,7 @@ export interface InitOutput {
   readonly memory: WebAssembly.Memory;
   readonly audio_destroy_clip: (a: number, b: number) => [number, number];
   readonly audio_init: () => [number, number];
-  readonly audio_load_clip_from_bytes: (a: number, b: number, c: number, d: number) => [number, number];
+  readonly audio_load_clip_from_bytes: (a: number, b: number, c: number, d: number) => [number, number, number];
   readonly audio_play: (a: number, b: number) => [number, number];
   readonly audio_play_instance: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number, m: number, n: number) => [number, number];
   readonly audio_set_pan: (a: number, b: number, c: number) => [number, number];

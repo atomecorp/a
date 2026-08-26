@@ -18,7 +18,18 @@ Canonical Molecule creation/absorb/ungroup/delete remain public module exports
 of `tool_runtime_atome_mutation.js`. The extracted
 `tool_runtime_atome_mutation_shared.js` and `tool_runtime_atome_duplicate.js`
 are internal factorization boundaries and do not expose a parallel mutation
-path.
+path. `deleteCanonicalMolecule` closes the registered group-timeline API only
+after its canonical owner/member batch succeeds; contextual Molecule Delete
+loads and invokes the existing `ui.delete.selection` owner rather than exposing
+another deletion endpoint. Structured List/Matrix readers never expose
+`__deleted`/`deleted_at` tombstones as project items.
+
+Project activation is an internal latest-wins operation owned by
+`activateProjectWorkspace`. It prepares the persisted representation through
+`project_view_mode_state.js`, then calls `loadProjectAtomes` with the internal
+`viewModePrepared: true` option. That option suppresses only the redundant
+post-load mode restoration for this activation; it is not persistent state and
+does not create a second view-mode API.
 
 Current native collaboration contract (2026-08-14): Tauri keeps Axum as its
 primary local data API and exposes Fastify only as the configured collaboration

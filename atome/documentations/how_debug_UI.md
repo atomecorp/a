@@ -22,6 +22,10 @@ await page.waitForFunction(async () => {
 
 The product menu and Flower have no DOM buttons, DOM proxies, browser aliases, or global runtime state. Do not wait for a legacy menu global or query an old ribbon/Flower selector.
 
+## Local test data
+
+Unless the user explicitly identifies a production target, treat a verified local runtime and local database as a resettable test environment. Verify the endpoint and storage path before any reset, then prioritize the user's real data and UI gestures for acceptance; fixtures may support diagnosis but never replace that replay.
+
 ## Real canvas interaction
 
 BevyUI interaction targets are overlay records projected on the shared `eve_surface_project` canvas. A real Playwright pointer click at the record center is the canonical user path.

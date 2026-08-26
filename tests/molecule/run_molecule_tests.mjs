@@ -8,9 +8,12 @@ const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'
 // Node-runnable Molecule suites. Browser-driven visual probes that need a live
 // app server stay manual.
 const SUITES = [
+    'tests/probes/media_playback_command.probe.mjs',
     'tests/probes/molecule_automation.probe.mjs',
     'tests/probes/molecule_dual_time_model.probe.mjs',
     'tests/probes/molecule_mount_visual_transaction.probe.mjs',
+    'tests/probes/molecule_audio_mix_transport.probe.mjs',
+    'tests/probes/molecule_scene_stack_commit.probe.mjs',
     'tests/probes/molecule_nested.probe.mjs',
     'tests/probes/molecule_multitrack_timeline_probe.probe.mjs',
     'tests/probes/molecule_session_history.probe.mjs',

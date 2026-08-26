@@ -48,10 +48,54 @@ test('transport projection unfolds Sections left-to-right and scopes Section pla
         ['clip_a', 0], ['clip_b', 2]
     ]);
     assert.deepEqual([molecule.tracks[0].gain, molecule.tracks[0].pan], [1.35, -0.4]);
+    assert.equal(molecule.tracks[0].clips[0].gain, 1,
+        'Track gain must be applied exactly once by the shared executor');
+    assert.equal(molecule.tracks[0].clips[0].playbackRate, 1,
+        'Natural playback must not introduce an implicit stretch');
     const section = await buildTransportTimeline(env, timeline, { section_id: 'section_b' });
     assert.deepEqual(section.tracks.flatMap((track) => track.clips).map((clip) => [clip.id, clip.start]), [
         ['clip_b', 0]
     ]);
+});
+
+test('transport normalizes recorded media kinds only at the playback boundary', async () => {
+    let timeline = createTimeline({
+        timeline_id: 'tl_recorded_media', project_id: 'project_recorded_media',
+        owner_atome_id: 'molecule_recorded_media', initial_section_id: 'section_recorded',
+        initial_track_id: 'track_video'
+    });
+    timeline = updateSection(timeline, { section_id: 'section_recorded', duration_frames: 96000 });
+    timeline = addClip(timeline, {
+        clip_id: 'clip_recorded_video', track_id: 'track_video', kind: 'video',
+        source: { type: 'atome', atome_id: 'video_recording_source' },
+        timeline: { start_seconds: 0, duration_seconds: 2, source_in_seconds: 0, source_out_seconds: 2 },
+        next_empty_track_id: 'track_audio', next_empty_track_name: 'Audio'
+    });
+    timeline = addClip(timeline, {
+        clip_id: 'clip_recorded_audio', track_id: 'track_audio', kind: 'audio',
+        source: { type: 'atome', atome_id: 'audio_recording_source' },
+        timeline: { start_seconds: 0, duration_seconds: 1, source_in_seconds: 0, source_out_seconds: 1 },
+        next_empty_track_id: 'track_empty', next_empty_track_name: 'Empty'
+    });
+    const recordedEnv = {
+        Atome: {
+            getStateCurrent: async (id) => ({
+                id,
+                properties: {
+                    kind: id.startsWith('video_') ? 'video_recording' : 'audio_recording',
+                    media_kind: id.startsWith('video_') ? 'video' : 'audio',
+                    audio_track_count: id.startsWith('video_') ? 1 : undefined,
+                    media_url: `/api/recordings/${id}.${id.startsWith('video_') ? 'mp4' : 'wav'}`
+                }
+            })
+        }
+    };
+    const projected = await buildTransportTimeline(recordedEnv, timeline);
+    assert.deepEqual(
+        projected.tracks.flatMap((track) => track.clips).map((clip) => clip.kind),
+        ['video', 'audio']
+    );
+    assert.equal(projected.tracks.flatMap((track) => track.clips)[0].hasAudio, true);
 });
 
 test('List transport chains Molecules in order and toggles the shared sequence session', async () => {

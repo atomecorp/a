@@ -3,7 +3,7 @@
 export const memory: WebAssembly.Memory;
 export const audio_destroy_clip: (a: number, b: number) => [number, number];
 export const audio_init: () => [number, number];
-export const audio_load_clip_from_bytes: (a: number, b: number, c: number, d: number) => [number, number];
+export const audio_load_clip_from_bytes: (a: number, b: number, c: number, d: number) => [number, number, number];
 export const audio_play: (a: number, b: number) => [number, number];
 export const audio_play_instance: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number, i: number, j: number, k: number, l: number, m: number, n: number) => [number, number];
 export const audio_set_pan: (a: number, b: number, c: number) => [number, number];

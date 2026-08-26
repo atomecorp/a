@@ -18,6 +18,23 @@ export const validateMatrixMoleculeDrop = async ({ page, project, fixture, repor
     const tile = (index) => findBevyUiNodeTarget(page, {
         nodeId: `project_view_matrix_tile_${index}`, treeId: 'eve_bevy_ui_project_view', step: 2
     });
+    const tileForRecord = async (recordId) => {
+        const nodeId = await page.evaluate((expectedId) => {
+            const surface = (window.eveBevyUiRuntime?.readOverlayDiagnostics?.()?.trees || [])
+                .find((entry) => entry.id === 'eve_bevy_ui_project_view');
+            const projectId = window.__currentProject?.id || window.__currentProject?.atome_id || '';
+            const records = window.eveToolBase?.getProjectSceneState?.(projectId)?.records || [];
+            const record = records.find((entry) => String(entry?.id || entry?.atome_id || '') === expectedId);
+            const label = String(record?.properties?.name || record?.name || expectedId);
+            return String((surface?.interactiveNodes || []).find((entry) => (
+                /^project_view_matrix_tile_\d+$/.test(String(entry?.id || ''))
+                && String(entry?.accessibility?.label || '') === label
+            ))?.id || '');
+        }, String(recordId));
+        return nodeId ? findBevyUiNodeTarget(page, {
+            nodeId, treeId: 'eve_bevy_ui_project_view', step: 2
+        }) : null;
+    };
     let source = await tile(0); let target = await tile(1);
     assert(source && target, 'matrix_insert_targets_missing');
     const insertion = await structuredDropTarget(page, {
@@ -57,7 +74,11 @@ export const validateMatrixMoleculeDrop = async ({ page, project, fixture, repor
     assert(overlap, 'matrix_overlap_geometry_missing');
     await drag({
         page, source, destination: overlap, holdMs: 700,
-        armedShot: () => screenshot({ page, report, outDir, name: 'drop_matrix_armed_before_release' })
+        armedShot: () => screenshot({
+            page, report, outDir,
+            name: 'drop_matrix_armed_before_release',
+            preservePointer: true
+        })
     });
     const molecule = await waitForMolecule(page, { sourceId: fixture.imageId, targetId: fixture.audioId });
     await reloadProjection(page, project.id);
@@ -68,7 +89,7 @@ export const validateMatrixMoleculeDrop = async ({ page, project, fixture, repor
         return { molecule, order, playbackModes: [], members: [], clean, core_only: true };
     }
     const moleculeId = molecule.sourceParent;
-    const rootMoleculeTile = await tile(1);
+    const rootMoleculeTile = await tileForRecord(moleculeId);
     assert(rootMoleculeTile, 'matrix_molecule_tile_missing');
     const active = await page.evaluate(async (id) => {
         const { getAtomeContextualEditApi } = await import(
@@ -86,26 +107,38 @@ export const validateMatrixMoleculeDrop = async ({ page, project, fixture, repor
     await screenshot({ page, report, outDir, name: 'drop_matrix_molecule_progress' });
     const ended = await waitForPlaybackEnd(page, 8000);
 
-    await clickCanvasTarget(page, await tile(1), { double: true });
+    const moleculeEntryTile = await tileForRecord(moleculeId);
+    assert(moleculeEntryTile, 'matrix_molecule_entry_tile_missing');
+    await clickCanvasTarget(page, moleculeEntryTile, { double: true });
     await waitForNavigation(page, 'molecule');
     await screenshot({ page, report, outDir, name: 'drop_matrix_inside_molecule' });
-    await clickCanvasTarget(page, await tile(0), { double: true });
-    await waitForNavigation(page, 'section');
-    await screenshot({ page, report, outDir, name: 'drop_matrix_inside_section' });
+    const directMembers = await page.evaluate(async (expectedIds) => {
+        const [{ readProjectViewSurfaceState }, navigation] = await Promise.all([
+            import('/eVe/domains/rendering/project_view_surface_runtime.js'),
+            import('/eVe/domains/rendering/project_view_navigation.js')
+        ]);
+        const projectId = readProjectViewSurfaceState().projectId;
+        const allRecords = window.eveToolBase?.getProjectSceneState?.(projectId)?.records || [];
+        const records = navigation.containerChildren(allRecords);
+        return {
+            ids: records.map((record) => String(record.id || '')),
+            entities: records.map((record) => String(record.properties?.molecule_entity || '')),
+            expectedIds,
+            recordCount: readProjectViewSurfaceState().content?.recordCount || 0
+        };
+    }, [fixture.audioId, fixture.imageId]);
+    assert(directMembers.expectedIds.every((id) => directMembers.ids.includes(id))
+        && directMembers.ids.length === 2,
+    `matrix_direct_members_missing:${JSON.stringify(directMembers)}`);
+    assert(!directMembers.entities.some((entity) => entity === 'section' || entity === 'track'),
+        `matrix_internal_timeline_leaked:${JSON.stringify(directMembers)}`);
     const members = [];
-    for (const [trackIndex, memberId] of [[0, fixture.audioId], [1, fixture.imageId]]) {
-        await clickCanvasTarget(page, await tile(trackIndex), { double: true });
-        await waitFor(page, async () => {
-            const [{ readState }, { readProjectViewSurfaceState }] = await Promise.all([
-                import('/eVe/domains/rendering/project_view_navigation.js'),
-                import('/eVe/domains/rendering/project_view_surface_runtime.js')
-            ]);
-            const navigation = readState();
-            const surface = readProjectViewSurfaceState();
-            return { ok: navigation.current?.entity === 'track' && surface.content?.recordCount === 1, navigation, surface };
-        });
-        await screenshot({ page, report, outDir, name: `drop_matrix_inside_${memberId === fixture.audioId ? 'audio' : 'image'}_track` });
-        await clickCanvasTarget(page, await tile(0));
+    for (const memberId of [fixture.audioId, fixture.imageId]) {
+        const memberIndex = directMembers.ids.indexOf(memberId);
+        assert(memberIndex >= 0, `matrix_member_index_missing:${memberId}`);
+        const memberTile = await tileForRecord(memberId);
+        assert(memberTile, `matrix_member_tile_missing:${memberId}`);
+        await clickCanvasTarget(page, memberTile);
         await waitForContextualTarget(page, memberId);
         const play = await memberPlayTool(page);
         assert(play, `matrix_member_play_missing:${memberId}`);
@@ -120,12 +153,6 @@ export const validateMatrixMoleculeDrop = async ({ page, project, fixture, repor
         const memberEnded = await waitForPlaybackEnd(page, memberId === fixture.audioId ? 30000 : 7000);
         const stopped = await disarmMemberPlayback(page);
         members.push({ memberId, started: started.state, ended: memberEnded.state, stopped });
-        const back = await findBevyUiNodeTarget(page, {
-            nodeId: 'project_view_footer_back', treeId: 'eve_bevy_ui_project_view', step: 2
-        });
-        assert(back, `matrix_back_missing:${memberId}`);
-        await clickCanvasTarget(page, back);
-        await waitForNavigation(page, 'section');
     }
     const clean = await assertNoParasites(page, project.id, [fixture.audioId, fixture.imageId]);
     assert(clean.ok, `matrix_parasitic_projection:${JSON.stringify(clean)}`);

@@ -211,7 +211,7 @@ pub fn audio_init() -> Result<(), JsValue> {
 /// Load an audio clip from raw bytes (WAV, MP3, OGG).
 /// In WASM, we cannot read files from disk so JS must pass the bytes.
 #[wasm_bindgen]
-pub fn audio_load_clip_from_bytes(id: &str, data: &[u8]) -> Result<(), JsValue> {
+pub fn audio_load_clip_from_bytes(id: &str, data: &[u8]) -> Result<f64, JsValue> {
     let mut guard = ENGINE
         .lock()
         .map_err(|e| JsValue::from_str(&format!("Lock error: {e}")))?;
@@ -225,10 +225,11 @@ pub fn audio_load_clip_from_bytes(id: &str, data: &[u8]) -> Result<(), JsValue> 
             .map_err(|e| JsValue::from_str(&format!("Failed to decode audio: {e}")))?
     };
 
+    let duration_seconds = sound_data.duration().as_secs_f64();
     engine
         .clips
         .insert(id.to_string(), ClipEntry { data: sound_data });
-    Ok(())
+    Ok(duration_seconds)
 }
 
 #[wasm_bindgen]

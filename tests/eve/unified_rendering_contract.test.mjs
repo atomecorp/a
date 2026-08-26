@@ -26,6 +26,7 @@ import {
     unmountActiveTextEditor
 } from '../../eVe/domains/rendering/hidden_text_service_runtime.js';
 import { createTextLayoutBridge } from '../../eVe/domains/rendering/text_bridge.js';
+import { resolveResizeHandle } from '../../eVe/domains/rendering/surface_pointer_runtime.js';
 import { createRenderTarget, createUnifiedWebGPUCompositor } from '../../eVe/domains/rendering/webgpu_compositor.js';
 import {
     makeMixedRecords,
@@ -462,6 +463,13 @@ test('Project view overlay routes Bevy surface interception without DOM dashboar
     assert.equal(event.defaultPrevented, true);
 });
 
+test('Single-line text keeps a central drag core outside its resize edges', () => {
+    const atom = { bounds: { x: 900, y: 180, width: 131, height: 24 }, capabilities: { resizable: true } };
+    assert.equal(resolveResizeHandle(atom, { x: 965.5, y: 192 }), null);
+    assert.deepEqual(resolveResizeHandle(atom, { x: 1031, y: 204 }), { axisX: 'e', axisY: 's' });
+    assert.deepEqual(resolveResizeHandle(atom, { x: 965.5, y: 203 }), { axisX: null, axisY: 's' });
+});
+
 test('Text bridge keeps one hidden root, commits through canonical mutation, and cancels without mutation', async () => {
     const dom = new JSDOM('<!doctype html><html><body></body></html>');
     const commits = [];
@@ -500,4 +508,31 @@ test('Text bridge keeps one hidden root, commits through canonical mutation, and
     assert.equal(cancelled.cancelled, true);
     assert.equal(commits.length, 1);
     assert.equal(bridge.getState().activeEditorCount, 0);
+});
+
+test('Text bridge commits the live value and measured frame on canonical editor blur', async () => {
+    const dom = new JSDOM('<!doctype html><html><body></body></html>');
+    const commits = [];
+    const ended = [];
+    const bridge = createTextLayoutBridge({
+        documentRef: dom.window.document,
+        updateLive: () => ({ ok: true }),
+        commit: async (payload) => { commits.push(payload); return { ok: true }; },
+        onEditingEnd: (payload) => ended.push(payload)
+    });
+    const text = normalizeRenderAtom(makeRecord('text_blur_commit', 'text', 1));
+    text.content.text = '';
+    text.bounds.width = 9;
+    text.bounds.height = 24;
+    bridge.beginEditing(text);
+    const editor = dom.window.document.querySelector('[data-role="active-text-editor"]');
+    editor.value = 'Committed by blur';
+    editor.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+    editor.blur();
+    await new Promise((resolve) => dom.window.setTimeout(resolve, 0));
+    assert.equal(commits.length, 1);
+    assert.equal(commits[0].props.text, 'Committed by blur');
+    assert.ok(Number(commits[0].props.width) > 9);
+    assert.equal(bridge.getState().activeEditorCount, 0);
+    assert.deepEqual(ended, [{ atome_id: 'text_blur_commit', reason: 'commit' }]);
 });

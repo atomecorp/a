@@ -12,6 +12,26 @@ const CORE_ONLY = process.env.MOLECULE_UI_DROP_CORE_ONLY === '1';
 
 export const validateListMoleculeDrop = async ({ page, project, fixture, report, outDir }) => {
     await switchView(page, project.id, 'list');
+    const initialRows = await structuredRows(page);
+    const lastRoot = initialRows.filter((row) => row.depth === 0).at(-1);
+    assert(lastRoot, `list_footer_fixture_empty:${JSON.stringify(initialRows)}`);
+    await selectListRow(page, lastRoot.id);
+    const footer = await listNode(page, 'project_view_footer');
+    assert(footer, 'list_footer_not_actionable');
+    await clickCanvasTarget(page, footer);
+    const footerSelection = await waitFor(page, async (expected) => {
+        const [{ readProjectViewSurfaceState }, selection] = await Promise.all([
+            import('/eVe/domains/rendering/project_view_surface_runtime.js'),
+            import('/eVe/intuition/runtime/selection.js')
+        ]);
+        const state = readProjectViewSurfaceState();
+        return {
+            ok: state.content?.primaryId === expected
+                && selection.getCurrentSelectionIds().length === 1
+                && selection.getCurrentSelectionIds()[0] === expected,
+            primaryId: state.content?.primaryId || '', selectedIds: selection.getCurrentSelectionIds()
+        };
+    }, initialRows[0].id);
     await screenshot({ page, report, outDir, name: 'drop_list_before' });
     const imageIndex = await listIndex(page, fixture.imageId);
     const audioIndex = await listIndex(page, fixture.audioId);
@@ -23,7 +43,11 @@ export const validateListMoleculeDrop = async ({ page, project, fixture, report,
     assert(overlapDestination, 'list_overlap_geometry_missing');
     await drag({
         page, source: image, destination: overlapDestination, holdMs: 700,
-        armedShot: () => screenshot({ page, report, outDir, name: 'drop_list_armed_before_release' })
+        armedShot: () => screenshot({
+            page, report, outDir,
+            name: 'drop_list_armed_before_release',
+            preservePointer: true
+        })
     });
     const molecule = await waitForMolecule(page, { sourceId: fixture.imageId, targetId: fixture.audioId });
     await reloadProjection(page, project.id);
@@ -54,15 +78,49 @@ export const validateListMoleculeDrop = async ({ page, project, fixture, report,
     await selectListRow(page, moleculeId);
     const playbackModes = [];
     for (const mode of ['sequential', 'random', 'layer']) {
+        await selectListRow(page, moleculeId);
         const rule = await chooseMoleculePlaybackMode(page, moleculeId, mode);
         const started = await startMoleculePlayback(page, moleculeId, [fixture.audioId, fixture.imageId]);
         await wait(500);
         const progressed = await playbackSnapshot(page, [fixture.audioId, fixture.imageId]);
         assert(progressed.playing && progressed.scope === `molecule:${moleculeId}`,
             `molecule_playback_not_progressing:${mode}:${JSON.stringify(progressed)}`);
+        const followed = await page.evaluate(async ({ playbackMode, owner, members }) => {
+            const [{ readProjectViewSurfaceState }, { projectViewPlayback }, selection] = await Promise.all([
+                import('/eVe/domains/rendering/project_view_surface_runtime.js'),
+                import('/eVe/domains/rendering/project_view_playback_runtime.js'),
+                import('/eVe/intuition/runtime/selection.js')
+            ]);
+            const playback = projectViewPlayback.readState();
+            const selectedIds = selection.getCurrentSelectionIds();
+            const primaryId = String(readProjectViewSurfaceState().content?.primaryId || '');
+            const currentMember = playback.playingIds.find((id) => members.includes(id)) || '';
+            return {
+                ok: playbackMode === 'layer'
+                    ? selectedIds.length === 1 && selectedIds[0] === owner && primaryId === owner
+                    : Boolean(currentMember) && selectedIds.length === 1
+                        && selectedIds[0] === currentMember && primaryId === currentMember,
+                playbackMode, currentMember, selectedIds, primaryId,
+                playingIds: playback.playingIds
+            };
+        }, { playbackMode: mode, owner: moleculeId, members: [fixture.audioId, fixture.imageId] });
+        assert(followed.ok, `molecule_playback_selection_not_following:${JSON.stringify(followed)}`);
         await screenshot({ page, report, outDir, name: `drop_list_molecule_${mode}_progress` });
         const ended = await waitForPlaybackEnd(page, mode === 'layer' ? 12000 : 35000);
-        playbackModes.push({ mode, rule, started, progressed, ended: ended.state });
+        const endedSelection = await page.evaluate(async () => {
+            const [{ readProjectViewSurfaceState }, selection] = await Promise.all([
+                import('/eVe/domains/rendering/project_view_surface_runtime.js'),
+                import('/eVe/intuition/runtime/selection.js')
+            ]);
+            return {
+                primaryId: String(readProjectViewSurfaceState().content?.primaryId || ''),
+                selectedIds: selection.getCurrentSelectionIds()
+            };
+        });
+        assert(mode === 'layer' ? endedSelection.primaryId === moleculeId
+            : [fixture.audioId, fixture.imageId].includes(endedSelection.primaryId),
+        `molecule_playback_final_selection:${mode}:${JSON.stringify(endedSelection)}`);
+        playbackModes.push({ mode, rule, started, progressed, followed, ended: ended.state, endedSelection });
     }
     const children = [];
     for (const memberId of [fixture.audioId, fixture.imageId]) {
@@ -83,5 +141,5 @@ export const validateListMoleculeDrop = async ({ page, project, fixture, report,
     }
     const clean = await assertNoParasites(page, project.id, [fixture.audioId, fixture.imageId]);
     assert(clean.ok, `list_parasitic_projection:${JSON.stringify(clean)}`);
-    return { molecule, rows, playbackModes, children, clean };
+    return { molecule, rows, footerSelection, playbackModes, children, clean };
 };

@@ -89,6 +89,23 @@ test('Foreground project render claims the canonical project layer when host is 
     assert.equal(calls.length > 0, true);
 });
 
+test('Forced workspace projection reconciles the shared WebGPU surface even when its size is unchanged', async () => {
+    clearAllProjectScenes();
+    const dom = projectDom();
+    const calls = [];
+    const input = {
+        projectId: 'project_force_surface_reconcile',
+        records: [makeRecord('force_surface_atom', 'shape', 1)],
+        host: dom.window.document.getElementById('project'),
+        compositor: createTestCompositor(calls)
+    };
+    await renderProjectScene(input);
+    const before = calls.filter((call) => call.type === 'surface').length;
+    await renderProjectScene({ ...input, forceSurfaceReconcile: true });
+    const after = calls.filter((call) => call.type === 'surface').length;
+    assert.equal(after, before + 1);
+});
+
 const assertHiddenDecodeVideoContract = (documentRef, expectedCount) => {
     const root = documentRef.getElementById('eve_bevy_video_decode_root');
     assert.ok(root, 'source-backed project video must use the hidden Bevy decode root');

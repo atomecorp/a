@@ -10,6 +10,13 @@ import {
     renderProjectScene
 } from '../../eVe/domains/rendering/project_scene_runtime.js';
 import { createTestCompositor, installDom } from './unified_rendering_test_helpers.mjs';
+import {
+    __testClearPrefetch,
+    __testSetCommitLoader,
+    restoreProjectViewMode
+} from '../../eVe/domains/rendering/project_view_mode_state.js';
+import { readProjectViewSurfaceState } from '../../eVe/domains/rendering/project_view_surface_runtime.js';
+import { createDashboardActionRuntime } from '../../eVe/domains/dashboard/dashboard_actions.js';
 
 const previewRuntime = vi.hoisted(() => ({
     warmProjectPreviewCapture: vi.fn(async () => ({ ok: true }))
@@ -18,6 +25,56 @@ const previewRuntime = vi.hoisted(() => ({
 vi.mock('../../eVe/domains/rendering/project_preview_runtime.js', () => ({
     warmProjectPreviewCapture: previewRuntime.warmProjectPreviewCapture
 }));
+
+test('restoring a Natural project applies the canonical surface transition', async () => {
+    const { window, document } = installMockBrowserEnv();
+    globalThis.window = window;
+    globalThis.document = document;
+    window.__currentProject = { id: 'project_natural_restore' };
+    __testClearPrefetch();
+    __testSetCommitLoader(async () => ({
+        getStateCurrent: async () => ({ properties: { view_mode: 'natural' } })
+    }));
+    try {
+        const restored = await restoreProjectViewMode('project_natural_restore');
+        assert.equal(restored.ok, true);
+        assert.equal(restored.restored, true);
+        assert.equal(restored.mode, 'natural');
+        assert.equal(readProjectViewSurfaceState().mode, 'natural');
+        assert.equal(readProjectViewSurfaceState().projectId, 'project_natural_restore');
+    } finally {
+        __testSetCommitLoader();
+        __testClearPrefetch();
+    }
+});
+
+test('Dashboard project activation delegates workspace and menu ownership once', async () => {
+    const calls = [];
+    const runtime = createDashboardActionRuntime({
+        destroy: async () => { calls.push('destroy'); },
+        openEditor: async () => ({ ok: true }),
+        openPanel: async () => ({ ok: true }),
+        loadProjectRuntime: async () => ({
+            activateProjectWorkspace: async (project, options) => {
+                calls.push({ project, options });
+                return { ok: true, projectId: project.id };
+            }
+        })
+    });
+
+    const project = { id: 'project_second', name: 'Second' };
+    const result = await runtime.activateItemAction({
+        category: { id: 'projects' },
+        item: { payload: project }
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(result.project, project);
+    assert.deepEqual(calls, [
+        'destroy',
+        { project, options: { force: true, staleFirst: false } }
+    ]);
+});
 
 
 test('Project workspace activation restores the project surface and main menu', async () => {
@@ -123,12 +180,84 @@ test('Project workspace activation restores the project surface and main menu', 
     assert.equal(menuActive, true);
     assert.deepEqual(
         calls.find((entry) => entry.name === 'loadProjectAtomes')?.options,
-        { force: true, staleFirst: false, forceProjectSurface: true, reason: 'workspace_activation' }
+        {
+            force: true,
+            staleFirst: false,
+            forceProjectSurface: true,
+            viewModePrepared: true,
+            reason: 'workspace_activation'
+        }
     );
     assert.equal(calls.some((entry) => entry.name === 'renderProjectScene'), false,
         'activation must reuse the authoritative projection owned by loadProjectAtomes');
     assert.deepEqual(calls.map((entry) => entry.name), ['setCurrent', 'commit', 'loadProjectAtomes', 'showFully']);
 }, 10_000);
+
+test('the latest overlapping project activation remains the canonical foreground owner', async () => {
+    const { window, document } = installMockBrowserEnv();
+    globalThis.window = window;
+    globalThis.document = document;
+    window.requestAnimationFrame = (callback) => {
+        callback();
+        return 0;
+    };
+    const view = document.createElement('div');
+    view.id = 'view';
+    document.body.appendChild(view);
+    setMainMenuRuntime({
+        showFully: async () => true,
+        measure: () => ({ active: true, treeMounted: true })
+    });
+    window.AdoleAPI = {
+        auth: { getCurrentInfo: () => ({ id: 'user_overlap' }) },
+        projects: {
+            setCurrent: async (id, name, ownerId) => {
+                window.__currentProject = { id, name, owner_id: ownerId };
+                return { ok: true };
+            }
+        }
+    };
+    window.Atome = { commit: async () => ({ ok: true }) };
+    let releaseFirst;
+    const firstRelease = new Promise((resolve) => { releaseFirst = resolve; });
+    let markFirstLoading;
+    const firstLoading = new Promise((resolve) => { markFirstLoading = resolve; });
+    window.eveToolBase = {
+        loadProjectAtomes: async (projectId) => {
+            if (projectId === 'project_first') {
+                markFirstLoading();
+                await firstRelease;
+            }
+            let layer = document.getElementById(`project_view_${projectId}`);
+            if (!layer) {
+                layer = document.createElement('div');
+                layer.id = `project_view_${projectId}`;
+                view.appendChild(layer);
+            }
+            let canvas = document.getElementById('eve_surface_project');
+            if (!canvas) {
+                canvas = document.createElement('canvas');
+                canvas.id = 'eve_surface_project';
+            }
+            layer.appendChild(canvas);
+            return [{ id: `atome_${projectId}`, project_id: projectId }];
+        }
+    };
+
+    const { activateProjectWorkspace } = await import('../../eVe/intuition/matrix/core/project_data.js');
+    const { sceneState } = await import('../../eVe/domains/rendering/project_scene_state.js');
+    const firstTask = activateProjectWorkspace({ id: 'project_first', name: 'First' });
+    await firstLoading;
+    const latest = await activateProjectWorkspace({ id: 'project_latest', name: 'Latest' });
+    releaseFirst();
+    const first = await firstTask;
+
+    assert.equal(latest.ok, true);
+    assert.equal(first.superseded, true);
+    assert.equal(window.__currentProject.id, 'project_latest');
+    assert.equal(sceneState.foregroundProjectId, 'project_latest');
+    assert.equal(document.getElementById('eve_surface_project')?.parentElement?.id, 'project_view_project_latest');
+});
 
 test('Project workspace activation records preview warmup failure without delaying the project', async () => {
     const { window, document } = installMockBrowserEnv();
@@ -298,7 +427,13 @@ test('Project workspace activation from dashboard claims the project surface ins
     assert.equal(menuActive, true);
     assert.deepEqual(
         calls.find((entry) => entry.name === 'loadProjectAtomes')?.options,
-        { force: true, staleFirst: false, forceProjectSurface: true, reason: 'workspace_activation' }
+        {
+            force: true,
+            staleFirst: false,
+            forceProjectSurface: true,
+            viewModePrepared: true,
+            reason: 'workspace_activation'
+        }
     );
     assert.deepEqual(calls.map((entry) => entry.name), [
         'destroyDashboard',

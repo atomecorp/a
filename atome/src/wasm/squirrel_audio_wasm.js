@@ -241,6 +241,7 @@ function passArray8ToWasm0(arg, malloc) {
  * In WASM, we cannot read files from disk so JS must pass the bytes.
  * @param {string} id
  * @param {Uint8Array} data
+ * @returns {number}
  */
 export function audio_load_clip_from_bytes(id, data) {
     const ptr0 = passStringToWasm0(id, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
@@ -248,9 +249,10 @@ export function audio_load_clip_from_bytes(id, data) {
     const ptr1 = passArray8ToWasm0(data, wasm.__wbindgen_malloc);
     const len1 = WASM_VECTOR_LEN;
     const ret = wasm.audio_load_clip_from_bytes(ptr0, len0, ptr1, len1);
-    if (ret[1]) {
-        throw takeFromExternrefTable0(ret[0]);
+    if (ret[2]) {
+        throw takeFromExternrefTable0(ret[1]);
     }
+    return ret[0];
 }
 
 /**
@@ -652,7 +654,7 @@ function __wbg_get_imports() {
         const ret = false;
         return ret;
     };
-    imports.wbg.__wbindgen_closure_wrapper918 = function(arg0, arg1, arg2) {
+    imports.wbg.__wbindgen_closure_wrapper919 = function(arg0, arg1, arg2) {
         const ret = makeMutClosure(arg0, arg1, 30, __wbg_adapter_20);
         return ret;
     };
