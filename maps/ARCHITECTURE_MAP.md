@@ -14,6 +14,18 @@ decoder, timer, clip state, `playingIds`, and published transport state; manual
 Stop and natural completion use the same complete release contract. Selection
 and visual-depth changes neither stop nor restart transport.
 
+Historical media records use a conservative audio contract: absent video-audio
+metadata means unknown, not silent. Only explicit `has_audio: false` or zero
+audio tracks authorizes visual-only playback. Web Kira returns its decoded clip
+duration through the shared audio executor so a durationless List item has a
+finite natural boundary and cannot trap the sequential queue.
+Container duration never overrides the decoded audio-frame boundary inside Web
+Kira. A requested playback window longer than the remaining decoded audio uses
+the audio's natural end instead of an out-of-range slice; only a strictly
+shorter explicit crop slices the sound. This keeps the audio engine alive
+across sequential Molécule-to-video transitions without stretching media or
+changing the longest-member transport rule.
+
 Visual stacking is independent from Track/time order. Absorbed members append
 above the current canonical `z_index`/`order`; Plan front/back actions mutate
 that canonical scene depth through the existing intent path and survive reload.

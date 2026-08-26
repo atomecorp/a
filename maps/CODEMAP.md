@@ -53,6 +53,21 @@ selectable-list preview remain disposable projections; canonical fusion stays in
 `tool_runtime_atome_mutation.js`. That public facade reuses
 `tool_runtime_atome_mutation_shared.js` for state/commit utilities and
 `tool_runtime_atome_duplicate.js` for duplication/remapping.
+
+Current historical-media List guard (2026-08-26):
+`backend.kira.js` preserves the positive decoded duration returned by the Web
+WASM byte loader. `media_playback_audio_executor.js` carries it through the
+shared prepared command, and `selected_project_media_playback_runtime.js`
+registers it with `project_audio_playback_progress_runtime.js` before
+`project_view_playback_runtime.js` evaluates the current queue item. Imported
+videos with absent audio metadata remain audio-required unless the persisted
+record explicitly declares no audio; a missing Kira voice therefore fails the
+paired start instead of degrading to silent video.
+`platforms/web/audio-wasm/src/lib.rs` additionally treats the decoded audio
+duration as the hard frame boundary: a longer video-container or Molécule
+duration cannot create an out-of-range Kira slice, while a shorter explicit
+crop remains intact. The outer transport still follows its longest member and
+no audio is stretched.
 Natural projection preserves canonical `parent_id` in `render_atom.js`;
 `surface_interaction_runtime.js` resolves an absorbed child to its composed
 Molecule owner until that owner is explicitly entered, and excludes the dragged

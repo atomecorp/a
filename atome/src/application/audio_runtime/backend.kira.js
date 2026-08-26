@@ -201,8 +201,11 @@ import {
       .then(function (buf) {
         var bytes = new Uint8Array(buf);
         if (mode === 'wasm' && wasm && typeof wasm.audio_load_clip_from_bytes === 'function') {
-          wasm.audio_load_clip_from_bytes(id, bytes);
-          return;
+          var durationSeconds = Number(wasm.audio_load_clip_from_bytes(id, bytes));
+          return {
+            success: true,
+            duration_seconds: Number.isFinite(durationSeconds) && durationSeconds > 0 ? durationSeconds : null
+          };
         }
         // Send as Array for Tauri JSON serialization (Tauri v1 requires this)
         // TODO: When migrating to Tauri v2, use raw bytes via IPC binary channel

@@ -38,6 +38,18 @@ marked as playing. The media reader then treated the second press as an
 already-active session rather than loading and starting its audio again. A
 refresh clears this runtime-only state, which explains the temporary recovery.
 
+Two additional guards are required for historical WhatsApp imports and List
+playback:
+
+- missing `has_audio`/`audio_track_count` metadata is not proof of a silent
+  video. Only an explicit false/zero value may select visual-only playback;
+  otherwise extracted audio is mandatory and a Kira failure rolls the paired
+  start back;
+- the Web Kira URL loader must return the positive duration reported by
+  `audio_load_clip_from_bytes`. Dropping that value leaves durationless audio
+  active in the project queue, so List never advances to the following
+  Molecule or video even though the waveform and Kira voice started.
+
 ## Ownership and correction
 
 - `eVe/intuition/runtime/eve_intuition/media_reader_tool_runtime.js` owns the
@@ -67,6 +79,36 @@ npx vitest run tests/eve/selected_project_media_playback_runtime.test.mjs tests/
 The coverage verifies two imported instances of `JeezsFire.mp4`, two playbacks
 per instance, completion cleanup before the decoder restart, stable voice ids,
 and exactly one decoder start per user playback.
+
+For the recurring WhatsApp AAC case, run the visible browser guard with the
+exact source file instead of substituting another MP4:
+
+```sh
+MOLECULE_UI_DROP_ONLY=1 \
+MOLECULE_UI_LAYERED_MEDIA_ONLY=1 \
+MOLECULE_UI_SKIP_COLD=1 \
+MOLECULE_UI_LAYERED_STANDALONE_ONLY=1 \
+MOLECULE_UI_LAYERED_NATURAL_REPLAY=1 \
+MOLECULE_UI_VIDEO_FIXTURE="./atome/src/assets/videos/WhatsApp Video 2026-04-28 at 21.27.38.mp4" \
+MOLECULE_UI_REPORT_TAG=whatsapp_natural_replay \
+npm run test:molecule:ui
+```
+
+This path must import through the real file chooser, reach the natural end at
+`23.953144 s`, restart Kira and the muted visual decoder on the second Play,
+and remain active for at least five seconds after replay. Inspect the imported
+video and extracted `.m4a` with `ffprobe`/`volumedetect`; an active playback id
+without a decoded non-silent source is not sufficient audio evidence. If this
+exact guard is green, do not recreate the historical fix on hypothesis: next
+reproduce the user's persisted Atome and inspect its protected media owner,
+extraction response and actual output route.
+
+For the historical account regression, the visible project-3 List must also be
+run from its container `Lecture` action. The expected natural sequence is the
+first audio (`4.765333333 s` decoded by Kira), the video-plus-text Molecule
+(`3.626 s` transport, one extracted-video voice), then the WhatsApp video
+(`23.936 s` decoded audio). Each transition must move the visible row selection;
+the WhatsApp frame must still progress after five seconds.
 
 ## Required platform acceptance
 

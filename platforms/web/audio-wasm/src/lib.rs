@@ -52,7 +52,9 @@ fn ensure_engine(guard: &mut Option<WasmAudioEngine>) -> &mut WasmAudioEngine {
     })
 }
 
-fn ensure_audio_manager(engine: &mut WasmAudioEngine) -> Result<&mut AudioManager<CpalBackend>, JsValue> {
+fn ensure_audio_manager(
+    engine: &mut WasmAudioEngine,
+) -> Result<&mut AudioManager<CpalBackend>, JsValue> {
     if engine.manager.is_none() {
         engine.manager = Some(create_audio_manager()?);
     }
@@ -242,6 +244,16 @@ fn gain_to_decibels(gain: f64) -> Decibels {
     Decibels((20.0 * clamped.log10()) as f32)
 }
 
+fn crop_duration_within_available_audio(
+    requested_duration: Option<f64>,
+    available_duration: f64,
+) -> Option<f64> {
+    requested_duration
+        .filter(|value| value.is_finite() && *value > 0.0)
+        .map(|value| value.max(0.001))
+        .filter(|value| *value < available_duration)
+}
+
 #[wasm_bindgen]
 pub fn audio_play_instance(
     asset_id: &str,
@@ -271,16 +283,21 @@ pub fn audio_play_instance(
         existing_voice.handle.stop(Tween::default());
     }
 
-    let mut sound_data = sound_data_template;
     let start = start_seconds.max(0.0);
+    let source_duration = sound_data_template.duration().as_secs_f64();
+    if start >= source_duration {
+        return Err(JsValue::from_str(&format!(
+            "Start position {start:.6} exceeds clip duration {source_duration:.6}"
+        )));
+    }
+    let available_duration = source_duration - start;
     let requested_rate = rate.max(0.0001);
-    let duration = duration_seconds
-        .filter(|value| value.is_finite() && *value > 0.0)
-        .map(|value| value.max(0.001));
+    let crop_duration = crop_duration_within_available_audio(duration_seconds, available_duration);
     let loop_start = loop_start_seconds.filter(|value| value.is_finite() && *value >= 0.0);
     let loop_end = loop_end_seconds.filter(|value| value.is_finite() && *value > 0.0);
 
-    if let Some(duration) = duration {
+    let mut sound_data = sound_data_template;
+    if let Some(duration) = crop_duration {
         let slice_end = start + duration;
         sound_data = sound_data.slice(start..slice_end);
     } else if start > 0.0 {
@@ -289,7 +306,7 @@ pub fn audio_play_instance(
 
     if let (Some(loop_start), Some(loop_end)) = (loop_start, loop_end) {
         if loop_end > loop_start {
-            if duration.is_some() {
+            if crop_duration.is_some() {
                 let relative_loop_start = (loop_start - start).max(0.0);
                 let relative_loop_end = (loop_end - start).max(relative_loop_start + 0.0001);
                 sound_data = sound_data.loop_region(relative_loop_start..relative_loop_end);
@@ -377,7 +394,10 @@ pub fn audio_set_pan(id: &str, pan: f64) -> Result<(), JsValue> {
         .ok_or_else(|| JsValue::from_str(&format!("Voice '{id}' not found")))?;
     voice.handle.set_panning(
         Panning(pan.clamp(-1.0, 1.0) as f32),
-        Tween { duration: Duration::from_millis(50), ..Default::default() },
+        Tween {
+            duration: Duration::from_millis(50),
+            ..Default::default()
+        },
     );
     Ok(())
 }
@@ -429,4 +449,38 @@ pub fn audio_shutdown() -> Result<(), JsValue> {
         .map_err(|e| JsValue::from_str(&format!("Lock error: {e}")))?;
     *guard = None;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::crop_duration_within_available_audio;
+
+    #[test]
+    fn container_duration_cannot_extend_decoded_audio() {
+        assert_eq!(
+            crop_duration_within_available_audio(Some(3.626), 3.562_667),
+            None
+        );
+        assert_eq!(
+            crop_duration_within_available_audio(Some(23.953_144), 23.936),
+            None
+        );
+    }
+
+    #[test]
+    fn explicit_shorter_crop_is_preserved() {
+        assert_eq!(
+            crop_duration_within_available_audio(Some(1.25), 3.562_667),
+            Some(1.25)
+        );
+    }
+
+    #[test]
+    fn natural_duration_requires_no_slice() {
+        assert_eq!(crop_duration_within_available_audio(None, 3.562_667), None);
+        assert_eq!(
+            crop_duration_within_available_audio(Some(3.562_667), 3.562_667),
+            None
+        );
+    }
 }

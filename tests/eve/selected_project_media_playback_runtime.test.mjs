@@ -520,6 +520,52 @@ test('a projected WhatsApp video end stops its source Atome even without persist
     assert.equal(audioCalls.some(({ action }) => action === 'stop_instance'), true);
 });
 
+test('a WhatsApp video without persisted audio metadata cannot silently fall back to visual-only playback', async () => {
+    const dom = await createProjectHost([{
+        id: 'whatsapp_unknown_audio',
+        type: 'video',
+        properties: {
+            kind: 'video',
+            media_url: '/api/uploads/WhatsApp_Video_2026-04-28_at_21.27.38.mp4?media_user_id=user_a',
+            file_path: 'Downloads/WhatsApp_Video_2026-04-28_at_21.27.38.mp4',
+            media_user_id: 'user_a',
+            left: 10,
+            top: 12,
+            width: 160,
+            height: 90
+        }
+    }]);
+    dom.window.Squirrel = {
+        av: {
+            audio: {
+                playback: {
+                    loadAsset: async () => ({ ok: false, error: 'whatsapp_aac_load_failed' })
+                },
+                play_instance: async () => ({ ok: true }),
+                stop_instance: async () => ({ ok: true }),
+                stop: async () => ({ ok: true })
+            }
+        }
+    };
+    const timelineActions = [];
+    const result = await runSelectedProjectMediaPlaybackAction({
+        action: 'play',
+        atomeIds: ['whatsapp_unknown_audio'],
+        windowRef: dom.window,
+        documentRef: dom.window.document,
+        projectTimelineAction: async ({ action }) => {
+            timelineActions.push(action);
+            return { ok: true };
+        }
+    });
+
+    assert.equal(result.ok, false);
+    assert.equal(result.succeeded, 0);
+    assert.equal(result.results[0].error, 'whatsapp_aac_load_failed');
+    assert.equal(timelineActions.includes('play'), false);
+    assert.equal(readSelectedProjectMediaPlaybackState(['whatsapp_unknown_audio']).anyPlaying, false);
+});
+
 test('recorded video with a declared audio track fails instead of masking a Kira load error', async () => {
     const dom = await createProjectHost([
         {
@@ -952,6 +998,7 @@ test('selected project video playback is owned by the project timeline without C
             properties: {
                 kind: 'video_recording',
                 media_url: '/api/recordings/video-gpu-a.mp4?media_user_id=user_a',
+                has_audio: false,
                 left: 10,
                 top: 12,
                 width: 160,
@@ -1229,6 +1276,7 @@ test('selected project video playback does not fall back to CPU posters when tim
             properties: {
                 kind: 'video_recording',
                 media_url: '/api/recordings/video-no-gpu-a.mp4?media_user_id=user_a',
+                has_audio: false,
                 left: 10,
                 top: 12,
                 width: 160,

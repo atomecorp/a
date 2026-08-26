@@ -11,6 +11,14 @@
   eVe playback has no audio.
 - An imported video without persisted duration reaches its final frame but the
   List remains in Play and never advances to the next item.
+- A durationless first audio can start and advance its waveform while the List
+  remains on that row forever because the decoded Kira duration was discarded.
+- A historical WhatsApp import can contain valid AAC while lacking persisted
+  `has_audio` metadata; treating that unknown value as false makes the failure
+  silently visual-only.
+- A short extracted video-audio clip can play inside a Molécule, then the next
+  WhatsApp video moves with no sound and every later Kira voice remains at
+  position zero even though load and play both report success.
 
 ## Confirmed ownership and correction
 
@@ -46,6 +54,20 @@
   as that start resolves instead of leaving it outside the `started` set.
   An `AbortError` is silent only when it belongs to that intentional decoder
   cancellation; an active decoder refusal remains reported.
+- `backend.kira.js` returns the positive duration produced by the WASM decoder
+  for URL-loaded clips. `selected_project_media_playback_runtime.js` records
+  that duration in the shared project-audio duration owner before the queue
+  decides how long to hold the current row.
+- Historical video audio state is tri-valued. Explicit false/zero is
+  visual-only; true and unknown both require successful extracted-audio load
+  and voice start, with atomic rollback on failure.
+- Video container duration is not audio-track duration. The Web Kira engine
+  must never slice `StaticSoundData` past its decoded frames when a video or
+  Molécule supplies the longer container duration. A requested duration equal
+  to or longer than the remaining decoded audio means natural audio playback,
+  while a strictly shorter user crop remains a real slice. This prevents the
+  Kira render transport from freezing at the end of a shorter AAC track and
+  does not stretch audio or shorten the outer Molécule transport.
 
 ## Regression coverage
 
@@ -57,6 +79,8 @@ npx vitest run \
   tests/eve/media_persistence_service.sanitization.test.mjs \
   tests/eve/project_view_playback_regressions.test.mjs \
   tests/eve/selected_project_media_playback_runtime.test.mjs
+
+cargo test --manifest-path platforms/web/audio-wasm/Cargo.toml
 ```
 
 The tests cover cold Delete registration, a 201-item playback scope, terminal
@@ -64,7 +88,11 @@ queue state, A-to-B-to-C mirror replacement, durable video extraction source,
 required-audio preload failure, voice-start rollback, queue ordering, and
 intentional decoder cancellation. They also cover legacy relative recording
 paths, projected `ended`, durationless queue advancement, manual Stop, random
-loop re-entry, and terminal transport reset.
+loop re-entry, unknown WhatsApp audio metadata, Kira-loaded duration completion,
+and terminal transport reset.
+The Web audio tests also pin the exact project-3 duration mismatches
+(`3.626 > 3.562667` and `23.953144 > 23.936`) and preserve an explicit shorter
+crop.
 
 ## Required platform acceptance
 

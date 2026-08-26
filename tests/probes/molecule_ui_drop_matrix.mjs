@@ -19,21 +19,22 @@ export const validateMatrixMoleculeDrop = async ({ page, project, fixture, repor
         nodeId: `project_view_matrix_tile_${index}`, treeId: 'eve_bevy_ui_project_view', step: 2
     });
     const tileForRecord = async (recordId) => {
-        const nodeId = await page.evaluate((expectedId) => {
+        const resolved = await waitFor(page, (expectedId) => {
             const surface = (window.eveBevyUiRuntime?.readOverlayDiagnostics?.()?.trees || [])
                 .find((entry) => entry.id === 'eve_bevy_ui_project_view');
             const projectId = window.__currentProject?.id || window.__currentProject?.atome_id || '';
             const records = window.eveToolBase?.getProjectSceneState?.(projectId)?.records || [];
             const record = records.find((entry) => String(entry?.id || entry?.atome_id || '') === expectedId);
             const label = String(record?.properties?.name || record?.name || expectedId);
-            return String((surface?.interactiveNodes || []).find((entry) => (
+            const nodeId = String((surface?.interactiveNodes || []).find((entry) => (
                 /^project_view_matrix_tile_\d+$/.test(String(entry?.id || ''))
                 && String(entry?.accessibility?.label || '') === label
             ))?.id || '');
+            return { ok: Boolean(nodeId), nodeId };
         }, String(recordId));
-        return nodeId ? findBevyUiNodeTarget(page, {
-            nodeId, treeId: 'eve_bevy_ui_project_view', step: 2
-        }) : null;
+        return findBevyUiNodeTarget(page, {
+            nodeId: resolved.nodeId, treeId: 'eve_bevy_ui_project_view', step: 2
+        });
     };
     let source = await tile(0); let target = await tile(1);
     assert(source && target, 'matrix_insert_targets_missing');

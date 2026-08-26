@@ -16,7 +16,7 @@ import {
 import { clickCanvasRect } from './dashboard_workspace_stress/support.mjs';
 
 const FIXTURES = Object.freeze({
-    video: path.resolve("tests/fixtures/media/Jeezs's fire.m4v"),
+    video: path.resolve(process.env.MOLECULE_UI_VIDEO_FIXTURE || "tests/fixtures/media/Jeezs's fire.m4v"),
     audio: path.resolve('tests/fixtures/media/test.m4a'),
     image: path.resolve('tests/fixtures/media/0000.png'),
     secondAudio: path.resolve('temp/molecule_layered_second_audio.wav')
@@ -564,6 +564,25 @@ const stopMolecule = async (page) => {
     await waitForPlaybackEnd(page, 8000);
 };
 
+const waitForStandaloneVideoStart = (page, videoId, timeoutMs = 7000) => waitFor(page, async (id) => {
+    const selected = await import('/eVe/domains/media/selected_project_media_playback_runtime.js');
+    const selectedState = selected.readSelectedProjectMediaPlaybackState([id]);
+    const audio = window.Squirrel?.av?.audio;
+    const videos = [...document.querySelectorAll('video')].map((video) => ({
+        currentTime: Number(video.currentTime || 0), paused: video.paused === true,
+        ended: video.ended === true, muted: video.muted === true,
+        width: Number(video.videoWidth || 0), height: Number(video.videoHeight || 0)
+    }));
+    return {
+        ok: selectedState.activeIds.includes(id)
+            && audio?.get_runtime?.()?.playback === 'web_wasm_kira'
+            && audio?.get_backend?.() === 'kira'
+            && videos.some((video) => !video.paused && video.muted && video.width > 0 && video.height > 0),
+        selectedState, audioRuntime: audio?.get_runtime?.() || null,
+        audioBackend: audio?.get_backend?.() || null, videos
+    };
+}, videoId, timeoutMs);
+
 const playStandaloneVideo = async ({ page, projectId, videoId, report, outDir }) => {
     await page.evaluate(() => {
         if (window.__EVE_BEVY_PERF__) {
@@ -581,24 +600,7 @@ const playStandaloneVideo = async ({ page, projectId, videoId, report, outDir })
         const play = await memberPlayTool(page);
         assert(play, 'layered_standalone_video_play_missing');
         await clickCanvasTarget(page, play);
-        started = await waitFor(page, async (id) => {
-            const selected = await import('/eVe/domains/media/selected_project_media_playback_runtime.js');
-            const selectedState = selected.readSelectedProjectMediaPlaybackState([id]);
-            const audio = window.Squirrel?.av?.audio;
-            const videos = [...document.querySelectorAll('video')].map((video) => ({
-                currentTime: Number(video.currentTime || 0), paused: video.paused === true,
-                ended: video.ended === true, muted: video.muted === true,
-                width: Number(video.videoWidth || 0), height: Number(video.videoHeight || 0)
-            }));
-            return {
-                ok: selectedState.activeIds.includes(id)
-                    && audio?.get_runtime?.()?.playback === 'web_wasm_kira'
-                    && audio?.get_backend?.() === 'kira'
-                    && videos.some((video) => !video.paused && video.muted && video.width > 0 && video.height > 0),
-                selectedState, audioRuntime: audio?.get_runtime?.() || null,
-                audioBackend: audio?.get_backend?.() || null, videos
-            };
-        }, videoId, 7000).catch(() => null);
+        started = await waitForStandaloneVideoStart(page, videoId).catch(() => null);
     }
     if (!started) {
         const diagnostics = await page.evaluate(async (id) => {
@@ -655,13 +657,45 @@ const playStandaloneVideo = async ({ page, projectId, videoId, report, outDir })
     );
     assert(frameDiff.differing_pixel_ratio > 0.001,
         `layered_standalone_video_static:${JSON.stringify({ frameDiff, started })}`);
+    let naturalEnd = null;
+    let replay = null;
+    if (process.env.MOLECULE_UI_LAYERED_NATURAL_REPLAY === '1') {
+        naturalEnd = await waitFor(page, async (id) => {
+            const selected = await import('/eVe/domains/media/selected_project_media_playback_runtime.js');
+            const selectedState = selected.readSelectedProjectMediaPlaybackState([id]);
+            const videos = [...document.querySelectorAll('video')].map((video) => ({
+                currentTime: Number(video.currentTime || 0), duration: Number(video.duration || 0),
+                paused: video.paused === true, ended: video.ended === true, muted: video.muted === true
+            }));
+            return {
+                ok: !selectedState.activeIds.includes(id)
+                    && videos.some((video) => video.ended || (video.duration > 0 && video.currentTime >= video.duration - 0.05)),
+                selectedState, videos
+            };
+        }, videoId, 40000);
+        const replayTool = await memberPlayTool(page);
+        assert(replayTool, 'layered_standalone_video_replay_missing');
+        await clickCanvasTarget(page, replayTool);
+        replay = await waitForStandaloneVideoStart(page, videoId, 10000);
+        await wait(5000);
+        replay.afterFiveSeconds = await page.evaluate(async (id) => {
+            const selected = await import('/eVe/domains/media/selected_project_media_playback_runtime.js');
+            return {
+                selectedState: selected.readSelectedProjectMediaPlaybackState([id]),
+                videos: [...document.querySelectorAll('video')].map((video) => ({
+                    currentTime: Number(video.currentTime || 0), paused: video.paused === true,
+                    ended: video.ended === true, muted: video.muted === true
+                }))
+            };
+        }, videoId);
+    }
     const stopped = await disarmMemberPlayback(page);
     const afterStop = await playbackSnapshot(page, [videoId]);
     assert(afterStop.playing !== true && afterStop.playingIds.length === 0,
         `layered_standalone_video_stop_leak:${JSON.stringify({ stopped, afterStop })}`);
     const naturalReconcile = await page.evaluate(() => (window.__EVE_BEVY_PERF__?.events || [])
         .filter((entry) => entry?.name === 'project_view.natural.reconcile'));
-    return { started, frameDiff, stopped, afterStop, naturalReconcile };
+    return { started, frameDiff, naturalEnd, replay, stopped, afterStop, naturalReconcile };
 };
 
 const assertDepthTransportContinuity = (before, samples) => {
