@@ -40,6 +40,18 @@ composition, three simultaneous Kira voices, natural timing,
 extraction/reabsorption, List hierarchy reorder, cross-mode persistence, and
 front/back pixel proof.
 
+Current cross-runtime media-source ownership (2026-08-26):
+`domains/media/shared/media_playback_record.js` is the sole record-level owner
+for normalized playback kind, protected Web URL, media owner, historical video
+audio requirement, and strict-native local path. Molecule transport and
+standalone selected-media playback both consume it. The Molecule engine keeps
+both URL and path through `core/media_engine/molecule_support.js`, so Tauri Kira
+loads the local recording while Web Kira continues to use the canonical API
+route. `selected_project_media_playback_state.js` now owns the selected-media
+registry, video completion listener, progress timer, publication and teardown;
+`selected_project_media_playback_runtime.js` remains the orchestration owner and
+no longer duplicates record resolution or playback-state lifecycle.
+
 Current structured playback/reorder ownership (2026-08-22):
 `project_view_playback_runtime.js` owns arm and transport lifecycle;
 `project_view_playback_item_model.js` owns item classification/default drivers;

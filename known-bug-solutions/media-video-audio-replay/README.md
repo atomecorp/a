@@ -117,3 +117,48 @@ instance, prove audio start, time progression, natural completion, and audible
 second playback. Capture console/native errors and preserve a screenshot or
 recording of the two successful UI playbacks. Do not mark the issue resolved on
 one platform only.
+
+## Tauri Molecule skips a recorded video
+
+### Native symptom
+
+In Tauri, a recorded video or audio Atome plays correctly by itself, but the
+same member inside a Molecule is skipped by List playback. The queue advances to
+the following item. Web playback remains correct.
+
+### Confirmed native cause
+
+The Molecule transport previously selected `media_url` before `file_path` and
+copied that HTTP value into both source fields. Video-audio extraction then
+returned only the derived API URL. Native `PlayRecordCore.loadAsset()` requires
+the local media path, so Kira rejected the mandatory voice with
+`play_record_native_local_path_required`; the structured queue correctly
+reported a failed item and advanced, which made the Molecule appear absent.
+
+### Canonical correction
+
+- `eVe/domains/media/shared/media_playback_record.js` resolves the canonical Web
+  URL and strict-native local path independently for standalone and Molecule
+  playback.
+- `eVe/intuition/tools/molecule/runtime_transport.js` adds the local path only
+  for a strict native runtime and never replaces the Web URL.
+- `eVe/core/media_engine/molecule_support.js` preserves that path while deriving
+  the extracted-video-audio URL.
+- Tauri Kira consumes `data/users/<owner>/recordings|Downloads/<file>`; Web Kira
+  continues to consume the protected API route. Do not reintroduce two media
+  classifiers, voice engines, timelines, or fallback players.
+
+Run the focused guards:
+
+```sh
+node --test tests/probes/molecule_transport_runtime.probe.mjs
+node tests/probes/molecule_audio_mix_transport.probe.mjs
+npx vitest run tests/eve/selected_project_media_playback_runtime.test.mjs tests/eve/project_view_playback_regressions.test.mjs
+```
+
+Then run the real Tauri application, select a Molecule containing a recorded
+video, and start it from the product Play control. During playback, require one
+active Molecule voice with `audioAvailable:true`, an empty `audioLoadError`, and
+the canonical local path. At natural completion require an empty voice map.
+Finally run `npm run test:molecule:ui` in visible Chromium to prove that the
+strict-native branch did not change Web media loading.

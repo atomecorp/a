@@ -98,6 +98,41 @@ test('transport normalizes recorded media kinds only at the playback boundary', 
     assert.equal(projected.tracks.flatMap((track) => track.clips)[0].hasAudio, true);
 });
 
+test('Tauri Molecule transport preserves the canonical local Kira source', async () => {
+    let timeline = createTimeline({
+        timeline_id: 'tl_native_media', project_id: 'project_native_media',
+        owner_atome_id: 'molecule_native_media', initial_section_id: 'section_native',
+        initial_track_id: 'track_native'
+    });
+    timeline = updateSection(timeline, { section_id: 'section_native', duration_frames: 96000 });
+    timeline = addClip(timeline, {
+        clip_id: 'clip_native_video', track_id: 'track_native', kind: 'video',
+        source: { type: 'atome', atome_id: 'video_native' },
+        timeline: { start_seconds: 0, duration_seconds: 2, source_in_seconds: 0, source_out_seconds: 2 },
+        next_empty_track_id: 'track_native_empty', next_empty_track_name: 'Empty'
+    });
+    const nativeEnv = {
+        __SQUIRREL_FORCE_TAURI_RUNTIME__: true,
+        Atome: {
+            getStateCurrent: async () => ({
+                id: 'video_native', type: 'video_recording',
+                properties: {
+                    kind: 'video_recording', has_audio: true, audio_track_count: 1,
+                    media_url: 'http://127.0.0.1:3000/api/recordings/video_native.mp4?media_user_id=user_native',
+                    file_path: 'data/users/user_native/recordings/video_native.mp4',
+                    media_user_id: 'user_native'
+                }
+            })
+        }
+    };
+
+    const projected = await buildTransportTimeline(nativeEnv, timeline);
+    const [clip] = projected.tracks.flatMap((track) => track.clips);
+    assert.equal(clip.source.url,
+        '/api/recordings/video_native.mp4?media_user_id=user_native');
+    assert.equal(clip.source.path, 'data/users/user_native/recordings/video_native.mp4');
+});
+
 test('List transport chains Molecules in order and toggles the shared sequence session', async () => {
     const sessions = new Map();
     let projected = null;

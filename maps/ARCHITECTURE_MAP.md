@@ -14,6 +14,16 @@ decoder, timer, clip state, `playingIds`, and published transport state; manual
 Stop and natural completion use the same complete release contract. Selection
 and visual-depth changes neither stop nor restart transport.
 
+Current native Molecule source contract (2026-08-26): protected media keeps two
+distinct playback identities at the shared record boundary. `url` is the
+canonical Web/API source used for browser loading and video-audio extraction;
+`path` is the canonical local `data/users/<owner>/recordings|Downloads/...`
+source required by strict native Kira. `runtime_transport.js` publishes the
+local path only in a strict native runtime, and `molecule_support.js` preserves
+it while deriving the extracted-audio URL. Standalone and Molecule playback
+consume the same resolver and the same Kira executor. Neither platform owns a
+parallel timeline, voice registry, media classifier, or fallback player.
+
 Historical media records use a conservative audio contract: absent video-audio
 metadata means unknown, not silent. Only explicit `has_audio: false` or zero
 audio tracks authorizes visual-only playback. Web Kira returns its decoded clip

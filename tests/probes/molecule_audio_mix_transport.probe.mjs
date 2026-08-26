@@ -10,9 +10,10 @@ globalThis.window = {
 globalThis.HTMLCanvasElement = class HTMLCanvasElement {};
 globalThis.HTMLVideoElement = class HTMLVideoElement {};
 
-const [{ createMoleculeEngine, __moleculeTestUtils }, { buildVideoAudioSource }] = await Promise.all([
+const [{ createMoleculeEngine, __moleculeTestUtils }, { buildVideoAudioSource }, { PlayRecordCore }] = await Promise.all([
     import('../../eVe/core/media_engine/molecule.js'),
-    import('../../eVe/core/media_engine/molecule_support.js')
+    import('../../eVe/core/media_engine/molecule_support.js'),
+    import('../../atome/src/application/audio_runtime/play_record_core.js')
 ]);
 
 const extractedSource = buildVideoAudioSource({
@@ -21,6 +22,37 @@ const extractedSource = buildVideoAudioSource({
 assert.deepEqual(extractedSource, {
     url: 'http://127.0.0.1:3001/api/extract-audio/Jeezs_s_fire.m4v?source=upload&media_user_id=probe_owner'
 }, 'video extraction must preserve the canonical upload owner');
+
+const nativeExtractedSource = buildVideoAudioSource({
+    url: '/api/recordings/native_video.mp4?media_user_id=probe_owner',
+    path: 'data/users/probe_owner/recordings/native_video.mp4'
+});
+assert.deepEqual(nativeExtractedSource, {
+    url: 'http://127.0.0.1:3001/api/extract-audio/native_video.mp4?source=recording&media_user_id=probe_owner',
+    path: 'data/users/probe_owner/recordings/native_video.mp4'
+}, 'video extraction must preserve the local Kira path while deriving the Web URL');
+
+const nativeCalls = [];
+const nativeCore = new PlayRecordCore({
+    __SQUIRREL_FORCE_TAURI_RUNTIME__: true,
+    __TAURI_INTERNALS__: {
+        invoke: async (command, payload) => {
+            nativeCalls.push({ command, payload });
+            return { success: true };
+        }
+    },
+    atome: {
+        tools: {
+            v2CommandBus: { dispatch: () => ({ ok: true }) }
+        }
+    }
+});
+await nativeCore.loadAsset({ assetId: 'native_video_audio', ...nativeExtractedSource });
+assert.equal(
+    nativeCalls.find(({ command }) => command === 'audio_load_clip')?.payload?.path,
+    'data/users/probe_owner/recordings/native_video.mp4',
+    'native Kira must load the local recording path, never the extraction URL'
+);
 
 const engine = createMoleculeEngine();
 const normalSession = engine.createSession({ id: 'molecule_audio_mix_normal' });
