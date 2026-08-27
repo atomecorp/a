@@ -1,2 +1,6 @@
 [build]
 target-dir = "../../../temp/platforms-web-bevy-renderer-target"
+
+[target.wasm32-unknown-unknown]
+# web-sys 0.3.85 gates the standard WebCodecs VideoFrame binding.
+rustflags = ["--cfg=web_sys_unstable_apis"]

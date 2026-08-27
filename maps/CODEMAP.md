@@ -1,6 +1,46 @@
 # Atome / eVe Code Map
 
+Initial refresh repair (2026-08-27): `ToolRegistryV2.refresh` shares its pending
+catalogue read; `tool_registry_storage.js` owns the extracted persistence adapter.
+`bevy_web_renderer_startup.js` is the existing renderer's extracted startup path,
+not a second renderer. It installs backing protection before invoking Winit and
+refreshes launch geometry after WASM preparation. `surface_runtime.js` projects
+the initial workspace reveal requested by `user_workspace_surface_runtime.js`.
+`eVe.js` warms the shared WASM module while loading application modules.
+
+UI preparation and motion (2026-08-27): `bevy_ui_flower_motion.js` derives
+child offsets from canonical layout; `bevy_ui_tree_motion_runtime.js` converts
+surface-space `overlayPosition` only at the flat renderer boundary. Ordinary
+motion uses one renderer batch. `bevy_ui_image_runtime.js` spends preparation
+frame budgets on cache misses only and can refresh geometry before publication.
+`surface_runtime.js` notifies every effective size change. List/Matrix wait for
+their page and contextual geometry before replacing their mounted tree.
+`project_workspace_activation_runtime.js` is the extracted lifecycle part of
+`project_data.js`; workspace chrome preservation remains in the scene owner.
+Evidence and remaining acceptance: `known-bug-solutions/ui-preparation-motion/README.md`.
+
+Transport hot path (2026-08-27): `project_view_surface_events.js` refreshes
+the contextual rail on recursive state/active-branch transitions, never on
+position-only ticks. Existing `patchTransport` owns incremental row/footer
+motion. `bevy_video_decode_source_runtime.js` primes a ready image on activation;
+subsequent playing ticks do not manufacture decoded-frame notifications.
+
+List filmstrip playback ownership (2026-08-27):
+`bevy_panel_record_timeline_preview.js` requests fixed temporal samples from
+the shared `recordPreviewNode` with `followPlayback: false`. The shared preview
+omits their playback-source association, so `playbackMirrorsFor` does not send
+them transport commands. Normal Visualizer/Matrix previews and audio waveforms
+retain that association. No second preview component or decoder is added.
+
 Status: Initial framework map after the Atome open / eVe closed boundary validation.
+
+Video seek continuity (2026-08-27): `bevy_video_decode_source_runtime.js`
+retains a frame before changing source time and releases it on decoded-frame
+arrival or canonical source removal. `bevy_video_stream_source_runtime.js`
+owns that bounded frame lifecycle and the existing source lookup, now returning
+a presentable video or its retained `VideoFrame`. `video_external_web.rs`
+imports either through the same external-texture draw. The Web Cargo target
+enables the web-sys 0.3.85 VideoFrame binding; no renderer or DOM surface is added.
 
 Current layered Molecule media ownership (2026-08-25):
 `core/media_engine/molecule.js` owns schema-v2 Ensemble transport, atomic

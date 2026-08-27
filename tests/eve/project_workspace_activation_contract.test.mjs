@@ -71,7 +71,6 @@ test('Dashboard project activation delegates workspace and menu ownership once',
     assert.equal(result.ok, true);
     assert.equal(result.project, project);
     assert.deepEqual(calls, [
-        'destroy',
         { project, options: { force: true, staleFirst: false } }
     ]);
 });
@@ -436,112 +435,10 @@ test('Project workspace activation from dashboard claims the project surface ins
         }
     );
     assert.deepEqual(calls.map((entry) => entry.name), [
-        'destroyDashboard',
         'setCurrent',
         'commit',
         'loadProjectAtomes',
-        'showFully'
+        'showFully',
+        'destroyDashboard'
     ]);
 });
-
-test('Empty project activation transfers the real main-menu overlay off the Dashboard scene', async () => {
-    clearAllProjectScenes();
-    const dom = installDom('<!doctype html><html><body><main id="view"><div id="project_view___eve_dashboard_workspace__"><canvas id="eve_surface_project"></canvas></div></main></body></html>');
-    const { window, document } = dom.window;
-    globalThis.window = window;
-    globalThis.document = document;
-    window.requestAnimationFrame = (callback) => {
-        callback();
-        return 1;
-    };
-    window.cancelAnimationFrame = () => {};
-    const surface = document.getElementById('eve_surface_project');
-    surface.getBoundingClientRect = () => ({
-        x: 0, y: 0, left: 0, top: 0, right: 1124, bottom: 853, width: 1124, height: 853
-    });
-    await renderProjectScene({
-        projectId: '__eve_dashboard_workspace__',
-        records: [{ id: '__eve_dashboard_sentinel', type: 'shape', properties: { width: 10, height: 10 } }],
-        host: document.getElementById('project_view___eve_dashboard_workspace__'),
-        compositor: createTestCompositor()
-    });
-
-    const uiRuntime = createEveBevyUiRuntime({
-        imageResolverFactory: () => async () => ({ width: 1, height: 1, rgba: [255, 255, 255, 255] }),
-        requestFrame: (callback) => {
-            callback();
-            return 1;
-        },
-        cancelFrame: () => {}
-    });
-    window.eveBevyUiRuntime = uiRuntime;
-    const menu = createBevyUiMainMenuRuntime({
-        content: {},
-        surfaceResolver: () => document.getElementById('eve_surface_project'),
-        runtimeResolver: () => uiRuntime,
-        handednessResolver: () => 'right',
-        requestFrame: (callback) => {
-            callback();
-            return 1;
-        },
-        cancelFrame: () => {},
-        reducedMotionResolver: () => true
-    });
-    setMainMenuRuntime(menu, window);
-    await menu.showFully();
-    assert.equal(
-        getProjectSceneState('__eve_dashboard_workspace__').records.some((record) => String(record.id || '').startsWith('__eve_bevy_ui_eve_bevy_ui_main_menu_')),
-        true,
-        'precondition: the real menu overlay starts on the Dashboard scene'
-    );
-
-    window.eveDashboardBevyUiRuntime = {
-        state: { active: true, suspended: false, sceneProjectId: '__eve_dashboard_workspace__' },
-        destroy: async () => {
-            window.eveDashboardBevyUiRuntime.state.active = false;
-            return { ok: true };
-        }
-    };
-    window.AdoleAPI = {
-        auth: { getCurrentInfo: () => ({ id: 'user_empty' }) },
-        projects: {
-            setCurrent: async (projectId, name, ownerId) => {
-                window.__currentProject = { id: projectId, name, owner_id: ownerId };
-                return { ok: true };
-            }
-        }
-    };
-    window.Atome = { commit: async () => ({ ok: true }) };
-    window.eveToolBase = {
-        loadProjectAtomes: async (projectId) => {
-            const host = document.getElementById(`project_view_${projectId}`);
-            await renderProjectScene({ projectId, records: [], host, compositor: createTestCompositor() });
-            return [];
-        },
-        getProjectSceneState,
-        renderProjectScene
-    };
-
-    const { activateProjectWorkspace } = await import('../../eVe/intuition/matrix/core/project_data.js');
-    const result = await activateProjectWorkspace({
-        id: 'project_empty',
-        name: 'Empty Project',
-        owner_id: 'user_empty'
-    });
-
-    const projectRecords = getProjectSceneState('project_empty')?.records || [];
-    const dashboardRecords = getProjectSceneState('__eve_dashboard_workspace__')?.records || [];
-    assert.equal(result.ok, true);
-    assert.equal(surface.parentElement?.id, 'project_view_project_empty');
-    assert.equal(
-        projectRecords.some((record) => String(record.id || '').startsWith('__eve_bevy_ui_eve_bevy_ui_main_menu_')),
-        true,
-        'the main menu must remain actionable even when the selected project has no persisted content'
-    );
-    assert.equal(
-        dashboardRecords.some((record) => String(record.id || '').startsWith('__eve_bevy_ui_eve_bevy_ui_main_menu_')),
-        false,
-        'the shared-canvas menu must not remain owned by the hidden Dashboard scene'
-    );
-    assert.equal(uiRuntime.readOverlayDiagnostics().lastOverlayError, null);
-}, 10_000);

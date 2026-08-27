@@ -113,10 +113,11 @@ test('live MediaStream replaces URL decode, drives shared lookups at 15 fps, and
             assert.equal(decodedVideo.isConnected, false);
             assert.equal(calls.videos.length, 2);
             assert.equal(dom.window.document.querySelectorAll('#eve_bevy_video_decode_root video').length, 1);
-            assert.equal(dom.window.__EVE_BEVY_VIDEO_SOURCE_FOR_ID__('capture_video_overlay'), registration.video);
+            assert.equal(dom.window.__EVE_BEVY_VIDEO_SOURCE_FOR_ID__('capture_video_overlay'), null);
             assert.equal(dom.window.__EVE_BEVY_VIDEO_ACTIVE_FOR_ID__('capture_video_overlay'), true);
 
             registration.video.__setPresentable();
+            assert.equal(dom.window.__EVE_BEVY_VIDEO_SOURCE_FOR_ID__('capture_video_overlay'), registration.video);
             registration.video.__flushVideoFrame(0);
             registration.video.__flushVideoFrame(20);
             registration.video.__flushVideoFrame(70);
@@ -183,6 +184,8 @@ test('prebound live source prevents URL video creation and replacement never sto
             assert.equal(first.video.isConnected, false);
             assert.equal(firstTrack.stopCalls, 0);
             assert.equal(secondTrack.stopCalls, 0);
+            assert.equal(dom.window.__EVE_BEVY_VIDEO_SOURCE_FOR_ID__('capture_video_overlay_prebound'), null);
+            replacement.video.__setPresentable();
             assert.equal(dom.window.__EVE_BEVY_VIDEO_SOURCE_FOR_ID__('capture_video_overlay_prebound'), replacement.video);
 
             assert.equal(unregisterBevyVideoStreamSource({

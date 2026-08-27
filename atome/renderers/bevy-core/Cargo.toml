@@ -30,7 +30,7 @@ serde_bytes = "0.11"
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 js-sys = "0.3"
 wasm-bindgen = "0.2"
-web-sys = { version = "0.3", features = ["HtmlMediaElement", "HtmlVideoElement", "Window"] }
+web-sys = { version = "0.3", features = ["HtmlMediaElement", "HtmlVideoElement", "VideoFrame", "Window"] }
 wgpu = { version = "29.0.4", default-features = false, features = ["webgpu"] }
 
 [patch.crates-io]

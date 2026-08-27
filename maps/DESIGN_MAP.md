@@ -1,5 +1,39 @@
 # Atome / eVe Design Map
 
+Initial refresh presentation (2026-08-27): the existing workspace canvas keeps
+its full layout size while transparent, then appears with its menu and content
+in one 160 ms fade over the existing background. Reduced motion skips the fade.
+The renderer's capped DPR must never shrink CSS geometry. Chrome refreshes were
+verified at native DPR 2 / render DPR 1.5; Tauri and iOS pixels remain unverified.
+This initial reveal does not claim to solve every later project-switch handoff.
+
+UI opening stability (2026-08-27): Flower icons, labels and palette accents
+follow their bubbles in canonical coordinates without double-applying parent
+offsets; the existing short animation is retained. Main-menu preparation uses
+the current surface geometry. List/Matrix retain their presented tree until
+records and rail geometry are prepared. Dashboard teardown now follows project
+preparation, but the contextual rail can still appear over it during handoff:
+whole-screen atomic presentation is **not yet accepted**. Cold-start latency,
+native pixel validation and endurance remain **To verify**.
+
+Playback progress stability (2026-08-27): advancing time updates existing
+row/footer heads without clearing the contextual rail or reconstructing the
+project view. State/branch transitions still update tools and Visualizer.
+Video refresh follows decoded images, not transport-position announcements;
+no moving head is added to Visualizer.
+
+List video filmstrips (2026-08-27): each sampled image represents its fixed
+source instant, including inside a text/video Molecule. Play, Pause and footer
+scrub do not animate or restart those samples. The row/footer heads indicate
+progress, while the Visualizer shows the current animated composition without
+a moving head. Sample bounds, crop windows and lane layout are unchanged.
+
+Video scrub continuity (2026-08-27): while the requested frame is decoding,
+the Visualizer keeps the last decoded image from that same video instead of
+briefly showing its background. The new frame replaces it when available;
+source changes release it. This uses the shared WebGPU video path, not a DOM
+overlay or poster. Moving heads remain exclusive to List rows and the footer.
+
 Status: Initial design map after the Atome open / eVe closed boundary validation.
 
 Current List/Matrix drag and Play presentation (2026-08-22): a contextual item

@@ -258,17 +258,14 @@ fn prepare_video_external_texture_bind_groups(
         let Some(source) = hidden_video_source_for_id(&video.id) else {
             continue;
         };
-        if source.ready_state() < web_sys::HtmlMediaElement::HAVE_CURRENT_DATA {
-            continue;
-        }
-        if source.video_width() == 0 || source.video_height() == 0 {
+        if source.width() == 0 || source.height() == 0 {
             continue;
         }
 
         let external_texture = render_device.wgpu_device().create_external_texture(
             &wgpu::ExternalTextureDescriptor {
                 label: Some("atome_video_external_texture"),
-                source: Some(wgpu::ExternalImageSource::HTMLVideoElement(source)),
+                source: Some(source),
                 width: 0,
                 height: 0,
                 format: wgpu::ExternalTextureFormat::Rgba,
@@ -434,7 +431,7 @@ fn clear_video_external_texture_bind_groups(
     prepared.0.clear();
 }
 
-fn hidden_video_source_for_id(id: &str) -> Option<web_sys::HtmlVideoElement> {
+fn hidden_video_source_for_id(id: &str) -> Option<wgpu::ExternalImageSource> {
     let window = web_sys::window()?;
     let lookup = js_sys::Reflect::get(
         window.as_ref(),
@@ -443,11 +440,15 @@ fn hidden_video_source_for_id(id: &str) -> Option<web_sys::HtmlVideoElement> {
     .ok()?
     .dyn_into::<js_sys::Function>()
     .ok()?;
-    lookup
-        .call1(window.as_ref(), &JsValue::from_str(id))
-        .ok()?
-        .dyn_into::<web_sys::HtmlVideoElement>()
+    let source = lookup.call1(window.as_ref(), &JsValue::from_str(id)).ok()?;
+    if let Some(video) = source.dyn_ref::<web_sys::HtmlVideoElement>() {
+        return (video.ready_state() >= web_sys::HtmlMediaElement::HAVE_CURRENT_DATA)
+            .then(|| wgpu::ExternalImageSource::HTMLVideoElement(video.clone()));
+    }
+    source
+        .dyn_into::<web_sys::VideoFrame>()
         .ok()
+        .map(wgpu::ExternalImageSource::VideoFrame)
 }
 
 fn record_video_external_event(name: &str, id: &str) {

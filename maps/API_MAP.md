@@ -1,6 +1,43 @@
 # Atome / eVe API Map
 
+Initial refresh (2026-08-27): `ToolRegistryV2.refresh()` shares only an in-flight
+read and releases it on success or failure; subsequent explicit refreshes reload.
+Existing registry and renderer exports remain unchanged. Internal surface APIs
+`prepareInitialRenderSurfacePresentation` / `presentInitialRenderSurface` stage
+one initial reveal after the workspace's menu and Dashboard have projected.
+No persisted property or new public command is introduced.
+
+UI readiness contract (2026-08-27): internal BevyUI mount/update options accept
+`refreshTree` to rebuild through the original owner when the surface changes
+during preparation. Trees and handlers publish after successful projection;
+failure retains the previous tree and rejects instead of clearing/retrying a
+stale snapshot. Motion's internal `overlayPosition` is surface-space; ordinary
+`position` remains parent-local. No public API or persisted particle is added.
+Project activation retains its existing exports, including `syncActiveProjectFlag`,
+through the extracted lifecycle owner; Dashboard actions delegate teardown to it.
+
+Transport event consumption (2026-08-27): position-only recursive snapshots
+update progress without forcing `refreshCurrentContext`/`enterVirtual`.
+Status/active-path changes still refresh the rail, as do legacy object
+announcements including refused starts. Repeated active decode-playback
+requests do not increment frameVersion; decoded-frame callbacks do.
+Public commands and persisted contracts are unchanged.
+
+Shared preview contract (2026-08-27): `recordPreviewNode` accepts internal
+`followPlayback` (default true), independently of `showPlaybackProgress`.
+False clears the projected `playback_source_atome_id` even if the input record
+already carries it; the source Atome is unchanged. Temporal List samples use
+false, while live Visualizer/Matrix previews and audio waveforms keep true.
+No public transport or persisted Atome property is added.
+
 Status: Initial API map after the Atome open / eVe closed boundary validation.
+
+Video source lookup contract (2026-08-27): the internal
+`__EVE_BEVY_VIDEO_SOURCE_FOR_ID__` returns a presentable `HTMLVideoElement`,
+the same decoder's retained `VideoFrame` during a pending seek, or null before
+any decoded image exists. Presentability includes the retained frame. The
+decoder owns its explicit close on replacement/removal; no public transport
+command, persisted property, or clock is added.
 
 Current structured playback/reorder API contract (2026-08-22):
 `projectViewPlayback.readState()` exposes `armed`, `armedProjectId`, `playing`,

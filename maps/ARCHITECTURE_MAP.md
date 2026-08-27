@@ -1,5 +1,46 @@
 # Atome / eVe Architecture Map
 
+Boot ownership repair (2026-08-27): concurrent tool registrations share the
+canonical registry's pending refresh instead of launching repeated catalogue
+queries that block SQLite and static module delivery. There is no TTL cache or
+alternate catalogue. The same Bevy surface owns CSS/backing reconciliation from
+before Winit invocation; its initial opacity is disposable presentation state.
+Workspace readiness controls the one reveal, not a fixed boot delay. The WASM
+loader is warmed early without starting an extra event loop or creating a canvas.
+
+Prepared UI publication (2026-08-27): geometry/hydration use the existing tree
+owner, image cache and render queue. State publication follows successful
+projection; no alternate DOM, renderer, persistence, timer or domain cache is
+introduced. Scene replacement carries only presented workspace chrome from
+the shared surface owner, never outgoing project media or its structured view.
+The project-data lifecycle is factored into `project_workspace_activation_runtime.js`;
+data mutations remain on the existing commit APIs. Full-screen handoff and native
+latency acceptance remain separate from passing owner-level tests.
+
+Transport/render separation (2026-08-27): recursive position ticks use the
+existing bounded progress projection; they must not force the rail's
+clear/re-enter lifecycle, which emits layout changes and rebuilds the view.
+The shared decoder publishes new frames through its existing frame callbacks,
+not every transport tick. This removes repeated work on the shared Web/iOS/
+Tauri JS route without adding state, caches, clocks, renderers or DOM owners.
+Native frame-pacing acceptance remains separate from the executable contract.
+
+Temporal sample isolation (2026-08-27): a projected playback-source association
+means a live mirror, not merely shared asset identity. Fixed List filmstrip
+samples retain their asset and source window but opt out of that association
+at the shared preview boundary. The existing mirror index therefore excludes
+them from Play/Pause/seek and source playback-event routing. This removes
+unnecessary video starts/seeks without an ID-pattern filter, additional clock,
+decoder, transport path, DOM surface or persistent state.
+
+Video seek presentation (2026-08-27): hidden media decoding owns at most one
+retained decoded `VideoFrame` per seeking source. That disposable resource
+bridges temporary loss of the HTML video backing frame through the existing
+Bevy/wgpu external-texture import and sorted draw, without another renderer,
+CPU readback, poster, canvas, clock, or canonical state. New decoded data,
+source replacement and disposal release the frame. Camera source ownership
+and its first-frame readiness guard are unchanged.
+
 Status: Initial architecture map after the Atome open / eVe closed boundary validation.
 
 Current layered Molecule playback contract (2026-08-25): a schema-v2 Molecule

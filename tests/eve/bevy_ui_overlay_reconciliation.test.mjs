@@ -42,7 +42,7 @@ const locateNodeBox = (node, nodeId, parentBox = null, forcedBox = null) => {
     return null;
 };
 
-test('BevyUI overlay remount reconciles from an exact empty baseline after a projection failure', async () => {
+test('BevyUI keeps the presented tree on failure and reports it without an implicit retry', async () => {
     const surface = createSurface();
     let rect = { width: 240, height: 240 };
     surface.getBoundingClientRect = () => ({ left: 0, top: 0, right: rect.width, bottom: rect.height, ...rect });
@@ -95,18 +95,49 @@ test('BevyUI overlay remount reconciles from an exact empty baseline after a pro
 
     rect = { width: 320, height: 240 };
     failProjection = true;
-    await runtime.updateTree({ id: 'ui_tree', surface, tree: tree() });
-    assert.deepEqual(runtime.state.overlayRecordIds.get('ui_tree'), []);
-    assert.equal(runtime.state.overlaySignatures.has('ui_tree'), false);
+    await assert.rejects(runtime.updateTree({ id: 'ui_tree', surface, tree: tree() }), /probe_overlay_batch_failed/);
+    assert.deepEqual(runtime.state.overlayRecordIds.get('ui_tree'), idsForWidth(240));
+    assert.equal(runtime.state.sourceTrees.get('ui_tree').tree.root.style.size[0], 240);
+    assert.equal(runtime.state.overlaySignatures.has('ui_tree'), true);
     assert.equal(runtime.state.lastOverlayError, 'probe_overlay_batch_failed:menu_icon_image');
-    assert.equal(frames.length, 1);
+    assert.equal(frames.length, 0);
+    assert.equal(projectionCalls.some((call) => call.type === 'clear'), false);
 
-    frames.shift()();
-    await waitFor(() => runtime.state.overlayRecordIds.get('ui_tree')?.[0] === 'menu_rect_320');
+    await runtime.updateTree({ id: 'ui_tree', surface, tree: tree() });
     const retry = projectionCalls.filter((call) => call.type === 'project').at(-1);
-    assert.deepEqual(retry.previousIds, []);
+    assert.deepEqual(retry.previousIds, idsForWidth(240));
     assert.deepEqual(runtime.state.overlayRecordIds.get('ui_tree'), idsForWidth(320));
     assert.equal(runtime.state.lastOverlayError, null);
+});
+
+test('BevyUI rebuilds geometry changed during image preparation before its first publication', async () => {
+    const surface = createSurface();
+    let width = 960;
+    surface.getBoundingClientRect = () => ({ width, height: 720 });
+    let release;
+    const decoded = new Promise((resolve) => { release = resolve; });
+    const published = [];
+    const runtime = createEveBevyUiRuntime({
+        imageResolverFactory: () => async () => decoded,
+        requestFrame: () => 0,
+        overlayProjector: { project: async ({ tree }) => { published.push(tree); return ['ready']; } }
+    });
+    const build = () => ({ id: 'prepared', root: {
+        id: 'root', kind: 'root', style: { size: [width, 720] }, children: [{
+            id: 'prepared_icon', kind: 'image', image: { source: 'prepared-geometry.svg' },
+            style: { position: [width - 60, 660], size: [24, 24] }
+        }]
+    } });
+    const mounting = runtime.mountTree({ id: 'prepared', surface, tree: build(), refreshTree: build });
+    await Promise.resolve();
+    await Promise.resolve();
+    assert.equal(runtime.state.trees.size, 0);
+    width = 1280;
+    release({ width: 1, height: 1, rgba: [255, 255, 255, 255] });
+    await mounting;
+    assert.equal(published.length, 1);
+    assert.deepEqual(published[0].root.style.size, [1280, 720]);
+    assert.deepEqual(published[0].root.children[0].style.position, [1220, 660]);
 });
 
 test('Bevy panel overlay reconciliation removes stale Contact records without relying on a prior id list', async () => {

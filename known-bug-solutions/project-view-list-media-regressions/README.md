@@ -1,5 +1,41 @@
 # Project View List and Media Regressions
 
+## Video playback stalls after recursive transport refactoring
+
+Confirmed shared-path regressions on 2026-08-27. The new recursive transport
+publishes position about every 33 ms. `project_view_surface_events.js` consumed
+those ticks like legacy state announcements and forced the contextual rail
+to reopen. `enterVirtual` clears the old target before entering the new one;
+both events change the rail layout and request a complete project-view render.
+An integration test using the real context and rail owners reproduced
+30 refreshes and 60 render requests for 30 position-only ticks.
+
+The event owner now refreshes only for recursive status/active-path changes;
+legacy object announcements still refresh, including refused starts. The same
+test now counts 30 progress patches, zero refreshes and zero render requests.
+Pause/Resume continue updating the tools. Separately, the decode owner no
+longer increments frameVersion on an already-active transport tick. Activation
+may prime an existing image; subsequent frames use the existing decoder
+callbacks. A second red-before test verifies this without weakening seek,
+scrub, frame retention or source disposal.
+
+Eight focused suites pass 45 tests, M1 passes all 28 Molecule suites plus M0,
+and syntax passes 1917 files. Real Web Project 3 reproduces the palette being
+closed by playback before the fix. After reload, it remains open as the same
+video advances from 6.83 to 18.37 seconds; the video remains visible, and the
+footer/row heads move. Sequential audio/composite/video transitions and natural
+completion also work. No browser warning/error was observed after reload.
+These observations are not an FPS, dropped-frame, audible-output or iOS proof.
+
+Physical acceptance is blocked: the iPhone is unavailable; the connected
+iPad has no installed WebDriverAgent and Xcode rejects its signing profile
+(certificate not included, exit 65). The original Appium instance also points
+to a deleted driver; the existing global installation was tried separately
+and its diagnostic server was stopped afterward. No signing settings, app
+data or user servers were changed. **To verify:** deploy these JS changes to
+the native app and measure frame pacing on the actual failing device through
+a provisioned native test session. Tauri was not exercised in this repair.
+
 ## Symptoms
 
 - A List footer Delete click reports `tool_handler_missing_v2`.
@@ -179,3 +215,68 @@ local node position, preserving layout offsets and native/hit-tree coordinates.
 cover both causes. Real Web Project 3 playback and footer scrub retain the
 heads on rows/footer only. Tauri and iPhone have not been validated for this
 specific change.
+
+## Footer scrub briefly removes the Visualizer video
+
+Confirmed on 2026-08-27 with a real footer drag within the same WhatsApp video
+in Web Project 3. The decoder alternates `readyState: 4 -> 1 -> 4` while seeking.
+The source lookup correctly rejects the unready HTML video; Bevy clears its
+per-render external bindings and skips that video, exposing the background.
+This is distinct from transport starvation and does not require a row change.
+
+The existing decoder now retains one `VideoFrame` before assigning source
+time, reuses it through pending seeks, and closes it on new decoded data or
+source removal/replacement. The source lookup and Rust external-texture import
+accept that frame through the same Bevy draw. Global decoder shutdown now
+reuses the single-source removal owner instead of duplicating disposal.
+
+Do not weaken first-frame readiness, keep an expired HTML-video bind group,
+add a poster/CPU copy, or overlay a DOM video. The
+[WebGPU external-texture lifetime contract](https://www.w3.org/TR/2026/CRD-webgpu-20260109/#gpuexternaltexture)
+allows an imported VideoFrame to remain valid until the frame is closed;
+HTML-video imports expire between tasks. The Web Cargo target enables the
+VideoFrame binding gated by web-sys 0.3.85. No dependency version changes.
+
+`bevy_video_decode_source_runtime.test.mjs` reproduces the failure before the
+repair and covers undecoded first frames, retention, repeated pending seeks,
+latest target, ready-frame replacement, source replacement, shutdown and
+paused scrub. Stream tests retain their existing readiness guard: two old
+expectations incorrectly exposed a never-decoded video and were corrected.
+The six focused suites pass 32 tests; M1 and syntax pass. The canonical WASM
+build passes (version `56ea5207ac321b7b`). Real Project 3 captures during
+repeated footer drags retain the image even at `readyState: 1`; paused scrub
+settles at `14.143753 s` without resuming, and active scrub resumes afterward.
+The footer/row heads remain outside Visual. No import/retention/GPU error was
+observed; two pre-existing sampled-thumbnail AbortError warnings remain
+separate. Tauri/iPhone and physical audio output remain unverified.
+
+## List composite video samples flicker during playback
+
+Confirmed on 2026-08-27 in Web Project 3's text/video Molecule. Temporal List
+previews contain up to five fixed 40 ms video samples. The shared preview
+unconditionally stamped each with `playback_source_atome_id`, enrolling it in
+`playbackMirrorsFor`. Transport then played and sought all those samples as
+live videos. Their fixed times changed, readiness dropped and two sample
+decoders reported `play_refused AbortError`.
+
+The existing `recordPreviewNode` now accepts `followPlayback` (default true).
+`recordTimelinePreviewNode` passes false for sampled images, clearing the
+projected playback association even when copied source properties contain it.
+The original source is unchanged. Audio waveforms keep their progression link;
+normal Visualizer/Matrix previews remain live. Do not filter sample IDs in
+transport, weaken decoder readiness, or add a parallel thumbnail player.
+
+Two failing-before tests in `project_view_list_preview_model.test.mjs` pass
+afterward. Six focused suites pass 36 tests; M1 and syntax pass. Real Play,
+Pause (21 seconds), paused footer drag and Resume preserve the five sample
+times at 0, 0.9065, 1.813, 2.7195 and 3.601666 seconds, all paused/readyState 4.
+Only live previews advance. No new sample AbortError occurs after reload.
+Continuous flicker after settled Pause was not reproduced in the baseline;
+the unintended live sample starts and interrupted plays were reproduced.
+
+Remaining separate observation: immediately after a composite footer scrub,
+one Visualizer capture contains text without video, and the next restores
+video. The List filmstrip remains intact. Decoder frame retention alone does
+not prove composite subject/reprojection continuity; investigate that boundary
+before declaring Visualizer scrub fully fixed. Tauri/iPhone, actual Matrix
+interaction and physical audio output were not validated in this repair.
