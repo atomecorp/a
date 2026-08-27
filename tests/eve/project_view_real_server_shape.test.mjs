@@ -157,7 +157,7 @@ test('Matrix reordering clears each completed drag so the same item can move rep
     const previousHTMLElement = globalThis.HTMLElement;
     const writes = [];
     let targetIndex = 1;
-    let dropPoint = { x: 95, y: 50 };
+    let dropPoint = { x: 50, y: 95 };
     globalThis.HTMLElement = class HTMLElement {};
     globalThis.window = {
         addEventListener: () => {},
@@ -184,7 +184,7 @@ test('Matrix reordering clears each completed drag so the same item can move rep
         await matrix.load({ projectId: 'project_matrix_repeat', readList: async () => records() });
         for (let attempt = 0; attempt < 2; attempt += 1) {
             targetIndex = attempt === 0 ? 1 : 0;
-            dropPoint = attempt === 0 ? { x: 95, y: 50 } : { x: 5, y: 50 };
+            dropPoint = attempt === 0 ? { x: 50, y: 95 } : { x: 50, y: 5 };
             await matrix.handleEvent({ type: 'project_view.matrix.drag.start', id: 'first', event: { client_x: 0, client_y: 0 } });
             await matrix.handleEvent({ type: 'project_view.matrix.drag.move', event: { client_x: dropPoint.x, client_y: dropPoint.y } });
             const result = await matrix.handleEvent({ type: 'project_view.matrix.drag.end', event: { client_x: dropPoint.x, client_y: dropPoint.y } });
@@ -209,7 +209,7 @@ test('Matrix persists one reorder as one canonical commit batch', async () => {
             hitTestAtClientPoint: () => ({
                 nodeId: 'project_view_matrix_tile_1',
                 box: { x: 0, y: 0, width: 100, height: 100 },
-                point: { x: 95, y: 50 }
+                point: { x: 50, y: 95 }
             })
         },
         Atome: {
@@ -227,8 +227,8 @@ test('Matrix persists one reorder as one canonical commit batch', async () => {
         ];
         await matrix.load({ projectId: 'project_matrix_batch', readList: async () => records });
         await matrix.handleEvent({ type: 'project_view.matrix.drag.start', id: 'first', event: { client_x: 0, client_y: 0 } });
-        await matrix.handleEvent({ type: 'project_view.matrix.drag.move', event: { client_x: 95, client_y: 50 } });
-        const result = await matrix.handleEvent({ type: 'project_view.matrix.drag.end', event: { client_x: 95, client_y: 50 } });
+        await matrix.handleEvent({ type: 'project_view.matrix.drag.move', event: { client_x: 50, client_y: 95 } });
+        const result = await matrix.handleEvent({ type: 'project_view.matrix.drag.end', event: { client_x: 50, client_y: 95 } });
         assert.equal(result.ok, true);
         assert.deepEqual(batches, [[
             { kind: 'set', atome_id: 'second', project_id: 'project_matrix_batch', props: { hierarchy_order: 0 } },
@@ -285,15 +285,15 @@ test('List bottom-quarter insertion traverses the real drag handler and commits 
     }
 });
 
-test('Matrix center overlap stays inert before 500ms and illuminates only after the deadline', async () => {
+test('Matrix center combination arms immediately in the generous center zone', async () => {
     const previousWindow = globalThis.window;
     const previousHTMLElement = globalThis.HTMLElement;
     const batches = [];
     const motions = [];
-    vi.useFakeTimers();
     globalThis.HTMLElement = class HTMLElement {};
     globalThis.window = {
-        addEventListener: () => {}, removeEventListener: () => {},
+        addEventListener: () => {}, removeEventListener: () => {}, dispatchEvent: () => {},
+        CustomEvent: class CustomEvent {},
         eveBevyUiRuntime: {
             hitTestAtClientPoint: () => ({
                 nodeId: 'project_view_matrix_tile_1',
@@ -315,34 +315,22 @@ test('Matrix center overlap stays inert before 500ms and illuminates only after 
         await matrix.handleEvent({ type: 'project_view.matrix.drag.move', event: { client_x: 50, client_y: 50 } }, {
             patchMotion: (updates) => { motions.push(...updates); }
         });
-        vi.advanceTimersByTime(499);
-        let tiles = matrix.build({ width: 600, height: 500, emit: () => {} })[0].children[0].children[0].children;
-        assert.equal(tiles[1].style.border, undefined);
-        const early = await matrix.handleEvent({ type: 'project_view.matrix.drag.end', event: { client_x: 50, client_y: 50 } });
-        assert.equal(early.ignored, true);
-        assert.equal(batches.length, 0);
-
-        await matrix.handleEvent({ type: 'project_view.matrix.drag.start', id: 'first', event: { client_x: 0, client_y: 0 } });
-        await matrix.handleEvent({ type: 'project_view.matrix.drag.move', event: { client_x: 50, client_y: 50 } }, {
-            patchMotion: (updates) => { motions.push(...updates); }
-        });
-        vi.advanceTimersByTime(500);
-        tiles = matrix.build({ width: 600, height: 500, emit: () => {} })[0].children[0].children[0].children;
+        const tiles = matrix.build({ width: 600, height: 500, emit: () => {} })[0].children[0].children[0].children;
         assert.deepEqual(tiles[1].style.border, [3, 3, 3, 3]);
         assert.equal(motions.some((update) => update.nodeId === 'project_view_matrix_tile_1'
             && Array.isArray(update.style?.background)), true);
-        await matrix.handleEvent({ type: 'project_view.matrix.drag.cancel' });
+        const combined = await matrix.handleEvent({ type: 'project_view.matrix.drag.end', event: { client_x: 50, client_y: 50 } });
+        assert.equal(combined.ok, true);
+        assert.equal(batches.length, 1);
     } finally {
-        vi.useRealTimers();
         globalThis.window = previousWindow;
         globalThis.HTMLElement = previousHTMLElement;
     }
 });
 
-test('Matrix overlap calls the canonical Molecule owner only after 500ms and release', async () => {
+test('Matrix center calls the canonical simultaneous Molecule owner on release', async () => {
     const previousWindow = globalThis.window;
     const calls = [];
-    vi.useFakeTimers();
     globalThis.window = {
         eveBevyUiRuntime: {
             hitTestAtClientPoint: ({ ignoredNodeIds = [] } = {}) => ({
@@ -370,30 +358,20 @@ test('Matrix overlap calls the canonical Molecule owner only after 500ms and rel
         });
         runtime.matrixDrag.begin('first', { client_x: 0, client_y: 0 });
         runtime.matrixDrag.move({ client_x: 50, client_y: 50 });
-        vi.advanceTimersByTime(499);
-        const early = await runtime.matrixDrag.end({ client_x: 50, client_y: 50 });
-        assert.equal(early.ignored, true);
-        assert.deepEqual(calls, []);
-
-        runtime.matrixDrag.begin('first', { client_x: 0, client_y: 0 });
-        runtime.matrixDrag.move({ client_x: 50, client_y: 50 });
-        vi.advanceTimersByTime(500);
-        runtime.matrixDrag.move({ client_x: 60, client_y: 50 });
-        const merged = await runtime.matrixDrag.end({ client_x: 60, client_y: 50 });
+        const merged = await runtime.matrixDrag.end({ client_x: 50, client_y: 50 });
         assert.equal(merged.operation, 'merge');
         assert.deepEqual(calls, [{
-            projectId: 'project_matrix_merge', sourceId: 'first', targetId: 'second'
+            projectId: 'project_matrix_merge', sourceId: 'first', targetId: 'second',
+            mode: 'simultaneous', placement: 'end'
         }]);
     } finally {
-        vi.useRealTimers();
         globalThis.window = previousWindow;
     }
 });
 
-test('List overlap reaches the canonical Molecule owner after the same 500ms release', async () => {
+test('List center reaches the canonical Molecule owner immediately on release', async () => {
     const previousWindow = globalThis.window;
     const batches = [];
-    vi.useFakeTimers();
     const records = [
         { atome_id: 'first', type: 'shape', project_id: 'project_list_merge', parent_id: 'project_list_merge', properties: {} },
         { atome_id: 'second', type: 'shape', project_id: 'project_list_merge', parent_id: 'project_list_merge', properties: {} }
@@ -435,14 +413,11 @@ test('List overlap reaches the canonical Molecule owner after the same 500ms rel
         });
         runtime.listDrag.begin('first', { client_x: 0, client_y: 0 });
         runtime.listDrag.move({ client_x: 50, client_y: 50 });
-        vi.advanceTimersByTime(500);
-        runtime.listDrag.move({ client_x: 60, client_y: 50 });
-        const result = await runtime.listDrag.end({ client_x: 60, client_y: 50 });
-        assert.equal(result.operation, 'create');
+        const result = await runtime.listDrag.end({ client_x: 50, client_y: 50 });
+        assert.equal(result.operation, 'wrap');
         assert.equal(batches.length, 1);
         assert.deepEqual(new Set(batches[0].slice(1).map((event) => event.atome_id)), new Set(['first', 'second']));
     } finally {
-        vi.useRealTimers();
         globalThis.window = previousWindow;
     }
 });

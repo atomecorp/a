@@ -1150,3 +1150,13 @@ The shared scene is not a reason to rebuild static Dashboard records when a tool
 - The obsolete DOM Molecule panel and its orphan footer-tool contract are deleted and may not return.
 - The acceptance owner is `scripts/molecule_acceptance_manifest.json` plus the composable `quality:*` package commands. UI/visual coverage stays on the official server and the shared canvas; endurance reuses that same real journey for 30 minutes and records heap, overlay, scene, canvas, transport and Record evidence without a test-only product seam.
 - Desktop navigation waits for an actual TCP listener through `platforms/desktop-tauri/src/local_http_navigation.rs` before loading the local URL. The former fixed 250 ms sleep is retired, so native startup readiness belongs to the local HTTP boundary rather than machine timing.
+
+# Canonical Atome/Molecule List architecture — 2026-08-27, authoritative
+
+This section supersedes the earlier statement that the shared List derives visible Molecule, Section, and Track rows. The List now projects only persisted Atomes and Molecules. `parent_id` is the sole membership authority, `hierarchy_order` is the sibling-order authority, and every Molecule reads only its own normalized `playback_mode`; `layer` migrates to `simultaneous` and mode inheritance is forbidden.
+
+The technical Timeline is a derived projection. A versioned idempotent migration converts legacy Clips to Atome occurrences, parallel Tracks to nested simultaneous Molecules, and ordered clips or Sections to sequential Molecules in one canonical batch. Multiple occurrences share the source asset but retain distinct Atome identity and non-destructive source windows.
+
+One recursive compiler maps the canonical tree to an ephemeral transport plan. Sequential nodes concatenate unmuted children, simultaneous nodes align child offsets against one global time, random nodes freeze an order for the current cycle, performance nodes replay persisted action timing, and nested Molecules recursively contribute their compiled duration. One runtime clock publishes global position, duration, active path, active leaves, and local positions; no row owns a timer or transport state.
+
+The shared Squirrel selectable-list components remain the UI authority. Footer progress and visible-row local progress are disposable WebGPU/BevyUI projections. Previews reuse canonical media caches and decoders, and editing writes only Atome occurrence properties through the mutation pipeline. Drag/drop uses the canonical Molecule mutation facade and preserves nested envelopes. No DOM proxy, second canvas, renderer fallback, or parallel List state owner is permitted.

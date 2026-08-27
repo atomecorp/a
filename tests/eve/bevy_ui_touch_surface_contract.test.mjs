@@ -516,6 +516,33 @@ test('Atome contextual runtime reuses its handed rail for virtual Molecule selec
     assert.equal(runtime.readState().menuVisible, true);
 });
 
+test('Structured row context accepts its canonical record when Natural has no projected scene', async () => {
+    const rendered = [];
+    const invocations = [];
+    const record = { id: 'audio_row', project_id: 'project', type: 'audio', properties: { kind: 'audio' } };
+    const runtime = createAtomeContextualEditRuntime({
+        legacyState: {}, resolveDefinitions: () => [], invokeDefinition: async () => ({ ok: true }),
+        surfaceResolver: () => ({ getBoundingClientRect: () => ({ width: 800, height: 600 }) }),
+        bevyRuntimeResolver: () => ({
+            mountTree: async ({ tree }) => rendered.push(tree),
+            updateTree: async ({ tree }) => rendered.push(tree), unmountTree: async () => null
+        }),
+        findSceneByAtomeId: () => null, readMainMenuHeight: () => 52
+    });
+    const entered = runtime.enter({
+        atomeId: record.id, projectId: record.project_id, kind: 'audio', railOnly: true, record,
+        extraDefinitions: [{ key: 'split', label: 'Split', icon: 'split', toolType: 'tool', occurrenceAction: 'split' }],
+        extraInvoker: async (definition) => { invocations.push(definition.key); return { ok: true }; }
+    });
+    assert.equal(entered.ok, true);
+    await runtime.render();
+    const split = findNode(rendered.at(-1).root, 'atome_contextual_tool_split');
+    assert.ok(split);
+    split.on.activate();
+    await Promise.resolve();
+    assert.deepEqual(invocations, ['split']);
+});
+
 test('Structured member context promotes in place to canvas tools when Natural view returns', async () => {
     const rendered = [];
     const record = { id: 'video_member', type: 'video', properties: { kind: 'video', left: 20, top: 20, width: 160, height: 90 } };

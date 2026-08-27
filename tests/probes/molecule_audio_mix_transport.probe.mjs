@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { MediaPlaybackAudioExecutor } from '../../eVe/domains/media/shared/media_playback_audio_executor.js';
 
 globalThis.window = {
     location: { href: 'http://127.0.0.1:3001/', origin: 'http://127.0.0.1:3001' },
@@ -92,6 +93,54 @@ assert.deepEqual(normalCalls.filter((call) => call.action === 'play').map((call)
 assert.equal(normalSession.runtimeClips.get('video_clip').playing, true);
 assert.equal(normalSession.runtimeClips.get('audio_clip').playing, true);
 assert.equal(normalSession.voiceState.size, 2);
+
+const loadedAssets = new Set();
+const identityCalls = [];
+const identityEnv = {
+    WebAssembly,
+    atome: { tools: { v2CommandBus: { dispatch: () => ({ ok: true }) } } },
+    Squirrel: { av: { audio: {
+        get_backend: () => 'kira',
+        __call_backend_method: async (method, payload) => {
+            identityCalls.push({ method, payload });
+            if (method === 'create_clip') loadedAssets.add(payload.id);
+            if (method === 'play_instance' && !loadedAssets.has(payload.asset_id)) {
+                throw new Error(`Clip '${payload.asset_id}' not found`);
+            }
+            return { success: true };
+        }
+    } } }
+};
+const identitySession = engine.createSession({ id: 'project_view_recursive_transport' });
+identitySession.audio = new MediaPlaybackAudioExecutor(identityEnv, { core: new PlayRecordCore(identityEnv) });
+await identitySession.setTimeline({
+    tracks: [{ id: 'sequence', kind: 'audio', clips: [0, 1].map((index) => ({
+        id: `project_view_clip_audio_recording_${index}`, kind: 'audio',
+        start: index, duration: 1, source: { url: '/api/recordings/shared.wav' }
+    })) }]
+}, { commit: false });
+assert.equal(identitySession.timeline.tracks[0].clips[0].source.assetId, '',
+    'the reproduction must use the actual normalized unshared source shape');
+await identitySession.play({ commit: false });
+await identitySession.pause({ commit: false });
+await identitySession.play({ startSeconds: 1.2, commit: false });
+await identitySession.pause({ commit: false });
+await identitySession.scrub(0.25, { previewOnly: true, commit: false });
+await identitySession.seek(1.5, { commit: false });
+await identitySession.play({ commit: false });
+await identitySession.stop({ commit: false });
+assert.equal(identitySession.getTransportState().position, 0);
+assert.equal(identitySession.voiceState.size, 0);
+const expectedAssets = [0, 1].map((index) => (
+    `project_view_recursive_transport:project_view_clip_audio_recording_${index}:asset`
+));
+assert.deepEqual([...loadedAssets], expectedAssets);
+assert.equal(identityCalls.filter(({ method }) => method === 'create_clip').length, 2,
+    'pause, resume, seek and scrub reuse the two prepared assets without forced re-decoding');
+assert.equal(identityCalls.filter(({ method }) => method === 'play_instance').length, 4);
+identityCalls.filter(({ method }) => method === 'play_instance').forEach(({ payload }) => {
+    assert.ok(expectedAssets.includes(payload.asset_id), 'every voice uses its loaded occurrence identity');
+});
 
 const delayedClip = {
     id: 'delayed_audio', kind: 'audio', start: 2, duration: 3, inPoint: 0,

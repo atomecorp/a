@@ -85,10 +85,9 @@ test('Natural mode retains the canonical video mirror resolver after structured 
     const source = fs.readFileSync(new URL(
         '../../eVe/domains/rendering/project_view_surface_runtime.js', import.meta.url
     ), 'utf8');
-    const unmountSource = source.slice(
-        source.indexOf('const unmountProjectViewSurface'),
-        source.indexOf('const mountProjectViewSurface')
-    );
+    const unmountSource = fs.readFileSync(new URL(
+        '../../eVe/domains/rendering/project_view_surface_unmount.js', import.meta.url
+    ), 'utf8');
     assert.match(unmountSource, /projectViewPlayback\.setVideoNodeResolver\(videoSurfaceIdsFor\)/);
     assert.doesNotMatch(unmountSource, /projectViewPlayback\.stop\(\)/,
         'switching from List or Matrix to Natural must not implicitly stop playback');
@@ -119,7 +118,7 @@ test('Natural mode retains the canonical video mirror resolver after structured 
         'workspace activation must opt into the pre-loader Natural transition explicitly');
     assert.ok(
         unmountSource.indexOf('await reconcileNaturalProjectSurface()')
-        < unmountSource.lastIndexOf('state.mode = MODES.NATURAL'),
+        < unmountSource.lastIndexOf('state.mode = naturalMode'),
         'Natural mode must not be published before its canonical surface is ready'
     );
     assert.match(source, /foreground\?\.records\?\.has\?\.\(id\) \? \[id\] : \[\]/,
@@ -933,6 +932,22 @@ test('a performance marker without usable owner clips is an explicit playback er
     assert.equal(rule.error, 'project_view_performance_clips_required');
 });
 
+test('nested Molecules resolve only their local playback mode and normalize legacy layer', async () => {
+    const records = new Map([
+        ['album', { properties: { playback_mode: 'random', playback_loop: true } }],
+        ['song', { properties: { playback_mode: 'layer' } }],
+        ['plain_song', { properties: {} }]
+    ]);
+    const stack = [{ entity: 'molecule', id: 'album', ownerId: 'album' }];
+    const readRecord = async (id) => records.get(id) || null;
+    assert.deepEqual(await resolvePlaybackRule({
+        level: { entity: 'molecule', id: 'song', ownerId: 'song' }, stack, readRecord
+    }), { mode: 'simultaneous', loop: false, source: 'override', from: 'song' });
+    assert.deepEqual(await resolvePlaybackRule({
+        level: { entity: 'molecule', id: 'plain_song', ownerId: 'plain_song' }, stack, readRecord
+    }), { mode: 'simultaneous', loop: false, source: 'default', from: 'plain_song' });
+});
+
 test('Playback rules no longer persist child performance ownership', async () => {
     const writes = [];
     await writePlaybackRuleOverride({
@@ -973,7 +988,7 @@ const mutationDependencies = (records, batches) => ({
     }
 });
 
-test('canonical absorb creates, absorbs, and flattens Molecules through direct parent_id mutations', async () => {
+test('canonical absorb creates and absorbs Molecules through direct parent_id mutations without flattening envelopes', async () => {
     const batches = [];
     const atomPair = await absorbCanonicalMolecule({
         projectId: 'project_molecules', sourceId: 'source', targetId: 'target'
@@ -1014,15 +1029,14 @@ test('canonical absorb creates, absorbs, and flattens Molecules through direct p
     }, mutationDependencies([
         moleculeState('molecule_source'), moleculeState('molecule_target'), atomeState('child_a', 'molecule_source')
     ], batches));
-    assert.equal(merge.operation, 'merge');
+    assert.equal(merge.operation, 'absorb_molecule');
     assert.deepEqual(batches[3].events.slice(1), [
         {
-            atome_id: 'child_a', project_id: 'project_molecules', parent_id: 'molecule_target',
+            atome_id: 'molecule_source', project_id: 'project_molecules', parent_id: 'molecule_target',
             props: { hierarchy_order: 0, zIndex: 1, z_index: 1, order: 1, render_order: 1, renderOrder: 1 }
-        },
-        { kind: 'delete', atome_id: 'molecule_source', project_id: 'project_molecules', props: {} }
+        }
     ]);
-    assert.equal(batches[3].events[0].props.molecule_timeline.clips[0].source.atome_id, 'child_a');
+    assert.equal(batches[3].events[0].props.molecule_timeline.clips[0].source.atome_id, 'molecule_source');
 });
 
 test('canonical absorb places a newly added member on the first visible row and preserves one visual order', async () => {
@@ -1407,16 +1421,18 @@ test('member Plan commands project the same persisted visual order immediately',
         'Plan must resolve a non-visual Molecule owner from canonical Atome state');
 });
 
-test('structured drop geometry separates exact insertion slots from the shared overlap delay', () => {
+test('structured drop geometry exposes five generous insertion and combination zones', () => {
     const box = { x: 10, y: 20, width: 200, height: 100 };
     assert.deepEqual(resolveStructuredDropIntent({
         layout: 'list', sourceId: 'source', targetId: 'target', targetIndex: 3,
         point: { x: 100, y: 30 }, box
     }).slotIndex, 3);
-    assert.equal(resolveStructuredDropIntent({
+    assert.deepEqual(resolveStructuredDropIntent({
         layout: 'list', sourceId: 'source', targetId: 'target', targetIndex: 3,
         point: { x: 100, y: 70 }, box
-    }).kind, 'overlap');
+    }), {
+        kind: 'combine', mode: 'simultaneous', placement: 'end', targetId: 'target', targetIndex: 3, box
+    });
     assert.deepEqual(resolveStructuredDropIntent({
         layout: 'list', sourceId: 'source', targetId: 'target', targetIndex: 3,
         point: { x: 100, y: 115 }, box
@@ -1424,11 +1440,11 @@ test('structured drop geometry separates exact insertion slots from the shared o
     assert.equal(resolveStructuredDropIntent({
         layout: 'matrix', sourceId: 'source', targetId: 'target', targetIndex: 2,
         point: { x: 110, y: 70 }, box
-    }).kind, 'overlap');
+    }).mode, 'simultaneous');
     assert.equal(resolveStructuredDropIntent({
         layout: 'matrix', sourceId: 'source', targetId: 'target', targetIndex: 2,
         point: { x: 12, y: 70 }, box
-    }).kind, 'insert');
+    }).mode, 'sequential');
 
     const timers = [];
     armStationaryAbsorb({

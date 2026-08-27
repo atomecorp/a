@@ -2192,3 +2192,11 @@ The next execution tasks must refine this map by:
 - List, Matrix, Natural, lasso, Flowers Ungroup, and Delete are UI intent
   callers of those existing commands. `group_visual_runtime.js` is preview-only
   and exposes neither a membership reader/writer nor a compatibility command.
+
+# List transport and occurrence-edit API delta — 2026-08-27
+
+- Shared audio execution: `MediaPlaybackAudioExecutor.loadAsset({ assetId, source, payload })` treats its explicit `assetId` as the registration identity on both the core and facade routes. Source/payload identity fields cannot override it. This is the same identity consumed by `playVoice`, not a new public API or persisted field.
+- `projectViewTransport` is an internal UI runtime exposing `load`, `play`, `pause`, `resume`, `stop`, `seek`, `scrub`, `seekNode`, `scrubNode`, `setMuted`, `read`, and `subscribe`. Its snapshots are ephemeral and never enter Atome history or synchronization.
+- Persistent membership, ordering, mode, loop, mute, source window, simultaneous offset, and stretch parameters continue to use the existing `Atome.commit` or `Atome.commitBatch` boundary. No public Timeline, media, renderer, DOM, or MCP mutation API was added.
+- The legacy toggle remains a compatibility caller only. List level playback compiles the canonical tree before delegating leaf commands to the existing shared media engine.
+- Split, Duplicate, Join, and Stretch are internal contextual-action definitions. Crop, Move, and Scrub remain direct preview gestures. Rubber Band unavailability returns an explicit failure without persisting a simulated stretch.

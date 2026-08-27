@@ -100,3 +100,34 @@ Follow `.codex/visual-test-protocol.md` on Web, Tauri Debug, and a physical
 iPhone. Record a List Delete click, a multi-page sequential queue, two audio
 items with advancing waveforms, and a recorded video with audible replay. Do
 not report cross-platform acceptance from unit coverage alone.
+
+## Recursive List transport reports `Clip '...:asset' not found`
+
+Confirmed on 2026-08-27: timeline normalization adds `assetId: ''` to an
+unshared source. The shared audio executor previously assembled the core load
+payload as `{ assetId, ...source }`. That empty value overwrote the session's
+explicit occurrence identity, so `PlayRecordCore` registered the media under
+its URL-derived identity while the voice requested the session's `...:asset`
+identity. The facade load route had the same field-priority defect.
+
+The source fix belongs to `media_playback_audio_executor.js`: compose source
+or explicit load payload first, then apply the explicit occurrence identity.
+Do not force re-decoding on every prepare or retry a missing voice; those
+workarounds preserved the wrong identity and are removed from `molecule.js`
+and `molecule_session_clips.js`. The inspected WASM `audio_init` retains the
+engine's clip map, so replacing that manager was not the cause of this case.
+
+`media_playback_command.probe.mjs` fails before the fix using the real
+executor and `PlayRecordCore`; it pins Web-core, native-core and facade load
+identity for empty and conflicting source ids. The existing
+`molecule_audio_mix_transport.probe.mjs` runs actual normalized sessions
+through the executor/core boundary and verifies play, pause, resume, seek,
+scrub and Stop with exactly two loads for two occurrences.
+
+Real Web acceptance used existing Project 3: container Play, sequential
+transition, stable Pause, footer scrub, Resume, natural end and replay from
+zero produced no missing-clip rejection. This is not a native or audible
+output proof. Separately, Project 2's `probleme.mov` extraction returned HTTP
+500 because ffmpeg found no `0:a:0` stream; Project 3's sampled video previews
+reported `AbortError`. Those are distinct unresolved media issues, not
+evidence of failed asset registration.

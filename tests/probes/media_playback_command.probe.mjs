@@ -6,6 +6,60 @@ import {
     resolveMediaPlaybackAudioSource
 } from '../../eVe/domains/media/shared/media_playback_command.js';
 import { MediaPlaybackAudioExecutor } from '../../eVe/domains/media/shared/media_playback_audio_executor.js';
+import { PlayRecordCore } from '../../atome/src/application/audio_runtime/play_record_core.js';
+
+// The engine normalizes an unshared source with assetId: ''. Source metadata
+// must never replace the occurrence identity used by the following voice.
+for (const adapter of ['web_core', 'native_core', 'facade']) {
+    const loaded = new Set();
+    const identityCalls = [];
+    const backend = async (method, payload = {}) => {
+        identityCalls.push({ method, payload });
+        if (method === 'create_clip' || method === 'audio_load_clip') loaded.add(payload.id);
+        if (method === 'play_instance' || method === 'audio_play_instance') {
+            const id = payload.assetId || payload.asset_id;
+            if (!loaded.has(id)) throw new Error(`Clip '${id}' not found`);
+        }
+        return { success: true };
+    };
+    const identityEnv = {
+        WebAssembly,
+        atome: { tools: { v2CommandBus: { dispatch: () => ({ ok: true }) } } },
+        ...(adapter === 'native_core' ? {
+            __SQUIRREL_FORCE_TAURI_RUNTIME__: true,
+            __TAURI_INTERNALS__: { invoke: backend }
+        } : {}),
+        Squirrel: { av: { audio: {
+            get_backend: () => 'kira',
+            __call_backend_method: backend,
+            playback: { loadAsset: (payload) => backend('create_clip', payload) },
+            play_instance: (payload) => backend('play_instance', payload)
+        } } }
+    };
+    const identityExecutor = new MediaPlaybackAudioExecutor(identityEnv, {
+        core: adapter === 'facade' ? null : new PlayRecordCore(identityEnv)
+    });
+    for (const sourceAssetId of ['', 'source_reference']) {
+        const assetId = `project_view_recursive_transport:recorded_${sourceAssetId || 'empty'}:asset`;
+        await identityExecutor.loadAsset({
+            assetId,
+            payload: adapter === 'facade' && sourceAssetId ? {
+                id: 'payload_metadata_id', assetId: sourceAssetId,
+                url: '/api/recordings/recorded.wav'
+            } : null,
+            source: {
+                assetId: sourceAssetId,
+                id: 'source_metadata_id',
+                url: '/api/recordings/recorded.wav',
+                path: 'data/users/probe_owner/recordings/recorded.wav'
+            }
+        });
+        await identityExecutor.playVoice({ assetId, voiceId: `${assetId}:voice` });
+        assert.ok(loaded.has(assetId), `${adapter} must load the exact occurrence asset identity`);
+    }
+    assert.equal(identityCalls.filter(({ method }) => /^(create_clip|audio_load_clip)$/.test(method)).length, 2,
+        'correct identity must not require retrying a missing voice');
+}
 
 const recordedVideo = createMediaPlaybackCommand({
     atomeId: 'video_recording_1',

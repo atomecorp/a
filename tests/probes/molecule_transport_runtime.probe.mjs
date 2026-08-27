@@ -174,7 +174,8 @@ test('one Molecule transport replaces its active scope and toggles Stop', async 
                 async setTimeline(timeline) { calls.push(['set', timeline.selected_track_ids]); },
                 async play() { calls.push(['play']); },
                 async stop() { calls.push(['stop']); },
-                async dispose() { calls.push(['dispose']); }
+                async dispose() { calls.push(['dispose']); },
+                getTransportState() { return { position: 0, duration: 0, playing: false }; }
             };
             sessions.set(id, session);
             return session;

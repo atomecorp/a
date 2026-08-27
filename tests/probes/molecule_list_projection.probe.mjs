@@ -51,9 +51,9 @@ test('Molecule List expands a schema-v2 Molecule to its direct Atomes only', asy
     const nodes = flatten(tree);
     const moleculeRowIndex = content.readState().entries.findIndex((entry) => entry.id === 'molecule_owner');
     const rowId = `project_view_list_entry_${moleculeRowIndex}`;
-    assert.equal(nodes.find((node) => node.id === `${rowId}_hierarchy_chevron`)?.kind, 'button');
+    assert.equal(nodes.find((node) => node.id === `${rowId}_hierarchy`)?.kind, 'button');
     assert.equal(nodes.find((node) => node.id === `${rowId}_name`)?.kind, 'button');
-    assert.equal(nodes.find((node) => node.id === `${rowId}_preview`)?.kind, 'button');
+    assert.equal(nodes.find((node) => node.id === `${rowId}_preview`)?.kind, 'pointer_capture');
     assert.equal(typeof nodes.find((node) => node.id === `${rowId}_preview`)?.on?.double_click, 'function');
 });
 

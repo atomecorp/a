@@ -828,4 +828,5 @@ Réutiliser ce qui existe.
 Modifier uniquement ce qui doit l’être.
 Ajouter uniquement ce qui manque.
 Conserver la cohérence visuelle et comportementale globale d’atome/eVe.
-Regarde le visuel de ce fichier pour etablir le design des pistes note que les pistes 'muted seront' ignorés  même en mode de lecture sequentiel ou aléatoire
+note que les pistes 'muted seront' ignorés même en mode de lecture sequentiel ou aléatoire
+Regarde le visuel de ce fichier : ./todo/!!!!atome_eve_liste_hierarchie_lecture_prompt.html, pour etablir le design des pistes 

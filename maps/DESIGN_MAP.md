@@ -913,3 +913,11 @@ This section supersedes the no-animation opening rule dated 2026-07-17. The firs
 List, Matrix and Natural are presentations of one canonical project scene. A change is latest-wins: the previous complete presentation stays visible until the requested structured prefix is ready for atomic replacement; Natural hides the structured prefix immediately. No fresh Dashboard or project-view tree exposes frame-separated batches, blanks the shared canvas or waits behind stale hydration. A suspended Dashboard cannot publish records, textures or opacity after close.
 
 All workspace layout consumes the single distinct-size publication from `surface_runtime.js`. One physical resize produces at most one layout reconstruction and one WebGPU presentation per active tree; an identical settled measurement produces no reconcile.
+
+# Atome/Molecule List and transport presentation — 2026-08-27
+
+The List exposes exactly four fixed columns: Hierarchy, Mute, Name, and Preview. Rows are 44 px high, remain horizontally aligned at every depth, and use a stable deterministic branch color whose intensity reflects depth. Selection and playback are separate visual states. Only Atomes and Molecules are visible; Timeline Sections, Tracks, and Clips remain derived implementation details.
+
+The footer remains the strong current-level target and contains the global progress band without increasing its height. Sequential playback crosses child boundaries and gives the current row a zero-based local playhead. Simultaneous playback projects the same global time into each active visible branch. One bounded transport update patches the footer and visible active rows without rebuilding the tree.
+
+The Preview is the temporal editing surface: direct scrub, crop, and move gestures coexist with derived waveform, bounded real thumbnails, and nested Molecule composition. Name double-click remains reserved for rename. The right rail contains exactly Play/Pause, Play Mode, Fullscreen, Record actions, Import, Info, and Delete; Stop belongs to the Play palette and Play Mode shows the current local mode.
