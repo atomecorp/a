@@ -1159,4 +1159,12 @@ The technical Timeline is a derived projection. A versioned idempotent migration
 
 One recursive compiler maps the canonical tree to an ephemeral transport plan. Sequential nodes concatenate unmuted children, simultaneous nodes align child offsets against one global time, random nodes freeze an order for the current cycle, performance nodes replay persisted action timing, and nested Molecules recursively contribute their compiled duration. One runtime clock publishes global position, duration, active path, active leaves, and local positions; no row owns a timer or transport state.
 
+Visual projection consumes the same snapshot's root record and active leaf records, independently of selection and visible expansion. The surface synchronously resolves Visual before decoder ids are requested; it rebuilds only for a branch/status transition, not position ticks. The existing decoder request registry owns pending active/paused positions until projection or release. Playback advances with bounded drift correction; explicit seek/scrub requests and completed paused seeks update the shared WebGPU frame. Timeline normalization is shared with the media projection contract rather than duplicated in the decoder.
+
 The shared Squirrel selectable-list components remain the UI authority. Footer progress and visible-row local progress are disposable WebGPU/BevyUI projections. Previews reuse canonical media caches and decoders, and editing writes only Atome occurrence properties through the mutation pipeline. Drag/drop uses the canonical Molecule mutation facade and preserves nested envelopes. No DOM proxy, second canvas, renderer fallback, or parallel List state owner is permitted.
+
+Visualizer media remains synchronized but displays no transport head. The
+shared preview's progress-visibility option affects only derived render
+records, including incremental audio-waveform updates. Video mirror identity
+is unchanged. The BevyUI motion owner preserves nested layout offsets when
+converting parent-local positions into projected screen-space motion.

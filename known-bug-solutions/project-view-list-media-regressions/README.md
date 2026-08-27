@@ -131,3 +131,51 @@ output proof. Separately, Project 2's `probleme.mov` extraction returned HTTP
 500 because ffmpeg found no `0:a:0` stream; Project 3's sampled video previews
 reported `AbortError`. Those are distinct unresolved media issues, not
 evidence of failed asset registration.
+
+## Recursive List plays but the Visualizer stays empty
+
+Confirmed on 2026-08-27 in existing Web Project 3. The surface copied
+`activePathIds` into the old playback signal, whose Visual resolver treated
+the first id as media. That id was the container, and no published media
+records accompanied it. Manual selection and the old object queue used a
+different, working subject contract.
+
+The compiler snapshot now exposes `rootRecord` and `activeLeafRecords`.
+`project_view_visual_subject.js` consumes the active leaves directly, using
+the existing composite preview for concurrent leaves, without selecting a
+row or requiring expansion. Surface events clear obsolete recursive snapshots
+when object playback takes over. Publication precedes decoder-id resolution.
+
+A second reproduced cause kept video empty after subject resolution: every
+33 ms transport tick assigned `currentTime`, leaving real decoders at
+`readyState: 1`. The shared video decoder now tolerates small continuous drift,
+avoids restarting an already active video, and preserves explicit paused
+seek requests across decoder creation/metadata. `seeked` requests a shared
+compositor redraw. Its duplicated timeline normalizer was removed in favor
+of the existing media contract; the module is below 500 lines.
+
+Regression tests: `project_view_transport_runtime.test.mjs`,
+`project_view_surface_context_refresh.test.mjs`, and
+`bevy_video_decode_source_runtime.test.mjs`. Four failing reproductions pass
+after correction; the wider seven-suite run passes 104 tests, M1 passes, and
+syntax passes for 1916 files. Real Web gestures show nested text/video,
+transition to the next video, Pause, footer scrub within/across branches and
+Resume with the footer still selected. Video decoders reach `readyState: 4`.
+This does not prove Tauri/iPhone or physical audio output. One existing sampled
+List-thumbnail `AbortError` remains; it does not concern the Visualizer decoder.
+
+## A moving head appears above/in the Visualizer
+
+The Visualizer must show media only; transport heads belong to rows and the
+footer (explicit user rule, 2026-08-27). The shared preview now accepts
+`showPlaybackProgress: false`, honored both during initial waveform projection
+and incremental audio updates without disabling video mirrors.
+
+The top-of-canvas line was a separate coordinate defect: the footer head's
+parent-local y=0 was written directly into its projected screen position.
+`bevy_ui_tree_motion_runtime.js` now derives projected deltas from the current
+local node position, preserving layout offsets and native/hit-tree coordinates.
+`bevy_ui_nested_motion.test.mjs` and `project_view_list_transport_ui.test.mjs`
+cover both causes. Real Web Project 3 playback and footer scrub retain the
+heads on rows/footer only. Tauri and iPhone have not been validated for this
+specific change.

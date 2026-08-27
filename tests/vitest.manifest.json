@@ -42,6 +42,7 @@
   "tests/eve/bevy_ui_main_menu_contract.test.mjs",
   "tests/eve/bevy_ui_main_menu_overlay_atomic.test.mjs",
   "tests/eve/bevy_ui_main_menu_palette_motion.test.mjs",
+  "tests/eve/bevy_ui_nested_motion.test.mjs",
   "tests/eve/bevy_ui_overlay_reconciliation.test.mjs",
   "tests/eve/bevy_ui_pointer_contract.test.mjs",
   "tests/eve/bevy_ui_runtime_contract.test.mjs",

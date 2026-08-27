@@ -920,4 +920,11 @@ The List exposes exactly four fixed columns: Hierarchy, Mute, Name, and Preview.
 
 The footer remains the strong current-level target and contains the global progress band without increasing its height. Sequential playback crosses child boundaries and gives the current row a zero-based local playhead. Simultaneous playback projects the same global time into each active visible branch. One bounded transport update patches the footer and visible active rows without rebuilding the tree.
 
+The existing Visualizer follows active transport leaves, not the first hierarchy-path id or selected row. One active leaf uses its canonical preview; multiple simultaneous leaves use the existing spatial composite preview, including descendants of collapsed Molecules. Pause retains the current subject and footer scrub changes the preview frame without resuming. Stop restores selection-based preview; natural end retains the last subject until another record is selected. No new Visualizer surface or selection state is introduced.
+
+Explicit user rule (2026-08-27): the Visualizer never displays a moving
+playhead, including over audio waveforms and composite previews. Only List
+rows/tracks and the footer display transport heads. The Visualizer continues
+to show the current media frame during playback and scrub.
+
 The Preview is the temporal editing surface: direct scrub, crop, and move gestures coexist with derived waveform, bounded real thumbnails, and nested Molecule composition. Name double-click remains reserved for rename. The right rail contains exactly Play/Pause, Play Mode, Fullscreen, Record actions, Import, Info, and Delete; Stop belongs to the Play palette and Play Mode shows the current local mode.
