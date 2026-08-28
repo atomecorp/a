@@ -16,6 +16,25 @@ Version: draft 1
 Target: Atome / eVe music engine  
 Purpose: deterministic MIDI control architecture for songs, scenes, patterns and samples.
 
+## Current minimal delivery boundary
+
+The active implementation deliberately stops at one small canonical layer:
+
+- normalized MIDI messages;
+- project-owned nonvisual `midi_binding` children;
+- ordered Tool Gateway actions that stop on the first error;
+- external MIDI output as the default playback destination;
+- `midir` only for Tauri desktop port enumeration and byte transport;
+- CoreMIDI only for the standalone iOS bridge;
+- `AURenderEvent` input and host MIDI output as the AUv3 boundary;
+- Web MIDI as the browser adapter.
+
+Global/Song/Scene/Focus inheritance, protected bindings, masking, Android,
+FreeBSD, and an internal synthesizer are not part of this delivery. They must
+not be inferred from the broader design sections below or implemented before a
+separate product decision. Desktop hardware, iPhone, and AUv3 host behavior
+remain **To verify** on their respective devices.
+
 ---
 
 # 1. Goals

@@ -8,6 +8,7 @@ mod bevy_backend;
 mod dev_logging;
 mod local_http_navigation;
 mod native_contacts;
+mod native_midi;
 mod runtime_logging;
 mod server;
 mod viewport_runtime;
@@ -182,6 +183,8 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             dev_logging::log_from_webview,
             native_contacts::macos_contacts_snapshot,
+            native_midi::start_native_midi,
+            native_midi::send_native_midi,
             audio_engine::bridge::audio_init,
             audio_engine::bridge::audio_load_clip,
             audio_engine::bridge::audio_load_clip_from_bytes,

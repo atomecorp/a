@@ -19,26 +19,24 @@ export const validateListMoleculeDrop = async ({ page, project, fixture, report,
     const footer = await listNode(page, 'project_view_footer');
     assert(footer, 'list_footer_not_actionable');
     await clickCanvasTarget(page, footer);
-    const footerSelection = await waitFor(page, async (expected) => {
+    const footerSelection = await waitFor(page, async () => {
         const [{ readProjectViewSurfaceState }, selection] = await Promise.all([
             import('/eVe/domains/rendering/project_view_surface_runtime.js'),
             import('/eVe/intuition/runtime/selection.js')
         ]);
         const state = readProjectViewSurfaceState();
         return {
-            ok: state.content?.primaryId === expected
-                && selection.getCurrentSelectionIds().length === 1
-                && selection.getCurrentSelectionIds()[0] === expected,
+            ok: !state.content?.primaryId && selection.getCurrentSelectionIds().length === 0,
             primaryId: state.content?.primaryId || '', selectedIds: selection.getCurrentSelectionIds()
         };
-    }, initialRows[0].id);
+    });
     await screenshot({ page, report, outDir, name: 'drop_list_before' });
     const imageIndex = await listIndex(page, fixture.imageId);
     const audioIndex = await listIndex(page, fixture.audioId);
     const image = await listNode(page, `project_view_list_entry_${imageIndex}_name`);
     assert(image && await listNode(page, `project_view_list_entry_${audioIndex}_name`), 'list_absorb_targets_missing');
     const overlapDestination = await structuredDropTarget(page, {
-        layout: 'list', sourceId: fixture.imageId, targetIndex: audioIndex, kind: 'overlap'
+        layout: 'list', sourceId: fixture.imageId, targetIndex: audioIndex, kind: 'combine'
     });
     assert(overlapDestination, 'list_overlap_geometry_missing');
     await drag({

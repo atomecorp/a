@@ -23,7 +23,8 @@ const mediaSchema = Object.freeze({
     media_source: { type: 'string' },
     media_url: { type: 'string' },
     transcript: { type: 'string' },
-    duration: { type: 'number' }
+    duration: { type: 'number' },
+    duration_sec: { type: 'number' }
 });
 
 const capability = (key, effects = ['read']) => ({
@@ -126,6 +127,21 @@ export const CORE_ATOME_TYPE_DEFINITIONS = Object.freeze([
         }
     }),
     defineType({
+        type: 'midi',
+        kind: 'media',
+        traits: ['visual', 'media', 'time_based', 'musical', 'selectable'],
+        schema: {
+            ...orderSchema,
+            ...frameSchema,
+            ...mediaSchema,
+            file_name: { type: 'string' },
+            mime_type: { type: 'string' },
+            source_atome_id: { type: 'string' },
+            note_count: { type: 'number' },
+            transcription_metadata: { type: 'object' }
+        }
+    }),
+    defineType({
         type: 'audio_waveform',
         kind: 'media',
         traits: ['visual', 'media', 'waveform', 'time_based', 'selectable'],
@@ -180,6 +196,19 @@ export const CORE_ATOME_TYPE_DEFINITIONS = Object.freeze([
             created_iso: { type: 'string' },
             updated_iso: { type: 'string' },
             span: { type: 'number' }
+        }
+    }),
+    defineType({
+        type: 'midi_binding',
+        kind: 'data_model',
+        traits: ['data', 'binding', 'nonvisual', 'executable'],
+        schema: {
+            kind: { type: 'string' },
+            enabled: { type: 'boolean' },
+            order: { type: 'number' },
+            input: { type: 'object' },
+            actions: { type: 'array' },
+            continuous: { type: 'object' }
         }
     }),
     defineType({

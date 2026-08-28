@@ -1,5 +1,33 @@
 # Atome / eVe Code Map
 
+Urgent interaction campaign (2026-08-28): `project_view_surface_runtime.js`
+owns `visual_fullscreen` and projects the existing WebGPU canvas through a
+Visualizer-only tree; `project_view_visual_fullscreen_runtime.js` owns its
+arm/exit transition without browser fullscreen. `bevy_panel_record_composite_preview.js` resolves the
+topmost touched child and `project_view_visual_interaction_runtime.js` remains
+the scene-intent/commit owner. The canonical fixed List row accepts handedness;
+the contextual rail sorts shared then target-specific tools by stable priority.
+`tool_runtime_molecule_geometry.js` removes structural Molecule paint while
+retaining canonical bounds and hit-testing. `tool_runtime_line_splitter.js`
+creates the sequential text Molecule in one commit batch; recursive transport
+derives its Prompter projection from canonical child order.
+
+Natural Molecule interaction stays in the shared scene path:
+`surface_pointer_runtime.js` expands an owner recursively,
+`surface_text_pointer_runtime.js` feeds owner plus members to the gesture, and
+`project_scene_gesture_runtime.js` coalesces in-flight frame commits before its
+single final batch. `project_view_mode_state.js` accepts a Natural transition
+only when the canonical surface reread confirms the same project and mode.
+
+MIDI ownership is split without duplicating commands: `midi_binding_runtime.js`
+owns normalization, matching, conflicts, continuous mapping and ordered Gateway
+execution; `midi_binding_service.js` owns persistence, Learn, final-command
+capture, Finder tool projection, runtime ports and the shared test monitor/send
+contract. `bevy_panel_midi_binding_runtime.js` is the Squirrel/BevyUI mobile
+composition. `midi_output_runtime.js` isolates output bytes from binding state;
+desktop `native_midi.rs` uses `midir`, while `MIDIController.swift` remains the
+iOS/CoreMIDI adapter. Neither owns binding truth.
+
 Initial refresh repair (2026-08-27): `ToolRegistryV2.refresh` shares its pending
 catalogue read; `tool_registry_storage.js` owns the extracted persistence adapter.
 `bevy_web_renderer_startup.js` is the existing renderer's extracted startup path,

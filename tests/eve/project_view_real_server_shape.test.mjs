@@ -144,12 +144,25 @@ test('Matrix tiles expose the same press-drag-release lifecycle used for persist
             { atome_id: 'second', atome_type: 'image', meta: { project_id: 'project_matrix_drag' }, properties: { name: 'Second' } }
         ]
     });
-    const root = matrix.build({ width: 600, height: 500, emit: () => {} })[0];
+    const emitted = [];
+    const root = matrix.build({ width: 600, height: 500, emit: (intent) => emitted.push(intent) })[0];
     const tiles = root.children[0].children[0].children;
     assert.equal(typeof tiles[0].on.press, 'function');
     assert.equal(typeof tiles[0].on.drag, 'function');
     assert.equal(typeof tiles[0].on.release, 'function');
     assert.equal(typeof tiles[0].on.cancel, 'function');
+    const labelBand = tiles[0].children.find((child) => child.id === 'project_view_matrix_tile_0_label_band');
+    assert.equal(typeof labelBand.on.press, 'function');
+    assert.equal(typeof labelBand.on.drag, 'function');
+    assert.equal(typeof labelBand.on.release, 'function');
+    assert.equal(typeof labelBand.on.cancel, 'function');
+    assert.equal(typeof labelBand.on.double_click, 'function');
+    assert.equal(labelBand.on.long_press, undefined);
+    labelBand.on.press({}); labelBand.on.drag({}); labelBand.on.release({}); labelBand.on.double_click({});
+    assert.deepEqual(emitted.map((intent) => intent.type), [
+        'project_view.matrix.drag.start', 'project_view.matrix.drag.move',
+        'project_view.matrix.drag.end', 'project_view.matrix.rename'
+    ]);
 });
 
 test('Matrix reordering clears each completed drag so the same item can move repeatedly', async () => {

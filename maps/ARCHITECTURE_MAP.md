@@ -1,5 +1,21 @@
 # Atome / eVe Architecture Map
 
+Urgent campaign architecture (2026-08-28): canonical Atome state remains outside
+the DOM and every new mutation uses the existing commit batch or Tool Gateway.
+Visualizer fullscreen is disposable projection state over the one scene/canvas;
+composite editing resolves child identity before emitting the existing scene
+intent, and a long press exits without changing WebView/window fullscreen.
+Structural Molecules retain union geometry and selection but paint at zero
+opacity. A Natural drag expands the structural owner to every descendant and
+serializes/coalesces frame commits before one final atomic set batch. Line
+Splitter creates one sequential Molecule beside the source
+and recursive simultaneous/sequential transport remains the only Prompter clock.
+MIDI bindings are nonvisual child Atomes. Learn and Manual normalize to one
+contract; capture listens only after successful final Gateway invocation; Finder
+supplies Search data; continuous CC execution suppresses recorder micro-samples.
+Web MIDI, desktop `midir` and iOS/CoreMIDI only adapt bytes and ports to the same
+resolver, monitor and send boundary. AUv3 host output remains to verify.
+
 Boot ownership repair (2026-08-27): concurrent tool registrations share the
 canonical registry's pending refresh instead of launching repeated catalogue
 queries that block SQLite and static module delivery. There is no TTL cache or

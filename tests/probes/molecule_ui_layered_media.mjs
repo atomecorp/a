@@ -420,7 +420,7 @@ export const absorbListMember = async ({
     let destination = null;
     for (let attempt = 0; attempt < 3; attempt += 1) {
         destination = await structuredDropTarget(page, {
-            layout: 'list', sourceId, targetIndex: targetRow.index, kind: 'overlap'
+            layout: 'list', sourceId, targetIndex: targetRow.index, kind: 'combine'
         });
         assert(destination, `layered_list_absorb_destination_missing:${JSON.stringify({
             sourceId, targetId, targetRow, attempt

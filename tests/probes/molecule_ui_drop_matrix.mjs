@@ -70,7 +70,7 @@ export const validateMatrixMoleculeDrop = async ({ page, project, fixture, repor
     source = await tile(imageIndex); target = await tile(audioIndex);
     assert(source && target, 'matrix_absorb_targets_missing');
     const overlap = await structuredDropTarget(page, {
-        layout: 'matrix', sourceId: fixture.imageId, targetIndex: audioIndex, kind: 'overlap'
+        layout: 'matrix', sourceId: fixture.imageId, targetIndex: audioIndex, kind: 'combine'
     });
     assert(overlap, 'matrix_overlap_geometry_missing');
     await drag({

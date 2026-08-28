@@ -137,12 +137,12 @@ extension WebViewManager {
     /// Send MIDI data to JavaScript
     static func sendMIDIToJS(data1: UInt8, data2: UInt8, data3: UInt8, timestamp: Double = 0) {
         let jsCode = """
-        if (typeof window.midiUtilities !== 'undefined' && typeof window.midiUtilities.receiveMidiData === 'function') {
+        if (typeof window.AtomeMidi !== 'undefined' && typeof window.AtomeMidi.receive === 'function') {
+            window.AtomeMidi.receive(\(data1), \(data2), \(data3), \(timestamp), { id: 'coremidi', name: 'CoreMIDI' });
+        } else if (typeof window.midiUtilities !== 'undefined' && typeof window.midiUtilities.receiveMidiData === 'function') {
             window.midiUtilities.receiveMidiData(\(data1), \(data2), \(data3), \(timestamp));
         } else if (typeof window.Lyrix !== 'undefined' && typeof window.Lyrix.midiUtilities !== 'undefined' && typeof window.Lyrix.midiUtilities.receiveMidiData === 'function') {
             window.Lyrix.midiUtilities.receiveMidiData(\(data1), \(data2), \(data3), \(timestamp));
-        } else {
-            console.log('🎹 MIDI received but no handler available:', \(data1), \(data2), \(data3));
         }
         """
         evaluateJS(jsCode, label: "midi", priority: .high)

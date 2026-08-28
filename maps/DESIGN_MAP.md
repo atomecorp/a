@@ -1,5 +1,19 @@
 # Atome / eVe Design Map
 
+Urgent interaction design (2026-08-28): right-handed List rows are Name,
+Preview, Mute, Chevron; left-handed rows mirror this as Chevron, Mute, Preview,
+Name through the same fixed-row component. Shared rail tools precede
+target-specific tools and Play/Stop remain last and reachable. Visual fullscreen
+shows only the Visualizer on the single WebGPU canvas and restores prior mode,
+selection, playback and geometry when it exits; its tool stays active and a long
+press exits the projection. In Natural, one selection outline represents the
+Molecule union and dragging it moves every member together. MIDI Binding uses the standard
+right contextual panel and shared accordion chevron. Its compact mobile flow is
+New → Learn or Manual → Capture/Search → Save; expanded/global views reveal
+ordered actions, continuous mapping, enable/remap/delete, conflicts and the
+temporary production-engine MIDI monitor/send controls. Prompter highlights the
+current canonical child with adjacent previous/next lines.
+
 Initial refresh presentation (2026-08-27): the existing workspace canvas keeps
 its full layout size while transparent, then appears with its menu and content
 in one 160 ms fade over the existing background. Reduced motion skips the fade.

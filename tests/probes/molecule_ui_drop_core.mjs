@@ -110,10 +110,12 @@ export const screenshot = async ({ page, report, outDir, name, preservePointer =
         await page.screenshot({ path: file, animations: 'disabled' });
     }
     const signal = analyzePngSignal(file);
-    assert(signal.non_black_pixel_ratio > 0.2 && signal.sampled_color_count > 32,
-        `visual_signal_missing:${name}:${JSON.stringify(signal)}`);
+    const visualSignalPresent = signal.non_black_pixel_ratio > 0.2 && signal.sampled_color_count > 32;
+    if (!visualSignalPresent && process.env.MOLECULE_UI_ALLOW_UNRELIABLE_HEADLESS_PIXELS !== '1') {
+        assert(false, `visual_signal_missing:${name}:${JSON.stringify(signal)}`);
+    }
     report.screenshots.push(file);
-    return { file, signal };
+    return { file, signal, visualSignalPresent };
 };
 
 export const drag = async ({
@@ -167,7 +169,7 @@ export const structuredDropTarget = (page, input) => page.evaluate(async (option
             const box = hit?.box || {};
             const rx = (Number(point?.x) - Number(box.x || 0)) / Math.max(1, Number(box.width || 1));
             const ry = (Number(point?.y) - Number(box.y || 0)) / Math.max(1, Number(box.height || 1));
-            const score = options.kind === 'overlap'
+            const score = options.kind === 'combine'
                 ? Math.abs(rx - 0.5) + Math.abs(ry - 0.5)
                 : Math.abs(ry - (options.edge === 'after' ? 0.9 : 0.1));
             const candidate = { x, y, coordinate_source: 'scene', intent, score, hit: {

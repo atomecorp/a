@@ -1,5 +1,23 @@
 # Atome / eVe API Map
 
+Urgent campaign contracts (2026-08-28): the explicit Visualizer intention is
+`visual_fullscreen`; the historical ambiguous view-fullscreen name is removed.
+It toggles shared-canvas projection state only and never invokes browser or
+WebView fullscreen APIs. `ui.play` and `ui.stop` route a selected MIDI Atome
+through the canonical selected-media transport.
+Line Splitter is the searchable/capturable `ui.text.line_splitter` command with
+closed input `{ target_atome_id }` and returns the Molecule id plus ordered text
+children. The nonvisual `midi_binding` Atome persists `input`, ordered `actions`,
+optional `continuous`, `enabled`, and `order` beneath its contextual `parent_id`.
+Its closed core Atome type rejects unknown persistent properties.
+Closed Tool Gateway/MCP schemas expose `midi.binding.create/read/list/update/
+reorder/enable/disable/delete/learn/remap/execute`. All execution returns through
+the Tool Gateway; a failed ordered action returns its index and stops the chain.
+`AtomeMidi.receive/route/learn/captureTool/ports/monitor/send` is the normalized
+runtime boundary used by production bindings and the diagnostic panel.
+`midi_output_runtime.js` is the byte/port/timestamp-only output boundary shared
+by Web MIDI, the Tauri `midir` command and the iOS bridge.
+
 Initial refresh (2026-08-27): `ToolRegistryV2.refresh()` shares only an in-flight
 read and releases it on success or failure; subsequent explicit refreshes reload.
 Existing registry and renderer exports remain unchanged. Internal surface APIs

@@ -166,7 +166,7 @@ const installCanonicalFixture = (page, projectId) => page.evaluate(async ({ pid,
         project_id: pid,
         parent_id: ownerId,
         tx_id: txId,
-        payload: { props: { hierarchy_order: hierarchyOrder } }
+        props: { hierarchy_order: hierarchyOrder }
     }));
     const committed = await window.Atome.commitBatch([
         {
@@ -174,7 +174,7 @@ const installCanonicalFixture = (page, projectId) => page.evaluate(async ({ pid,
             atome_id: ownerId,
             project_id: pid,
             tx_id: txId,
-            payload: { props: { molecule_timeline: timeline } }
+            props: { molecule_timeline: timeline }
         },
         ...membershipEvents
     ], { projectId: pid, tx_id: txId });
@@ -226,6 +226,7 @@ const main = async () => {
         console_errors: [],
         molecule_drop_logs: [],
         page_errors: [],
+        http_errors: [],
         websocket_events: [],
         screenshots: [],
         visual_diff: null,
@@ -309,6 +310,11 @@ const main = async () => {
             const text = message.text();
             if (message.type() === 'error') report.console_errors.push(text);
             if (text.startsWith('[eVe][molecule-drop]')) report.molecule_drop_logs.push(text);
+        });
+        page.on('response', (response) => {
+            if (response.status() >= 400) {
+                report.http_errors.push({ status: response.status(), url: response.url() });
+            }
         });
         page.on('pageerror', (error) => report.page_errors.push(error?.stack || error?.message || String(error)));
 
@@ -486,7 +492,9 @@ const main = async () => {
                     entry_count: state.content?.entries?.length || 0
                 };
             });
-            assert(await projectViewNode(page, project.id, 'project_view_list_entry_0_name'),
+            assert(await awaitBevyUiNodeTarget(page, {
+                nodeId: 'project_view_list_entry_0_name', treeId: 'eve_bevy_ui_project_view'
+            }),
                 'project_view_first_list_row_not_actionable');
             return opened;
         });

@@ -192,6 +192,12 @@ public class MIDIController: NSObject {
         let statusByte = data[0]
         let status = statusByte & 0xF0
         let channel = (statusByte & 0x0F) + 1
+        WebViewManager.sendMIDIToJS(
+            data1: statusByte,
+            data2: data.count > 1 ? data[1] : 0,
+            data3: data.count > 2 ? data[2] : 0,
+            timestamp: timestamp
+        )
         
         switch status {
         case 0x90: // Note On
