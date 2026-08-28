@@ -18,6 +18,7 @@ import { EVE_COMMON_SKIN_TOKENS } from '../../eVe/elements/skin/tokens.js';
 import { buildBevyUiFlowerTree } from '../../eVe/intuition/ribbon/bevy_ui_flower_model.js';
 import { buildBevyMainMenuTree } from '../../eVe/intuition/ribbon/bevy_ui_main_menu_model.js';
 import { createAtomeContextualEditRuntime } from '../../eVe/intuition/runtime/eve_intuition/atome_contextual_edit_runtime.js';
+import { resolveComposedInteractionTarget } from '../../eVe/domains/rendering/surface_interaction_runtime.js';
 import { createAtomeEditFooterModelRuntime } from '../../eVe/intuition/runtime/eve_intuition/atome_edit_footer_model_runtime.js';
 import { projectViewPlayback } from '../../eVe/domains/rendering/project_view_playback_runtime.js';
 import {
@@ -514,6 +515,50 @@ test('Atome contextual runtime reuses its handed rail for virtual Molecule selec
     await Promise.resolve();
     assert.deepEqual(invocations, ['molecule_info']);
     assert.equal(runtime.readState().menuVisible, true);
+});
+
+test('Natural Molecule editing reuses the canonical Atome frame and close restores owner routing', async () => {
+    const rendered = [];
+    const invocations = [];
+    const ownerRecord = {
+        id: 'natural_molecule', project_id: 'project', type: 'group',
+        properties: { molecule_entity: 'molecule', left: 20, top: 30, width: 180, height: 90 }
+    };
+    const ownerAtom = { id: ownerRecord.id, parentId: '', bounds: { x: 20, y: 30, width: 180, height: 90 } };
+    const memberAtom = { id: 'natural_member', parentId: ownerRecord.id, bounds: { x: 30, y: 40, width: 40, height: 30 } };
+    const scene = {
+        project_id: 'project', records: [ownerRecord],
+        scene: { byId: new Map([[ownerAtom.id, ownerAtom], [memberAtom.id, memberAtom]]) }
+    };
+    const runtime = createAtomeContextualEditRuntime({
+        legacyState: {}, resolveDefinitions: () => [], invokeDefinition: async () => ({ ok: true }),
+        surfaceResolver: () => ({ getBoundingClientRect: () => ({ width: 800, height: 600 }) }),
+        bevyRuntimeResolver: () => ({
+            mountTree: async ({ tree }) => rendered.push(tree),
+            updateTree: async ({ tree }) => rendered.push(tree), unmountTree: async () => null
+        }),
+        findSceneByAtomeId: (id) => id === ownerRecord.id ? scene : null,
+        readMainMenuHeight: () => 52
+    });
+    runtime.enter({
+        atomeId: ownerRecord.id, kind: 'group', projectId: 'project', record: ownerRecord,
+        definitions: [{ key: 'molecule_info', label: 'Info', icon: 'info', toolType: 'tool' }],
+        invokeDefinition: async (definition) => { invocations.push(definition.key); return { ok: true }; }
+    });
+    await runtime.render();
+
+    const tree = rendered.at(-1).root;
+    assert.equal(runtime.readState().railOnly, false);
+    assert.ok(findNode(tree, 'atome_contextual_edit_natural_molecule_outline'));
+    assert.ok(findNode(tree, 'atome_contextual_edit_natural_molecule_footer'));
+    findNode(tree, 'atome_contextual_tool_molecule_info').on.activate();
+    await Promise.resolve();
+    assert.deepEqual(invocations, ['molecule_info']);
+    assert.equal(resolveComposedInteractionTarget(scene.scene, memberAtom, runtime.readState().activeAtomeId)?.id, memberAtom.id);
+
+    findNode(tree, 'atome_contextual_edit_natural_molecule_close').on.activate();
+    assert.equal(runtime.readState().activeAtomeId, '');
+    assert.equal(resolveComposedInteractionTarget(scene.scene, memberAtom, runtime.readState().activeAtomeId)?.id, ownerAtom.id);
 });
 
 test('Structured row context accepts its canonical record when Natural has no projected scene', async () => {

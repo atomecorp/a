@@ -21,6 +21,7 @@ import {
 import { sceneState } from '../../eVe/domains/rendering/project_scene_state.js';
 import { createRenderScene, hitTestRenderScene } from '../../eVe/domains/rendering/scene_graph.js';
 import { createVirtualSceneTree } from '../../eVe/domains/rendering/virtual_scene_contract.js';
+import { setAtomeContextualEditApi } from '../../eVe/intuition/runtime/eve_intuition/atome_contextual_edit_registry.js';
 import {
     startProjectAudioPlaybackProgress,
     stopProjectAudioPlaybackProgress
@@ -474,6 +475,117 @@ test('Project scene canvas click selects through the existing selection runtime'
     assert.equal(getProjectSceneState('project_canvas_select').scene.atoms[0].visual.selected, true);
     assert.equal(dom.window.document.querySelectorAll('.eve-atome,.eve-atome-text,img,audio,svg').length, 0);
     assert.equal(visibleProjectVideos(dom.window.document).length, 0);
+});
+
+test('Natural selects a transparent structural Molecule with the canonical WebGPU outline', async () => {
+    clearAllProjectScenes();
+    const dom = projectDom();
+    const owner = makeRecord('molecule_owner', 'group', 1);
+    Object.assign(owner.properties, {
+        molecule_entity: 'molecule', left: 10, top: 20, width: 70, height: 20, zIndex: -1
+    });
+    const member = makeRecord('molecule_member', 'shape', 2);
+    member.parent_id = owner.id;
+    Object.assign(member.properties, { left: 10, top: 20, width: 20, height: 20 });
+    await renderProjectScene({
+        projectId: 'project_molecule_selection',
+        records: [owner, member],
+        host: dom.window.document.getElementById('project'),
+        compositor: createTestCompositor()
+    });
+
+    dom.window.document.dispatchEvent(new dom.window.MouseEvent('pointerdown', { clientX: 15, clientY: 25, bubbles: true }));
+    dom.window.document.dispatchEvent(new dom.window.MouseEvent('pointerup', { clientX: 15, clientY: 25, bubbles: true }));
+    await nextTick();
+    await nextTick();
+
+    const scene = getProjectSceneState('project_molecule_selection').scene;
+    assert.deepEqual(dom.window.__selectedAtomeIds, [owner.id]);
+    assert.equal(scene.byId.get(owner.id).visual.opacity, 0);
+    assert.equal(scene.byId.get(owner.id).visual.selected, true);
+    assert.notEqual(scene.byId.get(member.id).visual.selected, true);
+});
+
+test('Natural member editing commits the member and refreshed Molecule union in one batch', async () => {
+    clearAllProjectScenes();
+    const dom = projectDom();
+    const commits = [];
+    dom.window.Atome = {
+        commitBatch: async (events) => {
+            commits.push(events);
+            return { ok: true };
+        }
+    };
+    const owner = makeRecord('edited_molecule', 'group', 1);
+    Object.assign(owner.properties, {
+        molecule_entity: 'molecule', left: 10, top: 20, width: 70, height: 20, zIndex: -1
+    });
+    const first = makeRecord('edited_member_first', 'shape', 2);
+    first.parent_id = owner.id;
+    Object.assign(first.properties, { left: '10px', top: '20px', width: '20px', height: '20px' });
+    const second = makeRecord('edited_member_second', 'shape', 3);
+    second.parent_id = owner.id;
+    Object.assign(second.properties, { left: '60px', top: '20px', width: '20px', height: '20px' });
+    setAtomeContextualEditApi({ readState: () => ({ activeAtomeId: owner.id }) });
+    await renderProjectScene({
+        projectId: 'project_molecule_member_edit',
+        records: [owner, first, second],
+        host: dom.window.document.getElementById('project'),
+        compositor: createTestCompositor()
+    });
+
+    dom.window.document.dispatchEvent(new dom.window.MouseEvent('pointerdown', { clientX: 15, clientY: 25, bubbles: true }));
+    dom.window.document.dispatchEvent(new dom.window.MouseEvent('pointermove', { clientX: 35, clientY: 25, bubbles: true }));
+    dom.window.document.dispatchEvent(new dom.window.MouseEvent('pointerup', { clientX: 35, clientY: 25, bubbles: true }));
+    await nextTick();
+    await nextTick();
+    setAtomeContextualEditApi(null);
+
+    const finalBatch = commits.findLast((events) => events.some((event) => event.kind === 'set'));
+    assert.ok(finalBatch);
+    assert.deepEqual(finalBatch.map((event) => event.atome_id).sort(), [first.id, owner.id].sort());
+    assert.deepEqual(finalBatch.find((event) => event.atome_id === first.id).props, { left: 30, top: 20 });
+    assert.deepEqual(finalBatch.find((event) => event.atome_id === owner.id).props, {
+        left: 30, top: 20, width: 50, height: 20
+    });
+    assert.equal(first.parent_id, owner.id);
+    assert.equal(second.parent_id, owner.id);
+});
+
+test('Natural member editing never turns an internal drag into a Molecule absorption', async () => {
+    clearAllProjectScenes();
+    const dom = projectDom();
+    const commits = [];
+    dom.window.Atome = {
+        commitBatch: async (events) => {
+            commits.push(events);
+            return { ok: true };
+        }
+    };
+    const owner = makeRecord('stable_molecule', 'group', 1);
+    Object.assign(owner.properties, { molecule_entity: 'molecule', left: 10, top: 20, width: 70, height: 20 });
+    const member = makeRecord('stable_member', 'shape', 2);
+    member.parent_id = owner.id;
+    Object.assign(member.properties, { left: 10, top: 20, width: 20, height: 20 });
+    const overlap = makeRecord('overlap_target', 'shape', 3);
+    Object.assign(overlap.properties, { left: 60, top: 20, width: 20, height: 20 });
+    await renderProjectScene({
+        projectId: 'project_stable_molecule', records: [owner, member, overlap],
+        host: dom.window.document.getElementById('project'), compositor: createTestCompositor()
+    });
+
+    const result = await emitProjectSceneIntent({
+        projectId: 'project_stable_molecule',
+        intent: {
+            kind: 'drag.end', atome_id: member.id, commit: true,
+            props: { left: 50, top: 20 }, targets: [{ atome_id: member.id, props: { left: 50, top: 20 } }],
+            overlap_target_id: overlap.id, overlap_stationary_ms: 600, overlap_delay_ms: 500
+        }
+    });
+
+    assert.equal(result.molecule_mutation, undefined);
+    assert.deepEqual(commits.at(-1).map((event) => event.atome_id).sort(), [member.id, owner.id].sort());
+    assert.equal(member.parent_id, owner.id);
 });
 
 test('Project scene double-click enters contextual edit and preserves an included multi-selection', async () => {

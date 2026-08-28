@@ -91,10 +91,113 @@ export const validateNaturalMoleculeDrop = async ({ page, project, fixture, repo
         };
     }
     const moleculeId = molecule.sourceParent;
+    const spareSelectionTarget = await recordCenter(page, project.id, (record) => record.id === fixture.spareId, { sceneCoordinates: true });
+    await clickCanvasTarget(page, spareSelectionTarget);
     const ownerTarget = await recordCenter(page, project.id, (record) => record.id === fixture.audioId, { sceneCoordinates: true });
+    await clickCanvasTarget(page, ownerTarget);
+    const selectedOwner = await waitFor(page, async ({ pid, ownerId, memberIds }) => {
+        const [{ getProjectSceneState }, selection] = await Promise.all([
+            import('/eVe/domains/rendering/project_scene_runtime.js'),
+            import('/eVe/intuition/runtime/selection.js')
+        ]);
+        const runtime = getProjectSceneState(pid);
+        const selectedIds = selection.getCurrentSelectionIds().map(String);
+        const owner = runtime?.scene?.byId?.get?.(ownerId) || null;
+        return {
+            ok: selectedIds.length === 1 && selectedIds[0] === ownerId
+                && owner?.visual?.selected === true && owner?.visual?.opacity === 0,
+            selectedIds,
+            owner: owner ? { selected: owner.visual?.selected, opacity: owner.visual?.opacity, bounds: owner.bounds } : null,
+            selectedMembers: memberIds.filter((id) => runtime?.scene?.byId?.get?.(id)?.visual?.selected === true)
+        };
+    }, { pid: project.id, ownerId: moleculeId, memberIds: [fixture.audioId, fixture.imageId] });
+    assert(selectedOwner.selectedMembers.length === 0,
+        `natural_molecule_member_selected:${JSON.stringify(selectedOwner)}`);
+    await screenshot({ page, report, outDir, name: 'drop_natural_owner_selected' });
     await clickCanvasTarget(page, ownerTarget, { double: true });
-    await waitForContextualTarget(page, moleculeId);
+    const contextual = await waitForContextualTarget(page, moleculeId);
+    const contextualChrome = await waitFor(page, async (ownerId) => {
+        const { getAtomeContextualEditApi } = await import(
+            '/eVe/intuition/runtime/eve_intuition/atome_contextual_edit_registry.js'
+        );
+        const state = getAtomeContextualEditApi()?.readState?.() || {};
+        const tree = window.eveBevyUiRuntime?.state?.trees
+            ?.get?.('eve_bevy_panel_atome_contextual_edit')?.tree || null;
+        const nodes = new Map();
+        const visit = (node) => {
+            if (!node || typeof node !== 'object') return;
+            nodes.set(String(node.id || ''), node);
+            (node.children || []).forEach(visit);
+        };
+        visit(tree?.root);
+        const safe = ownerId.replace(/[^a-zA-Z0-9_-]/g, '_');
+        const outline = nodes.get(`atome_contextual_edit_${safe}_outline`) || null;
+        const footer = nodes.get(`atome_contextual_edit_${safe}_footer`) || null;
+        const close = nodes.get(`atome_contextual_edit_${safe}_close`) || null;
+        return {
+            ok: state.activeAtomeId === ownerId && state.railOnly === false
+                && outline?.kind === 'panel' && Array.isArray(outline?.style?.border)
+                && footer?.kind === 'row' && close?.kind === 'button',
+            state,
+            chrome: {
+                outline: outline ? { kind: outline.kind, style: outline.style } : null,
+                footer: footer ? { kind: footer.kind, style: footer.style } : null,
+                close: close ? { kind: close.kind, style: close.style } : null
+            }
+        };
+    }, moleculeId);
     await screenshot({ page, report, outDir, name: 'drop_natural_owner_entered' });
+    const memberBefore = await page.evaluate(async (ids) => Promise.all(ids.map((id) => window.Atome.getStateCurrent(id))), [
+        fixture.audioId, fixture.imageId
+    ]);
+    const memberDragSource = await recordCenter(page, project.id, (record) => record.id === fixture.audioId, { sceneCoordinates: true });
+    await drag({
+        page,
+        source: memberDragSource,
+        destination: { ...memberDragSource, x: memberDragSource.x + 24, coordinate_source: 'scene' }
+    });
+    const internalMove = await waitFor(page, async ({ ownerId, movedId, siblingId, before }) => {
+        const [owner, moved, sibling] = await Promise.all([
+            window.Atome.getStateCurrent(ownerId), window.Atome.getStateCurrent(movedId), window.Atome.getStateCurrent(siblingId)
+        ]);
+        const props = (value) => value?.properties || value?.props || {};
+        const movedProps = props(moved);
+        const beforeMoved = props(before[0]);
+        const siblingProps = props(sibling);
+        const beforeSibling = props(before[1]);
+        const ownerProps = props(owner);
+        const number = (value) => Number.parseFloat(String(value));
+        const bounds = [movedProps, siblingProps].map((entry) => ({
+            left: number(entry.left ?? entry.x), top: number(entry.top ?? entry.y),
+            width: number(entry.width), height: number(entry.height)
+        }));
+        const left = Math.min(...bounds.map((entry) => entry.left));
+        const top = Math.min(...bounds.map((entry) => entry.top));
+        const right = Math.max(...bounds.map((entry) => entry.left + entry.width));
+        const bottom = Math.max(...bounds.map((entry) => entry.top + entry.height));
+        return {
+            ok: number(movedProps.left ?? movedProps.x) === number(beforeMoved.left ?? beforeMoved.x) + 24
+                && number(siblingProps.left ?? siblingProps.x) === number(beforeSibling.left ?? beforeSibling.x)
+                && String(moved?.parent_id || moved?.parentId || movedProps.parent_id
+                    || moved?.meta?.parent_id || moved?.meta?.parentId || '') === ownerId
+                && number(ownerProps.left ?? ownerProps.x) === left && number(ownerProps.top ?? ownerProps.y) === top
+                && number(ownerProps.width) === right - left && number(ownerProps.height) === bottom - top,
+            ownerProps, movedProps, siblingProps
+        };
+    }, { ownerId: moleculeId, movedId: fixture.audioId, siblingId: fixture.imageId, before: memberBefore });
+    const close = await contextualTool(page, [`atome_contextual_edit_${moleculeId.replace(/[^a-zA-Z0-9_-]/g, '_')}_close`]);
+    assert(close, `natural_molecule_close_missing:${JSON.stringify(contextualChrome)}`);
+    await clickCanvasTarget(page, close);
+    await waitFor(page, async () => {
+        const { getAtomeContextualEditApi } = await import(
+            '/eVe/intuition/runtime/eve_intuition/atome_contextual_edit_registry.js'
+        );
+        const state = getAtomeContextualEditApi()?.readState?.() || {};
+        return { ok: !state.activeAtomeId, state };
+    });
+    const reopenedTarget = await recordCenter(page, project.id, (record) => record.id === fixture.audioId, { sceneCoordinates: true });
+    await clickCanvasTarget(page, reopenedTarget, { double: true });
+    await waitForContextualTarget(page, moleculeId);
     await chooseMoleculePlaybackMode(page, moleculeId, 'layer');
     await startMoleculePlayback(page, moleculeId, [fixture.audioId, fixture.imageId]);
     await wait(500);
@@ -143,7 +246,8 @@ export const validateNaturalMoleculeDrop = async ({ page, project, fixture, repo
     const clean = await assertNoParasites(page, project.id, [fixture.audioId, fixture.imageId]);
     assert(clean.ok, `natural_parasitic_projection:${JSON.stringify(clean)}`);
     return {
-        molecule, progressed, ended: ended.state, entered: entered.state, children, clean,
+        molecule, selectedOwner, contextual: contextual.state, contextualChrome,
+        internalMove, progressed, ended: ended.state, entered: entered.state, children, clean,
         membership: await readMembership(page, {
             sourceId: fixture.imageId, targetId: fixture.audioId, spareId: fixture.spareId
         })
