@@ -642,6 +642,7 @@ test('Bevy media texture resolver honors per-node image texture scale', async ()
     const resolver = createBrowserBevyMediaTextureResolver({
         documentRef,
         imageTextureScale: 1,
+        fetchResource: async () => new Response(new Uint8Array([0])),
         maxTextureSize: 1024
     });
     const node = {
@@ -685,7 +686,7 @@ test('Bevy media texture resolver rejects an image whose decode error already se
             throw new Error(`unexpected_element:${tagName}`);
         }
     };
-    const resolver = createBrowserBevyMediaTextureResolver({ documentRef });
+    const resolver = createBrowserBevyMediaTextureResolver({ documentRef, fetchResource: async () => new Response(new Uint8Array([0])) });
     const resolution = resolver({
         id: 'already_failed_image',
         kind: 'image',

@@ -87,11 +87,24 @@ fn web_frame_probe_end(world: &mut World) {
     // world also contains quarter-resolution blur cameras, so an unfiltered
     // camera query would intermittently publish their viewport instead.
     let (ui_viewport_width, ui_viewport_height) = ui_viewport_size(world);
+    let (apng_active, apng_frame_updates, apng_max_lateness_ms) = world
+        .get_resource::<AtomeRendererDiagnostics>()
+        .map(|diagnostics| {
+            (
+                diagnostics.apng_active as u32,
+                diagnostics.apng_frame_updates,
+                diagnostics.apng_max_lateness_ms,
+            )
+        })
+        .unwrap_or_default();
     if ui_viewport_width > 0 && ui_viewport_height > 0 {
         WEB_DIAGNOSTICS.with(|cell| {
             let mut diagnostics = cell.borrow_mut();
             diagnostics.ui_viewport_width = ui_viewport_width;
             diagnostics.ui_viewport_height = ui_viewport_height;
+            diagnostics.apng_active = apng_active;
+            diagnostics.apng_frame_updates = apng_frame_updates;
+            diagnostics.apng_max_lateness_ms = apng_max_lateness_ms;
         });
     }
     WEB_FRAME_PROBE.with(|cell| {
@@ -137,6 +150,9 @@ struct WebRendererDiagnostics {
     ui_batches: u32,
     running_apps: u32,
     update_ticks: u32,
+    apng_active: u32,
+    apng_frame_updates: u64,
+    apng_max_lateness_ms: f64,
     ui_viewport_width: u32,
     ui_viewport_height: u32,
     last_frame: WebFrameTiming,

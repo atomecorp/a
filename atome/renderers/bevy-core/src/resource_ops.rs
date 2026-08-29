@@ -134,6 +134,9 @@ pub fn apply_resource(world: &mut World, patch: AtomeResourcePatch) -> Result<()
         sprite.image = handle;
         sprite.color = color;
         drop(sprite);
+        if let Some(texture) = &patch.texture {
+            crate::animated_png::install_animation(world, entity, texture)?;
+        }
         apply_entity_clip(world, entity)?;
     }
     Ok(())

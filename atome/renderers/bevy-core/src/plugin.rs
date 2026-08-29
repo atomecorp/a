@@ -45,6 +45,9 @@ impl Plugin for AtomeBevyRendererPlugin {
             .init_resource::<AtomeRendererDiagnostics>()
             .init_resource::<Assets<Image>>()
             .init_resource::<Assets<Mesh>>()
+            .init_resource::<Time<Real>>()
+            .init_non_send::<crate::animated_png::PngAnimations>()
+            .add_systems(Update, crate::animated_png::advance_animations)
             .add_systems(Startup, spawn_atome_bevy_scene);
     }
 }

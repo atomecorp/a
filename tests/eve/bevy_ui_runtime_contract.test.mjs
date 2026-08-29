@@ -802,7 +802,7 @@ test('BevyUI emits one activation for pointer input and ignores delayed compatib
     }
 });
 
-test('BevyUI text focus waits for the terminal click and consumes it across an iOS viewport resize', async () => {
+for (const kind of ['text_input', 'icon_button']) test(`BevyUI ${kind} focus waits for the terminal click and consumes it across an iOS viewport resize`, async () => {
     const dom = new JSDOM('<!doctype html><html><body><div id="project_view_alpha"></div></body></html>');
     const host = dom.window.document.getElementById('project_view_alpha');
     let viewportHeight = 120;
@@ -843,7 +843,7 @@ test('BevyUI text focus waits for the terminal click and consumes it across an i
                     style: { size: [200, 120] },
                     children: [{
                         id: 'ios_text_input',
-                        kind: 'text_input',
+                        kind,
                         style: { position: [20, 30], size: [160, 32] },
                         on: {
                             press: () => received.push('press'),
@@ -852,7 +852,7 @@ test('BevyUI text focus waits for the terminal click and consumes it across an i
                                 viewportHeight = 70;
                             },
                             release: () => received.push('release'),
-                            activate: () => received.push('activate')
+                            [kind === 'text_input' ? 'activate' : 'click']: () => received.push('activate')
                         }
                     }]
                 }
@@ -887,6 +887,11 @@ test('BevyUI text focus waits for the terminal click and consumes it across an i
         assert.equal(viewportHeight, 70);
         assert.equal(compatibilityClick.defaultPrevented, true);
         assert.equal(downstreamClicks, 0, 'the terminal click must not reach the project after keyboard viewport contraction');
+        received.length = 0;
+        surface.dispatchEvent(pointer('pointerdown'));
+        surface.dispatchEvent(pointer('pointercancel'));
+        surface.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true, clientX: 40, clientY: 40 }));
+        assert.equal(received.includes('activate'), false, 'cancelled gestures must not activate text creation');
         await runtime.unmountTree('ios_text_tree');
     } finally {
         globalThis.window = previousWindow;

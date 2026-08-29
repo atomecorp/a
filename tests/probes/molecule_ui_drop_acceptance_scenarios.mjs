@@ -1,9 +1,12 @@
+import { runApngImageAcceptance } from './apng_image_acceptance.mjs';
+import { runToolTextRecordAcceptance } from './tool_text_record_acceptance.mjs';
 import { createDropFixture } from './molecule_ui_drop_core.mjs';
 import { validateListMoleculeDrop } from './molecule_ui_drop_list.mjs';
 import { validateMatrixMoleculeDrop } from './molecule_ui_drop_matrix.mjs';
 import { validateNaturalMoleculeDrop } from './molecule_ui_drop_natural.mjs';
 import { runLayeredMediaMoleculeAcceptance } from './molecule_ui_layered_media.mjs';
 import { runMoleculeOrderTextRegressions } from './molecule_ui_order_text_regressions.mjs';
+import { runMoleculeDragPerformanceAcceptance } from './molecule_drag_performance_acceptance.mjs';
 
 const SCENARIOS = Object.freeze([
     ['natural', validateNaturalMoleculeDrop],
@@ -12,6 +15,11 @@ const SCENARIOS = Object.freeze([
 ]);
 
 export const runMoleculeDropAcceptance = async ({ page, report, check, ensureProject, outDir }) => {
+    if (process.env.MOLECULE_UI_DRAG_PERF_ONLY === '1') {
+        return runMoleculeDragPerformanceAcceptance({ page, report, check, ensureProject });
+    }
+    if (process.env.MOLECULE_UI_TEXT_TOOLS_ONLY === '1') return runToolTextRecordAcceptance({ page, report, check, ensureProject, outDir });
+    if (process.env.MOLECULE_UI_APNG_ONLY === '1') return runApngImageAcceptance({ page, report, check, ensureProject, outDir });
     if (process.env.MOLECULE_UI_ORDER_TEXT_ONLY === '1') {
         return runMoleculeOrderTextRegressions({ page, report, check, ensureProject, outDir });
     }

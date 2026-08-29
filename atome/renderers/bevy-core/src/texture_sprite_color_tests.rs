@@ -26,6 +26,7 @@ fn textured_image_node(id: &str) -> AtomeRenderNode {
         texture_size: None,
         uv_rect: None,
         texture: Some(AtomeTexture {
+            animation: None,
             width: 2,
             height: 2,
             rgba: vec![255; 2 * 2 * 4],

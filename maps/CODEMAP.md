@@ -1,5 +1,34 @@
 # Atome / eVe Code Map
 
+Drag fluency repair (2026-08-29): `project_scene_gesture_runtime.js` owns the
+latest-per-display-frame visual queue and release flush for both standalone
+Atomes and expanded Molecule targets. `realtime_atome_events_runtime.js` honors
+the existing self-patch result before invoking project-scene projection, so a
+local `gesture_frame` cannot rebuild the scene it just patched directly.
+`project_scene_direct_transform_runtime.js` sends each visual frame as one
+renderer-specific transform batch. `bevy_native_renderer_runtime.js` keeps a
+latest-value queue per native surface, coalesces transforms while Tauri/iOS IPC
+is busy, and drains that queue before a settled projection can diff the scene.
+Deterministic burst coverage lives in
+`project_scene_gesture_performance.test.mjs`; real WebGPU cadence and canonical
+end positions are measured by `molecule_drag_performance_acceptance.mjs`.
+
+Contextual tools/text repair (2026-08-28): `main_tool_registration_runtime.js`
+protects dedicated handlers; `atome_edit_footer_selection_runtime.js` supplies
+the target; `tool_runtime_line_splitter.js` slices text/spans and delegates to
+`canonicalMoleculeCommit`. `atome_contextual_edit_runtime.js` observes canonical
+Record state; its model and the main-menu model use `tool_skin.js` recording tint.
+`bevy_ui_pointer_runtime.js` dispatches terminal click for Create Text.
+`main_menu_create_content_runtime.js` prepares focus before asynchronous work;
+`text_tool_create_runtime.js`, `text_bridge.js`, `text_editing_session.js` and the
+hidden service preserve the editor through adoption. `project_view_visual_panel.js`
+invokes its interaction owner synchronously; scene text/mutation owners propagate
+failed text commits. Integrated gestures/pixels live in
+`tests/probes/tool_text_record_acceptance.mjs` (MOLECULE_UI_TEXT_TOOLS_ONLY=1).
+
+Molecule/APNG owners (2026-08-29): tool_runtime_molecule_geometry.js reuses the canonical px parser; project_scene_record_projection.js derives nested member bounds without storage migration; render_atom.js and virtual_scene_contract.js enforce transparent structural fill; scene_graph.js excludes envelope hits while surface_interaction_runtime.js preserves member-to-owner gestures. bevy_image_texture_source.js owns bounded source reads, content sniffing and frame-count-aware raster sizing in the existing texture resolver: large Natural bounds keep their logical Bevy size while the precomposed APNG texture stays within the shared 32 MiB decoded-frame budget. animated_png.rs precomposes bounded fitted frames once, skips elapsed infinite-loop cycles and updates the resident Image on its 75 ms clock; animated_png_pixels.rs owns fitted RGBA/alpha preparation. Tests: molecule_visual_geometry.test.mjs, apng_image_resource.test.mjs, tests/rendering/animated_png_tests.rs, tests/probes/apng_image_acceptance.mjs and the dense drag/APNG lane in molecule_drag_performance_acceptance.mjs.
+Fitted preview records in bevy_ui_overlay_record_projection.js inherit their UI slot's layer and clip, not the source Atome's depth; this keeps image previews above the Visual panel background.
+
 Urgent interaction campaign (2026-08-28): `project_view_surface_runtime.js`
 owns `visual_fullscreen` and projects the existing WebGPU canvas through a
 Visualizer-only tree; `project_view_visual_fullscreen_runtime.js` owns its

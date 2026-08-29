@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
 import { JSDOM } from 'jsdom';
-import { test } from 'vitest';
+import { test, vi } from 'vitest';
 
 import {
     beginProjectSceneTextEdit,
+    emitProjectSceneIntent,
     clearAllProjectScenes,
     commitProjectSceneTextEdit,
     formatProjectSceneTextSelection,
@@ -11,6 +12,7 @@ import {
     renderProjectScene
 } from '../../eVe/domains/rendering/project_scene_runtime.js';
 import { readRecentProjectTextStyleSelection } from '../../eVe/domains/rendering/project_scene_text_edit_state.js';
+import { createProjectViewVisualInteractionRuntime } from '../../eVe/domains/rendering/project_view_visual_interaction_runtime.js';
 
 const compositor = {
     default: async () => {}, resolve_bevy_media_texture: async () => ({ width: 1, height: 1, rgba: [0, 0, 0, 0] }),
@@ -19,6 +21,58 @@ const compositor = {
     apply_atome_bevy_layer: () => {}, apply_atome_bevy_visibility: () => {}, apply_atome_bevy_resource: () => {},
     apply_atome_bevy_text_metadata: () => {}, apply_atome_bevy_surface: () => {}
 };
+
+test('Visual focuses text before asynchronous selection and rail work', async () => {
+    const calls = [];
+    let resolveSelection;
+    const runtime = createProjectViewVisualInteractionRuntime({
+        emitIntent: ({ intent }) => {
+            calls.push(intent.kind);
+            return intent.kind === 'select' ? new Promise((resolve) => { resolveSelection = resolve; }) : { ok: true };
+        },
+        feedRail: async () => { calls.push('rail'); }
+    });
+    const result = runtime.doubleClick({ event: { x: 10, y: 10 }, width: 100, height: 100,
+        record: { id: 'text', type: 'text', project_id: 'project', properties: { width: 100, height: 100 } } });
+    assert.deepEqual(calls, ['text.edit.begin', 'select']);
+    resolveSelection();
+    await result;
+    assert.deepEqual(calls, ['text.edit.begin', 'select', 'rail']);
+});
+
+test('text intents focus synchronously and preserve the new editor through a pending save', async () => {
+    clearAllProjectScenes();
+    const dom = new JSDOM('<!doctype html><main id="project"></main>', { pretendToBeVisual: true });
+    globalThis.window = dom.window;
+    globalThis.document = dom.window.document;
+    let finishSave;
+    dom.window.Atome = { commit: () => new Promise((resolve) => { finishSave = resolve; }) };
+    await renderProjectScene({ projectId: 'focus_project', host: dom.window.document.getElementById('project'), compositor,
+        records: ['a', 'b'].map((id) => ({ id, type: 'text', properties: { text: id, width: 150, height: 40 } })) });
+    const first = emitProjectSceneIntent({ projectId: 'focus_project', intent: { kind: 'text.edit.begin', atome_id: 'a' } });
+    const editor = dom.window.document.activeElement;
+    assert.equal(editor.tagName, 'TEXTAREA');
+    await first;
+    const switched = emitProjectSceneIntent({ projectId: 'focus_project', intent: { kind: 'text.edit.begin', atome_id: 'b' } });
+    assert.equal(dom.window.document.activeElement, editor);
+    assert.equal(editor.value, 'b');
+    await vi.waitFor(() => assert.equal(typeof finishSave, 'function'));
+    finishSave({ ok: true });
+    await switched;
+    assert.equal(getProjectSceneState('focus_project').text.inline_edit_session.atom_id, 'b');
+    assert.equal(dom.window.document.activeElement, editor);
+    dom.window.Atome.commit = async () => ({ ok: true });
+    await commitProjectSceneTextEdit({ projectId: 'focus_project' });
+    assert.equal(editor.isConnected, false);
+    await emitProjectSceneIntent({ projectId: 'focus_project', intent: { kind: 'text.edit.begin', atome_id: 'b' } });
+    dom.window.Atome.commit = async () => ({ ok: false, error: 'write_denied' });
+    const failed = await commitProjectSceneTextEdit({ projectId: 'focus_project' });
+    assert.equal(failed.committed, false);
+    assert.equal(failed.error, 'write_denied');
+    dom.window.close();
+    delete globalThis.window;
+    delete globalThis.document;
+});
 
 test('project text selection remembers and commits Font/Size span styles through the hidden editor', async () => {
     clearAllProjectScenes();

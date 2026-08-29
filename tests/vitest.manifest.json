@@ -1,5 +1,6 @@
 [
   "tests/atome/src/squirrel/apis/unified/adole_api/session.current_project.test.mjs",
+  "tests/eve/apng_image_resource.test.mjs",
   "tests/eve/assistant_gesture_runtime.test.mjs",
   "tests/eve/assistant_session_controller.test.mjs",
   "tests/eve/assistant_turn_taking.test.mjs",
@@ -93,6 +94,7 @@
   "tests/eve/molecule_mix_bevy_kind_contract.test.mjs",
   "tests/eve/molecule_project_view_rail_layout.test.mjs",
   "tests/eve/molecule_ui_acceptance_coordinates.test.mjs",
+  "tests/eve/molecule_visual_geometry.test.mjs",
   "tests/eve/photo_capture_persistence_contract.test.mjs",
   "tests/eve/project_audio_waveform_renderer.test.mjs",
   "tests/eve/project_layer_canvas_lasso_selection.test.mjs",

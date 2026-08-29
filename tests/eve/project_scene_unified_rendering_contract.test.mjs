@@ -501,7 +501,7 @@ test('Natural selects a transparent structural Molecule with the canonical WebGP
 
     const scene = getProjectSceneState('project_molecule_selection').scene;
     assert.deepEqual(dom.window.__selectedAtomeIds, [owner.id]);
-    assert.equal(scene.byId.get(owner.id).visual.opacity, 0);
+    assert.deepEqual(scene.byId.get(owner.id).style.fill, [0, 0, 0, 0]);
     assert.equal(scene.byId.get(owner.id).visual.selected, true);
     assert.notEqual(scene.byId.get(member.id).visual.selected, true);
 });

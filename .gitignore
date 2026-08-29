@@ -91,6 +91,11 @@ tests/eve/*
 !tests/eve/project_order_runtime.test.mjs
 !tests/eve/project_view_real_server_shape.test.mjs
 !tests/eve/urgent_debug_campaign.test.mjs
+!tests/eve/molecule_visual_geometry.test.mjs
+!tests/eve/apng_image_resource.test.mjs
+!tests/rendering/
+tests/rendering/*
+!tests/rendering/animated_png_tests.rs
 !tests/eve/project_view_playback_regressions.test.mjs
 !tests/eve/project_workspace_activation_contract.test.mjs
 !tests/eve/selected_project_media_playback_runtime.test.mjs
@@ -145,6 +150,7 @@ tests/eve/*
 !tests/eve/bevy_ui_main_menu_overlay_atomic.test.mjs
 !tests/eve/bevy_ui_overlay_reconciliation.test.mjs
 !tests/eve/bevy_ui_touch_surface_contract.test.mjs
+!tests/eve/text_creation_handoff_contract.test.mjs
 !tests/eve/bevy_web_renderer_skipped_scene_baseline.test.mjs
 !tests/eve/project_video_timeline_playback_contract.test.mjs
 !tests/eve/project_scene_unified_rendering_contract.test.mjs

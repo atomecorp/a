@@ -91,6 +91,7 @@ pub fn apply_despawn(world: &mut World, id: &str) -> Result<(), String> {
         .remove(id)
         .ok_or_else(|| format!("bevy_despawn_entity_missing:{id}"))?;
     remove_selection_overlay(world, entity);
+    crate::animated_png::remove_animation(world, entity);
     remove_shape_shadow_overlay(world, entity);
     remove_waveform_playback_overlay(world, entity);
     world.despawn(entity);

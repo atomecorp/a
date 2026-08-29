@@ -1,3 +1,4 @@
+import { assertClosedMoleculePicking } from './molecule_selection_visual_acceptance.mjs';
 import {
     assert, clickCanvasTarget, recordCenter, wait, waitFor, waitForStableScene
 } from './molecule_ui_acceptance_support.mjs';
@@ -105,7 +106,7 @@ export const validateNaturalMoleculeDrop = async ({ page, project, fixture, repo
         const owner = runtime?.scene?.byId?.get?.(ownerId) || null;
         return {
             ok: selectedIds.length === 1 && selectedIds[0] === ownerId
-                && owner?.visual?.selected === true && owner?.visual?.opacity === 0,
+                && owner?.visual?.selected === true && owner?.style?.fill?.[3] === 0,
             selectedIds,
             owner: owner ? { selected: owner.visual?.selected, opacity: owner.visual?.opacity, bounds: owner.bounds } : null,
             selectedMembers: memberIds.filter((id) => runtime?.scene?.byId?.get?.(id)?.visual?.selected === true)
@@ -154,7 +155,7 @@ export const validateNaturalMoleculeDrop = async ({ page, project, fixture, repo
     await drag({
         page,
         source: memberDragSource,
-        destination: { ...memberDragSource, x: memberDragSource.x + 24, coordinate_source: 'scene' }
+        destination: { ...memberDragSource, x: memberDragSource.x + 400, coordinate_source: 'scene' }
     });
     const internalMove = await waitFor(page, async ({ ownerId, movedId, siblingId, before }) => {
         const [owner, moved, sibling] = await Promise.all([
@@ -176,7 +177,7 @@ export const validateNaturalMoleculeDrop = async ({ page, project, fixture, repo
         const right = Math.max(...bounds.map((entry) => entry.left + entry.width));
         const bottom = Math.max(...bounds.map((entry) => entry.top + entry.height));
         return {
-            ok: number(movedProps.left ?? movedProps.x) === number(beforeMoved.left ?? beforeMoved.x) + 24
+            ok: number(movedProps.left ?? movedProps.x) === number(beforeMoved.left ?? beforeMoved.x) + 400
                 && number(siblingProps.left ?? siblingProps.x) === number(beforeSibling.left ?? beforeSibling.x)
                 && String(moved?.parent_id || moved?.parentId || movedProps.parent_id
                     || moved?.meta?.parent_id || moved?.meta?.parentId || '') === ownerId
@@ -195,10 +196,12 @@ export const validateNaturalMoleculeDrop = async ({ page, project, fixture, repo
         const state = getAtomeContextualEditApi()?.readState?.() || {};
         return { ok: !state.activeAtomeId, state };
     });
+    report.molecule_selection_visual = await assertClosedMoleculePicking({ page, project, ownerId: moleculeId,
+        memberIds: [fixture.audioId, fixture.imageId], report, outDir });
     const reopenedTarget = await recordCenter(page, project.id, (record) => record.id === fixture.audioId, { sceneCoordinates: true });
     await clickCanvasTarget(page, reopenedTarget, { double: true });
     await waitForContextualTarget(page, moleculeId);
-    await chooseMoleculePlaybackMode(page, moleculeId, 'layer');
+    await chooseMoleculePlaybackMode(page, moleculeId, 'simultaneous');
     await startMoleculePlayback(page, moleculeId, [fixture.audioId, fixture.imageId]);
     await wait(500);
     const progressed = await playbackSnapshot(page, [fixture.audioId, fixture.imageId]);

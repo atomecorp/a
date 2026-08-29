@@ -1,10 +1,12 @@
 import assert from 'node:assert/strict';
-import { afterEach, test } from 'vitest';
+import { afterEach, test, vi } from 'vitest';
 import { JSDOM } from 'jsdom';
 
 import { createProjectLayerRuntime } from '../../eVe/core/atome_events/project_layer_runtime.js';
 import { setMainMenuRuntime } from '../../eVe/intuition/ribbon/bevy_ui_product_registry.js';
-import { createMainMenuCreateContent } from '../../eVe/intuition/runtime/eve_intuition/main_menu_create_content_runtime.js';
+import { createMainMenuCreateContent, createMainMenuCreateInvocationRuntime } from '../../eVe/intuition/runtime/eve_intuition/main_menu_create_content_runtime.js';
+import { textCreationSession } from '../../eVe/core/atome_events/text_creation_session.js';
+import * as viewMode from '../../eVe/domains/rendering/project_view_mode_state.js';
 import { createContextToolInvocationRuntime } from '../../eVe/intuition/runtime/eve_intuition/context_tool_invocation_runtime.js';
 import { normalizeToolEntry } from '../../eVe/intuition/ribbon/menu_model.js';
 import { resolvePageFrame } from '../../eVe/domains/rendering/project_view_creation_geometry.js';
@@ -28,6 +30,7 @@ const previousNode = globalThis.Node;
 const previousLocalStorage = globalThis.localStorage;
 
 afterEach(() => {
+    vi.restoreAllMocks();
     globalThis.window = previousWindow;
     globalThis.document = previousDocument;
     globalThis.Element = previousElement;
@@ -35,6 +38,32 @@ afterEach(() => {
     globalThis.Node = previousNode;
     globalThis.localStorage = previousLocalStorage;
     setMainMenuRuntime(null);
+});
+
+test('List Create Text focuses before the first await and cleans up a rejected creation', async () => {
+    const dom = new JSDOM('<!doctype html><body></body>');
+    globalThis.window = dom.window;
+    globalThis.document = dom.window.document;
+    window.__currentProject = { id: 'focus_project' };
+    window.__eveTextTool = { isActive: () => false };
+    vi.spyOn(viewMode, 'getProjectViewMode').mockReturnValue('list');
+    const invocation = createMainMenuCreateInvocationRuntime({
+        invokeToolFromUiButton: async () => { throw new Error('creation_denied'); }
+    });
+    try {
+        const pending = invocation.invoke({ definition: { toolId: 'ui.text.create', extraInput: {
+            content_kind: 'text', create_tool_ids: ['ui.text.create']
+        } } });
+        const editor = document.activeElement;
+        assert.equal(editor.tagName, 'TEXTAREA');
+        assert.equal(textCreationSession.isCreating(), true);
+        await assert.rejects(pending, /creation_denied/);
+        assert.equal(editor.isConnected, false);
+        assert.equal(textCreationSession.isIdle(), true);
+    } finally {
+        textCreationSession.abort();
+        dom.window.close();
+    }
 });
 
 test('the real Bevy invocation keeps Create exclusive even when the gateway envelope has a stale latch', async () => {
@@ -264,7 +293,7 @@ test('Visual double-click edits the displayed source inline and never creates a 
     await runtime.doubleClick({ event: { x: 2, y: 2 }, record, width: 400, height: 180 });
 
     assert.equal(parasiteCreates, 0);
-    assert.deepEqual(intents.slice(-2).map((intent) => intent.kind), ['select', 'text.edit.begin']);
+    assert.deepEqual(intents.slice(-2).map((intent) => intent.kind), ['text.edit.begin', 'select']);
     assert.equal(railTargets.length, 1);
     assert.equal(railTargets[0].projectId, 'project_inline');
     assert.equal(railTargets[0].target.id, 'text_inline');

@@ -466,6 +466,7 @@ name = "atome-bevy-renderer-core"
 version = "0.1.0"
 dependencies = [
  "bevy",
+ "image",
  "js-sys",
  "serde",
  "serde_bytes",

@@ -74,6 +74,7 @@ fn image_tree() -> AtomeUiTree {
                     opacity: Some(1.0),
                     tint: Some([1.0, 1.0, 1.0, 1.0]),
                     texture: Some(AtomeTexture {
+            animation: None,
                         width: 2,
                         height: 2,
                         rgba: vec![

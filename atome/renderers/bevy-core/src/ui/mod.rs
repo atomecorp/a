@@ -397,29 +397,17 @@ fn spawn_image_node(
     kind: &str,
     node: &AtomeUiNode,
 ) -> Result<Entity, String> {
-    let texture = node
-        .image
-        .as_ref()
-        .and_then(|image| image.texture.clone())
-        .ok_or_else(|| format!("bevy_ui_image_texture_required:{}", node.id))?;
-    let tint = node
-        .image
-        .as_ref()
-        .and_then(|image| image.tint)
-        .or(node.style.color);
-    let opacity = node
-        .image
-        .as_ref()
-        .and_then(|image| image.opacity)
-        .unwrap_or(1.0);
+    let image = node.image.as_ref().ok_or_else(|| format!("bevy_ui_image_required:{}", node.id))?;
+    let texture = image.texture.as_ref().ok_or_else(|| format!("bevy_ui_image_texture_required:{}", node.id))?;
+    let tint = image.tint.or(node.style.color);
+    let opacity = image.opacity.unwrap_or(1.0);
     let handle = {
         let mut images = world
             .get_resource_mut::<Assets<Image>>()
             .ok_or_else(|| "bevy_image_assets_required".to_string())?;
-        image_handle_from_texture(&mut images, &Some(texture), &node.id)?
+        image_handle_from_texture(&mut images, &Some(texture.clone()), &node.id)?
     };
-    Ok(world
-        .spawn((
+    let entity = world.spawn((
             id_component,
             node_layout(kind, &node.style),
             ImageNode::new(handle).with_color(color(
@@ -431,7 +419,12 @@ fn spawn_image_node(
             ZIndex(node.style.z_index.unwrap_or(0)),
             GlobalZIndex(node.style.z_index.unwrap_or(0)),
         ))
-        .id())
+        .id();
+    if let Err(error) = crate::animated_png::install_animation(world, entity, texture) {
+            world.despawn(entity);
+            return Err(error);
+        }
+    Ok(entity)
 }
 
 fn spawn_ui_node(

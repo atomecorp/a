@@ -112,6 +112,17 @@ export const screenshot = async ({ page, report, outDir, name, preservePointer =
     const signal = analyzePngSignal(file);
     const visualSignalPresent = signal.non_black_pixel_ratio > 0.2 && signal.sampled_color_count > 32;
     if (!visualSignalPresent && process.env.MOLECULE_UI_ALLOW_UNRELIABLE_HEADLESS_PIXELS !== '1') {
+        report.visual_failure = await page.evaluate(async () => {
+            const canvas = document.getElementById('eve_surface_project');
+            const { getRenderSurfaceState } = await import('/eVe/domains/rendering/surface_runtime.js');
+            const { ensureBevyModule } = await import('/eVe/domains/rendering/bevy_web_renderer_module_loader.js');
+            const state = getRenderSurfaceState(canvas);
+            const module = await ensureBevyModule(window);
+            return { style: canvas?.getAttribute('style'), opacity: canvas ? getComputedStyle(canvas).opacity : null,
+                initialPreparing: state?.initialPreparing, initialPresented: state?.initialPresented,
+                diagnostics: module.read_atome_bevy_web_diagnostics?.(),
+                atoms: state?.scene?.atoms?.map((a) => ({ id: a.id, type: a.type, bounds: a.bounds, visual: a.visual })).slice(0, 20) };
+        });
         assert(false, `visual_signal_missing:${name}:${JSON.stringify(signal)}`);
     }
     report.screenshots.push(file);

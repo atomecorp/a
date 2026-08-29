@@ -60,6 +60,7 @@ fn text_node_with_texture(id: &str) -> AtomeRenderNode {
         texture_size: None,
         uv_rect: None,
         texture: Some(AtomeTexture {
+            animation: None,
             width: 160,
             height: 60,
             rgba: vec![255; 160 * 60 * 4],
@@ -169,6 +170,7 @@ fn backdrop_fixture_keeps_text_and_image_in_capture_and_large_glass_circle_in_pr
         texture_size: None,
         uv_rect: None,
         texture: Some(AtomeTexture {
+            animation: None,
             width: 4,
             height: 4,
             rgba: vec![255; 4 * 4 * 4],
@@ -187,6 +189,7 @@ fn backdrop_fixture_keeps_text_and_image_in_capture_and_large_glass_circle_in_pr
         layer: 3,
         text: Some("Backdrop fixture text".to_string()),
         texture: Some(AtomeTexture {
+            animation: None,
             width: 220,
             height: 60,
             rgba: vec![255; 220 * 60 * 4],
@@ -748,6 +751,7 @@ fn surface_background_cover_size_tracks_surface_resize() {
             signature: "wide".to_string(),
             color: [0.0, 0.0, 0.0, 1.0],
             texture: Some(AtomeTexture {
+            animation: None,
                 width: 200,
                 height: 100,
                 rgba: vec![255; 200 * 100 * 4],

@@ -208,6 +208,9 @@ pub struct AtomeEntityTable {
 pub struct AtomeRendererDiagnostics {
     pub applied_ops: usize,
     pub last_error: Option<String>,
+    pub apng_active: usize,
+    pub apng_frame_updates: u64,
+    pub apng_max_lateness_ms: f64,
 }
 
 #[derive(Clone, Debug, Resource)]

@@ -109,14 +109,14 @@ const enterProvisionedWorkspace = async (page) => {
     await page.reload({ waitUntil: 'commit', timeout: 45000 });
     return waitFor(page, async () => {
         const current = await window.AdoleAPI?.auth?.current?.().catch(() => null);
-        const dashboard = window.eveDashboardBevyUiRuntime?.state || {};
+        const canvas = document.getElementById('eve_surface_project');
         return {
             ok: current?.logged === true
                 && window.AdoleAPI?.security?.isAnonymous?.() === false
-                && !!document.getElementById('eve_surface_project'),
-            logged: current?.logged === true,
+                && !!canvas && getComputedStyle(canvas).opacity === '1'
+                && !!(window.__DEBUG__ || window.new_menu_v2),
             anonymous: window.AdoleAPI?.security?.isAnonymous?.() ?? null,
-            dashboard_active: dashboard.active === true
+            surface_opacity: canvas ? getComputedStyle(canvas).opacity : null
         };
     });
 };

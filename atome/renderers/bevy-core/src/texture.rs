@@ -12,8 +12,10 @@ fn image_from_texture(texture: &AtomeTexture, id: &str) -> Result<Image, String>
     if texture.width == 0 || texture.height == 0 {
         return Err(format!("bevy_texture_dimension_required:{id}"));
     }
-    let expected_len = texture.width as usize * texture.height as usize * 4;
-    if texture.rgba.len() != expected_len {
+    let expected_len = (texture.width as usize).checked_mul(texture.height as usize)
+        .and_then(|size| size.checked_mul(4)).ok_or_else(|| format!("bevy_texture_size_limit:{id}"))?;
+    if texture.animation.is_some() && expected_len > 32 * 1024 * 1024 { return Err(format!("bevy_texture_size_limit:{id}")); }
+    if texture.animation.is_none() && texture.rgba.len() != expected_len {
         return Err(format!("bevy_texture_rgba_length_invalid:{id}"));
     }
     let mut image = Image::new(
@@ -23,7 +25,7 @@ fn image_from_texture(texture: &AtomeTexture, id: &str) -> Result<Image, String>
             depth_or_array_layers: 1,
         },
         TextureDimension::D2,
-        texture.rgba.clone(),
+        if texture.animation.is_some() { vec![0; expected_len] } else { texture.rgba.clone() },
         TextureFormat::Rgba8UnormSrgb,
         RenderAssetUsages::default(),
     );
@@ -198,6 +200,7 @@ pub fn image_handle_from_rounded_rect_mask(
     }
     Ok(images.add(image_from_texture(
         &AtomeTexture {
+            animation: None,
             width,
             height,
             rgba,

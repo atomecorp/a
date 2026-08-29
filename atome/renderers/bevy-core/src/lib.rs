@@ -46,3 +46,5 @@ mod texture_sprite_color_tests;
 mod video_external_texture_tests;
 #[cfg(test)]
 mod workspace_blur_tests;
+pub mod animated_png;
+mod animated_png_pixels;

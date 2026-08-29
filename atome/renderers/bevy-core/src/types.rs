@@ -382,6 +382,8 @@ pub struct AtomeTexture {
     pub height: u32,
     #[serde(with = "serde_bytes")]
     pub rgba: Vec<u8>,
+    #[serde(default)]
+    pub animation: Option<crate::animated_png::PngAnimationSource>,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq)]

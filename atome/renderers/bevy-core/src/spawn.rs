@@ -348,5 +348,11 @@ pub fn spawn_node_with_texture_handle(
             crate::workspace_backdrop::FLOWER_PRESENTATION_LAYER,
         ));
     }
+    if let Some(texture) = &node.texture {
+        if let Err(error) = crate::animated_png::install_animation(world, entity, texture) {
+            world.despawn(entity);
+            return Err(error);
+        }
+    }
     Ok(entity)
 }

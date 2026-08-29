@@ -40,6 +40,9 @@ import { EVE_EN_CORE_MESSAGES } from '../../eVe/i18n/languages_en_core.js';
 import { EVE_FR_CORE_MESSAGES } from '../../eVe/i18n/languages_fr_core.js';
 import { buildMainMenuRecordingVisualNodes } from '../../eVe/intuition/ribbon/bevy_ui_main_menu_recording_visual_model.js';
 import { createMainMenuRecordingVisualRuntime } from '../../eVe/intuition/ribbon/bevy_ui_main_menu_recording_visual_runtime.js';
+import { buildAtomeContextualEditTree } from '../../eVe/intuition/runtime/eve_intuition/atome_contextual_edit_model.js';
+import { buildBevyMainMenuTree } from '../../eVe/intuition/ribbon/bevy_ui_main_menu_model.js';
+import { BEVY_MENU_TOKENS, resolvePaletteAccentColor } from '../../eVe/intuition/ribbon/bevy_ui_menu_surface.js';
 
 const childPositions = (tree) => Object.fromEntries(
     tree.children.map((child) => [child.id.replace('row_', ''), child.style.position[0]])
@@ -88,12 +91,54 @@ describe('urgent campaign contracts', () => {
             item: { id: 'record_action' }, itemSize: 56, position: [10, 20], metrics: {},
             visual, stackLayer: 3, cornerRadius: 8
         });
-        expect(nodes).toHaveLength(1);
-        expect(nodes[0].overlayRecord.properties).toMatchObject({
-            color: '#ff2d2d', corner_radius: 6.5
-        });
+        expect(nodes).toHaveLength(0);
+        const iconFor = (recordActionActive) => {
+            const tree = buildAtomeContextualEditTree({
+                activeAtomeId: 'text', recordActionActive,
+                definitions: [{ key: 'record_action', toolId: 'ui.detail.record.toggle', icon: 'record', label: 'Record' }]
+            });
+            const walk = (node) => [node, ...(node.children || []).flatMap(walk)];
+            return walk(tree.root).find((node) => node.id.endsWith('record_action_icon')).image;
+        };
+        expect(iconFor(false).tint).toEqual(BEVY_MENU_TOKENS.surface.icon);
+        expect(iconFor(true).tint).toEqual(BEVY_MENU_TOKENS.surface.recordingIcon);
+        const menuNodes = () => {
+            const tree = buildBevyMainMenuTree({
+                content: { toolbox: { children: ['record_action'] }, record_action: {
+                    atome_tool: true, tool_id: 'ui.detail.record.toggle', icon: 'record', label: 'Record'
+                } }, surface: { getBoundingClientRect: () => ({ width: 800, height: 600 }) },
+                state: { ...state, activePaletteKey: '', latchedByToolId: new Map([['ui.detail.record.toggle', true]]), externalOpenByToolId: new Map() }
+            });
+            const walk = (node) => [node, ...(node.children || []).flatMap(walk)];
+            return walk(tree.root);
+        };
+        const redNodes = menuNodes();
+        expect(redNodes.find((node) => node.id.endsWith('record_action_icon')).image.tint).toEqual(BEVY_MENU_TOKENS.surface.recordingIcon);
         runtime.projectActionRecordingState({ active: false });
         expect(state.recordingVisualByToolId.has('ui.detail.record.toggle')).toBe(false);
+        expect(iconFor(false).tint).toEqual(BEVY_MENU_TOKENS.surface.icon);
+        const whiteNodes = menuNodes();
+        expect(whiteNodes.find((node) => node.id.endsWith('record_action_icon')).image.tint).toEqual(BEVY_MENU_TOKENS.surface.icon);
+        expect(whiteNodes.find((node) => node.id.endsWith('record_action_background')).style.background)
+            .toEqual(redNodes.find((node) => node.id.endsWith('record_action_background')).style.background);
+    });
+
+    it('resolves the temporal stretch palette accent', () => {
+        expect(resolvePaletteAccentColor('list_occurrence_stretch')).toEqual(resolvePaletteAccentColor('time'));
+    });
+
+    it('splits current text and rebases rich spans without carrying editor state', () => {
+        const plan = buildLineSplitterPlan({ source: {
+            id: 'one', project_id: 'project', type: 'text', properties: {
+                content: 'stale', text: 'AB\r\n\r\nCD',
+                rich_text: { spans: [{ start: 1, end: 7, bold: true }], editing: { selection: {} } }
+            }
+        }, moleculeId: 'group', childIds: ['one', 'two', 'three'] });
+        expect(plan.children.map((child) => child.properties.text)).toEqual(['AB', '', 'CD']);
+        expect(plan.children.map((child) => child.properties.rich_text.spans)).toEqual([
+            [{ start: 1, end: 2, bold: true }], [], [{ start: 0, end: 1, bold: true }]
+        ]);
+        expect(plan.children.every((child) => !child.properties.rich_text.editing)).toBe(true);
     });
 
     it('lays out the canonical List row for right and left handed users without duplicating it', () => {
@@ -228,7 +273,7 @@ describe('urgent campaign contracts', () => {
         const ids = ['mol-1', 'text-2', 'text-3'];
         const result = await splitTextAtomeIntoLineMolecule({ targetAtomeId: 'text-1' }, {
             read: vi.fn().mockResolvedValue({
-                atome_id: 'text-1', project_id: 'project-1', parent_id: 'project-1', type: 'text',
+                id: 'text-1', meta: { project_id: 'project-1', parent_id: 'parent-1' }, type: 'text',
                 properties: { content: 'One\n\nThree', left: 2, top: 3, width: 80, height: 40 }
             }),
             createId: () => ids.shift(),
@@ -240,8 +285,23 @@ describe('urgent campaign contracts', () => {
         expect(commitBatch).toHaveBeenCalledTimes(1);
         const [events, options] = commitBatch.mock.calls[0];
         expect(events.map((event) => event.atome_id)).toEqual(['mol-1', 'text-1', 'text-2', 'text-3']);
+        expect(events[0]).toMatchObject({ project_id: 'project-1', parent_id: 'parent-1' });
         expect(events.slice(1).map((event) => event.props.content)).toEqual(['One', '', 'Three']);
         expect(options).toMatchObject({ refreshState: true, realtimeBroadcast: true });
+    });
+
+    it.each([true, false])('commits the active draft before splitting and preserves commit failure (%s)', async (ok) => {
+        const calls = [];
+        const commitBatch = vi.fn().mockResolvedValue({ ok: true });
+        const result = await splitTextAtomeIntoLineMolecule({ targetAtomeId: 'text' }, {
+            readActiveEdit: () => ({ atomeId: 'text', projectId: 'project' }),
+            commitText: async () => { calls.push('commit'); return { committed: ok, error: ok ? undefined : 'write_denied' }; },
+            read: async () => { calls.push('read'); return { id: 'text', type: 'text', meta: { project_id: 'project' }, properties: { text: 'Latest draft' } }; },
+            createId: () => 'molecule', commitBatch
+        });
+        expect(calls).toEqual(ok ? ['commit', 'read'] : ['commit']);
+        expect(commitBatch).toHaveBeenCalledTimes(ok ? 1 : 0);
+        expect(result).toMatchObject(ok ? { ok: true, line_count: 1 } : { ok: false, error: 'write_denied' });
     });
 
     it('gives a canonical molecule the union geometry of its visible members', () => {
@@ -257,7 +317,7 @@ describe('urgent campaign contracts', () => {
             properties: { kind: 'group', molecule_entity: 'molecule', left: 10, top: 5, width: 130, height: 65 }
         });
         expect(atom.bounds).toEqual({ x: 10, y: 5, width: 130, height: 65 });
-        expect(atom.visual.opacity).toBe(0);
+        expect(atom.style.fill).toEqual([0, 0, 0, 0]);
     });
 
     it('selects one Molecule while moving its owner and members through one gesture', () => {
