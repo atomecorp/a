@@ -118,7 +118,6 @@ export async function upsertUserStateCurrent(dataSource, userId, username, visib
     if (!dataSource || !userId) return;
     const patch = {
         type: 'user',
-        name: username,
         username,
         visibility,
         access: visibility

@@ -72,7 +72,7 @@ export async function handleWsApiAccountProvision(message, context) {
 
     const phone = normalizePhone(message.phone);
     const password = typeof message.password === 'string' ? message.password : '';
-    const username = String(message.username || '').trim() || phone;
+    const requestedUsername = String(message.username || '').trim();
     if (!phone || phone.length < 6 || password.length < 8) {
         return response(requestId, false, { error: 'invalid_credentials' });
     }
@@ -103,6 +103,9 @@ export async function handleWsApiAccountProvision(message, context) {
         }
     } else {
         const principalId = context.generatePrincipalId();
+        const username = requestedUsername && normalizePhone(requestedUsername) !== phone
+            ? requestedUsername
+            : `user_${principalId}`;
         user = await createUserAtome(
             context.dataSource,
             principalId,

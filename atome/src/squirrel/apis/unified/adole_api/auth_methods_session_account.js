@@ -70,8 +70,7 @@ export const sessionAccountMethods = {
                 user: {
                     user_id: state.user.id,
                     id: state.user.id,
-                    username: state.user.name,
-                    name: state.user.name,
+                    username: state.user.username,
                     phone: state.user.phone
                 },
                 source: state.backend || getPrimaryBackend(),
@@ -196,7 +195,7 @@ export const sessionAccountMethods = {
         if (!guest?.user?.id) {
             const principalId = globalThis.crypto?.randomUUID?.();
             if (!principalId) return { ok: false, reason: 'secure_random_unavailable', user: null };
-            guest = { user: { id: principalId, name: 'Guest', phone: null }, createdAt: new Date().toISOString() };
+            guest = { user: { id: principalId, username: 'Guest', phone: null }, createdAt: new Date().toISOString() };
             setGuestWorkspace(guest);
         }
         const user = normalizeSessionUser(guest.user);
@@ -280,8 +279,7 @@ export const sessionAccountMethods = {
         return {
             id: state.user?.id || null,
             user_id: state.user?.id || null,
-            username: state.user?.name || null,
-            name: state.user?.name || null,
+            username: state.user?.username || null,
             phone: state.user?.phone || null
         };
     },
@@ -290,7 +288,7 @@ export const sessionAccountMethods = {
         if (!userId) return false;
         setSessionState({
             mode: 'authenticated',
-            user: { id: String(userId), name: userName, phone: userPhone },
+            user: { id: String(userId), username: userName, phone: userPhone },
             backend: getPrimaryBackend()
         });
         return true;

@@ -98,7 +98,7 @@ const syncWindowAuthState = (state) => {
     }
     window.__currentUser = {
         id: state.user.id,
-        name: state.user.name || null,
+        username: state.user.username || null,
         phone: state.user.phone || null
     };
     window.__authCheckResult = {

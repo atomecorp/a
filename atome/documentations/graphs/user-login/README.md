@@ -18,6 +18,10 @@ Ce dossier cartographie le bloc user-login pour faciliter le debug auth UI, sess
 - eVe/intuition/tools/project_bootstrap.js
 - server/auth.js
 - server/userHome.js
+- eVe/domains/user/profile_api.js
+- eVe/intuition/runtime/bevy_panel/bevy_panel_home_access.js
+- server/directoryPublicService.js
+- platforms/desktop-tauri/src/server/local_auth.rs
 
 ## Main entry points
 
@@ -40,6 +44,14 @@ actions.
 - RISK-002: `ASYNC_RISK` sur login multi-backend et sync locale detachee.
 - RISK-003: `CONFLICT` entre anonymous restore, login reel et project bootstrap.
 - RISK-004: `PARTIAL_LIFECYCLE` possible si logout arrive pendant project load.
+
+## Current identity boundary
+
+- `phone` is the private login identifier and only projects to the phone field.
+- `username` is a generated technical alias distinct from the phone.
+- Display identity comes only from `name`, `first_name`, or `nickname` in
+  `eve_profile`; account bootstrap never synthesizes it.
+- New accounts are private and Home refuses publication without a display name.
 
 ## Graphs
 

@@ -99,6 +99,32 @@ test('ws/sync announces newly granted streams and revokes active subscriptions i
     assert.equal(runtime.snapshot()[0].streams.includes('stream-a'), false);
 });
 
+test('ws/sync discovers future descendant streams and revokes a stream moved outside the shared root', async (t) => {
+    let descendantVisible = true;
+    const runtime = createFixture({
+        access: (_principal, stream) => stream === 'stream-a' || (stream === 'stream-child' && descendantVisible)
+    });
+    t.after(() => runtime.stop());
+    const connection = new FakeConnection();
+    await runtime.attach(connection, { principal: 'user-a' });
+    await emitJson(connection, { type: 'register', source: 'browser-a' });
+
+    await runtime.publish({
+        id: 'child-created', stream_id: 'stream-child', sequence: 1, source: 'owner-device',
+        atome_id: 'child', kind: 'set', payload: { props: { parent_id: 'shared-root' } }
+    });
+    assert.deepEqual(connection.sent.at(-1), { type: 'stream-available', stream: 'stream-child' });
+    await emitJson(connection, { type: 'subscribe', stream: 'stream-child', cursor: 0 });
+
+    descendantVisible = false;
+    await runtime.publish({
+        id: 'child-moved', stream_id: 'stream-child', sequence: 2, source: 'owner-device',
+        atome_id: 'child', kind: 'set', payload: { props: { parent_id: 'private-root' } }
+    });
+    assert.deepEqual(connection.sent.at(-1), { type: 'revoked', stream: 'stream-child' });
+    assert.equal(runtime.snapshot()[0].streams.includes('stream-child'), false);
+});
+
 test('ws/sync rejects anonymous controls and unprovisioned principals', async (t) => {
     const runtime = createFixture();
     t.after(() => runtime.stop());
@@ -119,7 +145,7 @@ test('ws/sync rejects anonymous controls and unprovisioned principals', async (t
 test('ws/sync replays in sequence, acknowledges and excludes only the source session', async (t) => {
     const events = [
         { id: 'e1', stream_id: 'stream-a', sequence: 1, source: 'seed', atome_id: 'a1', kind: 'update', payload: { props: { left: 1 } } },
-        { id: 'e2', stream_id: 'stream-a', sequence: 2, source: 'seed', atome_id: 'a1', kind: 'update', payload: { props: { left: 2 } } }
+        { id: 'e2', stream_id: 'stream-a', sequence: 2, source: 'seed', atome_id: 'a1', vault_principal_id: 'user-a', kind: 'update', payload: { props: { left: 2 } } }
     ];
     const runtime = createFixture({ events });
     t.after(() => runtime.stop());
@@ -141,6 +167,7 @@ test('ws/sync replays in sequence, acknowledges and excludes only the source ses
         [2]
     );
     assert.equal(source.sent.find((entry) => entry.type === 'replay-complete').cursor, 2);
+    assert.equal(peer.sent.find((entry) => entry.event_id === 'e2').vault_principal_id, 'user-a');
 
     await emitJson(peer, { type: 'ack', stream: 'stream-a', sequence: 2 });
     assert.equal(peer.sent.at(-1).sequence, 2);

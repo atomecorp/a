@@ -6,7 +6,7 @@ import {
     clearSessionState,
     getCurrentProjectCache
 } from './session.js';
-import { normalizePhone, normalizeUsername, getPrimaryBackend, getSecondaryBackend, hasAuthenticatedToken } from './auth_core.js';
+import { normalizePhone, createTechnicalUsername, getPrimaryBackend, getSecondaryBackend, hasAuthenticatedToken } from './auth_core.js';
 import { loginBackend, registerBackend, bootstrapBackend, ensureBackendAvailability } from './auth_backends.js';
 import {
     persistFastifyLoginCache,
@@ -28,9 +28,9 @@ const repairMissingFastifyCounterpart = async ({ primary, primaryResult, seconda
 };
 
 export const loginMethods = {
-    async bootstrap(phone, password, username, visibility = 'public') {
+    async bootstrap(phone, password, username, visibility = 'private') {
         const cleanPhone = normalizePhone(phone);
-        const cleanName = normalizeUsername(username) || cleanPhone;
+        const cleanName = createTechnicalUsername(username, cleanPhone);
         if (!cleanPhone || !password || password.length < 8) {
             return {
                 tauri: { success: false, error: 'invalid_credentials' },
@@ -130,9 +130,9 @@ export const loginMethods = {
         return response;
     },
 
-    async register(phone, password, username, visibility = 'public') {
+    async register(phone, password, username, visibility = 'private') {
         const cleanPhone = normalizePhone(phone);
-        const cleanName = normalizeUsername(username) || cleanPhone;
+        const cleanName = createTechnicalUsername(username, cleanPhone);
         if (!cleanPhone || !password || password.length < 8) {
             return {
                 tauri: { success: false, error: 'invalid_credentials' },
@@ -286,7 +286,7 @@ export const loginMethods = {
             });
             secondaryResult = await repairMissingFastifyCounterpart({
                 primary, primaryResult, secondary, secondaryResult,
-                phone: cleanPhone, password, username: username || loggedUser?.name || cleanPhone
+                phone: cleanPhone, password, username: username || loggedUser?.username || ''
             });
             response[secondary] = {
                 success: secondaryResult.ok,

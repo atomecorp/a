@@ -1,5 +1,12 @@
 import { FastifyAdapter } from '../adole.js';
-import { extractToken, extractUser, normalizePhone, normalizeUser } from './auth_core.js';
+import { getFastifyHttpBaseUrl } from '../adole_backend.js';
+import {
+    createTechnicalUsername,
+    extractToken,
+    extractUser,
+    normalizePhone,
+    normalizeUser
+} from './auth_core.js';
 
 const PROVISIONING_TTL_MS = 5 * 60 * 1000;
 const IDENTITY_MAX_AGE_MS = 60 * 1000;
@@ -64,15 +71,27 @@ export const verifyFastifyIdentityResponse = async (response, challenge, { now =
     }
 };
 
+export const resolveFastifyVerificationUrl = () => {
+    const baseUrl = String(getFastifyHttpBaseUrl() || '').replace(/\/+$/, '');
+    if (!baseUrl) return '';
+    try {
+        const parsed = new URL(baseUrl);
+        if (!['http:', 'https:'].includes(parsed.protocol)) return '';
+        return `${baseUrl}/api/server/verify`;
+    } catch (_) {
+        return '';
+    }
+};
+
 const verifyFastifyServer = async () => {
-    const baseUrl = String(FastifyAdapter?.baseUrl || '').replace(/\/+$/, '');
-    if (!baseUrl || !globalThis.crypto?.subtle || !globalThis.crypto?.getRandomValues || typeof globalThis.fetch !== 'function') {
+    const verificationUrl = resolveFastifyVerificationUrl();
+    if (!verificationUrl || !globalThis.crypto?.subtle || !globalThis.crypto?.getRandomValues || typeof globalThis.fetch !== 'function') {
         return { ok: false, error: 'remote_identity_verification_unavailable' };
     }
     const challenge = randomChallenge();
     let response;
     try {
-        response = await globalThis.fetch(`${baseUrl}/api/server/verify`, {
+        response = await globalThis.fetch(verificationUrl, {
             method: 'POST',
             headers: { 'content-type': 'application/json', accept: 'application/json' },
             body: JSON.stringify({ challenge })
@@ -98,7 +117,7 @@ export const provisionFastifyCounterpart = async ({ phone, password, username } 
         operationId,
         expiresAt: new Date(Date.now() + PROVISIONING_TTL_MS).toISOString(),
         verifiedServerFingerprint: verified.fingerprint,
-        username: String(username || '').trim() || normalizedPhone,
+        username: createTechnicalUsername(username, normalizedPhone),
         phone: normalizedPhone,
         password: plainPassword
     });

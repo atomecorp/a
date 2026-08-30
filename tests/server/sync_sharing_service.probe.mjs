@@ -45,6 +45,7 @@ test('linked realtime, manual linked and detached sharing remain distinct', asyn
         assert.equal(linked.requests[0].stream_id, initial.event.stream_id);
         assert.deepEqual(granted[0], { principal: recipient, stream: initial.event.stream_id });
         const replay = await router.listStreamEvents(recipient, initial.event.stream_id, { cursor: 0 });
+        assert.equal(replay[0].vault_principal_id, owner);
         assert.deepEqual(replay[0].payload.props, { left: 1 });
         assert.deepEqual(replay[0].projection.properties, { left: 1 });
 
@@ -55,6 +56,81 @@ test('linked realtime, manual linked and detached sharing remain distinct', asyn
             commit(recipient, linkedId, 'linked-denied', { secret: 'leak' }, 'recipient-device'),
             /property_write_denied/
         );
+
+        const projectRoot = 'shared-project-root';
+        const moleculeRoot = 'shared-molecule-root';
+        const existingMember = 'shared-existing-member';
+        const outsideRoot = 'private-outside-root';
+        await commit(owner, projectRoot, 'project-root-1', { type: 'project', name: 'Shared project' });
+        await commit(owner, moleculeRoot, 'molecule-root-1', { type: 'molecule', parent_id: projectRoot });
+        await commit(owner, existingMember, 'member-1', { type: 'shape', parent_id: moleculeRoot, width: 20 });
+        await commit(owner, outsideRoot, 'outside-1', { type: 'project', name: 'Private project' });
+        const rooted = await service.request(owner, {
+            principal_id: recipient,
+            atome_id: projectRoot,
+            share_type: 'linked',
+            mode: 'real-time',
+            permission: { read: true, alter: true, create: true, delete: false }
+        }, { direct: true });
+        assert.equal(rooted.requests[0].atome_id, projectRoot);
+        assert.ok(await router.getState(recipient, moleculeRoot));
+        assert.ok(await router.getState(recipient, existingMember));
+        assert.deepEqual(
+            (await router.listStates(recipient, { includeShared: true }))
+                .filter((state) => state.vault_principal_id === owner)
+                .map((state) => state.atome?.id || state.atome_id || state.id).sort(),
+            [existingMember, moleculeRoot, projectRoot].sort()
+        );
+        await commit(recipient, existingMember, 'member-resize', { width: 64 }, 'recipient-device');
+        assert.equal((await router.getState(owner, existingMember)).properties.width, 64);
+        await assert.rejects(
+            router.commit(recipient, {
+                id: 'member-delete-denied-2', kind: 'delete', atome_id: existingMember,
+                actor: { type: 'user', id: recipient }, payload: {}
+            }, { source: 'recipient-device' }),
+            /property_delete_denied/
+        );
+        const futureMember = 'shared-future-member';
+        await commit(recipient, futureMember, 'future-member-1', {
+            type: 'shape', parent_id: moleculeRoot, height: 30
+        }, 'recipient-device');
+        assert.equal((await router.getState(owner, futureMember)).properties.height, 30);
+        assert.ok(await router.getState(recipient, futureMember));
+        await commit(owner, moleculeRoot, 'molecule-move-out', { parent_id: outsideRoot });
+        assert.equal(await router.getState(recipient, moleculeRoot), null);
+        assert.equal(await router.getState(recipient, existingMember), null);
+        assert.equal(await router.getState(recipient, futureMember), null);
+
+        const moleculeOnlyRoot = 'standalone-shared-molecule';
+        const moleculeOnlyMember = 'standalone-molecule-member';
+        const moleculeOutsideSibling = 'standalone-molecule-private-sibling';
+        await commit(owner, moleculeOnlyRoot, 'molecule-only-root-1', {
+            type: 'molecule', parent_id: outsideRoot
+        });
+        await commit(owner, moleculeOnlyMember, 'molecule-only-member-1', {
+            type: 'shape', parent_id: moleculeOnlyRoot, left: 12
+        });
+        await commit(owner, moleculeOutsideSibling, 'molecule-private-sibling-1', {
+            type: 'shape', parent_id: outsideRoot, left: 99
+        });
+        const moleculeOnly = await service.request(owner, {
+            principal_id: recipient,
+            atome_id: moleculeOnlyRoot,
+            share_type: 'linked',
+            mode: 'real-time',
+            permission: { read: true, alter: true, create: true, delete: false }
+        }, { direct: true });
+        assert.equal(moleculeOnly.requests[0].atome_id, moleculeOnlyRoot);
+        assert.ok(await router.getState(recipient, moleculeOnlyRoot));
+        assert.ok(await router.getState(recipient, moleculeOnlyMember));
+        assert.equal(await router.getState(recipient, moleculeOutsideSibling), null);
+        const moleculeFutureMember = 'standalone-molecule-future-member';
+        await commit(recipient, moleculeFutureMember, 'molecule-future-member-1', {
+            type: 'shape', parent_id: moleculeOnlyRoot, top: 44
+        }, 'recipient-device');
+        assert.equal((await router.getState(owner, moleculeFutureMember)).properties.top, 44);
+        await commit(owner, moleculeOnlyMember, 'molecule-member-move-out', { parent_id: outsideRoot });
+        assert.equal(await router.getState(recipient, moleculeOnlyMember), null);
 
         const manualId = 'manual-shape';
         const manualInitial = await commit(owner, manualId, 'manual-1', { top: 2 });

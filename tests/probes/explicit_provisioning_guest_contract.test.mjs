@@ -15,8 +15,9 @@ describe('explicit provisioning and isolated guest contract', () => {
 
         expect(schema).toContain('account_provision_operations');
         expect(schema).toContain('guest_workspace_principals');
-        expect(identity).toContain('classifyLegacyGuestWorkspace');
-        expect(identity).toContain('isCredentiallessLegacyUser');
+        expect(identity).toContain('const credentialless = (legacyUsers || []).filter');
+        expect(identity).toContain('INSERT INTO guest_workspace_principals');
+        expect(identity).toContain("SET atome_type = 'guest_workspace'");
         expect(adole).toContain('isGuestWorkspacePrincipal');
         expect(provisioning).toContain("action !== 'account-provision'");
         expect(provisioning).toContain("message?.intent === 'account_provision'");

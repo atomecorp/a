@@ -76,6 +76,13 @@ test('directory.public exposes consented display identities and redacted invalid
             }
         });
         await db.createAtome({
+            id: 'bootstrap-phone-user', type: 'user', owner: 'bootstrap-phone-user', creator: 'bootstrap-phone-user',
+            properties: {
+                visibility: 'public', access: 'public', username: '+33777777777', phone: '+33777777777',
+                name: '+33777777777', eve_profile: { access: 'public' }
+            }
+        });
+        await db.createAtome({
             id: 'name-user', type: 'user', owner: 'name-user', creator: 'name-user',
             properties: {
                 visibility: 'public',
@@ -91,16 +98,21 @@ test('directory.public exposes consented display identities and redacted invalid
         });
         await service.refreshPrincipal('fallback-user');
         await service.refreshPrincipal('unknown-user');
+        await service.refreshPrincipal('bootstrap-phone-user');
         await service.refreshPrincipal('name-user');
         await service.refreshPrincipal('firstname-user');
         const entries = await service.list({ requesterId: 'private-user' });
         assert.deepEqual(
             entries.map((entry) => [entry.principal_id, entry.display_name]),
             [
-                ['unknown-user', ''], ['public-user', 'Ally'], ['fallback-user', 'Fallback Name'],
+                ['public-user', 'Ally'], ['fallback-user', 'Fallback Name'],
                 ['name-user', 'Family'], ['firstname-user', 'Given Two']
             ]
         );
+        assert.equal(entries.some((entry) => entry.principal_id === 'unknown-user'), false,
+            'a public profile with no resolved name must not enter directory.public');
+        assert.equal(entries.some((entry) => entry.principal_id === 'bootstrap-phone-user'), false,
+            'a bootstrap phone alias must not be accepted as a public display name');
         const publicEntry = entries.find((entry) => entry.principal_id === 'public-user');
         assert.equal(publicEntry.display_name, 'Ally');
         assert.equal(publicEntry.user_face, '/alice.png');
@@ -111,7 +123,7 @@ test('directory.public exposes consented display identities and redacted invalid
             ['display_name', 'principal_id', 'revision', 'updated_at', 'user_face']
         );
         const serialized = JSON.stringify({ entries, events: await service.listEvents(0) });
-        for (const forbidden of ['+33123456789', '+33888888888', 'alice@example.test', 'never-public', '+33999999999', 'Alice']) {
+        for (const forbidden of ['+33123456789', '+33888888888', '+33777777777', 'alice@example.test', 'never-public', '+33999999999', 'Alice']) {
             assert.equal(serialized.includes(forbidden), false);
         }
         assert.deepEqual(Object.keys(published[0].payload).sort(), ['action', 'principal_id', 'revision']);
@@ -141,7 +153,7 @@ test('directory.public exposes consented display identities and redacted invalid
         await service.refreshPrincipal('public-user');
         assert.deepEqual(
             (await service.list()).map((entry) => entry.principal_id),
-            ['unknown-user', 'fallback-user', 'name-user', 'firstname-user']
+            ['fallback-user', 'name-user', 'firstname-user']
         );
         assert.equal(published.at(-1).payload.action, 'revoke');
         vaultProfiles.set('public-user', {

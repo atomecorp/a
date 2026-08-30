@@ -200,7 +200,12 @@ export class SyncSharingService {
                  WHERE share_id = ?`,
                 [row.share_id]
             );
-            await this.syncRuntime?.grantStream?.(row.principal_id, row.stream_id);
+            const streams = typeof this.vaultRouter.listShareStreams === 'function'
+                ? await this.vaultRouter.listShareStreams(row.principal_id, row.share_id)
+                : [row.stream_id];
+            for (const streamId of streams) {
+                await this.syncRuntime?.grantStream?.(row.principal_id, streamId);
+            }
         }
         return this.get(row.share_id);
     }

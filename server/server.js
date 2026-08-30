@@ -88,7 +88,6 @@ import {
 } from './auth.js';
 import { ensureOpaquePrincipalIdentity, replaceVerifiedPhone, removeVerifiedPhone } from './auth_identity.js';
 // Canonical helper; the /ws/api bootstrap branch used to redefine it locally.
-import { normalizeAccessValue } from './auth_user_particles.js';
 import { handleWsApiAccountProvision } from './wsApiAuthProvisioning.js';
 import { handleWsApiGuestAdoption } from './wsApiGuestAdoption.js';
 import { announceWsSurfaceDisconnect, handleWsSurfaceOperation } from './wsSurfaceOperations.js';
@@ -2577,9 +2576,7 @@ async function startServer() {
                 const { username, phone, password } = data;
                 const isBootstrap = action === 'bootstrap';
                 const requestedUsername = String(username || '').trim();
-                const incomingAccess = data.access ?? data.visibility;
-                const visibility = normalizeAccessValue(incomingAccess || 'public');
-                console.log(`[auth] bootstrap_started action=${action} access=${visibility} request_id=${requestId || 'missing'}`);
+                console.log(`[auth] bootstrap_started action=${action} access=private request_id=${requestId || 'missing'}`);
                 if ((!isBootstrap && !requestedUsername) || !phone || !password) {
                   safeSend({
                     type: 'auth-response',
@@ -2609,7 +2606,9 @@ async function startServer() {
                   });
                   return;
                 }
-                const cleanUsername = requestedUsername || cleanPhone;
+                const requestedTechnicalUsername = normalizePhone(requestedUsername) === cleanPhone
+                  ? ''
+                  : requestedUsername;
 
                 // Check if user already exists
                 const existingUser = await findUserByPhone(dataSource, cleanPhone);
@@ -2711,11 +2710,12 @@ async function startServer() {
                 }
 
                 // Hash password and create user
-                // visibility: 'public' = visible in user_list (default), 'private' = hidden
+                // Account discovery requires an explicit later profile publication.
                 const passwordHash = await hashPassword(password);
                 const userId = generateOpaquePrincipalId();
+                const cleanUsername = requestedTechnicalUsername || `user_${userId}`;
                 try {
-                  await createUserAtome(dataSource, userId, cleanUsername, cleanPhone, passwordHash, visibility, data.optional || {});
+                  await createUserAtome(dataSource, userId, cleanUsername, cleanPhone, passwordHash, 'private', data.optional || {});
 
                   try {
                     const accessRows = await dataSource.query(

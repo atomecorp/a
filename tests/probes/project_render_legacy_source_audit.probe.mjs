@@ -41,12 +41,11 @@ test('Infos compatibility entry cannot restore project DOM rendering or assignme
     assert.equal(infosSource.includes('document.'), false);
 });
 
-test('shared project atomes hydrate the project scene without dead legacy render branches', () => {
-    const body = sliceFunction(communicationSource, 'fetchAndRenderSharedAtomes');
-
-    assert.equal(body.includes('renderAtomeRecord('), false);
-    assert.equal(body.includes('createAtomeElement('), false);
-    assert.ok(body.includes('updateProjectSceneRecord({'));
+test('linked shares have no local hydration or legacy render branch', () => {
+    assert.equal(communicationSource.includes('fetchAndRenderSharedAtomes'), false);
+    assert.equal(communicationSource.includes('communication_realtime'), false);
+    assert.equal(communicationSource.includes('communication_atome_render'), false);
+    assert.equal(communicationSource.includes('linkedTo'), false);
 });
 
 test('timeline project replay exits through the scene runtime before legacy DOM helpers', () => {
@@ -97,8 +96,8 @@ test('tool genesis delegates legacy group visual ownership outside the legacy ru
     assert.ok(toolGenesisGroupSource.includes("from './group_visual_runtime.js'"));
     assert.ok(groupVisualSource.includes('createGroupVisualRuntime'));
     assert.ok(groupVisualSource.includes('renderGroupHostPreview'));
-    assert.ok(groupVisualSource.includes('applyGroupMembership'));
-    assert.ok(groupVisualSource.includes('refreshGroupVisual'));
+    assert.ok(groupVisualSource.includes('updateGroupHostData'));
+    assert.ok(groupVisualSource.includes('applyGroupHostVisual'));
     assert.equal(toolGenesisSource.includes('const mediaGroupState ='), false);
     assert.equal(toolGenesisSource.includes('const renderGroupHostPreview ='), false);
     assert.equal(toolGenesisSource.includes('const createGroupPersistedPreviewNode ='), false);

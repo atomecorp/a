@@ -16,13 +16,13 @@ import {
 } from './auth_identity.js';
 
 
-export async function createUserAtome(dataSource, userId, username, phone, passwordHash, visibility = 'public', optional = {}) {
+export async function createUserAtome(dataSource, userId, username, phone, passwordHash, visibility = 'private', optional = {}) {
     return withTransaction(() => createUserAtomeInTransaction(
         dataSource, userId, username, phone, passwordHash, visibility, optional
     ));
 }
 
-async function createUserAtomeInTransaction(dataSource, userId, username, phone, passwordHash, visibility = 'public', optional = {}) {
+async function createUserAtomeInTransaction(dataSource, userId, username, phone, passwordHash, visibility = 'private', optional = {}) {
     const now = new Date().toISOString();
     // Normalize visibility value
     const normalizedVisibility = normalizeAccessValue(visibility);
@@ -300,7 +300,7 @@ export async function deleteUserAtome(dataSource, userId) {
     await revokeVerifiedPhone(dataSource, userId, 'account_deleted');
 }
 
-export async function syncUserToTauri(username, phone, passwordHash, userId = null, optional = {}, visibility = 'public') {
+export async function syncUserToTauri(username, phone, passwordHash, userId = null, optional = {}, visibility = 'private') {
     try {
         const eventBus = getABoxEventBus();
         if (eventBus) {

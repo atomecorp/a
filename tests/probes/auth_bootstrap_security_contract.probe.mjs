@@ -38,6 +38,7 @@ assert.match(fastifyBootstrapBranch, /verifyPassword\(password, existingUser\.pa
 assert.ok((fastifyBootstrapBranch.match(/phone: cleanPhone/g) || []).length >= 2, 'Fastify bootstrap must return the verified normalized phone for both existing and newly created principals');
 assert.match(fastifyBootstrapBranch, /success: false,[\s\S]*alreadyExists: true,[\s\S]*error: 'Invalid credentials'/, 'Fastify register/create must not report existing phone as authenticated');
 assert.doesNotMatch(fastifyBootstrapBranch, /message: 'User already exists - ready to login'/, 'Fastify auth must not preserve the former misleading existing-user success message');
+assert.match(fastifyBootstrapBranch, /createUserAtome\(dataSource, userId, cleanUsername, cleanPhone, passwordHash, 'private'/, 'Fastify must ignore legacy public creation input and create every new account privately');
 assert.match(fastifyBootstrapBranch, /consumePhoneVerification\(connection, cleanPhone, 'enrollment'\)/, 'Fastify must require a consumed server-side enrollment proof before creating a new principal');
 assert.match(fastifyBootstrapBranch, /error: 'phone_verification_required'/, 'Fastify must expose an explicit missing enrollment proof error');
 const fastifyStartup = sliceBetween(fastifyServer, 'async function startServer()', 'async function stopFileWatcher()');
@@ -58,6 +59,11 @@ const adoleApis = readSource('atome/src/squirrel/apis/unified/adole_apis.js');
 assert.match(authLoginMethods, /bootstrapBackend/, 'Unified auth login methods must use the bootstrap backend adapter');
 assert.match(authBackends, /alreadyExists && !token\) ok = false/, 'Unified register must reject alreadyExists responses that have no token');
 assert.match(authLoginMethods, /hasAuthenticatedToken\(activeBackend, activeResult\)/, 'Unified auth must require an effective authenticated backend token before installing a session');
+assert.match(authLoginMethods, /async bootstrap\(phone, password, username, visibility = 'private'\)/, 'Unified bootstrap must create accounts privately unless the user explicitly publishes later');
+assert.match(authLoginMethods, /async register\(phone, password, username, visibility = 'private'\)/, 'Unified register must create accounts privately unless the user explicitly publishes later');
+assert.doesNotMatch(authLoginMethods, /visibility = 'public'/, 'Unified auth must not retain an implicit public default');
+assert.match(authLoginMethods, /createTechnicalUsername\(username, cleanPhone\)/, 'Unified auth must generate a technical username distinct from the login phone');
+assert.doesNotMatch(authLoginMethods, /normalizeUsername\(username\) \|\| cleanPhone/, 'Unified auth must never reuse the login phone as a technical username');
 
 const authPhoneVerification = readSource('atome/src/squirrel/apis/unified/adole_api/auth_phone_verification.js');
 const adoleAdapter = readSource('atome/src/squirrel/apis/unified/adole_adapter.js');
@@ -84,6 +90,12 @@ assert.doesNotMatch(guestStartMethod, /bootstrapBackend\(/, 'Guest entry must no
 assert.doesNotMatch(sessionAccountMethods, /ensureAnonymousUser/, 'Legacy anonymous-account alias must not remain exposed');
 assert.match(localAuth, /const AUTH_BCRYPT_COST: u32 = 10;/, 'Tauri local auth bcrypt cost must match the Fastify auth cost so local bootstrap fits the workspace-open budget');
 assert.doesNotMatch(localAuth, /DEFAULT_COST/, 'Tauri local auth must not use bcrypt DEFAULT_COST because it is slower than the Fastify contract');
+assert.doesNotMatch(localAuth, /unwrap_or\("public"\)/, 'Tauri account creation must not retain an implicit public default');
+assert.match(tauriBootstrap, /let visibility = "private"\.to_string\(\);/, 'Tauri bootstrap must force every new account private');
+const tauriRegister = sliceBetween(localAuth, 'async fn handle_register', 'async fn handle_login');
+assert.match(tauriRegister, /let visibility = "private"\.to_string\(\);/, 'Tauri register must force every new account private');
+assert.doesNotMatch(localAuth, /patch\.insert\("name"\.to_string\(\), JsonValue::String\(username\.to_string\(\)\)\)/, 'Tauri auth projection must not copy the technical username into the profile name');
+assert.match(localAuth, /username = format!\("user_\{\}", user_id\)/, 'Tauri registration must replace a phone-shaped username with an opaque technical alias');
 
 assert.match(adoleApis, /bootstrap: auth\.bootstrap/, 'AdoleAPI.auth must expose bootstrap');
 assert.match(adoleApis, /requestPhoneVerification,[\s\S]*verifyPhoneVerification,/, 'AdoleAPI.auth must expose pre-auth phone verification helpers from the dedicated module');
@@ -122,6 +134,7 @@ const executeLoginFlow = sliceBetween(userTool, 'const executeLoginFlow = async'
 assert.match(executeLoginFlow, /api\.auth\.bootstrap/, 'Initial login UI must call the atomic bootstrap flow');
 assert.doesNotMatch(executeLoginFlow, /api\.auth\.create/, 'Initial login UI must not create after a failed login');
 assert.doesNotMatch(executeLoginFlow, /api\.auth\.login/, 'Initial login UI must not split bootstrap into a separate login attempt');
+assert.match(executeLoginFlow, /api\.auth\.bootstrap\(phone, password, username \|\| '', 'private'\)/, 'Initial login UI must create a private account without copying the phone into username');
 assert.match(executeLoginFlow, /void openAuthenticatedWorkspace\(\)/, 'Authenticated session completion must not wait on Dashboard/project bootstrap');
 const publicBootstrap = sliceBetween(authLoginMethods, 'async bootstrap(phone, password, username, visibility =', 'async register');
 assert.match(publicBootstrap, /response\.ok = true/, 'Unified bootstrap must expose top-level ok after login or account creation');
@@ -129,8 +142,16 @@ assert.match(publicBootstrap, /response\.user = activeResult\.user/, 'Unified bo
 assert.match(publicBootstrap, /response\.backend = activeBackend/, 'Unified bootstrap must expose the authenticated backend');
 assert.match(authLoginMethods, /repairMissingFastifyCounterpart/, 'A valid local login must repair a missing Fastify counterpart');
 assert.match(authFastifyToken, /remote_counterpart_provisioned/, 'A restored Tauri session must repair its Fastify counterpart before directory reads');
+assert.match(authFastifyToken, /createTechnicalUsername\(/, 'Restored Tauri sessions must generate a phone-safe technical username for remote provisioning');
+assert.doesNotMatch(authFastifyToken, /localSession\.user\.username \|\| cached\.phone/, 'Restored Tauri sessions must never use the cached phone as technical username');
+assert.doesNotMatch(authLoginMethods, /loggedUser\?\.username \|\| cleanPhone/, 'Cross-backend login repair must never use the login phone as technical username');
 assert.match(authRemoteProvisioning, /crypto\.subtle\.verify/, 'Remote provisioning must verify the server signature locally');
 assert.match(authRemoteProvisioning, /remote_identity_fingerprint_mismatch/, 'Remote provisioning must bind the verified key to its fingerprint');
+assert.match(authRemoteProvisioning, /getFastifyHttpBaseUrl/, 'Remote identity verification must use the canonical HTTP\/HTTPS Fastify base');
+assert.doesNotMatch(authRemoteProvisioning, /FastifyAdapter\?\.baseUrl/, 'Remote identity verification must never derive a fetch URL from the WebSocket adapter base');
+assert.match(authRemoteProvisioning, /username: createTechnicalUsername\(username, normalizedPhone\)/, 'Remote provisioning must derive its technical username through the canonical phone-safe generator');
+assert.doesNotMatch(authRemoteProvisioning, /username: String\(username[^\n]*\|\| normalizedPhone/, 'Remote provisioning must never fall back directly to the verified phone');
 assert.match(authRemoteProvisioning, /provisionAccount/, 'Remote repair must use the dedicated idempotent provisioning contract');
 assert.doesNotMatch(authRemoteProvisioning, /\.register\(/, 'Remote repair must not bypass enrollment through raw registration');
+assert.doesNotMatch(readSource('server/wsApiAuthProvisioning.js'), /String\(message\.username \|\| ''\)\.trim\(\) \|\| phone/, 'Fastify provisioning must never use the verified phone as technical username');
 assert.match(adoleApis, /directory:[\s\S]*ensureFastifyToken/, 'Public directory reads must prepare the authenticated Fastify identity');

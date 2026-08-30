@@ -1,6 +1,15 @@
 import crypto from 'node:crypto';
 import db from '../database/adole.js';
 import { createUserVaultProvider } from './userVaultProvider.js';
+import {
+    ACTIVE_LINKED_SHARE_SQL,
+    activeSharesForPrincipal,
+    findShareForAtome,
+    sharePermissions,
+    stateAtomeId,
+    stateParentId,
+    statesWithinSharedRoot
+} from './syncShareHierarchy.js';
 
 const vaultKey = (principalId) => crypto
     .createHash('sha256')
@@ -12,10 +21,6 @@ const parseJson = (value, fallback = null) => {
     if (typeof value === 'object') return value;
     try { return JSON.parse(value); } catch (_) { return fallback; }
 };
-
-const activeShareSql = `status IN ('active', 'accepted')
-    AND share_type = 'linked'
-    AND (expires_at IS NULL OR expires_at > datetime('now'))`;
 
 const allowedProperties = (share) => {
     const value = parseJson(share?.allowed_properties_json, null);
@@ -94,8 +99,20 @@ export class UserVaultRouter {
             actor: { ...(event?.actor || {}), type: 'user', id: actorId },
             source: options.source || event?.source || null
         };
-        const ownerId = await this.vaultPrincipalForAtome(normalized.atome_id, actorId);
-        if (String(ownerId) !== actorId) await this.authorizeSharedWrite(actorId, normalized);
+        let ownerId = await this.vaultPrincipalForAtome(normalized.atome_id, null);
+        if (!ownerId) {
+            const parentId = stateParentId({ properties: normalized.payload?.props || {} })
+                || normalized.parent_id || normalized.parentId || normalized.project_id || normalized.projectId || null;
+            const parentOwnerId = parentId ? await this.vaultPrincipalForAtome(parentId, null) : null;
+            if (parentOwnerId && String(parentOwnerId) !== actorId) {
+                await this.authorizeSharedCreate(actorId, parentOwnerId, parentId);
+                ownerId = parentOwnerId;
+            }
+        }
+        ownerId ||= actorId;
+        if (String(ownerId) !== actorId && await this.vaultPrincipalForAtome(normalized.atome_id, null)) {
+            await this.authorizeSharedWrite(actorId, normalized, ownerId);
+        }
         const committed = await this.provider.request(ownerId, 'event:commit', {
             event: normalized,
             source: normalized.source,
@@ -143,18 +160,27 @@ export class UserVaultRouter {
         if (options.includeShared !== true && options.include_shared !== true) return own;
         const shares = await db.query(
             'all',
-            `SELECT * FROM sync_share_requests WHERE principal_id = ? AND ${activeShareSql}`,
+            `SELECT * FROM sync_share_requests WHERE principal_id = ? AND ${ACTIVE_LINKED_SHARE_SQL}`,
             [requestingPrincipalId]
         );
+        const seen = new Set(own.map((state) => String(stateAtomeId(state))));
         for (const share of shares || []) {
-            const state = await this.provider.request(share.owner_id, 'state:get', { atome_id: share.atome_id });
-            if (!state) continue;
-            own.push({
-                ...state,
-                properties: filterProperties(state.properties, share),
-                vault_principal_id: share.owner_id,
-                sync_share_id: share.share_id
+            const states = await statesWithinSharedRoot({
+                provider: this.provider,
+                ownerId: share.owner_id,
+                rootAtomeId: share.atome_id
             });
+            for (const state of states) {
+                const id = String(stateAtomeId(state));
+                if (seen.has(id)) continue;
+                seen.add(id);
+                own.push({
+                    ...state,
+                    properties: filterProperties(state.properties, share),
+                    vault_principal_id: share.owner_id,
+                    sync_share_id: share.share_id
+                });
+            }
         }
         return own;
     }
@@ -172,13 +198,7 @@ export class UserVaultRouter {
         );
         if (!stream) return null;
         if (String(stream.vault_principal_id) === String(principalId)) return { ...stream, owner: true };
-        const share = await db.query(
-            'get',
-            `SELECT * FROM sync_share_requests
-             WHERE stream_id = ? AND principal_id = ? AND ${activeShareSql}
-             ORDER BY updated_at DESC LIMIT 1`,
-            [streamId, principalId]
-        );
+        const share = stream.atome_id ? await this.shareForAtome(principalId, stream.atome_id, stream.vault_principal_id) : null;
         return share ? { ...stream, owner: false, share } : null;
     }
 
@@ -188,13 +208,40 @@ export class UserVaultRouter {
             'SELECT stream_id FROM vault_stream_registry WHERE vault_principal_id = ? ORDER BY stream_id',
             [principalId]
         );
-        const shared = await db.query(
-            'all',
-            `SELECT DISTINCT stream_id FROM sync_share_requests
-             WHERE principal_id = ? AND ${activeShareSql} ORDER BY stream_id`,
-            [principalId]
+        const shared = [];
+        const shares = await activeSharesForPrincipal(db, principalId);
+        for (const share of shares || []) {
+            const streams = await db.query(
+                'all',
+                'SELECT stream_id, atome_id FROM vault_stream_registry WHERE vault_principal_id = ? ORDER BY stream_id',
+                [share.owner_id]
+            );
+            for (const stream of streams || []) {
+                if (await this.shareForAtome(principalId, stream.atome_id, share.owner_id)) shared.push(stream);
+            }
+        }
+        return Array.from(new Set([...(owned || []), ...shared].map((row) => row.stream_id).filter(Boolean)));
+    }
+
+    async listShareStreams(principalId, shareId) {
+        const share = await db.query(
+            'get',
+            `SELECT * FROM sync_share_requests
+             WHERE share_id = ? AND principal_id = ? AND ${ACTIVE_LINKED_SHARE_SQL}`,
+            [shareId, principalId]
         );
-        return Array.from(new Set([...(owned || []), ...(shared || [])].map((row) => row.stream_id).filter(Boolean)));
+        if (!share) return [];
+        const streams = await db.query(
+            'all',
+            'SELECT stream_id, atome_id FROM vault_stream_registry WHERE vault_principal_id = ? ORDER BY stream_id',
+            [share.owner_id]
+        );
+        const result = [];
+        for (const stream of streams || []) {
+            const resolved = await this.shareForAtome(principalId, stream.atome_id, share.owner_id);
+            if (String(resolved?.share_id || '') === String(shareId)) result.push(stream.stream_id);
+        }
+        return result;
     }
 
     async listStreamEvents(principalId, streamId, options = {}) {
@@ -221,7 +268,7 @@ export class UserVaultRouter {
     }
 
     projectStreamEvent(event, access) {
-        if (access.owner) return event;
+        if (access.owner) return { ...event, vault_principal_id: access.vault_principal_id };
         const share = access.share;
         const payload = event?.payload && typeof event.payload === 'object' ? event.payload : {};
         const allowed = allowedProperties(share);
@@ -235,6 +282,7 @@ export class UserVaultRouter {
             : null;
         return {
             ...event,
+            vault_principal_id: access.vault_principal_id,
             payload: { ...payload, props, delete_keys: deleteKeys },
             lww_decisions: decisions,
             projection
@@ -249,20 +297,34 @@ export class UserVaultRouter {
         return this.projectStreamEvent(event, access);
     }
 
-    async shareForAtome(principalId, atomeId) {
-        return db.query(
-            'get',
-            `SELECT * FROM sync_share_requests
-             WHERE atome_id = ? AND principal_id = ? AND ${activeShareSql}
-             ORDER BY updated_at DESC LIMIT 1`,
-            [atomeId, principalId]
-        );
+    async shareForAtome(principalId, atomeId, ownerId = null) {
+        const resolvedOwnerId = ownerId || await this.vaultPrincipalForAtome(atomeId, null);
+        if (!resolvedOwnerId) return null;
+        return findShareForAtome({
+            db,
+            provider: this.provider,
+            principalId,
+            ownerId: resolvedOwnerId,
+            atomeId
+        });
     }
 
-    async authorizeSharedWrite(principalId, event) {
-        const share = await this.shareForAtome(principalId, event.atome_id);
+    async authorizeSharedCreate(principalId, ownerId, parentId) {
+        const share = await this.shareForAtome(principalId, parentId, ownerId);
+        const permissions = sharePermissions(share);
+        if (!share || (permissions.can_create !== true && permissions.create !== true)) {
+            throw new Error('property_create_denied');
+        }
+        return true;
+    }
+
+    async authorizeSharedWrite(principalId, event, ownerId = null) {
+        const share = await this.shareForAtome(principalId, event.atome_id, ownerId);
         if (!share) throw new Error('property_write_denied');
-        const permissions = parseJson(share.permissions_json, {});
+        const permissions = sharePermissions(share);
+        if (String(event.kind || '').toLowerCase() === 'delete' && permissions.can_delete !== true && permissions.delete !== true) {
+            throw new Error('property_delete_denied');
+        }
         if (permissions.can_write !== true && permissions.write !== true && permissions.alter !== true) {
             throw new Error('property_write_denied');
         }

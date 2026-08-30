@@ -51,6 +51,8 @@ Canonical synchronized events contain:
 - `sequence`: monotonically increasing integer within that stream;
 - `source`: device/session identifier used to suppress only the source session;
 - `project_id`, `atome_id`, `tx_id`, and optional `gesture_id`;
+- `vault_principal_id`: canonical owner of the stream's vault, emitted by the
+  server for both replay and live delivery;
 - `timestamp`: client event time used only by the offline LWW decision;
 - `kind`, authorized property patch, and resulting authorized projection;
 - per-property conflict-decision metadata without protected values.
@@ -144,6 +146,7 @@ All realtime broadcasts are wrapped in a single event envelope.
   "source": "device-session-id",
   "project_id": "project-id",
   "atome_id": "atome-id",
+  "vault_principal_id": "canonical-vault-owner",
   "tx_id": "transaction-id",
   "gesture_id": "gesture-id-or-null",
   "kind": "set",
@@ -166,6 +169,13 @@ ACK cursors are scoped by environment fingerprint, principal, and stream.
 Duplicate `event.id` values are idempotent. Replay is sequence-ordered and the
 server rechecks authorization immediately before every replay batch.
 
+Tauri stores a distinct authenticated local principal and Fastify principal.
+For an event whose `vault_principal_id` is the configured Fastify principal,
+the native projection maps ownership to the authenticated local principal. For
+a shared event, it preserves the foreign `vault_principal_id` and grants only
+the projected permission to the local recipient. This mapping changes the
+native projection only; it never rewrites append-only remote audit identity.
+
 ### 8) stream availability and directory invalidation (server -> client)
 
 An authorization change can announce or revoke an opaque stream without
@@ -175,6 +185,12 @@ placing a business command on the delivery channel:
 { "type": "stream-available", "stream": "opaque-stream-id" }
 { "type": "revoked", "stream": "opaque-stream-id" }
 ```
+
+For a linked root share, authorization is evaluated from the stream Atome's
+current canonical `parent_id` chain. The server announces streams for existing
+and future descendants and sends `revoked` as soon as that chain no longer
+reaches the shared root. An Atome root has no descendant expansion unless it is
+actually a Project or Molecule container in canonical state.
 
 ```
 {

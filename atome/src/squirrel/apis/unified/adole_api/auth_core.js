@@ -20,6 +20,13 @@ const normalizePhone = (phone) => {
     return cleaned.replace(/\+/g, '');
 };
 const normalizeUsername = (name) => String(name || '').trim();
+const createTechnicalUsername = (candidate, phone) => {
+    const normalized = normalizeUsername(candidate);
+    if (normalized && normalizePhone(normalized) !== normalizePhone(phone)) return normalized;
+    const id = globalThis.crypto?.randomUUID?.();
+    if (!id) throw new Error('secure_random_unavailable');
+    return `user_${id}`;
+};
 
 const maskPhoneForLog = (phone) => {
     const normalized = normalizePhone(phone || '');
@@ -96,7 +103,7 @@ const normalizeUser = (user) => {
     if (!id) return null;
     return {
         id: String(id),
-        name: user.username || user.name || null,
+        username: user.username || null,
         phone: user.phone || null
     };
 };
@@ -109,7 +116,7 @@ const hasToken = (backend) => !!adapters[backend]?.getToken?.();
 const hasAuthenticatedToken = (backend, result) => !!result?.token || hasToken(backend);
 
 export {
-  adapters, normalizePhone, normalizeUsername, maskPhoneForLog, summarizeBackendAttempt,
+  adapters, normalizePhone, normalizeUsername, createTechnicalUsername, maskPhoneForLog, summarizeBackendAttempt,
   normalizePhoneForCompare, isPhoneMatch, classifyPhoneClaim, PHONE_CLAIM_FAULTS,
   extractUser, extractToken, extractAlreadyExists,
   normalizeUser, normalizeBackend, getPrimaryBackend, getSecondaryBackend, hasToken, hasAuthenticatedToken

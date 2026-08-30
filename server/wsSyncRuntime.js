@@ -16,6 +16,7 @@ const eventEnvelope = (event, replay = false) => ({
     source: event.source || null,
     project_id: event.project_id || null,
     atome_id: event.atome_id || null,
+    vault_principal_id: event.vault_principal_id || null,
     tx_id: event.tx_id || null,
     gesture_id: event.gesture_id || null,
     kind: event.kind,
@@ -294,7 +295,21 @@ export class WsSyncRuntime {
         if (!stream) return 0;
         let delivered = 0;
         for (const record of this.records.values()) {
-            if (!record.authenticated || record.closed || !record.subscriptions.has(stream)) continue;
+            if (!record.authenticated || record.closed) continue;
+            const access = await this.vaultRouter.streamAccess(record.principalId, stream);
+            if (!record.subscriptions.has(stream)) {
+                if (access) {
+                    this.safeSend(record.connection, { type: 'stream-available', stream });
+                    delivered += 1;
+                }
+                continue;
+            }
+            if (!access) {
+                record.subscriptions.delete(stream);
+                this.safeSend(record.connection, { type: 'revoked', stream });
+                delivered += 1;
+                continue;
+            }
             if (record.source && event.source && record.source === String(event.source)) continue;
             const projected = await this.vaultRouter.projectEventForPrincipal(record.principalId, event);
             if (!projected) continue;

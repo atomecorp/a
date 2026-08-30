@@ -10,6 +10,9 @@ flowchart TD
   Session --> AdoleAPI["AdoleAPI.auth.current"]
   Anonymous["anonymous local session"] --> Session
   ProjectCurrent["window.__currentProject"] --> ProjectBoot
+  Phone["phone credential\nprivate login identity"] --> Server
+  Technical["opaque technical username"] --> Server
+  Profile["eve_profile display identity\nname / first_name / nickname"] --> AdoleAPI
 
   Multi["MULTI_SOURCE_OF_TRUTH: server session, adapters, local session, window globals, project bootstrap cache"]:::risk
   Server --> Multi

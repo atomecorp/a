@@ -52,20 +52,23 @@ AdoleAPI = {
 Create a new user account.
 
 ```javascript
-// Create a public account (default - user is visible in user list)
-const result = await AdoleAPI.auth.create('33333333', 'mypassword', 'john');
-
-// Create a private account (hidden from user list)
-const result = await AdoleAPI.auth.create('33333333', 'mypassword', 'john', { visibility: 'private' });
+// New accounts are private. The third argument is a technical username,
+// not a display name; omit it to generate an opaque technical value.
+const result = await AdoleAPI.auth.create('33333333', 'mypassword');
 // result: { tauri: { success, data, error }, fastify: { success, data, error } }
 ```
 
 **Options:**
 
-- `visibility`: `'public'` or `'private'` (default: `'public'`)
+- Legacy `visibility` input is ignored during account creation: the persisted
+  value is always `'private'`. Publication is a later explicit Home profile
+  mutation.
   - **public**: User appears through `AdoleAPI.directory.list()` with only `principal_id`, the resolved `display_name`, an allowed `user_face`, `revision`, and `updated_at`.
   - **private**: User is hidden from the public directory.
 - Profile visibility does not authorize disclosure of the phone number.
+- `phone` is a private authentication identifier. `username` is technical.
+  Neither value is a fallback for `name`, `first_name`, or `nickname`.
+- Publishing requires an explicit non-empty display name in `eve_profile`.
 - Phone and other contact fields require a separate explicit, revocable consent or an authorized relationship.
 
 ### `login(phone, password, username?, callback?)`
@@ -323,6 +326,12 @@ await AdoleAPI.sharing.share(
 
 - `copy`: Creates independent copies for the recipient
 - `reference`: Creates linked references (changes sync)
+
+Maintained Communication calls interpret each supplied Atome id as an ACL
+root. Project and Molecule descendants are resolved dynamically through
+canonical `parent_id`; future descendants inherit access and moving outside the
+root revokes it. Ordinary Atome roots authorize only that Atome. The initial
+linked permission set is `read + alter + create`, never `delete`.
 
 ---
 

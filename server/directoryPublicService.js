@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import db from '../database/adole.js';
+import { normalizePhone } from './auth_crypto.js';
 
 const parse = (value) => {
     if (value == null) return null;
@@ -39,11 +40,20 @@ const displayName = (row, profile) => {
         .map((key) => values[key])
         .find(Boolean) || '';
 };
+const isBootstrapPhoneIdentity = (row, profile) => {
+    if (profileValue(profile, 'name', 'first_name', 'firstname', 'nickname')) return false;
+    const name = text(parse(row?.name));
+    const username = text(parse(row?.username));
+    const phone = normalizePhone(parse(row?.phone));
+    return !!phone && normalizePhone(name) === phone && normalizePhone(username) === phone;
+};
 
 const PROFILE_SELECT = `SELECT a.atome_id,
         MAX(CASE WHEN p.particle_key = 'visibility' THEN p.particle_value END) AS visibility,
         MAX(CASE WHEN p.particle_key = 'access' THEN p.particle_value END) AS access,
         MAX(CASE WHEN p.particle_key = 'name' THEN p.particle_value END) AS name,
+        MAX(CASE WHEN p.particle_key = 'username' THEN p.particle_value END) AS username,
+        MAX(CASE WHEN p.particle_key = 'phone' THEN p.particle_value END) AS phone,
         MAX(CASE WHEN p.particle_key IN ('first_name', 'firstname', 'firstName') THEN p.particle_value END) AS first_name,
         MAX(CASE WHEN p.particle_key = 'nickname' THEN p.particle_value END) AS nickname,
         MAX(CASE WHEN p.particle_key = 'user_face' THEN p.particle_value END) AS user_face,
@@ -56,7 +66,7 @@ const projectProfile = (row) => {
     const canonicalProfile = profile && typeof profile === 'object' && !Array.isArray(profile) ? profile : {};
     return {
         principal_id: String(row.atome_id),
-        display_name: displayName(row, canonicalProfile),
+        display_name: isBootstrapPhoneIdentity(row, canonicalProfile) ? '' : displayName(row, canonicalProfile),
         user_face: rowValue(row, canonicalProfile, 'user_face'),
         public: publicProfile(row, canonicalProfile)
     };
@@ -166,7 +176,7 @@ export class DirectoryPublicService {
             'SELECT display_name, user_face, revision FROM directory_public_profiles WHERE principal_id = ?',
             [principalId]
         );
-        if (profile?.public) {
+        if (profile?.public && profile.display_name) {
             const nextPhoto = profile.user_face || null;
             if (previous
                 && text(previous.display_name) === profile.display_name
@@ -213,7 +223,7 @@ export class DirectoryPublicService {
             );
         const requesterId = text(options.requesterId || options.requester_id);
         return Promise.all((rows || []).filter((row) => (
-            !requesterId || text(row.principal_id) !== requesterId
+            text(row.display_name) && (!requesterId || text(row.principal_id) !== requesterId)
         )).map(async (row) => {
             const visiblePhoto = row.user_face && requesterId
                 ? await db.allowsPropertyRead(row.principal_id, 'user_face', requesterId, 'directory')

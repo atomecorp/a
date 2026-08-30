@@ -269,15 +269,7 @@ async fn handle_bootstrap(
         _ => return error_response(request_id, "Password must be at least 8 characters"),
     };
 
-    let visibility = message
-        .get("visibility")
-        .and_then(|v| v.as_str())
-        .unwrap_or("public");
-    let visibility = if visibility == "private" {
-        "private".to_string()
-    } else {
-        "public".to_string()
-    };
+    let visibility = "private".to_string();
     let optional = normalize_user_optional(message.get("optional"));
 
     let db = match state.db.lock() {
@@ -305,7 +297,7 @@ async fn handle_bootstrap(
             )
             .ok()
             .and_then(|v| serde_json::from_str::<String>(&v).ok())
-            .unwrap_or_else(|| "public".to_string());
+            .unwrap_or_else(|| "private".to_string());
 
         let (stored_username, password_hash, created_at) =
             match get_user_particles(&db, &existing_id) {
@@ -433,7 +425,7 @@ async fn handle_register(
     state: &LocalAuthState,
     request_id: Option<String>,
 ) -> AuthResponse {
-    let username = match message.get("username").and_then(|v| v.as_str()) {
+    let mut username = match message.get("username").and_then(|v| v.as_str()) {
         Some(u) if u.trim().len() >= 2 => u.trim().to_string(),
         _ => return error_response(request_id, "Username must be at least 2 characters"),
     };
@@ -447,15 +439,7 @@ async fn handle_register(
         Some(p) if p.len() >= 8 => p,
         _ => return error_response(request_id, "Password must be at least 8 characters"),
     };
-    let visibility = message
-        .get("visibility")
-        .and_then(|v| v.as_str())
-        .unwrap_or("public");
-    let visibility = if visibility == "private" {
-        "private".to_string()
-    } else {
-        "public".to_string()
-    };
+    let visibility = "private".to_string();
     let optional = normalize_user_optional(message.get("optional"));
 
     let mut db = match state.db.lock() {
@@ -474,6 +458,9 @@ async fn handle_register(
 
     // Generate a new opaque principal ID.
     let user_id = generate_opaque_principal_id();
+    if normalize_phone(&username) == phone {
+        username = format!("user_{}", user_id);
+    }
     let now = Utc::now().to_rfc3339();
 
     if let Some((existing_id, existing_type, deleted_at)) = existing_user {
@@ -736,7 +723,7 @@ async fn handle_login(
         )
         .ok()
         .and_then(|v| serde_json::from_str::<String>(&v).ok())
-        .unwrap_or_else(|| "public".to_string());
+        .unwrap_or_else(|| "private".to_string());
 
     // Get user particles (repair if corrupted)
     let (username, password_hash, created_at) = match get_user_particles(&db, &user_id) {
@@ -1467,7 +1454,6 @@ fn upsert_user_state_current(
 ) -> Result<(), String> {
     let mut patch = JsonMap::new();
     patch.insert("type".to_string(), JsonValue::String("user".to_string()));
-    patch.insert("name".to_string(), JsonValue::String(username.to_string()));
     patch.insert(
         "username".to_string(),
         JsonValue::String(username.to_string()),

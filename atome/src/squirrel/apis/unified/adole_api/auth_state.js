@@ -28,7 +28,7 @@ const normalizeSessionUser = (user) => {
     if (!id) return null;
     return {
         id: String(id),
-        name: user.name || user.username || null,
+        username: user.username || user.name || null,
         phone: user.phone || null
     };
 };

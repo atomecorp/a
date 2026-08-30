@@ -5,7 +5,9 @@ import { test } from 'vitest';
 import {
     buildUserProperties,
     mergeUserProfileIdentity,
+    repairBootstrapPhoneProfile,
     repairLegacyRemoteProfile,
+    resolveUsername,
     sanitizeProfileForPersistence
 } from '../../eVe/domains/user/profile_api_support.js';
 import { loadUserProfile, upsertUserProfile } from '../../eVe/domains/user/profile_api.js';
@@ -31,6 +33,7 @@ import {
     storeHomeMailSecret
 } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_home_vault.js';
 import { homeSurface, readHomePanelState } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_home_runtime.js';
+import { createHomeAccessRuntime } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_home_access.js';
 import { handleHomeVaultEvent } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_home_vault_runtime.js';
 import { resolveBevyPanelGeometry } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_layout.js';
 import { setMainMenuRuntime } from '../../eVe/intuition/ribbon/bevy_ui_product_registry.js';
@@ -64,6 +67,7 @@ const baseState = (overrides = {}) => ({
     loadError: '',
     notice: '',
     error: false,
+    accessError: '',
     busy: false,
     sessionBusy: false,
     expanded: 'identity',
@@ -154,6 +158,83 @@ test('Home is a seven-section Bevy composition with the restored nested hierarch
     assert.equal(all.some((entry) => /professional/i.test(entry.id || '')), false);
     assert.equal(fixed[0].id, 'home_session_exit');
     assert.equal(profileDisplayName(state.profile), 'Ada');
+});
+
+test('profile reconstruction never derives the technical username from display identity or phone', () => {
+    assert.equal(resolveUsername({
+        phone: '+33612345678',
+        name: 'Toto',
+        first_name: 'Toto',
+        nickname: 'Tot'
+    }), '');
+    assert.equal(resolveUsername({ username: 'user_opaque', phone: '+33612345678' }), 'user_opaque');
+    const properties = buildUserProperties({ phone: '+33612345678', name: 'Toto' });
+    assert.equal(Object.prototype.hasOwnProperty.call(properties, 'username'), false);
+    assert.equal(properties.name, 'Toto');
+});
+
+test('Home replaces the access selector with an inline destructive error when a public name is required', () => {
+    const state = baseState({
+        profile: normalizeHomeProfile({ access: 'private' }, { preserveEmptyItems: true }),
+        accessError: 'Renseignez un nom avant de rendre ce profil public.'
+    });
+    const all = flatten(buildHomeContent(state, { emit: () => {}, bodyWidth: 452, editing }));
+    const error = all.find((entry) => entry.id === 'home_access_error');
+    assert.equal(all.some((entry) => entry.id === 'home_access_select'), false);
+    assert.equal(error.text, 'Renseignez un nom avant de rendre ce profil public.');
+    assert.equal(Array.isArray(error.style.color), true);
+    assert.equal(all.some((entry) => /modal|popup|dialog/i.test(entry.id || '')), false);
+});
+
+test('Home refuses public access without a name and restores the last public display identity', async () => {
+    const state = {
+        profile: normalizeHomeProfile({ access: 'private' }, { preserveEmptyItems: true }),
+        accessError: '',
+        selectOpen: 'access',
+        savedSignature: JSON.stringify(normalizeHomeProfile({
+            access: 'public',
+            name: 'Ada'
+        }, { preserveEmptyItems: true }))
+    };
+    const readPath = (root, path) => String(path || '').split('.').reduce((value, part) => value?.[part], root);
+    const writePath = (root, path, value) => {
+        const parts = String(path || '').split('.');
+        const leaf = parts.pop();
+        const owner = parts.reduce((value, part) => value[part], root);
+        owner[leaf] = value;
+    };
+    let persisted = 0;
+    let choiceWrites = 0;
+    const runtime = createHomeAccessRuntime({
+        state,
+        displayName: profileDisplayName,
+        readPath,
+        writePath,
+        persist: async () => { persisted += 1; return { ok: true }; },
+        persistable: () => true
+    });
+
+    assert.deepEqual(runtime.setChoice('access', 'public', () => {}, () => {
+        choiceWrites += 1;
+    }), { ok: false, error: 'profile_public_name_required' });
+    assert.equal(state.profile.access, 'private');
+    assert.equal(choiceWrites, 0);
+    assert.ok(state.accessError);
+
+    state.profile.access = 'public';
+    state.profile.name = '';
+    assert.deepEqual(runtime.commitField('name', { refresh: () => {} }), {
+        ok: false,
+        error: 'profile_public_name_required'
+    });
+    assert.equal(state.profile.name, 'Ada');
+    assert.equal(state.profile.access, 'public');
+    assert.equal(persisted, 0);
+
+    state.profile.name = 'Grace';
+    assert.deepEqual(await runtime.commitField('name'), { ok: true });
+    assert.equal(state.accessError, '');
+    assert.equal(persisted, 1);
 });
 
 test('Passwords and keys expose direct AI provider settings without a vault unlock screen', () => {
@@ -656,6 +737,36 @@ test('Home section services subscribe only while their lazy subsection is active
     } finally {
         globalThis.window = previousWindow;
     }
+});
+
+test('legacy bootstrap phone aliases are repaired through one canonical profile commit on each backend', async () => {
+    for (const backend of ['tauri', 'fastify']) {
+        const commits = [];
+        const repaired = await repairBootstrapPhoneProfile({
+            backend,
+            userId: `phone_alias_user_${backend}`,
+            properties: { name: '+33123456789', username: '+33123456789', phone: '+33 1 23 45 67 89' },
+            profile: {},
+            commit: async (payload, options) => {
+                commits.push({ payload, options });
+                return { ok: true };
+            }
+        });
+        assert.equal(repaired.profile.name, '');
+        assert.equal(repaired.profile.phone, '+33123456789');
+        assert.match(repaired.profile.username, /^user_/);
+        assert.notEqual(repaired.profile.username, repaired.profile.phone);
+        assert.equal(repaired.properties.name, '');
+        assert.equal(repaired.properties.username, repaired.profile.username);
+        assert.equal(commits.length, 1);
+        assert.equal(commits[0].payload.actor.id, `phone_alias_user_${backend}`);
+        assert.equal(commits[0].options.backend, backend);
+    }
+    assert.equal(await repairBootstrapPhoneProfile({
+        backend: 'tauri', userId: 'named_user',
+        properties: { name: 'Ada', username: '+33123456789', phone: '+33123456789' },
+        profile: { name: 'Ada' }, commit: async () => ({ ok: true })
+    }), null);
 });
 
 test('guest tool bootstrap keeps the local registry when no remote account is provisioned', () => {

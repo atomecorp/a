@@ -1,8 +1,9 @@
 // Extracted from auth.js: Fastify token management — login cache persistence + relogin throttling + ensureFastifyToken(Local).
 import { TauriAdapter, FastifyAdapter } from '../adole.js';
+import { getFastifyHttpBaseUrl } from '../adole_backend.js';
 import { isTauriRuntime } from './runtime.js';
 import { getSessionState } from './session.js';
-import { normalizePhone } from './auth_core.js';
+import { createTechnicalUsername, normalizePhone } from './auth_core.js';
 import { loginBackend, meBackend } from './auth_backends.js';
 import { provisionFastifyCounterpart } from './auth_remote_provisioning.js';
 
@@ -72,9 +73,19 @@ const configureTauriRemoteSync = async () => {
     if (!localSession?.ok || !remoteSession?.ok || !localUserId || !remoteUserId) {
         return { ok: false, reason: 'sync_identity_principal_missing' };
     }
+    const remoteUrl = String(getFastifyHttpBaseUrl() || '').trim().replace(/\/+$/, '');
+    if (!/^https?:\/\//i.test(remoteUrl)) {
+        return { ok: false, reason: 'sync_remote_url_missing' };
+    }
+    const configuredFingerprint = typeof window !== 'undefined'
+        ? String(window.__SQUIRREL_ENVIRONMENT_FINGERPRINT__ || '').trim()
+        : '';
+    const environmentFingerprint = configuredFingerprint || `${remoteUrl}|${remoteUserId}`;
     const configured = await TauriAdapter?.sync?.configureRemote?.({
         remote_user_id: remoteUserId,
-        remote_token: remoteToken
+        remote_token: remoteToken,
+        remote_url: remoteUrl,
+        environment_fingerprint: environmentFingerprint
     });
     if (!configured || configured.ok === false || configured.success === false) {
         return {
@@ -186,7 +197,10 @@ const ensureFastifyTokenLocal = async () => {
             const provisioned = await provisionFastifyCounterpart({
                 phone: cached.phone,
                 password: cached.password,
-                username: state.user?.name || localSession.user.name || cached.phone
+                username: createTechnicalUsername(
+                    state.user?.username || localSession.user.username || '',
+                    cached.phone
+                )
             });
             if (provisioned.ok) {
                 fastifyReloginBlockedUntil = 0;
@@ -242,7 +256,12 @@ const ensureFastifyToken = async () => {
             const me = await meBackend('fastify');
             if (me?.ok) {
                 markFastifyAuthValid();
-                return { ok: true, reason: 'token_valid' };
+                const sync = await configureTauriRemoteSync();
+                return {
+                    ok: true,
+                    reason: 'token_valid',
+                    ...(isTauriRuntime() ? { sync } : {})
+                };
             }
             if (isTransportFailure(me)) {
                 // Unproven, not invalid: keep the credential and let the actual
