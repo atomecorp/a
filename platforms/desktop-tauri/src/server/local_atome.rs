@@ -2547,6 +2547,41 @@ fn enqueue_sync_event(
     Ok(())
 }
 
+pub(crate) fn enqueue_current_user_profile_sync(
+    state: &LocalAtomeState,
+    local_user_id: &str,
+    remote_user_id: &str,
+) -> Result<bool, String> {
+    let db = state.db.lock().map_err(|_| "local_database_unavailable".to_string())?;
+    let row = db.query_row(
+        "SELECT properties, updated_at, version FROM state_current WHERE atome_id = ?1",
+        [local_user_id],
+        |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?, row.get::<_, i64>(2)?)),
+    );
+    let (properties_json, updated_at, version) = match row {
+        Ok(value) => value,
+        Err(rusqlite::Error::QueryReturnedNoRows) => return Ok(false),
+        Err(error) => return Err(error.to_string()),
+    };
+    let properties: JsonValue = serde_json::from_str(&properties_json).map_err(|error| error.to_string())?;
+    if !properties.is_object() || properties.get("eve_profile").is_none() {
+        return Ok(false);
+    }
+    let event = EventRecord {
+        id: format!("remote-profile-bootstrap:{}:{}", remote_user_id, version),
+        ts: updated_at,
+        atome_id: Some(local_user_id.to_string()),
+        project_id: None,
+        kind: "set".to_string(),
+        payload: Some(json!({ "props": properties, "scope": "global" })),
+        actor: Some(json!({ "type": "user", "id": local_user_id })),
+        tx_id: None,
+        gesture_id: None,
+    };
+    enqueue_sync_event(&db, &event, "fastify")?;
+    Ok(true)
+}
+
 pub(super) fn list_sync_queue_for_actor(
     db: &Connection,
     target_server: &str,
@@ -3094,6 +3129,41 @@ mod property_commit_security_tests {
                 "payload": { "props": props }
             }
         })
+    }
+
+    #[test]
+    fn current_profile_is_republished_to_the_remote_principal() {
+        let state = state();
+        {
+            let db = state.db.lock().expect("database lock");
+            db.execute(
+                "INSERT INTO atomes (atome_id, atome_type, owner_id, creator_id) VALUES (?1, 'user', ?1, ?1)",
+                ["local-user"],
+            )
+            .expect("profile atome fixture");
+            db.execute(
+                "INSERT INTO state_current (atome_id, owner_id, properties, version) VALUES (?1, ?1, ?2, 7)",
+                rusqlite::params![
+                    "local-user",
+                    r#"{"eve_profile":{"access":"public","name":"Visible"},"phone":"private"}"#
+                ],
+            )
+            .expect("profile state fixture");
+        }
+        assert_eq!(
+            enqueue_current_user_profile_sync(&state, "local-user", "remote-user"),
+            Ok(true)
+        );
+        let db = state.db.lock().expect("database lock");
+        let payload: String = db.query_row(
+            "SELECT payload FROM sync_queue WHERE atome_id = 'local-user'",
+            [],
+            |row| row.get(0),
+        ).expect("queued profile payload");
+        let event: JsonValue = serde_json::from_str(&payload).expect("profile event json");
+        assert_eq!(event.get("id"), Some(&json!("remote-profile-bootstrap:remote-user:7")));
+        assert_eq!(event.get("atome_id"), Some(&json!("local-user")));
+        assert_eq!(event.pointer("/payload/props/eve_profile/access"), Some(&json!("public")));
     }
 
     #[tokio::test]

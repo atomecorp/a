@@ -135,7 +135,7 @@ async function handleConditions(message, userId) {
     return errorResponse('conditions', message, `Unknown conditions action: ${action || 'missing'}`);
 }
 
-async function handleDirectory(message, connection) {
+async function handleDirectory(message, connection, userId) {
     const service = connection?._wsApiDirectoryService;
     if (!service) return errorResponse('directory', message, 'directory_service_unavailable');
     const action = actionOf(message);
@@ -145,7 +145,8 @@ async function handleDirectory(message, connection) {
     const entries = await service.list({
         query: action === 'search' ? message.query : null,
         limit: message.limit,
-        offset: message.offset
+        offset: message.offset,
+        requesterId: userId
     });
     return response('directory', message, true, { entries });
 }
@@ -165,6 +166,9 @@ async function handleEvents(message, connection, userId) {
             });
         if (result.ok && result.inserted) {
             await connection?._wsApiSyncRuntime?.publish(result.event);
+            if (String(result.event?.atome_id || '') === String(userId)) {
+                await connection?._wsApiDirectoryService?.refreshPrincipal(userId);
+            }
         }
         return response('events', message, result.ok, result.ok
             ? { event: result.event }
@@ -176,11 +180,15 @@ async function handleEvents(message, connection, userId) {
             ? await vaultRouter.commitBatch(userId, events, {
                 txId: message.tx_id || message.txId || null,
                 source: message.source || null
-            }).then((entries) => ({
-                ok: true,
-                events: entries.map((entry) => entry.event),
-                inserted_count: entries.filter((entry) => entry.inserted).length
-            }))
+            }).then((entries) => {
+                const insertedEntries = entries.filter((entry) => entry.inserted);
+                return {
+                    ok: true,
+                    events: entries.map((entry) => entry.event),
+                    inserted_events: insertedEntries.map((entry) => entry.event),
+                    inserted_count: insertedEntries.length
+                };
+            })
             : await commitAtomeEvents({
                 events,
                 authenticatedUserId: userId,
@@ -189,10 +197,15 @@ async function handleEvents(message, connection, userId) {
                 syncSource: message.sync_source || ''
             });
         if (result.ok && result.inserted_count > 0) {
-            for (const committedEvent of result.events || []) {
-                if (committedEvent?.inserted !== true) continue;
+            let refreshDirectory = false;
+            const insertedEvents = Array.isArray(result.inserted_events)
+                ? result.inserted_events
+                : (result.events || []).filter((event) => db.wasEventInserted(event));
+            for (const committedEvent of insertedEvents) {
                 await connection?._wsApiSyncRuntime?.publish(committedEvent);
+                if (String(committedEvent?.atome_id || '') === String(userId)) refreshDirectory = true;
             }
+            if (refreshDirectory) await connection?._wsApiDirectoryService?.refreshPrincipal(userId);
         }
         return response('events', message, result.ok, result.ok
             ? { events: result.events }
@@ -492,7 +505,7 @@ export async function handleWsAtomeOperation(message, connection) {
         else if (type === 'user-data') result = await handleUserData(message, auth.userId);
         else if (type === 'sync') result = await handleSync(message, auth.userId, connection);
         else if (type === 'conditions') result = await handleConditions(message, auth.userId);
-        else if (type === 'directory') result = await handleDirectory(message, connection);
+        else if (type === 'directory') result = await handleDirectory(message, connection, auth.userId);
         else if (type === 'history') result = await handleHistoryCommand(message, auth.userId);
         else result = await handleAtomeHistory(message, auth.userId);
         return rememberMutation(connection, message, result);

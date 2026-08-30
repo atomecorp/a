@@ -190,7 +190,10 @@ const syncSharingService = createSyncSharingService({
     { scope: 'ws/api', op: payload.type, targetUserId: principalId }
   )
 });
-const directoryPublicService = createDirectoryPublicService({ syncRuntime: wsSyncRuntime });
+const directoryPublicService = createDirectoryPublicService({
+  syncRuntime: wsSyncRuntime,
+  vaultRouter: userVaultRouter
+});
 wsSyncRuntime.setDirectoryService(directoryPublicService);
 import { v4 as uuidv4 } from 'uuid';
 import { makeId } from '../atome/src/squirrel/shared/scalars.js';
@@ -721,7 +724,6 @@ async function startServer() {
       try {
         await db.initDatabase();
         await ensureOpaquePrincipalIdentity(db.getDataSourceAdapter());
-        await directoryPublicService.rebuild();
         const globalScopeRepair = await db.repairGlobalStateCurrentScopes();
         if (globalScopeRepair.repaired_ids.length) {
           console.log('[ADOLE] Repaired account-global projections:', globalScopeRepair.repaired_ids.length);
@@ -3054,7 +3056,10 @@ async function startServer() {
                 }
 
                 await updateUserParticle(dataSource, userId, key, value);
-                if (['username', 'visibility', 'access'].includes(String(key))) {
+                if ([
+                  'visibility', 'access', 'name', 'first_name', 'firstname', 'firstName',
+                  'nickname', 'pseudonym', 'pseudo', 'display_name_source', 'user_face', 'eve_profile'
+                ].includes(String(key))) {
                   await directoryPublicService.refreshPrincipal(userId);
                 }
 
@@ -3746,15 +3751,9 @@ async function startServer() {
                 const requestedOwner = (owner_id === '*' || owner_id === 'all') ? null : (owner_id || user_id);
                 const effectiveOwner = requesterId || requestedOwner;
 
-                // Special-case: public user directory listing
-                // If the client requests atomeType='user' with no explicit owner filter,
-                // return all PUBLIC users (visibility='public') instead of "only my own user".
-                // This is critical for sharing workflows (recipient discovery) and must work
-                // even when authenticated.
-                const isUserDirectoryRequest = effectiveType === 'user' && !requestedOwner;
                 const isAuthenticated = hasAuthIdentity && requesterId && requesterId !== 'anonymous';
 
-                if (!isAuthenticated && !isUserDirectoryRequest) {
+                if (!isAuthenticated) {
                   safeSend({
                     type: 'atome-response',
                     requestId,
@@ -3773,59 +3772,7 @@ async function startServer() {
                 const deletedClause = include_deleted ? '' : 'AND a.deleted_at IS NULL';
 
                 let atomes;
-                if (isUserDirectoryRequest) {
-                  const dataSource = db.getDataSourceAdapter();
-                  const directoryLimit = Number.isFinite(Number(limit)) ? Number(limit) : 1000;
-                  const directoryOffset = Number.isFinite(Number(offset)) ? Number(offset) : 0;
-                  const sinceIso = (typeof since === 'string' && since.trim()) ? since.trim() : null;
-
-                  const sinceClause = sinceIso ? "AND (a.updated_at > ? OR a.created_at > ?)" : '';
-                  const params = sinceIso
-                    ? [...excludedParticleKeyList, sinceIso, sinceIso, directoryLimit, directoryOffset]
-                    : [...excludedParticleKeyList, directoryLimit, directoryOffset];
-
-                  const rows = await dataSource.query(
-                    `SELECT a.atome_id, a.atome_type, a.parent_id, a.owner_id, a.creator_id, a.created_at, a.updated_at, a.deleted_at,
-                            MAX(CASE WHEN p.particle_key = 'username' THEN p.particle_value END) AS username,
-                            MAX(CASE WHEN p.particle_key = 'visibility' THEN p.particle_value END) AS visibility
-                     FROM atomes a
-                     LEFT JOIN particles p ON a.atome_id = p.atome_id ${excludedParticleJoinClause}
-                     WHERE a.atome_type = 'user'
-                       ${deletedClause}
-                       ${sinceClause}
-                       AND EXISTS (
-                         SELECT 1 FROM particles pv
-                         WHERE pv.atome_id = a.atome_id
-                           AND pv.particle_key = 'visibility'
-                           AND pv.particle_value = '"public"'
-                       )
-                     GROUP BY a.atome_id
-                     ORDER BY a.created_at DESC
-                     LIMIT ? OFFSET ?`,
-                    params
-                  );
-
-                  atomes = rows.map((row) => {
-                    const parse = (val) => {
-                      if (!val) return null;
-                      try { return JSON.parse(val); } catch (error) {
-                        console.warn("[server] operation failed", error); return val;
-                      }
-                    };
-                    return {
-                      atome_id: row.atome_id,
-                      atome_type: row.atome_type,
-                      parent_id: row.parent_id,
-                      owner_id: row.owner_id,
-                      creator_id: row.creator_id,
-                      created_at: row.created_at,
-                      updated_at: row.updated_at,
-                      deleted_at: row.deleted_at,
-                      username: parse(row.username),
-                      visibility: parse(row.visibility) || 'public'
-                    };
-                  });
-                } else if (effectiveOwner && effectiveOwner !== 'anonymous') {
+                if (effectiveOwner && effectiveOwner !== 'anonymous') {
                   // List atomes accessible to this user (owned OR shared via permissions)
                   const dataSource = db.getDataSourceAdapter();
                   const pendingOwner = JSON.stringify(effectiveOwner);
@@ -3949,7 +3896,7 @@ async function startServer() {
                   atomes = [];
                 }
 
-                if (!isUserDirectoryRequest && requesterId) {
+                if (requesterId) {
                   const projectedAtomes = await Promise.all(atomes.map(async (atome) => {
                     if (String(atome.owner_id || '') === String(requesterId)) return atome;
                     const properties = await projectAtomePropertiesForRead(
@@ -4225,6 +4172,9 @@ async function startServer() {
     console.log(`✅ Fastify server v${server.version} started on http://localhost:${PORT} (Atome ${SERVER_VERSION}, eVe ${EVE_VERSION})`);
     console.log(`🔄 Sync WebSocket at ws://localhost:${PORT}/ws/sync`);
     console.log(`🌐 Frontend served from: http://localhost:${PORT}/`);
+    void directoryPublicService.rebuild()
+      .then((result) => console.log(`[directory.public] startup rebuild complete profiles=${result.profiles}`))
+      .catch((error) => console.warn('[directory.public] startup rebuild failed:', error?.message || error));
 
   } catch (error) {
     console.error('❌ Error starting server:', error);

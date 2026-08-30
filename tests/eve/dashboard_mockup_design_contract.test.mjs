@@ -18,7 +18,7 @@ test('dashboard Bevy defaults keep the approved square-cell override over the st
     assert.doesNotMatch(source, /HEADER_ADD_RATIO/);
     assert.match(source, /const CELL_EXPAND_DURATION\s*=\s*300;/);
     assert.match(source, /const CONTENT_RADIUS\s*=\s*10;/);
-    assert.equal(DASHBOARD_VISUAL_TOKENS.transitions.fullscreenMs, 0);
+    assert.equal(Object.hasOwn(DASHBOARD_VISUAL_TOKENS.transitions, 'fullscreenMs'), false);
     assert.equal(DASHBOARD_VISUAL_TOKENS.metrics.contentRadius, 0);
 });
 

@@ -100,3 +100,28 @@ test('SyncEngine learns authorized streams from ws/sync registration before repl
     socket.receive({ type: 'registered', streams: ['stream-a'] });
     assert.deepEqual(new Set(engine.getState().streams), new Set(['stream-a', 'directory.public']));
 });
+
+test('SyncEngine keeps the Fastify directory stream active when Tauri owns local data', async () => {
+    FakeSocket.instances.length = 0;
+    const env = createEnv();
+    env.__SQUIRREL_DATA_SOURCE__ = 'tauri';
+    const engine = new SyncEngine({
+        env,
+        WebSocketClass: FakeSocket,
+        token: () => 'remote-signed-token'
+    });
+    assert.equal(await engine.connect(), true);
+    const socket = FakeSocket.instances[0];
+    socket.open();
+    socket.receive({ type: 'welcome' });
+    socket.receive({ type: 'registered', streams: [] });
+    assert.deepEqual(socket.sent.at(-1), { type: 'subscribe', stream: 'directory.public', cursor: 0 });
+    socket.receive({
+        type: 'event', event_id: 'directory-event-1', stream: 'directory.public', sequence: 1,
+        kind: 'directory.invalidate', patch: { principal_id: 'remote-b', action: 'upsert', revision: 1 }
+    });
+    assert.equal(env.dispatched.at(-1).type, 'squirrel:directory-invalidated');
+    assert.deepEqual(env.dispatched.at(-1).detail, {
+        principal_id: 'remote-b', action: 'upsert', revision: 1, source: 'realtime', origin: 'ws/sync'
+    });
+});

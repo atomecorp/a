@@ -1,4 +1,5 @@
 const MEDIA_CARD_STATUSES = new Set(['ready', 'loading', 'error']);
+const IDENTITY_PLACEHOLDER_SOURCE = './assets/images/icons/user.svg';
 
 const requiredText = (value, name) => {
     const normalized = String(value || '').trim();
@@ -22,7 +23,18 @@ const normalizeMediaCardPresentation = ({ status, title, message, source = '', a
     });
 };
 
+const normalizeIdentityMediaPresentation = (source = '') => {
+    const normalizedSource = String(source || '').trim();
+    return Object.freeze({
+        source: normalizedSource || IDENTITY_PLACEHOLDER_SOURCE,
+        placeholder: !normalizedSource,
+        fit: normalizedSource ? 'cover' : 'contain'
+    });
+};
+
 export {
+    IDENTITY_PLACEHOLDER_SOURCE,
     MEDIA_CARD_STATUSES,
+    normalizeIdentityMediaPresentation,
     normalizeMediaCardPresentation
 };

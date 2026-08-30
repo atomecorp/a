@@ -63,7 +63,7 @@ const result = await AdoleAPI.auth.create('33333333', 'mypassword', 'john', { vi
 **Options:**
 
 - `visibility`: `'public'` or `'private'` (default: `'public'`)
-  - **public**: User appears in `AdoleAPI.auth.list()` with safe public identity fields such as user id, username, and visibility.
+  - **public**: User appears through `AdoleAPI.directory.list()` with only `principal_id`, the resolved `display_name`, an allowed `user_face`, `revision`, and `updated_at`.
   - **private**: User is hidden from the public directory.
 - Profile visibility does not authorize disclosure of the phone number.
 - Phone and other contact fields require a separate explicit, revocable consent or an authorized relationship.
@@ -134,26 +134,13 @@ Refresh authentication tokens for active backends.
 const result = await AdoleAPI.auth.refreshToken();
 ```
 
-### `list(callback?)`
+### `directory.list({ limit, offset })`
 
-List all **public** users with field-level redaction. Private users are hidden, and phone/contact information is absent unless the authenticated caller has a separate explicit authorization.
-
-```javascript
-const result = await AdoleAPI.auth.list();
-// result.tauri.users or result.fastify.users
-// Only returns users with visibility = 'public'
-```
-
-### `setVisibility(visibility, callback?)`
-
-Change the current user's account visibility.
+List all **public** users with strict field-level redaction. Private users are hidden; phone and email are never part of this projection.
 
 ```javascript
-// Make account public (visible in user list)
-await AdoleAPI.auth.setVisibility('public');
-
-// Make account private (hidden from user list)
-await AdoleAPI.auth.setVisibility('private');
+const result = await AdoleAPI.directory.list({ limit: 100, offset: 0 });
+// result.entries never contains phone, email, login identifiers, or a full profile.
 ```
 
 ---

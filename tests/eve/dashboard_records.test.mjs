@@ -5,6 +5,9 @@ import { buildDashboardRecords, dashboardRecordId } from '../../eVe/domains/dash
 import { DASHBOARD_FONT_FAMILY, mergeDashboardTokens } from '../../eVe/domains/dashboard/dashboard_tokens.js';
 import { createBevyMediaTextureCacheKey } from '../../eVe/domains/rendering/bevy_media_texture_cache.js';
 import { workspaceSceneLayerOrder } from '../../eVe/domains/rendering/workspace_scene_layers.js';
+import { loadPeopleDirectory } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_finder_data.js';
+import { createCommUsers } from '../../eVe/intuition/tools/communication_users.js';
+import { createProjectOrderRuntime } from '../../eVe/intuition/matrix/core/project_order_runtime.js';
 
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 
@@ -53,7 +56,7 @@ test('dashboard records stay inside their workspace layer below Flower', () => {
     );
 });
 
-test('dashboard fullscreen item renders only the selected item summary', () => {
+test('dashboard records never project a generic fullscreen item summary', () => {
     const tokens = mergeDashboardTokens();
     const layout = createDashboardLayout({
         width: 960,
@@ -66,30 +69,16 @@ test('dashboard fullscreen item renders only the selected item summary', () => {
             visible: true
         }],
         activeCategoryId: 'news',
-        itemsByCategory: new Map(),
+        itemsByCategory: new Map([
+            ['news', [{ id: 'record_1', category_id: 'news', title: 'New news', preview: 'Preview text' }]]
+        ]),
         tokens
     });
-    const records = buildDashboardRecords({
-        layout,
-        tokens,
-        editor: {
-            title: 'New news',
-            preview: 'Preview text',
-            item: {
-                id: 'record_1',
-                category_id: 'news',
-                title: 'New news',
-                payload: { id: 'record_1', hidden: 'not rendered' }
-            }
-        }
-    });
+    const records = buildDashboardRecords({ layout, tokens });
     const ids = new Set(records.map((record) => record.id));
-    assert.ok(ids.has(dashboardRecordId('editor')));
-    assert.ok(ids.has(dashboardRecordId('editor_title')));
-    assert.ok(ids.has(dashboardRecordId('editor_preview')));
-    assert.equal([...ids].some((id) => id.includes('editor_field_')), false);
-    assert.equal(records.some((record) => record.type === 'text' && record.properties.text === 'Preview text'), true);
-    assert.equal(records.some((record) => String(record.properties?.text || '').includes('not rendered')), false);
+    assert.equal([...ids].some((id) => id.startsWith('__eve_dashboard_editor')), false);
+    assert.ok(ids.has(dashboardRecordId('card_news_record_1')));
+    assert.equal(records.some((record) => record.type === 'text' && record.properties.text === 'New news'), true);
 });
 
 test('dashboard records flood focused backgrounds without plus records', () => {
@@ -330,6 +319,31 @@ test('dashboard contact cards render profile photos behind Bevy text', () => {
     assert.equal(Number(title.properties.z_index) > Number(backdrop.properties.z_index), true);
 });
 
+test('dashboard contact cards render the canonical person pictogram when no photo exists', () => {
+    const tokens = mergeDashboardTokens();
+    const layout = createDashboardLayout({
+        width: 960,
+        height: 640,
+        toolboxHeight: 80,
+        categories: [{ id: 'contacts', label_key: 'eve.dashboard.category.contacts', color: '#2f6f78', visible: true }],
+        activeCategoryId: '',
+        itemsByCategory: new Map([['contacts', [{
+            id: 'contact_unknown',
+            title: 'Unknown',
+            category_id: 'contacts',
+            metadata: { user_face: './assets/images/icons/user.svg', user_face_placeholder: true },
+            span: 1
+        }]]]),
+        tokens
+    });
+    const records = buildDashboardRecords({ layout, tokens });
+    const media = records.find((record) => record.id === dashboardRecordId('card_media_contacts_contact_unknown'));
+    const card = records.find((record) => record.id === dashboardRecordId('card_contacts_contact_unknown'));
+    assert.match(media.properties.source, /user\.svg$/);
+    assert.equal(media.properties.media_fit, 'contain');
+    assert.equal(card.properties.color, tokens.contactPlaceholderBackground);
+});
+
 test('dashboard project cards render contained renderer previews over the card color', () => {
     const tokens = mergeDashboardTokens();
     const layout = createDashboardLayout({
@@ -533,7 +547,7 @@ test('dashboard records do not render placeholder cards for empty lanes', () => 
     assert.equal(records.some((record) => record.id.includes('empty_cell_')), false);
 });
 
-test('dashboard fullscreen item records render directly in the detail rect', () => {
+test('dashboard layout exposes no generic fullscreen detail geometry', () => {
     const tokens = mergeDashboardTokens();
     const layout = createDashboardLayout({
         width: 960,
@@ -544,19 +558,65 @@ test('dashboard fullscreen item records render directly in the detail rect', () 
         itemsByCategory: new Map(),
         tokens
     });
-    const rect = layout.creation_fullscreen_rect;
-    const records = buildDashboardRecords({
-        layout,
-        tokens,
-        editor: {
-            rect,
-            title: 'Goal',
-            item: { id: 'goal_1', title: 'Goal', category_id: 'goals' }
+    assert.equal(Object.hasOwn(layout, 'creation_fullscreen_rect'), false);
+    assert.equal(Object.hasOwn(layout, 'expanded_cell_rect'), false);
+});
+
+const publicDirectoryApi = () => ({
+    directory: {
+        list: async () => ({
+            entries: [{ principal_id: 'public-user', display_name: 'Visible Name', user_face: '/face.png', revision: 1 }]
+        })
+    },
+    auth: {
+        list: async () => ({ directory: [{ id: 'private-bait', name: 'Private Bait', visibility: 'private' }] }),
+        getCurrentInfo: () => null
+    }
+});
+
+test('Finder and Communication share only the redacted directory.public population', async () => {
+    const finderRecords = await loadPeopleDirectory({ api: publicDirectoryApi() });
+    assert.deepEqual([...finderRecords.keys()], ['public-user']);
+    assert.equal(finderRecords.get('public-user').name, 'Visible Name');
+    assert.equal(finderRecords.get('public-user').phone, '');
+
+    const users = createCommUsers({ getAdoleApi: publicDirectoryApi, getCommitApi: () => null });
+    const communicationRecords = await users.collectPublicUsers();
+    assert.deepEqual(communicationRecords.map((record) => record.id), ['public-user']);
+    assert.equal(communicationRecords[0].phone, '');
+    assert.equal(users.normalizeUserRecord({ principal_id: 'unknown', display_name: '' }).name, 'Unknown');
+});
+
+test('a stale post-commit project list cannot hide Dashboard projects or trigger duplicate repairs', async () => {
+    const previousWindow = globalThis.window;
+    const commitCalls = [];
+    const staleProjects = [
+        { id: 'project_b', createdAt: '2026-01-02T00:00:00.000Z' },
+        { id: 'project_a', createdAt: '2026-01-01T00:00:00.000Z' }
+    ];
+    globalThis.window = {
+        Atome: {
+            commitBatch: async (events) => {
+                commitCalls.push(events);
+                return { ok: true };
+            }
         }
-    });
-    const editor = records.find((record) => record.id === dashboardRecordId('editor'));
-    assert.equal(editor.properties.left, rect.x);
-    assert.equal(editor.properties.top, rect.y);
-    assert.equal(editor.properties.width, rect.width);
-    assert.equal(editor.properties.height, rect.height);
+    };
+
+    try {
+        const runtime = createProjectOrderRuntime({
+            loadProjectListRaw: async () => staleProjects.map((project) => ({ ...project }))
+        });
+        const ordered = await runtime.reconcileProjectOrder('user_a');
+
+        assert.deepEqual(ordered.map((project) => project.id), ['project_a', 'project_b']);
+        assert.equal(commitCalls.length, 1);
+        assert.deepEqual(
+            commitCalls[0].map((event) => [event.atome_id, event.props.matrix_slot]),
+            [['project_b', 1], ['project_a', 0]]
+        );
+    } finally {
+        if (previousWindow === undefined) delete globalThis.window;
+        else globalThis.window = previousWindow;
+    }
 });

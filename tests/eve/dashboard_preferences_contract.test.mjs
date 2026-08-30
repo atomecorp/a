@@ -45,10 +45,7 @@ test('project lists exclude heavy preview particles before backend serialization
     );
     assert.ok(listBranch.length > 0, 'the canonical list branch must remain discoverable');
     assert.match(listBranch, /LEFT JOIN particles p ON a\.atome_id = p\.atome_id \$\{excludedParticleJoinClause\}/);
-    assert.match(
-        listBranch,
-        /const params = sinceIso\s*\? \[\.\.\.excludedParticleKeyList, sinceIso, sinceIso, directoryLimit, directoryOffset\]/
-    );
+    assert.doesNotMatch(listBranch, /isUserDirectoryRequest|directoryLimit|visibility='public'/);
     assert.match(
         listBranch,
         /\? \[\.\.\.excludedParticleKeyList, effectiveOwner, effectiveOwner, pendingOwner, effectiveType, limit \|\| 100, offset \|\| 0\]/

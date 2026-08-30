@@ -4,6 +4,7 @@ import { isTauriRuntime } from './runtime.js';
 import { getSessionState } from './session.js';
 import { normalizePhone } from './auth_core.js';
 import { loginBackend, meBackend } from './auth_backends.js';
+import { provisionFastifyCounterpart } from './auth_remote_provisioning.js';
 
 const loadFastifyLoginCache = () => {
     if (typeof localStorage === 'undefined') return null;
@@ -180,6 +181,20 @@ const ensureFastifyTokenLocal = async () => {
         password: cached.password
     });
     if (!loginResult.ok) {
+        const localSession = isTauriRuntime() ? await meBackend('tauri') : null;
+        if (localSession?.ok && localSession.user?.id) {
+            const provisioned = await provisionFastifyCounterpart({
+                phone: cached.phone,
+                password: cached.password,
+                username: state.user?.name || localSession.user.name || cached.phone
+            });
+            if (provisioned.ok) {
+                fastifyReloginBlockedUntil = 0;
+                fastifyReloginBlockedReason = null;
+                markFastifyAuthValid();
+                return { ok: true, reason: 'remote_counterpart_provisioned' };
+            }
+        }
         const status = Number(loginResult?.raw?.status || 0);
         blockFastifyRelogin(
             status === 429 ? 'login_rate_limited' : 'cache_login_failed',

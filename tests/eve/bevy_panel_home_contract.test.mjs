@@ -2,7 +2,13 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { test } from 'vitest';
 
-import { sanitizeProfileForPersistence } from '../../eVe/domains/user/profile_api_support.js';
+import {
+    buildUserProperties,
+    mergeUserProfileIdentity,
+    repairLegacyRemoteProfile,
+    sanitizeProfileForPersistence
+} from '../../eVe/domains/user/profile_api_support.js';
+import { loadUserProfile, upsertUserProfile } from '../../eVe/domains/user/profile_api.js';
 import {
     applyHomeServerPreference,
     changeHomePassword,
@@ -10,6 +16,7 @@ import {
     deleteHomeAccount,
     logoutHomeSession,
     normalizeHomeProfile,
+    mergeHomeProfileUpdate,
     profileDisplayName
 } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_home_actions.js';
 import {
@@ -38,6 +45,7 @@ import {
 import { resolveSecureMailAuth } from '../../atome/src/squirrel/mail/bootstrap_transport.js';
 import { resolveActiveAiProviderConfig } from '../../atome/src/squirrel/ai/provider_client.js';
 import { resolveConfiguredAiProviderKeys } from '../../atome/src/squirrel/ai/model_catalog_refresh.js';
+import { FastifyAdapter, TauriAdapter } from '../../atome/src/squirrel/apis/unified/adole.js';
 import {
     classifyRetryableMutationException,
     classifyRetryableMutationResult
@@ -276,6 +284,65 @@ test('Home normalization preserves hidden Pro values and removes every legacy se
     assert.equal('password' in persisted.preferences.mail, false);
     assert.equal('password' in persisted.passkeys.credentials[0], false);
     assert.equal('key' in persisted.passkeys.keys[0], false);
+});
+
+test('Contact identity edits preserve the complete canonical Home profile', () => {
+    const merged = mergeUserProfileIdentity({
+        name: 'Before',
+        access: 'private',
+        bio: { birth: '2000-01-01' },
+        profile: { competences: [{ label: 'Piano', value: 'Expert', pro: true }] },
+        preferences: { language: 'fr', dashboard: { news: false } },
+        passkeys: { credentials: [{ label: 'site', login: 'ada' }] }
+    }, {
+        name: 'After', first_name: 'Ada', nickname: 'AA', phone: '0600000000', email: 'ada@example.test'
+    });
+
+    assert.equal(merged.name, 'After');
+    assert.equal(merged.first_name, 'Ada');
+    assert.equal(merged.access, 'private');
+    assert.equal(merged.bio.birth, '2000-01-01');
+    assert.equal(merged.profile.competences[0].label, 'Piano');
+    assert.equal(merged.preferences.language, 'fr');
+    assert.equal(merged.passkeys.credentials[0].login, 'ada');
+
+    const cleared = buildUserProperties(mergeUserProfileIdentity(merged, {
+        name: '', first_name: '', nickname: '', email: '', user_face: ''
+    }));
+    assert.equal(cleared.name, '');
+    assert.equal(cleared.first_name, '');
+    assert.equal(cleared.nickname, '');
+    assert.equal(cleared.email, '');
+    assert.equal(cleared.user_face, '');
+});
+
+test('Home overlays a confirmed Contact update without discarding stored sections', () => {
+    const profile = mergeHomeProfileUpdate({
+        name: 'Before',
+        access: 'public',
+        bio: { birth: '2000-01-01' },
+        preferences: { language: 'fr' }
+    }, {
+        name: 'After', first_name: 'Ada'
+    });
+
+    assert.equal(profile.name, 'After');
+    assert.equal(profile.first_name, 'Ada');
+    assert.equal(profile.access, 'public');
+    assert.equal(profile.bio.birth, '2000-01-01');
+    assert.equal(profile.preferences.language, 'fr');
+
+    const contactRuntime = fs.readFileSync(
+        new URL('../../eVe/intuition/runtime/bevy_panel/bevy_panel_contact_runtime.js', import.meta.url),
+        'utf8'
+    );
+    const homeRuntime = fs.readFileSync(
+        new URL('../../eVe/intuition/runtime/bevy_panel/bevy_panel_home_runtime.js', import.meta.url),
+        'utf8'
+    );
+    assert.match(contactRuntime, /updateUserProfileIdentity\(draft, \{ userId: state\.currentUserId \}\)/);
+    assert.doesNotMatch(contactRuntime, /upsertUserProfile\(draft/);
+    assert.match(homeRuntime, /state\.profile = mergeHomeProfileUpdate\(state\.profile, event\?\.detail\?\.profile\)/);
 });
 
 test('Home list additions retain blank stable rows immediately above the canonical add action', async () => {
@@ -623,4 +690,117 @@ test('legacy Home DOM owners remain deleted and the route never names eve_user_d
     assert.doesNotMatch(homeRuntime, /^import .*home_vault|^import .*project_media_import_runtime/m);
     assert.match(routeModule, /syncLoginToolState\(false, 'anonymous_workspace'\)/);
     assert.match(routeModule, /syncLoginToolState\(false, 'authenticated_workspace'\)/);
+});
+
+test('Home reboot keeps public access and photo on the principal owned by the configured profile backend', async () => {
+    const previousWindow = globalThis.window;
+    const previousApi = globalThis.AdoleAPI;
+    const originalMe = TauriAdapter.auth.me;
+    const originalGetStateCurrent = TauriAdapter.atome.getStateCurrent;
+    const originalFastifyMe = FastifyAdapter.auth.me;
+    const originalFastifyGetStateCurrent = FastifyAdapter.atome.getStateCurrent;
+    const commits = [];
+    TauriAdapter.auth.me = async () => ({
+        ok: true,
+        user: { id: 'local_profile_principal', username: 'Local identity' }
+    });
+    TauriAdapter.atome.getStateCurrent = async (id) => ({
+        ok: true,
+        data: {
+            state: {
+                atome_id: id,
+                properties: {
+                    eve_profile: {
+                        name: 'Local identity',
+                        access: 'public'
+                    }
+                }
+            }
+        }
+    });
+    FastifyAdapter.auth.me = async () => ({
+        ok: true,
+        user: { id: 'remote_session_principal', username: 'Remote identity' }
+    });
+    FastifyAdapter.atome.getStateCurrent = async (id) => ({
+        ok: true,
+        data: {
+            state: {
+                atome_id: id,
+                properties: {
+                    eve_profile: {
+                        name: 'Persisted name',
+                        access: 'public',
+                        user_face: 'data:image/png;base64,persisted'
+                    }
+                }
+            }
+        }
+    });
+    const api = {
+        auth: {
+            current: async () => ({
+                logged: true,
+                source: 'fastify',
+                user: { id: 'remote_session_principal', username: 'Remote identity' }
+            }),
+            ensureFastifyToken: async () => ({ ok: true })
+        },
+        atomes: {},
+        security: { isAnonymous: () => false }
+    };
+    globalThis.window = {
+        __SQUIRREL_FORCE_TAURI_RUNTIME__: true,
+        __SQUIRREL_PROFILE_SOURCE__: 'tauri',
+        AdoleAPI: api,
+        Atome: {
+            commit: async (payload, options) => {
+                commits.push({ payload, options });
+                return { ok: true };
+            }
+        }
+    };
+    globalThis.AdoleAPI = api;
+    try {
+        const intentionalRemoval = await repairLegacyRemoteProfile({
+            backend: 'tauri',
+            userId: 'local_profile_principal',
+            user: { name: 'Local identity' },
+            profile: { name: 'Custom local name', user_face: '' },
+            commit: globalThis.window.Atome.commit
+        });
+        assert.equal(intentionalRemoval, null);
+        assert.equal(commits.length, 0);
+
+        const loaded = await loadUserProfile();
+        assert.equal(loaded.ok, true);
+        assert.equal(loaded.userId, 'local_profile_principal');
+        assert.equal(loaded.profile.access, 'public');
+        assert.equal(loaded.profile.user_face, 'data:image/png;base64,persisted');
+        assert.equal(commits.length, 1);
+        assert.equal(commits[0].payload.atome_id, 'local_profile_principal');
+        assert.equal(commits[0].payload.props.eve_profile.name, 'Persisted name');
+
+        const updated = await upsertUserProfile(loaded.profile, { allowCreate: false });
+        assert.equal(updated.ok, true);
+        assert.equal(updated.userId, 'local_profile_principal');
+        assert.equal(commits.length, 2);
+        assert.equal(commits[1].payload.atome_id, 'local_profile_principal');
+        assert.equal(commits[1].payload.actor.id, 'local_profile_principal');
+        assert.equal(commits[1].options.backend, 'tauri');
+
+        TauriAdapter.atome.getStateCurrent = async () => ({ ok: false, error: 'state not found' });
+        const refused = await loadUserProfile();
+        assert.equal(refused.ok, false);
+        assert.equal(refused.error, 'state not found');
+    } finally {
+        TauriAdapter.auth.me = originalMe;
+        TauriAdapter.atome.getStateCurrent = originalGetStateCurrent;
+        FastifyAdapter.auth.me = originalFastifyMe;
+        FastifyAdapter.atome.getStateCurrent = originalFastifyGetStateCurrent;
+        if (previousWindow === undefined) delete globalThis.window;
+        else globalThis.window = previousWindow;
+        if (previousApi === undefined) delete globalThis.AdoleAPI;
+        else globalThis.AdoleAPI = previousApi;
+    }
 });

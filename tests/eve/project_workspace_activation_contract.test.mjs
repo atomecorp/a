@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { JSDOM } from 'jsdom';
 import { test, vi } from 'vitest';
 import { installMockBrowserEnv } from '../strangler_v2/_env.mjs';
 import { setMainMenuRuntime } from '../../eVe/intuition/ribbon/bevy_ui_product_registry.js';
@@ -17,6 +18,7 @@ import {
 } from '../../eVe/domains/rendering/project_view_mode_state.js';
 import { readProjectViewSurfaceState } from '../../eVe/domains/rendering/project_view_surface_runtime.js';
 import { createDashboardActionRuntime } from '../../eVe/domains/dashboard/dashboard_actions.js';
+import { contactSurface } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_contact_runtime.js';
 
 const previewRuntime = vi.hoisted(() => ({
     warmProjectPreviewCapture: vi.fn(async () => ({ ok: true }))
@@ -52,7 +54,6 @@ test('Dashboard project activation delegates workspace and menu ownership once',
     const calls = [];
     const runtime = createDashboardActionRuntime({
         destroy: async () => { calls.push('destroy'); },
-        openEditor: async () => ({ ok: true }),
         openPanel: async () => ({ ok: true }),
         loadProjectRuntime: async () => ({
             activateProjectWorkspace: async (project, options) => {
@@ -73,6 +74,81 @@ test('Dashboard project activation delegates workspace and menu ownership once',
     assert.deepEqual(calls, [
         { project, options: { force: true, staleFirst: false } }
     ]);
+});
+
+test('Dashboard routes Contacts by stable identity and leaves unsupported cards inert', async () => {
+    const opened = [];
+    const runtime = createDashboardActionRuntime({
+        openPanel: async (surfaceKey, context) => {
+            opened.push({ surfaceKey, context });
+            return { ok: true, surface_key: surfaceKey };
+        }
+    });
+
+    const openedContact = await runtime.activateItemAction({
+        category: { id: 'contacts' },
+        item: {
+            id: 'dashboard_projection_id',
+            payload: { id: 'contact_stable_id', source_contact_id: 'source_contact_id', phone: '0600000000' }
+        }
+    });
+    assert.equal(openedContact.ok, true);
+    assert.deepEqual(opened, [{
+        surfaceKey: 'contact',
+        context: {
+            contactId: 'contact_stable_id',
+            source: { type: 'dashboard_contact_item' }
+        }
+    }]);
+
+    assert.deepEqual(await runtime.activateItemAction({
+        category: { id: 'contacts' },
+        item: { id: 'phone_projection', payload: { phone: '0600000000' } }
+    }), { ok: true, ignored: 'dashboard_contact_identity_missing' });
+    assert.deepEqual(await runtime.activateItemAction({ category: { id: 'news' }, item: { id: 'news_1' } }), {
+        ok: true,
+        ignored: 'dashboard_item_action_unsupported'
+    });
+    assert.deepEqual(await runtime.activateItemAction({ category: { id: 'monitor' }, item: { id: 'monitor_1' } }), {
+        ok: true,
+        ignored: 'dashboard_item_action_unsupported'
+    });
+    assert.equal(opened.length, 1, 'unsupported and phone-only cards must not open a panel');
+});
+
+test('Dashboard Contact context reveals only the requested stable identity', async () => {
+    const previousWindow = globalThis.window;
+    const previousDocument = globalThis.document;
+    const dom = new JSDOM('<!doctype html><html><body></body></html>');
+    const items = [{
+        id: 'contact_stable', source_contact_id: 'contact_stable', source_provider: 'eve_contacts_local',
+        source_writable: true, name: 'Stable contact', phone: '0600000000', custom_fields: []
+    }];
+    globalThis.window = dom.window;
+    globalThis.document = dom.window.document;
+    dom.window.Squirrel = { contacts: {
+        list: () => ({ items: items.map((item) => ({ ...item })) }),
+        ensureReady: async () => ({ ok: true, items }),
+        sources: () => ({ items: [] })
+    } };
+    dom.window.AdoleAPI = {
+        auth: { getCurrentInfo: () => ({ id: 'current_user', name: 'Current', phone: '0600000000' }) },
+        directory: { list: async () => ({ entries: [] }) }
+    };
+    const openFor = (contactId) => new Promise((resolve) => {
+        contactSurface.onOpen({ context: { contactId }, refresh: resolve });
+    });
+
+    try {
+        assert.deepEqual(await openFor('contact_stable'), { preserveNodeId: 'contact_accordion_contact_stable' });
+        assert.equal(contactSurface.readState().expandedId, 'contact_stable');
+        await openFor('0600000000');
+        assert.equal(contactSurface.readState().expandedId, '', 'phone display data cannot select a contact');
+    } finally {
+        await contactSurface.onClose();
+        globalThis.window = previousWindow;
+        globalThis.document = previousDocument;
+    }
 });
 
 

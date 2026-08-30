@@ -77,14 +77,12 @@ export const AdoleAPI = {
     changePassword: auth.changePassword,
     deleteAccount: auth.deleteAccount,
     refreshToken: auth.refreshToken,
-    list: auth.list,
     lookupPhone: auth.lookupPhone,
     requestPhoneVerification,
     verifyPhoneVerification,
     getCurrentInfo: auth.getCurrentInfo,
     setCurrentState: auth.setCurrentState,
     tryAutoLogin: auth.tryAutoLogin,
-    setVisibility: auth.setVisibility,
     ensureFastifyToken: auth.ensureFastifyToken,
     clearFastifyToken: auth.clearFastifyToken,
     isAuthenticated: () => getSessionState().mode === 'authenticated',
@@ -151,12 +149,20 @@ export const AdoleAPI = {
     maybeSync: auth.maybeSync
   },
   directory: {
-    list: (options = {}) => FastifyAdapter.ws.send({
-      type: 'directory', action: 'list', limit: options.limit, offset: options.offset
-    }),
-    search: (query, options = {}) => FastifyAdapter.ws.send({
-      type: 'directory', action: 'search', query, limit: options.limit, offset: options.offset
-    })
+    list: async (options = {}) => {
+      const prepared = await auth.ensureFastifyToken();
+      if (!prepared?.ok) throw new Error(prepared?.error || prepared?.reason || 'directory_auth_unavailable');
+      return FastifyAdapter.ws.send({
+        type: 'directory', action: 'list', limit: options.limit, offset: options.offset
+      });
+    },
+    search: async (query, options = {}) => {
+      const prepared = await auth.ensureFastifyToken();
+      if (!prepared?.ok) throw new Error(prepared?.error || prepared?.reason || 'directory_auth_unavailable');
+      return FastifyAdapter.ws.send({
+        type: 'directory', action: 'search', query, limit: options.limit, offset: options.offset
+      });
+    }
   },
   machine: {
     getCurrent: auth.getCurrentMachine,

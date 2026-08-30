@@ -273,6 +273,7 @@ CREATE TABLE IF NOT EXISTS sync_share_policies (
 CREATE TABLE IF NOT EXISTS directory_public_profiles (
     principal_id TEXT PRIMARY KEY,
     display_name TEXT NOT NULL,
+    user_face TEXT,
     revision INTEGER NOT NULL,
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );

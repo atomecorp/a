@@ -6,7 +6,7 @@ This note explains the safe, reliable way to read atomes and their data, why som
 
 There are multiple sources that can return atomes, and they do **not** expose the same shape:
 
-- **Directory or summary lists** (e.g., `auth.list().directory`)
+- **Public account directory** (`AdoleAPI.directory.list()` / `search()`), projected only from `directory.public`
   - Built for discovery and speed.
   - Typically only contain `username`, `phone`, `visibility`.
   - **Do not assume** profile fields (`first_name`, `eve_profile`, etc.) are present.

@@ -6,65 +6,137 @@ const parse = (value) => {
     try { return JSON.parse(value); } catch (_) { return value; }
 };
 
+const text = (value) => String(value == null ? '' : value).trim();
+const profileValue = (profile, ...keys) => {
+    for (const key of keys) {
+        const value = text(profile?.[key]);
+        if (value) return value;
+    }
+    return '';
+};
+const rowValue = (row, profile, key, ...aliases) => (
+    profileValue(profile, key, ...aliases)
+    || text(parse(row?.[key]))
+    || aliases.map((alias) => text(parse(row?.[alias]))).find(Boolean)
+    || ''
+);
+const publicProfile = (row, profile) => {
+    const candidates = [profile?.access, profile?.visibility, row?.access, row?.visibility];
+    const selected = candidates.find((value) => value !== null && value !== undefined && text(parse(value)) !== '');
+    return text(parse(selected)).toLowerCase() === 'public';
+};
+const displayName = (row, profile) => {
+    const values = {
+        name: rowValue(row, profile, 'name', 'last_name', 'lastname'),
+        firstname: rowValue(row, profile, 'first_name', 'firstname', 'firstName'),
+        nickname: rowValue(row, profile, 'nickname', 'pseudonym', 'pseudo')
+    };
+    const selected = ['name', 'firstname', 'nickname'].includes(text(profile?.display_name_source))
+        ? text(profile.display_name_source)
+        : 'name';
+    return [selected, 'name', 'firstname', 'nickname']
+        .filter((key, index, keys) => keys.indexOf(key) === index)
+        .map((key) => values[key])
+        .find(Boolean) || '';
+};
+
+const PROFILE_SELECT = `SELECT a.atome_id,
+        MAX(CASE WHEN p.particle_key = 'visibility' THEN p.particle_value END) AS visibility,
+        MAX(CASE WHEN p.particle_key = 'access' THEN p.particle_value END) AS access,
+        MAX(CASE WHEN p.particle_key = 'name' THEN p.particle_value END) AS name,
+        MAX(CASE WHEN p.particle_key IN ('first_name', 'firstname', 'firstName') THEN p.particle_value END) AS first_name,
+        MAX(CASE WHEN p.particle_key = 'nickname' THEN p.particle_value END) AS nickname,
+        MAX(CASE WHEN p.particle_key = 'user_face' THEN p.particle_value END) AS user_face,
+        MAX(CASE WHEN p.particle_key = 'eve_profile' THEN p.particle_value END) AS eve_profile
+    FROM atomes a LEFT JOIN particles p ON p.atome_id = a.atome_id`;
+
+const projectProfile = (row) => {
+    if (!row) return null;
+    const profile = parse(row.eve_profile);
+    const canonicalProfile = profile && typeof profile === 'object' && !Array.isArray(profile) ? profile : {};
+    return {
+        principal_id: String(row.atome_id),
+        display_name: displayName(row, canonicalProfile),
+        user_face: rowValue(row, canonicalProfile, 'user_face'),
+        public: publicProfile(row, canonicalProfile)
+    };
+};
+
+const runBounded = async (items, worker, concurrency = 8) => {
+    const entries = Array.isArray(items) ? items : [];
+    let cursor = 0;
+    const run = async () => {
+        while (cursor < entries.length) {
+            const index = cursor;
+            cursor += 1;
+            await worker(entries[index]);
+        }
+    };
+    await Promise.all(Array.from(
+        { length: Math.min(Math.max(1, concurrency), entries.length) },
+        () => run()
+    ));
+};
+
 export class DirectoryPublicService {
     constructor(options = {}) {
         this.syncRuntime = options.syncRuntime || null;
+        this.vaultRouter = options.vaultRouter || null;
     }
 
     async sourceProfile(principalId) {
-        const row = await db.query(
+        const authRow = await db.query(
             'get',
-            `SELECT a.atome_id,
-                    MAX(CASE WHEN p.particle_key = 'username' THEN p.particle_value END) AS username,
-                    MAX(CASE WHEN p.particle_key = 'visibility' THEN p.particle_value END) AS visibility
-             FROM atomes a LEFT JOIN particles p ON p.atome_id = a.atome_id
+            `${PROFILE_SELECT}
              WHERE a.atome_id = ? AND a.atome_type = 'user' AND a.deleted_at IS NULL
              GROUP BY a.atome_id`,
             [principalId]
         );
-        if (!row) return null;
-        return {
-            principal_id: String(row.atome_id),
-            display_name: String(parse(row.username) || '').trim(),
-            public: parse(row.visibility) === 'public'
-        };
+        let vaultState = null;
+        if (this.vaultRouter?.getState) {
+            try {
+                vaultState = await this.vaultRouter.getState(principalId, principalId);
+            } catch (_) {
+                vaultState = null;
+            }
+        }
+        const properties = vaultState?.properties && typeof vaultState.properties === 'object'
+            ? vaultState.properties
+            : {};
+        const row = (authRow || Object.keys(properties).length) ? {
+            ...(authRow || {}),
+            ...properties,
+            atome_id: String(principalId),
+            eve_profile: Object.prototype.hasOwnProperty.call(properties, 'eve_profile')
+                ? properties.eve_profile
+                : authRow?.eve_profile
+        } : null;
+        return projectProfile(row);
     }
 
     async rebuild() {
         const rows = await db.query(
             'all',
-            `SELECT a.atome_id,
-                    MAX(CASE WHEN p.particle_key = 'username' THEN p.particle_value END) AS username,
-                    MAX(CASE WHEN p.particle_key = 'visibility' THEN p.particle_value END) AS visibility
-             FROM atomes a LEFT JOIN particles p ON p.atome_id = a.atome_id
+            `${PROFILE_SELECT}
              WHERE a.atome_type = 'user' AND a.deleted_at IS NULL GROUP BY a.atome_id`
         );
-        await db.query('run', 'DELETE FROM directory_public_profiles');
-        for (const row of rows || []) {
-            const name = String(parse(row.username) || '').trim();
-            if (parse(row.visibility) !== 'public' || !name) continue;
-            const revision = Number((await db.query(
-                'get',
-                'SELECT COALESCE(MAX(revision), 0) AS revision FROM directory_public_events WHERE principal_id = ?',
-                [row.atome_id]
-            ))?.revision || 0);
-            await db.query(
-                'run',
-                `INSERT INTO directory_public_profiles (principal_id, display_name, revision)
-                 VALUES (?, ?, ?)`,
-                [row.atome_id, name, revision]
-            );
-        }
+        const activeIds = new Set((rows || []).map((row) => String(row.atome_id)));
+        await runBounded(rows, (row) => this.refreshPrincipal(row.atome_id));
+        const projected = await db.query('all', 'SELECT principal_id FROM directory_public_profiles');
+        const stale = (projected || []).filter((row) => !activeIds.has(String(row.principal_id)));
+        await runBounded(stale, (row) => this.refreshPrincipal(row.principal_id, { deleted: true }));
         return { profiles: (await this.list({ limit: 500 })).length };
     }
 
-    async record(principalId, action) {
-        const previous = await db.query(
+    async record(principalId, action, requestedRevision = null) {
+        const previous = requestedRevision == null ? await db.query(
             'get',
             'SELECT COALESCE(MAX(revision), 0) AS revision FROM directory_public_events WHERE principal_id = ?',
             [principalId]
-        );
-        const revision = Number(previous?.revision || 0) + 1;
+        ) : null;
+        const revision = requestedRevision == null
+            ? Number(previous?.revision || 0) + 1
+            : Number(requestedRevision);
         const event = {
             id: crypto.randomUUID(),
             stream_id: 'directory.public',
@@ -89,23 +161,34 @@ export class DirectoryPublicService {
 
     async refreshPrincipal(principalId, options = {}) {
         const profile = options.deleted === true ? null : await this.sourceProfile(principalId);
-        if (profile?.public && profile.display_name) {
-            const previous = await db.query(
+        const previous = await db.query(
+            'get',
+            'SELECT display_name, user_face, revision FROM directory_public_profiles WHERE principal_id = ?',
+            [principalId]
+        );
+        if (profile?.public) {
+            const nextPhoto = profile.user_face || null;
+            if (previous
+                && text(previous.display_name) === profile.display_name
+                && text(previous.user_face) === text(nextPhoto)) {
+                return { unchanged: true, principal_id: String(principalId) };
+            }
+            const eventRevision = Number((await db.query(
                 'get',
-                'SELECT revision FROM directory_public_profiles WHERE principal_id = ?',
+                'SELECT COALESCE(MAX(revision), 0) AS revision FROM directory_public_events WHERE principal_id = ?',
                 [principalId]
-            );
-            const revision = Number(previous?.revision || 0) + 1;
+            ))?.revision || 0) + 1;
             await db.query(
                 'run',
-                `INSERT INTO directory_public_profiles (principal_id, display_name, revision)
-                 VALUES (?, ?, ?)
+                `INSERT INTO directory_public_profiles (principal_id, display_name, user_face, revision)
+                 VALUES (?, ?, ?, ?)
                  ON CONFLICT(principal_id) DO UPDATE SET display_name = excluded.display_name,
-                 revision = excluded.revision, updated_at = datetime('now')`,
-                [principalId, profile.display_name, revision]
+                 user_face = excluded.user_face, revision = excluded.revision, updated_at = datetime('now')`,
+                [principalId, profile.display_name, nextPhoto, eventRevision]
             );
-            return this.record(principalId, 'upsert');
+            return this.record(principalId, 'upsert', eventRevision);
         }
+        if (!previous) return { unchanged: true, principal_id: String(principalId) };
         await db.query('run', 'DELETE FROM directory_public_profiles WHERE principal_id = ?', [principalId]);
         return this.record(principalId, options.deleted === true ? 'delete' : 'revoke');
     }
@@ -117,18 +200,32 @@ export class DirectoryPublicService {
         const rows = query
             ? await db.query(
                 'all',
-                `SELECT principal_id, display_name, revision, updated_at
+                `SELECT principal_id, display_name, user_face, revision, updated_at
                  FROM directory_public_profiles WHERE lower(display_name) LIKE ?
                  ORDER BY lower(display_name), principal_id LIMIT ? OFFSET ?`,
                 [`%${query}%`, limit, offset]
             )
             : await db.query(
                 'all',
-                `SELECT principal_id, display_name, revision, updated_at
+                `SELECT principal_id, display_name, user_face, revision, updated_at
                  FROM directory_public_profiles ORDER BY lower(display_name), principal_id LIMIT ? OFFSET ?`,
                 [limit, offset]
             );
-        return rows || [];
+        const requesterId = text(options.requesterId || options.requester_id);
+        return Promise.all((rows || []).filter((row) => (
+            !requesterId || text(row.principal_id) !== requesterId
+        )).map(async (row) => {
+            const visiblePhoto = row.user_face && requesterId
+                ? await db.allowsPropertyRead(row.principal_id, 'user_face', requesterId, 'directory')
+                : false;
+            return {
+                principal_id: row.principal_id,
+                display_name: text(row.display_name),
+                user_face: visiblePhoto ? text(row.user_face) : null,
+                revision: Number(row.revision || 0),
+                updated_at: row.updated_at
+            };
+        }));
     }
 
     async listEvents(cursor = 0, limit = 500) {

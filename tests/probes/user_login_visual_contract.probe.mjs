@@ -85,8 +85,24 @@ const {
     LOGIN_TEXT_STYLE,
     createLoginGradientMotionFrames
 } = await import('../../eVe/intuition/tools/user_login_visual_contract.js');
-const { ANIMATION_MS } = await import('../../eVe/intuition/tools/user_login_choreography.js');
+const { ANIMATION_MS, resetCredentialAnimations } = await import('../../eVe/intuition/tools/user_login_choreography.js');
 const { createUserLoginSequence } = await import('../../eVe/intuition/tools/user_login_sequence.js');
+
+let retainedFillActive = true;
+let caretBlinkCancelled = false;
+const retainedFillAnimation = { cancel: () => { retainedFillActive = false; } };
+const caretBlinkAnimation = { cancel: () => { caretBlinkCancelled = true; } };
+const reopenedTypedText = {
+    style: { opacity: LOGIN_TEXT_STYLE.opacity },
+    getAnimations: () => retainedFillActive ? [retainedFillAnimation] : []
+};
+const permanentCaret = { getAnimations: () => [caretBlinkAnimation] };
+const computedReopenedOpacity = () => retainedFillActive ? '0' : reopenedTypedText.style.opacity;
+assert.equal(computedReopenedOpacity(), '0', 'the WAAPI mock must reproduce a retained fill-forwards opacity over inline styles');
+resetCredentialAnimations({ typedText: reopenedTypedText });
+assert.equal(computedReopenedOpacity(), LOGIN_TEXT_STYLE.opacity, 'reopening must cancel retained fill-forwards so mirrored text becomes visible');
+assert.equal(caretBlinkCancelled, false, 'the permanent caret blink must remain outside transient credential animation cleanup');
+assert.equal(permanentCaret.getAnimations().length, 1, 'caret blink must keep running after credential cleanup');
 
 const gradientMotionFrames = createLoginGradientMotionFrames();
 assert.equal(LOGIN_GRADIENT_MOTION.choiceDurationMs, 22000, 'choice gradient motion must expose a slow adjustable duration');

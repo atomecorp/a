@@ -158,9 +158,16 @@ async function ensureSyncEventTables(query) {
     await query('run', `CREATE TABLE IF NOT EXISTS directory_public_profiles (
         principal_id TEXT PRIMARY KEY,
         display_name TEXT NOT NULL,
+        user_face TEXT,
         revision INTEGER NOT NULL,
         updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     )`);
+    await ensureColumn({
+        query,
+        table: 'directory_public_profiles',
+        column: 'user_face',
+        ddl: 'ALTER TABLE directory_public_profiles ADD COLUMN user_face TEXT'
+    });
     await query('run', `CREATE TABLE IF NOT EXISTS directory_public_events (
         sequence INTEGER PRIMARY KEY AUTOINCREMENT,
         event_id TEXT NOT NULL UNIQUE,

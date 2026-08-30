@@ -59,7 +59,7 @@ export async function list_atomes(options = {}, callback) {
     const secondary = runtimeTauri ? 'fastify' : 'tauri';
     const atomeType = options.type || options.atomeType || options.atome_type || null;
     const skipOwnerFilter = options.skipOwner === true || options.ownerId === '*' || options.owner_id === '*' || options.ownerId === 'all' || options.owner_id === 'all';
-    const allowCrossOwner = skipOwnerFilter && (options.includeShared === true || atomeType === 'user' || atomeType === 'share_request' || atomeType === 'share_policy' || atomeType === 'share_permission');
+    const allowCrossOwner = skipOwnerFilter && (options.includeShared === true || atomeType === 'share_request' || atomeType === 'share_policy' || atomeType === 'share_permission');
     const allowCreatorMatch = options.allowCreator !== false;
 
     const results = {

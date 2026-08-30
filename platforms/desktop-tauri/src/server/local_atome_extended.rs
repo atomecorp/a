@@ -433,17 +433,21 @@ pub async fn handle_sync_message(
                 remote_url,
                 environment_fingerprint,
             ) {
-                Ok(()) => response(
-                    "sync",
-                    &message,
-                    true,
-                    Some(json!({
-                        "configured": true,
-                        "remote_user_id": remote_user_id,
-                        "environment_fingerprint": environment_fingerprint
-                    })),
-                    None,
-                ),
+                Ok(()) => match super::local_atome::enqueue_current_user_profile_sync(state, user_id, remote_user_id) {
+                    Ok(profile_republished) => response(
+                        "sync",
+                        &message,
+                        true,
+                        Some(json!({
+                            "configured": true,
+                            "remote_user_id": remote_user_id,
+                            "environment_fingerprint": environment_fingerprint,
+                            "profile_republished": profile_republished
+                        })),
+                        None,
+                    ),
+                    Err(error) => response("sync", &message, false, None, Some(error)),
+                },
                 Err(error) => response("sync", &message, false, None, Some(error)),
             }
         }

@@ -367,54 +367,6 @@ export const sessionAccountMethods = {
         return { ok: true, success: true };
     },
 
-    async list() {
-        const results = {
-            tauri: { users: [], error: null },
-            fastify: { users: [], error: null },
-            directory: []
-        };
-
-        try {
-            const tauriRes = await TauriAdapter.atome.list({ type: 'user', limit: 500, offset: 0, skipOwner: true, owner_id: '*' });
-            if (tauriRes?.ok || tauriRes?.success) {
-                results.tauri.users = tauriRes.atomes || tauriRes.data || [];
-            } else {
-                results.tauri.error = tauriRes?.error || 'list_failed';
-            }
-        } catch (e) {
-            results.tauri.error = e?.message || 'list_failed';
-        }
-
-        try {
-            const fastifyRes = await FastifyAdapter.atome.list({ type: 'user', limit: 500, offset: 0, skipOwner: true, owner_id: '*' });
-            if (fastifyRes?.ok || fastifyRes?.success) {
-                results.fastify.users = fastifyRes.atomes || fastifyRes.data || [];
-            } else {
-                results.fastify.error = fastifyRes?.error || 'list_failed';
-            }
-        } catch (e) {
-            results.fastify.error = e?.message || 'list_failed';
-        }
-
-        results.directory = [...results.tauri.users, ...results.fastify.users];
-        return results;
-    },
-
-    async setVisibility(visibility) {
-        const authCheck = requireAuth('set_visibility');
-        if (!authCheck.authenticated) return { ok: false, error: authCheck.error };
-        const userId = authCheck.user.id;
-        const primary = getPrimaryBackend();
-        const adapter = adapters[primary];
-        if (!adapter?.atome?.commit) return { ok: false, error: 'commit_unavailable' };
-        return adapter.atome.commit({
-            kind: 'set',
-            atome_id: userId,
-            props: { visibility: visibility || 'public' },
-            actor: { type: 'user', id: String(userId) }
-        });
-    },
-
     // Compatibility stubs for legacy sync/machine APIs.
     async sync() {
         if (typeof window !== 'undefined' && window.Squirrel?.SyncEngine?.requestSync) {

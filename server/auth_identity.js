@@ -156,25 +156,6 @@ async function moveActiveReferences(dataSource, legacyId, principalId) {
     ]);
 }
 
-async function isCredentiallessLegacyUser(dataSource, legacyId) {
-    const records = await rows(dataSource, `SELECT particle_key FROM particles
-        WHERE atome_id = ? AND particle_key IN ('phone', 'password_hash')`, [legacyId]);
-    const keys = new Set((records || []).map((record) => record.particle_key));
-    if (!keys.size) return true;
-    if (keys.has('phone') && keys.has('password_hash')) return false;
-    throw new Error(`legacy_principal_credential_ambiguous:${legacyId}`);
-}
-
-async function classifyLegacyGuestWorkspace(dataSource, legacy) {
-    const now = nowIso();
-    await rows(dataSource, `INSERT INTO guest_workspace_principals
-        (guest_principal_id, status, classified_at) VALUES (?, 'active', ?)
-        ON CONFLICT(guest_principal_id) DO NOTHING`, [legacy.atome_id, now]);
-    await rows(dataSource, `UPDATE atomes SET atome_type = 'guest_workspace',
-        updated_at = ? WHERE atome_id = ? AND atome_type = 'user'`, [now, legacy.atome_id]);
-    return legacy.atome_id;
-}
-
 async function cloneLegacyUser(dataSource, legacy, principalId, phone) {
     const now = nowIso();
     await rows(dataSource, `INSERT INTO atomes
@@ -256,16 +237,37 @@ export async function migrateLegacyPhonePrincipals(dataSource) {
     await assertIdentitySchema(dataSource);
     return withTransaction(async () => {
         const legacyUsers = await rows(dataSource, `SELECT atome_id, created_at, deleted_at, last_sync,
-            created_source, sync_status FROM atomes WHERE atome_type = 'user'
+            created_source, sync_status,
+            EXISTS(SELECT 1 FROM particles p WHERE p.atome_id = atomes.atome_id AND p.particle_key = 'phone') AS has_phone,
+            EXISTS(SELECT 1 FROM particles p WHERE p.atome_id = atomes.atome_id AND p.particle_key = 'password_hash') AS has_password
+            FROM atomes WHERE atome_type = 'user'
             AND NOT EXISTS (SELECT 1 FROM principal_phone_credentials c
                 WHERE c.principal_id = atomes.atome_id)`);
         const migrated = [];
+        const credentialless = (legacyUsers || []).filter((legacy) => !legacy.has_phone && !legacy.has_password);
+        if (credentialless.length) {
+            const classifiedAt = nowIso();
+            await rows(dataSource, `INSERT INTO guest_workspace_principals
+                (guest_principal_id, status, classified_at)
+                SELECT a.atome_id, 'active', ? FROM atomes a
+                WHERE a.atome_type = 'user'
+                AND NOT EXISTS (SELECT 1 FROM principal_phone_credentials c WHERE c.principal_id = a.atome_id)
+                AND NOT EXISTS (SELECT 1 FROM particles p WHERE p.atome_id = a.atome_id
+                    AND p.particle_key IN ('phone', 'password_hash'))
+                ON CONFLICT(guest_principal_id) DO NOTHING`, [classifiedAt]);
+            await rows(dataSource, `UPDATE atomes SET atome_type = 'guest_workspace', updated_at = ?
+                WHERE atome_type = 'user'
+                AND NOT EXISTS (SELECT 1 FROM principal_phone_credentials c WHERE c.principal_id = atomes.atome_id)
+                AND NOT EXISTS (SELECT 1 FROM particles p WHERE p.atome_id = atomes.atome_id
+                    AND p.particle_key IN ('phone', 'password_hash'))`, [classifiedAt]);
+            migrated.push(...credentialless.map((legacy) => legacy.atome_id));
+        }
         for (const legacy of legacyUsers || []) {
-            if (await isCredentiallessLegacyUser(dataSource, legacy.atome_id)) {
-                migrated.push(await classifyLegacyGuestWorkspace(dataSource, legacy));
-            } else {
-                migrated.push(await migrateLegacyUser(dataSource, legacy));
+            if (!legacy.has_phone && !legacy.has_password) continue;
+            if (!legacy.has_phone || !legacy.has_password) {
+                throw new Error(`legacy_principal_credential_ambiguous:${legacy.atome_id}`);
             }
+            migrated.push(await migrateLegacyUser(dataSource, legacy));
         }
         return migrated;
     });

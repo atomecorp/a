@@ -13,9 +13,18 @@ import {
     markFastifyAuthValid,
     configureTauriRemoteSync
 } from './auth_fastify_token.js';
+import { provisionFastifyCounterpart } from './auth_remote_provisioning.js';
 
 const markValidFastifySession = (backend, result) => {
     if (backend === 'fastify' && hasAuthenticatedToken('fastify', result)) markFastifyAuthValid();
+};
+
+const repairMissingFastifyCounterpart = async ({ primary, primaryResult, secondary, secondaryResult, phone, password, username }) => {
+    if (primary !== 'tauri' || secondary !== 'fastify' || !primaryResult?.ok || secondaryResult?.ok) {
+        return secondaryResult;
+    }
+    const provisioned = await provisionFastifyCounterpart({ phone, password, username });
+    return provisioned.ok ? provisioned : secondaryResult;
 };
 
 export const loginMethods = {
@@ -80,6 +89,10 @@ export const loginMethods = {
                 password,
                 username: cleanName,
                 visibility
+            });
+            secondaryResult = await repairMissingFastifyCounterpart({
+                primary, primaryResult, secondary, secondaryResult,
+                phone: cleanPhone, password, username: cleanName
             });
             response[secondary] = {
                 success: secondaryResult.ok,
@@ -193,6 +206,10 @@ export const loginMethods = {
                 username: cleanName,
                 visibility
             });
+            secondaryResult = await repairMissingFastifyCounterpart({
+                primary, primaryResult, secondary, secondaryResult,
+                phone: cleanPhone, password, username: cleanName
+            });
             response[secondary] = {
                 success: secondaryResult.ok,
                 data: secondaryResult.raw,
@@ -266,6 +283,10 @@ export const loginMethods = {
             secondaryResult = await loginBackend(secondary, {
                 phone: cleanPhone,
                 password
+            });
+            secondaryResult = await repairMissingFastifyCounterpart({
+                primary, primaryResult, secondary, secondaryResult,
+                phone: cleanPhone, password, username: username || loggedUser?.name || cleanPhone
             });
             response[secondary] = {
                 success: secondaryResult.ok,

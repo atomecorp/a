@@ -40,10 +40,21 @@ assert.match(fastifyBootstrapBranch, /success: false,[\s\S]*alreadyExists: true,
 assert.doesNotMatch(fastifyBootstrapBranch, /message: 'User already exists - ready to login'/, 'Fastify auth must not preserve the former misleading existing-user success message');
 assert.match(fastifyBootstrapBranch, /consumePhoneVerification\(connection, cleanPhone, 'enrollment'\)/, 'Fastify must require a consumed server-side enrollment proof before creating a new principal');
 assert.match(fastifyBootstrapBranch, /error: 'phone_verification_required'/, 'Fastify must expose an explicit missing enrollment proof error');
+const fastifyStartup = sliceBetween(fastifyServer, 'async function startServer()', 'async function stopFileWatcher()');
+assert.ok(
+    fastifyStartup.indexOf('await server.listen') < fastifyStartup.indexOf('directoryPublicService.rebuild()'),
+    'Fastify must listen before rebuilding the persisted public directory'
+);
+const authIdentity = readSource('server/auth_identity.js');
+assert.match(authIdentity, /INSERT INTO guest_workspace_principals[\s\S]*SELECT a\.atome_id/, 'Credentialless legacy principals must be classified in one bulk insert');
+assert.doesNotMatch(authIdentity, /classifyLegacyGuestWorkspace/, 'Per-principal credentialless startup classification must stay removed');
 
 const authApi = readSource('atome/src/squirrel/apis/unified/adole_api/auth.js');
 const authLoginMethods = readSource('atome/src/squirrel/apis/unified/adole_api/auth_methods_login.js');
 const authBackends = readSource('atome/src/squirrel/apis/unified/adole_api/auth_backends.js');
+const authFastifyToken = readSource('atome/src/squirrel/apis/unified/adole_api/auth_fastify_token.js');
+const authRemoteProvisioning = readSource('atome/src/squirrel/apis/unified/adole_api/auth_remote_provisioning.js');
+const adoleApis = readSource('atome/src/squirrel/apis/unified/adole_apis.js');
 assert.match(authLoginMethods, /bootstrapBackend/, 'Unified auth login methods must use the bootstrap backend adapter');
 assert.match(authBackends, /alreadyExists && !token\) ok = false/, 'Unified register must reject alreadyExists responses that have no token');
 assert.match(authLoginMethods, /hasAuthenticatedToken\(activeBackend, activeResult\)/, 'Unified auth must require an effective authenticated backend token before installing a session');
@@ -74,7 +85,6 @@ assert.doesNotMatch(sessionAccountMethods, /ensureAnonymousUser/, 'Legacy anonym
 assert.match(localAuth, /const AUTH_BCRYPT_COST: u32 = 10;/, 'Tauri local auth bcrypt cost must match the Fastify auth cost so local bootstrap fits the workspace-open budget');
 assert.doesNotMatch(localAuth, /DEFAULT_COST/, 'Tauri local auth must not use bcrypt DEFAULT_COST because it is slower than the Fastify contract');
 
-const adoleApis = readSource('atome/src/squirrel/apis/unified/adole_apis.js');
 assert.match(adoleApis, /bootstrap: auth\.bootstrap/, 'AdoleAPI.auth must expose bootstrap');
 assert.match(adoleApis, /requestPhoneVerification,[\s\S]*verifyPhoneVerification,/, 'AdoleAPI.auth must expose pre-auth phone verification helpers from the dedicated module');
 assert.match(adoleAdapter, /data\.context === 'login_demo' \? 'enrollment' : data\.context/, 'Fastify adapter must map the legacy login context to the canonical enrollment purpose');
@@ -117,3 +127,10 @@ const publicBootstrap = sliceBetween(authLoginMethods, 'async bootstrap(phone, p
 assert.match(publicBootstrap, /response\.ok = true/, 'Unified bootstrap must expose top-level ok after login or account creation');
 assert.match(publicBootstrap, /response\.user = activeResult\.user/, 'Unified bootstrap must expose the authenticated created/logged user');
 assert.match(publicBootstrap, /response\.backend = activeBackend/, 'Unified bootstrap must expose the authenticated backend');
+assert.match(authLoginMethods, /repairMissingFastifyCounterpart/, 'A valid local login must repair a missing Fastify counterpart');
+assert.match(authFastifyToken, /remote_counterpart_provisioned/, 'A restored Tauri session must repair its Fastify counterpart before directory reads');
+assert.match(authRemoteProvisioning, /crypto\.subtle\.verify/, 'Remote provisioning must verify the server signature locally');
+assert.match(authRemoteProvisioning, /remote_identity_fingerprint_mismatch/, 'Remote provisioning must bind the verified key to its fingerprint');
+assert.match(authRemoteProvisioning, /provisionAccount/, 'Remote repair must use the dedicated idempotent provisioning contract');
+assert.doesNotMatch(authRemoteProvisioning, /\.register\(/, 'Remote repair must not bypass enrollment through raw registration');
+assert.match(adoleApis, /directory:[\s\S]*ensureFastifyToken/, 'Public directory reads must prepare the authenticated Fastify identity');

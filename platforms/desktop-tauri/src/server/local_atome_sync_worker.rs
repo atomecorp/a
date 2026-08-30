@@ -60,6 +60,7 @@ fn remove_local_identity_aliases(map: &mut serde_json::Map<String, JsonValue>) {
 
 pub(crate) fn normalize_outbound_event(
     mut event: JsonValue,
+    local_user_id: &str,
     remote_user_id: &str,
 ) -> Result<JsonValue, String> {
     let object = event
@@ -69,6 +70,9 @@ pub(crate) fn normalize_outbound_event(
         "actor".to_string(),
         json!({ "type": "user", "id": remote_user_id }),
     );
+    if object.get("atome_id").and_then(JsonValue::as_str) == Some(local_user_id) {
+        object.insert("atome_id".to_string(), JsonValue::String(remote_user_id.to_string()));
+    }
     remove_local_identity_aliases(object);
 
     if let Some(payload) = object.get_mut("payload").and_then(JsonValue::as_object_mut) {
@@ -248,7 +252,7 @@ pub async fn run(state: LocalAtomeState, remote_url: String) {
             if let Ok(db) = state.db.lock() {
                 let _ = mark_sync_queue_syncing(&db, item.queue_id, attempts);
             }
-            let event = match normalize_outbound_event(payload, &credential.remote_user_id) {
+            let event = match normalize_outbound_event(payload, &local_user_id, &credential.remote_user_id) {
                 Ok(value) => value,
                 Err(error) => {
                     record_error(&state, item.queue_id, attempts, item.max_attempts, &error);
@@ -301,14 +305,35 @@ mod tests {
                     }
                 }
             }),
+            "local-user",
             "remote-user",
         )
         .expect("event must normalize");
 
         assert_eq!(normalized.pointer("/actor/id"), Some(&json!("remote-user")));
+        assert_eq!(normalized.get("atome_id"), Some(&json!("shape-1")));
         assert_eq!(normalized.pointer("/payload/props/left"), Some(&json!(12)));
         assert!(normalized.pointer("/payload/props/owner_id").is_none());
         assert!(normalized.pointer("/payload/props/creator_id").is_none());
+    }
+
+    #[test]
+    fn outbound_user_profile_targets_the_remote_principal() {
+        let normalized = normalize_outbound_event(
+            json!({
+                "id": "profile-event",
+                "atome_id": "local-user",
+                "kind": "set",
+                "actor": { "type": "user", "id": "local-user" },
+                "payload": { "props": { "eve_profile": { "access": "public" } } }
+            }),
+            "local-user",
+            "remote-user",
+        )
+        .expect("profile event must normalize");
+
+        assert_eq!(normalized.get("atome_id"), Some(&json!("remote-user")));
+        assert_eq!(normalized.pointer("/actor/id"), Some(&json!("remote-user")));
     }
 
     #[test]

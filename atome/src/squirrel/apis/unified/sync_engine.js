@@ -1,4 +1,4 @@
-import { CONFIG, resolveDataSource } from './adole_backend.js';
+import { CONFIG } from './adole_backend.js';
 import { getToken } from './adole_connection.js';
 
 const DEVICE_KEY = 'squirrel_sync_device_id_v1';
@@ -139,7 +139,6 @@ export class SyncEngine {
         const url = syncUrl(this.env);
         const authToken = this.token();
         if (!url || !authToken || !principalId(this.env) || !this.WebSocketClass) return false;
-        if (resolveDataSource() !== 'fastify') return false;
         if (this.socket?.readyState === this.WebSocketClass.OPEN) return true;
         this.disconnect({ reconnect: false });
         this.loadScope();
