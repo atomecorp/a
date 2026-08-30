@@ -18,9 +18,6 @@ import {
     authorizeAtomeEventWrite
 } from './atomePropertySecurity.js';
 
-const SYNC_REMOTE_ENABLED = process.env.SQUIRREL_SYNC_REMOTE !== '0';
-const SYNC_TARGET_SERVER = 'tauri';
-
 function resolveSyncOperation(kind) {
     if (!kind) return 'update';
     const normalized = String(kind).toLowerCase();
@@ -97,8 +94,7 @@ async function emitCommittedAtomeSync(event) {
 
 export async function commitAtomeEvent({
     event,
-    authenticatedUserId,
-    syncSource = ''
+    authenticatedUserId
 } = {}) {
     if (!authenticatedUserId) {
         return { ok: false, error: 'authenticated_user_missing' };
@@ -107,21 +103,13 @@ export async function commitAtomeEvent({
         return { ok: false, error: 'invalid_event_payload' };
     }
     const actor = normalizeAtomeCommitActor(event.actor, authenticatedUserId);
-    const normalizedSyncSource = String(syncSource || event.sync_source || '').toLowerCase();
-    const shouldEnqueue = SYNC_REMOTE_ENABLED && normalizedSyncSource !== SYNC_TARGET_SERVER;
     let created = null;
     let authorization;
     try {
         authorization = await db.withTransaction(async () => {
             const decision = await authorizeAtomeEventWrite(event, authenticatedUserId);
             if (!decision.allowed) return decision;
-            created = await db.appendEvent(
-                { ...event, actor },
-                {
-                    syncTarget: shouldEnqueue ? SYNC_TARGET_SERVER : null,
-                    skipQueue: !shouldEnqueue
-                }
-            );
+            created = await db.appendEvent({ ...event, actor });
             return decision;
         });
     } catch (error) {
@@ -146,8 +134,7 @@ export async function commitAtomeEvents({
     events,
     authenticatedUserId,
     actor = null,
-    txId = null,
-    syncSource = ''
+    txId = null
 } = {}) {
     if (!authenticatedUserId) {
         return { ok: false, error: 'authenticated_user_missing' };
@@ -162,19 +149,13 @@ export async function commitAtomeEvents({
             ? normalizeAtomeCommitActor(evt.actor, authenticatedUserId)
             : secondaryActor
     }));
-    const normalizedSyncSource = String(syncSource || '').toLowerCase();
-    const shouldEnqueue = SYNC_REMOTE_ENABLED && normalizedSyncSource !== SYNC_TARGET_SERVER;
     let created = [];
     let authorization;
     try {
         authorization = await db.withTransaction(async () => {
             const decision = await authorizeAtomeEventBatch(normalizedEvents, authenticatedUserId);
             if (!decision.allowed) return decision;
-            created = await db.appendEvents(normalizedEvents, {
-                txId,
-                syncTarget: shouldEnqueue ? SYNC_TARGET_SERVER : null,
-                skipQueue: !shouldEnqueue
-            });
+            created = await db.appendEvents(normalizedEvents, { txId });
             return decision;
         });
     } catch (error) {

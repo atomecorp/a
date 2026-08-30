@@ -196,10 +196,28 @@ Decision:
 - Historical editing through a separate future line depends on `todo/ai_voice/time_machine_historical_branching.md`.
 - Define a deterministic tie-breaker for equal or invalid timestamps and expose the conflict decision in diagnostics.
 
-Current gap:
+Locked deterministic rule:
 
-- `server/githubSync.js` returns `offline_conflict_resolution_unavailable` for `offline_changes`.
-- No verified end-to-end implementation currently proves ordered offline replay, last-write-wins projection, preservation of losing events, permission enforcement, or cross-runtime parity.
+- newest valid timestamp wins per authorized property;
+- equal valid timestamps use lexical `event.id`;
+- an invalid timestamp ranks below every valid timestamp and is then ordered by
+  lexical `event.id`;
+- database row order, arrival order, device class, owner status, and author id
+  never decide the winner.
+
+Socket ownership is also locked: commands and offline `sync:push` use
+authenticated `/ws/api`; authenticated `/ws/sync` only registers subscriptions,
+delivers ordered replay/live events, accepts ACKs, and carries redacted
+`directory.public` invalidations.
+
+Implemented state (2026-08-29):
+
+- `/ws/api sync:push` commits authorized offline events into the principal vault.
+- Per-property LWW, invalid/equal timestamp ordering, append-only losing-event
+  retention, permission enforcement, stable stream sequences, replay, ACK and
+  deduplication have executable server/runtime coverage.
+- Generic GitHub synchronization is unrelated to the Atome event contract and
+  is not an offline-conflict owner.
 
 **Current default in ShareAPI.share_with():** `linked`  
 **Current override in communication.js:** `copy` (line 3199)

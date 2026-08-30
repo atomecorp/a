@@ -50,6 +50,11 @@ Offline conflict contract:
  • A correction or restoration is a new appended event.
  • Editing from a historical point through a distinct branch depends on the registered Time Machine historical-branching work.
  • Equal or invalid timestamps require a documented deterministic tie-breaker and must never depend on database row accident or arrival-order ambiguity.
+ • Locked tie-breaker: newest valid timestamp, then lexical `event.id`; invalid
+   timestamps rank below valid timestamps and are then ordered by lexical
+   `event.id`.
+ • Interactive stale same-property writes are not LWW: `expected_versions`
+   produces an atomic `property_version_conflict` rejection.
 
 ⸻
 

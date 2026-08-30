@@ -415,11 +415,23 @@ pub async fn handle_sync_message(
                 .or_else(|| message.get("remoteToken"))
                 .and_then(|value| value.as_str())
                 .unwrap_or("");
+            let remote_url = message
+                .get("remote_url")
+                .or_else(|| message.get("remoteUrl"))
+                .and_then(|value| value.as_str())
+                .unwrap_or("");
+            let environment_fingerprint = message
+                .get("environment_fingerprint")
+                .or_else(|| message.get("environmentFingerprint"))
+                .and_then(|value| value.as_str())
+                .unwrap_or("");
             match super::local_atome::configure_remote_sync_credential(
                 state,
                 user_id,
                 remote_user_id,
                 remote_token,
+                remote_url,
+                environment_fingerprint,
             ) {
                 Ok(()) => response(
                     "sync",
@@ -427,7 +439,8 @@ pub async fn handle_sync_message(
                     true,
                     Some(json!({
                         "configured": true,
-                        "remote_user_id": remote_user_id
+                        "remote_user_id": remote_user_id,
+                        "environment_fingerprint": environment_fingerprint
                     })),
                     None,
                 ),

@@ -61,6 +61,7 @@ import {
     stripEventMetaPatch
 } from './adole_event_contract.js';
 import { createAdoleEventMutationApi } from './adole_event_mutation.js';
+import { createAdoleConflictApi } from './adole_conflicts.js';
 
 export {
     HISTORY_EVENT_CLASS,
@@ -96,6 +97,7 @@ const permissions = createAdolePermissionApi({
 });
 
 const eventMutations = createAdoleEventMutationApi({ query });
+const eventConflicts = createAdoleConflictApi({ query });
 const insertedEventResults = new WeakSet();
 
 export function wasEventInserted(event) {
@@ -126,7 +128,8 @@ async function upsertAtomeFromEvent({
     deleted,
     restored,
     properties,
-    writeParticles = true
+    writeParticles = true,
+    eventId = null
 }) {
     if (!atomeId) return;
     const now = ts || new Date().toISOString();
@@ -191,10 +194,10 @@ async function upsertAtomeFromEvent({
         );
 
         if (pendingOwnerId && writeParticles) {
-            await setParticle(atomeId, '_pending_owner_id', pendingOwnerId, ownerId || null);
+            await setParticle(atomeId, '_pending_owner_id', pendingOwnerId, ownerId || null, { eventId, timestamp: now });
         }
         if (pendingParentId && writeParticles) {
-            await setParticle(atomeId, '_pending_parent_id', pendingParentId, ownerId || null);
+            await setParticle(atomeId, '_pending_parent_id', pendingParentId, ownerId || null, { eventId, timestamp: now });
         }
     } else {
         const updates = [];
@@ -258,7 +261,7 @@ async function upsertAtomeFromEvent({
             await query('run', `UPDATE atomes SET ${updates.join(', ')} WHERE atome_id = ?`, values);
         }
         if (pendingOwnerId && writeParticles) {
-            await setParticle(atomeId, '_pending_owner_id', pendingOwnerId, ownerId || null);
+            await setParticle(atomeId, '_pending_owner_id', pendingOwnerId, ownerId || null, { eventId, timestamp: now });
         } else if (writeParticles && (assignedOwnerId || existing.owner_id)) {
             await query(
                 'run',
@@ -267,7 +270,7 @@ async function upsertAtomeFromEvent({
             );
         }
         if (pendingParentId && writeParticles) {
-            await setParticle(atomeId, '_pending_parent_id', pendingParentId, ownerId || null);
+            await setParticle(atomeId, '_pending_parent_id', pendingParentId, ownerId || null, { eventId, timestamp: now });
         } else if (writeParticles && (assignedParentId || existing.parent_id)) {
             await query(
                 'run',
@@ -278,7 +281,7 @@ async function upsertAtomeFromEvent({
     }
 
     if (writeParticles && properties && Object.keys(properties).length > 0) {
-        await setParticles(atomeId, properties, ownerId || null);
+        await setParticles(atomeId, properties, ownerId || null, { eventId, timestamp: now });
     }
 }
 
@@ -906,9 +909,10 @@ export async function listAtomes(ownerId, options = {}) {
  * Set a particle on an atome (creates or updates)
  * Also records the change in particles_versions for history
  */
-export async function setParticle(atomeId, key, value, author = null) {
+export async function setParticle(atomeId, key, value, author = null, metadata = {}) {
     const propertyKey = assertCanonicalPropertyKey(key);
-    const now = new Date().toISOString();
+    const now = metadata.timestamp || new Date().toISOString();
+    const eventId = metadata.eventId || null;
     const valueStr = JSON.stringify(value);
     const valueType = typeof value === 'object' ? 'json' : typeof value;
 
@@ -961,9 +965,9 @@ export async function setParticle(atomeId, key, value, author = null) {
 
     // Record in particles_versions for history (correct column names)
     await query('run', `
-		INSERT INTO particles_versions (particle_id, atome_id, particle_key, version, old_value, new_value, changed_by, changed_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-	`, [particleId, atomeId, propertyKey, version, oldValue, valueStr, author, now]);
+		INSERT INTO particles_versions (particle_id, atome_id, particle_key, version, old_value, new_value, changed_by, changed_at, event_id)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, [particleId, atomeId, propertyKey, version, oldValue, valueStr, author, now, eventId]);
 
     // Update atome's updated_at and sync_status
     await query('run',
@@ -978,7 +982,7 @@ export async function setParticle(atomeId, key, value, author = null) {
  * Set multiple particles at once (OPTIMIZED BATCH INSERT)
  * Uses a single transaction for all particles to improve performance
  */
-export async function setParticles(atomeId, particles, author = null) {
+export async function setParticles(atomeId, particles, author = null, metadata = {}) {
     // Guard against null/undefined particles
     if (!particles || typeof particles !== 'object') {
         console.warn('[setParticles] Invalid particles:', particles, 'for atome:', atomeId);
@@ -991,13 +995,14 @@ export async function setParticles(atomeId, particles, author = null) {
     // For small batches (1-3 particles), use sequential for simplicity
     if (entries.length <= 3) {
         for (const [key, value] of entries) {
-            await setParticle(atomeId, key, value, author);
+            await setParticle(atomeId, key, value, author, metadata);
         }
         return;
     }
 
     // For larger batches, use optimized batch operations
-    const now = new Date().toISOString();
+    const now = metadata.timestamp || new Date().toISOString();
+    const eventId = metadata.eventId || null;
 
     // Get all existing particles for this atome in one query
     const existingRows = await query('all',
@@ -1068,9 +1073,9 @@ export async function setParticles(atomeId, particles, author = null) {
     // Batch insert history records
     for (const record of historyRecords) {
         await query('run', `
-            INSERT INTO particles_versions (particle_id, atome_id, particle_key, version, old_value, new_value, changed_by, changed_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        `, [record.particleId, atomeId, record.key, record.version, record.oldValue, record.newValue, author, now]);
+            INSERT INTO particles_versions (particle_id, atome_id, particle_key, version, old_value, new_value, changed_by, changed_at, event_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `, [record.particleId, atomeId, record.key, record.version, record.oldValue, record.newValue, author, now, eventId]);
     }
 
     // Nothing actually changed: leave the atome's sync_status alone rather than
@@ -1211,6 +1216,7 @@ function normalizeEventInput(event, options = {}) {
     const actor = event.actor ?? null;
     const txId = event.tx_id || event.txId || options.txId || null;
     const gestureId = event.gesture_id || event.gestureId || null;
+    const source = event.source || event.source_id || event.sourceId || options.source || null;
 
     return {
         id,
@@ -1222,8 +1228,43 @@ function normalizeEventInput(event, options = {}) {
         payload,
         actor,
         tx_id: txId,
-        gesture_id: gestureId
+        gesture_id: gestureId,
+        source
     };
+}
+
+const eventScopeKey = (event) => event.project_id
+    ? `project:${event.project_id}`
+    : (event.atome_id ? `atome:${event.atome_id}` : 'global');
+
+async function assignEventSequence(event) {
+    const scopeKey = eventScopeKey(event);
+    let stream = await query('get', 'SELECT stream_id FROM sync_streams WHERE scope_key = ?', [scopeKey]);
+    if (!stream) {
+        const streamId = uuidv4();
+        await query(
+            'run',
+            `INSERT OR IGNORE INTO sync_streams (stream_id, scope_key, project_id, atome_id, owner_id)
+             VALUES (?, ?, ?, ?, ?)`,
+            [
+                streamId,
+                scopeKey,
+                event.project_id || null,
+                event.project_id ? null : event.atome_id || null,
+                resolveActorId(event.actor)
+            ]
+        );
+        stream = await query('get', 'SELECT stream_id FROM sync_streams WHERE scope_key = ?', [scopeKey]);
+    }
+    const counter = await query('get', 'SELECT last_sequence FROM sync_stream_sequences WHERE stream_id = ?', [stream.stream_id]);
+    const sequence = Number(counter?.last_sequence || 0) + 1;
+    await query(
+        'run',
+        `INSERT INTO sync_stream_sequences (stream_id, last_sequence) VALUES (?, ?)
+         ON CONFLICT(stream_id) DO UPDATE SET last_sequence = excluded.last_sequence`,
+        [stream.stream_id, sequence]
+    );
+    return { ...event, stream_id: stream.stream_id, stream: stream.stream_id, sequence };
 }
 
 async function applyEventToStateCurrent(event, options = {}) {
@@ -1255,14 +1296,16 @@ async function applyEventToStateCurrent(event, options = {}) {
         deleted,
         restored,
         properties: particlePatch,
-        writeParticles: options.writeParticles !== false
+        writeParticles: options.writeParticles !== false,
+        eventId: event.id || null
     });
     if (options.writeParticles !== false && deletedKeys.length) {
         await eventMutations.applyDeletes({
             atomeId,
             keys: deletedKeys,
             author: actorId,
-            timestamp: ts
+            timestamp: ts,
+            eventId: event.id || null
         });
     }
 
@@ -1367,7 +1410,9 @@ export async function rebuildStateCurrentFromEvents(options = {}) {
 
         const rows = await query(
             'all',
-            `SELECT rowid AS replay_rowid, * FROM events ${where} ORDER BY ts ASC, rowid ASC LIMIT ?`,
+            `SELECT * FROM events ${where}
+             ORDER BY CASE WHEN julianday(ts) IS NULL THEN 0 ELSE 1 END ASC,
+                      julianday(ts) ASC, id ASC LIMIT ?`,
             [...params, limit]
         );
         eventCount = rows.length;
@@ -1397,6 +1442,7 @@ export async function appendEvent(event, options = {}) {
     let normalized = normalizeEventInput(event, options);
     const syncTarget = options.syncTarget || options.target_server || null;
     const skipQueue = options.skipQueue === true;
+    const conflictMode = options.conflictMode === 'offline-lww' ? 'offline-lww' : 'interactive';
     let inserted = false;
 
     await withTransaction(async () => {
@@ -1407,15 +1453,30 @@ export async function appendEvent(event, options = {}) {
         );
         if (existing) {
             assertIdempotentEventReplay(existing, normalized);
+            normalized = {
+                ...existing,
+                payload: safeParseJson(existing.payload),
+                actor: safeParseJson(existing.actor),
+                projection: safeParseJson(existing.projection),
+                lww_decisions: safeParseJson(existing.lww_decisions),
+                stream: existing.stream_id,
+                inserted: false
+            };
             return;
         }
-        normalized = await eventMutations.prepare(normalized);
+        normalized = await eventMutations.prepare(normalized, {
+            skipExpectedVersions: conflictMode === 'offline-lww'
+        });
+        normalized = await assignEventSequence(normalized);
+        const evaluation = await eventConflicts.evaluate(normalized, conflictMode);
+        normalized.lww_decisions = evaluation.decisions;
         const payloadJson = serializeJson(normalized.payload);
         const actorJson = serializeJson(normalized.actor);
         await query(
             'run',
-            `INSERT INTO events (id, ts, atome_id, project_id, kind, payload, actor, tx_id, gesture_id)
-			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            `INSERT INTO events
+             (id, ts, atome_id, project_id, kind, payload, actor, tx_id, gesture_id, stream_id, sequence, source, lww_decisions)
+			 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [
                 normalized.id,
                 normalized.ts,
@@ -1425,15 +1486,21 @@ export async function appendEvent(event, options = {}) {
                 payloadJson,
                 actorJson,
                 normalized.tx_id,
-                normalized.gesture_id
+                normalized.gesture_id,
+                normalized.stream_id,
+                normalized.sequence,
+                normalized.source,
+                serializeJson(normalized.lww_decisions)
             ]
         );
         inserted = true;
+        await eventConflicts.record(normalized, evaluation);
 
-        await applyEventToStateCurrent({
-            ...normalized,
-            payload: normalized.payload
-        });
+        const projection = evaluation.projectionEvent
+            ? await applyEventToStateCurrent(evaluation.projectionEvent)
+            : await getStateCurrent(normalized.atome_id);
+        normalized.projection = projection;
+        await query('run', 'UPDATE events SET projection = ? WHERE id = ?', [serializeJson(projection), normalized.id]);
         if (syncTarget && !skipQueue) {
             await enqueueSyncOperation({
                 atome_id: normalized.atome_id,
@@ -1459,10 +1526,11 @@ export async function appendEvents(events, options = {}) {
     const txId = options.tx_id || options.txId || null;
     const syncTarget = options.syncTarget || options.target_server || null;
     const skipQueue = options.skipQueue === true;
+    const conflictMode = options.conflictMode === 'offline-lww' ? 'offline-lww' : 'interactive';
 
     await withTransaction(async () => {
         for (const evt of events) {
-            let normalized = normalizeEventInput(evt, { txId });
+            let normalized = normalizeEventInput(evt, { txId, source: options.source || null });
 
             const existing = await query(
                 'get',
@@ -1471,18 +1539,32 @@ export async function appendEvents(events, options = {}) {
             );
             if (existing) {
                 assertIdempotentEventReplay(existing, normalized);
-                results.push(normalized);
+                results.push({
+                    ...existing,
+                    payload: safeParseJson(existing.payload),
+                    actor: safeParseJson(existing.actor),
+                    projection: safeParseJson(existing.projection),
+                    lww_decisions: safeParseJson(existing.lww_decisions),
+                    stream: existing.stream_id,
+                    inserted: false
+                });
                 continue;
             }
 
-            normalized = await eventMutations.prepare(normalized);
+            normalized = await eventMutations.prepare(normalized, {
+                skipExpectedVersions: conflictMode === 'offline-lww'
+            });
+            normalized = await assignEventSequence(normalized);
+            const evaluation = await eventConflicts.evaluate(normalized, conflictMode);
+            normalized.lww_decisions = evaluation.decisions;
             const payloadJson = serializeJson(normalized.payload);
             const actorJson = serializeJson(normalized.actor);
 
             await query(
                 'run',
-                `INSERT INTO events (id, ts, atome_id, project_id, kind, payload, actor, tx_id, gesture_id)
-				 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                `INSERT INTO events
+                 (id, ts, atome_id, project_id, kind, payload, actor, tx_id, gesture_id, stream_id, sequence, source, lww_decisions)
+				 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
                 [
                     normalized.id,
                     normalized.ts,
@@ -1492,14 +1574,20 @@ export async function appendEvents(events, options = {}) {
                     payloadJson,
                     actorJson,
                     normalized.tx_id,
-                normalized.gesture_id
+                normalized.gesture_id,
+                normalized.stream_id,
+                normalized.sequence,
+                normalized.source,
+                serializeJson(normalized.lww_decisions)
             ]
         );
+            await eventConflicts.record(normalized, evaluation);
 
-            await applyEventToStateCurrent({
-                ...normalized,
-                payload: normalized.payload
-            });
+            const projection = evaluation.projectionEvent
+                ? await applyEventToStateCurrent(evaluation.projectionEvent)
+                : await getStateCurrent(normalized.atome_id);
+            normalized.projection = projection;
+            await query('run', 'UPDATE events SET projection = ? WHERE id = ?', [serializeJson(projection), normalized.id]);
 
             if (syncTarget && !skipQueue) {
                 await enqueueSyncOperation({

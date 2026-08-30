@@ -453,15 +453,6 @@ async function handleClientMessage(clientId, message) {
                 }
                 return { type: 'pong' };
 
-            case 'offline_changes':
-                // Client reports offline changes for conflict resolution
-                console.log(`📥 Offline changes from ${clientId}:`, data.changes?.length || 0);
-                return {
-                    type: 'error',
-                    message: 'offline_conflict_resolution_unavailable',
-                    count: data.changes?.length || 0
-                };
-
             default:
                 return { type: 'error', message: 'Unknown message type' };
         }

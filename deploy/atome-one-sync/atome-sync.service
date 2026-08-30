@@ -1,0 +1,30 @@
+[Unit]
+Description=atome.one Fastify sync orchestrator
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=atome
+Group=atome
+WorkingDirectory=/opt/a
+EnvironmentFile=/etc/squirrel/squirrel.env
+ExecStart=/usr/bin/node /opt/a/server/server.js
+Restart=on-failure
+RestartSec=5
+KillMode=control-group
+TimeoutStopSec=30
+NoNewPrivileges=true
+PrivateTmp=true
+RuntimeDirectory=atome-vault
+RuntimeDirectoryMode=0700
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/atome /run/atome-vault
+LimitNOFILE=65536
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=atome-sync
+
+[Install]
+WantedBy=multi-user.target

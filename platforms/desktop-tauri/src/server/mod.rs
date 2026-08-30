@@ -63,6 +63,7 @@ mod local_atome_extended;
 mod local_atome_remote_projection;
 mod local_atome_security;
 mod local_atome_sync_worker;
+mod local_atome_ws_sync;
 mod remote_control;
 mod remote_control_ws;
 

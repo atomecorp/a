@@ -125,6 +125,7 @@ const SPARK_BOOT_WAVES = [
     { id: 'apis.loader', path: './apis/loader.js', critical: true },
     { id: 'apis.shortcut', path: './apis/shortcut.js' },
     { id: 'apis.adole_apis', path: './apis/unified/adole_apis.js', critical: true },
+    { id: 'apis.sync_engine', path: './apis/unified/sync_engine.js', critical: true },
     { id: 'apis.loadServerConfig', path: './apis/loadServerConfig.js', critical: true },
     { id: 'apis.dragdrop', path: './apis/dragdrop.js', critical: true },
     { id: 'squirrel.core', path: './squirrel.js', critical: true }
@@ -246,6 +247,7 @@ const bootstrapSpark = async () => {
   const { bootstrapAiModelCatalogRefresh } = loadedModules['ai.model_catalog_refresh'];
   const { AdoleAPI } = loadedModules['apis.adole_apis'];
   const { loadServerConfigOnce } = loadedModules['apis.loadServerConfig'];
+  const { installSyncEngine } = loadedModules['apis.sync_engine'];
   const { $, define, observeMutations } = loadedModules['squirrel.core'];
 
   bootstrapAiModelCatalogRefresh({ env: globalThis?.window || globalThis });
@@ -286,6 +288,7 @@ const bootstrapSpark = async () => {
   });
 
   const loadServerConfigMs = await loadSparkServerConfig(loadServerConfigOnce);
+  installSyncEngine(globalThis?.window || globalThis);
 
   startSparkApplicationLoad({
     emitSparkPerf,

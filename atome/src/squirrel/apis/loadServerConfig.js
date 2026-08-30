@@ -216,9 +216,7 @@ function isLikelyTauriLoopbackBase(base, config = null) {
 
 function clearFastifyOverrideStorage() {
     if (typeof window === 'undefined') return;
-    
-        localStorage.removeItem('squirrel_tauri_fastify_url_override');
-    
+    window.localStorage?.removeItem?.('squirrel_tauri_fastify_url_override');
 }
 
 function isLocalFastifyBase(base) {
@@ -240,7 +238,7 @@ function readTauriFastifyOverride() {
         return '';
     }
     try {
-        const stored = localStorage.getItem('squirrel_tauri_fastify_url_override');
+        const stored = window.localStorage?.getItem?.('squirrel_tauri_fastify_url_override');
         const normalized = normalizeNoTrailingSlash(stored);
         if (!normalized) return '';
         if (isInvalidFastifyLoopbackBase(normalized)) {

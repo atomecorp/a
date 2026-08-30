@@ -13,13 +13,13 @@ import { execFile } from 'child_process';
 import pino from 'pino';
 import { coerceLogEnvelope, isValidLogEnvelope } from '../atome/src/shared/logging.js';
 import { handleWsAtomeOperation } from './wsAtomeOperations.js';
-import { sendWsApiRequest } from './wsApiClient.js';
+import { createUserVaultRouter } from './userVaultRouter.js';
+import { createWsSyncRuntime } from './wsSyncRuntime.js';
+import { createSyncSharingService } from './syncSharingService.js';
+import { createDirectoryPublicService } from './directoryPublicService.js';
 import {
   authenticateWsSyncMessage,
   authenticateWsSyncRequest,
-  buildWsSyncWelcome,
-  filterWsSyncEventForPrincipal,
-  handleWsSyncControlMessage,
   validateWsSyncPrincipal
 } from './wsSyncSecurity.js';
 
@@ -138,11 +138,7 @@ import {
   wsSendJsonToUser,
   wsSendJsonToUserExcept
 } from './wsApiState.js';
-import {
-  inheritPermissionsFromParent,
-  broadcastAtomeCreate
-} from './atomeRealtime.js';
-import { handleWsAtomeRealtimeOperation } from './wsAtomeRealtimeOperation.js';
+import { inheritPermissionsFromParent } from './atomeRealtime.js';
 import { handleWsAtomeDeleteOperation } from './wsAtomeDeleteOperation.js';
 import { executeShellCommand } from './shell.js';
 import { ensureUserHome } from './userHome.js';
@@ -164,7 +160,6 @@ import { SERVER_VERSION, EVE_VERSION, loadServerVersion, loadEveVersion, refresh
 import { logger, logStructured, setLogServer, MINIMAL_LOGS } from './server_logger.js';
 import { recentErrors, recordRecentError, isDuplicateWsRequest, isDuplicateAtomeCreate } from './server_dedup.js';
 import { uploadsDir, resolveUploadsDir, listUserDownloadsSnapshot, listAnonymousUploads, listUserDownloads, listUploadsForUser, resolveDownloadTarget } from './server_uploads.js';
-import { createSyncQueueWorker } from './sync_queue_worker.js';
 import { classifyHttpLifecycleError } from './http_error_classification.js';
 import {
   canReadAnyAtomeProperty,
@@ -173,6 +168,30 @@ import {
 
 // Database imports - Using SQLite/libSQL (ADOLE data layer)
 import db from '../database/adole.js';
+
+const userVaultRouter = createUserVaultRouter({
+  root: process.env.SQUIRREL_VAULT_ROOT || path.join(projectRoot_env, 'database_storage', 'vaults')
+});
+const wsSyncRuntime = createWsSyncRuntime({
+  authenticateRequest: authenticateWsSyncRequest,
+  authenticateMessage: authenticateWsSyncMessage,
+  validatePrincipal: validateWsSyncPrincipal,
+  isProvisioned: isWsApiPrincipalProvisioned,
+  getVersion: getLocalVersion,
+  vaultRouter: userVaultRouter
+});
+const syncSharingService = createSyncSharingService({
+  vaultRouter: userVaultRouter,
+  syncRuntime: wsSyncRuntime,
+  isProvisioned: isWsApiPrincipalProvisioned,
+  notifyPrincipal: (principalId, payload) => wsSendJsonToUser(
+    principalId,
+    payload,
+    { scope: 'ws/api', op: payload.type, targetUserId: principalId }
+  )
+});
+const directoryPublicService = createDirectoryPublicService({ syncRuntime: wsSyncRuntime });
+wsSyncRuntime.setDirectoryService(directoryPublicService);
 import { v4 as uuidv4 } from 'uuid';
 import { makeId } from '../atome/src/squirrel/shared/scalars.js';
 
@@ -270,12 +289,6 @@ const UI_TESTS_DIR = path.join(LOG_DIR, 'ui-tests');
 const SCHEMA_PATH = path.join(projectRoot, 'database', 'schema.sql');
 const SCHEMA_TABLES = 'atomes, particles, particles_versions, snapshots, events, state_current, permissions, sync_queue, sync_state';
 let cachedSchemaHash = null;
-const TAURI_SYNC_URL = process.env.SQUIRREL_TAURI_URL || process.env.TAURI_URL || 'http://127.0.0.1:3000';
-const SYNC_REMOTE_ENABLED = process.env.SQUIRREL_SYNC_REMOTE !== '0';
-const SYNC_TARGET_SERVER = 'tauri';
-const SYNC_BACKOFF_BASE_MS = Number(process.env.SQUIRREL_SYNC_BACKOFF_MS || 1000);
-const SYNC_BACKOFF_MAX_MS = Number(process.env.SQUIRREL_SYNC_BACKOFF_MAX_MS || 60000);
-const SYNC_QUEUE_LIMIT = Number(process.env.SQUIRREL_SYNC_BATCH || 50);
 const CORS_METHODS = ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'];
 
 const buildAllowedCorsOrigins = () => {
@@ -342,66 +355,6 @@ const resolveSyncAtomeType = (...candidates) => {
   }
   return null;
 };
-
-const computeBackoffMs = (attempts) => {
-  if (!attempts || attempts <= 1) return SYNC_BACKOFF_BASE_MS;
-  const next = SYNC_BACKOFF_BASE_MS * Math.pow(2, attempts - 1);
-  return Math.min(next, SYNC_BACKOFF_MAX_MS);
-};
-
-async function processSyncQueue() {
-  if (!SYNC_REMOTE_ENABLED) return;
-  const items = await db.listSyncQueue({ target_server: SYNC_TARGET_SERVER, limit: SYNC_QUEUE_LIMIT });
-  if (!items || !items.length) return;
-
-  for (const item of items) {
-    const attempts = (item.attempts || 0) + 1;
-    await db.markSyncQueueSyncing(item.queue_id, attempts);
-
-    const payload = safeJsonParse(item.payload);
-    if (!payload || typeof payload !== 'object') {
-      await db.markSyncQueueError(item.queue_id, attempts, 'Invalid payload', null, true);
-      continue;
-    }
-
-    try {
-      const response = await sendWsApiRequest(TAURI_SYNC_URL, {
-        type: 'events',
-        action: 'commit',
-        token: process.env.SQUIRREL_SYNC_TOKEN || '',
-        sync_source: 'fastify',
-        event: payload
-      });
-      if (response.success === true) {
-        await db.markSyncQueueDone(item.queue_id);
-        continue;
-      }
-
-      const maxAttempts = item.max_attempts || 5;
-      const final = attempts >= maxAttempts;
-      const retryAt = final ? null : new Date(Date.now() + computeBackoffMs(attempts)).toISOString();
-      await db.markSyncQueueError(
-        item.queue_id,
-        attempts,
-        response.error || 'WebSocket sync failed',
-        retryAt,
-        final
-      );
-    } catch (error) {
-      const maxAttempts = item.max_attempts || 5;
-      const final = attempts >= maxAttempts;
-      const retryAt = final ? null : new Date(Date.now() + computeBackoffMs(attempts)).toISOString();
-      await db.markSyncQueueError(item.queue_id, attempts, error?.message || 'Sync error', retryAt, final);
-    }
-  }
-}
-
-const syncQueueWorker = createSyncQueueWorker({
-  drain: processSyncQueue,
-  onError: (error) => {
-    console.warn('⚠️  Sync queue processing failed:', error?.message || error);
-  }
-});
 
 try {
   mkdirSync(LOG_DIR, { recursive: true });
@@ -768,6 +721,7 @@ async function startServer() {
       try {
         await db.initDatabase();
         await ensureOpaquePrincipalIdentity(db.getDataSourceAdapter());
+        await directoryPublicService.rebuild();
         const globalScopeRepair = await db.repairGlobalStateCurrentScopes();
         if (globalScopeRepair.repaired_ids.length) {
           console.log('[ADOLE] Repaired account-global projections:', globalScopeRepair.repaired_ids.length);
@@ -2143,6 +2097,9 @@ async function startServer() {
         try { wsApiConnections.add(connection); } catch (error) {
           console.warn("[server] operation failed", error);
         }
+        connection._wsApiVaultRouter = userVaultRouter;
+        connection._wsApiSyncRuntime = wsSyncRuntime;
+        connection._wsApiDirectoryService = directoryPublicService;
 
         try {
           const requestUser = await validateToken(request);
@@ -2725,6 +2682,7 @@ async function startServer() {
                   console.log(`[auth] bootstrap_succeeded account=existing request_id=${requestId || 'missing'}`);
 
                   attachWsApiClientToUser(connection, existingUser.user_id);
+                  await userVaultRouter.provision(existingUser.user_id);
                   try {
                     const decoded = jwt.default.verify(token, jwtSecret);
                     if (decoded && typeof decoded.exp === 'number') {
@@ -2783,24 +2741,8 @@ async function startServer() {
                   throw err;
                 }
 
-                // Broadcast account creation for real-time directory sync (ws/sync)
                 try {
-                  const syncEventBus = getSyncEventBus();
-                  if (syncEventBus) {
-                    const now = new Date().toISOString();
-                    syncEventBus.emit('event', {
-                      type: 'sync:account-created',
-                      timestamp: now,
-                      runtime: 'Fastify',
-                      payload: {
-                        userId,
-                        username: cleanUsername,
-                        optional: data.optional || {},
-                        visibility,
-                        access: visibility
-                      }
-                    });
-                  }
+                  await directoryPublicService.refreshPrincipal(userId);
                 } catch (error) {
                   console.warn("[server] operation failed", error);
                 }
@@ -2832,6 +2774,7 @@ async function startServer() {
                 console.log(`[auth] bootstrap_succeeded account=created request_id=${requestId || 'missing'}`);
 
                 attachWsApiClientToUser(connection, userId);
+                await userVaultRouter.provision(userId);
                 try {
                   const decoded = jwt.default.verify(token, jwtSecret);
                   if (decoded && typeof decoded.exp === 'number') {
@@ -3055,20 +2998,8 @@ async function startServer() {
 
                 await deleteUserAtome(dataSource, targetUserId);
 
-                // Broadcast account deletion for real-time directory sync
                 try {
-                  const syncEventBus = getSyncEventBus();
-                  if (syncEventBus) {
-                    const now = new Date().toISOString();
-                    syncEventBus.emit('event', {
-                      type: 'sync:account-deleted',
-                      timestamp: now,
-                      runtime: 'Fastify',
-                      payload: {
-                        userId: targetUserId
-                      }
-                    });
-                  }
+                  await directoryPublicService.refreshPrincipal(targetUserId, { deleted: true });
                 } catch (error) {
                   console.warn("[server] operation failed", error);
                 }
@@ -3123,6 +3054,9 @@ async function startServer() {
                 }
 
                 await updateUserParticle(dataSource, userId, key, value);
+                if (['username', 'visibility', 'access'].includes(String(key))) {
+                  await directoryPublicService.refreshPrincipal(userId);
+                }
 
                 safeSend({
                   type: 'auth-response',
@@ -3413,6 +3347,19 @@ async function startServer() {
               return;
             }
 
+            if (new Set([
+              'create', 'update', 'alter', 'delete', 'soft-delete', 'set-particle',
+              'delete-particle', 'realtime'
+            ]).has(action)) {
+              safeSend({
+                type: 'atome-response',
+                requestId,
+                success: false,
+                error: 'canonical_event_commit_required'
+              });
+              return;
+            }
+
             try {
               if (action === 'create') {
                 const atomeId = data.atome_id || data.id || uuidv4();
@@ -3495,19 +3442,6 @@ async function startServer() {
                 }
 
                 try {
-                  await broadcastAtomeCreate({
-                    atomeId,
-                    atomeType,
-                    parentId: parentId || null,
-                    particles,
-                    senderUserId: requesterId,
-                    senderConnection: connection
-                  });
-                } catch (error) {
-                  console.warn("[server] operation failed", error);
-                }
-
-                try {
                   syncAtomeViaWebSocket({
                     atome_id: atomeId,
                     atome_type: atomeType,
@@ -3553,10 +3487,10 @@ async function startServer() {
                   atome
                 });
               } else if (action === 'realtime') {
-                const response = await handleWsAtomeRealtimeOperation({
-                  data, connection, requesterId, requestId
+                safeSend({
+                  type: 'atome-response', requestId, success: false, ok: false,
+                  error: 'canonical_event_commit_required'
                 });
-                if (response) safeSend(response);
                 return;
               } else if (action === 'update') {
                 const atomeId = data.atome_id;
@@ -3615,13 +3549,6 @@ async function startServer() {
                   return;
                 }
                 const currentAtome = await db.getAtome(atomeId).catch(() => null);
-
-                // Realtime collaboration: broadcast patch to share recipients
-                try {
-                  await broadcastAtomeRealtimePatch({ atomeId, particles, senderUserId: requesterId, senderConnection: connection });
-                } catch (error) {
-                  console.warn("[server] operation failed", error);
-                }
 
                 try {
                   syncAtomeViaWebSocket({
@@ -3690,13 +3617,6 @@ async function startServer() {
                   return;
                 }
                 const currentAtome = await db.getAtome(atomeId).catch(() => null);
-
-                // Realtime collaboration: broadcast patch to share recipients
-                try {
-                  await broadcastAtomeRealtimePatch({ atomeId, particles, senderUserId: requesterId, senderConnection: connection });
-                } catch (error) {
-                  console.warn("[server] operation failed", error);
-                }
 
                 try {
                   syncAtomeViaWebSocket({
@@ -4175,7 +4095,7 @@ async function startServer() {
             }
 
             try {
-              const response = await handleShareMessage(data, userId);
+              const response = await handleShareMessage(data, userId, { syncSharingService });
               safeSend({ type: 'share-response', ...response });
             } catch (error) {
               safeSend({
@@ -4279,95 +4199,7 @@ async function startServer() {
     server.register(async function (fastify) {
       // Route WebSocket pour sync GitHub et gestion clients Tauri/Browser
       fastify.get('/ws/sync', { websocket: true }, async (connection, request) => {
-        const clientId = `client_${crypto.randomUUID()}`;
-        const safeSend = (payload) => wsSendJson(connection, payload, { scope: 'ws/sync', op: 'send' });
-        const syncEventBus = getSyncEventBus();
-        let authenticated = false;
-        let fileEventForwarder = null;
-        let authTimer = null;
-
-        const cleanup = () => {
-          if (authTimer) clearTimeout(authTimer);
-          authTimer = null;
-          if (fileEventForwarder && syncEventBus) {
-            syncEventBus.off('event', fileEventForwarder);
-          }
-          fileEventForwarder = null;
-          detachWsApiClient(connection);
-          unregisterClient(clientId);
-        };
-
-        const closeUnauthenticated = (code = 'authentication_required') => {
-          safeSend({ type: 'error', code });
-          cleanup();
-          connection.close?.(4401, code);
-        };
-
-        const activate = async (userId) => {
-          if (!userId || authenticated) return;
-          if (!await isWsApiPrincipalProvisioned(userId)) {
-            closeUnauthenticated('remote_account_not_provisioned');
-            return;
-          }
-          authenticated = true;
-          if (authTimer) clearTimeout(authTimer);
-          authTimer = null;
-          registerClient(clientId, connection, 'authenticated');
-          fileEventForwarder = async (payload) => {
-            try {
-              const principalId = validateWsSyncPrincipal(connection);
-              if (!principalId) {
-                closeUnauthenticated('authentication_expired');
-                return;
-              }
-              const event = await filterWsSyncEventForPrincipal(payload, principalId);
-              if (!event) return;
-              safeSend({
-                type: 'event',
-                eventType: event.eventType,
-                payload: event.payload,
-                timestamp: event.payload?.timestamp || new Date().toISOString()
-              });
-            } catch (error) {
-              closeUnauthenticated('authentication_invalid');
-            }
-          };
-          if (syncEventBus) syncEventBus.on('event', fileEventForwarder);
-          const version = await getLocalVersion();
-          safeSend(buildWsSyncWelcome(clientId, version));
-        };
-
-        try {
-          await activate(authenticateWsSyncRequest(connection, request));
-        } catch (error) {
-          closeUnauthenticated('authentication_invalid');
-          return;
-        }
-
-        if (!authenticated) {
-          authTimer = setTimeout(() => closeUnauthenticated(), 5000);
-        }
-
-        connection.on('message', async (rawMessage) => {
-          try {
-            const data = JSON.parse(rawMessage.toString());
-            if (!authenticated) {
-              const userId = authenticateWsSyncMessage(connection, data);
-              if (!userId) {
-                closeUnauthenticated('authentication_required');
-                return;
-              }
-              await activate(userId);
-              return;
-            }
-            safeSend(handleWsSyncControlMessage(connection, data));
-          } catch (error) {
-            closeUnauthenticated('authentication_invalid');
-          }
-        });
-
-        connection.on('close', cleanup);
-        connection.on('error', cleanup);
+        await wsSyncRuntime.attach(connection, request);
       });
     });
 
@@ -4393,11 +4225,6 @@ async function startServer() {
     console.log(`✅ Fastify server v${server.version} started on http://localhost:${PORT} (Atome ${SERVER_VERSION}, eVe ${EVE_VERSION})`);
     console.log(`🔄 Sync WebSocket at ws://localhost:${PORT}/ws/sync`);
     console.log(`🌐 Frontend served from: http://localhost:${PORT}/`);
-
-    if (SYNC_REMOTE_ENABLED) {
-      console.log(`🔁 Sync queue enabled → ${TAURI_SYNC_URL}`);
-      syncQueueWorker.start();
-    }
 
   } catch (error) {
     console.error('❌ Error starting server:', error);
@@ -4426,9 +4253,10 @@ async function stopFileWatcher() {
 process.on('SIGINT', async () => {
   console.log('\n🛑 Server stopping...');
   try {
-    syncQueueWorker.stop();
     await server.close();
+    wsSyncRuntime.stop();
     await stopFileWatcher();
+    await userVaultRouter.stopAll();
     console.log('✅ Server stopped cleanly');
     process.exit(0);
   } catch (error) {
@@ -4440,9 +4268,10 @@ process.on('SIGINT', async () => {
 process.on('SIGTERM', async () => {
   console.log('\n🛑 Signal SIGTERM received, stopping...');
   try {
-    syncQueueWorker.stop();
     await server.close();
+    wsSyncRuntime.stop();
     await stopFileWatcher();
+    await userVaultRouter.stopAll();
     console.log('✅ Server stopped cleanly');
     process.exit(0);
   } catch (error) {

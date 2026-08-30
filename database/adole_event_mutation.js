@@ -22,7 +22,7 @@ const versionConflict = () => {
 };
 
 export function createAdoleEventMutationApi({ query }) {
-    const prepare = async (event) => {
+    const prepare = async (event, options = {}) => {
         const atomeId = event?.atome_id || null;
         const touchedKeys = eventTouchedPropertyKeys(event);
         if (!atomeId || !touchedKeys.length) return event;
@@ -35,10 +35,12 @@ export function createAdoleEventMutationApi({ query }) {
         );
         const currentByKey = new Map((rows || []).map((row) => [row.particle_key, row]));
         const expectedVersions = eventExpectedPropertyVersions(event);
-        for (const [key, expected] of Object.entries(expectedVersions)) {
-            const row = currentByKey.get(key);
-            const currentVersion = Number(row?.version || 0);
-            if (currentVersion !== expected) throw versionConflict();
+        if (options.skipExpectedVersions !== true) {
+            for (const [key, expected] of Object.entries(expectedVersions)) {
+                const row = currentByKey.get(key);
+                const currentVersion = Number(row?.version || 0);
+                if (currentVersion !== expected) throw versionConflict();
+            }
         }
 
         const before = {};
@@ -64,7 +66,7 @@ export function createAdoleEventMutationApi({ query }) {
         return { ...event, payload };
     };
 
-    const applyDeletes = async ({ atomeId, keys, author = null, timestamp }) => {
+    const applyDeletes = async ({ atomeId, keys, author = null, timestamp, eventId = null }) => {
         for (const key of keys || []) {
             const row = await query(
                 'get',
@@ -83,9 +85,9 @@ export function createAdoleEventMutationApi({ query }) {
             await query(
                 'run',
                 `INSERT INTO particles_versions
-                 (particle_id, atome_id, particle_key, version, old_value, new_value, changed_by, changed_at)
-                 VALUES (?, ?, ?, ?, ?, NULL, ?, ?)`,
-                [row.particle_id, atomeId, key, version, row.particle_value, author, timestamp]
+                 (particle_id, atome_id, particle_key, version, old_value, new_value, changed_by, changed_at, event_id)
+                 VALUES (?, ?, ?, ?, ?, NULL, ?, ?, ?)`,
+                [row.particle_id, atomeId, key, version, row.particle_value, author, timestamp, eventId]
             );
         }
     };

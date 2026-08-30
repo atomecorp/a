@@ -332,11 +332,16 @@ CREATE TABLE IF NOT EXISTS json_nodes (
 * Allow the definition of retention rules (time, size, priority, object type).
 * Support an on-demand reload mechanism from the online storage hub.
 
-#### 2. Central Online Storage (Shared Hub)
+#### 2. Orchestrator and per-user vaults
 
-* Create an online PostgreSQL instance containing all synchronizable data.
-* This hub stores all commits, snapshots, and changes, serving as the source of truth.
-* Local jails only retain the objects or versions required for their active context.
+* Fastify owns identity, sessions, routing, invitations, and active sockets; it
+  is not the primary business-state store.
+* Each cloud principal owns an isolated vault process, SQLite event log, file
+  root, and private Unix socket. That vault is the authoritative online coffre.
+* The current macOS/Debian process provider is the executable jail substitute;
+  the provider boundary may later target FreeBSD jails without changing the
+  event or WebSocket contracts.
+* Local device databases retain their offline log and authorized projections.
 
 #### 3. Selective and Differential Synchronization
 

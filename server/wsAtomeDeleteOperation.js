@@ -1,5 +1,4 @@
 import { commitAtomeEvent } from './atomeRoutes.orm.js';
-import { broadcastAtomeDelete } from './atomeRealtime.js';
 
 export async function handleWsAtomeDeleteOperation({
     data,
@@ -28,13 +27,6 @@ export async function handleWsAtomeDeleteOperation({
         return { success: false, ok: false, error: committed.error };
     }
 
-    if (committed.inserted) {
-        await broadcastAtomeDelete({
-            atomeId,
-            senderUserId: requesterId,
-            senderConnection: connection
-        });
-    }
     return {
         success: true,
         ok: true,

@@ -874,8 +874,26 @@ Storage:
 Sync:
 
 - Sync is event-based, append-only, and replayable.
-- Authenticated `/ws/sync` transports only permission-scoped, redacted Atome, file/media, and ACL notifications. Account-directory broadcasts and private filesystem metadata are excluded from the ordinary channel.
-- Offline writes queue in `sync_queue` and replay in order with idempotency keys.
+- `/ws/api` is the sole command bus for commits, batches, sharing, directory
+  queries, and offline `sync:push`.
+- Authenticated `/ws/sync` accepts only `auth`, `register`, `subscribe`,
+  `unsubscribe`, `ack`, and `ping`, then transports permission-scoped events and
+  ordered replay. Ordinary streams exclude account records and private
+  filesystem metadata; `directory.public` carries redacted invalidations only.
+- `registered` announces the verified principal's authorized opaque streams;
+  `stream-available` and `revoked` update live subscriptions. Each subscribe and
+  replay batch is independently reauthorized, so discovery is never permission.
+- Offline writes queue in `sync_queue` and submit in order with idempotent event
+  ids. LWW is per property using valid timestamp then lexical event id; invalid
+  timestamps rank below valid ones. Interactive stale versions reject atomically.
+- Fastify is the identity/session/routing/socket orchestrator. A supervised
+  private vault process, SQLite database, file root, and IPC socket per principal
+  owns cloud business state on macOS/Debian until the provider becomes a FreeBSD
+  jail implementation.
+- Web uses `SyncEngine`; Tauri and iOS persist inbound envelopes in local SQLite
+  before notifying their WebView and ACKing. Home owns the device-local
+  Local/Production/Custom selector and Debug sync flag; tokens, queues, streams,
+  cursors, and caches are isolated by environment fingerprint and principal.
 
 Communication:
 

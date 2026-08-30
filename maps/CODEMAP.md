@@ -1928,6 +1928,12 @@ Main files:
 - `server/ws_api_schema.js`
 - `server/sharing.js`
 - `server/notificationStack.js`
+- `server/wsSyncRuntime.js`
+- `server/userVaultProvider.js`
+- `server/userVaultProcess.js`
+- `server/userVaultRouter.js`
+- `server/syncSharingService.js`
+- `server/directoryPublicService.js`
 - `server/fileStorage.js`
 - `server/mailRoutes.js`
 - `server/userFiles.js`
@@ -1938,6 +1944,11 @@ Should be extended by:
 - Server-side source-of-truth behavior, websocket communication, auth, sharing, sync, and file APIs.
 - Atome route changes through the split route owners: orchestration and event commit helpers in `server/atomeRoutes.orm.js`, CRUD route handlers in `server/atomeCrudRoutes.js`, event/state/snapshot routes in `server/atomeEventRoutes.js`, route-boundary formatting in `server/atomeRouteContract.js`, and sync side effects in `server/atomeSyncRuntime.js`.
 - Sharing changes through the split sharing owners: message orchestration in `server/sharing.js`, ACL primitives in `server/sharingPermissionService.js`, and canonical Atome field accessors in `server/sharingAtomeAccessors.js`.
+- Canonical sync delivery through `wsSyncRuntime.js`; per-principal cloud coffre
+  lifecycle through `userVaultProvider.js`/`userVaultProcess.js`; routing and
+  property projection through `userVaultRouter.js`; linked/manual/detached
+  policy through `syncSharingService.js`; public invalidations through
+  `directoryPublicService.js`.
 
 Should not be duplicated by:
 
@@ -1991,6 +2002,12 @@ Verified desktop Bevy renderer owner:
 
 Verified iOS/AUv3 native owners:
 
+- `platforms/ios/atome-auv3/Common/FastifySyncClient.swift` owns authenticated
+  `/ws/sync`, `/ws/api sync:push`, persist-before-ACK, and WebView notification.
+- `platforms/desktop-tauri/src/server/local_atome_ws_sync.rs` owns the persistent
+  authenticated inbound stream; `local_atome_sync_worker.rs` owns queued
+  outbound `sync:push`; `local_atome_remote_projection.rs` owns local SQLite
+  projection and cursors.
 - `platforms/ios/atome-auv3/Common/FileSyncCoordinator.swift` owns file sync scheduling, safe-mode gating, tombstone state, move/deletion tracking, and the core newest-wins sync pass.
 - `platforms/ios/atome-auv3/Common/FileSyncCoordinatorFileOperations.swift` owns visible/App Group/iCloud root discovery, syncable file inventory, file copy/delete helpers, and cleanup of leaked or duplicated sync artifacts.
 - `platforms/ios/atome-auv3/Common/FileSystemBridge.swift` owns WK message dispatch, sandboxed path resolution, and bridge success/error serialization; `FileSystemBridgeJavaScriptAPI.swift` owns only the injected `AtomeFileSystem` JavaScript surface; `FileSystemBridgeOperations.swift` owns non-delete filesystem commands plus document-picker/import delegates and result forwarding; and `FileSystemBridgeDeletion.swift` owns delete command adaptation. `FileSystemDeletionTransaction.swift` is the testable deletion transaction: coordinator/accessor/removal/absence failures escape before success, tombstone, or sync, while a partial batch marks only confirmed removals and syncs once.
@@ -2327,8 +2344,10 @@ This section supersedes earlier Dashboard lifecycle descriptions in this map. `e
   `Mot de passe et clés → Intelligence artificielle`, never under
   account/security or an unlock screen.
 - `loadServerConfig.js` keeps URL normalization and HTTP/WebSocket derivation;
-  Home applies selected Server preferences through existing SyncEngine and
-  RemoteCommands reconnect operations without exposing a new API.
+  Home applies a device-local environment selection through the canonical
+  SyncEngine and command-bus reconnect owners. Environment fingerprints scope
+  tokens, cursors, caches, and offline queues; profile Atome state must not own
+  the selected endpoint.
 
 # Calendar Bevy migration update — 2026-08-03
 

@@ -1,0 +1,14 @@
+NODE_ENV=production
+HOST=127.0.0.1
+PORT=3001
+SQLITE_PATH=/var/lib/atome/orchestrator/adole.db
+SQUIRREL_VAULT_ROOT=/var/lib/atome/vaults
+SQUIRREL_VAULT_SOCKET_ROOT=/run/atome-vault
+SQUIRREL_UPLOADS_DIR=/var/lib/atome/uploads
+SQUIRREL_ALLOWED_ORIGINS=https://atome.one
+SQUIRREL_DISABLE_UI_LOGS=1
+SQUIRREL_LOG_LEVEL=info
+JWT_SECRET=REPLACE_WITH_AT_LEAST_32_RANDOM_BYTES
+COOKIE_SECRET=REPLACE_WITH_AT_LEAST_32_RANDOM_BYTES
+SERVER_PRIVATE_KEY_PATH=/etc/squirrel/identity/server-private.pem
+SERVER_PUBLIC_KEY_PATH=/etc/squirrel/identity/server-public.pem

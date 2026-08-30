@@ -40,7 +40,7 @@ import {
 import { broadcastShareCommand, enforceRecipientVisibility, listShareRequestsForUser, loadShareRequestById, loadShareRequestsByRequestId, normalizeParticles } from './sharing_recipients.js';
 import { createShareRequest, applyShareAcceptance } from './sharing_requests.js';
 
-export async function handleShareMessage(message, userId) {
+export async function handleShareMessage(message, userId, dependencies = {}) {
     const { action, requestId } = message;
 
     if (!userId) {
@@ -48,6 +48,14 @@ export async function handleShareMessage(message, userId) {
     }
 
     try {
+        const canonicalActions = new Set([
+            'request', 'respond', 'publish', 'create', 'revoke', 'inbox',
+            'shared-with-me', 'my-shares', 'policy'
+        ]);
+        if (dependencies.syncSharingService && canonicalActions.has(String(action || '').toLowerCase())) {
+            const result = await dependencies.syncSharingService.handle(message, userId);
+            return { requestId, success: result.ok !== false, data: result, ...result };
+        }
         switch (action) {
             case 'request': {
                 const {

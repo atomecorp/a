@@ -5,11 +5,13 @@ use super::local_atome::{
 use chrono::Utc;
 use futures_util::{SinkExt, StreamExt};
 use serde_json::{json, Value as JsonValue};
+use std::collections::HashSet;
 use tokio::time::{sleep, timeout, Duration};
 use tokio_tungstenite::{connect_async, tungstenite::Message as TungsteniteMessage};
 use uuid::Uuid;
 
 const TARGET_SERVER: &str = "fastify";
+const SYNC_DELIVERY_PATH: &str = "/ws/sync";
 
 fn compute_backoff_ms(attempts: i64) -> i64 {
     let base_ms = std::env::var("SQUIRREL_SYNC_BACKOFF_MS")
@@ -111,7 +113,9 @@ fn record_error(
 }
 
 async fn send_event(
+    state: &LocalAtomeState,
     remote_url: &str,
+    local_user_id: &str,
     credential: &RemoteSyncCredential,
     event: JsonValue,
 ) -> Result<(), String> {
@@ -119,13 +123,24 @@ async fn send_event(
         remote_url,
         credential,
         json!({
-            "type": "events",
-            "action": "commit",
-            "sync_source": "axum",
-            "event": event
+            "type":"sync",
+            "action":"push",
+            "source":format!("tauri:{}", local_user_id),
+            "events":[event]
         }),
     ).await?;
     if response.get("success").and_then(JsonValue::as_bool) == Some(true) {
+        if let Some(changes) = response.get("changes").and_then(JsonValue::as_array) {
+            let db = state.db.lock().map_err(|_| "local_projection_database_unavailable".to_string())?;
+            for change in changes {
+                if let Some(stream) = change.get("stream_id").or_else(|| change.get("stream"))
+                    .and_then(JsonValue::as_str) {
+                    super::local_atome_remote_projection::register_stream(
+                        &db, local_user_id, &credential.remote_user_id, stream,
+                    )?;
+                }
+            }
+        }
         Ok(())
     } else {
         Err(response.get("error").and_then(JsonValue::as_str).unwrap_or("WebSocket sync failed").to_string())
@@ -174,74 +189,12 @@ async fn request_remote(
     .map_err(|error| error.to_string())?
 }
 
-async fn pull_remote_projection(
-    state: &LocalAtomeState,
-    remote_url: &str,
-    local_user_id: &str,
-    credential: &RemoteSyncCredential,
-) -> Result<(), String> {
-    const PAGE_SIZE: usize = 500;
-    let mut states = Vec::new();
-    let mut offset = 0usize;
-    loop {
-        let response = request_remote(remote_url, credential, json!({
-            "type": "state-current",
-            "action": "list",
-            "include_shared": true,
-            "limit": PAGE_SIZE,
-            "offset": offset
-        })).await?;
-        if response.get("success").and_then(JsonValue::as_bool) != Some(true) {
-            return Err(response.get("error").and_then(JsonValue::as_str).unwrap_or("Remote state pull failed").to_string());
-        }
-        let page = response.get("states")
-            .or_else(|| response.pointer("/data/states"))
-            .and_then(JsonValue::as_array).cloned().unwrap_or_default();
-        let page_len = page.len();
-        states.extend(page);
-        if page_len < PAGE_SIZE { break; }
-        offset += page_len;
-    }
-
-    let cursor = state.db.lock().ok().and_then(|db| {
-        super::local_atome_remote_projection::cursor_for(&db, local_user_id)
-    });
-    let mut events = Vec::new();
-    let mut event_offset = 0usize;
-    loop {
-        let response = request_remote(remote_url, credential, json!({
-            "type": "sync",
-            "action": "pull",
-            "since": cursor.clone(),
-            "limit": PAGE_SIZE,
-            "offset": event_offset
-        })).await?;
-        if response.get("success").and_then(JsonValue::as_bool) != Some(true) {
-            return Err(response.get("error").and_then(JsonValue::as_str).unwrap_or("Remote event pull failed").to_string());
-        }
-        let page = response.get("changes")
-            .or_else(|| response.pointer("/data/changes"))
-            .and_then(JsonValue::as_array).cloned().unwrap_or_default();
-        let page_len = page.len();
-        events.extend(page);
-        if page_len < PAGE_SIZE { break; }
-        event_offset += page_len;
-    }
-
-    let mut db = state.db.lock().map_err(|_| "local_projection_database_unavailable".to_string())?;
-    super::local_atome_remote_projection::reconcile_remote_states(
-        &mut db, local_user_id, &credential.remote_user_id, &states
-    )?;
-    super::local_atome_remote_projection::persist_remote_events(
-        &mut db, local_user_id, &credential.remote_user_id, &events
-    )
-}
-
 pub async fn run(state: LocalAtomeState, remote_url: String) {
     if remote_url.trim().is_empty() {
         return;
     }
 
+    let mut inbound_started = HashSet::<String>::new();
     loop {
         let credentials = state
             .remote_sync_credentials
@@ -252,8 +205,12 @@ pub async fn run(state: LocalAtomeState, remote_url: String) {
             sleep(Duration::from_millis(500)).await;
             continue;
         }
-        for (local_user_id, credential) in &credentials {
-            let _ = pull_remote_projection(&state, &remote_url, local_user_id, credential).await;
+        for (local_user_id, _) in &credentials {
+            if inbound_started.insert(local_user_id.clone()) {
+                tokio::spawn(super::local_atome_ws_sync::run(
+                    state.clone(), remote_url.clone(), SYNC_DELIVERY_PATH.to_string(), local_user_id.clone(),
+                ));
+            }
         }
         let actor_ids = credentials.iter().map(|(id, _)| id.clone()).collect::<Vec<_>>();
         let mut items = match state.db.lock() {
@@ -284,6 +241,9 @@ pub async fn run(state: LocalAtomeState, remote_url: String) {
             let Some(credential) = credential_for_event(&state, &payload) else {
                 continue;
             };
+            let Some(local_user_id) = actor_id(&payload).map(str::to_string) else {
+                continue;
+            };
             let attempts = item.attempts + 1;
             if let Ok(db) = state.db.lock() {
                 let _ = mark_sync_queue_syncing(&db, item.queue_id, attempts);
@@ -295,7 +255,12 @@ pub async fn run(state: LocalAtomeState, remote_url: String) {
                     continue;
                 }
             };
-            match send_event(&remote_url, &credential, event).await {
+            let endpoint = if credential.remote_url.is_empty() {
+                remote_url.as_str()
+            } else {
+                credential.remote_url.as_str()
+            };
+            match send_event(&state, endpoint, &local_user_id, &credential, event).await {
                 Ok(()) => {
                     if let Ok(db) = state.db.lock() {
                         let _ = mark_sync_queue_done(&db, item.queue_id);
@@ -307,9 +272,9 @@ pub async fn run(state: LocalAtomeState, remote_url: String) {
             }
         }
 
-        let poll_ms = std::env::var("SQUIRREL_SYNC_POLL_MS")
+        let queue_interval_ms = std::env::var("SQUIRREL_SYNC_QUEUE_INTERVAL_MS")
             .ok().and_then(|value| value.parse::<u64>().ok()).unwrap_or(5000);
-        sleep(Duration::from_millis(poll_ms)).await;
+        sleep(Duration::from_millis(queue_interval_ms)).await;
     }
 }
 

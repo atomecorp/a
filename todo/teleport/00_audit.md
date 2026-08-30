@@ -9,8 +9,8 @@ produire ce document ; tout ce qui suit a été vérifié dans le dépôt.
 | --- | --- | --- |
 | Transport temps réel authentifié | `/ws/api` — `server/server.js:1996` | oui |
 | Registre de connexions par utilisateur | `server/wsApiState.js` (`wsApiClientsByUserId`) | oui |
-| Diffusion d'un changement d'atome | `server/atomeRealtime.js` → `share-sync` | oui |
-| Réception client et dispatch | `atome/src/squirrel/apis/unified/adole_websocket_message.js` → `squirrel:atome-updated` | oui |
+| Diffusion d'un changement d'atome | `/ws/sync` → `SyncEngine` (événement autorisé, replay et ACK) | oui |
+| Réception client et dispatch | `atome/src/squirrel/apis/unified/sync_engine.js` → projection canonique | oui |
 | Identité unique de l'objet (§13) | `atomes.atome_id` — `database/schema.sql:44` | oui |
 | Propriétés dynamiques | `particles` — `database/schema.sql:74` | oui |
 | Journal append-only | `events` — `database/schema.sql:144` | oui |
@@ -41,8 +41,10 @@ Conséquences directement observables :
    jamais**, plus un second de 3 s pour le démarrage. Fuite de timer permanente sur
    toute session authentifiée.
 
-**Décision :** la téléportation ne ressuscite pas ce système. Elle emprunte le chemin
-réellement vivant `events` → `broadcastCommittedAtomeEvent` → `share-sync`.
+**Décision mise à jour après la consolidation de la synchronisation :** la
+téléportation ne ressuscite pas ce système. Les mutations passent par le command bus
+`/ws/api`, puis les événements autorisés sont livrés et rejoués par `/ws/sync`.
+L'ancien relais `console-message/share-sync` est retiré du contrat actif.
 
 ### 2.2 Le « débogage distribué » réutilisable est local seulement
 

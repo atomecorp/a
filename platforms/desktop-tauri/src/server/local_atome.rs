@@ -114,6 +114,8 @@ pub struct LocalAtomeState {
 pub(crate) struct RemoteSyncCredential {
     pub(crate) remote_user_id: String,
     pub(crate) token: String,
+    pub(crate) remote_url: String,
+    pub(crate) environment_fingerprint: String,
 }
 
 pub(crate) fn configure_remote_sync_credential(
@@ -121,8 +123,14 @@ pub(crate) fn configure_remote_sync_credential(
     local_user_id: &str,
     remote_user_id: &str,
     token: &str,
+    remote_url: &str,
+    environment_fingerprint: &str,
 ) -> Result<(), String> {
-    if local_user_id.trim().is_empty() || remote_user_id.trim().is_empty() || token.trim().is_empty() {
+    if local_user_id.trim().is_empty()
+        || remote_user_id.trim().is_empty()
+        || token.trim().is_empty()
+        || remote_url.trim().is_empty()
+    {
         return Err("invalid_remote_sync_credential".to_string());
     }
     let mut credentials = state
@@ -134,6 +142,8 @@ pub(crate) fn configure_remote_sync_credential(
         RemoteSyncCredential {
             remote_user_id: remote_user_id.to_string(),
             token: token.to_string(),
+            remote_url: remote_url.trim_end_matches('/').to_string(),
+            environment_fingerprint: environment_fingerprint.to_string(),
         },
     );
     Ok(())
@@ -389,6 +399,11 @@ pub fn init_database(data_dir: &PathBuf) -> Result<Connection, rusqlite::Error> 
     conn.execute("PRAGMA foreign_keys = ON", [])?;
     let _ = conn.execute_batch("PRAGMA journal_mode = WAL;");
 
+    // A legacy Tauri database already owns `events`, so CREATE TABLE IF NOT
+    // EXISTS cannot add the sync envelope columns. Add them before executing
+    // the canonical schema because that schema creates the stream/sequence
+    // index immediately afterwards.
+    ensure_event_sync_columns(&conn)?;
     conn.execute_batch(ADOLE_SCHEMA_SQL)?;
 
     ensure_permissions_columns(&conn)?;
@@ -403,6 +418,76 @@ pub fn init_database(data_dir: &PathBuf) -> Result<Connection, rusqlite::Error> 
     );
 
     Ok(conn)
+}
+
+fn ensure_event_sync_columns(conn: &Connection) -> Result<(), rusqlite::Error> {
+    let events_exists = conn
+        .query_row(
+            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'events'",
+            [],
+            |_| Ok(()),
+        )
+        .optional()?
+        .is_some();
+    if !events_exists {
+        return Ok(());
+    }
+
+    let mut statement = conn.prepare("PRAGMA table_info(events)")?;
+    let rows = statement.query_map([], |row| row.get::<_, String>(1))?;
+    let names = rows.filter_map(Result::ok).collect::<HashSet<_>>();
+    for (column, ddl) in [
+        ("stream_id", "ALTER TABLE events ADD COLUMN stream_id TEXT"),
+        ("sequence", "ALTER TABLE events ADD COLUMN sequence INTEGER"),
+        ("source", "ALTER TABLE events ADD COLUMN source TEXT"),
+        ("lww_decisions", "ALTER TABLE events ADD COLUMN lww_decisions TEXT"),
+        ("projection", "ALTER TABLE events ADD COLUMN projection TEXT"),
+    ] {
+        if !names.contains(column) {
+            conn.execute(ddl, [])?;
+        }
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod event_sync_schema_migration_tests {
+    use super::*;
+
+    #[test]
+    fn legacy_events_gain_sync_columns_before_canonical_indexes() {
+        let database = Connection::open_in_memory().expect("memory database");
+        database
+            .execute_batch(
+                "CREATE TABLE events (
+                    id TEXT PRIMARY KEY, ts TEXT NOT NULL, atome_id TEXT,
+                    project_id TEXT, kind TEXT NOT NULL, payload TEXT,
+                    actor TEXT, tx_id TEXT, gesture_id TEXT
+                 );
+                 INSERT INTO events (id, ts, kind) VALUES ('legacy-event', '2026-08-28T00:00:00Z', 'set');",
+            )
+            .expect("legacy events schema");
+
+        ensure_event_sync_columns(&database).expect("pre-schema migration");
+        database
+            .execute_batch(ADOLE_SCHEMA_SQL)
+            .expect("canonical schema after migration");
+
+        let columns = database
+            .prepare("PRAGMA table_info(events)")
+            .expect("events columns")
+            .query_map([], |row| row.get::<_, String>(1))
+            .expect("events column rows")
+            .filter_map(Result::ok)
+            .collect::<HashSet<_>>();
+        for required in ["stream_id", "sequence", "source", "lww_decisions", "projection"] {
+            assert!(columns.contains(required), "missing {required}");
+        }
+        let historical_count: i64 = database
+            .query_row("SELECT COUNT(*) FROM events WHERE id = 'legacy-event'", [], |row| row.get(0))
+            .expect("historical event count");
+        assert_eq!(historical_count, 1);
+    }
 }
 
 fn ensure_permissions_columns(conn: &Connection) -> Result<(), rusqlite::Error> {
@@ -2888,7 +2973,12 @@ mod state_current_owner_tests {
             db.execute("INSERT INTO atomes (atome_id, atome_type, owner_id, creator_id, created_at, updated_at) VALUES (?1, 'project', ?2, ?2, ?3, ?3)", rusqlite::params!["guest_adoption_project", guest_id, now]).unwrap();
             db.execute("INSERT INTO state_current (atome_id, owner_id, project_id, properties, updated_at, version) VALUES (?1, ?2, ?1, '{}', ?3, 1)", rusqlite::params!["guest_adoption_project", guest_id, now]).unwrap();
             db.execute("INSERT INTO permissions (atome_id, principal_id, granted_by, granted_at) VALUES (?1, ?2, ?2, ?3)", rusqlite::params!["guest_adoption_project", guest_id, now]).unwrap();
-            db.execute("INSERT INTO events (id, ts, atome_id, kind, actor) VALUES ('guest_adoption_event', ?1, ?2, 'set', ?3)", rusqlite::params![now, "guest_adoption_project", json!({ "type": "guest", "id": guest_id }).to_string()]).unwrap();
+            db.execute(
+                "INSERT INTO events (
+                    id, ts, atome_id, kind, actor, stream_id, sequence, source
+                 ) VALUES ('guest_adoption_event', ?1, ?2, 'set', ?3, 'tauri:guest-adoption', 1, 'tauri')",
+                rusqlite::params![now, "guest_adoption_project", json!({ "type": "guest", "id": guest_id }).to_string()]
+            ).unwrap();
             db.execute("INSERT INTO snapshots (atome_id, snapshot_data, actor, created_by, created_at) VALUES (?1, '{}', ?2, ?3, ?4)", rusqlite::params!["guest_adoption_project", json!({ "type": "guest", "id": guest_id }).to_string(), guest_id, now]).unwrap();
             db.execute("INSERT INTO sync_queue (atome_id, operation, payload, target_server, status, attempts, max_attempts, created_at) VALUES (?1, 'commit', '{}', 'fastify', 'pending', 0, 5, ?2)", rusqlite::params!["guest_adoption_project", now]).unwrap();
         }
@@ -3277,9 +3367,22 @@ fn insert_event_record(db: &Connection, event: &EventRecord) -> Result<bool, Str
         Some(actor) => Some(serde_json::to_string(actor).map_err(|e| e.to_string())?),
         None => None,
     };
+    let actor_id = event.actor.as_ref()
+        .and_then(|actor| actor.get("id"))
+        .and_then(JsonValue::as_str)
+        .unwrap_or("local");
+    let scope_id = event.project_id.as_deref().or(event.atome_id.as_deref()).unwrap_or("account");
+    let stream_id = format!("tauri:{}:{}", actor_id, scope_id);
+    let sequence = db.query_row(
+        "SELECT COALESCE(MAX(sequence), 0) + 1 FROM events WHERE stream_id = ?1",
+        [&stream_id],
+        |row| row.get::<_, i64>(0),
+    ).map_err(|error| error.to_string())?;
     db.execute(
-        "INSERT INTO events (id, ts, atome_id, project_id, kind, payload, actor, tx_id, gesture_id)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+        "INSERT INTO events (
+            id, ts, atome_id, project_id, kind, payload, actor, tx_id, gesture_id,
+            stream_id, sequence, source
+         ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, 'tauri')",
         rusqlite::params![
             event.id,
             event.ts,
@@ -3289,7 +3392,9 @@ fn insert_event_record(db: &Connection, event: &EventRecord) -> Result<bool, Str
             payload_json,
             actor_json,
             event.tx_id,
-            event.gesture_id
+            event.gesture_id,
+            stream_id,
+            sequence
         ],
     )
     .map_err(|e| e.to_string())?;

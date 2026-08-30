@@ -5,7 +5,6 @@
 // branches. `request_id`/`requestId` is normalised once at the entry (it was read
 // 34 times), and the "resolve the pending request" block — 12 near-identical
 // copies — lives in `resolvePending` only.
-import { shouldIgnoreRealtimePatch } from './realtime_dedupe.js';
 import { reportRuntimeError } from '../../runtime_errors.js';
 
 // Server pushes with no request id: re-emitted on `window` as `squirrel:<type>`.
@@ -30,6 +29,17 @@ const PUSH_EVENTS = {
     'remote-control-preview-frame': remoteControlDetail,
     'remote-control-preview-stopped': remoteControlDetail
 };
+
+PUSH_EVENTS['share-invitation'] = (message) => {
+    const streams = Array.isArray(message.streams) ? message.streams : [];
+    window.Squirrel?.SyncEngine?.observeEvents?.(streams.map((stream) => ({ stream_id: stream })));
+    return { share: message.share || null, streams };
+};
+PUSH_EVENTS['share-decision'] = (message) => ({ share: message.share || null });
+PUSH_EVENTS['share-revoked'] = (message) => ({
+    share_id: message.share_id || null,
+    stream_id: message.stream_id || null
+});
 
 function teleportDetail(message) {
     return {
@@ -132,10 +142,10 @@ const RESPONSE_PAYLOADS = {
 
 // Data-plane replies that may carry their payload either inline or under `data`.
 const DATA_PAYLOAD_TYPES = ['events-response', 'state-current-response', 'snapshot-response',
-    'user-data-response', 'sync-response', 'conditions-response', 'history-response'];
+    'user-data-response', 'sync-response', 'conditions-response', 'history-response', 'directory-response'];
 const DATA_PAYLOAD_KEYS = ['event', 'events', 'state', 'states', 'snapshot', 'snapshots',
     'snapshot_id', 'atomes', 'changes', 'deleted', 'acknowledged', 'items', 'ids', 'total',
-    'cursor', 'revision'];
+    'cursor', 'revision', 'entries'];
 
 for (const type of DATA_PAYLOAD_TYPES) {
     RESPONSE_PAYLOADS[type] = (message) => {
@@ -155,55 +165,8 @@ const dispatchWindowEvent = (name, detail) => {
     }
 };
 
-const applyShareSync = (params, senderInfo, message) => {
-    // Guard: do not apply realtime share-sync patches to anonymous sessions.
-    const localUserId = window.__currentUser?.id || null;
-    if (!localUserId) return;
-
-    const atomeId = params?.atomeId || params?.atome_id || params?.id || null;
-    if (!atomeId) return;
-
-    const properties = params?.properties || params?.particles || params?.patch || null;
-    const isDeleted = properties?.__deleted === true || params?.deletedAt || params?.deleted_at;
-    if (isDeleted) {
-        dispatchWindowEvent('squirrel:atome-deleted', { id: atomeId, atome_id: atomeId, source: 'realtime' });
-        return;
-    }
-    if (!properties || typeof properties !== 'object') return;
-
-    const deleteKeys = Array.isArray(params?.delete_keys)
-        ? params.delete_keys
-        : (Array.isArray(params?.deleteKeys) ? params.deleteKeys : []);
-    const authorId = params?.author_id || params?.authorId
-        || message?.author_id || message?.authorId || senderInfo.userId || null;
-    const eventId = params?.event_id || params?.eventId || null;
-    const gestureId = params?.gesture_id || params?.gestureId || null;
-    const txId = params?.tx_id || params?.txId || null;
-
-    if (shouldIgnoreRealtimePatch(atomeId, properties, {
-        authorId, source: 'realtime', origin: 'adole:share-sync', eventId, gestureId, txId
-    })) return;
-
-    dispatchWindowEvent('squirrel:atome-updated', {
-        id: atomeId,
-        atome_id: atomeId,
-        properties,
-        delete_keys: deleteKeys,
-        property_versions: params?.property_versions || params?.propertyVersions || {},
-        event_id: eventId,
-        tx_id: txId,
-        gesture_id: gestureId,
-        author_id: authorId,
-        durable: params?.durable === true,
-        source: 'realtime',
-        origin: 'adole:share-sync',
-        realtime_dedup_checked: true,
-        realtime_dedup_ignore: false
-    });
-};
-
-// A console-message may carry a RemoteCommand encoded as JSON (share-sync realtime
-// over Fastify->Fastify). Dispatch it here so collaboration works without a reload.
+// Console messages remain a command/notification surface. Durable Atome changes
+// are owned exclusively by SyncEngine on /ws/sync.
 const handleConsoleMessage = (message) => {
     const text = message.message;
     if (typeof text !== 'string' || !text.trim().startsWith('{')) return;
@@ -229,11 +192,6 @@ const handleConsoleMessage = (message) => {
         const detail = { ...params, sender: senderInfo };
         dispatchWindowEvent('adole-share-create', detail);
         if (detail?.atomeId || detail?.atome_id) dispatchWindowEvent('squirrel:atome-created', detail);
-        return;
-    }
-
-    if (typeof window !== 'undefined' && command.command === 'share-sync') {
-        applyShareSync(params, senderInfo, message);
         return;
     }
 

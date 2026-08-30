@@ -282,7 +282,7 @@ tail -f /var/log/messages  # Logs (or specific app log if configured)
 | **Implementation** | Swift (Network framework) |
 | **Port** | Dynamic (usually 8080+) |
 | **Bind Address** | `127.0.0.1` only (loopback) |
-| **Database** | None (uses App Group Shared Container + iCloud) |
+| **Database** | SQLite in the App Group container for canonical local events, projections, and sync cursors |
 | **Location** | `/platforms/ios/atome-auv3/Common/LocalHTTPServer.swift` |
 
 ### Why AiS Exists

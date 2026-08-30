@@ -1,5 +1,3 @@
-import { broadcastAtomeRealtimePatch } from './atomeRealtime.js';
-
 export async function handleWsAtomeRealtimeOperation({
   data,
   connection,
@@ -22,21 +20,8 @@ export async function handleWsAtomeRealtimeOperation({
     };
   }
 
-  const result = await broadcastAtomeRealtimePatch({
-    atomeId,
-    particles,
-    senderUserId: requesterId,
-    senderConnection: connection
-  });
-  if (!result?.ok) {
-    return {
-      type: 'atome-response', requestId, success: false, ok: false,
-      error: result?.error || 'property_write_denied'
-    };
-  }
-  if (data?.noReply === true) return null;
   return {
-    type: 'atome-response', requestId, success: true,
-    message: 'Realtime patch broadcasted'
+    type: 'atome-response', requestId, success: false, ok: false,
+    error: 'canonical_event_commit_required'
   };
 }

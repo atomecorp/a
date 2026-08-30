@@ -137,6 +137,8 @@
   "tests/eve/selected_project_media_playback_runtime.test.mjs",
   "tests/eve/selection_style_font_size_contract.test.mjs",
   "tests/eve/server_http_error_classification.test.mjs",
+  "tests/eve/sync_engine.test.mjs",
+  "tests/eve/sync_environment.test.mjs",
   "tests/eve/text_creation_handoff_contract.test.mjs",
   "tests/eve/text_editing_session_contract.test.mjs",
   "tests/eve/text_tool_background_runtime_contract.test.mjs",
@@ -168,5 +170,6 @@
   "tests/probes/render_atom_persistent_media_cache.test.mjs",
   "tests/probes/server_identity_deployment_contract.test.mjs",
   "tests/probes/tauri_bevy_native_permission.test.mjs",
-  "tests/probes/video_recording_failure_lifecycle.test.mjs"
+  "tests/probes/video_recording_failure_lifecycle.test.mjs",
+  "tests/server/sync_architecture_contract.test.mjs"
 ]

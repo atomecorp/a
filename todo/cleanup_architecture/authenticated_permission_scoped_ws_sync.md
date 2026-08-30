@@ -17,7 +17,7 @@ Fastify and every maintained runtime must keep `/ws/sync` as a distinct WebSocke
 
 WebSocket remains the exclusive transport. This task does not authorize an HTTP fallback.
 
-## Current verified security gap
+## Historical verified security gap (remediation contract)
 
 - Fastify currently accepts `/ws/sync` connections without attaching an authenticated identity.
 - A connection is registered before any authentication or authorization check.
@@ -26,7 +26,9 @@ WebSocket remains the exclusive transport. This task does not authorize an HTTP 
 - One internal account synchronization payload can also contain a password hash.
 - Atome payloads can contain the complete projected properties plus owner and parent identifiers.
 - File watcher payloads can contain absolute and relative filesystem paths, host metadata, and file hashes.
-- `atome/documentations/sync_protocol.md` explicitly states that authentication is not required at the sync layer.
+- The former protocol incorrectly stated that authentication was not required at
+  the sync layer. The active protocol now requires authentication before
+  `welcome`; executable revalidation remains required.
 
 The permission-scoped Atome real-time path already used by `/ws/api` does not compensate for this gap because the separate global `/ws/sync` event-bus forwarder remains active.
 
@@ -38,7 +40,9 @@ The permission-scoped Atome real-time path already used by `/ws/api` does not co
 4. Filter Atome events through current read permission and real-time sharing mode before delivery.
 5. Scope account-directory events to explicitly authorized directory consumers and redact private fields that the recipient is not allowed to read. Phone and contact data are private by default; password hashes are forbidden in every client event.
 6. Scope file events to authorized roots and capabilities; do not expose absolute server paths, host details, hashes, or unrelated user files to ordinary clients.
-7. Authorize active messages such as `sync_request` independently from passive event subscription.
+7. Accept only `auth`, `register`, `subscribe`, `unsubscribe`, `ack`, and `ping`;
+   authorize each independently. Business commands and offline `sync:push` stay
+   on authenticated `/ws/api`.
 8. Apply equivalent authentication, expiry, revocation, reconnect, and authorization semantics on Fastify, Tauri, and supported iOS paths.
 9. Keep `/ws/api` and `/ws/sync` responsibilities explicit: `/ws/api` owns authenticated request/response business operations, while authenticated `/ws/sync` owns permission-scoped real-time notification delivery.
 10. Remove the legacy unauthenticated protocol statement and add a permanent security regression guard.

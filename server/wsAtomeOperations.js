@@ -13,7 +13,6 @@ import {
 } from './atomePropertySecurity.js';
 import { createServerConditionAuthority } from './conditionsQueryAuthority.js';
 import { executeAtomeHistoryCommand } from './atomeHistoryCommands.js';
-import { broadcastCommittedAtomeEvent } from './atomeRealtime.js';
 import { wsResponse as response, wsErrorResponse as errorResponse, requestIdOf } from './wsResponse.js';
 
 
@@ -86,6 +85,9 @@ async function filterReadableEvents(events, userId) {
 async function projectStateForRead(state, userId) {
     const atomeId = state?.atome_id || state?.id || null;
     if (!atomeId) return null;
+    if (state?.vault_principal_id && String(state.vault_principal_id) === String(userId)) {
+        return { ...state, capabilities: { read: true, write: true, delete: true, share: true } };
+    }
     const properties = await projectAtomePropertiesForRead(atomeId, state.properties || {}, userId);
     if (!Object.keys(properties).length) return null;
     const propertyVersions = await projectAtomePropertyVersionsForRead(
@@ -133,21 +135,36 @@ async function handleConditions(message, userId) {
     return errorResponse('conditions', message, `Unknown conditions action: ${action || 'missing'}`);
 }
 
+async function handleDirectory(message, connection) {
+    const service = connection?._wsApiDirectoryService;
+    if (!service) return errorResponse('directory', message, 'directory_service_unavailable');
+    const action = actionOf(message);
+    if (action !== 'list' && action !== 'search') {
+        return errorResponse('directory', message, `Unknown directory action: ${action || 'missing'}`);
+    }
+    const entries = await service.list({
+        query: action === 'search' ? message.query : null,
+        limit: message.limit,
+        offset: message.offset
+    });
+    return response('directory', message, true, { entries });
+}
+
 async function handleEvents(message, connection, userId) {
     const action = actionOf(message);
+    const vaultRouter = connection?._wsApiVaultRouter || null;
     if (action === 'commit') {
         const event = message.event || message.body || message.payload || null;
-        const result = await commitAtomeEvent({
-            event,
-            authenticatedUserId: userId,
-            syncSource: message.sync_source || event?.sync_source || ''
-        });
-        if (result.ok && result.inserted) {
-            await broadcastCommittedAtomeEvent({
-                event: result.event,
-                senderUserId: userId,
-                senderConnection: connection
+        const result = vaultRouter
+            ? await vaultRouter.commit(userId, event, { source: message.source || event?.source || null })
+                .then((entry) => ({ ok: true, ...entry }))
+            : await commitAtomeEvent({
+                event,
+                authenticatedUserId: userId,
+                syncSource: message.sync_source || event?.sync_source || ''
             });
+        if (result.ok && result.inserted) {
+            await connection?._wsApiSyncRuntime?.publish(result.event);
         }
         return response('events', message, result.ok, result.ok
             ? { event: result.event }
@@ -155,21 +172,26 @@ async function handleEvents(message, connection, userId) {
     }
     if (action === 'commit-batch') {
         const events = Array.isArray(message.events) ? message.events : [];
-        const result = await commitAtomeEvents({
-            events,
-            authenticatedUserId: userId,
-            actor: message.actor || null,
-            txId: message.tx_id || message.txId || null,
-            syncSource: message.sync_source || ''
-        });
+        const result = vaultRouter
+            ? await vaultRouter.commitBatch(userId, events, {
+                txId: message.tx_id || message.txId || null,
+                source: message.source || null
+            }).then((entries) => ({
+                ok: true,
+                events: entries.map((entry) => entry.event),
+                inserted_count: entries.filter((entry) => entry.inserted).length
+            }))
+            : await commitAtomeEvents({
+                events,
+                authenticatedUserId: userId,
+                actor: message.actor || null,
+                txId: message.tx_id || message.txId || null,
+                syncSource: message.sync_source || ''
+            });
         if (result.ok && result.inserted_count > 0) {
             for (const committedEvent of result.events || []) {
-                if (!db.wasEventInserted(committedEvent)) continue;
-                await broadcastCommittedAtomeEvent({
-                    event: committedEvent,
-                    senderUserId: userId,
-                    senderConnection: connection
-                });
+                if (committedEvent?.inserted !== true) continue;
+                await connection?._wsApiSyncRuntime?.publish(committedEvent);
             }
         }
         return response('events', message, result.ok, result.ok
@@ -177,7 +199,7 @@ async function handleEvents(message, connection, userId) {
             : { error: result.error || 'commit_batch_failed' });
     }
     if (action === 'list') {
-        const events = await db.listEvents({
+        const listOptions = {
             projectId: message.project_id || message.projectId || null,
             atomeId: message.atome_id || message.atomeId || null,
             txId: message.tx_id || message.txId || null,
@@ -187,7 +209,10 @@ async function handleEvents(message, connection, userId) {
             limit: message.limit,
             offset: message.offset,
             order: message.order || 'asc'
-        });
+        };
+        const events = vaultRouter
+            ? await vaultRouter.listEvents(userId, listOptions)
+            : await db.listEvents(listOptions);
         return response('events', message, true, {
             events: await filterReadableEvents(events, userId)
         });
@@ -195,12 +220,16 @@ async function handleEvents(message, connection, userId) {
     return errorResponse('events', message, `Unknown events action: ${action || 'missing'}`);
 }
 
-async function handleStateCurrent(message, userId) {
+async function handleStateCurrent(message, userId, connection) {
     const action = actionOf(message);
+    const vaultRouter = connection?._wsApiVaultRouter || null;
     if (action === 'get') {
         const atomeId = message.atome_id || message.atomeId || null;
         if (!atomeId) return errorResponse('state-current', message, 'Missing atome_id');
-        const state = await projectStateForRead(await db.getStateCurrent(atomeId), userId);
+        const rawState = vaultRouter
+            ? await vaultRouter.getState(userId, atomeId)
+            : await db.getStateCurrent(atomeId);
+        const state = await projectStateForRead(rawState, userId);
         return state
             ? response('state-current', message, true, { state })
             : errorResponse('state-current', message, 'State not found');
@@ -214,7 +243,9 @@ async function handleStateCurrent(message, userId) {
             includeShared: message.include_shared === true || message.includeShared === true,
             excludeSystem: message.exclude_system === true || message.excludeSystem === true
         };
-        const rawStates = await db.listStateCurrent(projectId, options);
+        const rawStates = vaultRouter
+            ? await vaultRouter.listStates(userId, { ...options, project_id: projectId })
+            : await db.listStateCurrent(projectId, options);
         const states = (await Promise.all(rawStates.map((state) => projectStateForRead(state, userId)))).filter(Boolean);
         const includeTotal = message.include_total === true || message.includeTotal === true;
         return response('state-current', message, true, { states, ...(includeTotal ? { total: states.length } : {}) });
@@ -383,35 +414,36 @@ async function handleUserData(message, userId) {
     return errorResponse('user-data', message, `Unknown user-data action: ${action || 'missing'}`);
 }
 
-async function handleSync(message, userId) {
+async function handleSync(message, userId, connection) {
     const action = actionOf(message);
+    const vaultRouter = connection?._wsApiVaultRouter || null;
     if (action === 'get-pending') {
         const changes = await db.getPendingForSync(userId);
         return response('sync', message, true, { changes });
-    }
-    if (action === 'pull') {
-        const events = await db.listEvents({
-            since: message.since || null,
-            until: message.until || null,
-            limit: message.limit,
-            offset: message.offset,
-            order: 'asc'
-        });
-        return response('sync', message, true, {
-            changes: await filterReadableEvents(events, userId)
-        });
     }
     if (action === 'push') {
         const events = Array.isArray(message.events)
             ? message.events
             : (Array.isArray(message.changes) ? message.changes : []);
-        const committed = await commitAtomeEvents({
-            events,
-            authenticatedUserId: userId,
-            actor: { type: 'user', id: userId },
-            txId: message.tx_id || message.txId || null,
-            syncSource: message.sync_source || 'ws-api'
-        });
+        const committed = vaultRouter
+            ? await vaultRouter.commitBatch(userId, events, {
+                txId: message.tx_id || message.txId || null,
+                source: message.source || message.sync_source || 'ws-api',
+                conflictMode: 'offline-lww'
+            }).then((entries) => ({ ok: true, events: entries.map((entry) => entry.event) }))
+            : await commitAtomeEvents({
+                events,
+                authenticatedUserId: userId,
+                actor: { type: 'user', id: userId },
+                txId: message.tx_id || message.txId || null,
+                syncSource: message.sync_source || 'ws-api'
+            });
+        if (committed.ok) {
+            for (const event of committed.events || []) {
+                if (event?.inserted !== true) continue;
+                await connection?._wsApiSyncRuntime?.publish(event);
+            }
+        }
         return committed.ok
             ? response('sync', message, true, { changes: committed.events })
             : errorResponse('sync', message, committed.error);
@@ -443,6 +475,7 @@ export async function handleWsAtomeOperation(message, connection) {
         || type === 'sync'
         || type === 'history'
         || type === 'conditions'
+        || type === 'directory'
         || (type === 'atome' && action === 'history');
     if (!supported) return null;
 
@@ -454,11 +487,12 @@ export async function handleWsAtomeOperation(message, connection) {
     try {
         let result;
         if (type === 'events') result = await handleEvents(message, connection, auth.userId);
-        else if (type === 'state-current') result = await handleStateCurrent(message, auth.userId);
+        else if (type === 'state-current') result = await handleStateCurrent(message, auth.userId, connection);
         else if (type === 'snapshot') result = await handleSnapshot(message, auth.userId);
         else if (type === 'user-data') result = await handleUserData(message, auth.userId);
-        else if (type === 'sync') result = await handleSync(message, auth.userId);
+        else if (type === 'sync') result = await handleSync(message, auth.userId, connection);
         else if (type === 'conditions') result = await handleConditions(message, auth.userId);
+        else if (type === 'directory') result = await handleDirectory(message, connection);
         else if (type === 'history') result = await handleHistoryCommand(message, auth.userId);
         else result = await handleAtomeHistory(message, auth.userId);
         return rememberMutation(connection, message, result);

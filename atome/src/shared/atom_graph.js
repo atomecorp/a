@@ -198,7 +198,9 @@ const sortedEventRecords = (events = []) => (
             const leftTime = Date.parse(left.event?.ts || left.event?.timestamp || '') || 0;
             const rightTime = Date.parse(right.event?.ts || right.event?.timestamp || '') || 0;
             if (leftTime !== rightTime) return leftTime - rightTime;
-            return left.index - right.index;
+            const leftId = String(left.event?.id || left.event?.event_id || '');
+            const rightId = String(right.event?.id || right.event?.event_id || '');
+            return leftId.localeCompare(rightId);
         })
         .map(({ event, index }) => eventToRecord(event, index))
         .filter(Boolean)

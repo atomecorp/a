@@ -55,6 +55,160 @@ async function ensureEventColumns(query) {
     await ensureColumn({ query, table: 'events', column: 'actor', ddl: "ALTER TABLE events ADD COLUMN actor TEXT" });
     await ensureColumn({ query, table: 'events', column: 'tx_id', ddl: "ALTER TABLE events ADD COLUMN tx_id TEXT" });
     await ensureColumn({ query, table: 'events', column: 'gesture_id', ddl: "ALTER TABLE events ADD COLUMN gesture_id TEXT" });
+    await ensureColumn({ query, table: 'events', column: 'stream_id', ddl: "ALTER TABLE events ADD COLUMN stream_id TEXT" });
+    await ensureColumn({ query, table: 'events', column: 'sequence', ddl: "ALTER TABLE events ADD COLUMN sequence INTEGER" });
+    await ensureColumn({ query, table: 'events', column: 'source', ddl: "ALTER TABLE events ADD COLUMN source TEXT" });
+    await ensureColumn({ query, table: 'events', column: 'lww_decisions', ddl: "ALTER TABLE events ADD COLUMN lww_decisions TEXT" });
+    await ensureColumn({ query, table: 'events', column: 'projection', ddl: "ALTER TABLE events ADD COLUMN projection TEXT" });
+    await ensureColumn({ query, table: 'particles_versions', column: 'event_id', ddl: "ALTER TABLE particles_versions ADD COLUMN event_id TEXT" });
+}
+
+async function ensureSyncEventTables(query) {
+    await query('run', `CREATE TABLE IF NOT EXISTS sync_streams (
+        stream_id TEXT PRIMARY KEY,
+        scope_key TEXT NOT NULL UNIQUE,
+        project_id TEXT,
+        atome_id TEXT,
+        owner_id TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )`);
+    await query('run', `CREATE TABLE IF NOT EXISTS sync_stream_sequences (
+        stream_id TEXT PRIMARY KEY,
+        last_sequence INTEGER NOT NULL DEFAULT 0,
+        FOREIGN KEY(stream_id) REFERENCES sync_streams(stream_id) ON DELETE CASCADE
+    )`);
+    await query('run', `CREATE TABLE IF NOT EXISTS event_property_winners (
+        atome_id TEXT NOT NULL,
+        particle_key TEXT NOT NULL,
+        event_id TEXT NOT NULL,
+        event_ts TEXT,
+        timestamp_valid INTEGER NOT NULL DEFAULT 0,
+        sequence INTEGER NOT NULL,
+        decision TEXT NOT NULL,
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        PRIMARY KEY(atome_id, particle_key),
+        FOREIGN KEY(event_id) REFERENCES events(id) ON DELETE RESTRICT
+    )`);
+    await query('run', `CREATE TABLE IF NOT EXISTS manual_share_cursors (
+        share_id TEXT NOT NULL,
+        stream_id TEXT NOT NULL,
+        published_sequence INTEGER NOT NULL DEFAULT 0,
+        acknowledged_sequence INTEGER NOT NULL DEFAULT 0,
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        PRIMARY KEY(share_id, stream_id),
+        FOREIGN KEY(stream_id) REFERENCES sync_streams(stream_id) ON DELETE CASCADE
+    )`);
+    await query('run', `CREATE TABLE IF NOT EXISTS vault_principal_registry (
+        principal_id TEXT PRIMARY KEY,
+        provider TEXT NOT NULL,
+        vault_key TEXT NOT NULL UNIQUE,
+        status TEXT NOT NULL DEFAULT 'active',
+        provisioned_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        CHECK(provider IN ('process', 'freebsd-jail')),
+        CHECK(status IN ('active', 'stopped', 'failed'))
+    )`);
+    await query('run', `CREATE TABLE IF NOT EXISTS vault_object_registry (
+        atome_id TEXT PRIMARY KEY,
+        vault_principal_id TEXT NOT NULL,
+        registered_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY(vault_principal_id) REFERENCES vault_principal_registry(principal_id) ON DELETE RESTRICT
+    )`);
+    await query('run', `CREATE TABLE IF NOT EXISTS vault_stream_registry (
+        stream_id TEXT PRIMARY KEY,
+        vault_principal_id TEXT NOT NULL,
+        project_id TEXT,
+        atome_id TEXT,
+        registered_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY(vault_principal_id) REFERENCES vault_principal_registry(principal_id) ON DELETE RESTRICT
+    )`);
+    await query('run', 'CREATE INDEX IF NOT EXISTS idx_vault_stream_principal ON vault_stream_registry(vault_principal_id)');
+    await query('run', `CREATE TABLE IF NOT EXISTS sync_share_requests (
+        share_id TEXT PRIMARY KEY,
+        owner_id TEXT NOT NULL,
+        principal_id TEXT NOT NULL,
+        atome_id TEXT NOT NULL,
+        stream_id TEXT NOT NULL,
+        share_type TEXT NOT NULL,
+        share_mode TEXT NOT NULL,
+        status TEXT NOT NULL,
+        permissions_json TEXT NOT NULL,
+        allowed_properties_json TEXT,
+        publication_cursor INTEGER NOT NULL DEFAULT 0,
+        detached_atome_id TEXT,
+        expires_at TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        CHECK(share_type IN ('linked', 'detached')),
+        CHECK(share_mode IN ('real-time', 'manual')),
+        CHECK(status IN ('pending', 'active', 'accepted', 'rejected', 'revoked', 'expired'))
+    )`);
+    await query('run', 'CREATE INDEX IF NOT EXISTS idx_sync_share_recipient ON sync_share_requests(principal_id, status)');
+    await query('run', 'CREATE INDEX IF NOT EXISTS idx_sync_share_stream ON sync_share_requests(stream_id, principal_id, status)');
+    await query('run', `CREATE TABLE IF NOT EXISTS sync_share_policies (
+        owner_id TEXT NOT NULL,
+        peer_id TEXT NOT NULL,
+        policy TEXT NOT NULL,
+        permissions_json TEXT,
+        revoked_at TEXT,
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        PRIMARY KEY(owner_id, peer_id),
+        CHECK(policy IN ('one-shot', 'always', 'never', 'block'))
+    )`);
+    await query('run', `CREATE TABLE IF NOT EXISTS directory_public_profiles (
+        principal_id TEXT PRIMARY KEY,
+        display_name TEXT NOT NULL,
+        revision INTEGER NOT NULL,
+        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )`);
+    await query('run', `CREATE TABLE IF NOT EXISTS directory_public_events (
+        sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+        event_id TEXT NOT NULL UNIQUE,
+        principal_id TEXT NOT NULL,
+        action TEXT NOT NULL,
+        revision INTEGER NOT NULL,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        CHECK(action IN ('upsert', 'revoke', 'delete'))
+    )`);
+}
+
+const legacyScopeKey = (row) => row.project_id
+    ? `project:${row.project_id}`
+    : (row.atome_id ? `atome:${row.atome_id}` : 'global');
+
+async function backfillEventSequences(query) {
+    const rows = await query(
+        'all',
+        `SELECT id, ts, atome_id, project_id, actor FROM events
+         WHERE stream_id IS NULL OR sequence IS NULL
+         ORDER BY ts ASC, id ASC`
+    );
+    const streamByScope = new Map();
+    for (const row of rows || []) {
+        const scopeKey = legacyScopeKey(row);
+        let streamId = streamByScope.get(scopeKey);
+        if (!streamId) {
+            const existing = await query('get', 'SELECT stream_id FROM sync_streams WHERE scope_key = ?', [scopeKey]);
+            streamId = existing?.stream_id || `legacy:${scopeKey}`;
+            await query(
+                'run',
+                `INSERT OR IGNORE INTO sync_streams (stream_id, scope_key, project_id, atome_id)
+                 VALUES (?, ?, ?, ?)`,
+                [streamId, scopeKey, row.project_id || null, row.project_id ? null : row.atome_id || null]
+            );
+            streamByScope.set(scopeKey, streamId);
+        }
+        const counter = await query('get', 'SELECT last_sequence FROM sync_stream_sequences WHERE stream_id = ?', [streamId]);
+        const sequence = Number(counter?.last_sequence || 0) + 1;
+        await query(
+            'run',
+            `INSERT INTO sync_stream_sequences (stream_id, last_sequence) VALUES (?, ?)
+             ON CONFLICT(stream_id) DO UPDATE SET last_sequence = excluded.last_sequence`,
+            [streamId, sequence]
+        );
+        await query('run', 'UPDATE events SET stream_id = ?, sequence = ? WHERE id = ?', [streamId, sequence, row.id]);
+    }
+    await query('run', 'CREATE UNIQUE INDEX IF NOT EXISTS idx_events_stream_sequence ON events(stream_id, sequence)');
 }
 
 async function ensureStateCurrentColumns(query) {
@@ -246,6 +400,8 @@ async function runAdoleSchemaMigrations(query) {
     await migratePermissionConditions(query);
     await ensureSnapshotColumns(query);
     await ensureEventColumns(query);
+    await ensureSyncEventTables(query);
+    await backfillEventSequences(query);
     await ensureStateCurrentColumns(query);
     await ensurePrincipalIdentityTables(query);
     await refreshUsersView(query);

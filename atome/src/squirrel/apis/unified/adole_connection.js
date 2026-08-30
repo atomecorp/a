@@ -226,13 +226,9 @@ function generateClientId() {
  */
 const tokenMemory = new Map();
 
-function clearPreviousFastifyTokenStorage() {
-    if (typeof localStorage !== 'undefined') {
-        localStorage.removeItem('auth_token');
-    }
-    if (typeof sessionStorage !== 'undefined') {
-        sessionStorage.removeItem('auth_token');
-    }
+function clearPreviousFastifyTokenStorage(local = globalThis.localStorage, session = globalThis.sessionStorage) {
+    local?.removeItem?.('auth_token');
+    session?.removeItem?.('auth_token');
     tokenMemory.delete('auth_token');
 }
 
@@ -245,9 +241,9 @@ function isCloudFastifyTarget() {
     return base.includes('atome.one') || base.startsWith('https://');
 }
 
-function getToken(key) {
-    if (typeof localStorage !== 'undefined') {
-        const token = localStorage.getItem(key);
+function getToken(key, local = globalThis.localStorage, session = globalThis.sessionStorage) {
+    if (typeof local?.getItem === 'function') {
+        const token = local.getItem(key);
         if (token) {
             // Persistent storage is authoritative: native auth can refresh it after JS memory was hydrated.
             tokenMemory.set(key, token);
@@ -257,16 +253,16 @@ function getToken(key) {
         const cloudKey = CONFIG.FASTIFY_TOKEN_KEY || 'cloud_auth_token';
         if (key === cloudKey) {
             // Previous migration: use auth_token as cloud token only.
-            const previous = localStorage.getItem('auth_token');
+            const previous = local.getItem('auth_token');
             if (previous) {
-                localStorage.setItem(cloudKey, previous);
+                local.setItem(cloudKey, previous);
                 tokenMemory.set(cloudKey, previous);
                 return previous;
             }
         }
     }
-    if (typeof sessionStorage !== 'undefined') {
-        const token = sessionStorage.getItem(key);
+    if (typeof session?.getItem === 'function') {
+        const token = session.getItem(key);
         if (token) {
             tokenMemory.set(key, token);
             return token;
@@ -284,13 +280,9 @@ function getToken(key) {
  * @param {string} key - Storage key
  * @param {string} token - Token value
  */
-function setToken(key, token) {
-    if (typeof localStorage !== 'undefined' && token) {
-        localStorage.setItem(key, token);
-    }
-    if (typeof sessionStorage !== 'undefined' && token) {
-        sessionStorage.setItem(key, token);
-    }
+function setToken(key, token, local = globalThis.localStorage, session = globalThis.sessionStorage) {
+    if (token) local?.setItem?.(key, token);
+    if (token) session?.setItem?.(key, token);
     if (token) {
         tokenMemory.set(key, token);
     }
@@ -300,13 +292,9 @@ function setToken(key, token) {
  * Remove token from localStorage
  * @param {string} key - Storage key
  */
-function clearToken(key) {
-    if (typeof localStorage !== 'undefined') {
-        localStorage.removeItem(key);
-    }
-    if (typeof sessionStorage !== 'undefined') {
-        sessionStorage.removeItem(key);
-    }
+function clearToken(key, local = globalThis.localStorage, session = globalThis.sessionStorage) {
+    local?.removeItem?.(key);
+    session?.removeItem?.(key);
     tokenMemory.delete(key);
 
     const cloudKey = CONFIG.FASTIFY_TOKEN_KEY || 'cloud_auth_token';
@@ -314,7 +302,7 @@ function clearToken(key) {
         // Previous Fastify builds stored the same JWT under auth_token.
         // If we only clear cloud_auth_token, getToken() may immediately
         // rehydrate the expired previous token and recreate the 401 loop.
-        clearPreviousFastifyTokenStorage();
+        clearPreviousFastifyTokenStorage(local, session);
     }
 }
 

@@ -8,7 +8,6 @@
 import db, { withTransaction } from '../database/adole.js';
 import { v4 as uuidv4 } from 'uuid';
 import { pushNotificationToUserStack } from './notificationStack.js';
-import { broadcastAtomeCreate } from './atomeRealtime.js';
 import { createShare } from './sharingPermissionService.js';
 import {
     atomeCreatorIdOf,
@@ -57,7 +56,9 @@ export async function applyShareAcceptance({ sharerId, targetUserId, particles }
     const shareMode = (rawMode === 'validation-based' || rawMode === 'manual' || rawMode === 'non-real-time')
         ? 'manual'
         : 'real-time';
-    const effectiveShareType = shareMode === 'real-time' ? shareType : 'copy';
+    const effectiveShareType = shareType;
+    const publication_cursor = Number(particles.publication_cursor || 0);
+    const linkedPublicationCursor = shareMode === 'manual' ? publication_cursor : null;
     const meta = extractShareMeta(particles);
     const expiresAt = normalizeDurationToExpiry(meta?.duration);
     const conditions = meta?.condition || null;
@@ -104,26 +105,9 @@ export async function applyShareAcceptance({ sharerId, targetUserId, particles }
             return { ok: false, error: res?.error || 'Failed to grant permissions' };
         }
 
-        if (shareMode === 'real-time') {
-            try {
-                const atome = await db.getAtome(atomeId);
-                if (atome) {
-                    const atomeType = atomeTypeOf(atome);
-                    if (!atomeType || atomeType === 'atome') continue;
-                    await broadcastAtomeCreate({
-                        atomeId,
-                        atomeType,
-                        parentId: atomeParentIdOf(atome),
-                        particles: atomeProperties(atome),
-                        senderUserId: sharerId
-                    });
-                }
-            } catch (error) {
-        console.warn("[cleanup] operation failed", error); }
-        }
     }
 
-    return { ok: true };
+    return { ok: true, shareMode, publication_cursor: linkedPublicationCursor };
 }
 
 export async function createShareRequest({ sharerId, targetUserId, targetPhone, atomeIds, permissions, mode, shareType, propertyOverrides }) {

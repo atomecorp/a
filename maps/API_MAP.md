@@ -700,7 +700,10 @@ Verified route families:
 
 - Health and diagnostics: `/health`, `/healthz`, `/__whoami`, `/dev/state`, `/dev/client-log`, `/client-log`, `/dev/snapshot`.
 - Application operations: typed `/ws/api` families for authentication, Atome CRUD/history, events, `state-current`, snapshots/restoration, sharing, synchronization, and user data.
-- Authenticated notifications: `/ws/sync`, with principal binding before `welcome` and permission-scoped event delivery.
+- Authenticated delivery: `/ws/sync`, with principal binding before `welcome`,
+  control messages limited to `auth|register|subscribe|unsubscribe|ack|ping`,
+  sequence replay, ACK, and permission-scoped event delivery. Commits and offline
+  `sync:push` remain `/ws/api` operations.
 - Server identity and operational discovery: `/api/server/identity`, `/api/server/verify`, `/api/server/status`.
 - Uploads and protected files: `/api/uploads`, `/api/uploads/chunk`, `/api/uploads/complete`, `/api/uploads/:file`, `/api/files/*`, `/api/recordings/:file`, `/api/extract-audio/:file`.
 - Mail gateway: `/api/eve/mail/sync`, `/api/eve/mail/send`, `/api/eve/mail/mark-read`, `/api/eve/mail/archive`, `/api/eve/mail/delete`.
@@ -1322,9 +1325,18 @@ Boundary status: Closed product runtime API. Public promotion would require a pr
 
 Ownership: Atome open.
 
-Primary sources: `atome/security/trusted_keys.js`, `atome/security/serverVerification.js`, `atome/security/serverVerificationCrypto.js`, `atome/security/serverVerificationState.js`, `atome/security/syncQueue.js`, `atome/security/sync_queue_constants.js`, `atome/security/sync_queue_storage.js`, `atome/security/sync_queue_items.js`, `atome/security/sync_queue_credentials.js`, `atome/src/squirrel/security/bootstrap.js`, `atome/src/squirrel/security/token_vault.js`.
+Primary sources: `atome/security/trusted_keys.js`, `atome/security/serverVerification.js`, `atome/security/serverVerificationCrypto.js`, `atome/security/serverVerificationState.js`, `atome/security/syncQueue.js`, `atome/security/sync_queue_constants.js`, `atome/security/sync_queue_storage.js`, `atome/security/sync_queue_items.js`, `atome/security/sync_queue_credentials.js`, `atome/src/squirrel/security/bootstrap.js`, `atome/src/squirrel/security/token_vault.js`, `atome/src/squirrel/apis/unified/sync_engine.js`, `server/wsSyncRuntime.js`, `server/userVaultRouter.js`, and `server/syncSharingService.js`.
 
-Verified responsibilities: trusted server metadata, fingerprint lookup, server verification, sync queue behavior, token vault bootstrap, and token vault tests. The retired HTTP `cloudSync.js` API is unavailable; explicit cross-runtime provisioning remains a separate validated task.
+Contract responsibilities: trusted server metadata, fingerprint lookup, server
+verification, isolated sync queues/cursors, token vault bootstrap, authenticated
+`/ws/sync` replay, and directory invalidation. The retired HTTP `cloudSync.js`
+API is unavailable. Runtime validation status is recorded in `FRAMEWORK_STATE.md`.
+
+Verified runtime surface: `SyncEngine.install`, `retry`, `disconnect`,
+`requestSync`, `observeEvents`, `subscribe`, `getSource`, and `getState`.
+`/ws/api` exposes `sync:push`, `sync:get-pending`, commits, batches, sharing, and
+directory commands. `/ws/sync` is server-driven delivery/replay and has no pull
+or mutation action.
 
 Boundary status: Open framework security. eVe may call these contracts but must not own product-specific bypasses.
 

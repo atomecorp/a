@@ -22,8 +22,9 @@ flowchart TD
   Realtime["/ws/api atome:realtime\nserver.js"] --> RealtimeHandler["handleWsAtomeRealtimeOperation\nwsAtomeRealtimeOperation.js"]
   RealtimeHandler --> PropertyWritePolicy["authorizeAtomeEventWrite\natomePropertySecurity.js"]
   PropertyWritePolicy --> RecipientProjection["broadcastAtomeRealtimePatch\natomeRealtime.js"]
-  SyncPull["/ws/api sync:pull + state-current"] --> ReadProjection["current authorization\nwsAtomeOperations.js"]
-  SyncLive["/ws/sync event"] --> SyncProjection["filterWsSyncEventForPrincipal\nwsSyncSecurity.js"]
+  SyncPush["/ws/api sync:push"] --> CommitEvent
+  StateRead["/ws/api state-current"] --> ReadProjection["current authorization\nwsAtomeOperations.js"]
+  SyncLive["/ws/sync replay/live"] --> SyncProjection["UserVaultRouter property projection"]
   ReadProjection --> PropertyWritePolicy
   SyncProjection --> PropertyWritePolicy
   ConsumerReads["state list / conditions search / user export"] --> ReadProjection
@@ -31,8 +32,8 @@ flowchart TD
   TauriCommit["Tauri /ws/api events:commit"] --> NativeSecurity["local_atome_security.rs\nper-particle authorization"]
   NativeSecurity --> NativeAtomic["local_atome.rs\nevent + particles + versions + state + queue"]
   NativeAtomic --> NativeWorker["local_atome_sync_worker.rs\nper-principal credential"]
-  NativeWorker --> CommitEvent
-  CommitEvent --> RemoteProjection["local_atome_remote_projection.rs\nrecipient-scoped inbound state/events"]
+  NativeWorker --> SyncPush
+  SyncProjection --> RemoteProjection["local_atome_remote_projection.rs\nrecipient-scoped inbound state/events"]
   Db["database/adole.js"] --> Create["createAtome\ndatabase/adole.js:494"]
   Db --> Update["updateAtome\ndatabase/adole.js:926"]
   Db --> PropertyVersions["exact particle versions + tombstones"]

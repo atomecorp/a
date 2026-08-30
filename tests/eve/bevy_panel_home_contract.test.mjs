@@ -74,7 +74,15 @@ const baseState = (overrides = {}) => ({
     selectOpen: '',
     securityMode: '',
     vault: { unlocked: false, credentials: [], providers: [], mailConfigured: false },
-    server: { selected: 'https://atome.one', servers: ['https://atome.one'], connected: false },
+    server: {
+        selected: 'https://atome.one', mode: 'production', customBase: '', debugSync: false,
+        environments: [
+            { id: 'local', label: 'Local test', base: 'http://localhost:3001' },
+            { id: 'production', label: 'Production — atome.one', base: 'https://atome.one' },
+            { id: 'custom', label: 'Custom développeur', base: '' }
+        ],
+        connected: false
+    },
     dashboardCategories: [{ id: 'projects', label_key: 'eve.dashboard.category.projects' }],
     rowKeys: {
         'bio.biometrics': [],
@@ -85,7 +93,7 @@ const baseState = (overrides = {}) => ({
     ...overrides
 });
 
-test('Home is a six-section Bevy composition with the restored nested hierarchy', () => {
+test('Home is a seven-section Bevy composition with the restored nested hierarchy', () => {
     const state = baseState();
     const nodes = buildHomeContent(state, { emit: () => {}, bodyWidth: 452, editing });
     const all = flatten([
@@ -105,7 +113,8 @@ test('Home is a six-section Bevy composition with the restored nested hierarchy'
         'home_profile_accordion',
         'home_passkeys_accordion',
         'home_preferences_accordion',
-        'home_security_accordion'
+        'home_security_accordion',
+        'home_privacy_accordion'
     ]);
     const initialProjection = flatten(nodes);
     assert.equal(initialProjection.some((entry) => entry.id === 'home_bio_birth'), false);
@@ -364,7 +373,7 @@ test('Home applies a validated server through the existing HTTP/WebSocket and re
         }
     };
     try {
-        const result = await applyHomeServerPreference('server.example/');
+        const result = await applyHomeServerPreference({ mode: 'custom', customBase: 'server.example/' });
         assert.equal(result.ok, true);
         assert.equal(result.selected, 'https://server.example');
         assert.equal(globalThis.window.__SQUIRREL_FASTIFY_URL__, 'https://server.example');
@@ -374,9 +383,9 @@ test('Home applies a validated server through the existing HTTP/WebSocket and re
 
         globalThis.window.__SQUIRREL_FORCE_TAURI_RUNTIME__ = true;
         globalThis.window.__SQUIRREL_TAURI_LOCAL_PORT__ = 3000;
-        assert.deepEqual(await applyHomeServerPreference('http://localhost:3000'), {
+        assert.deepEqual(await applyHomeServerPreference({ mode: 'custom', customBase: 'http://localhost:3000' }), {
             ok: false,
-            error: 'home_server_invalid'
+            error: 'home_server_rejected'
         });
     } finally {
         globalThis.window = previousWindow;

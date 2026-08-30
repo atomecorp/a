@@ -13,6 +13,16 @@ import {
     clearToken
 } from './adole_connection.js';
 
+const observeShareStreams = (result) => {
+    if (typeof window === 'undefined') return result;
+    const data = result?.data && typeof result.data === 'object' ? result.data : result;
+    const streams = data?.streams || data?.data?.streams || [];
+    window.Squirrel?.SyncEngine?.observeEvents?.(
+        (Array.isArray(streams) ? streams : []).map((stream) => ({ stream_id: stream }))
+    );
+    return result;
+};
+
 function createWebSocketAdapter(tokenKey, backend = 'tauri') {
     const resolvedBackend = backend || (isInTauri() ? 'tauri' : 'fastify');
 
@@ -227,7 +237,7 @@ function createWebSocketAdapter(tokenKey, backend = 'tauri') {
                 });
             },
             async respond(data) {
-                return getWs().send({
+                return observeShareStreams(await getWs().send({
                     type: 'share',
                     action: 'respond',
                     status: data.status || data.decision || null,
@@ -235,7 +245,7 @@ function createWebSocketAdapter(tokenKey, backend = 'tauri') {
                     request_id: data.request_id || data.requestId || null,
                     policy: data.policy || null,
                     receiver_project_id: data.receiver_project_id || data.receiverProjectId || null
-                });
+                }));
             },
             async publish(data) {
                 return getWs().send({
@@ -402,7 +412,9 @@ function createWebSocketAdapter(tokenKey, backend = 'tauri') {
                     action: 'configure-remote',
                     token,
                     remote_user_id: data.remote_user_id || data.remoteUserId || null,
-                    remote_token: data.remote_token || data.remoteToken || null
+                    remote_token: data.remote_token || data.remoteToken || null,
+                    remote_url: data.remote_url || data.remoteUrl || null,
+                    environment_fingerprint: data.environment_fingerprint || data.environmentFingerprint || null
                 });
             },
             async clearRemote() {
@@ -426,18 +438,6 @@ function createWebSocketAdapter(tokenKey, backend = 'tauri') {
                     events: data.events || data.changes || [],
                     tx_id: data.tx_id || data.txId || null,
                     sync_source: data.sync_source || data.syncSource || null
-                });
-            },
-            async pull(data = {}) {
-                const token = getToken(tokenKey);
-                return getWs().send({
-                    type: 'sync',
-                    action: 'pull',
-                    token,
-                    since: data.since || null,
-                    until: data.until || null,
-                    limit: data.limit,
-                    offset: data.offset
                 });
             },
             async ack(data = {}) {

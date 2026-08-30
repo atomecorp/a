@@ -323,7 +323,7 @@ final class LocalHTTPServer {
                 print("❌ WS upgrade: 101 send failed: \(error)")
                 return
             }
-            FastifySyncRelay.shared.connectIfConfigured()
+            FastifySyncClient.shared.connectIfConfigured()
             if route == "/ws/sync" {
                 self.queue.asyncAfter(deadline: .now() + 5) { [weak self] in
                     guard let self,
@@ -502,6 +502,7 @@ final class LocalHTTPServer {
         if type == "events" {
             let response = AiSRuntime.handleEventsMessage(payload)
             sendWebSocketJson(response, on: connection)
+            FastifySyncClient.shared.pushCommittedResponse(response)
             return
         }
 
@@ -517,7 +518,13 @@ final class LocalHTTPServer {
             return
         }
 
-        if type == "user-data" || type == "sync" || type == "sync_request" {
+        if type == "sync" {
+            let response = AiSRuntime.handleSyncMessage(payload)
+            sendWebSocketJson(response, on: connection)
+            return
+        }
+
+        if type == "user-data" || type == "sync_request" {
             sendWebSocketJson([
                 "type": "\(type)-response",
                 "requestId": payload["requestId"] ?? NSNull(),
@@ -531,7 +538,6 @@ final class LocalHTTPServer {
             broadcastWebSocketText(text, excluding: connection)
         }
 
-        FastifySyncRelay.shared.send(text: text)
     }
 
     private func shouldBroadcastLocalEvent(payload: [String: Any]) -> Bool {
@@ -594,7 +600,7 @@ final class LocalHTTPServer {
         }
     }
 
-    fileprivate func handleFastifyRelayMessage(_ text: String) {
+    func handleFastifySyncMessage(_ text: String) {
         guard let data = text.data(using: .utf8) else { return }
         guard let obj = try? JSONSerialization.jsonObject(with: data, options: []),
               let payload = obj as? [String: Any] else {
@@ -1568,104 +1574,6 @@ final class LocalHTTPServer {
     }
 }
 
-final class FastifySyncRelay {
-    static let shared = FastifySyncRelay()
-
-    private let queue = DispatchQueue(label: "ais.fastify.relay.queue")
-    private var session: URLSession?
-    private var task: URLSessionWebSocketTask?
-    private var reconnectDelay: TimeInterval = 1.0
-    private var connecting = false
-    private(set) var isConnected = false
-
-    func connectIfConfigured() {
-        queue.async { [weak self] in
-            guard let self = self else { return }
-            guard !self.connecting, !self.isConnected else { return }
-            guard let endpoint = self.resolveEndpoint() else { return }
-            self.connecting = true
-            let session = URLSession(configuration: .default)
-            self.session = session
-            let task = session.webSocketTask(with: endpoint)
-            self.task = task
-            task.resume()
-            self.isConnected = true
-            self.connecting = false
-            self.reconnectDelay = 1.0
-            self.receiveLoop()
-        }
-    }
-
-    func send(text: String) {
-        queue.async { [weak self] in
-            guard let self = self else { return }
-            guard let task = self.task, self.isConnected else { return }
-            task.send(.string(text)) { _ in }
-        }
-    }
-
-    private func receiveLoop() {
-        guard let task = task else { return }
-        task.receive { [weak self] result in
-            guard let self = self else { return }
-            switch result {
-            case .success(let message):
-                switch message {
-                case .string(let text):
-                    LocalHTTPServer.shared.handleFastifyRelayMessage(text)
-                case .data(let data):
-                    let text = String(decoding: data, as: UTF8.self)
-                    LocalHTTPServer.shared.handleFastifyRelayMessage(text)
-                @unknown default:
-                    break
-                }
-                self.receiveLoop()
-            case .failure:
-                self.scheduleReconnect()
-            }
-        }
-    }
-
-    private func scheduleReconnect() {
-        queue.async { [weak self] in
-            guard let self = self else { return }
-            self.isConnected = false
-            self.task?.cancel(with: .goingAway, reason: nil)
-            self.task = nil
-            let delay = self.reconnectDelay
-            self.reconnectDelay = min(self.reconnectDelay * 2, 30)
-            self.queue.asyncAfter(deadline: .now() + delay) {
-                self.connectIfConfigured()
-            }
-        }
-    }
-
-    private func resolveEndpoint() -> URL? {
-        let keys = [
-            "SQUIRREL_FASTIFY_WS_SYNC_URL",
-            "SQUIRREL_FASTIFY_URL",
-            "SQUIRREL_TAURI_FASTIFY_URL"
-        ]
-
-        let userDefaults = UserDefaults(suiteName: SharedBus.appGroupSuite) ?? UserDefaults.standard
-        for key in keys {
-            if let raw = userDefaults.string(forKey: key), !raw.isEmpty {
-                if key == "SQUIRREL_FASTIFY_WS_SYNC_URL" {
-                    return URL(string: raw)
-                }
-                let base = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-                if base.isEmpty { continue }
-                let wsBase = base
-                    .replacingOccurrences(of: "https://", with: "wss://")
-                    .replacingOccurrences(of: "http://", with: "ws://")
-                    .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-                return URL(string: wsBase + "/ws/sync")
-            }
-        }
-        return nil
-    }
-}
-
 private extension UInt64 {
     func asIntSafe() -> Int {
         if self > UInt64(Int.max) { return Int.max }
@@ -1832,11 +1740,25 @@ enum AiSRuntime {
         payload TEXT,
         actor TEXT,
         tx_id TEXT,
-        gesture_id TEXT
+        gesture_id TEXT,
+        stream_id TEXT,
+        sequence INTEGER,
+        source TEXT,
+        lww_decisions TEXT,
+        projection TEXT
     );
     CREATE INDEX IF NOT EXISTS idx_events_ts ON events(ts);
     CREATE INDEX IF NOT EXISTS idx_events_atome ON events(atome_id);
     CREATE INDEX IF NOT EXISTS idx_events_project ON events(project_id);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_events_stream_sequence
+        ON events(stream_id, sequence) WHERE stream_id IS NOT NULL AND sequence IS NOT NULL;
+    CREATE TABLE IF NOT EXISTS remote_sync_stream_cursors (
+        principal_id TEXT NOT NULL,
+        stream_id TEXT NOT NULL,
+        last_sequence INTEGER NOT NULL DEFAULT 0,
+        updated_at TEXT NOT NULL,
+        PRIMARY KEY (principal_id, stream_id)
+    );
     CREATE TABLE IF NOT EXISTS snapshots (
         snapshot_id INTEGER PRIMARY KEY AUTOINCREMENT,
         atome_id TEXT,
@@ -1957,6 +1879,57 @@ enum AiSRuntime {
             } catch {
                 return eventsResponse(requestId: requestId, success: false, error: error.localizedDescription)
             }
+        }
+    }
+
+    static func handleSyncMessage(_ message: [String: Any]) -> [String: Any] {
+        queue.sync {
+            let requestId = stringValue(message["requestId"])
+            let action = stringValue(message["action"])
+            guard let localToken = normalizedOptionalString(message["token"]),
+                  let claims = try? verifyToken(localToken),
+                  normalizedOptionalString(claims["sub"]) != nil else {
+                return ["type":"sync-response", "requestId":requestId, "success":false, "error":"Access denied"]
+            }
+            let defaults = UserDefaults(suiteName: SharedBus.appGroupSuite) ?? .standard
+            if action == "configure-remote" {
+                let remoteUserId = stringValue(message["remote_user_id"] ?? message["remoteUserId"])
+                let remoteToken = stringValue(message["remote_token"] ?? message["remoteToken"])
+                let remoteURL = stringValue(message["remote_url"] ?? message["remoteUrl"])
+                guard !remoteUserId.isEmpty, !remoteToken.isEmpty, !remoteURL.isEmpty else {
+                    return ["type":"sync-response", "requestId":requestId, "success":false, "error":"Invalid remote sync configuration"]
+                }
+                defaults.set(remoteUserId, forKey: "SQUIRREL_FASTIFY_PRINCIPAL_ID")
+                defaults.set(remoteToken, forKey: "SQUIRREL_FASTIFY_TOKEN")
+                defaults.set(remoteURL, forKey: "SQUIRREL_FASTIFY_URL")
+                defaults.set(stringValue(message["environment_fingerprint"] ?? message["environmentFingerprint"]),
+                             forKey: "SQUIRREL_SYNC_ENVIRONMENT_FINGERPRINT")
+                FastifySyncClient.shared.reloadConfiguration()
+                return ["type":"sync-response", "requestId":requestId, "success":true, "configured":true]
+            }
+            if action == "clear-remote" {
+                for key in [
+                    "SQUIRREL_FASTIFY_PRINCIPAL_ID", "SQUIRREL_FASTIFY_TOKEN",
+                    "SQUIRREL_FASTIFY_URL", "SQUIRREL_SYNC_ENVIRONMENT_FINGERPRINT"
+                ] {
+                    defaults.removeObject(forKey: key)
+                }
+                FastifySyncClient.shared.disconnect()
+                return ["type":"sync-response", "requestId":requestId, "success":true, "configured":false]
+            }
+            if action == "get-pending" {
+                do {
+                    let db = try openDatabase()
+                    let rows = try query(db, """
+                        SELECT queue_id, atome_id, operation, created_at FROM sync_queue
+                        WHERE status IN ('pending', 'syncing', 'failed') ORDER BY queue_id
+                        """)
+                    return ["type":"sync-response", "requestId":requestId, "success":true, "changes":rows]
+                } catch {
+                    return ["type":"sync-response", "requestId":requestId, "success":false, "error":error.localizedDescription]
+                }
+            }
+            return ["type":"sync-response", "requestId":requestId, "success":false, "error":"Unknown sync action"]
         }
     }
 
@@ -2637,8 +2610,99 @@ enum AiSRuntime {
             sqlite3_close(opened)
             throw AiSError(message)
         }
+        try ensureSyncSchema(opened)
         db = opened
         return opened
+    }
+
+    private static func ensureSyncSchema(_ db: OpaquePointer?) throws {
+        let additions = [
+            "ALTER TABLE events ADD COLUMN stream_id TEXT",
+            "ALTER TABLE events ADD COLUMN sequence INTEGER",
+            "ALTER TABLE events ADD COLUMN source TEXT",
+            "ALTER TABLE events ADD COLUMN lww_decisions TEXT",
+            "ALTER TABLE events ADD COLUMN projection TEXT"
+        ]
+        for statement in additions { _ = sqlite3_exec(db, statement, nil, nil, nil) }
+        try execute(db, """
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_events_stream_sequence
+            ON events(stream_id, sequence) WHERE stream_id IS NOT NULL AND sequence IS NOT NULL
+            """)
+        try execute(db, """
+            CREATE TABLE IF NOT EXISTS remote_sync_stream_cursors (
+                principal_id TEXT NOT NULL, stream_id TEXT NOT NULL,
+                last_sequence INTEGER NOT NULL DEFAULT 0, updated_at TEXT NOT NULL,
+                PRIMARY KEY (principal_id, stream_id)
+            )
+            """)
+    }
+
+    static func registerRemoteSyncStream(principalId: String, streamId: String) throws {
+        try queue.sync {
+            let db = try openDatabase()
+            try execute(db, """
+                INSERT INTO remote_sync_stream_cursors (principal_id, stream_id, last_sequence, updated_at)
+                VALUES (?, ?, 0, ?)
+                ON CONFLICT(principal_id, stream_id) DO UPDATE SET updated_at = excluded.updated_at
+                """, [.text(principalId), .text(streamId), .text(isoNow())])
+        }
+    }
+
+    static func remoteSyncCursors(principalId: String) -> [(String, Int64)] {
+        (try? queue.sync {
+            let db = try openDatabase()
+            return try query(db, """
+                SELECT stream_id, last_sequence FROM remote_sync_stream_cursors
+                WHERE principal_id = ? ORDER BY stream_id
+                """, [.text(principalId)]).compactMap { row in
+                guard let stream = row["stream_id"] as? String else { return nil }
+                return (stream, row["last_sequence"] as? Int64 ?? 0)
+            }
+        }) ?? []
+    }
+
+    static func persistRemoteSyncEnvelope(_ envelope: [String: Any], principalId: String) throws -> Bool {
+        try queue.sync {
+            let db = try openDatabase()
+            let eventId = stringValue(envelope["event_id"] ?? envelope["id"])
+            let streamId = stringValue(envelope["stream"] ?? envelope["stream_id"])
+            let sequence = intValue(envelope["sequence"], defaultValue: 0)
+            guard !eventId.isEmpty, !streamId.isEmpty, sequence > 0 else {
+                throw AiSError("Invalid remote sync envelope")
+            }
+            let duplicate = !(try query(db, "SELECT id FROM events WHERE id = ? LIMIT 1", [.text(eventId)])).isEmpty
+            var event: [String: Any] = [
+                "id": eventId,
+                "ts": stringValue(envelope["timestamp"] ?? envelope["ts"]),
+                "kind": stringValue(envelope["kind"]),
+                "payload": envelope["patch"] ?? [:],
+                "actor": ["type": "user", "id": principalId],
+                "stream_id": streamId,
+                "sequence": sequence,
+                "source": envelope["source"] ?? NSNull(),
+                "lww_decisions": envelope["lww_decisions"] ?? NSNull(),
+                "projection": envelope["projection"] ?? NSNull()
+            ]
+            for key in ["atome_id", "project_id", "tx_id", "gesture_id"] {
+                if let value = envelope[key] { event[key] = value }
+            }
+            try execute(db, "BEGIN IMMEDIATE")
+            do {
+                if !duplicate { try appendEvent(db, event: event) }
+                try execute(db, """
+                    INSERT INTO remote_sync_stream_cursors (principal_id, stream_id, last_sequence, updated_at)
+                    VALUES (?, ?, ?, ?)
+                    ON CONFLICT(principal_id, stream_id) DO UPDATE SET
+                      last_sequence = MAX(remote_sync_stream_cursors.last_sequence, excluded.last_sequence),
+                      updated_at = excluded.updated_at
+                    """, [.text(principalId), .text(streamId), .int(sequence), .text(isoNow())])
+                try execute(db, "COMMIT")
+            } catch {
+                _ = try? execute(db, "ROLLBACK")
+                throw error
+            }
+            return !duplicate
+        }
     }
 
     private static func serializeAtome(
@@ -2959,9 +3023,20 @@ enum AiSRuntime {
         if !existing.isEmpty { return }
         let payloadString = try jsonString(event["payload"] ?? NSNull())
         let actorString = try jsonString(event["actor"] ?? NSNull())
+        let actorId = resolveActorId(event["actor"]) ?? "local"
+        let scopeId = normalizedOptionalString(event["project_id"] ?? event["atome_id"]) ?? "account"
+        let streamId = normalizedOptionalString(event["stream_id"] ?? event["stream"])
+            ?? "ais:\(actorId):\(scopeId)"
+        let sequence = intValue(event["sequence"], defaultValue: 0) > 0
+            ? intValue(event["sequence"], defaultValue: 0)
+            : ((try query(db,
+                "SELECT COALESCE(MAX(sequence), 0) + 1 AS next_sequence FROM events WHERE stream_id = ?",
+                [.text(streamId)]).first?["next_sequence"] as? Int64) ?? 1)
         try execute(db, """
-            INSERT INTO events (id, ts, atome_id, project_id, kind, payload, actor, tx_id, gesture_id)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO events (
+                id, ts, atome_id, project_id, kind, payload, actor, tx_id, gesture_id,
+                stream_id, sequence, source, lww_decisions, projection
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, [
             .text(eventId),
             .text(stringValue(event["ts"])),
@@ -2971,7 +3046,12 @@ enum AiSRuntime {
             .text(payloadString),
             .text(actorString),
             normalizedOptionalString(event["tx_id"]).map(SQLiteBinding.text) ?? .null,
-            normalizedOptionalString(event["gesture_id"]).map(SQLiteBinding.text) ?? .null
+            normalizedOptionalString(event["gesture_id"]).map(SQLiteBinding.text) ?? .null,
+            .text(streamId),
+            .int(sequence),
+            normalizedOptionalString(event["source"]).map(SQLiteBinding.text) ?? .text("ais"),
+            .text(try jsonString(event["lww_decisions"] ?? NSNull())),
+            .text(try jsonString(event["projection"] ?? NSNull()))
         ])
         _ = try applyEventToStateCurrent(db, event: event)
     }

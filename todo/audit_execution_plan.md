@@ -1089,9 +1089,10 @@ execution_state: stopped at user request, not completed and not blocked
 7. A newly confirmed realtime defect was corrected: `events:commit` and
    `events:commit-batch` previously persisted successfully but emitted no live
    recipient update. Inserted committed events now emit a durable
-   recipient-projected `share-sync`; retries of an already inserted event do
-   not rebroadcast, the sender connection is excluded, and another session of
-   the sender's account receives the update.
+   recipient-projected durable event. The current owner is authenticated
+   `/ws/sync`; the retired `console-message/share-sync` bridge is forbidden.
+   Retries of an already inserted event do not rebroadcast, the source session
+   is excluded, and another session of the source account receives the update.
 8. The unified WebSocket client now preserves `delete_keys`, property versions,
    event/transaction/gesture identifiers, and the durable marker. A projected
    property deletion forces reconstruction from canonical state instead of

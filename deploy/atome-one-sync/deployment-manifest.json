@@ -1,0 +1,17 @@
+{
+  "schema": "atome.one.sync.deployment.v1",
+  "status": "prepared-not-executed",
+  "application_root": "/opt/a",
+  "environment": "/etc/squirrel/squirrel.env",
+  "service": "atome-sync.service",
+  "vault_provider": "per-principal-node-process",
+  "command_socket": "/ws/api",
+  "delivery_socket": "/ws/sync",
+  "production_reset_requires_local_acceptance": true,
+  "files": [
+    "README.md",
+    "environment.example",
+    "atome-sync.service",
+    "nginx-atome.one.conf"
+  ]
+}

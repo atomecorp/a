@@ -51,6 +51,7 @@ import {
   setLocalSurfaceLabel
 } from './adole_api/surfaces.js';
 import { getSessionState, waitForAuthCheck } from './adole_api/session.js';
+import { FastifyAdapter } from './adole.js';
 
 // Kick off auth bootstrap immediately so UI waits on a single source of truth.
 try {
@@ -148,6 +149,14 @@ export const AdoleAPI = {
     sync: auth.sync,
     listUnsynced: auth.listUnsynced,
     maybeSync: auth.maybeSync
+  },
+  directory: {
+    list: (options = {}) => FastifyAdapter.ws.send({
+      type: 'directory', action: 'list', limit: options.limit, offset: options.offset
+    }),
+    search: (query, options = {}) => FastifyAdapter.ws.send({
+      type: 'directory', action: 'search', query, limit: options.limit, offset: options.offset
+    })
   },
   machine: {
     getCurrent: auth.getCurrentMachine,
