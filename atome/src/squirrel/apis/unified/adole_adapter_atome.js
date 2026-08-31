@@ -236,6 +236,7 @@ export const buildAtomeApi = ({ getWs, tokenKey }) => ({
                     type: 'state-current',
                     action: 'list',
                     token,
+                    atome_type: params.atome_type || params.atomeType || params.type || null,
                     project_id: params.project_id || params.projectId || params.parent_id || params.parentId || null,
                     include_shared: params.include_shared === true || params.includeShared === true,
                     include_total: params.include_total === true || params.includeTotal === true,

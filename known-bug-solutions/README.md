@@ -12,6 +12,7 @@ the established solution before attempting a new implementation.
 | List Delete has no handler, playback skips paged items, or projected audio progress freezes | [project-view-list-media-regressions](project-view-list-media-regressions/README.md) |
 | Projects disappear, project views look empty, or legacy media returns 404 after identity migration | [project-state-media-identity-reconciliation](project-state-media-identity-reconciliation/README.md) |
 | Bottom menu or moved panels float after rotation or WebView resize | [cross-runtime-viewport-reanchor](cross-runtime-viewport-reanchor/README.md) |
+| Browser login with a Tauri-created account terminates Fastify during sync | [sync-subscription-burst-fastify-crash](sync-subscription-burst-fastify-crash/README.md) |
 
 ## Maintenance rules
 

@@ -18,6 +18,7 @@ process.env.SQUIRREL_SYNC_REMOTE = '0';
 
 const db = await import('../database/adole.js');
 await db.initDatabase();
+await db.resolvePendingOwners();
 
 const parseJson = (value) => {
     if (value == null || typeof value === 'object') return value ?? null;
@@ -67,6 +68,7 @@ const handleOperation = async (operation, payload = {}) => {
     if (operation === 'state:list') {
         return db.listStateCurrent(payload.project_id || payload.projectId || null, {
             ownerId: principalId,
+            atomeType: payload.atome_type || payload.atomeType || null,
             includeShared: false,
             excludeSystem: payload.exclude_system === true || payload.excludeSystem === true,
             limit: payload.limit,

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { afterEach, test } from 'vitest';
 import { resolveFastifyVerificationUrl } from '../../atome/src/squirrel/apis/unified/adole_api/auth_remote_provisioning.js';
+import { shouldAttemptFastify } from '../../atome/src/squirrel/apis/unified/adole_backend.js';
 
 const previousWindow = globalThis.window;
 const previousLocalStorage = globalThis.localStorage;
@@ -44,6 +45,26 @@ test('a real Tauri WebView keeps Axum primary while exposing the configured Fast
     assert.equal(globalThis.window.__SQUIRREL_FASTIFY_WS_SYNC_URL__, 'ws://127.0.0.1:3001/ws/sync');
     assert.notEqual(globalThis.window.__SQUIRREL_AUTH_SOURCE__, 'fastify');
     assert.notEqual(globalThis.window.__SQUIRREL_DATA_SOURCE__, 'fastify');
+    assert.equal(shouldAttemptFastify(), true);
+});
+
+test('an ordinary browser on local Axum cannot activate Fastify as a parallel backend', () => {
+    const localStorage = {
+        getItem: () => null,
+        setItem: () => {},
+        removeItem: () => {}
+    };
+    globalThis.localStorage = localStorage;
+    globalThis.window = {
+        location: {
+            protocol: 'http:', hostname: '127.0.0.1', port: '3000',
+            origin: 'http://127.0.0.1:3000', href: 'http://127.0.0.1:3000/'
+        },
+        localStorage,
+        __SQUIRREL_FASTIFY_URL__: 'http://127.0.0.1:3001'
+    };
+
+    assert.equal(shouldAttemptFastify(), false);
 });
 
 test('remote provisioning verifies local Fastify over HTTP, never over WebSocket', () => {

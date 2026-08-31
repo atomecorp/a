@@ -107,15 +107,22 @@ const actorIdentity = (actor) => {
 };
 
 export function eventIdempotencyIntent(event) {
+    const kind = String(event?.kind || '');
+    const props = eventPropertyPatch(event) || {};
     return stableValue({
-        kind: String(event?.kind || ''),
+        kind,
         atome_id: event?.atome_id || event?.atomeId || null,
         project_id: event?.project_id || event?.projectId || null,
-        parent_id: event?.parent_id || event?.parentId || null,
+        // A delete projection does not persist structural metadata in the
+        // append-only event row. Parentage cannot affect delete semantics and
+        // must therefore not make an otherwise identical retry conflict.
+        parent_id: kind.toLowerCase() === 'delete'
+            ? null
+            : (event?.parent_id || event?.parentId || props.parent_id || props.parentId || null),
         tx_id: event?.tx_id || event?.txId || null,
         gesture_id: event?.gesture_id || event?.gestureId || null,
         actor_id: actorIdentity(event?.actor),
-        props: eventPropertyPatch(event) || {},
+        props,
         delete_keys: eventDeletedPropertyKeys(event),
         expected_versions: eventExpectedPropertyVersions(event)
     });

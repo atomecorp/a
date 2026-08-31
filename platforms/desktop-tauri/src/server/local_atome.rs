@@ -5,6 +5,10 @@
 // Schema: atomes + particles (unified with Fastify, source: database/schema.sql)
 // =============================================================================
 use crate::server::broadcast_sync_event;
+use super::local_atome_sync_worker::{
+    enqueue_sync_event, is_syncable_event, resolve_sync_source, resolve_sync_target,
+    should_enqueue_sync,
+};
 use chrono::Utc;
 use rusqlite::{Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
@@ -108,6 +112,12 @@ pub struct LocalAtomeState {
     pub recent_request_ids: Arc<Mutex<DedupeCache>>,
     pub recent_fingerprints: Arc<Mutex<FingerprintCache>>,
     pub(crate) remote_sync_credentials: Arc<Mutex<HashMap<String, RemoteSyncCredential>>>,
+}
+
+impl LocalAtomeState {
+    pub(crate) fn storage_root(&self) -> &Path {
+        &self.storage_root
+    }
 }
 
 #[derive(Clone)]
@@ -1854,7 +1864,6 @@ pub(super) struct SyncQueueItem {
     pub(super) queue_id: i64,
     pub(super) payload: String,
     pub(super) attempts: i64,
-    pub(super) max_attempts: i64,
 }
 
 fn sync_event_type(kind: &str) -> &'static str {
@@ -1941,7 +1950,7 @@ async fn handle_event_commit(
         if inserted {
             let _ = apply_event_to_state_current(conn, &normalized)?;
             apply_event_to_atomes(conn, &normalized, user_id)?;
-            if should_enqueue_sync(&sync_target, &sync_source) {
+            if is_syncable_event(&normalized) && should_enqueue_sync(&sync_target, &sync_source) {
                 if let Some(target) = sync_target.as_ref() {
                     let _ = enqueue_sync_event(conn, &normalized, target);
                 }
@@ -2017,7 +2026,7 @@ async fn handle_event_commit_batch(
             if inserted {
                 let _ = apply_event_to_state_current(conn, evt)?;
                 apply_event_to_atomes(conn, evt, user_id)?;
-                if should_enqueue_sync(&sync_target, &sync_source) {
+                if is_syncable_event(evt) && should_enqueue_sync(&sync_target, &sync_source) {
                     if let Some(target) = sync_target.as_ref() {
                         let _ = enqueue_sync_event(conn, evt, target);
                     }
@@ -2274,6 +2283,13 @@ async fn handle_state_current_list(
     request_id: Option<String>,
 ) -> WsResponse {
     let project_id = message.get("project_id").and_then(|v| v.as_str());
+    let atome_type = message
+        .get("atome_type")
+        .or_else(|| message.get("atomeType"))
+        .and_then(|value| value.as_str())
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_lowercase);
     let limit = message
         .get("limit")
         .and_then(|v| v.as_i64())
@@ -2309,6 +2325,14 @@ async fn handle_state_current_list(
     if let Some(pid) = project_id {
         conditions.insert(0, "sc.project_id = ?".to_string());
         scope_params.insert(0, rusqlite::types::Value::from(pid.to_string()));
+    }
+    if let Some(kind) = atome_type {
+        conditions.push(
+            "(LOWER(COALESCE(a.atome_type, '')) = ? OR LOWER(COALESCE(json_extract(sc.properties, '$.type'), '')) = ? OR LOWER(COALESCE(json_extract(sc.properties, '$.kind'), '')) = ?)".to_string()
+        );
+        scope_params.push(rusqlite::types::Value::from(kind.clone()));
+        scope_params.push(rusqlite::types::Value::from(kind.clone()));
+        scope_params.push(rusqlite::types::Value::from(kind));
     }
     if exclude_system {
         conditions.push("LOWER(COALESCE(a.atome_type, '')) NOT IN ('project','user','blackhole','tool','tool_macro','toolbox','tool_block','panel','system')".to_string());
@@ -2381,6 +2405,67 @@ async fn handle_state_current_list(
         data: Some(payload),
         atomes: None,
         count: include_total.then_some(total),
+    }
+}
+
+#[cfg(test)]
+mod state_current_type_filter_tests {
+    use super::*;
+
+    fn state() -> LocalAtomeState {
+        let db = Connection::open_in_memory().expect("memory db");
+        db.execute_batch(ADOLE_SCHEMA_SQL).expect("schema");
+        LocalAtomeState {
+            db: Arc::new(Mutex::new(db)),
+            storage_root: PathBuf::new(),
+            recent_request_ids: Arc::new(Mutex::new(DedupeCache::new(32))),
+            recent_fingerprints: Arc::new(Mutex::new(FingerprintCache::new(32, 750))),
+            remote_sync_credentials: Arc::new(Mutex::new(HashMap::new())),
+        }
+    }
+
+    #[tokio::test]
+    async fn project_filter_runs_before_limit_and_accepts_canonical_kind() {
+        let state = state();
+        {
+            let db = state.db.lock().expect("database lock");
+            db.execute(
+                "INSERT INTO atomes (atome_id, atome_type, owner_id, creator_id, updated_at) VALUES ('owner', 'user', NULL, 'owner', '2025-12-31T00:00:00Z')",
+                [],
+            ).expect("owner atome");
+            db.execute(
+                "INSERT INTO atomes (atome_id, atome_type, owner_id, creator_id, updated_at) VALUES ('old-project', 'generic', 'owner', 'owner', '2026-01-01T00:00:00Z')",
+                [],
+            ).expect("project atome");
+            db.execute(
+                "INSERT INTO state_current (atome_id, owner_id, project_id, properties, updated_at, version) VALUES ('old-project', 'owner', 'old-project', '{\"kind\":\"project\",\"name\":\"Old project\"}', '2026-01-01T00:00:00Z', 1)",
+                [],
+            ).expect("project state");
+            db.execute(
+                "INSERT INTO atomes (atome_id, atome_type, owner_id, creator_id, updated_at) VALUES ('new-shape', 'shape', 'owner', 'owner', '2026-02-01T00:00:00Z')",
+                [],
+            ).expect("shape atome");
+            db.execute(
+                "INSERT INTO state_current (atome_id, owner_id, project_id, properties, updated_at, version) VALUES ('new-shape', 'owner', 'old-project', '{\"kind\":\"shape\"}', '2026-02-01T00:00:00Z', 1)",
+                [],
+            ).expect("shape state");
+        }
+
+        let response = handle_state_current_list(
+            json!({ "atome_type": "project", "limit": 1 }),
+            "owner",
+            &state,
+            None,
+        ).await;
+
+        assert!(response.success, "{:?}", response.error);
+        let states = response.data
+            .as_ref()
+            .and_then(|data| data.get("states"))
+            .and_then(JsonValue::as_array)
+            .expect("states");
+        assert_eq!(states.len(), 1);
+        assert_eq!(states[0].get("atome_id"), Some(&json!("old-project")));
     }
 }
 
@@ -2492,96 +2577,6 @@ fn event_parent_id(event: &EventRecord) -> Option<&str> {
         .as_str()
 }
 
-fn resolve_sync_target(message: &JsonValue) -> Option<String> {
-    let explicit = message
-        .get("sync_target")
-        .or_else(|| message.get("syncTarget"))
-        .and_then(|v| v.as_str())
-        .map(|v| v.to_lowercase());
-    if explicit.is_some() {
-        return explicit;
-    }
-
-    if let Ok(url) = std::env::var("SQUIRREL_FASTIFY_URL") {
-        if !url.trim().is_empty() {
-            return Some("fastify".to_string());
-        }
-    }
-    if let Ok(url) = std::env::var("FASTIFY_URL") {
-        if !url.trim().is_empty() {
-            return Some("fastify".to_string());
-        }
-    }
-    None
-}
-
-fn resolve_sync_source(message: &JsonValue) -> Option<String> {
-    message
-        .get("sync_source")
-        .or_else(|| message.get("syncSource"))
-        .and_then(|v| v.as_str())
-        .map(|v| v.to_lowercase())
-}
-
-fn should_enqueue_sync(sync_target: &Option<String>, sync_source: &Option<String>) -> bool {
-    match (sync_target, sync_source) {
-        (Some(target), Some(source)) => target != source,
-        (Some(_), None) => true,
-        _ => false,
-    }
-}
-
-fn enqueue_sync_event(
-    db: &Connection,
-    event: &EventRecord,
-    target_server: &str,
-) -> Result<(), String> {
-    let payload_json =
-        serde_json::to_string(&event_with_actor(event.clone())).map_err(|e| e.to_string())?;
-    db.execute(
-        "INSERT INTO sync_queue (atome_id, operation, payload, target_server, status, attempts, max_attempts, created_at)
-         VALUES (?1, ?2, ?3, ?4, 'pending', 0, 5, datetime('now'))",
-        rusqlite::params![event.atome_id, "events:commit", payload_json, target_server],
-    )
-    .map_err(|e| e.to_string())?;
-    Ok(())
-}
-
-pub(crate) fn enqueue_current_user_profile_sync(
-    state: &LocalAtomeState,
-    local_user_id: &str,
-    remote_user_id: &str,
-) -> Result<bool, String> {
-    let db = state.db.lock().map_err(|_| "local_database_unavailable".to_string())?;
-    let row = db.query_row(
-        "SELECT properties, updated_at, version FROM state_current WHERE atome_id = ?1",
-        [local_user_id],
-        |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?, row.get::<_, i64>(2)?)),
-    );
-    let (properties_json, updated_at, version) = match row {
-        Ok(value) => value,
-        Err(rusqlite::Error::QueryReturnedNoRows) => return Ok(false),
-        Err(error) => return Err(error.to_string()),
-    };
-    let properties: JsonValue = serde_json::from_str(&properties_json).map_err(|error| error.to_string())?;
-    if !properties.is_object() || properties.get("eve_profile").is_none() {
-        return Ok(false);
-    }
-    let event = EventRecord {
-        id: format!("remote-profile-bootstrap:{}:{}", remote_user_id, version),
-        ts: updated_at,
-        atome_id: Some(local_user_id.to_string()),
-        project_id: None,
-        kind: "set".to_string(),
-        payload: Some(json!({ "props": properties, "scope": "global" })),
-        actor: Some(json!({ "type": "user", "id": local_user_id })),
-        tx_id: None,
-        gesture_id: None,
-    };
-    enqueue_sync_event(&db, &event, "fastify")?;
-    Ok(true)
-}
-
 pub(super) fn list_sync_queue_for_actor(
     db: &Connection,
     target_server: &str,
@@ -2590,12 +2585,12 @@ pub(super) fn list_sync_queue_for_actor(
 ) -> Result<Vec<SyncQueueItem>, String> {
     let mut stmt = db
         .prepare(
-            "SELECT queue_id, payload, attempts, max_attempts
+            "SELECT queue_id, payload, attempts
              FROM sync_queue
              WHERE target_server = ?1
                AND json_extract(payload, '$.actor.id') = ?2
                AND status IN ('pending', 'error')
-               AND (next_retry_at IS NULL OR next_retry_at <= datetime('now'))
+               AND (next_retry_at IS NULL OR julianday(next_retry_at) <= julianday('now'))
              ORDER BY created_at ASC, queue_id ASC
              LIMIT ?3",
         )
@@ -2607,7 +2602,6 @@ pub(super) fn list_sync_queue_for_actor(
                 queue_id: row.get(0)?,
                 payload: row.get(1)?,
                 attempts: row.get::<_, i64>(2)?,
-                max_attempts: row.get::<_, i64>(3)?,
             })
         })
         .map_err(|e| e.to_string())?;
@@ -2648,6 +2642,55 @@ pub(super) fn mark_sync_queue_done(db: &Connection, queue_id: i64) -> Result<(),
     )
     .map_err(|e| e.to_string())?;
     Ok(())
+}
+
+#[cfg(test)]
+mod sync_queue_retry_tests {
+    use super::*;
+
+    #[test]
+    fn rfc3339_retry_dates_are_compared_as_dates_not_text() {
+        let db = Connection::open_in_memory().expect("memory db");
+        db.execute_batch(ADOLE_SCHEMA_SQL).expect("schema");
+        db.execute_batch(
+            "INSERT INTO atomes (atome_id, atome_type, created_source, sync_status)
+             VALUES ('past', 'project', 'tauri', 'local');
+             INSERT INTO atomes (atome_id, atome_type, created_source, sync_status)
+             VALUES ('future', 'project', 'tauri', 'local');",
+        )
+        .expect("atome fixtures");
+        let payload = json!({ "actor": { "id": "local-user" } }).to_string();
+        db.execute(
+            "INSERT INTO sync_queue (
+                atome_id, operation, payload, target_server, status, attempts, max_attempts,
+                next_retry_at, created_at
+             ) VALUES ('past', 'events:commit', ?1, 'fastify', 'error', 1, 5,
+                strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '-1 second'), datetime('now'))",
+            [&payload],
+        )
+        .expect("past retry");
+        db.execute(
+            "INSERT INTO sync_queue (
+                atome_id, operation, payload, target_server, status, attempts, max_attempts,
+                next_retry_at, created_at
+             ) VALUES ('future', 'events:commit', ?1, 'fastify', 'error', 1, 5,
+                strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '+1 hour'), datetime('now'))",
+            [&payload],
+        )
+        .expect("future retry");
+
+        let ready = list_sync_queue_for_actor(&db, "fastify", "local-user", 10)
+            .expect("ready retries");
+        assert_eq!(ready.len(), 1);
+        let queued_id: String = db
+            .query_row(
+                "SELECT atome_id FROM sync_queue WHERE queue_id = ?1",
+                [ready[0].queue_id],
+                |row| row.get(0),
+            )
+            .expect("queued retry id");
+        assert_eq!(queued_id, "past");
+    }
 }
 
 fn extract_event_patch(
@@ -3132,7 +3175,7 @@ mod property_commit_security_tests {
     }
 
     #[test]
-    fn current_profile_is_republished_to_the_remote_principal() {
+    fn current_user_state_is_republished_to_the_remote_principal() {
         let state = state();
         {
             let db = state.db.lock().expect("database lock");
@@ -3149,10 +3192,44 @@ mod property_commit_security_tests {
                 ],
             )
             .expect("profile state fixture");
+            db.execute(
+                "INSERT INTO atomes (atome_id, atome_type, owner_id, creator_id) VALUES ('local-project', 'project', 'local-user', 'local-user')",
+                [],
+            )
+            .expect("project atome fixture");
+            db.execute(
+                "INSERT INTO state_current (atome_id, owner_id, project_id, properties, updated_at, version) VALUES ('local-project', 'local-user', 'local-project', '{\"kind\":\"project\",\"name\":\"Projet test\"}', '2026-08-31T09:59:00Z', 2)",
+                [],
+            )
+            .expect("project state fixture");
+            db.execute(
+                "INSERT INTO events (id, ts, atome_id, project_id, kind, actor, stream_id, sequence, source) VALUES ('project-event', '2026-08-31T09:59:00Z', 'local-project', 'local-project', 'set', '{\"id\":\"local-user\"}', 'tauri:local-user:local-project', 1, 'tauri')",
+                [],
+            )
+            .expect("project event fixture");
+            db.execute(
+                "INSERT INTO atomes (atome_id, atome_type, owner_id, creator_id, parent_id) VALUES ('local-child', 'text', 'local-user', 'local-user', 'local-project')",
+                [],
+            )
+            .expect("child atome fixture");
+            db.execute(
+                "INSERT INTO state_current (atome_id, owner_id, project_id, properties, updated_at, version) VALUES ('local-child', 'local-user', 'local-project', '{\"kind\":\"text\",\"content\":\"complete\"}', '2026-08-31T10:00:00Z', 3)",
+                [],
+            )
+            .expect("child state fixture");
+            db.execute(
+                "INSERT INTO events (id, ts, atome_id, project_id, kind, actor, stream_id, sequence, source) VALUES ('child-event', '2026-08-31T10:00:00Z', 'local-child', 'local-project', 'set', '{\"id\":\"local-user\"}', 'tauri:local-user:local-project', 2, 'tauri')",
+                [],
+            )
+            .expect("child event fixture");
         }
         assert_eq!(
-            enqueue_current_user_profile_sync(&state, "local-user", "remote-user"),
-            Ok(true)
+            crate::server::local_atome_sync_worker::enqueue_current_user_state_sync(
+                &state,
+                "local-user",
+                "remote-user",
+            ),
+            Ok(3)
         );
         let db = state.db.lock().expect("database lock");
         let payload: String = db.query_row(
@@ -3161,9 +3238,21 @@ mod property_commit_security_tests {
             |row| row.get(0),
         ).expect("queued profile payload");
         let event: JsonValue = serde_json::from_str(&payload).expect("profile event json");
-        assert_eq!(event.get("id"), Some(&json!("remote-profile-bootstrap:remote-user:7")));
+        assert!(event
+            .get("id")
+            .and_then(JsonValue::as_str)
+            .is_some_and(|id| id.starts_with("remote-state-bootstrap-v2:remote-user:local-user:")));
         assert_eq!(event.get("atome_id"), Some(&json!("local-user")));
         assert_eq!(event.pointer("/payload/props/eve_profile/access"), Some(&json!("public")));
+        let child_payload: String = db.query_row(
+            "SELECT payload FROM sync_queue WHERE atome_id = 'local-child'",
+            [],
+            |row| row.get(0),
+        ).expect("queued child payload");
+        let child: JsonValue = serde_json::from_str(&child_payload).expect("child event json");
+        assert_eq!(child.get("project_id"), Some(&json!("local-project")));
+        assert_eq!(child.pointer("/payload/parent_id"), Some(&json!("local-project")));
+        assert_eq!(child.pointer("/payload/props/content"), Some(&json!("complete")));
     }
 
     #[tokio::test]
@@ -3471,7 +3560,7 @@ fn insert_event_record(db: &Connection, event: &EventRecord) -> Result<bool, Str
     Ok(true)
 }
 
-fn event_with_actor(event: EventRecord) -> JsonValue {
+pub(super) fn event_with_actor(event: EventRecord) -> JsonValue {
     json!({
         "id": event.id,
         "ts": event.ts,

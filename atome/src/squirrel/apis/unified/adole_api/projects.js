@@ -1,6 +1,6 @@
 import { generateUUID } from '../adole.js';
 import { getSessionState, setCurrentProjectCache, getCurrentProjectCache, clearCurrentProjectCache, updateWindowProject } from './session.js';
-import { list_atomes, create_atome, delete_atome, get_atome, syncLocalProjectsToFastify } from './atomes.js';
+import { list_atomes, create_atome, delete_atome, get_atome } from './atomes.js';
 
 const with_callback = (result, callback) => {
     if (typeof callback === 'function') callback(result);
@@ -114,6 +114,10 @@ export async function list_projects(options = {}, callback) {
     });
 
     const onlyProjects = (items) => items.filter((record) => {
+        const properties = record?.properties || record?.particles || record?.data || {};
+        if (record?.deleted_at || record?.deletedAt || record?.__deleted === true || properties.__deleted === true) {
+            return false;
+        }
         const type = record?.atome_type || record?.type || record?.kind
             || record?.properties?.type || record?.properties?.kind
             || record?.particles?.type || record?.particles?.kind
@@ -134,22 +138,6 @@ export async function list_projects(options = {}, callback) {
         fastify: { projects: fastifyProjects, error: listResult?.fastify?.error || null },
         meta: listResult?.meta || null
     };
-
-    if (Array.isArray(tauriProjects) && tauriProjects.length > 0
-        && Array.isArray(fastifyProjects)) {
-        const fastifyIds = new Set(
-            fastifyProjects.map((p) => p?.id || p?.atome_id).filter(Boolean).map(String)
-        );
-        const hasMissing = tauriProjects.some((p) => {
-            const id = p?.id || p?.atome_id;
-            return id && !fastifyIds.has(String(id));
-        });
-        if (hasMissing) {
-            
-                syncLocalProjectsToFastify({ reason: 'list_projects' }).catch(() => { });
-            
-        }
-    }
 
     return with_callback(result, callback);
 }

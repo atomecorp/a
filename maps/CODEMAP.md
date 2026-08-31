@@ -189,8 +189,12 @@ property ACL decisions and recipient projections;
 `local_atome.rs` owns transactional commit/batch enforcement;
 `local_atome_extended.rs` owns authenticated sync configuration and projected
 history/state commands; `local_atome_sync_worker.rs` owns per-principal
-outbound/inbound transport; and `local_atome_remote_projection.rs` owns durable
-recipient-scoped Fastify projection, cursors, revocation and remote lifecycle.
+outbound/inbound queue transport and interrupted-queue recovery;
+`local_atome_sync_bootstrap.rs` owns deterministic current-state catch-up;
+`local_atome_sync_media.rs` owns scoped, idempotent media upload before event delivery; and
+`local_atome_remote_projection.rs` owns durable recipient-scoped Fastify projection,
+cursors, revocation, remote lifecycle, hierarchy-envelope repair, and preservation
+of device-local media references when the device receives its own remote echo.
 `atome/src/squirrel/apis/unified/adole_api/auth_fastify_token.js` owns the
 WebView-to-native credential handoff and restart reconfiguration. No token or
 remote credential is persisted by these owners.
@@ -1948,7 +1952,9 @@ Should be extended by:
   lifecycle through `userVaultProvider.js`/`userVaultProcess.js`; routing and
   property projection through `userVaultRouter.js`; linked/manual/detached
   policy through `syncSharingService.js`; public invalidations through
-  `directoryPublicService.js`.
+  `directoryPublicService.js`. `wsSyncRuntime.js` also owns the per-connection
+  serial control-message queue: subscription bursts preserve arrival order and
+  cannot fan out concurrent replay IPC calls from one WebSocket.
 
 Should not be duplicated by:
 

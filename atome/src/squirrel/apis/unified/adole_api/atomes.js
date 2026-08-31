@@ -9,7 +9,6 @@ import {
     getCurrentUserId,
     isAnonymous,
     isLoggedOut,
-    listOnBackend,
     listStateCurrentOnBackend,
     normalizeAtomeRecord,
     resolveAtomeId,
@@ -68,18 +67,17 @@ export async function list_atomes(options = {}, callback) {
         meta: { source: primary }
     };
 
-    const shouldUseStateCurrent = !!(options.projectId || options.project_id || options.parentId || options.parent_id);
-    const primaryResult = shouldUseStateCurrent
-        ? await listStateCurrentOnBackend(adapters, primary, options)
-        : await listOnBackend(adapters, primary, options, currentUserId, allowCrossOwner);
+    // Event commits, replay, offline recovery and per-user vault isolation all
+    // converge in state_current. Reading the legacy `atome:list` tables here
+    // made freshly committed Web projects invisible even though their canonical
+    // vault projection already existed.
+    const primaryResult = await listStateCurrentOnBackend(adapters, primary, options);
     results[primary] = { atomes: primaryResult.list, error: primaryResult.error };
 
     if (runtimeTauri && !isAnonymous() && (options.includeShared || primaryResult.list.length === 0)) {
         const allowFastify = await canUseFastify(currentUserId);
         if (allowFastify) {
-            const secondaryResult = shouldUseStateCurrent
-                ? await listStateCurrentOnBackend(adapters, secondary, options)
-                : await listOnBackend(adapters, secondary, options, currentUserId, allowCrossOwner);
+            const secondaryResult = await listStateCurrentOnBackend(adapters, secondary, options);
             results[secondary] = { atomes: secondaryResult.list, error: secondaryResult.error };
             if (primaryResult.list.length === 0 && secondaryResult.list.length > 0) {
                 results.meta.preferFastify = true;
@@ -97,7 +95,7 @@ export async function list_atomes(options = {}, callback) {
         }
     }
 
-    if (!allowCrossOwner && !shouldUseStateCurrent) {
+    if (!allowCrossOwner) {
         const filteredPrimary = filterByOwner(results[primary].atomes, currentUserId, { allowCreator: allowCreatorMatch });
         results[primary].atomes = filteredPrimary;
         if (results[secondary]?.atomes?.length) {
@@ -123,7 +121,6 @@ export async function create_atome(options = {}, callback) {
 
     const runtimeTauri = isTauriRuntime();
     const primary = runtimeTauri ? 'tauri' : 'fastify';
-    const secondary = runtimeTauri ? 'fastify' : 'tauri';
 
     const atomeId = options.id || generateUUID();
     const atomeType = String(options.type || '').trim();
@@ -170,16 +167,6 @@ export async function create_atome(options = {}, callback) {
         fastify: { success: false, data: null, error: null }
     };
     results[primary] = { success: okPrimary, data: primaryResult, error: okPrimary ? null : primaryResult?.error };
-
-    if (okPrimary && runtimeTauri && !isAnonymous() && adapters[secondary]?.getToken?.()) {
-        try {
-            const secondaryResult = await adapters[secondary].atome.commit(payload);
-            const okSecondary = !!(secondaryResult?.ok || secondaryResult?.success);
-            results[secondary] = { success: okSecondary, data: secondaryResult, error: okSecondary ? null : secondaryResult?.error };
-        } catch (e) {
-            results[secondary] = { success: false, data: null, error: e?.message || 'secondary_failed' };
-        }
-    }
 
     if (typeof callback === 'function') callback(results);
     return results;
@@ -353,7 +340,6 @@ export async function alter_atome(atomeId, properties = {}, callback) {
 
     const runtimeTauri = isTauriRuntime();
     const primary = runtimeTauri ? 'tauri' : 'fastify';
-    const secondary = runtimeTauri ? 'fastify' : 'tauri';
 
     const payload = sanitizeAtomeProperties(properties?.properties || properties?.particles || properties || {});
 
@@ -376,21 +362,6 @@ export async function alter_atome(atomeId, properties = {}, callback) {
         fastify: { success: false, data: null, error: null }
     };
     results[primary] = { success: okPrimary, data: primaryResult, error: okPrimary ? null : primaryResult?.error };
-
-    if (okPrimary && runtimeTauri && !isAnonymous() && adapters[secondary]?.getToken?.()) {
-        try {
-            const secondaryResult = await adapters[secondary].atome.commit({
-                kind: 'set',
-                atome_id: atomeId,
-                props: payload,
-                actor: { type: 'user', id: String(currentUserId) }
-            });
-            const okSecondary = !!(secondaryResult?.ok || secondaryResult?.success);
-            results[secondary] = { success: okSecondary, data: secondaryResult, error: okSecondary ? null : secondaryResult?.error };
-        } catch (e) {
-            results[secondary] = { success: false, data: null, error: e?.message || 'secondary_failed' };
-        }
-    }
 
     if (typeof callback === 'function') callback(results);
     return results;
@@ -416,7 +387,6 @@ export async function delete_atome(atomeId, callback) {
         return result;
     }
     const primary = runtimeTauri ? 'tauri' : 'fastify';
-    const secondary = runtimeTauri ? 'fastify' : 'tauri';
 
     const primaryResult = await adapters[primary].atome.softDelete(atomeId);
     const okPrimary = !!(primaryResult?.ok || primaryResult?.success);
@@ -425,16 +395,6 @@ export async function delete_atome(atomeId, callback) {
         fastify: { success: false, data: null, error: null }
     };
     results[primary] = { success: okPrimary, data: primaryResult, error: okPrimary ? null : primaryResult?.error };
-
-    if (okPrimary && runtimeTauri && !isAnonymous() && adapters[secondary]?.getToken?.()) {
-        try {
-            const secondaryResult = await adapters[secondary].atome.softDelete(atomeId);
-            const okSecondary = !!(secondaryResult?.ok || secondaryResult?.success);
-            results[secondary] = { success: okSecondary, data: secondaryResult, error: okSecondary ? null : secondaryResult?.error };
-        } catch (e) {
-            results[secondary] = { success: false, data: null, error: e?.message || 'secondary_failed' };
-        }
-    }
 
     if (typeof callback === 'function') callback(results);
     return results;

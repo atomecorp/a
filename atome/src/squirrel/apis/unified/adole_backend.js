@@ -355,7 +355,11 @@ function isLocalDev() {
 function shouldAttemptFastify() {
     if (typeof window === 'undefined') return false;
     if (window.__SQUIRREL_DISABLE_FASTIFY__ === true) return false;
-    if (isLocalAxumPage() && !allowFastifyPrimaryOnLocalAxumPage()) return false;
+    // A local Axum page must keep Tauri as its primary backend, but the native
+    // runtime still needs Fastify as the secondary owner for account
+    // provisioning and event replication. The browser-only guard must not
+    // disable that sync lane inside the Tauri WebView.
+    if (!isInTauri() && isLocalAxumPage() && !allowFastifyPrimaryOnLocalAxumPage()) return false;
     return !!getFastifyHttpBaseUrl();
 }
 

@@ -32,6 +32,7 @@ echo "🖥️ Démarrage de Tauri..."
 stop_stale_tauri_dev_runtime() {
     local patterns=(
         "target/debug/squirrel"
+        "target/debug/bundle/macos/squirrel.app/Contents/MacOS/squirrel"
         "tauri dev"
         "npm run tauri:dev"
     )
@@ -57,7 +58,7 @@ stop_stale_tauri_dev_runtime() {
     sleep 1
 
     local remaining
-    remaining="$(pgrep -f "target/debug/squirrel" 2>/dev/null || true)"
+    remaining="$(pgrep -f "target/debug/(bundle/macos/squirrel\\.app/Contents/MacOS/)?squirrel" 2>/dev/null || true)"
     if [[ -n "$remaining" ]]; then
         echo "WARN: Stale Tauri dev runtime did not exit after SIGTERM; forcing shutdown: $remaining"
         while IFS= read -r pid; do

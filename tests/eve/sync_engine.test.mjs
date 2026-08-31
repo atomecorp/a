@@ -74,13 +74,25 @@ test('SyncEngine authenticates, subscribes, projects winners and persists its cu
     assert.equal(engine.getState().cursors['stream-a'], 1);
 
     socket.receive({
+        type: 'event', event_id: 'event-delete-project', stream: 'stream-a', sequence: 2,
+        atome_id: 'project-a', kind: 'delete', patch: {},
+        projection: {
+            atome_id: 'project-a', project_id: 'project-a',
+            properties: { kind: 'project', name: 'Disposable', __deleted: true }
+        }
+    });
+    assert.equal(env.dispatched.at(-1).type, 'squirrel:atome-deleted');
+    assert.equal(env.dispatched.at(-1).detail.project_id, 'project-a');
+    assert.equal(env.dispatched.at(-1).detail.atome_type, 'project');
+
+    socket.receive({
         type: 'event', event_id: 'event-1', stream: 'stream-a', sequence: 1,
         atome_id: 'shape-a', kind: 'set', patch: { props: { top: 4 } }
     });
-    assert.equal(env.dispatched.length, 1);
+    assert.equal(env.dispatched.length, 2);
 
     const restored = new SyncEngine({ env, WebSocketClass: FakeSocket, token: () => 'signed-token' });
-    assert.equal(restored.getState().cursors['stream-a'], 1);
+    assert.equal(restored.getState().cursors['stream-a'], 2);
     assert.deepEqual(new Set(restored.getState().streams), new Set(['stream-a', 'directory.public']));
 });
 

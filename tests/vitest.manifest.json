@@ -1,5 +1,7 @@
 [
   "tests/atome/src/squirrel/apis/unified/adole_api/session.current_project.test.mjs",
+  "tests/eve/adole_adapter_state_current_type.test.mjs",
+  "tests/eve/adole_api_canonical_project_sync.test.mjs",
   "tests/eve/apng_image_resource.test.mjs",
   "tests/eve/assistant_gesture_runtime.test.mjs",
   "tests/eve/assistant_session_controller.test.mjs",
@@ -10,6 +12,7 @@
   "tests/eve/atome_record_projection_project_id.test.mjs",
   "tests/eve/audio_to_midi_contract.test.mjs",
   "tests/eve/auth_fastify_token_tauri_restart.test.mjs",
+  "tests/eve/auth_tauri_primary_invariant.test.mjs",
   "tests/eve/background_home_persistence.test.mjs",
   "tests/eve/bevy_dashboard_deferred_texture_budget.test.mjs",
   "tests/eve/bevy_media_texture_image_fit.test.mjs",
@@ -71,6 +74,7 @@
   "tests/eve/dashboard_focus_color_contract.test.mjs",
   "tests/eve/dashboard_mockup_design_contract.test.mjs",
   "tests/eve/dashboard_preferences_contract.test.mjs",
+  "tests/eve/dashboard_project_change_events.test.mjs",
   "tests/eve/dashboard_records.test.mjs",
   "tests/eve/dashboard_render_performance_contract.test.mjs",
   "tests/eve/dashboard_workspace_mode_contract.test.mjs",
@@ -97,6 +101,7 @@
   "tests/eve/molecule_visual_geometry.test.mjs",
   "tests/eve/photo_capture_persistence_contract.test.mjs",
   "tests/eve/project_audio_waveform_renderer.test.mjs",
+  "tests/eve/project_default_name.test.mjs",
   "tests/eve/project_layer_canvas_lasso_selection.test.mjs",
   "tests/eve/project_layer_visibility_contract.test.mjs",
   "tests/eve/project_media_atome_renderer_pending.test.mjs",
@@ -171,5 +176,6 @@
   "tests/probes/server_identity_deployment_contract.test.mjs",
   "tests/probes/tauri_bevy_native_permission.test.mjs",
   "tests/probes/video_recording_failure_lifecycle.test.mjs",
+  "tests/server/deferred_parent_resolution.test.mjs",
   "tests/server/sync_architecture_contract.test.mjs"
 ]

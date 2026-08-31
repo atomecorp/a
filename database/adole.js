@@ -111,7 +111,11 @@ function resolveActorId(actor) {
 
 function resolveEventType(patch) {
     if (!patch || typeof patch !== 'object') return null;
-    return patch.type || patch.atome_type || patch.kind || null;
+    const declaredType = patch.type || patch.atome_type || null;
+    const kind = patch.kind || null;
+    return declaredType && String(declaredType).toLowerCase() !== 'generic'
+        ? declaredType
+        : (kind || declaredType);
 }
 
 function resolveEventParentId(patch) {
@@ -468,7 +472,7 @@ export async function createAtome({ id, type, kind, parent, owner, creator, prop
  * Resolve pending owner_id references after sync
  * This fixes atomes that were created with NULL owner_id due to FK constraints
  */
-export async function resolvePendingOwners() {
+export async function resolvePendingOwners(targetId = null) {
     const now = new Date().toISOString();
 
     // Find all atomes with deferred FK references
@@ -476,7 +480,8 @@ export async function resolvePendingOwners() {
 		SELECT p.atome_id, p.particle_key, p.particle_value
 		FROM particles p
 		WHERE p.particle_key IN ('_pending_owner_id', '_pending_parent_id')
-	`);
+		${targetId ? 'AND p.particle_value = ?' : ''}
+	`, targetId ? [JSON.stringify(String(targetId))] : []);
 
     let resolved = 0;
     let failed = 0;
@@ -1511,7 +1516,10 @@ export async function appendEvent(event, options = {}) {
         }
     });
 
-    if (inserted) insertedEventResults.add(normalized);
+    if (inserted) {
+        insertedEventResults.add(normalized);
+        await resolvePendingOwners(normalized.atome_id);
+    }
 
     return normalized;
 }
@@ -1604,6 +1612,11 @@ export async function appendEvents(events, options = {}) {
     });
 
     created.forEach((event) => insertedEventResults.add(event));
+    if (created.length > 0) {
+        for (const atomeId of new Set(created.map((event) => event.atome_id).filter(Boolean))) {
+            await resolvePendingOwners(atomeId);
+        }
+    }
 
     return results;
 }
@@ -1764,12 +1777,26 @@ export async function getStateCurrent(atomeId) {
 
 const stateCurrentListScope = (projectId, options = {}) => {
     const ownerId = options.ownerId || options.owner_id || null;
+    const atomeType = String(options.atomeType || options.atome_type || '').trim().toLowerCase();
     const includeShared = options.includeShared === true || options.include_shared === true;
     const params = [];
     const conditions = [];
+    const includeDeleted = options.includeDeleted === true || options.include_deleted === true;
+    if (!includeDeleted) {
+        conditions.push('a.deleted_at IS NULL');
+        conditions.push("COALESCE(json_extract(sc.properties, '$.__deleted'), 0) <> 1");
+    }
     if (projectId) {
         conditions.push('sc.project_id = ?');
         params.push(projectId);
+    }
+    if (atomeType) {
+        conditions.push(`(
+            LOWER(COALESCE(a.atome_type, '')) = ?
+            OR LOWER(COALESCE(json_extract(sc.properties, '$.type'), '')) = ?
+            OR LOWER(COALESCE(json_extract(sc.properties, '$.kind'), '')) = ?
+        )`);
+        params.push(atomeType, atomeType, atomeType);
     }
     if (ownerId) {
         if (includeShared) {

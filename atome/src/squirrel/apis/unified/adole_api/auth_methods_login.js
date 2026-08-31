@@ -14,6 +14,7 @@ import {
     configureTauriRemoteSync
 } from './auth_fastify_token.js';
 import { provisionFastifyCounterpart } from './auth_remote_provisioning.js';
+import { isTauriRuntime } from './runtime.js';
 
 const markValidFastifySession = (backend, result) => {
     if (backend === 'fastify' && hasAuthenticatedToken('fastify', result)) markFastifyAuthValid();
@@ -41,6 +42,7 @@ export const loginMethods = {
         const availability = await ensureBackendAvailability();
         const primary = getPrimaryBackend();
         const secondary = getSecondaryBackend();
+        const allowSecondaryActivation = !isTauriRuntime();
 
         TauriAdapter?.clearToken?.();
         FastifyAdapter?.clearToken?.();
@@ -67,7 +69,7 @@ export const loginMethods = {
         };
 
         let secondaryResult = null;
-        if (!primaryResult.ok && availability[secondary]) {
+        if (!primaryResult.ok && allowSecondaryActivation && availability[secondary]) {
             secondaryResult = await bootstrapBackend(secondary, {
                 phone: cleanPhone,
                 password,
@@ -143,6 +145,7 @@ export const loginMethods = {
         const availability = await ensureBackendAvailability();
         const primary = getPrimaryBackend();
         const secondary = getSecondaryBackend();
+        const allowSecondaryActivation = !isTauriRuntime();
 
 
         TauriAdapter?.clearToken?.();
@@ -176,7 +179,7 @@ export const loginMethods = {
             }
         }
 
-        if (!primaryResult.ok && availability[secondary]) {
+        if (!primaryResult.ok && allowSecondaryActivation && availability[secondary]) {
             fallbackResult = await registerBackend(secondary, {
                 phone: cleanPhone,
                 password,
@@ -252,6 +255,7 @@ export const loginMethods = {
         const availability = await ensureBackendAvailability();
         const primary = getPrimaryBackend();
         const secondary = getSecondaryBackend();
+        const allowSecondaryActivation = !isTauriRuntime();
 
 
         // Security: clear any stale auth state before attempting a new login
@@ -294,7 +298,7 @@ export const loginMethods = {
                 error: secondaryResult.ok ? null : secondaryResult.error
             };
             if (!loggedUser && secondaryResult.user) loggedUser = secondaryResult.user;
-        } else if (!primaryResult.ok && availability[secondary]) {
+        } else if (!primaryResult.ok && allowSecondaryActivation && availability[secondary]) {
             secondaryResult = await loginBackend(secondary, {
                 phone: cleanPhone,
                 password

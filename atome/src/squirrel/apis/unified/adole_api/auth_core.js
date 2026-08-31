@@ -109,7 +109,14 @@ const normalizeUser = (user) => {
 };
 
 const normalizeBackend = (value) => (value === 'tauri' || value === 'fastify' ? value : null);
-const getPrimaryBackend = () => normalizeBackend(resolveAuthSource()) || (isTauriRuntime() ? 'tauri' : 'fastify');
+// Native runtimes own an always-local session. Server preferences only select
+// the remote replication target; they must never turn Fastify into Tauri's
+// active identity owner.
+const getPrimaryBackend = () => (
+    isTauriRuntime()
+        ? 'tauri'
+        : (normalizeBackend(resolveAuthSource()) || 'fastify')
+);
 const getSecondaryBackend = () => (getPrimaryBackend() === 'tauri' ? 'fastify' : 'tauri');
 
 const hasToken = (backend) => !!adapters[backend]?.getToken?.();

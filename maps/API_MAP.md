@@ -361,7 +361,7 @@ Effect model:
 - Calendar Dashboard reads resolve their data project through `dashboard_workspace_mode.js`; `__eve_dashboard_workspace__` is renderer context only and is rejected before `CalendarAPI.listEvents({ projectId })`. Calendar is not stored in the Dashboard item cache, so open, focus, mutation, and resume all reconcile against the canonical list.
 - Generic News, Monitor, and Goals records use the open Atome `record` type with `source_domain: "eve.dashboard"` and a generic `category_id`; no product-specific Atome type is introduced for these domains in v1.
 - Calendar and Contacts header long-press actions create one record through `CalendarAPI.createEvent()` or `Squirrel.contacts.createLocalContact()`, invalidate the corresponding Dashboard category, and open the registered BevyUI `calendar` or `contact` panel surface. They must not open the legacy HTML panel from the Dashboard creation path.
-- Project header long-press creation delegates to shared Matrix/Adole project helpers through `createProjectRecord()` and refreshes the Dashboard Projects category; it does not activate or load the new project. `createProjectRecord({ name })` may receive an explicit internal project name for tests/tools, otherwise it uses the Matrix `untitled` sequencing helper. On successful creation, `AdoleAPI.projects.create(...)` returns the generated project id on the top-level result (`id`, `atome_id`, and `project_id`) so Matrix activation can use the known canonical id even when backend commit acknowledgements do not echo it.
+- Project header long-press creation delegates to shared Matrix/Adole project helpers through `createProjectRecord()` and refreshes the Dashboard Projects category; it does not activate or load the new project. `createProjectRecord({ name })` may receive an explicit internal project name for tests/tools, otherwise `project_default_name.js` creates a localized, human-readable timestamp name and adds a deterministic suffix only for a same-second collision. On successful creation, `AdoleAPI.projects.create(...)` returns the generated project id on the top-level result (`id`, `atome_id`, and `project_id`) so Matrix activation can use the known canonical id even when backend commit acknowledgements do not echo it.
 
 ### eVe Workspace Scene Layer API
 
@@ -1336,7 +1336,10 @@ Verified runtime surface: `SyncEngine.install`, `retry`, `disconnect`,
 `requestSync`, `observeEvents`, `subscribe`, `getSource`, and `getState`.
 `/ws/api` exposes `sync:push`, `sync:get-pending`, commits, batches, sharing, and
 directory commands. `/ws/sync` is server-driven delivery/replay and has no pull
-or mutation action.
+or mutation action. Incoming control frames are processed serially per
+connection, preserving their arrival order and bounding vault replay admission;
+an internal processing rejection closes only the affected connection with
+`sync_processing_failed`.
 
 Boundary status: Open framework security. eVe may call these contracts but must not own product-specific bypasses.
 

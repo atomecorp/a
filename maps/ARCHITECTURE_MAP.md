@@ -205,8 +205,13 @@ canonical `atomes.parent_id` column and returns it at the root of each
 Molecule membership identically in Web and Tauri batch commits.
 `local_atome_sync_worker.rs` consumes each local principal's ordered queue with
 that principal's in-memory Fastify credential, normalizes local-only identity
-fields at the boundary, and pulls durable remote state/events back into a
-recipient-scoped projection. `remote_projection_access` and
+fields at the boundary, and retries transport failures with capped backoff.
+`local_atome_sync_bootstrap.rs` republishes locally authored current state after
+remote identity provisioning; `local_atome_sync_media.rs` uploads local media
+bytes idempotently before the owning event. On startup the worker returns
+interrupted deliveries to `pending`; remote echoes never re-enter the outbound
+queue. It also pulls durable remote state/events back into a recipient-scoped
+projection. `remote_projection_access` and
 `remote_projection_scopes` own exact/global visibility so revocation removes
 stale values; remote delete/restore updates the local lifecycle. Fastify remains
 the collaboration authority and the native projection is not a second shared
@@ -883,6 +888,12 @@ Sync:
 - `registered` announces the verified principal's authorized opaque streams;
   `stream-available` and `revoked` update live subscriptions. Each subscribe and
   replay batch is independently reauthorized, so discovery is never permission.
+- `wsSyncRuntime.js` serializes control frames in arrival order per WebSocket
+  connection. A registration followed by a large subscription burst therefore
+  opens at most one replay request at a time for that connection instead of
+  exhausting the principal vault socket backlog. A processing rejection is
+  contained by closing only that sync connection with
+  `sync_processing_failed`; it must never become an unhandled server rejection.
 - Offline writes queue in `sync_queue` and submit in order with idempotent event
   ids. LWW is per property using valid timestamp then lexical event id; invalid
   timestamps rank below valid ones. Interactive stale versions reject atomically.
@@ -1280,7 +1291,7 @@ converting parent-local positions into projected screen-space motion.
 - Home applies confirmed profile events directly and overlays the latest event when opening. It performs neither a stale immediate reload nor a second visibility write.
 # Tauri remote identity and directory invalidation — 2026-08-30
 
-- The Tauri outbound sync worker maps `atome_id` from the local principal to the authenticated Fastify principal only for the current user's profile Atome. Other Atome identifiers remain unchanged; the authenticated remote principal remains the event actor.
+- The Tauri outbound sync worker maps `atome_id` from the local principal to the authenticated Fastify principal only for the current user's profile Atome. Other Atome identifiers remain unchanged; the authenticated remote principal remains the event actor. After credential mapping it enqueues deterministic snapshots only for locally authored canonical state (project roots before descendants), so historical projects and media converge without echoing records that originated on Fastify. Local media references remain local in Axum while the outbound projection carries the corresponding Fastify upload URL.
 - Remote sync credential configuration enqueues the complete current profile under that remote principal with a deterministic event id. Fastify rebuilds and refreshes `directory.public` from the principal vault, using the authentication database only to enumerate/bootstrap accounts.
 - `SyncEngine` connects to the configured Fastify `/ws/sync` endpoint even when Tauri owns local persistence. `squirrel:directory-invalidated` is the single client refresh contract; active Contact, Dashboard Contacts, Finder Contacts, and Communication surfaces subscribe through `public_directory_events.js` and release their listeners with their surface lifecycle.
 - Credential Login reopening cancels retained transient WAAPI animations on the surface, bands, instructions, mirrored text, and opening message. The permanent caret blink is not cancelled. A surface generation prevents an earlier final transition from hiding a reopened session.

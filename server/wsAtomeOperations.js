@@ -252,6 +252,7 @@ async function handleStateCurrent(message, userId, connection) {
         const options = {
             limit: message.limit,
             offset: message.offset,
+            atomeType: message.atome_type || message.atomeType || null,
             ownerId: userId,
             includeShared: message.include_shared === true || message.includeShared === true,
             excludeSystem: message.exclude_system === true || message.excludeSystem === true

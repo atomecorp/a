@@ -112,10 +112,15 @@ export class WsSyncRuntime {
             lastSeenAt: Date.now(),
             authTimer: null,
             expiryTimer: null,
+            messageQueue: Promise.resolve(),
             closed: false
         };
         this.records.set(connection, record);
-        connection.on('message', (raw) => this.receive(record, raw));
+        connection.on('message', (raw) => {
+            record.messageQueue = record.messageQueue
+                .then(() => this.receive(record, raw))
+                .catch(() => this.close(record, 'sync_processing_failed'));
+        });
         connection.on('close', () => this.cleanup(connection));
         connection.on('error', () => this.cleanup(connection));
         try {

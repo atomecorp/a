@@ -15,8 +15,121 @@ pub(super) fn ensure_schema(db: &Connection) -> Result<(), rusqlite::Error> {
             local_user_id TEXT NOT NULL, remote_user_id TEXT NOT NULL,
             stream_id TEXT NOT NULL, last_sequence INTEGER NOT NULL DEFAULT 0,
             updated_at TEXT NOT NULL, PRIMARY KEY (local_user_id, stream_id)
-         );",
-    )
+         );
+         UPDATE atomes
+         SET atome_type = COALESCE(
+           NULLIF(NULLIF(json_extract((SELECT properties FROM state_current WHERE state_current.atome_id = atomes.atome_id), '$.type'), ''), 'generic'),
+           NULLIF(json_extract((SELECT properties FROM state_current WHERE state_current.atome_id = atomes.atome_id), '$.kind'), ''),
+           atome_type
+         )
+         WHERE atome_type = 'generic';
+         UPDATE atomes
+         SET parent_id = COALESCE(
+           json_extract((SELECT properties FROM state_current WHERE state_current.atome_id = atomes.atome_id), '$.parent_id'),
+           json_extract((SELECT properties FROM state_current WHERE state_current.atome_id = atomes.atome_id), '$.parentId')
+         )
+         WHERE parent_id IS NULL
+           AND COALESCE(
+             json_extract((SELECT properties FROM state_current WHERE state_current.atome_id = atomes.atome_id), '$.parent_id'),
+             json_extract((SELECT properties FROM state_current WHERE state_current.atome_id = atomes.atome_id), '$.parentId')
+           ) IN (SELECT atome_id FROM atomes);
+         UPDATE state_current
+         SET properties = json_set(COALESCE(properties, '{}'), '$.__deleted', json('true'))
+         WHERE atome_id IN (SELECT atome_id FROM atomes WHERE deleted_at IS NOT NULL);",
+    )?;
+    repair_local_media_references(db)
+}
+
+const MEDIA_REFERENCE_KEYS: [&str; 8] = [
+    "file_name", "fileName", "file_path", "filePath",
+    "media_url", "mediaUrl", "media_user_id", "mediaUserId",
+];
+
+fn has_local_media_reference(properties: &JsonMap<String, JsonValue>, local_user_id: &str) -> bool {
+    properties
+        .get("media_user_id")
+        .or_else(|| properties.get("mediaUserId"))
+        .and_then(JsonValue::as_str)
+        == Some(local_user_id)
+        || properties
+            .get("media_url")
+            .or_else(|| properties.get("mediaUrl"))
+            .and_then(JsonValue::as_str)
+            .is_some_and(|value| value.contains("127.0.0.1:3000"))
+        || properties
+            .get("file_path")
+            .or_else(|| properties.get("filePath"))
+            .and_then(JsonValue::as_str)
+            .is_some_and(|value| value.contains(&format!("data/users/{local_user_id}/")))
+}
+
+fn preserve_local_media_references(
+    current: &JsonMap<String, JsonValue>,
+    incoming: &mut JsonMap<String, JsonValue>,
+    local_user_id: &str,
+) {
+    if !has_local_media_reference(current, local_user_id) {
+        return;
+    }
+    for key in MEDIA_REFERENCE_KEYS {
+        if let Some(value) = current.get(key) {
+            incoming.insert(key.to_string(), value.clone());
+        }
+    }
+}
+
+fn repair_local_media_references(db: &Connection) -> Result<(), rusqlite::Error> {
+    let mut statement = db.prepare(
+        "SELECT sc.atome_id, sc.owner_id, sc.properties, e.payload
+         FROM state_current sc
+         JOIN events e ON e.id = (
+           SELECT e2.id FROM events e2
+           WHERE e2.atome_id = sc.atome_id
+             AND e2.source = 'tauri'
+             AND json_extract(e2.actor, '$.id') = sc.owner_id
+             AND json_extract(e2.payload, '$.props.file_path') IS NOT NULL
+           ORDER BY julianday(e2.ts) DESC, e2.rowid DESC LIMIT 1
+         )",
+    )?;
+    let rows = statement
+        .query_map([], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+                row.get::<_, String>(3)?,
+            ))
+        })?
+        .collect::<Result<Vec<_>, _>>()?;
+    drop(statement);
+    for (atome_id, owner_id, current_json, event_json) in rows {
+        let Some(mut current) = serde_json::from_str::<JsonValue>(&current_json)
+            .ok()
+            .and_then(|value| value.as_object().cloned())
+        else {
+            continue;
+        };
+        if has_local_media_reference(&current, &owner_id) {
+            continue;
+        }
+        let Some(local_props) = serde_json::from_str::<JsonValue>(&event_json)
+            .ok()
+            .and_then(|value| value.get("props").and_then(JsonValue::as_object).cloned())
+            .filter(|props| has_local_media_reference(props, &owner_id))
+        else {
+            continue;
+        };
+        for key in MEDIA_REFERENCE_KEYS {
+            if let Some(value) = local_props.get(key) {
+                current.insert(key.to_string(), value.clone());
+            }
+        }
+        db.execute(
+            "UPDATE state_current SET properties = ?1 WHERE atome_id = ?2",
+            rusqlite::params![JsonValue::Object(current).to_string(), atome_id],
+        )?;
+    }
+    Ok(())
 }
 
 pub(super) fn register_stream(
@@ -155,24 +268,77 @@ fn localize_identity_properties(
     }
 }
 
+fn projection_parent_id<'a>(
+    event: &'a JsonValue,
+    patch: &'a JsonMap<String, JsonValue>,
+    local_user_id: &'a str,
+    remote_user_id: &'a str,
+) -> Option<&'a str> {
+    let parent_id = patch
+        .get("parent_id")
+        .or_else(|| patch.get("parentId"))
+        .or_else(|| {
+            patch
+                .get("props")
+                .and_then(JsonValue::as_object)
+                .and_then(|props| props.get("parent_id").or_else(|| props.get("parentId")))
+        })
+        .or_else(|| event.get("parent_id"))
+        .or_else(|| event.get("parentId"))
+        .and_then(JsonValue::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())?;
+    Some(if parent_id == remote_user_id {
+        local_user_id
+    } else {
+        parent_id
+    })
+}
+
 fn ensure_target(
     tx: &Transaction<'_>,
     atome_id: &str,
     remote_user_id: &str,
+    parent_id: Option<&str>,
     patch: &JsonMap<String, JsonValue>,
 ) -> Result<(), String> {
     ensure_principal(tx, remote_user_id)?;
     let props = patch.get("props").and_then(JsonValue::as_object);
-    let atome_type = props
-        .and_then(|values| values.get("type").or_else(|| values.get("kind")))
+    let declared_type = props
+        .and_then(|values| values.get("type"))
         .and_then(JsonValue::as_str)
-        .unwrap_or("generic");
+        .map(str::trim)
+        .filter(|value| !value.is_empty());
+    let kind = props
+        .and_then(|values| values.get("kind"))
+        .and_then(JsonValue::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty());
+    let atome_type = match declared_type {
+        Some(value) if !value.eq_ignore_ascii_case("generic") => value,
+        _ => kind.or(declared_type).unwrap_or("generic"),
+    };
+    let resolved_parent_id = parent_id
+        .filter(|value| *value != atome_id)
+        .filter(|value| {
+            tx.query_row("SELECT 1 FROM atomes WHERE atome_id = ?1", [*value], |_| Ok(()))
+                .optional()
+                .ok()
+                .flatten()
+                .is_some()
+        });
     tx.execute(
         "INSERT INTO atomes (
-            atome_id, atome_type, owner_id, creator_id, created_source, sync_status
-         ) VALUES (?1, ?2, ?3, ?3, 'fastify', 'synced')
-         ON CONFLICT(atome_id) DO UPDATE SET sync_status = 'synced', updated_at = datetime('now')",
-        rusqlite::params![atome_id, atome_type, remote_user_id],
+            atome_id, atome_type, parent_id, owner_id, creator_id, created_source, sync_status
+         ) VALUES (?1, ?2, ?3, ?4, ?4, 'fastify', 'synced')
+         ON CONFLICT(atome_id) DO UPDATE SET
+           atome_type = CASE
+             WHEN excluded.atome_type <> 'generic' THEN excluded.atome_type
+             ELSE atomes.atome_type
+           END,
+           parent_id = COALESCE(excluded.parent_id, atomes.parent_id),
+           sync_status = 'synced', updated_at = datetime('now')",
+        rusqlite::params![atome_id, atome_type, resolved_parent_id, remote_user_id],
     )
     .map_err(|error| error.to_string())?;
     Ok(())
@@ -189,8 +355,9 @@ fn project_patch(
         return Ok(());
     };
     let owner_id = projection_owner_id(event, local_user_id, remote_user_id);
+    let parent_id = projection_parent_id(event, patch, local_user_id, remote_user_id);
     ensure_principal(tx, local_user_id)?;
-    ensure_target(tx, atome_id, owner_id, patch)?;
+    ensure_target(tx, atome_id, owner_id, parent_id, patch)?;
     let current = tx
         .query_row(
             "SELECT properties FROM state_current WHERE atome_id = ?1",
@@ -225,6 +392,7 @@ fn project_patch(
         .unwrap_or_default();
     if owner_id == local_user_id {
         localize_identity_properties(&mut projected_props, local_user_id, remote_user_id);
+        preserve_local_media_references(&properties, &mut projected_props, local_user_id);
     }
     for (key, value) in &projected_props {
         properties.insert(key.clone(), value.clone());
@@ -262,6 +430,15 @@ fn project_patch(
         )
         .map_err(|error| error.to_string())?;
     }
+    let kind = event
+        .get("kind")
+        .and_then(JsonValue::as_str)
+        .unwrap_or("set");
+    if kind.eq_ignore_ascii_case("delete") {
+        properties.insert("__deleted".to_string(), JsonValue::Bool(true));
+    } else if kind.eq_ignore_ascii_case("restore") {
+        properties.insert("__deleted".to_string(), JsonValue::Bool(false));
+    }
     tx.execute(
         "INSERT INTO state_current (atome_id, owner_id, project_id, properties, updated_at, version)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6)
@@ -273,10 +450,17 @@ fn project_patch(
             event.get("project_id").and_then(JsonValue::as_str),
             JsonValue::Object(properties).to_string(), timestamp, sequence],
     ).map_err(|error| error.to_string())?;
-    let kind = event
-        .get("kind")
-        .and_then(JsonValue::as_str)
-        .unwrap_or("set");
+    tx.execute(
+        "UPDATE atomes
+         SET parent_id = ?1, updated_at = ?2
+         WHERE parent_id IS NULL AND atome_id <> ?1 AND atome_id IN (
+           SELECT atome_id FROM state_current
+           WHERE json_extract(properties, '$.parent_id') = ?1
+              OR json_extract(properties, '$.parentId') = ?1
+         )",
+        rusqlite::params![atome_id, timestamp],
+    )
+    .map_err(|error| error.to_string())?;
     if kind.eq_ignore_ascii_case("delete") {
         tx.execute(
             "UPDATE atomes SET deleted_at = ?1, updated_at = ?1 WHERE atome_id = ?2",
@@ -424,6 +608,46 @@ mod tests {
     }
 
     #[test]
+    fn schema_repair_recovers_existing_type_and_parent_envelopes() {
+        let db = Connection::open_in_memory().unwrap();
+        db.execute_batch(include_str!("../../../../database/schema.sql"))
+            .unwrap();
+        db.execute_batch(
+            "INSERT INTO atomes (atome_id, atome_type, created_source, sync_status)
+             VALUES ('project-1', 'generic', 'tauri', 'synced');
+             INSERT INTO state_current (atome_id, properties)
+             VALUES ('project-1', '{\"type\":\"generic\",\"kind\":\"project\"}');
+             INSERT INTO atomes (atome_id, atome_type, created_source, sync_status, deleted_at)
+             VALUES ('shape-1', 'generic', 'tauri', 'synced', '2026-08-31T00:00:00Z');
+             INSERT INTO state_current (atome_id, properties)
+             VALUES ('shape-1', '{\"type\":\"shape\",\"parent_id\":\"project-1\"}');",
+        )
+        .unwrap();
+
+        ensure_schema(&db).unwrap();
+
+        let envelope: (String, Option<String>) = db
+            .query_row(
+                "SELECT atome_type, parent_id FROM atomes WHERE atome_id='shape-1'",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!(envelope, ("shape".to_string(), Some("project-1".to_string())));
+        let project_type: String = db
+            .query_row("SELECT atome_type FROM atomes WHERE atome_id='project-1'", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(project_type, "project");
+        let properties: String = db
+            .query_row("SELECT properties FROM state_current WHERE atome_id='shape-1'", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(
+            serde_json::from_str::<JsonValue>(&properties).unwrap().get("__deleted"),
+            Some(&json!(true))
+        );
+    }
+
+    #[test]
     fn own_remote_projection_uses_the_local_principal_identity() {
         let mut db = Connection::open_in_memory().unwrap();
         db.execute_batch(include_str!("../../../../database/schema.sql"))
@@ -451,6 +675,203 @@ mod tests {
                 .unwrap()
                 .get("owner_id"),
             Some(&json!("local-user"))
+        );
+    }
+
+    #[test]
+    fn local_media_reference_survives_remote_echo_and_is_repaired_on_startup() {
+        let mut db = Connection::open_in_memory().unwrap();
+        db.execute_batch(include_str!("../../../../database/schema.sql"))
+            .unwrap();
+        db.execute(
+            "INSERT INTO atomes (atome_id, atome_type, owner_id, creator_id, created_source, sync_status)
+             VALUES ('local-user', 'user', NULL, NULL, 'tauri', 'synced')",
+            [],
+        )
+        .unwrap();
+        db.execute(
+            "INSERT INTO atomes (atome_id, atome_type, owner_id, creator_id, created_source, sync_status)
+             VALUES ('image-1', 'image', 'local-user', 'local-user', 'tauri', 'synced')",
+            [],
+        )
+        .unwrap();
+        db.execute(
+            "INSERT INTO state_current (atome_id, owner_id, project_id, properties, version)
+             VALUES ('image-1', 'local-user', 'project-1', ?1, 2)",
+            [json!({
+                "kind":"image",
+                "file_path":"Downloads/remote.png",
+                "media_url":"https://atome.one/api/uploads/remote.png?media_user_id=remote-user",
+                "media_user_id":"remote-user"
+            }).to_string()],
+        )
+        .unwrap();
+        db.execute(
+            "INSERT INTO events (id, ts, atome_id, project_id, kind, payload, actor, stream_id, sequence, source)
+             VALUES ('local-image', '2026-08-31T00:00:00Z', 'image-1', 'project-1', 'set', ?1, ?2, 'tauri:local-user:project-1', 1, 'tauri')",
+            rusqlite::params![
+                json!({"props":{
+                    "kind":"image",
+                    "file_path":"data/users/local-user/Downloads/local.png",
+                    "media_url":"http://127.0.0.1:3000/api/uploads/local.png?media_user_id=local-user",
+                    "media_user_id":"local-user"
+                }}).to_string(),
+                json!({"id":"local-user"}).to_string()
+            ],
+        )
+        .unwrap();
+
+        ensure_schema(&db).unwrap();
+        let repaired: String = db.query_row(
+            "SELECT properties FROM state_current WHERE atome_id='image-1'",
+            [],
+            |row| row.get(0),
+        ).unwrap();
+        let repaired: JsonValue = serde_json::from_str(&repaired).unwrap();
+        assert_eq!(repaired.get("media_user_id"), Some(&json!("local-user")));
+        assert_eq!(repaired.get("file_path"), Some(&json!("data/users/local-user/Downloads/local.png")));
+
+        persist_ws_event(
+            &mut db,
+            "local-user",
+            "remote-user",
+            &json!({
+                "event_id":"remote-echo", "stream":"remote-stream", "sequence":2,
+                "vault_principal_id":"remote-user", "atome_id":"image-1", "project_id":"project-1", "kind":"set",
+                "patch":{"props":{
+                    "kind":"image", "left":42,
+                    "file_path":"Downloads/remote.png",
+                    "media_url":"https://atome.one/api/uploads/remote.png?media_user_id=remote-user",
+                    "media_user_id":"remote-user"
+                }}
+            }),
+        ).unwrap();
+        let preserved: String = db.query_row(
+            "SELECT properties FROM state_current WHERE atome_id='image-1'",
+            [],
+            |row| row.get(0),
+        ).unwrap();
+        let preserved: JsonValue = serde_json::from_str(&preserved).unwrap();
+        assert_eq!(preserved.get("media_user_id"), Some(&json!("local-user")));
+        assert_eq!(preserved.get("file_path"), Some(&json!("data/users/local-user/Downloads/local.png")));
+        assert_eq!(preserved.get("left"), Some(&json!(42)));
+    }
+
+    #[test]
+    fn remote_projection_repairs_a_preexisting_generic_project_envelope() {
+        let mut db = Connection::open_in_memory().unwrap();
+        db.execute_batch(include_str!("../../../../database/schema.sql"))
+            .unwrap();
+        ensure_schema(&db).unwrap();
+        db.execute(
+            "INSERT INTO atomes (atome_id, atome_type, created_source, sync_status)
+             VALUES ('project-legacy', 'generic', 'tauri', 'synced')",
+            [],
+        )
+        .unwrap();
+
+        persist_ws_event(
+            &mut db,
+            "local-user",
+            "remote-user",
+            &json!({
+                "event_id":"repair-project", "stream":"repair-stream", "sequence":1,
+                "vault_principal_id":"remote-user", "atome_id":"project-legacy", "kind":"set",
+                "patch":{"props":{"type":"generic","kind":"project","name":"Synced project"}}
+            }),
+        )
+        .unwrap();
+
+        let atome_type: String = db
+            .query_row(
+                "SELECT atome_type FROM atomes WHERE atome_id='project-legacy'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(atome_type, "project");
+    }
+
+    #[test]
+    fn remote_projection_resolves_a_child_received_before_its_parent() {
+        let mut db = Connection::open_in_memory().unwrap();
+        db.execute_batch(include_str!("../../../../database/schema.sql"))
+            .unwrap();
+        ensure_schema(&db).unwrap();
+
+        persist_ws_event(
+            &mut db,
+            "local-user",
+            "remote-user",
+            &json!({
+                "event_id":"child-first", "stream":"project-stream", "sequence":1,
+                "vault_principal_id":"remote-user", "atome_id":"shape-1", "project_id":"project-1", "kind":"set",
+                "patch":{"props":{"type":"shape","parent_id":"project-1","left":12}}
+            }),
+        )
+        .unwrap();
+        let parent_before: Option<String> = db
+            .query_row("SELECT parent_id FROM atomes WHERE atome_id='shape-1'", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(parent_before, None);
+
+        persist_ws_event(
+            &mut db,
+            "local-user",
+            "remote-user",
+            &json!({
+                "event_id":"parent-second", "stream":"project-stream", "sequence":2,
+                "vault_principal_id":"remote-user", "atome_id":"project-1", "kind":"set",
+                "patch":{"props":{"type":"project","name":"Synced project"}}
+            }),
+        )
+        .unwrap();
+        let parent_after: Option<String> = db
+            .query_row("SELECT parent_id FROM atomes WHERE atome_id='shape-1'", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(parent_after.as_deref(), Some("project-1"));
+    }
+
+    #[test]
+    fn remote_delete_projects_the_canonical_deleted_marker() {
+        let mut db = Connection::open_in_memory().unwrap();
+        db.execute_batch(include_str!("../../../../database/schema.sql"))
+            .unwrap();
+        ensure_schema(&db).unwrap();
+        persist_ws_event(
+            &mut db,
+            "local-user",
+            "remote-user",
+            &json!({
+                "event_id":"project-create", "stream":"project-stream", "sequence":1,
+                "vault_principal_id":"remote-user", "atome_id":"project-1", "kind":"set",
+                "patch":{"props":{"kind":"project","name":"Disposable"}}
+            }),
+        )
+        .unwrap();
+        persist_ws_event(
+            &mut db,
+            "local-user",
+            "remote-user",
+            &json!({
+                "event_id":"project-delete", "stream":"project-stream", "sequence":2,
+                "vault_principal_id":"remote-user", "atome_id":"project-1", "kind":"delete",
+                "patch":{}
+            }),
+        )
+        .unwrap();
+
+        let (deleted_at, properties): (Option<String>, String) = db
+            .query_row(
+                "SELECT a.deleted_at, sc.properties FROM atomes a JOIN state_current sc USING(atome_id) WHERE a.atome_id='project-1'",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .unwrap();
+        assert!(deleted_at.is_some());
+        assert_eq!(
+            serde_json::from_str::<JsonValue>(&properties).unwrap().get("__deleted"),
+            Some(&json!(true))
         );
     }
 

@@ -20,8 +20,7 @@ import { loginBackend, meBackend, ensureBackendAvailability } from './auth_backe
 import {
     loadFastifyLoginCache,
     ensureFastifyToken,
-    markFastifyAuthValid,
-    configureTauriRemoteSync
+    markFastifyAuthValid
 } from './auth_fastify_token.js';
 import { transferGuestWorkspace } from './auth_workspace.js';
 import { requireAuth, normalizeSessionUser } from './auth_state.js';
@@ -87,7 +86,7 @@ export const sessionAccountMethods = {
             return { authenticated: false, user: null };
         }
 
-        const primary = stored.backend || getPrimaryBackend();
+        const primary = getPrimaryBackend();
         if (stored.mode === 'authenticated') {
             const restoredUser = normalizeSessionUser(stored.user);
             if (!restoredUser) {
@@ -96,13 +95,16 @@ export const sessionAccountMethods = {
             }
             const prevSession = getSessionState();
             const prevProjectCache = getCurrentProjectCache();
+            const storedBackend = stored.backend || primary;
+            const requiresPrimaryMigration = storedBackend !== primary;
+            const allowSecondarySession = !isTauriRuntime();
             const restoreSession = async (user, backend = primary) => {
                 setSessionState({
                     mode: 'authenticated',
                     user,
                     backend
                 });
-                await configureTauriRemoteSync();
+                await ensureFastifyToken();
                 return { authenticated: true, user };
             };
 
@@ -119,7 +121,7 @@ export const sessionAccountMethods = {
             }
 
             const secondary = getSecondaryBackend();
-            if (secondary !== primary) {
+            if (allowSecondarySession && secondary !== primary) {
                 const secondaryMe = await meBackend(secondary);
                 if (secondaryMe.ok && secondaryMe.user) {
                     return await restoreSession(secondaryMe.user, secondary);
@@ -136,7 +138,7 @@ export const sessionAccountMethods = {
                 if (relogin.ok && relogin.user) {
                     return await restoreSession(relogin.user, primary);
                 }
-                if (secondary !== primary) {
+                if (allowSecondarySession && secondary !== primary) {
                     const secondaryRelogin = await loginBackend(secondary, {
                         phone: cached.phone,
                         password: cached.password
@@ -155,7 +157,7 @@ export const sessionAccountMethods = {
                 clearSessionState();
                 return { authenticated: false, user: null };
             }
-            if (primary !== 'fastify' && !hasToken(primary)) {
+            if (requiresPrimaryMigration || (primary !== 'fastify' && !hasToken(primary))) {
                 clearSessionState();
                 return { authenticated: false, user: null };
             }

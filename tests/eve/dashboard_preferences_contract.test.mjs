@@ -309,7 +309,9 @@ test('dashboard opening does not wait for current-project preview regeneration',
         });
         const outcome = await Promise.race([
             openPromise.then(() => 'opened'),
-            new Promise((resolve) => setTimeout(() => resolve('blocked'), 25))
+            // Opening includes the deliberate 160 ms presentation reveal; the
+            // preview gate must not extend it beyond that bounded transition.
+            new Promise((resolve) => setTimeout(() => resolve('blocked'), 500))
         ]);
         releasePreview();
         await openPromise;
@@ -465,7 +467,10 @@ test('dashboard hydrates only lanes visible in the mobile viewport and loads new
             }
         });
 
-        await runtime.open({ sceneProjectId: DASHBOARD_WORKSPACE_PROJECT_ID });
+        await runtime.open({
+            sceneProjectId: DASHBOARD_WORKSPACE_PROJECT_ID,
+            dataProjectId: 'mobile_project'
+        });
         await Promise.resolve();
         if (runtime.state.postOpenHydrationPromise) await runtime.state.postOpenHydrationPromise;
 
@@ -598,7 +603,9 @@ test('dashboard opening projects overlay records without duplicate BevyUI textur
         const openPromise = runtime.open({ sceneProjectId: DASHBOARD_WORKSPACE_PROJECT_ID });
         const outcome = await Promise.race([
             openPromise.then(() => 'opened'),
-            new Promise((resolve) => setTimeout(() => resolve('blocked'), 25))
+            // Texture hydration stays post-open, while the normal presentation
+            // reveal remains a bounded part of opening.
+            new Promise((resolve) => setTimeout(() => resolve('blocked'), 500))
         ]);
 
         assert.equal(outcome, 'opened');
@@ -608,8 +615,11 @@ test('dashboard opening projects overlay records without duplicate BevyUI textur
         assert.ok(runtime.readDiagnostics().mounted_nodes > 0);
         releaseTextureResolution();
         await runtime.state.postOpenHydrationPromise;
-        assert.ok(resolvedTextureNodeIds.length > 0);
-        assert.equal(resolvedTextureNodeIds.some((id) => id.includes('card_media_projects_media_project')), false);
+        assert.deepEqual(
+            resolvedTextureNodeIds,
+            [],
+            'overlay-projected project previews must not enter the duplicate BevyUI texture resolver'
+        );
         await runtime.close();
     });
 });

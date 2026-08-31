@@ -33,6 +33,10 @@ const emitJson = async (connection, message) => {
 const createFixture = (options = {}) => {
     const events = options.events || [];
     const access = options.access || (() => true);
+    const authorizedStreams = options.authorizedStreams || ['stream-a'];
+    const listStreamEvents = options.listStreamEvents || (async (_principal, stream, query) => events.filter((event) => (
+        event.stream_id === stream && event.sequence > query.cursor
+    )));
     const runtime = createWsSyncRuntime({
         authenticateRequest: (connection, request) => {
             const principal = request?.principal || null;
@@ -49,18 +53,67 @@ const createFixture = (options = {}) => {
         isProvisioned: async (principal) => principal === 'user-a',
         getVersion: async () => ({ version: 'test' }),
         vaultRouter: {
-            listAuthorizedStreams: async () => ['stream-a'],
+            listAuthorizedStreams: async () => authorizedStreams,
             streamAccess: async (principal, stream) => access(principal, stream),
             projectEventForPrincipal: async (principal, event) => access(principal, event.stream_id) ? event : null,
-            listStreamEvents: async (_principal, stream, query) => events.filter((event) => (
-                event.stream_id === stream && event.sequence > query.cursor
-            ))
+            listStreamEvents
         },
         authTimeoutMs: 1000,
         idleTimeoutMs: 60_000
     });
     return runtime;
 };
+
+test('ws/sync serializes a subscription burst per connection before opening vault requests', async (t) => {
+    let activeReplays = 0;
+    let maximumActiveReplays = 0;
+    const releases = [];
+    const runtime = createFixture({
+        authorizedStreams: ['stream-a', 'stream-b'],
+        listStreamEvents: async () => {
+            activeReplays += 1;
+            maximumActiveReplays = Math.max(maximumActiveReplays, activeReplays);
+            await new Promise((resolve) => releases.push(resolve));
+            activeReplays -= 1;
+            return [];
+        }
+    });
+    t.after(() => runtime.stop());
+    const connection = new FakeConnection();
+    await runtime.attach(connection, { principal: 'user-a' });
+    await emitJson(connection, { type: 'register', source: 'browser-a' });
+
+    connection.emit('message', Buffer.from(JSON.stringify({ type: 'subscribe', stream: 'stream-a', cursor: 0 })));
+    connection.emit('message', Buffer.from(JSON.stringify({ type: 'subscribe', stream: 'stream-b', cursor: 0 })));
+    await flush();
+
+    assert.equal(maximumActiveReplays, 1, 'one sync connection must not fan out concurrent vault replay requests');
+    releases.shift()();
+    await flush();
+    assert.equal(maximumActiveReplays, 1);
+    releases.shift()();
+    await flush();
+    assert.deepEqual(
+        connection.sent.filter((entry) => entry.type === 'replay-complete').map((entry) => entry.stream),
+        ['stream-a', 'stream-b']
+    );
+});
+
+test('ws/sync contains a vault processing failure to the affected connection', async (t) => {
+    const runtime = createFixture({
+        listStreamEvents: async () => {
+            throw new Error('vault_unavailable');
+        }
+    });
+    t.after(() => runtime.stop());
+    const connection = new FakeConnection();
+    await runtime.attach(connection, { principal: 'user-a' });
+    await emitJson(connection, { type: 'register', source: 'browser-a' });
+    await emitJson(connection, { type: 'subscribe', stream: 'stream-a', cursor: 0 });
+
+    assert.deepEqual(connection.sent.at(-1), { type: 'error', code: 'sync_processing_failed' });
+    assert.deepEqual(connection.closed, { code: 4401, reason: 'sync_processing_failed' });
+});
 
 test('ws/sync authenticates before welcome and accepts control messages only', async (t) => {
     const runtime = createFixture();

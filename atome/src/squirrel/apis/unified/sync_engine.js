@@ -233,16 +233,23 @@ export class SyncEngine {
             return;
         }
         const lifecycleWins = message.lww_decisions?.__lifecycle__?.winner !== false;
+        const projection = message.projection && typeof message.projection === 'object'
+            ? message.projection
+            : {};
+        const projectionProperties = projection.properties && typeof projection.properties === 'object'
+            ? projection.properties
+            : {};
         const common = {
             id: message.atome_id,
             atome_id: message.atome_id,
-            project_id: message.project_id,
+            project_id: message.project_id || projection.project_id || null,
+            atome_type: message.atome_type || projection.atome_type || projectionProperties.type || projectionProperties.kind || null,
             event_id: eventId,
             tx_id: message.tx_id,
             gesture_id: message.gesture_id,
             properties: props,
             delete_keys: deleteKeys,
-            projection: message.projection,
+            projection,
             source: 'realtime',
             origin: 'ws/sync',
             durable: true
