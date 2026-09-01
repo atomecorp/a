@@ -142,7 +142,7 @@ import { handleWsAtomeDeleteOperation } from './wsAtomeDeleteOperation.js';
 import { executeShellCommand } from './shell.js';
 import { ensureUserHome } from './userHome.js';
 import { createVisioService } from './visio.js';
-import { pushNotificationToUserStack } from './notificationStack.js';
+import { pushNotificationToUserStack, updateNotificationInUserStack } from './notificationStack.js';
 import {
   ensureUserDownloadsDir,
   resolveUserUploadPath,
@@ -2185,6 +2185,39 @@ async function startServer() {
           //   return;
           // }
 
+          if (data.type === 'notification-stack') {
+            const requestId = data.requestId || data.request_id;
+            const attachedUserId = connection && connection._wsApiUserId
+              ? String(connection._wsApiUserId)
+              : null;
+            if (!attachedUserId || !await isWsApiPrincipalProvisioned(attachedUserId)) {
+              safeSend({
+                type: 'notification-stack-response', requestId, success: false,
+                error: attachedUserId ? 'remote_account_not_provisioned' : 'Unauthenticated ws/api connection'
+              });
+              return;
+            }
+            if (data.action !== 'update') {
+              safeSend({
+                type: 'notification-stack-response', requestId, success: false,
+                error: 'notification_stack_action_unsupported'
+              });
+              return;
+            }
+            const result = await updateNotificationInUserStack({
+              userId: attachedUserId,
+              authorId: attachedUserId,
+              notificationId: data.notificationId || data.notification_id || data.id || null,
+              patch: data.patch && typeof data.patch === 'object' ? data.patch : {}
+            });
+            safeSend({
+              type: 'notification-stack-response', requestId,
+              success: result.ok === true,
+              ...result
+            });
+            return;
+          }
+
           // Handle direct messages (targeted, console-only)
           if (data.type === 'direct-message') {
             const requestId = data.requestId || data.request_id;
@@ -2410,7 +2443,10 @@ async function startServer() {
                   to_phone: targetUser ? targetUser.phone : (normalizedToPhone ? String(normalizedToPhone) : null),
                   timestamp: nowIso,
                   unread: true,
-                  box: 'inbox'
+                  box: 'inbox',
+                  publication: params.publication && typeof params.publication === 'object'
+                    ? params.publication
+                    : null
                 };
                 const messageAtomeId = uuidv4();
                 const created = await commitAtomeEvent({

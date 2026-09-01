@@ -51,7 +51,7 @@ assert.deepEqual(calls.map((entry) => entry.name), ['setCurrent', 'loadProjectAt
 assert.deepEqual(calls.at(-1), {
     name: 'loadProjectAtomes',
     projectId: 'project_last',
-    options: { staleFirst: true }
+    options: { staleFirst: true, reason: 'project_bootstrap' }
 });
 
 console.log('project_bootstrap_dashboard_ready_contract: PASS');

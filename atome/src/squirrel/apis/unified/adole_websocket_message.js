@@ -195,6 +195,18 @@ const handleConsoleMessage = (message) => {
         return;
     }
 
+    if (typeof window !== 'undefined' && command.command === 'eve-comm-share') {
+        dispatchWindowEvent('adole-new-message', {
+            ...params,
+            fromId: params.fromId || senderInfo.userId,
+            fromPhone: params.fromPhone || senderInfo.phone,
+            fromName: params.fromName || senderInfo.username,
+            date: params.date || senderInfo.timestamp,
+            persisted: true
+        });
+        return;
+    }
+
     const camel = String(command.command).replace(/-([a-z])/g, (_, c) => String(c).toUpperCase());
     const handler = globalThis.BuiltinHandlers?.handlers?.[camel] || null;
     if (typeof handler === 'function') handler(params, senderInfo);

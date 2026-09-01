@@ -273,6 +273,31 @@ test('BevyUI main menu tool activation reuses the normalized ribbon definition t
     }
 });
 
+test('BevyUI Communicate tool reuses the shared external-width projection for unread content', async () => {
+    const harness = createRuntimeHarness();
+    try {
+        await harness.runtime.showFully();
+        assert.equal(harness.runtime.setToolInlineNotification({
+            tool_id: 'tool.main.communicate', summary: 'Hello', count: 2
+        }), true);
+        assert.equal(harness.runtime.setToolExternalOpen({
+            tool_id: 'tool.main.communicate', widthPx: 240
+        }), true);
+        await waitFrame();
+        const tree = harness.calls.at(-1).payload.tree;
+        assert.equal(findNode(tree.root, 'eve_bevy_ui_main_menu_communication_unread_summary')?.text, 'Hello');
+        assert.equal(findNode(tree.root, 'eve_bevy_ui_main_menu_communication_unread_count')?.text, '2');
+        harness.runtime.setToolInlineNotification({ tool_id: 'tool.main.communicate', count: 0 });
+        harness.runtime.setToolExternalOpen({ tool_id: 'tool.main.communicate', widthPx: 0 });
+        await waitFrame();
+        assert.equal(findNode(harness.calls.at(-1).payload.tree.root,
+            'eve_bevy_ui_main_menu_communication_unread_summary'), null);
+    } finally {
+        harness.runtime.destroy();
+        harness.restore();
+    }
+});
+
 test('BevyUI recording tools route the second activation as an off transition without a DOM latch', async () => {
     const content = {
         toolbox: { children: ['capture'] },

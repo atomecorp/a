@@ -164,6 +164,29 @@ export const AdoleAPI = {
       });
     }
   },
+  communication: {
+    send: async ({ targetUserId = null, targetPhone = null, message = '' } = {}) => {
+      const prepared = await auth.ensureFastifyToken();
+      if (!prepared?.ok) throw new Error(prepared?.error || prepared?.reason || 'communication_auth_unavailable');
+      const payload = String(message || '');
+      if ((!targetUserId && !targetPhone) || !payload) throw new Error('communication_target_and_message_required');
+      return FastifyAdapter.ws.send({
+        type: 'direct-message',
+        toUserId: targetUserId || undefined,
+        toPhone: targetPhone || undefined,
+        message: payload
+      });
+    },
+    updateNotification: async ({ notificationId = null, patch = {} } = {}) => {
+      const prepared = await auth.ensureFastifyToken();
+      if (!prepared?.ok) throw new Error(prepared?.error || prepared?.reason || 'communication_auth_unavailable');
+      const id = String(notificationId || '').trim();
+      if (!id) throw new Error('communication_notification_id_required');
+      return FastifyAdapter.ws.send({
+        type: 'notification-stack', action: 'update', notificationId: id, patch
+      });
+    }
+  },
   machine: {
     getCurrent: auth.getCurrentMachine,
     register: auth.registerMachine,

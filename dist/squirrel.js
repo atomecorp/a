@@ -569,6 +569,35 @@
   	window.shortcut = shortcut;
   })();
 
+  /**
+   * Shared scalar helpers.
+   *
+   * These five-line helpers were rewritten between 4 and 19 times across
+   * atome/src, server/ and eVe/, with divergent behaviour on the edge cases that
+   * matter (`''`, `0`, `null`, objects carrying functions). One implementation
+   * each, semantics documented, so a call site can no longer get a different
+   * answer depending on which copy it happened to reach.
+   */
+
+
+  // --- identifiers -------------------------------------------------------------
+
+  /**
+   * Prefixed unique identifier.
+   * Backed by `crypto.randomUUID()`; the 27 hand-rolled
+   * `Date.now() + Math.random().toString(36)` variants used three different
+   * suffix lengths (6/8/9/10), so collision odds differed by 10^6 between two
+   * components of the same application. The `Math.random` branch exists only for
+   * runtimes without WebCrypto and keeps the full 32-hex-digit width.
+   */
+  const makeId = (prefix = 'id') => {
+      const cryptoRef = globalThis.crypto;
+      const unique = (cryptoRef && typeof cryptoRef.randomUUID === 'function')
+          ? cryptoRef.randomUUID().replace(/-/g, '')
+          : `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 12)}${Math.random().toString(36).slice(2, 12)}`;
+      return prefix ? `${prefix}_${unique}` : unique;
+  };
+
   // SVG utilities extracted from loader.js for clarity
 
   // --- SVG sanitizer -----------------------------------------------------------
@@ -672,7 +701,7 @@
     tmp.innerHTML = sanitizeSVG(String(svgcontent).trim());
     const svgEl = tmp.querySelector('svg');
     if (!svgEl) return null;
-    const finalId = id && String(id).trim() ? String(id).trim() : 'svg_' + Math.random().toString(36).slice(2);
+    const finalId = id && String(id).trim() ? String(id).trim() : makeId('svg');
     svgEl.id = finalId;
     svgEl.style.position = 'absolute';
     svgEl.style.top = top; svgEl.style.left = left;
@@ -2122,7 +2151,7 @@
     } = config;
 
     // Génération d'ID unique si non fourni
-    const sliderId = id || `slider_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
+    const sliderId = id || makeId('slider');
 
     // Validation des valeurs
     const currentValue = Math.max(min, Math.min(max, value));
@@ -2928,13 +2957,21 @@
       };
       const destroyUnitEditor = () => {
           if (!unitEditorSelect) return;
-          try { unitEditorSelect.remove(); } catch (_) { }
+          try {
+              unitEditorSelect.remove();
+          } catch (_) {
+              // Already detached by a re-render: removing twice is a no-op, not a fault.
+          }
           unitEditorSelect = null;
           syncValueVisual();
       };
       const destroyValueEditor = () => {
           if (!valueEditorInput) return;
-          try { valueEditorInput.remove(); } catch (_) { }
+          try {
+              valueEditorInput.remove();
+          } catch (_) {
+              // Already detached by a re-render: removing twice is a no-op, not a fault.
+          }
           valueEditorInput = null;
           setStyles(valueButton, {
               display: 'inline-flex'
@@ -3065,7 +3102,10 @@
               if (Number.isFinite(valueDragSession.pointerId)) {
                   valueButton.releasePointerCapture?.(valueDragSession.pointerId);
               }
-          } catch (_) { }
+          } catch (_) {
+              // The browser drops pointer capture on its own when the pointer is lost;
+              // releasing an id it no longer holds throws and means the job is done.
+          }
           valueDragSession = null;
       };
       const readDraggedValue = (clientX, clientY) => {
@@ -3179,7 +3219,10 @@
           try {
               valueEditorInput.focus();
               valueEditorInput.select();
-          } catch (_) { }
+          } catch (_) {
+              // Focusing a node detached between creation and this frame throws;
+              // there is nothing to focus, and nothing downstream depends on it.
+          }
       };
       const beginUnitEditor = (event) => {
           stopAndPrevent(event);
@@ -3241,7 +3284,9 @@
           unitEditorSelect.addEventListener('blur', () => commit(), true);
           try {
               unitEditorSelect.focus();
-          } catch (_) { }
+          } catch (_) {
+              // Same as the value editor: a detached node cannot take focus.
+          }
       };
       directSliderDragController.bind();
       hitzone.addEventListener('click', stopAndPrevent, true);
@@ -3277,7 +3322,10 @@
               if (Number.isFinite(valueDragSession.pointerId)) {
                   valueButton.setPointerCapture?.(valueDragSession.pointerId);
               }
-          } catch (_) { }
+          } catch (_) {
+              // Capture is refused when the pointer was already released; the drag
+              // then simply runs without capture instead of aborting.
+          }
           if (typeof window !== 'undefined') {
               window.addEventListener('pointermove', onValuePointerMove, true);
               window.addEventListener('pointerup', onValuePointerUp, true);
@@ -4104,7 +4152,7 @@
     } = config;
 
     // Génération d'ID unique si non fourni
-    const buttonId = id || `btn_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
+    const buttonId = id || makeId('btn');
 
     // Résoudre le nom du template
     const templateName = template || templates;
@@ -4694,7 +4742,7 @@
           uniqueTransferData = {
             ...transferData,
             dragStartTime: Date.now(),
-            dragId: transferData.dragId || Math.random().toString(36).substr(2, 9)
+            dragId: transferData.dragId || makeId('drag')
           };
           e.dataTransfer.setData('application/json', JSON.stringify(uniqueTransferData));
         }
@@ -7563,7 +7611,7 @@
       ...otherProps
     } = config;
 
-    const tableId = id || `table_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`;
+    const tableId = id || makeId('table');
 
     const defaultStyling = {
       rowHeight: 40,

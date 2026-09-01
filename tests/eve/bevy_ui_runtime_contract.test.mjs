@@ -38,7 +38,7 @@ test('BevyUI drop routing keeps File objects transient and releases its canvas l
         removeEventListener: (type) => { removed.push(type); listeners.delete(type); }
     };
     const received = [];
-    const state = { handlers: new Map([['photo_tree:photo_frame:drop', (event) => received.push(event.files)]]) };
+    const state = { handlers: new Map([['photo_tree:photo_frame:drop', (event) => received.push(event)]]) };
     const runtime = createBevyUiDropRuntime({
         state,
         hitTestTrees: () => ({ treeId: 'photo_tree', nodeId: 'photo_frame', kind: 'button', box: { x: 0, y: 0, width: 90, height: 90 } }),
@@ -46,13 +46,18 @@ test('BevyUI drop routing keeps File objects transient and releases its canvas l
         localEventForTarget: (target, eventName) => ({ tree_id: target.treeId, node_id: target.nodeId, event: eventName })
     });
     runtime.ensureSurface(canvas);
+    const payload = { id: 'shape_1', kind: 'atome' };
+    assert.equal(runtime.dispatchPayload(canvas, { clientX: 20, clientY: 20 }, payload), true);
+    assert.equal(received[0].payload, payload);
     const file = { name: 'avatar.png', type: 'image/png', size: 4 };
+    const dataTransfer = { files: [file], items: [], types: ['Files'] };
     await listeners.get('drop')({
-        dataTransfer: { files: [file], items: [], types: ['Files'] },
+        dataTransfer,
         preventDefault: () => {},
         stopPropagation: () => {}
     });
-    assert.deepEqual(received, [[file]]);
+    assert.deepEqual(received[1].files, [file]);
+    assert.equal(received[1].dataTransfer, dataTransfer);
     assert.equal(state.files, undefined);
     runtime.releaseSurface(canvas);
     assert.deepEqual(removed.sort(), ['dragover', 'drop']);

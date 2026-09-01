@@ -46,6 +46,7 @@ assert.equal(projectId, 'project_new');
 assert.equal(window.__currentProject?.id, 'project_new');
 assert.ok(document.getElementById('project_view_project_new'), 'new project host must be ready behind the Dashboard');
 assert.deepEqual(calls.map((entry) => entry.name), ['create', 'setCurrent', 'loadProjectAtomes']);
-assert.equal(calls[0].projectName, 'untitled');
+assert.ok(calls[0].projectName, 'the first project must receive the canonical generated name');
+assert.equal(window.__currentProject?.name, calls[0].projectName);
 
 console.log('project_bootstrap_first_project_ready_contract: PASS');

@@ -53,7 +53,9 @@ const normalizeNotification = (input = {}) => {
         to_phone: input.to_phone || input.toPhone || null,
         timestamp: input.timestamp || input.date || new Date().toISOString(),
         unread: input.unread !== false,
-        status: input.status || null
+        status: input.status || null,
+        archived: input.archived === true,
+        publication: input.publication && typeof input.publication === 'object' ? input.publication : null
     };
 };
 
@@ -91,4 +93,35 @@ export async function readNotificationStack(userId) {
     if (!userAtome) return { ok: false, error: 'user_atome_missing' };
     const stack = resolveStack(userAtome);
     return { ok: true, count: stack.length, stack };
+}
+
+export async function updateNotificationInUserStack({
+    userId,
+    notificationId,
+    patch = {},
+    authorId = null
+}) {
+    if (!userId || !notificationId) return { ok: false, error: 'missing_user_or_notification_id' };
+    const userAtome = await getAtome(userId);
+    if (!userAtome) return { ok: false, error: 'user_atome_missing' };
+    const allowedPatch = {};
+    if (typeof patch.unread === 'boolean') allowedPatch.unread = patch.unread;
+    if (typeof patch.archived === 'boolean') allowedPatch.archived = patch.archived;
+    if (Object.prototype.hasOwnProperty.call(patch, 'status')) allowedPatch.status = patch.status || null;
+    if (!Object.keys(allowedPatch).length) return { ok: false, error: 'notification_patch_empty' };
+
+    const stack = resolveStack(userAtome);
+    let updatedItem = null;
+    const next = stack.map((item) => {
+        const itemId = item?.id || item?.message_id || null;
+        if (!itemId || String(itemId) !== String(notificationId)) return item;
+        updatedItem = { ...item, ...allowedPatch };
+        return updatedItem;
+    });
+    if (!updatedItem) return { ok: false, error: 'notification_not_found' };
+    await updateAtome(userId, {
+        message_stack: next,
+        notification_stack: next
+    }, authorId || userId);
+    return { ok: true, count: next.length, stack: next, notification: updatedItem };
 }

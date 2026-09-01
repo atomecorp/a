@@ -808,6 +808,7 @@ Sources principales:
 - todo/sharing_search_monitoring/Share_tool.md
 - todo/sharing_search_monitoring/finder.md
 - todo/sharing_search_monitoring/finder_UI.md
+- todo/debug_communication_notifications_publications_2026-09-01.md
 
 Taches:
 
@@ -821,6 +822,7 @@ Taches:
 - [ ] Implementer la resolution hors ligne last-write-wins sans perte historique: ordonner les evenements autorises par timestamp avec departage deterministe, projeter le gagnant courant, conserver tous les evenements concurrents dans le journal append-only et produire toute correction/restauration comme nouvel evenement; critere de sortie: replay hors ligne, conflits, egalites d'horodatage, permissions, diagnostics, relecture complete et parite Fastify/Tauri/iOS sont verifies sans mutation du passe.
 - [ ] Rendre le telephone et les coordonnees prives par defaut dans tout le repertoire: ajouter un consentement explicite et revocable independant de la visibilite du profil, supprimer les contacts et secrets des listes publiques, recherches, caches hors ligne et evenements de compte, puis n'exposer les champs consentis qu'au proprietaire ou aux relations autorisees; critere de sortie: profil public sans consentement, consentement actif/revoque, relations autorisees, `/ws/sync`, Fastify/Tauri/iOS et absence absolue de `password_hash` dans les payloads clients sont testes.
 - [ ] Stabiliser Finder apres correction du modele partage/projet.
+- [x] Valider puis solder le debug Communication: message direct durable sans sujet, notification non lue projetee dans le panneau et l'outil, publication `All` dans Dashboard News, destinataires activables, depot canonique Atome/Molecule/Projet et section Avance/Conditions; critere de sortie: contrats cibles, deux comptes Web jetables et captures visuelles reelles passent, avec Tauri et iOS rapportes separement.
 
 ### Phase 7 - Migration V2 / cleanup large / performance
 

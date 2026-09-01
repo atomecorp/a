@@ -178,7 +178,7 @@ describe('shared Conditions integrations', () => {
         expect(runtime.filter(contacts).map((entry) => entry.id)).toEqual(['a']);
     });
 
-    it('keeps Communication Conditions independent and discovers properties without a local catalogue', async () => {
+    it('embeds Communication Conditions inside Advanced and discovers properties without a local catalogue', async () => {
         const previousAtome = globalThis.atome;
         try {
             globalThis.atome = { conditions: {
@@ -197,24 +197,22 @@ describe('shared Conditions integrations', () => {
                 bodyWidth: 480,
                 emit: (intent) => emitted.push(intent)
             });
-            const advanced = content.find((entry) => entry.id === 'comm_advanced');
-            const conditions = content.find((entry) => entry.id === 'comm_conditions');
-            expect(advanced).toBeTruthy();
-            expect(conditions).toBeTruthy();
-            expect(findNode(advanced, 'comm_conditions')).toBeNull();
-
-            findNode(conditions, 'comm_conditions_header').on.activate();
-            await commSurface.handleEvent(emitted.shift(), context);
+            expect(content.find((entry) => entry.id === 'comm_advanced')).toBeUndefined();
+            expect(content.find((entry) => entry.id === 'comm_conditions')).toBeUndefined();
+            await commSurface.handleEvent({ type: 'comm.advanced.toggle' }, context);
             await new Promise((resolve) => setTimeout(resolve, 0));
             content = commSurface.buildContent(commSurface.readState(), {
                 bodyWidth: 480,
                 emit: (intent) => emitted.push(intent)
             });
-            const add = findNode(content.find((entry) => entry.id === 'comm_conditions'), 'comm_conditions_add');
+            const advanced = content.find((entry) => entry.id === 'comm_advanced');
+            const conditions = findNode(advanced, 'comm_conditions');
+            expect(conditions).toBeTruthy();
+            const add = findNode(conditions, 'comm_conditions_add');
             expect(add).toBeTruthy();
             add.on.press();
             await commSurface.handleEvent(emitted.shift(), context);
-            expect(commSurface.readState().conditions.rows).toHaveLength(2);
+            expect(commSurface.readState().conditions.rows).toHaveLength(1);
             const row = commSurface.readState().conditions.rows[0];
             await commSurface.handleEvent({
                 type: 'comm.conditions.menu', id: row.id, part: 'property'
@@ -223,7 +221,7 @@ describe('shared Conditions integrations', () => {
                 bodyWidth: 480,
                 emit: (intent) => emitted.push(intent)
             });
-            const conditionsTree = content.find((entry) => entry.id === 'comm_conditions');
+            const conditionsTree = findNode(content.find((entry) => entry.id === 'comm_advanced'), 'comm_conditions');
             const serialized = JSON.stringify(conditionsTree);
             expect(serialized).toContain('Vehicle color');
             expect(serialized).toContain('Weight');

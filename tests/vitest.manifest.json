@@ -66,6 +66,7 @@
   "tests/eve/button_builder_acyclic_contract.test.mjs",
   "tests/eve/capture_recording_bevy_feedback.test.mjs",
   "tests/eve/conditions_integrations.test.mjs",
+  "tests/eve/communication_notifications_publications.test.mjs",
   "tests/eve/contact_model_identity_contract.test.mjs",
   "tests/eve/create_tools_modes_contract.test.mjs",
   "tests/eve/dashboard_bevy_ui_lifecycle_contract.test.mjs",
@@ -177,5 +178,6 @@
   "tests/probes/tauri_bevy_native_permission.test.mjs",
   "tests/probes/video_recording_failure_lifecycle.test.mjs",
   "tests/server/deferred_parent_resolution.test.mjs",
+  "tests/server/notification_stack_persistence.test.mjs",
   "tests/server/sync_architecture_contract.test.mjs"
 ]

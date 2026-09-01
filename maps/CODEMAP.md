@@ -247,9 +247,10 @@ chrome. `atome/src/squirrel/teleport/remote_preview.js` owns the on-demand still
 `ensureRemoteSurfacePrincipal`, which every teleport/remote-control/grant request must
 pass: a Tauri or iOS session may be authenticated only against the local backend, and
 the relay lives on Fastify. The audit that scoped this work is `todo/teleport/00_audit.md`; it records that
-`RemoteCommands`/`BuiltinHandlers` do not exist (dead dispatch in
-`adole_websocket_message.js`, infinite retry timers in
-`eVe/intuition/tools/communication_remote_commands.js`) and that
+`RemoteCommands`/`BuiltinHandlers` do not exist. Communication no longer imports or
+retries that deleted transport: `AdoleAPI.communication.send` uses the authenticated
+persist-before-delivery `/ws/api` direct-message owner, while
+`adole_websocket_message.js` projects its explicit `eve-comm-share` envelope. The audit also records that
 `platforms/desktop-tauri/src/server/remote_control_ws.rs` is loopback-only with six
 audio actions — neither is a cross-device transport.
 
@@ -2182,6 +2183,14 @@ Do not create:
 
 - Product-level duplicate mail/contact/calendar state models before checking these services.
 - HTTP polling or REST fallback transport paths.
+
+The eVe Communication compose owner is `bevy_panel_comm_*`; enabled-recipient state,
+embedded Advanced/Conditions, and attachment projection stay there. Delivery routes
+through `AdoleAPI.communication.send`, `server/server.js` direct-message persistence,
+and `server/notificationStack.js`. That server owner also applies authenticated
+self-only read/archive patches through `AdoleAPI.communication.updateNotification`;
+`communication_tool_unread_runtime.js` projects the returned durable unread stack
+through the existing main-menu external-width API.
 
 Status: Verified.
 
