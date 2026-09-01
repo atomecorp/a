@@ -12,6 +12,9 @@ database_storage/
 *.db-wal
 *.db-shm
 
+# provate data & keys
+*private/
+
 # Build outputs
 atome/src/svelte/build/
 platforms/ios/atome-auv3/build/

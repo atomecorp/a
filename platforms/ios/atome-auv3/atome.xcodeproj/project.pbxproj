@@ -326,7 +326,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "set -eu\nRESOURCE_ROOT=\"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/atome_open\"\nrm -rf \"$RESOURCE_ROOT\"\nmkdir -p \"$RESOURCE_ROOT\"\nrsync -a --exclude target --exclude .git \"$SRCROOT/../../../atome/\" \"$RESOURCE_ROOT/\"\nmkdir -p \"$RESOURCE_ROOT/vendor/rubberband-wasm\"\nrsync -a --delete \"$SRCROOT/../../../node_modules/rubberband-wasm/dist/\" \"$RESOURCE_ROOT/vendor/rubberband-wasm/\"\n";
+			shellScript = "set -eu\nRESOURCE_ROOT=\"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/atome_open\"\nrm -rf \"$RESOURCE_ROOT\"\nmkdir -p \"$RESOURCE_ROOT\"\nrsync -a --exclude target --exclude .git --exclude renderers/wgpu-web-external-texture \"$SRCROOT/../../../atome/\" \"$RESOURCE_ROOT/\"\nmkdir -p \"$RESOURCE_ROOT/vendor/rubberband-wasm\"\nrsync -a --delete \"$SRCROOT/../../../node_modules/rubberband-wasm/dist/\" \"$RESOURCE_ROOT/vendor/rubberband-wasm/\"\n";
 		};
 		6BARCH020000000000000002 /* Copy Atome Resource Root */ = {
 			isa = PBXShellScriptBuildPhase;
@@ -343,7 +343,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "set -eu\nRESOURCE_ROOT=\"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/atome_open\"\nrm -rf \"$RESOURCE_ROOT\"\nmkdir -p \"$RESOURCE_ROOT\"\nrsync -a --exclude target --exclude .git \"$SRCROOT/../../../atome/\" \"$RESOURCE_ROOT/\"\nmkdir -p \"$RESOURCE_ROOT/vendor/rubberband-wasm\"\nrsync -a --delete \"$SRCROOT/../../../node_modules/rubberband-wasm/dist/\" \"$RESOURCE_ROOT/vendor/rubberband-wasm/\"\n";
+			shellScript = "set -eu\nRESOURCE_ROOT=\"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/atome_open\"\nrm -rf \"$RESOURCE_ROOT\"\nmkdir -p \"$RESOURCE_ROOT\"\nrsync -a --exclude target --exclude .git --exclude renderers/wgpu-web-external-texture \"$SRCROOT/../../../atome/\" \"$RESOURCE_ROOT/\"\nmkdir -p \"$RESOURCE_ROOT/vendor/rubberband-wasm\"\nrsync -a --delete \"$SRCROOT/../../../node_modules/rubberband-wasm/dist/\" \"$RESOURCE_ROOT/vendor/rubberband-wasm/\"\n";
 		};
 		6BBEVY020000000000000001 /* Build iOS Bevy Renderer */ = {
 			isa = PBXShellScriptBuildPhase;
@@ -561,7 +561,7 @@
 				CODE_SIGN_ENTITLEMENTS = application/atome.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 2;
 				DEVELOPMENT_TEAM = 2W25PVZ57F;
 				"FRAMEWORK_SEARCH_PATHS[arch=*]" = "$(SRCROOT)/Common ";
 				GENERATE_INFOPLIST_FILE = NO;
@@ -582,7 +582,7 @@
 					"$(BUILT_PRODUCTS_DIR)",
 					"$(TARGET_TEMP_DIR)",
 				);
-				MARKETING_VERSION = 1.02;
+				MARKETING_VERSION = 1.03;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-latome_ios_bevy_renderer",
@@ -609,7 +609,7 @@
 				CODE_SIGN_ENTITLEMENTS = application/atomeRelease.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 2;
 				DEVELOPMENT_TEAM = 2W25PVZ57F;
 				"FRAMEWORK_SEARCH_PATHS[arch=*]" = "$(SRCROOT)/Common ";
 				GENERATE_INFOPLIST_FILE = NO;
@@ -630,7 +630,7 @@
 					"$(BUILT_PRODUCTS_DIR)",
 					"$(TARGET_TEMP_DIR)",
 				);
-				MARKETING_VERSION = 1.02;
+				MARKETING_VERSION = 1.03;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-latome_ios_bevy_renderer",
@@ -656,7 +656,7 @@
 				"CODE_SIGN_ENTITLEMENTS[sdk=*]" = auv3/auv3.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 2;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = auv3/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = atome;
@@ -674,7 +674,7 @@
 					"$(BUILT_PRODUCTS_DIR)",
 					"$(TARGET_TEMP_DIR)",
 				);
-				MARKETING_VERSION = 1.02;
+				MARKETING_VERSION = 1.03;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-latome_ios_bevy_renderer",
@@ -699,7 +699,7 @@
 				CODE_SIGN_ENTITLEMENTS = auv3/auv3Release.entitlements;
 				"CODE_SIGN_ENTITLEMENTS[sdk=*]" = auv3/auv3Release.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 2;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = auv3/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = atome;
@@ -717,7 +717,7 @@
 					"$(BUILT_PRODUCTS_DIR)",
 					"$(TARGET_TEMP_DIR)",
 				);
-				MARKETING_VERSION = 1.02;
+				MARKETING_VERSION = 1.03;
 				OTHER_LDFLAGS = (
 					"$(inherited)",
 					"-latome_ios_bevy_renderer",

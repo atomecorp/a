@@ -1,0 +1,508 @@
+#!/usr/bin/env bash
+
+# Build, archive, export, and upload the iOS application to App Store Connect.
+# This script intentionally owns the release workflow only. auv3.sh remains the
+# local-device AUv3 development launcher and is not a TestFlight release path.
+
+set -Eeuo pipefail
+
+readonly SCRIPT_NAME="${0##*/}"
+readonly REPO_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)"
+readonly IOS_DIRECTORY="$REPO_ROOT/platforms/ios/atome-auv3"
+readonly CONFIGURATION="Release"
+readonly DISTRIBUTION_METHOD="app-store-connect"
+readonly APP_STORE_CONNECT_DIRECTORY="$HOME/.appstoreconnect"
+readonly APP_STORE_CONNECT_KEY_DIRECTORY="$APP_STORE_CONNECT_DIRECTORY/private_keys"
+readonly APP_STORE_CONNECT_ISSUER_ID_FILE="$APP_STORE_CONNECT_DIRECTORY/issuer-id"
+readonly EXPORT_COMPLIANCE_OPTION="2"
+readonly EXPORT_COMPLIANCE_SELECTION="Standard encryption algorithms instead of, or in addition to, the encryption used in or accessed through Apple's operating system"
+
+DRY_RUN=false
+CURRENT_STEP="initialization"
+CONTAINER_FLAG=""
+CONTAINER_PATH=""
+VERSION_LEDGER_PROJECT_FILE=""
+APP_SCHEME=""
+APP_TARGET=""
+APP_BUNDLE_IDENTIFIER=""
+MARKETING_VERSION=""
+NEXT_MARKETING_VERSION=""
+CURRENT_BUILD=""
+NEXT_BUILD=""
+TEAM_ID=""
+SIGNING_STYLE=""
+SIGNING_IDENTITY=""
+API_KEY_ID=""
+API_ISSUER_ID=""
+API_PRIVATE_KEY_PATH=""
+EXTENSION_TARGET_COUNT=0
+EXTENSION_TARGETS=()
+
+usage() {
+    cat <<USAGE
+Usage: ./scripts/$SCRIPT_NAME [--dry-run] [--export-compliance]
+
+Builds the distributable iOS app, then uploads its IPA to App Store Connect.
+
+Options:
+  --dry-run  Inspect the Xcode project and print the planned release settings.
+             It does not change versions, archive, export, or upload.
+  --export-compliance
+             Print the recorded App Store Connect encryption declaration.
+             It does not inspect, build, export, upload, or modify anything.
+  -h, --help Show this help.
+
+Live upload authentication:
+  The Key ID is derived from the single AuthKey_*.p8 file below.
+  Store the Issuer ID once in ~/.appstoreconnect/issuer-id.
+  APP_STORE_CONNECT_ISSUER_ID remains supported for CI overrides.
+
+Store the downloaded private key outside the repository at:
+  ~/.appstoreconnect/private_keys/AuthKey_<your-key-id>.p8
+
+The private key and Issuer ID are never copied, created, overwritten, or printed
+by this script.
+USAGE
+}
+
+print_export_compliance_guidance() {
+    cat <<GUIDANCE
+
+App Store Connect encryption declaration
+  Select option $EXPORT_COMPLIANCE_OPTION: $EXPORT_COMPLIANCE_SELECTION.
+  Reason: the iOS app uses standard CryptoKit primitives (SHA-1, SHA-256, and
+  HMAC-SHA256), while its bundled web runtime verifies RSA-PSS/SHA-256
+  signatures through WebCrypto. No proprietary, AES, libsodium, Olm, Megolm,
+  or Matrix encryption implementation is present.
+  This is an App Store Connect action and cannot be submitted by this local
+  upload script. See platforms/ios/atome-auv3/README.md for the evidence and
+  the remaining manual TestFlight steps.
+GUIDANCE
+}
+
+fail() {
+    printf '\nFAILED\nStep: %s\nReason: %s\n' "$CURRENT_STEP" "$1" >&2
+    exit 1
+}
+
+on_error() {
+    local exit_code=$?
+    printf '\nFAILED\nStep: %s\nExit code: %s\n' "$CURRENT_STEP" "$exit_code" >&2
+    exit "$exit_code"
+}
+
+trap on_error ERR
+
+require_command() {
+    command -v "$1" >/dev/null 2>&1 || fail "Required command is unavailable: $1"
+}
+
+xcodebuild_for_container() {
+    xcodebuild "$CONTAINER_FLAG" "$CONTAINER_PATH" "$@"
+}
+
+extract_setting() {
+    local settings="$1"
+    local key="$2"
+    printf '%s\n' "$settings" | sed -n "s/^[[:space:]]*${key} = //p" | tail -n 1
+}
+
+append_json_values() {
+    local json="$1"
+    local key="$2"
+
+    while IFS= read -r value; do
+        [ -n "$value" ] && printf '%s\n' "$value"
+    done < <(
+        printf '%s' "$json" | /usr/bin/ruby -rjson -e '
+            document = JSON.parse(STDIN.read)
+            root = document["workspace"] || document.fetch("project")
+            root.fetch(ARGV.fetch(0), []).each { |value| puts value }
+        ' "$key"
+    )
+}
+
+resolve_xcode_container() {
+    local workspaces=()
+    local projects=()
+
+    shopt -s nullglob
+    workspaces=("$IOS_DIRECTORY"/*.xcworkspace)
+    projects=("$IOS_DIRECTORY"/*.xcodeproj)
+    shopt -u nullglob
+
+    if [ "${#workspaces[@]}" -eq 1 ]; then
+        CONTAINER_FLAG="-workspace"
+        CONTAINER_PATH="${workspaces[0]}"
+        return
+    fi
+
+    if [ "${#workspaces[@]}" -gt 1 ]; then
+        fail "Multiple top-level workspaces were found; choose one before releasing."
+    fi
+
+    if [ "${#projects[@]}" -eq 1 ]; then
+        CONTAINER_FLAG="-project"
+        CONTAINER_PATH="${projects[0]}"
+        return
+    fi
+
+    fail "Expected exactly one top-level .xcworkspace or .xcodeproj in $IOS_DIRECTORY."
+}
+
+resolve_version_ledger() {
+    local project_path
+    local project_count=0
+
+    shopt -s nullglob
+    for project_path in "$IOS_DIRECTORY"/*.xcodeproj; do
+        VERSION_LEDGER_PROJECT_FILE="$project_path/project.pbxproj"
+        ((project_count += 1))
+    done
+    shopt -u nullglob
+
+    [ "$project_count" -eq 1 ] || fail "Expected exactly one top-level .xcodeproj to store release versions."
+
+    [ -f "$VERSION_LEDGER_PROJECT_FILE" ] || fail "Xcode version ledger is missing: $VERSION_LEDGER_PROJECT_FILE"
+}
+
+release_settings_for_target() {
+    xcodebuild_for_container -target "$1" -configuration "$CONFIGURATION" -showBuildSettings
+}
+
+release_settings_for_scheme() {
+    xcodebuild_for_container -scheme "$1" -configuration "$CONFIGURATION" -destination "generic/platform=iOS" -showBuildSettings
+}
+
+discover_application_scheme() {
+    local project_json
+    local scheme
+    local target
+    local settings
+    local product_type
+    local application_schemes=()
+    local application_targets=()
+    local matching_schemes=()
+    local matching_scheme_count=0
+
+    project_json="$(xcodebuild_for_container -list -json)"
+    while IFS= read -r scheme; do
+        settings="$(release_settings_for_scheme "$scheme")"
+        product_type="$(extract_setting "$settings" "PRODUCT_TYPE")"
+        if [ "$product_type" = "com.apple.product-type.application" ]; then
+            application_schemes+=("$scheme")
+        fi
+    done < <(append_json_values "$project_json" "schemes")
+
+    while IFS= read -r target; do
+        settings="$(release_settings_for_target "$target")"
+        product_type="$(extract_setting "$settings" "PRODUCT_TYPE")"
+        if [ "$product_type" = "com.apple.product-type.application" ]; then
+            application_targets+=("$target")
+        fi
+    done < <(append_json_values "$project_json" "targets")
+
+    for scheme in "${application_schemes[@]}"; do
+        for target in "${application_targets[@]}"; do
+            if [ "$scheme" = "$target" ]; then
+                matching_schemes+=("$scheme")
+                ((matching_scheme_count += 1))
+            fi
+        done
+    done
+
+    if [ "$matching_scheme_count" -ne 1 ]; then
+        fail "Expected one app scheme named after its application target, found $matching_scheme_count."
+    fi
+
+    APP_SCHEME="${matching_schemes[0]}"
+}
+
+discover_release_targets() {
+    local project_json
+    local target
+    local settings
+    local product_type
+    local target_bundle_identifier
+    local target_marketing_version
+    local target_build
+    local application_targets=()
+    local application_target_count=0
+    local app_settings
+
+    project_json="$(xcodebuild_for_container -list -json)"
+    while IFS= read -r target; do
+        settings="$(release_settings_for_target "$target")"
+        product_type="$(extract_setting "$settings" "PRODUCT_TYPE")"
+        target_bundle_identifier="$(extract_setting "$settings" "PRODUCT_BUNDLE_IDENTIFIER")"
+
+        if [ "$product_type" = "com.apple.product-type.application" ]; then
+            application_targets+=("$target")
+            ((application_target_count += 1))
+            if [ "$target_bundle_identifier" = "$APP_BUNDLE_IDENTIFIER" ]; then
+                APP_TARGET="$target"
+                app_settings="$settings"
+            fi
+        elif [ "$product_type" = "com.apple.product-type.app-extension" ]; then
+            EXTENSION_TARGETS+=("$target")
+            ((EXTENSION_TARGET_COUNT += 1))
+        fi
+    done < <(append_json_values "$project_json" "targets")
+
+    if [ "$application_target_count" -ne 1 ] || [ -z "$APP_TARGET" ]; then
+        fail "Expected exactly one application target matching scheme $APP_SCHEME."
+    fi
+
+    MARKETING_VERSION="$(extract_setting "$app_settings" "MARKETING_VERSION")"
+    CURRENT_BUILD="$(extract_setting "$app_settings" "CURRENT_PROJECT_VERSION")"
+    TEAM_ID="$(extract_setting "$app_settings" "DEVELOPMENT_TEAM")"
+    SIGNING_STYLE="$(extract_setting "$app_settings" "CODE_SIGN_STYLE")"
+    SIGNING_IDENTITY="$(extract_setting "$app_settings" "CODE_SIGN_IDENTITY")"
+
+    [ -n "$MARKETING_VERSION" ] || fail "MARKETING_VERSION is not configured for $APP_TARGET."
+    [[ "$CURRENT_BUILD" =~ ^[0-9]+$ ]] || fail "CURRENT_PROJECT_VERSION must be an integer, found: $CURRENT_BUILD"
+    [ -n "$TEAM_ID" ] || fail "DEVELOPMENT_TEAM is not configured for $APP_TARGET."
+    [ -n "$SIGNING_STYLE" ] || fail "CODE_SIGN_STYLE is not configured for $APP_TARGET."
+
+    for target in "${EXTENSION_TARGETS[@]}"; do
+        settings="$(release_settings_for_target "$target")"
+        target_marketing_version="$(extract_setting "$settings" "MARKETING_VERSION")"
+        target_build="$(extract_setting "$settings" "CURRENT_PROJECT_VERSION")"
+        target_bundle_identifier="$(extract_setting "$settings" "PRODUCT_BUNDLE_IDENTIFIER")"
+
+        [ "$target_marketing_version" = "$MARKETING_VERSION" ] || fail "Extension $target ($target_bundle_identifier) has MARKETING_VERSION $target_marketing_version, expected $MARKETING_VERSION."
+        [ "$target_build" = "$CURRENT_BUILD" ] || fail "Extension $target ($target_bundle_identifier) has build $target_build, expected $CURRENT_BUILD."
+    done
+
+    NEXT_BUILD=$((10#$CURRENT_BUILD + 1))
+    increment_marketing_version
+}
+
+increment_marketing_version() {
+    local version_prefix
+    local version_component
+    local component_width
+    local next_component
+
+    [[ "$MARKETING_VERSION" =~ ^[0-9]+(\.[0-9]+)+$ ]] || fail "MARKETING_VERSION must contain dot-separated numeric components, found: $MARKETING_VERSION"
+
+    version_prefix="${MARKETING_VERSION%.*}"
+    version_component="${MARKETING_VERSION##*.}"
+    component_width=${#version_component}
+    next_component=$((10#$version_component + 1))
+    printf -v next_component "%0${component_width}d" "$next_component"
+    NEXT_MARKETING_VERSION="$version_prefix.$next_component"
+}
+
+validate_environment() {
+    CURRENT_STEP="environment validation"
+    [ -d "$IOS_DIRECTORY" ] || fail "iOS project directory is missing: $IOS_DIRECTORY"
+    require_command xcodebuild
+    require_command xcrun
+    require_command /usr/bin/ruby
+    xcrun --find altool >/dev/null
+    xcodebuild -version >/dev/null
+}
+
+resolve_upload_credentials() {
+    local private_key_path
+    local private_key_count=0
+    local private_key_name
+    local derived_key_id
+    local configured_issuer_id
+
+    CURRENT_STEP="App Store Connect authentication"
+    shopt -s nullglob
+    for private_key_path in "$APP_STORE_CONNECT_KEY_DIRECTORY"/AuthKey_*.p8; do
+        API_PRIVATE_KEY_PATH="$private_key_path"
+        ((private_key_count += 1))
+    done
+    shopt -u nullglob
+
+    [ "$private_key_count" -eq 1 ] || fail "Expected exactly one private key at $APP_STORE_CONNECT_KEY_DIRECTORY/AuthKey_*.p8."
+
+    private_key_name="${API_PRIVATE_KEY_PATH##*/}"
+    derived_key_id="${private_key_name#AuthKey_}"
+    derived_key_id="${derived_key_id%.p8}"
+    [[ "$derived_key_id" =~ ^[[:alnum:]]+$ ]] || fail "The private key file name must use the AuthKey_<key-id>.p8 format."
+
+    if [ -n "${APP_STORE_CONNECT_KEY_ID:-}" ] && [ "$APP_STORE_CONNECT_KEY_ID" != "$derived_key_id" ]; then
+        fail "APP_STORE_CONNECT_KEY_ID does not match the locally stored private key."
+    fi
+    API_KEY_ID="$derived_key_id"
+
+    configured_issuer_id="${APP_STORE_CONNECT_ISSUER_ID:-}"
+    if [ -z "$configured_issuer_id" ] && [ -r "$APP_STORE_CONNECT_ISSUER_ID_FILE" ]; then
+        configured_issuer_id="$(tr -d '\r\n' < "$APP_STORE_CONNECT_ISSUER_ID_FILE")"
+    fi
+
+    [ -n "$configured_issuer_id" ] || fail "Store the App Store Connect Issuer ID in $APP_STORE_CONNECT_ISSUER_ID_FILE or set APP_STORE_CONNECT_ISSUER_ID."
+    [[ "$configured_issuer_id" =~ ^[[:xdigit:]]{8}-[[:xdigit:]]{4}-[[:xdigit:]]{4}-[[:xdigit:]]{4}-[[:xdigit:]]{12}$ ]] || fail "The App Store Connect Issuer ID must be a UUID."
+    [ -r "$API_PRIVATE_KEY_PATH" ] || fail "App Store Connect private key is unreadable: $API_PRIVATE_KEY_PATH"
+
+    API_ISSUER_ID="$configured_issuer_id"
+}
+
+write_export_options() {
+    local export_options_path="$1"
+
+    cat > "$export_options_path" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>destination</key>
+    <string>export</string>
+    <key>manageAppVersionAndBuildNumber</key>
+    <false/>
+    <key>method</key>
+    <string>$DISTRIBUTION_METHOD</string>
+    <key>signingStyle</key>
+    <string>automatic</string>
+    <key>teamID</key>
+    <string>$TEAM_ID</string>
+    <key>uploadSymbols</key>
+    <true/>
+</dict>
+</plist>
+PLIST
+}
+
+persist_version_ledger() {
+    local minimum_matching_settings=$((1 + EXTENSION_TARGET_COUNT))
+
+    /usr/bin/ruby -e '
+        project_file, current_marketing_version, next_marketing_version, current_build, next_build, minimum_count = ARGV
+        minimum_count = Integer(minimum_count)
+        source = File.binread(project_file)
+        updates = {
+            "MARKETING_VERSION" => [current_marketing_version, next_marketing_version],
+            "CURRENT_PROJECT_VERSION" => [current_build, next_build]
+        }
+
+        updated = source.dup
+        updates.each do |setting, values|
+            current_value, next_value = values
+            expression = /(?<=\b#{Regexp.escape(setting)} = )#{Regexp.escape(current_value)}(?=;)/
+            matches = updated.scan(expression).length
+            abort("Expected at least #{minimum_count} #{setting} settings with value #{current_value}, found #{matches}.") if matches < minimum_count
+            updated.gsub!(expression, next_value)
+        end
+
+        temporary_project_file = "#{project_file}.testflight-#{Process.pid}"
+        begin
+            File.binwrite(temporary_project_file, updated)
+            File.chmod(File.stat(project_file).mode, temporary_project_file)
+            File.rename(temporary_project_file, project_file)
+        ensure
+            File.delete(temporary_project_file) if File.exist?(temporary_project_file)
+        end
+    ' "$VERSION_LEDGER_PROJECT_FILE" "$MARKETING_VERSION" "$NEXT_MARKETING_VERSION" "$CURRENT_BUILD" "$NEXT_BUILD" "$minimum_matching_settings"
+}
+
+print_release_summary() {
+    printf '%s\n' "Project: $CONTAINER_PATH"
+    printf '%s\n' "Scheme: $APP_SCHEME"
+    printf '%s\n' "Application target: $APP_TARGET ($APP_BUNDLE_IDENTIFIER)"
+    printf '%s\n' "Embedded extension targets: ${EXTENSION_TARGETS[*]:-none}"
+    printf '%s\n' "Signing: $SIGNING_STYLE (${SIGNING_IDENTITY:-unspecified}), team $TEAM_ID"
+    printf '%s\n' "Current version: $MARKETING_VERSION"
+    printf '%s\n' "New version: $NEXT_MARKETING_VERSION"
+    printf '%s\n' "Current build: $CURRENT_BUILD"
+    printf '%s\n' "New build: $NEXT_BUILD"
+}
+
+parse_arguments() {
+    while [ "$#" -gt 0 ]; do
+        case "$1" in
+            --dry-run) DRY_RUN=true ;;
+            --export-compliance) print_export_compliance_guidance; exit 0 ;;
+            -h|--help) usage; exit 0 ;;
+            *) fail "Unknown option: $1" ;;
+        esac
+        shift
+    done
+}
+
+main() {
+    parse_arguments "$@"
+    validate_environment
+
+    CURRENT_STEP="Xcode project discovery"
+    resolve_xcode_container
+    resolve_version_ledger
+    discover_application_scheme
+
+    APP_BUNDLE_IDENTIFIER="$(extract_setting "$(release_settings_for_scheme "$APP_SCHEME")" "PRODUCT_BUNDLE_IDENTIFIER")"
+    [ -n "$APP_BUNDLE_IDENTIFIER" ] || fail "PRODUCT_BUNDLE_IDENTIFIER is not configured for scheme $APP_SCHEME."
+    discover_release_targets
+    print_release_summary
+
+    if [ "$DRY_RUN" = true ]; then
+        printf '\nDRY RUN SUCCESS\n'
+        printf '%s\n' "No version was changed. No archive, export, or upload was started."
+        printf '%s\n' "Planned archive: xcodebuild archive ... CURRENT_PROJECT_VERSION=$NEXT_BUILD"
+        printf '%s\n' "Planned export method: $DISTRIBUTION_METHOD"
+        printf '%s\n' "Planned uploader: xcrun altool with App Store Connect API-key authentication"
+        printf '%s\n' "A live upload additionally requires one AuthKey_*.p8 private key and the Issuer ID documented by --help."
+        print_export_compliance_guidance
+        return
+    fi
+
+    resolve_upload_credentials
+
+    local run_directory
+    local archive_path
+    local export_path
+    local export_options_path
+    local ipa_path
+
+    run_directory="$(mktemp -d "$REPO_ROOT/temp/testflight.XXXXXX")"
+    archive_path="$run_directory/Atome-$NEXT_MARKETING_VERSION-$NEXT_BUILD.xcarchive"
+    export_path="$run_directory/export"
+    export_options_path="$run_directory/ExportOptions.plist"
+    write_export_options "$export_options_path"
+
+    CURRENT_STEP="Release archive"
+    xcodebuild_for_container \
+        -allowProvisioningUpdates \
+        -scheme "$APP_SCHEME" \
+        -configuration "$CONFIGURATION" \
+        -destination "generic/platform=iOS" \
+        -archivePath "$archive_path" \
+        -derivedDataPath "$run_directory/DerivedData" \
+        "MARKETING_VERSION=$NEXT_MARKETING_VERSION" \
+        "CURRENT_PROJECT_VERSION=$NEXT_BUILD" \
+        archive
+
+    CURRENT_STEP="App Store Connect export"
+    xcodebuild -exportArchive \
+        -allowProvisioningUpdates \
+        -archivePath "$archive_path" \
+        -exportPath "$export_path" \
+        -exportOptionsPlist "$export_options_path"
+
+    ipa_path="$(find "$export_path" -maxdepth 1 -type f -name '*.ipa' -print -quit)"
+    [ -n "$ipa_path" ] || fail "The export completed without producing an IPA."
+
+    CURRENT_STEP="App Store Connect upload"
+    xcrun altool --upload-app \
+        --type ios \
+        --file "$ipa_path" \
+        --apiKey "$API_KEY_ID" \
+        --apiIssuer "$API_ISSUER_ID"
+
+    CURRENT_STEP="Persisting published version"
+    persist_version_ledger
+
+    printf '\nSUCCESS\n\n'
+    printf '%s\n' "Version: $NEXT_MARKETING_VERSION"
+    printf '%s\n' "Build: $NEXT_BUILD"
+    printf '%s\n' "Archive: OK ($archive_path)"
+    printf '%s\n' "Export: OK ($ipa_path)"
+    printf '%s\n' "Upload App Store Connect: OK"
+    printf '\n%s\n' "Build $NEXT_BUILD was sent to App Store Connect. It should appear in TestFlight after Apple processing."
+    print_export_compliance_guidance
+}
+
+main "$@"
