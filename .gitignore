@@ -111,6 +111,7 @@ tests/rendering/*
 !tests/rendering/animated_png_tests.rs
 !tests/eve/project_view_playback_regressions.test.mjs
 !tests/eve/project_workspace_activation_contract.test.mjs
+!tests/eve/render_surface_resize_reconciliation.test.mjs
 !tests/eve/selected_project_media_playback_runtime.test.mjs
 !tests/eve/bevy_panel_home_contract.test.mjs
 !tests/eve/sync_engine.test.mjs
