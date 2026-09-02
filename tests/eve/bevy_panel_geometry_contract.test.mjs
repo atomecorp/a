@@ -11,8 +11,68 @@ import {
     bevyPanelRuntimeState,
     closeBevyPanelSurface,
     openBevyPanelSurface,
-    registerBevyPanelSurface
+    registerBevyPanelSurface,
+    schedulePanelRefresh
 } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_runtime.js';
+import { waitAnimationFrame } from '../../eVe/domains/rendering/animation_frame_runtime.js';
+import { createProjectSceneRenderScheduler } from '../../eVe/domains/rendering/project_scene_render_scheduler.js';
+
+test('panel refresh has a bounded fallback when requestAnimationFrame stalls', async () => {
+    let frameCallback = null;
+    let cancelledFrame = 0;
+    const win = {
+        requestAnimationFrame(callback) {
+            frameCallback = callback;
+            return 41;
+        },
+        cancelAnimationFrame(handle) { cancelledFrame = handle; },
+        setTimeout,
+        clearTimeout
+    };
+    const startedAt = Date.now();
+    await new Promise((resolve) => schedulePanelRefresh(win, resolve));
+    assert.ok(Date.now() - startedAt < 250);
+    assert.equal(cancelledFrame, 41);
+    frameCallback?.(Date.now());
+});
+
+test('two Bevy startup frames stay bounded when requestAnimationFrame stalls', async () => {
+    let cancelledFrames = 0;
+    const win = {
+        requestAnimationFrame() { return 51; },
+        cancelAnimationFrame() { cancelledFrames += 1; },
+        setTimeout,
+        clearTimeout
+    };
+    const startedAt = Date.now();
+    await waitAnimationFrame(win);
+    await waitAnimationFrame(win);
+
+    assert.ok(Date.now() - startedAt < 250);
+    assert.equal(cancelledFrames, 2);
+});
+
+test('project scene scheduling renders through the shared frame watchdog', async () => {
+    const originalWindow = globalThis.window;
+    globalThis.window = {
+        requestAnimationFrame() { return 61; },
+        cancelAnimationFrame() {},
+        setTimeout,
+        clearTimeout
+    };
+    try {
+        const calls = [];
+        const scheduler = createProjectSceneRenderScheduler({
+            renderProjection: async (runtime) => calls.push(runtime.project_id)
+        });
+        scheduler.schedule({ project_id: 'home-panel' });
+        await new Promise((resolve) => setTimeout(resolve, 80));
+
+        assert.deepEqual(calls, ['home-panel']);
+    } finally {
+        globalThis.window = originalWindow;
+    }
+});
 
 const findNode = (tree, id) => {
     let found = null;

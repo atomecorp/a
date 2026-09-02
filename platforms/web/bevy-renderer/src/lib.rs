@@ -555,9 +555,12 @@ struct WebBevyRendererPlugin {
 /// still renders at display rate — and, being rAF-driven, in step with the
 /// compositor rather than a free-running timer.
 ///
-/// This long wait is only a failsafe: it bounds how long a dropped wake could
-/// leave the surface stale, and it clears a stuck in-flight wake flag.
-const WEB_IDLE_HEARTBEAT_MS: u64 = 1_000;
+/// This wait is only a failsafe: it bounds how long a dropped wake can leave
+/// the surface stale and clears a stuck in-flight wake flag. WKWebView can
+/// occasionally defer the async Winit user-event waker after a cold reload, so
+/// keep the bound below the one-second interaction budget without returning to
+/// a display-rate idle loop.
+const WEB_IDLE_HEARTBEAT_MS: u64 = 500;
 
 fn web_winit_settings() -> WinitSettings {
     WinitSettings {

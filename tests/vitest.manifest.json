@@ -152,6 +152,7 @@
   "tests/eve/tool_genesis_create_parent_contract.test.mjs",
   "tests/eve/tool_runtime_home_lazy_load.test.mjs",
   "tests/eve/tool_runtime_move_relative.test.mjs",
+  "tests/eve/tool_runtime_native_bootstrap_fast_path.test.mjs",
   "tests/eve/unified_rendering_contract.test.mjs",
   "tests/eve/urgent_debug_campaign.test.mjs",
   "tests/eve/user_profile_events.test.mjs",

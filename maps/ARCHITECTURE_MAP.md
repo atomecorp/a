@@ -49,7 +49,12 @@ loader is warmed early without starting an extra event loop or creating a canvas
 
 Tauri panel startup (2026-09-02): Home, Communication, and the other panels use
 the same `panel_definitions.js` -> `panel_surface_runtime.js` -> Bevy panel
-runtime in Web and Tauri. The desktop binary is a thin `squirrel_lib::run()`
+runtime in Web, Tauri, and iOS. Built-in execution resolves from the canonical
+bootstrap definitions and registered handlers before persistent registry
+reconciliation, so restoring a native identity and synchronizing it to Fastify
+cannot gate the first panel. Shared animation-frame waits have one bounded
+watchdog, and the reactive WASM renderer's 500 ms idle heartbeat bounds a lost
+first WKWebView wake without introducing a continuous loop. The desktop binary is a thin `squirrel_lib::run()`
 entrypoint; `lib.rs` is the single Tauri bootstrap owner. Native Vosk model
 loading is demand-driven by the first listening action. Neither the vendored
 plugin nor `createVoiceService` may preload it during page/application boot,

@@ -97,6 +97,53 @@ test('BevyUI image prewarming hydrates without mounting or projecting a tree', a
     assert.equal(runtime.readOverlayDiagnostics().treeCount, 0);
 });
 
+test('BevyUI initial mount does not depend on a host animation-frame continuation', async () => {
+    const surface = createSurface();
+    let requestedFrames = 0;
+    const module = {
+        apply_atome_bevy_ui_ops: () => null,
+        drain_atome_bevy_ui_events: () => []
+    };
+    const runtime = createEveBevyUiRuntime({
+        moduleProvider: async () => module,
+        nativeUiEnabled: true,
+        imageResolverFactory: () => async () => ({
+            width: 1,
+            height: 1,
+            rgba: new Uint8ClampedArray([255, 255, 255, 255])
+        }),
+        requestFrame: () => {
+            requestedFrames += 1;
+            return requestedFrames;
+        }
+    });
+
+    const mount = runtime.mountTree({
+        id: 'initial_panel_tree',
+        surface,
+        tree: {
+            id: 'initial_panel_tree',
+            root: {
+                id: 'initial_panel_root',
+                kind: 'root',
+                children: Array.from({ length: 7 }, (_value, index) => ({
+                    id: `initial_panel_image_${index + 1}`,
+                    kind: 'image',
+                    image: { source: `initial_panel_image_${index + 1}.png` },
+                    style: { size: [12, 12] }
+                }))
+            }
+        }
+    });
+    const result = await Promise.race([
+        mount.then(() => 'mounted'),
+        new Promise((resolve) => setTimeout(() => resolve('timeout'), 100))
+    ]);
+
+    assert.equal(result, 'mounted', 'atomic first visibility must not wait on a throttled WKWebView frame');
+    assert.equal(requestedFrames > 0, true, 'non-blocking lifecycle frame scheduling must remain active');
+});
+
 test('BevyUI latest render cancels image hydration from the superseded tree', async () => {
     const surface = createSurface();
     let oldResolverStarted = false;
@@ -525,6 +572,39 @@ test('BevyUI image hydration uses a three-texture frame budget in tree order', a
     assert.deepEqual(resolved, ['preview_1', 'preview_2', 'preview_3', 'preview_4', 'preview_5', 'preview_6', 'preview_7'], 'BevyUI image hydration must preserve visible-first tree order');
     assert.equal(DEFERRED_TEXTURE_BATCH_SIZE, 3);
     assert.equal(frameYields, 2, 'seven images must yield twice with the shared deferred texture frame budget');
+});
+
+test('BevyUI image hydration cannot stall when the host does not deliver animation frames', async () => {
+    const surface = createSurface();
+    let requestedFrames = 0;
+    const startedAt = performance.now();
+    const hydrated = await hydrateImageTree({
+        surface,
+        imageResolverFactory: () => async () => ({
+            width: 1,
+            height: 1,
+            rgba: new Uint8ClampedArray([255, 255, 255, 255])
+        }),
+        requestFrame: () => {
+            requestedFrames += 1;
+            return requestedFrames;
+        },
+        frameFallbackMs: 5,
+        tree: {
+            id: 'ui_root',
+            kind: 'root',
+            children: Array.from({ length: 7 }, (_value, index) => ({
+                id: `suspended_preview_${index + 1}`,
+                kind: 'image',
+                image: { source: `suspended_preview_${index + 1}.png` },
+                style: { size: [12, 12] }
+            }))
+        }
+    });
+
+    assert.equal(hydrated.children.length, 7);
+    assert.equal(requestedFrames, 2, 'the normal frame pacing contract must remain active');
+    assert.equal(performance.now() - startedAt < 100, true, 'two suspended host frames must use the bounded fallback');
 });
 
 test('BevyUI live image hydration resolves an already-mounted tree without frame-budget waits', async () => {

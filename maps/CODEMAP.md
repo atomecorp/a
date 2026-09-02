@@ -59,6 +59,13 @@ iOS/CoreMIDI adapter. Neither owns binding truth.
 
 Initial refresh repair (2026-08-27): `ToolRegistryV2.refresh` shares its pending
 catalogue read; `tool_registry_storage.js` owns the extracted persistence adapter.
+Canonical built-in tools resolve directly from `tool_runtime_bootstrap.js`
+definitions and registered handlers, so their first invocation never waits for
+the authenticated persistent catalogue or the native Fastify synchronization.
+`animation_frame_runtime.js` owns the shared requestAnimationFrame watchdog used
+by presentation, panel refresh, image hydration, preview capture, and project
+scene scheduling. The reactive Web renderer retains event-driven wakes and a
+500 ms idle heartbeat only as a bound for a deferred WKWebView Winit wake.
 `bevy_web_renderer_startup.js` is the existing renderer's extracted startup path,
 not a second renderer. It installs backing protection before invoking Winit and
 refreshes launch geometry after WASM preparation. `surface_runtime.js` projects

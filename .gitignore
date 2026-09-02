@@ -146,6 +146,7 @@ tests/rendering/*
 !tests/eve/assistant_turn_taking.test.mjs
 !tests/eve/assistant_voice_runtime.test.mjs
 !tests/eve/tool_runtime_home_lazy_load.test.mjs
+!tests/eve/tool_runtime_native_bootstrap_fast_path.test.mjs
 !tests/eve/main_tool_interaction_failure_reporting.test.mjs
 !tests/eve/load_server_config_tauri_collaboration.test.mjs
 !tests/eve/tool_runtime_move_relative.test.mjs
