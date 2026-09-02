@@ -188,7 +188,8 @@ test('Tauri capability authorizes the registered audio_get_scope command', async
         readFile(new URL('../../platforms/desktop-tauri/src/lib.rs', import.meta.url), 'utf8'),
         readFile(new URL('../../platforms/desktop-tauri/capabilities/default.json', import.meta.url), 'utf8')
     ]);
-    assert.match(mainSource, /audio_engine::bridge::audio_get_scope/);
+    assert.match(mainSource, /squirrel_lib::run\(\)/);
+    assert.doesNotMatch(mainSource, /audio_engine::bridge::audio_get_scope/);
     assert.match(libSource, /audio_engine::bridge::audio_get_scope/);
     assert.match(permissions, /"allow-audio-get-scope"/);
     assert.match(permissions, /identifier = "allow-audio-get-scope"[\s\S]*commands\.allow = \["audio_get_scope"\]/);

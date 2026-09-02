@@ -62,12 +62,13 @@ pub mod local_atome;
 mod local_atome_extended;
 mod local_atome_remote_projection;
 mod local_atome_security;
-mod local_atome_sync_worker;
 mod local_atome_sync_bootstrap;
 mod local_atome_sync_media;
+mod local_atome_sync_worker;
 mod local_atome_ws_sync;
 mod remote_control;
 mod remote_control_ws;
+mod static_asset_cache;
 
 #[derive(Clone)]
 struct AppState {
@@ -1516,29 +1517,6 @@ async fn log_request_middleware(req: Request<Body>, next: middleware::Next) -> R
         );
     }
 
-    response
-}
-
-async fn no_store_static_asset_middleware(req: Request<Body>, next: middleware::Next) -> Response {
-    let path = req.uri().path().to_string();
-    let mut response = next.run(req).await;
-    let is_static_runtime_asset = path == "/"
-        || path.starts_with("/eVe/")
-        || path.starts_with("/atome/")
-        || path.starts_with("/src/")
-        || path.ends_with(".html")
-        || path.ends_with(".js")
-        || path.ends_with(".mjs")
-        || path.ends_with(".css");
-    if is_static_runtime_asset {
-        let headers = response.headers_mut();
-        headers.insert(
-            header::CACHE_CONTROL,
-            HeaderValue::from_static("no-store, no-cache, must-revalidate, max-age=0"),
-        );
-        headers.insert(header::PRAGMA, HeaderValue::from_static("no-cache"));
-        headers.insert(header::EXPIRES, HeaderValue::from_static("0"));
-    }
     response
 }
 
@@ -5443,7 +5421,9 @@ pub async fn start_server(static_dir: PathBuf, uploads_dir: PathBuf, data_dir: P
         .layer(cors)
         .layer(DefaultBodyLimit::disable())
         .layer(RequestBodyLimitLayer::new(MAX_UPLOAD_BYTES))
-        .layer(middleware::from_fn(no_store_static_asset_middleware))
+        .layer(middleware::from_fn(
+            static_asset_cache::revalidate_static_asset_middleware,
+        ))
         .layer(middleware::from_fn(log_request_middleware))
         .with_state(state);
 

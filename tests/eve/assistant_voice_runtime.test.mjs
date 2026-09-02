@@ -226,9 +226,15 @@ test('scene hints filter overlays before the bound and retain a selected px-posi
 test('the desktop STT manifest authorizes prepare_model before first listening', () => {
     const buildScript = fs.readFileSync('platforms/desktop-tauri/vendor/tauri-plugin-stt/build.rs', 'utf8');
     const permissions = fs.readFileSync('platforms/desktop-tauri/vendor/tauri-plugin-stt/permissions/default.toml', 'utf8');
+    const pluginRuntime = fs.readFileSync('platforms/desktop-tauri/vendor/tauri-plugin-stt/src/lib.rs', 'utf8');
+    const desktopRuntime = fs.readFileSync('platforms/desktop-tauri/vendor/tauri-plugin-stt/src/desktop.rs', 'utf8');
+    const serviceRuntime = fs.readFileSync('atome/src/squirrel/voice/service.js', 'utf8');
 
     assert.match(buildScript, /"prepare_model"/);
     assert.match(permissions, /"allow-prepare-model"/);
+    assert.doesNotMatch(pluginRuntime, /SQUIRREL_STT_PRELOAD_LANGUAGE|std::thread::spawn/);
+    assert.doesNotMatch(serviceRuntime, /void stt\.prepare/);
+    assert.match(desktopRuntime, /start_listening[\s\S]*ensure_model\(config\.language\.as_deref\(\)\)/);
 });
 
 test('planner context is single-copy, schema-only, and protected by a size ceiling', () => {

@@ -47,6 +47,23 @@ before Winit invocation; its initial opacity is disposable presentation state.
 Workspace readiness controls the one reveal, not a fixed boot delay. The WASM
 loader is warmed early without starting an extra event loop or creating a canvas.
 
+Tauri panel startup (2026-09-02): Home, Communication, and the other panels use
+the same `panel_definitions.js` -> `panel_surface_runtime.js` -> Bevy panel
+runtime in Web and Tauri. The desktop binary is a thin `squirrel_lib::run()`
+entrypoint; `lib.rs` is the single Tauri bootstrap owner. Native Vosk model
+loading is demand-driven by the first listening action. Neither the vendored
+plugin nor `createVoiceService` may preload it during page/application boot,
+because the CPU/disk-heavy native load competes with the already-visible WebView.
+
+Tauri static revalidation (2026-09-02): the local Axum server keeps bundled
+runtime modules eligible for the browser cache with `public, max-age=0`, so
+WKWebView revalidates unchanged Home, Communication, eVe, Atome, source, vendor,
+HTML, JavaScript and CSS resources through the existing `Last-Modified`/304
+path after refresh or restart. `static_asset_cache.rs` is the only policy owner;
+`server/mod.rs` only composes it. API, file, text and WebSocket paths are excluded
+so private/dynamic responses cannot inherit public caching. This changes no panel
+owner, module loader, service worker, product state, renderer or DOM projection.
+
 Prepared UI publication (2026-08-27): geometry/hydration use the existing tree
 owner, image cache and render queue. State publication follows successful
 projection; no alternate DOM, renderer, persistence, timer or domain cache is
@@ -249,6 +266,7 @@ Current boot resilience contract (2026-07-23): `boot_runtime.js` may retry the c
 Current mobile resource/lifecycle contract (2026-07-17; supersedes older warmup, preview, and fixed-cadence details below wherever they conflict):
 
 - Boot and workspace restoration are demand-driven. No delayed cascade may preload Dashboard, capture, panels, activities, voice/TTS, or renderer WASM. Camera/microphone permission belongs to the explicit capture gesture.
+- Tauri STT follows the same rule: Vosk is prepared by the first explicit listening action, not by plugin setup or voice-service construction.
 - Project listing excludes `preview_url` at the Tauri, iOS, and Fastify storage-query boundaries; canonical `meta.owner_id` participates in security projection and failures cannot masquerade as an empty project list. Preview capture is ephemeral, WebP, DPR 1, and limited to an explicit current project.
 - One shared surface interceptor owns input. Dashboard render backpressure keeps only current plus latest state, and data hydration is restricted to lanes currently visible in the viewport; newly revealed lanes hydrate on scroll. Dashboard mode suspends hidden media decode and its frame callbacks. The Web renderer is strictly event-driven with explicit wakeups and no idle update cadence; surface DPR is capped at 1.5 and decoded texture retention at 16 MiB.
 - iOS file propagation is event-driven. `FileSyncCoordinator.syncAll()` runs after initialization, confirmed explicit file mutations/imports/captures, explicit sync, or list freshness; `FileSystemDeletionTransaction` forbids success, tombstones, and sync when coordination, removal, or absence confirmation fails, and a partial batch marks only confirmed deletions. No repeating directory-scanning timer exists, and the local HTTP server never synchronizes all roots for ordinary static GET requests.

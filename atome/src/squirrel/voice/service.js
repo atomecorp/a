@@ -190,13 +190,6 @@ export const createVoiceService = ({
         startBrowserRecognition,
         startTauriRecognition
     });
-    void stt.prepare({ lang: DEFAULT_LANG }).catch((error) => {
-        telemetry.trace('voice.stt.prepare.failed', {
-            provider: providers.stt.selected,
-            error: error?.message || String(error)
-        });
-    });
-
     const tts = {
         async speak(text, options = {}) {
             if (options.engine === 'local_onnx') {

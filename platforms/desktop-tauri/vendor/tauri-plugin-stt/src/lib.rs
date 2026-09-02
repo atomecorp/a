@@ -81,15 +81,6 @@ pub fn init<R: Runtime>() -> TauriPlugin<R> {
             #[cfg(desktop)]
             let stt = desktop::init(app, api)?;
             app.manage(stt);
-            #[cfg(desktop)]
-            {
-                let app_handle = app.clone();
-                std::thread::spawn(move || {
-                    let language = std::env::var("SQUIRREL_STT_PRELOAD_LANGUAGE")
-                        .unwrap_or_else(|_| "fr-FR".to_string());
-                    let _ = app_handle.stt().prepare_model(Some(&language));
-                });
-            }
             Ok(())
         })
         .build()

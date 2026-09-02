@@ -790,12 +790,18 @@ test('legacy Home DOM owners remain deleted and the route never names eve_user_d
     const commonSurfaces = fs.readFileSync('eVe/intuition/runtime/bevy_panel/bevy_panel_surfaces.js', 'utf8');
     const actionsModule = fs.readFileSync('eVe/intuition/runtime/bevy_panel/bevy_panel_home_actions.js', 'utf8');
     const homeRuntime = fs.readFileSync('eVe/intuition/runtime/bevy_panel/bevy_panel_home_runtime.js', 'utf8');
+    const commonPanelRuntime = fs.readFileSync('eVe/intuition/runtime/bevy_panel/bevy_panel_runtime.js', 'utf8');
     assert.doesNotMatch(definitions, /eve_user_dialog/);
     assert.match(definitions, /runtime_owner: 'window'/);
     assert.match(definitions, /surface_key: useWindowOwner \? '' : def\.surface_key/);
     assert.doesNotMatch(userModule, /createEveDialog|createElement\(|innerHTML|querySelector/);
     assert.match(userModule, /bevy_panel_home_runtime\.js/);
     assert.match(userModule, /registerBevyPanelSurface\(homeSurface\)/);
+    assert.doesNotMatch(userModule, /^import .*user_workspace_(runtime|surface_runtime)\.js/m);
+    assert.match(userModule, /import\('\.\/user_workspace_runtime\.js'\)/);
+    assert.match(userModule, /import\('\.\/user_workspace_surface_runtime\.js'\)/);
+    assert.doesNotMatch(commonPanelRuntime, /^import .*workspace_main_menu_visibility\.js/m);
+    assert.match(commonPanelRuntime, /import\('\.\.\/\.\.\/tools\/workspace_main_menu_visibility\.js'\)/);
     assert.doesNotMatch(commonSurfaces, /bevy_panel_(home|contact|lab)/);
     assert.doesNotMatch(actionsModule, /^import .*profile_api|^import .*dashboard_defaults|^import .*loadServerConfig/m);
     assert.doesNotMatch(homeRuntime, /^import .*home_vault|^import .*project_media_import_runtime/m);

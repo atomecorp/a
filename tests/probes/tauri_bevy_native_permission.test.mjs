@@ -28,7 +28,8 @@ test('Tauri capability allows every native Bevy renderer command registered by t
 
     for (const command of nativeCommands) {
         assert.match(permissionText, new RegExp(`commands\\.allow = \\["${command}"\\]`));
-        assert.match(mainText, new RegExp(`bevy_backend::${command}`));
+        assert.doesNotMatch(mainText, new RegExp(`bevy_backend::${command}`));
         assert.match(libText, new RegExp(`bevy_backend::${command}`));
     }
+    assert.match(mainText, /squirrel_lib::run\(\)/);
 });
