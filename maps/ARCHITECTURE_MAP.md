@@ -1,5 +1,37 @@
 # Atome / eVe Architecture Map
 
+iOS boot architecture (2026-09-02): Xcode no longer copies the source trees as
+resources. Both app and AUv3 invoke the same deterministic esbuild manifest and
+receive one `atome_runtime` root each; compatibility URLs still resolve through
+`atome://` without adding another runtime. The critical entry is bundled and
+split, while voice/ONNX, AI, bank, calendar, contacts, mail, Communication, and
+panel domains stay behind their existing dynamic owners and start only after
+presentation or first use. Canonical project bootstrap reads the existing
+startup preference/current project and presents local `staleFirst` state before
+background synchronization. Native Swift owns only launch presentation,
+resource transport, measurements, and recovery; Atome state and WebGPU remain
+the sole model and renderer authorities.
+Normal Xcode Debug launches keep Panel Lab, Web Inspector, and verbose text
+tracing disabled unless their explicit launch opt-in is set. The custom-scheme
+root resolves to the packaged product entry and normal MIDI startup schedules
+no smoke-test callback. The linked iOS Rust probe uses its optimized archive in
+both Debug and Release; `ATOME_IOS_RUST_DEV=1` is the explicit native-debug
+exception.
+
+Physical iOS renderer readiness (2026-09-03): browser Bevy startup completes
+only after the WASM `run()` call and two presented animation frames. A captured
+renderer panic is terminal even when WebAssembly also reports `unreachable`,
+and a failed project projection cannot publish `projection.bevy_ready` or
+release the native launch surface. The experimental virtual-function-
+elimination build is removed; packaging accepts the stable release renderer.
+Two consecutive signed Debug launches on an 11-inch iPad Pro (M5) visibly
+presented the saved project and final Main Toolbar in about 1.25 seconds native
+elapsed. The 20+20 P95 campaign, physical touch journey, and the 100-request
+budget remain separate acceptance gates.
+The app and AUv3 build phases share one configuration-scoped Cargo target
+directory, avoiding a second compilation of the identical native Bevy graph
+while retaining one linked library per target.
+
 Project drag performance (2026-08-29): the shared scene gesture owner keeps only
 the latest visual update per gesture/Atome until the next display frame, then
 patches the existing Bevy transform and spatial index once. Persistence remains
@@ -270,7 +302,7 @@ Current boot resilience contract (2026-07-23): `boot_runtime.js` may retry the c
 
 Current mobile resource/lifecycle contract (2026-07-17; supersedes older warmup, preview, and fixed-cadence details below wherever they conflict):
 
-- Boot and workspace restoration are demand-driven. No delayed cascade may preload Dashboard, capture, panels, activities, voice/TTS, or renderer WASM. Camera/microphone permission belongs to the explicit capture gesture.
+- Boot and workspace restoration are demand-driven. No delayed cascade may preload Dashboard, capture, panels, activities, voice/TTS, or renderer WASM before the first presentation. Existing non-critical owners may warm only after the presentation signal; camera/microphone permission still belongs to the explicit capture gesture.
 - Tauri STT follows the same rule: Vosk is prepared by the first explicit listening action, not by plugin setup or voice-service construction.
 - Project listing excludes `preview_url` at the Tauri, iOS, and Fastify storage-query boundaries; canonical `meta.owner_id` participates in security projection and failures cannot masquerade as an empty project list. Preview capture is ephemeral, WebP, DPR 1, and limited to an explicit current project.
 - One shared surface interceptor owns input. Dashboard render backpressure keeps only current plus latest state, and data hydration is restricted to lanes currently visible in the viewport; newly revealed lanes hydrate on scroll. Dashboard mode suspends hidden media decode and its frame callbacks. The Web renderer is strictly event-driven with explicit wakeups and no idle update cadence; surface DPR is capped at 1.5 and decoded texture retention at 16 MiB.
@@ -317,7 +349,7 @@ BevyUI panel architecture:
 - The panel structure is fixed as `PanelRoot -> BodyScroll -> FooterControls`. BodyScroll is the only scroll owner; FooterControls owns the title, close, drag, and resize controls. A generic tools dock and a redundant passive header are forbidden on migrated panels.
 - Every registered Bevy panel opening geometry is bottom-anchored to the top edge of the active main-menu reserved band on desktop and mobile. The shared panel layout resolver derives that boundary from the canonical main-menu reserved height; only an explicit runtime drag may move an already opened panel away from its initial anchor. Font opts into `openBesideContextualRail`: its surface resolves a canonical non-DOM rail inset only while the rail is visible, the runtime forwards it, and the layout places Font in the adjacent remaining surface rather than underneath the rail.
 - Contextual Atome editing follows the same exterior-depth rule: its disposable exact-bounds composed shell owns the shared shadow around the Atome plus footer, while its selection-outline projection is shadow-free and cannot alter the shell geometry.
-- During the migration only, the development/test-gated `panel_lab` surface is opened through the same Bevy panel router from a temporary trailing main-ribbon tool. A short activation toggles the Lab; a 520 ms long press is suppressed from normal activation and invokes only the development-view reload. It renders only the shared panel foundation, keeps drag/resize geometry and its opt-in footer double-activation fullscreen/restoration state in `bevy_panel_runtime.js`, shares the one canonical canvas BevyUI runtime with Dashboard and the ribbon so footer hit-testing remains active above Dashboard, and reuses the contextual Atome-edit footer order (left resize, close, drag, right resize) from the existing Bevy ribbon contract. Panel Lab alone opts into floating geometry on mobile so its footer drag and resize specimens remain testable on a physical iPhone; product panels retain the existing mobile fullscreen policy. The runtime retains the full-viewport geometry as its base, projects only a clamped copy while the iOS keyboard contracts `visualViewport`, and reapplies the base after the viewport settles on dismissal. Panel refreshes are coalesced to one animation frame and viewport resize bursts to one settled update, so text/caret updates and keyboard animation cannot repeatedly rebuild the panel backdrop. Its internal fullscreen fills the canvas above the main-menu reserved band and restores its prior geometry. Native iOS Debug builds enable the existing internal gate through the shared document-start `WebViewManager` bootstrap before eVe modules run; Release builds inject no gate and keep the tool unavailable. Panel Lab must be deleted completely after its permanent component tests replace it.
+- During the migration only, the development/test-gated `panel_lab` surface is opened through the same Bevy panel router from a temporary trailing main-ribbon tool. A short activation toggles the Lab; a 520 ms long press is suppressed from normal activation and invokes only the development-view reload. It renders only the shared panel foundation, keeps drag/resize geometry and its opt-in footer double-activation fullscreen/restoration state in `bevy_panel_runtime.js`, shares the one canonical canvas BevyUI runtime with Dashboard and the ribbon so footer hit-testing remains active above Dashboard, and reuses the contextual Atome-edit footer order (left resize, close, drag, right resize) from the existing Bevy ribbon contract. Panel Lab alone opts into floating geometry on mobile so its footer drag and resize specimens remain testable on a physical iPhone; product panels retain the existing mobile fullscreen policy. The runtime retains the full-viewport geometry as its base, projects only a clamped copy while the iOS keyboard contracts `visualViewport`, and reapplies the base after the viewport settles on dismissal. Panel refreshes are coalesced to one animation frame and viewport resize bursts to one settled update, so text/caret updates and keyboard animation cannot repeatedly rebuild the panel backdrop. Its internal fullscreen fills the canvas above the main-menu reserved band and restores its prior geometry. Native iOS builds enable the gate only through the explicit `-AtomePanelLab` launch argument or `ATOME_IOS_PANEL_LAB=1` Debug environment opt-in; normal Xcode launches and every Release build keep the tool unavailable. Panel Lab must be deleted completely after its permanent component tests replace it.
 - Shared BevyUI overflow is owned below panels: `bevy_ui_layout_runtime.js` is
   the single geometry/content/clip calculator used by overlay projection and
   hit-testing; `bevy_ui_scroll_runtime.js` owns ephemeral bounded offsets,

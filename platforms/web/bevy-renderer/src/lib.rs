@@ -6,7 +6,6 @@ use atome_bevy_renderer_core::{
 };
 use bevy::platform::time::Instant;
 use bevy::{
-    log::{Level, LogPlugin},
     prelude::*,
     window::{
         CompositeAlphaMode, PresentMode, RequestRedraw, Window, WindowPlugin, WindowResized,
@@ -782,11 +781,6 @@ fn build_web_bevy_app(config: WebBevyRendererConfig) -> App {
     let mut app = App::new();
     app.add_plugins(
         DefaultPlugins
-            .set(LogPlugin {
-                level: Level::WARN,
-                filter: "warn,wgpu=error,naga=warn".to_string(),
-                ..default()
-            })
             .set(WindowPlugin {
                 primary_window: Some(window),
                 ..default()

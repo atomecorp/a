@@ -11,14 +11,20 @@ const resolveModulePath = (descriptor, baseUrl) => {
     return baseUrl ? new URL(rawModulePath, baseUrl).href : rawModulePath;
 };
 
-const loadSingleModule = async ({ entry, baseUrl, logPrefix, onModuleLoaded, onModuleError }) => {
+const loadSingleModule = async ({ entry, baseUrl, logPrefix, onModuleStart, onModuleLoaded, onModuleError }) => {
     const descriptor = resolveDescriptor(entry);
     const moduleId = String(descriptor.id || descriptor.path || 'module');
     const modulePath = resolveModulePath(descriptor, baseUrl);
     const moduleStart = perfNowMs();
 
     try {
-        const moduleNamespace = await import(modulePath);
+        if (typeof onModuleStart === 'function') {
+            onModuleStart({ descriptor, moduleId, modulePath });
+        }
+        const packagedLoader = globalThis.__ATOME_PACKAGED_MODULES__?.[moduleId];
+        const moduleNamespace = typeof packagedLoader === 'function'
+            ? await packagedLoader()
+            : await import(modulePath);
         const totalMs = perfElapsedMs(moduleStart);
 
         if (typeof onModuleLoaded === 'function') {
@@ -45,6 +51,7 @@ export const loadModulesSequentially = async ({
     modules = [],
     baseUrl,
     logPrefix = '[Runtime]',
+    onModuleStart,
     onModuleLoaded,
     onModuleError
 } = {}) => {
@@ -52,7 +59,7 @@ export const loadModulesSequentially = async ({
 
     for (const entry of modules) {
         const { moduleId, moduleNamespace } = await loadSingleModule({
-            entry, baseUrl, logPrefix, onModuleLoaded, onModuleError
+            entry, baseUrl, logPrefix, onModuleStart, onModuleLoaded, onModuleError
         });
         loadedModules[moduleId] = moduleNamespace;
     }
@@ -73,6 +80,7 @@ export const loadModulesConcurrently = async ({
     modules = [],
     baseUrl,
     logPrefix = '[Runtime]',
+    onModuleStart,
     onModuleLoaded,
     onModuleError,
     settle = false
@@ -80,7 +88,7 @@ export const loadModulesConcurrently = async ({
     const loadedModules = {};
 
     const settled = await Promise.allSettled(modules.map((entry) => loadSingleModule({
-        entry, baseUrl, logPrefix, onModuleLoaded, onModuleError
+        entry, baseUrl, logPrefix, onModuleStart, onModuleLoaded, onModuleError
     })));
 
     const rejected = settled.filter((result) => result.status === 'rejected');

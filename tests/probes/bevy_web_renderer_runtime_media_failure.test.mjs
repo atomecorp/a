@@ -9,6 +9,7 @@ import {
     startBevyWebRenderer
 } from '../../eVe/domains/rendering/bevy_web_renderer_runtime.js';
 import { createBrowserBevyMediaTextureResolver } from '../../eVe/domains/rendering/bevy_media_texture_resolver.js';
+import { shouldDeferIOSBootImageTextureResolution } from '../../eVe/domains/rendering/bevy_media_resource_runtime.js';
 import { VIRTUAL_SCENE_DIFF_TYPES } from '../../eVe/domains/rendering/virtual_scene_contract.js';
 
 const flushBevyRun = () => new Promise((resolve) => setTimeout(resolve, 0));
@@ -48,6 +49,14 @@ const createTextTextureDocument = ({ devicePixelRatio = 2 } = {}) => {
         }
     };
 };
+
+test('native iOS defers decoded project images until after the Bevy startup peak', () => {
+    const nativeWindow = { webkit: { messageHandlers: { swiftBridge: { postMessage() {} } } } };
+    const image = { id: 'project_image', kind: 'image', content: { source: '/api/uploads/image.png' } };
+    assert.equal(shouldDeferIOSBootImageTextureResolution(image, nativeWindow), true);
+    assert.equal(shouldDeferIOSBootImageTextureResolution(image, {}), false);
+    assert.equal(shouldDeferIOSBootImageTextureResolution({ ...image, kind: 'shape' }, nativeWindow), false);
+});
 
 test('Bevy web runtime keeps broken initial deferred media present without blocking valid nodes', async () => {
     const dom = new JSDOM('<!doctype html><html><body><canvas id="eve_surface_project_media_failure"></canvas></body></html>');

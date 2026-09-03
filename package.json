@@ -16,8 +16,7 @@
   "exports": {
     ".": {
       "import": "./dist/squirrel.esm.js",
-      "require": "./dist/squirrel.cjs.js",
-      "browser": "./dist/squirrel.umd.js"
+      "require": "./dist/squirrel.cjs.js"
     },
     "./dist/*": "./dist/*"
   },

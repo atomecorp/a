@@ -8,10 +8,6 @@
 
 /* Begin PBXBuildFile section */
 		34960420281861B500E13C15 /* atomeAudioUnit.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 349603FF281861B500E13C15 /* atomeAudioUnit.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
-		34960427281861EE00E13C15 /* src in Resources */ = {isa = PBXBuildFile; fileRef = 34960426281861EE00E13C15 /* src */; };
-		34960428281861EE00E13C15 /* src in Resources */ = {isa = PBXBuildFile; fileRef = 34960426281861EE00E13C15 /* src */; };
-		6BARCH010000000000000003 /* eVe in Resources */ = {isa = PBXBuildFile; fileRef = 6BARCH000000000000000002 /* eVe */; };
-		6BARCH010000000000000004 /* eVe in Resources */ = {isa = PBXBuildFile; fileRef = 6BARCH000000000000000002 /* eVe */; };
 		7A1000030000000000000003 /* GuestAdoptionRuntimeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A1000010000000000000001 /* GuestAdoptionRuntimeTests.swift */; };
 		7A1000050000000000000005 /* XCTest.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 7A1000040000000000000004 /* XCTest.framework */; };
 /* End PBXBuildFile section */
@@ -287,8 +283,6 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				34960427281861EE00E13C15 /* src in Resources */,
-				6BARCH010000000000000003 /* eVe in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -296,8 +290,6 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				34960428281861EE00E13C15 /* src in Resources */,
-				6BARCH010000000000000004 /* eVe in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -319,14 +311,16 @@
 			);
 			inputPaths = (
 				"$(SRCROOT)/../../../atome",
+				"$(SRCROOT)/../../../eVe",
+				"$(SRCROOT)/../package_ios_runtime.mjs",
 			);
-			name = "Copy Atome Resource Root";
+			name = "Package Atome Runtime";
 			outputPaths = (
-				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/atome_open",
+				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/atome_runtime/runtime-manifest.json",
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "set -eu\nRESOURCE_ROOT=\"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/atome_open\"\nrm -rf \"$RESOURCE_ROOT\"\nmkdir -p \"$RESOURCE_ROOT\"\nrsync -a --exclude target --exclude .git --exclude renderers/wgpu-web-external-texture \"$SRCROOT/../../../atome/\" \"$RESOURCE_ROOT/\"\nmkdir -p \"$RESOURCE_ROOT/vendor/rubberband-wasm\"\nrsync -a --delete \"$SRCROOT/../../../node_modules/rubberband-wasm/dist/\" \"$RESOURCE_ROOT/vendor/rubberband-wasm/\"\n";
+			shellScript = "set -eu\nRESOURCE_ROOT=\"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/atome_runtime\"\nPATH=\"/opt/homebrew/bin:/usr/local/bin:$PATH\"\nNODE_BINARY=\"${NODE_BINARY:-$(command -v node || true)}\"\nif [ -z \"$NODE_BINARY\" ] || [ ! -x \"$NODE_BINARY\" ]; then\n  echo \"error: Package Atome Runtime requires Node.js (set NODE_BINARY or install node in /opt/homebrew/bin or /usr/local/bin).\" >&2\n  exit 127\nfi\necho \"[IOS_RUNTIME_PACKAGE] node=$NODE_BINARY\"\n\"$NODE_BINARY\" \"$SRCROOT/../package_ios_runtime.mjs\" --output=\"$RESOURCE_ROOT\"\n";
 		};
 		6BARCH020000000000000002 /* Copy Atome Resource Root */ = {
 			isa = PBXShellScriptBuildPhase;
@@ -336,14 +330,16 @@
 			);
 			inputPaths = (
 				"$(SRCROOT)/../../../atome",
+				"$(SRCROOT)/../../../eVe",
+				"$(SRCROOT)/../package_ios_runtime.mjs",
 			);
-			name = "Copy Atome Resource Root";
+			name = "Package Atome Runtime";
 			outputPaths = (
-				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/atome_open",
+				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/atome_runtime/runtime-manifest.json",
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "set -eu\nRESOURCE_ROOT=\"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/atome_open\"\nrm -rf \"$RESOURCE_ROOT\"\nmkdir -p \"$RESOURCE_ROOT\"\nrsync -a --exclude target --exclude .git --exclude renderers/wgpu-web-external-texture \"$SRCROOT/../../../atome/\" \"$RESOURCE_ROOT/\"\nmkdir -p \"$RESOURCE_ROOT/vendor/rubberband-wasm\"\nrsync -a --delete \"$SRCROOT/../../../node_modules/rubberband-wasm/dist/\" \"$RESOURCE_ROOT/vendor/rubberband-wasm/\"\n";
+			shellScript = "set -eu\nRESOURCE_ROOT=\"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/atome_runtime\"\nPATH=\"/opt/homebrew/bin:/usr/local/bin:$PATH\"\nNODE_BINARY=\"${NODE_BINARY:-$(command -v node || true)}\"\nif [ -z \"$NODE_BINARY\" ] || [ ! -x \"$NODE_BINARY\" ]; then\n  echo \"error: Package Atome Runtime requires Node.js (set NODE_BINARY or install node in /opt/homebrew/bin or /usr/local/bin).\" >&2\n  exit 127\nfi\necho \"[IOS_RUNTIME_PACKAGE] node=$NODE_BINARY\"\n\"$NODE_BINARY\" \"$SRCROOT/../package_ios_runtime.mjs\" --output=\"$RESOURCE_ROOT\"\n";
 		};
 		6BBEVY020000000000000001 /* Build iOS Bevy Renderer */ = {
 			isa = PBXShellScriptBuildPhase;

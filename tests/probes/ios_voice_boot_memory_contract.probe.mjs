@@ -15,12 +15,9 @@ test('iOS boot keeps ONNX allocation outside the Bevy startup peak', () => {
     );
     assert.match(
         bootRuntime,
-        /isWorkspaceActiveForMainMenu\?\.\(\) === true[\s\S]*?scheduleVoiceWarmup\(\)/,
-        'voice warmup must require a confirmed active workspace'
+        /bootPresentationPublished = true[\s\S]*?scheduleVoiceWarmup\(\)/,
+        'voice warmup must start only after the first interactive workspace presentation'
     );
-    assert.match(
-        bootRuntime,
-        /voiceWarmupScheduled[\s\S]*?preloadLocalTts\(\)[\s\S]*?12000/,
-        'voice warmup must be unique and delayed beyond initial WebGPU/UI stabilization'
-    );
+    assert.match(bootRuntime, /voiceWarmupScheduled[\s\S]*?preloadLocalTts\?\.\(\)/, 'voice warmup must be unique');
+    assert.match(bootRuntime, /scheduleVoiceWarmup[\s\S]*?setTimeout[\s\S]*?12000/, 'ONNX warmup must remain delayed beyond initial stabilization');
 });

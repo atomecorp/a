@@ -13,7 +13,8 @@ import {
     startBevyWebRenderer
 } from '../../eVe/domains/rendering/bevy_web_renderer_runtime.js';
 import {
-    createVideoFrameDispatcher
+    createVideoFrameDispatcher,
+    scheduleBevyRun
 } from '../../eVe/domains/rendering/bevy_web_presentation_runtime.js';
 import {
     ensureBevyPerfDiagnostics,
@@ -51,6 +52,75 @@ const sourceSlice = (source, startPattern, endPattern) => {
     assert.notEqual(end, -1);
     return tail.slice(0, end);
 };
+
+test('Bevy startup without diagnostics waits across the runner boundary and rejects asynchronous panics', async () => {
+    let requestedFrames = 0;
+    const ownerWindow = {
+        console: { error: () => {} },
+        setTimeout: (callback) => {
+            queueMicrotask(callback);
+            return 1;
+        },
+        clearTimeout: () => {},
+        requestAnimationFrame: (callback) => {
+            requestedFrames += 1;
+            queueMicrotask(() => callback(requestedFrames));
+            return requestedFrames;
+        },
+        cancelAnimationFrame: () => {}
+    };
+    const surface = { ownerDocument: { defaultView: ownerWindow } };
+    const module = {
+        run_atome_bevy_renderer: () => {
+            queueMicrotask(() => ownerWindow.console.error('panicked at Unable to find a GPU'));
+        }
+    };
+
+    await assert.rejects(
+        scheduleBevyRun({
+            surface,
+            module,
+            canvasSelector: '#surface',
+            width: 100,
+            height: 100,
+            surfaceMetrics: {},
+            initialScene: {}
+        }),
+        /bevy_renderer_wasm_panic:panicked at Unable to find a GPU/
+    );
+    assert.ok(requestedFrames >= 1, 'startup must cross an animation-frame boundary before reporting readiness');
+});
+
+test('Bevy startup never masks a captured panic as expected runner completion', async () => {
+    const ownerWindow = {
+        console: { error: () => {} },
+        setTimeout: (callback) => {
+            queueMicrotask(callback);
+            return 1;
+        },
+        clearTimeout: () => {}
+    };
+    const surface = { ownerDocument: { defaultView: ownerWindow } };
+    const module = {
+        run_atome_bevy_renderer: () => {
+            ownerWindow.console.error('panicked at Unable to find a GPU');
+            throw new Error('unreachable');
+        }
+    };
+
+    await assert.rejects(
+        scheduleBevyRun({
+            surface,
+            module,
+            canvasSelector: '#surface',
+            width: 100,
+            height: 100,
+            surfaceMetrics: {},
+            initialScene: {}
+        }),
+        /bevy_renderer_wasm_panic:panicked at Unable to find a GPU/
+    );
+});
 
 test('Bevy project renderer guards lock canvas ownership, drag, and video playback routes', () => {
     const projectionRuntime = readSource('eVe/domains/rendering/project_scene_bevy_projection_runtime.js');
@@ -105,7 +175,7 @@ test('Bevy project renderer guards lock canvas ownership, drag, and video playba
     // The MTrax domain (and its timeline playback driver) was deleted. The project
     // transport now drives Bevy video decode from the eVeIntuition media reader
     // and the shared project-view item model used by every structured queue.
-    // Guard that no other stray caller appears outside those two canonical
+    // Guard that no other stray caller appears outside those canonical
     // transport owners and the defining runtime.
     const setBevyCallers = jsFilesUnder('eVe')
         .filter((file) => /setBevyVideoDecodePlayback/.test(readFileSync(file, 'utf8')))
@@ -113,10 +183,12 @@ test('Bevy project renderer guards lock canvas ownership, drag, and video playba
         .filter((file) => file !== 'eVe/domains/rendering/bevy_video_decode_source_runtime.js');
     assert.deepEqual(setBevyCallers, [
         'eVe/domains/rendering/project_view_playback_item_model.js',
+        'eVe/domains/rendering/project_view_transport_runtime.js',
         'eVe/intuition/runtime/eve_intuition/media_reader_tool_runtime.js'
     ]);
 
     const webRenderer = readSource('eVe/domains/rendering/bevy_web_renderer_runtime.js');
+    const webRendererStartup = readSource('eVe/domains/rendering/bevy_web_renderer_startup.js');
     const webRendererModuleLoader = readSource('eVe/domains/rendering/bevy_web_renderer_module_loader.js');
     const mediaResourceRuntime = readSource('eVe/domains/rendering/bevy_media_resource_runtime.js');
     const presentationRuntime = readSource('eVe/domains/rendering/bevy_web_presentation_runtime.js');
@@ -127,7 +199,7 @@ test('Bevy project renderer guards lock canvas ownership, drag, and video playba
     assert.match(webRenderer, /opsNeedMediaSourceSync/);
     assert.match(webRenderer, /opsNeedPresentationRedrawPrime/);
     assert.match(webRenderer, /createBevyMediaResourceRuntime/);
-    assert.match(webRenderer, /attachBevyWasmDiagnosticsReaders/);
+    assert.match(webRendererStartup, /attachBevyWasmDiagnosticsReaders/);
     assert.match(webRendererModuleLoader, /BEVY_WASM_MODULE_PATH = '\/wasm\/squirrel_bevy_renderer\.js'/);
     assert.match(webRendererModuleLoader, /BEVY_WASM_BINARY_PATH = '\/wasm\/squirrel_bevy_renderer_bg\.wasm'/);
     assert.match(webRendererModuleLoader, /BEVY_WASM_VERSION_PATH = '\/wasm\/renderer_version\.mjs'/);
@@ -368,15 +440,11 @@ test('transform-only Bevy diffs request one redraw without delayed redraw primes
         visible: true,
         children: []
     };
-    const originalSetTimeout = dom.window.setTimeout;
-    let startTimerFired = false;
-    dom.window.setTimeout = (callback) => {
-        if (!startTimerFired && typeof callback === 'function') {
-            startTimerFired = true;
-            callback();
-        }
+    dom.window.requestAnimationFrame = (callback) => {
+        callback(0);
         return 1;
     };
+    dom.window.cancelAnimationFrame = () => {};
     await startBevyWebRenderer({
         surface: canvas,
         width: 100,
@@ -390,6 +458,7 @@ test('transform-only Bevy diffs request one redraw without delayed redraw primes
         },
         wasmModule
     });
+    calls.length = 0;
     let delayedPrimeCount = 0;
     dom.window.setTimeout = () => {
         delayedPrimeCount += 1;
@@ -413,7 +482,8 @@ test('transform-only Bevy diffs request one redraw without delayed redraw primes
             virtualScene: null
         });
     } finally {
-        dom.window.setTimeout = originalSetTimeout;
+        delete dom.window.requestAnimationFrame;
+        delete dom.window.cancelAnimationFrame;
     }
     assert.equal(delayedPrimeCount, 0);
     const ops = calls.filter((call) => call.type === 'ops').flatMap((call) => call.ops);
@@ -525,6 +595,11 @@ test('Bevy style diffs forward opacity to the WASM style export', async () => {
     globalThis.window = dom.window;
     globalThis.document = dom.window.document;
     const canvas = dom.window.document.getElementById('eve_surface_project');
+    dom.window.requestAnimationFrame = (callback) => {
+        callback(0);
+        return 1;
+    };
+    dom.window.cancelAnimationFrame = () => {};
     const calls = [];
     const wasmModule = {
         default: async () => {},
@@ -561,6 +636,7 @@ test('Bevy style diffs forward opacity to the WASM style export', async () => {
         },
         wasmModule
     });
+    calls.length = 0;
     await applyBevyWebRendererDiffs({
         surface: canvas,
         ops: [{

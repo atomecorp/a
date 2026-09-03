@@ -411,12 +411,6 @@ public class MIDIController: NSObject {
             return
         }
         connectToAllMIDISources()
-        
-        // Test if callback is working by simulating data
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
-            self.logger.info("🧪 Testing MIDI callback system...")
-            // If no real MIDI data comes in 2 seconds, this suggests a routing issue
-        }
     }
     
     /// Stop MIDI monitoring

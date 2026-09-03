@@ -66,6 +66,8 @@ const {
 
 assert.equal(isTerminalWorkspaceBootFailure({ error: 'remote_account_not_provisioned' }), true);
 assert.equal(isTerminalWorkspaceBootFailure({ error: new Error('remote_account_not_provisioned') }), true);
+assert.equal(isTerminalWorkspaceBootFailure({ error: 'bevy_renderer_wasm_panic:Unable to find a GPU' }), true);
+assert.equal(isTerminalWorkspaceBootFailure({ error: 'bevy_renderer_start_failed_terminal:call_indirect' }), true);
 assert.equal(isTerminalWorkspaceBootFailure({ error: 'bevy_surface_not_ready' }), false);
 
 const kickstartSource = readFileSync(new URL('../../atome/src/squirrel/kickstart.js', import.meta.url), 'utf8');
@@ -155,9 +157,19 @@ const workspaceOpenCalls = [];
 const readinessCalls = [];
 const activitiesWarmupCalls = [];
 const homeWarmupCalls = [];
+const nativeBootMessages = [];
 let workspaceOpenAttempts = 0;
 window.__eveWorkspaceWarmupsStarted = false;
 delete window.__currentProject;
+window.webkit = {
+    messageHandlers: {
+        swiftBridge: {
+            postMessage(message) {
+                nativeBootMessages.push(message);
+            }
+        }
+    }
+};
 installEveIntuitionBootRuntime({
     applyBackgroundPanelClose() {},
     applyBackgroundPanelOpen() {},
@@ -234,17 +246,19 @@ installEveIntuitionBootRuntime({
     installTextStyleToolSelectionGuard() {},
     invokeAtomeEditFooterToolDefinitionWithContext() {},
     isWorkspaceActiveForMainMenu: () => true,
-    newMenu: {},
+    newMenu: { measure: () => ({ active: true, treeMounted: true, reservedHeight: 60 }) },
     normalizeAtomeEditFooterKind: (value) => value,
     normalizeAtomeEditFooterToolKey: (value) => value,
     openCanonicalHomePanel() {},
-    openInitialLoginSequence() {},
+    openInitialLoginSequence() {
+        window.dispatchEvent(new window.CustomEvent('eve:login-choice-mounted'));
+    },
     openWorkspaceDashboardWithProjectBootstrap: async (payload) => {
         workspaceOpenCalls.push(payload);
         workspaceOpenAttempts += 1;
         if (workspaceOpenAttempts === 1) return { ok: false, error: 'bevy_surface_not_ready' };
         const projectId = await payload.ensureProjectReady();
-        return { ok: true, projectId };
+        return { ok: true, projectId, route: 'project' };
     },
     panelSurfaceDefinitions: {},
     publishAtomeEditFooterSelection() {},
@@ -278,6 +292,23 @@ assert.equal(workspaceOpenCalls[1]?.source, 'boot_workspace');
 assert.deepEqual(readinessCalls, ['ready'], 'only the successful retry must prepare the project through canonical bootstrap');
 assert.deepEqual(activitiesWarmupCalls, ['activities'], 'workspace warmup must load contextual Activity before Molecule selection events');
 assert.deepEqual(homeWarmupCalls, ['home'], 'workspace warmup must make Home actionable before the first click');
+assert.equal(
+    nativeBootMessages.some((message) => message?.action === 'bootAuthenticationReady' && message?.version === 1),
+    true,
+    'mounted login must release the native launch cover through the versioned Swift bridge'
+);
+assert.equal(
+    nativeBootMessages.some((message) => (
+        message?.action === 'bootPresentationReady'
+        && message?.version === 1
+        && message?.route === 'project'
+        && message?.project_id === 'boot_project_valid'
+        && message?.main_menu?.active === true
+        && message?.main_menu?.tree_mounted === true
+    )),
+    true,
+    'workspace presentation must publish the canonical project and mounted Main Toolbar contract'
+);
 window.dispatchEvent(new window.CustomEvent('squirrel:project-changed', {
     detail: { id: 'boot_project_valid' }
 }));

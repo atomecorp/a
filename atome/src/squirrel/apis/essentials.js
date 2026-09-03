@@ -17,7 +17,6 @@ window.currentTheme = {
     button_color: 'rgba(204, 35, 35, 0.85)',
     button_active_color: "rgba(72,71,71,0.15) 100%)",
     palette_bg: 'rgba(72,71,71,0)',
-    tool_bg: 'rgba(72,71,71,0)',
     particle_bg: 'rgba(72,71,71)',
     option_bg: 'rgba(72,71,71,0)',
     zonespecial_bg: 'rgba(72,71,71,0)',
@@ -384,7 +383,6 @@ function cleanupGlobalVariables() {
 
 // Export for ES6 modules
 export { wait };
-
 
 
 

@@ -115,6 +115,45 @@ extension WebViewManager {
                 }
                 // Vérifier si c'est un message de système de fichiers
                 if let action = body["action"] as? String {
+                    if action == "bootMilestone" {
+                        let version = (body["version"] as? NSNumber)?.intValue ?? 0
+                        let rawStage = (body["stage"] as? String) ?? ""
+                        let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "._-"))
+                        let stage = String(rawStage.unicodeScalars.filter { allowed.contains($0) }.prefix(80))
+                        guard version == 1, !stage.isEmpty else { return }
+                        WebViewManager.markBootMilestone("js_\(stage)")
+                        print("[BOOT_MILESTONE] \(stage)")
+                        return
+                    }
+                    if action == "bootFailure" {
+                        let version = (body["version"] as? NSNumber)?.intValue ?? 0
+                        guard version == 1 else {
+                            WebViewManager.reportBootFailure(reason: "boot_failure_protocol_invalid")
+                            return
+                        }
+                        let rawReason = (body["reason"] as? String) ?? "javascript_boot_failed"
+                        let reason = String(rawReason.prefix(240))
+                        WebViewManager.reportBootFailure(reason: reason)
+                        return
+                    }
+                    if action == "bootPresentationReady" {
+                        let version = (body["version"] as? NSNumber)?.intValue ?? 0
+                        guard version == 1 else {
+                            WebViewManager.reportBootFailure(reason: "boot_presentation_protocol_invalid")
+                            return
+                        }
+                        WebViewManager.handleBootPresentationReady(body)
+                        return
+                    }
+                    if action == "bootAuthenticationReady" {
+                        let version = (body["version"] as? NSNumber)?.intValue ?? 0
+                        guard version == 1 else {
+                            WebViewManager.reportBootFailure(reason: "boot_authentication_protocol_invalid")
+                            return
+                        }
+                        WebViewManager.handleBootAuthenticationReady(body)
+                        return
+                    }
                     if action == "nativeInvoke" {
                         let requestId = body["requestId"] as? String ?? ""
                         let command = body["command"] as? String ?? ""

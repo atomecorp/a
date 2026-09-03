@@ -3,23 +3,31 @@ set -eu
 
 REPO_ROOT="$SRCROOT/../../.."
 CRATE_MANIFEST="$REPO_ROOT/platforms/ios/bevy-renderer/Cargo.toml"
-PROFILE_DIR=debug
-CARGO_PROFILE_FLAG=
+PROFILE_DIR=release
+CARGO_PROFILE_FLAG=--release
 
 export PATH="$HOME/.cargo/bin:/opt/homebrew/bin:/usr/local/bin:$PATH"
-export CARGO_TARGET_DIR="$PROJECT_TEMP_DIR/ios-bevy-renderer-target"
+# App and AUv3 are built in dependency order but have different
+# PROJECT_TEMP_DIR values. Use the configuration-wide directory so Cargo does
+# not compile the identical Rust crate once per Xcode target.
+export CARGO_TARGET_DIR="${CONFIGURATION_TEMP_DIR:-$PROJECT_TEMP_DIR/..}/ios-bevy-renderer-target"
 if [ -n "${RUSTFLAGS:-}" ]; then
   export RUSTFLAGS="$RUSTFLAGS -C force-unwind-tables=no"
 else
   export RUSTFLAGS="-C force-unwind-tables=no"
 fi
 
-if [ "${CONFIGURATION:-Debug}" = "Release" ]; then
-  CARGO_PROFILE_FLAG=--release
-  PROFILE_DIR=release
+# The linked iOS crate is part of every app/AUv3 process even while the native
+# presenter is unavailable. A Rust dev archive made each Xcode Debug binary
+# roughly 180 MiB and increased launch/dyld pressure without helping JavaScript
+# debugging. Keep normal Debug installs optimized; native Rust debugging remains
+# available as an explicit diagnostic launch.
+if [ "${CONFIGURATION:-Debug}" = "Debug" ] && [ "${ATOME_IOS_RUST_DEV:-0}" = "1" ]; then
+  CARGO_PROFILE_FLAG=
+  PROFILE_DIR=debug
 fi
 
-echo "[IOS_BEVY_BUILD] env sdk=${SDK_NAME:-unknown} archs=${ARCHS:-arm64} configuration=${CONFIGURATION:-Debug}"
+echo "[IOS_BEVY_BUILD] env sdk=${SDK_NAME:-unknown} archs=${ARCHS:-arm64} configuration=${CONFIGURATION:-Debug} rust_profile=$PROFILE_DIR"
 echo "[IOS_BEVY_BUILD] target_dir=$CARGO_TARGET_DIR"
 
 if [ ! -f "$CRATE_MANIFEST" ]; then

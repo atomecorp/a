@@ -58,7 +58,8 @@ window.AdoleAPI = {
     }
 };
 
-await import('../../eVe/intuition/tools/project_bootstrap.js');
+const { ensureProjectBootstrapReady } = await import('../../eVe/intuition/tools/project_bootstrap.js');
+const initialBootstrap = ensureProjectBootstrapReady();
 await new Promise((resolve) => setTimeout(resolve, 0));
 
 assert.equal(authWaiters.length, 1, 'initial bootstrap must wait for auth before dashboard entry');
@@ -72,8 +73,8 @@ window.dispatchEvent(new CustomEvent('squirrel:user-logged-in', {
     }
 }));
 authWaiters.shift()({ authenticated: false, userId: null, anonymous: false });
-
-await new Promise((resolve) => setTimeout(resolve, 25));
+await initialBootstrap;
+const authenticatedBootstrap = ensureProjectBootstrapReady();
 
 const projectView = document.createElement('div');
 projectView.id = 'project_view_project_existing';
@@ -94,7 +95,8 @@ window.__currentProject = {
     name: 'existing project'
 };
 
-await new Promise((resolve) => setTimeout(resolve, 180));
+await authenticatedBootstrap;
+await new Promise((resolve) => setTimeout(resolve, 25));
 
 assert.equal(
     document.getElementById('project_view_project_existing'),

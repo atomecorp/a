@@ -24,17 +24,18 @@ extension WebViewManager {
     // MARK: - WKNavigationDelegate
 
     public func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
+        WebViewManager.markBootMilestone("navigation_started")
         WebViewManager.markPageLoading()
     }
 
     public func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
     // Only run full initialization on the real app page (ignore placeholder page)
     guard let last = webView.url?.lastPathComponent, last == "index.html" else { return }
+    WebViewManager.markBootMilestone("navigation_finished")
     WebViewManager.markPageReady()
     log.debug("didFinish; frame=\(String(describing: webView.frame.debugDescription)) bounds=\(String(describing: webView.bounds.debugDescription))")
-        // Silent page loading for performance
-        WebViewManager.sendToJS("test", "creerDivRouge")
-        // Simplified initialization
+        // Keep post-navigation work limited to product initialization. The
+        // historical red-div smoke-test IPC must never run in an installed app.
         if FeatureFlags.startLocalHTTPServer {
             if let p = LocalHTTPServer.shared.port {
                 let js = """
@@ -69,31 +70,8 @@ extension WebViewManager {
 
     public func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
         WebViewManager.markPageLoading()
-        guard FeatureFlags.centralTerminationRetry else { return }
-        log.error("WebContent terminated; retryCount=\(self.terminateRetryCount)")
-        let backoff = pow(2.0, Double(terminateRetryCount)) * 0.2
-        DispatchQueue.main.asyncAfter(deadline: .now() + backoff) { [weak self, weak webView] in
-            guard let self = self, let wv = webView else { return }
-            if self.terminateRetryCount >= 1 {
-                self.log.error("Max retries reached; stopping reload attempts")
-                return
-            }
-            self.terminateRetryCount += 1
-            if wv.url != nil {
-                self.log.info("Retry reload() after termination; backoff=\(backoff)")
-                wv.reload()
-            } else {
-                if FeatureFlags.registerCustomScheme, let entry = URL(string: "atome:///src/index.html") {
-                    self.log.info("Retry load atome:///src/index.html after termination; backoff=\(backoff)")
-                    wv.load(URLRequest(url: entry))
-                } else if let fileURL = Bundle.main.url(forResource: "src/index", withExtension: "html") {
-                    self.log.info("Retry load file src/index.html after termination; backoff=\(backoff)")
-                    wv.loadFileURL(fileURL, allowingReadAccessTo: Bundle.main.bundleURL)
-                } else if let entry = URL(string: "atome:///src/index.html") {
-                    self.log.info("Retry fallback atome:///src/index.html after termination; backoff=\(backoff)")
-                    wv.load(URLRequest(url: entry))
-                }
-            }
-        }
+        self.terminateRetryCount += 1
+        log.error("WebContent terminated; automatic reload disabled; count=\(self.terminateRetryCount)")
+        WebViewManager.reportBootFailure(reason: "web_content_terminated")
     }
 }

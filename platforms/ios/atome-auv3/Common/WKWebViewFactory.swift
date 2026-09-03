@@ -37,12 +37,12 @@ final class WKWebViewFactory {
         webView.isOpaque = true
         webView.backgroundColor = .black
         webView.scrollView.backgroundColor = .black
-        // Debug builds only: without this, iOS 16.4+ exposes no remote inspector,
-        // so Safari Web Inspector and the XCUITest WEBVIEW context cannot reach
-        // the running page. Release builds stay non-inspectable.
-        #if DEBUG
-        if #available(iOS 16.4, *) { webView.isInspectable = true }
-        #endif
+        // WebKit inspection substantially increases JavaScriptCore's peak memory
+        // while parsing the application graph. Keep it available for a deliberate
+        // diagnostic launch without taxing every Xcode-installed Debug build.
+        if #available(iOS 16.4, *) {
+            webView.isInspectable = FeatureFlags.webInspectorEnabled
+        }
         log.info("Created WKWebView; mode=\(String(describing: mode)) frame=\(String(describing: frame.debugDescription))")
         return webView
     }

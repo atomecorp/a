@@ -1,22 +1,72 @@
 import Foundation
 import WebKit
+import OSLog
+import QuartzCore
 
 // WKURLSchemeHandler to serve local audio and static assets via custom scheme
 class AudioSchemeHandler: NSObject, WKURLSchemeHandler {
     private let fileManager = FileManager.default
     private let scheme = "atome"
     private lazy var bundleRoot: URL? = Bundle.main.resourceURL
+    private let ioQueue = DispatchQueue(label: "atome.scheme.io", qos: .userInitiated, attributes: .concurrent)
+    private let log = Logger(subsystem: "atome", category: "URLScheme")
+    private static let metricsQueue = DispatchQueue(label: "atome.scheme.metrics")
+    private static var requestCount = 0
+    private static var byteCount: Int64 = 0
+    private static var missingCount = 0
+    private static var recentPaths: [String] = []
+    private static let recentPathLimit = 64
+    private static var startedAt = CACurrentMediaTime()
+    private static let streamThreshold = 512 * 1024
+    private static let streamChunkSize = 256 * 1024
+
+    static func resetBootMetrics() {
+        metricsQueue.sync {
+            requestCount = 0
+            byteCount = 0
+            missingCount = 0
+            recentPaths.removeAll(keepingCapacity: true)
+            startedAt = CACurrentMediaTime()
+        }
+    }
+
+    static func bootMetrics() -> [String: Any] {
+        metricsQueue.sync {
+            [
+                "request_count": requestCount,
+                "byte_count": byteCount,
+                "missing_count": missingCount,
+                "elapsed_ms": Int((CACurrentMediaTime() - startedAt) * 1_000),
+                "recent_paths": recentPaths
+            ]
+        }
+    }
+
+    private static func recordRequest(path: String) {
+        metricsQueue.async {
+            requestCount += 1
+            recentPaths.append(path)
+            if recentPaths.count > recentPathLimit {
+                recentPaths.removeFirst(recentPaths.count - recentPathLimit)
+            }
+        }
+    }
+
+    private static func recordResponse(bytes: Int) {
+        metricsQueue.async { byteCount += Int64(bytes) }
+    }
+
+    private static func recordMissing() {
+        metricsQueue.async { missingCount += 1 }
+    }
     
     func webView(_ webView: WKWebView, start urlSchemeTask: WKURLSchemeTask) {
         guard let url = urlSchemeTask.request.url else { return }
-        let (path, host) = normalize(url: url)
-        print("[AudioSchemeHandler] start request url=\(url.absoluteString) sanitizedPath=\(path) range=\(urlSchemeTask.request.value(forHTTPHeaderField: "Range") ?? "<none>")")
-
-        if path == "/" || path == "/index.html" {
-            print("[AudioSchemeHandler] Serving index.html")
-            serveIndexHTML(task: urlSchemeTask)
-            return
-        }
+        let (requestedPath, host) = normalize(url: url)
+        let path = (requestedPath == "/" || requestedPath == "/index.html")
+            ? "/src/index.html"
+            : requestedPath
+        Self.recordRequest(path: path)
 
         if path == "/api/server-info" {
             serveServerInfo(task: urlSchemeTask)
@@ -46,31 +96,16 @@ class AudioSchemeHandler: NSObject, WKURLSchemeHandler {
             return
         }
         
-        if serveStatic(path: path, task: urlSchemeTask) { return }
-        print("[AudioSchemeHandler] 404 for path=\(path)")
-        respond404(task: urlSchemeTask)
+        ioQueue.async { [weak self] in
+            guard let self else { return }
+            if self.serveStatic(path: path, task: urlSchemeTask) { return }
+            self.log.error("Missing atome resource: \(path, privacy: .public)")
+            self.respond404(task: urlSchemeTask)
+        }
     }
     
     func webView(_ webView: WKWebView, stop urlSchemeTask: WKURLSchemeTask) {
         // No-op
-    }
-    
-    private func serveIndexHTML(task: WKURLSchemeTask) {
-        // Minimal HTML referencing audio via custom scheme
-                let html = """
-<!DOCTYPE html><html><head><meta name='viewport' content='width=device-width,initial-scale=1'>
-<title>AUv3 Audio Test</title></head><body>
-<h3>Custom Scheme Audio Test</h3>
-<!-- Using triple slash so path is /audio/Alive.m4a (empty host) -->
-<audio id='player' controls playsinline src='\(scheme):///audio/Alive.m4a'></audio>
-<script>
-document.getElementById('player').addEventListener('error', e => {
-    console.log('AUDIO ERROR', e, document.getElementById('player').error?.code);
-});
-</script>
-</body></html>
-"""
-        respondData(html.data(using: .utf8)!, mime: "text/html", task: task)
     }
     
     private func serveSandboxFile(relativePath rawPath: String, label: String, task: WKURLSchemeTask) {
@@ -91,18 +126,13 @@ document.getElementById('player').addEventListener('error', e => {
             respond404(task: task)
             return
         }
-        print("[AudioSchemeHandler] Found \(label) at path=\(locatedURL.path)")
-        
         do {
             let attr = try fileManager.attributesOfItem(atPath: locatedURL.path)
             let fileSize = (attr[.size] as? NSNumber)?.int64Value ?? 0
             let mime = mimeType(for: locatedURL.pathExtension.lowercased())
-            print("[AudioSchemeHandler] fileSize=\(fileSize) mime=\(mime)")
-            
             // Check for Range header
             if let rangeHeader = task.request.value(forHTTPHeaderField: "Range"),
                let range = parseRange(rangeHeader: rangeHeader, fileLength: fileSize) {
-                print("[AudioSchemeHandler] Handling Range request header=\(rangeHeader) resolved=\(range.lowerBound)-\(range.upperBound - 1)")
                 // Partial response
                 let handle = try FileHandle(forReadingFrom: locatedURL)
                 try handle.seek(toOffset: UInt64(range.lowerBound))
@@ -119,22 +149,12 @@ document.getElementById('player').addEventListener('error', e => {
                 task.didReceive(response)
                 task.didReceive(data)
                 task.didFinish()
+                Self.recordResponse(bytes: data.count)
                 return
             }
-            
-            // Full file
-            print("[AudioSchemeHandler] Serving full file (no Range)")
-            let data = try Data(contentsOf: locatedURL)
-            let response = HTTPURLResponse(url: task.request.url!, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: [
-                "Content-Type": mime,
-                "Content-Length": String(data.count),
-                "Accept-Ranges": "bytes"
-            ])!
-            task.didReceive(response)
-            task.didReceive(data)
-            task.didFinish()
+            try respondFile(locatedURL, fileSize: fileSize, mime: mime, immutable: false, task: task)
         } catch {
-            print("[AudioSchemeHandler] Error serving file: \(error)")
+            log.error("File response failed for \(label, privacy: .public): \(error.localizedDescription, privacy: .public)")
             respond404(task: task)
         }
     }
@@ -202,10 +222,11 @@ document.getElementById('player').addEventListener('error', e => {
         task.didReceive(response)
         task.didReceive(data)
         task.didFinish()
+        Self.recordResponse(bytes: data.count)
     }
     
     private func respond404(task: WKURLSchemeTask) {
-    print("[AudioSchemeHandler] Responding 404 for url=\(task.request.url?.absoluteString ?? "<nil>")")
+        Self.recordMissing()
         let data = Data("Not Found".utf8)
         let response = HTTPURLResponse(url: task.request.url!, statusCode: 404, httpVersion: "HTTP/1.1", headerFields: [
             "Content-Type": "text/plain",
@@ -221,12 +242,11 @@ document.getElementById('player').addEventListener('error', e => {
         var rel = path
         if rel.hasPrefix("/") { rel.removeFirst() }
         if rel.isEmpty { rel = "src/index.html" }
-        if rel.hasPrefix("eVe/") {
-            rel = "eVe/" + String(rel.dropFirst("eVe/".count))
-        } else if rel.hasPrefix("atome/") {
-            rel = "atome_open/" + String(rel.dropFirst("atome/".count))
-        } else if rel.hasPrefix("vendor/rubberband-wasm/") {
-            rel = "atome_open/vendor/rubberband-wasm/" + String(rel.dropFirst("vendor/rubberband-wasm/".count))
+        if rel.hasPrefix("atome/") {
+            rel = String(rel.dropFirst("atome/".count))
+        } else if rel.hasPrefix("chunks/") || rel.hasPrefix("vendor/") {
+            // Bundled ESM chunks and third-party runtime packages live at the
+            // deterministic runtime root.
         } else if rel == "server_config.json" || rel == "version.txt" {
             // Keep bundle-root files unprefixed.
         } else if !rel.hasPrefix("src/") && !rel.hasPrefix("eVe/") && !rel.hasPrefix("atome/") {
@@ -237,32 +257,71 @@ document.getElementById('player').addEventListener('error', e => {
             return false
         }
 
-        // Prefer sandboxed copy
-        let sandboxURL = SandboxAssetManager.shared.materializeAssetIfNeeded(relativePath: sanitized)
-
-        // Fallback to bundled asset only if copy unavailable
-        let finalURL: URL?
-        if let sandboxURL {
-            finalURL = sandboxURL
-        } else if let bundleRoot = bundleRoot {
-            finalURL = bundleRoot.appendingPathComponent(sanitized)
-        } else {
-            finalURL = nil
-        }
-
-        guard let resolvedURL = finalURL, fileManager.fileExists(atPath: resolvedURL.path) else {
+        guard let root = bundleRoot else { return false }
+        // New packages have one deterministic runtime root. The second candidate
+        // keeps development builds made before the packaging migration readable.
+        let candidates = [
+            root.appendingPathComponent("atome_runtime", isDirectory: true).appendingPathComponent(sanitized),
+            root.appendingPathComponent(sanitized)
+        ]
+        guard let resolvedURL = candidates.first(where: { fileManager.fileExists(atPath: $0.path) }) else {
             return false
         }
         do {
-            let data = try Data(contentsOf: resolvedURL)
+            let attrs = try fileManager.attributesOfItem(atPath: resolvedURL.path)
+            let fileSize = (attrs[.size] as? NSNumber)?.int64Value ?? 0
             let ext = resolvedURL.pathExtension.lowercased()
             let mime = mimeType(for: ext)
-            respondData(data, mime: mime, task: task)
+            try respondFile(resolvedURL, fileSize: fileSize, mime: mime, immutable: true, task: task)
             return true
         } catch {
-            print("[AudioSchemeHandler] Static serve error for \(resolvedURL.path): \(error)")
+            log.error("Static response failed: \(error.localizedDescription, privacy: .public)")
             return false
         }
+    }
+
+    private func respondFile(_ fileURL: URL,
+                             fileSize: Int64,
+                             mime: String,
+                             immutable: Bool,
+                             task: WKURLSchemeTask) throws {
+        var headers = [
+            "Content-Type": mime,
+            "Content-Length": String(fileSize),
+            "Accept-Ranges": "bytes"
+        ]
+        if immutable { headers["Cache-Control"] = "public, max-age=31536000, immutable" }
+        let response = HTTPURLResponse(
+            url: task.request.url!,
+            statusCode: 200,
+            httpVersion: "HTTP/1.1",
+            headerFields: headers
+        )!
+        task.didReceive(response)
+
+        // WebAssembly.instantiateStreaming expects one coherent module body.
+        // Feeding WKWebView dozens of didReceive fragments for the 13 MiB Bevy
+        // module reproducibly terminated WebContent on physical iOS. Mapping it
+        // keeps native copying bounded while media files still use true chunks.
+        if fileSize <= Int64(Self.streamThreshold) || mime == "application/wasm" {
+            let data = try Data(contentsOf: fileURL, options: [.mappedIfSafe])
+            task.didReceive(data)
+            task.didFinish()
+            Self.recordResponse(bytes: data.count)
+            return
+        }
+
+        let handle = try FileHandle(forReadingFrom: fileURL)
+        defer { try? handle.close() }
+        var sent = 0
+        while true {
+            let data = try handle.read(upToCount: Self.streamChunkSize) ?? Data()
+            if data.isEmpty { break }
+            task.didReceive(data)
+            sent += data.count
+        }
+        task.didFinish()
+        Self.recordResponse(bytes: sent)
     }
 
     private func serveServerInfo(task: WKURLSchemeTask) {

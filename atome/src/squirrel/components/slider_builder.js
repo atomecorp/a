@@ -93,15 +93,15 @@ define('slider-tick', {
 const createSlider = (config = {}) => {
   const {
     type = 'horizontal',
-    min = 0,
-    max = 100,
+    min: initialMin = 0,
+    max: initialMax = 100,
     value = 50,
     step = 1,
     onChange,
     onInput,
     skin = {},
     id,
-    disabled = false,
+    disabled: initiallyDisabled = false,
     showLabel = true,
     showTicks = false,
     ticks = [],
@@ -113,6 +113,9 @@ const createSlider = (config = {}) => {
     dragMax = null,  // Zone de drag maximum (null = utilise max)
     ...otherProps
   } = config;
+  let min = initialMin;
+  let max = initialMax;
+  let disabled = initiallyDisabled;
 
   // Génération d'ID unique si non fourni
   const sliderId = id || makeId('slider');

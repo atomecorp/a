@@ -9,7 +9,7 @@ export const createLocalTtsRuntime = ({
     env = globalThis,
     audio = getAudioPlaybackAPI(env),
     frameBus = createTtsFrameBus(),
-    workerFactory = () => new env.Worker(new URL('./local_tts_worker.js', import.meta.url), { type: 'module' }),
+    workerFactory = () => new env.Worker('/src/squirrel/voice/local_tts_worker.js', { type: 'module' }),
     now = () => env.performance?.now?.() ?? Date.now(),
     setTimer = (callback, delay) => env.setInterval(callback, delay),
     clearTimer = (id) => env.clearInterval(id),

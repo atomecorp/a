@@ -1,9 +1,9 @@
 import * as ort from '../../assets/vendor/onnxruntime-web/ort.wasm.min.mjs';
 import { encodeFrenchPhonemes } from './french_phoneme_encoder.js';
 
-const MODEL_URL = new URL('../../assets/voice/fr_FR-siwis-medium/fr_FR-siwis-medium.onnx', import.meta.url).href;
-const CONFIG_URL = new URL('../../assets/voice/fr_FR-siwis-medium/fr_FR-siwis-medium.onnx.json', import.meta.url).href;
-const WASM_ROOT = new URL('../../assets/vendor/onnxruntime-web/', import.meta.url).href;
+const MODEL_URL = '/src/assets/voice/fr_FR-siwis-medium/fr_FR-siwis-medium.onnx';
+const CONFIG_URL = '/src/assets/voice/fr_FR-siwis-medium/fr_FR-siwis-medium.onnx.json';
+const WASM_ROOT = '/src/assets/vendor/onnxruntime-web/';
 
 let configPromise;
 let modelPromise;

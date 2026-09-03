@@ -9,16 +9,16 @@ BUILD_OUT_DIR="$PROJECT_ROOT/temp/bevy_renderer_wasm_pack"
 
 echo "[build] Building squirrel-bevy-renderer..."
 
-if ! command -v wasm-pack &> /dev/null; then
-    echo "[build] wasm-pack not found"
-    exit 1
-fi
-
 cd "$SCRIPT_DIR"
 
 rm -rf "$BUILD_OUT_DIR"
 mkdir -p "$BUILD_OUT_DIR" "$OUT_DIR"
 trap 'rm -rf "$BUILD_OUT_DIR"' EXIT
+
+if ! command -v wasm-pack >/dev/null 2>&1; then
+    echo "[build] wasm-pack not found"
+    exit 1
+fi
 
 wasm-pack build \
     --target web \

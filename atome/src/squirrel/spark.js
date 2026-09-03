@@ -100,21 +100,12 @@ const SPARK_BOOT_WAVES = [
     { id: 'atome.atome', path: './atome/atome.js' },
     { id: 'atome.mcp', path: './atome/mcp.js', critical: true }
   ],
-  // default_tools registers into the gateway; the catalog refresh reads both.
-  [
-    { id: 'ai.agent_gateway', path: './ai/agent_gateway.js', critical: true },
-    { id: 'ai.default_tools', path: './ai/default_tools.js', critical: true },
-    { id: 'ai.model_catalog_refresh', path: './ai/model_catalog_refresh.js', critical: true }
-  ],
-  // Independent domains: no import-time reads between them.
+  // Authentication and conditions are required before a workspace can be
+  // presented. Feature-specific integrations are loaded after that first
+  // interactive frame below.
   [
     { id: 'security.bootstrap', path: './security/bootstrap.js' },
-    { id: 'conditions.bootstrap', path: './conditions/bootstrap.js' },
-    { id: 'bank.bootstrap', path: './bank/bootstrap.js' },
-    { id: 'calendar.bootstrap', path: './calendar/bootstrap.js' },
-    { id: 'contacts.bootstrap', path: './contacts/bootstrap.js' },
-    { id: 'mail.bootstrap', path: './mail/bootstrap.js' },
-    { id: 'voice.bootstrap', path: './voice/bootstrap.js' }
+    { id: 'conditions.bootstrap', path: './conditions/bootstrap.js' }
   ],
   // apis.loader reads what essentials/utils put on window.
   [
@@ -171,6 +162,20 @@ const SPARK_COMPONENT_MODULES = [
 
 const kickstartModule = [{ id: 'kickstart', path: './kickstart.js' }];
 const applicationEntryModule = [{ id: 'application.index', path: '../application/index.js' }];
+const OPTIONAL_BOOT_WAVES = [
+  [
+    { id: 'ai.agent_gateway', path: './ai/agent_gateway.js' },
+    { id: 'ai.default_tools', path: './ai/default_tools.js' },
+    { id: 'ai.model_catalog_refresh', path: './ai/model_catalog_refresh.js' }
+  ],
+  [
+    { id: 'bank.bootstrap', path: './bank/bootstrap.js' },
+    { id: 'calendar.bootstrap', path: './calendar/bootstrap.js' },
+    { id: 'contacts.bootstrap', path: './contacts/bootstrap.js' },
+    { id: 'mail.bootstrap', path: './mail/bootstrap.js' },
+    { id: 'voice.bootstrap', path: './voice/bootstrap.js' }
+  ]
+];
 
 const emitSparkPerf = (stage, data = {}) => {
   perfLog(`[Perf] spark.${String(stage || 'stage')}`, data);
@@ -237,6 +242,26 @@ const collectComponentStatics = (loadedModules) => {
   return statics;
 };
 
+let optionalIntegrationsPromise = null;
+const loadOptionalIntegrations = () => optionalIntegrationsPromise ||= (async () => {
+  const loaded = {};
+  for (const wave of OPTIONAL_BOOT_WAVES) Object.assign(loaded, await loadBootWave(wave));
+  loaded['ai.model_catalog_refresh']?.bootstrapAiModelCatalogRefresh?.({ env: globalThis?.window || globalThis });
+  emitSparkPerf('optional_integrations_ready', { ok: true });
+  return loaded;
+})().catch((error) => {
+  emitSparkPerf('optional_integrations_ready', { ok: false, error: String(error?.message || error || '') });
+  return {};
+});
+
+const scheduleOptionalIntegrations = () => {
+  if (typeof window === 'undefined') return;
+  // AI, bank, calendar, contacts, mail and voice are product-owned optional
+  // domains. Keep their canonical loader available to the opening route, but
+  // never start the whole set merely because the first frame was presented.
+  window.__atomeLoadOptionalIntegrations = loadOptionalIntegrations;
+};
+
 const bootstrapSpark = async () => {
   const loadedModules = {};
   for (const wave of SPARK_BOOT_WAVES) {
@@ -244,13 +269,10 @@ const bootstrapSpark = async () => {
   }
   Object.assign(loadedModules, await loadBootWave(SPARK_COMPONENT_MODULES));
 
-  const { bootstrapAiModelCatalogRefresh } = loadedModules['ai.model_catalog_refresh'];
   const { AdoleAPI } = loadedModules['apis.adole_apis'];
   const { loadServerConfigOnce } = loadedModules['apis.loadServerConfig'];
   const { installSyncEngine } = loadedModules['apis.sync_engine'];
   const { $, define, observeMutations } = loadedModules['squirrel.core'];
-
-  bootstrapAiModelCatalogRefresh({ env: globalThis?.window || globalThis });
 
   const squirrelComponentRegistry = buildComponentRegistry(loadedModules);
   squirrelComponentRegistry.DragDrop = loadedModules['apis.dragdrop'].default;
@@ -305,6 +327,7 @@ const bootstrapSpark = async () => {
     optionalIntegrationMs: 0,
     sparkBootstrapStartMs
   });
+  scheduleOptionalIntegrations();
 };
 
 bootstrapSpark().catch((error) => {

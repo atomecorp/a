@@ -10,8 +10,13 @@ import WebKit
 
 final class FullscreenWebViewController: UIViewController {
     private(set) var webView: WKWebView!
+    private let bootOverlay = UIView()
+    private let bootStatusLabel = UILabel()
+    private let bootRetryButton = UIButton(type: .system)
+    private var bootTimeoutWorkItem: DispatchWorkItem?
 
     override func loadView() {
+        WebViewManager.resetBootTelemetry()
         let root = UIView(frame: UIScreen.main.bounds)
         root.backgroundColor = .black
         root.isOpaque = true
@@ -38,6 +43,7 @@ final class FullscreenWebViewController: UIViewController {
         userContentController.addUserScript(preScript)
         config.setValue(false, forKey: "drawsBackground")
         webView = WKWebView(frame: root.bounds, configuration: config)
+        WebViewManager.markBootMilestone("webview_created")
         // Same rule as the AUv3 factory: no native long-press link preview, the
         // product owns every context menu.
         webView.allowsLinkPreview = false
@@ -56,25 +62,15 @@ final class FullscreenWebViewController: UIViewController {
             webView.leadingAnchor.constraint(equalTo: guide.leadingAnchor),
             webView.trailingAnchor.constraint(equalTo: guide.trailingAnchor)
         ])
-
-        let svgLogo = """
-        <svg id=atome width=160 height=160 viewBox='0 0 237 237' xmlns='http://www.w3.org/2000/svg'>
-            <g transform='matrix(0.0267056 0 0 0.0267056 18.6376 20.2376)'>
-                <g transform='matrix(4.16667 0 0 4.16667 -377.307 105.632)'>
-                    <path d='M629.175,81.832C740.508,190.188 742.921,368.28 634.565,479.613C526.209,590.945 348.116,593.358 236.784,485.002C125.451,376.646 123.038,198.554 231.394,87.221C339.75,-24.111 517.843,-26.524 629.175,81.832Z' fill='#C90C7D'/>
-                </g>
-                <g transform='matrix(4.16667 0 0 4.16667 -377.307 105.632)'>
-                    <path d='M1679.33,410.731C1503.98,413.882 1402.52,565.418 1402.72,691.803C1402.91,818.107 1486.13,846.234 1498.35,1056.78C1501.76,1313.32 1173.12,1490.47 987.025,1492.89C257.861,1502.39 73.275,904.061 71.639,735.381C70.841,653.675 1.164,647.648 2.788,737.449C12.787,1291.4 456.109,1712.79 989.247,1706.24C1570.67,1699.09 1982.31,1234 1965.76,683.236C1961.3,534.95 1835.31,407.931 1679.33,410.731Z' fill='#C90C7D'/>
-                </g>
-            </g>
-        </svg>
-        """.replacingOccurrences(of: "\n", with: "")
-        let placeholder = "<!doctype html><html style='background:#000;height:100%'><head><meta name=viewport content='initial-scale=1,viewport-fit=cover'><style>body{margin:0;display:flex;align-items:center;justify-content:center;background:#000;} .fade-in{opacity:0;animation:f .6s ease-out forwards .05s}@keyframes f{to{opacity:1}}</style></head><body>" + svgLogo + "</body></html>"
-        webView.loadHTMLString(placeholder, baseURL: nil)
+        installBootOverlay(in: root)
     }
 
     override func viewDidLoad() {
         super.viewDidLoad()
+        WebViewManager.installBootPresentationHandlers(
+            onReady: { [weak self] _ in self?.hideBootOverlay() },
+            onFailure: { [weak self] reason, _ in self?.showBootFailure(reason: reason) }
+        )
         WebViewManager.setNativeInvokeHandler { command, payload, completion in
             if AppNativeMediaCaptureController.canHandle(command: command) {
                 AppNativeMediaCaptureController.shared.handle(
@@ -109,6 +105,7 @@ final class FullscreenWebViewController: UIViewController {
         DispatchQueue.main.async {
             WebViewManager.setupWebView(for: self.webView)
         }
+        armBootTimeout()
         injectFullscreenFixJS()
     }
 
@@ -133,6 +130,89 @@ final class FullscreenWebViewController: UIViewController {
             label: "fullscreenFix",
             targetWebView: webView
         )
+    }
+
+    private func installBootOverlay(in root: UIView) {
+        bootOverlay.translatesAutoresizingMaskIntoConstraints = false
+        bootOverlay.backgroundColor = .black
+        bootOverlay.isOpaque = true
+
+        let logo = UIImageView(image: UIImage(named: "LaunchLogo"))
+        logo.translatesAutoresizingMaskIntoConstraints = false
+        logo.contentMode = .scaleAspectFit
+
+        bootStatusLabel.translatesAutoresizingMaskIntoConstraints = false
+        bootStatusLabel.text = "Ouverture…"
+        bootStatusLabel.textColor = UIColor(white: 0.65, alpha: 1)
+        bootStatusLabel.font = .systemFont(ofSize: 13, weight: .medium)
+        bootStatusLabel.textAlignment = .center
+        bootStatusLabel.numberOfLines = 0
+
+        bootRetryButton.translatesAutoresizingMaskIntoConstraints = false
+        bootRetryButton.setTitle("Réessayer", for: .normal)
+        bootRetryButton.tintColor = UIColor(red: 0.79, green: 0.05, blue: 0.49, alpha: 1)
+        bootRetryButton.isHidden = true
+        bootRetryButton.addTarget(self, action: #selector(retryBoot), for: .touchUpInside)
+
+        root.addSubview(bootOverlay)
+        bootOverlay.addSubview(logo)
+        bootOverlay.addSubview(bootStatusLabel)
+        bootOverlay.addSubview(bootRetryButton)
+        NSLayoutConstraint.activate([
+            bootOverlay.topAnchor.constraint(equalTo: root.topAnchor),
+            bootOverlay.bottomAnchor.constraint(equalTo: root.bottomAnchor),
+            bootOverlay.leadingAnchor.constraint(equalTo: root.leadingAnchor),
+            bootOverlay.trailingAnchor.constraint(equalTo: root.trailingAnchor),
+            logo.centerXAnchor.constraint(equalTo: bootOverlay.centerXAnchor),
+            logo.centerYAnchor.constraint(equalTo: bootOverlay.centerYAnchor, constant: -30),
+            logo.widthAnchor.constraint(equalToConstant: 160),
+            logo.heightAnchor.constraint(equalToConstant: 160),
+            bootStatusLabel.topAnchor.constraint(equalTo: logo.bottomAnchor, constant: 18),
+            bootStatusLabel.leadingAnchor.constraint(greaterThanOrEqualTo: bootOverlay.leadingAnchor, constant: 24),
+            bootStatusLabel.trailingAnchor.constraint(lessThanOrEqualTo: bootOverlay.trailingAnchor, constant: -24),
+            bootStatusLabel.centerXAnchor.constraint(equalTo: bootOverlay.centerXAnchor),
+            bootRetryButton.topAnchor.constraint(equalTo: bootStatusLabel.bottomAnchor, constant: 14),
+            bootRetryButton.centerXAnchor.constraint(equalTo: bootOverlay.centerXAnchor)
+        ])
+    }
+
+    private func armBootTimeout() {
+        bootTimeoutWorkItem?.cancel()
+        let work = DispatchWorkItem { [weak self] in
+            guard self != nil else { return }
+            WebViewManager.reportBootFailure(reason: "boot_timeout")
+        }
+        bootTimeoutWorkItem = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 8, execute: work)
+    }
+
+    private func hideBootOverlay() {
+        bootTimeoutWorkItem?.cancel()
+        bootTimeoutWorkItem = nil
+        guard !bootOverlay.isHidden else { return }
+        UIView.animate(withDuration: 0.16, delay: 0, options: [.curveEaseOut]) {
+            self.bootOverlay.alpha = 0
+        } completion: { _ in
+            self.bootOverlay.isHidden = true
+        }
+    }
+
+    private func showBootFailure(reason: String) {
+        bootTimeoutWorkItem?.cancel()
+        bootOverlay.layer.removeAllAnimations()
+        bootOverlay.alpha = 1
+        bootOverlay.isHidden = false
+        bootStatusLabel.text = reason == "web_content_terminated"
+            ? "Le moteur d’affichage s’est arrêté."
+            : "Le démarrage prend trop de temps."
+        bootRetryButton.isHidden = false
+    }
+
+    @objc private func retryBoot() {
+        bootStatusLabel.text = "Nouvelle tentative…"
+        bootRetryButton.isHidden = true
+        armBootTimeout()
+        WebViewManager.retryMainPageAfterUserRequest()
     }
 }
 

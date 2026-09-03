@@ -44,10 +44,12 @@ window.Atome = {
 
 const rendered = [];
 let restoreCount = 0;
+let remoteListCount = 0;
+const perfEvents = [];
 const runtime = createToolGenesisProjectLoadRuntime({
     clearProjectLoadInFlightIfCurrent: () => {},
     dispatchProjectRenderDone: () => {},
-    emitPerfEvent: () => {},
+    emitPerfEvent: (name, detail) => { perfEvents.push({ name, detail }); },
     ensureProjectLayer: (id) => {
         let layer = document.getElementById(`project_view_${id}`);
         if (!layer) {
@@ -60,14 +62,17 @@ const runtime = createToolGenesisProjectLoadRuntime({
     },
     fetchSharedOverrideAtomes: async () => [],
     filterAtomesByOwner: (records) => records,
-    getAdoleApi: () => ({ atomes: { list: async () => ({ atomes: [{
-        id: 'remote_atom',
-        atome_id: 'remote_atom',
-        type: 'shape',
-        project_id: projectId,
-        owner_id: userId,
-        properties: { kind: 'shape', width: 10, height: 10 }
-    }] }) } }),
+    getAdoleApi: () => ({ atomes: { list: async () => {
+        remoteListCount += 1;
+        return { atomes: [{
+            id: 'remote_atom',
+            atome_id: 'remote_atom',
+            type: 'shape',
+            project_id: projectId,
+            owner_id: userId,
+            properties: { kind: 'shape', width: 10, height: 10 }
+        }] };
+    } } }),
     getProjectLoadInFlight: () => null,
     getRecentProjectCache: () => null,
     getSharedProjectOverride: () => null,
@@ -103,5 +108,79 @@ assert.deepEqual(loaded.map((record) => record.id || record.atome_id), ['remote_
 assert.deepEqual(rendered.at(-1).map((record) => record.id || record.atome_id), ['remote_atom', 'visible_atom']);
 assert.equal(rendered.length, 2, 'local quick paint and authoritative merged paint are both exercised');
 assert.equal(restoreCount, 1, 'local and final project paints must restore the project view exactly once');
+
+const remoteCountBeforeStaleFirst = remoteListCount;
+rendered.length = 0;
+const locallyPresented = await runtime.loadProjectAtomes(projectId, { force: true, staleFirst: true });
+assert.deepEqual(locallyPresented.map((record) => record.id || record.atome_id), ['visible_atom']);
+assert.equal(rendered.length, 1, 'stale-first boot must project the canonical local scene only once before presentation');
+assert.equal(remoteListCount, remoteCountBeforeStaleFirst, 'stale-first boot must not start remote synchronization before presentation');
+assert.equal(
+    perfEvents.some(({ name, detail }) => name === 'atomes.load_project' && detail?.mode === 'stale_first_local'),
+    true,
+    'stale-first local completion must be separately observable'
+);
+
+const raceRenders = [];
+const racePerfEvents = [];
+window.Atome = {
+    listStateCurrent: () => new Promise((resolve) => setTimeout(() => resolve([{
+        id: 'late_local_atom',
+        atome_id: 'late_local_atom',
+        type: 'shape',
+        project_id: projectId,
+        owner_id: userId,
+        properties: { kind: 'shape', width: 20, height: 20 }
+    }]), 105))
+};
+const raceRuntime = createToolGenesisProjectLoadRuntime({
+    clearProjectLoadInFlightIfCurrent: () => {},
+    dispatchProjectRenderDone: () => {},
+    emitPerfEvent: (name, detail) => { racePerfEvents.push({ name, detail }); },
+    ensureProjectLayer: () => view,
+    fetchSharedOverrideAtomes: async () => [],
+    filterAtomesByOwner: (records) => records,
+    getAdoleApi: () => ({ atomes: { list: async () => ({ atomes: [{
+        id: 'authoritative_atom',
+        atome_id: 'authoritative_atom',
+        type: 'shape',
+        project_id: projectId,
+        owner_id: userId,
+        properties: { kind: 'shape', width: 10, height: 10 }
+    }] }) } }),
+    getProjectLoadInFlight: () => null,
+    getRecentProjectCache: () => null,
+    getSharedProjectOverride: () => null,
+    isAnonymousWorkspace: () => true,
+    isRecordDeleted: () => false,
+    isRenderableAtome: () => true,
+    markProjectLoadCompleted: () => {},
+    perfElapsedMs: () => 1,
+    perfLog: () => {},
+    perfNowMs: () => 0,
+    persistenceDiagLog: () => {},
+    pickAuthoritativeAtomes: (result) => result?.atomes || [],
+    rememberProjectAtomes: () => {},
+    renderProjectScene: async ({ records }) => {
+        raceRenders.push(records.map((record) => record.id || record.atome_id));
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        return { ok: true };
+    },
+    resolveAtomeProperties: (record) => record?.properties || {},
+    resolveCurrentUserId: () => userId,
+    resolveToolShortcutRole: () => false,
+    setProjectLoadInFlight: () => {},
+    summarizePersistenceRecords: () => [],
+    prefetchViewMode: () => Promise.resolve('list'),
+    restoreViewModeAfterLoad: () => {}
+});
+
+await raceRuntime.loadProjectAtomes(projectId, { force: true, staleFirst: false });
+assert.deepEqual(raceRenders, [['authoritative_atom']], 'late local state must not start a redundant render after the authoritative render begins');
+assert.equal(
+    racePerfEvents.some(({ name, detail }) => name === 'atomes.load_project' && detail?.skippedLateLocalRender === true),
+    true,
+    'the skipped late-local render must remain observable'
+);
 
 console.log('project_load_filter_contract.test: PASS');

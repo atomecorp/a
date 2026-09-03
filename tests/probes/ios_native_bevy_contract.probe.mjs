@@ -4,6 +4,9 @@ import { test } from 'node:test';
 
 const controllerSource = await readFile(new URL('../../platforms/ios/atome-auv3/Common/AppNativeBevyRendererController.swift', import.meta.url), 'utf8');
 const webViewManagerSource = await readFile(new URL('../../platforms/ios/atome-auv3/Common/WebViewManager.swift', import.meta.url), 'utf8');
+const webViewFactorySource = await readFile(new URL('../../platforms/ios/atome-auv3/Common/WKWebViewFactory.swift', import.meta.url), 'utf8');
+const webViewScriptMessagesSource = await readFile(new URL('../../platforms/ios/atome-auv3/Common/WebViewManagerScriptMessages.swift', import.meta.url), 'utf8');
+const webViewNavigationSource = await readFile(new URL('../../platforms/ios/atome-auv3/Common/WebViewManagerNavigation.swift', import.meta.url), 'utf8');
 const featureFlagsSource = await readFile(new URL('../../platforms/ios/atome-auv3/Common/FeatureFlags.swift', import.meta.url), 'utf8');
 const appViewControllerSource = await readFile(new URL('../../platforms/ios/atome-auv3/application/ViewController.swift', import.meta.url), 'utf8');
 const auv3ControllerSource = await readFile(new URL('../../platforms/ios/atome-auv3/auv3/AudioUnitViewController.swift', import.meta.url), 'utf8');
@@ -18,13 +21,16 @@ const iosBevyBuildScriptSource = await readFile(new URL('../../platforms/ios/bui
 const iosBevyHeaderSource = await readFile(new URL('../../platforms/ios/atome-auv3/Common/AtomeIosBevyRendererBridge.h', import.meta.url), 'utf8');
 const bridgingHeaderSource = await readFile(new URL('../../platforms/ios/atome-auv3/Common/AtomeAUv3BridgingHeader.h', import.meta.url), 'utf8');
 const audioSchemeHandlerSource = await readFile(new URL('../../platforms/ios/atome-auv3/Common/AudioSchemeHandler.swift', import.meta.url), 'utf8');
+const midiControllerSource = await readFile(new URL('../../platforms/ios/atome-auv3/Common/MIDIController.swift', import.meta.url), 'utf8');
+const iosPackagerSource = await readFile(new URL('../../platforms/ios/package_ios_runtime.mjs', import.meta.url), 'utf8');
+const webBevyBuildScriptSource = await readFile(new URL('../../platforms/web/bevy-renderer/build.sh', import.meta.url), 'utf8');
 const nativeRuntime = await import('../../eVe/domains/rendering/bevy_native_renderer_runtime.js');
 
-test('iOS development builds enable Panel Lab before eVe boot while release builds remain gated', () => {
+test('iOS Panel Lab remains explicit opt-in even in development builds', () => {
     assert.match(
         featureFlagsSource,
-        /#if DEBUG\s+static let panelLabEnabled: Bool = true\s+#else\s+static let panelLabEnabled: Bool = false\s+#endif/,
-        'Panel Lab must be compiled on only for iOS Debug configurations'
+        /#if DEBUG\s+static var panelLabEnabled:[\s\S]*?-AtomePanelLab[\s\S]*?ATOME_IOS_PANEL_LAB[\s\S]*?#else\s+static let panelLabEnabled: Bool = false/,
+        'Panel Lab must require an explicit iOS Debug argument or environment opt-in'
     );
     assert.ok(
         webViewManagerSource.includes('let panelLabBootstrap = FeatureFlags.panelLabEnabled'),
@@ -33,6 +39,11 @@ test('iOS development builds enable Panel Lab before eVe boot while release buil
     assert.ok(
         webViewManagerSource.includes('window.__EVE_PANEL_LAB__ = true;'),
         'Debug iOS WebViews must expose the existing internal Panel Lab gate'
+    );
+    assert.equal(
+        webViewNavigationSource.includes('creerDivRouge'),
+        false,
+        'installed iOS builds must not dispatch the historical red-div smoke-test IPC'
     );
     assert.ok(
         webViewManagerSource.indexOf('\\(panelLabBootstrap)')
@@ -149,6 +160,20 @@ test('iOS links a Rust staticlib wrapper around the shared Bevy core', () => {
     assert.ok(
         iosBevyBuildScriptSource.includes('-C force-unwind-tables=no'),
         'iOS Rust staticlib must avoid forced unwind tables that overflow ld compact unwind encoding'
+    );
+    assert.match(
+        iosBevyBuildScriptSource,
+        /PROFILE_DIR=release[\s\S]*?CARGO_PROFILE_FLAG=--release/,
+        'normal Xcode installs must link the optimized Rust archive'
+    );
+    assert.match(
+        iosBevyBuildScriptSource,
+        /ATOME_IOS_RUST_DEV[\s\S]*?PROFILE_DIR=debug/,
+        'native Rust dev symbols must require an explicit diagnostic opt-in'
+    );
+    assert.ok(
+        iosBevyBuildScriptSource.includes('${CONFIGURATION_TEMP_DIR:-$PROJECT_TEMP_DIR/..}/ios-bevy-renderer-target'),
+        'app and AUv3 must share one Cargo target directory per Xcode configuration'
     );
     assert.ok(
         projectSource.includes('-latome_ios_bevy_renderer'),
@@ -340,8 +365,59 @@ test('iOS resource packaging excludes build artifacts before copying', () => {
         false,
         'iOS packaging must not copy Rust target directories into the app before pruning them'
     );
+    assert.ok(projectSource.includes('package_ios_runtime.mjs'), 'both iOS targets must use the canonical runtime packager');
     assert.ok(
-        projectSource.includes('rsync -a --exclude target --exclude .git'),
-        'iOS app and AUv3 packaging must exclude build and repository metadata at the copy boundary'
+        projectSource.includes('PATH=\\"/opt/homebrew/bin:/usr/local/bin:$PATH\\"'),
+        'runtime packaging must resolve Homebrew Node when Xcode is launched outside an interactive shell'
     );
+    assert.ok(
+        projectSource.includes('Package Atome Runtime requires Node.js'),
+        'a missing Node binary must produce an actionable Xcode error instead of a silent PhaseScriptExecution failure'
+    );
+    assert.ok(
+        projectSource.includes('command -v node || true'),
+        'Node discovery must not terminate the packaging phase before its explicit diagnostic'
+    );
+    assert.equal(projectSource.includes('src in Resources'), false, 'raw src must not be copied beside the packaged runtime');
+    assert.equal(projectSource.includes('eVe in Resources'), false, 'raw eVe must not be copied beside the packaged runtime');
+    assert.match(iosPackagerSource, /SKIP_DIRS[\s\S]*?'\.git'[\s\S]*?'target'/, 'packager must exclude repository and Rust build metadata');
+    assert.ok(iosPackagerSource.includes("'/chunks/optional-integrations.js'"), 'optional domains must remain in a deferred ESM artifact');
+    assert.ok(iosPackagerSource.includes("'/chunks/eve/eve-application.js'"), 'the application entry must delegate to the bounded eVe critical graph');
+    assert.equal(iosPackagerSource.includes('bevy.early_wasm_start'), false, 'iOS must not retain a preloaded WASM module while the application graph is parsed');
+    assert.equal(iosPackagerSource.includes('eve-stage-'), false, 'the critical graph must not duplicate shared dependencies across independent stage bundles');
+    assert.ok(iosPackagerSource.includes('deferDynamicImportsPlugin'), 'dynamic feature owners must stay outside the presentation bundle');
+    assert.match(iosPackagerSource, /outdir:\s*path\.join\(outputRoot, 'chunks\/deferred'\)[\s\S]*?chunkNames:\s*'shared\/\[name\]-\[hash\]'/, 'deferred eVe owners must use factorized ESM chunks');
+    assert.ok(iosPackagerSource.includes('EVE_CRITICAL_MODULE_IDS'), 'the packaged eVe graph must explicitly own its presentation-critical boundary');
+    assert.match(iosPackagerSource, /criticalGroupBuild[\s\S]*?splitting:\s*true/, 'critical eVe owners must share factorized ESM chunks');
+    assert.ok(iosPackagerSource.includes("chunkNames: 'critical-shared-[hash]'"), 'the critical graph must factor shared code once');
+    assert.ok(
+        iosPackagerSource.includes('reuseCriticalEveModulesPlugin'),
+        'deferred actions must reuse critical eVe owners instead of creating competing runtime instances'
+    );
+    assert.ok(
+        iosPackagerSource.includes('critical-workspace-surface'),
+        'the shared workspace owner must have one stable packaged entry for deferred callers'
+    );
+    assert.ok(iosPackagerSource.includes('minifyIdentifiers: true'), 'critical Debug packaging must reduce WebKit parser memory, not only whitespace');
+    assert.ok(
+        iosPackagerSource.includes('IOS_WEB_RENDERER_MAX_BYTES'),
+        'iOS packaging must reject a renderer artifact large enough to restore the WebContent memory regression'
+    );
+    assert.equal(
+        webBevyBuildScriptSource.includes('virtual-function-elimination'),
+        false,
+        'the production renderer build must reject the VFE artifact that fails on physical iOS'
+    );
+    assert.ok(iosPackagerSource.includes("'src/wasm/renderer_version.mjs'"), 'the WebGPU renderer version contract must remain available through /wasm');
+    assert.ok(webViewScriptMessagesSource.includes('bootPresentationReady'), 'the native bridge must consume versioned presentation readiness');
+    assert.ok(webViewScriptMessagesSource.includes('bootMilestone'), 'the native bridge must consume versioned JavaScript boot milestones');
+    assert.ok(webViewScriptMessagesSource.includes('bootFailure'), 'the native bridge must consume explicit terminal JavaScript boot failures');
+    assert.ok(appViewControllerSource.includes('bootRetryButton'), 'terminal boot failure must expose an explicit native retry action');
+    assert.match(featureFlagsSource, /webInspectorEnabled[\s\S]*?-AtomeWebInspector[\s\S]*?ATOME_IOS_WEB_INSPECTOR/, 'Web Inspector must be an explicit Debug diagnostic opt-in');
+    assert.ok(webViewFactorySource.includes('FeatureFlags.webInspectorEnabled'), 'WKWebView construction must consume the explicit inspector flag');
+    assert.match(featureFlagsSource, /textTraceEnabled[\s\S]*?-AtomeTextTrace[\s\S]*?ATOME_IOS_TEXT_TRACE/, 'verbose text tracing must be an explicit Debug diagnostic opt-in');
+    assert.ok(webViewManagerSource.includes('if FeatureFlags.textTraceEnabled'), 'document-start text tracing must consume the explicit diagnostic flag');
+    assert.equal(audioSchemeHandlerSource.includes('AUv3 Audio Test'), false, 'the production atome root must not expose the historical audio-test page');
+    assert.match(audioSchemeHandlerSource, /requestedPath == "\/"[\s\S]*?"\/src\/index\.html"/, 'the atome root must resolve to the real packaged application entry');
+    assert.equal(midiControllerSource.includes('Testing MIDI callback system'), false, 'normal MIDI startup must not schedule a delayed smoke-test callback');
 });

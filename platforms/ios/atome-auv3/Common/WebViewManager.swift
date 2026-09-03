@@ -9,6 +9,7 @@ import WebKit
 import OSLog
 import QuartzCore
 import AudioToolbox
+import Darwin
 
 public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDelegate, WKUIDelegate {
     typealias NativeInvokeHandler = (_ command: String, _ payload: [String: Any], _ completion: @escaping ([String: Any], String?) -> Void) -> Void
@@ -32,6 +33,37 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
     // NEW: remember last sent transport state to avoid duplicate/unreal logs
     static var lastSentTransportPlaying: Bool? = nil
     static var lastSentTransportPosition: Double = -1
+    static var bootStartedAt = CACurrentMediaTime()
+    static var bootMilestones: [String: Int] = [:]
+    static var bootPresentationHandler: (([String: Any]) -> Void)?
+    static var bootFailureHandler: ((String, [String: Any]) -> Void)?
+    static var bootTerminalFailure = false
+
+    static func resetBootTelemetry() {
+        bootStartedAt = CACurrentMediaTime()
+        bootMilestones = [:]
+        bootTerminalFailure = false
+        AudioSchemeHandler.resetBootMetrics()
+    }
+
+    static func markBootMilestone(_ name: String) {
+        bootMilestones[name] = Int((CACurrentMediaTime() - bootStartedAt) * 1_000)
+    }
+
+    static func nativePeakMemoryMegabytes() -> Int? {
+        var usage = rusage()
+        guard getrusage(RUSAGE_SELF, &usage) == 0 else { return nil }
+        return Int(usage.ru_maxrss / (1_024 * 1_024))
+    }
+
+    static func attachNativeBootSummary(to report: inout [String: Any]) {
+        report["native_elapsed_ms"] = Int((CACurrentMediaTime() - bootStartedAt) * 1_000)
+        report["native_milestones_ms"] = bootMilestones
+        report["scheme"] = AudioSchemeHandler.bootMetrics()
+        if let peakMemory = nativePeakMemoryMegabytes() {
+            report["native_peak_memory_mb"] = peakMemory
+        }
+    }
 
     // Timers for streaming (host time & transport)
     static var hostTimeTimer: Timer?
@@ -86,11 +118,102 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
 
     var terminateRetryCount = 0
 
+    static func installBootPresentationHandlers(
+        onReady: @escaping ([String: Any]) -> Void,
+        onFailure: @escaping (String, [String: Any]) -> Void
+    ) {
+        bootPresentationHandler = onReady
+        bootFailureHandler = onFailure
+    }
+
+    static func handleBootPresentationReady(_ body: [String: Any]) {
+        guard !bootTerminalFailure else {
+            shared.log.error("Ignoring late boot presentation after terminal failure")
+            return
+        }
+        var report = body
+        markBootMilestone("presentation_ready")
+        attachNativeBootSummary(to: &report)
+        shared.log.info("Boot presentation ready: \(String(describing: report), privacy: .public)")
+        print("[BOOT_PRESENTATION] \(String(describing: report))")
+        DispatchQueue.main.async { bootPresentationHandler?(report) }
+    }
+
+    static func handleBootAuthenticationReady(_ body: [String: Any]) {
+        guard !bootTerminalFailure else {
+            shared.log.error("Ignoring late authentication presentation after terminal failure")
+            return
+        }
+        var report = body
+        markBootMilestone("authentication_ready")
+        attachNativeBootSummary(to: &report)
+        shared.log.info("Boot authentication ready: \(String(describing: report), privacy: .public)")
+        print("[BOOT_AUTHENTICATION] \(String(describing: report))")
+        DispatchQueue.main.async { bootPresentationHandler?(report) }
+    }
+
+    static func reportBootFailure(reason: String) {
+        guard !bootTerminalFailure else { return }
+        bootTerminalFailure = true
+        var report: [String: Any] = ["reason": reason]
+        attachNativeBootSummary(to: &report)
+        shared.log.error("Boot failed: \(String(describing: report), privacy: .public)")
+        print("[BOOT_FAILURE] \(String(describing: report))")
+        captureBootJavaScriptDiagnostics(reason: reason)
+        DispatchQueue.main.async { bootFailureHandler?(reason, report) }
+    }
+
+    private static func captureBootJavaScriptDiagnostics(reason: String) {
+        let script = """
+        (function(){
+          try {
+            var menu = null;
+            try { menu = window.new_menu_v2 && window.new_menu_v2.measure ? window.new_menu_v2.measure() : null; } catch (_) {}
+            return {
+              reason: \(String(reflecting: reason)),
+              href: String(location.href || ''),
+              ready_state: String(document.readyState || ''),
+              auth_complete: window.__authCheckComplete === true,
+              auth_result: window.__authCheckResult || null,
+              workspace_mode: window.__eveWorkspaceMode || null,
+              workspace_error: window.__eveWorkspaceBootOpenError || null,
+              workspace_trace: window.__eveWorkspaceBootTrace || [],
+              current_project_id: String(window.__currentProject && (window.__currentProject.id || window.__currentProject.atome_id) || ''),
+              menu: menu
+            };
+          } catch (error) { return { diagnostic_error: String(error && error.message || error) }; }
+        })();
+        """
+        webView?.evaluateJavaScript(script) { value, error in
+            if let error {
+                shared.log.error("Boot JS diagnostic failed: \(error.localizedDescription, privacy: .public)")
+            } else {
+                shared.log.error("Boot JS diagnostic: \(String(describing: value), privacy: .public)")
+                print("[BOOT_DIAGNOSTIC] \(String(describing: value))")
+            }
+        }
+    }
+
+    static func retryMainPageAfterUserRequest() {
+        guard let webView else { return }
+        shared.terminateRetryCount = 0
+        mainLoadDone = false
+        resetBootTelemetry()
+        markBootMilestone("retry_requested")
+        markPageLoading()
+        if FeatureFlags.registerCustomScheme, let entry = URL(string: "atome:///src/index.html") {
+            webView.load(URLRequest(url: entry))
+        } else if let entry = Bundle.main.url(forResource: "src/index", withExtension: "html") {
+            webView.loadFileURL(entry, allowingReadAccessTo: Bundle.main.bundleURL)
+        }
+    }
+
     static func setupWebView(for webView: WKWebView, audioController: AudioControllerProtocol? = nil) {
         if FeatureFlags.mainThreadPrecondition {
             dispatchPrecondition(condition: .onQueue(.main))
         }
         self.webView = webView
+        markBootMilestone("webview_configured")
         self.audioController = audioController
         // hostAudioUnit will be set later via setHostAudioUnit from AudioUnitViewController once created
         webView.navigationDelegate = WebViewManager.shared
@@ -276,17 +399,17 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
     let contentController = webView.configuration.userContentController
         let userScript = WKUserScript(source: scriptSource, injectionTime: .atDocumentStart, forMainFrameOnly: true)
         contentController.addUserScript(userScript)
-        // Debug builds only: arm the runtime's own verbose text tracing before eVe
-        // boots. Keeping this switch native means it cannot ship enabled, and no
-        // diagnostic flag has to live in the JavaScript sources.
-        #if DEBUG
-        let traceScript = WKUserScript(
-            source: "window.__EVE_TEXT_TRACE__ = true;",
-            injectionTime: .atDocumentStart,
-            forMainFrameOnly: true
-        )
-        contentController.addUserScript(traceScript)
-        #endif
+        // Text tracing is diagnostic-only and can generate substantial console
+        // traffic while the first project is projected. Keep it opt-in even for
+        // Xcode Debug launches so normal boot follows the production path.
+        if FeatureFlags.textTraceEnabled {
+            let traceScript = WKUserScript(
+                source: "window.__EVE_TEXT_TRACE__ = true;",
+                injectionTime: .atDocumentStart,
+                forMainFrameOnly: true
+            )
+            contentController.addUserScript(traceScript)
+        }
     // Always capture console for diagnostics
     contentController.add(WebViewManager.shared, name: "console")
     if FeatureFlags.enableJSBridge {
@@ -315,7 +438,9 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
         @keyframes pulse{0%,100%{opacity:.25}50%{opacity:.75}}
         </style></head><body><div class=pulse>Loading…</div></body></html>
         """
-    webView.loadHTMLString(placeholderHTML, baseURL: nil)
+    if isExtension {
+        webView.loadHTMLString(placeholderHTML, baseURL: nil)
+    }
         // Load real app shortly after to ensure WKWebView is on-screen with black already painted
         let myProjectBundle: Bundle = Bundle.main
         let mainURL = myProjectBundle.url(forResource: "src/index", withExtension: "html")
