@@ -157,6 +157,7 @@ const workspaceOpenCalls = [];
 const readinessCalls = [];
 const activitiesWarmupCalls = [];
 const homeWarmupCalls = [];
+const deferredOwnerCalls = [];
 const nativeBootMessages = [];
 let workspaceOpenAttempts = 0;
 window.__eveWorkspaceWarmupsStarted = false;
@@ -219,8 +220,11 @@ installEveIntuitionBootRuntime({
     ensureCouleurPanelModule() {},
     ensureDeletePanelModule() {},
     ensureDetailPanelModule() {},
+    ensureDeferredIntuitionRuntime() { deferredOwnerCalls.push('intuition_deferred'); },
+    ensureEveDeferredRuntime() { deferredOwnerCalls.push('eve_deferred'); },
     ensureFinderPanelModule() {},
     ensureFontPanelModule() {},
+    ensureFlowerContextItemsRuntime() { deferredOwnerCalls.push('flower_items'); },
     ensureHomePanelModule() { homeWarmupCalls.push('home'); },
     ensureInfoPanelModule() {},
     ensureLayerPanelModule() {},
@@ -233,14 +237,15 @@ installEveIntuitionBootRuntime({
     ensurePastePanelModule() {},
     ensureSizePanelModule() {},
     ensureTimelinePanelModule() {},
+    ensureTextToolRuntime() { deferredOwnerCalls.push('text'); },
     ensureToolModule() {},
     ensureUndoPanelModule() {},
     focusFinderPanel() {},
     getAtomeElement() {},
     getAtomeRuntimeState() {},
-    installAtomeEditFooterRuntime() {},
+    installAtomeEditFooterRuntime() { deferredOwnerCalls.push('footer'); },
     installEveDebugRuntime() {},
-    installIntuitionXFlowerContextRuntime() {},
+    installIntuitionXFlowerContextRuntime() { deferredOwnerCalls.push('flower'); },
     installSvgDrawRuntime() {},
     installSvgVectorEditRuntime() {},
     installTextStyleToolSelectionGuard() {},
@@ -268,6 +273,7 @@ installEveIntuitionBootRuntime({
     refreshFinderPanelProjection() {},
     registerAtomeTool() {},
     registerBasicUiToolsRuntime() {},
+    registerMediaReaderToolRuntime() { deferredOwnerCalls.push('media_reader'); },
     registerMainToolAtomes() {},
     registerPanelSurfaceDefinition() {},
     registerPanelUiToolsRuntime() {},
@@ -314,5 +320,33 @@ window.dispatchEvent(new window.CustomEvent('squirrel:project-changed', {
 }));
 await new Promise((resolve) => setTimeout(resolve, 0));
 assert.equal(workspaceOpenCalls.length, 2, 'workspace boot must not reopen the dashboard when a project id is published after retry success');
+window.__eveStartDeferredInteractionOwners();
+window.__eveStartDeferredInteractionOwners();
+await new Promise((resolve) => setTimeout(resolve, 1250));
+assert.deepEqual(
+    deferredOwnerCalls.slice(0, 5),
+    ['eve_deferred', 'media_reader', 'intuition_deferred', 'flower_items', 'text'],
+    'canonical deferred tool owners must replace bootstrap handlers before Flower is installed'
+);
+assert.equal(
+    deferredOwnerCalls.filter((owner) => owner === 'media_reader').length,
+    1,
+    'deferred interaction owners must install the Media Reader exactly once'
+);
+assert.doesNotMatch(
+    readFileSync(new URL('../../eVe/intuition/runtime/eve_intuition/basic_ui_tools_runtime.js', import.meta.url), 'utf8'),
+    /__eveRegisterMediaReaderToolRuntime/,
+    'the orphan global Media Reader loader must stay removed'
+);
+assert.doesNotMatch(
+    readFileSync(new URL('../../eVe/eVe.js', import.meta.url), 'utf8'),
+    /__eveLoadDeferredRuntime/,
+    'the deferred eVe modules must be called through their module owner, not an orphan global loader'
+);
+assert.doesNotMatch(
+    readFileSync(new URL('../../eVe/intuition/bootstrap.js', import.meta.url), 'utf8'),
+    /__eveLoadDeferredIntuitionRuntime/,
+    'deferred interaction tools must be called through their module owner, not an orphan global loader'
+);
 
 console.log('user_login_boot_order_contract.test: PASS');

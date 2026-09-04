@@ -112,7 +112,7 @@ const syncWindowAuthState = (state) => {
 const notifyAuthCheckComplete = (state) => {
     authCheckComplete = true;
     syncWindowAuthState(state);
-    const result = window?.__authCheckResult || {
+    const result = (typeof window !== 'undefined' ? window.__authCheckResult : null) || {
         authenticated: false,
         userId: null,
         anonymous: false

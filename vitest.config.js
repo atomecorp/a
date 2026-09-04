@@ -24,6 +24,7 @@ export default defineConfig({
         // contracts on loaded hosts; two isolated workers keep the suite
         // deterministic without retries or relaxed timeouts.
         maxWorkers: 2,
+        setupFiles: ['./tests/vitest.setup.mjs'],
         include: manifest,
         exclude: [
             '**/node_modules/**',

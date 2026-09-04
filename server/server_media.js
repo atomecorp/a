@@ -39,7 +39,7 @@ export function resolveVideoCacheTarget(sourcePath, fileName) {
 }
 
 export async function transcodeVideoToMp4(sourcePath, outputPath) {
-  await fs.mkdir(path.dirname(outputPath), { recursive: true });
+  await mkdir(path.dirname(outputPath), { recursive: true });
   await new Promise((resolve, reject) => {
     execFile('ffmpeg', [
       '-y',
@@ -82,7 +82,7 @@ export async function ensureVideoPlaybackCache(sourcePath, fileName, mimeType = 
   if (!shouldServeWebmVideoAsMp4(fileName, mimeType)) return null;
   const target = resolveVideoCacheTarget(sourcePath, fileName);
   try {
-    await fs.access(target.cachedPath);
+    await access(target.cachedPath);
   } catch (_) {
     await transcodeVideoToMp4(sourcePath, target.cachedPath);
   }

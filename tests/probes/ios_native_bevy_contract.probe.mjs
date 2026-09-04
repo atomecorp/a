@@ -26,6 +26,8 @@ const bridgingHeaderSource = await readFile(new URL('../../platforms/ios/atome-a
 const audioSchemeHandlerSource = await readFile(new URL('../../platforms/ios/atome-auv3/Common/AudioSchemeHandler.swift', import.meta.url), 'utf8');
 const midiControllerSource = await readFile(new URL('../../platforms/ios/atome-auv3/Common/MIDIController.swift', import.meta.url), 'utf8');
 const iosPackagerSource = await readFile(new URL('../../platforms/ios/package_ios_runtime.mjs', import.meta.url), 'utf8');
+const eveEntrySource = await readFile(new URL('../../eVe/eVe.js', import.meta.url), 'utf8');
+const audioApiSource = await readFile(new URL('../../eVe/domains/media/api/audio_api.js', import.meta.url), 'utf8');
 const webBevyBuildScriptSource = await readFile(new URL('../../platforms/web/bevy-renderer/build.sh', import.meta.url), 'utf8');
 const nativeRuntime = await import('../../eVe/domains/rendering/bevy_native_renderer_runtime.js');
 
@@ -466,6 +468,16 @@ test('iOS resource packaging excludes build artifacts before copying', () => {
     assert.ok(iosPackagerSource.includes('singletonOwnerPaths'), 'the packager must declare stateful owners that may never be duplicated');
     assert.ok(iosPackagerSource.includes('packaged_singleton_owner_count'), 'the iOS build must fail when a singleton owner is emitted more than once');
     assert.ok(iosPackagerSource.includes('packaged_runtime_input_duplicated'), 'the iOS build must reject every duplicated browser input, not only named singletons');
+    assert.match(
+        audioApiSource,
+        /import ['"]\.\.\/\.\.\/\.\.\/\.\.\/atome\/src\/application\/audio_runtime\/record_audio_api\.js['"];/,
+        'the canonical audio API must install its unified recorder dependency when Capture is loaded'
+    );
+    assert.equal(
+        eveEntrySource.includes("id: 'eve.record_audio_api'"),
+        false,
+        'the recorder dependency must not also be scheduled by the unrelated deferred boot lane'
+    );
     assert.equal(iosPackagerSource.includes('const criticalBuild ='), false, 'the former independent Spark build must not survive');
     assert.equal(iosPackagerSource.includes('const optionalBuild ='), false, 'the former independent optional build must not survive');
     assert.equal(iosPackagerSource.includes('const eveBundleBuild ='), false, 'the former independent eVe build must not survive');

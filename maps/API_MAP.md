@@ -115,15 +115,15 @@ Visual gesture adapter to the canonical Flower context; List/Matrix item menus
 retain `openProjectViewItemMenu` and their surface-item action set.
 
 Project activation is an internal latest-wins operation owned by
-`activateProjectWorkspace`. It prepares the persisted representation through
-`project_view_mode_state.js`, then calls `loadProjectAtomes` with the internal
-`viewModePrepared: true` option. That option suppresses only the redundant
-post-load mode restoration for this activation; it is not persistent state and
-does not create a second view-mode API. The same internal marker is carried by
-the post-presentation authoritative refresh after a stale-first boot, because
-that load transaction already restored the representation from local state.
-An explicit same-mode user choice still persists through the canonical commit
-owner and invalidates any older asynchronous preference read.
+`activateProjectWorkspace`. It starts the canonical persisted-mode prefetch
+through `project_view_mode_state.js`, loads the authoritative project records
+with the internal `viewModePrepared: true` option, then asks that same owner to
+restore once after loading. The option suppresses only the loader's redundant
+post-load restoration; it is not persistent state and does not create a second
+view-mode API. The post-presentation authoritative refresh carries the same
+marker because the activation has already consumed its one restoration. An
+explicit user choice, including a same-mode Natural choice, persists through
+the canonical commit owner and makes any older prefetched value inapplicable.
 Project bootstrap uses that same mode owner. `loadProjectAtomes` does not expose
 its local Natural projection as ready until the one prefetched persisted-mode
 application has completed; this is a presentation barrier, not a second mode

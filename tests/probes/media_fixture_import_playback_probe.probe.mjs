@@ -4,8 +4,9 @@ import { chromium } from 'playwright';
 
 const APP_URL = process.env.ADOLE_TEST_URL || 'http://127.0.0.1:3001';
 const MODE = process.env.ADOLE_TEST_MODE || 'browser';
-const PHONE = process.env.ADOLE_TEST_PHONE || '7777000081';
-const PASSWORD = process.env.ADOLE_TEST_PASSWORD || PHONE;
+const PROBE_SUFFIX = `${Date.now()}${Math.floor(Math.random() * 10000)}`.replace(/\D+/g, '').slice(-10);
+const PHONE = process.env.ADOLE_TEST_PHONE || `+1555${PROBE_SUFFIX}`;
+const PASSWORD = process.env.ADOLE_TEST_PASSWORD || `media_fixture_${PROBE_SUFFIX}_password`;
 const MEDIA_DIR = path.resolve(process.env.ATOME_MEDIA_TEST_DIR || 'tests/fixtures/media');
 const OUT_DIR = path.resolve('temp/probe_reports/media_fixture_import_playback_probe', MODE);
 const REPORT_FILE = path.join(OUT_DIR, 'report.json');
@@ -61,7 +62,12 @@ const tryLogin = async (page) => {
     const created = await safeEval(page, async ({ phone, password }) => {
         const api = window.AdoleAPI || null;
         if (!api?.auth?.create) return { ok: false, error: 'auth_create_unavailable' };
-        const result = await api.auth.create(phone, password, phone, { autoLogin: true });
+        const requested = await api.auth.requestPhoneVerification(phone, 'enrollment', { exposeForTest: true });
+        if (!requested?.ok || !requested?.code) return { ok: false, error: 'verification_request_failed', requested };
+        const verified = await api.auth.verifyPhoneVerification(phone, requested.code, 'enrollment');
+        if (!verified?.ok) return { ok: false, error: 'verification_failed', verified };
+        const username = `media_fixture_${phone.replace(/\D+/g, '').slice(-10)}`;
+        const result = await api.auth.create(phone, password, username, { autoLogin: true });
         return { ok: !!(result?.fastify?.success || result?.tauri?.success || result?.login?.fastify?.success || result?.login?.tauri?.success), result };
     }, { phone: PHONE, password: PASSWORD }, 30000);
     if (created?.ok) return created;
@@ -188,21 +194,28 @@ const run = async () => {
         const imported = Array.isArray(report.import?.results) ? report.import.results : [];
         const expected = MEDIA_CASES.map((entry, index) => ({ ...entry, atomeId: imported[index]?.atomeId || null }));
         report.visual = await safeEval(page, ({ expected }) => {
+            const projectId = String(window.__currentProject?.id || '');
+            const scene = window.eveToolBase?.getProjectSceneState?.(projectId) || {};
+            const records = Array.isArray(scene.records) ? scene.records : [];
+            const nodes = Array.from(scene.projection?.virtual_scene?.nodes || []);
             const result = expected.map((entry) => {
-                const host = document.querySelector(`[data-atome-id="${CSS.escape(entry.atomeId || '')}"]`);
-                const rect = host?.getBoundingClientRect?.();
-                const media = host?.querySelector?.('img,svg,video,audio,canvas,[data-role*="media"]') || null;
-                const mediaRect = media?.getBoundingClientRect?.();
+                const record = records.find((candidate) => String(candidate?.id || candidate?.atome_id || '') === entry.atomeId) || null;
+                const node = nodes.find((candidate) => String(candidate?.id || '') === entry.atomeId) || null;
+                const properties = record?.properties || {};
+                const source = String(node?.content?.source || node?.source || properties.media_url || '');
+                const nodeKind = String(node?.kind || node?.type || '').toLowerCase();
+                const requiresVisualNode = entry.kind !== 'audio';
                 return {
                     name: entry.name,
                     kind: entry.kind,
                     atome_id: entry.atomeId,
-                    ok: !!host && rect.width > 12 && rect.height > 12 && (entry.kind === 'audio' || (!!media && mediaRect.width >= 0 && mediaRect.height >= 0)),
-                    host_rect: rect ? { width: Math.round(rect.width), height: Math.round(rect.height) } : null,
-                    media_tag: media?.tagName?.toLowerCase?.() || null
+                    ok: !!record && (!requiresVisualNode || (!!node && !!source)),
+                    record_kind: String(record?.type || record?.kind || properties.kind || properties.media_kind || ''),
+                    node_kind: nodeKind,
+                    source
                 };
             });
-            return { ok: result.every((entry) => entry.ok), result };
+            return { ok: result.every((entry) => entry.ok), project_id: projectId, canvas_count: document.querySelectorAll('canvas').length, result };
         }, { expected }, 30000);
         if (!report.visual?.ok) throw new Error('visual_fixture_verification_failed');
 
