@@ -19,6 +19,9 @@ public class iCloudFileManager: ObservableObject {
     // Pour stocker le delegate du Document Picker
     private var documentPickerDelegate: DocumentPickerDelegate?
     private var documentPickerLoadDelegate: DocumentPickerLoadDelegate?
+    private let initializationQueue = DispatchQueue(label: "atome.file-structure.initialization", qos: .utility)
+    private let initializationLock = NSLock()
+    private var initializationRequested = false
     // Persisté pour ne pas redemander à chaque lancement
     private var fileAccessGrantedOnce: Bool = UserDefaults.standard.bool(forKey: "AtomeFileAccessGranted")
     private var isRunningInsideExtension: Bool {
@@ -43,9 +46,7 @@ public class iCloudFileManager: ObservableObject {
     
     // MARK: - Directory URLs
     private func getLocalDocumentsDirectory() -> URL {
-        // Déterminer si on est dans l'extension AUv3 ou l'app principale
         let isAUv3Extension = isRunningInsideExtension
-        
         if isAUv3Extension {
             if let preferred = SandboxPathValidator.primaryRoot() {
                 return preferred
@@ -56,7 +57,6 @@ public class iCloudFileManager: ObservableObject {
             let paths = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)
             return paths[0]
         } else {
-            // Pour l'app principale : utiliser Documents standard (visible dans Files)
             let paths = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)
             let documentsURL = paths[0]
             return documentsURL
@@ -103,26 +103,23 @@ public class iCloudFileManager: ObservableObject {
     }
     
     // MARK: - File Structure Initialization
-    public func initializeFileStructure() {
-        let useICloud = UserDefaults.standard.bool(forKey: "AtomeUseICloud")
-        
-        if useICloud && iCloudAvailable {
-            initializeiCloudFileStructure()
-        } else {
-            initializeLocalFileStructure()
+    public func initializeFileStructure(force: Bool = false) {
+        initializationLock.lock()
+        let shouldInitialize = force || !initializationRequested
+        if shouldInitialize { initializationRequested = true }
+        initializationLock.unlock()
+        guard shouldInitialize else { return }
+
+        initializationQueue.async { [weak self] in
+            guard let self else { return }
+            let useICloud = UserDefaults.standard.bool(forKey: "AtomeUseICloud")
+            if useICloud && self.iCloudAvailable {
+                self.initializeiCloudFileStructure()
+            } else {
+                self.initializeLocalFileStructure()
+            }
+            FileSyncCoordinator.shared.syncAll(force: true)
         }
-        
-        // Si c'est l'app principale, synchroniser les fichiers depuis App Groups
-        let isApp = !isRunningInsideExtension
-        if isApp {
-            // Première passe : AppGroup -> Visible
-            syncFromAppGroupsToVisibleDocuments()
-            // Deuxième passe : Visible -> AppGroup (pour récupérer les fichiers déjà présents côté app)
-            syncFromVisibleDocumentsToAppGroups()
-        }
-        // One explicit newest-wins pass after initialization. Later passes are driven by
-        // concrete file mutations, imports/captures, explicit sync, or list freshness.
-        FileSyncCoordinator.shared.syncAll(force: true)
     }
     
     private func initializeLocalFileStructure() {
@@ -708,96 +705,6 @@ public class iCloudFileManager: ObservableObject {
             }
             top.present(picker, animated: true)
         }
-    }
-    
-    // MARK: - App Groups Synchronization
-    private func syncFromAppGroupsToVisibleDocuments() {
-        guard let groupURL = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: "group.atome.one") else {
-            return
-        }
-        
-        let appGroupDocuments = groupURL.appendingPathComponent("Documents")
-        let visibleDocuments = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-        
-        // Vérifier si App Groups contient des fichiers
-    guard FileManager.default.fileExists(atPath: appGroupDocuments.path) else { return }
-        
-        do {
-            let fileManager = FileManager.default
-            let folders = ["Projects", "Exports", "Recordings", "Templates", "Downloads", "data"]
-            
-            for folder in folders {
-                let sourceFolder = appGroupDocuments.appendingPathComponent(folder)
-                let destFolder = visibleDocuments.appendingPathComponent(folder)
-                
-                if fileManager.fileExists(atPath: sourceFolder.path) {
-                    // Créer le dossier de destination s'il n'existe pas
-                    if !fileManager.fileExists(atPath: destFolder.path) {
-                        try fileManager.createDirectory(at: destFolder, withIntermediateDirectories: true, attributes: nil)
-                    }
-                    
-                    // Copier tous les fichiers du dossier source vers destination
-                    let sourceContents = try fileManager.contentsOfDirectory(at: sourceFolder, includingPropertiesForKeys: nil)
-                    
-                    for sourceFile in sourceContents {
-                        let destFile = destFolder.appendingPathComponent(sourceFile.lastPathComponent)
-                        
-                        // Ne copier que si le fichier n'existe pas déjà ou est plus récent
-                        var shouldCopy = false
-                        
-                        if !fileManager.fileExists(atPath: destFile.path) {
-                            shouldCopy = true
-                        } else {
-                            // Comparer les dates de modification
-                            let sourceDate = try sourceFile.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate
-                            let destDate = try destFile.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate
-                            
-                            if let sDate = sourceDate, let dDate = destDate, sDate > dDate {
-                                try fileManager.removeItem(at: destFile)
-                                shouldCopy = true
-                            }
-                        }
-                        
-                        if shouldCopy { try fileManager.copyItem(at: sourceFile, to: destFile) }
-                    }
-                }
-            }
-        } catch { }
-    }
-
-    // MARK: - Reverse Synchronisation (Visible -> App Groups)
-    private func syncFromVisibleDocumentsToAppGroups() {
-        guard let groupURL = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: "group.atome.one") else { return }
-        let appGroupDocuments = groupURL.appendingPathComponent("Documents")
-        let visibleDocuments = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-
-        do {
-            let fm = FileManager.default
-            let folders = ["Projects", "Exports", "Recordings", "Templates", "Downloads", "data"]
-            // Créer racine Documents si nécessaire côté App Group
-            try fm.createDirectory(at: appGroupDocuments, withIntermediateDirectories: true)
-            for folder in folders {
-                let srcFolder = visibleDocuments.appendingPathComponent(folder)
-                let dstFolder = appGroupDocuments.appendingPathComponent(folder)
-                if fm.fileExists(atPath: srcFolder.path) {
-                    if !fm.fileExists(atPath: dstFolder.path) {
-                        try fm.createDirectory(at: dstFolder, withIntermediateDirectories: true)
-                    }
-                    let contents = try fm.contentsOfDirectory(at: srcFolder, includingPropertiesForKeys: [.contentModificationDateKey])
-                    for srcFile in contents {
-                        let dstFile = dstFolder.appendingPathComponent(srcFile.lastPathComponent)
-                        var shouldCopy = false
-                        if !fm.fileExists(atPath: dstFile.path) { shouldCopy = true }
-                        else {
-                            let srcDate = try srcFile.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate
-                            let dstDate = try dstFile.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate
-                            if let s = srcDate, let d = dstDate, s > d { try fm.removeItem(at: dstFile); shouldCopy = true }
-                        }
-                        if shouldCopy { try fm.copyItem(at: srcFile, to: dstFile) }
-                    }
-                }
-            }
-        } catch { }
     }
     
     private func copyFileToVisibleDocuments(from sourceURL: URL, relativePath: String) {

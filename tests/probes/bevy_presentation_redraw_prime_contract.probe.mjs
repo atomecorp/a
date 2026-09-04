@@ -20,7 +20,8 @@ const module = { request_atome_bevy_redraw: () => { redraws += 1; } };
 
 assert.deepEqual(schedulePresentationRedrawPrime(surface, module, 'diff'), { scheduled: true, count: 4 });
 assert.deepEqual(schedulePresentationRedrawPrime(surface, module, 'diff'), { scheduled: false, coalesced: true });
-assert.equal(timers.length, 4, 'one active prime sequence owns the four required retries');
+assert.equal(redraws, 1, 'the first redraw is requested immediately');
+assert.equal(timers.length, 3, 'one active prime sequence owns the three delayed retries');
 timers.forEach(({ callback }) => callback());
 assert.equal(redraws, 4, 'coalescing must preserve the required presentation retries');
 assert.deepEqual(

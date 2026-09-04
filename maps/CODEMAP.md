@@ -1,5 +1,32 @@
 # Atome / eVe Code Map
 
+iOS WebContent capacity owners (2026-09-04):
+`adole_adapter_atome.js` forwards state-current particle exclusions;
+`atome_record_projection.js` owns bounded pagination, identical-read
+coalescence, and backend-independent derived-activity-tool quarantine;
+`eVe/core/atome_commit_fetch.js` forwards type/exclusion filters and pages the
+core reader; tool registry callers request 100-row pages.
+`LocalHTTPServer.swift` applies type filtering and exclusions in SQL/row
+serialization, emits only canonical `properties`, frames JSON bytes once, and
+quarantines historical derived activity-selection tools before catalogue
+hydration. The three active-project flag owners request project rows without
+preview payloads. `ios_webcontent_boot_capacity_contract.probe.mjs` locks these
+boundaries and the renderer capacity ceiling.
+
+iOS cold-boot owners (2026-09-03): `application/AppDelegate.swift` starts the
+monotonic measurement before constructing `iCloudFileManager`;
+`iCloudFileManager.swift` schedules idempotent directory preparation and the
+sole `FileSyncCoordinator.syncAll` reconciliation away from the main launch
+path. `application/ViewController.swift` requests the first page immediately
+and triggers the visible-view fallback, while `WebViewManager.swift` owns one
+navigation attempt and stops it before Retry. `WebViewManagerBoot.swift` owns
+milestones, ready/failure reports, JavaScript diagnostics, and the
+progress-aware pre-navigation/active-navigation stall watchdog.
+`package_ios_runtime.mjs` makes `workspace_main_menu_visibility.js` a shared
+critical entry for Home/panel chunks and emits the bundled
+`bevy_project_preview_capture_frame.js` module at the exact scheme path.
+`ios_native_bevy_contract.probe.mjs` locks those boundaries.
+
 iOS boot owners (2026-09-02): `platforms/ios/package_ios_runtime.mjs` is the
 single app/AUv3 packaging manifest. It builds `src/squirrel/spark.js` plus
 split ESM chunks, keeps lazy module ids routed through

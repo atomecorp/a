@@ -241,6 +241,9 @@ export const buildAtomeApi = ({ getWs, tokenKey }) => ({
                     include_shared: params.include_shared === true || params.includeShared === true,
                     include_total: params.include_total === true || params.includeTotal === true,
                     exclude_system: params.exclude_system === true || params.excludeSystem === true,
+                    exclude_particle_keys: Array.isArray(params.excludeParticleKeys || params.exclude_particle_keys)
+                        ? (params.excludeParticleKeys || params.exclude_particle_keys)
+                        : [],
                     limit: params.limit,
                     offset: params.offset
                 });

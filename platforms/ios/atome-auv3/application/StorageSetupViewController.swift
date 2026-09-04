@@ -197,7 +197,7 @@ class StorageSetupViewController: UIViewController {
         UserDefaults.standard.set(true, forKey: "AtomeUseICloud")
         UserDefaults.standard.set(true, forKey: "AtomeStorageChoiceMade")
         
-        iCloudFileManager.shared.initializeFileStructure()
+        iCloudFileManager.shared.initializeFileStructure(force: true)
         
         showSuccessMessage(message: "iCloud configuré avec succès!")
         dismissSetup()
@@ -207,7 +207,7 @@ class StorageSetupViewController: UIViewController {
         UserDefaults.standard.set(false, forKey: "AtomeUseICloud")
         UserDefaults.standard.set(true, forKey: "AtomeStorageChoiceMade")
         
-        iCloudFileManager.shared.initializeFileStructure()
+        iCloudFileManager.shared.initializeFileStructure(force: true)
         
         showSuccessMessage(message: "Stockage local configuré avec succès!")
         dismissSetup()

@@ -13,7 +13,12 @@ const eveRoot = path.join(projectRoot, 'eVe');
 const outputArg = process.argv.find((arg) => arg.startsWith('--output='));
 if (!outputArg) throw new Error('package_ios_runtime_output_required');
 const outputRoot = path.resolve(outputArg.slice('--output='.length));
-const IOS_WEB_RENDERER_MAX_BYTES = 13_500_000;
+// Measurement window, 2026-09-04: the byte budget alone has never been shown to
+// be the dimension WebKit's per-process limit responds to. It is temporarily
+// widened to admit the opt-level="s" candidate (15,009,530 bytes, 65,254
+// functions against 75,015) so the device can decide between code size and
+// function count. Restore a budget the iPhone actually validated.
+const IOS_WEB_RENDERER_MAX_BYTES = 16_000_000;
 const rendererWasmPath = path.join(sourceRoot, 'wasm/squirrel_bevy_renderer_bg.wasm');
 const rendererWasmBytes = (await stat(rendererWasmPath)).size;
 if (rendererWasmBytes > IOS_WEB_RENDERER_MAX_BYTES) {
@@ -129,6 +134,11 @@ ${optionalDescriptors
 const workspaceSurfacePath = path.join(eveRoot, 'intuition/tools/user_workspace_surface_runtime.js');
 const WORKSPACE_SURFACE_ENTRY_NAME = 'critical-workspace-surface';
 const WORKSPACE_SURFACE_ENTRY_URL = `/chunks/eve/${WORKSPACE_SURFACE_ENTRY_NAME}.js`;
+const workspaceMainMenuPath = path.join(eveRoot, 'intuition/tools/workspace_main_menu_visibility.js');
+const WORKSPACE_MAIN_MENU_ENTRY_NAME = 'critical-workspace-main-menu';
+const WORKSPACE_MAIN_MENU_ENTRY_URL = `/chunks/eve/${WORKSPACE_MAIN_MENU_ENTRY_NAME}.js`;
+const bevyProjectPreviewCaptureFramePath = path.join(eveRoot, 'domains/rendering/bevy_project_preview_capture_frame.js');
+const EXTRA_CRITICAL_ENTRY_COUNT = 2;
 const criticalEntryNameByModuleId = new Map(eveCriticalDescriptors.map(([moduleId]) => [
     moduleId,
     `critical-${moduleId.slice('eve.'.length).replace(/[^a-zA-Z0-9_-]/g, '-')}`
@@ -138,7 +148,8 @@ const criticalEveEntryUrlByPath = new Map([
         target,
         `/chunks/eve/${criticalEntryNameByModuleId.get(moduleId)}.js`
     ]),
-    [workspaceSurfacePath, WORKSPACE_SURFACE_ENTRY_URL]
+    [workspaceSurfacePath, WORKSPACE_SURFACE_ENTRY_URL],
+    [workspaceMainMenuPath, WORKSPACE_MAIN_MENU_ENTRY_URL]
 ]);
 const eveApplicationSource = `
 import { startEve } from ${JSON.stringify(path.join(eveRoot, 'eVe.js'))};
@@ -225,7 +236,8 @@ const criticalGroupBuild = await build({
             criticalEntryNameByModuleId.get(moduleId),
             target
         ])),
-        [WORKSPACE_SURFACE_ENTRY_NAME]: workspaceSurfacePath
+        [WORKSPACE_SURFACE_ENTRY_NAME]: workspaceSurfacePath,
+        [WORKSPACE_MAIN_MENU_ENTRY_NAME]: workspaceMainMenuPath
     },
     absWorkingDir: projectRoot,
     bundle: true,
@@ -308,17 +320,35 @@ const criticalBuild = await build({
     metafile: true,
     write: true
 });
+const previewCaptureFrameBuild = await build({
+    entryPoints: [bevyProjectPreviewCaptureFramePath],
+    absWorkingDir: projectRoot,
+    bundle: true,
+    splitting: false,
+    format: 'esm',
+    platform: 'browser',
+    target: ['safari16.4'],
+    external: ['/wasm/*', 'node:*'],
+    minifySyntax: true,
+    minifyWhitespace: true,
+    minifyIdentifiers: true,
+    outfile: path.join(outputRoot, 'eVe/domains/rendering/bevy_project_preview_capture_frame.js'),
+    logLevel: 'warning',
+    metafile: true,
+    write: true
+});
 await writeFile(
     path.join(outputRoot, 'build-manifest.json'),
     JSON.stringify({
         version: 1,
         module_count: descriptors.size,
-        critical_module_count: criticalDescriptors.length + eveCriticalDescriptors.length + 1,
+        critical_module_count: criticalDescriptors.length + eveCriticalDescriptors.length + EXTRA_CRITICAL_ENTRY_COUNT,
         eve_module_count: eveDescriptors.length,
         optional_module_count: optionalDescriptors.length,
         critical_outputs: criticalBuild.metafile.outputs,
         eve_outputs: eveBuild.metafile.outputs,
         eve_critical_outputs: criticalGroupBuild.metafile.outputs,
+        preview_capture_outputs: previewCaptureFrameBuild.metafile.outputs,
         deferred_outputs: deferredBuild?.metafile.outputs || {},
         optional_outputs: optionalBuild.metafile.outputs
     }, null, 2)
@@ -373,6 +403,6 @@ await writeFile(
     JSON.stringify({ version: 1, files: outputEntries.sort((a, b) => a.path.localeCompare(b.path)) }, null, 2)
 );
 console.log(
-    `[iOS runtime] ${outputEntries.length} files, ${criticalDescriptors.length + eveCriticalDescriptors.length + 1} critical owners in one shared graph, `
+    `[iOS runtime] ${outputEntries.length} files, ${criticalDescriptors.length + eveCriticalDescriptors.length + EXTRA_CRITICAL_ENTRY_COUNT} critical owners in one shared graph, `
     + `${optionalDescriptors.length} deferred owners -> ${outputRoot}`
 );

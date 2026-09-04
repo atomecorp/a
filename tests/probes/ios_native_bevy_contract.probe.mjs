@@ -4,11 +4,14 @@ import { test } from 'node:test';
 
 const controllerSource = await readFile(new URL('../../platforms/ios/atome-auv3/Common/AppNativeBevyRendererController.swift', import.meta.url), 'utf8');
 const webViewManagerSource = await readFile(new URL('../../platforms/ios/atome-auv3/Common/WebViewManager.swift', import.meta.url), 'utf8');
+const webViewBootSource = await readFile(new URL('../../platforms/ios/atome-auv3/Common/WebViewManagerBoot.swift', import.meta.url), 'utf8');
 const webViewFactorySource = await readFile(new URL('../../platforms/ios/atome-auv3/Common/WKWebViewFactory.swift', import.meta.url), 'utf8');
 const webViewScriptMessagesSource = await readFile(new URL('../../platforms/ios/atome-auv3/Common/WebViewManagerScriptMessages.swift', import.meta.url), 'utf8');
 const webViewNavigationSource = await readFile(new URL('../../platforms/ios/atome-auv3/Common/WebViewManagerNavigation.swift', import.meta.url), 'utf8');
 const featureFlagsSource = await readFile(new URL('../../platforms/ios/atome-auv3/Common/FeatureFlags.swift', import.meta.url), 'utf8');
 const appViewControllerSource = await readFile(new URL('../../platforms/ios/atome-auv3/application/ViewController.swift', import.meta.url), 'utf8');
+const appDelegateSource = await readFile(new URL('../../platforms/ios/atome-auv3/application/AppDelegate.swift', import.meta.url), 'utf8');
+const fileManagerSource = await readFile(new URL('../../platforms/ios/atome-auv3/Common/iCloudFileManager.swift', import.meta.url), 'utf8');
 const auv3ControllerSource = await readFile(new URL('../../platforms/ios/atome-auv3/auv3/AudioUnitViewController.swift', import.meta.url), 'utf8');
 const nativeRuntimeSource = await readFile(new URL('../../eVe/domains/rendering/bevy_native_renderer_runtime.js', import.meta.url), 'utf8');
 const projectSceneEngineSource = await readFile(new URL('../../eVe/domains/rendering/project_scene_engine.js', import.meta.url), 'utf8');
@@ -25,6 +28,73 @@ const midiControllerSource = await readFile(new URL('../../platforms/ios/atome-a
 const iosPackagerSource = await readFile(new URL('../../platforms/ios/package_ios_runtime.mjs', import.meta.url), 'utf8');
 const webBevyBuildScriptSource = await readFile(new URL('../../platforms/web/bevy-renderer/build.sh', import.meta.url), 'utf8');
 const nativeRuntime = await import('../../eVe/domains/rendering/bevy_native_renderer_runtime.js');
+
+test('iOS app boot keeps file reconciliation off the startup main thread', () => {
+    assert.equal(
+        appDelegateSource.includes('init() {\n        // Initialiser les fichiers au démarrage'),
+        false,
+        'the SwiftUI app initializer must not synchronously reconcile files before the WebView exists'
+    );
+    assert.equal(
+        webViewManagerSource.includes('iCloudFileManager.shared.initializeFileStructure()'),
+        false,
+        'WebView setup must not block first navigation on file structure initialization'
+    );
+    assert.equal(
+        fileManagerSource.includes('syncFromAppGroupsToVisibleDocuments'),
+        false,
+        'legacy app-group copying must not duplicate FileSyncCoordinator during boot'
+    );
+    assert.equal(
+        fileManagerSource.includes('syncFromVisibleDocumentsToAppGroups'),
+        false,
+        'legacy reverse copying must not duplicate FileSyncCoordinator during boot'
+    );
+    assert.match(
+        fileManagerSource,
+        /initializationQueue\.async[\s\S]*?FileSyncCoordinator\.shared\.syncAll\(force: true\)/,
+        'directory setup and canonical reconciliation must execute asynchronously in one ordered lane'
+    );
+});
+
+test('iOS app boot loads immediately and diagnoses inactivity instead of elapsed time', () => {
+    assert.equal(
+        appViewControllerSource.includes('DispatchQueue.main.async {\n            WebViewManager.setupWebView'),
+        false,
+        'viewDidLoad must configure the WebView immediately on the main thread'
+    );
+    assert.ok(
+        appViewControllerSource.includes('WebViewManager.triggerMainLoadNow()'),
+        'viewDidAppear must trigger the first load as soon as the WebView is visible'
+    );
+    assert.equal(
+        appViewControllerSource.includes('asyncAfter(deadline: .now() + 8'),
+        false,
+        'the app must not turn a live cold WebKit launch into a terminal eight-second failure'
+    );
+    assert.ok(
+        appViewControllerSource.includes('WebViewManager.startBootWatchdog()'),
+        'the app must arm the progress-aware boot watchdog'
+    );
+    assert.match(
+        webViewBootSource,
+        /coldWebKitGrace: TimeInterval = 20[\s\S]*?activeBootStallLimit: TimeInterval = 8/,
+        'cold WebKit process creation needs a distinct grace period from an active stalled boot'
+    );
+    assert.ok(
+        webViewBootSource.includes('noteProgress(_ milestone: String'),
+        'each native or JavaScript milestone must refresh the inactivity watchdog'
+    );
+    assert.ok(
+        webViewManagerSource.includes('webView.stopLoading()'),
+        'an explicit retry must stop the previous navigation before starting another one'
+    );
+    assert.equal(
+        webViewManagerSource.includes('asyncAfter(deadline: .now() + 0.03'),
+        false,
+        'the first main-page load must not include a fixed startup delay'
+    );
+});
 
 test('iOS Panel Lab remains explicit opt-in even in development builds', () => {
     assert.match(
@@ -397,6 +467,15 @@ test('iOS resource packaging excludes build artifacts before copying', () => {
     assert.ok(
         iosPackagerSource.includes('critical-workspace-surface'),
         'the shared workspace owner must have one stable packaged entry for deferred callers'
+    );
+    assert.ok(
+        iosPackagerSource.includes('critical-workspace-main-menu'),
+        'deferred panels must reuse the initialized main-menu registry instead of bundling an empty duplicate'
+    );
+    assert.match(
+        iosPackagerSource,
+        /bevyProjectPreviewCaptureFramePath[\s\S]*?outfile:\s*path\.join\(outputRoot, 'eVe\/domains\/rendering\/bevy_project_preview_capture_frame\.js'\)/,
+        'the iframe preview runtime must be bundled at the absolute URL requested by its adapter'
     );
     assert.ok(iosPackagerSource.includes('minifyIdentifiers: true'), 'critical Debug packaging must reduce WebKit parser memory, not only whitespace');
     assert.ok(

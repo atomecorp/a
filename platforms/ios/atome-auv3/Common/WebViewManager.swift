@@ -38,32 +38,7 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
     static var bootPresentationHandler: (([String: Any]) -> Void)?
     static var bootFailureHandler: ((String, [String: Any]) -> Void)?
     static var bootTerminalFailure = false
-
-    static func resetBootTelemetry() {
-        bootStartedAt = CACurrentMediaTime()
-        bootMilestones = [:]
-        bootTerminalFailure = false
-        AudioSchemeHandler.resetBootMetrics()
-    }
-
-    static func markBootMilestone(_ name: String) {
-        bootMilestones[name] = Int((CACurrentMediaTime() - bootStartedAt) * 1_000)
-    }
-
-    static func nativePeakMemoryMegabytes() -> Int? {
-        var usage = rusage()
-        guard getrusage(RUSAGE_SELF, &usage) == 0 else { return nil }
-        return Int(usage.ru_maxrss / (1_024 * 1_024))
-    }
-
-    static func attachNativeBootSummary(to report: inout [String: Any]) {
-        report["native_elapsed_ms"] = Int((CACurrentMediaTime() - bootStartedAt) * 1_000)
-        report["native_milestones_ms"] = bootMilestones
-        report["scheme"] = AudioSchemeHandler.bootMetrics()
-        if let peakMemory = nativePeakMemoryMegabytes() {
-            report["native_peak_memory_mb"] = peakMemory
-        }
-    }
+    static let bootWatchdog = BootStallWatchdog()
 
     // Timers for streaming (host time & transport)
     static var hostTimeTimer: Timer?
@@ -104,7 +79,6 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
     static var safeModeExitWork: DispatchWorkItem?
     static let inboundLimit: Int = 24
 
-    // Deferred main page load state
     private static var mainLoadDone: Bool = false
     private static var mainLoadAttempts: Int = 0
     private static var mainLoadTimer: Timer?
@@ -118,93 +92,25 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
 
     var terminateRetryCount = 0
 
-    static func installBootPresentationHandlers(
-        onReady: @escaping ([String: Any]) -> Void,
-        onFailure: @escaping (String, [String: Any]) -> Void
-    ) {
-        bootPresentationHandler = onReady
-        bootFailureHandler = onFailure
-    }
-
-    static func handleBootPresentationReady(_ body: [String: Any]) {
-        guard !bootTerminalFailure else {
-            shared.log.error("Ignoring late boot presentation after terminal failure")
-            return
-        }
-        var report = body
-        markBootMilestone("presentation_ready")
-        attachNativeBootSummary(to: &report)
-        shared.log.info("Boot presentation ready: \(String(describing: report), privacy: .public)")
-        print("[BOOT_PRESENTATION] \(String(describing: report))")
-        DispatchQueue.main.async { bootPresentationHandler?(report) }
-    }
-
-    static func handleBootAuthenticationReady(_ body: [String: Any]) {
-        guard !bootTerminalFailure else {
-            shared.log.error("Ignoring late authentication presentation after terminal failure")
-            return
-        }
-        var report = body
-        markBootMilestone("authentication_ready")
-        attachNativeBootSummary(to: &report)
-        shared.log.info("Boot authentication ready: \(String(describing: report), privacy: .public)")
-        print("[BOOT_AUTHENTICATION] \(String(describing: report))")
-        DispatchQueue.main.async { bootPresentationHandler?(report) }
-    }
-
-    static func reportBootFailure(reason: String) {
-        guard !bootTerminalFailure else { return }
-        bootTerminalFailure = true
-        var report: [String: Any] = ["reason": reason]
-        attachNativeBootSummary(to: &report)
-        shared.log.error("Boot failed: \(String(describing: report), privacy: .public)")
-        print("[BOOT_FAILURE] \(String(describing: report))")
-        captureBootJavaScriptDiagnostics(reason: reason)
-        DispatchQueue.main.async { bootFailureHandler?(reason, report) }
-    }
-
-    private static func captureBootJavaScriptDiagnostics(reason: String) {
-        let script = """
-        (function(){
-          try {
-            var menu = null;
-            try { menu = window.new_menu_v2 && window.new_menu_v2.measure ? window.new_menu_v2.measure() : null; } catch (_) {}
-            return {
-              reason: \(String(reflecting: reason)),
-              href: String(location.href || ''),
-              ready_state: String(document.readyState || ''),
-              auth_complete: window.__authCheckComplete === true,
-              auth_result: window.__authCheckResult || null,
-              workspace_mode: window.__eveWorkspaceMode || null,
-              workspace_error: window.__eveWorkspaceBootOpenError || null,
-              workspace_trace: window.__eveWorkspaceBootTrace || [],
-              current_project_id: String(window.__currentProject && (window.__currentProject.id || window.__currentProject.atome_id) || ''),
-              menu: menu
-            };
-          } catch (error) { return { diagnostic_error: String(error && error.message || error) }; }
-        })();
-        """
-        webView?.evaluateJavaScript(script) { value, error in
-            if let error {
-                shared.log.error("Boot JS diagnostic failed: \(error.localizedDescription, privacy: .public)")
-            } else {
-                shared.log.error("Boot JS diagnostic: \(String(describing: value), privacy: .public)")
-                print("[BOOT_DIAGNOSTIC] \(String(describing: value))")
-            }
-        }
-    }
-
     static func retryMainPageAfterUserRequest() {
         guard let webView else { return }
+        webView.stopLoading()
+        mainLoadTimer?.invalidate()
+        mainLoadTimer = nil
         shared.terminateRetryCount = 0
         mainLoadDone = false
         resetBootTelemetry()
+        startBootWatchdog()
         markBootMilestone("retry_requested")
         markPageLoading()
         if FeatureFlags.registerCustomScheme, let entry = URL(string: "atome:///src/index.html") {
+            markBootMilestone("navigation_requested")
             webView.load(URLRequest(url: entry))
+            mainLoadDone = true
         } else if let entry = Bundle.main.url(forResource: "src/index", withExtension: "html") {
+            markBootMilestone("navigation_requested")
             webView.loadFileURL(entry, allowingReadAccessTo: Bundle.main.bundleURL)
+            mainLoadDone = true
         }
     }
 
@@ -215,10 +121,8 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
         self.webView = webView
         markBootMilestone("webview_configured")
         self.audioController = audioController
-        // hostAudioUnit will be set later via setHostAudioUnit from AudioUnitViewController once created
         webView.navigationDelegate = WebViewManager.shared
         webView.uiDelegate = WebViewManager.shared
-
         // Detect execution environment (App vs AUv3 extension) and log explicitly
         let isExtension: Bool = {
             let path = Bundle.main.bundlePath
@@ -422,10 +326,6 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
         if FeatureFlags.enableJSBridge {
             addFileSystemAPI(to: webView)
         }
-        
-        // Initialiser la structure de fichiers avec iCloudFileManager
-        iCloudFileManager.shared.initializeFileStructure()
-
         webView.configuration.preferences.setValue(true, forKey: "allowFileAccessFromFileURLs")
         webView.configuration.setValue(false, forKey: "allowUniversalAccessFromFileURLs")
         
@@ -448,21 +348,19 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
             WebViewManager.storedMainURL = mainURL
             WebViewManager.mainLoadDone = false
             WebViewManager.mainLoadAttempts = 0
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.03) {
-                _ = WebViewManager.attemptMainPageLoad(isExtension: isExtension, mainURL: mainURL)
+            if !WebViewManager.attemptMainPageLoad(isExtension: isExtension, mainURL: mainURL) {
+                WebViewManager.scheduleMainLoadRetry(isExtension: isExtension, mainURL: mainURL)
             }
-            WebViewManager.scheduleMainLoadRetry(isExtension: isExtension, mainURL: mainURL)
         } else {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.03) {
-                if webView.url == nil || webView.url?.lastPathComponent != "index.html" {
-                    if FeatureFlags.loadInlineOnly {
-                        let inline = "<!doctype html><html><head><meta name=viewport content='width=device-width,initial-scale=1,viewport-fit=cover'></head><body style='margin:0;background:#000;color:#9cf;font:14px -apple-system,Helvetica,Arial,sans-serif;display:flex;align-items:center;justify-content:center;height:100vh'>Inline OK</body></html>"
-                        webView.loadHTMLString(inline, baseURL: nil)
-                    } else if FeatureFlags.registerCustomScheme, let schemeURL = URL(string: "atome:///src/index.html") {
-                        webView.load(URLRequest(url: schemeURL))
-                    } else if let fileURL = mainURL {
-                        webView.loadFileURL(fileURL, allowingReadAccessTo: Bundle.main.bundleURL)
-                    }
+            if webView.url == nil || webView.url?.lastPathComponent != "index.html" {
+                markBootMilestone("navigation_requested")
+                if FeatureFlags.loadInlineOnly {
+                    let inline = "<!doctype html><html><head><meta name=viewport content='width=device-width,initial-scale=1,viewport-fit=cover'></head><body style='margin:0;background:#000;color:#9cf;font:14px -apple-system,Helvetica,Arial,sans-serif;display:flex;align-items:center;justify-content:center;height:100vh'>Inline OK</body></html>"
+                    webView.loadHTMLString(inline, baseURL: nil)
+                } else if FeatureFlags.registerCustomScheme, let schemeURL = URL(string: "atome:///src/index.html") {
+                    webView.load(URLRequest(url: schemeURL))
+                } else if let fileURL = mainURL {
+                    webView.loadFileURL(fileURL, allowingReadAccessTo: Bundle.main.bundleURL)
                 }
             }
         }
@@ -501,23 +399,27 @@ public class WebViewManager: NSObject, WKScriptMessageHandler, WKNavigationDeleg
         if FeatureFlags.loadInlineOnly {
             let inline = "<!doctype html><html><head><meta name=viewport content='width=device-width,initial-scale=1,viewport-fit=cover'></head><body style='margin:0;background:#000;color:#9cf;font:14px -apple-system,Helvetica,Arial,sans-serif;display:flex;align-items:center;justify-content:center;height:100vh'>Inline OK</body></html>"
             shared.log.info("Attempt #\(mainLoadAttempts) loading inline-only test page")
+            markBootMilestone("navigation_requested")
             webView.loadHTMLString(inline, baseURL: nil)
             mainLoadDone = true
             return true
         } else if FeatureFlags.registerCustomScheme {
             if let schemeURL = URL(string: "atome:///src/index.html") {
                 shared.log.info("Attempt #\(mainLoadAttempts) loading entry atome:///src/index.html")
+                markBootMilestone("navigation_requested")
                 webView.load(URLRequest(url: schemeURL))
                 mainLoadDone = true
                 return true
             }
         } else if let fileURL = mainURL {
             shared.log.info("Attempt #\(mainLoadAttempts) loading App entry file URL src/index.html")
+            markBootMilestone("navigation_requested")
             webView.loadFileURL(fileURL, allowingReadAccessTo: Bundle.main.bundleURL)
             mainLoadDone = true
             return true
         } else if FeatureFlags.registerCustomScheme, let schemeURL = URL(string: "atome:///src/index.html") {
             shared.log.info("Attempt #\(mainLoadAttempts) loading fallback atome:///src/index.html")
+            markBootMilestone("navigation_requested")
             webView.load(URLRequest(url: schemeURL))
             mainLoadDone = true
             return true

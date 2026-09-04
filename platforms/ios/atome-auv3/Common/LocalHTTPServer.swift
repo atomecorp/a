@@ -548,26 +548,39 @@ final class LocalHTTPServer {
         return false
     }
 
+    // Single owner for every outgoing WebSocket frame. A peer that stops accepting
+    // writes is gone, so the connection is dropped instead of retried: the previous
+    // inline sends discarded the error and flooded the log once WebContent died.
+    private func sendWebSocketFrame(opcode: UInt8, payload: Data, on connection: NWConnection) {
+        let frame = buildWebSocketFrame(opcode: opcode, payload: payload)
+        connection.send(content: frame, completion: .contentProcessed { [weak self] error in
+            guard let self, let failure = error, !self.shouldLogConnectionFailure(failure) else { return }
+            self.queue.async {
+                // Only a genuine teardown (reset, not connected, broken pipe, cancelled)
+                // retires the peer. Dropping it from the broadcast set first, then
+                // cancelling once: clearing the whole connection state here would reset
+                // the cancelled-once guard and make every queued frame re-cancel it.
+                self.wsConnections.removeValue(forKey: ObjectIdentifier(connection))
+                self.cancelConnectionIfNeededLocked(connection)
+            }
+        })
+    }
+
     private func sendWebSocketJson(_ payload: [String: Any], on connection: NWConnection) {
         guard JSONSerialization.isValidJSONObject(payload) else { return }
         guard let data = try? JSONSerialization.data(withJSONObject: payload, options: []) else { return }
-        sendWebSocketText(String(decoding: data, as: UTF8.self), on: connection)
-    }
-
-    private func sendWebSocketText(_ text: String, on connection: NWConnection) {
-        let payload = Data(text.utf8)
-        let frame = buildWebSocketFrame(opcode: 0x1, payload: payload)
-        connection.send(content: frame, completion: .contentProcessed { _ in })
+        // The serialized JSON is already the exact UTF-8 frame payload. Routing it
+        // through String and back allocated two further full copies of every
+        // response, which is unaffordable for large state_current lists.
+        sendWebSocketFrame(opcode: 0x1, payload: data, on: connection)
     }
 
     private func sendWebSocketPong(_ payload: Data, on connection: NWConnection) {
-        let frame = buildWebSocketFrame(opcode: 0xA, payload: payload)
-        connection.send(content: frame, completion: .contentProcessed { _ in })
+        sendWebSocketFrame(opcode: 0xA, payload: payload, on: connection)
     }
 
     private func sendWebSocketClose(on connection: NWConnection) {
-        let frame = buildWebSocketFrame(opcode: 0x8, payload: Data())
-        connection.send(content: frame, completion: .contentProcessed { _ in })
+        sendWebSocketFrame(opcode: 0x8, payload: Data(), on: connection)
     }
 
     private func buildWebSocketFrame(opcode: UInt8, payload: Data) -> Data {
@@ -593,10 +606,9 @@ final class LocalHTTPServer {
 
     private func broadcastWebSocketText(_ text: String, excluding: NWConnection? = nil) {
         let payload = Data(text.utf8)
-        let frame = buildWebSocketFrame(opcode: 0x1, payload: payload)
         for (id, connection) in wsConnections {
             if let excluded = excluding, ObjectIdentifier(excluded) == id { continue }
-            connection.send(content: frame, completion: .contentProcessed { _ in })
+            sendWebSocketFrame(opcode: 0x1, payload: payload, on: connection)
         }
     }
 
@@ -2547,19 +2559,32 @@ enum AiSRuntime {
             return stateCurrentResponse(requestId: requestId, success: false, error: "Access denied")
         }
         let projectId = normalizedOptionalString(message["project_id"] ?? message["projectId"])
+        let atomeType = normalizedOptionalString(message["atome_type"] ?? message["atomeType"])
         let ownerId = stringValue(claims["sub"])
         let excludeSystem = boolValue(message["exclude_system"] ?? message["excludeSystem"])
         let includeTotal = boolValue(message["include_total"] ?? message["includeTotal"])
+        let excludedParticleKeys = Set(
+            ((message["exclude_particle_keys"] ?? message["excludeParticleKeys"]) as? [Any] ?? [])
+                .compactMap { normalizedOptionalString($0) }
+        )
         let states = try listStateCurrent(
             db,
             projectId: projectId,
             ownerId: ownerId,
             limit: intValue(message["limit"], defaultValue: 1000),
             offset: intValue(message["offset"], defaultValue: 0),
-            excludeSystem: excludeSystem
+            excludeSystem: excludeSystem,
+            atomeType: atomeType,
+            excludingParticleKeys: excludedParticleKeys
         )
         let total = includeTotal
-            ? try countStateCurrent(db, projectId: projectId, ownerId: ownerId, excludeSystem: excludeSystem)
+            ? try countStateCurrent(
+                db,
+                projectId: projectId,
+                ownerId: ownerId,
+                excludeSystem: excludeSystem,
+                atomeType: atomeType
+            )
             : nil
         return stateCurrentResponse(requestId: requestId, success: true, states: states, total: total)
     }
@@ -3182,7 +3207,16 @@ enum AiSRuntime {
         return try serializeStateCurrentRow(db, row: row)
     }
 
-    private static func listStateCurrent(_ db: OpaquePointer?, projectId: String?, ownerId: String?, limit: Int64, offset: Int64, excludeSystem: Bool = false) throws -> [[String: Any]] {
+    private static func listStateCurrent(
+        _ db: OpaquePointer?,
+        projectId: String?,
+        ownerId: String?,
+        limit: Int64,
+        offset: Int64,
+        excludeSystem: Bool = false,
+        atomeType: String? = nil,
+        excludingParticleKeys: Set<String> = []
+    ) throws -> [[String: Any]] {
         var sql = """
             SELECT sc.atome_id, sc.owner_id, sc.project_id, sc.properties, sc.updated_at, sc.version
             FROM state_current sc
@@ -3193,6 +3227,21 @@ enum AiSRuntime {
         if let projectId, !projectId.isEmpty {
             conditions.append("sc.project_id = ?")
             bindings.append(.text(projectId))
+        }
+        if let atomeType, !atomeType.isEmpty {
+            let normalizedType = atomeType.lowercased()
+            conditions.append("(LOWER(COALESCE(a.atome_type, '')) = ? OR LOWER(COALESCE(json_extract(sc.properties, '$.type'), '')) = ? OR LOWER(COALESCE(json_extract(sc.properties, '$.kind'), '')) = ?)")
+            bindings.append(.text(normalizedType))
+            bindings.append(.text(normalizedType))
+            bindings.append(.text(normalizedType))
+            if normalizedType == "tool" {
+                // Activity-selection tools are derived from the canonical activity
+                // list at runtime. Historical builds persisted those derivatives
+                // after an unfiltered activity read, recursively creating thousands
+                // of `ui.activity.select.*` records. Keep their history intact but
+                // never hydrate them as the durable tool catalogue.
+                conditions.append("LOWER(sc.atome_id) NOT LIKE 'tool_ui.activity.select.%'")
+            }
         }
         if let ownerId, !ownerId.isEmpty {
             conditions.append("(COALESCE(sc.owner_id, a.owner_id) = ? OR COALESCE(sc.owner_id, a.owner_id) IS NULL)")
@@ -3211,16 +3260,32 @@ enum AiSRuntime {
         bindings.append(.int(limit))
         bindings.append(.int(offset))
         let rows = try query(db, sql, bindings)
-        return try rows.map { try serializeStateCurrentRow(db, row: $0) }
+        return try rows.map { try serializeStateCurrentRow(db, row: $0, excludingParticleKeys: excludingParticleKeys) }
     }
 
-    private static func countStateCurrent(_ db: OpaquePointer?, projectId: String?, ownerId: String?, excludeSystem: Bool) throws -> Int64 {
+    private static func countStateCurrent(
+        _ db: OpaquePointer?,
+        projectId: String?,
+        ownerId: String?,
+        excludeSystem: Bool,
+        atomeType: String? = nil
+    ) throws -> Int64 {
         var sql = "SELECT COUNT(DISTINCT sc.atome_id) AS total FROM state_current sc LEFT JOIN atomes a ON a.atome_id = sc.atome_id"
         var conditions: [String] = []
         var bindings: [SQLiteBinding] = []
         if let projectId, !projectId.isEmpty {
             conditions.append("sc.project_id = ?")
             bindings.append(.text(projectId))
+        }
+        if let atomeType, !atomeType.isEmpty {
+            let normalizedType = atomeType.lowercased()
+            conditions.append("(LOWER(COALESCE(a.atome_type, '')) = ? OR LOWER(COALESCE(json_extract(sc.properties, '$.type'), '')) = ? OR LOWER(COALESCE(json_extract(sc.properties, '$.kind'), '')) = ?)")
+            bindings.append(.text(normalizedType))
+            bindings.append(.text(normalizedType))
+            bindings.append(.text(normalizedType))
+            if normalizedType == "tool" {
+                conditions.append("LOWER(sc.atome_id) NOT LIKE 'tool_ui.activity.select.%'")
+            }
         }
         if let ownerId, !ownerId.isEmpty {
             conditions.append("(COALESCE(sc.owner_id, a.owner_id) = ? OR COALESCE(sc.owner_id, a.owner_id) IS NULL)")
@@ -3255,10 +3320,18 @@ enum AiSRuntime {
         )
     }
 
-    private static func serializeStateCurrentRow(_ db: OpaquePointer?, row: [String: Any]) throws -> [String: Any] {
+    private static func serializeStateCurrentRow(
+        _ db: OpaquePointer?,
+        row: [String: Any],
+        excludingParticleKeys: Set<String> = []
+    ) throws -> [String: Any] {
         let atomeId = stringValue(row["atome_id"])
         let meta = try findAnyAtomeMeta(db, atomeId: atomeId)
         var properties = (row["properties"] as? String).flatMap { parseJSONValue($0) as? [String: Any] } ?? [:]
+        // `atome:list` has always honoured exclude_particle_keys; state_current did
+        // not, so callers asking for metadata-only rows still received avoidable
+        // preview or other heavy fields.
+        for key in excludingParticleKeys { properties.removeValue(forKey: key) }
         if properties["type"] == nil, let metaType = meta?.atomeType, !metaType.isEmpty {
             properties["type"] = metaType
         }
@@ -3271,12 +3344,14 @@ enum AiSRuntime {
             if properties["project_id"] == nil { properties["project_id"] = projectId }
             if properties["projectId"] == nil { properties["projectId"] = projectId }
         }
+        // `properties` is the single canonical shape for a state_current row. The
+        // former `particles`/`data` aliases repeated the same dictionary, so every
+        // response carried each atome three times and JSON.parse rebuilt three
+        // separate object graphs inside WebContent.
         var state: [String: Any] = [
             "atome_id": atomeId,
             "id": atomeId,
             "properties": properties,
-            "particles": properties,
-            "data": properties,
             "updated_at": stringValue(row["updated_at"]),
             "version": intValue(row["version"], defaultValue: 0)
         ]

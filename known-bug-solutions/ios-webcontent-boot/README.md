@@ -144,3 +144,66 @@ The app and AUv3 Xcode phases now share the same Cargo target directory for a
 given configuration. They still link their own static-library copy, but no
 longer compile the identical Bevy dependency graph twice during one scheme
 build.
+
+## Confirmed root cause and repair (2026-09-04, physical iPhone 17 Pro)
+
+The physical Jetsam report for `Jeezs's phone` (iPhone18,1, iOS 26.6 build
+23G71) settles the mechanism. At the moment of the kill,
+`largestProcess` is `com.apple.WebKit.WebContent` with
+`reason: per-process-limit`, `rpages: 131072` and `lifetimeMax: 131072`
+— 16 KiB pages, so exactly 2 GiB — while the native `atome` process holds only
+4,525 pages (about 70 MiB). The native `rusage` counter therefore proves
+nothing about this failure and must never be used to clear it.
+
+The decisive failing launch received five identical unfiltered
+`state-current-response` frames of 2,358,931 bytes before requesting the
+renderer WASM. This disproved the earlier WASM-compilation hypothesis. The
+actual owners were the state-current query boundary and historical derived-tool
+amplification:
+
+- `serializeStateCurrentRow` emitted the same properties dictionary three
+  times, under `properties`, `particles` and `data`. Swift shares one copy, but
+  the three keys are serialized independently and `JSON.parse` rebuilds three
+  separate object graphs inside WebContent. Every JavaScript consumer already
+  reads `properties` first, so the aliases were dead weight only.
+- `sendWebSocketJson` re-encoded each response `Data -> String -> Data`, so a
+  large `state_current` list was resident three times while being framed.
+- Outgoing frames had no single owner and discarded send errors, so once
+  WebContent died the server retried every queued frame forever and buried the
+  boot chronology under `Socket is not connected`. `sendWebSocketFrame` is now
+  the only sender and drops a peer that refuses writes.
+- The unified adapter dropped `exclude_particle_keys`, and the iOS
+  state-current handler ignored `atome_type`. Tool and activity boot queries
+  therefore returned the entire state table.
+- An older unfiltered activity path had persisted recursive
+  `tool_ui.activity.select.*` derivatives. The phone held 1,201 tool rows, none
+  individually larger than 2,532 bytes. Collection multiplication, not one
+  oversized record, caused the peak.
+
+Measured on the target iPhone with the cleaned signed build:
+
+| run | native presentation | interactive | `bevy.run_ready` | native peak |
+| --- | ---: | ---: | ---: | ---: |
+| 1 | 1,254 ms | 811 ms | 1,100 ms | 107 MiB |
+| 2 | 1,052 ms | 767 ms | 921 ms | 99 MiB |
+| 3 | 1,086 ms | 797 ms | 954 ms | 100 MiB |
+| 4 | 1,131 ms | 708 ms | 971 ms | 105 MiB |
+
+The corrected contract filters and counts by type before serialization,
+forwards particle exclusions across all backends, pages every broad read (100
+for tool catalogues, maximum 250), coalesces identical concurrent reads, and
+quarantines derived activity-selection tools in both the native and
+backend-independent client paths. Active-project synchronization reads project
+records only and excludes previews.
+
+The historical contaminated rows are deliberately preserved, not deleted. They
+can no longer hydrate the boot catalogue or generate descendants. The canonical
+`DefaultPlugins` renderer is restored; temporary frame/property/WASM probes and
+the experimental reduced renderer are removed.
+
+All four cleaned runs restored the historical project, reported zero missing
+resources, Main Toolbar `active=1` and `treeMounted=1`, and no WebContent
+termination. Runs 1, 3, and 4 remained stable for about 27 seconds while the final
+33-record projection completed. Xcode's physical-device screenshot confirms
+the real project pixels and complete toolbar. The focused capacity/native boot
+suite passes 23/23, and the signed app plus embedded AUv3 device build succeeds.

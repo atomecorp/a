@@ -10,20 +10,19 @@ import UIKit
 
 @main
 struct atomeApp: App {
-    @StateObject private var fileManager = iCloudFileManager.shared
+    @StateObject private var fileManager: iCloudFileManager
     @Environment(\.scenePhase) private var scenePhase
 
     init() {
-        // Initialiser les fichiers au démarrage avec iCloudFileManager
-        iCloudFileManager.shared.initializeFileStructure()
-    // Inbox system disabled (Darwin + drain/flush removed)
+        WebViewManager.resetBootTelemetry()
+        _fileManager = StateObject(wrappedValue: iCloudFileManager.shared)
+        WebViewManager.markBootMilestone("app_initialized")
     }
 
     var body: some Scene {
         WindowGroup {
             ContentView()
                 .onAppear {
-                    // Réinitialiser si nécessaire
                     if !fileManager.isInitialized {
                         fileManager.initializeFileStructure()
                     }

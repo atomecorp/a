@@ -13,10 +13,9 @@ final class FullscreenWebViewController: UIViewController {
     private let bootOverlay = UIView()
     private let bootStatusLabel = UILabel()
     private let bootRetryButton = UIButton(type: .system)
-    private var bootTimeoutWorkItem: DispatchWorkItem?
 
     override func loadView() {
-        WebViewManager.resetBootTelemetry()
+        WebViewManager.markBootMilestone("view_load_started")
         let root = UIView(frame: UIScreen.main.bounds)
         root.backgroundColor = .black
         root.isOpaque = true
@@ -71,6 +70,7 @@ final class FullscreenWebViewController: UIViewController {
             onReady: { [weak self] _ in self?.hideBootOverlay() },
             onFailure: { [weak self] reason, _ in self?.showBootFailure(reason: reason) }
         )
+        WebViewManager.startBootWatchdog()
         WebViewManager.setNativeInvokeHandler { command, payload, completion in
             if AppNativeMediaCaptureController.canHandle(command: command) {
                 AppNativeMediaCaptureController.shared.handle(
@@ -102,11 +102,13 @@ final class FullscreenWebViewController: UIViewController {
         webView.scrollView.verticalScrollIndicatorInsets = .zero
         webView.scrollView.horizontalScrollIndicatorInsets = .zero
         webView.scrollView.scrollIndicatorInsets = .zero
-        DispatchQueue.main.async {
-            WebViewManager.setupWebView(for: self.webView)
-        }
-        armBootTimeout()
+        WebViewManager.setupWebView(for: webView)
         injectFullscreenFixJS()
+    }
+
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        WebViewManager.triggerMainLoadNow()
     }
 
     override var prefersStatusBarHidden: Bool { true }
@@ -176,19 +178,7 @@ final class FullscreenWebViewController: UIViewController {
         ])
     }
 
-    private func armBootTimeout() {
-        bootTimeoutWorkItem?.cancel()
-        let work = DispatchWorkItem { [weak self] in
-            guard self != nil else { return }
-            WebViewManager.reportBootFailure(reason: "boot_timeout")
-        }
-        bootTimeoutWorkItem = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + 8, execute: work)
-    }
-
     private func hideBootOverlay() {
-        bootTimeoutWorkItem?.cancel()
-        bootTimeoutWorkItem = nil
         guard !bootOverlay.isHidden else { return }
         UIView.animate(withDuration: 0.16, delay: 0, options: [.curveEaseOut]) {
             self.bootOverlay.alpha = 0
@@ -198,7 +188,6 @@ final class FullscreenWebViewController: UIViewController {
     }
 
     private func showBootFailure(reason: String) {
-        bootTimeoutWorkItem?.cancel()
         bootOverlay.layer.removeAllAnimations()
         bootOverlay.alpha = 1
         bootOverlay.isHidden = false
@@ -211,7 +200,6 @@ final class FullscreenWebViewController: UIViewController {
     @objc private func retryBoot() {
         bootStatusLabel.text = "Nouvelle tentative…"
         bootRetryButton.isHidden = true
-        armBootTimeout()
         WebViewManager.retryMainPageAfterUserRequest()
     }
 }

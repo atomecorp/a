@@ -1,5 +1,26 @@
 # Atome / eVe Architecture Map
 
+iOS WebContent capacity repair (2026-09-04): state-current remains the single
+read boundary, but it now enforces requested atome type and particle exclusions
+before serialization, pages broad consumers, and coalesces identical concurrent
+reads. Dynamic activity-selection tools remain derived UI projections and are
+quarantined from durable tool-catalogue hydration in both native and shared
+client paths. Historical rows are preserved; no second store, migration, state
+owner, sync route, renderer, or DOM authority was introduced.
+
+iOS cold-boot latency repair (2026-09-03): native boot telemetry starts before
+the shared file manager is constructed, while directory preparation and the
+single canonical `FileSyncCoordinator` reconciliation run off the launch path
+on one idempotent serial queue. `WKWebView` navigation starts immediately when
+its visible controller is ready; the old fixed delay and duplicated legacy
+file-copy passes are removed. One progress-aware watchdog allows 20 seconds for
+cold WebKit process creation, then detects only eight seconds without a native
+or JavaScript milestone instead of failing a progressing launch at a fixed
+elapsed time. Retry stops the prior navigation before starting exactly one new
+attempt. Runtime packaging shares the canonical workspace-main-menu owner with
+deferred Home/panel chunks and bundles the project-preview capture frame at its
+requested `atome://` URL. This adds no state, sync, menu, renderer, or DOM owner.
+
 iOS boot architecture (2026-09-02): Xcode no longer copies the source trees as
 resources. Both app and AUv3 invoke the same deterministic esbuild manifest and
 receive one `atome_runtime` root each; compatibility URLs still resolve through

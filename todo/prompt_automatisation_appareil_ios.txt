@@ -1,0 +1,168 @@
+PROMPT — AUTOMATISER LE BUILD, L’INSTALLATION ET LES MESURES SUR UN APPAREIL iOS PHYSIQUE
+
+Je veux que tu prennes en charge, depuis le Mac, le cycle complet de test de mon application sur un iPhone ou un iPad physique : détection de l’appareil, compilation signée, installation, lancement, relancement, collecte des logs, mesure du démarrage et capture d’écran finale.
+
+Important : respecte les règles AGENTS.md du dépôt avant toute action. Ne modifie pas le code sur une simple hypothèse. Établis d’abord les preuves, préserve les changements existants et n’effectue aucune opération Git interdite par le dépôt.
+
+TECHNIQUE À UTILISER
+
+Utilise les outils Apple officiels en ligne de commande :
+
+- xcodebuild pour compiler et signer l’application avec les réglages Xcode du projet ;
+- xcrun devicectl pour détecter l’appareil physique, installer l’application, arrêter l’ancienne instance, lancer la nouvelle et attacher sa console ;
+- Xcode « Devices and Simulators » pour prendre une vraie capture de l’écran physique si le service de capture en ligne de commande n’est pas disponible ;
+- l’automatisation de l’interface du Mac, si elle est disponible dans Codex, uniquement pour piloter Xcode sur le Mac (raccourcis, sélection de l’appareil, bouton « Take Screenshot »).
+
+Cette technique ne simule pas des touchers sur l’écran de l’iPhone ou de l’iPad. Elle automatise le Mac, Xcode et le cycle de vie de l’application sur l’appareil. Ne prétends donc pas avoir cliqué dans l’application tant qu’aucun véritable mécanisme d’interaction tactile n’a été mis en place et vérifié.
+
+PRÉREQUIS
+
+- L’appareil est relié au Mac par USB, allumé et déverrouillé.
+- Le Mac a été approuvé comme appareil de confiance.
+- Le mode développeur iOS/iPadOS est activé.
+- Xcode possède l’équipe de signature et les profils nécessaires.
+- Après un redémarrage physique, je dois saisir le code de l’appareil une première fois. Demande-moi seulement les gestes physiques réellement indispensables, comme saisir le code ou reconnecter le câble.
+
+PARAMÈTRES À IDENTIFIER AVANT DE COMMENCER
+
+Détermine et conserve les valeurs suivantes :
+
+PROJECT_ROOT=<racine du dépôt>
+XCODE_PROJECT=<chemin du fichier .xcodeproj>
+SCHEME=<scheme de l’application>
+CONFIGURATION=Debug
+DEVICE_UDID=<UDID CoreDevice de l’appareil>
+BUNDLE_ID=<identifiant du bundle>
+DERIVED_DATA=<dossier temporaire dédié aux produits de build>
+
+Dans la session de référence, les valeurs étaient :
+
+PROJECT_ROOT=/Users/jean-ericgodard/RubymineProjects/a
+XCODE_PROJECT=platforms/ios/atome-auv3/atome.xcodeproj
+SCHEME=atome
+CONFIGURATION=Debug
+DEVICE_UDID=00008142-001C21C62147801C
+BUNDLE_ID=one.atome.app
+DERIVED_DATA=temp/DerivedData-ios-boot-device-baseline
+
+L’appareil réellement utilisé pendant cette session était l’iPad « Jeezs’s Tab », un iPad Pro 11 pouces (M5). La même méthode s’applique à un iPhone compatible.
+
+PROCÉDURE
+
+1. Vérifie Xcode et la connexion de l’appareil.
+
+Exécute :
+
+  xcode-select -p
+  xcodebuild -version
+  xcrun devicectl list devices --verbose
+
+Ne poursuis que si l’appareil ciblé apparaît comme connecté. Ne déduis pas une incompatibilité uniquement parce que la version du SDK Xcode et celle d’iOS/iPadOS diffèrent : vérifie le comportement réel de CoreDevice, du tunnel et des services développeur.
+
+2. Compile et signe une version appareil.
+
+Depuis PROJECT_ROOT, exécute l’équivalent de :
+
+  xcodebuild \
+    -project "$XCODE_PROJECT" \
+    -scheme "$SCHEME" \
+    -configuration "$CONFIGURATION" \
+    -destination 'generic/platform=iOS' \
+    -derivedDataPath "$DERIVED_DATA" \
+    -allowProvisioningUpdates \
+    build
+
+Vérifie explicitement que le build se termine par BUILD SUCCEEDED et localise le produit signé, normalement :
+
+  $DERIVED_DATA/Build/Products/Debug-iphoneos/atome.app
+
+3. Installe l’application sur l’appareil.
+
+Exécute :
+
+  xcrun devicectl device install app \
+    --device "$DEVICE_UDID" \
+    "$DERIVED_DATA/Build/Products/Debug-iphoneos/atome.app"
+
+Vérifie dans la sortie que l’installation a réussi. Un avertissement isolé tel que « No provider was found » ne suffit pas à conclure à un échec si CoreDevice établit ensuite le tunnel, active les services développeur et confirme l’installation. Base la conclusion sur le résultat final de la commande.
+
+4. Lance l’application et attache la console.
+
+Exécute :
+
+  xcrun devicectl device process launch \
+    --device "$DEVICE_UDID" \
+    --terminate-existing \
+    --console \
+    "$BUNDLE_ID"
+
+Cette commande remplace l’instance existante, lance l’application réelle sur l’appareil et remonte ses logs dans le terminal. Conserve notamment les événements de démarrage, les erreurs et les marqueurs de présentation tels que :
+
+  [BOOT_MILESTONE]
+  [BOOT_PRESENTATION]
+  [BOOT_FAILURE]
+
+N’utilise pas la simple réussite du lancement du processus comme preuve que l’interface est utilisable. Attends le marqueur de présentation attendu et vérifie ensuite les pixels de l’appareil.
+
+5. Mesure plusieurs scénarios.
+
+Effectue au minimum :
+
+- plusieurs lancements chauds, en relançant avec --terminate-existing ;
+- un lancement après réinstallation si nécessaire ;
+- un vrai lancement froid après redémarrage de l’appareil si je l’autorise et si je peux saisir son code.
+
+Pour chaque essai, note séparément :
+
+- l’heure de la demande de lancement ;
+- le temps jusqu’au démarrage du processus ;
+- le temps jusqu’au premier marqueur de boot ;
+- le temps jusqu’à la présentation de l’interface ;
+- l’écran réellement visible : dashboard ou projet actif ;
+- tout timeout, retry, blocage réseau, chargement de données ou erreur native.
+
+Répète suffisamment les lancements chauds pour obtenir une médiane et signaler les valeurs atypiques. Pour un lancement froid, précise qu’il s’agit d’une mesure distincte et ne mélange pas ses résultats avec les lancements chauds.
+
+6. Redémarrage physique, uniquement si demandé.
+
+La commande utilisée dans la session était :
+
+  xcrun devicectl device reboot --device "$DEVICE_UDID"
+
+Après le redémarrage, attends que je saisisse le code. Relance ensuite :
+
+  xcrun devicectl list devices --verbose
+
+Si l’appareil reste indisponible, vérifie d’abord son état et les services CoreDevice. Une déconnexion/reconnexion USB peut être nécessaire pour rétablir le tunnel et les services Developer Disk Image. Ne contourne jamais le verrouillage de l’appareil.
+
+7. Capture une preuve visuelle physique.
+
+Essaie d’abord un outil Apple/libimobiledevice seulement s’il fonctionne avec cette version de l’appareil. Dans la session de référence, idevicescreenshot a échoué avec « Invalid service » : ce n’était donc pas une preuve exploitable.
+
+La solution réellement utilisée a été :
+
+- ouvrir Xcode ;
+- ouvrir « Devices and Simulators » avec Cmd+Shift+2 ;
+- sélectionner l’appareil connecté ;
+- cliquer sur « Take Screenshot » ;
+- récupérer le PNG enregistré par Xcode et l’inspecter.
+
+Si Codex dispose du contrôle de l’interface du Mac, utilise-le pour ces actions Xcode. Ce contrôle porte sur Xcode, pas directement sur l’écran tactile de l’appareil.
+
+8. Gère correctement les limites d’exécution.
+
+Les commandes CoreDevice utilisent des services XPC du Mac et peuvent être bloquées dans un environnement sandboxé. Si cela arrive, demande l’autorisation explicite nécessaire pour exécuter la commande sur l’hôte. N’essaie pas de contourner les permissions et n’élargis pas l’autorisation au-delà des commandes Xcode/CoreDevice requises.
+
+CRITÈRES DE FIN
+
+Ne conclus que lorsque :
+
+- le build signé réussit ;
+- l’installation réelle réussit ;
+- l’application se lance plusieurs fois sans timeout ;
+- les logs ne contiennent plus le problème de boot ciblé ;
+- le temps jusqu’à l’interface est mesuré, pas estimé ;
+- une capture de l’appareil montre bien le dashboard ou le projet actif ;
+- les résultats distinguent clairement build, installation, lancement du processus, présentation de l’interface et interaction utilisateur.
+
+À la fin, donne-moi un compte rendu factuel avec les commandes utilisées, les mesures individuelles, la médiane, la meilleure et la pire valeur, les erreurs éventuelles et le chemin de la capture d’écran. Signale explicitement toute étape non exécutée ou toute interaction tactile non automatisée.

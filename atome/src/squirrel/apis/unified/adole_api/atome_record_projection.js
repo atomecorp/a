@@ -1,6 +1,31 @@
 import { sanitizeAtomeProperties } from '../../../../shared/atome_contract.js';
 import { getSessionState } from './session.js';
 
+const STATE_CURRENT_LIST_IN_FLIGHT = new Map();
+const MAX_STATE_CURRENT_PAGE_SIZE = 250;
+
+function positiveInteger(value, fallback) {
+    const parsed = Number(value);
+    return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function stateCurrentRequestKey(backend, options = {}) {
+    const excludedParticleKeys = options.excludeParticleKeys || options.exclude_particle_keys || [];
+    return JSON.stringify([
+        backend,
+        options.atome_type || options.type || options.atomeType || null,
+        options.project_id || options.projectId || options.parent_id || options.parentId || null,
+        options.owner_id || options.ownerId || null,
+        options.include_shared === true || options.includeShared === true,
+        options.include_total === true || options.includeTotal === true,
+        options.exclude_system === true || options.excludeSystem === true,
+        Array.isArray(excludedParticleKeys) ? excludedParticleKeys.map(String).sort() : [],
+        positiveInteger(options.limit, 1000),
+        Math.max(0, Number(options.offset) || 0),
+        positiveInteger(options.pageSize || options.page_size, 100)
+    ]);
+}
+
 function normalizeAtomeRecord(record) {
     if (!record || typeof record !== 'object') return null;
     const id = record.atome_id || record.id || null;
@@ -51,6 +76,11 @@ function filterByOwner(records, userId, { allowCreator = false } = {}) {
 
 const resolveAtomeType = (record) => String(record?.type || record?.atome_type || record?.kind || '').toLowerCase();
 const resolveAtomeId = (record) => record?.id || record?.atome_id || null;
+
+function isDerivedActivitySelectionTool(record) {
+    const atomeId = String(resolveAtomeId(record) || '').toLowerCase();
+    return atomeId.startsWith('tool_ui.activity.select.');
+}
 
 const resolveAtomeParentId = (record) => (
     record?.meta?.parent_id
@@ -169,21 +199,53 @@ async function listStateCurrentOnBackend(adapters, backend, options) {
     if (!adapter?.atome?.listStateCurrent) {
         return { ok: false, list: [], error: 'state_current_unavailable' };
     }
-    try {
-        const payload = await adapter.atome.listStateCurrent(options);
-        if (payload?.ok === false || payload?.success === false) {
-            return { ok: false, list: [], error: payload?.error || 'state_current_failed' };
+    const requestKey = stateCurrentRequestKey(backend, options);
+    const existingRequest = STATE_CURRENT_LIST_IN_FLIGHT.get(requestKey);
+    if (existingRequest) return existingRequest;
+
+    const request = (async () => {
+        try {
+            const requestedLimit = positiveInteger(options.limit, 1000);
+            const requestedPageSize = positiveInteger(options.pageSize || options.page_size, 100);
+            const pageSize = Math.min(requestedLimit, requestedPageSize, MAX_STATE_CURRENT_PAGE_SIZE);
+            const startOffset = Math.max(0, Number(options.offset) || 0);
+            const list = [];
+            let offset = startOffset;
+            let remaining = requestedLimit;
+            let pageCount = 0;
+
+            while (remaining > 0) {
+                const limit = Math.min(pageSize, remaining);
+                const payload = await adapter.atome.listStateCurrent({ ...options, limit, offset });
+                if (payload?.ok === false || payload?.success === false) {
+                    return { ok: false, list: [], error: payload?.error || 'state_current_failed' };
+                }
+                const listRaw = Array.isArray(payload?.states)
+                    ? payload.states
+                    : Array.isArray(payload?.data?.states)
+                        ? payload.data.states
+                        : [];
+                const mappedPage = listRaw.map(mapStateCurrentToAtome).filter(Boolean);
+                const requestedType = String(options.atome_type || options.type || options.atomeType || '').toLowerCase();
+                list.push(...(requestedType === 'tool'
+                    ? mappedPage.filter((record) => !isDerivedActivitySelectionTool(record))
+                    : mappedPage));
+                pageCount += 1;
+                if (listRaw.length < limit) break;
+                offset += listRaw.length;
+                remaining -= listRaw.length;
+            }
+            return { ok: true, list, raw: { pageCount, count: list.length } };
+        } catch (error) {
+            return { ok: false, list: [], error: error?.message || 'state_current_failed' };
         }
-        const listRaw = Array.isArray(payload?.states)
-            ? payload.states
-            : Array.isArray(payload?.data?.states)
-                ? payload.data.states
-                : [];
-        const list = listRaw.map(mapStateCurrentToAtome).filter(Boolean);
-        return { ok: true, list, raw: payload };
-    } catch (error) {
-        return { ok: false, list: [], error: error?.message || 'state_current_failed' };
-    }
+    })().finally(() => {
+        if (STATE_CURRENT_LIST_IN_FLIGHT.get(requestKey) === request) {
+            STATE_CURRENT_LIST_IN_FLIGHT.delete(requestKey);
+        }
+    });
+    STATE_CURRENT_LIST_IN_FLIGHT.set(requestKey, request);
+    return request;
 }
 
 export {
@@ -192,6 +254,7 @@ export {
     filterByOwner,
     getCurrentUserId,
     isAnonymous,
+    isDerivedActivitySelectionTool,
     isLoggedOut,
     listOnBackend,
     listStateCurrentOnBackend,
