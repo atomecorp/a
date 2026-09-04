@@ -236,6 +236,26 @@ fn update_node_style_patches_position_size_background_z_in_place() {
 }
 
 #[test]
+fn update_node_text_patches_visible_text_in_place() {
+    let mut world = World::new();
+    mount_styled_tree(
+        &mut world,
+        vec![styled_node("ui_label", "label", AtomeUiStyle::default())],
+    );
+    apply_ui_ops(
+        &mut world,
+        vec![AtomeUiOp::UpdateNodeText {
+            id: "ui_label".to_string(),
+            text: "Visible while typing".to_string(),
+        }],
+    );
+
+    assert!(read_ui_diagnostics(&world).last_error.is_none());
+    let entity = entity_for(&world, "ui_label");
+    assert_eq!(world.get::<Text>(entity).unwrap().0, "Visible while typing");
+}
+
+#[test]
 fn ui_visual_transform_mounts_and_updates_without_rebuilding_the_node() {
     let mut world = World::new();
     mount_styled_tree(

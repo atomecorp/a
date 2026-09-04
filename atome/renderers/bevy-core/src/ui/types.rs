@@ -188,5 +188,6 @@ pub enum AtomeUiOp {
     UpdateTree { tree: AtomeUiTree },
     UnmountTree { id: String },
     UpdateNodeStyle { id: String, style: AtomeUiStyle },
+    UpdateNodeText { id: String, text: String },
     SetSubtreeOpacity { id: String, opacity: f32 },
 }

@@ -704,6 +704,17 @@ fn update_node_style(world: &mut World, id: &str, style: AtomeUiStyle) -> Result
     Ok(())
 }
 
+fn update_node_text(world: &mut World, id: &str, text: String) -> Result<(), String> {
+    let normalized = normalized_id(id, "bevy_ui_node_id_required")?;
+    let entity = node_entity(world, &normalized)?;
+    let mut entity_mut = world.entity_mut(entity);
+    let mut current = entity_mut
+        .get_mut::<Text>()
+        .ok_or_else(|| format!("bevy_ui_text_node_required:{normalized}"))?;
+    current.0 = text;
+    Ok(())
+}
+
 fn scaled_alpha(base: Color, factor: f32) -> Color {
     base.with_alpha(base.alpha() * factor.clamp(0.0, 1.0))
 }
@@ -769,6 +780,7 @@ pub fn apply_ui_ops(world: &mut World, ops: Vec<AtomeUiOp>) {
             AtomeUiOp::UpdateTree { tree } => update_tree(world, tree),
             AtomeUiOp::UnmountTree { id } => unmount_tree(world, &id),
             AtomeUiOp::UpdateNodeStyle { id, style } => update_node_style(world, &id, style),
+            AtomeUiOp::UpdateNodeText { id, text } => update_node_text(world, &id, text),
             AtomeUiOp::SetSubtreeOpacity { id, opacity } => {
                 set_subtree_opacity(world, &id, opacity)
             }

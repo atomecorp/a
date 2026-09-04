@@ -121,7 +121,11 @@ the initial workspace reveal requested by `user_workspace_surface_runtime.js`.
 UI preparation and motion (2026-08-27): `bevy_ui_flower_motion.js` derives
 child offsets from canonical layout; `bevy_ui_tree_motion_runtime.js` converts
 surface-space `overlayPosition` only at the flat renderer boundary. Ordinary
-motion uses one renderer batch. `bevy_ui_image_runtime.js` spends preparation
+motion uses one renderer batch. Incremental text edits use the same motion API:
+the native path emits `update_node_text`, while
+`bevy_ui_project_overlay_runtime.js` regenerates only the affected text
+resource through `updateProjectSceneRecord`; caret geometry stays on the direct
+motion path. `bevy_ui_image_runtime.js` spends preparation
 frame budgets on cache misses only and can refresh geometry before publication.
 `surface_runtime.js` notifies every effective size change. List/Matrix wait for
 their page and contextual geometry before replacing their mounted tree.

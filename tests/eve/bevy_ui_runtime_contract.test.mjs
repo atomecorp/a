@@ -3,6 +3,7 @@ import { test } from 'vitest';
 import { JSDOM } from 'jsdom';
 
 import { createEveBevyUiRuntime, normalizeBevyUiTree } from '../../eVe/domains/rendering/bevy_ui_runtime.js';
+import { patchBevyUiTreeMotion } from '../../eVe/domains/rendering/bevy_ui_project_overlay_runtime.js';
 import { createBevyUiDropRuntime } from '../../eVe/domains/rendering/bevy_ui_pointer_runtime.js';
 import { ensureRenderSurface } from '../../eVe/domains/rendering/surface_runtime.js';
 import { hydrateImageTree } from '../../eVe/domains/rendering/bevy_ui_image_runtime.js';
@@ -271,13 +272,14 @@ test('BevyUI runtime sends mount/update/unmount ops without creating component D
     await runtime.updateTree({ id: 'ui_tree', surface, tree });
     await runtime.updateTreeMotion({
         id: 'ui_tree',
-        updates: [{ nodeId: 'open_button', position: [20, 30], scale: [0.9, 1.05], rotation: 8, origin: [0.5, 0.5], opacity: 0.7 }]
+        updates: [{ nodeId: 'open_button', text: 'Opened', position: [20, 30], scale: [0.9, 1.05], rotation: 8, origin: [0.5, 0.5], opacity: 0.7 }]
     });
     await runtime.unmountTree('ui_tree');
 
-    assert.deepEqual(calls.map((op) => op.type), ['mount_tree', 'update_tree', 'update_node_style', 'unmount_tree']);
-    assert.deepEqual(calls[2].style.scale, [0.9, 1.05]);
-    assert.equal(calls[2].style.rotation, 8);
+    assert.deepEqual(calls.map((op) => op.type), ['mount_tree', 'update_tree', 'update_node_text', 'update_node_style', 'unmount_tree']);
+    assert.equal(calls[2].text, 'Opened');
+    assert.deepEqual(calls[3].style.scale, [0.9, 1.05]);
+    assert.equal(calls[3].style.rotation, 8);
     assert.equal(calls[0].tree.root.children[0].id, 'open_button');
     assert.equal(surface.ownerDocument.querySelectorAll('button, input, [data-bevy-ui]').length, 0);
     assert.deepEqual(runtime.readDiagnostics(), {
@@ -1207,4 +1209,42 @@ test('BevyUI menu overlay updates preserve Dashboard media records and effects',
         assert.equal(recordsById.get(record.id).properties.media_height, record.properties.media_height);
     }
     assert.equal(recordsById.has('__eve_bevy_ui_main_menu_home_icon_image'), true);
+});
+
+test('BevyUI input motion regenerates its visible WebGPU text on every value patch', async () => {
+    clearAllProjectScenes();
+    const previousWindow = globalThis.window;
+    const previousDocument = globalThis.document;
+    const dom = projectDom();
+    try {
+        const host = dom.window.document.getElementById('project');
+        const calls = [];
+        const id = '__eve_bevy_ui_input_tree_name_input_text_text';
+        const record = {
+            id,
+            type: 'text',
+            properties: { kind: 'text', left: 10, top: 10, width: 120, height: 32, text: '' }
+        };
+        await renderProjectScene({
+            projectId: 'project_live_input', records: [record], host, compositor: createTestCompositor(calls)
+        });
+
+        calls.length = 0;
+        const result = await patchBevyUiTreeMotion({
+            treeId: 'input_tree',
+            documentRef: dom.window.document,
+            updates: [{ nodeId: 'name_input_text', suffix: '_text', text: 'Ada' }]
+        });
+        const state = getProjectSceneState('project_live_input');
+        const visible = state.records.find((entry) => entry.id === id);
+
+        assert.equal(result.ok, true);
+        assert.equal(visible.properties.text, 'Ada');
+        assert.equal(state.projection.virtual_scene.byId.get(id).content.text, 'Ada');
+        assert.equal(state.projection.render_result.incremental_record, true);
+    } finally {
+        clearAllProjectScenes();
+        globalThis.window = previousWindow;
+        globalThis.document = previousDocument;
+    }
 });
