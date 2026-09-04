@@ -1,5 +1,11 @@
 # Atome / eVe API Map
 
+Internal Capture provenance contract (2026-09-04): a Capture definition keeps
+the caller's `presentation` and structured `source` through its nested gateway
+invocation. Main-menu audio/video feedback therefore targets the canonical
+BevyUI tool that initiated the session instead of a synthetic Capture layer.
+No public command or persisted field changes.
+
 Internal drag/realtime contract (2026-08-29): repeated scene
 `applyGestureFrame()` calls for one gesture/Atome collapse to the latest visual
 payload per animation frame; `flushGesture()` applies any remaining visual frame
@@ -113,7 +119,19 @@ Project activation is an internal latest-wins operation owned by
 `project_view_mode_state.js`, then calls `loadProjectAtomes` with the internal
 `viewModePrepared: true` option. That option suppresses only the redundant
 post-load mode restoration for this activation; it is not persistent state and
-does not create a second view-mode API.
+does not create a second view-mode API. The same internal marker is carried by
+the post-presentation authoritative refresh after a stale-first boot, because
+that load transaction already restored the representation from local state.
+An explicit same-mode user choice still persists through the canonical commit
+owner and invalidates any older asynchronous preference read.
+Project bootstrap uses that same mode owner. `loadProjectAtomes` does not expose
+its local Natural projection as ready until the one prefetched persisted-mode
+application has completed; this is a presentation barrier, not a second mode
+state or an iOS-specific renderer branch. The internal `sourceRecords` argument
+passes that load transaction's canonical snapshot through the restored surface,
+page normalizer, and initial contextual playback-rule lookup. It is consumed
+only for the first mount and prevents redundant native `listStateCurrent` and
+`getStateCurrent` calls; subsequent view reads retain the normal canonical APIs.
 
 Current native collaboration contract (2026-08-14): Tauri keeps Axum as its
 primary local data API and exposes Fastify only as the configured collaboration

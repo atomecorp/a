@@ -141,13 +141,10 @@ test('tool genesis delegates persistence diagnostics outside the legacy runtime'
     assert.ok(toolGenesisHostLifecycleSource.includes("from './persistence_diag_runtime.js'"));
     assert.ok(persistenceDiagSource.includes('createPersistenceDiagRuntime'));
     assert.ok(persistenceDiagSource.includes('persistenceDiagLog'));
-    assert.ok(persistenceDiagSource.includes('summarizePersistenceRecord'));
-    assert.ok(persistenceDiagSource.includes('summarizePersistenceRecords'));
     assert.equal(toolGenesisSource.includes('const persistenceDiagLog ='), false);
-    assert.equal(toolGenesisSource.includes('const summarizePersistenceRecord ='), false);
 });
 
-test('persistence diagnostics runtime summarizes records and logs only when enabled', async () => {
+test('persistence diagnostics runtime logs only when enabled', async () => {
     const originalWindow = globalThis.window;
     try {
         const messages = [];
@@ -165,38 +162,7 @@ test('persistence diagnostics runtime summarizes records and logs only when enab
                 invoke: async (name, payload) => invokes.push({ name, payload })
             }
         };
-        const runtime = createPersistenceDiagRuntime({
-            resolveAtomeProperties: (record) => record.properties || {}
-        });
-
-        const records = runtime.summarizePersistenceRecords([
-            {
-                atome_id: 'shape_a',
-                type: 'shape',
-                owner_id: 'owner_a',
-                properties: {
-                    project_id: 'project_a',
-                    parent_id: 'project_a',
-                    left: 10,
-                    top: 20,
-                    width: 30,
-                    height: 40
-                }
-            },
-            null
-        ]);
-        assert.deepEqual(records, [{
-            id: 'shape_a',
-            type: 'shape',
-            projectId: 'project_a',
-            parentId: 'project_a',
-            ownerId: 'owner_a',
-            left: 10,
-            top: 20,
-            width: 30,
-            height: 40,
-            deleted: null
-        }]);
+        const runtime = createPersistenceDiagRuntime();
 
         runtime.persistenceDiagLog('disabled', { ok: false });
         assert.deepEqual(messages, []);

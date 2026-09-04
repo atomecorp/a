@@ -110,10 +110,13 @@ const optionalDescriptors = [...descriptors.entries()]
 const registryLines = criticalDescriptors
     .sort(([left], [right]) => left.localeCompare(right))
     .map(([moduleId, target]) => `  ${JSON.stringify(moduleId)}: () => import(${JSON.stringify(target)})`);
-registryLines.push(`  ${JSON.stringify(EVE_ENTRY_MODULE_ID)}: () => import('/chunks/eve/eve-application.js')`);
+const SPARK_ENTRY_ID = 'atome-ios:spark';
+const EVE_APPLICATION_ENTRY_ID = 'atome-ios:eve-application';
+const OPTIONAL_INTEGRATIONS_ENTRY_ID = 'atome-ios:optional-integrations';
+registryLines.push(`  ${JSON.stringify(EVE_ENTRY_MODULE_ID)}: () => import(${JSON.stringify(EVE_APPLICATION_ENTRY_ID)})`);
 for (const [moduleId] of optionalDescriptors.sort(([left], [right]) => left.localeCompare(right))) {
     registryLines.push(
-        `  ${JSON.stringify(moduleId)}: () => import('/chunks/optional-integrations.js')`
+        `  ${JSON.stringify(moduleId)}: () => import(${JSON.stringify(OPTIONAL_INTEGRATIONS_ENTRY_ID)})`
         + `.then((module) => module.optionalModuleLoaders[${JSON.stringify(moduleId)}]())`
     );
 }
@@ -133,31 +136,21 @@ ${optionalDescriptors
 `;
 const workspaceSurfacePath = path.join(eveRoot, 'intuition/tools/user_workspace_surface_runtime.js');
 const WORKSPACE_SURFACE_ENTRY_NAME = 'critical-workspace-surface';
-const WORKSPACE_SURFACE_ENTRY_URL = `/chunks/eve/${WORKSPACE_SURFACE_ENTRY_NAME}.js`;
 const workspaceMainMenuPath = path.join(eveRoot, 'intuition/tools/workspace_main_menu_visibility.js');
 const WORKSPACE_MAIN_MENU_ENTRY_NAME = 'critical-workspace-main-menu';
-const WORKSPACE_MAIN_MENU_ENTRY_URL = `/chunks/eve/${WORKSPACE_MAIN_MENU_ENTRY_NAME}.js`;
 const bevyProjectPreviewCaptureFramePath = path.join(eveRoot, 'domains/rendering/bevy_project_preview_capture_frame.js');
 const EXTRA_CRITICAL_ENTRY_COUNT = 2;
 const criticalEntryNameByModuleId = new Map(eveCriticalDescriptors.map(([moduleId]) => [
     moduleId,
     `critical-${moduleId.slice('eve.'.length).replace(/[^a-zA-Z0-9_-]/g, '-')}`
 ]));
-const criticalEveEntryUrlByPath = new Map([
-    ...eveCriticalDescriptors.map(([moduleId, target]) => [
-        target,
-        `/chunks/eve/${criticalEntryNameByModuleId.get(moduleId)}.js`
-    ]),
-    [workspaceSurfacePath, WORKSPACE_SURFACE_ENTRY_URL],
-    [workspaceMainMenuPath, WORKSPACE_MAIN_MENU_ENTRY_URL]
-]);
 const eveApplicationSource = `
 import { startEve } from ${JSON.stringify(path.join(eveRoot, 'eVe.js'))};
 globalThis.__ATOME_PACKAGED_MODULES__ = Object.freeze({
   ...(globalThis.__ATOME_PACKAGED_MODULES__ || {}),
 ${[
-    ...eveCriticalDescriptors.map(([moduleId]) => (
-        `  ${JSON.stringify(moduleId)}: () => import(${JSON.stringify(`/chunks/eve/${criticalEntryNameByModuleId.get(moduleId)}.js`)})`
+    ...eveCriticalDescriptors.map(([moduleId, target]) => (
+        `  ${JSON.stringify(moduleId)}: () => import(${JSON.stringify(target)})`
     )),
     ...eveDeferredDescriptors.map(([moduleId, target]) => (
         `  ${JSON.stringify(moduleId)}: () => import(${JSON.stringify(target)})`
@@ -169,162 +162,49 @@ ${[
 await startEve();
 `;
 
+const IOS_RUNTIME_ENTRY_NAMESPACE = 'atome-ios-entry';
+const virtualEntrySources = new Map([
+    [SPARK_ENTRY_ID, entrySource],
+    [EVE_APPLICATION_ENTRY_ID, eveApplicationSource],
+    [OPTIONAL_INTEGRATIONS_ENTRY_ID, optionalEntrySource]
+]);
+const iosRuntimeEntryPlugin = {
+    name: 'atome-ios-runtime-entry',
+    setup(buildContext) {
+        buildContext.onResolve({ filter: /^atome-ios:/ }, (args) => (
+            virtualEntrySources.has(args.path)
+                ? { path: args.path, namespace: IOS_RUNTIME_ENTRY_NAMESPACE }
+                : null
+        ));
+        buildContext.onLoad({ filter: /.*/, namespace: IOS_RUNTIME_ENTRY_NAMESPACE }, (args) => ({
+            contents: virtualEntrySources.get(args.path),
+            loader: 'js',
+            resolveDir: projectRoot
+        }));
+    }
+};
+
 await rm(outputRoot, { recursive: true, force: true });
 await mkdir(outputRoot, { recursive: true });
-const deferredEntryTargets = new Map();
-const deferDynamicImportsPlugin = {
-    name: 'atome-ios-deferred-imports',
-    setup(buildContext) {
-        buildContext.onResolve({ filter: /.*/ }, async (args) => {
-            if (args.kind !== 'dynamic-import') return null;
-            if (args.path.startsWith('/chunks/')) return { path: args.path, external: true };
-            const resolved = await buildContext.resolve(args.path, {
-                importer: args.importer,
-                resolveDir: args.resolveDir,
-                kind: 'import-statement'
-            });
-            if (resolved.errors.length || !resolved.path) return null;
-            const criticalEntryUrl = criticalEveEntryUrlByPath.get(resolved.path);
-            if (criticalEntryUrl) return { path: criticalEntryUrl, external: true };
-            const relative = path.relative(projectRoot, resolved.path).replace(/\\/g, '/');
-            const entryName = relative.replace(/\.[^.]+$/, '').replace(/[^a-zA-Z0-9_-]/g, '-');
-            const existing = deferredEntryTargets.get(entryName);
-            if (existing && existing !== resolved.path) throw new Error(`packaged_deferred_entry_collision:${entryName}`);
-            deferredEntryTargets.set(entryName, resolved.path);
-            return { path: `/chunks/deferred/${entryName}.js`, external: true };
-        });
-    }
-};
-// Home is deferred, but its anonymous/authenticated actions call the same
-// workspace owner already loaded by the critical boot graph. Without this
-// alias, esbuild emits a second copy of that stateful module in the deferred
-// graph, so the two copies can bootstrap and project the Dashboard concurrently.
-const reuseCriticalEveModulesPlugin = {
-    name: 'atome-ios-reuse-critical-eve-modules',
-    setup(buildContext) {
-        buildContext.onResolve({ filter: /\.js$/ }, (args) => {
-            const resolved = path.resolve(args.resolveDir || path.dirname(args.importer), args.path);
-            const criticalEntryUrl = criticalEveEntryUrlByPath.get(resolved);
-            return criticalEntryUrl ? { path: criticalEntryUrl, external: true } : null;
-        });
-    }
-};
-const optionalBuild = await build({
-    stdin: {
-        contents: optionalEntrySource,
-        resolveDir: projectRoot,
-        sourcefile: 'chunks/optional-integrations.entry.js'
-    },
-    absWorkingDir: projectRoot,
-    bundle: true,
-    splitting: false,
-    format: 'esm',
-    platform: 'browser',
-    target: ['safari16.4'],
-    external: ['/wasm/*', 'node:*'],
-    minifySyntax: true,
-    minifyWhitespace: true,
-    minifyIdentifiers: true,
-    outfile: path.join(outputRoot, 'chunks/optional-integrations.js'),
-    logLevel: 'warning',
-    metafile: true,
-    write: true
-});
-const criticalGroupBuild = await build({
+// Critical entry points keep stable URLs while optional and feature code stays
+// behind dynamic imports. All browser code still belongs to this one splitting
+// graph, so common modules and stateful owners are emitted exactly once.
+const runtimeBuild = await build({
     entryPoints: {
+        'src/squirrel/spark': SPARK_ENTRY_ID,
+        'chunks/optional-integrations': OPTIONAL_INTEGRATIONS_ENTRY_ID,
         ...Object.fromEntries(eveCriticalDescriptors.map(([moduleId, target]) => [
-            criticalEntryNameByModuleId.get(moduleId),
+            `chunks/eve/${criticalEntryNameByModuleId.get(moduleId)}`,
             target
         ])),
-        [WORKSPACE_SURFACE_ENTRY_NAME]: workspaceSurfacePath,
-        [WORKSPACE_MAIN_MENU_ENTRY_NAME]: workspaceMainMenuPath
+        [`chunks/eve/${WORKSPACE_SURFACE_ENTRY_NAME}`]: workspaceSurfacePath,
+        [`chunks/eve/${WORKSPACE_MAIN_MENU_ENTRY_NAME}`]: workspaceMainMenuPath,
+        'eVe/eVe': EVE_APPLICATION_ENTRY_ID,
+        'eVe/domains/rendering/bevy_project_preview_capture_frame': bevyProjectPreviewCaptureFramePath
     },
     absWorkingDir: projectRoot,
     bundle: true,
     splitting: true,
-    format: 'esm',
-    platform: 'browser',
-    target: ['safari16.4'],
-    external: ['/chunks/*', '/wasm/*', 'node:*'],
-    minifySyntax: true,
-    minifyWhitespace: true,
-    minifyIdentifiers: true,
-    outdir: path.join(outputRoot, 'chunks/eve'),
-    entryNames: '[name]',
-    chunkNames: 'critical-shared-[hash]',
-    plugins: [deferDynamicImportsPlugin],
-    logLevel: 'warning',
-    metafile: true,
-    write: true
-});
-const eveBuild = await build({
-    stdin: {
-        contents: eveApplicationSource,
-        resolveDir: projectRoot,
-        sourcefile: 'eve-application.js'
-    },
-    absWorkingDir: projectRoot,
-    bundle: true,
-    splitting: false,
-    format: 'esm',
-    platform: 'browser',
-    target: ['safari16.4'],
-    external: ['/chunks/*', '/wasm/*', 'node:*'],
-    minifySyntax: true,
-    minifyWhitespace: true,
-    minifyIdentifiers: true,
-    outfile: path.join(outputRoot, 'chunks/eve/eve-application.js'),
-    plugins: [deferDynamicImportsPlugin],
-    logLevel: 'warning',
-    metafile: true,
-    write: true
-});
-const deferredBuild = deferredEntryTargets.size ? await build({
-    entryPoints: Object.fromEntries(deferredEntryTargets),
-    absWorkingDir: projectRoot,
-    bundle: true,
-    splitting: true,
-    format: 'esm',
-    platform: 'browser',
-    target: ['safari16.4'],
-    external: ['/chunks/*', '/wasm/*', 'node:*'],
-    minifySyntax: true,
-    minifyWhitespace: true,
-    minifyIdentifiers: true,
-    outdir: path.join(outputRoot, 'chunks/deferred'),
-    entryNames: '[name]',
-    chunkNames: 'shared/[name]-[hash]',
-    plugins: [reuseCriticalEveModulesPlugin],
-    logLevel: 'warning',
-    metafile: true,
-    write: true
-}) : null;
-const criticalBuild = await build({
-    stdin: {
-        contents: entrySource,
-        resolveDir: projectRoot,
-        sourcefile: 'src/squirrel/spark.packaged.js'
-    },
-    absWorkingDir: projectRoot,
-    bundle: true,
-    splitting: false,
-    format: 'esm',
-    platform: 'browser',
-    target: ['safari16.4'],
-    external: ['/chunks/*', '/wasm/*', 'node:*'],
-    minifySyntax: true,
-    minifyWhitespace: true,
-    minifyIdentifiers: true,
-    outfile: path.join(outputRoot, 'src/squirrel/spark.js'),
-    logLevel: 'warning',
-    metafile: true,
-    write: true
-});
-const previewCaptureFrameBuild = await build({
-    entryPoints: [bevyProjectPreviewCaptureFramePath],
-    absWorkingDir: projectRoot,
-    bundle: true,
-    splitting: false,
     format: 'esm',
     platform: 'browser',
     target: ['safari16.4'],
@@ -332,11 +212,41 @@ const previewCaptureFrameBuild = await build({
     minifySyntax: true,
     minifyWhitespace: true,
     minifyIdentifiers: true,
-    outfile: path.join(outputRoot, 'eVe/domains/rendering/bevy_project_preview_capture_frame.js'),
+    outdir: outputRoot,
+    entryNames: '[dir]/[name]',
+    chunkNames: 'chunks/shared/[name]-[hash]',
+    plugins: [iosRuntimeEntryPlugin],
     logLevel: 'warning',
     metafile: true,
     write: true
 });
+
+const singletonOwnerPaths = [
+    'eVe/domains/rendering/project_view_mode_state.js',
+    'eVe/domains/media/api/audio_api.js',
+    'eVe/domains/media/api/video_api.js',
+    'eVe/intuition/ribbon/bevy_ui_product_registry.js'
+];
+const outputsByInput = new Map();
+for (const [outputPath, output] of Object.entries(runtimeBuild.metafile.outputs)) {
+    for (const inputPath of Object.keys(output.inputs || {})) {
+        const outputPaths = outputsByInput.get(inputPath) || [];
+        outputPaths.push(outputPath);
+        outputsByInput.set(inputPath, outputPaths);
+    }
+}
+const duplicatedRuntimeInput = [...outputsByInput]
+    .find(([, outputPaths]) => outputPaths.length !== 1);
+if (duplicatedRuntimeInput) {
+    const [inputPath, outputPaths] = duplicatedRuntimeInput;
+    throw new Error(`packaged_runtime_input_duplicated:${inputPath}:${outputPaths.join(',')}`);
+}
+for (const ownerPath of singletonOwnerPaths) {
+    const outputs = outputsByInput.get(ownerPath) || [];
+    if (outputs.length !== 1) {
+        throw new Error(`packaged_singleton_owner_count:${ownerPath}:${outputs.length}:${outputs.join(',')}`);
+    }
+}
 await writeFile(
     path.join(outputRoot, 'build-manifest.json'),
     JSON.stringify({
@@ -345,12 +255,8 @@ await writeFile(
         critical_module_count: criticalDescriptors.length + eveCriticalDescriptors.length + EXTRA_CRITICAL_ENTRY_COUNT,
         eve_module_count: eveDescriptors.length,
         optional_module_count: optionalDescriptors.length,
-        critical_outputs: criticalBuild.metafile.outputs,
-        eve_outputs: eveBuild.metafile.outputs,
-        eve_critical_outputs: criticalGroupBuild.metafile.outputs,
-        preview_capture_outputs: previewCaptureFrameBuild.metafile.outputs,
-        deferred_outputs: deferredBuild?.metafile.outputs || {},
-        optional_outputs: optionalBuild.metafile.outputs
+        runtime_outputs: runtimeBuild.metafile.outputs,
+        singleton_owners: singletonOwnerPaths
     }, null, 2)
 );
 

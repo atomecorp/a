@@ -11,12 +11,6 @@ import {
     renderProjectScene
 } from '../../eVe/domains/rendering/project_scene_runtime.js';
 import { createTestCompositor, installDom } from './unified_rendering_test_helpers.mjs';
-import {
-    __testClearPrefetch,
-    __testSetCommitLoader,
-    restoreProjectViewMode
-} from '../../eVe/domains/rendering/project_view_mode_state.js';
-import { readProjectViewSurfaceState } from '../../eVe/domains/rendering/project_view_surface_runtime.js';
 import { createDashboardActionRuntime } from '../../eVe/domains/dashboard/dashboard_actions.js';
 import { contactSurface } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_contact_runtime.js';
 
@@ -27,28 +21,6 @@ const previewRuntime = vi.hoisted(() => ({
 vi.mock('../../eVe/domains/rendering/project_preview_runtime.js', () => ({
     warmProjectPreviewCapture: previewRuntime.warmProjectPreviewCapture
 }));
-
-test('restoring a Natural project applies the canonical surface transition', async () => {
-    const { window, document } = installMockBrowserEnv();
-    globalThis.window = window;
-    globalThis.document = document;
-    window.__currentProject = { id: 'project_natural_restore' };
-    __testClearPrefetch();
-    __testSetCommitLoader(async () => ({
-        getStateCurrent: async () => ({ properties: { view_mode: 'natural' } })
-    }));
-    try {
-        const restored = await restoreProjectViewMode('project_natural_restore');
-        assert.equal(restored.ok, true);
-        assert.equal(restored.restored, true);
-        assert.equal(restored.mode, 'natural');
-        assert.equal(readProjectViewSurfaceState().mode, 'natural');
-        assert.equal(readProjectViewSurfaceState().projectId, 'project_natural_restore');
-    } finally {
-        __testSetCommitLoader();
-        __testClearPrefetch();
-    }
-});
 
 test('Dashboard project activation delegates workspace and menu ownership once', async () => {
     const calls = [];

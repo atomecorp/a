@@ -19,6 +19,8 @@ class AudioSchemeHandler: NSObject, WKURLSchemeHandler {
     private static var startedAt = CACurrentMediaTime()
     private static let streamThreshold = 512 * 1024
     private static let streamChunkSize = 256 * 1024
+    private let taskLock = NSLock()
+    private var closedTaskIds = Set<ObjectIdentifier>()
 
     static func resetBootMetrics() {
         metricsQueue.sync {
@@ -59,8 +61,58 @@ class AudioSchemeHandler: NSObject, WKURLSchemeHandler {
     private static func recordMissing() {
         metricsQueue.async { missingCount += 1 }
     }
+
+    private func taskId(_ task: WKURLSchemeTask) -> ObjectIdentifier {
+        ObjectIdentifier(task as AnyObject)
+    }
+
+    private func register(_ task: WKURLSchemeTask) {
+        taskLock.lock()
+        closedTaskIds.remove(taskId(task))
+        taskLock.unlock()
+    }
+
+    private func close(_ task: WKURLSchemeTask) {
+        taskLock.lock()
+        closedTaskIds.insert(taskId(task))
+        taskLock.unlock()
+    }
+
+    private func deliver(_ task: WKURLSchemeTask, _ body: () -> Void) -> Bool {
+        taskLock.lock()
+        let isOpen = !closedTaskIds.contains(taskId(task))
+        taskLock.unlock()
+        guard isOpen else { return false }
+        body()
+        return true
+    }
+
+    private func complete(_ task: WKURLSchemeTask, response: URLResponse, data: Data) -> Bool {
+        taskLock.lock()
+        let id = taskId(task)
+        let isOpen = !closedTaskIds.contains(id)
+        if isOpen { closedTaskIds.insert(id) }
+        taskLock.unlock()
+        guard isOpen else { return false }
+        task.didReceive(response)
+        task.didReceive(data)
+        task.didFinish()
+        return true
+    }
+
+    private func finish(_ task: WKURLSchemeTask) -> Bool {
+        taskLock.lock()
+        let id = taskId(task)
+        let isOpen = !closedTaskIds.contains(id)
+        if isOpen { closedTaskIds.insert(id) }
+        taskLock.unlock()
+        guard isOpen else { return false }
+        task.didFinish()
+        return true
+    }
     
     func webView(_ webView: WKWebView, start urlSchemeTask: WKURLSchemeTask) {
+        register(urlSchemeTask)
         guard let url = urlSchemeTask.request.url else { return }
         let (requestedPath, host) = normalize(url: url)
         let path = (requestedPath == "/" || requestedPath == "/index.html")
@@ -105,7 +157,7 @@ class AudioSchemeHandler: NSObject, WKURLSchemeHandler {
     }
     
     func webView(_ webView: WKWebView, stop urlSchemeTask: WKURLSchemeTask) {
-        // No-op
+        close(urlSchemeTask)
     }
     
     private func serveSandboxFile(relativePath rawPath: String, label: String, task: WKURLSchemeTask) {
@@ -146,10 +198,9 @@ class AudioSchemeHandler: NSObject, WKURLSchemeHandler {
                     "Content-Range": "bytes \(range.lowerBound)-\(range.upperBound - 1)/\(fileSize)",
                     "Accept-Ranges": "bytes"
                 ])!
-                task.didReceive(response)
-                task.didReceive(data)
-                task.didFinish()
-                Self.recordResponse(bytes: data.count)
+                if complete(task, response: response, data: data) {
+                    Self.recordResponse(bytes: data.count)
+                }
                 return
             }
             try respondFile(locatedURL, fileSize: fileSize, mime: mime, immutable: false, task: task)
@@ -213,28 +264,15 @@ class AudioSchemeHandler: NSObject, WKURLSchemeHandler {
         }
     }
     
-    private func respondData(_ data: Data, mime: String, task: WKURLSchemeTask) {
-        let response = HTTPURLResponse(url: task.request.url!, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: [
-            "Content-Type": mime,
-            "Content-Length": String(data.count),
-            "Accept-Ranges": "bytes"
-        ])!
-        task.didReceive(response)
-        task.didReceive(data)
-        task.didFinish()
-        Self.recordResponse(bytes: data.count)
-    }
-    
     private func respond404(task: WKURLSchemeTask) {
-        Self.recordMissing()
         let data = Data("Not Found".utf8)
         let response = HTTPURLResponse(url: task.request.url!, statusCode: 404, httpVersion: "HTTP/1.1", headerFields: [
             "Content-Type": "text/plain",
             "Content-Length": String(data.count)
         ])!
-        task.didReceive(response)
-        task.didReceive(data)
-        task.didFinish()
+        if complete(task, response: response, data: data) {
+            Self.recordMissing()
+        }
     }
 
     // MARK: - Static asset serving from bundled source roots
@@ -297,31 +335,29 @@ class AudioSchemeHandler: NSObject, WKURLSchemeHandler {
             httpVersion: "HTTP/1.1",
             headerFields: headers
         )!
-        task.didReceive(response)
-
         // WebAssembly.instantiateStreaming expects one coherent module body.
         // Feeding WKWebView dozens of didReceive fragments for the 13 MiB Bevy
         // module reproducibly terminated WebContent on physical iOS. Mapping it
         // keeps native copying bounded while media files still use true chunks.
         if fileSize <= Int64(Self.streamThreshold) || mime == "application/wasm" {
             let data = try Data(contentsOf: fileURL, options: [.mappedIfSafe])
-            task.didReceive(data)
-            task.didFinish()
-            Self.recordResponse(bytes: data.count)
+            if complete(task, response: response, data: data) {
+                Self.recordResponse(bytes: data.count)
+            }
             return
         }
 
         let handle = try FileHandle(forReadingFrom: fileURL)
         defer { try? handle.close() }
+        guard deliver(task, { task.didReceive(response) }) else { return }
         var sent = 0
         while true {
             let data = try handle.read(upToCount: Self.streamChunkSize) ?? Data()
             if data.isEmpty { break }
-            task.didReceive(data)
+            guard deliver(task, { task.didReceive(data) }) else { return }
             sent += data.count
         }
-        task.didFinish()
-        Self.recordResponse(bytes: sent)
+        if finish(task) { Self.recordResponse(bytes: sent) }
     }
 
     private func serveServerInfo(task: WKURLSchemeTask) {
@@ -334,9 +370,9 @@ class AudioSchemeHandler: NSObject, WKURLSchemeHandler {
             "Content-Length": String(data.count),
             "Cache-Control": "no-store"
         ])!
-        task.didReceive(response)
-        task.didReceive(data)
-        task.didFinish()
+        if complete(task, response: response, data: data) {
+            Self.recordResponse(bytes: data.count)
+        }
     }
 
     private func normalize(url: URL) -> (path: String, host: String?) {

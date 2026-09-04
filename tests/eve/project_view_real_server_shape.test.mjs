@@ -78,6 +78,27 @@ test('project pages retain a child whose ancestor is outside the page when its c
     assert.equal(windowState.hasNext, false, 'an exact final page must not create a phantom next page');
 });
 
+test('a boot snapshot feeds the structured view without a duplicate native-state read', async () => {
+    const readList = vi.fn(async () => {
+        throw new Error('duplicate_native_state_read');
+    });
+    const result = await loadProjectViewPage({
+        projectId: 'project_boot_snapshot',
+        windowState: createProjectViewWindowState(),
+        readList,
+        sourceRecords: [{
+            atome_id: 'boot_shape',
+            atome_type: 'shape',
+            meta: { project_id: 'project_boot_snapshot' },
+            properties: { name: 'Already loaded' }
+        }]
+    });
+
+    assert.equal(result.ok, true);
+    assert.deepEqual(result.records.map((record) => record.id), ['boot_shape']);
+    assert.equal(readList.mock.calls.length, 0);
+});
+
 test('resetting a project view window retires an in-flight read from the previous project', async () => {
     const windowState = createProjectViewWindowState();
     let resolveRead;

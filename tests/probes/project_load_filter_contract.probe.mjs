@@ -1,14 +1,12 @@
 import assert from 'node:assert/strict';
 import { installMockBrowserEnv } from '../strangler_v2/_env.mjs';
-import { createToolGenesisProjectLoadRuntime } from '../../eVe/intuition/runtime/tool_genesis_project_load_runtime.js';
-import {
-    __testClearPrefetch,
-    __testSetCommitLoader
-} from '../../eVe/domains/rendering/project_view_mode_state.js';
 
 const { window, document } = installMockBrowserEnv();
 globalThis.window = window;
 globalThis.document = document;
+const { createToolGenesisProjectLoadRuntime } = await import(
+    '../../eVe/intuition/runtime/tool_genesis_project_load_runtime.js'
+);
 
 const projectId = 'project_filter_valid';
 const userId = 'user_filter_valid';
@@ -44,6 +42,7 @@ window.Atome = {
 
 const rendered = [];
 let restoreCount = 0;
+let prefetchCount = 0;
 let remoteListCount = 0;
 const perfEvents = [];
 const runtime = createToolGenesisProjectLoadRuntime({
@@ -81,9 +80,7 @@ const runtime = createToolGenesisProjectLoadRuntime({
     isRenderableAtome: () => true,
     markProjectLoadCompleted: () => {},
     perfElapsedMs: () => 1,
-    perfLog: () => {},
     perfNowMs: () => 0,
-    persistenceDiagLog: () => {},
     pickAuthoritativeAtomes: (result) => result?.atomes || [],
     rememberProjectAtomes: () => {},
     renderProjectScene: async ({ records }) => { rendered.push(records); return { ok: true }; },
@@ -91,18 +88,13 @@ const runtime = createToolGenesisProjectLoadRuntime({
     resolveCurrentUserId: () => userId,
     resolveToolShortcutRole: () => false,
     setProjectLoadInFlight: () => {},
-    summarizePersistenceRecords: () => [],
-    prefetchViewMode: () => Promise.resolve('list'),
+    prefetchViewMode: () => { prefetchCount += 1; return Promise.resolve('list'); },
     restoreViewModeAfterLoad: () => { restoreCount += 1; }
 });
 
-__testSetCommitLoader(async () => ({ getStateCurrent: () => new Promise(() => {}) }));
-__testClearPrefetch();
 const nonBlockingStart = Date.now();
 const loaded = await runtime.loadProjectAtomes(projectId, { force: true, staleFirst: false });
 assert.ok(Date.now() - nonBlockingStart < 120, 'project load must not await view projection restoration');
-__testSetCommitLoader();
-__testClearPrefetch();
 
 assert.deepEqual(loaded.map((record) => record.id || record.atome_id), ['remote_atom', 'visible_atom']);
 assert.deepEqual(rendered.at(-1).map((record) => record.id || record.atome_id), ['remote_atom', 'visible_atom']);
@@ -110,11 +102,18 @@ assert.equal(rendered.length, 2, 'local quick paint and authoritative merged pai
 assert.equal(restoreCount, 1, 'local and final project paints must restore the project view exactly once');
 
 const remoteCountBeforeStaleFirst = remoteListCount;
+const restoreCountBeforeStaleFirst = restoreCount;
+const prefetchCountBeforeStaleFirst = prefetchCount;
 rendered.length = 0;
+window.__eveBootPresentationReady = true;
 const locallyPresented = await runtime.loadProjectAtomes(projectId, { force: true, staleFirst: true });
 assert.deepEqual(locallyPresented.map((record) => record.id || record.atome_id), ['visible_atom']);
 assert.equal(rendered.length, 1, 'stale-first boot must project the canonical local scene only once before presentation');
 assert.equal(remoteListCount, remoteCountBeforeStaleFirst, 'stale-first boot must not start remote synchronization before presentation');
+await new Promise((resolve) => setTimeout(resolve, 10));
+assert.equal(remoteListCount, remoteCountBeforeStaleFirst + 1, 'presentation must schedule one authoritative refresh');
+assert.equal(restoreCount, restoreCountBeforeStaleFirst + 1, 'the authoritative refresh must not restore the view mode a second time');
+assert.equal(prefetchCount, prefetchCountBeforeStaleFirst + 1, 'the authoritative refresh must reuse the prepared view mode');
 assert.equal(
     perfEvents.some(({ name, detail }) => name === 'atomes.load_project' && detail?.mode === 'stale_first_local'),
     true,
@@ -156,9 +155,7 @@ const raceRuntime = createToolGenesisProjectLoadRuntime({
     isRenderableAtome: () => true,
     markProjectLoadCompleted: () => {},
     perfElapsedMs: () => 1,
-    perfLog: () => {},
     perfNowMs: () => 0,
-    persistenceDiagLog: () => {},
     pickAuthoritativeAtomes: (result) => result?.atomes || [],
     rememberProjectAtomes: () => {},
     renderProjectScene: async ({ records }) => {
@@ -170,7 +167,6 @@ const raceRuntime = createToolGenesisProjectLoadRuntime({
     resolveCurrentUserId: () => userId,
     resolveToolShortcutRole: () => false,
     setProjectLoadInFlight: () => {},
-    summarizePersistenceRecords: () => [],
     prefetchViewMode: () => Promise.resolve('list'),
     restoreViewModeAfterLoad: () => {}
 });

@@ -17,9 +17,12 @@ file-copy passes are removed. One progress-aware watchdog allows 20 seconds for
 cold WebKit process creation, then detects only eight seconds without a native
 or JavaScript milestone instead of failing a progressing launch at a fixed
 elapsed time. Retry stops the prior navigation before starting exactly one new
-attempt. Runtime packaging shares the canonical workspace-main-menu owner with
-deferred Home/panel chunks and bundles the project-preview capture frame at its
-requested `atome://` URL. This adds no state, sync, menu, renderer, or DOM owner.
+attempt. Runtime packaging uses one factorized browser graph for Spark, eVe,
+deferred features, optional integrations and the project-preview frame. Lazy
+boundaries and stable URLs remain, but no input can be emitted into two browser
+bundles; named view, recording and BevyUI singletons add a second build lock.
+The local TTS worker remains self-contained in its separate JavaScript realm.
+This adds no state, sync, menu, renderer, or DOM owner.
 
 iOS boot architecture (2026-09-02): Xcode no longer copies the source trees as
 resources. Both app and AUv3 invoke the same deterministic esbuild manifest and
@@ -247,7 +250,18 @@ a superseded activation cannot reclaim the shared surface, current project, or
 WebGPU foreground, and repairs the latest foreground if its already-running
 loader touched the shared canvas. Natural restoration uses the same surface
 owner and therefore unmounts an older structured tree instead of only changing
-an in-memory value. Canonical project records remain the durable preference;
+an in-memory value. User intent is sequenced before asynchronous surface work,
+rechecked after durable-state reads, and persisted even when it matches the
+local-first in-memory default. The post-presentation authoritative refresh
+reuses that prepared mode and cannot launch a second restore. Canonical project
+bootstrap similarly awaits its prefetched mode application before publishing
+project readiness; the native iOS launch cover therefore cannot reveal the
+intermediate Natural projection of a project remembered in Matrix. That first
+structured mount reuses the project snapshot already loaded by the canonical
+loader for both its page and contextual playback rule; it must not issue
+duplicate native current-state reads behind the launch cover. Later reloads and
+interactions still read through the canonical state API. Canonical project
+records remain the durable preference;
 the DOM and Bevy tree remain disposable projections.
 
 Canonical Molecule Delete remains one `deleteCanonicalMolecule` transaction for

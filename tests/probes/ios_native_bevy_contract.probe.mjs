@@ -451,19 +451,25 @@ test('iOS resource packaging excludes build artifacts before copying', () => {
     assert.equal(projectSource.includes('src in Resources'), false, 'raw src must not be copied beside the packaged runtime');
     assert.equal(projectSource.includes('eVe in Resources'), false, 'raw eVe must not be copied beside the packaged runtime');
     assert.match(iosPackagerSource, /SKIP_DIRS[\s\S]*?'\.git'[\s\S]*?'target'/, 'packager must exclude repository and Rust build metadata');
-    assert.ok(iosPackagerSource.includes("'/chunks/optional-integrations.js'"), 'optional domains must remain in a deferred ESM artifact');
-    assert.ok(iosPackagerSource.includes("'/chunks/eve/eve-application.js'"), 'the application entry must delegate to the bounded eVe critical graph');
+    assert.ok(iosPackagerSource.includes("'chunks/optional-integrations'"), 'optional domains must remain in a deferred ESM entry');
+    assert.ok(iosPackagerSource.includes("'eVe/eVe': EVE_APPLICATION_ENTRY_ID"), 'the application entry must retain its canonical URL');
+    assert.match(
+        iosPackagerSource,
+        /const registryLines = criticalDescriptors[\s\S]*?\(\[moduleId, target\]\) => `  \$\{JSON\.stringify\(moduleId\)\}: \(\) => import/,
+        'packaged loaders must remain lazy so import-time owners execute only after their registry exists'
+    );
     assert.equal(iosPackagerSource.includes('bevy.early_wasm_start'), false, 'iOS must not retain a preloaded WASM module while the application graph is parsed');
     assert.equal(iosPackagerSource.includes('eve-stage-'), false, 'the critical graph must not duplicate shared dependencies across independent stage bundles');
-    assert.ok(iosPackagerSource.includes('deferDynamicImportsPlugin'), 'dynamic feature owners must stay outside the presentation bundle');
-    assert.match(iosPackagerSource, /outdir:\s*path\.join\(outputRoot, 'chunks\/deferred'\)[\s\S]*?chunkNames:\s*'shared\/\[name\]-\[hash\]'/, 'deferred eVe owners must use factorized ESM chunks');
+    assert.equal(iosPackagerSource.includes('deferDynamicImportsPlugin'), false, 'the old discovery build and its externalized duplicate graph must be removed');
+    assert.match(iosPackagerSource, /runtimeBuild[\s\S]*?splitting:\s*true[\s\S]*?chunkNames:\s*'chunks\/shared\/\[name\]-\[hash\]'/, 'all browser owners must use one factorized ESM graph');
     assert.ok(iosPackagerSource.includes('EVE_CRITICAL_MODULE_IDS'), 'the packaged eVe graph must explicitly own its presentation-critical boundary');
-    assert.match(iosPackagerSource, /criticalGroupBuild[\s\S]*?splitting:\s*true/, 'critical eVe owners must share factorized ESM chunks');
-    assert.ok(iosPackagerSource.includes("chunkNames: 'critical-shared-[hash]'"), 'the critical graph must factor shared code once');
-    assert.ok(
-        iosPackagerSource.includes('reuseCriticalEveModulesPlugin'),
-        'deferred actions must reuse critical eVe owners instead of creating competing runtime instances'
-    );
+    assert.ok(iosPackagerSource.includes('singletonOwnerPaths'), 'the packager must declare stateful owners that may never be duplicated');
+    assert.ok(iosPackagerSource.includes('packaged_singleton_owner_count'), 'the iOS build must fail when a singleton owner is emitted more than once');
+    assert.ok(iosPackagerSource.includes('packaged_runtime_input_duplicated'), 'the iOS build must reject every duplicated browser input, not only named singletons');
+    assert.equal(iosPackagerSource.includes('const criticalBuild ='), false, 'the former independent Spark build must not survive');
+    assert.equal(iosPackagerSource.includes('const optionalBuild ='), false, 'the former independent optional build must not survive');
+    assert.equal(iosPackagerSource.includes('const eveBundleBuild ='), false, 'the former independent eVe build must not survive');
+    assert.equal(iosPackagerSource.includes('reuseCriticalEveModulesPlugin'), false, 'the former partial alias workaround must not survive the unified graph');
     assert.ok(
         iosPackagerSource.includes('critical-workspace-surface'),
         'the shared workspace owner must have one stable packaged entry for deferred callers'
@@ -474,8 +480,8 @@ test('iOS resource packaging excludes build artifacts before copying', () => {
     );
     assert.match(
         iosPackagerSource,
-        /bevyProjectPreviewCaptureFramePath[\s\S]*?outfile:\s*path\.join\(outputRoot, 'eVe\/domains\/rendering\/bevy_project_preview_capture_frame\.js'\)/,
-        'the iframe preview runtime must be bundled at the absolute URL requested by its adapter'
+        /'eVe\/domains\/rendering\/bevy_project_preview_capture_frame':\s*bevyProjectPreviewCaptureFramePath/,
+        'the iframe preview runtime must be an entry in the same graph at the URL requested by its adapter'
     );
     assert.ok(iosPackagerSource.includes('minifyIdentifiers: true'), 'critical Debug packaging must reduce WebKit parser memory, not only whitespace');
     assert.ok(
@@ -497,6 +503,13 @@ test('iOS resource packaging excludes build artifacts before copying', () => {
     assert.match(featureFlagsSource, /textTraceEnabled[\s\S]*?-AtomeTextTrace[\s\S]*?ATOME_IOS_TEXT_TRACE/, 'verbose text tracing must be an explicit Debug diagnostic opt-in');
     assert.ok(webViewManagerSource.includes('if FeatureFlags.textTraceEnabled'), 'document-start text tracing must consume the explicit diagnostic flag');
     assert.equal(audioSchemeHandlerSource.includes('AUv3 Audio Test'), false, 'the production atome root must not expose the historical audio-test page');
+    assert.match(
+        audioSchemeHandlerSource,
+        /func webView\(_ webView: WKWebView, stop urlSchemeTask: WKURLSchemeTask\) \{\s*close\(urlSchemeTask\)/,
+        'a stopped WebKit scheme task must be closed before any asynchronous response can reach it'
+    );
+    assert.ok(audioSchemeHandlerSource.includes('closedTaskIds.contains'), 'all native scheme deliveries must reject stopped tasks');
+    assert.equal(audioSchemeHandlerSource.includes('// No-op'), false, 'the unsafe no-op scheme cancellation handler must not return');
     assert.match(audioSchemeHandlerSource, /requestedPath == "\/"[\s\S]*?"\/src\/index\.html"/, 'the atome root must resolve to the real packaged application entry');
     assert.equal(midiControllerSource.includes('Testing MIDI callback system'), false, 'normal MIDI startup must not schedule a delayed smoke-test callback');
 });

@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
 import { installMockBrowserEnv } from '../strangler_v2/_env.mjs';
@@ -20,6 +21,18 @@ const TOOL_CASES = Object.freeze([
         input: { mode: 'media', record_source: 'audio' }
     }
 ]);
+
+test('Capture preserves the calling UI source instead of replacing it', async () => {
+    const source = await readFile(new URL('../../eVe/intuition/tools/capture.js', import.meta.url), 'utf8');
+    assert.match(source, /const contextSource = context\?\.source/);
+    assert.match(source, /const source = contextSource \|\| inputSource \|\|/);
+    assert.match(source, /source: touchInput\?\.source/);
+    assert.equal(
+        /invokeToolGateway\(\{[\s\S]*?source:\s*\{\s*type:\s*'ui',\s*layer:\s*'capture'\s*\}/.test(source),
+        false,
+        'a nested Capture call must not erase bevy_ui_main_menu provenance'
+    );
+});
 
 const unwrapResult = (value = null) => {
     let current = value;
