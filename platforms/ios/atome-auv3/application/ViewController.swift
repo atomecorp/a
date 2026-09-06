@@ -11,6 +11,7 @@ import WebKit
 final class FullscreenWebViewController: UIViewController {
     private(set) var webView: WKWebView!
     private let bootOverlay = UIView()
+    private let bootLogo = UIImageView(image: UIImage(named: "LaunchLogo"))
     private let bootStatusLabel = UILabel()
     private let bootRetryButton = UIButton(type: .system)
 
@@ -139,9 +140,8 @@ final class FullscreenWebViewController: UIViewController {
         bootOverlay.backgroundColor = .black
         bootOverlay.isOpaque = true
 
-        let logo = UIImageView(image: UIImage(named: "LaunchLogo"))
-        logo.translatesAutoresizingMaskIntoConstraints = false
-        logo.contentMode = .scaleAspectFit
+        bootLogo.translatesAutoresizingMaskIntoConstraints = false
+        bootLogo.contentMode = .scaleAspectFit
 
         bootStatusLabel.translatesAutoresizingMaskIntoConstraints = false
         bootStatusLabel.text = "Ouverture…"
@@ -157,7 +157,7 @@ final class FullscreenWebViewController: UIViewController {
         bootRetryButton.addTarget(self, action: #selector(retryBoot), for: .touchUpInside)
 
         root.addSubview(bootOverlay)
-        bootOverlay.addSubview(logo)
+        bootOverlay.addSubview(bootLogo)
         bootOverlay.addSubview(bootStatusLabel)
         bootOverlay.addSubview(bootRetryButton)
         NSLayoutConstraint.activate([
@@ -165,11 +165,11 @@ final class FullscreenWebViewController: UIViewController {
             bootOverlay.bottomAnchor.constraint(equalTo: root.bottomAnchor),
             bootOverlay.leadingAnchor.constraint(equalTo: root.leadingAnchor),
             bootOverlay.trailingAnchor.constraint(equalTo: root.trailingAnchor),
-            logo.centerXAnchor.constraint(equalTo: bootOverlay.centerXAnchor),
-            logo.centerYAnchor.constraint(equalTo: bootOverlay.centerYAnchor, constant: -30),
-            logo.widthAnchor.constraint(equalToConstant: 160),
-            logo.heightAnchor.constraint(equalToConstant: 160),
-            bootStatusLabel.topAnchor.constraint(equalTo: logo.bottomAnchor, constant: 18),
+            bootLogo.centerXAnchor.constraint(equalTo: bootOverlay.centerXAnchor),
+            bootLogo.centerYAnchor.constraint(equalTo: bootOverlay.centerYAnchor, constant: -30),
+            bootLogo.widthAnchor.constraint(equalToConstant: 160),
+            bootLogo.heightAnchor.constraint(equalToConstant: 160),
+            bootStatusLabel.topAnchor.constraint(equalTo: bootLogo.bottomAnchor, constant: 18),
             bootStatusLabel.leadingAnchor.constraint(greaterThanOrEqualTo: bootOverlay.leadingAnchor, constant: 24),
             bootStatusLabel.trailingAnchor.constraint(lessThanOrEqualTo: bootOverlay.trailingAnchor, constant: -24),
             bootStatusLabel.centerXAnchor.constraint(equalTo: bootOverlay.centerXAnchor),
@@ -188,13 +188,35 @@ final class FullscreenWebViewController: UIViewController {
     }
 
     private func showBootFailure(reason: String) {
+        if reason == "boot_stalled" {
+            showBootDelayWarning()
+            return
+        }
         bootOverlay.layer.removeAllAnimations()
+        bootOverlay.backgroundColor = .black
+        bootOverlay.isOpaque = true
+        bootOverlay.isUserInteractionEnabled = true
         bootOverlay.alpha = 1
         bootOverlay.isHidden = false
+        bootLogo.isHidden = false
+        bootStatusLabel.backgroundColor = .clear
         bootStatusLabel.text = reason == "web_content_terminated"
             ? "Le moteur d’affichage s’est arrêté."
-            : "Le démarrage prend trop de temps."
+            : "Le démarrage a échoué."
         bootRetryButton.isHidden = false
+    }
+
+    private func showBootDelayWarning() {
+        bootOverlay.layer.removeAllAnimations()
+        bootOverlay.backgroundColor = .clear
+        bootOverlay.isOpaque = false
+        bootOverlay.isUserInteractionEnabled = false
+        bootOverlay.alpha = 1
+        bootOverlay.isHidden = false
+        bootLogo.isHidden = true
+        bootStatusLabel.text = "Le démarrage continue…"
+        bootStatusLabel.backgroundColor = UIColor(white: 0, alpha: 0.72)
+        bootRetryButton.isHidden = true
     }
 
     @objc private func retryBoot() {

@@ -120,6 +120,29 @@ assert.equal(
     'stale-first local completion must be separately observable'
 );
 
+const preservedRenders = [];
+window.Atome = { listStateCurrent: () => new Promise((resolve) => setTimeout(() => resolve([]), 105)) };
+const preservedRuntime = createToolGenesisProjectLoadRuntime({
+    clearProjectLoadInFlightIfCurrent: () => {}, dispatchProjectRenderDone: () => {}, emitPerfEvent: () => {},
+    ensureProjectLayer: () => view, fetchSharedOverrideAtomes: async () => [], filterAtomesByOwner: (records) => records,
+    getAdoleApi: () => ({ atomes: { list: async () => ({ atomes: [] }) } }),
+    getProjectLoadInFlight: () => null,
+    getRecentProjectCache: () => [{ id: 'presented_atom', atome_id: 'presented_atom', type: 'shape', project_id: projectId }],
+    getSharedProjectOverride: () => null, isAnonymousWorkspace: () => true, isRecordDeleted: () => false,
+    isRenderableAtome: () => true, markProjectLoadCompleted: () => {}, perfElapsedMs: () => 1, perfNowMs: () => 0,
+    pickAuthoritativeAtomes: (result) => result?.atomes || [], rememberProjectAtomes: () => {},
+    renderProjectScene: async ({ records }) => { preservedRenders.push(records); return { ok: true }; },
+    resolveAtomeProperties: (record) => record?.properties || {}, resolveCurrentUserId: () => userId,
+    resolveToolShortcutRole: () => false, setProjectLoadInFlight: () => {}, prefetchViewMode: () => Promise.resolve('list'),
+    restoreViewModeAfterLoad: () => {}
+});
+const preserved = await preservedRuntime.loadProjectAtomes(projectId, {
+    force: true, staleFirst: false, viewModePrepared: true, reason: 'post_presentation_authoritative_refresh'
+});
+assert.deepEqual(preserved.map((record) => record.id), ['presented_atom']);
+assert.deepEqual(preservedRenders.at(-1).map((record) => record.id), ['presented_atom'],
+    'an empty delayed refresh must not erase the project snapshot already presented');
+
 const raceRenders = [];
 const racePerfEvents = [];
 window.Atome = {

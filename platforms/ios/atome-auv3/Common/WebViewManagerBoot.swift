@@ -59,13 +59,13 @@ extension WebViewManager {
     }
 
     static func startBootWatchdog() {
-        bootWatchdog.start { reportBootFailure(reason: "boot_stalled") }
+        bootWatchdog.start { reportBootStall() }
     }
 
     static func markBootMilestone(_ name: String) {
         dispatchPrecondition(condition: .onQueue(.main))
         bootMilestones[name] = Int((CACurrentMediaTime() - bootStartedAt) * 1_000)
-        bootWatchdog.noteProgress(name) { reportBootFailure(reason: "boot_stalled") }
+        bootWatchdog.noteProgress(name) { reportBootStall() }
     }
 
     static func nativePeakMemoryMegabytes() -> Int? {
@@ -155,6 +155,18 @@ extension WebViewManager {
         print("[BOOT_FAILURE] \(String(describing: report))")
         captureBootJavaScriptDiagnostics(reason: reason)
         DispatchQueue.main.async { bootFailureHandler?(reason, report) }
+    }
+
+    static func reportBootStall() {
+        guard !bootTerminalFailure else { return }
+        bootWatchdog.cancel()
+        var report: [String: Any] = ["reason": "boot_stalled"]
+        attachNativeBootSummary(to: &report)
+        shared.log.warning("Boot is still pending: \(String(describing: report), privacy: .public)")
+        print(bootSummaryLine("warning", report: report))
+        print("[BOOT_WARNING] \(String(describing: report))")
+        captureBootJavaScriptDiagnostics(reason: "boot_stalled")
+        DispatchQueue.main.async { bootFailureHandler?("boot_stalled", report) }
     }
 
     private static func captureBootJavaScriptDiagnostics(reason: String) {

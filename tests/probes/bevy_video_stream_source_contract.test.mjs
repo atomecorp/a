@@ -117,8 +117,10 @@ test('live MediaStream replaces URL decode, drives shared lookups at 15 fps, and
             assert.equal(dom.window.__EVE_BEVY_VIDEO_ACTIVE_FOR_ID__('capture_video_overlay'), true);
 
             registration.video.__setPresentable();
-            assert.equal(dom.window.__EVE_BEVY_VIDEO_SOURCE_FOR_ID__('capture_video_overlay'), registration.video);
+            assert.equal(dom.window.__EVE_BEVY_VIDEO_SOURCE_FOR_ID__('capture_video_overlay'), null,
+                'readiness and dimensions alone must never expose an undecoded iOS video to WebGPU');
             registration.video.__flushVideoFrame(0);
+            assert.equal(dom.window.__EVE_BEVY_VIDEO_SOURCE_FOR_ID__('capture_video_overlay'), registration.video);
             registration.video.__flushVideoFrame(20);
             registration.video.__flushVideoFrame(70);
             assert.equal(dom.window.__EVE_BEVY_VIDEO_FRAME_VERSION_FOR_ID__('capture_video_overlay'), 2);
@@ -186,6 +188,7 @@ test('prebound live source prevents URL video creation and replacement never sto
             assert.equal(secondTrack.stopCalls, 0);
             assert.equal(dom.window.__EVE_BEVY_VIDEO_SOURCE_FOR_ID__('capture_video_overlay_prebound'), null);
             replacement.video.__setPresentable();
+            replacement.video.__flushVideoFrame(0);
             assert.equal(dom.window.__EVE_BEVY_VIDEO_SOURCE_FOR_ID__('capture_video_overlay_prebound'), replacement.video);
 
             assert.equal(unregisterBevyVideoStreamSource({

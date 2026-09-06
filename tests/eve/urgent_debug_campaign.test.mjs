@@ -59,6 +59,9 @@ describe('urgent campaign contracts', () => {
         expect(resolveFlowerToolKeysForKind('video')).toEqual([
             'copy', 'delete', 'info', 'couleur', 'communicate', 'play'
         ]);
+        expect(resolveFlowerToolKeysForKind('video_recording')).toEqual([
+            'copy', 'delete', 'info', 'couleur', 'communicate', 'play'
+        ]);
         expect(resolveFlowerToolKeysForKind('image')).toEqual(['copy', 'delete', 'info', 'communicate']);
         expect(resolveFlowerToolKeysForKind('shape')).toEqual(['copy', 'delete', 'info', 'communicate']);
         expect(resolveFlowerToolKeysForKind('text')).toEqual([

@@ -87,6 +87,26 @@ test('iOS app boot loads immediately and diagnoses inactivity instead of elapsed
         webViewBootSource.includes('noteProgress(_ milestone: String'),
         'each native or JavaScript milestone must refresh the inactivity watchdog'
     );
+    assert.match(
+        webViewBootSource,
+        /func reportBootStall\(\)[\s\S]*?bootWatchdog\.cancel\(\)[\s\S]*?bootFailureHandler\?\("boot_stalled", report\)/,
+        'an inactivity warning must remain observable without becoming a terminal boot failure'
+    );
+    assert.equal(
+        /func reportBootStall\(\)[\s\S]*?bootTerminalFailure\s*=\s*true/.test(webViewBootSource),
+        false,
+        'a slow but live boot must still be allowed to publish presentation readiness'
+    );
+    assert.match(
+        appViewControllerSource,
+        /reason == "boot_stalled"[\s\S]*?showBootDelayWarning\(\)/,
+        'the app must render a boot delay as a non-blocking warning'
+    );
+    assert.match(
+        appViewControllerSource,
+        /func showBootDelayWarning\(\)[\s\S]*?bootOverlay\.backgroundColor = \.clear[\s\S]*?bootOverlay\.isUserInteractionEnabled = false/,
+        'the delay warning must reveal the WebView and let real touches reach it'
+    );
     assert.ok(
         webViewManagerSource.includes('webView.stopLoading()'),
         'an explicit retry must stop the previous navigation before starting another one'
@@ -477,6 +497,11 @@ test('iOS resource packaging excludes build artifacts before copying', () => {
         eveEntrySource.includes("id: 'eve.record_audio_api'"),
         false,
         'the recorder dependency must not also be scheduled by the unrelated deferred boot lane'
+    );
+    assert.match(
+        eveEntrySource,
+        /if \(!globalThis\.__ATOME_PACKAGED_MODULES__\) \{[\s\S]*?queueMicrotask/,
+        'the packaged iOS entry must install its compiled module registry before startEve can load an owner'
     );
     assert.equal(iosPackagerSource.includes('const criticalBuild ='), false, 'the former independent Spark build must not survive');
     assert.equal(iosPackagerSource.includes('const optionalBuild ='), false, 'the former independent optional build must not survive');
