@@ -1,5 +1,11 @@
 # Atome / eVe Architecture Map
 
+History input consolidation (2026-09-07): default keyboard shortcuts dispatch canonical Undo/Redo commands and leave editable text to its own history. The legacy HTML panel no longer owns keyboard undo. Undo refreshes the persisted journal and excludes transactions already undone; depth transactions remain parent-preserving and reading-order-independent. Canonical failures propagate through tool results. See tests/eve/history_shortcuts.test.mjs and tests/eve/timeline_undo_source.test.mjs.
+
+Offline durability and reconnection (2026-09-07): local commit transactions capture property preimages and atomically enqueue synchronization; queue failure rolls back the complete mutation. Native history extends the existing event owner. Tauri remote projection now consults the existing event_property_winners schema per property so stale replay cannot replace newer local edits. Both runtimes use millisecond timestamps and locale-independent event-id ordering. Tauri reads use only the synchronized local state_current projection; shared reads do not await remote enrichment. Profile writes prepare remote authentication only when Fastify owns the profile. Local ACL list scope uses an indexed permission set instead of a correlated scan for every state row. The shared schema replaces the atom-only permissions index with an atom/principal/key index after native stack sampling and an in-memory query benchmark. Live Web-to-Tauri replay after reopening was observed; the opposite offline direction remains to verify.
+
+Workspace presentation ownership (2026-09-07): project-scene canonical records survive representation changes. The same scene engine submits only presentation records to the compositor and hit-test index while retaining canonical video decode sources for shared playback. Direct prefix reconciliation delegates representation entry/exit to full canonical reconciliation; steady UI prefix updates keep their fast path. Contextual depth is derived from the existing rail registry, never persisted as view state. Dashboard's operation generation rejects obsolete data before cache or visible-item writes; its existing post-open hydration owns progressive data and preview work. Dashboard overlay images use the existing overlay renderer without a second BevyUI texture hydration. Home opening cleanup invalidates its outstanding profile read. No parallel state store, DOM authority or renderer is added.
+
 iOS WebContent capacity repair (2026-09-04): state-current remains the single
 read boundary, but it now enforces requested atome type and particle exclusions
 before serialization, pages broad consumers, and coalesces identical concurrent
@@ -199,9 +205,9 @@ above the current canonical `z_index`/`order`; Plan front/back actions mutate
 that canonical scene depth through the existing intent path and survive reload.
 The visible hierarchy is deliberately `Molecule -> direct Atomes`: List and
 Matrix never expose Section, Track or clip implementation records. Reordering a
-direct member in List atomically persists both `hierarchy_order` and its visual
-depth aliases; Matrix and Natural are disposable projections of that same
-order. Dropping a direct member on footer Retour removes its internal clip and
+direct member in List persists `hierarchy_order` by default; with the depth
+palette open it persists only visual depth. Matrix uses the same explicit
+intent separation. Dropping a direct member on footer Retour removes its internal clip and
 `parent_id` in one canonical extraction batch without duplicating the Atome or
 changing the remaining transport.
 Natural presentation completes a forced canonical reconcile before announcing
@@ -234,7 +240,7 @@ Current Molecule member-mutation contract (2026-08-26):
 survivor reindexing, `tool_runtime_molecule_timeline.js` owns derived clip
 normalization, and `tool_runtime_molecule_structure.js` owns backfill, ungroup,
 whole-owner Delete and transforms. Every reorder set carries the member's
-canonical `parent_id` envelope together with `hierarchy_order` and visual depth,
+canonical `parent_id` envelope and only the properties of its explicit order intent,
 so an order-only batch cannot detach a member. `deleteCanonicalMoleculeMember`
 removes one member and its clip atomically, then deletes the owner in the same
 logical batch when no live member remains.

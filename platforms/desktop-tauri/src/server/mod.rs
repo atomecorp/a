@@ -59,6 +59,7 @@ macro_rules! eprintln {
 pub mod local_auth;
 // Local atome storage module
 pub mod local_atome;
+mod local_atome_conflicts;
 mod local_atome_extended;
 mod local_atome_remote_projection;
 mod local_atome_security;
@@ -4930,7 +4931,7 @@ async fn handle_ws_api(mut socket: WebSocket, state: AppState) {
                     continue;
                 }
 
-                if matches!(msg_type, "snapshot" | "user-data" | "sync") {
+                if matches!(msg_type, "snapshot" | "user-data" | "sync" | "history") {
                     if let Some(ref atome_state) = state.atome_state {
                         let user_id = match ws_authenticated_user(&data, &state) {
                             Ok(user_id) => user_id,
@@ -4944,6 +4945,7 @@ async fn handle_ws_api(mut socket: WebSocket, state: AppState) {
                             }
                         };
                         let response = match msg_type {
+                            "history" => local_atome::handle_history_command(data, &user_id, atome_state).await,
                             "snapshot" => local_atome_extended::handle_snapshot_message(data, &user_id, atome_state).await,
                             "user-data" => local_atome_extended::handle_user_data_message(data, &user_id, atome_state).await,
                             _ => local_atome_extended::handle_sync_message(data, &user_id, atome_state).await,

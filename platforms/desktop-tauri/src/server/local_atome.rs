@@ -37,6 +37,13 @@ macro_rules! eprintln {
     };
 }
 
+#[path = "local_atome_history.rs"]
+mod history;
+pub use history::handle_history_command;
+#[cfg(test)]
+#[path = "../../../../tests/tauri/local_atome_history.rs"]
+mod history_tests;
+
 const ADOLE_SCHEMA_SQL: &str = include_str!("../../../../database/schema.sql");
 const ADOLE_SCHEMA_TABLES: &str =
     "atomes, particles, particles_versions, snapshots, events, state_current, permissions, sync_queue, sync_state";
@@ -1931,7 +1938,7 @@ async fn handle_event_commit(
         None => return error_response(request_id, "Missing event payload"),
     };
 
-    let normalized = match normalize_event_input(event, user_id, None) {
+    let mut normalized = match normalize_event_input(event, user_id, None) {
         Ok(v) => v,
         Err(e) => return error_response(request_id, &e),
     };
@@ -1946,13 +1953,15 @@ async fn handle_event_commit(
         if !decision.allowed {
             return Err(format!("{}:{}", decision.reason, decision.denied_keys.join(",")));
         }
+        history::capture_before(conn, &mut normalized)?;
         let inserted = insert_event_record(conn, &normalized)?;
         if inserted {
             let _ = apply_event_to_state_current(conn, &normalized)?;
             apply_event_to_atomes(conn, &normalized, user_id)?;
+            history::record_winners(conn, &normalized)?;
             if is_syncable_event(&normalized) && should_enqueue_sync(&sync_target, &sync_source) {
                 if let Some(target) = sync_target.as_ref() {
-                    let _ = enqueue_sync_event(conn, &normalized, target);
+                    enqueue_sync_event(conn, &normalized, target)?;
                 }
             }
         }
@@ -2021,14 +2030,16 @@ async fn handle_event_commit_batch(
                 return Err(format!("{}:{}", decision.reason, decision.denied_keys.join(",")));
             }
         }
-        for evt in normalized_events.iter() {
+        for evt in normalized_events.iter_mut() {
+            history::capture_before(conn, evt)?;
             let inserted = insert_event_record(conn, evt)?;
             if inserted {
                 let _ = apply_event_to_state_current(conn, evt)?;
                 apply_event_to_atomes(conn, evt, user_id)?;
+                history::record_winners(conn, evt)?;
                 if is_syncable_event(evt) && should_enqueue_sync(&sync_target, &sync_source) {
                     if let Some(target) = sync_target.as_ref() {
-                        let _ = enqueue_sync_event(conn, evt, target);
+                        enqueue_sync_event(conn, evt, target)?;
                     }
                 }
             }
@@ -2312,10 +2323,9 @@ async fn handle_state_current_list(
     };
 
     let mut conditions = vec![
-        "(sc.owner_id = ? OR EXISTS (
-            SELECT 1 FROM permissions p
-            WHERE p.atome_id = sc.atome_id AND p.principal_id = ?
-              AND p.can_read = 1
+        "(sc.owner_id = ? OR sc.atome_id IN (
+            SELECT p.atome_id FROM permissions p
+            WHERE p.principal_id = ? AND p.can_read = 1
         ))".to_string()
     ];
     let mut scope_params = vec![
@@ -2705,6 +2715,10 @@ fn extract_event_patch(
         return Some(map);
     }
 
+    if kind == "restore" {
+        return Some(JsonMap::from_iter([("__deleted".into(), json!(false)), ("deleted_at".into(), JsonValue::Null)]));
+    }
+
     let payload_value = payload.as_ref()?;
     let payload_obj = match payload_value {
         JsonValue::Object(map) => Some(map.clone()),
@@ -2856,6 +2870,8 @@ fn apply_event_to_state_current(
     for (key, value) in patch.into_iter() {
         current_props.insert(key, value);
     }
+
+    for key in history::deleted_keys(event) { current_props.remove(&key); }
 
     let next_version = existing.as_ref().map(|row| row.1 + 1).unwrap_or(1);
     let global_scope = event
@@ -3457,50 +3473,55 @@ fn apply_event_to_atomes(
 
     if let Some((_id, existing_type)) = existing.as_ref() {
         if atome_type == "user" && existing_type != "user" {
-            let _ = db.execute(
+            db.execute(
                 "UPDATE atomes SET atome_type = 'user', updated_at = ?1, sync_status = 'pending' WHERE atome_id = ?2",
                 rusqlite::params![event.ts, atome_id],
-            );
+            ).map_err(|e| e.to_string())?;
         }
     }
 
     if existing.is_some() {
         if event.kind == "delete" {
-            let _ = db.execute(
+            db.execute(
                 "UPDATE atomes SET deleted_at = ?1, updated_at = ?1, sync_status = 'pending' WHERE atome_id = ?2",
                 rusqlite::params![event.ts, atome_id],
-            );
+            ).map_err(|e| e.to_string())?;
+        } else if event.kind == "restore" {
+            db.execute("UPDATE atomes SET deleted_at = NULL, updated_at = ?1, sync_status = 'pending' WHERE atome_id = ?2", rusqlite::params![event.ts, atome_id]).map_err(|e| e.to_string())?;
         } else {
-            let _ = db.execute(
+            db.execute(
                 "UPDATE atomes SET updated_at = ?1, sync_status = 'pending', parent_id = COALESCE(?2, parent_id) WHERE atome_id = ?3",
                 rusqlite::params![event.ts, parent_id, atome_id],
-            );
+            ).map_err(|e| e.to_string())?;
         }
     } else {
-        let _ = db.execute(
+        db.execute(
             "INSERT INTO atomes (atome_id, atome_type, parent_id, owner_id, creator_id, created_at, updated_at, last_sync, created_source, sync_status)
              VALUES (?1, ?2, ?3, ?4, ?4, ?5, ?5, NULL, 'tauri', 'pending')",
             rusqlite::params![atome_id, atome_type, parent_id, user_id, event.ts],
-        );
+        ).map_err(|e| e.to_string())?;
     }
 
     if event.kind == "delete" {
         return Ok(());
     }
 
+    for key in history::deleted_keys(event) {
+        db.execute("DELETE FROM particles WHERE atome_id = ?1 AND particle_key = ?2", rusqlite::params![atome_id, key]).map_err(|e| e.to_string())?;
+    }
     for (key, value) in patch.into_iter() {
         if key.starts_with("__") {
             continue;
         }
         let value_str = serde_json::to_string(&value).unwrap_or_default();
-        let _ = db.execute(
+        db.execute(
             "INSERT INTO particles (atome_id, particle_key, particle_value, updated_at)
              VALUES (?1, ?2, ?3, ?4)
              ON CONFLICT(atome_id, particle_key) DO UPDATE SET
                 particle_value = excluded.particle_value,
                 updated_at = excluded.updated_at",
             rusqlite::params![atome_id, key, value_str, event.ts],
-        );
+        ).map_err(|e| e.to_string())?;
     }
 
     Ok(())

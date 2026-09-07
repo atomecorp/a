@@ -805,3 +805,26 @@ test('Project scene selection invalidation redraws selected canvas state without
     assert.equal(dom.window.document.querySelectorAll('#eve_bevy_video_decode_root video').length, 2);
     assert.equal(dom.window.document.querySelectorAll('canvas#eve_surface_project').length, 1);
 });
+
+test('structured presentation removes Natural pixels and hits while retaining canonical source records', async () => {
+    clearAllProjectScenes();
+    const dom = projectDom();
+    const calls = [];
+    const projectId = 'exclusive_views';
+    const natural = makeRecord('natural_atom', 'shape', 1);
+    await renderProjectScene({projectId,records:[natural],host:dom.window.document.getElementById('project'),compositor:createTestCompositor(calls)});
+    const prefix = '__eve_bevy_ui_eve_bevy_ui_project_view_';
+    const structured = makeRecord(`${prefix}root`, 'shape', 9000);
+    for (let index=0; index<3; index+=1) {
+        await reconcileProjectSceneRecordsByPrefix({projectId,prefix,records:[structured]});
+        let snapshot = getProjectSceneState(projectId);
+        assert.ok(snapshot.records.some(record => record.id === 'natural_atom'));
+        assert.ok(!snapshot.scene.atoms.some(atom => atom.id === 'natural_atom'));
+        assert.ok(snapshot.scene.atoms.some(atom => atom.id === structured.id));
+        await reconcileProjectSceneRecordsByPrefix({projectId,prefix,records:[]});
+        snapshot = getProjectSceneState(projectId);
+        assert.ok(snapshot.scene.atoms.some(atom => atom.id === 'natural_atom'));
+        assert.ok(!snapshot.scene.atoms.some(atom => atom.id === structured.id));
+    }
+    clearAllProjectScenes();
+});

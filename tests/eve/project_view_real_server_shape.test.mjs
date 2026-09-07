@@ -521,3 +521,15 @@ test('dropping a direct List member on the footer Back button runs one canonical
         globalThis.window = previousWindow;
     }
 });
+
+test('depth projection loads complete sibling membership beyond one canonical page', async () => {
+    const all=Array.from({length:205},(_,i)=>({id:`depth_${i}`,type:'shape',project_id:'depth_project',parent_id:'depth_project',properties:{hierarchy_order:i,z_index:i}}));
+    const offsets=[];const windowState=createProjectViewWindowState();
+    const loaded=await loadProjectViewPage({projectId:'depth_project',windowState,orderKind:'depth',readList:async(_,options)=>{
+        offsets.push(options.offset);return {records:all.slice(options.offset,options.offset+options.limit),totalCount:all.length};
+    }});
+    assert.equal(loaded.ok,true);
+    assert.equal(loaded.records.length,205);
+    assert.deepEqual(offsets,[0,200]);
+    assert.equal(windowState.hasNext,false);
+});

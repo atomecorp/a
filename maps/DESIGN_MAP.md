@@ -1,5 +1,11 @@
 # Atome / eVe Design Map
 
+History input consolidation (2026-09-07): default keyboard shortcuts dispatch canonical Undo/Redo commands and leave editable text to its own history. The legacy HTML panel no longer owns keyboard undo. Undo refreshes the persisted journal and excludes transactions already undone; depth transactions remain parent-preserving and reading-order-independent. Canonical failures propagate through tool results. See tests/eve/history_shortcuts.test.mjs and tests/eve/timeline_undo_source.test.mjs.
+
+Dashboard status projection (2026-09-07): loading and error text uses the shared panel-state component with explicit text depth above Dashboard content. A transparent parent does not provide a rendered stacking surface. Failure text is therefore checked at the projected-record boundary.
+
+Workspace views and depth (2026-09-07): Natural, List and Matrix are exclusive presentations of the same canonical project. The contextual rail scrolls within available surface height using the shared scrollbar and motion tokens. Every atome type exposes the existing depth palette with up, down, front and back actions; frontmost siblings appear first while the palette is open. Closing it restores reading order without undoing persisted depth. Selection changes within the same project retain this palette. Dashboard always clears contextual chrome and presents interactive structure, then project/contact data, remaining visible categories and requested preview captures. Home starts with its existing shell and loads privacy only on demand. Native acceptance limitations are recorded in FRAMEWORK_STATE.md.
+
 Drag fluency (2026-08-29): pointer input may arrive faster than the display, but
 an Atome is painted at most once per display frame at its latest position. A
 closed Molecule follows the same cadence for its owner and members, preserving

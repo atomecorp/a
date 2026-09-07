@@ -1,5 +1,11 @@
 # Atome / eVe API Map
 
+History input consolidation (2026-09-07): default keyboard shortcuts dispatch canonical Undo/Redo commands and leave editable text to its own history. The legacy HTML panel no longer owns keyboard undo. Undo refreshes the persisted journal and excludes transactions already undone; depth transactions remain parent-preserving and reading-order-independent. Canonical failures propagate through tool results. See tests/eve/history_shortcuts.test.mjs and tests/eve/timeline_undo_source.test.mjs.
+
+Transport and history continuity (2026-09-07): explicit state-current get/list operations always reach the selected adapter; transport availability no longer substitutes a successful empty result after a failure. Explicit tool selections share one alias resolver (selection_ids, selectionIds, ids, atome_ids, atomeIds). WebSocket request identifiers survive retries. Native history undo/redo uses the existing history/source_tx_id protocol and event commit batch, without a new public API. Unsupported historical transactions lacking authoritative preimages fail explicitly. Tauri profile persistence never waits for remote authentication. Project list presentation propagates its authoritative source error and does not merge stale secondary results.
+
+Workspace order intent (2026-09-07): existing ui.zorder.up/down/front/back commands resolve an explicit selection before the active target and commit one parent-preserving Atome.commitBatch with history and realtime options. Internal persistLevelOrder/projectRecordsWithOrder accept orderKind: playback (hierarchy_order only) or depth (visual stack aliases only); visualStack coupling is removed. The contextual palette state remains transient and restores playback projection when cleared. No new public command, persisted field, cache or renderer is introduced. Dashboard activation errors restore a non-transitioning Dashboard and produce the shared localized error presentation.
+
 Internal Capture provenance contract (2026-09-04): a Capture definition keeps
 the caller's `presentation` and structured `source` through its nested gateway
 invocation. Main-menu audio/video feedback therefore targets the canonical

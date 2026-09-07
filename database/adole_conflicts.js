@@ -33,8 +33,8 @@ const compareCandidate = (event, current) => {
             ? { wins: true, reason: 'newer_timestamp' }
             : { wins: false, reason: 'older_timestamp' };
     }
-    const lexical = String(event.id).localeCompare(String(current.event_id));
-    return lexical > 0
+    // Event identifiers use a locale-independent order on every runtime.
+    return String(event.id) > String(current.event_id)
         ? { wins: true, reason: incoming.valid ? 'equal_timestamp_event_id' : 'invalid_timestamp_event_id' }
         : { wins: false, reason: incoming.valid ? 'equal_timestamp_event_id' : 'invalid_timestamp_event_id' };
 };

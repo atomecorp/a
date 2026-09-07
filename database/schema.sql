@@ -331,7 +331,9 @@ CREATE TABLE IF NOT EXISTS permissions (
     FOREIGN KEY(principal_id) REFERENCES atomes(atome_id) ON DELETE CASCADE
 );
 
-CREATE INDEX IF NOT EXISTS idx_permissions_atome ON permissions(atome_id);
+CREATE INDEX IF NOT EXISTS idx_permissions_atome_principal_key
+    ON permissions(atome_id, principal_id, particle_key);
+DROP INDEX IF EXISTS idx_permissions_atome;
 CREATE INDEX IF NOT EXISTS idx_permissions_principal ON permissions(principal_id);
 
 -- ============================================================================

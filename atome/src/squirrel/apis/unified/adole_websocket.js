@@ -183,33 +183,32 @@ class TauriWebSocket {
     }
 
     async send(message) {
-        const isAuthMessage = message?.type === 'auth';
-        void isAuthMessage;
         const connected = await this.connect();
         if (!connected || this.socket?.readyState !== WebSocket.OPEN) {
             if (this.isConnected) this.handleDisconnect();
             return { ok: false, success: false, error: 'Server unreachable', offline: true, status: 0 };
         }
 
-        return new Promise((resolve) => {
-            const requestId = `ws_${++this.requestCounter}_${Date.now()}`;
-            message.requestId = requestId;
+        const requestId = message.requestId || message.request_id || `ws_${++this.requestCounter}_${Date.now()}`;
+        message.requestId = requestId;
+        const pending = this.pendingRequests.get(requestId);
+        if (pending) return pending.promise;
 
-            const timeout = setTimeout(() => {
-                this.pendingRequests.delete(requestId);
-                resolve({ ok: false, success: false, error: 'Request timeout', status: 0 });
-            }, 10000);
-
-            this.pendingRequests.set(requestId, { resolve, timeout });
-
-            try {
-                this.socket.send(JSON.stringify(message));
-            } catch (e) {
-                this.pendingRequests.delete(requestId);
-                clearTimeout(timeout);
-                resolve({ ok: false, success: false, error: e.message, status: 0 });
-            }
-        });
+        let resolve;
+        const promise = new Promise(settle => { resolve = settle; });
+        const timeout = setTimeout(() => {
+            this.pendingRequests.delete(requestId);
+            resolve({ ok: false, success: false, error: 'Request timeout', status: 0 });
+        }, 10000);
+        this.pendingRequests.set(requestId, { resolve, timeout, promise });
+        try {
+            this.socket.send(JSON.stringify(message));
+        } catch (error) {
+            this.pendingRequests.delete(requestId);
+            clearTimeout(timeout);
+            resolve({ ok: false, success: false, error: error.message, status: 0 });
+        }
+        return promise;
     }
 
     async sendFireAndForget(message) {

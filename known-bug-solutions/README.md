@@ -8,6 +8,8 @@ the established solution before attempting a new implementation.
 
 | Symptom | Folder |
 | --- | --- |
+| Native Cmd-Z is inactive or history repeats an already undone transaction | [canonical-history-shortcuts](canonical-history-shortcuts/README.md) |
+| Tauri Home or Dashboard first-open times out under permission-heavy accounts | [tauri-panel-permission-scans](tauri-panel-permission-scans/README.md) |
 | An imported video plays audio once, then later playbacks are silent | [media-video-audio-replay](media-video-audio-replay/README.md) |
 | List Delete has no handler, playback skips paged items, or projected audio progress freezes | [project-view-list-media-regressions](project-view-list-media-regressions/README.md) |
 | Projects disappear, project views look empty, or legacy media returns 404 after identity migration | [project-state-media-identity-reconciliation](project-state-media-identity-reconciliation/README.md) |

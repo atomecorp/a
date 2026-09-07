@@ -36,7 +36,7 @@ test('Natural mode retains the canonical video mirror resolver after structured 
         '../../eVe/intuition/matrix/core/project_workspace_activation_runtime.js', import.meta.url
     ), 'utf8');
     assert.match(projectActivationSource,
-        /loadProjectAtomes\(projectId,[\s\S]*setProjectViewMode\(preparedViewMode\.mode,[\s\S]*allowNaturalSceneUnavailable: true/,
+        /loadProjectAtomes\(projectId,[\s\S]*preparedViewMode\.restoreProjectViewMode\(projectId\)/,
         'workspace activation must prepare the scene before revealing its selected representation');
     assert.ok(
         unmountSource.indexOf('await reconcileNaturalProjectSurface()')

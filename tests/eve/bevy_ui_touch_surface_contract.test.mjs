@@ -672,7 +672,7 @@ test('Atome contextual Size slider pins on click and closes only after a transie
     assert.deepEqual(invocations.map((entry) => entry.payload.phase), ['start', 'frame', 'end']);
 });
 
-test('Dashboard mode suspends contextual edit chrome and project return restores or clears its session', async () => {
+test('Dashboard mode clears contextual edit chrome and project return keeps it closed', async () => {
     const previousWindow = globalThis.window;
     const previousDocument = globalThis.document;
     const dom = new JSDOM('<!doctype html><canvas id="eve_surface_project"></canvas>');
@@ -710,13 +710,16 @@ test('Dashboard mode suspends contextual edit chrome and project return restores
         await runtime.render();
         assert.equal(runtime.readState().suspended, true);
         assert.equal(runtime.readState().menuVisible, false);
-        assert.deepEqual(runtime.readState().editingAtomeIds, ['a']);
+        assert.deepEqual(runtime.readState().editingAtomeIds, []);
         assert.equal(unmounts, 1);
 
         markProjectWorkspaceMode('project_a');
         await runtime.render();
         assert.equal(runtime.readState().suspended, false);
-        assert.deepEqual(runtime.readState().editingAtomeIds, ['a']);
+        assert.deepEqual(runtime.readState().editingAtomeIds, []);
+        assert.equal(mounts, 1);
+        runtime.enter({ atomeId: 'a', kind: 'image' });
+        await runtime.render();
         assert.equal(mounts, 2);
 
         renderFrameCallback = null;
@@ -785,4 +788,32 @@ test('canonical vertical slider is relative for touch and collapses on mouse can
     hitzone.dispatchEvent(new PointerEventShim('pointerdown', { bubbles: true, pointerId: 9, pointerType: 'pen', clientY: 70 }));
     input.dispatchEvent(new PointerEventShim('lostpointercapture', { bubbles: true, pointerId: 9, pointerType: 'pen', clientY: 70 }));
     assert.equal(button.dataset.sliderExpanded, 'false');
+});
+
+test('depth palette survives structured target selection and closes on explicit rail clear', async () => {
+    const previousWindow=globalThis.window, previousDocument=globalThis.document;
+    const dom=new JSDOM('<!doctype html><canvas id="eve_surface_project"></canvas>');
+    globalThis.window=dom.window;globalThis.document=dom.window.document;
+    dom.window.__eveWorkspaceMode={mode:'project',projectId:'p'};
+    dom.window.requestAnimationFrame=()=>1;
+    let tree;
+    const runtime=createAtomeContextualEditRuntime({
+        legacyState:{},resolveDefinitions:()=>[],invokeDefinition:async()=>({ok:true}),
+        surfaceResolver:()=>dom.window.document.getElementById('eve_surface_project'),
+        bevyRuntimeResolver:()=>({mountTree:async payload=>{tree=payload.tree;},updateTree:async payload=>{tree=payload.tree;},unmountTree:async()=>{}}),
+        findSceneByAtomeId:()=>null,readSceneState:()=>null,hitTestScene:()=>null,readMainMenuHeight:()=>52
+    });
+    const enter=(id,projectId='p')=>runtime.enterVirtual({atomeId:id,kind:'image',projectId,record:{id,properties:{}},
+        definitions:[{key:'z_order',toolType:'palette',label:'Depth',children:[{key:'front',label:'Front'}]}],invokeDefinition:async()=>({ok:true})});
+    try {
+        enter('a');await runtime.render();
+        findNode(tree.root,'atome_contextual_tool_z_order').on.activate();
+        assert.equal(runtime.readState().activePaletteKey,'z_order');
+        enter('b');await runtime.render();
+        assert.equal(runtime.readState().activePaletteKey,'z_order');
+        runtime.clear();assert.equal(runtime.readState().activePaletteKey,'');
+        enter('c');await runtime.render();
+        findNode(tree.root,'atome_contextual_tool_z_order').on.activate();
+        enter('d','other');assert.equal(runtime.readState().activePaletteKey,'');
+    } finally {runtime.clear();globalThis.window=previousWindow;globalThis.document=previousDocument;dom.window.close();}
 });

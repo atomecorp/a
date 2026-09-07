@@ -4,7 +4,6 @@ import { sanitizeAtomeProperties } from '../../../../shared/atome_contract.js';
 import { commitGuestAtome, deleteGuestAtome, getGuestAtome, listGuestAtomes } from './guest_workspace_store.js';
 import {
     buildUpsertPayload,
-    extractUserId,
     filterByOwner,
     getCurrentUserId,
     isAnonymous,
@@ -21,14 +20,6 @@ import {
 const adapters = {
     tauri: TauriAdapter,
     fastify: FastifyAdapter
-};
-
-const canUseFastify = async (currentUserId) => {
-    if (!FastifyAdapter?.getToken?.()) return false;
-    const me = await FastifyAdapter.auth.me();
-    const id = extractUserId(me?.user || me?.data?.user || me?.user_data || null);
-    if (id && currentUserId && String(id) === String(currentUserId)) return true;
-    return false;
 };
 
 export async function list_atomes(options = {}, callback) {
@@ -55,7 +46,6 @@ export async function list_atomes(options = {}, callback) {
         return result;
     }
     const primary = runtimeTauri ? 'tauri' : 'fastify';
-    const secondary = runtimeTauri ? 'fastify' : 'tauri';
     const atomeType = options.type || options.atomeType || options.atome_type || null;
     const skipOwnerFilter = options.skipOwner === true || options.ownerId === '*' || options.owner_id === '*' || options.ownerId === 'all' || options.owner_id === 'all';
     const allowCrossOwner = skipOwnerFilter && (options.includeShared === true || atomeType === 'share_request' || atomeType === 'share_policy' || atomeType === 'share_permission');
@@ -74,33 +64,11 @@ export async function list_atomes(options = {}, callback) {
     const primaryResult = await listStateCurrentOnBackend(adapters, primary, options);
     results[primary] = { atomes: primaryResult.list, error: primaryResult.error };
 
-    if (runtimeTauri && !isAnonymous() && (options.includeShared || primaryResult.list.length === 0)) {
-        const allowFastify = await canUseFastify(currentUserId);
-        if (allowFastify) {
-            const secondaryResult = await listStateCurrentOnBackend(adapters, secondary, options);
-            results[secondary] = { atomes: secondaryResult.list, error: secondaryResult.error };
-            if (primaryResult.list.length === 0 && secondaryResult.list.length > 0) {
-                results.meta.preferFastify = true;
-            }
-            if (options.includeShared && secondaryResult.list.length > 0) {
-                const merged = new Map();
-                primaryResult.list.forEach((item) => merged.set(resolveAtomeId(item), item));
-                secondaryResult.list.forEach((item) => {
-                    const key = resolveAtomeId(item);
-                    if (!merged.has(key)) merged.set(key, item);
-                });
-                results[primary].atomes = Array.from(merged.values());
-                results.meta.merged = true;
-            }
-        }
-    }
-
+    // Native shared records arrive through the durable sync projection. A
+    // second remote read here delayed local UI and bypassed that single owner.
     if (!allowCrossOwner) {
         const filteredPrimary = filterByOwner(results[primary].atomes, currentUserId, { allowCreator: allowCreatorMatch });
         results[primary].atomes = filteredPrimary;
-        if (results[secondary]?.atomes?.length) {
-            results[secondary].atomes = filterByOwner(results[secondary].atomes, currentUserId, { allowCreator: allowCreatorMatch });
-        }
     }
 
     if (typeof callback === 'function') callback(results);

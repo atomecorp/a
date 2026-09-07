@@ -350,14 +350,13 @@ fn project_patch(
     remote_user_id: &str,
     event: &JsonValue,
     patch: &JsonMap<String, JsonValue>,
-) -> Result<(), String> {
+) -> Result<Vec<String>, String> {
     let Some(atome_id) = projection_atome_id(event, local_user_id, remote_user_id) else {
-        return Ok(());
+        return Ok(Vec::new());
     };
     let owner_id = projection_owner_id(event, local_user_id, remote_user_id);
     let parent_id = projection_parent_id(event, patch, local_user_id, remote_user_id);
-    ensure_principal(tx, local_user_id)?;
-    ensure_target(tx, atome_id, owner_id, parent_id, patch)?;
+
     let current = tx
         .query_row(
             "SELECT properties FROM state_current WHERE atome_id = ?1",
@@ -390,6 +389,23 @@ fn project_patch(
         .and_then(JsonValue::as_object)
         .cloned()
         .unwrap_or_default();
+    let event_id = event.get("event_id").or_else(|| event.get("id")).and_then(JsonValue::as_str).unwrap_or("");
+    let accept = |key: &str| super::local_atome_conflicts::accept_remote(tx, atome_id, key, event_id, &timestamp);
+    let kind = event.get("kind").and_then(JsonValue::as_str).unwrap_or("set");
+    let lifecycle = matches!(kind, "delete" | "restore") && accept("__lifecycle__")?;
+    if matches!(kind, "delete" | "restore") && !lifecycle { return Ok(Vec::new()); }
+    for key in projected_props.keys().cloned().collect::<Vec<_>>() {
+        if !accept(&key)? { projected_props.remove(&key); }
+    }
+    let mut removed = Vec::new();
+    for key in delete_keys(patch) { if accept(&key)? { removed.push(key); } }
+    if projected_props.is_empty() && removed.is_empty() && !lifecycle { return Ok(Vec::new()); }
+    let mut winner_keys: Vec<String> = projected_props.keys().cloned().chain(removed.iter().cloned()).collect();
+    if lifecycle { winner_keys.push("__lifecycle__".into()); }
+    ensure_principal(tx, local_user_id)?;
+    let mut accepted_patch = patch.clone();
+    accepted_patch.insert("props".into(), json!(projected_props));
+    ensure_target(tx, atome_id, owner_id, parent_id, &accepted_patch)?;
     if owner_id == local_user_id {
         localize_identity_properties(&mut projected_props, local_user_id, remote_user_id);
         preserve_local_media_references(&properties, &mut projected_props, local_user_id);
@@ -422,7 +438,7 @@ fn project_patch(
         )
         .map_err(|error| error.to_string())?;
     }
-    for key in delete_keys(patch) {
+    for key in removed {
         properties.remove(&key);
         tx.execute(
             "DELETE FROM particles WHERE atome_id = ?1 AND particle_key = ?2",
@@ -430,13 +446,9 @@ fn project_patch(
         )
         .map_err(|error| error.to_string())?;
     }
-    let kind = event
-        .get("kind")
-        .and_then(JsonValue::as_str)
-        .unwrap_or("set");
-    if kind.eq_ignore_ascii_case("delete") {
+    if lifecycle && kind.eq_ignore_ascii_case("delete") {
         properties.insert("__deleted".to_string(), JsonValue::Bool(true));
-    } else if kind.eq_ignore_ascii_case("restore") {
+    } else if lifecycle && kind.eq_ignore_ascii_case("restore") {
         properties.insert("__deleted".to_string(), JsonValue::Bool(false));
     }
     tx.execute(
@@ -461,20 +473,20 @@ fn project_patch(
         rusqlite::params![atome_id, timestamp],
     )
     .map_err(|error| error.to_string())?;
-    if kind.eq_ignore_ascii_case("delete") {
+    if lifecycle && kind.eq_ignore_ascii_case("delete") {
         tx.execute(
             "UPDATE atomes SET deleted_at = ?1, updated_at = ?1 WHERE atome_id = ?2",
             rusqlite::params![timestamp, atome_id],
         )
         .map_err(|error| error.to_string())?;
-    } else if kind.eq_ignore_ascii_case("restore") {
+    } else if lifecycle && kind.eq_ignore_ascii_case("restore") {
         tx.execute(
             "UPDATE atomes SET deleted_at = NULL, updated_at = ?1 WHERE atome_id = ?2",
             rusqlite::params![timestamp, atome_id],
         )
         .map_err(|error| error.to_string())?;
     }
-    Ok(())
+    Ok(winner_keys)
 }
 
 pub(super) fn persist_ws_event(
@@ -506,7 +518,7 @@ pub(super) fn persist_ws_event(
     let tx = db.transaction().map_err(|error| error.to_string())?;
     if !duplicate {
         let patch = patch_of(event);
-        project_patch(&tx, local_user_id, remote_user_id, event, &patch)?;
+        let winner_keys = project_patch(&tx, local_user_id, remote_user_id, event, &patch)?;
         let projected_atome_id = projection_atome_id(event, local_user_id, remote_user_id);
         let timestamp = event
             .get("timestamp")
@@ -544,6 +556,11 @@ pub(super) fn persist_ws_event(
             ],
         )
         .map_err(|error| error.to_string())?;
+        if let Some(atome_id) = projected_atome_id {
+            for key in winner_keys {
+                super::local_atome_conflicts::record(&tx, atome_id, &key, event_id, &timestamp, sequence, "offline-lww")?;
+            }
+        }
     }
     tx.execute(
         "INSERT INTO remote_sync_stream_cursors (

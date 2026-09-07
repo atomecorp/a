@@ -150,6 +150,8 @@ test('Project workspace activation restores the project surface and main menu', 
 
     const calls = [];
     let menuActive = false;
+    let dashboardClosed = 0;
+    window.eveDashboardBevyUiRuntime = { state: { active: true, sceneProjectId: 'project_alpha' }, destroy: async () => { dashboardClosed += 1; } };
     window.__eveWorkspaceMode = { mode: 'transition', projectId: 'project_alpha', targetMode: 'project', transitioning: true };
     setMainMenuRuntime({
         showFully: async () => {
@@ -225,6 +227,8 @@ test('Project workspace activation restores the project surface and main menu', 
     assert.equal(canvas.style.visibility, '');
     assert.equal(canvas.style.pointerEvents, '');
     assert.equal(menuActive, true);
+    assert.equal(dashboardClosed, 1, 'even the current project must close its Dashboard');
+    delete window.eveDashboardBevyUiRuntime;
     assert.deepEqual(
         calls.find((entry) => entry.name === 'loadProjectAtomes')?.options,
         {
@@ -489,4 +493,22 @@ test('Project workspace activation from dashboard claims the project surface ins
         'showFully',
         'destroyDashboard'
     ]);
+});
+
+test('Dashboard activation failure ends the transition and late requests cannot replace a newer click', async () => {
+    const {window,document}=installMockBrowserEnv();globalThis.window=window;globalThis.document=document;
+    window.__eveWorkspaceMode={mode:'dashboard',projectId:'dashboard_scene',transitioning:false};
+    const failing=createDashboardActionRuntime({loadProjectRuntime:async()=>({activateProjectWorkspace:async()=>({ok:false,error:'unavailable'})})});
+    await assert.rejects(()=>failing.activateItemAction({category:{id:'projects'},item:{id:'p'}}),/unavailable/);
+    assert.equal(window.__eveWorkspaceMode.mode,'dashboard');
+    assert.equal(window.__eveWorkspaceMode.transitioning,false);
+    let resolveFirst;let loads=0;const activated=[];
+    const module={activateProjectWorkspace:async p=>{activated.push(p.id);return {ok:true};}};
+    const runtime=createDashboardActionRuntime({loadProjectRuntime:()=>++loads===1?new Promise(resolve=>{resolveFirst=resolve;}):Promise.resolve(module)});
+    const first=runtime.activateItemAction({category:{id:'projects'},item:{id:'first'}});
+    await runtime.activateItemAction({category:{id:'projects'},item:{id:'second'}});
+    resolveFirst(module);
+    assert.equal((await first).superseded,true);
+    assert.deepEqual(activated,['second']);
+    assert.equal(window.__eveWorkspaceMode.projectId,'second');
 });

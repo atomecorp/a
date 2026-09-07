@@ -1516,15 +1516,16 @@ export const runLayeredMediaMoleculeAcceptance = async ({ page, report, ensurePr
 };
 
 const windowState = (page, projectId, videoId, textId) => page.evaluate(async ({ project, video, text }) => {
-    const [videoState, textState, zOrder] = await Promise.all([
+    const [videoState, textState, order] = await Promise.all([
         window.Atome.getStateCurrent(video), window.Atome.getStateCurrent(text),
-        import('/eVe/intuition/tools/z_order_actions.js')
+        import('/eVe/domains/rendering/project_view_order_runtime.js')
     ]);
-    const neighbours = zOrder.stackNeighbours(project);
+    const scene = window.eveToolBase.getProjectSceneState(project);
+    const neighbours = [...scene.records].sort(order.compareDepthRecords).reverse();
     const stackEntry = (id) => {
         const position = neighbours.findIndex((entry) => entry.id === id);
         const entry = position >= 0 ? neighbours[position] : null;
-        return { position, zIndex: Number(entry?.zIndex || 0), order: Number(entry?.order || 0) };
+        return { position, zIndex: Number(entry?.properties?.zIndex ?? entry?.properties?.z_index ?? 0), order: Number(entry?.properties?.order || 0) };
     };
     return {
         video: videoState?.properties || videoState?.props || videoState || {},

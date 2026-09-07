@@ -317,8 +317,8 @@ test('dashboard opening does not wait for current-project preview regeneration',
         await openPromise;
 
         assert.equal(outcome, 'opened');
-        assert.equal(forcedPreviewStarted, true);
         await runtime.state.postOpenHydrationPromise;
+        assert.equal(forcedPreviewStarted, true);
         assert.equal(runtime.state.postOpenHydrationError, '');
         await runtime.close();
     });
@@ -373,7 +373,7 @@ test('dashboard retargets prepared project data without unmounting its visible t
     });
 });
 
-test('dashboard starts current-project preview hydration before non-critical categories', async () => {
+test('dashboard presents project data before non-critical categories and hydrates previews last', async () => {
     const dom = new JSDOM('<!doctype html><html><body><div id="view"></div></body></html>', { url: 'http://localhost/' });
     let releaseNonCritical;
     const nonCriticalGate = new Promise((resolve) => { releaseNonCritical = resolve; });
@@ -418,13 +418,14 @@ test('dashboard starts current-project preview hydration before non-critical cat
         });
         await new Promise((resolve) => setTimeout(resolve, 0));
 
-        const forcedIndex = calls.findIndex((call) => call.forced);
+        const projectIndex = calls.findIndex(call => call.ids.includes('projects') && !call.forced);
         const nonCriticalIndex = calls.findIndex((call) => call.ids.includes('calendar') && !call.forced);
         releaseNonCritical();
         await runtime.state.postOpenHydrationPromise;
 
-        assert.ok(forcedIndex >= 0);
-        assert.ok(nonCriticalIndex < 0 || forcedIndex < nonCriticalIndex);
+        const forcedIndex = calls.findIndex(call => call.forced);
+        assert.ok(projectIndex >= 0 && forcedIndex > projectIndex);
+        assert.ok(nonCriticalIndex < 0 || projectIndex < nonCriticalIndex && nonCriticalIndex < forcedIndex);
         await runtime.close();
     });
 });
@@ -665,4 +666,22 @@ test('Home preserves normalized dashboard rubrique preferences in canonical prof
     assert.deepEqual(profile.preferences.dashboard, {
         categories: { news: false, calendar: true }
     });
+});
+
+
+test('Dashboard loading and failure text is projected above its opaque content', async () => {
+    const { buildDashboardBevyUiTree } = await import('../../eVe/domains/dashboard/dashboard_bevy_ui_tree.js');
+    const { createDashboardLayout } = await import('../../eVe/domains/dashboard/dashboard_layout.js');
+    const { DASHBOARD_VISUAL_TOKENS: tokens } = await import('../../eVe/domains/dashboard/dashboard_tokens.js');
+    const { projectBevyUiTreeRecords } = await import('../../eVe/domains/rendering/bevy_ui_overlay_record_projection.js');
+    const layout = createDashboardLayout({ width: 800, height: 600, tokens });
+    for (const status of [{ loading: true }, { actionError: 'activation_failed' }, { loadError: 'offline' }]) {
+        const tree = buildDashboardBevyUiTree({ layout, tokens, ...status });
+        const records = projectBevyUiTreeRecords({ tree, treeId: tree.id, workspaceLayer: 'dashboard' });
+        const messages = records.filter(record => record.id.includes('dashboard_status'));
+        const content = records.filter(record => !record.id.includes('dashboard_status'));
+        assert.equal(messages.length, 2);
+        const top = Math.max(...content.map(record => record.properties.render_layer));
+        assert.ok(messages.every(record => record.properties.render_layer > top), 'status must remain visible over Dashboard content');
+    }
 });
