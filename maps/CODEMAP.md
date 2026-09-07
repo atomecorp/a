@@ -2572,3 +2572,17 @@ This section supersedes earlier Dashboard lifecycle descriptions in this map. `e
 - `server/directoryPublicService.js`: principal-vault profile source, restart rebuild, unchanged-profile revision suppression, requester exclusion, and redacted photo projection.
 - `eVe/domains/user/public_directory_events.js`: shared invalidation subscription used by Contact, Dashboard, Finder, and Communication.
 - `eVe/intuition/tools/user_login_choreography.js` and `user_login_credentials.js`: retained-animation cleanup and stale-generation guard for logout/reopen.
+
+
+### 2026-09-07 — Dashboard cancellation and recursive playback input
+
+`dashboard_lifecycle_runtime.js` limits stale-open cleanup to its own generation;
+a superseded operation cannot suspend a newer tree. The Dashboard runtime checks
+cancellation after first reveal. Workspace opening propagates cancelled results
+before projection validation and bootstrap-ready publication.
+
+`project_view_surface_context_runtime.js` reads the playback root once, shares
+that record with rule resolution, and includes its canonical properties/timeline
+in the recursive transport input even when visible rows exclude the project.
+It removes the empty synthetic root and does not replace invalid Performance mode
+with a sequential rail icon. State persistence and WebGPU ownership are unchanged.

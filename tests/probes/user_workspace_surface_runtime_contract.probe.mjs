@@ -94,4 +94,12 @@ assert.equal(reopened.ok, true);
 assert.equal(reopened.sceneProjectId, 'project_resident');
 assert.deepEqual(calls.map((entry) => entry.name), ['open']);
 
+await toggleWorkspaceDashboardAndMainMenu();
+const runtime = window.eveDashboardBevyUiRuntime;
+runtime.open = async () => ({ ok: true, cancelled: true, active: false });
+const cancelled = await openWorkspaceDashboardAndMainMenu();
+assert.equal(cancelled.cancelled, true, 'an intentional cancellation is not a missing Dashboard tree');
+runtime.open = async () => ({ ok: true, active: true });
+await assert.rejects(openWorkspaceDashboardAndMainMenu(), /workspace_dashboard_bevy_ui_tree_unavailable/);
+
 console.log('user_workspace_surface_runtime_contract.test: PASS');

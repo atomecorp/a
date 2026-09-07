@@ -2348,3 +2348,17 @@ The next execution tasks must refine this map by:
 - `resolveProfileIdentity` and `readProfileState` are internal profile-API support boundaries. They pair the configured profile backend with that backend's authenticated opaque principal and raw `state_current` reader; they expose no product API and create no fallback profile store.
 - `repairLegacyRemoteProfile` is a private, one-shot compatibility operation for profiles previously written under the wrong remote principal. It requires an authenticated self-profile with a remote photo/custom identity and a local photo-less bootstrap identity, then persists the complete sanitized profile through the canonical Tauri commit; it is not a continuing read fallback.
 - `provisionFastifyCounterpart({ phone, password, username })` verifies `/api/server/verify` locally with Web Crypto, then calls the existing idempotent `auth.account-provision` operation. `AdoleAPI.directory.list/search` prepare `auth.ensureFastifyToken()` first, so a local-only authenticated account cannot silently receive an empty public directory.
+
+
+### 2026-09-07 — Dashboard cancellation and recursive playback input
+
+`dashboard_lifecycle_runtime.js` limits stale-open cleanup to its own generation;
+a superseded operation cannot suspend a newer tree. The Dashboard runtime checks
+cancellation after first reveal. Workspace opening propagates cancelled results
+before projection validation and bootstrap-ready publication.
+
+`project_view_surface_context_runtime.js` reads the playback root once, shares
+that record with rule resolution, and includes its canonical properties/timeline
+in the recursive transport input even when visible rows exclude the project.
+It removes the empty synthetic root and does not replace invalid Performance mode
+with a sequential rail icon. State persistence and WebGPU ownership are unchanged.
