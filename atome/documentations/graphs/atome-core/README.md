@@ -38,8 +38,8 @@ Ce dossier cartographie le bloc atome-core pour faciliter le debug des mutations
 
 ## Main entry points
 
-- `commit` - eVe/core/atome_commit.js:1760
-- `commitBatch` - eVe/core/atome_commit.js:1923
+- `commit` - eVe/core/atome_commit.js:70
+- `commitBatch` - eVe/core/atome_commit.js:151
 - `getStateCurrent` - eVe/core/atome_commit.js:2122
 - `listEvents` - eVe/core/atome_commit.js:2124
 - `window.Atome` API assignment - eVe/core/atome_commit.js:2128
@@ -74,3 +74,7 @@ Ce dossier cartographie le bloc atome-core pour faciliter le debug des mutations
 - 06-lifecycle-graph.md
 - 07-risk-map.md
 - 08-open-questions.md
+
+## Bounded recheck — 2026-09-08
+
+The commit and commitBatch locations above were refreshed from the current source. Other historical line numbers, DOM arrows and risk labels have not been revalidated by this pass. In particular, the realtime preview description differs from the current rejecting handler; see the [audit evidence](../../../../.audit/CODE_AUDIT_PROGRESS.md#lots-12--section-evidence-and-foundation-coverage). These graphs guide inspection and must not be treated as proof of current runtime behavior.

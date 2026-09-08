@@ -1021,3 +1021,43 @@ The Preview is the temporal editing surface: direct scrub, crop, and move gestur
 - Restarting the application must reconstruct the same Home access selector and avatar that were durably confirmed before shutdown. The UI never normalizes a profile from an identifier belonging to a different backend; a failed canonical read is surfaced as a load failure instead of being presented as an empty private profile.
 - A legacy split profile with a durable remote avatar and no local avatar is visibly restored on first load together with its complete saved identity/access profile, then committed locally. Later restarts use the ordinary single local projection.
 - Dashboard Contacts never interprets a missing remote identity as “aucun contact public”. For an authenticated historical Tauri account, the verified provisioning bridge is completed first; the current/local cards remain local and discoverable cards continue to come exclusively from `directory.public`.
+
+## UI charter preparation — 2026-09-08 — non-normative audit draft
+
+This section organizes the explicit principles in the user's 2026-09-08 documentary-audit mission. It does not approve new geometry, exceptions, propagation rules, implementations or replacements for existing controls. Existing design descriptions elsewhere in this map are evidence to examine, not independent proof that the mission's principles were superseded. Detailed evidence and coverage: [documentary audit registry](../.audit/CODE_AUDIT_PROGRESS.md#documentary-audit--2026-09-08--first-bounded-pass).
+
+### A. Established decisions and verifiable formulation
+
+The source for every principle below is the mission, supplemented by the named existing sources. Examples illustrate the principle within its stated scope; they do not decide its unresolved boundaries.
+
+| ID / rule | Scope and observable requirement | Conforming example | Nonconforming example | Existing source / unresolved detail |
+| --- | --- | --- | --- | --- |
+| UI01 / square unit | The interface is structured from a square unit and modular composition | Closed tools align to the same square module | Unrelated closed tool dimensions without a documented relation | Module 05 product-slider contract; tool_skin.js toolboxSquareSizePx. Exact scope of square shape remains open, especially fields and content. |
+| UI02 / coherent dimensions | Related sizes derive from explicit coherent ratios | Dashboard block unit derives from toolbox size through its token multiplier | Independent magic numbers used for equivalent roles without an established ratio | This map's Dashboard token contract; tool_skin.js. Current values are observations, not a universal ratio whitelist; spacing policy remains open. |
+| UI03 / anchored primary menu | Right-handed main menu stays at the bottom with its reading/start edge on the right | Short menu rests against the bottom-right edge | Primary menu appears as an arbitrary floating palette | bevy_ui_main_menu_model.js:resolveBevyMainMenuLayout. Insets, narrow viewports and thumb acceptance require runtime verification. |
+| UI04 / contextual menu | Right-handed secondary/contextual controls use the right edge; left-handed presentation mirrors that organization | Editing controls stay on the contextual edge | Contextual actions spawn freely positioned palettes | Existing contextual-rail descriptions in this map; no full contextual runtime acceptance in this pass. |
+| UI05 / handedness and thumb access | Left-handed mode mirrors handed organization and prioritizes reachable controls | Primary reading/start edge moves to the left in left-handed mode | Visual mirroring leaves primary actions unreachable on the original side | Main-menu handedness layout and current List ordering. Thumb usability is not proven by code geometry. |
+| UI06 / no popups or floating palettes | Product interactions preserve the mission's ban | An action reveals its detail within the established anchored composition | An independently floating options palette | Existing Panel Lab Select popup and this map's floating-palette ordering conflict with this principle. No exception is approved here. |
+| UI07 / cross-screen continuity | Mobile, tablet, desktop and other screens share the same interface language | Available space changes composition/scroll while preserving action identity and semantics | A separate mobile interaction model changes the meaning of the same tool | Universal experience described in eVe/concept/eVe.html. Complete platform parity remains unverified. |
+| UI08 / object display modes | Natural / List / Matrix concern presentation of Atomes and molecules | The same canonical content switches representation | A display-mode switch freely rewrites the structure of tools | project_view_mode_state.js stores project view_mode through commitBatch. No general tool-mutation rule is inferred. |
+| UI09 / independent mode axes | Editing / Consultation / Performance are distinct from Natural / List / Matrix | A representation choice does not itself imply edit permission or performance behavior | “List” is treated as an execution mode or authorization grant | Mission; existing view owner. All combinations and platform behavior are not audited. |
+| UI10 / multiple and authorization | Object identity, local representation and permission scope remain distinct | A color-only permission is described as color-only; a view remains a reference | Hiding a control is treated as server authorization; a linked view is silently copied | Security_and_sharing.md §2.5, concept Vue, atomePropertySecurity.js. Exact shared/local presentation policy remains open. |
+
+### B. Current observations (static only)
+
+- `eVe/elements/skin/tool_skin.js` declares 60 px tool size / toolbox square size. Dashboard documentation derives its block unit through a multiplier of 2. Those values do not establish universal allowed ratios for every component.
+- `eVe/intuition/ribbon/bevy_ui_main_menu_model.js:resolveBevyMainMenuLayout` computes bottom placement from surface height minus item size, horizontal handedness alignment, and bounded scroll. This is source inspection, not pixels or thumb acceptance.
+- `eVe/intuition/runtime/bevy_panel/bevy_panel_select.js:selectNode` builds an options panel below the control with menu gap, shadow and popup z-index. Its parent node also grows in height; therefore the map's claim that it never expands body flow needs a consumer-layout check. No actual screen was inspected.
+- `eVe/domains/rendering/project_view_mode_state.js` persists view_mode on the project and owns its derived per-project cache. This is not proof of a separate durable history for each simultaneous view.
+
+### C. Known discrepancies
+
+- The Panel Lab Select and floating-palette descriptions do not conform to the mission's no-popup principle. Preserve their implementation evidence, but do not present them as approved product exceptions.
+- The map has detailed tokens and component geometry but the inspected sources do not settle the universal unit, ratio set, square scope or exceptions. A source search alone is not proof that no earlier decision exists.
+- The global rule copy's DOM tool selector differs from the repository's BevyUI interaction procedure; this is a diagnostic-instruction discrepancy, not a reason to introduce DOM proxies.
+
+### D. Open decisions (not approved)
+
+The user was asked about: global unit/allowed ratios/spacing, exact square scope, and local-versus-shared presentation changes across views. A fourth question concerns whether the competing Kata/Firecracker conceptual reference is a separate ThermUSS variant or replaces the eVe isolation target. Full wording and consequences are retained in the audit registry. No answer is inferred from elapsed time.
+
+Possible directions, **not validated**: use one named module unit with explicitly allowed size/spacing relations; specify square requirements by component role; define the ownership of view-local zoom/placement separately from canonical object geometry. Do not implement these suggestions or copy them into normative rules without product validation.
