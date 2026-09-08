@@ -1,5 +1,16 @@
 # Atome / eVe Code Map
 
+Deletion hierarchy repair (2026-09-08): `delete.js` routes every selected
+Atome through the existing Molecule lifecycle, regardless of selection size.
+Selected descendants are consumed by selected ancestors only once. A deleted
+parent is not an active Molecule owner; surviving children use the existing
+BlackHole commit without reviving the parent. The shared
+`isDeletedRuntimeState` predicate remains owned by
+`tool_runtime_molecule_mutation.js`. Whole-Molecule deletion in
+`tool_runtime_molecule_structure.js` builds one parent index, traverses all
+live descendants, validates modifiability before its atomic commit and closes
+all removed Molecule timelines. No renderer or alternate mutation owner.
+
 History shortcut ownership (2026-09-07): eVe/default/shortcuts.js routes Cmd/Ctrl-Z and Shift-Z through the existing Undo/Redo gateway. The legacy undo panel no longer installs its own shortcut or direct-undo global. Undo handlers return canonical outcomes instead of unconditional success. tests/eve/history_shortcuts.test.mjs covers shared routing and editable-target exclusion. atome_timeline_history_contract.js reconstructs undo eligibility from persisted transactions and excludes canonical reconnect bootstrap events; tests/eve/timeline_undo_source.test.mjs covers batches, repeated undo, redo and bootstrap records. atome_commit_transport.js no longer retains the uncalled mirror-token preparer or its unused setter.
 
 Native history and conflict owners (2026-09-07): platforms/desktop-tauri/src/server/local_atome_history.rs extends local_atome.rs for transaction preimages and history commands; local_atome_conflicts.rs implements the database/adole_conflicts.js conflict contract using event_property_winners. local_atome_remote_projection.rs applies winning properties before cursor advancement. Tests live in tests/tauri/local_atome_history.rs. adole_websocket.js preserves command request identity; atome_commit_fetch.js owns shared authenticated local reads. database/schema.sql owns the measured atom/principal/key permission index; tests/server/permission_query_scope.test.mjs protects its upgrade and bounded query plan. project_data.js uses only the authoritative project list and propagates its errors.

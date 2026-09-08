@@ -1,5 +1,16 @@
 # Atome / eVe API Map
 
+Deletion hierarchy repair (2026-09-08): `delete.js` routes every selected
+Atome through the existing Molecule lifecycle, regardless of selection size.
+Selected descendants are consumed by selected ancestors only once. A deleted
+parent is not an active Molecule owner; surviving children use the existing
+BlackHole commit without reviving the parent. The shared
+`isDeletedRuntimeState` predicate remains owned by
+`tool_runtime_molecule_mutation.js`. Whole-Molecule deletion in
+`tool_runtime_molecule_structure.js` builds one parent index, traverses all
+live descendants, validates modifiability before its atomic commit and closes
+all removed Molecule timelines. No renderer or alternate mutation owner.
+
 History input consolidation (2026-09-07): default keyboard shortcuts dispatch canonical Undo/Redo commands and leave editable text to its own history. The legacy HTML panel no longer owns keyboard undo. Undo refreshes the persisted journal and excludes transactions already undone; depth transactions remain parent-preserving and reading-order-independent. Canonical failures propagate through tool results. See tests/eve/history_shortcuts.test.mjs and tests/eve/timeline_undo_source.test.mjs.
 
 Transport and history continuity (2026-09-07): explicit state-current get/list operations always reach the selected adapter; transport availability no longer substitutes a successful empty result after a failure. Explicit tool selections share one alias resolver (selection_ids, selectionIds, ids, atome_ids, atomeIds). WebSocket request identifiers survive retries. Native history undo/redo uses the existing history/source_tx_id protocol and event commit batch, without a new public API. Unsupported historical transactions lacking authoritative preimages fail explicitly. Tauri profile persistence never waits for remote authentication. Project list presentation propagates its authoritative source error and does not merge stale secondary results.

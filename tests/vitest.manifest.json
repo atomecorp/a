@@ -81,6 +81,7 @@
   "tests/eve/dashboard_render_performance_contract.test.mjs",
   "tests/eve/dashboard_workspace_mode_contract.test.mjs",
   "tests/eve/debug_runtime_webgpu_probe.test.mjs",
+  "tests/eve/delete_selection_hierarchy.test.mjs",
   "tests/eve/history_shortcuts.test.mjs",
   "tests/eve/home_hydration_lifecycle.test.mjs",
   "tests/eve/imported_media_durability_contract.test.mjs",

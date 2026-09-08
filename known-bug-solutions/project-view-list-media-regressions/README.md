@@ -280,3 +280,39 @@ video. The List filmstrip remains intact. Decoder frame retention alone does
 not prove composite subject/reprojection continuity; investigate that boundary
 before declaring Visualizer scrub fully fixed. Tauri/iPhone, actual Matrix
 interaction and physical audio output were not validated in this repair.
+
+## A surviving Draw cannot be deleted after its Molecule was trashed
+
+Confirmed in Tauri on 2026-09-08: a native pointer selection and Backspace leave
+the Draw visible. The canonical gateway returns `molecule_not_found`. The Draw
+is live in its project, but `parent_id` points to a group whose state contains
+`__deleted:true` and whose project/parent are BlackHole. Permissions allow
+Delete. This is a hierarchy/lifecycle failure, not a CORS or WebGPU failure.
+
+`delete.js` previously applied Molecule routing only to singleton selections;
+a multiple selection sent owners through ordinary BlackHole relocation, leaving
+children behind. Routing now applies to every selection, skips descendants of
+selected owners, and uses the shared deleted-state predicate before delegating
+to a parent. A surviving child of a deleted parent uses ordinary canonical
+BlackHole deletion without restoring or mutating that parent. Type and parent
+parsing reuse existing canonical readers.
+
+Whole-Molecule deletion previously stopped at direct members. Its existing
+`tool_runtime_molecule_structure.js` owner now indexes parentage once and
+includes all live descendants in the same permission-checked transaction.
+Nested timelines close after success. A locked descendant prevents any commit.
+
+Regression coverage:
+`tests/eve/delete_selection_hierarchy.test.mjs`,
+`tests/eve/project_view_member_mutation_regressions.test.mjs`, and
+`tests/eve/atome_edit_footer_delete_cold_start.test.mjs`: 19 tests pass.
+M0 and syntax pass. The broader Molecule runner has one unrelated existing
+source assertion failure in `molecule_scene_stack_commit.probe.mjs` against
+unchanged `z_order_actions.js`.
+
+Native acceptance: the exact reported Draw is deleted by Backspace, its state
+moves to BlackHole, its scene record/pixels disappear, and reload retains both
+the deletion and the active mounted main menu. The final console is clean.
+Multi-selection and nested lifecycle have executable test evidence; repeat
+those UI cases on Tauri, Web and physical iPhone before claiming full platform
+coverage. The separate 1430/MIME incident was left unchanged.

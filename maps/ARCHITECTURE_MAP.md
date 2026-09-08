@@ -1,5 +1,16 @@
 # Atome / eVe Architecture Map
 
+Deletion hierarchy repair (2026-09-08): `delete.js` routes every selected
+Atome through the existing Molecule lifecycle, regardless of selection size.
+Selected descendants are consumed by selected ancestors only once. A deleted
+parent is not an active Molecule owner; surviving children use the existing
+BlackHole commit without reviving the parent. The shared
+`isDeletedRuntimeState` predicate remains owned by
+`tool_runtime_molecule_mutation.js`. Whole-Molecule deletion in
+`tool_runtime_molecule_structure.js` builds one parent index, traverses all
+live descendants, validates modifiability before its atomic commit and closes
+all removed Molecule timelines. No renderer or alternate mutation owner.
+
 History input consolidation (2026-09-07): default keyboard shortcuts dispatch canonical Undo/Redo commands and leave editable text to its own history. The legacy HTML panel no longer owns keyboard undo. Undo refreshes the persisted journal and excludes transactions already undone; depth transactions remain parent-preserving and reading-order-independent. Canonical failures propagate through tool results. See tests/eve/history_shortcuts.test.mjs and tests/eve/timeline_undo_source.test.mjs.
 
 Offline durability and reconnection (2026-09-07): local commit transactions capture property preimages and atomically enqueue synchronization; queue failure rolls back the complete mutation. Native history extends the existing event owner. Tauri remote projection now consults the existing event_property_winners schema per property so stale replay cannot replace newer local edits. Both runtimes use millisecond timestamps and locale-independent event-id ordering. Tauri reads use only the synchronized local state_current projection; shared reads do not await remote enrichment. Profile writes prepare remote authentication only when Fastify owns the profile. Local ACL list scope uses an indexed permission set instead of a correlated scan for every state row. The shared schema replaces the atom-only permissions index with an atom/principal/key index after native stack sampling and an in-memory query benchmark. Live Web-to-Tauri replay after reopening was observed; the opposite offline direction remains to verify.
