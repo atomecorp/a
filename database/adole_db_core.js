@@ -19,29 +19,59 @@ let isAsync = false;
 let transactionTail = Promise.resolve();
 const transactionContext = new AsyncLocalStorage();
 
+// Concurrent first queries used to each run a full initialisation: `db` is only
+// assigned after `await connect()`, so every caller passed the `if (db)` guard.
+// The schema was applied N times and the DROP/CREATE VIEW of the migration chain
+// then failed for all but one of them. One in-flight promise serialises them.
+let initializing = null;
+
 export async function initDatabase(config = {}) {
     if (db) return db;
+    if (initializing) return initializing;
+    initializing = openDatabase(config).finally(() => { initializing = null; });
+    return initializing;
+}
 
+// Schema + migrations are pure DDL: replaying them on every boot costs a full
+// `exec` of schema.sql plus ~15 PRAGMA/scan round-trips, and it is the only
+// reason `users_view` is dropped and recreated at each start. `PRAGMA
+// user_version` records a fingerprint of the DDL that produced the current
+// file; when it matches, the whole chain is skipped. The fingerprint is derived
+// from the DDL sources themselves, so editing schema.sql or the migration module
+// re-runs them automatically -- no version constant to remember to bump.
+const ddlFingerprint = (...sources) => {
+    let hash = 0x811c9dc5;
+    for (const source of sources) {
+        for (let index = 0; index < source.length; index += 1) {
+            hash ^= source.charCodeAt(index);
+            hash = Math.imul(hash, 0x01000193);
+        }
+    }
+    return hash & 0x7fffffff;
+};
+
+async function openDatabase(config) {
     console.log('[ADOLE v3.0] Initializing unified database...');
     db = await connect(config);
     isAsync = db.type === 'libsql';
 
-    // Run schema from file
-    const fs = await import('fs');
-    const path = await import('path');
-    const { fileURLToPath } = await import('url');
-    const __dirname = path.dirname(fileURLToPath(import.meta.url));
-    const schemaPath = path.join(__dirname, 'schema.sql');
+    const fs = await import('node:fs');
+    const path = await import('node:path');
+    const { fileURLToPath } = await import('node:url');
+    const here = path.dirname(fileURLToPath(import.meta.url));
+    const schema = fs.readFileSync(path.join(here, 'schema.sql'), 'utf8');
+    const migrations = fs.readFileSync(path.join(here, 'adole_schema_migrations.js'), 'utf8');
+    const expectedVersion = ddlFingerprint(schema, migrations);
 
-    try {
-        const schema = fs.readFileSync(schemaPath, 'utf8');
-        await query('exec', schema);
-        console.log('[ADOLE v3.0] Unified schema applied successfully');
-    } catch (e) {
-        console.log('[ADOLE v3.0] Schema already exists or error:', e.message);
-    }
+    const [{ user_version: currentVersion = 0 } = {}] = await query('all', 'PRAGMA user_version');
+    if (currentVersion === expectedVersion) return db;
 
+    // A schema failure used to be logged as "already exists or error" and
+    // swallowed, leaving the server running against a half-built database.
+    await query('exec', schema);
     await runAdoleSchemaMigrations(query);
+    await query('exec', `PRAGMA user_version = ${expectedVersion}`);
+    console.log(`[ADOLE v3.0] Schema and migrations applied (ddl ${expectedVersion})`);
 
     return db;
 }

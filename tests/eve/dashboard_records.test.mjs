@@ -620,3 +620,25 @@ test('a stale post-commit project list cannot hide Dashboard projects or trigger
         else globalThis.window = previousWindow;
     }
 });
+
+test('clock and weather stay next to the header while only News content scrolls, in either handedness', () => {
+    const tokens = mergeDashboardTokens();
+    const items = ['clock', 'weather'].map(id => ({ id, category_id: 'news', metadata: { dashboard_module: id } }));
+    items.push(...Array.from({ length: 30 }, (_, index) => ({ id: `news_${index}`, category_id: 'news' })));
+    for (const handedness of ['left', 'right']) {
+        const options = { width: 1200, height: 600, handedness, tokens, categories: [{ id: 'news' }], itemsByCategory: new Map([['news', items]]) };
+        const initial = createDashboardLayout(options);
+        const scrolled = createDashboardLayout({ ...options, scrollByLane: { news: 800 } });
+        for (const id of ['clock', 'weather']) {
+            const before = initial.visible_item_rects.find(entry => entry.item.id === id);
+            const after = scrolled.visible_item_rects.find(entry => entry.item.id === id);
+            assert.deepEqual(after.rect, before.rect);
+        }
+        assert.equal(scrolled.visible_item_rects.some(entry => entry.item.id === 'news_0'), false);
+        const lane = scrolled.lanes[0];
+        for (const entry of scrolled.visible_item_rects.filter(entry => !entry.item.metadata?.dashboard_module)) {
+            assert.ok(entry.card_rect.x >= lane.scroll_clip_rect.x || handedness === 'right');
+            assert.ok(entry.card_rect.x + entry.card_rect.width <= lane.scroll_clip_rect.x + lane.scroll_clip_rect.width || handedness === 'left');
+        }
+    }
+});

@@ -12,6 +12,13 @@ const orderSchema = Object.freeze({
     accessibility: { type: 'object' }
 });
 
+export const ATOME_MIX_PROPERTY_SCHEMA = Object.freeze({
+    mute: { type: 'boolean' },
+    solo: { type: 'boolean' },
+    mute_strength: { type: 'number', minimum: 0, maximum: 1, default: 1 },
+    solo_strength: { type: 'number', minimum: 0, maximum: 1, default: 1 }
+});
+
 const frameSchema = Object.freeze({
     left: { type: 'number' },
     top: { type: 'number' },
@@ -42,7 +49,10 @@ const defineType = (definition) => Object.freeze({
         capability(`${definition.type}.write`, ['read', 'write', 'persistent'])
     ],
     ...definition,
-    schema: Object.freeze({ ...definition.schema })
+    schema: Object.freeze({
+        ...(definition.traits?.some((trait) => ['visual', 'audible', 'container'].includes(trait)) ? ATOME_MIX_PROPERTY_SCHEMA : {}),
+        ...definition.schema
+    })
 });
 
 export const CORE_ATOME_TYPE_DEFINITIONS = Object.freeze([
@@ -52,6 +62,13 @@ export const CORE_ATOME_TYPE_DEFINITIONS = Object.freeze([
         traits: ['container', 'root', 'navigable'],
         schema: {
             ...orderSchema,
+            project_view_split: { type: 'object' },
+            project_intent: { type: 'object', properties: {
+                family: { type: 'string', enum: ['health', 'creation', 'recording', 'publication'] },
+                goal: { type: 'string' },
+                status: { type: 'string', enum: ['draft'] },
+                audience: { type: 'string', enum: ['everyone', 'group'] }
+            }, required: ['family', 'goal'] },
             title: { type: 'string' },
             description: { type: 'string' }
         }

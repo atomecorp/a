@@ -9,6 +9,7 @@ import {
     copyFile,
     mkdir,
     readdir,
+    readFile,
     rm,
     stat,
     writeFile
@@ -66,8 +67,18 @@ async function pathExists(targetPath) {
 // tests, VCS/tooling dirs. Excluding them from packages strips the vendored
 // Rust renderer tree, 7.5 MB of sourcemaps, colocated tests, and documentation
 // without touching any runtime-loaded js/css/wasm/asset. Source tree untouched.
-const SKIP_DIR_NAMES = new Set(['node_modules', 'target', '.git']);
+// Aligné sur platforms/ios/package_ios_runtime.mjs, qui excluait déjà ces
+// répertoires et ces vidéos: R&D (912 Ko de maquettes HTML et de marque-pages),
+// les documentations et les tests colocalisés n'ont rien à faire dans un paquet
+// exécutable, et les trois vidéos ci-dessous ne sont référencées par aucun code
+// produit (24,9 Mo).
+const SKIP_DIR_NAMES = new Set(['node_modules', 'target', '.git', 'R&D', 'documentations', 'concept', 'tests']);
 const SKIP_FILE_EXTS = new Set(['.map', '.rs', '.md', '.orig', '.lock']);
+const SKIP_FILE_NAMES = new Set([
+    'JeezsFire.mp4',
+    'video_1787217554069.mp4',
+    'WhatsApp Video 2026-04-28 at 21.27.38.mp4'
+]);
 const shouldSkipEntry = (entry) => {
     if (entry.isDirectory()) {
         return SKIP_DIR_NAMES.has(entry.name);
@@ -75,7 +86,10 @@ const shouldSkipEntry = (entry) => {
     if (entry.name === '.DS_Store') {
         return true;
     }
-    if (/\.test\.mjs$/.test(entry.name)) {
+    if (/\.(?:test|probe)\.mjs$/.test(entry.name)) {
+        return true;
+    }
+    if (SKIP_FILE_NAMES.has(entry.name)) {
         return true;
     }
     return SKIP_FILE_EXTS.has(path.extname(entry.name));
@@ -156,13 +170,19 @@ async function main() {
 
         const exampleDest = path.join(targetDir, path.basename(sourcePath));
 
-        await copyDirectory(path.join(projectRoot, 'atome', 'src', 'js'), path.join(targetDir, 'js'));
-        await copyDirectory(path.join(projectRoot, 'atome', 'src', 'assets'), path.join(targetDir, 'assets'));
-        await copyDirectory(path.join(projectRoot, 'atome', 'src', 'css'), path.join(targetDir, 'css'));
-        await copyDirectory(path.join(projectRoot, 'atome', 'src', 'squirrel'), path.join(targetDir, 'squirrel'));
-        await copyDirectory(path.join(projectRoot, 'atome', 'src', 'application'), path.join(targetDir, 'application'));
-        await copyDirectory(path.join(projectRoot, 'atome'), path.join(targetDir, 'atome'));
+        // The package must reproduce the URL space the app is written against:
+        //   /            -> atome/src        (assets, squirrel, utils, shared, wasm, ...)
+        //   /eVe/        -> eVe              (reached by ../../../../eVe/ from atome/src)
+        //   /vendor/rubberband-wasm/         (declared by the importmap AND by RUBBERBAND_WASM_URL)
+        // The previous shape copied five subfolders flat AND the whole atome/ tree on top,
+        // which duplicated the 188 MB of assets while still leaving utils/ and shared/ --
+        // the first five imports of spark.js -- missing from the flat root.
+        await copyDirectory(path.join(projectRoot, 'atome', 'src'), targetDir);
         await copyDirectory(path.join(projectRoot, 'eVe'), path.join(targetDir, 'eVe'));
+        await copyDirectory(
+            path.join(projectRoot, 'node_modules', 'rubberband-wasm', 'dist'),
+            path.join(targetDir, 'vendor', 'rubberband-wasm')
+        );
         await copyFile(sourcePath, exampleDest);
 
         const manifest = {
@@ -183,117 +203,33 @@ async function main() {
             'utf8'
         );
 
-        const cacheName = `package-${packageName}-v1`;
-        const serviceWorkerContent = `const CACHE_NAME = '${cacheName}';
-
-self.addEventListener('install', event => {
-  event.waitUntil(caches.open(CACHE_NAME));
-  self.skipWaiting();
-});
-
-self.addEventListener('activate', event => {
-  event.waitUntil(
-    caches.keys().then(keys =>
-      Promise.all(
-        keys.filter(key => key !== CACHE_NAME).map(key => caches.delete(key))
-      )
-    ).then(() => self.clients.claim())
-  );
-});
-
-self.addEventListener('fetch', event => {
-  const { request } = event;
-  if (request.method !== 'GET') {
-    return;
-  }
-
-  event.respondWith(
-    caches.match(request).then(cachedResponse => {
-      if (cachedResponse) {
-        return cachedResponse;
-      }
-      return fetch(request)
-        .then(networkResponse => {
-          const clone = networkResponse.clone();
-          caches.open(CACHE_NAME).then(cache => cache.put(request, clone));
-          return networkResponse;
-        })
-        .catch(() => cachedResponse || Response.error());
-    })
-  );
-});
-`;
-
-        await writeFile(path.join(targetDir, 'service-worker.js'), serviceWorkerContent, 'utf8');
-
-        const indexHtmlContent = `<!DOCTYPE html>
-<html lang="fr">
-
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="apple-mobile-web-app-title" content="App">
-  <title>${packageName}</title>
-  <link rel="manifest" href="./manifest.json">
-  <link rel="icon" href="data:,">
-  <link rel="stylesheet" href="css/squirrel.css">
-  <link rel="stylesheet" href="js/leaflet.min.css">
-  <script defer src="js/gsap.min.js"></script>
-  <script defer src="js/leaflet.min.js"></script>
-  <script type="module" src="squirrel/spark.js"></script>
-  <script type="module">
-    let __appImported = false;
-    const importAppOnce = () => {
-      if (__appImported) {
-        return;
-      }
-      __appImported = true;
-      import('./application/index.js');
-    };
-
-    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
-      (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-
-    if (!isIOS) {
-      window.addEventListener('squirrel:ready', importAppOnce, { once: true });
-    } else {
-      window.addEventListener('local-server-ready', importAppOnce, { once: true });
-      window.addEventListener('squirrel:ready', () => {
-        setTimeout(importAppOnce, 900);
-      }, { once: true });
-    }
-
-    if ('serviceWorker' in navigator) {
-      window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./service-worker.js').catch(err => {
-          console.warn('Service worker registration failed:', err);
-        });
-      }, { once: true });
-    }
-  </script>
-</head>
-
-<body>
-</body>
-
-</html>
-`;
-
-        await writeFile(path.join(targetDir, 'index.html'), indexHtmlContent, 'utf8');
+        // index.html is NOT re-authored here. A hand-written copy drifted from the real
+        // entry point: it lost the importmap (114 bare `#squirrel/` specifiers stop
+        // resolving), it never loaded early-init.js, and it registered a second,
+        // cache-first service worker that contradicts atome/src/sw.js -- the very
+        // stale-JS hazard sw.js documents avoiding. The real entry is copied verbatim
+        // by copyDirectory above; only the <title> and the manifest link are patched.
+        const entryHtmlPath = path.join(targetDir, 'index.html');
+        const entryHtml = await readFile(entryHtmlPath, 'utf8');
+        const packagedHtml = entryHtml
+            .replace(/<title>[^<]*<\/title>/, `<title>${packageName}</title>`)
+            .replace(
+                /(\s*)<link rel="stylesheet"/,
+                `$1<link rel="manifest" href="./manifest.json">$1<link rel="stylesheet"`
+            );
+        if (packagedHtml === entryHtml) {
+            throw new Error('package_index_html_patch_failed: atome/src/index.html changed shape');
+        }
+        await writeFile(entryHtmlPath, packagedHtml, 'utf8');
 
         console.log(`✅ Package prêt dans ${targetDir}`);
         console.log('Fichiers inclus :');
         console.log(`- ${path.basename(exampleDest)}`);
         console.log('- manifest.json');
-        console.log('- service-worker.js');
-        console.log('- index.html');
-        console.log('- js');
-        console.log('- assets');
-        console.log('- css');
-        console.log('- squirrel');
-        console.log('- application');
+        console.log('- index.html + sw.js (copies conformes de atome/src)');
+        console.log('- assets, css, js, squirrel, application, utils, shared, wasm');
+        console.log('- eVe/');
+        console.log('- vendor/rubberband-wasm/');
         console.log('\nServez ce dossier en local (ex: `npx http-server`) et ouvrez http://localhost:PORT pour tester la PWA.');
         console.log('Le service worker nécessite un contexte sécurisé (HTTPS ou localhost).');
     } catch (error) {

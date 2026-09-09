@@ -1,5 +1,65 @@
 # Atome / eVe Code Map
 
+### Context scope lifetime — 2026-09-09
+
+`project_view_surface_context_runtime` retains project/navigation identity and context revision through owner resolution and invocation. Old navigation cannot create a container rail under a new project ID; late reads and retained closures become stale. Real Dashboard cross-project return and 15 context/readiness regressions verify this owner.
+
+### Performance sample boundaries — 2026-09-09
+
+`project_view_capture_to_timeline.clipOperation` quantizes measured start/end through existing `time_model` conversion and derives duration from their frame difference. `kernel/collisions` compares sample boundaries using the owning timeline sample rate, supplied by reducers, stretch and block loop. This prevents an artificial overlap between adjacent captured holds, including floating-second addition error. No tolerance, new timebase, clip displacement or alternate recording owner is added.
+
+### Audio upload ownership — 2026-09-09
+
+`createAudioStorage` in `eVe/domains/media/api/audio_core_storage.js` owns `uploadRecordingToFastify`. Recording finalization and durable queue replay consume it through the existing shared audio context. Failed queued upload propagates to the existing facade reporter and does not mark the job done. The write-only in-flight flag and duplicate upload ownership were removed; headers, credentials and upload bytes are preserved. Storage/flush regression: 15 tests passed; final M0/Molecule: 28 suites passed.
+
+### Composition owner convergence — 2026-09-09
+
+- project_view_drop_feedback composes the shared tool factory and popup placement for six explicit choices; existing List/Matrix/surface gesture sessions own arming, cancellation and cleanup.
+- tool_runtime_molecule_combine delegates cuts to project_view_occurrence_edit_runtime and copies to planCanonicalRecordCopies in tool_runtime_atome_duplicate. Group windows are compiled by project_view_transport_plan; canonical parentage uses atome_record_utils.resolveAtomeParentId.
+- tool_runtime_molecule_structure exposes the existing transform planner for translating whole nested source envelopes.
+
+### Dashboard and shared interaction owners — 2026-09-09
+
+- `eVe/domains/dashboard/dashboard_project_guide.js`: disposable family/goal navigation rendered by the shared Bevy panel. `dashboard_header_creation_actions.js` owns the catalog and delegates creation to existing project/News commands. `core_atome_types.js` declares project intent; no separate project store.
+- `dashboard_news_modules.js`: disposable clock/current-weather readings and manual-location panel. Existing Finder geocoder owns debouncing/cancellation; shared Dashboard layout keeps two module cards outside scrolling News. Dashboard shutdown closes the panel and stops its timer/requests.
+- `atome_contextual_edit_registry.js` triggers the same deferred contextual owner on first selection; `atome_contextual_edit_runtime.install` consumes canonical selection already present. No second selection listener interprets content or owns state.
+- `bevy_text_texture_style.wrapTextLines` owns common word wrapping for labels and text editing; normalization/projection carry explicit wrap width without shrinking fonts.
+- Current M/S options are Mute/Solo/All/None. Historical Select All/Delete All descriptions below are superseded.
+
+
+### M/S factors and column gestures — 2026-09-08
+
+`ATOME_MIX_PROPERTY_SCHEMA` extends the shared core visual/audio/container schemas with boolean `mute`/`solo` and 0–1 `mute_strength`/`solo_strength` (default 1). `project_view_mix_projection` derives inherited Mute and sibling Solo factors from canonical records. Source opacity/gain remain unchanged; the engine applies gain once. Fully muted sequential entries are skipped; Solo preserves order and duration. `transport.updateMix` consumes committed property changes.
+
+`project_view_mix_controls` uses shared menu buttons, icon resolution, slider and Delete module loading. The existing selectable-list fixed row exposes M/S gestures. Web `mix_strength_v3` verifies long-press choices, multiple solos, both vertical paint directions and horizontal slider at 50 percent; inspected pixels show attenuation. Select All resolves the full container through the canonical loader. Delete All cold-start acceptance, off-screen/nested scope, media audio and single-item transport remain pending.
+
+
+### Live Mute event and restoration — 2026-09-08
+
+`project_view_surface_events` reads canonical `event.payload.props` for both Mute transitions. The recursive transport recompiles its input records at the current playhead instead of permanently filtering its leaves. The plan carries reusable random orders; entirely hidden containers stay empty. Web `mute_live_fixed_v4` verifies live mute/unmute with actual viewer pixels. Solo, strengths, audio and painting remain pending.
+
+
+### Shared Performance capture — 2026-09-08
+
+`project_view_capture_to_timeline.toggleProjectPerformanceRecording` owns arm/stop/persist for Natural, List and Matrix. The recorder retains its project/container scope; Natural selection uses the existing item trigger with a held lifetime. Contextual rails reuse `projectViewRecordToolDefinition` and the existing recording-state event/pulse. This is separate from media/property recording. Web `natural_performance_v1` verified initial silence, 10.31/2.07-second holds, two clips and persisted replay in List. Direct Natural replay and media-end frame holding remain open.
+
+
+### Selection playback scope — 2026-09-08
+
+`project_view_transport_plan` accepts selectionIds and compiles selected descendants as roots under the canonical container, pruning covered descendants without reparenting state. `project_view_surface_context_runtime.playSelection` reuses playLevel and the single recursive clock. The structured footer routes multiple selections through `playProjectViewSelection`. The automatic text-only prompter branch and its duplicate visual hit-testing were retired; activeLeafRecords now owns playback projection.
+
+### Performance capture controls — 2026-09-08
+
+Performance Record retains its virtual container rail during forced playback refresh. `createContextualDefinitionRunner` now lives beside contextual event handlers; `createRecordingIndicatorPulse` reuses the existing recording visual runtime and BevyUI motion updates.
+
+### Structured drop dwell and feedback — 2026-09-08
+
+`project_view_drop_intent_runtime.js` remains the shared five-zone and 500 ms dwell owner. List/Matrix drag runtimes now consume its arming guard on release; changing mode/placement restarts the timer. `project_view_drop_feedback.js` is the shared disposable projection of that existing session: exact target zone, translated intention and progress. It introduces no command or durable state. `bevy_panel_media_card.js` accepts a base zIndex so a raised drag card preserves the ordering of its image and label above its own background.
+
+
+Interaction owners (2026-09-08): `project_view_molecule_list_model.comparePlaybackRecords` orders persisted hierarchy positions with an immutable-id tie break; List, Matrix and recursive transport share it. `selection.js` updates its canonical runtime selection before publishing. Context edition queries distinguish `hasContext` from `isEditing`; pointer motion compares projected geometry before scheduling. `bevy_panel_record_preview` forwards rich text through tree normalization and overlay record projection to the existing texture renderer, replacing its private caret projection. `svg_draw_runtime` owns interceptor installation/removal; local SVG content events reach the existing scene projection while direct transform echoes remain deduplicated. Whole-text colors update existing rich spans via the shared style owner.
+
+
 Deletion hierarchy repair (2026-09-08): `delete.js` routes every selected
 Atome through the existing Molecule lifecycle, regardless of selection size.
 Selected descendants are consumed by selected ancestors only once. A deleted
@@ -677,13 +737,7 @@ Capture reveal ownership:
 - `eVe/intuition/runtime/eve_intuition/atome_contextual_edit_runtime.js` owns session-only multi-Atome editing state, active context, canonical footer drag/resize gestures, fullscreen geometry, handedness, rail scroll, vertical-slider sessions, and BevyUI lifecycle. It consumes the canonical workspace-mode notification to unmount all edit chrome over Dashboard without losing the same-project session, remount it on return, and clear it when another project becomes active.
 - `eVe/intuition/runtime/eve_intuition/atome_contextual_edit_model.js` owns the single shared-canvas BevyUI tree for edit outlines, per-Atome footers, fixed lateral rail, palette children, and 3x vertical slider reflow. It consumes the shared Bevy menu surface contract and renders palette accents on the rail interior: left for right-handed placement and right for left-handed placement.
 - `eVe/intuition/runtime/eve_intuition/atome_contextual_edit_registry.js` owns the closed module registry replacing the deleted `window.eveAtomeEditFooterApi` exposure.
-- `eVe/intuition/runtime/eve_intuition/atome_edit_footer_drag_runtime.js` owns Atome-edit footer record-action tool drag payloads, active drag session publication, MIME writes, drag guards, and preview ghost creation.
-- `eVe/intuition/runtime/eve_intuition/atome_edit_footer_palette_runtime.js` owns Atome-edit footer palette child button creation, palette expansion state, palette target resolution, and palette child drag binding.
-- `eVe/intuition/runtime/eve_intuition/atome_edit_footer_slider_runtime.js` owns Atome-edit footer slider events, value debounce, size-module loading, footer-row recentering, and slider collapse scheduling.
-- `eVe/intuition/runtime/eve_intuition/atome_edit_footer_tool_state_runtime.js` owns Atome-edit footer button latch visuals, record-action bridge state, record-action state-event sync, and footer row tool-state refresh.
-- `eVe/intuition/runtime/eve_intuition/atome_edit_footer_child_invocation_runtime.js` owns Atome-edit footer palette child invocation for record-action and generic child tools through the canonical tool invocation path.
 - `eVe/intuition/runtime/eve_intuition/atome_edit_footer_definition_invocation_runtime.js` owns Atome-edit footer definition invocation for footer runtime and explicit context calls, including selection-bound payload merge and slider dispatch.
-- `eVe/intuition/runtime/eve_intuition/atome_edit_footer_row_render_runtime.js` owns Atome-edit footer tool row rendering, button creation, palette/slider binding, and footer-row click routing through injected canonical tool invokers.
 - All capture action/runtime files are below the 500-line hard maximum after R23.
 
 Perform tool ownership:
@@ -843,7 +897,7 @@ Main entry points:
 - `tests/shared/core_atome_types.test.mjs` guards the core Atome type definitions and registry installation for text, shape, image, video, audio, waveform, group, project, tool instance, and record contracts, including the record `data_model` universal kind.
 - `tests/shared/semantic_rename_contract.test.mjs` guards semantic rename normalization, deterministic label fallback, `set` event construction with required `tx_id`, HistoryTransaction grouping, and AccessibilityGraph label updates without DOM state.
 - `tests/eve/bevy_projection_adapter_contract.test.mjs` guards Bevy projection adapter compatibility, including the default renderer adapter registry, immutable registry metadata, adapter-delegated kind mapping, existing kind payload parity, CSS layer clamping, `Uint8ClampedArray` to `Uint8Array` texture normalization, natural video texture size, and display-size exclusion from video texture metadata.
-- `tests/eve/bevy_project_renderer_guards.test.mjs` guards active Bevy project renderer ownership: external renderers cannot target `canvas#eve_surface_project`, transform-only diffs do not schedule delayed redraw primes, selected project video playback cannot bypass the project timeline, source-backed live video cannot enter the RGBA media resolver/readback path, and the pinned `wgpu 27.0.1` backend cannot be masked by facade video-track exports before real web external-texture support exists. `platforms/web/bevy-renderer/src/web_wake_tests.rs` guards the browser/WASM Bevy wake contract: JavaScript exports wake the reactive winit loop, while Bevy update systems drain queued ops/redraw requests without emitting a second `WakeUp` from inside the active WASM event-loop closure.
+- `tests/eve/bevy_project_renderer_guards.test.mjs` guards active Bevy project renderer ownership: external renderers cannot target `canvas#eve_surface_project`, transform-only diffs do not schedule delayed redraw primes, selected project video playback cannot bypass the project timeline, source-backed live video cannot enter the RGBA media resolver/readback path, and the pinned `wgpu 29.0.4` backend cannot be masked by facade video-track exports before real web external-texture support exists. `platforms/web/bevy-renderer/src/web_wake_tests.rs` guards the browser/WASM Bevy wake contract: JavaScript exports wake the reactive winit loop, while Bevy update systems drain queued ops/redraw requests without emitting a second `WakeUp` from inside the active WASM event-loop closure.
 - `tests/eve/bevy_ui_main_menu_overlay_atomic.test.mjs` guards the BevyUI main-menu overlay path at a 70 px item size: all 27 menu records and 9 icon textures must be committed together while Dashboard records/effects are preserved.
 - `tests/eve/bevy_web_renderer_skipped_scene_baseline.test.mjs` guards the Web Bevy applied-scene baseline for skipped media textures: failed image spawns stay absent from the diff baseline, failed resource updates preserve the previously visible node, and successful retries clear stale skipped markers while emitting the real WASM spawn/resource op.
 - `tests/eve/project_scene_media_projection_filter.test.mjs` guards project media filtering before Bevy projection and source-backed live-video DOM boundaries: project video must start on `#eve_surface_project`, visible Atome/media DOM projection stays absent, and the only allowed `<video>` is the fully hidden Bevy decode resource under `#eve_bevy_video_decode_root`.
@@ -1122,8 +1176,6 @@ Purpose: Shared product-neutral utility contracts.
 
 Main files:
 
-- `atome/shared/logging.js`
-- `atome/shared/recipient_access.js`
 
 Reusable APIs:
 
@@ -1232,8 +1284,6 @@ Tests:
 - `runtime_audio_backend.strict_native.test.mjs`
 - `auv3_host_playback.test.mjs`
 - `av_api_boundaries.test.mjs`
-- `tests/atome/audio_sample_accurate_recording.test.mjs`
-- `tests/atome/record_audio_auv3_clock_contract.test.mjs`
 - `tests/native/recorder_core_frame_contract.cpp`
 - `tests/probes/audio_browser_recording_flush_contract.test.mjs`
 - `tests/probes/video_recording_failure_lifecycle.test.mjs`
@@ -1823,7 +1873,7 @@ Reusable APIs:
 - `eVe/intuition/tools/clipboard/` owns shared copy/paste clipboard state, system clipboard writes, and paste event generation. `copy.js` and `paste.js` remain product tool entrypoints and panel/action registration surfaces; record normalization now belongs to `eVe/intuition/tools/shared/atome_record_utils.js`; `eVeIntuition.js` paste action must call the canonical `window.eve_paste_selection` entrypoint and must not detour through deleted MTraX clipboard APIs.
 - `eVe/intuition/tools/delete.js` owns only the delete tool entrypoint, project-layer SVG deletion through `window.eveSvgLayerApi`, restore-drop document binding, panel open/close wiring, and `ui.delete.selection` routing. `eVe/intuition/tools/delete/blackhole_runtime.js` owns black-hole Atome creation/discovery, deleted-record cache ownership, sanitized delete/restore commits, canonical `eve-atome_<id>` host cleanup through `getAtomeElement(...)`, and project-scene remove/update calls through the Bevy scene runtime. `eVe/intuition/tools/delete/panel_view.js` owns the delete panel DOM composition and deleted-row rendering. Deleted-row UI must keep target Atome ids in closures/canonical `application/x-eve-atome` drag payloads rather than `data-*` row metadata or parallel text MIME restore fallbacks, must clear list contents with DOM node replacement rather than string HTML, and must use the shared `createEveButton` control for row restore actions. `ui.delete.selection` must not route timeline clips or SVG layers through deleted `window.eveMtrackApi.deleteSelection` / `deleteSvgLayer`. All three delete modules are below the 500-line hard maximum.
 - `eVe/intuition/tools/layer.js` owns only the project SVG-layer panel surface (dialog DOM, row rendering, panel refresh, `ui.layer.select`) and installs `window.eveSvgLayerApi`; `eVe/intuition/tools/core/svg_layer_store.js` owns the canonical per-Atome project layer-selection store, SVG layer markup add/remove/update mutation, the `eve:svg-layer-*` event emitters, and the `createProjectSvgLayerApi` command factory; `eVe/intuition/tools/layer_panel_styles.js` owns the injected layer-panel CSS. None of them may read MTrack preview layer manifests, emit `clip_id` layer events, or call deleted `window.eveMtrackApi` SVG-layer routes. `eVe/intuition/tools/core/svg_vector_edit_runtime.js` consumes those layer selection events as project-Atome events only.
-- `eVe/intuition/tools/core/svg_vector_edit_runtime.js` owns vector-edit activation, drag lifecycle, commit completion, double-click point insertion, and `window.__eveVectorTool` installation. `svg_vector_dom_runtime.js` owns SVG host/layer resolution, overlay handles, flower-menu lock attributes, and screen/local point projection. `svg_vector_refresh_runtime.js` owns selected-SVG refresh, model parsing, session switching, and handle rerender scheduling. `svg_vector_mutation_runtime.js` owns mutation payload classification for SVG versus geometry changes.
+- `eVe/intuition/tools/core/svg_vector_edit_runtime.js` parses the existing detached SVG model and supplies pointer-capture handles to the contextual BevyUI tree. Canonical gesture commits serialize point changes; cancel restores the source markup. Edition entries own session lifetime. The former DOM overlay, host refresh and mutation classifier modules were removed after consumer checks. Transform-rich imported SVG and full Web acceptance remain to verify.
 - `eVe/intuition/flower/context.js` owns Flower gesture entry, `menu_layout.js` radial geometry, `menu_items.js` item/icon normalization, and `context_target.js` context resolution plus BevyUI point blocking. That blocker resolves the canonical project canvas by point when an iOS Pointer Event targets the project shell instead of the canvas, so a panel hit never arms Flower long press. `context_selection.js` owns selection compatibility; `context_pointer_lock.js` owns module-local pointer/hold state with no DOM renderer or browser global.
 - `eVe/intuition/matrix/ui/view.js` owns Matrix root/project-view/tile DOM orchestration; `eVe/intuition/matrix/ui/matrix_layout.js` owns Matrix viewport fitting, toolbar-aware row/column sizing, scroll positioning, and layout observers.
 - `eVe/intuition/matrix/core/project_data.js` owns Matrix project list loading, current-project persistence, active-project flag synchronization, rename, authoritative deletion confirmation, and project-level duplicate/copy/paste. It reuses the shared clipboard state and `executeBootstrapDuplicateOperation` for snapshot cloning; Dashboard only supplies the target project and refreshes its existing `projects` category after a successful operation. `eVe/intuition/matrix/core/project_order_runtime.js` owns stable Matrix project slot ordering, per-user slot update serialization, and sanitized project slot `commitBatch` payloads. All Atome mutation payloads built by either owner must pass through the shared `sanitizeAtomeProperties(...)` contract before `window.Atome.commit` or `window.Atome.commitBatch`.
@@ -1872,8 +1922,6 @@ Main files:
 - `eVe/elements/look/matrix_preset.js`
 - `eVe/elements/look/utility_presets.js`
 - `eVe/elements/look/preset_chrome.js`
-- `eVe/elements/look/preset_comm_table.js`
-- `eVe/elements/look/preset_comm_surface.js`
 - `eVe/elements/look/preset_controls.js`
 - `eVe/elements/look/tool_theme.js`
 - `eVe/elements/skin/index.js`
@@ -2001,8 +2049,6 @@ Main files:
 - `server/server.js`
 - `server/auth.js`
 - `server/atomeRoutes.orm.js`
-- `server/atomeCrudRoutes.js`
-- `server/atomeEventRoutes.js`
 - `server/atomeRouteContract.js`
 - `server/atomeSyncRuntime.js`
 - `server/atomeRealtime.js`
@@ -2010,7 +2056,6 @@ Main files:
 - `server/sharingPermissionService.js`
 - `server/wsApiState.js`
 - `server/wsSend.js`
-- `server/ws_api_schema.js`
 - `server/sharing.js`
 - `server/notificationStack.js`
 - `server/wsSyncRuntime.js`
@@ -2171,8 +2216,6 @@ Main files:
 - `scripts/server_secure_config.js`
 - `scripts/static_file_server.mjs`
 - `scripts/run_fastify.sh`
-- `scripts/rollup.config.cdn.js`
-- `scripts/rollup.config.npm.js`
 
 Should be extended by:
 
@@ -2602,3 +2645,40 @@ that record with rule resolution, and includes its canonical properties/timeline
 in the recursive transport input even when visible rows exclude the project.
 It removes the empty synthetic root and does not replace invalid Performance mode
 with a sequential rail icon. State persistence and WebGPU ownership are unchanged.
+
+### Structured presentation campaign — 2026-09-08
+
+Structured presentation: project_view_surface_layout owns shared tool-size/row geometry and bounded split heights; project_view_visual_fullscreen_runtime owns project/mode split persistence and session accordion state. project_view_surface_events owns transport snapshot projection. Fixed list rows and project footer reuse fixedHierarchyListRowGeometry.
+
+### Structured selection transport convergence — 2026-09-08
+
+project_view_surface_context_runtime.playSelection owns both single and multiple structured Play. project_view_playback_follow retargets that same transport; the footer no longer starts a second item clock. project_view_contextual_rail owns the shared project/Molecule Play Mode palette, with canonical playback_rules writes and immediate icon refresh. The recursive compiler skips full Mute only in sequential/random parents; simultaneous silence retains its timeline duration. Web selection_recursive_v2 and single_mix_recursive_v9 validate these paths.
+
+### Live structured draft projection — 2026-09-08
+
+project_view_create_draft_runtime extends the existing visual-changed event with record/project_id. project_view_surface_events updates the content projection before rendering, preventing its older record from replacing the current drawn SVG. Draw drafts use #ffffff00 until canonical geometry sets neutral #ffffff; SVG stroke paint owns brush color. Web draw_live_projection_fixed_v5 verifies held-pointer live pixels in List/Matrix.
+
+### Text style focus contract — 2026-09-08
+
+The existing text_editing_session accepts retainOnBlur (default false); text_bridge enables it for scene objects. Losing keyboard focus to a style tool stops the caret but retains the active projected range. Tab/explicit commit ends the scene edit. project_scene_text_edit_state invalidates ranges by lifecycle and collapse rather than a timer. Web partial_text_color_commit_v3 verifies partial color in both structured viewers and persistence after commit.
+
+### Interaction campaign convergence — 2026-09-08
+
+List/Matrix controllers apply canonical selection before project_view_playback_follow receives selectionIds; an empty set stops the recursive transport. svg_draw_runtime routes inactive-brush opacity to applySelectionStyleMutation; active-brush opacity remains a brush setting. project_view_list_view retains the shared virtualizer's computed window and uses it for transport updates, preventing bottom rows from disappearing after scrub. No new state authority or renderer.
+
+The real-pointer harness remains molecule_eve_ui_acceptance_probe; molecule_ui_acceptance_support owns input geometry, molecule_ui_image_evidence owns pixel comparisons, molecule_ui_list_acceptance owns the List journey, molecule_ui_timeline_acceptance and molecule_ui_timeline_gestures own Timeline checks, and molecule_ui_media_fixture/hierarchy_gestures/media_playback_evidence own the respective layered-media responsibilities. Existing top-level entrypoints are retained.
+
+Contextual interaction ownership (2026-09-08): `atome_contextual_edit_registry.js` owns the lazy public facade and scene intent installation; `atome_edit_footer_runtime.js` resolves tool definitions and forwards them to the shared BevyUI contextual runtime. The six unused DOM row/drag/palette/slider/state/child modules were removed after consumer checks. Interaction labels live in `languages_{en,fr}_interaction.js`, assembled by `languages.js`.
+
+Structural history (2026-09-08): database/adole_event_mutation.js captures identity preimages, server/atomeHistoryCommands.js constructs undo/redo events, and server/userVaultRouter.js plus server/userVaultProcess.js execute in the owner's vault. tests/server/user_vault_provider.probe.mjs covers real gateway routing, cross-principal refusal and Molecule creation/reparent undo/redo. project_view_matrix_content.js uses the full-project playback loader; bevy_panel_media_card.js delegates Molecule cards to the shared composite preview owner.
+
+Choice palettes (2026-09-08): tool_definition_ssot.js owns resolveToolChoiceIcon; toolbox_runtime_model.js and atome_contextual_edit_model.js consume it. main_menu_content_runtime.js binds View to its canonical mode owner; bevy_ui_main_menu_runtime.js owns the disposable refresh listener. contextual_selection_levels.test.mjs covers shared choice resolution.
+
+### 2026-09-09 interaction lifecycle checkpoint
+
+- `project_view_transport_plan.js`: recursive plan plus pure engine-timeline projection (moved from runtime; existing public export retained by the runtime).
+- `project_view_transport_runtime.js`: cancels superseded media preparation and releases foreign plans/resources through `releaseOutsideProject`.
+- `project_workspace_activation_runtime.js`: awaits transport project-scope release before activating the next project.
+- `bevy_ui_tree_motion_runtime.js`: inherited parent translation for flat projected children; structural local coordinates unchanged.
+- `bevy_ui_main_menu_resize_runtime.js`: late canonical handedness hydration subscription with mounted lifetime.
+- `tests/probes/dashboard_modules_acceptance.mjs`: real fixed News scrolling in both handedness modes, guided plus, shared weather editor and attributed current response.

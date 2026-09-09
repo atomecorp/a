@@ -62,14 +62,11 @@ const RULES = [
         allow: [
             'eVe/intuition/runtime/bevy_panel/bevy_panel_virtual_window.js',
             // --- declared debt, 2026-08-07 -------------------------------
-            // Two strategies, not three copies: the first two window by page,
-            // the third by viewport. Choosing between them is a product
-            // decision on a `validated` panel — see
-            // `todo/ui_bevy/component_convergence.md`. What is unambiguously
-            // duplicated is `virtualPageIndex` / `matrixPageIndex`, identical
-            // character for character.
+            // Two strategies, not three copies: one windows by page, the other
+            // by viewport. The third copy lived in bevy_panel_matrix.js, which
+            // was unreachable from every product entry point and has been
+            // deleted; this list shrank with it.
             'eVe/intuition/runtime/bevy_panel/bevy_panel_selectable_list.js',
-            'eVe/intuition/runtime/bevy_panel/bevy_panel_matrix.js',
             'eVe/domains/rendering/project_view_matrix_content.js'
         ]
     }),

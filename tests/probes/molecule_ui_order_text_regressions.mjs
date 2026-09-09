@@ -42,9 +42,9 @@ const playAndStopMember = async ({ page, memberId }) => {
     assert(play, `focused_member_play_missing:${memberId}`);
     await clickCanvasTarget(page, play);
     const started = await waitFor(page, async (id) => {
-        const { projectViewPlayback } = await import('/eVe/domains/rendering/project_view_playback_runtime.js');
-        const state = projectViewPlayback.readState();
-        return { ok: state.playing === true && state.playingIds.includes(id), state };
+        const { projectViewTransport } = await import('/eVe/domains/rendering/project_view_transport_runtime.js');
+        const state = projectViewTransport.read();
+        return { ok: state.playing && state.activeLeafIds.includes(id), state };
     }, memberId);
     await disarmMemberPlayback(page);
     return started.state;

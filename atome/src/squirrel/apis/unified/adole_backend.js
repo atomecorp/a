@@ -4,6 +4,7 @@ import {
     canUseFastifyPrimaryOnLocalAxumPage,
     getCloudServerPort,
     getCloudServerUrl,
+    isEmbeddedIosRuntime,
     isLocalAxumPage,
     getLocalServerPort,
     getLocalServerUrl,
@@ -134,15 +135,6 @@ function isInTauri() {
     return isCanonicalTauriRuntime();
 }
 
-function isEmbeddedIOSRuntime() {
-    if (typeof window === 'undefined') return false;
-    const protocol = String(window.location?.protocol || '').toLowerCase();
-    if (protocol === 'atome:') return true;
-    if (window.__AUV3_MODE__ === true) return true;
-    const hostEnv = String(window.__HOST_ENV || '').trim().toLowerCase();
-    return hostEnv === 'app' || hostEnv === 'auv3';
-}
-
 function allowFastifyPrimaryOnLocalAxumPage() {
     return canUseFastifyPrimaryOnLocalAxumPage();
 }
@@ -151,7 +143,7 @@ function readLocalTauriHttpPort() {
     if (typeof window === 'undefined') return null;
     const localUrl = getLocalServerUrl();
     if (!localUrl) {
-        if (isEmbeddedIOSRuntime()) return null;
+        if (isEmbeddedIosRuntime()) return null;
         return isInTauri() ? getLocalServerPort() : null;
     }
     return getLocalServerPort();
@@ -257,7 +249,7 @@ function resolveBackendSource(kind) {
         return 'tauri';
     }
     if (explicit && explicit !== 'auto') return explicit;
-    if (isEmbeddedIOSRuntime()) {
+    if (isEmbeddedIosRuntime()) {
         return 'tauri';
     }
     return isInTauri() ? 'tauri' : 'fastify';
@@ -296,7 +288,7 @@ function getTauriHttpBaseUrl() {
 
     const base = getLocalServerUrl();
     if (base) return alignLoopbackUrlToPageHost(base);
-    if (isEmbeddedIOSRuntime()) return '';
+    if (isEmbeddedIosRuntime()) return '';
 
     return CONFIG.TAURI_BASE_URL;
 }
@@ -365,5 +357,5 @@ function shouldAttemptFastify() {
 
 
 export {
-    CONFIG, _connectionState, MEDIA_PATCH_KIND_HINTS, mediaPatchHintsByAtomeId, normalizeMediaPatchKindHint, hasMediaSourceHintsInPatch, rememberMediaPatchHint, isAnonymousLogin, silentPing, isInTauri, isEmbeddedIOSRuntime, allowFastifyPrimaryOnLocalAxumPage, readLocalTauriHttpPort, hasInjectedLocalTauriPort, isLoopbackHostname, clearFastifyOverrideStorage, readExpectedFastifyLoopbackPort, isDisallowedFastifyLoopbackPort, isInvalidFastifyHttpBase, isInvalidFastifyWsUrl, BACKEND_SOURCES, SYNC_DIRECTIONS, normalizeSource, normalizeSyncDirection, readServerConfig, readGlobalOverride, resolveBackendSource, resolveAuthSource, resolveProfileSource, resolveDataSource, resolveSyncDirection, getTauriHttpBaseUrl, getTauriWsUrl, getFastifyHttpBaseUrl, getFastifyWsApiUrl, isLocalDev, shouldAttemptFastify
+    CONFIG, _connectionState, MEDIA_PATCH_KIND_HINTS, mediaPatchHintsByAtomeId, normalizeMediaPatchKindHint, hasMediaSourceHintsInPatch, rememberMediaPatchHint, isAnonymousLogin, silentPing, isInTauri, isEmbeddedIosRuntime, allowFastifyPrimaryOnLocalAxumPage, readLocalTauriHttpPort, hasInjectedLocalTauriPort, isLoopbackHostname, clearFastifyOverrideStorage, readExpectedFastifyLoopbackPort, isDisallowedFastifyLoopbackPort, isInvalidFastifyHttpBase, isInvalidFastifyWsUrl, BACKEND_SOURCES, SYNC_DIRECTIONS, normalizeSource, normalizeSyncDirection, readServerConfig, readGlobalOverride, resolveBackendSource, resolveAuthSource, resolveProfileSource, resolveDataSource, resolveSyncDirection, getTauriHttpBaseUrl, getTauriWsUrl, getFastifyHttpBaseUrl, getFastifyWsApiUrl, isLocalDev, shouldAttemptFastify
 };

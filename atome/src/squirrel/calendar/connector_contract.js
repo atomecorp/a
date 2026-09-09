@@ -1,3 +1,5 @@
+import { normalizeConnectorContract } from '../shared/connector_contract.js';
+
 export const CALENDAR_V1_ARCHITECTURE_DECISION = Object.freeze({
     provider: 'tauri_caldav_primary',
     primary_write_source: {
@@ -29,10 +31,10 @@ export const createCalendarConnectorContract = ({
     role = CALENDAR_V1_ARCHITECTURE_DECISION.primary_write_source.role,
     read_capabilities = ['calendar_today', 'calendar_next', 'calendar_search', 'calendar_sources'],
     write_capabilities = ['calendar_create', 'calendar_update', 'calendar_delete']
-} = {}) => ({
-    provider: String(provider || CALENDAR_V1_ARCHITECTURE_DECISION.provider),
-    protocol: String(protocol || 'caldav'),
-    role: String(role || CALENDAR_V1_ARCHITECTURE_DECISION.primary_write_source.role),
-    read_capabilities: Array.isArray(read_capabilities) ? read_capabilities.map((entry) => String(entry)) : [],
-    write_capabilities: Array.isArray(write_capabilities) ? write_capabilities.map((entry) => String(entry)) : []
+} = {}) => normalizeConnectorContract({
+    provider: provider || CALENDAR_V1_ARCHITECTURE_DECISION.provider,
+    protocol: protocol || 'caldav',
+    role: role || CALENDAR_V1_ARCHITECTURE_DECISION.primary_write_source.role,
+    read_capabilities,
+    write_capabilities
 });

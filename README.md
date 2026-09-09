@@ -97,7 +97,6 @@ npm run tauri build    # production desktop bundle (also invoked by ./run.sh --p
 
 ```bash
 npm run test           # vitest
-npm run scan:components
 npm run check:syntax
 npm run cargo:bevy:check
 npm run cargo:bevy:test

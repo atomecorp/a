@@ -4,7 +4,7 @@
 
 import { getABoxEventBus } from './aBoxServer.js';
 import { ensureUserHome } from './userHome.js';
-import { withTransaction } from '../database/adole.js';
+import { setParticle, withTransaction } from '../database/adole.js';
 import { normalizePhone } from './auth_crypto.js';
 import { ensureUserAtomeType, upsertUserStateCurrent, normalizeUserOptional, normalizeAccessValue } from './auth_user_particles.js';
 import {
@@ -50,23 +50,14 @@ async function createUserAtomeInTransaction(dataSource, userId, username, phone,
                 [now, userId]
             );
 
-            // Update particles (username and password might have changed)
-            await dataSource.query(
-                `UPDATE particles SET particle_value = ?, updated_at = ? WHERE atome_id = ? AND particle_key = 'username'`,
-                [JSON.stringify(username), now, userId]
-            );
-            await dataSource.query(
-                `UPDATE particles SET particle_value = ?, updated_at = ? WHERE atome_id = ? AND particle_key = 'password_hash'`,
-                [JSON.stringify(passwordHash), now, userId]
-            );
-            await dataSource.query(
-                `UPDATE particles SET particle_value = ?, updated_at = ? WHERE atome_id = ? AND particle_key = 'visibility'`,
-                [JSON.stringify(normalizedVisibility), now, userId]
-            );
-            await dataSource.query(
-                `UPDATE particles SET particle_value = ?, updated_at = ? WHERE atome_id = ? AND particle_key = 'access'`,
-                [JSON.stringify(normalizedVisibility), now, userId]
-            );
+            // Réactivation d'un compte supprimé. Ces quatre écritures étaient des
+            // `UPDATE` bruts: sur une ligne absente ils ne modifiaient RIEN
+            // silencieusement (0 ligne touchée), n'incrémentaient pas `version` et
+            // n'écrivaient aucun historique. Le chemin canonique fait un upsert.
+            await updateUserParticle(dataSource, userId, 'username', username);
+            await updateUserParticle(dataSource, userId, 'password_hash', passwordHash);
+            await updateUserParticle(dataSource, userId, 'visibility', normalizedVisibility);
+            await updateUserParticle(dataSource, userId, 'access', normalizedVisibility);
 
             for (const [key, value] of Object.entries(optionalParticles)) {
                 await updateUserParticle(dataSource, userId, key, value);
@@ -88,23 +79,12 @@ async function createUserAtomeInTransaction(dataSource, userId, username, phone,
         if (needsTypeRepair) {
             await ensureUserAtomeType(dataSource, userId, existingType);
 
-            const particles = [
-                { key: 'username', value: JSON.stringify(username) },
-                { key: 'password_hash', value: JSON.stringify(passwordHash) },
-                { key: 'visibility', value: JSON.stringify(normalizedVisibility) },
-                { key: 'access', value: JSON.stringify(normalizedVisibility) }
-            ];
-
-            for (const p of particles) {
-                await dataSource.query(
-                    `INSERT INTO particles (atome_id, particle_key, particle_value, updated_at)
-                     VALUES (?, ?, ?, ?)
-                     ON CONFLICT(atome_id, particle_key) DO UPDATE SET
-                        particle_value = excluded.particle_value,
-                        updated_at = excluded.updated_at`,
-                    [userId, p.key, p.value, now]
-                );
-            }
+            // Réparation de type: même upsert que ci-dessus, via le chemin canonique
+            // (assertion de clé + version + historique).
+            await updateUserParticle(dataSource, userId, 'username', username);
+            await updateUserParticle(dataSource, userId, 'password_hash', passwordHash);
+            await updateUserParticle(dataSource, userId, 'visibility', normalizedVisibility);
+            await updateUserParticle(dataSource, userId, 'access', normalizedVisibility);
 
             for (const [key, value] of Object.entries(optionalParticles)) {
                 await updateUserParticle(dataSource, userId, key, value);
@@ -134,21 +114,13 @@ async function createUserAtomeInTransaction(dataSource, userId, username, phone,
         [userId, userId, userId, now, now]
     );
 
-    // Create particles for user properties (particle_id is auto-increment)
-    const particles = [
-        { key: 'username', value: JSON.stringify(username) },
-        { key: 'password_hash', value: JSON.stringify(passwordHash) },
-        { key: 'visibility', value: JSON.stringify(normalizedVisibility) },
-        { key: 'access', value: JSON.stringify(normalizedVisibility) }
-    ];
-
-    for (const p of particles) {
-        await dataSource.query(
-            `INSERT INTO particles (atome_id, particle_key, particle_value, updated_at)
-             VALUES (?, ?, ?, ?)`,
-            [userId, p.key, p.value, now]
-        );
-    }
+    // Propriétés du compte, via le chemin canonique: dernier des trois blocs de SQL
+    // brut sur `particles` de ce module. Tous partagent maintenant la même
+    // assertion de clé, le même versionnement et le même historique.
+    await updateUserParticle(dataSource, userId, 'username', username);
+    await updateUserParticle(dataSource, userId, 'password_hash', passwordHash);
+    await updateUserParticle(dataSource, userId, 'visibility', normalizedVisibility);
+    await updateUserParticle(dataSource, userId, 'access', normalizedVisibility);
 
     for (const [key, value] of Object.entries(optionalParticles)) {
         await updateUserParticle(dataSource, userId, key, value);
@@ -258,37 +230,23 @@ export async function listAllUsers(dataSource, includePrivate = false) {
     }));
 }
 
+// Écriture de particule utilisateur — délègue au chemin canonique.
+//
+// Cette fonction dupliquait le SQL de `setParticle` en perdant quatre choses:
+//   - `assertCanonicalPropertyKey` : la clé venant du client (server.js, action
+//     `update-user`) n'était vérifiée nulle part, donc un champ d'enveloppe
+//     réservé (`owner_id`, `parent_id`, `atomeId`…) pouvait être écrit comme
+//     propriété;
+//   - la ligne d'historique `particles_versions`, que le schéma présente
+//     pourtant comme complète — les mutations d'authentification n'y figuraient
+//     pas, donc ni undo, ni synchronisation par diff;
+//   - le garde « valeur inchangée » : chaque réécriture identique incrémentait la
+//     version, ajoutait une ligne d'historique et repassait l'atome en
+//     `sync_status='pending'`;
+//   - le vrai `value_type`, figé à 'string' même pour un objet.
 export async function updateUserParticle(dataSource, userId, key, value) {
     if (key === 'phone') throw new Error('phone_particle_is_not_a_supported_credential_store');
-    const now = new Date().toISOString();
-    const valueStr = JSON.stringify(value);
-
-    // Check if particle exists
-    const existing = await dataSource.query(
-        `SELECT particle_id, version FROM particles WHERE atome_id = ? AND particle_key = ?`,
-        [userId, key]
-    );
-
-    if (existing.length > 0) {
-        const newVersion = (existing[0].version || 1) + 1;
-        await dataSource.query(
-            `UPDATE particles SET particle_value = ?, version = ?, updated_at = ? WHERE atome_id = ? AND particle_key = ?`,
-            [valueStr, newVersion, now, userId, key]
-        );
-    } else {
-        // particle_id is auto-increment, don't specify it
-        await dataSource.query(
-            `INSERT INTO particles (atome_id, particle_key, particle_value, value_type, version, created_at, updated_at)
-             VALUES (?, ?, ?, 'string', 1, ?, ?)`,
-            [userId, key, valueStr, now, now]
-        );
-    }
-
-    // Update atome's updated_at
-    await dataSource.query(
-        `UPDATE atomes SET updated_at = ?, sync_status = 'pending' WHERE atome_id = ?`,
-        [now, userId]
-    );
+    return setParticle(userId, key, value, userId);
 }
 
 export async function deleteUserAtome(dataSource, userId) {

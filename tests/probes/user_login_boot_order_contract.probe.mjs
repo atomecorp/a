@@ -172,6 +172,7 @@ window.webkit = {
     }
 };
 installEveIntuitionBootRuntime({
+    atomeContextualEditRuntime: { hasContext: () => false, isEditing: () => false },
     applyBackgroundPanelClose() {},
     applyBackgroundPanelOpen() {},
     applyCalendarPanelClose() {},
@@ -348,5 +349,9 @@ assert.doesNotMatch(
     /__eveLoadDeferredIntuitionRuntime/,
     'deferred interaction tools must be called through their module owner, not an orphan global loader'
 );
+
+const { getAtomeContextualEditApi } = await import('../../eVe/intuition/runtime/eve_intuition/atome_contextual_edit_registry.js');
+assert.equal(getAtomeContextualEditApi().hasContext('missing'), false);
+assert.equal(getAtomeContextualEditApi().isEditing('missing'), false);
 
 console.log('user_login_boot_order_contract.test: PASS');

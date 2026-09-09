@@ -5,6 +5,18 @@ import {
     eventTouchedPropertyKeys
 } from '../database/adole_event_contract.js';
 import { commitAtomeEvents } from './atomeRoutes.orm.js';
+import { wsResponse, wsErrorResponse, requestIdOf } from './wsResponse.js';
+
+export async function handleAtomeHistoryCommand(message, userId, connection) {
+    const options = { operation: String(message.action || message.action_type || message.op || ''),
+        sourceTxId: message.source_tx_id || message.sourceTxId || null, requestId: requestIdOf(message) };
+    const router = connection?._wsApiVaultRouter;
+    const result = router ? await router.applyHistory(userId, options)
+        : await executeAtomeHistoryCommand({ ...options, authenticatedUserId: userId });
+    if (!result.ok) return wsErrorResponse('history', message, result.error);
+    for (const event of result.inserted_events || result.events || []) await connection?._wsApiSyncRuntime?.publish(event);
+    return wsResponse('history', message, true, { events: result.events });
+}
 
 const parseStoredValue = (value) => {
     if (value === null || value === undefined) return null;
@@ -68,6 +80,16 @@ export async function executeAtomeHistoryCommand({
     const events = [];
     for (const source of ordered) {
         const atomeId = source.atome_id;
+        if (Object.hasOwn(source.payload || {}, 'before_identity') && source.payload.before_identity === null) {
+            events.push({
+                id: 'history:' + operation + ':' + requestId + ':' + source.id,
+                kind: operation === 'undo' ? 'delete' : 'restore', atome_id: atomeId,
+                project_id: source.project_id || null,
+                payload: { ...(operation === 'redo' ? historyPayload(source, operation) : {}),
+                    source_tx_id: sourceTxId, source_event_id: source.id }
+            });
+            continue;
+        }
         if (String(source?.kind || '').toLowerCase() === 'delete') {
             if (!atomeId) continue;
             events.push({

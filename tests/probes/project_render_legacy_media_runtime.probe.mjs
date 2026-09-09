@@ -51,7 +51,7 @@ test('media hydration runtime attaches tauri streaming media with projected sour
             extractMediaIdentifier: () => 'recording_probe',
             isSafeMediaIdentifier: () => true,
             isRecordingSpec: () => true,
-            isTauriRuntime: () => true,
+            isLocalNativeBackendRuntime: () => true,
             appendStreamingMediaAuthQuery: (url) => `${url}?token=local`,
             buildLocalAuthHeaders: () => ({ 'X-User-Id': 'owner_probe' }),
             getCloudAuthToken: () => '',

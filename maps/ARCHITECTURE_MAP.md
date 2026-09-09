@@ -1,5 +1,77 @@
 # Atome / eVe Architecture Map
 
+### Composition lifecycle and recursive windows — 2026-09-09
+
+The canonical combine command owns structural changes. The existing occurrence kernel owns cutting arithmetic; the duplicate planner owns cloning/remapping; the transform planner owns spatial translation. The recursive transport compiler projects group source windows and reads canonical meta parentage via the existing record reader. No alternate hierarchy, renderer, source file mutation or DOM state is introduced. List/Matrix reset cancels the gesture before clearing state; the gesture disposes its composition palette.
+
+### Dashboard and shared interaction owners — 2026-09-09
+
+- `eVe/domains/dashboard/dashboard_project_guide.js`: disposable family/goal navigation rendered by the shared Bevy panel. `dashboard_header_creation_actions.js` owns the catalog and delegates creation to existing project/News commands. `core_atome_types.js` declares project intent; no separate project store.
+- `dashboard_news_modules.js`: disposable clock/current-weather readings and manual-location panel. Existing Finder geocoder owns debouncing/cancellation; shared Dashboard layout keeps two module cards outside scrolling News. Dashboard shutdown closes the panel and stops its timer/requests.
+- `atome_contextual_edit_registry.js` triggers the same deferred contextual owner on first selection; `atome_contextual_edit_runtime.install` consumes canonical selection already present. No second selection listener interprets content or owns state.
+- `bevy_text_texture_style.wrapTextLines` owns common word wrapping for labels and text editing; normalization/projection carry explicit wrap width without shrinking fonts.
+- Current M/S options are Mute/Solo/All/None. Historical Select All/Delete All descriptions below are superseded.
+
+
+### Web interaction ownership checkpoint — 2026-09-09
+
+The List's upward display is derived by the shared hierarchy model. Its row
+order command resolves siblings by canonical parent from all expanded entries.
+In simultaneous containers, order transactions couple hierarchy and depth;
+sequential hierarchy retains its reading-order role. Both projections remain
+consumers of the same records. Natural presentation uses the shared M/S factor
+projection without removing objects from the canonical scene collection.
+
+The existing menu surface owns first-level popup placement for the ribbon,
+contextual rail and M/S. Shared pointer events own held palette selection and
+cancellation; the standard tool slider supports both orientations. M/S uses
+Mute/Solo/All/None, with full-container batches through the canonical loader.
+The former selection/deletion choices are no longer part of this palette.
+
+List authoring previews and clip geometry use the recursive transport plan on
+one container axis, retaining muted clips in authoring. The existing transport
+owns temporary local-scrub isolation and restoration, without writing M/S.
+Clip edits use the occurrence-edit owner, disposable previews, and one durable
+transaction at release. Escape routes through shared pointer cancellation.
+Current Web evidence and open acceptance cases:
+`eVe/documentations/INTERACTION_VALIDATION_2026-09-09.md`.
+
+
+### M/S factors and column gestures — 2026-09-08
+
+`ATOME_MIX_PROPERTY_SCHEMA` extends the shared core visual/audio/container schemas with boolean `mute`/`solo` and 0–1 `mute_strength`/`solo_strength` (default 1). `project_view_mix_projection` derives inherited Mute and sibling Solo factors from canonical records. Source opacity/gain remain unchanged; the engine applies gain once. Fully muted sequential entries are skipped; Solo preserves order and duration. `transport.updateMix` consumes committed property changes.
+
+`project_view_mix_controls` uses shared menu buttons, icon resolution, slider and Delete module loading. The existing selectable-list fixed row exposes M/S gestures. Web `mix_strength_v3` verifies long-press choices, multiple solos, both vertical paint directions and horizontal slider at 50 percent; inspected pixels show attenuation. Select All resolves the full container through the canonical loader. Delete All cold-start acceptance, off-screen/nested scope, media audio and single-item transport remain pending.
+
+
+### Live Mute event and restoration — 2026-09-08
+
+`project_view_surface_events` reads canonical `event.payload.props` for both Mute transitions. The recursive transport recompiles its input records at the current playhead instead of permanently filtering its leaves. The plan carries reusable random orders; entirely hidden containers stay empty. Web `mute_live_fixed_v4` verifies live mute/unmute with actual viewer pixels. Solo, strengths, audio and painting remain pending.
+
+
+### Shared Performance capture — 2026-09-08
+
+`project_view_capture_to_timeline.toggleProjectPerformanceRecording` owns arm/stop/persist for Natural, List and Matrix. The recorder retains its project/container scope; Natural selection uses the existing item trigger with a held lifetime. Contextual rails reuse `projectViewRecordToolDefinition` and the existing recording-state event/pulse. This is separate from media/property recording. Web `natural_performance_v1` verified initial silence, 10.31/2.07-second holds, two clips and persisted replay in List. Direct Natural replay and media-end frame holding remain open.
+
+
+### Selection playback scope — 2026-09-08
+
+Multiple-selection transport is a derived plan over canonical records. It validates membership, excludes redundant descendant roots, retains nested modes and uses the current container rule. No synthetic Atome, extra transport or persistent selection mirror is created. Starting container playback stops the item clock first. Playback preview consumes only active leaves; automatic text-neighbor projection no longer supersedes that contract.
+
+### Performance capture controls — 2026-09-08
+
+Forced context synchronization during Performance capture projects the recording container even when a row is selected. Starting capture invalidates older context requests. Pulse animation is disposable presentation state and does not rebuild the workspace or commit Atome properties.
+
+### Structured drag ownership — 2026-09-08
+
+Combination eligibility is derived from the existing gesture session and common 500 ms dwell owner, including intent mode/placement. Both views guard canonical combination at release. Progress uses the existing BevyUI motion patch path; no per-tick model mutation or full-tree refresh is introduced. One feedback projection is shared between the views, with no independent timer or selection state.
+
+
+Vector/style checkpoint (2026-09-08): the contextual BevyUI tree owns SVG point handles; the detached SVG model and canonical gesture commits remain the source of editing behavior. Public hasContext/isEditing methods delegate to the same contextual owner. Shared color conversion provides RGBA handle colors. vector_handles_v4 verifies real handle movement and inspected pixels. Whole-object SVG Color no longer reads DOM hosts or an unselected legacy layer context; its targeted contract test passes, with later Web whole-object color acceptance in vector_structured_color_v1.
+
+Interaction ownership (2026-09-08): structured previews reuse the project text texture owner for rich spans, caret and blue selection; no second text renderer or visible DOM is introduced. Canonical hierarchy order has a deterministic immutable-id tie break shared by views and recursive transport. Selection state publishes only after its runtime owner updates. Operative creation tools release their existing pointer interceptor when deactivated; brush settings share the central slider and preserve the active drawing mode. Derived contextual geometry only schedules projection after an actual change. Container-to-item selection stops the recursive transport before arming the existing item transport; structured_retarget_v1 verifies that handoff with real List/Matrix gestures and a clean console.
+
+
 Deletion hierarchy repair (2026-09-08): `delete.js` routes every selected
 Atome through the existing Molecule lifecycle, regardless of selection size.
 Selected descendants are consumed by selected ancestors only once. A deleted
@@ -1408,3 +1480,37 @@ converting parent-local positions into projected screen-space motion.
 - Existing split profiles receive one bounded repair: an authorized remote profile carrying a photo and custom identity is copied once, in full, only when the local canonical profile has no photo and still carries the authentication bootstrap identity. These combined migration markers avoid resurrecting an intentionally removed photo; after the commit every read returns to the configured single owner and no merge/cache remains active.
 - A valid Tauri session that predates its Fastify identity is repaired through the signed-server `account-provision` contract before `directory.public` is read. The client verifies the RSA-PSS challenge and fingerprint, configures the opaque local/remote mapping, and republishes the current profile; raw registration and OTP bypasses are not used.
 - Fastify opens its listener after the mandatory identity migration but before the directory rebuild. Credentialless legacy principals are classified with two set-based SQLite statements, and the persisted directory is reconciled asynchronously with bounded per-principal refreshes. It never empties the live table, preventing both the availability race and a transient disappearance during concurrent logins.
+
+### Structured presentation campaign — 2026-09-08
+
+Structured presentation ratio is canonical project.properties.project_view_split[mode], committed by the existing presentation runtime. Accordion state is session-only. Surface tree derives panel bounds; the existing virtualized list owns overflow. Local preview gestures prepare the recursive row transport; footer gestures prepare the complete current container through contextual prepareLevel.
+
+### Structured selection transport convergence — 2026-09-08
+
+project_view_surface_context_runtime.playSelection owns both single and multiple structured Play. project_view_playback_follow retargets that same transport; the footer no longer starts a second item clock. project_view_contextual_rail owns the shared project/Molecule Play Mode palette, with canonical playback_rules writes and immediate icon refresh. The recursive compiler skips full Mute only in sequential/random parents; simultaneous silence retains its timeline duration. Web selection_recursive_v2 and single_mix_recursive_v9 validate these paths.
+
+### Live structured draft projection — 2026-09-08
+
+project_view_create_draft_runtime extends the existing visual-changed event with record/project_id. project_view_surface_events updates the content projection before rendering, preventing its older record from replacing the current drawn SVG. Draw drafts use #ffffff00 until canonical geometry sets neutral #ffffff; SVG stroke paint owns brush color. Web draw_live_projection_fixed_v5 verifies held-pointer live pixels in List/Matrix.
+
+### Text style focus contract — 2026-09-08
+
+The existing text_editing_session accepts retainOnBlur (default false); text_bridge enables it for scene objects. Losing keyboard focus to a style tool stops the caret but retains the active projected range. Tab/explicit commit ends the scene edit. project_scene_text_edit_state invalidates ranges by lifecycle and collapse rather than a timer. Web partial_text_color_commit_v3 verifies partial color in both structured viewers and persistence after commit.
+
+### Interaction campaign convergence — 2026-09-08
+
+List/Matrix controllers apply canonical selection before project_view_playback_follow receives selectionIds; an empty set stops the recursive transport. svg_draw_runtime routes inactive-brush opacity to applySelectionStyleMutation; active-brush opacity remains a brush setting. project_view_list_view retains the shared virtualizer's computed window and uses it for transport updates, preventing bottom rows from disappearing after scrub. No new state authority or renderer.
+
+The real-pointer harness remains molecule_eve_ui_acceptance_probe; molecule_ui_acceptance_support owns input geometry, molecule_ui_image_evidence owns pixel comparisons, molecule_ui_list_acceptance owns the List journey, molecule_ui_timeline_acceptance and molecule_ui_timeline_gestures own Timeline checks, and molecule_ui_media_fixture/hierarchy_gestures/media_playback_evidence own the respective layered-media responsibilities. Existing top-level entrypoints are retained.
+
+### Structural undo ownership and renderer cleanup — 2026-09-08
+
+ADOLE event preparation owns identity/property preimages; atomeHistoryCommands converts them into canonical delete/restore/property events. UserVaultProcess executes that existing engine inside the authenticated vault. Directory ACLs do not filter events already confined to that private database. Matrix playback loads the full canonical descendant graph, independently of visible cells. Molecule tiles reuse recordCompositePreviewNode. Six obsolete DOM footer modules and the three SVG DOM editing modules are removed; the existing contextual registry owns deferred facade installation and shared BevyUI remains the visual owner.
+
+Choice palettes (2026-09-08): Choice state stays with the definition owner. Main/contextual renderers share resolveToolChoiceIcon; the View-mode event schedules the main menu and is detached on destruction. See API_MAP for selectedChildKey. No choice cache or new event bus is introduced.
+
+### 2026-09-09 — transport project boundary and flat motion
+
+Workspace activation releases the previous recursive transport plan before loading a foreign project, including terminal Performance frames. The existing operation generation rejects media preparation that finishes after release. `project_view_transport_plan` owns the pure plan-to-engine timeline conversion; the runtime owns session/resource lifecycle. BevyUI translation propagates to flattened child records without putting inherited screen positions into structural child-local state.
+
+Viewer media identity (2026-09-09): project_view_visual_panel derives single and composite visual children from compositePreviewMemberNodeId. The pointer root stays project_view_visual_preview. Composition membership changes therefore do not recreate an unchanged decoder. bevy_projection_media_contract bounds media-time requests to the decoded file end, including fixed thumbnails whose authored trim exceeds it.

@@ -329,7 +329,10 @@ test('shared previews stay passive by default and expose the canonical edit care
     assert.equal(passive.kind, 'panel');
     assert.equal(interactive.kind, 'pointer_capture');
     assert.equal(typeof interactive.on.press, 'function');
-    assert.equal(interactive.children[0].children.some((child) => child.id === 'interactive_visual_caret'), true);
+    assert.equal(interactive.children[0].children.length, 1);
+    assert.equal(interactive.children[0].children[0].style.rich_text.editing, true);
+    assert.equal(interactive.children[0].children[0].style.rich_text.caret_visible, true);
+    assert.deepEqual(interactive.children[0].children[0].style.rich_text.selection, { start: 0, end: 0, caret: 0 });
 });
 
 test('a pinned Visual keeps its source identity but accepts canonical live text updates', () => {
@@ -416,4 +419,21 @@ test('structured Create drafts delete an empty canonical Atome and retain the sa
     assert.equal(retained.kept, true);
     assert.equal(retained.atome_id, 'draw_valid');
     assert.deepEqual(deleted, ['draw_empty']);
+});
+
+
+test('Visual preserves a media projection identity when other composition members end', () => {
+    const panel = createProjectViewVisualPanel();
+    const video = { id: 'video_1', type: 'video', properties: { media_url: '/video.mp4', width: 160, height: 90 } };
+    const text = { id: 'text_1', type: 'text', properties: { text: 'Title' } };
+    panel.setSubject(video, { records: [video, text] });
+    const compositeId = panel.videoNodeIdsFor(video.id);
+    const composite = panel.build({ width: 320, height: 180 });
+    panel.setSubject(video);
+    assert.deepEqual(panel.videoNodeIdsFor(video.id), compositeId);
+    const single = panel.build({ width: 320, height: 180 });
+    assert.equal(single.children[0].id, composite.children[0].id);
+    assert.equal(single.children[0].children[0].id, composite.children[0].children[0].children[0].id);
+    panel.pinSubject(video, { reason: 'editing' });
+    assert.deepEqual(panel.videoNodeIdsFor(video.id), compositeId);
 });

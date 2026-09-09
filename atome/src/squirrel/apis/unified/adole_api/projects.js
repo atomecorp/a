@@ -40,7 +40,8 @@ const normalizeProject = (record) => {
     };
 };
 
-export async function create_project(projectName, callback) {
+export async function create_project(projectName, options = {}, callback = null) {
+    if (typeof options === 'function') { callback = options; options = {}; }
     const currentUserId = getCurrentUserId();
     if (!currentUserId || isLoggedOut()) {
         const error = 'No user logged in. Please log in first.';
@@ -52,6 +53,7 @@ export async function create_project(projectName, callback) {
 
     const projectId = generateUUID();
     const properties = {
+        ...(options?.properties || {}),
         name: projectName || 'untitled',
         created_at: new Date().toISOString(),
         owner_id: currentUserId

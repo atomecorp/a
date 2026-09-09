@@ -190,6 +190,13 @@ export class UserVaultRouter {
         return this.provider.request(requestingPrincipalId, 'events:list', options);
     }
 
+    async applyHistory(principalId, options = {}) {
+        await this.provision(principalId);
+        const result = await this.provider.request(principalId, 'history:apply', options);
+        if (result.ok) for (const event of result.events || []) await this.registerStream(event, principalId);
+        return result;
+    }
+
     async streamAccess(principalId, streamId) {
         const stream = await db.query(
             'get',

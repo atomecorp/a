@@ -1,3 +1,8 @@
+// Client WebSocket de test pour /ws/api.
+//
+// Vivait sous server/ alors qu'aucun code serveur ne l'importe: seul
+// tests/eve/adole_commit_boundary.probe.mjs s'en sert. Déplacé ici pour que
+// server/ ne contienne que du code que le serveur exécute.
 import WebSocket from 'ws';
 import crypto from 'crypto';
 

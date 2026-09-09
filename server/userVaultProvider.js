@@ -12,7 +12,7 @@ const principalKey = (principalId) => crypto
 
 const requestSocket = ({ socketPath, secret, operation, payload, timeoutMs }) => new Promise((resolve, reject) => {
     const connection = net.createConnection(socketPath);
-    let buffer = '';
+    const chunks = [];
     const timer = setTimeout(() => {
         connection.destroy();
         reject(new Error('vault_request_timeout'));
@@ -24,12 +24,12 @@ const requestSocket = ({ socketPath, secret, operation, payload, timeoutMs }) =>
     connection.setEncoding('utf8');
     connection.once('error', finish(reject));
     connection.on('data', (chunk) => {
-        buffer += chunk;
-        const newline = buffer.indexOf('\n');
+        const newline = chunk.indexOf('\n');
+        chunks.push(newline < 0 ? chunk : chunk.slice(0, newline));
         if (newline < 0) return;
         connection.end();
         try {
-            const response = JSON.parse(buffer.slice(0, newline));
+            const response = JSON.parse(chunks.join(''));
             if (!response.ok) throw new Error(response.error || 'vault_request_failed');
             finish(resolve)(response.result);
         } catch (error) {

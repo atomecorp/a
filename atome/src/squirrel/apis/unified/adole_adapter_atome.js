@@ -113,13 +113,20 @@ export const buildAtomeApi = ({ getWs, tokenKey }) => ({
                     offset: params.offset || ((params.page || 0) * (params.limit || 50))
                 });
             },
-            async softDelete(id) {
+            // Le serveur refuse les actions `atome` mutantes heritees
+            // (`canonical_event_commit_required`) : une suppression doit passer par un
+            // EVENEMENT canonique, comme toute autre ecriture.
+            async commitDelete(id, actorId = '') {
                 const token = getToken(tokenKey);
                 return getWs().send({
-                    type: 'atome',
-                    action: 'soft-delete',
+                    type: 'events',
+                    action: 'commit',
                     token,
-                    atome_id: id
+                    event: {
+                        kind: 'delete',
+                        atome_id: id,
+                        ...(actorId ? { actor: { type: 'user', id: String(actorId) } } : {})
+                    }
                 });
             },
             async alter(id, data) {

@@ -121,3 +121,19 @@ test('single-character and edge ranges keep half-open font boundaries', () => {
     assert.deepEqual(resolveRichTextStyleAt(richText.spans, 1, {}), {});
     assert.deepEqual(resolveRichTextStyleAt(richText.spans, 3, {}), {});
 });
+
+test('wrapped labels retain their font size and rasterize every character on visible lines', async () => {
+    clearBevyMediaTextureCache();
+    const dom = new JSDOM('<!doctype html><html><body></body></html>');
+    const recording = installRecordingCanvas(dom.window);
+    const resolver = createBrowserBevyMediaTextureResolver({ documentRef: dom.window.document, textTextureScale: 1 });
+    await resolver({
+        id: 'wrapped_label', kind: 'text', bounds: { width: 50, height: 100 },
+        material: { fill: '#ffffff' },
+        text: { text: 'abcdefghij', style: { font_size: 10, wrap_width: 40, padding_x: 0 } }
+    });
+    assert.equal(recording.draws.map(draw => draw.text).join(''), 'abcdefghij');
+    assert.equal(new Set(recording.draws.map(draw => draw.y)).size, 3);
+    assert.ok(recording.draws.every(draw => draw.font.includes('10px')));
+    dom.window.close();
+});

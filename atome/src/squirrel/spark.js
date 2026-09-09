@@ -13,6 +13,7 @@ import { isIOSDevice, waitForIOSLocalServerReady } from '../utils/ios_runtime.js
 import { loadModulesConcurrently, loadModulesSequentially } from '../utils/module_loader_runtime.js';
 import { exposeSparkGlobals } from '../utils/spark_exposure_runtime.js';
 import { startPerfCollector } from '../utils/perf_collector_runtime.js';
+import { reportRuntimeError } from './runtime_errors.js';
 
 // Enable and buffer perf events only when the operator opts in (?perf=1). Must run
 // before the first emitPerfEvent call so boot stages are captured on window.__squirrelPerf.
@@ -104,7 +105,11 @@ const SPARK_BOOT_WAVES = [
   // presented. Feature-specific integrations are loaded after that first
   // interactive frame below.
   [
-    { id: 'security.bootstrap', path: './security/bootstrap.js' },
+    // security.bootstrap installs the encrypted token vault and the security API
+    // every authenticated call reads (`atome.security`, `Squirrel.security`).
+    // Without `critical` its failure left the app booting half-armed with a perf
+    // event as its only trace.
+    { id: 'security.bootstrap', path: './security/bootstrap.js', critical: true },
     { id: 'conditions.bootstrap', path: './conditions/bootstrap.js' }
   ],
   // apis.loader reads what essentials/utils put on window.
@@ -194,6 +199,11 @@ const trackModuleError = (stage) => ({ moduleId, modulePath, totalMs, error }) =
     totalMs,
     error: String(error?.message || error || '')
   });
+  // A non-critical module that fails to load is absorbed on purpose (`settle:
+  // true`), but the failure used to exist only as a perf event nobody reads.
+  // The runtime-error ring is the product's single collection point for
+  // deliberately absorbed errors.
+  reportRuntimeError(error, `spark:${stage}`, { moduleId, path: modulePath });
 };
 
 // A wave used to be a `Promise.all`: one optional module failing killed the whole

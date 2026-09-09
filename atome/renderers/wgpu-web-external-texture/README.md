@@ -6,8 +6,13 @@ creation and binding from browser media sources.
 
 Scope:
 
-- `wgpu-27.0.1/` is based on the pinned `wgpu` crate used by Bevy 0.18.1.
-- `wgpu-types-27.0.1/` is based on the matching `wgpu-types` crate.
+- `wgpu-29.0.4/` is based on the pinned `wgpu` crate used by the Bevy renderer.
+- `wgpu-types-29.0.4/` is based on the matching `wgpu-types` crate.
+- The 27.0.1 pair was removed on 2026-09-09: `platforms/web/bevy-renderer/Cargo.toml`
+  and `atome/renderers/bevy-core/Cargo.toml` both pin 29.0.4, no `Cargo.toml`
+  referenced 27.0.1 any more, and the first maintenance rule below requires the
+  fork to track the renderer dependency. It was ~25 000 lines of vendored Rust
+  (2,4 MB) that nothing built.
 - The fork is intentionally limited to WebGPU external-texture support:
   browser media source descriptors, `GPUDevice.importExternalTexture`, Web
   bind-group resource mapping for `BindingResource::ExternalTexture`, and the

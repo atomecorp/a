@@ -19,8 +19,12 @@ export const structuredRows = (page) => page.evaluate(async () => {
             entity: String(entry.visualRecord?.properties?.molecule_entity || ''), label: String(entry.label || '')
         }));
     }
-    const records = window.eveToolBase?.getProjectSceneState?.(state.projectId)?.records || [];
-    return navigation.containerChildren(records).map((record, index) => ({
+    const { loadProjectViewRecordsForPlayback } = await import('/eVe/domains/rendering/project_view_records.js');
+    const loaded = await loadProjectViewRecordsForPlayback({ projectId: state.projectId });
+    if (loaded.ok !== true) throw new Error(loaded.error || 'structured_rows_read_failed');
+    const records = loaded.records;
+    const { comparePlaybackRecords } = await import('/eVe/domains/rendering/project_view_molecule_list_model.js');
+    return navigation.containerChildren(records).sort(comparePlaybackRecords).map((record, index) => ({
         index,
         id: String(record?.id || record?.atome_id || ''),
         depth: 0,
@@ -46,7 +50,7 @@ export const expandCanonicalListMolecule = async (page, memberIds) => {
             const row = rows.find(predicate);
             assert(row, `list_expand_row_missing:${JSON.stringify(rows)}`);
             const alreadyExpanded = rows.some((candidate, index) => (
-                index > row.index && candidate.depth === row.depth + 1 && memberIds.includes(candidate.id)
+                index < row.index && candidate.depth === row.depth + 1 && memberIds.includes(candidate.id)
             ));
             if (alreadyExpanded) return row;
             const target = await listNode(page, `project_view_list_entry_${row.index}_hierarchy_chevron`);
@@ -57,7 +61,7 @@ export const expandCanonicalListMolecule = async (page, memberIds) => {
                 const projected = await structuredRows(page);
                 lastRows = projected;
                 if (projected.some((candidate, index) => (
-                    index > row.index && candidate.depth === row.depth + 1 && memberIds.includes(candidate.id)
+                    index < projected.findIndex(entry => entry.id === row.id) && candidate.depth === row.depth + 1 && memberIds.includes(candidate.id)
                 ))) return row;
             }
         }
@@ -151,29 +155,20 @@ export const selectListRow = async (page, id) => {
 };
 
 export const playbackSnapshot = (page, ids = []) => page.evaluate(async (memberIds) => {
-    const [{ projectViewPlayback }, progress] = await Promise.all([
-        import('/eVe/domains/rendering/project_view_playback_runtime.js'),
+    const [{ projectViewTransport }, progress] = await Promise.all([
+        import('/eVe/domains/rendering/project_view_transport_runtime.js'),
         import('/eVe/domains/media/project_audio_playback_progress_runtime.js')
     ]);
-    const state = projectViewPlayback.readState();
-    return {
-        playing: state.playing === true,
-        scope: String(state.scope || ''),
-        playingIds: state.playingIds.map(String),
-        armed: state.armed === true,
-        progress: Object.fromEntries(memberIds.map((id) => [id,
-            progress.readProjectAudioPlaybackProgressForId(id)]))
-    };
+    const state = projectViewTransport.read();
+    return { ...state, playingIds: state.activeLeafIds,
+        progress: Object.fromEntries(memberIds.map((id) => [id, progress.readProjectAudioPlaybackProgressForId(id)])) };
 }, ids);
 
 export const chooseMoleculePlaybackMode = async (page, moleculeId, mode) => {
-    const play = await moleculePlayTool(page);
-    assert(play, `molecule_play_tool_missing:${mode}`);
-    const point = await playwrightPointForClientTarget(page, play);
-    await page.mouse.move(point.x, point.y);
-    await page.mouse.down();
-    await wait(750);
-    await page.mouse.up();
+    mode = mode === 'layer' ? 'simultaneous' : mode;
+    const palette = await contextualTool(page, ['atome_contextual_tool_container_play_mode']);
+    assert(palette, `molecule_play_mode_palette_missing:${mode}`);
+    await clickCanvasTarget(page, palette);
     const option = await waitFor(page, async (expected) => {
         const diagnostics = window.eveBevyUiRuntime?.readOverlayDiagnostics?.() || {};
         const tree = (diagnostics.trees || []).find((entry) => entry.id === 'eve_bevy_panel_atome_contextual_edit');
@@ -198,35 +193,27 @@ export const startMoleculePlayback = async (page, moleculeId, memberIds) => {
     assert(play, 'molecule_play_tool_not_actionable');
     await clickCanvasTarget(page, play);
     const started = await waitFor(page, async ({ id, members }) => {
-        const { projectViewPlayback } = await import('/eVe/domains/rendering/project_view_playback_runtime.js');
-        const state = projectViewPlayback.readState();
-        return {
-            ok: state.playing === true && state.scope === `molecule:${id}`
-                && (state.playingIds.length === 0 || state.playingIds.some((item) => members.includes(item))),
-            state
-        };
+        const { projectViewTransport } = await import('/eVe/domains/rendering/project_view_transport_runtime.js');
+        const state = projectViewTransport.read();
+        return { ok: state.playing && state.selectionIds.includes(id)
+            && state.activeLeafIds.some((item) => members.includes(item)), state };
     }, { id: moleculeId, members: memberIds });
     return started.state;
 };
 
 export const waitForPlaybackEnd = (page, timeoutMs) => waitFor(page, async () => {
-    const { projectViewPlayback } = await import('/eVe/domains/rendering/project_view_playback_runtime.js');
-    const state = projectViewPlayback.readState();
-    return { ok: state.playing !== true && state.playingIds.length === 0, state };
+    const { projectViewTransport } = await import('/eVe/domains/rendering/project_view_transport_runtime.js');
+    const state = projectViewTransport.read();
+    return { ok: !state.playing && ['ended', 'stopped'].includes(state.status), state };
 }, null, timeoutMs);
 
 export const disarmMemberPlayback = async (page) => {
     const state = await playbackSnapshot(page);
-    if (!state.armed) return state;
+    if (!state.playing) return state;
     const stop = await memberPlayTool(page);
     assert(stop, 'member_stop_tool_missing');
     await clickCanvasTarget(page, stop);
-    const stopped = await waitFor(page, async () => {
-        const { projectViewPlayback } = await import('/eVe/domains/rendering/project_view_playback_runtime.js');
-        const value = projectViewPlayback.readState();
-        return { ok: value.playing !== true && value.armed !== true && value.playingIds.length === 0, value };
-    });
-    return stopped.value;
+    return waitForPlaybackEnd(page, 5000);
 };
 
 export const waitForContextualTarget = (page, id) => waitFor(page, async (expected) => {

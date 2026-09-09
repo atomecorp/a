@@ -36,11 +36,11 @@ test('Molecule List expands a schema-v2 Molecule to its direct Atomes only', asy
             { id: 'unrelated', atome_id: 'unrelated', project_id: 'project_list', type: 'text', properties: { name: 'Not a Molecule' } }
         ], totalCount: 3 })
     });
-    assert.deepEqual(content.readState().entries.map((entry) => entry.label), ['Molécule 1', 'Not a Molecule']);
+    assert.deepEqual(content.readState().entries.map((entry) => entry.label), ['Not a Molecule', 'Molécule 1']);
     await content.handleEvent({ type: 'project_view.list.toggle', id: 'molecule_owner' });
-    assert.deepEqual(content.readState().entries.map((entry) => entry.label), ['Molécule 1', 'Take', 'Not a Molecule']);
+    assert.deepEqual(content.readState().entries.map((entry) => entry.label), ['Not a Molecule', 'Take', 'Molécule 1']);
     await content.handleEvent({ type: 'project_view.list.select', id: 'molecule_owner' });
-    assert.deepEqual(content.readState().entries.map((entry) => entry.label), ['Molécule 1', 'Take', 'Not a Molecule']);
+    assert.deepEqual(content.readState().entries.map((entry) => entry.label), ['Not a Molecule', 'Take', 'Molécule 1']);
     assert.equal(content.readState().entries.some((entry) => (
         ['section', 'track'].includes(entry.visualRecord?.properties?.molecule_entity)
     )), false);
@@ -77,7 +77,7 @@ test('Molecule List never projects a large internal track graph outside Timeline
     assert.equal(rows.length, 1);
 });
 
-test('Molecule List footer selection contract selects the first visible Atome and preserves an empty level', async () => {
+test('Molecule List footer selection contract selects the first canonical Atome and preserves an empty level', async () => {
     const content = createProjectViewListContent({ requestRefresh: () => {} });
     await content.load({
         projectId: 'project_footer',

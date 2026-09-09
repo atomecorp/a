@@ -60,3 +60,17 @@ test('selected Molecule resize handles remain available while its empty body can
     expect(hitTestRenderScene(scene, { x: 270, y: 190 }, options)?.id).toBe('m');
     expect(hitTestRenderScene(scene, { x: 270, y: 190 })).toBeNull();
 });
+
+
+test('Visual editing maps CSS pixel source dimensions to source coordinates', async () => {
+    const { createProjectViewVisualInteractionRuntime } = await import('../../eVe/domains/rendering/project_view_visual_interaction_runtime.js');
+    const intents = [];
+    const runtime = createProjectViewVisualInteractionRuntime({
+        emitIntent: async ({ intent }) => { intents.push(intent); return { ok: true }; }, feedRail: async () => ({ ok: true })
+    });
+    await runtime.doubleClick({ event: { x: 200, y: 90 }, width: 400, height: 180,
+        record: { id: 'text_px', type: 'text', project_id: 'project', properties: {
+            text: 'CSS frame', left: '240px', top: '180px', width: '320px', height: '180px'
+        } } });
+    expect(intents.find((intent) => intent.kind === 'text.edit.begin').point).toEqual({ x: 400, y: 270 });
+});

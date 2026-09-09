@@ -14,7 +14,7 @@ const createApiContext = () => ({
     isBrowser: () => true,
     isOnline: () => true,
     getQueue: () => [],
-    isTauriRuntime: () => false,
+    isLocalNativeBackendRuntime: () => false,
     getCurrentUserInfo: vi.fn(async () => ({ ok: false })),
     persistRecordingLocally: vi.fn(async () => ({
         id: 'recording-id', createdAt: '2026-07-19T00:00:00.000Z', backend: 'idb'

@@ -12,10 +12,8 @@ import {
     projectEventForRead
 } from './atomePropertySecurity.js';
 import { createServerConditionAuthority } from './conditionsQueryAuthority.js';
-import { executeAtomeHistoryCommand } from './atomeHistoryCommands.js';
+import { handleAtomeHistoryCommand } from './atomeHistoryCommands.js';
 import { wsResponse as response, wsErrorResponse as errorResponse, requestIdOf } from './wsResponse.js';
-
-
 const MUTATING_ACTIONS = new Set([
     'events:commit',
     'events:commit-batch',
@@ -226,9 +224,8 @@ async function handleEvents(message, connection, userId) {
         const events = vaultRouter
             ? await vaultRouter.listEvents(userId, listOptions)
             : await db.listEvents(listOptions);
-        return response('events', message, true, {
-            events: await filterReadableEvents(events, userId)
-        });
+        // Vault listing is already confined to the authenticated owner's database.
+        return response('events', message, true, { events: vaultRouter ? events : await filterReadableEvents(events, userId) });
     }
     return errorResponse('events', message, `Unknown events action: ${action || 'missing'}`);
 }
@@ -368,19 +365,6 @@ async function handleAtomeHistory(message, userId) {
     });
 }
 
-async function handleHistoryCommand(message, userId) {
-    const action = actionOf(message);
-    const result = await executeAtomeHistoryCommand({
-        operation: action,
-        sourceTxId: message.source_tx_id || message.sourceTxId || null,
-        requestId: requestIdOf(message),
-        authenticatedUserId: userId
-    });
-    return result.ok
-        ? response('history', message, true, { events: result.events })
-        : errorResponse('history', message, result.error);
-}
-
 async function handleUserData(message, userId) {
     const action = actionOf(message);
     const rows = await db.getAtomesByOwner(userId, { limit: 10000 });
@@ -507,7 +491,7 @@ export async function handleWsAtomeOperation(message, connection) {
         else if (type === 'sync') result = await handleSync(message, auth.userId, connection);
         else if (type === 'conditions') result = await handleConditions(message, auth.userId);
         else if (type === 'directory') result = await handleDirectory(message, connection, auth.userId);
-        else if (type === 'history') result = await handleHistoryCommand(message, auth.userId);
+        else if (type === 'history') result = await handleAtomeHistoryCommand(message, auth.userId, connection);
         else result = await handleAtomeHistory(message, auth.userId);
         return rememberMutation(connection, message, result);
     } catch (error) {

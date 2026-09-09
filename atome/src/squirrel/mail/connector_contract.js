@@ -1,3 +1,5 @@
+import { normalizeConnectorContract } from '../shared/connector_contract.js';
+
 export const MAIL_V1_ARCHITECTURE_DECISION = Object.freeze({
     provider: 'icloud_imap_smtp',
     read_path: {
@@ -35,8 +37,8 @@ export const createMailConnectorContract = ({
     provider = MAIL_V1_ARCHITECTURE_DECISION.provider,
     read_capabilities = ['mail_list', 'mail_read', 'mail_mark_read', 'mail_search', 'mail_next_unread'],
     write_capabilities = ['mail_archive', 'mail_delete', 'mail_reply_draft', 'mail_send']
-} = {}) => ({
-    provider: String(provider || MAIL_V1_ARCHITECTURE_DECISION.provider),
-    read_capabilities: Array.isArray(read_capabilities) ? read_capabilities.map((entry) => String(entry)) : [],
-    write_capabilities: Array.isArray(write_capabilities) ? write_capabilities.map((entry) => String(entry)) : []
+} = {}) => normalizeConnectorContract({
+    provider: provider || MAIL_V1_ARCHITECTURE_DECISION.provider,
+    read_capabilities,
+    write_capabilities
 });

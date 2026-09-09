@@ -1,3 +1,6 @@
+import { runProjectViewLayoutAcceptance } from './project_view_layout_acceptance.mjs';
+import { runProjectMuteAcceptance } from './project_mute_acceptance.mjs';
+import { runProjectPerformanceHoldAcceptance } from './project_performance_hold_acceptance.mjs';
 import { runApngImageAcceptance } from './apng_image_acceptance.mjs';
 import { runToolTextRecordAcceptance } from './tool_text_record_acceptance.mjs';
 import { createDropFixture } from './molecule_ui_drop_core.mjs';
@@ -15,6 +18,11 @@ const SCENARIOS = Object.freeze([
 ]);
 
 export const runMoleculeDropAcceptance = async ({ page, report, check, ensureProject, outDir }) => {
+    if (process.env.MOLECULE_UI_DROP_ZONES_ONLY === '1') return runProjectDropZonesAcceptance({ page, report, check, ensureProject, outDir });
+    if (process.env.MOLECULE_UI_RECURSIVE_ONLY === '1') return runProjectRecursivePlaybackAcceptance({ page, report, check, ensureProject, outDir });
+    if (process.env.MOLECULE_UI_LAYOUT_ONLY === '1') return runProjectViewLayoutAcceptance({ page, report, check, ensureProject, outDir });
+    if (process.env.MOLECULE_UI_MUTE_ONLY === '1') return runProjectMuteAcceptance({ page, report, check, ensureProject, outDir });
+    if (process.env.MOLECULE_UI_PERFORMANCE_HOLD_ONLY === '1') return runProjectPerformanceHoldAcceptance({ page, report, check, ensureProject, outDir });
     if (process.env.MOLECULE_UI_DRAG_PERF_ONLY === '1') {
         return runMoleculeDragPerformanceAcceptance({ page, report, check, ensureProject });
     }
@@ -41,3 +49,5 @@ export const runMoleculeDropAcceptance = async ({ page, report, check, ensurePro
         ));
     }
 };
+import { runProjectRecursivePlaybackAcceptance } from './project_recursive_playback_acceptance.mjs';
+import { runProjectDropZonesAcceptance } from './project_drop_zones_acceptance.mjs';

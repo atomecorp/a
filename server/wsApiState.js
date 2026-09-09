@@ -12,12 +12,25 @@ export const wsApiConnections = new Set();
 // userId -> Array<payload>
 const pendingConsoleMessagesByUserId = new Map();
 
+// Chaque file est plafonnée à 200 messages, mais le NOMBRE d'utilisateurs dans la
+// carte ne l'était pas: une entrée n'était retirée que si l'utilisateur se
+// reconnectait, donc un destinataire qui ne revient jamais laissait 200 charges
+// utiles en mémoire pour la vie du processus. La carte est insertion-ordonnée,
+// donc la file la plus ancienne est en tête.
+const PENDING_QUEUE_MAX = 200;
+const PENDING_USERS_MAX = 500;
+
 export function enqueuePendingConsoleMessage(userId, payload) {
     if (!userId || !payload) return 0;
     if (!pendingConsoleMessagesByUserId.has(userId)) pendingConsoleMessagesByUserId.set(userId, []);
     const queue = pendingConsoleMessagesByUserId.get(userId);
     queue.push({ ...payload, _queuedAt: new Date().toISOString() });
-    if (queue.length > 200) queue.splice(0, queue.length - 200);
+    if (queue.length > PENDING_QUEUE_MAX) queue.splice(0, queue.length - PENDING_QUEUE_MAX);
+    while (pendingConsoleMessagesByUserId.size > PENDING_USERS_MAX) {
+        const oldest = pendingConsoleMessagesByUserId.keys().next().value;
+        if (oldest === userId) break;
+        pendingConsoleMessagesByUserId.delete(oldest);
+    }
     return queue.length;
 }
 

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import {
     beginBevyToolSliderSession,
-    buildBevyVerticalToolSliderNode,
+    buildBevyToolSliderNode,
     closeBevyToolSliderSession,
     dragBevyToolSliderSession,
     releaseBevyToolSliderSession,
@@ -25,11 +25,12 @@ test('shared vertical tool slider renders an upward compact anchor and clamps it
     assert.equal(lowered.value, 0);
     assert.equal(closeBevyToolSliderSession(raised, { cancelled: true }).value, 50);
 
-    const collapsed = buildBevyVerticalToolSliderNode({ id: 'slider', label: 'Size', value: 50 });
+    const collapsed = buildBevyToolSliderNode({ id: 'slider', label: 'Size', value: 50 });
     assert.deepEqual(collapsed.style.size, [60, 60]);
+    assert.equal(collapsed.accessibility.label, 'Size');
     assert.equal(findNode(collapsed, 'slider_rail'), null);
 
-    const expanded = buildBevyVerticalToolSliderNode({
+    const expanded = buildBevyToolSliderNode({
         id: 'slider', label: 'Size', value: 50, unit: '%', expanded: true
     });
     assert.deepEqual(expanded.style.size, [60, 180]);
@@ -99,4 +100,34 @@ test('a tool slider owns its vertical drag instead of starting panel scroll', ()
     runtime.routePointerEvent({ canvas, phase: 'pointerup', point: { x: 10, y: 70 }, event: { pointerId: 4 } });
     assert.deepEqual(scrollCalls, { begin: 0, drag: 0, end: 0 });
     assert.deepEqual(emitted.map((event) => event.type), ['press', 'focus', 'drag', 'release', 'activate']);
+});
+
+test('shared horizontal slider uses only the rail and value, without a compact icon', () => {
+    const slider = buildBevyToolSliderNode({ id: 'mix', label: 'Strength', orientation: 'horizontal', value: 50, expanded: true });
+    assert.deepEqual(slider.style.size, [180,60]);
+    assert.equal(findNode(slider, 'mix_icon'), null);
+    assert.ok(findNode(slider, 'mix_rail').style.size[0] > findNode(slider, 'mix_rail').style.size[1]);
+});
+
+test('a held palette gesture opens on press and selects the release target exactly once', () => {
+    const emitted = [];
+    const canvas = { setPointerCapture: () => {}, releasePointerCapture: () => {} };
+    const parent = { treeId: 'menu', nodeId: 'palette', kind: 'icon_button', box: {} };
+    const child = { treeId: 'menu', nodeId: 'choice', kind: 'icon_button', box: {} };
+    let hit = parent;
+    const handlers = new Map([['menu:palette:palette_open', () => {}], ['menu:choice:palette_choose', () => {}]]);
+    const runtime = createBevyUiPointerRuntime({
+        state: { handlers, lastSurfacePoints: new Map(), pointerTarget: null, focusTarget: null, hoverTarget: null },
+        hitTestTrees: () => hit,
+        localEventForTarget: (target, type) => ({ node: target.nodeId, type }),
+        emitUiEvents: events => emitted.push(...events),
+        scrollRuntime: { begin: () => {}, drag: () => false, end: () => false, hover: () => {}, wheel: () => false }
+    });
+    runtime.routePointerEvent({ canvas, phase: 'pointerdown', point: {x:20,y:20}, event: {pointerId:1} });
+    hit = child;
+    runtime.routePointerEvent({ canvas, phase: 'pointerup', point: {x:20,y:80}, event: {pointerId:1} });
+    assert.deepEqual(emitted.filter(event => event.type.startsWith('palette_')), [
+        {node:'palette',type:'palette_open'}, {node:'choice',type:'palette_choose'}
+    ]);
+    assert.equal(emitted.filter(event => event.type === 'activate').length, 0);
 });

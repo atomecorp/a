@@ -98,6 +98,7 @@ import { handleWsFileOperation } from './wsFileOperations.js';
 import { registerServerIdentityRoutes } from './auth_routes_server.js';
 import { initServerIdentity } from './serverIdentity.js';
 import { isWsApiPrincipalProvisioned } from './wsApiIdentity.js';
+import { handleWsAtomeRealtimeOperation } from './wsAtomeRealtimeOperation.js';
 import { revokeAllRefreshSessions } from './auth_sessions.js';
 import {
   commitAtomeEvent,
@@ -306,8 +307,11 @@ const buildAllowedCorsOrigins = () => {
     'http://localhost:3001',
     'http://tauri.localhost',
     'https://tauri.localhost',
-    'tauri://localhost',
-    'null'
+    'tauri://localhost'
+    // 'null' is NOT allowed: sandboxed iframes, file:// pages and some
+    // redirects all send `Origin: null`, and this server answers with
+    // credentials:true. Accepting it handed credentialed access to any page
+    // able to produce that origin.
   ]);
 };
 
@@ -319,8 +323,10 @@ const isAllowedCorsOrigin = (origin) => {
   // which is invalid when credentials: true is set.
   if (!origin) return false;
   if (ALLOWED_CORS_ORIGINS.has(origin)) return true;
-  if (origin === 'null') return true;
-  const parsed = new URL(origin);
+  let parsed;
+  // `new URL` used to run unguarded: a malformed Origin header threw inside the
+  // CORS check instead of being rejected.
+  try { parsed = new URL(origin); } catch { return false; }
   const protocol = String(parsed.protocol || '').toLowerCase();
   const hostname = String(parsed.hostname || '').toLowerCase();
   if (protocol === 'tauri:' && hostname === 'localhost') return true;
@@ -2642,6 +2648,19 @@ async function startServer() {
                   });
                   return;
                 }
+
+                // Account-creation flood guard, same limiter as login above.
+                const registerRate = enforceAuthIdentityRateLimit('auth_register', cleanPhone, 5);
+                if (!registerRate.ok) {
+                  safeSend({
+                    type: 'auth-response',
+                    requestId,
+                    success: false,
+                    error: 'Too many attempts',
+                    retry_after_seconds: registerRate.retryAfterSeconds
+                  });
+                  return;
+                }
                 const requestedTechnicalUsername = normalizePhone(requestedUsername) === cleanPhone
                   ? ''
                   : requestedUsername;
@@ -3091,7 +3110,20 @@ async function startServer() {
                   return;
                 }
 
-                await updateUserParticle(dataSource, userId, key, value);
+                // `key` vient du client. Le chemin canonique refuse désormais les
+                // champs d'enveloppe réservés (owner_id, parent_id, atomeId…);
+                // le refus doit devenir une réponse propre, pas une exception.
+                try {
+                  await updateUserParticle(dataSource, userId, key, value);
+                } catch (error) {
+                  safeSend({
+                    type: 'auth-response',
+                    requestId,
+                    success: false,
+                    error: String(error?.message || 'update_user_particle_rejected')
+                  });
+                  return;
+                }
                 if ([
                   'visibility', 'access', 'name', 'first_name', 'firstname', 'firstName',
                   'nickname', 'pseudonym', 'pseudo', 'display_name_source', 'user_face', 'eve_profile'
@@ -3107,6 +3139,22 @@ async function startServer() {
                 });
               } else if (action === 'login') {
                 const { phone, password } = data;
+
+                // Credential stuffing guard. The same limiter already protects
+                // phone verification; login and register were the two unthrottled
+                // doors (no HTTP rate-limit plugin is registered either, and bcrypt
+                // slows an attacker without stopping one).
+                const loginRate = enforceAuthIdentityRateLimit('auth_login', normalizePhone(phone) || 'unknown', 10);
+                if (!loginRate.ok) {
+                  safeSend({
+                    type: 'auth-response',
+                    requestId,
+                    success: false,
+                    error: 'Too many attempts',
+                    retry_after_seconds: loginRate.retryAfterSeconds
+                  });
+                  return;
+                }
 
                 if (!phone || !password) {
                   safeSend({
@@ -3528,10 +3576,12 @@ async function startServer() {
                   atome
                 });
               } else if (action === 'realtime') {
-                safeSend({
-                  type: 'atome-response', requestId, success: false, ok: false,
-                  error: 'canonical_event_commit_required'
-                });
+                // Extracted handler, previously duplicated inline here without its
+                // validation branches: the module was imported by nothing but a
+                // 519-line security probe, so the probe guarded code production
+                // never ran. Wiring it makes the probe meaningful and restores the
+                // missing-id / missing-particles / unauthenticated checks.
+                safeSend(await handleWsAtomeRealtimeOperation({ data, connection, requesterId, requestId }));
                 return;
               } else if (action === 'update') {
                 const atomeId = data.atome_id;

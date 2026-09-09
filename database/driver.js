@@ -63,10 +63,13 @@ function ensureDirectory(filePath) {
  * Synchronous API wrapped in async for consistency
  */
 class SqliteDriver {
+    static STATEMENT_CACHE_MAX = 256;
+
     constructor(dbPath) {
         this.dbPath = dbPath;
         this.db = null;
         this.type = 'sqlite';
+        this.statements = new Map();
     }
 
     async connect() {
@@ -88,7 +91,28 @@ class SqliteDriver {
      * Execute raw SQL (for schema/DDL)
      */
     exec(sql) {
+        // DDL changes the schema, which invalidates every compiled statement.
+        this.statements.clear();
         return this.db.exec(sql);
+    }
+
+    /**
+     * Compiled-statement cache.
+     *
+     * run/get/all used to call `this.db.prepare(sql)` on EVERY call, so the same
+     * dozen queries were recompiled thousands of times per session. better-sqlite3
+     * statements are reusable and synchronous, so caching them is safe; the cache
+     * is bounded and cleared by `exec` (DDL) and `close`.
+     */
+    prepared(sql) {
+        let stmt = this.statements.get(sql);
+        if (stmt) return stmt;
+        stmt = this.db.prepare(sql);
+        if (this.statements.size >= SqliteDriver.STATEMENT_CACHE_MAX) {
+            this.statements.delete(this.statements.keys().next().value);
+        }
+        this.statements.set(sql, stmt);
+        return stmt;
     }
 
     /**
@@ -96,8 +120,7 @@ class SqliteDriver {
      * @returns {{ changes: number, lastInsertRowid: number }}
      */
     run(sql, params = []) {
-        const stmt = this.db.prepare(sql);
-        const result = stmt.run(...(Array.isArray(params) ? params : [params]));
+        const result = this.prepared(sql).run(...(Array.isArray(params) ? params : [params]));
         return {
             changes: result.changes,
             lastInsertRowid: result.lastInsertRowid
@@ -109,8 +132,7 @@ class SqliteDriver {
      * @returns {Object|undefined}
      */
     get(sql, params = []) {
-        const stmt = this.db.prepare(sql);
-        return stmt.get(...(Array.isArray(params) ? params : [params]));
+        return this.prepared(sql).get(...(Array.isArray(params) ? params : [params]));
     }
 
     /**
@@ -118,8 +140,7 @@ class SqliteDriver {
      * @returns {Array<Object>}
      */
     all(sql, params = []) {
-        const stmt = this.db.prepare(sql);
-        return stmt.all(...(Array.isArray(params) ? params : [params]));
+        return this.prepared(sql).all(...(Array.isArray(params) ? params : [params]));
     }
 
     /**
@@ -167,6 +188,7 @@ class SqliteDriver {
      */
     close() {
         if (this.db) {
+            this.statements.clear();
             this.db.close();
             this.db = null;
             console.log('[DB] SQLite connection closed');
@@ -333,12 +355,28 @@ class LibsqlDriver {
  * @param {Object} [config] - Optional configuration override
  * @returns {Promise<SqliteDriver|LibsqlDriver>}
  */
+// The driver handle used to be published on `db` BEFORE `await db.connect()`
+// resolved, so a second concurrent caller could take the early return above and
+// receive a driver whose underlying handle was still null. The in-flight promise
+// makes every concurrent caller await the same connection.
+let connecting = null;
+
 export async function connect(config = {}) {
     if (db) {
         return db;
     }
+    if (connecting) {
+        return connecting;
+    }
+    connecting = openConnection(config).finally(() => { connecting = null; });
+    return connecting;
+}
 
+async function openConnection(config) {
     driverType = config.type || detectDriverType();
+    let resolvedUrl = null;
+    let resolvedAuthToken = null;
+    let resolvedPath = null;
 
     if (driverType === 'libsql') {
         const url = config.url ||
@@ -352,13 +390,18 @@ export async function connect(config = {}) {
             throw new Error('[DB] libSQL URL not configured. Set LIBSQL_URL or TURSO_DATABASE_URL');
         }
 
-        db = new LibsqlDriver(url, authToken);
+        resolvedUrl = url;
+        resolvedAuthToken = authToken;
     } else {
-        const dbPath = config.path || getSqlitePath();
-        db = new SqliteDriver(dbPath);
+        resolvedPath = config.path || getSqlitePath();
     }
 
-    await db.connect();
+    // `db` is published only once the handle is actually open.
+    const pending = driverType === 'libsql'
+        ? new LibsqlDriver(resolvedUrl, resolvedAuthToken)
+        : new SqliteDriver(resolvedPath);
+    await pending.connect();
+    db = pending;
     return db;
 }
 

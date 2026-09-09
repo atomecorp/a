@@ -1,3 +1,5 @@
+import { normalizeConnectorContract } from '../shared/connector_contract.js';
+
 export const BANK_V1_ARCHITECTURE_DECISION = Object.freeze({
     provider: 'powens_psd2_with_local_analytics',
     read_source: {
@@ -31,10 +33,10 @@ export const createBankConnectorContract = ({
     role = 'primary_read',
     read_capabilities = [...BANK_V1_ARCHITECTURE_DECISION.voice_capabilities],
     write_capabilities = []
-} = {}) => ({
-    provider: String(provider || BANK_V1_ARCHITECTURE_DECISION.read_source.id),
-    protocol: String(protocol || 'https'),
-    role: String(role || 'primary_read'),
-    read_capabilities: Array.isArray(read_capabilities) ? read_capabilities.map((entry) => String(entry)) : [],
-    write_capabilities: Array.isArray(write_capabilities) ? write_capabilities.map((entry) => String(entry)) : []
+} = {}) => normalizeConnectorContract({
+    provider: provider || BANK_V1_ARCHITECTURE_DECISION.read_source.id,
+    protocol: protocol || 'https',
+    role: role || 'primary_read',
+    read_capabilities,
+    write_capabilities
 });

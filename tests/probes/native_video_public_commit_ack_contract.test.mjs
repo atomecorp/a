@@ -62,7 +62,7 @@ test('public native stop acknowledges only after a durable idempotent project as
         toErrorMessage: (error) => String(error?.message || error)
     }));
     vi.doMock('../../eVe/domains/media/api/media_api_shared.js', () => ({
-        isTauriRuntime: () => false
+        isLocalNativeBackendRuntime: () => false
     }));
     vi.doMock('../../eVe/domains/media/api/video_api_persist.js', () => ({
         persistRecording: vi.fn()

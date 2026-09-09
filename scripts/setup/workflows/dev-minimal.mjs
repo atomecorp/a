@@ -58,7 +58,6 @@ export function runDevMinimalWorkflow(context) {
     runCommand(logger, "bash", ["scripts/run_tauri.sh"]);
   } else {
     // Keep process behavior simple and explicit for now.
-    runCommand(logger, "npm", ["run", "scan:components"]);
     runCommand(logger, "bash", ["scripts/run_fastify.sh"]);
   }
 

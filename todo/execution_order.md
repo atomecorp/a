@@ -995,6 +995,11 @@ Every maintained todo family is assigned to an execution phase. A file may not b
 - Phase 9: `todo/ai_voice/`.
 - Phase 10: `todo/midi/`, `todo/dev_ops/`, `todo/communication_social/apple_mail_security.md`, `todo/eve_features/prompt_modification_menu_mvp_v146_ios_touch_tests.md`, `todo/tests/`, `todo/eVe_plugin.md`, `todo/execution_order.md` follow-up documentation work.
 
+- Phase 7 (audit transverse): `todo/problems.md` (rapport d'audit du 2026-09-09) et
+  `todo/problems_fixes.md` (journal d'exécution des correctifs). Documents de constat et de
+  suivi: ils n'autorisent aucune implémentation par eux-mêmes, chaque correctif y est
+  rattaché à sa probe de validation.
+
 The registry is intentionally directory-based only for families that are fully governed by the corresponding phase. Any newly created todo file must be assigned here before execution.
 
 Si un de ces fichiers devient necessaire, il doit etre ajoute ici avant execution.

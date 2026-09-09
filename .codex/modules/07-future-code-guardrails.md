@@ -273,8 +273,8 @@ maps/API_MAP.md
 maps/DESIGN_MAP.md
 maps/ARCHITECTURE_MAP.md
 atome/documentations/atome_structur_to_respect.md
-eve/application/documentations/
-documentations/
+atome/documentations/
+eVe/documentations/
 ```
 
 Required code areas to inspect when the task touches them:

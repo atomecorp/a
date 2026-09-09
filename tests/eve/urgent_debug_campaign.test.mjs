@@ -36,8 +36,7 @@ import {
     FLOWER_TOOL_KEYS_BY_KIND,
     resolveFlowerToolKeysForKind
 } from '../../eVe/intuition/runtime/eve_intuition/flower_tool_capability_matrix.js';
-import { EVE_EN_CORE_MESSAGES } from '../../eVe/i18n/languages_en_core.js';
-import { EVE_FR_CORE_MESSAGES } from '../../eVe/i18n/languages_fr_core.js';
+import { EVE_DEFAULT_MESSAGES } from '../../eVe/i18n/languages.js';
 import { buildMainMenuRecordingVisualNodes } from '../../eVe/intuition/ribbon/bevy_ui_main_menu_recording_visual_model.js';
 import { createMainMenuRecordingVisualRuntime } from '../../eVe/intuition/ribbon/bevy_ui_main_menu_recording_visual_runtime.js';
 import { buildAtomeContextualEditTree } from '../../eVe/intuition/runtime/eve_intuition/atome_contextual_edit_model.js';
@@ -71,13 +70,13 @@ describe('urgent campaign contracts', () => {
     });
 
     it('uses localized verbs for all contextual Flower actions', () => {
-        expect(EVE_EN_CORE_MESSAGES).toMatchObject({
+        expect(EVE_DEFAULT_MESSAGES.en).toMatchObject({
             'eve.menu.communicate': 'communicate',
             'eve.menu.couleur': 'colorize',
             'eve.menu.size': 'resize',
             'eve.menu.font': 'set font'
         });
-        expect(EVE_FR_CORE_MESSAGES).toMatchObject({
+        expect(EVE_DEFAULT_MESSAGES.fr).toMatchObject({
             'eve.menu.communicate': 'communiquer',
             'eve.menu.couleur': 'colorer',
             'eve.menu.size': 'redimensionner',
@@ -202,7 +201,7 @@ describe('urgent campaign contracts', () => {
         });
         const options = enter.mock.calls[0][0];
         expect(options.extraDefinitions.map((definition) => definition.key)).toEqual([
-            'molecule_import', 'molecule_info', 'molecule_activity'
+            'container_multiselect', 'container_play_mode', 'molecule_import', 'molecule_info', 'molecule_activity'
         ]);
         expect(options.extraDefinitions.every((definition) => definition.priority < 1000)).toBe(true);
         expect(typeof options.extraInvoker).toBe('function');
@@ -366,7 +365,7 @@ describe('urgent campaign contracts', () => {
         })).toBeUndefined();
     });
 
-    it('runs a sequential Prompter molecule in parallel with sibling media', () => {
+    it('projects only the active sequential text alongside simultaneous sibling media', () => {
         const records = [
             { atome_id: 'root', type: 'group', properties: { playback_mode: 'simultaneous' } },
             { atome_id: 'music', parent_id: 'root', type: 'audio', properties: { duration_seconds: 3, hierarchy_order: 0 } },
@@ -379,8 +378,8 @@ describe('urgent campaign contracts', () => {
         const second = projectViewTransportSnapshotAt(plan, 1.5);
         expect(first.activeLeafIds).toEqual(expect.arrayContaining(['music', 'line-1']));
         expect(second.activeLeafIds).toEqual(expect.arrayContaining(['music', 'line-2']));
-        expect(first.prompter.records.map((record) => record.atome_id)).toEqual(['line-1', 'line-2']);
-        expect(second.prompter.active_atome_id).toBe('line-2');
+        expect(first.activeLeafIds).not.toContain('line-2');
+        expect(second.activeLeafIds).not.toContain('line-1');
     });
 
     it('projects Visualizer-only content while visual_fullscreen is active', () => {

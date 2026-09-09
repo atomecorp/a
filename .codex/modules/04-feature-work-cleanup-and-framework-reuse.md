@@ -78,13 +78,13 @@ definition of done. The list may shrink. It may never grow.
 
 ## ARCHITECTURAL AUTHORITY
 
-The authoritative architecture documentation is located under eve/application/documentations/, documentations/, and maps/. Before generating or modifying code, the assistant MUST ensure full consistency with these documents.
+The authoritative architecture documentation is located under `atome/documentations/`, `eVe/documentations/`, and `maps/` (paths relative to the repository root). Before generating or modifying code, the assistant MUST ensure full consistency with these documents.
 
 ## MANDATORY MAP MAINTENANCE POLICY
 
 The framework maps are active architectural contracts, not optional notes.
 
-Mandatory maps are maps/CODEMAP.md, maps/API_MAP.md, maps/DESIGN_MAP.md, and maps/ARCHITECTURE_MAP.md once it exists.
+Mandatory maps are `maps/CODEMAP.md`, `maps/API_MAP.md`, `maps/DESIGN_MAP.md`, and `maps/ARCHITECTURE_MAP.md`.
 
 Whenever a task changes structure, creates new files, moves modules, changes ownership boundaries, adds or modifies code or APIs, changes runtime exposure, changes design tokens, changes JavaScript-generated styling, changes visual factories, or changes product design behavior, the relevant map or maps MUST be updated in the same task.
 

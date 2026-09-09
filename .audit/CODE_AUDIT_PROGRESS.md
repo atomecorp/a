@@ -505,3 +505,7 @@ Dependency fingerprints for a cheap resumption check (SHA-256, code-inspected ow
 - `server/sharingPermissionService.js`: `fb0ddba164184100bccd2688a779ed4c3b6b44f369e532199e4eea4b232257f9`.
 - `database/adole_event_mutation.js`: `e42e8a9ac39ccae4fca76ea0f829ca82856f721001c3f16b531e4eeab7fe24ab`.
 - `eVe/domains/rendering/project_view_mode_state.js`: `147560a85cb5c3bdaac7c7ed0c0ef67ee0fd807e078bb08c149e9dc0549fe852`.
+
+### D01 follow-up — documentation routing corrected
+
+Following the user request to correct the stale references, the repository-local `.codex/AGENTS.md` now links directly to both documentation indexes, CODEMAP, ARCHITECTURE_MAP, API_MAP, DESIGN_MAP and scoped audit graphs. Modules 04 and 07 now name the exact `atome/documentations/` and `eVe/documentations/` roots; module 04 no longer describes the existing ARCHITECTURE_MAP as conditional. D01 is resolved for these local references; historical findings above are preserved. This does not resolve D02 or certify map exhaustiveness. Validation: 8 relative links and 6 root targets exist, obsolete paths are absent from the three edited rule files, and diff whitespace checks pass. No code, tests, cleanup obligations or Git state were changed. Baseline parent revision: `17f9af3e`.

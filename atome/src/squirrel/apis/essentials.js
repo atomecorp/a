@@ -93,18 +93,56 @@ window.currentTheme = {
   }
 };
 
-// Add the puts method to display in the console
-window.puts = function puts(val) {
+// `puts` is the product's user-facing notice channel: 13 call sites in the aBox
+// media transport report upload/download outcomes through it ("Connectez-vous
+// pour envoyer des fichiers", "[download] échec pour ..."). Its body was empty,
+// so every one of those messages went nowhere and a failed transfer was silent.
+//
+// It follows the same shape as reportRuntimeError (squirrel/runtime_errors.js):
+// the last entries stay readable on `window.__squirrelNotices`, and the console
+// only speaks when `window.__SQUIRREL_DEBUG` is truthy -- production stays quiet
+// without the message being destroyed.
+const NOTICE_RING_SIZE = 200;
+const noticeRing = [];
+window.__squirrelNotices = noticeRing;
+
+window.puts = function puts(...values) {
+  const message = values
+    .map((value) => (typeof value === 'string' ? value : (() => {
+      try { return JSON.stringify(value); } catch (_) { return String(value); }
+    })()))
+    .join(' ');
+  noticeRing.push({ at: new Date().toISOString(), message });
+  if (noticeRing.length > NOTICE_RING_SIZE) {
+    noticeRing.splice(0, noticeRing.length - NOTICE_RING_SIZE);
+  }
+  if (window.__SQUIRREL_DEBUG && typeof console !== 'undefined') console.log(message);
+  return message;
 };
 
-// Add the print method to display in the console without newline (Ruby-like)
-window.print = function print(val) {
-};
+// `window.print` is NOT redefined: it used to be overwritten with an empty
+// function, which permanently disabled the browser's native print dialog for
+// the whole application. Nothing in the product calls a `print()` global.
 
 // Add the grab method to retrieve DOM elements
 window.grab = (function () {
-  // Cache for recent results
+  // Cache des résultats récents.
+  //
+  // Une entrée n'était retirée que si l'élément était détaché AU MOMENT d'une
+  // relecture du même id: un id consulté une seule fois gardait son nœud vivant
+  // pour la session entière, ce qui empêchait aussi le ramasse-miettes de libérer
+  // le sous-arbre DOM correspondant. La carte est insertion-ordonnée, donc la
+  // tête est l'entrée la plus ancienne.
+  const DOM_CACHE_MAX = 512;
   const domCache = new Map();
+  const rememberElement = (id, element) => {
+    domCache.set(id, element);
+    while (domCache.size > DOM_CACHE_MAX) {
+      const oldest = domCache.keys().next().value;
+      if (oldest === id) break;
+      domCache.delete(oldest);
+    }
+  };
 
   const looksLikeUuid = (val) => {
     if (!val) return false;
@@ -260,7 +298,7 @@ window.grab = (function () {
     enhanceSelectable(element, id);
 
     // Store in the cache for future calls
-    domCache.set(id, element);
+    rememberElement(id, element);
 
     return element;
   };

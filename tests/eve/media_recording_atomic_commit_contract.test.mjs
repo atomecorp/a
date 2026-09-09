@@ -53,7 +53,7 @@ test('Tauri audio persistence preserves the reserved Atome identity without comm
         getLocalAuthToken: () => 'local-token',
         getTauriHttpBaseUrl: () => 'http://127.0.0.1:3000',
         isBrowser: () => true,
-        isTauriRuntime: () => true,
+        isLocalNativeBackendRuntime: () => true,
         resolveCurrentUser: async () => ({
             ok: true,
             id: 'user_a',
@@ -113,7 +113,7 @@ test('browser video persistence preserves upload and Atome identities without co
         getFastifyBaseUrl: () => 'http://127.0.0.1:3000',
         getLocalAuthToken: () => '',
         getTauriHttpBaseUrl: () => '',
-        isTauriRuntime: () => false,
+        isLocalNativeBackendRuntime: () => false,
         resolveCurrentUser: async () => ({
             ok: true,
             id: 'user_a',
@@ -164,7 +164,7 @@ test('browser video persistence rejects an acknowledged upload outside the recor
         getFastifyBaseUrl: () => 'http://127.0.0.1:3000',
         getLocalAuthToken: () => '',
         getTauriHttpBaseUrl: () => '',
-        isTauriRuntime: () => false,
+        isLocalNativeBackendRuntime: () => false,
         resolveCurrentUser: async () => ({ ok: true, id: 'user_a', user: { user_id: 'user_a' } })
     }));
     vi.doMock('../../eVe/domains/media/api/video_api_helpers.js', () => ({
@@ -185,4 +185,28 @@ test('browser video persistence rejects an acknowledged upload outside the recor
         }),
         /recording_upload_path_mismatch/
     );
+});
+
+
+test('audio upload uses the storage owner and a failed queue preserves its jobs', async () => {
+    const { createAudioStorage } = await import('../../eVe/domains/media/api/audio_core_storage.js');
+    const { createAudioRecord } = await import('../../eVe/domains/media/api/audio_core_record.js');
+    const fetchMock = vi.fn(async () => ({ ok: true, json: async () => ({ success: true, path: 'recordings/take.wav' }) }));
+    vi.stubGlobal('fetch', fetchMock);
+    const storage = createAudioStorage({ getFastifyBaseUrl: () => 'http://127.0.0.1:3001',
+        buildAuthHeaders: headers => ({ ...headers, Authorization: 'Bearer fixture-token' }) });
+    const bytes = new Uint8Array([10, 20, 30]);
+    await storage.uploadRecordingToFastify('take.wav', bytes.buffer, 'audio/wav', { userId: 'fixture', filePath: 'recordings/take.wav' });
+    assert.equal(fetchMock.mock.calls[0][0], 'http://127.0.0.1:3001/api/uploads');
+    assert.deepEqual([...fetchMock.mock.calls[0][1].body], [...bytes]);
+    assert.equal(fetchMock.mock.calls[0][1].headers['X-File-Path'], 'recordings/take.wav');
+    assert.equal(fetchMock.mock.calls[0][1].credentials, 'include');
+    const markJobDone = vi.fn();
+    fetchMock.mockRejectedValue(new Error('upload_unavailable'));
+    const recording = createAudioRecord({ isBrowser: () => true, isOnline: () => true,
+        getQueue: () => [{ id: 'queued', fileName: 'take.wav', filePath: 'recordings/take.wav' }],
+        idbGet: async () => ({ bytes }), markJobDone,
+        uploadRecordingToFastify: storage.uploadRecordingToFastify });
+    await assert.rejects(recording.syncQueuedUploads(), /upload_unavailable/);
+    assert.equal(markJobDone.mock.calls.length, 0);
 });

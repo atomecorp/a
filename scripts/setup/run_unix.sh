@@ -517,10 +517,6 @@ if [ "$TAURI_ONLY" = true ]; then
     # Production mode for Tauri-only: build bundle then launch the generated .app
     if [ "$PROD_BUILD" = true ]; then
         echo "🏗️  Building production Tauri bundle..."
-        echo "🔍 Scanning Squirrel components..."
-        npm run scan:components
-        echo ""
-
         echo "📦 Building frontend..."
         npm run build
         echo ""
@@ -611,10 +607,6 @@ fi
 # Construction production si demandée
 if [ "$PROD_BUILD" = true ]; then
     echo "🏗️  Construction production (Tauri)"
-    echo "🔍 Scan des composants Squirrel..."
-    npm run scan:components
-    echo ""
-
     echo "📦 Build frontend..."
     npm run build
     echo ""
@@ -650,11 +642,6 @@ if [ "$PROD_BUILD" = true ]; then
     echo "✅ Build Tauri production terminé"
     exit 0
 fi
-
-# Scanner les composants Squirrel
-echo "🔍 Scan des composants Squirrel..."
-npm run scan:components
-echo ""
 
 # Capturer les signaux d'interruption
 trap cleanup SIGINT SIGTERM EXIT

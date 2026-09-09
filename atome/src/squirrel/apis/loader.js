@@ -6,6 +6,10 @@
  * - Provides SVG rendering helpers for UI.
  */
 import { render_svg, sanitizeSVG, fetch_and_render_svg } from './svg_utils.js';
+// Both predicates were duplicated here and in loadServerConfig.js. This copy was
+// also missing the `tauri.localhost` rule the other had -- so the desktop prod
+// webview kept stale local ports, against the contract stated just below.
+import { isDesktopTauriRuntime, isEmbeddedIosRuntime } from './serverUrls.js';
 
 const normalizeBundledAssetPath = (path) => {
   let cleanPath = String(path || '').trim();
@@ -43,29 +47,11 @@ const resolveBundledAssetUrl = (path) => {
   const clearStoredPort = () => {
     localStorage.removeItem(k);
   };
-  const isTauriRuntime = () => {
-    if (window.__SQUIRREL_FORCE_FASTIFY__ === true) return false;
-    if (window.__SQUIRREL_FORCE_TAURI_RUNTIME__ === true) return true;
-    const protocol = String(window.location?.protocol || '').toLowerCase();
-    if (protocol === 'tauri:' || protocol === 'asset:' || protocol === 'ipc:') return true;
-    const hasInvoke = !!(window.__TAURI_INTERNALS__ && typeof window.__TAURI_INTERNALS__.invoke === 'function');
-    if (hasInvoke) return true;
-    const hasTauriObjects = !!(window.__TAURI__ || window.__TAURI_INTERNALS__);
-    if (!hasTauriObjects) return false;
-    const ua = (typeof navigator !== 'undefined') ? String(navigator.userAgent || '') : '';
-    return /tauri/i.test(ua);
-  };
-  const isEmbeddedIosRuntime = () => {
-    const protocol = String(window.location?.protocol || '').toLowerCase();
-    const hostEnv = String(window.__HOST_ENV || '').trim().toLowerCase();
-    return protocol === 'atome:' || window.__AUV3_MODE__ === true || hostEnv === 'app' || hostEnv === 'auv3';
-  };
-
   // Contract:
   // - Desktop Tauri uses Axum local server and must never consume stale browser/localStorage ports.
   // - Browser runtime must not keep local private ports.
   // - Embedded iOS runtime may keep a persisted dynamic local port.
-  if (isTauriRuntime()) {
+  if (isDesktopTauriRuntime()) {
     const runtimePort = Number(window.ATOME_LOCAL_HTTP_PORT || window.__LOCAL_HTTP_PORT || window[k] || null);
     if (Number.isFinite(runtimePort) && runtimePort > 0) {
       window[k] = runtimePort;

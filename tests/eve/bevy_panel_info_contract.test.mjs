@@ -160,6 +160,14 @@ test('Info hierarchy preserves depth and only reveals descendants of expanded pa
     assert.equal(expanded.at(-1).selected, true);
 });
 
+test('upward hierarchy keeps the first child adjacent to its parent and retains selection', () => {
+    const expanded = hierarchyEntries(records, new Set(['project_a','parent_a']), ['child_a'], { direction: 'up' });
+    assert.deepEqual(expanded.map(entry => [entry.id,entry.depth]),
+        [['child_a',2],['parent_a',1],['project_a',0]]);
+    assert.equal(expanded[0].selected, true);
+    assert.ok(expanded.every(entry => entry.expandDirection === 'up'));
+});
+
 test('Info lazily reads independent project and global pages and never projects more than 200 rows per page', async () => {
     const calls = [];
     const projectPage = Array.from({ length: 200 }, (_, index) => ({

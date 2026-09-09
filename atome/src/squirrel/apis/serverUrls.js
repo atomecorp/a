@@ -204,17 +204,58 @@ export function resolveCanonicalFastifyHttpBase(url) {
     return normalized || null;
 }
 
-/**
- * Check if running in Tauri environment
- */
+// Two NARROWER predicates that answer a different question than isTauri(), and
+// were duplicated verbatim in both loader.js and loadServerConfig.js: the pair
+// decides how persisted local ports are treated, and embedded iOS must take the
+// iOS branch rather than the desktop one. Kept distinct from isTauri() on
+// purpose, but defined once.
+export function isDesktopTauriRuntime() {
+    if (typeof window === 'undefined') return false;
+    if (window.__SQUIRREL_FORCE_FASTIFY__ === true) return false;
+    if (window.__SQUIRREL_FORCE_TAURI_RUNTIME__ === true) return true;
+    const protocol = String(window.location?.protocol || '').toLowerCase();
+    const host = String(window.location?.hostname || '').toLowerCase();
+    if (protocol === 'tauri:' || protocol === 'asset:' || protocol === 'ipc:') return true;
+    if (host === 'tauri.localhost') return true;
+    if (window.__TAURI_INTERNALS__ && typeof window.__TAURI_INTERNALS__.invoke === 'function') return true;
+    if (!(window.__TAURI__ || window.__TAURI_INTERNALS__)) return false;
+    const userAgent = (typeof navigator !== 'undefined') ? String(navigator.userAgent || '') : '';
+    return /tauri/i.test(userAgent);
+}
+
+export function isEmbeddedIosRuntime() {
+    if (typeof window === 'undefined') return false;
+    const protocol = String(window.location?.protocol || '').toLowerCase();
+    const hostEnv = String(window.__HOST_ENV || '').trim().toLowerCase();
+    return protocol === 'atome:' || window.__AUV3_MODE__ === true || hostEnv === 'app' || hostEnv === 'auv3';
+}
+
+// SINGLE SOURCE OF TRUTH for "is this page served by a local native backend?".
+//
+// Ten copies of this predicate existed under the same name and did not agree.
+// On the local Axum page (localhost:3000) some answered "tauri" and others
+// "fastify"; on iOS (atome:) one answered false where five answered true. The
+// predicate decides which backend every authenticated call is sent to, so the
+// disagreement is what produced "it works, then it doesn't".
+//
+// This module is a leaf (no imports), which is why the definition lives here.
+// `adole_api/runtime.js` re-exports it as `isTauriRuntime`; every other module
+// imports one of the two. Narrower predicates that legitimately answer a
+// DIFFERENT question keep their own body but no longer share this name.
 export function isTauri() {
     if (typeof window === 'undefined') return false;
     if (window.__SQUIRREL_FORCE_FASTIFY__ === true) return false;
     if (window.__SQUIRREL_FORCE_TAURI_RUNTIME__ === true) return true;
     const protocol = String(window.location?.protocol || '').toLowerCase();
     const host = String(window.location?.hostname || '').toLowerCase();
+    const hostEnv = String(window.__HOST_ENV || '').trim().toLowerCase();
     if (protocol === 'tauri:' || protocol === 'asset:' || protocol === 'ipc:' || protocol === 'atome:') return true;
     if (host === 'tauri.localhost') return true;
+    // The page served by the local Axum server is a native-backend page. This
+    // rule existed only in adole_api/runtime.js, which is why project_security,
+    // profile_api_support and project_bootstrap_support disagreed with it.
+    if (isLocalAxumPage()) return true;
+    if (window.__AUV3_MODE__ === true || hostEnv === 'app' || hostEnv === 'auv3') return true;
     const hasTauriInvoke = !!(window.__TAURI_INTERNALS__ && typeof window.__TAURI_INTERNALS__.invoke === 'function');
     if (hasTauriInvoke) return true;
     const hasTauriObjects = !!(window.__TAURI__ || window.__TAURI_INTERNALS__);
@@ -333,9 +374,7 @@ export function getCloudServerUrl() {
             return resolveCanonicalFastifyHttpBase(`${protocol}//${host}${port}`);
         }
 
-        const protocol = window.location?.protocol || '';
-        const isEmbeddedIos = protocol === 'atome:' || window.__AUV3_MODE__ === true;
-        if (isEmbeddedIos) {
+        if (isEmbeddedIosRuntime()) {
             return 'https://atome.one';
         }
     }

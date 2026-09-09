@@ -1,5 +1,4 @@
-import fs from 'node:fs';
-import { PNG } from 'pngjs';
+export { analyzePngSignal, diffPng, diffPngRegion } from './molecule_ui_image_evidence.mjs';
 
 export const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -22,102 +21,6 @@ export const runSetupStep = async (name, operation, timeoutMs = 45000) => {
     } finally {
         if (timer) clearTimeout(timer);
     }
-};
-
-const readPng = (filePath) => PNG.sync.read(fs.readFileSync(filePath));
-
-export const analyzePngSignal = (filePath) => {
-    const png = readPng(filePath);
-    let opaquePixels = 0;
-    let nonBlackPixels = 0;
-    let minimumLuma = 255;
-    let maximumLuma = 0;
-    const colors = new Set();
-    for (let index = 0; index < png.data.length; index += 4) {
-        const red = png.data[index];
-        const green = png.data[index + 1];
-        const blue = png.data[index + 2];
-        const alpha = png.data[index + 3];
-        if (alpha > 0) opaquePixels += 1;
-        if (Math.max(red, green, blue) > 5 && alpha > 0) nonBlackPixels += 1;
-        const luma = Math.round((red * 0.2126) + (green * 0.7152) + (blue * 0.0722));
-        minimumLuma = Math.min(minimumLuma, luma);
-        maximumLuma = Math.max(maximumLuma, luma);
-        if (colors.size < 4096) colors.add(`${red}:${green}:${blue}:${alpha}`);
-    }
-    const pixelCount = Math.max(1, png.width * png.height);
-    return {
-        width: png.width,
-        height: png.height,
-        opaque_pixel_ratio: opaquePixels / pixelCount,
-        non_black_pixel_ratio: nonBlackPixels / pixelCount,
-        luma_range: maximumLuma - minimumLuma,
-        sampled_color_count: colors.size
-    };
-};
-
-export const diffPng = (leftPath, rightPath) => {
-    const left = readPng(leftPath);
-    const right = readPng(rightPath);
-    if (left.width !== right.width || left.height !== right.height) {
-        return { same_size: false, differing_pixel_ratio: 1, max_channel_delta: 255, mean_absolute_channel_delta: 255 };
-    }
-    let differingPixels = 0;
-    let maxChannelDelta = 0;
-    let absoluteDelta = 0;
-    for (let index = 0; index < left.data.length; index += 4) {
-        let differs = false;
-        for (let channel = 0; channel < 4; channel += 1) {
-            const delta = Math.abs(left.data[index + channel] - right.data[index + channel]);
-            absoluteDelta += delta;
-            maxChannelDelta = Math.max(maxChannelDelta, delta);
-            if (delta > 0) differs = true;
-        }
-        if (differs) differingPixels += 1;
-    }
-    const pixelCount = left.width * left.height;
-    return {
-        same_size: true,
-        differing_pixel_ratio: differingPixels / Math.max(1, pixelCount),
-        max_channel_delta: maxChannelDelta,
-        mean_absolute_channel_delta: absoluteDelta / Math.max(1, left.data.length)
-    };
-};
-
-export const diffPngRegion = (leftPath, rightPath, region = {}) => {
-    const left = readPng(leftPath);
-    const right = readPng(rightPath);
-    if (left.width !== right.width || left.height !== right.height) {
-        return { same_size: false, differing_pixel_ratio: 1, max_channel_delta: 255, mean_absolute_channel_delta: 255 };
-    }
-    const startX = Math.max(0, Math.floor(Number(region.x) || 0));
-    const startY = Math.max(0, Math.floor(Number(region.y) || 0));
-    const endX = Math.min(left.width, Math.ceil(startX + Math.max(1, Number(region.width) || 1)));
-    const endY = Math.min(left.height, Math.ceil(startY + Math.max(1, Number(region.height) || 1)));
-    let differingPixels = 0;
-    let maxChannelDelta = 0;
-    let absoluteDelta = 0;
-    for (let y = startY; y < endY; y += 1) {
-        for (let x = startX; x < endX; x += 1) {
-            const index = ((y * left.width) + x) * 4;
-            let differs = false;
-            for (let channel = 0; channel < 4; channel += 1) {
-                const delta = Math.abs(left.data[index + channel] - right.data[index + channel]);
-                absoluteDelta += delta;
-                maxChannelDelta = Math.max(maxChannelDelta, delta);
-                if (delta > 0) differs = true;
-            }
-            if (differs) differingPixels += 1;
-        }
-    }
-    const pixelCount = Math.max(1, (endX - startX) * (endY - startY));
-    return {
-        same_size: true,
-        region: { x: startX, y: startY, width: endX - startX, height: endY - startY },
-        differing_pixel_ratio: differingPixels / pixelCount,
-        max_channel_delta: maxChannelDelta,
-        mean_absolute_channel_delta: absoluteDelta / (pixelCount * 4)
-    };
 };
 
 export const waitFor = async (page, predicate, argument = null, timeoutMs = 30000) => {
@@ -148,7 +51,8 @@ export const waitForStableScene = async (page, projectId, consecutiveSamples = 4
             const surfaceSize = readRenderSurfaceSize(surface);
             const records = window.eveToolBase?.getProjectSceneState?.(pid)?.records || [];
             return JSON.stringify({
-                paletteMotionActive: menu.paletteMotionActive === true,
+                paletteMotionActive: menu.paletteMotionActive === true || window.eveBevyUiRuntime?.state?.renderQueues?.size > 0,
+                uiVersions: [...(window.eveBevyUiRuntime?.state?.renderVersions?.entries?.() || [])],
                 surfaceSize,
                 backingSize: [surface?.width || 0, surface?.height || 0],
                 recordCount: records.length,
@@ -275,7 +179,7 @@ export const readBevyUiHit = (page, target) => page.evaluate(({ x, y }) => {
 export const findBevyUiNodeTarget = (page, {
     nodeId = '', nodePrefix = '', treeId = '', step = 3, hint = null
 } = {}) => (
-    page.evaluate(({ expectedId, expectedPrefix, expectedTree, stride, pointHint }) => {
+    page.evaluate(async ({ expectedId, expectedPrefix, expectedTree, stride, pointHint }) => {
         const surface = document.getElementById('eve_surface_project');
         const runtime = window.eveBevyUiRuntime;
         const rect = surface?.getBoundingClientRect?.();
@@ -284,6 +188,21 @@ export const findBevyUiNodeTarget = (page, {
             && (!expectedTree || hit.treeId === expectedTree)
             && (!expectedId || hit.nodeId === expectedId)
             && (!expectedPrefix || String(hit.nodeId || '').startsWith(expectedPrefix));
+        const { nodeBox, layoutForNodeCached } = await import('/eVe/domains/rendering/bevy_ui_layout_runtime.js');
+        const candidates = [];
+        const visit = (node, parentBox = null, forcedBox = null) => {
+            if (!node) return;
+            const box = forcedBox || nodeBox(node, parentBox);
+            if ((!expectedId || node.id === expectedId) && (!expectedPrefix || String(node.id || '').startsWith(expectedPrefix))) candidates.push(box);
+            const boxes = layoutForNodeCached(node, box).childBoxes;
+            (node.children || []).forEach((child, index) => visit(child, box, boxes[index]));
+        };
+        for (const [id, entry] of runtime.state.trees) {
+            if (expectedTree && id !== expectedTree) continue;
+            if (entry.surface !== surface || runtime.state.suspendedTrees.has(id)) continue;
+            visit(entry.tree.root);
+        }
+        if (!candidates.length) return null;
         const increment = Math.max(1, Number(stride) || 3);
         const hitAt = (x, y) => {
             const hit = runtime.hitTestAtClientPoint({ surface, clientX: x, clientY: y });
@@ -295,25 +214,23 @@ export const findBevyUiNodeTarget = (page, {
                 }
             };
         };
-        if (Number.isFinite(pointHint?.x) && Number.isFinite(pointHint?.y)
-            && pointHint.x >= rect.left && pointHint.x < rect.right
-            && pointHint.y >= rect.top && pointHint.y < rect.bottom) {
+        if (Number.isFinite(pointHint?.x) && Number.isFinite(pointHint?.y)) {
             const direct = hitAt(pointHint.x, pointHint.y);
             if (direct) return direct;
-            for (let offset = 0; offset <= 18; offset += increment) {
-                for (const y of [pointHint.y - offset, pointHint.y + offset]) {
-                    if (y < rect.top || y >= rect.bottom) continue;
-                    for (let x = rect.left + 1; x < rect.right; x += increment) {
-                        const found = hitAt(x, y);
-                        if (found) return found;
-                    }
-                }
-            }
         }
-        for (let y = rect.top + 1; y < rect.bottom; y += increment) {
-            for (let x = rect.left + 1; x < rect.right; x += increment) {
-                const found = hitAt(x, y);
-                if (found) return found;
+        for (const box of candidates) {
+            const left = Math.max(rect.left, rect.left + box.x);
+            const top = Math.max(rect.top, rect.top + box.y);
+            const right = Math.min(rect.right, rect.left + box.x + box.width);
+            const bottom = Math.min(rect.bottom, rect.top + box.y + box.height);
+            if (!(right > left && bottom > top)) continue;
+            const center = hitAt((left + right) / 2, (top + bottom) / 2);
+            if (center) return center;
+            for (let y = top + 1; y < bottom; y += increment) {
+                for (let x = left + 1; x < right; x += increment) {
+                    const found = hitAt(x, y);
+                    if (found) return found;
+                }
             }
         }
         return null;
@@ -411,7 +328,8 @@ export const visibleMenuTool = async (page, projectId, toolKey) => {
             });
             if (direct) {
                 await waitForSettledMainMenu(page);
-                return direct;
+                const settled = await findBevyUiNodeTarget(page, { nodeId, treeId: 'eve_bevy_ui_main_menu', step: 2 });
+                if (settled) return settled;
             }
         }
         let target = null;
@@ -499,6 +417,7 @@ export const visibleMenuTool = async (page, projectId, toolKey) => {
 };
 
 export const clickCanvasTarget = async (page, target, { double = false } = {}) => {
+    assert(target && Number.isFinite(target.x) && Number.isFinite(target.y), `canvas_target_required:${JSON.stringify(target)}`);
     const canvas = page.locator('#eve_surface_project');
     let bounds = await canvas.boundingBox();
     for (let attempt = 0; !bounds && attempt < 30; attempt += 1) {
@@ -570,88 +489,4 @@ export const clickCanvasTarget = async (page, target, { double = false } = {}) =
         return;
     }
     await page.mouse.click(point.x, point.y, { delay: 40 });
-};
-
-export const exerciseMixerLassoBlock = async (page) => {
-    const blocker = await findBevyUiNodeTarget(page, {
-        nodeId: 'project_view_molecule_mix_lasso_blocker', treeId: 'eve_bevy_ui_project_view', step: 2
-    });
-    assert(blocker, 'molecule_mix_lasso_blocker_not_actionable');
-    const before = await page.evaluate(() => {
-        const apiIds = window.SelectionAPI?.selected?.() || [];
-        return Array.from(new Set([...(Array.isArray(apiIds) ? apiIds : []), ...(window.__selectedAtomeIds || [])])).map(String).sort();
-    });
-    const box = blocker.hit?.box || {};
-    const end = {
-        x: Math.min(blocker.x + 48, Number(box.x || blocker.x) + Number(box.width || 52) - 2),
-        y: Math.min(blocker.y + 36, Number(box.y || blocker.y) + Number(box.height || 40) - 2)
-    };
-    await page.mouse.move(blocker.x, blocker.y); await page.mouse.down();
-    await page.mouse.move(end.x, end.y, { steps: 8 }); await page.mouse.up();
-    const after = await page.evaluate(() => {
-        const apiIds = window.SelectionAPI?.selected?.() || [];
-        const selection = Array.from(new Set([...(Array.isArray(apiIds) ? apiIds : []), ...(window.__selectedAtomeIds || [])])).map(String).sort();
-        return { selection, lasso_visible: !!document.querySelector('.eve-atome-lasso') };
-    });
-    assert(JSON.stringify(after.selection) === JSON.stringify(before),
-        `molecule_mix_drag_changed_selection:${JSON.stringify({ before, after })}`);
-    assert(after.lasso_visible === false, 'molecule_mix_drag_started_lasso');
-    return { blocker: blocker.id, selection: after.selection };
-};
-
-export const exerciseTimelineEditingGestures = async ({ page, projectId, ownerId, clipId } = {}) => {
-    const readTimeline = () => page.evaluate(async (owner) => {
-        const state = await window.Atome.getStateCurrent(owner);
-        return state?.molecule_timeline || state?.props?.molecule_timeline || state?.properties?.molecule_timeline;
-    }, ownerId);
-    const beforeCrop = await readTimeline();
-    const previousDuration = beforeCrop.clips.find((clip) => clip.clip_id === clipId).timeline.duration_frames;
-    const crop = await recordCenter(page, projectId, (record) => record.id === `mol:crop:${clipId}:out`, { sceneCoordinates: true });
-    const cropPoint = await playwrightPointForClientTarget(page, crop);
-    await page.mouse.move(cropPoint.x, cropPoint.y); await page.mouse.down();
-    await page.mouse.move(cropPoint.x - 24, cropPoint.y, { steps: 6 }); await page.mouse.up();
-    const cropCommitted = await waitFor(page, async ({ owner, id, prior }) => {
-        const state = await window.Atome.getStateCurrent(owner);
-        const timeline = state?.molecule_timeline || state?.props?.molecule_timeline || state?.properties?.molecule_timeline;
-        const duration = timeline?.clips?.find((clip) => clip.clip_id === id)?.timeline?.duration_frames;
-        return { ok: Number.isSafeInteger(duration) && duration !== prior, duration };
-    }, { owner: ownerId, id: clipId, prior: previousDuration });
-    await waitForStableScene(page, projectId);
-
-    const beforeZoom = await readTimeline();
-    const zoomTarget = await recordCenter(page, projectId, (record) => record.id === `mol:clip:${clipId}`, { sceneCoordinates: true });
-    const zoomPoint = await playwrightPointForClientTarget(page, zoomTarget);
-    await page.mouse.move(zoomPoint.x, zoomPoint.y); await page.keyboard.down('Control'); await page.mouse.wheel(0, -120); await page.keyboard.up('Control');
-    const zoomCommitted = await waitFor(page, async ({ owner, prior }) => {
-        const state = await window.Atome.getStateCurrent(owner);
-        const timeline = state?.molecule_timeline || state?.props?.molecule_timeline || state?.properties?.molecule_timeline;
-        const zoom = Number(timeline?.view?.x_zoom || 1); return { ok: zoom !== prior, zoom };
-    }, { owner: ownerId, prior: Number(beforeZoom.view?.x_zoom || 1) });
-    await waitForStableScene(page, projectId);
-
-    const splitTarget = await recordCenter(page, projectId, (record) => record.id === `mol:clip:${clipId}`, { sceneCoordinates: true });
-    const splitPoint = await playwrightPointForClientTarget(page, splitTarget);
-    await page.mouse.move(splitPoint.x, splitPoint.y); await page.keyboard.down('Alt');
-    await page.mouse.dblclick(splitPoint.x, splitPoint.y, { delay: 40 }); await page.keyboard.up('Alt');
-    const splitCommitted = await waitFor(page, async ({ owner, id }) => {
-        const state = await window.Atome.getStateCurrent(owner);
-        const timeline = state?.molecule_timeline || state?.props?.molecule_timeline || state?.properties?.molecule_timeline;
-        const ids = (timeline?.clips || []).map((clip) => String(clip.clip_id));
-        const splitIds = ids.filter((candidate) => candidate.startsWith(`${id}:split:`));
-        return { ok: !ids.includes(id) && splitIds.length === 2, split_ids: splitIds };
-    }, { owner: ownerId, id: clipId });
-    await waitForStableScene(page, projectId);
-    const lassoTargetId = splitCommitted.split_ids[0];
-    const lassoTarget = await recordCenter(page, projectId, (record) => record.id === `mol:clip:${lassoTargetId}`, { sceneCoordinates: true });
-    const start = { x: lassoTarget.x - lassoTarget.width / 2 - 8, y: lassoTarget.y - lassoTarget.height / 2 - 2 };
-    await page.mouse.move(start.x, start.y); await page.mouse.down();
-    await page.mouse.move(lassoTarget.x + lassoTarget.width / 2 + 8, lassoTarget.y + lassoTarget.height / 2 + 2, { steps: 8 }); await page.mouse.up();
-    const lassoSelection = await page.evaluate(() => {
-        const apiIds = window.SelectionAPI?.selected?.() || [];
-        return Array.from(new Set([...(Array.isArray(apiIds) ? apiIds : []), ...(window.__selectedAtomeIds || [])])).map(String);
-    });
-    assert(lassoSelection.includes(`mol:clip:${lassoTargetId}`), `timeline_lasso_clip_missing:${JSON.stringify(lassoSelection)}`);
-    assert(lassoSelection.every((id) => !id.startsWith('mol:lane:') && !id.startsWith('mol:crop:')),
-        `timeline_lasso_selected_technical_record:${JSON.stringify(lassoSelection)}`);
-    return { lasso_selection: lassoSelection, crop: cropCommitted, zoom: zoomCommitted, split: splitCommitted };
 };

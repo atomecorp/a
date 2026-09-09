@@ -356,7 +356,10 @@ export async function delete_atome(atomeId, callback) {
     }
     const primary = runtimeTauri ? 'tauri' : 'fastify';
 
-    const primaryResult = await adapters[primary].atome.softDelete(atomeId);
+    // Suppression par evenement canonique. L'action heritee `atome`/`soft-delete` est
+    // refusee par le serveur (`canonical_event_commit_required`), ce qui faisait echouer
+    // silencieusement toute suppression de projet ou d'atome.
+    const primaryResult = await adapters[primary].atome.commitDelete(atomeId, currentUserId);
     const okPrimary = !!(primaryResult?.ok || primaryResult?.success);
     const results = {
         tauri: { success: false, data: null, error: null },

@@ -286,7 +286,7 @@ test('shared project override runtime loads canonical overrides and prunes stale
             getCloudAuthToken: () => 'token_a',
             getFastifyBaseUrl: () => 'http://fastify.test',
             getTauriHttpBaseUrl: () => '',
-            isTauriRuntime: () => false,
+            isLocalNativeBackendRuntime: () => false,
             extractAtomeFromResult: (payload) => payload?.data?.atome || payload?.atome || null,
             toErrorMessage: (error) => error?.message || String(error),
             debugLog: (...args) => logs.push(args)

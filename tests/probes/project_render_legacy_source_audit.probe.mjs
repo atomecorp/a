@@ -121,7 +121,7 @@ test('tool genesis delegates media source resolution outside the legacy runtime'
 
 test('media source runtime normalizes bundled upload recording protected and local media cases', () => {
     const runtime = createMediaSourceRuntime({
-        isTauriRuntime: () => false,
+        isLocalNativeBackendRuntime: () => false,
         getLocalHttpPort: () => 8794
     });
 
@@ -133,7 +133,7 @@ test('media source runtime normalizes bundled upload recording protected and loc
     assert.equal(runtime.shouldAttemptIdentifierHydration({ src: 'clip.mp4' }), true);
 
     const tauriRuntime = createMediaSourceRuntime({
-        isTauriRuntime: () => true,
+        isLocalNativeBackendRuntime: () => true,
         getLocalHttpPort: () => 8794
     });
     assert.equal(tauriRuntime.resolveMediaSrc('/file/local.wav'), 'http://127.0.0.1:8794/file/local.wav');

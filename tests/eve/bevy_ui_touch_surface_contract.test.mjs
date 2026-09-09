@@ -226,13 +226,13 @@ test('contextual palettes keep the semantic accent on the rail interior in both 
     };
     const right = buildAtomeContextualEditTree(input);
     const left = buildAtomeContextualEditTree({ ...input, handedness: 'left' });
-    const rightAccent = findNode(right.root, 'atome_contextual_mode_accent');
-    const leftAccent = findNode(left.root, 'atome_contextual_mode_accent');
-    const verticalPosition = BEVY_MENU_TOKENS.paletteAccent.insetPx + BEVY_MENU_TOKENS.paletteAccent.verticalOffsetPx;
+    const rightAccent = findNode(right.root, 'atome_contextual_tool_mode_palette_accent');
+    const leftAccent = findNode(left.root, 'atome_contextual_tool_mode_palette_accent');
+    const verticalPosition = BEVY_MENU_TOKENS.paletteAccent.insetPx;
     assert.deepEqual(rightAccent.style.position, [BEVY_MENU_TOKENS.paletteAccent.insetPx, verticalPosition]);
     assert.deepEqual(leftAccent.style.position, [60 - BEVY_MENU_TOKENS.paletteAccent.insetPx - BEVY_MENU_TOKENS.paletteAccent.thicknessPx, verticalPosition]);
-    assert.equal(rightAccent.style.size[1], 114);
-    assert.equal(leftAccent.style.size[1], 114);
+    assert.equal(rightAccent.style.size[1], 60 - BEVY_MENU_TOKENS.paletteAccent.insetPx * 2);
+    assert.equal(leftAccent.style.size[1], 60 - BEVY_MENU_TOKENS.paletteAccent.insetPx * 2);
 });
 
 test('Flower palette accents are individual rounded top arcs', () => {
@@ -594,7 +594,7 @@ test('Structured member context promotes in place to canvas tools when Natural v
     const scene = { project_id: 'project', records: [record], scene: { byId: new Map() } };
     const runtime = createAtomeContextualEditRuntime({
         legacyState: {},
-        resolveDefinitions: ({ railOnly }) => railOnly ? [] : [{ key: 'z_order', label: 'Plan', icon: 'modules', toolType: 'tool' }],
+        resolveDefinitions: () => [{ key: 'z_order', label: 'Plan', icon: 'modules', toolType: 'tool' }],
         invokeDefinition: async () => ({ ok: true }),
         surfaceResolver: () => ({ getBoundingClientRect: () => ({ width: 800, height: 600 }) }),
         bevyRuntimeResolver: () => ({
@@ -611,7 +611,9 @@ test('Structured member context promotes in place to canvas tools when Natural v
     });
     await runtime.render();
     assert.ok(findNode(rendered.at(-1).root, 'atome_contextual_tool_structured_info'));
-    assert.deepEqual(runtime.promoteActiveToCanvas(), { ok: true, atome_id: record.id, rail_only: false });
+    assert.deepEqual(runtime.promoteActiveToCanvas(), { ok: true, atome_id: record.id, rail_only: true });
+    assert.equal(runtime.readState().contextLevel, 'selection');
+    assert.deepEqual(runtime.readState().editingAtomeIds, []);
     await runtime.render();
     assert.ok(findNode(rendered.at(-1).root, 'atome_contextual_tool_z_order'));
     assert.equal(findNode(rendered.at(-1).root, 'atome_contextual_tool_structured_info'), null);

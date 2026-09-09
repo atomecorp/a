@@ -1,9 +1,12 @@
 import assert from 'node:assert/strict';
 import { JSDOM } from 'jsdom';
-import { test } from 'vitest';
+import { test, vi } from 'vitest';
+
+vi.mock('../../eVe/domains/rendering/project_view_surface_runtime.js', () => ({
+    playProjectViewSelection: async (selectionIds) => ({ ok: true, selectionIds })
+}));
 
 import { createAtomeEditFooterDefinitionInvocationRuntime } from '../../eVe/intuition/runtime/eve_intuition/atome_edit_footer_definition_invocation_runtime.js';
-import { projectViewPlayback } from '../../eVe/domains/rendering/project_view_playback_runtime.js';
 import { feedContextualRailWithRow } from '../../eVe/domains/rendering/project_view_contextual_rail.js';
 
 test('footer Delete prepares its lazy canonical handler before unified invocation', async () => {
@@ -75,9 +78,8 @@ test('structured rail Play delegates the exact List or Matrix record to the proj
         payload: { domEl: dom.window.document.getElementById('play') }
     });
     assert.equal(result.ok, true);
-    assert.equal(result.id, 'caption_row');
+    assert.deepEqual(result.selectionIds, ['caption_row']);
     assert.equal(gatewayCalled, false);
-    await projectViewPlayback.stop();
     dom.window.close();
     delete globalThis.window;
     delete globalThis.document;
@@ -89,6 +91,7 @@ test('a structured List or Matrix selection hands the active rail the marked can
     const record = { id: 'video_row', type: 'video', project_id: 'project_structured', properties: { kind: 'video' } };
     const result = await feedContextualRailWithRow({
         target: { id: record.id, record }, projectId: record.project_id,
+        loadRecords: async () => ({ ok: true, records: [record] }),
         api: { enter: (options) => { calls.push(options); return { ok: true }; } }
     });
     assert.equal(result.ok, true);
@@ -96,4 +99,22 @@ test('a structured List or Matrix selection hands the active rail the marked can
     assert.equal(calls[0].railOnly, true);
     assert.equal(calls[0].record.id, record.id);
     assert.equal(calls[0].record.structured_context, true);
+});
+
+test('a pending structured target cannot replace a newer selection after records load', async () => {
+    const calls = [];
+    let complete;
+    let current = true;
+    const loading = new Promise((resolve) => { complete = resolve; });
+    const pending = feedContextualRailWithRow({
+        target: { id: 'old', record: { id: 'old', type: 'text' } }, projectId: 'project',
+        api: { enter: (options) => { calls.push(options); return { ok: true }; } },
+        loadRecords: () => loading,
+        isCurrent: () => current
+    });
+    current = false;
+    complete({ ok: true, records: [] });
+    const result = await pending;
+    assert.equal(result.stale, true);
+    assert.equal(calls.length, 0);
 });

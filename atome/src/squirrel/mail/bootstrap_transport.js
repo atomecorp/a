@@ -33,7 +33,7 @@ const isNodeRuntime = (env = globalThis) => {
     if (env?.__SQUIRREL_FORCE_BROWSER_RUNTIME__ === true || host?.__SQUIRREL_FORCE_BROWSER_RUNTIME__ === true) return false;
     if (typeof window !== 'undefined' && (host === window || host?.window === window)) return false;
     if (host?.location || host?.document || host?.navigator) return false;
-    if (isTauriRuntime(host)) return false;
+    if (isTauriTransportEnv(host)) return false;
     return typeof process !== 'undefined' && !!process.versions?.node;
 };
 
@@ -59,7 +59,9 @@ const resolveLoopbackOrigin = (env) => {
     }
 };
 
-const isTauriRuntime = (env) => {
+// Environment-injected variant (takes `env`) so the mail transport stays testable
+// without globals. Distinct question, distinct name.
+const isTauriTransportEnv = (env) => {
     const hostEnv = resolveTransportHost(env);
     if (!hostEnv || typeof hostEnv !== 'object') return false;
     if (env?.__SQUIRREL_FORCE_FASTIFY__ === true || hostEnv.__SQUIRREL_FORCE_FASTIFY__ === true) return false;
@@ -89,7 +91,7 @@ const resolveFastifyBase = (env) => {
     if (found) return found;
     const currentOrigin = resolveLoopbackOrigin(env);
     if (currentOrigin) return currentOrigin;
-    if (isTauriRuntime(env)) return FASTIFY_FALLBACK;
+    if (isTauriTransportEnv(env)) return FASTIFY_FALLBACK;
     return '';
 };
 
@@ -121,7 +123,7 @@ const resolveLocalServerBase = (env) => {
 };
 
 const resolveMailSyncBase = (env) => {
-    if (isTauriRuntime(env)) {
+    if (isTauriTransportEnv(env)) {
         const localBase = resolveLocalServerBase(env);
         if (localBase) return localBase;
         // In Tauri, if no local server port is detected, try the Fastify endpoint

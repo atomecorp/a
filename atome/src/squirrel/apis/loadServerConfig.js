@@ -21,18 +21,22 @@ import { applyDebugConfig } from './loadServerConfigDebug.js';
 import { buildDefaultServerConfig } from './loadServerConfigDefaults.js';
 import { buildFastifyWsUrl } from './loadServerConfigWs.js';
 
+// Both predicates now come from apis/serverUrls.js; the bodies were duplicated
+// verbatim in loader.js.
+import { isDesktopTauriRuntime, isEmbeddedIosRuntime } from './serverUrls.js';
+
 let _loadPromise = null;
 
 function shouldBlockFastifyPrimaryOnLocalAxumPage() {
     if (typeof window === 'undefined') return false;
-    return !isInTauriRuntime()
+    return !isDesktopTauriRuntime()
         && isLocalAxumPage()
         && !canUseFastifyPrimaryOnLocalAxumPage();
 }
 
 function isCrossOriginLoopbackFastifyBaseForBrowser(base) {
     if (typeof window === 'undefined') return false;
-    if (isInTauriRuntime()) return false;
+    if (isDesktopTauriRuntime()) return false;
     if (typeof base !== 'string' || !base.trim()) return false;
     try {
         const parsed = new URL(base.trim(), window.location.href);
@@ -52,31 +56,8 @@ function clearFastifyRuntimeGlobals() {
     window.__SQUIRREL_FASTIFY_WS_SYNC_URL__ = '';
 }
 
-function isInTauriRuntime() {
-    if (typeof window === 'undefined') return false;
-    if (window.__SQUIRREL_FORCE_FASTIFY__ === true) return false;
-    if (window.__SQUIRREL_FORCE_TAURI_RUNTIME__ === true) return true;
-    const protocol = window.location?.protocol || '';
-    const host = window.location?.hostname || '';
-    if (protocol === 'tauri:' || protocol === 'asset:' || protocol === 'ipc:') return true;
-    if (host === 'tauri.localhost') return true;
-    const hasTauriInvoke = !!(window.__TAURI_INTERNALS__ && typeof window.__TAURI_INTERNALS__.invoke === 'function');
-    if (hasTauriInvoke) return true;
-    const hasTauriObjects = !!(window.__TAURI__ || window.__TAURI_INTERNALS__);
-    if (!hasTauriObjects) return false;
-    const userAgent = typeof navigator !== 'undefined' ? String(navigator.userAgent || '') : '';
-    return /tauri/i.test(userAgent);
-}
-
-function isEmbeddedIOSRuntime() {
-    if (typeof window === 'undefined') return false;
-    const protocol = String(window.location?.protocol || '').toLowerCase();
-    const hostEnv = String(window.__HOST_ENV || '').trim().toLowerCase();
-    return protocol === 'atome:' || window.__AUV3_MODE__ === true || hostEnv === 'app' || hostEnv === 'auv3';
-}
-
 function isTauriProdWebview() {
-    if (!isInTauriRuntime()) return false;
+    if (!isDesktopTauriRuntime()) return false;
     const host = window.location?.hostname || '';
     return host === 'tauri.localhost';
 }
@@ -115,7 +96,7 @@ function readLocalTauriHttpPort() {
     const raw = window.ATOME_LOCAL_HTTP_PORT || window.__LOCAL_HTTP_PORT || window.__ATOME_LOCAL_HTTP_PORT__ || null;
     const value = Number(raw);
     if (!Number.isFinite(value) || value <= 0) {
-        return isInTauriRuntime() ? 3000 : null;
+        return isDesktopTauriRuntime() ? 3000 : null;
     }
     return value;
 }
@@ -151,7 +132,7 @@ function readExpectedFastifyLoopbackPort(config = null) {
 
 function isDisallowedFastifyLoopbackPort(base, config = null) {
     if (typeof base !== 'string' || !base.trim()) return false;
-    if (!isInTauriRuntime()) return false;
+    if (!isDesktopTauriRuntime()) return false;
     if (window.__SQUIRREL_ALLOW_CUSTOM_FASTIFY_LOOPBACK_PORT__ === true) return false;
     try {
         const parsed = new URL(base.trim());
@@ -167,7 +148,7 @@ function isDisallowedFastifyLoopbackPort(base, config = null) {
 
 function isInvalidFastifyLoopbackBase(base) {
     if (typeof base !== 'string' || !base.trim()) return false;
-    if (!isInTauriRuntime()) return false;
+    if (!isDesktopTauriRuntime()) return false;
     const localPort = readLocalTauriHttpPort();
     if (isDisallowedFastifyLoopbackPort(base)) return true;
     if (!localPort) return false;
@@ -200,7 +181,7 @@ function isLikelyUiLoopbackBase(base, config = null) {
 function isLikelyTauriLoopbackBase(base, config = null) {
     if (typeof base !== 'string' || !base.trim()) return false;
     if (typeof window === 'undefined') return false;
-    if (isInTauriRuntime()) return false;
+    if (isDesktopTauriRuntime()) return false;
     try {
         const parsed = new URL(base.trim());
         if (!isLoopbackHost(parsed.hostname)) return false;
@@ -284,7 +265,7 @@ function applyFastifyGlobalsFromHttpBase(httpBase, config = null) {
 }
 
 function resolveConfigUrl() {
-    const isTauri = isInTauriRuntime();
+    const isTauri = isDesktopTauriRuntime();
     if (isTauri) {
         const localPort = readLocalTauriHttpPort() || 3000;
         return `http://127.0.0.1:${localPort}/server_config.json`;
@@ -314,7 +295,7 @@ function resolveFastifyPortFromConfig(config) {
     const parsedPort = Number(rawPort);
     if (!Number.isFinite(parsedPort) || parsedPort <= 0) return rawPort;
 
-    if (isInTauriRuntime()) {
+    if (isDesktopTauriRuntime()) {
         const localPort = readLocalTauriHttpPort();
         const host = resolveFastifyHostFromConfig(config);
         if (localPort && parsedPort === localPort && isLoopbackHost(host)) {
@@ -331,14 +312,14 @@ function resolveProtocolBase() {
 }
 
 function buildFastifyHttpBase(config) {
-    if (isEmbeddedIOSRuntime()) {
+    if (isEmbeddedIosRuntime()) {
         return resolveTauriProdFastifyHttpBase();
     }
 
     // In browser mode (behind nginx), Fastify is reached via same-origin.
     // Never force :3001 in production web deployments, otherwise HTTPS pages will
     // attempt to talk TLS directly to the Fastify HTTP port and fail.
-    if (!isInTauriRuntime()) {
+    if (!isDesktopTauriRuntime()) {
         const sameOriginBase = getBrowserSameOriginServerUrl();
         if (sameOriginBase) {
             return sameOriginBase;
@@ -386,7 +367,7 @@ export async function loadServerConfigOnce() {
             clearFastifyRuntimeGlobals();
             clearFastifyOverrideStorage();
         }
-        const isTauriRuntime = isInTauriRuntime();
+        const isTauriRuntime = isDesktopTauriRuntime();
         const forceFetch = window.__SQUIRREL_FORCE_SERVER_CONFIG_FETCH__ === true;
         let tauriOverride = isTauriRuntime ? readTauriFastifyOverride() : '';
         const applyFallbackBase = () => {
@@ -404,7 +385,7 @@ export async function loadServerConfigOnce() {
                 );
                 if (!invalidExisting) return;
             }
-            if (isEmbeddedIOSRuntime()) {
+            if (isEmbeddedIosRuntime()) {
                 const fallback = resolveTauriProdFastifyHttpBase();
                 if (fallback) {
                     applyFastifyGlobalsFromHttpBase(fallback, currentConfig);
@@ -427,7 +408,7 @@ export async function loadServerConfigOnce() {
         if (isTauriRuntime && !forceFetch) {
             const config = buildDefaultServerConfig();
             window.__SQUIRREL_SERVER_CONFIG__ = config;
-            applyDebugConfig(config, { isInTauriRuntime });
+            applyDebugConfig(config, { isDesktopTauriRuntime });
             if (tauriOverride) {
                 window.__SQUIRREL_TAURI_FASTIFY_URL__ = tauriOverride;
                 applyFastifyGlobalsFromHttpBase(tauriOverride, config);
@@ -460,7 +441,7 @@ export async function loadServerConfigOnce() {
 
             const config = await res.json();
             window.__SQUIRREL_SERVER_CONFIG__ = config;
-            applyDebugConfig(config, { isInTauriRuntime });
+            applyDebugConfig(config, { isDesktopTauriRuntime });
 
             if (isTauriProdWebview()) {
                 applyFastifyGlobalsFromHttpBase(resolveTauriProdFastifyHttpBase(), config);

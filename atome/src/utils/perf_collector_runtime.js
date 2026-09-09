@@ -194,7 +194,11 @@ export const startPerfCollector = (win = globalThis?.window) => {
         if (late > worstBeatLateMs) worstBeatLateMs = late;
         lastBeatAtMs = now;
     };
-    if (typeof win.setInterval === 'function') win.setInterval(beat, PERF_HEARTBEAT_MS);
+    // La poignée est conservée: sans elle le battement ne pouvait plus être
+    // arrêté, et le collecteur (opt-in `?perf=1`) laissait une minuterie vivante
+    // pour toute la session.
+    let heartbeatId = null;
+    if (typeof win.setInterval === 'function') heartbeatId = win.setInterval(beat, PERF_HEARTBEAT_MS);
 
     // --- Le compteur de frames ----------------------------------------------
     //
@@ -277,7 +281,22 @@ export const startPerfCollector = (win = globalThis?.window) => {
         if (name !== 'perf.gap') reportGap(name, Number(detail?.atMs));
         recordAndReport(detail);
     };
-    win.addEventListener(PERF_EVENT_NAME, (event) => api.record(event?.detail), { passive: true });
+    const onPerfEvent = (event) => api.record(event?.detail);
+    win.addEventListener(PERF_EVENT_NAME, onPerfEvent, { passive: true });
+
+    // Un collecteur qu'on ne peut pas arrêter fausse toute mesure faite APRÈS lui.
+    api.stop = () => {
+        activeMode = null;
+        if (heartbeatId !== null && typeof win.clearInterval === 'function') {
+            win.clearInterval(heartbeatId);
+            heartbeatId = null;
+        }
+        if (typeof win.removeEventListener === 'function') {
+            win.removeEventListener('pointerdown', onPress, { capture: true });
+            win.removeEventListener(PERF_EVENT_NAME, onPerfEvent);
+        }
+    };
+
     win.__squirrelPerf = api;
     return api;
 };

@@ -81,8 +81,23 @@ export function readClientRateKey(request, identity = '') {
     return `${ip}:${String(identity || '').trim()}`;
 }
 
+// The store holds one entry per (bucket, identity) and nothing ever removed the
+// expired ones. It was small while only phone verification used it; login and
+// register feed it every attempt, so expired windows are swept here. The sweep is
+// amortised: it only walks the map when it grows past the threshold, and it
+// deletes strictly expired entries, so it stays O(1) per call on average.
+const RATE_STORE_SWEEP_THRESHOLD = 1000;
+
+const sweepExpiredRateEntries = (now) => {
+    if (authRateStore.size <= RATE_STORE_SWEEP_THRESHOLD) return;
+    for (const [key, entry] of authRateStore) {
+        if (now >= entry.resetAt) authRateStore.delete(key);
+    }
+};
+
 export function enforceAuthIdentityRateLimit(bucket, identity, limit = 8, windowMs = 15 * 60 * 1000) {
     const now = Date.now();
+    sweepExpiredRateEntries(now);
     const key = `${bucket}:${String(identity || '').trim()}`;
     const current = authRateStore.get(key);
     if (!current || now >= current.resetAt) {

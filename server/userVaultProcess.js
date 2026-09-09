@@ -64,6 +64,11 @@ const handleOperation = async (operation, payload = {}) => {
         return committed.map((event) => ({ ...event, inserted: db.wasEventInserted(event) }));
     }
     if (operation === 'event:get') return db.getEvent(payload.event_id || payload.eventId);
+    if (operation === 'history:apply') {
+        const { executeAtomeHistoryCommand } = await import('./atomeHistoryCommands.js');
+        return executeAtomeHistoryCommand({ operation: payload.operation, sourceTxId: payload.sourceTxId,
+            requestId: payload.requestId, authenticatedUserId: principalId });
+    }
     if (operation === 'state:get') return db.getStateCurrent(payload.atome_id || payload.atomeId);
     if (operation === 'state:list') {
         return db.listStateCurrent(payload.project_id || payload.projectId || null, {

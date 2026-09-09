@@ -391,15 +391,21 @@ async function ensurePrincipalIdentityTables(query) {
 }
 
 async function refreshUsersView(query) {
-    await query('run', 'DROP VIEW IF EXISTS users_view');
-    await query('run', `CREATE VIEW users_view AS
+    // DROP then CREATE used to run as two awaited statements outside any
+    // transaction: between them `users_view` -- the view every auth lookup goes
+    // through -- simply did not exist. SQLite DDL is transactional, so both
+    // statements are now applied atomically in a single exec.
+    await query('exec', `BEGIN;
+        DROP VIEW IF EXISTS users_view;
+        CREATE VIEW users_view AS
         SELECT a.atome_id AS user_id,
             MAX(CASE WHEN p.particle_key = 'username' THEN JSON_EXTRACT(p.particle_value, '$') END) AS username,
             MAX(CASE WHEN p.particle_key = 'password_hash' THEN JSON_EXTRACT(p.particle_value, '$') END) AS password_hash,
             a.created_at, a.updated_at, a.last_sync, a.created_source
         FROM atomes a LEFT JOIN particles p ON a.atome_id = p.atome_id
         WHERE a.atome_type = 'user' AND a.deleted_at IS NULL
-        GROUP BY a.atome_id`);
+        GROUP BY a.atome_id;
+    COMMIT;`);
 }
 
 async function runAdoleSchemaMigrations(query) {

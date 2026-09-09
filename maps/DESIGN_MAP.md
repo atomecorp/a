@@ -1,5 +1,52 @@
 # Atome / eVe Design Map
 
+### Explicit composition choices — 2026-09-09
+
+A 500 ms armed overlap reveals Before/After/Front/Behind/Overwrite/Insert beside the pointer using the shared tool surface, metrics, icon registry, skin and popup placement. The original held gesture chooses on release; leaving or Escape cancels. Shared tool factories center content unless a consumer overrides layout. Selection-to-Natural promotion preserves selection/edition instead of silently entering edition.
+
+### Current interaction contracts — 2026-09-09
+
+The M/S palette now contains Mute, Solo, All and None; the selection/deletion actions described in the historical 2026-09-08 checkpoint below are superseded. All/None apply the chosen effect to all canonical children. The existing shared palette and horizontal slider own placement and held gestures.
+
+Dashboard News adds fixed clock/weather projections ahead of scrolling News. Weather uses the existing Finder geocoder and shared panel editor/buttons; external readings have a disposable lifecycle. Guided creation uses the same shared panel and canonical project/News creation. Project schema `project_intent` declares family, goal, draft status and intended audience; publication remains private. Shared button `wrapLabel` passes `wrap_width` through tree normalization/projection to the common text layout owner, preserving font size.
+
+Local/footer timeline progress shares the authored container axis. Composite preview mix uses the same factor as transport; expanded row gaps inherit the parent branch color. Normal video activity is bounded by the decoded source window; Performance holds are explicit plan semantics. Current evidence and remaining acceptance are in `eVe/documentations/INTERACTION_VALIDATION_2026-09-09.md`.
+
+### M/S factors and column gestures — 2026-09-08
+
+`ATOME_MIX_PROPERTY_SCHEMA` extends the shared core visual/audio/container schemas with boolean `mute`/`solo` and 0–1 `mute_strength`/`solo_strength` (default 1). `project_view_mix_projection` derives inherited Mute and sibling Solo factors from canonical records. Source opacity/gain remain unchanged; the engine applies gain once. Fully muted sequential entries are skipped; Solo preserves order and duration. `transport.updateMix` consumes committed property changes.
+
+`project_view_mix_controls` uses shared menu buttons, icon resolution, slider and Delete module loading. The existing selectable-list fixed row exposes M/S gestures. Web `mix_strength_v3` verifies long-press choices, multiple solos, both vertical paint directions and horizontal slider at 50 percent; inspected pixels show attenuation. Select All resolves the full container through the canonical loader. Delete All cold-start acceptance, off-screen/nested scope, media audio and single-item transport remain pending.
+
+
+### Live Mute event and restoration — 2026-09-08
+
+`project_view_surface_events` reads canonical `event.payload.props` for both Mute transitions. The recursive transport recompiles its input records at the current playhead instead of permanently filtering its leaves. The plan carries reusable random orders; entirely hidden containers stay empty. Web `mute_live_fixed_v4` verifies live mute/unmute with actual viewer pixels. Solo, strengths, audio and painting remain pending.
+
+
+### Shared Performance capture — 2026-09-08
+
+`project_view_capture_to_timeline.toggleProjectPerformanceRecording` owns arm/stop/persist for Natural, List and Matrix. The recorder retains its project/container scope; Natural selection uses the existing item trigger with a held lifetime. Contextual rails reuse `projectViewRecordToolDefinition` and the existing recording-state event/pulse. This is separate from media/property recording. Web `natural_performance_v1` verified initial silence, 10.31/2.07-second holds, two clips and persisted replay in List. Direct Natural replay and media-end frame holding remain open.
+
+
+### Selection playback scope — 2026-09-08
+
+Play uses the full multiple selection and preserves its marks. Sequential playback shows only currently active text/media; simultaneous playback composes active leaves. Text-only sequences no longer automatically show preceding/following lines. The current playback scope controls the Stop icon even when the active contextual row is scheduled later in the sequence.
+
+### Performance capture controls — 2026-09-08
+
+During Performance recording, the container Stop icon stays accessible after each triggered row and is red with a gentle two-second opacity cycle. The recording target and selected content remain distinct; selection cannot replace Stop with an object-specific recording tool.
+
+### Structured drop feedback — 2026-09-08
+
+A central overlap composes simultaneously; side overlaps compose before/after. These zones now share a 500 ms progress indication and translated intention badge. Reordering at the top/bottom remains immediate. The dragged media card retains its source preview above its own background. Runtime acceptance currently proves center combination, short-drop rejection, ordering and persistence; side-zone/nested/history acceptance remains pending.
+
+
+Vector/style checkpoint (2026-09-08): the contextual BevyUI tree owns SVG point handles; the detached SVG model and canonical gesture commits remain the source of editing behavior. Public hasContext/isEditing methods delegate to the same contextual owner. Shared color conversion provides RGBA handle colors. vector_handles_v4 verifies real handle movement and inspected pixels. Whole-object SVG Color no longer reads DOM hosts or an unselected legacy layer context; its targeted contract test passes, with later Web whole-object color acceptance in vector_structured_color_v1.
+
+Interaction presentation (2026-09-08): shared tool labels use 12 px and six displayed characters (five plus ellipsis when truncated); full labels remain available to accessibility. First-level palettes open perpendicular to their rail without moving parent tools, using viewport bounds and handedness. Context selection and edition are distinct, with stronger outlines for selected objects. Draw exposes shared size, round/flat type and opacity controls; neutral SVG tint preserves authored color. List/Matrix text previews display rich styling and the shared blue selection ribbon. Matrix and List cumulative selection and ribbon pixels passed structured_text_highlight_v2; later layout, vector handles and Mute/Solo evidence is recorded in the follow-up below.
+
+
 History input consolidation (2026-09-07): default keyboard shortcuts dispatch canonical Undo/Redo commands and leave editable text to its own history. The legacy HTML panel no longer owns keyboard undo. Undo refreshes the persisted journal and excludes transactions already undone; depth transactions remain parent-preserving and reading-order-independent. Canonical failures propagate through tool results. See tests/eve/history_shortcuts.test.mjs and tests/eve/timeline_undo_source.test.mjs.
 
 Dashboard status projection (2026-09-07): loading and error text uses the shared panel-state component with explicit text depth above Dashboard content. A transparent parent does not provide a rendered stacking surface. Failure text is therefore checked at the projected-record boundary.
@@ -278,8 +325,6 @@ Related sources:
 - `eVe/elements/look/matrix_preset.js`
 - `eVe/elements/look/utility_presets.js`
 - `eVe/elements/look/preset_chrome.js`
-- `eVe/elements/look/preset_comm_table.js`
-- `eVe/elements/look/preset_comm_surface.js`
 - `eVe/elements/look/preset_controls.js`
 - `eVe/elements/look/tool_theme.js`
 
@@ -299,7 +344,6 @@ Compatibility presets factor repeated declaration groups only inside their exist
 
 Primary sources:
 
-- `eVe/intuition/tools/map.js`
 - `eVe/elements/eVe_look.js`
 
 Role:
@@ -529,7 +573,6 @@ Primary sources:
 - `eVe/intuition/tools/core/tool_definition_ssot.js`
 - `eVe/intuition/tools/core/tool_runtime.js`
 - `eVe/intuition/projection/button.js`
-- `eVe/intuition/projection/tool_strip.js`
 - `eVe/intuition/shared/slider_tool_dom.js`
 - `eVe/intuition/shared/tool_drag.js`
 
@@ -601,8 +644,6 @@ Primary sources:
 - `eVe/intuition/ribbon/bevy_ui_product_registry.js`
 - `eVe/intuition/ribbon/bevy_ui_product_runtime.js`
 - `eVe/domains/rendering/bevy_ui_runtime.js`
-- `eVe/intuition/menu/visual/toolbox_styles.js`
-- `eVe/intuition/menu/visual/toolbox_runtime_visual.js`
 - `eVe/intuition/flower/menu_layout.js`
 - `eVe/intuition/flower/menu_items.js`
 - `eVe/intuition/flower/context_selection.js`
@@ -648,7 +689,6 @@ Primary sources:
 - `eVe/intuition/panels/visual/panel_visual_tokens.js`
 - `eVe/intuition/panels/core/panel_creator.js`
 - `eVe/intuition/components/visual/component_visual_tokens.js`
-- `eVe/intuition/components/core/component_creator.js`
 
 Role:
 
@@ -686,14 +726,7 @@ Boundary status: Closed product visual layer. Generic Atome object contracts rem
 
 Primary sources:
 
-- `eVe/domains/mtrax/ui/styles.js`
-- `eVe/domains/mtrax/ui/embedded_footer_styles.js`
-- `eVe/domains/mtrax/ui/loop_cells_styles.js`
-- `eVe/domains/mtrax/ui/preview_styles.js`
-- `eVe/domains/mtrax/ui/docked_renderer_runtime.js`
 - `eVe/domains/mtrax/preview/`
-- `eVe/intuition/tools/molecule/panel/index.js`
-- `eVe/intuition/tools/molecule/footer_tools_contract.js`
 
 Role:
 
@@ -729,7 +762,6 @@ Design rule: MTraX/Molecule visuals are closed product workflow design unless pr
 Static CSS files currently found:
 
 - `atome/src/css/squirrel.css`
-- `atome/src/js/leaflet.min.css`
 - `dist/squirrel.css`
 - `node_modules/leaflet/dist/leaflet.css`
 
@@ -1061,3 +1093,37 @@ The source for every principle below is the mission, supplemented by the named e
 The user was asked about: global unit/allowed ratios/spacing, exact square scope, and local-versus-shared presentation changes across views. A fourth question concerns whether the competing Kata/Firecracker conceptual reference is a separate ThermUSS variant or replaces the eVe isolation target. Full wording and consequences are retained in the audit registry. No answer is inferred from elapsed time.
 
 Possible directions, **not validated**: use one named module unit with explicitly allowed size/spacing relations; specify square requirements by component role; define the ownership of view-local zoom/placement separately from canonical object geometry. Do not implement these suggestions or copy them into normative rules without product validation.
+
+### Structured presentation campaign — 2026-09-08
+
+List rows and project band use the main-menu tool height, shared hierarchy/mix/name/preview columns and handedness. Names have inset button blocks; timeline bounds match exactly. Gray playheads span the full row with 12-pixel capture width. The 10-pixel splitter has a centered grip; project accordion hides rows while retaining the chosen split. Web layout_scrub_v5 verifies right-handed geometry and both scrub scopes; layout_left_v3 verifies left-handed layout before the latest scrub additions.
+
+### Structured selection transport convergence — 2026-09-08
+
+project_view_surface_context_runtime.playSelection owns both single and multiple structured Play. project_view_playback_follow retargets that same transport; the footer no longer starts a second item clock. project_view_contextual_rail owns the shared project/Molecule Play Mode palette, with canonical playback_rules writes and immediate icon refresh. The recursive compiler skips full Mute only in sequential/random parents; simultaneous silence retains its timeline duration. Web selection_recursive_v2 and single_mix_recursive_v9 validate these paths.
+
+### Live structured draft projection — 2026-09-08
+
+project_view_create_draft_runtime extends the existing visual-changed event with record/project_id. project_view_surface_events updates the content projection before rendering, preventing its older record from replacing the current drawn SVG. Draw drafts use #ffffff00 until canonical geometry sets neutral #ffffff; SVG stroke paint owns brush color. Web draw_live_projection_fixed_v5 verifies held-pointer live pixels in List/Matrix.
+
+### Text style focus contract — 2026-09-08
+
+The existing text_editing_session accepts retainOnBlur (default false); text_bridge enables it for scene objects. Losing keyboard focus to a style tool stops the caret but retains the active projected range. Tab/explicit commit ends the scene edit. project_scene_text_edit_state invalidates ranges by lifecycle and collapse rather than a timer. Web partial_text_color_commit_v3 verifies partial color in both structured viewers and persistence after commit.
+
+### Interaction campaign convergence — 2026-09-08
+
+List/Matrix controllers apply canonical selection before project_view_playback_follow receives selectionIds; an empty set stops the recursive transport. svg_draw_runtime routes inactive-brush opacity to applySelectionStyleMutation; active-brush opacity remains a brush setting. project_view_list_view retains the shared virtualizer's computed window and uses it for transport updates, preventing bottom rows from disappearing after scrub. No new state authority or renderer.
+
+The real-pointer harness remains molecule_eve_ui_acceptance_probe; molecule_ui_acceptance_support owns input geometry, molecule_ui_image_evidence owns pixel comparisons, molecule_ui_list_acceptance owns the List journey, molecule_ui_timeline_acceptance and molecule_ui_timeline_gestures own Timeline checks, and molecule_ui_media_fixture/hierarchy_gestures/media_playback_evidence own the respective layered-media responsibilities. Existing top-level entrypoints are retained.
+
+### Verified interaction presentation follow-up — 2026-09-08
+
+Molecule Matrix tiles now display the shared composite preview of their children. Text edit/select cycles preserve viewer, menu, row and canvas geometry; blue ranges remain visible when a style tool takes keyboard focus. Draw control-point handles, flat/round strokes and selected opacity have real-pointer Web evidence. Full-height gray scrub handles, tool-height rows/project footer, opposite-handed layout, accordion and splitter are verified by layout_scrub_v5/layout_scroll_fixed. M/S source appearance and actual audio gains restore after attenuation is disabled. These checks do not establish a quantified performance improvement.
+
+Choice palettes (2026-09-08): Choice palettes display the selected child icon while retaining the parent label and help text. View switches immediately among Layout, List and Matrix icons; Play Mode shows its active playback mode. choice_icons_vector_history_verified confirms the visible View changes.
+
+### Web interaction checkpoint 2026-09-09 — empty ranges and Left restoration
+
+A local scrub cursor follows the requested common-axis position through empty ranges; the viewer is black there. Parent-local pointer geometry and its visible bar must translate together in the shared overlay. Late profile hydration must align the main menu, contextual rail, row names and footer with the same handedness; changing Home preference and reloading are separate acceptance cases.
+
+Project List bottom spacing (2026-09-09): the shared virtualized list accepts minimumViewportHeight (default 80); project timelines use zero so one tool-height row fits exactly. Virtual content excludes its final inter-row gap. The footer uses the same four-pixel separation as adjacent rows.

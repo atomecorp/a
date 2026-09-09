@@ -102,6 +102,20 @@ evidence, a changed verification status, a known limitation, or an
 evidence-based recommendation. The unified final report defined by module 07
 must state whether the State File was updated.
 
+## Documentation and architecture entry points
+
+Paths below are relative to the repository root; links resolve from this file.
+
+- [Atome documentation index](../atome/documentations/README.md): framework contracts and API/platform documentation.
+- [eVe documentation index](../eVe/documentations/README.md): product and runtime contracts.
+- [Code map](../maps/CODEMAP.md): source structure, file/module responsibilities, canonical owners and reusable entry points.
+- [Architecture map](../maps/ARCHITECTURE_MAP.md): cross-layer dependencies, lifecycle and ownership boundaries.
+- [API map](../maps/API_MAP.md): interfaces, runtime exposure and operation owners.
+- [Design map](../maps/DESIGN_MAP.md): shared visual contracts, tokens and component owners.
+- [Audit graphs](../atome/documentations/graphs/): scoped call, state, event and lifecycle graphs; consult the relevant graph's evidence status before relying on it.
+
+Use these existing maps to locate the affected owners before modifying code, and verify the relevant source. The maps are navigation and architectural contracts, not a guarantee that every file or historical graph has been exhaustively validated.
+
 ## Active modular rule set
 
 This file is the only entry point. The active rule set is now distributed across the following mandatory modules:

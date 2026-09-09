@@ -894,15 +894,50 @@ export async function listAtomes(ownerId, options = {}) {
         atomes = await getAtomesAccessibleToUser(ownerId, options);
     }
 
-    // Load particles for each atome
-    const result = [];
-    for (const atome of atomes) {
-        const fullAtome = await getAtome(atome.atome_id);
-        if (fullAtome) {
-            result.push(fullAtome);
+    return await hydrateStoredAtomes(atomes);
+}
+
+// Particle loading for a batch of already-fetched rows.
+//
+// The previous shape called getAtome(id) per row, and getAtome re-reads the
+// `atomes` row the caller already holds before reading its particles: a listing
+// of 100 atomes cost 1 + 100x2 = 201 sequential SQLite round-trips, each with a
+// fresh `prepare()`. One `IN (...)` query returns every particle instead, and the
+// rows in hand are reused. Chunked to stay under SQLite's bound-parameter limit.
+const PARTICLE_FETCH_CHUNK = 400;
+
+async function hydrateStoredAtomes(rows) {
+    const list = Array.isArray(rows) ? rows.filter((row) => row?.atome_id) : [];
+    if (!list.length) return [];
+
+    const propertiesById = new Map();
+    const kindById = new Map();
+    for (let offset = 0; offset < list.length; offset += PARTICLE_FETCH_CHUNK) {
+        const ids = list.slice(offset, offset + PARTICLE_FETCH_CHUNK).map((row) => row.atome_id);
+        const particles = await query('all',
+            `SELECT atome_id, particle_key, particle_value FROM particles
+             WHERE atome_id IN (${ids.map(() => '?').join(', ')}) AND value_type != 'deleted'`,
+            ids
+        );
+        for (const particle of particles || []) {
+            let value;
+            try { value = JSON.parse(particle.particle_value); } catch { value = particle.particle_value; }
+            if (particle.particle_key === 'kind') { kindById.set(particle.atome_id, value); continue; }
+            let bucket = propertiesById.get(particle.atome_id);
+            if (!bucket) { bucket = {}; propertiesById.set(particle.atome_id, bucket); }
+            bucket[particle.particle_key] = value;
         }
     }
 
+    const result = [];
+    for (const row of list) {
+        const projected = projectStoredAtome({
+            row,
+            properties: propertiesById.get(row.atome_id) || {},
+            kind: kindById.get(row.atome_id) ?? null
+        });
+        if (projected) result.push(projected);
+    }
     return result;
 }
 

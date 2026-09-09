@@ -6,7 +6,7 @@ import {
 } from './molecule_ui_drop_core.mjs';
 import {
     assertNoParasites, chooseMoleculePlaybackMode, disarmMemberPlayback,
-    memberPlayTool, playbackSnapshot, startMoleculePlayback,
+    memberPlayTool, playbackSnapshot, startMoleculePlayback, structuredRows,
     waitForContextualTarget, waitForPlaybackEnd
 } from './molecule_ui_drop_playback_support.mjs';
 
@@ -36,10 +36,11 @@ export const validateMatrixMoleculeDrop = async ({ page, project, fixture, repor
             nodeId: resolved.nodeId, treeId: 'eve_bevy_ui_project_view', step: 2
         });
     };
-    let source = await tile(0); let target = await tile(1);
+    const initialRows = await structuredRows(page);
+    let source = await tileForRecord(fixture.spareId); let target = await tileForRecord(fixture.imageId);
     assert(source && target, 'matrix_insert_targets_missing');
     const insertion = await structuredDropTarget(page, {
-        layout: 'matrix', sourceId: fixture.spareId, targetIndex: 1, kind: 'insert', edge: 'after'
+        layout: 'matrix', sourceId: fixture.spareId, targetIndex: initialRows.find((row) => row.id === fixture.imageId).index, kind: 'insert', edge: 'after'
     });
     assert(insertion, 'matrix_insert_geometry_missing');
     let insertPreview = false;
@@ -73,13 +74,27 @@ export const validateMatrixMoleculeDrop = async ({ page, project, fixture, repor
         layout: 'matrix', sourceId: fixture.imageId, targetIndex: audioIndex, kind: 'combine'
     });
     assert(overlap, 'matrix_overlap_geometry_missing');
+    await drag({ page, source, destination: overlap, steps: 1, holdMs: 50 });
+    await wait(650);
+    const earlyDrop = await page.evaluate(async (ids) => {
+        const states = await Promise.all(ids.map((id) => window.Atome.getStateCurrent(id)));
+        return states.map((state) => String(state?.parent_id || state?.props?.parent_id || state?.properties?.parent_id || state?.meta?.parent_id || ''));
+    }, [fixture.imageId, fixture.audioId]);
+    assert(earlyDrop.every((id) => id === project.id), `matrix_combined_before_dwell:${JSON.stringify(earlyDrop)}`);
     await drag({
-        page, source, destination: overlap, holdMs: 700,
-        armedShot: () => screenshot({
+        page, source, destination: overlap, holdMs: 700, compositionChoice: 'front',
+        armedShot: async () => {
+            report.matrixDropFeedback = await page.evaluate(() => {
+                const tree = window.eveBevyUiRuntime?.state?.trees?.get('eve_bevy_ui_project_view');
+                const found = [];
+                const visit = (node) => { if (!node) return; if (String(node.id).startsWith('project_view_drop_')) found.push({ id: node.id, text: node.text, style: node.style }); (node.children || []).forEach(visit); };
+                visit(tree?.sourceTree?.root || tree?.tree?.root || tree?.root); return found;
+            });
+            return screenshot({
             page, report, outDir,
             name: 'drop_matrix_armed_before_release',
             preservePointer: true
-        })
+        }); }
     });
     const molecule = await waitForMolecule(page, { sourceId: fixture.imageId, targetId: fixture.audioId });
     await reloadProjection(page, project.id);
@@ -145,9 +160,9 @@ export const validateMatrixMoleculeDrop = async ({ page, project, fixture, repor
         assert(play, `matrix_member_play_missing:${memberId}`);
         await clickCanvasTarget(page, play);
         const started = await waitFor(page, async (id) => {
-            const { projectViewPlayback } = await import('/eVe/domains/rendering/project_view_playback_runtime.js');
-            const state = projectViewPlayback.readState();
-            return { ok: state.playing === true && state.playingIds.includes(id), state };
+            const { projectViewTransport } = await import('/eVe/domains/rendering/project_view_transport_runtime.js');
+            const state = projectViewTransport.read();
+            return { ok: state.playing === true && state.activeLeafIds.includes(id), state };
         }, memberId);
         await wait(400);
         await screenshot({ page, report, outDir, name: `drop_matrix_member_${memberId === fixture.audioId ? 'audio' : 'image'}_progress` });

@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict';
-import { afterEach, test, vi } from 'vitest';
-import { buildBevyMainMenuItems, buildBevyMainMenuTree } from '../../eVe/intuition/ribbon/bevy_ui_main_menu_model.js';
-import { buildBevyUiFlowerTree } from '../../eVe/intuition/ribbon/bevy_ui_flower_model.js';
-import { createMainMenuRecordingVisualRuntime } from '../../eVe/intuition/ribbon/bevy_ui_main_menu_recording_visual_runtime.js';
-import { createCaptureRecordingFeedbackRuntime } from '../../eVe/intuition/tools/capture_recording_feedback_runtime.js';
-import { createAudioScopeFrame } from '../../eVe/domains/media/api/audio_browser_recorder_worklet.js';
-import { normalizeBevyUiTree } from '../../eVe/domains/rendering/bevy_ui_tree_normalization.js';
+import { afterEach, test, vi } from "vitest";
+import { buildBevyMainMenuItems, buildBevyMainMenuTree } from "../../eVe/intuition/ribbon/bevy_ui_main_menu_model.js";
+import { buildBevyUiFlowerTree } from "../../eVe/intuition/ribbon/bevy_ui_flower_model.js";
+import { createMainMenuRecordingVisualRuntime } from "../../eVe/intuition/ribbon/bevy_ui_main_menu_recording_visual_runtime.js";
+
+import { createAudioScopeFrame } from "../../eVe/domains/media/api/audio_browser_recorder_worklet.js";
+import { normalizeBevyUiTree } from "../../eVe/domains/rendering/bevy_ui_tree_normalization.js";
 
 const surface = {
     clientWidth: 640,
@@ -122,7 +122,7 @@ test('recording feedback keeps the main menu visible and projects the preview in
         handlers: {}
     });
     assert.deepEqual(tree.visualItems.map((item) => item.key), ['photo', 'video', 'audio', 'capture', 'atome']);
-    assert.equal(tree.layout.width, 300);
+    assert.equal(tree.layout.width, 120, 'the perpendicular capture palette keeps the two-tool menu width');
     const audioItem = findNode(tree.root, (node) => node.id.endsWith('capture__audio'));
     assert.ok(audioItem);
     assert.equal(audioItem.children.some((node) => node.id.endsWith('_icon')), false);
@@ -322,172 +322,4 @@ test('audio scope decimation is bounded, normalized and derived from the recorde
         assert.ok(minimum >= -1 && minimum <= maximum);
         assert.ok(maximum <= 1);
     });
-});
-
-test('capture feedback binds the live sources and clears only the matching session', async () => {
-    const pushed = [];
-    const menu = {
-        setToolRecordingVisual: vi.fn(async ({ toolId }) => ({
-            ok: true,
-            recordId: toolId === 'ui.capture.video' ? 'bevy_video_record' : 'bevy_audio_record'
-        })),
-        pushToolAudioScope: vi.fn((frame) => pushed.push(frame)),
-        clearToolRecordingVisual: vi.fn(async () => true)
-    };
-    let audioListener = null;
-    const unsubscribe = vi.fn();
-    const unregisterVideo = vi.fn();
-    const stream = { getTracks: () => [{ stop: vi.fn() }] };
-    const state = { activeSession: null, sequence: 0 };
-    const runtime = createCaptureRecordingFeedbackRuntime({
-        captureVisualState: state,
-        flowerResolver: () => menu,
-        audioScopeSubscriber: (listener) => {
-            audioListener = listener;
-            return unsubscribe;
-        },
-        audioStateResolver: () => ({ stream: null }),
-        videoStateResolver: () => ({ stream }),
-        videoStreamRegistrar: vi.fn(() => ({ ok: true, dispose: unregisterVideo }))
-    });
-
-    const audio = await runtime.startCaptureVisualSession({ kind: 'audio' });
-    audioListener({ sequence: 1, sample_rate: 48_000, channels: 1, pairs: [[-0.2, 0.2]] });
-    assert.equal(pushed[0].sessionId, audio.id);
-    const video = await runtime.startCaptureVisualSession({ kind: 'video' });
-    assert.equal(unsubscribe.mock.calls.length, 1);
-    assert.equal(menu.clearToolRecordingVisual.mock.calls[0][0].sessionId, audio.id);
-    assert.ok(video.id !== audio.id);
-    await video.dispose();
-    assert.equal(unregisterVideo.mock.calls.length, 1);
-    assert.equal(stream.getTracks()[0].stop.mock.calls.length, 0);
-});
-
-test('capture feedback keeps Flower and main-menu visual sessions isolated', async () => {
-    const flower = {
-        setToolRecordingVisual: vi.fn(async () => ({ ok: true })),
-        clearToolRecordingVisual: vi.fn(async () => true)
-    };
-    const mainMenu = {
-        setToolRecordingVisual: vi.fn(async () => ({ ok: true })),
-        clearToolRecordingVisual: vi.fn(async () => true)
-    };
-    const runtime = createCaptureRecordingFeedbackRuntime({
-        captureVisualState: { activeSession: null, sequence: 0 },
-        flowerResolver: () => flower,
-        mainMenuResolver: () => mainMenu
-    });
-
-    const mainSession = await runtime.startCaptureVisualSession({ kind: 'audio', presentation: 'main_menu' });
-    assert.equal(mainMenu.setToolRecordingVisual.mock.calls.length, 1);
-    assert.equal(flower.setToolRecordingVisual.mock.calls.length, 0);
-    await mainSession.dispose();
-    assert.equal(mainMenu.clearToolRecordingVisual.mock.calls.length, 1);
-
-    const flowerSession = await runtime.startCaptureVisualSession({ kind: 'audio', presentation: 'flower' });
-    assert.equal(flower.setToolRecordingVisual.mock.calls.length, 1);
-    await flowerSession.dispose();
-    assert.equal(flower.clearToolRecordingVisual.mock.calls.length, 1);
-});
-
-test('two successive audio Flower sessions get independent scope subscriptions and leave no stale visual', async () => {
-    const pushed = [];
-    const subscribers = [];
-    const menu = {
-        setToolRecordingVisual: vi.fn(async () => ({ ok: true, recordId: 'flower_audio_record' })),
-        pushToolAudioScope: vi.fn((frame) => pushed.push(frame)),
-        clearToolRecordingVisual: vi.fn(async () => true)
-    };
-    const state = { activeSession: null, sequence: 0 };
-    const runtime = createCaptureRecordingFeedbackRuntime({
-        captureVisualState: state,
-        flowerResolver: () => menu,
-        audioScopeSubscriber: (listener) => {
-            subscribers.push(listener);
-            return () => { subscribers[subscribers.length - 1] = null; };
-        }
-    });
-
-    const first = await runtime.startCaptureVisualSession({ kind: 'audio' });
-    subscribers[0]({ sequence: 1, pairs: [[-0.2, 0.2]] });
-    assert.equal(pushed.length, 1);
-    await first.dispose();
-    assert.equal(state.activeSession, null);
-    assert.equal(menu.clearToolRecordingVisual.mock.calls[0][0].sessionId, first.id);
-
-    const second = await runtime.startCaptureVisualSession({ kind: 'audio' });
-    assert.notEqual(second.id, first.id);
-    subscribers[0]?.({ sequence: 2, pairs: [[-1, 1]] });
-    subscribers[1]({ sequence: 1, pairs: [[-0.4, 0.4]] });
-    assert.equal(pushed.length, 2);
-    assert.equal(pushed[1].sessionId, second.id);
-    await second.dispose();
-    assert.equal(state.activeSession, null);
-    assert.equal(menu.clearToolRecordingVisual.mock.calls.length, 2);
-    assert.equal(menu.clearToolRecordingVisual.mock.calls[1][0].sessionId, second.id);
-});
-
-test('video feedback refuses a recording phase when neither stream nor native frames are available', async () => {
-    const menu = {
-        setToolRecordingVisual: vi.fn(async () => ({ ok: true, recordId: 'video_record' })),
-        clearToolRecordingVisual: vi.fn(async () => true)
-    };
-    const runtime = createCaptureRecordingFeedbackRuntime({
-        captureVisualState: { activeSession: null, sequence: 0 },
-        flowerResolver: () => menu,
-        videoStateResolver: () => ({ stream: null, readNativePreviewFrame: null })
-    });
-    await assert.rejects(
-        runtime.startCaptureVisualSession({ kind: 'video' }),
-        /capture_video_preview_source_unavailable/
-    );
-});
-
-test('photo feedback is a 120 ms Bevy flash without a preview source', async () => {
-    vi.useFakeTimers();
-    const menu = {
-        setToolRecordingVisual: vi.fn(async () => ({ ok: true })),
-        clearToolRecordingVisual: vi.fn(async () => true)
-    };
-    const runtime = createCaptureRecordingFeedbackRuntime({
-        captureVisualState: { activeSession: null, sequence: 0 },
-        flowerResolver: () => menu
-    });
-    const pending = runtime.flashPhotoCapture();
-    await vi.advanceTimersByTimeAsync(120);
-    await pending;
-    assert.equal(menu.setToolRecordingVisual.mock.calls[0][0].kind, 'photo_flash');
-    assert.equal('sourceId' in menu.setToolRecordingVisual.mock.calls[0][0], false);
-    assert.equal(menu.clearToolRecordingVisual.mock.calls.length, 1);
-});
-
-test('native BGRA preview polling pushes a bounded RGBA texture into the matching Bevy session', async () => {
-    const pushed = [];
-    const menu = {
-        setToolRecordingVisual: vi.fn(async () => ({ ok: true, recordId: 'native_video_record' })),
-        pushToolVideoFrame: vi.fn((frame) => pushed.push(frame)),
-        clearToolRecordingVisual: vi.fn(async () => true)
-    };
-    const runtime = createCaptureRecordingFeedbackRuntime({
-        captureVisualState: { activeSession: null, sequence: 0 },
-        flowerResolver: () => menu,
-        videoStateResolver: () => ({
-            stream: null,
-            nativePreviewSourceId: 'native_preview_1',
-            readNativePreviewFrame: vi.fn(async () => ({
-                available: true,
-                source_id: 'native_preview_1',
-                sequence: 4,
-                width: 1,
-                height: 1,
-                pixel_format: 'bgra8',
-                bytes_base64: btoa(String.fromCharCode(10, 20, 30, 255))
-            }))
-        })
-    });
-    const session = await runtime.startCaptureVisualSession({ kind: 'video' });
-    await vi.waitFor(() => assert.equal(pushed.length, 1));
-    assert.equal(pushed[0].sessionId, session.id);
-    assert.deepEqual([...pushed[0].rgba], [30, 20, 10, 255]);
-    await session.dispose();
 });

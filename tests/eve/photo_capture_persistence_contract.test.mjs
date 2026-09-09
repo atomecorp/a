@@ -28,7 +28,7 @@ test('photo persistence validates JPEG bytes and commits complete canonical meta
         ensureProjectId: vi.fn(async () => 'project_a'),
         getCloudAuthToken: () => '',
         getFastifyBaseUrl: () => 'http://127.0.0.1:3000',
-        isTauriRuntime: () => false
+        isLocalNativeBackendRuntime: () => false
     }));
     vi.doMock('../../eVe/domains/media/api/video_api_state.js', () => ({
         getIosNativeInvoke: () => null
@@ -113,7 +113,7 @@ test('photo APIs fail when the final project Atome commit fails', async () => {
         ensureProjectId: vi.fn(async () => 'project_a'),
         getCloudAuthToken: () => '',
         getFastifyBaseUrl: () => 'http://127.0.0.1:3000',
-        isTauriRuntime: () => false
+        isLocalNativeBackendRuntime: () => false
     }));
     vi.doMock('../../eVe/domains/media/api/video_api_state.js', () => ({
         getIosNativeInvoke: () => invoke
@@ -162,7 +162,7 @@ test('Tauri photo persistence keeps the local recordings route explicit', async 
     vi.doMock('../../eVe/domains/media/api/media_api_shared.js', () => ({
         getCloudAuthToken: () => '',
         getFastifyBaseUrl: () => '',
-        isTauriRuntime: () => true
+        isLocalNativeBackendRuntime: () => true
     }));
     vi.doMock('../../eVe/domains/media/api/video_api_state.js', () => ({
         getIosNativeInvoke: () => null

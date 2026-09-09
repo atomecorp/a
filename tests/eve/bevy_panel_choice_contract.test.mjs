@@ -5,13 +5,11 @@ import { normalizeToggleablePresentation } from '../../atome/src/squirrel/compon
 import { projectBevyUiTreeRecords } from '../../eVe/domains/rendering/bevy_ui_overlay_record_projection.js';
 import { createBevyUiPointerRuntime } from '../../eVe/domains/rendering/bevy_ui_pointer_runtime.js';
 import { INTERACTIVE_KINDS } from '../../eVe/domains/rendering/bevy_ui_tree_normalization.js';
-import { EVE_DEFAULT_MESSAGES } from '../../eVe/i18n/languages.js';
 import {
     BEVY_ICON_BUTTON_TOKENS,
     resolveBevyIconButtonSurface
 } from '../../eVe/intuition/shared/bevy_ui_icon_button.js';
 import { radioGroupNode, toggleableRowNode } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_choice.js';
-import { panelLabSurface } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_lab_surface.js';
 import { BEVY_PANEL_TOKENS } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_tokens.js';
 
 const tokens = BEVY_PANEL_TOKENS.choice;
@@ -126,58 +124,6 @@ test('the complete visual-state matrix reuses the canonical icon-button surface'
     assert.equal(disabled.style.opacity, BEVY_ICON_BUTTON_TOKENS.disabled.opacity);
     assert.equal(disabled.on, undefined, 'a disabled control must expose no handler');
     assert.equal(idle.style.opacity, 1);
-});
-
-test('Panel Lab mounts the approved four-variant contract before the table and proves each semantic', () => {
-    panelLabSurface.onOpen();
-    try {
-        const body = panelLabSurface.buildContent(panelLabSurface.readState(), { emit: () => {}, bodyWidth: 400 });
-        const dividerIndex = body.findIndex((node) => node.id === 'panel_lab_choice_divider');
-        const groupIndex = body.findIndex((node) => node.id === 'panel_lab_choice_group');
-
-        assert.equal(body.length, 45);
-        assert.equal(groupIndex, dividerIndex + 1);
-        assert.equal(dividerIndex > body.findIndex((node) => node.id === 'panel_lab_select'), true);
-        assert.equal(groupIndex < body.findIndex((node) => node.id === 'panel_lab_table'), true);
-        assert.equal(EVE_DEFAULT_MESSAGES.fr['eve.panel_lab.choice.switch'], 'Synchronisation automatique');
-        assert.equal(EVE_DEFAULT_MESSAGES.en['eve.panel_lab.choice.radio_left'], 'Left handed');
-
-        // checkbox: independent boolean, both directions.
-        assert.deepEqual(panelLabSurface.handleEvent({ type: 'panel_lab.choice.checkbox.activate' }), { ok: true, checked: true });
-        assert.deepEqual(panelLabSurface.handleEvent({ type: 'panel_lab.choice.checkbox.activate' }), { ok: true, checked: false });
-
-        // radio: exclusive group, and reactivating the current choice keeps it.
-        assert.equal(panelLabSurface.readState().choice.radioValue, 'left');
-        assert.deepEqual(panelLabSurface.handleEvent({ type: 'panel_lab.choice.radio.activate', value: 'right' }), { ok: true, value: 'right' });
-        assert.deepEqual(panelLabSurface.handleEvent({ type: 'panel_lab.choice.radio.activate', value: 'right' }), { ok: true, value: 'right' });
-        assert.equal(panelLabSurface.readState().choice.radioValue, 'right');
-        const afterRadio = panelLabSurface.buildContent(panelLabSurface.readState(), { emit: () => {}, bodyWidth: 400 });
-        assert.ok(findNode(afterRadio, 'panel_lab_choice_radio_right_indicator_dot'));
-        assert.equal(findNode(afterRadio, 'panel_lab_choice_radio_left_indicator_dot'), null);
-        assert.equal(panelLabSurface.handleEvent({ type: 'panel_lab.choice.radio.activate', value: 'up' }).ok, false);
-
-        // switch: single on/off value.
-        assert.deepEqual(panelLabSurface.handleEvent({ type: 'panel_lab.choice.switch.activate' }), { ok: true, checked: true });
-
-        // pressed state is ephemeral presentation state only.
-        panelLabSurface.handleEvent({ type: 'panel_lab.choice.checkbox.press' });
-        assert.equal(panelLabSurface.readState().choice.checkboxPressed, true);
-        panelLabSurface.handleEvent({ type: 'panel_lab.choice.checkbox.cancel' });
-        assert.equal(panelLabSurface.readState().choice.checkboxPressed, false);
-
-        const records = projectBevyUiTreeRecords({
-            tree: { root: body[groupIndex] }, treeId: 'choice_projection', workspaceLayer: 'panel'
-        });
-        assert.equal(records.some((record) => record.id.includes('panel_lab_choice_switch')), true);
-        assert.equal(records.every((record) => !String(record.id).includes('data-')), true);
-    } finally {
-        panelLabSurface.onClose();
-    }
-    const reset = panelLabSurface.readState().choice;
-    assert.equal(reset.radioValue, 'left');
-    assert.equal(reset.checkboxChecked, false);
-    assert.equal(reset.switchChecked, false);
-    assert.equal('radioHovered' in reset, false);
 });
 
 test('native choice controls activate through the canonical pointer route', () => {

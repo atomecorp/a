@@ -17,6 +17,13 @@ export const validateNaturalMoleculeDrop = async ({ page, project, fixture, repo
     await switchView(page, project.id, 'natural');
     await screenshot({ page, report, outDir, name: 'drop_natural_before' });
     const spare = await recordCenter(page, project.id, (record) => record.id === fixture.spareId, { sceneCoordinates: true });
+    await clickCanvasTarget(page, spare);
+    const selectionContext = await waitFor(page, async (id) => {
+        const registry = await import('/eVe/intuition/runtime/eve_intuition/atome_contextual_edit_registry.js');
+        const rail = registry.getAtomeContextualEditApi()?.readState();
+        return { ok: rail?.activeAtomeId === id && rail?.contextLevel === 'selection' && rail?.menuVisible === true, rail };
+    }, fixture.spareId);
+    assert(selectionContext.ok, 'natural_selection_context_missing');
     await drag({
         page, source: spare,
         destination: { ...spare, x: spare.x, y: spare.y + 250, coordinate_source: 'scene' }
@@ -29,7 +36,7 @@ export const validateNaturalMoleculeDrop = async ({ page, project, fixture, repo
     const target = await recordCenter(page, project.id, (record) => record.id === fixture.audioId, { sceneCoordinates: true });
     let armed = null;
     const dragTrace = await drag({
-        page, source, destination: target, holdMs: 700,
+        page, source, destination: target, holdMs: 700, compositionChoice: 'front',
         armedShot: async () => {
             const pointBeforeScreenshot = await page.evaluate(async () => {
                 const { getRenderSurfaceState } = await import('/eVe/domains/rendering/surface_runtime.js');

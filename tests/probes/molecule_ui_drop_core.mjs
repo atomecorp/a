@@ -78,6 +78,17 @@ export const switchView = async (page, projectId, mode) => {
         const state = readProjectViewSurfaceState();
         return { ok: state.mode === expected, mode: state.mode, content: state.content };
     }, mode);
+    await waitFor(page, (mode) => {
+        const nodes = [window.eveBevyUiRuntime.state.sourceTrees.get('eve_bevy_ui_main_menu')?.tree.root];
+        let icon = '';
+        while (nodes.length) {
+            const node = nodes.pop();
+            if (node?.id === 'eve_bevy_ui_main_menu_tool_view_icon') icon = node.image?.source || '';
+            nodes.push(...(node?.children || []));
+        }
+        const expected = { list: 'hamburger', table: 'grid', natural: 'tool' }[mode];
+        return { ok: icon.endsWith('/' + expected + '.svg'), icon, expected };
+    }, mode);
     if (mode === 'list' || mode === 'table') {
         await waitFor(page, async ({ expectedMode, expectedProjectId }) => {
             const { readProjectViewSurfaceState } = await import('/eVe/domains/rendering/project_view_surface_runtime.js');
@@ -91,6 +102,9 @@ export const switchView = async (page, projectId, mode) => {
             };
         }, { expectedMode: mode, expectedProjectId: projectId });
     }
+    const palette = await page.evaluate(async () => (await import('/eVe/intuition/ribbon/bevy_ui_product_registry.js'))
+        .getMainMenuRuntime()?.measure?.().activePaletteKey);
+    if (palette === 'view') await clickCanvasTarget(page, await visibleMenuTool(page, projectId, 'view'));
     await waitForStableScene(page, projectId);
 };
 
@@ -131,7 +145,7 @@ export const screenshot = async ({ page, report, outDir, name, preservePointer =
 
 export const drag = async ({
     page, source, destination, holdMs = 0, armedShot = null, steps = 16,
-    postArmOffset = null, waypoint = null
+    postArmOffset = null, waypoint = null, compositionChoice = null
 }) => {
     const from = await playwrightPointForClientTarget(page, source);
     const to = await playwrightPointForClientTarget(page, destination);
@@ -151,6 +165,16 @@ export const drag = async ({
             to.x + Number(postArmOffset.x || 0),
             to.y + Number(postArmOffset.y || 0)
         );
+    }
+    if (compositionChoice) {
+        const options = await page.evaluate(() => window.eveBevyUiRuntime?.state?.trees
+            ?.get('eve_bevy_panel_composition_choices')?.tree?.root.children.map(node => ({
+                key: node.id.replace('composition_choice_', ''), position: node.style.position, size: node.style.size
+            })) || []);
+        const selected = options.find(option => option.key === compositionChoice);
+        assert(selected, 'composition_choice_not_mounted:' + compositionChoice);
+        for (const option of [options[0], selected]) await page.mouse.move(
+            option.position[0] + option.size[0] / 2, option.position[1] + option.size[1] / 2, { steps: 8 });
     }
     await page.mouse.up();
     return { from, to };
@@ -177,11 +201,12 @@ export const structuredDropTarget = (page, input) => page.evaluate(async (option
                 point, box: hit?.box || null
             });
             if (intent.kind !== options.kind || (options.edge && intent.edge !== options.edge)) continue;
+            if ((options.mode && intent.mode !== options.mode) || (options.placement && intent.placement !== options.placement)) continue;
             const box = hit?.box || {};
             const rx = (Number(point?.x) - Number(box.x || 0)) / Math.max(1, Number(box.width || 1));
             const ry = (Number(point?.y) - Number(box.y || 0)) / Math.max(1, Number(box.height || 1));
             const score = options.kind === 'combine'
-                ? Math.abs(rx - 0.5) + Math.abs(ry - 0.5)
+                ? Math.abs(rx - (options.placement === 'start' ? 0.175 : options.mode === 'sequential' ? 0.825 : 0.5)) + Math.abs(ry - 0.5)
                 : Math.abs(ry - (options.edge === 'after' ? 0.9 : 0.1));
             const candidate = { x, y, coordinate_source: 'scene', intent, score, hit: {
                 nodeId: hit.nodeId, treeId: hit.treeId, box: hit.box || null

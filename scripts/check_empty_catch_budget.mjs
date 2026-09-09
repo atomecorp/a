@@ -8,11 +8,13 @@
 // or a comment inside the block explaining why the failure is expected.
 //
 // Lower BUDGET whenever you bring the count down.
+// Resserré le 2026-09-09: le cliquet était resté à 465 pour un compte réel de 441,
+// soit 24 régressions possibles sans que la garde ne bronche.
 import fs from 'node:fs';
 import path from 'node:path';
 
 const ROOT = process.cwd();
-const BUDGET = 465;
+const BUDGET = 437;
 const ROOTS = ['atome/src', 'eVe', 'server'];
 const SKIP_DIRS = new Set(['node_modules', '.git', 'dist', 'target', 'build', 'temp']);
 const SKIP_PATHS = [/^atome\/src\/js\//, /\.min\.js$/, /\.bundle\.js$/];

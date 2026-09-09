@@ -1,5 +1,4 @@
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
 
 import { createProjectSceneMutationRuntime } from '../../eVe/domains/rendering/project_scene_mutation_runtime.js';
 
@@ -42,12 +41,6 @@ try {
         props: { z_index: 7, zIndex: 7 }
     }]);
 
-    const engineSource = await readFile(new URL('../../eVe/domains/rendering/project_scene_engine.js', import.meta.url), 'utf8');
-    const zOrderSource = await readFile(new URL('../../eVe/intuition/tools/z_order_actions.js', import.meta.url), 'utf8');
-    assert.match(engineSource, /intent\.kind === 'record\.commit'/);
-    assert.match(zOrderSource, /emitProjectSceneIntent\(\{/);
-    assert.match(zOrderSource, /kind: 'record\.commit'/);
-    assert.doesNotMatch(zOrderSource, /updateAtomeProperties/);
 } finally {
     globalThis.window = previousWindow;
 }

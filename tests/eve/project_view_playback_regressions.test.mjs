@@ -67,7 +67,7 @@ test('Natural absorption resolves a visible member hit to its canonical Molecule
     ), 'utf8');
     assert.match(source, /resolveMoleculeAbsorbTargetId\(runtime, overlapTargetId\)/);
     assert.match(source, /if \(isMoleculeRecord\(record\)\) return currentId/);
-    assert.match(source, /sourceId, targetId: canonicalTargetId/);
+    assert.match(source, /sourceId, targetId: resolveMoleculeAbsorbTargetId\(runtime, overlapTargetId\)/);
 });
 
 test('canonical sound records become audio clips even when their top-level type is generic', () => {
@@ -291,7 +291,7 @@ test('canonical absorb creates and absorbs Molecules through direct parent_id mu
     assert.equal(intoMolecule.operation, 'absorb');
     assert.deepEqual(batches[1].events.at(-1), {
         atome_id: 'atom', project_id: 'project_molecules', parent_id: 'molecule_target',
-        props: { hierarchy_order: 0, zIndex: 1, z_index: 1, order: 1, render_order: 1, renderOrder: 1 }
+        props: { hierarchy_order: 0, zIndex: 1, z_index: 1, renderLayer: 1, render_layer: 1, order: 1, render_order: 1 }
     });
     assert.equal(batches[1].events[0].props.molecule_timeline.clips[0].source.atome_id, 'atom');
 
@@ -304,7 +304,7 @@ test('canonical absorb creates and absorbs Molecules through direct parent_id mu
     assert.deepEqual(batches[2].events.slice(1), [
         {
             atome_id: 'atom_target', project_id: 'project_molecules', parent_id: 'molecule_source',
-            props: { hierarchy_order: 0, zIndex: 1, z_index: 1, order: 1, render_order: 1, renderOrder: 1 }
+            props: { hierarchy_order: 0, zIndex: 1, z_index: 1, renderLayer: 1, render_layer: 1, order: 1, render_order: 1 }
         }
     ]);
     assert.equal(batches[2].events[0].props.molecule_timeline.clips[0].source.atome_id, 'atom_target');
@@ -318,8 +318,56 @@ test('canonical absorb creates and absorbs Molecules through direct parent_id mu
     assert.deepEqual(batches[3].events.slice(1), [
         {
             atome_id: 'molecule_source', project_id: 'project_molecules', parent_id: 'molecule_target',
-            props: { hierarchy_order: 0, zIndex: 1, z_index: 1, order: 1, render_order: 1, renderOrder: 1 }
+            props: { hierarchy_order: 0, zIndex: 1, z_index: 1, renderLayer: 1, render_layer: 1, order: 1, render_order: 1 }
         }
     ]);
     assert.equal(batches[3].events[0].props.molecule_timeline.clips[0].source.atome_id, 'molecule_source');
+});
+
+test('stopped Molecule and multi-selection previews resolve visible leaves instead of empty containers', () => {
+    const owner = { id: 'preview_owner', type: 'group', properties: { playback_mode: 'simultaneous' } };
+    const first = { id: 'first', parent_id: owner.id, type: 'text', properties: { text: 'First', duration: 2 } };
+    const second = { id: 'second', parent_id: owner.id, type: 'text', properties: { text: 'Second', duration: 3 } };
+    const records = [owner, first, second];
+    const content = {
+        contextualTarget: () => ({ id: owner.id, record: owner }),
+        levelChildren: () => [owner],
+        recordsFor: (ids) => ids == null ? records : records.filter((record) => ids.includes(record.id)),
+        readState: () => ({ selectedIds: [owner.id] })
+    };
+    assert.deepEqual(resolveProjectViewVisualSubject({ content }).records.map((record) => record.id), ['first', 'second']);
+    owner.properties.playback_mode = 'sequential';
+    assert.equal(resolveProjectViewVisualSubject({ content }).record.id, 'first');
+    content.contextualTarget = () => ({ id: first.id, record: first });
+    content.readState = () => ({ selectedIds: [first.id, second.id] });
+    assert.deepEqual(resolveProjectViewVisualSubject({ content }).records.map((record) => record.id), ['first', 'second']);
+});
+
+
+test('Performance adjoining measured holds share one exact sample boundary', async () => {
+    let batch;
+    await applyCaptureToTimeline({
+        projectId: 'fractional',
+        events: [
+            { atome_id: 'first', at_seconds: 1.000012, duration_seconds: 10.000012 },
+            { atome_id: 'second', at_seconds: 11.000024, duration_seconds: 2 }
+        ],
+        api: {
+            openGroupTimeline: async () => ({ ok: true }),
+            readGroupTimeline: () => ({ timeline: { timebase: { sample_rate: 48000 },
+                sections: [{ section_id: 'section' }], tracks: [{ track_id: 'track', section_id: 'section', role: 'content' }], clips: [] } }),
+            applyGroupTimelineBatch: async (value) => { batch = value; return { ok: true }; }
+        }
+    });
+    const [a, b] = batch.operations.filter(operation => operation.operation === 'molecule.clip.add').map(operation => operation.command.timeline);
+    assert.equal(Math.round(a.start_seconds * 48000) + Math.round(a.duration_seconds * 48000), Math.round(b.start_seconds * 48000));
+});
+
+
+test('Molecule touching sample boundaries do not collide through floating second sums', async () => {
+    const { overlaps } = await import('../../eVe/intuition/tools/molecule/kernel/collisions.js');
+    const a = { start_frame: 1, duration_frames: 7, start_seconds: 1 / 48000, duration_seconds: 7 / 48000 };
+    const b = { start_frame: 8, duration_frames: 2, start_seconds: 8 / 48000, duration_seconds: 2 / 48000 };
+    assert.equal(overlaps(a, b, 48000), false);
+    assert.equal(overlaps(a, { ...b, start_frame: 7, start_seconds: 7 / 48000 }, 48000), true);
 });

@@ -59,3 +59,44 @@ export const visibleProjectVideos = (documentRef) => (
 export const finalSetCommit = (commits) => (
     commits.flat().filter((event) => event?.kind === 'set').at(-1)
 );
+
+export const makeGestureRecord = (id) => ({
+    id,
+    type: 'image',
+    properties: {
+        kind: 'image',
+        left: 10,
+        top: 20,
+        width: 40,
+        height: 30,
+        z_index: 1,
+        media_url: `/media/${id}`
+    }
+});
+
+export const installFrameScheduler = (windowRef) => {
+    const callbacks = [];
+    windowRef.requestAnimationFrame = (callback) => {
+        callbacks.push(callback);
+        return callbacks.length;
+    };
+    const flushAnimationFrames = async () => {
+        while (callbacks.length) {
+            const next = callbacks.shift();
+            next(Date.now());
+            await Promise.resolve();
+        }
+    };
+    const flushFrames = async () => {
+        await flushAnimationFrames();
+        await new Promise((resolve) => windowRef.setTimeout(resolve, 0));
+    };
+    flushFrames.animationFrames = flushAnimationFrames;
+    return flushFrames;
+};
+
+export const pointerEvent = (windowRef, type, options = {}) => {
+    const event = new windowRef.MouseEvent(type, { bubbles: true, ...options });
+    Object.defineProperty(event, 'pointerId', { value: options.pointerId ?? 1 });
+    return event;
+};
