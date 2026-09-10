@@ -8,8 +8,29 @@ final class FastifySyncClient {
         let syncURL: URL
         let token: String
         let principalId: String
+        let localPrincipalId: String
     }
 
+    private final class ProviderChannel {
+        let task: URLSessionWebSocketTask
+        let principal: String
+        let token: String
+        let reply: ([String: Any]) -> Void
+        var pending: Set<String> = []
+        var voices: Set<String> = []
+        init(task: URLSessionWebSocketTask, principal: String, token: String, reply: @escaping ([String: Any]) -> Void) {
+            self.task = task; self.principal = principal; self.token = token; self.reply = reply
+        }
+        func close() {
+            task.cancel(with: .goingAway, reason: nil)
+            for id in pending { reply(["type":"ai-provider-response", "requestId":id, "ok":false,
+                "success":false, "error":"provider_connection_closed"]) }
+            for id in voices { reply(["type":"ai-realtime-event", "session_id":id,
+                "event":["type":"error", "code":"provider_connection_closed"]]) }
+            pending.removeAll(); voices.removeAll()
+        }
+    }
+    private var providerChannels: [ObjectIdentifier: ProviderChannel] = [:]
     private let queue = DispatchQueue(label: "ais.fastify.sync.queue")
     private var session: URLSession?
     private var syncTask: URLSessionWebSocketTask?
@@ -235,6 +256,8 @@ final class FastifySyncClient {
     }
 
     private func disconnectLocked() {
+        providerChannels.values.forEach { $0.close() }
+        providerChannels.removeAll()
         connected = false
         connecting = false
         subscribedStreams.removeAll()
@@ -259,7 +282,8 @@ final class FastifySyncClient {
             .trimmingCharacters(in: CharacterSet(charactersIn: "/"))
         guard let syncURL = URL(string: explicitSync.isEmpty ? wsBase + "/ws/sync" : explicitSync),
               let apiURL = URL(string: wsBase + "/ws/api") else { return nil }
-        return Configuration(apiURL: apiURL, syncURL: syncURL, token: token, principalId: principal)
+        return Configuration(apiURL: apiURL, syncURL: syncURL, token: token, principalId: principal,
+            localPrincipalId: firstValue(defaults, keys: ["SQUIRREL_FASTIFY_LOCAL_PRINCIPAL_ID"]))
     }
 
     private func firstValue(_ defaults: UserDefaults, keys: [String]) -> String {
@@ -284,4 +308,102 @@ final class FastifySyncClient {
         if let text = value as? String { return Int64(text) }
         return nil
     }
+    func closeProvider(connectionId: ObjectIdentifier) {
+        queue.async { self.providerChannels.removeValue(forKey: connectionId)?.close() }
+    }
+
+    func sendProvider(_ payload: [String: Any], connectionId: ObjectIdentifier, localUserId: String,
+                      reply: @escaping ([String: Any]) -> Void) {
+        queue.async {
+            guard let config = self.resolveConfiguration(), config.localPrincipalId == localUserId else {
+                reply(["type":"ai-provider-response", "requestId":payload["requestId"] ?? NSNull(),
+                       "ok":false, "success":false, "error":"provider_principal_unavailable"])
+                return
+            }
+            if let current = self.providerChannels[connectionId], current.principal != localUserId || current.token != config.token {
+                current.close()
+                self.providerChannels.removeValue(forKey: connectionId)
+            }
+            if self.providerChannels[connectionId] == nil {
+                if self.session == nil { self.session = URLSession(configuration: .ephemeral) }
+                guard let task = self.session?.webSocketTask(with: config.apiURL) else { return }
+                task.maximumMessageSize = 28_000_000
+                let channel = ProviderChannel(task: task, principal: localUserId, token: config.token, reply: reply)
+                self.providerChannels[connectionId] = channel
+                task.resume(); self.receiveProvider(connectionId, channel: channel)
+            }
+            guard let channel = self.providerChannels[connectionId] else { return }
+            if let id = payload["requestId"] as? String { channel.pending.insert(id) }
+            if let body = payload["payload"] as? [String: Any], let id = body["session_id"] as? String {
+                if payload["action"] as? String == "realtime-connect" { channel.voices.insert(id) }
+                if payload["action"] as? String == "realtime-close" { channel.voices.remove(id) }
+            }
+            var request = payload; request["token"] = config.token
+            do {
+                let data = try JSONSerialization.data(withJSONObject: request)
+                channel.task.send(.data(data)) { error in
+                    if error != nil { reply(["type":"ai-provider-response", "requestId":payload["requestId"] ?? NSNull(),
+                        "ok":false, "success":false, "error":"provider_connection_failed"]) }
+                }
+            } catch {
+                reply(["type":"ai-provider-response", "requestId":payload["requestId"] ?? NSNull(),
+                       "ok":false, "success":false, "error":"provider_request_invalid"])
+            }
+        }
+    }
+
+    private func receiveProvider(_ id: ObjectIdentifier, channel: ProviderChannel) {
+        channel.task.receive { [weak self] result in
+            self?.queue.async {
+                guard let self, self.providerChannels[id]?.task === channel.task else { return }
+                guard let config = self.resolveConfiguration(), config.localPrincipalId == channel.principal,
+                      config.token == channel.token else {
+                    self.providerChannels.removeValue(forKey: id)?.close(); return
+                }
+                switch result {
+                case .success(let message):
+                    let data: Data?
+                    switch message {
+                    case .data(let bytes): data = bytes
+                    case .string(let text): data = text.data(using: .utf8)
+                    @unknown default: data = nil
+                    }
+                    guard let data, let value = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else {
+                        self.providerChannels.removeValue(forKey: id)?.close(); return
+                    }
+                    if ["ai-provider-response", "ai-provider-progress", "ai-realtime-event"].contains(value["type"] as? String ?? "") {
+                        if value["type"] as? String == "ai-provider-response", let requestId = value["requestId"] as? String {
+                            channel.pending.remove(requestId)
+                        }
+                        channel.reply(value)
+                    }
+                    self.receiveProvider(id, channel: channel)
+                case .failure:
+                    self.providerChannels.removeValue(forKey: id)?.close()
+                }
+            }
+        }
+    }
+
+    static func configureRemote(_ message: [String: Any], localUserId: String) -> [String: Any] {
+        let requestId = message["requestId"] ?? NSNull()
+        let defaults = UserDefaults(suiteName: SharedBus.appGroupSuite) ?? .standard
+        let keys = ["SQUIRREL_FASTIFY_PRINCIPAL_ID", "SQUIRREL_FASTIFY_TOKEN", "SQUIRREL_FASTIFY_URL",
+                    "SQUIRREL_SYNC_ENVIRONMENT_FINGERPRINT", "SQUIRREL_FASTIFY_LOCAL_PRINCIPAL_ID"]
+        if message["action"] as? String == "clear-remote" {
+            keys.forEach { defaults.removeObject(forKey: $0) }; shared.disconnect()
+            return ["type":"sync-response", "requestId":requestId, "success":true, "configured":false]
+        }
+        let fields: [Any?] = [message["remote_user_id"] ?? message["remoteUserId"],
+                      message["remote_token"] ?? message["remoteToken"], message["remote_url"] ?? message["remoteUrl"],
+                      message["environment_fingerprint"] ?? message["environmentFingerprint"], localUserId]
+        let values = fields.map { ($0 as? String) ?? "" }
+        guard values.prefix(3).allSatisfy({ !$0.isEmpty }) else {
+            return ["type":"sync-response", "requestId":requestId, "success":false, "error":"Invalid remote sync configuration"]
+        }
+        zip(keys, values).forEach { defaults.set($0.1, forKey: $0.0) }
+        shared.reloadConfiguration()
+        return ["type":"sync-response", "requestId":requestId, "success":true, "configured":true]
+    }
+
 }

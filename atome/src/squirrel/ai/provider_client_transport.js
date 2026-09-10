@@ -5,13 +5,13 @@ const DEFAULT_TIMEOUT_MS = 20000;
 const LOCAL_AI_PROXY_PATH = '/api/eve/ai/provider-completion';
 
 const normalizeUsage = (usage = {}) => ({
-    prompt_tokens: Number.isFinite(Number(usage?.prompt_tokens)) ? Number(usage.prompt_tokens) : 0,
-    completion_tokens: Number.isFinite(Number(usage?.completion_tokens)) ? Number(usage.completion_tokens) : 0,
+    prompt_tokens: Number(usage?.prompt_tokens ?? usage?.input_tokens) || 0,
+    completion_tokens: Number(usage?.completion_tokens ?? usage?.output_tokens) || 0,
     total_tokens: Number.isFinite(Number(usage?.total_tokens))
         ? Number(usage.total_tokens)
         : (
-            (Number.isFinite(Number(usage?.prompt_tokens)) ? Number(usage.prompt_tokens) : 0)
-            + (Number.isFinite(Number(usage?.completion_tokens)) ? Number(usage.completion_tokens) : 0)
+            (Number(usage?.prompt_tokens ?? usage?.input_tokens) || 0)
+            + (Number(usage?.completion_tokens ?? usage?.output_tokens) || 0)
         )
 });
 
@@ -64,6 +64,7 @@ const withMergedSignal = ({ signal = null, timeoutMs = DEFAULT_TIMEOUT_MS } = {}
     const onSignalAbort = () => abort(signal.reason || 'aborted');
     const onTimeoutAbort = () => abort(timeout.controller.signal.reason || 'provider_timeout');
     signal.addEventListener('abort', onSignalAbort, { once: true });
+    if (signal.aborted) onSignalAbort();
     timeout.controller.signal.addEventListener('abort', onTimeoutAbort, { once: true });
     return {
         signal: merged.signal,
@@ -307,4 +308,20 @@ export {
     requestOpenAiStyle,
     requestAnthropic,
     requestGoogle
+};
+
+// JSON Schema permits omitted array items; OpenAI requires that any-item
+// meaning to be explicit. Preserve the canonical schema and its constraints.
+export const projectOpenAiSchema = (schema) => {
+    if (!schema || typeof schema !== 'object') return schema;
+    if (Array.isArray(schema)) return schema.map(projectOpenAiSchema);
+    const projected = { ...schema };
+    for (const key of ['properties', '$defs', 'definitions', 'patternProperties']) {
+        if (schema[key]) projected[key] = Object.fromEntries(Object.entries(schema[key]).map(([name, value]) => [name, projectOpenAiSchema(value)]));
+    }
+    for (const key of ['items', 'additionalProperties', 'anyOf', 'oneOf', 'allOf', 'not']) {
+        if (Object.hasOwn(schema, key)) projected[key] = projectOpenAiSchema(schema[key]);
+    }
+    if (schema.type === 'array' && !Object.hasOwn(schema, 'items')) projected.items = {};
+    return projected;
 };

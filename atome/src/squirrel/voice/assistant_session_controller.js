@@ -373,5 +373,52 @@ export const createVoiceAssistantSessionController = ({
         return () => listeners.delete(listener);
     };
 
-    return Object.freeze({ close, getState: () => cloneState(state), open, respond, subscribe });
+    const pause = async () => {
+        ++state.generation;
+        clearTranscriptTimers();
+        await stopActiveChannels('assistant_text_focus');
+        if (state.active) setPhase('idle');
+        return cloneState(state);
+    };
+    const resume = async () => {
+        if (!state.active || !state.sessionId) return open();
+        const generation = ++state.generation;
+        await stopActiveChannels('assistant_resume');
+        if (state.active && generation === state.generation) startListenLoop(generation);
+        return cloneState(state);
+    };
+    return Object.freeze({ close, getState: () => cloneState(state), open, respond, pause, resume, subscribe });
+};
+
+// Provider choice shares the assistant lifecycle contract. Only the local
+// speech backend publishes viseme/input frames; Realtime delivers media tracks.
+export const bindVoiceAssistantSession = async ({
+    env, voiceApi, provider, conversation, onSession, onSpeech, onInput, translate
+}) => {
+    if (provider?.providerId === 'openai' && !provider.ok) throw new Error(provider.error || 'no_ai_key_configured');
+    const remote = provider?.ok && provider.providerId === 'openai';
+    const controller = remote
+        ? (await import('./realtime_session.js')).createRealtimeSession({ env,
+            history: () => conversation.contextTurns(),
+            onTurn: turn => conversation.appendVoiceTurn(turn),
+            createTools: options => conversation.createVoiceTools(options),
+            onUsage: (usage, model) => conversation.recordUsage(usage, model)
+        })
+        : createVoiceAssistantSessionController({ voiceApi,
+            openingGreeting: translate('eve.voice.assistant.opening_greeting'),
+            touchResponse: translate('eve.voice.assistant.touch_response'),
+            closingGreeting: translate('eve.voice.assistant.closing_greeting'), locale: 'fr-FR'
+        });
+    const unsubscribeSession = controller.subscribe(onSession);
+    const frameSubscriptions = [];
+    try {
+        if (!remote) {
+            if (typeof voiceApi.subscribeTtsFrames !== 'function') throw new Error('eve_voice_assistant_tts_frames_unavailable');
+            if (typeof voiceApi.subscribeInputFrames !== 'function') throw new Error('eve_voice_assistant_input_frames_unavailable');
+            frameSubscriptions.push(voiceApi.subscribeTtsFrames(onSpeech), voiceApi.subscribeInputFrames(onInput));
+        }
+    } catch (error) {
+        unsubscribeSession(); frameSubscriptions.forEach(unsubscribe => unsubscribe()); throw error;
+    }
+    return { controller, unsubscribeSession, unsubscribeFrames: () => frameSubscriptions.forEach(unsubscribe => unsubscribe()) };
 };

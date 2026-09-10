@@ -11,7 +11,6 @@ const SIMPLE_PANEL_MODULE_FILES = Object.freeze({
     home: 'eVe/intuition/tools/user.js',
     contact: 'eVe/intuition/tools/contact.js',
     info: 'eVe/intuition/tools/infos.js',
-    ai: 'eVe/intuition/tools/AI.js',
     delete: 'eVe/intuition/tools/delete/panel_view.js',
     undo: 'eVe/intuition/tools/undo.js',
     paste: 'eVe/intuition/tools/paste.js',

@@ -44,6 +44,15 @@ export const ensureVoiceBridgeModules = async ({
         hasTauriInternals: !!readEnv(env, '__TAURI_INTERNALS__')
     });
 
+    // Voice is available on the Dashboard before deferred project tools load.
+    // Install their shared playback owners in the same order; ESM imports are
+    // shared with the project bootstrap and never install a second engine.
+    if (readEnv(env, 'document')) {
+        await importModule('../../application/audio_runtime/audio.facade.js');
+        await importModule('../../application/audio_runtime/backend.kira.js');
+        loaded.push('audio_facade', 'backend_kira');
+    }
+
     if (tauri && (typeof readEnv(env, 'record_start') !== 'function' || typeof readEnv(env, 'record_stop') !== 'function')) {
         await importModule('../../application/audio_runtime/record_audio_api.js');
         loaded.push('record_audio_api');

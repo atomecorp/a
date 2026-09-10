@@ -1,4 +1,18 @@
 export const registerCalendarDefaultTools = ({ Agent, safeString, requireCalendarServiceApi, invokeRuntimeDefaultTool }) => {
+    for (const [name, description, required, properties] of [
+        ['time.read', 'Read current time, epoch milliseconds and local timezone.', [], {}],
+        ['alarm.set', 'Set an agenda alarm at an ISO date with timezone or after delay_ms. Optional command runs a Runtime V2 tool through MCP at that time; sensitive actions still need approval. Runs only while the application is alive. eventId/alarmId replace an existing alarm.', [], {
+            at: { type: 'string' }, delay_ms: { type: 'number', minimum: 1 }, title: { type: 'string' }, message: { type: 'string' },
+            eventId: { type: 'string' }, alarmId: { type: 'string' }, projectId: { type: 'string' }, calendarId: { type: 'string' },
+            command: { type: 'object', description: 'Specify tool_id for Runtime V2, or tool_name for an AI/MCP registered tool; input contains its arguments.', properties: { tool_id: { type: 'string' }, tool_name: { type: 'string' }, action: { type: 'string' }, input: { type: 'object' } } }
+        }],
+        ['alarm.read', 'Read agenda alarms and remaining milliseconds (countdown).', [], { eventId: { type: 'string' }, projectId: { type: 'string' } }],
+        ['alarm.cancel', 'Cancel one alarm, or all alarms of an event when alarmId is omitted, preserving the agenda event.', ['eventId'], { eventId: { type: 'string' }, alarmId: { type: 'string' } }]
+    ]) Agent.registerTool({ name: 'calendar.' + name, description,
+        capabilities: [name.endsWith('read') ? 'calendar.read' : 'calendar.write'], risk_tier: name.endsWith('read') ? 'LOW' : 'MEDIUM',
+        parameters: { type: 'object', required, properties },
+        handler: ({ params, context }) => invokeRuntimeDefaultTool({ tool_id: 'calendar.' + name, source_tool: 'calendar.' + name, params: params || {}, context })
+    });
     Agent.registerTool({
         name: 'calendar.list_events',
         description: 'List calendar events.',

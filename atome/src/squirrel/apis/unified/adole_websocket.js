@@ -182,8 +182,10 @@ class TauriWebSocket {
         }
     }
 
-    async send(message) {
+    async send(message, { timeoutMs = 10000, onProgress = null, signal = null } = {}) {
+        signal?.throwIfAborted();
         const connected = await this.connect();
+        signal?.throwIfAborted();
         if (!connected || this.socket?.readyState !== WebSocket.OPEN) {
             if (this.isConnected) this.handleDisconnect();
             return { ok: false, success: false, error: 'Server unreachable', offline: true, status: 0 };
@@ -199,8 +201,15 @@ class TauriWebSocket {
         const timeout = setTimeout(() => {
             this.pendingRequests.delete(requestId);
             resolve({ ok: false, success: false, error: 'Request timeout', status: 0 });
-        }, 10000);
-        this.pendingRequests.set(requestId, { resolve, timeout, promise });
+        }, Math.max(1, Math.min(Number(timeoutMs) || 10000, 180000)));
+        const settle = resolve;
+        const cancel = () => {
+            this.pendingRequests.delete(requestId); clearTimeout(timeout);
+            resolve({ ok: false, success: false, error: 'Request cancelled', status: 0 });
+        };
+        resolve = value => { signal?.removeEventListener('abort', cancel); settle(value); };
+        signal?.addEventListener('abort', cancel, { once: true });
+        this.pendingRequests.set(requestId, { resolve, timeout, promise, onProgress });
         try {
             this.socket.send(JSON.stringify(message));
         } catch (error) {

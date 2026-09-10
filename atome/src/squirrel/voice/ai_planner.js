@@ -324,6 +324,7 @@ export const createVoiceAiPlanner = ({
             env
         });
 
+        if (providerConfig?.providerId === 'openai') Object.assign(providerConfig, { ok: false, error: 'voice_realtime_required' });
         if (providerConfig?.ok !== true) {
             const code = toText(providerConfig?.error) || 'no_ai_key_configured';
             return normalizeVoiceIntent({

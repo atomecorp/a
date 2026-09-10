@@ -1,5 +1,16 @@
 # Atome / eVe API Map
 
+Conversation persistence returns durable asset references after explicit Keep. The assistant reloads attachment bytes only for an explicit media operation, through existing asset availability/authentication. File upload transfers accept AbortSignal. The authenticated file-transfer temporary namespace is per user on Fastify and Tauri; the database-enabled flag is passed explicitly to the extracted Fastify file owner. Provider billing observations are recorded once at provider_broker, into the shared account-scoped aiQuotaTracker; missing usage does not imply zero cost or a reliable remaining percentage.
+
+
+The private login/me/provisioning response uses auth_users.authenticatedUserSnapshot to retain the verified phone claim required by the client identity check. This allowlist excludes password hashes and does not change public-directory redaction. The model-catalog cache is account-scoped; first bootstrap discovers remote models through the authenticated provider transport. Media detach revokes local reference access without remote traffic.
+### OpenAI authenticated capabilities — 2026-09-10 (acceptance in progress)
+
+`ai-provider` runs on the existing authenticated socket: credential store/status/remove, Responses progress/cancel, models, audio/images and specialized service routes. Status returns only configured state. Realtime connect/send/close use server-created session IDs scoped to the application socket and principal; provider function calls arrive as `squirrel:ai-realtime-event`. Tool outputs require a pending provider call. These are transport APIs; route presence does not constitute product integration of every specialized service.
+
+Conversation tools are projected from `ai.tools.list` and `runtime.tools.list`. Runtime arguments preserve action/input/dry_run; each call carries actor/trace/intent/idempotence. Sensitive confirmation remains in existing MCP/AtomeAI owners, bound to reviewed arguments and actor. Temporary conversations become canonical `conversation` Atomes only on explicit Keep. Drawing retouch exposes begin/preview/append/undo/clear/exportSource/exportMask/close without modifying the source. Image Apply delegates to the existing project importer.
+
+
 ### Category drafts and capture presentation — 2026-09-10
 
 Dashboard `runForHeader` dispatches by category. Calendar and Contact use the existing panel-opening context `{ createNew: true, projectId }`; Calendar no longer writes an event before validation. Projects use the existing guided creation callback. Store and Monitor expose no creation action. News opening and template persistence are preserved.
@@ -1242,18 +1253,18 @@ Boundary status: Closed product runtime API. Public promotion would require a pr
 
 Ownership: eVe closed Intuition inline tool and Finder panel bridge boundary.
 
-Primary sources: `eVe/intuition/runtime/eve_intuition/finder_inline_runtime.js`, `eVe/intuition/runtime/eve_intuition/finder_tool_identity_runtime.js`, `eVe/intuition/runtime/eve_intuition/finder_inline_visual_runtime.js`, `eVe/intuition/runtime/eve_intuition/ai_inline_runtime.js`, and `eVe/intuition/tools/AI.js`.
+Primary sources: `eVe/intuition/runtime/eve_intuition/finder_inline_runtime.js`, `eVe/intuition/runtime/eve_intuition/finder_tool_identity_runtime.js`, `eVe/intuition/runtime/eve_intuition/finder_inline_visual_runtime.js`, `eVe/voice/assistant/assistant_runtime.js`, and `atome/src/squirrel/ai/conversation_session.js`.
 
 Exposure: JavaScript module exports consumed by `eVe/intuition/eVeIntuition.js`, `tool_window_bridge_runtime.js`, panel tool registration, main tool definitions, and atome edit footer tool invocation.
 
-Verified entry points: `createFinderInlineRuntime`, `createFinderToolIdentityRuntime`, `createFinderInlineVisualRuntime`, `createInlineToolVisualRuntime`, `createAiInlineRuntime`, and `submitAiPrompt`.
+Verified entry points: `createFinderInlineRuntime`, `createFinderToolIdentityRuntime`, `createFinderInlineVisualRuntime`, `createInlineToolVisualRuntime`, `bootstrapEveAssistant`, and `requestConversationResponse`.
 
 Boundary rules:
 
 - Finder identity normalization and projection-instance recovery live only in `finder_tool_identity_runtime.js`.
 - Disposable inline input styling lives only in `finder_inline_visual_runtime.js`.
 - Finder inline open/close/search and panel wrapper behavior live only in `finder_inline_runtime.js`; callers must use returned functions instead of duplicating Finder DOM searches.
-- IA prompt input open/close/send behavior lives only in `ai_inline_runtime.js`; prompt provider dispatch and action application live only in `eVe/intuition/tools/AI.js`.
+- AI input uses the shared Bevy editor and assistant runtime. The hidden legacy AI menu entry delegates to the same assistant toggle. Conversation dispatch uses the provider client and canonical MCP policies; no separate JSON-action executor remains.
 - The runtime may project transient inline input DOM but must not create canonical Atome state, alternate Finder stores, or non-Bevy atom rendering paths.
 
 Boundary status: Closed product runtime API. Public promotion would require a product-neutral inline-tool bridge contract.
@@ -1499,7 +1510,7 @@ Boundary status: Open orchestration contract. Calls into eVe tool runtime must g
 
 Ownership: Atome open voice runtime.
 
-Primary sources: `atome/src/squirrel/voice/bootstrap.js`, `atome/src/squirrel/voice/service.js`, `atome/src/squirrel/voice/assistant_session_controller.js`, `atome/src/squirrel/voice/local_tts_runtime.js`, the internal voice helper/runtime modules, `atome/src/squirrel/voice/orchestrator.js`, `atome/src/squirrel/voice/tool_router.js`, `atome/src/squirrel/voice/ai_planner.js`, and `atome/src/squirrel/voice/home_surface.js`.
+Primary sources: `atome/src/squirrel/voice/bootstrap.js`, `atome/src/squirrel/voice/service.js`, `atome/src/squirrel/voice/assistant_session_controller.js`, `atome/src/squirrel/voice/tts_runtime.js`, the internal voice helper/runtime modules, `atome/src/squirrel/voice/orchestrator.js`, `atome/src/squirrel/voice/tool_router.js`, `atome/src/squirrel/voice/ai_planner.js`, and `atome/src/squirrel/voice/home_surface.js`.
 
 Exposure: voice bootstrap modules, runtime services, tool router, communication surfaces, AI planner, orchestrator facade, home surface contract, local TTS preload, and ephemeral voice-frame subscriptions. `subscribeTtsFrames(listener)` publishes session/sample/RMS/peak/phoneme/vowel/confidence/progress and `subscribeInputFrames(listener)` publishes only session-scoped microphone RMS/activity; neither writes durable journal state. Native STT exposes `prepare(language)`, `onAudioLevel(listener)`, and `onDiagnostic(listener)` through `stt_api.js`: preparation loads the configured model without opening the microphone, audio level forwards the RMS of the already-open recognizer stream, and diagnostics forward native model/audio stages into centralized voice telemetry. Native final recognition results preserve ranked `alternatives` with their real confidence values. `writeVoiceDiagnostic` emits one secret-redacted structured record to the WebView console and the existing iOS/Tauri native log bridges. The removed main-handle DOM bridge is not public API.
 
@@ -2482,3 +2493,17 @@ Choice-palette contract (2026-09-08): tool_definition_ssot.resolveToolChoiceIcon
 `projectViewTransport.releaseOutsideProject(projectId)` preserves a plan owned by that project and otherwise stops/releases it, clears its plan/records/root and submits an empty engine timeline. Workspace activation awaits this boundary. Superseded `load()` calls return `{ ok: true, superseded: true }` and cannot install an older prepared plan. Occurrence crop/move/split/duplicate/join/stretch transactions now use unique gesture identities even when repeatedly targeting one record.
 
 Clip input contract (2026-09-09): project_view_list_preview_gesture owns edit-level dispatch; playhead projection translates its initial local position but cannot force scrub. A gesture retains the initial client X and uses physical displacement across preview rebuilds. Crop minimum endpoints are inclusive.
+
+OpenAI lifecycle checkpoint (2026-09-10 18:13): `realtime_session.js` scopes asynchronous failures, playback completion, tool preparation and SDP to their owning generation; disposed sessions cannot close or configure replacements. `conversation_session.js` delegates voice usage to the shared quota owner. `assistant_media_session.js` adds Batch output/error preview through existing `batches.read` / `files.content` and canonical Apply; JSONL is inert data and textual preview is bounded to 8 KiB. `model_catalog_registry.js` owns corpus file list/read/detach schemas and server route projection; no parallel corpus registry. Controlled coverage is not live provider acceptance.
+
+OpenAI integration checkpoint (2026-09-10 18:42): voice/bootstrap.js loads the shared audio.facade.js then backend.kira.js before browser voice service use, including cold Dashboard speech. No new audio engine. Main-menu inline controls cancel hold on slider acquisition and reset only transient gesture state so all five levels remain reachable inward. Text previews and mask limits use the existing localized Bevy text surface. Real Web masks/source export preserve canonical source state; tests/probes/openai_local_voice_acceptance.mjs covers local playback. See eVe/documentations/openai_integration.md for validation limits.
+
+Realtime metering (2026-09-10): realtime_session.js reports input-transcription usage separately from response usage. model_catalog_registry.js owns standard modality tariffs; quota_tracker.js computes only complete, internally consistent token estimates. No balance or total invoice is inferred. openai_modality_metering.test.mjs and lifecycle tests cover separate billing and unknown components.
+
+OpenAI credential correction (2026-09-10): Home vault/view owners project configured, missing or unavailable status. Stored secrets use a fixed bullet placeholder, never a repopulated editor value. Server vault remains the single OpenAI authority; native provider relay uses the same configured authenticated server, with no credential in Atome sync. Local legacy cleanup cannot convert a server-save receipt into a local-unlock failure; removal clears migration material before deleting the server key. See openai_home_vault_contract.test.mjs and openai_key_ui_acceptance.mjs.
+
+OpenAI live repair (2026-09-10 20:15): eVe.js owns installation of the existing profile bridge; assistant_runtime.js loads canonical optional integrations. SVG Draw commit reuses createProjectDraw in svg_draw_commit_runtime.js. mcp_runtime.js projects tool envelopes without scene/view/surface; local results remain intact. Generic recording owns optional duration_ms and cancellation. Full-slot assistant icon and text/voice status reuse the ribbon and Bevy components. Live acceptance and pending lanes: eVe/documentations/openai_integration.md; maintained probes openai_live_ui_campaign.mjs and openai_live_voice_acceptance.mjs.
+
+2026-09-10 20:55 OpenAI live acceptance: real text (750/940 chars), SVG, PNG generation/edit/import and synthetic-microphone Realtime tool calls pass. SyncEngine restore now projects full winning properties (real SVG Undo/Redo verified); AI list results are bounded metadata and search ranks relevance. Protected built-in contract validation belongs to tool_runtime_builtin_resolver.js. 178 consolidated tests and subsequent 23 focused tests pass, overlapping counts. Project playback failed, project-open exposure missing, timed recording denied by MCP permissions; broad default timeline grant rejected by automatic approval review and not applied. No full native or exhaustive API acceptance. See eVe/documentations/openai_integration.md live checkpoint and temp/openai-fixture-cleanup.json.
+
+2026-09-10 Agenda alarm extension: calendar_api.js remains the persistent alarm/timer owner; calendar.alarm.set/read/cancel and calendar.time.read use existing AI/Runtime V2 registration and MCP dispatch. The Time palette Alarm entry and countdown reuse the Bevy calendar panel. ui.project.open uses project workspace activation; ui.project.transport uses project_view_surface_context_runtime.js and canonical project records. Default timeline rights explicitly authorized; no restricted actor widening. Controlled smoke acceptance only; suspended/closed-app and multi-device delivery remain unvalidated. See eVe/documentations/calendar_v1_architecture.md.

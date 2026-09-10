@@ -200,13 +200,25 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
     let core_inertia = select(0.0, destructive_pull * mix(0.10, 0.18, gesture_velocity), destructive_active);
     let core_point = (point + destructive_axis * core_inertia - vec2(0.0, -core_drop))
         / ((1.0 + pulse * 0.72 * core_reveal) * core_scale);
-    let core_distance = organic_core(core_point, material.morph, time);
+    let petal_count = u32(clamp(round(material.flower.y), 1.0, 5.0));
+    var core_distance = organic_core(core_point, material.morph, time);
+    if petal_count > 1u {
+        core_distance = 10.0;
+        for (var index = 0u; index < petal_count; index += 1u) {
+            let angle = f32(index) * 6.2831853 / f32(petal_count) + 1.5707963;
+            let axis = vec2(cos(angle), sin(angle));
+            let offset = core_point - axis * 0.23;
+            let local = vec2(dot(offset, vec2(-axis.y, axis.x)), dot(offset, axis));
+            core_distance = min(core_distance, sd_ellipse(local, vec2(0.145, 0.22)));
+        }
+    }
     let core_mask = 1.0 - smoothstep(-0.012, 0.018, core_distance);
     let core_edge = 1.0 - smoothstep(0.0, 0.11, abs(core_distance));
     let core_light = clamp(0.54 + core_point.x * -0.24 + core_point.y * 0.25, 0.0, 1.0);
     var core_color = mix(vec3(0.91, 0.34, 0.47), vec3(1.0, 0.82, 0.70), core_light);
     core_color = mix(core_color, vec3(1.0, 0.95, 0.88), core_edge * 0.42);
     core_color += vec3(0.10, 0.03, 0.08) * intensity * 0.22;
+    core_color += vec3(0.045, 0.04, 0.025) * f32(petal_count - 1u);
     let core_alpha = core_mask * (0.80 + core_edge * 0.17) * core_reveal;
 
     let listening_band = exp(-pow((core_point.y - 0.27) / 0.055, 2.0));

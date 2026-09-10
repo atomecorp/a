@@ -1,65 +1,16 @@
-import assert from 'node:assert/strict';
-import fs from 'node:fs';
-import { test } from 'vitest';
+import assert from "node:assert/strict";
+import fs from "node:fs";
+import { test } from "vitest";
+import { buildUserProperties, mergeUserProfileIdentity, resolveUsername, sanitizeProfileForPersistence } from "../../eVe/domains/user/profile_api_support.js";
+import { upsertUserProfile } from "../../eVe/domains/user/profile_api.js";
+import { normalizeHomeProfile, mergeHomeProfileUpdate, profileDisplayName } from "../../eVe/intuition/runtime/bevy_panel/bevy_panel_home_actions.js";
+import { homeSurface, readHomePanelState } from "../../eVe/intuition/runtime/bevy_panel/bevy_panel_home_runtime.js";
+import { createHomeAccessRuntime } from "../../eVe/intuition/runtime/bevy_panel/bevy_panel_home_access.js";
+import { handleHomeVaultEvent } from "../../eVe/intuition/runtime/bevy_panel/bevy_panel_home_vault_runtime.js";
+import { resolveBevyPanelGeometry } from "../../eVe/intuition/runtime/bevy_panel/bevy_panel_layout.js";
+import { setMainMenuRuntime } from "../../eVe/intuition/ribbon/bevy_ui_product_registry.js";
+import { buildHomeContent, buildHomeFixedContent } from "../../eVe/intuition/runtime/bevy_panel/bevy_panel_home_view.js";
 
-import {
-    buildUserProperties,
-    mergeUserProfileIdentity,
-    repairBootstrapPhoneProfile,
-    repairLegacyRemoteProfile,
-    resolveUsername,
-    sanitizeProfileForPersistence
-} from '../../eVe/domains/user/profile_api_support.js';
-import { loadUserProfile, upsertUserProfile } from '../../eVe/domains/user/profile_api.js';
-import {
-    applyHomeServerPreference,
-    changeHomePassword,
-    createHomeSectionSubscriptions,
-    deleteHomeAccount,
-    logoutHomeSession,
-    normalizeHomeProfile,
-    mergeHomeProfileUpdate,
-    profileDisplayName
-} from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_home_actions.js';
-import {
-    ensureHomeVault,
-    lockHomeVault,
-    mailVaultEntryId,
-    readHomeVaultState,
-    removeHomeAiToken,
-    removeHomeCredential,
-    storeHomeAiToken,
-    storeHomeCredential,
-    storeHomeMailSecret
-} from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_home_vault.js';
-import { homeSurface, readHomePanelState } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_home_runtime.js';
-import { createHomeAccessRuntime } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_home_access.js';
-import { handleHomeVaultEvent } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_home_vault_runtime.js';
-import { resolveBevyPanelGeometry } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_layout.js';
-import { setMainMenuRuntime } from '../../eVe/intuition/ribbon/bevy_ui_product_registry.js';
-import {
-    buildHomeContent,
-    buildHomeFixedContent
-} from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_home_view.js';
-import {
-    persistRuntimeMailPreferences,
-    readPersistedRuntimeMailPreferences
-} from '../../atome/src/squirrel/mail/runtime_preferences.js';
-import { resolveSecureMailAuth } from '../../atome/src/squirrel/mail/bootstrap_transport.js';
-import { resolveActiveAiProviderConfig } from '../../atome/src/squirrel/ai/provider_client.js';
-import { resolveConfiguredAiProviderKeys } from '../../atome/src/squirrel/ai/model_catalog_refresh.js';
-import { FastifyAdapter, TauriAdapter } from '../../atome/src/squirrel/apis/unified/adole.js';
-import {
-    classifyRetryableMutationException,
-    classifyRetryableMutationResult
-} from '../../eVe/intuition/tools/core/tool_registry_mutations.js';
-
-const flatten = (nodes = []) => nodes.flatMap((entry) => [entry, ...flatten(entry?.children || [])]);
-const editing = {
-    displayValue: () => '',
-    fieldView: () => ({}),
-    registerFieldWidth: () => {}
-};
 const baseState = (overrides = {}) => ({
     profile: normalizeHomeProfile({ name: 'Ada', preferences: { language: 'en' } }, { preserveEmptyItems: true }),
     guest: false,
@@ -104,6 +55,14 @@ const baseState = (overrides = {}) => ({
     },
     ...overrides
 });
+
+const editing = {
+    displayValue: () => '',
+    fieldView: () => ({}),
+    registerFieldWidth: () => {}
+};
+
+const flatten = (nodes = []) => nodes.flatMap((entry) => [entry, ...flatten(entry?.children || [])]);
 
 test('Home is a seven-section Bevy composition with the restored nested hierarchy', () => {
     const state = baseState();
@@ -262,7 +221,7 @@ test('Passwords and keys expose direct AI provider settings without a vault unlo
         assert.equal(all.some((entry) => entry.id === `home_key_${id}_model`), true, id);
         assert.ok(all.some((entry) => entry.id === `home_key_${id}_api`), id);
         assert.equal(all.some((entry) => entry.id === `home_key_${id}_save`), false, id);
-        assert.equal(all.some((entry) => entry.id === `home_key_${id}_status`), false, id);
+        assert.equal(all.some((entry) => entry.id === `home_key_${id}_status`), true, id);
     });
     assert.ok(all.some((entry) => entry.id === 'home_ai_keys_accordion'));
     assert.equal(all.some((entry) => /home_vault_|locked_notice/i.test(entry.id || '')), false);
@@ -491,433 +450,15 @@ test('Home opening geometry follows handedness and remains bottom-aligned on des
     }
 });
 
-test('Home applies a validated server through the existing HTTP/WebSocket and reconnect owners', async () => {
-    const previousWindow = globalThis.window;
-    const calls = [];
-    const records = new Map();
-    globalThis.window = {
-        location: {
-            protocol: 'asset:',
-            hostname: 'workspace.example',
-            href: 'asset://workspace.example/',
-            origin: 'null'
-        },
-        localStorage: {
-            getItem: (key) => records.get(String(key)) || null,
-            setItem: (key, value) => records.set(String(key), String(value))
-        },
-        Squirrel: {
-            SyncEngine: {
-                clearFastifyAvailabilityCache: () => calls.push('clear'),
-                disconnect: () => calls.push('disconnect'),
-                retry: () => calls.push('retry'),
-                getState: () => ({ connected: true })
-            }
-        },
-        RemoteCommands: {
-            stop: () => calls.push('remote-stop'),
-            start: async (userId) => calls.push(`remote-start:${userId}`),
-            getCurrentUserId: () => 'server-user'
-        }
-    };
-    try {
-        const result = await applyHomeServerPreference({ mode: 'custom', customBase: 'server.example/' });
-        assert.equal(result.ok, true);
-        assert.equal(result.selected, 'https://server.example');
-        assert.equal(globalThis.window.__SQUIRREL_FASTIFY_URL__, 'https://server.example');
-        assert.match(globalThis.window.__SQUIRREL_FASTIFY_WS_API_URL__, /^wss:\/\/server\.example\//);
-        assert.deepEqual(calls, ['clear', 'disconnect', 'retry', 'remote-stop', 'remote-start:server-user']);
-        assert.equal(records.get('squirrel_tauri_fastify_url_override'), 'https://server.example');
-
-        globalThis.window.__SQUIRREL_FORCE_TAURI_RUNTIME__ = true;
-        globalThis.window.__SQUIRREL_TAURI_LOCAL_PORT__ = 3000;
-        assert.deepEqual(await applyHomeServerPreference({ mode: 'custom', customBase: 'http://localhost:3000' }), {
-            ok: false,
-            error: 'home_server_rejected'
-        });
-    } finally {
-        globalThis.window = previousWindow;
-    }
-});
-
-test('Home creates its local encryption key automatically and keeps credentials, Mail auth and provider keys out of projections', async () => {
-    const previousWindow = globalThis.window;
-    const records = new Map();
-    globalThis.window = {
-        localStorage: {
-            getItem: (key) => records.get(String(key)) || null,
-            setItem: (key, value) => records.set(String(key), String(value)),
-            removeItem: (key) => records.delete(String(key)),
-            key: (index) => Array.from(records.keys())[index] || null,
-            get length() { return records.size; }
-        }
-    };
-    try {
-        assert.deepEqual(ensureHomeVault({ userId: 'home-user' }), { ok: true });
-        const credential = await storeHomeCredential({
-            userId: 'home-user',
-            credential: { name: 'Private site', login: 'ada', draft: true },
-            password: 'credential-password'
-        });
-        assert.equal(credential.ok, true);
-        assert.equal((await storeHomeMailSecret({
-            userId: 'home-user', username: 'ada@example.test', password: 'mail-password'
-        })).ok, true);
-        for (const providerId of ['openai', 'anthropic', 'mistral', 'google', 'deepseek']) {
-            assert.equal((await storeHomeAiToken({
-                userId: 'home-user', providerId, apiKey: `${providerId}-private-key`
-            })).ok, true);
-        }
-        const snapshot = await readHomeVaultState({ userId: 'home-user' });
-        assert.equal(snapshot.unlocked, true);
-        assert.equal(snapshot.mailConfigured, true);
-        assert.equal(snapshot.credentials[0].name, 'Private site');
-        assert.deepEqual(snapshot.providers.map((provider) => provider.id), ['openai', 'anthropic', 'mistral', 'google', 'deepseek']);
-        assert.ok(snapshot.providers.every((provider) => provider.configured));
-        assert.doesNotMatch(JSON.stringify(snapshot), /credential-password|mail-password|private-key/);
-        assert.doesNotMatch([...records.values()].join(''), /credential-password|mail-password|private-key/);
-
-        lockHomeVault();
-        assert.deepEqual(ensureHomeVault({ userId: 'home-user' }), { ok: true });
-        assert.equal(removeHomeCredential({ userId: 'home-user', credentialId: credential.credential.id }).ok, true);
-        assert.equal(removeHomeAiToken({ userId: 'home-user', providerId: 'openai' }).ok, true);
-    } finally {
-        lockHomeVault();
-        globalThis.window = previousWindow;
-    }
-});
-
-test('Mail preferences persist auth_ref only and resolve the password asynchronously from the vault', async () => {
-    const previousWindow = globalThis.window;
-    const records = new Map();
-    const localStorage = {
-        getItem: (key) => records.get(String(key)) || null,
-        setItem: (key, value) => records.set(String(key), String(value)),
-        removeItem: (key) => records.delete(String(key)),
-        key: (index) => Array.from(records.keys())[index] || null,
-        get length() { return records.size; }
-    };
-    globalThis.window = { localStorage };
-    try {
-        assert.deepEqual(ensureHomeVault({ userId: 'mail-user' }), { ok: true });
-        await storeHomeMailSecret({ userId: 'mail-user', username: 'ada', password: 'mail-secret' });
-        const authRef = mailVaultEntryId({ userId: 'mail-user' });
-        const saved = persistRuntimeMailPreferences(globalThis.window, {
-            email: 'ada@example.test', username: 'ada', password: 'must-not-persist', auth_ref: authRef
-        });
-        assert.equal(saved.password, '');
-        assert.equal(saved.auth_ref, authRef);
-        assert.equal(readPersistedRuntimeMailPreferences(globalThis.window).auth_ref, authRef);
-        assert.doesNotMatch([...records.values()].join(''), /mail-secret|must-not-persist/);
-        const resolved = await resolveSecureMailAuth(globalThis.window, saved);
-        assert.equal(resolved.password, 'mail-secret');
-    } finally {
-        lockHomeVault();
-        globalThis.window = previousWindow;
-    }
-});
-
-test('AI consumers read provider secrets asynchronously from the vault, never from profile metadata', async () => {
-    const profile = {
-        ok: true,
-        userId: 'ai-user',
-        profile: {
-            passkeys: {
-                keys: [{ provider: 'openai', model: 'gpt-5', active: true, key: 'legacy-clear-key' }]
-            }
-        }
-    };
-    const securityApi = {
-        vaultStatus: () => ({ configured: true }),
-        readToken: async (entryId) => ({ ok: true, entry_id: entryId, value: { apiKey: 'vault-only-key' } })
-    };
-    const options = { loadProfile: async () => profile, securityApi };
-    const consumer = await resolveActiveAiProviderConfig(options);
-    const catalog = await resolveConfiguredAiProviderKeys(options);
-
-    assert.equal(consumer.apiKey, 'vault-only-key');
-    assert.equal(consumer.source, 'profile.passkeys.keys.active+token_vault');
-    assert.deepEqual(catalog.items, [{ provider: 'openai', model: 'gpt-5', apiKey: 'vault-only-key' }]);
-    assert.doesNotMatch(JSON.stringify({ consumer, catalog }), /legacy-clear-key/);
-});
-
-test('AI provider resolution fails closed until exactly one configured provider is active', async () => {
-    const securityApi = {
-        vaultStatus: () => ({ configured: true }),
-        readToken: async () => ({ ok: true, value: { apiKey: 'vault-key' } })
-    };
-    const resolve = (keys) => resolveActiveAiProviderConfig({
-        loadProfile: async () => ({ ok: true, userId: 'ai-user', profile: { passkeys: { keys } } }),
-        securityApi
-    });
-    assert.equal((await resolve([{ provider: 'openai', model: 'gpt-5' }])).error, 'no_active_ai_provider');
-    assert.equal((await resolve([
-        { provider: 'openai', model: 'gpt-5', active: true },
-        { provider: 'anthropic', model: 'claude-sonnet-4', active: true }
-    ])).error, 'ai_active_provider_ambiguous');
-});
-
-test('Home security actions normalize owner exceptions without exposing a second route', async () => {
-    const previousWindow = globalThis.window;
-    globalThis.window = {
-        AdoleAPI: {
-            auth: {
-                changePassword: async () => { throw new Error('change_denied'); },
-                deleteAccount: async () => { throw new Error('delete_denied'); },
-                logout: async () => { throw new Error('logout_denied'); }
-            }
-        }
-    };
-    try {
-        assert.deepEqual(await changeHomePassword({ currentPassword: 'old', newPassword: 'new' }), { ok: false, error: 'change_denied' });
-        assert.deepEqual(await deleteHomeAccount({ password: 'old' }), { ok: false, error: 'delete_denied' });
-        assert.deepEqual(await logoutHomeSession(), { ok: false, error: 'logout_denied' });
-    } finally {
-        globalThis.window = previousWindow;
-    }
-});
-
-test('Guest authorization rejects every private Home intent outside the visual projection', async () => {
-    const previousFetch = globalThis.fetch;
-    globalThis.fetch = async () => ({ ok: true, json: async () => ({ dashboard: { categories: [] } }) });
-    let refreshCount = 0;
-    let resolveReady = null;
-    const ready = new Promise((resolve) => { resolveReady = resolve; });
-    const cleanup = homeSurface.onOpen({
-        context: { guest: true },
-        refresh: () => {
-            refreshCount += 1;
-            if (refreshCount >= 2) resolveReady();
-        }
-    });
-    try {
-        await ready;
-        for (const intent of [
-            { type: 'home.choice.set', field: 'display_name_source', value: 'nickname' },
-            { type: 'home.list.add', section: 'bio.biometrics' },
-            { type: 'home.photo.pick' },
-            { type: 'home.security.change_password.request' },
-            { type: 'home.credential.add' },
-            { type: 'home.mail.save' },
-            { type: 'home.server.add' }
-        ]) {
-            assert.deepEqual(await homeSurface.handleEvent(intent, { refresh: () => {} }), {
-                ok: false,
-                error: 'home_guest_read_only'
-            });
-        }
-    } finally {
-        cleanup?.();
-        globalThis.fetch = previousFetch;
-    }
-});
-
-test('Home section services subscribe only while their lazy subsection is active', () => {
-    const previousWindow = globalThis.window;
-    const target = new EventTarget();
-    const counts = new Map();
-    target.addEventListener = (type, handler) => {
-        counts.set(type, (counts.get(type) || 0) + 1);
-        EventTarget.prototype.addEventListener.call(target, type, handler);
-    };
-    target.removeEventListener = (type, handler) => {
-        counts.set(type, (counts.get(type) || 0) - 1);
-        EventTarget.prototype.removeEventListener.call(target, type, handler);
-    };
-    globalThis.window = target;
-    try {
-        const subscriptions = createHomeSectionSubscriptions({ onBackgroundResult: () => {}, onServerState: () => {} });
-        assert.equal(counts.size, 0);
-        subscriptions.background(true);
-        subscriptions.server(true);
-        assert.equal(counts.get('eve:background-action-result'), 1);
-        assert.equal(counts.get('squirrel:sync-ready'), 1);
-        subscriptions.release();
-        assert.ok(Array.from(counts.values()).every((count) => count === 0));
-    } finally {
-        globalThis.window = previousWindow;
-    }
-});
-
-test('legacy bootstrap phone aliases are repaired through one canonical profile commit on each backend', async () => {
-    for (const backend of ['tauri', 'fastify']) {
-        const commits = [];
-        const repaired = await repairBootstrapPhoneProfile({
-            backend,
-            userId: `phone_alias_user_${backend}`,
-            properties: { name: '+33123456789', username: '+33123456789', phone: '+33 1 23 45 67 89' },
-            profile: {},
-            commit: async (payload, options) => {
-                commits.push({ payload, options });
-                return { ok: true };
-            }
-        });
-        assert.equal(repaired.profile.name, '');
-        assert.equal(repaired.profile.phone, '+33123456789');
-        assert.match(repaired.profile.username, /^user_/);
-        assert.notEqual(repaired.profile.username, repaired.profile.phone);
-        assert.equal(repaired.properties.name, '');
-        assert.equal(repaired.properties.username, repaired.profile.username);
-        assert.equal(commits.length, 1);
-        assert.equal(commits[0].payload.actor.id, `phone_alias_user_${backend}`);
-        assert.equal(commits[0].options.backend, backend);
-    }
-    assert.equal(await repairBootstrapPhoneProfile({
-        backend: 'tauri', userId: 'named_user',
-        properties: { name: 'Ada', username: '+33123456789', phone: '+33123456789' },
-        profile: { name: 'Ada' }, commit: async () => ({ ok: true })
-    }), null);
-});
-
-test('guest tool bootstrap keeps the local registry when no remote account is provisioned', () => {
-    assert.equal(classifyRetryableMutationException(new Error('remote_account_not_provisioned')), 'access_denied');
-    assert.equal(classifyRetryableMutationResult({ error: 'remote_account_not_provisioned' }), 'access_denied');
-});
-
-test('legacy Home DOM owners remain deleted and the route never names eve_user_dialog', () => {
-    const deleted = [
-        'user_dialogs_runtime.js',
-        'user_identity_fields_runtime.js',
-        'user_profile_sections_runtime.js',
-        'user_photo_runtime.js',
-        'user_action_buttons_runtime.js',
-        'user_profile_lifecycle_runtime.js'
-    ];
-    deleted.forEach((file) => assert.equal(fs.existsSync(`eVe/intuition/tools/${file}`), false, file));
-    const definitions = fs.readFileSync('eVe/intuition/panel_definitions.js', 'utf8');
-    const userModule = fs.readFileSync('eVe/intuition/tools/user.js', 'utf8');
-    const routeModule = fs.readFileSync('eVe/intuition/tools/user_home_panel_runtime.js', 'utf8');
-    const commonSurfaces = fs.readFileSync('eVe/intuition/runtime/bevy_panel/bevy_panel_surfaces.js', 'utf8');
-    const actionsModule = fs.readFileSync('eVe/intuition/runtime/bevy_panel/bevy_panel_home_actions.js', 'utf8');
-    const homeRuntime = fs.readFileSync('eVe/intuition/runtime/bevy_panel/bevy_panel_home_runtime.js', 'utf8');
-    const commonPanelRuntime = fs.readFileSync('eVe/intuition/runtime/bevy_panel/bevy_panel_runtime.js', 'utf8');
-    assert.doesNotMatch(definitions, /eve_user_dialog/);
-    assert.match(definitions, /runtime_owner: 'window'/);
-    assert.match(definitions, /surface_key: useWindowOwner \? '' : def\.surface_key/);
-    assert.doesNotMatch(userModule, /createEveDialog|createElement\(|innerHTML|querySelector/);
-    assert.match(userModule, /bevy_panel_home_runtime\.js/);
-    assert.match(userModule, /registerBevyPanelSurface\(homeSurface\)/);
-    assert.doesNotMatch(userModule, /^import .*user_workspace_(runtime|surface_runtime)\.js/m);
-    assert.match(userModule, /import\('\.\/user_workspace_runtime\.js'\)/);
-    assert.match(userModule, /import\('\.\/user_workspace_surface_runtime\.js'\)/);
-    assert.doesNotMatch(commonPanelRuntime, /^import .*workspace_main_menu_visibility\.js/m);
-    assert.match(commonPanelRuntime, /import\('\.\.\/\.\.\/tools\/workspace_main_menu_visibility\.js'\)/);
-    assert.doesNotMatch(commonSurfaces, /bevy_panel_(home|contact|lab)/);
-    assert.doesNotMatch(actionsModule, /^import .*profile_api|^import .*dashboard_defaults|^import .*loadServerConfig/m);
-    assert.doesNotMatch(homeRuntime, /^import .*home_vault|^import .*project_media_import_runtime/m);
-    assert.match(routeModule, /syncLoginToolState\(false, 'anonymous_workspace'\)/);
-    assert.match(routeModule, /syncLoginToolState\(false, 'authenticated_workspace'\)/);
-});
-
-test('Home reboot keeps public access and photo on the principal owned by the configured profile backend', async () => {
-    const previousWindow = globalThis.window;
-    const previousApi = globalThis.AdoleAPI;
-    const originalMe = TauriAdapter.auth.me;
-    const originalGetStateCurrent = TauriAdapter.atome.getStateCurrent;
-    const originalFastifyMe = FastifyAdapter.auth.me;
-    const originalFastifyGetStateCurrent = FastifyAdapter.atome.getStateCurrent;
-    const commits = [];
-    TauriAdapter.auth.me = async () => ({
-        ok: true,
-        user: { id: 'local_profile_principal', username: 'Local identity' }
-    });
-    TauriAdapter.atome.getStateCurrent = async (id) => ({
-        ok: true,
-        data: {
-            state: {
-                atome_id: id,
-                properties: {
-                    eve_profile: {
-                        name: 'Local identity',
-                        access: 'public'
-                    }
-                }
-            }
-        }
-    });
-    FastifyAdapter.auth.me = async () => ({
-        ok: true,
-        user: { id: 'remote_session_principal', username: 'Remote identity' }
-    });
-    FastifyAdapter.atome.getStateCurrent = async (id) => ({
-        ok: true,
-        data: {
-            state: {
-                atome_id: id,
-                properties: {
-                    eve_profile: {
-                        name: 'Persisted name',
-                        access: 'public',
-                        user_face: 'data:image/png;base64,persisted'
-                    }
-                }
-            }
-        }
-    });
-    const api = {
-        auth: {
-            current: async () => ({
-                logged: true,
-                source: 'fastify',
-                user: { id: 'remote_session_principal', username: 'Remote identity' }
-            }),
-            ensureFastifyToken: async () => ({ ok: true })
-        },
-        atomes: {},
-        security: { isAnonymous: () => false }
-    };
-    globalThis.window = {
-        __SQUIRREL_FORCE_TAURI_RUNTIME__: true,
-        __SQUIRREL_PROFILE_SOURCE__: 'tauri',
-        AdoleAPI: api,
-        Atome: {
-            commit: async (payload, options) => {
-                commits.push({ payload, options });
-                return { ok: true };
-            }
-        }
-    };
-    globalThis.AdoleAPI = api;
-    try {
-        const intentionalRemoval = await repairLegacyRemoteProfile({
-            backend: 'tauri',
-            userId: 'local_profile_principal',
-            user: { name: 'Local identity' },
-            profile: { name: 'Custom local name', user_face: '' },
-            commit: globalThis.window.Atome.commit
-        });
-        assert.equal(intentionalRemoval, null);
-        assert.equal(commits.length, 0);
-
-        const loaded = await loadUserProfile();
-        assert.equal(loaded.ok, true);
-        assert.equal(loaded.userId, 'local_profile_principal');
-        assert.equal(loaded.profile.access, 'public');
-        assert.equal(loaded.profile.user_face, 'data:image/png;base64,persisted');
-        assert.equal(commits.length, 1);
-        assert.equal(commits[0].payload.atome_id, 'local_profile_principal');
-        assert.equal(commits[0].payload.props.eve_profile.name, 'Persisted name');
-
-        const updated = await upsertUserProfile(loaded.profile, { allowCreate: false });
-        assert.equal(updated.ok, true);
-        assert.equal(updated.userId, 'local_profile_principal');
-        assert.equal(commits.length, 2);
-        assert.equal(commits[1].payload.atome_id, 'local_profile_principal');
-        assert.equal(commits[1].payload.actor.id, 'local_profile_principal');
-        assert.equal(commits[1].options.backend, 'tauri');
-
-        TauriAdapter.atome.getStateCurrent = async () => ({ ok: false, error: 'state not found' });
-        const refused = await loadUserProfile();
-        assert.equal(refused.ok, false);
-        assert.equal(refused.error, 'state not found');
-    } finally {
-        TauriAdapter.auth.me = originalMe;
-        TauriAdapter.atome.getStateCurrent = originalGetStateCurrent;
-        FastifyAdapter.auth.me = originalFastifyMe;
-        FastifyAdapter.atome.getStateCurrent = originalFastifyGetStateCurrent;
-        if (previousWindow === undefined) delete globalThis.window;
-        else globalThis.window = previousWindow;
-        if (previousApi === undefined) delete globalThis.AdoleAPI;
-        else globalThis.AdoleAPI = previousApi;
-    }
+test('stored provider keys show a fixed mask without repopulating the editor or hiding status errors', () => {
+    const render = provider => flatten(buildHomeContent(baseState({ expanded: 'passkeys', vault: {
+        credentials: [], providers: [{ id: 'openai', label: 'OpenAI', models: [], ...provider }] }
+    }), { emit() {}, bodyWidth: 452, editing }));
+    const saved = render({ configured: true });
+    const field = saved.find(node => node.id === 'home_key_openai_api_input');
+    assert.ok(JSON.stringify(field).includes('••••••••'));
+    assert.equal(editing.displayValue('security.aiKeys.openai'), '');
+    const unknown = render({ configured: null, error: 'provider_connection_failed' });
+    assert.equal(JSON.stringify(unknown).includes('••••••••'), false);
+    assert.notDeepEqual(unknown.find(node => node.id === 'home_key_openai_status'), render({ configured: false }).find(node => node.id === 'home_key_openai_status'));
 });

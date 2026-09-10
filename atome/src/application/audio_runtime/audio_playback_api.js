@@ -6,6 +6,32 @@ export class AudioPlaybackAPI {
         this.env = env;
         this.core = core;
         this.av = installSharedAVContracts(env);
+        this.streams = new Map();
+    }
+
+    async playStream({ id, stream } = {}) {
+        if (!id || !stream) throw new Error('audio_stream_required');
+        this.stopStream({ id });
+        const element = this.env.document.createElement('audio');
+        element.autoplay = true;
+        element.srcObject = stream;
+        this.streams.set(id, element);
+        try { await element.play(); }
+        catch (error) { this.stopStream({ id }); throw error; }
+        return { ok: true, id };
+    }
+
+    stopStream({ id } = {}) {
+        const element = this.streams.get(id);
+        if (!element) return;
+        element.pause();
+        element.srcObject = null;
+        this.streams.delete(id);
+    }
+
+    muteStream({ id, muted = true } = {}) {
+        const element = this.streams.get(id);
+        if (element) element.muted = muted;
     }
 
     loadAsset(input = {}) {

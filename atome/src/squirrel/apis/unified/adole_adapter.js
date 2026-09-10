@@ -51,7 +51,7 @@ function createWebSocketAdapter(tokenKey, backend = 'tauri') {
             // Bumped by the transport on every successful open. Consumers that must
             // re-declare per-connection state after a reconnection read it from here.
             get connectionGeneration() { return getWs().connectionGeneration ?? -1; },
-            send: (message) => getWs().send(message),
+            send: (message, options) => getWs().send(message, options),
             sendFireAndForget: (message) => {
                 const ws = getWs();
                 if (ws && typeof ws.sendFireAndForget === 'function') {

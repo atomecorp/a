@@ -1,0 +1,10 @@
+<svg width="128" height="128" viewBox="0 0 128 128" preserveAspectRatio="xMidYMid meet" xmlns:xlink="http://www.w3.org/1999/xlink" class="svg-icon" style="width: 1em; height: 1em;vertical-align: middle;fill: currentColor;overflow: hidden;" xmlns="http://www.w3.org/2000/svg"><g transform="translate(0, 0) scale(1) translate(0, 0)">
+<g transform="translate(0, 0) scale(0.125) translate(0, 0)">
+
+  <path d="M196 62 254 96 726 810 668 844Z"/>
+  <path d="M828 62 770 96 298 810 356 844Z"/>
+  <path fill-rule="evenodd" d="M128 852a148 148 0 1 0 296 0 148 148 0 1 0-296 0zM200 852a76 76 0 1 1 152 0 76 76 0 1 1-152 0z"/>
+  <path fill-rule="evenodd" d="M600 852a148 148 0 1 0 296 0 148 148 0 1 0-296 0zM672 852a76 76 0 1 1 152 0 76 76 0 1 1-152 0z"/>
+
+</g>
+</g></svg>

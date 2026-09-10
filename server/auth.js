@@ -13,7 +13,7 @@
  */
 
 import { normalizePhone, generateOpaquePrincipalId, hashPassword, verifyPassword } from './auth_crypto.js';
-import { createUserAtome, findUserByPhone, findUserById, listAllUsers, updateUserParticle, deleteUserAtome } from './auth_users.js';
+import { authenticatedUserSnapshot, createUserAtome, findUserByPhone, findUserById, listAllUsers, updateUserParticle, deleteUserAtome } from './auth_users.js';
 import { generateOTP, sendSMS } from './auth_otp.js';
 
 export {
@@ -30,6 +30,7 @@ export {
 
 // User management surface used by the WebSocket handlers.
 export {
+    authenticatedUserSnapshot,
     createUserAtome,
     findUserByPhone,
     findUserById,

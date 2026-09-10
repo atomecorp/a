@@ -24,9 +24,9 @@ import { isWsApiPrincipalProvisioned } from './wsApiIdentity.js';
  * @param {string} ctx.UPLOADS_TMP_DIR
  * @param {object} ctx.deps - server-side helpers kept in server.js
  */
-export async function handleWsFileOperation({ connection, data, safeSend, projectRoot, UPLOADS_TMP_DIR, deps }) {
+export async function handleWsFileOperation({ connection, data, safeSend, projectRoot, UPLOADS_TMP_DIR, deps, provisioned = isWsApiPrincipalProvisioned }) {
     const {
-        coerceWsChunkSize, ensureVideoPlaybackCache, getRequiredJwtSecret,
+        databaseEnabled, coerceWsChunkSize, ensureVideoPlaybackCache, getRequiredJwtSecret,
         listUserDownloadsSnapshot, normalizeUserRelativePath, registerFileUpload,
         resolveDownloadTarget, resolveUserAssetPath, resolveUserUploadPath, sanitizeUploadId
     } = deps;
@@ -81,7 +81,7 @@ export async function handleWsFileOperation({ connection, data, safeSend, projec
       });
       return;
     }
-    if (!await isWsApiPrincipalProvisioned(userId)) {
+    if (!await provisioned(userId)) {
       safeSend({
         type: 'file-response',
         requestId,
@@ -232,7 +232,7 @@ export async function handleWsFileOperation({ connection, data, safeSend, projec
       try {
         const bytes = Buffer.from(String(chunkBase64), 'base64');
         await fs.mkdir(UPLOADS_TMP_DIR, { recursive: true, mode: 0o700 });
-        const uploadDir = path.join(UPLOADS_TMP_DIR, uploadId);
+        const uploadDir = path.join(UPLOADS_TMP_DIR, 'user_' + encodeURIComponent(userId), uploadId);
         await fs.mkdir(uploadDir, { recursive: true, mode: 0o700 });
         const chunkPath = path.join(uploadDir, `${chunkIndex}.part`);
         await fs.writeFile(chunkPath, bytes);
@@ -302,7 +302,7 @@ export async function handleWsFileOperation({ connection, data, safeSend, projec
           return;
         }
 
-        const uploadDir = path.join(UPLOADS_TMP_DIR, uploadId);
+        const uploadDir = path.join(UPLOADS_TMP_DIR, 'user_' + encodeURIComponent(userId), uploadId);
 
         if (chunkCount > 0) {
           const output = createWriteStream(filePath, { flags: 'w' });
@@ -331,7 +331,7 @@ export async function handleWsFileOperation({ connection, data, safeSend, projec
         }
         await ensureVideoPlaybackCache(filePath, fileName, mimeType || '');
 
-        if (DATABASE_ENABLED) {
+        if (databaseEnabled) {
           const stats = await fs.stat(filePath).catch(() => null);
           await registerFileUpload(fileName, userId, {
             atome_id: atomeId || null,

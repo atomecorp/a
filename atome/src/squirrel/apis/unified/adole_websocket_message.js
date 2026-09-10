@@ -10,6 +10,7 @@ import { reportRuntimeError } from '../../runtime_errors.js';
 // Server pushes with no request id: re-emitted on `window` as `squirrel:<type>`.
 // Value = how to build the event detail from the message.
 const PUSH_EVENTS = {
+    'ai-realtime-event': message => ({ session_id: message.session_id, event: message.event }),
     'surface-presence': (message) => ({
         event: message.event || null,
         surface: message.surface || null,
@@ -242,6 +243,10 @@ export const messageHandlerMixin = {
             // repeated at every branch.
             const requestId = message.request_id || message.requestId;
             if (!requestId) return;
+            if (type === 'ai-provider-progress') {
+                this.pendingRequests.get(requestId)?.onProgress?.(message.event);
+                return;
+            }
 
             const buildPayload = RESPONSE_PAYLOADS[type];
             if (buildPayload) {
@@ -263,6 +268,7 @@ export const messageHandlerMixin = {
                 success: success !== false,
                 status: success === false ? 400 : 200,
                 error: message.error,
+                http_status: message.http_status,
                 data: message.data ?? message
             });
         } catch (error) {

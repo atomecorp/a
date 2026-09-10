@@ -134,33 +134,56 @@ const normalizeSchema = (schema) => {
 };
 
 const validateType = (value, type) => {
+  if (Array.isArray(type)) return type.some(item => validateType(value, item));
   if (type === 'array') return Array.isArray(value);
   if (type === 'null') return value === null;
+  if (type === 'integer') return Number.isInteger(value);
+  if (type === 'number') return typeof value === 'number' && Number.isFinite(value);
+  if (type === 'object') return value !== null && typeof value === 'object' && !Array.isArray(value);
   return typeof value === type;
 };
 
-const validateParams = (schema, params) => {
-  if (!schema) return { ok: true };
-  const value = params || {};
-  const required = Array.isArray(schema.required) ? schema.required : [];
-
-  for (const key of required) {
-    if (!(key in value)) {
-      return { ok: false, error: `Missing required param: ${key}` };
+const validateParams = (schema, params, path = 'params', depth = 0) => {
+  const invalid = rule => ({ ok: false, error: 'Invalid ' + rule + ' at ' + path });
+  if (depth > 32) return invalid('schema depth');
+  if (schema === false) return invalid('value');
+  if (!schema || schema === true) return { ok: true };
+  const value = params;
+  const matches = rule => validateParams(rule, value, path, depth + 1).ok;
+  if (schema.anyOf && !schema.anyOf.some(matches)) return invalid('anyOf');
+  if (schema.oneOf && schema.oneOf.filter(matches).length !== 1) return invalid('oneOf');
+  if (schema.allOf && !schema.allOf.every(matches)) return invalid('allOf');
+  if (schema.not && matches(schema.not)) return invalid('not');
+  if (schema.type && !validateType(value, schema.type)) return invalid('type');
+  if (schema.enum && !schema.enum.some(item => stableStringify(item) === stableStringify(value))) return invalid('enum');
+  if (Object.hasOwn(schema, 'const') && stableStringify(schema.const) !== stableStringify(value)) return invalid('const');
+  if (typeof value === 'number') {
+    if (schema.minimum !== undefined && value < schema.minimum) return invalid('minimum');
+    if (schema.maximum !== undefined && value > schema.maximum) return invalid('maximum');
+  }
+  if (typeof value === 'string') {
+    if (schema.minLength !== undefined && value.length < schema.minLength) return invalid('minLength');
+    if (schema.maxLength !== undefined && value.length > schema.maxLength) return invalid('maxLength');
+    if (schema.pattern && !new RegExp(schema.pattern, 'u').test(value)) return invalid('pattern');
+  }
+  if (Array.isArray(value)) {
+    if (schema.minItems !== undefined && value.length < schema.minItems) return invalid('minItems');
+    if (schema.maxItems !== undefined && value.length > schema.maxItems) return invalid('maxItems');
+    if (schema.uniqueItems && new Set(value.map(stableStringify)).size !== value.length) return invalid('uniqueItems');
+    if (schema.items) for (let i = 0; i < value.length; i++) {
+      const result = validateParams(schema.items, value[i], path + '[' + i + ']', depth + 1);
+      if (!result.ok) return result;
+    }
+  } else if (value && typeof value === 'object') {
+    for (const key of schema.required || []) if (!Object.hasOwn(value, key)) return invalid('required ' + key);
+    for (const [key, item] of Object.entries(value)) {
+      const rule = schema.properties?.[key] ?? schema.additionalProperties;
+      if (rule !== undefined) {
+        const result = validateParams(rule, item, path + '.' + key, depth + 1);
+        if (!result.ok) return result;
+      }
     }
   }
-
-  const properties = schema.properties || {};
-  for (const [key, rules] of Object.entries(properties)) {
-    if (!(key in value)) continue;
-    if (rules.type && !validateType(value[key], rules.type)) {
-      return { ok: false, error: `Invalid type for ${key}` };
-    }
-    if (Array.isArray(rules.enum) && !rules.enum.includes(value[key])) {
-      return { ok: false, error: `Invalid enum value for ${key}` };
-    }
-  }
-
   return { ok: true };
 };
 
@@ -253,6 +276,7 @@ const normalizeToolDefinition = (tool) => {
 };
 
 export {
+    stableStringify,
     toIso,
     makeId,
     cloneValue,

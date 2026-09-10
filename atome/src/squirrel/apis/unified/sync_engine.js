@@ -255,7 +255,11 @@ export class SyncEngine {
             durable: true
         };
         if (kind === 'delete' && lifecycleWins) this.dispatch('squirrel:atome-deleted', common);
-        else if (kind === 'restore' && lifecycleWins) this.dispatch('squirrel:atome-restored', common);
+        else if (kind === 'restore') {
+            if (lifecycleWins) this.dispatch('squirrel:atome-restored', {
+                ...common, properties: { ...projectionProperties, ...props }
+            });
+        }
         else if (Object.keys(props).length || deleteKeys.length) this.dispatch('squirrel:atome-updated', common);
         this.persistCursor(stream, sequence);
         this.ack(stream, sequence);

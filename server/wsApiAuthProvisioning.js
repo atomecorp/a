@@ -2,6 +2,7 @@ import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
 import { getServerIdentity } from './serverIdentity.js';
 import {
+    authenticatedUserSnapshot,
     createUserAtome,
     findUserByPhone,
     findUserById
@@ -92,7 +93,7 @@ export async function handleWsApiAccountProvision(message, context) {
             provisioned: true,
             replayed: true,
             token,
-            user: { id: user.user_id, user_id: user.user_id, username: user.username }
+            user: authenticatedUserSnapshot(user)
         });
     }
 
@@ -129,7 +130,7 @@ export async function handleWsApiAccountProvision(message, context) {
         provisioned: true,
         replayed: false,
         token,
-        user: { id: user.user_id, user_id: user.user_id, username: user.username }
+        user: authenticatedUserSnapshot(user)
     });
 }
 

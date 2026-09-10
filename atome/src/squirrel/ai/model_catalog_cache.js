@@ -1,3 +1,4 @@
+import { getSessionState } from '../apis/unified/adole_api/session.js';
 import {
     AI_MODEL_PROVIDER_REGISTRY,
     listAiModelProviders
@@ -5,6 +6,7 @@ import {
 import { cloneJson as clone, toText } from '../shared/scalars.js';
 
 const STORAGE_KEY = 'eve_ai_model_catalog_cache_v1';
+const scopedKey = userId => STORAGE_KEY + ':' + encodeURIComponent(toText(userId) || 'anonymous');
 export const AI_MODEL_CATALOG_VERSION = 2;
 export const AI_MODEL_CATALOG_TTL_MS = 60 * 60 * 1000;
 
@@ -75,9 +77,9 @@ const sanitizePayload = (payload = {}) => {
     };
 };
 
-const readRawPayload = (storage) => {
+const readRawPayload = (storage, userId) => {
     try {
-        const raw = storage?.getItem(STORAGE_KEY);
+        const raw = storage?.getItem(scopedKey(userId));
         if (!raw) return null;
         return sanitizePayload(JSON.parse(raw));
     } catch (_) {
@@ -85,9 +87,9 @@ const readRawPayload = (storage) => {
     }
 };
 
-const writeRawPayload = (storage, payload) => {
+const writeRawPayload = (storage, payload, userId) => {
     try {
-        storage?.setItem(STORAGE_KEY, JSON.stringify(sanitizePayload(payload)));
+        storage?.setItem(scopedKey(userId), JSON.stringify(sanitizePayload(payload)));
         return true;
     } catch (_) {
         return false;
@@ -116,11 +118,11 @@ export const buildModelCatalogCacheRecord = ({
 };
 
 export const readModelCatalogCache = ({
-    storage = null
+    storage = null, userId = getSessionState()?.user?.id
 } = {}) => {
     const resolvedStorage = resolveStorage(storage);
     const embedded = buildEmbeddedPayload();
-    const cached = resolvedStorage ? readRawPayload(resolvedStorage) : null;
+    const cached = resolvedStorage ? readRawPayload(resolvedStorage, userId) : null;
     if (!cached || !Array.isArray(cached.items) || cached.items.length === 0) {
         return {
             ok: true,
@@ -155,11 +157,11 @@ export const readModelCatalogCache = ({
 
 export const writeModelCatalogCache = ({
     storage = null,
-    payload
+    payload, userId = getSessionState()?.user?.id
 } = {}) => {
     const resolvedStorage = resolveStorage(storage);
     if (!resolvedStorage) return false;
-    return writeRawPayload(resolvedStorage, payload);
+    return writeRawPayload(resolvedStorage, payload, userId);
 };
 
 export const getEmbeddedModelCatalogPayload = () => clone(buildEmbeddedPayload());

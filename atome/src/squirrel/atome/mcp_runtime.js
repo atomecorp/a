@@ -1,5 +1,3 @@
-import { hasOwn } from './mcp_core.js';
-
 export function ensureAtomeContext() {
     if (typeof globalThis === 'undefined') {
         throw new Error('Global context unavailable for MCP bridge');
@@ -92,4 +90,15 @@ export function buildRuntimeInvocationPayload(params = {}, defaults = {}) {
         ...(params?.dry_run === true ? { dry_run: true } : {}),
         ...(params?.idempotency_key ? { idempotency_key: params.idempotency_key } : {})
     };
+}
+
+// UI execution can return disposable renderer objects to its local caller.
+// The MCP boundary exposes business results, never a whole scene or DOM surface.
+export function projectRuntimeMcpResult(value) {
+    if (Array.isArray(value)) return value.map(projectRuntimeMcpResult);
+    if (!value || typeof value !== 'object') return value;
+    const { view, scene, surface, ...result } = value;
+    if (result.result && typeof result.result === 'object') result.result = projectRuntimeMcpResult(result.result);
+    if (Array.isArray(result.results)) result.results = result.results.map(projectRuntimeMcpResult);
+    return result;
 }

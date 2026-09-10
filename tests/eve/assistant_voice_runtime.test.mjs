@@ -108,6 +108,7 @@ test('voice diagnostics preserve requests and redact every secret field', () => 
     const nativeLines = [];
     const nativeRecords = [];
     const env = {
+        __EVE_VOICE_DIAGNOSTICS__: true,
         console: { info: (line) => lines.push(line) },
         webkit: { messageHandlers: { console: { postMessage: (line) => nativeLines.push(line) } } },
         __TAURI_INTERNALS__: { invoke: (command, payload) => nativeRecords.push({ command, payload }) }
@@ -304,6 +305,7 @@ test('MCP diagnostics keep traceable summaries instead of nested catalog dumps',
         parameters: { type: 'object', properties: { huge: { description: 'x'.repeat(500) } } }
     }));
     const env = {
+        __EVE_VOICE_DIAGNOSTICS__: true,
         console: { info: (line) => lines.push(line) },
         handleAtomeMCPRequestAsync: async () => ({ jsonrpc: '2.0', id: 1, result: { tools } })
     };

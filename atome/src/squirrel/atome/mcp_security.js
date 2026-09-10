@@ -9,6 +9,7 @@ import {
 } from './mcp_core.js';
 import { renderPrompt } from './mcp_resources.js';
 import { resolveRateLimitRule, sanitizeConfirmationParams } from './mcp_security_policy.js';
+import { stableStringify } from '../ai/agent_gateway_normalize.js';
 
 const MCP_SECURITY_JOURNAL_LIMIT = 200;
 const MCP_IDEMPOTENCY_LIMIT = 200;
@@ -35,6 +36,8 @@ const DEFAULT_ACTOR_CAPABILITIES = Object.freeze([
     'contacts.write',
     'calendar.read',
     'calendar.write',
+    'timeline.read',
+    'timeline.write',
     'conditions.read',
     'conditions.write',
     'bank.read',
@@ -292,6 +295,10 @@ export function validateConfirmation(method, params = {}, policy = {}, actor = {
                 confirmation_id: confirmationId
             }
         };
+    }
+    if (record.actor.actor_id !== (actor.actor_id || 'local_owner')
+        || stableStringify(record.params) !== stableStringify(sanitizeConfirmationParams(params))) {
+        return { ok: false, gate: { ok: false, error: 'mcp_confirmation_request_mismatch', confirmation_id: confirmationId } };
     }
     record.status = 'consumed';
     record.consumed_at = nowIso();

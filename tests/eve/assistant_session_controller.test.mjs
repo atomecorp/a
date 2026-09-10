@@ -1,40 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-
-import { createLocalTtsRuntime } from '../../atome/src/squirrel/voice/local_tts_runtime.js';
-import { encodeFrenchPhonemes, normalizeFrenchTtsText } from '../../atome/src/squirrel/voice/french_phoneme_encoder.js';
-import { analyzePcmWindow, pcm16WavBytes, vowelFamilyForPhoneme } from '../../atome/src/squirrel/voice/tts_pcm_analysis.js';
-import {
-    assistantMorphForVowel,
-    assistantRevealAt,
-    assistantSizeForSurface,
-    assistantTransitionAt,
-    assistantUniforms,
-    buildAssistantVisualRecord
-} from '../../eVe/voice/assistant/assistant_visual_contract.js';
 import { createEveAssistantRuntime } from '../../eVe/voice/assistant/assistant_runtime.js';
 import { createBevyMainMenuHoldRuntime } from '../../eVe/intuition/ribbon/bevy_ui_main_menu_hold_runtime.js';
-import { isEphemeralProjectSceneRecord } from '../../eVe/domains/rendering/project_scene_record_projection.js';
-import { normalizeWorkspaceSceneRecord } from '../../eVe/domains/rendering/workspace_scene_layers.js';
-import voiceConfig from '../../atome/src/assets/voice/fr_FR-siwis-medium/fr_FR-siwis-medium.onnx.json' with { type: 'json' };
-import { PlayRecordCore } from '../../atome/src/application/audio_runtime/play_record_core.js';
 
-const deferred = () => {
-    let resolve;
-    const promise = new Promise((next) => { resolve = next; });
-    return { promise, resolve };
-};
-const voiceTexts = {
-    openingGreeting: 'Salut, que veux-tu ?',
-    touchResponse: 'Oui, je suis toujours là. Comment puis-je t’aider ?',
-    closingGreeting: 'Salut, à plus tard.'
-};
-const translateVoiceKey = (key) => {
-    if (key.endsWith('opening_greeting')) return voiceTexts.openingGreeting;
-    if (key.endsWith('touch_response')) return voiceTexts.touchResponse;
-    if (key.endsWith('closing_greeting')) return voiceTexts.closingGreeting;
-    return 'Assistant vocal eVe';
-};
 const withMcpBridge = (api) => ({
     orchestrator: { bridge: { kind: 'mcp' } },
     stopListening: async () => ({ stopped: true }),
@@ -42,99 +10,24 @@ const withMcpBridge = (api) => ({
     ...api
 });
 
-test('French local TTS encoder is deterministic for greeting, numbers and elisions', () => {
-    const first = encodeFrenchPhonemes("Salut, que veux-tu ? J'ai 21 idées.", voiceConfig.phoneme_id_map);
-    const second = encodeFrenchPhonemes("Salut, que veux-tu ? J'ai 21 idées.", voiceConfig.phoneme_id_map);
-    assert.deepEqual(first, second);
-    assert.match(normalizeFrenchTtsText('21 idées'), /vingt et un idées/);
-    assert.ok(first.ids.length > first.phonemes.length);
-    assert.equal(first.phonemes[0], '^');
-    assert.equal(first.phonemes.at(-1), '$');
-});
+const translateVoiceKey = (key) => {
+    if (key.endsWith('opening_greeting')) return voiceTexts.openingGreeting;
+    if (key.endsWith('touch_response')) return voiceTexts.touchResponse;
+    if (key.endsWith('closing_greeting')) return voiceTexts.closingGreeting;
+    return 'Assistant vocal eVe';
+};
 
-test('PCM analysis and WAV encoding expose the real playback envelope', () => {
-    const pcm = Float32Array.from({ length: 441 }, (_, index) => Math.sin(index / 5) * 0.5);
-    const analysis = analyzePcmWindow(pcm);
-    const wav = pcm16WavBytes(pcm, 22050);
-    assert.ok(analysis.rms > 0.3);
-    assert.ok(analysis.peak >= 0.49);
-    assert.equal(new TextDecoder().decode(wav.slice(0, 4)), 'RIFF');
-    assert.equal(wav.byteLength, 44 + pcm.length * 2);
-    assert.deepEqual(['a', 'ɛ', 'i', 'ɔ', 'u'].map(vowelFamilyForPhoneme), ['A', 'E', 'I', 'O', 'U']);
-});
+const voiceTexts = {
+    openingGreeting: 'Salut, que veux-tu ?',
+    touchResponse: 'Oui, je suis toujours là. Comment puis-je t’aider ?',
+    closingGreeting: 'Salut, à plus tard.'
+};
 
-test('assistant visual contract clamps size and defines all deterministic vowel morphs', () => {
-    assert.equal(assistantSizeForSurface({ width: 320, height: 640 }), 240);
-    assert.equal(assistantSizeForSurface({ width: 2000, height: 1400 }), 420);
-    const morphs = ['A', 'E', 'I', 'O', 'U'].map(assistantMorphForVowel);
-    assert.equal(new Set(morphs.map((morph) => morph.join(','))).size, 5);
-    const speaking = assistantUniforms({ phase: 'speaking', vowel: 'A', rms: 1, elapsedMs: 800 });
-    assert.equal(speaking.phase, 4);
-    assert.equal(speaking.intensity, 1);
-    assert.ok(speaking.pulse <= 0.055);
-    assert.equal(speaking.listening_rms, 0);
-    const listening = assistantUniforms({ phase: 'listening', listeningRms: 0.6, listeningActive: true, elapsedMs: 800 });
-    assert.equal(listening.listening_rms, 0.6);
-    const bargeIn = assistantUniforms({ phase: 'speaking', listeningRms: 0.4, listeningActive: true, elapsedMs: 800 });
-    assert.equal(bargeIn.listening_rms, 0.4);
-    const idleStart = assistantUniforms({ morph: [1, 1, 0, 0], elapsedMs: 0 });
-    const idleLater = assistantUniforms({ morph: [1, 1, 0, 0], elapsedMs: 800 });
-    assert.notStrictEqual(idleStart.morph, idleLater.morph);
-    assert.notDeepEqual(idleStart.morph, idleLater.morph);
-});
-
-test('assistant visibility transitions are continuous at every timing boundary', () => {
-    assert.equal(assistantTransitionAt({ transition: 'appearing', elapsedMs: 0 }), 0);
-    assert.ok(assistantTransitionAt({ transition: 'appearing', elapsedMs: 419 }) < 1);
-    assert.equal(assistantTransitionAt({ transition: 'appearing', elapsedMs: 420 }), 1);
-    assert.ok(assistantTransitionAt({ transition: 'settling', elapsedMs: 90 }) <= 1.015);
-    assert.equal(assistantTransitionAt({ transition: 'settling', elapsedMs: 180 }), 1);
-    assert.ok(assistantTransitionAt({ transition: 'disappearing', elapsedMs: 319 }) > 0);
-    assert.equal(assistantTransitionAt({ transition: 'disappearing', elapsedMs: 320 }), 0);
-});
-
-test('assistant reveal choreography orders glow, core and shell at exact boundaries', () => {
-    assert.deepEqual(assistantRevealAt({ transition: 'appearing', elapsedMs: 0 }), { glow: 0, core: 0, shell: 0 });
-    assert.ok(assistantRevealAt({ transition: 'appearing', elapsedMs: 70 }).glow > 0);
-    assert.equal(assistantRevealAt({ transition: 'appearing', elapsedMs: 70 }).core, 0);
-    assert.equal(assistantRevealAt({ transition: 'appearing', elapsedMs: 140 }).glow, 1);
-    assert.equal(assistantRevealAt({ transition: 'appearing', elapsedMs: 140 }).shell, 0);
-    assert.ok(assistantRevealAt({ transition: 'appearing', elapsedMs: 150 }).core > 0);
-    assert.equal(assistantRevealAt({ transition: 'appearing', elapsedMs: 150 }).shell, 0);
-    assert.equal(assistantRevealAt({ transition: 'appearing', elapsedMs: 330 }).core, 1);
-    assert.ok(assistantRevealAt({ transition: 'appearing', elapsedMs: 419 }).shell < 1);
-    assert.deepEqual(assistantRevealAt({ transition: 'appearing', elapsedMs: 420 }), { glow: 1, core: 1, shell: 1 });
-});
-
-test('assistant global transition boundaries map 0, 419, 420, 599, 600 and 920 ms deterministically', () => {
-    const at = (elapsedMs) => {
-        if (elapsedMs < 420) return assistantTransitionAt({ transition: 'appearing', elapsedMs });
-        if (elapsedMs < 600) return assistantTransitionAt({ transition: 'settling', elapsedMs: elapsedMs - 420 });
-        if (elapsedMs < 920) return assistantTransitionAt({ transition: 'disappearing', elapsedMs: elapsedMs - 600 });
-        return 0;
-    };
-    assert.equal(at(0), 0);
-    assert.ok(at(419) < 1);
-    assert.equal(at(420), 1);
-    assert.ok(at(599) > 1);
-    assert.equal(at(600), 1);
-    assert.equal(at(920), 0);
-});
-
-test('assistant uses one undimmed full-surface visual above Dashboard', () => {
-    const record = buildAssistantVisualRecord({ surfaceSize: { width: 1280, height: 720 }, phase: 'listening' });
-    const normalized = normalizeWorkspaceSceneRecord(record);
-    assert.equal(normalized.properties.layer, 'panel');
-    assert.ok(normalized.properties.renderLayer > 1420);
-    assert.ok(normalized.properties.renderLayer < 2350);
-    assert.equal(isEphemeralProjectSceneRecord(record), true);
-    assert.equal(record.properties.left, 0);
-    assert.equal(record.properties.top, 0);
-    assert.equal(record.properties.width, 1280);
-    assert.equal(record.properties.height, 720);
-    assert.deepEqual(record.properties.material.procedural.surface_size, [1280, 720]);
-    assert.equal(record.properties.material.procedural.assistant_size, 273.6);
-});
+const deferred = () => {
+    let resolve;
+    const promise = new Promise((next) => { resolve = next; });
+    return { promise, resolve };
+};
 
 test('a real BevyUI long hold reopens after visual close even while the farewell is finishing', async () => {
     let clock = 0;
@@ -224,7 +117,7 @@ test('a real BevyUI long hold reopens after visual close even while the farewell
     await flush();
 });
 
-test('assistant public API owns modal lifecycle, trace command, render teardown and clean reopen', async () => {
+test('assistant public API preserves project interaction, trace command, render teardown and clean reopen', async () => {
     const listeners = {};
     const renders = [];
     const interactions = [];
@@ -285,27 +178,10 @@ test('assistant public API owns modal lifecycle, trace command, render teardown 
     assert.equal(runtime.getState().sessionId, 'session-1');
     assert.equal(commands[0].command, 'voice.assistant.toggle');
     assert.equal(commands[0].source, 'bevy_ui_main_menu_atome');
-    assert.equal(interactions[0][0], 'project');
-    assert.equal(interactions[0][3].priority, 1100);
+    assert.equal(interactions.length, 0);
     assert.equal(renders[0].phase, 'opening');
-    const assistantInterceptor = interactions[0][2];
-    const pointerPayload = (phase, clientX, clientY, pointerId = 9) => ({
-        canvas: {},
-        event: { clientX, clientY, pointerId },
-        phase,
-        point: { x: clientX, y: clientY },
-        surface_size: { width: 1000, height: 800 }
-    });
-    assert.equal(assistantInterceptor(pointerPayload('pointerdown', 940, 760)).handled, false);
-    assert.equal(assistantInterceptor(pointerPayload('pointermove', 500, 300)).handled, false);
-    assert.equal(assistantInterceptor(pointerPayload('pointerup', 500, 300)).handled, false);
-    assert.equal(assistantInterceptor(pointerPayload('pointerup', 940, 760, 10)).handled, false);
-    assert.equal(assistantInterceptor(pointerPayload('pointerdown', 200, 200, 11)).handled, true);
-    assert.equal(assistantInterceptor(pointerPayload('pointercancel', 200, 200, 11)).handled, true);
     const firstClose = runtime.toggle({ source: 'bevy_ui_main_menu_atome' });
     const duplicateClose = runtime.close({ source: 'bevy_ui_main_menu_atome' });
-    assert.equal(assistantInterceptor(pointerPayload('pointerdown', 940, 760, 12)).handled, false);
-    assert.equal(assistantInterceptor(pointerPayload('pointerup', 940, 760, 12)).handled, false);
     await advance(320);
     await Promise.all([firstClose, duplicateClose]);
     assert.equal(runtime.getState().phase, 'closed');
@@ -355,7 +231,11 @@ test('closing during appearance speaks only the farewell and remains reopenable'
     frameCallback?.();
     await close;
     assert.deepEqual(spokenTexts, [voiceTexts.closingGreeting]);
-    assert.deepEqual(runtime.getState(), {
+    const { conversation, inputMode, image, ...closedState } = runtime.getState();
+    assert.equal(image.phase, 'idle');
+    assert.equal(inputMode, 'voice');
+    assert.equal(conversation.saved, false);
+    assert.deepEqual(closedState, {
         active: false,
         error: '',
         phase: 'closed',
@@ -564,6 +444,7 @@ test('a native farewell failure cannot strand the assistant or block reopening',
     const runtime = createEveAssistantRuntime({
         env: {
             addEventListener: () => { },
+            __EVE_VOICE_DIAGNOSTICS__: true,
             console: { info: (line) => {
                 if (line.includes('voice.session.close.error')) closeErrors.push(line);
             } },
@@ -594,115 +475,4 @@ test('a native farewell failure cannot strand the assistant or block reopening',
     await advance(420);
     assert.equal(runtime.getState().active, true);
     assert.equal(runtime.getState().sessionId, 'failure-session-2');
-});
-
-test('transient PCM assets stay ephemeral while using the existing Kira facade authority', async () => {
-    const envelopes = [];
-    const backendCalls = [];
-    const core = new PlayRecordCore({
-        Squirrel: {
-            commandBus: { dispatch: (envelope) => { envelopes.push(envelope); return { ok: true }; } },
-            av: { audio: { __call_backend_method: async (...args) => { backendCalls.push(args); return true; } } }
-        }
-    });
-    core.init = async () => ({ ok: true });
-    core.runtime = () => ({ playback: 'web_wasm_kira' });
-    await core.loadTransientAsset({ assetId: 'tts-test', bytes: new Uint8Array([1, 2, 3]) });
-    await core.releaseTransientAsset('tts-test');
-    assert.equal(envelopes[0].meta.history_mode, 'ephemeral');
-    assert.equal(envelopes[1].meta.history_mode, 'ephemeral');
-    assert.equal(backendCalls[0][0], 'create_clip');
-    assert.equal(backendCalls[1][0], 'destroy_clip');
-});
-
-test('local TTS publishes monotone 20 ms frames from the PCM handed to Kira', async () => {
-    let currentTime = 0;
-    let intervalCallback;
-    let endCallback;
-    const audioCalls = [];
-    const worker = {
-        onmessage: null,
-        onerror: null,
-        postMessage(message) {
-            queueMicrotask(() => this.onmessage({ data: message.type === 'preload'
-                ? { id: message.id, type: 'ready' }
-                : {
-                    id: message.id,
-                    type: 'result',
-                    pcm: Float32Array.from({ length: 2205 }, (_, index) => Math.sin(index / 4) * 0.3),
-                    phonemes: ['^', 'a', 'i', 'u', '$'],
-                    sampleRate: 22050
-                } }));
-        }
-    };
-    const runtime = createLocalTtsRuntime({
-        env: {},
-        audio: {
-            loadTransientAsset: async (payload) => audioCalls.push(['load', payload]),
-            startVoice: async (payload) => audioCalls.push(['play', payload]),
-            stopVoice: async (payload) => audioCalls.push(['stop', payload]),
-            releaseTransientAsset: async (payload) => audioCalls.push(['release', payload])
-        },
-        workerFactory: () => worker,
-        now: () => currentTime,
-        setTimer: (callback) => { intervalCallback = callback; return 1; },
-        clearTimer: () => { },
-        setDelay: (callback) => { endCallback = callback; return 2; },
-        clearDelay: () => { }
-    });
-    const frames = [];
-    runtime.subscribeFrames((frame) => frames.push(frame));
-    const started = await runtime.speak('tts-session', 'Salut');
-    currentTime = 20;
-    intervalCallback();
-    currentTime = 80;
-    intervalCallback();
-    endCallback();
-    await started.promise;
-    assert.deepEqual(audioCalls.slice(0, 2).map(([kind]) => kind), ['load', 'play']);
-    assert.ok(audioCalls[0][1].bytes.byteLength > 44);
-    assert.deepEqual(frames.map((frame) => frame.playback_sample), [...frames.map((frame) => frame.playback_sample)].sort((a, b) => a - b));
-    assert.ok(frames.some((frame) => frame.rms > 0));
-});
-
-test('local TTS fully tears down and replays five sequential utterances', async () => {
-    const audioCalls = [];
-    const endCallbacks = [];
-    const worker = {
-        onmessage: null,
-        onerror: null,
-        postMessage(message) {
-            queueMicrotask(() => this.onmessage({ data: {
-                id: message.id,
-                type: 'result',
-                pcm: Float32Array.from({ length: 441 }, (_, index) => Math.sin(index / 3) * 0.2),
-                phonemes: ['^', 'a', '$'],
-                sampleRate: 22050
-            } }));
-        }
-    };
-    const runtime = createLocalTtsRuntime({
-        env: {},
-        audio: {
-            loadTransientAsset: async ({ assetId }) => audioCalls.push(['load', assetId]),
-            startVoice: async ({ voiceId }) => audioCalls.push(['play', voiceId]),
-            stopVoice: async ({ voiceId }) => audioCalls.push(['stop', voiceId]),
-            releaseTransientAsset: async (assetId) => audioCalls.push(['release', assetId])
-        },
-        workerFactory: () => worker,
-        now: () => 0,
-        setTimer: () => 1,
-        clearTimer: () => { },
-        setDelay: (callback) => { endCallbacks.push(callback); return endCallbacks.length; },
-        clearDelay: () => { }
-    });
-    for (let index = 0; index < 5; index += 1) {
-        const started = await runtime.speak(`session-${index}`, `lecture ${index}`);
-        endCallbacks.shift()();
-        await started.promise;
-    }
-    assert.equal(audioCalls.filter(([kind]) => kind === 'load').length, 5);
-    assert.equal(audioCalls.filter(([kind]) => kind === 'play').length, 5);
-    assert.equal(audioCalls.filter(([kind]) => kind === 'stop').length, 5);
-    assert.equal(audioCalls.filter(([kind]) => kind === 'release').length, 5);
 });

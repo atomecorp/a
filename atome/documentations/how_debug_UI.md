@@ -4,20 +4,21 @@
 
 Do not use `domcontentloaded`, `networkidle`, or `document.readyState` alone as the UI readiness gate. The HTML shell can be ready before the eVe runtime and its shared WebGPU surface are mounted.
 
-Wait first for the eVe shell, then for the BevyUI main-menu tree:
+Wait first for the eVe shell, then for the BevyUI main-menu tree. Import `waitFor` from `tests/probes/molecule_ui_acceptance_support.mjs` for predicates using dynamic imports:
 
 ```js
 await page.waitForFunction(() => (
   !!window.__DEBUG__ || !!document.getElementById('intuition')
 ), null, { timeout: 30000 });
 
-await page.waitForFunction(async () => {
+// Reuse the repository helper, which awaits asynchronous predicates on every poll.
+await waitFor(page, async () => {
   const { getMainMenuRuntime } = await import('/eVe/intuition/ribbon/bevy_ui_product_registry.js');
   const menu = getMainMenuRuntime();
   const canvas = document.getElementById('eve_surface_project');
   const measure = menu?.measure?.();
   return !!canvas && measure?.active === true && measure?.treeMounted === true;
-}, null, { timeout: 30000 });
+}, null, 30000);
 ```
 
 The product menu and Flower have no DOM buttons, DOM proxies, browser aliases, or global runtime state. Do not wait for a legacy menu global or query an old ribbon/Flower selector.

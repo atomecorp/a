@@ -88,3 +88,36 @@ test('Photo captures once at the region boundary and becomes an image over the f
     assert.equal(result.clip.kind, 'image');
     assert.equal(session.getState().record_regions.length, 0);
 });
+
+test('timed recording stops once after capture starts and returns the committed take', async () => {
+    const session = createMoleculeSession({ timeline: timelineWithRegions(), eventSink: { append: async () => {} } });
+    const timers = new Map(); let stopCount = 0;
+    const recording = createGenericMoleculeRecordingSession({ session,
+        startAudio: async () => ({ ok: true }),
+        stopAudio: async () => { stopCount++; return { ok: true, result: { duration_seconds: 2 }, project: { atomeId: 'timed_take' } }; },
+        schedule: (fn, ms) => { assert.equal(ms, 2000); timers.set(1, fn); return 1; }, unschedule: id => timers.delete(id)
+    });
+    const completed = recording.start({ record_region_id: 'region_audio', duration_ms: 2000 });
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(recording.read().active.length, 1);
+    const stop = timers.get(1); stop();
+    const result = await completed;
+    assert.equal(result.completed, true); assert.equal(result.project_atome_id, 'timed_take');
+    assert.equal(result.clip.timeline.duration_frames, 96000);
+    assert.equal(stopCount, 1); assert.equal(timers.size, 0); assert.equal(recording.read().active.length, 0);
+});
+
+test('manual cancellation clears timed capture and invalid duration never opens the microphone', async () => {
+    const session = createMoleculeSession({ timeline: timelineWithRegions(), eventSink: { append: async () => {} } });
+    const timers = new Map(); let starts = 0, stops = 0;
+    const recording = createGenericMoleculeRecordingSession({ session,
+        startAudio: async () => { starts++; return { ok: true }; },
+        stopAudio: async ({discard}) => { assert.equal(discard,true); stops++; return { ok:true }; },
+        schedule: fn => { timers.set(1,fn);return 1; }, unschedule: id => timers.delete(id)
+    });
+    await assert.rejects(recording.start({ duration_ms:-1 }), /duration_invalid/);assert.equal(starts,0);
+    const completion=recording.start({ record_region_id:'region_audio',duration_ms:2000 });
+    await new Promise(resolve=>setImmediate(resolve));
+    await recording.dispose();
+    assert.equal((await completion).discarded,true);assert.equal(stops,1);assert.equal(timers.size,0);assert.equal(session.getState().clips.length,0);
+});

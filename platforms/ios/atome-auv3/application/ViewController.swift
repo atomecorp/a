@@ -81,6 +81,12 @@ final class FullscreenWebViewController: UIViewController {
                 )
             } else if AppNativeHealthController.canHandle(command: command) {
                 AppNativeHealthController.shared.handle(command: command, payload: payload, completion: completion)
+            } else if AppNativeClipboardController.canHandle(command: command) {
+                AppNativeClipboardController.shared.handle(
+                    command: command,
+                    payload: payload,
+                    completion: completion
+                )
             } else if AppNativeBevyRendererController.canHandle(command: command) {
                 AppNativeBevyRendererController.shared.handle(
                     command: command,

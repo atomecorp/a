@@ -1,3 +1,5 @@
+import { requestProviderService, decodeProviderBytes } from '../ai/provider_broker.js';
+import { OPENAI_MODALITY_MODELS } from '../ai/model_catalog_registry.js';
 import { createVoiceSessionRuntime, normalizeLocalVoiceCommand } from './session_runtime.js';
 import { createVoiceOrchestrator } from './orchestrator.js';
 import { createVoiceLatencyTelemetry } from './telemetry.js';
@@ -20,7 +22,7 @@ import { resolveVoiceProviders } from './service_providers.js';
 import { startBrowserRecognition } from './service_browser_stt.js';
 import { startTauriRecognition } from './service_tauri_stt.js';
 import { settleTtsStop, startSpeechSynthesis } from './service_tts_runtime.js';
-import { createLocalTtsRuntime } from './local_tts_runtime.js';
+import { createTtsRuntime } from './tts_runtime.js';
 import { createVoiceInputMeterRuntime } from './service_input_meter.js';
 import { createVoiceSttRuntime } from './service_stt_runtime.js';
 export { VOICE_V1_PROVIDER_DECISION, resolveVoiceProviders } from './service_providers.js';
@@ -63,7 +65,17 @@ export const createVoiceService = ({
         sessionRuntime,
         sttProvider: providers.stt.selected
     });
-    const localTts = createLocalTtsRuntime({ env });
+    const localTts = createTtsRuntime({ env });
+    const openaiTts = createTtsRuntime({ env, provider: 'openai', synthesize: async (text, signal) => {
+        const result = await requestProviderService('speech', {
+            model: OPENAI_MODALITY_MODELS.tts, voice: 'marin', input: text, response_format: 'pcm'
+        }, { signal });
+        const bytes = decodeProviderBytes(result.base64, env);
+        if (!bytes.length || bytes.length % 2) throw new Error('tts_pcm_invalid');
+        const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+        const pcm = Float32Array.from({ length: bytes.length / 2 }, (_, index) => view.getInt16(index * 2, true) / 32768);
+        return { pcm, sampleRate: 24000, phonemes: [] };
+    } });
 
     // Prefer already-registered connectors and avoid importing heavy business
     // bootstraps in headless or incomplete hosts.
@@ -192,10 +204,10 @@ export const createVoiceService = ({
     });
     const tts = {
         async speak(text, options = {}) {
-            if (options.engine === 'local_onnx') {
+            if (['local_onnx', 'openai'].includes(options.engine)) {
                 const session = ensureSession(options);
-                sessionRuntime.startSpeaking(session.session_id, { text, voice_id: 'fr_FR-siwis-medium' });
-                const started = await localTts.speak(session.session_id, text);
+                sessionRuntime.startSpeaking(session.session_id, { text, voice_id: options.engine === 'openai' ? 'marin' : 'fr_FR-siwis-medium' });
+                const started = await (options.engine === 'openai' ? openaiTts : localTts).speak(session.session_id, text);
                 started.promise.then(
                     () => sessionRuntime.finishSpeaking(session.session_id, { reason: 'done' }),
                     (error) => sessionRuntime.interrupt(session.session_id, { reason: `tts_error:${error?.message || error}` })
@@ -210,6 +222,8 @@ export const createVoiceService = ({
             throw new Error(`Unsupported TTS provider bridge: ${providers.tts.selected}`);
         },
         async stop(sessionId, { reason = 'tts_stop' } = {}) {
+            const remote = await openaiTts.stop(sessionId, reason);
+            if (remote.stopped) { sessionRuntime.finishSpeaking(sessionId, { reason: 'interrupted' }); return remote; }
             if (ttsSessions.has(String(sessionId)) === false) {
                 const stopped = await localTts.stop(sessionId, reason);
                 if (stopped.stopped) {

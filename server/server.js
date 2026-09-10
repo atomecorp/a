@@ -71,6 +71,7 @@ import {
   getABoxEventBus
 } from './aBoxServer.js';
 import {
+  authenticatedUserSnapshot,
   consumePhoneVerification,
   createUserAtome,
   deleteUserAtome,
@@ -93,6 +94,7 @@ import { handleWsApiGuestAdoption } from './wsApiGuestAdoption.js';
 import { announceWsSurfaceDisconnect, handleWsSurfaceOperation } from './wsSurfaceOperations.js';
 import { handleTeleportSurfaceLoss, handleWsTeleportOperation } from './wsTeleportOperations.js';
 import { handleRemoteControlSurfaceLoss, handleWsRemoteControlOperation } from './wsRemoteControlOperations.js';
+import { handleWsAiProviderOperation } from './wsAiProviderOperations.js';
 import { handleWsSurfaceGrantOperation } from './wsSurfaceGrantOperations.js';
 import { handleWsFileOperation } from './wsFileOperations.js';
 import { registerServerIdentityRoutes } from './auth_routes_server.js';
@@ -2134,6 +2136,11 @@ async function startServer() {
             return;
           }
 
+          const aiProviderResponse = await handleWsAiProviderOperation(data, connection);
+          if (aiProviderResponse) {
+            safeSend(aiProviderResponse);
+            return;
+          }
           const atomeOperationResponse = await handleWsAtomeOperation(data, connection);
           if (atomeOperationResponse) {
             safeSend(atomeOperationResponse);
@@ -2164,32 +2171,6 @@ async function startServer() {
             if (remoteControlResponse) safeSend(remoteControlResponse);
             return;
           }
-
-          // Debug: broadcast probe (no auth) - echoes to ALL ws/api clients
-          // if (data && data.type === 'broadcast-probe') {
-          //   const nowIso = new Date().toISOString();
-          //   const payload = {
-          //     ...data,
-          //     type: 'broadcast-probe',
-          //     serverReceivedAt: nowIso
-          //   };
-
-          //   const broadcastedTo = wsBroadcastJson(
-          //     wsApiConnections,
-          //     payload,
-          //     { scope: 'ws/api', op: 'broadcast-probe' }
-          //   );
-
-          //   // Also acknowledge to sender (useful if broadcast fails)
-          //   safeSend({
-          //     type: 'broadcast-probe-ack',
-          //     poil: 'poilu',
-          //     probeId: data.probeId || data.requestId || null,
-          //     serverReceivedAt: nowIso,
-          //     broadcastedTo
-          //   });
-          //   return;
-          // }
 
           if (data.type === 'notification-stack') {
             const requestId = data.requestId || data.request_id;
@@ -2570,7 +2551,7 @@ async function startServer() {
               projectRoot,
               UPLOADS_TMP_DIR,
               deps: {
-                coerceWsChunkSize, ensureVideoPlaybackCache, getRequiredJwtSecret,
+                databaseEnabled: DATABASE_ENABLED, coerceWsChunkSize, ensureVideoPlaybackCache, getRequiredJwtSecret,
                 listUserDownloadsSnapshot, normalizeUserRelativePath, registerFileUpload,
                 resolveDownloadTarget, resolveUserAssetPath, resolveUserUploadPath, sanitizeUploadId
               }
@@ -3227,11 +3208,7 @@ async function startServer() {
                   success: true,
                   ok: true,
                   token,
-                  user: {
-                    id: user.user_id,
-                    user_id: user.user_id,
-                    username: user.username
-                  }
+                  user: authenticatedUserSnapshot(user)
                 });
 
                 // Associate this ws/api connection with the authenticated user.
@@ -3301,11 +3278,7 @@ async function startServer() {
                     requestId,
                     success: true,
                     ok: true,
-                    user: {
-                      id: user.user_id,
-                      user_id: user.user_id,
-                      username: user.username
-                    },
+                    user: authenticatedUserSnapshot(user),
                     registeredAs: registerAsUserId
                   });
 

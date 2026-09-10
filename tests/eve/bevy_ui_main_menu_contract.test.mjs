@@ -384,3 +384,35 @@ test('retired Panel Lab shortcuts are absent from product menu content', () => {
     const source = readFileSync(resolve(process.cwd(), 'eVe/intuition/runtime/eve_intuition/main_menu_content_runtime.js'), 'utf8');
     assert.doesNotMatch(source, /panel_lab:/);
 });
+
+test('assistant slider acquisition cancels the hold even below the ordinary hold motion tolerance', async () => {
+    const toggles = [];
+    const h = createRuntimeHarness({ toggleAssistant: () => toggles.push('toggle') });
+    h.window.eveAssistantApi = { getState: () => ({ active: true }), focusText() {}, selectLevel() {} };
+    try {
+        await h.runtime.showFully(); await h.runtime.assistantFieldOpen(); await waitFrame();
+        const icon = findNode(h.calls.at(-1).payload.tree.root, BEVY_MAIN_MENU_ATOME_ID);
+        icon.on.press({ x: 30, y: 30 });
+        icon.on.drag({ x: 23, y: 30, delta_x: -7 });
+        assert.equal(h.runtime.state.sliderStateByKey.get('assistant').dragged, true);
+        await waitMs(540);
+        assert.deepEqual(toggles, []);
+        icon.on.release({ x: 23, y: 30 });
+    } finally { h.runtime.destroy(); h.restore(); }
+});
+
+test('assistant slider can select the minimum immediately after the maximum without an outward gesture', async () => {
+    const selected = [];
+    const h = createRuntimeHarness();
+    h.window.eveAssistantApi = { getState: () => ({ active: true }), focusText() {}, selectLevel: level => selected.push(level) };
+    try {
+        await h.runtime.showFully(); await h.runtime.assistantFieldOpen(); await waitFrame();
+        const icon = findNode(h.calls.at(-1).payload.tree.root, BEVY_MAIN_MENU_ATOME_ID);
+        for (const distance of [180, 7]) {
+            icon.on.press({ x: 30, y: 30 });
+            icon.on.drag({ x: 30 - distance, y: 30, delta_x: -distance });
+            icon.on.release({ x: 30 - distance, y: 30 });
+        }
+        assert.deepEqual(selected, [5, 1]);
+    } finally { h.runtime.destroy(); h.restore(); }
+});

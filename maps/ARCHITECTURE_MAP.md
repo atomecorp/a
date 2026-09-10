@@ -1,5 +1,18 @@
 # Atome / eVe Architecture Map
 
+Provider observations converge on the shared aiQuotaTracker instead of being counted again by text conversations or image sessions. Known standard Sol/Astra token costs distinguish cache reads/writes and long-context rates; hosted fees, unsupported tariffs and missing usage remain unknown. Explicit conversation Keep can perform sequential conversation/asset commits; failure is reported and must not be described as an atomic transaction. Saved attachment metadata contains canonical asset IDs, never provider secrets, local paths or inline file bytes.
+
+
+OpenAI lifecycle validation: provider configuration is pinned per text tool chain; model discovery caches are isolated by account. Read-aloud reuses one canonical voice session and releases transient audio even on backend errors. Assistant disposal removes budget and reduced-motion listeners. Private authenticated self-projection retains its verified phone claim; public user projections remain redacted.
+### OpenAI boundaries — 2026-09-10 (acceptance in progress)
+
+Home entry -> existing encrypted vault on the authenticated server -> fixed OpenAI endpoints. Main keys never return through status or provider responses. Provider signaling uses the existing application WebSocket; WebRTC carries realtime media. The provider control connection is server-owned, closes with its application socket/account/credential lifecycle, and delegates Atome actions to existing MCP/policy/Runtime V2 owners. No second agent orchestrator or application server is introduced. Native transport conformance and real media acceptance remain open.
+
+Conversation authority is local/canonical, distinct from disposable provider sessions. Principal checks guard asynchronous responses, tools, decisions and persistence; logout discards temporary references and cancels work. Public final turns, not tokens or internal reasoning, are persisted. Retouch overlays are temporary shared-compositor records; source/mask export uses the canonical export adapter. Applying a preview creates a new asset through the canonical importer.
+
+`server/server.js` remains oversized legacy routing infrastructure (~4,300 lines). This integration adds only handler dispatch and removes obsolete commented probe code; provider lifecycle resides in cohesive server modules. Its broader reduction owner remains the existing WS operation handlers, to which remaining inline business handlers must converge; no additional inline provider feature growth is permitted.
+
+
 ### Shared presentation ownership — 2026-09-10
 
 Creation stays in the existing Dashboard actions and canonical project/contact/calendar APIs; Plus controls only select the appropriate owner or open a draft. List expansion is disposable view state, while selection and Mute/Solo still consume canonical records and intents. Shared pointer/menu owners decide held palette completion.
@@ -539,9 +552,16 @@ BevyUI panel architecture:
   edit, drag, lasso, or create an Atome behind the panel. The full-canvas root
   remains non-blocking.
 - `text_editing_session.js` is the single active text-entry owner for BevyUI
-  Input and project text. It delegates only keyboard/IME/clipboard capture to
+  Input and project text. It delegates only keyboard/IME capture to
   `hidden_text_service_runtime.js`. That service keeps its focused textarea
-  fixed inside the layout viewport with a zoom-safe 16 px native font. It does
+  fixed inside the layout viewport with a zoom-safe 16 px native font. It carries
+  no clipboard listener and needs none: a native paste into that textarea arrives
+  as an ordinary `input` event and `syncInputFromEditor` re-reads the whole value.
+  Programmatic paste — the Paste tool, and every paste on iOS, where the native
+  gesture does not exist because the callout is suppressed — goes through
+  `intuition/tools/clipboard/editable_surface.js`, which writes at the caret with
+  `setRangeText` and then calls `session.sync()`, so this module stays the single
+  owner of that state. It does
   not lock pre-keyboard geometry: the native iOS shell, project render surface,
   Bevy panel geometry, and main menu must all follow the same live
   `visualViewport` contraction while the keyboard is present.
@@ -1521,3 +1541,15 @@ Choice palettes (2026-09-08): Choice state stays with the definition owner. Main
 Workspace activation releases the previous recursive transport plan before loading a foreign project, including terminal Performance frames. The existing operation generation rejects media preparation that finishes after release. `project_view_transport_plan` owns the pure plan-to-engine timeline conversion; the runtime owns session/resource lifecycle. BevyUI translation propagates to flattened child records without putting inherited screen positions into structural child-local state.
 
 Viewer media identity (2026-09-09): project_view_visual_panel derives single and composite visual children from compositePreviewMemberNodeId. The pointer root stays project_view_visual_preview. Composition membership changes therefore do not recreate an unchanged decoder. bevy_projection_media_contract bounds media-time requests to the decoded file end, including fixed thumbnails whose authored trim exceeds it.
+
+OpenAI lifecycle checkpoint (2026-09-10 18:13): `realtime_session.js` scopes asynchronous failures, playback completion, tool preparation and SDP to their owning generation; disposed sessions cannot close or configure replacements. `conversation_session.js` delegates voice usage to the shared quota owner. `assistant_media_session.js` adds Batch output/error preview through existing `batches.read` / `files.content` and canonical Apply; JSONL is inert data and textual preview is bounded to 8 KiB. `model_catalog_registry.js` owns corpus file list/read/detach schemas and server route projection; no parallel corpus registry. Controlled coverage is not live provider acceptance.
+
+OpenAI integration checkpoint (2026-09-10 18:42): voice/bootstrap.js loads the shared audio.facade.js then backend.kira.js before browser voice service use, including cold Dashboard speech. No new audio engine. Main-menu inline controls cancel hold on slider acquisition and reset only transient gesture state so all five levels remain reachable inward. Text previews and mask limits use the existing localized Bevy text surface. Real Web masks/source export preserve canonical source state; tests/probes/openai_local_voice_acceptance.mjs covers local playback. See eVe/documentations/openai_integration.md for validation limits.
+
+Realtime metering (2026-09-10): realtime_session.js reports input-transcription usage separately from response usage. model_catalog_registry.js owns standard modality tariffs; quota_tracker.js computes only complete, internally consistent token estimates. No balance or total invoice is inferred. openai_modality_metering.test.mjs and lifecycle tests cover separate billing and unknown components.
+
+OpenAI live repair (2026-09-10 20:15): eVe.js owns installation of the existing profile bridge; assistant_runtime.js loads canonical optional integrations. SVG Draw commit reuses createProjectDraw in svg_draw_commit_runtime.js. mcp_runtime.js projects tool envelopes without scene/view/surface; local results remain intact. Generic recording owns optional duration_ms and cancellation. Full-slot assistant icon and text/voice status reuse the ribbon and Bevy components. Live acceptance and pending lanes: eVe/documentations/openai_integration.md; maintained probes openai_live_ui_campaign.mjs and openai_live_voice_acceptance.mjs.
+
+2026-09-10 20:55 OpenAI live acceptance: real text (750/940 chars), SVG, PNG generation/edit/import and synthetic-microphone Realtime tool calls pass. SyncEngine restore now projects full winning properties (real SVG Undo/Redo verified); AI list results are bounded metadata and search ranks relevance. Protected built-in contract validation belongs to tool_runtime_builtin_resolver.js. 178 consolidated tests and subsequent 23 focused tests pass, overlapping counts. Project playback failed, project-open exposure missing, timed recording denied by MCP permissions; broad default timeline grant rejected by automatic approval review and not applied. No full native or exhaustive API acceptance. See eVe/documentations/openai_integration.md live checkpoint and temp/openai-fixture-cleanup.json.
+
+2026-09-10 Agenda alarm extension: calendar_api.js remains the persistent alarm/timer owner; calendar.alarm.set/read/cancel and calendar.time.read use existing AI/Runtime V2 registration and MCP dispatch. The Time palette Alarm entry and countdown reuse the Bevy calendar panel. ui.project.open uses project workspace activation; ui.project.transport uses project_view_surface_context_runtime.js and canonical project records. Default timeline rights explicitly authorized; no restricted actor widening. Controlled smoke acceptance only; suspended/closed-app and multi-device delivery remain unvalidated. See eVe/documentations/calendar_v1_architecture.md.

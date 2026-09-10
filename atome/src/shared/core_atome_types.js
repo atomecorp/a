@@ -196,6 +196,23 @@ export const CORE_ATOME_TYPE_DEFINITIONS = Object.freeze([
         }
     }),
     defineType({
+        type: 'conversation',
+        kind: 'data_model',
+        traits: ['data', 'textual', 'editable', 'navigable', 'nonvisual'],
+        schema: {
+            ...orderSchema,
+            title: { type: 'string' },
+            category_id: { type: 'string' },
+            transcript: { type: 'string' },
+            model: { type: 'string' },
+            level: { type: 'number' },
+            effort: { type: 'string' },
+            turns: { type: 'array' },
+            assets: { type: 'array' },
+            updated_iso: { type: 'string' }
+        }
+    }),
+    defineType({
         type: 'record',
         kind: 'data_model',
         traits: ['data', 'editable', 'navigable'],

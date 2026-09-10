@@ -1,6 +1,6 @@
 import { ATOME_MCP_PROTOCOL } from './mcp_core.js';
 import { ensureAIAgent, ensureRuntimeCommandBus, ensureRuntimeToolApi } from './mcp_bridges.js';
-import { buildRuntimeInvocationPayload, normalizeRuntimeToolEntry } from './mcp_runtime.js';
+import { buildRuntimeInvocationPayload, normalizeRuntimeToolEntry, projectRuntimeMcpResult } from './mcp_runtime.js';
 
 export const createMcpAiRuntimeHandlers = () => ({
     'ai.tools.list'() {
@@ -61,7 +61,7 @@ export const createMcpAiRuntimeHandlers = () => ({
             presentation: 'mcp',
             layer: 'atome_mcp_runtime_call'
         });
-        return runtime.invokeById(payload);
+        return projectRuntimeMcpResult(await runtime.invokeById(payload));
     },
     async 'runtime.tools.batch_call'(params = {}) {
         const runtime = ensureRuntimeToolApi();
@@ -74,9 +74,9 @@ export const createMcpAiRuntimeHandlers = () => ({
             presentation: 'mcp',
             layer: 'atome_mcp_runtime_batch_call'
         }));
-        return runtime.invokeBatch(normalizedEvents, {
+        return projectRuntimeMcpResult(await runtime.invokeBatch(normalizedEvents, {
             tx_id: String(params?.tx_id || params?.txId || '').trim() || undefined
-        });
+        }));
     },
     'runtime.audit.list'(params = {}) {
         const bus = ensureRuntimeCommandBus();

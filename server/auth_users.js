@@ -287,3 +287,8 @@ export async function syncUserToTauri(username, phone, passwordHash, userId = nu
         return { success: false, error: error.message };
     }
 }
+
+// Private self-authentication projection only. Never use for public user lookup.
+export const authenticatedUserSnapshot = user => ({
+    id: user.user_id, user_id: user.user_id, username: user.username, phone: user.phone
+});

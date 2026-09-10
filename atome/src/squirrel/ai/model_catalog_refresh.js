@@ -11,6 +11,7 @@ import {
 import { loadRuntimeUserProfile } from './profile_loader.js';
 import { resolveConfiguredAiProviderCredentials } from './provider_client.js';
 import { cloneJson as clone, toText } from '../shared/scalars.js';
+import { requestProviderService } from './provider_broker.js';
 
 const REFRESH_INTERVAL_MS = 60 * 60 * 1000;
 const DEFAULT_TIMEOUT_MS = 15000;
@@ -83,7 +84,8 @@ export const resolveConfiguredAiProviderKeys = async (options = {}) => {
         items: (resolved.items || []).map((entry) => ({
             provider: entry.providerId,
             model: entry.model,
-            apiKey: entry.apiKey
+            apiKey: entry.apiKey,
+            serverManaged: entry.serverManaged === true
         }))
     };
 };
@@ -151,7 +153,7 @@ export const listRemoteProviderModels = async ({
     providerId,
     apiKey,
     fetchImpl = globalThis.fetch?.bind(globalThis),
-    timeoutMs = DEFAULT_TIMEOUT_MS
+    timeoutMs = DEFAULT_TIMEOUT_MS, providerRequest = requestProviderService
 } = {}) => {
     const definition = getAiModelProviderDefinition(providerId);
     if (!definition) {
@@ -163,7 +165,10 @@ export const listRemoteProviderModels = async ({
     const merged = createTimeoutController(timeoutMs);
     try {
         let models = [];
-        if (definition.request_type === 'anthropic') {
+        if (definition.id === 'openai') {
+            const result = await providerRequest('models', {}, { signal: merged.controller?.signal });
+            models = unique((result.data || []).map(item => normalizeListedModelId(item.id)));
+        } else if (definition.request_type === 'anthropic') {
             models = await listAnthropicModels({
                 definition,
                 apiKey: toText(apiKey),
@@ -224,19 +229,19 @@ export const refreshAiModelCatalog = async ({
     storage = null,
     fetchImpl = globalThis.fetch?.bind(globalThis),
     loadProfile = loadRuntimeUserProfile,
-    securityApi = null,
+    securityApi = null, providerRequest = requestProviderService,
     env = globalThis,
     now = () => new Date().toISOString()
 } = {}) => {
-    const configured = await resolveConfiguredAiProviderKeys({ loadProfile, securityApi, env });
+    const configured = await resolveConfiguredAiProviderKeys({ loadProfile, securityApi, env, providerRequest });
     const configuredByProvider = new Map((configured.items || []).map((entry) => [entry.provider, entry]));
-    const previous = readModelCatalogCache({ storage });
+    const previous = readModelCatalogCache({ storage, userId: configured.userId });
     const previousByProvider = new Map((previous?.payload?.items || []).map((entry) => [entry.provider, entry]));
     const items = [];
 
     for (const definition of Object.values(AI_MODEL_PROVIDER_REGISTRY)) {
         const configuredEntry = configuredByProvider.get(definition.id);
-        if (!configuredEntry?.apiKey) {
+        if (!configuredEntry?.apiKey && !configuredEntry?.serverManaged) {
             items.push(buildCatalogItem({
                 definition,
                 detectedModels: [],
@@ -249,7 +254,7 @@ export const refreshAiModelCatalog = async ({
             const detectedModels = await listRemoteProviderModels({
                 providerId: definition.id,
                 apiKey: configuredEntry.apiKey,
-                fetchImpl
+                fetchImpl, providerRequest
             });
             items.push(buildCatalogItem({
                 definition,
@@ -273,7 +278,7 @@ export const refreshAiModelCatalog = async ({
         refreshedAt: toText(now?.()) || new Date().toISOString(),
         source: 'refresh'
     });
-    writeModelCatalogCache({ storage, payload });
+    writeModelCatalogCache({ storage, payload, userId: configured.userId });
     return {
         ok: true,
         stale: false,
@@ -285,20 +290,21 @@ export const ensureFreshAiModelCatalog = async ({
     storage = null,
     fetchImpl = globalThis.fetch?.bind(globalThis),
     loadProfile = loadRuntimeUserProfile,
-    securityApi = null,
+    securityApi = null, providerRequest = requestProviderService,
     env = globalThis,
     force = false,
     now = () => new Date().toISOString()
 } = {}) => {
-    const cached = readModelCatalogCache({ storage });
-    if (!force && cached.ok === true && cached.stale === false) {
+    const profile = await loadProfile();
+    const cached = readModelCatalogCache({ storage, userId: profile?.userId || profile?.user_id });
+    if (!force && cached.ok === true && cached.source !== 'embedded' && cached.stale === false) {
         return cached;
     }
     return refreshAiModelCatalog({
         storage,
         fetchImpl,
-        loadProfile,
-        securityApi,
+        loadProfile: async () => profile,
+        securityApi, providerRequest,
         env,
         now
     });
@@ -309,7 +315,7 @@ export const bootstrapAiModelCatalogRefresh = ({
     storage = env?.localStorage || null,
     fetchImpl = env?.fetch?.bind(env),
     loadProfile = loadRuntimeUserProfile,
-    securityApi = null,
+    securityApi = null, providerRequest = requestProviderService,
     intervalMs = REFRESH_INTERVAL_MS
 } = {}) => {
     if (!env || typeof env !== 'object') return null;
@@ -324,7 +330,7 @@ export const bootstrapAiModelCatalogRefresh = ({
                 storage,
                 fetchImpl,
                 loadProfile,
-                securityApi,
+                securityApi, providerRequest,
                 env,
                 force
             });

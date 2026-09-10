@@ -37,7 +37,7 @@ export const registerAdoleDefaultTools = ({ Agent, requireGlobal, safeString, ge
 
     Agent.registerTool({
         name: 'adole.atomes.list',
-        description: 'List atomes (optional type/projectId/ownerId/includeShared).',
+        description: 'List a bounded metadata index of atomes (id, name, type and hierarchy). No text, image or project contents are returned. Use atomes.get with a known id for an explicitly needed object; prefer get when verifying a created object.',
         capabilities: ['atome.read'],
         risk_tier: 'LOW',
         parameters: {
@@ -46,8 +46,8 @@ export const registerAdoleDefaultTools = ({ Agent, requireGlobal, safeString, ge
                 projectId: { type: 'string' },
                 ownerId: { type: 'string' },
                 includeShared: { type: 'boolean' },
-                limit: { type: 'number' },
-                offset: { type: 'number' }
+                limit: { type: 'integer', minimum: 1, maximum: 100 },
+                offset: { type: 'integer', minimum: 0 }
             }
         },
         handler: async ({ params }) => {
@@ -60,18 +60,27 @@ export const registerAdoleDefaultTools = ({ Agent, requireGlobal, safeString, ge
                 ...(params?.projectId ? { projectId: String(params.projectId) } : {}),
                 ...(params?.ownerId ? { ownerId: String(params.ownerId) } : {}),
                 ...(typeof params?.includeShared === 'boolean' ? { includeShared: params.includeShared } : {}),
-                ...(Number.isFinite(params?.limit) ? { limit: params.limit } : {}),
+                limit: Math.max(1, Math.min(100, Math.trunc(Number(params?.limit) || 25))),
                 ...(Number.isFinite(params?.offset) ? { offset: params.offset } : {})
             };
 
-            return fn(payload);
+            const result = await fn(payload);
+            const index = records => (records || []).slice(0, payload.limit).map(record => ({
+                id: record.id || record.atome_id,
+                type: record.type || record.properties?.kind,
+                name: record.name || record.properties?.name || null,
+                project_id: record.project_id || record.meta?.project_id || null,
+                parent_id: record.parent_id || record.meta?.parent_id || null
+            }));
+            return Object.fromEntries(Object.entries(result).map(([backend, value]) => [backend,
+                value && Array.isArray(value.atomes) ? { ...value, atomes: index(value.atomes) } : value]));
         },
         summary: () => 'List atomes'
     });
 
     Agent.registerTool({
         name: 'adole.atomes.create',
-        description: 'Create an atome (type/properties/parentId/ownerId). Useful for messages, documents, shapes, etc.',
+        description: 'Create a nonvisual storage record (type/properties/parentId/ownerId). For visible drawings, SVG, text, images or project objects use the eVe runtime creation tools instead; this storage operation alone does not render a project object.',
         capabilities: ['atome.write'],
         risk_tier: 'MEDIUM',
         parameters: {

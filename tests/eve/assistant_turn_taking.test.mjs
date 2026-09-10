@@ -46,6 +46,7 @@ test('assistant playback ends and drains before the only user-turn microphone ca
         }
     };
     const env = {
+        __EVE_VOICE_DIAGNOSTICS__: true,
         __EVE_VOICE_ACOUSTIC_DRAIN_MS: 8,
         console: { info: (line) => diagnosticLines.push(line) },
         setTimeout,

@@ -137,3 +137,19 @@ test('SyncEngine keeps the Fastify directory stream active when Tauri owns local
         principal_id: 'remote-b', action: 'upsert', revision: 1, source: 'realtime', origin: 'ws/sync'
     });
 });
+
+test('a winning restore recreates the full SVG projection and a losing restore cannot revive it', () => {
+    const env = createEnv(); const engine = new SyncEngine({ env, WebSocketClass: FakeSocket, token: () => 'signed-token' });
+    const svg = '<svg><rect width="160" height="160" fill="green" /></svg>';
+    const restored = { type: 'event', event_id: 'restore-svg', stream: 'stream-a', sequence: 1,
+        atome_id: 'square', kind: 'restore', patch: { props: { kind: 'shape', __deleted: false } },
+        lww_decisions: { __lifecycle__: { winner: true } },
+        projection: { project_id: 'project', properties: { kind: 'shape', svg_markup: svg, left: '100px', __deleted: false } } };
+    engine.applyEvent(restored);
+    assert.equal(env.dispatched.at(-1).type, 'squirrel:atome-restored');
+    assert.equal(env.dispatched.at(-1).detail.properties.svg_markup, svg);
+    assert.equal(env.dispatched.at(-1).detail.properties.left, '100px');
+    const count = env.dispatched.length;
+    engine.applyEvent({ ...restored, event_id: 'stale-restore', sequence: 2, lww_decisions: { __lifecycle__: { winner: false } } });
+    assert.equal(env.dispatched.length, count);
+});

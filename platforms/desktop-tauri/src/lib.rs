@@ -2,6 +2,7 @@ mod audio_engine;
 mod bevy_backend;
 mod dev_logging;
 mod local_http_navigation;
+mod native_clipboard;
 mod native_contacts;
 mod native_midi;
 mod runtime_logging;
@@ -174,6 +175,7 @@ pub fn run() {
     tauri::Builder::default()
         .append_invoke_initialization_script(TAURI_RUNTIME_INIT_SCRIPT)
         .plugin(tauri_plugin_stt::init())
+        .plugin(tauri_plugin_clipboard_manager::init())
         .on_window_event(viewport_runtime::publish_native_viewport)
         .invoke_handler(tauri::generate_handler![
             dev_logging::log_from_webview,
@@ -200,6 +202,9 @@ pub fn run() {
             bevy_backend::bevy_native_start,
             bevy_backend::bevy_native_apply_ops,
             bevy_backend::bevy_native_resize,
+            native_clipboard::clipboard_write_text,
+            native_clipboard::clipboard_read_text,
+            native_clipboard::clipboard_has_text,
             project_root
         ])
         .setup(|app| {

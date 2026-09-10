@@ -493,6 +493,18 @@ final class LocalHTTPServer {
             return
         }
 
+        if type == "ai-provider" {
+            guard let userId = AiSRuntime.resolveAuthenticatedUserId(token: payload["token"] as? String, userIdHint: nil, phoneHint: nil) else {
+                sendWebSocketJson(["type":"ai-provider-response", "requestId":payload["requestId"] ?? NSNull(),
+                    "ok":false, "success":false, "error":"not_authenticated"], on: connection); return
+            }
+            FastifySyncClient.shared.sendProvider(payload, connectionId: connectionId, localUserId: userId) { [weak self, weak connection] response in
+                guard let self, let connection else { return }
+                self.queue.async { self.sendWebSocketJson(response, on: connection) }
+            }
+            return
+        }
+
         if type == "atome" {
             let response = AiSRuntime.handleAtomeMessage(payload)
             sendWebSocketJson(response, on: connection)
@@ -1444,6 +1456,7 @@ final class LocalHTTPServer {
         let id = ObjectIdentifier(connection)
         cancelledConnections.remove(id)
         wsConnections.removeValue(forKey: id)
+        FastifySyncClient.shared.closeProvider(connectionId: id)
         wsStates.removeValue(forKey: id)
         httpStates.removeValue(forKey: id)
     }
@@ -1903,31 +1916,8 @@ enum AiSRuntime {
                   normalizedOptionalString(claims["sub"]) != nil else {
                 return ["type":"sync-response", "requestId":requestId, "success":false, "error":"Access denied"]
             }
-            let defaults = UserDefaults(suiteName: SharedBus.appGroupSuite) ?? .standard
-            if action == "configure-remote" {
-                let remoteUserId = stringValue(message["remote_user_id"] ?? message["remoteUserId"])
-                let remoteToken = stringValue(message["remote_token"] ?? message["remoteToken"])
-                let remoteURL = stringValue(message["remote_url"] ?? message["remoteUrl"])
-                guard !remoteUserId.isEmpty, !remoteToken.isEmpty, !remoteURL.isEmpty else {
-                    return ["type":"sync-response", "requestId":requestId, "success":false, "error":"Invalid remote sync configuration"]
-                }
-                defaults.set(remoteUserId, forKey: "SQUIRREL_FASTIFY_PRINCIPAL_ID")
-                defaults.set(remoteToken, forKey: "SQUIRREL_FASTIFY_TOKEN")
-                defaults.set(remoteURL, forKey: "SQUIRREL_FASTIFY_URL")
-                defaults.set(stringValue(message["environment_fingerprint"] ?? message["environmentFingerprint"]),
-                             forKey: "SQUIRREL_SYNC_ENVIRONMENT_FINGERPRINT")
-                FastifySyncClient.shared.reloadConfiguration()
-                return ["type":"sync-response", "requestId":requestId, "success":true, "configured":true]
-            }
-            if action == "clear-remote" {
-                for key in [
-                    "SQUIRREL_FASTIFY_PRINCIPAL_ID", "SQUIRREL_FASTIFY_TOKEN",
-                    "SQUIRREL_FASTIFY_URL", "SQUIRREL_SYNC_ENVIRONMENT_FINGERPRINT"
-                ] {
-                    defaults.removeObject(forKey: key)
-                }
-                FastifySyncClient.shared.disconnect()
-                return ["type":"sync-response", "requestId":requestId, "success":true, "configured":false]
+            if action == "configure-remote" || action == "clear-remote" {
+                return FastifySyncClient.configureRemote(message, localUserId: stringValue(claims["sub"]))
             }
             if action == "get-pending" {
                 do {

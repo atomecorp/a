@@ -197,8 +197,16 @@ export const registerTimelineDefaultTools = ({ Agent }) => {
         })
     }));
 
+    Agent.registerTool({
+        name: 'eve.timeline.record.prepare',
+        description: 'Prepare the current project for microphone recording using the existing Record tool owner. Return group_id and track_id for record.start; creates a Molecule only when needed.',
+        capabilities: ['timeline.write'], risk_tier: 'MODERATE',
+        parameters: { type: 'object', properties: { project_id: { type: 'string' } } },
+        handler: async (params = {}) => requireMoleculeTimelineApi().prepareGroupTimelineRecording(params)
+    });
+
     [
-        ['start', 'startGroupTimelineGenericRecording', 'Start a generic Molecule capture on an armed region or Track.'],
+        ['start', 'startGroupTimelineGenericRecording', 'Start a generic Molecule capture on an armed region or Track. With duration_ms, stop automatically and return the actual imported recording after completion.'],
         ['stop', 'stopGroupTimelineGenericRecording', 'Stop and commit a generic Molecule capture.'],
         ['cancel', 'cancelGroupTimelineGenericRecording', 'Cancel and discard a generic Molecule capture.']
     ].forEach(([verb, method, description]) => Agent.registerTool({
@@ -210,10 +218,15 @@ export const registerTimelineDefaultTools = ({ Agent }) => {
             type: 'object', required: ['group_id'],
             properties: {
                 group_id: { type: 'string' }, track_id: { type: 'string' }, capture_id: { type: 'string' },
+                duration_ms: { type: 'integer', minimum: 100, maximum: 600000 },
                 record_region_id: { type: 'string' }, source_kind: { type: 'string', enum: ['audio', 'video', 'screen', 'photo'] }
             }
         },
-        handler: async (params = {}) => requireMoleculeTimelineApi()[method](params)
+        handler: async (params = {}) => {
+            const result = await requireMoleculeTimelineApi()[method](params);
+            const { state, ...receipt } = result;
+            return receipt;
+        }
     }));
 
     Agent.registerTool({

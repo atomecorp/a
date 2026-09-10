@@ -1,0 +1,25 @@
+"$schema" = "schemas/schema.json"
+
+[[set]]
+identifier = "clipboard-bridge"
+description = "Allows the main webview to read and write the host system clipboard."
+permissions = [
+  "allow-clipboard-write-text",
+  "allow-clipboard-read-text",
+  "allow-clipboard-has-text",
+]
+
+[[permission]]
+identifier = "allow-clipboard-write-text"
+description = "Enables the clipboard_write_text command."
+commands.allow = ["clipboard_write_text"]
+
+[[permission]]
+identifier = "allow-clipboard-read-text"
+description = "Enables the clipboard_read_text command."
+commands.allow = ["clipboard_read_text"]
+
+[[permission]]
+identifier = "allow-clipboard-has-text"
+description = "Enables the clipboard_has_text command."
+commands.allow = ["clipboard_has_text"]

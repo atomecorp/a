@@ -66,6 +66,11 @@ public class AudioUnitViewController: AUViewController, AUAudioUnitFactory, Audi
     WebViewManager.setNativeInvokeHandler { command, payload, completion in
         if AppNativeMediaCaptureController.canHandle(command: command) {
             AppNativeMediaCaptureController.shared.handle(command: command, payload: payload, completion: completion)
+        } else if AppNativeClipboardController.canHandle(command: command) {
+            // The AUv3 dispatch has no fallback branch — its final `else`
+            // answers "Unsupported native invoke command in AUv3" — so a command
+            // missing here fails outright rather than landing anywhere else.
+            AppNativeClipboardController.shared.handle(command: command, payload: payload, completion: completion)
         } else if AppNativeBevyRendererController.canHandle(command: command) {
             AppNativeBevyRendererController.shared.handle(command: command, payload: payload, completion: completion)
         } else if command == "audio_init" {
