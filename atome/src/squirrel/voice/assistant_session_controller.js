@@ -395,7 +395,7 @@ export const createVoiceAssistantSessionController = ({
 export const bindVoiceAssistantSession = async ({
     env, voiceApi, provider, conversation, onSession, onSpeech, onInput, translate
 }) => {
-    if (provider?.providerId === 'openai' && !provider.ok) throw new Error(provider.error || 'no_ai_key_configured');
+    if (provider && provider.ok !== true) throw new Error(provider.error || 'no_active_ai_provider');
     const remote = provider?.ok && provider.providerId === 'openai';
     const controller = remote
         ? (await import('./realtime_session.js')).createRealtimeSession({ env,

@@ -59,6 +59,7 @@ async fn connected_session(
     let credential = credential_for(state, local_user_id)
         .ok_or_else(|| "remote_sync_credential_unavailable".to_string())?;
     let endpoint = if credential.remote_url.is_empty() { remote_url } else { credential.remote_url.as_str() };
+    super::local_atome_sync_media::recover_inbound_media(state, endpoint, local_user_id, &credential).await?;
     let (socket, _) = connect_async(sync_url(endpoint, delivery_path)).await.map_err(|error| error.to_string())?;
     let (mut sink, mut source) = socket.split();
     send_json(&mut sink, json!({ "type":"auth", "token":credential.token })).await?;
@@ -136,6 +137,12 @@ async fn connected_session(
                             .ok_or_else(|| "remote_event_stream_required".to_string())?;
                         let sequence = payload.get("sequence").and_then(JsonValue::as_i64)
                             .ok_or_else(|| "remote_event_sequence_invalid".to_string())?;
+                        if let Err(error) = super::local_atome_sync_media::download_inbound_media(
+                            state, endpoint, local_user_id, &credential, &payload,
+                        ).await {
+                            if !error.starts_with("inbound_media_http:403") && !error.starts_with("inbound_media_http:404") { return Err(error); }
+                            eprintln!("[sync-media] unavailable asset: {error}");
+                        }
                         let inserted = persist_before_delivery(
                             state, local_user_id, &credential.remote_user_id, &payload,
                         )?;

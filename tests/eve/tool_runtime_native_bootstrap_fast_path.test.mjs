@@ -40,4 +40,15 @@ describe('Runtime V2 built-in tool fast path', () => {
         expect(handler).toBeTypeOf('function');
         expect(storageList).not.toHaveBeenCalled();
     });
+    it('discovers graphical built-ins even when the persisted native catalog is empty', async () => {
+        const { toolRegistryV2 } = await import('../../eVe/intuition/tools/core/tool_registry.js');
+        const boot = vi.spyOn(toolRuntimeV2, 'bootstrap').mockResolvedValue({ ok: true });
+        const list = vi.spyOn(toolRegistryV2, 'listTools').mockResolvedValue([]);
+        try {
+            const tools = await toolRuntimeV2.listTools();
+            expect(tools.find(tool => tool.id === 'ui.draw.edit')?.input_schema?.properties?.mode).toBeDefined();
+            expect(tools.find(tool => tool.id === 'ui.ai.image.generate')?.input_schema?.properties?.prompt).toBeDefined();
+        } finally { boot.mockRestore(); list.mockRestore(); }
+    });
+
 });

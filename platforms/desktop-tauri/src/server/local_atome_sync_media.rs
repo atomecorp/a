@@ -203,6 +203,92 @@ pub(super) async fn upload_outbound_media(
     Ok(())
 }
 
+pub(super) async fn recover_inbound_media(
+    state: &LocalAtomeState, remote_url: &str, local_user_id: &str, credential: &RemoteSyncCredential,
+) -> Result<(), String> {
+    let records: Vec<(String, String, String)> = {
+        let db = state.db.lock().map_err(|_| "local_database_unavailable")?;
+        let mut statement = db.prepare("SELECT s.atome_id, COALESCE(a.owner_id, ''), s.properties
+            FROM state_current s JOIN atomes a ON a.atome_id = s.atome_id
+            WHERE COALESCE(json_extract(s.properties, '$.__deleted'), 0) != 1
+            AND json_extract(s.properties, '$.file_name') IS NOT NULL
+            AND EXISTS (SELECT 1 FROM remote_projection_access r WHERE r.atome_id=s.atome_id AND r.local_user_id=?1)")
+            .map_err(|e| e.to_string())?;
+        let rows = statement.query_map([local_user_id], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?))).map_err(|e| e.to_string())?;
+        rows.collect::<Result<Vec<_>, _>>().map_err(|e| e.to_string())?
+    };
+    for (id, owner, raw) in records {
+        let props: JsonValue = serde_json::from_str(&raw).map_err(|e| e.to_string())?;
+        let media_owner = props.get("media_user_id").and_then(JsonValue::as_str).unwrap_or(&owner);
+        let name = props.get("file_name").and_then(JsonValue::as_str).unwrap_or("");
+        if !name.is_empty() && !name.contains('/') && !name.contains('\\')
+            && media_owner.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+            && state.storage_root().join("data/users").join(media_owner).join("Downloads").join(name).is_file() { continue; }
+        let event = serde_json::json!({"atome_id":id,"vault_principal_id":owner,"patch":{"props":props}});
+        if let Err(error) = download_inbound_media(state, remote_url, local_user_id, credential, &event).await {
+            eprintln!("[sync-media] recovery failed for {id}: {error}");
+        }
+    }
+    Ok(())
+}
+
+// Inbound media is authorized by Fastify before it becomes a local render resource.
+pub(super) async fn download_inbound_media(
+    state: &LocalAtomeState,
+    remote_url: &str,
+    local_user_id: &str,
+    credential: &RemoteSyncCredential,
+    event: &JsonValue,
+) -> Result<(), String> {
+    if event.get("kind").and_then(JsonValue::as_str) == Some("delete") { return Ok(()); }
+    let Some(props) = event.pointer("/patch/props").or_else(|| event.pointer("/payload/props")) else { return Ok(()); };
+    let Some(name) = props.get("file_name").or_else(|| props.get("fileName")).and_then(JsonValue::as_str) else { return Ok(()); };
+    if name.is_empty() || name.contains('/') || name.contains('\\') || matches!(name, "." | "..") {
+        return Err("inbound_media_name_invalid".into());
+    }
+    let owner = props.get("media_user_id").or_else(|| props.get("mediaUserId")).and_then(JsonValue::as_str)
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| {
+            let vault = event.get("vault_principal_id").and_then(JsonValue::as_str).unwrap_or(&credential.remote_user_id);
+            if vault == credential.remote_user_id { local_user_id } else { vault }
+        });
+    if !owner.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_') || owner.is_empty() {
+        return Err("inbound_media_owner_invalid".into());
+    }
+    let asset_id = event.get("atome_id").and_then(JsonValue::as_str).ok_or("inbound_media_atome_required")?;
+    let client = reqwest::Client::builder().redirect(reqwest::redirect::Policy::none())
+        .timeout(std::time::Duration::from_secs(120)).build().map_err(|e| e.to_string())?;
+    // The asset ID selects canonical metadata and ACLs, avoiding filename collisions across owners.
+    let mut response = client.get(format!("{}/api/uploads/{}", remote_url.trim_end_matches('/'), urlencoding::encode(asset_id)))
+        .bearer_auth(&credential.token).send().await.map_err(|e| format!("inbound_media_download:{e}"))?;
+    if !response.status().is_success() { return Err(format!("inbound_media_http:{}", response.status())); }
+    const LIMIT: usize = 256 * 1024 * 1024;
+    if response.content_length().is_some_and(|length| length > LIMIT as u64) { return Err("inbound_media_size_limit".into()); }
+    let mut bytes = Vec::new();
+    while let Some(chunk) = response.chunk().await.map_err(|e| e.to_string())? {
+        if bytes.len().saturating_add(chunk.len()) > LIMIT { return Err("inbound_media_size_limit".into()); }
+        bytes.extend_from_slice(&chunk);
+    }
+    let valid = state.remote_sync_credentials.lock().map_err(|_| "remote_sync_credentials_unavailable")?
+        .get(local_user_id).is_some_and(|current| current.token == credential.token && current.remote_user_id == credential.remote_user_id);
+    if !valid { return Err("remote_sync_credential_changed".into()); }
+    let directory = state.storage_root().join("data").join("users").join(owner).join("Downloads");
+    tokio::fs::create_dir_all(&directory).await.map_err(|e| e.to_string())?;
+    let temporary = directory.join(format!(".sync-{}", uuid::Uuid::new_v4()));
+    if let Err(error) = tokio::fs::write(&temporary, bytes).await {
+        let _ = tokio::fs::remove_file(&temporary).await;
+        return Err(error.to_string());
+    }
+    let valid = state.remote_sync_credentials.lock().map_err(|_| "remote_sync_credentials_unavailable")?
+        .get(local_user_id).is_some_and(|current| current.token == credential.token && current.remote_user_id == credential.remote_user_id);
+    if !valid { let _ = tokio::fs::remove_file(&temporary).await; return Err("remote_sync_credential_changed".into()); }
+    if let Err(error) = tokio::fs::rename(&temporary, directory.join(name)).await {
+        let _ = tokio::fs::remove_file(&temporary).await;
+        return Err(error.to_string());
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::{local_media_path, rewrite_remote_media_properties};
@@ -247,3 +333,7 @@ mod tests {
         );
     }
 }
+
+#[cfg(test)]
+#[path = "../../../../tests/native/inbound_media_sync.rs"]
+mod inbound_tests;

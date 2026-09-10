@@ -52,6 +52,7 @@ test('a real BevyUI long hold reopens after visual close even while the farewell
         interrupt: async () => ({ ok: true })
     });
     const runtime = createEveAssistantRuntime({
+        providerResolver: async () => ({ ok: true, providerId: 'local' }),
         env: { addEventListener: () => { }, performance: { now: () => clock } },
         voiceApiResolver: () => voiceApi,
         now: () => clock,
@@ -148,6 +149,7 @@ test('assistant public API preserves project interaction, trace command, render 
         interrupt: async () => ({ ok: true })
     });
     const runtime = createEveAssistantRuntime({
+        providerResolver: async () => ({ ok: true, providerId: 'local' }),
         env: {
             addEventListener: (type, listener) => { listeners[type] = listener; },
             requestAnimationFrame: (callback) => { frameCallback = callback; return 1; },
@@ -212,6 +214,7 @@ test('closing during appearance speaks only the farewell and remains reopenable'
         interrupt: async () => ({ ok: true })
     });
     const runtime = createEveAssistantRuntime({
+        providerResolver: async () => ({ ok: true, providerId: 'local' }),
         env: { addEventListener: () => { } },
         voiceApiResolver: () => voiceApi,
         requestFrame: (callback) => { frameCallback = callback; return 1; },
@@ -271,6 +274,7 @@ test('assistant releases visual interaction after animation without waiting for 
         interrupt: async () => ({ ok: true })
     });
     const runtime = createEveAssistantRuntime({
+        providerResolver: async () => ({ ok: true, providerId: 'local' }),
         env: { addEventListener: () => { } },
         voiceApiResolver: () => voiceApi,
         requestFrame: (callback) => { frameCallback = callback; return 1; },
@@ -321,6 +325,7 @@ test('renderer warmup time is excluded from the 420 ms reveal clock', async () =
         interrupt: async () => ({ ok: true })
     });
     const runtime = createEveAssistantRuntime({
+        providerResolver: async () => ({ ok: true, providerId: 'local' }),
         env: { addEventListener: () => { } },
         voiceApiResolver: () => voiceApi,
         requestFrame: (callback) => { frameCallback = callback; return 1; },
@@ -382,6 +387,7 @@ test('assistant runtime survives ten complete voiced open and close cycles with 
         interrupt: async () => ({ ok: true })
     });
     const runtime = createEveAssistantRuntime({
+        providerResolver: async () => ({ ok: true, providerId: 'local' }),
         env: { addEventListener: () => { }, console: { error: () => { } }, performance: { now: () => clock } },
         voiceApiResolver: () => voiceApi,
         now: () => clock,
@@ -442,6 +448,7 @@ test('a native farewell failure cannot strand the assistant or block reopening',
         interrupt: async () => ({ ok: true })
     });
     const runtime = createEveAssistantRuntime({
+        providerResolver: async () => ({ ok: true, providerId: 'local' }),
         env: {
             addEventListener: () => { },
             __EVE_VOICE_DIAGNOSTICS__: true,
@@ -475,4 +482,11 @@ test('a native farewell failure cannot strand the assistant or block reopening',
     await advance(420);
     assert.equal(runtime.getState().active, true);
     assert.equal(runtime.getState().sessionId, 'failure-session-2');
+});
+
+ test('provider resolution failure never starts the legacy voice controller', async () => {
+    const { bindVoiceAssistantSession } = await import('../../atome/src/squirrel/voice/assistant_session_controller.js');
+    for (const error of ['no_active_ai_provider', 'profile_loader_unavailable', 'ai_active_provider_ambiguous']) {
+        await assert.rejects(bindVoiceAssistantSession({ provider: { ok: false, error }, voiceApi: null }), new RegExp(error));
+    }
 });

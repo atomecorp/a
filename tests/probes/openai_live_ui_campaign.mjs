@@ -41,6 +41,7 @@ try {
    events.push({id:event.atome_id,kind:event.kind,tx:event.tx_id,props:event.payload?.props,stateDeleted:state?.properties?.__deleted,statePresent:!!state});if(events.length===2)stop();
   });timer=setTimeout(stop,60000);});
  }):null;
+ const beforeImages=process.env.ATOME_TEST_DIRECT_IMAGE==='1'?await page.evaluate(id=>(window.eveToolBase.getProjectSceneState(id)?.records||[]).map(r=>r.id),projectId):null;
  report.stage='send';await clickCanvasTarget(page,field);await page.keyboard.press('Meta+A');await page.keyboard.type(prompt);await page.keyboard.press('Enter');
  await page.waitForFunction(()=>{const s=window.eveAssistantApi.getState().conversation;return s.turns.some(t=>t.role==='user');},null,{timeout:10000});
  report.stage='response';await page.waitForFunction(()=>{const s=window.eveAssistantApi.getState().conversation;return s.error||s.confirmation||s.phase==='idle';},null,{timeout:180000});
@@ -70,6 +71,12 @@ try {
  if(!report.inputExact)throw Error('submitted_text_mismatch');
  const failedTool=report.state.conversation.turns.find(t=>t.role==='tool'&&(t.result?.ok===false||t.result?.result?.ok===false));
  if(failedTool)throw Error('tool_failed:'+failedTool.name);
+ if(beforeImages) {
+  if(!report.state.conversation.turns.some(t=>t.name==='ui.ai.image.generate'))throw Error('image_generation_tool_not_called');
+  if(report.state.image.phase!=='idle')throw Error('direct_image_not_applied');
+  report.directImages=await page.evaluate(({projectId,before})=>(window.eveToolBase.getProjectSceneState(projectId)?.records||[]).filter(r=>!before.includes(r.id)&&!r.id.startsWith('__eve_')&&!r.id.startsWith('eve_')&&(r.type==='image'||r.properties?.kind==='image'||r.properties?.type==='image')).map(r=>({id:r.id,type:r.type,properties:r.properties})),{projectId,before:beforeImages});
+  if(report.directImages.length!==1)throw Error('direct_image_record_missing_or_duplicate');
+ }
  if(process.env.ATOME_TEST_TEXT==='1') {
   const turn=report.state.conversation.turns.find(t=>t.name==='ui.text.create');
   const id=turn?.result?.result?.atome_id;
