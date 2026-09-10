@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { eveT } from '../../eVe/i18n/i18n.js';
 import { test } from 'vitest';
 import { createDashboardLayout } from '../../eVe/domains/dashboard/dashboard_layout.js';
 import { buildDashboardRecords, dashboardRecordId } from '../../eVe/domains/dashboard/dashboard_records.js';
@@ -81,7 +82,7 @@ test('dashboard records never project a generic fullscreen item summary', () => 
     assert.equal(records.some((record) => record.type === 'text' && record.properties.text === 'New news'), true);
 });
 
-test('dashboard records flood focused backgrounds without plus records', () => {
+test('dashboard records retain focused backgrounds and per-category creation records', () => {
     const tokens = mergeDashboardTokens();
     const categories = [
         { id: 'news', label_key: 'eve.dashboard.category.news', color: '#111111', visible: true },
@@ -105,7 +106,7 @@ test('dashboard records flood focused backgrounds without plus records', () => {
     const laneMonitor = records.find((record) => record.id === dashboardRecordId('lane_monitor'));
     const table = records.find((record) => record.id === dashboardRecordId('table'));
     const card = records.find((record) => record.id === dashboardRecordId('card_monitor_m1'));
-    assert.equal(records.some((record) => String(record.id || '').includes('plus')), false);
+    assert.equal(records.filter(record => record.id.startsWith('__eve_dashboard_create_bg_')).length, categories.length);
     assert.equal(table.properties.color, '#ff3366');
     assert.equal(laneNews.properties.color, '#ff3366');
     assert.equal(laneMonitor.properties.color, '#ff3366');
@@ -584,7 +585,7 @@ test('Finder and Communication share only the redacted directory.public populati
     const communicationRecords = await users.collectPublicUsers();
     assert.deepEqual(communicationRecords.map((record) => record.id), ['public-user']);
     assert.equal(communicationRecords[0].phone, '');
-    assert.equal(users.normalizeUserRecord({ principal_id: 'unknown', display_name: '' }).name, 'Unknown');
+    assert.equal(users.normalizeUserRecord({ principal_id: 'unknown', display_name: '' }).name, eveT('eve.contact.unknown', 'Unknown'));
 });
 
 test('a stale post-commit project list cannot hide Dashboard projects or trigger duplicate repairs', async () => {
@@ -641,4 +642,21 @@ test('clock and weather stay next to the header while only News content scrolls,
             assert.ok(entry.card_rect.x + entry.card_rect.width <= lane.scroll_clip_rect.x + lane.scroll_clip_rect.width || handedness === 'left');
         }
     }
+});
+
+for (const handedness of ['left', 'right']) test(`Dashboard Plus blocks align exactly with every header (${handedness})`, () => {
+    const tokens = mergeDashboardTokens();
+    const categories = ['news', 'calendar', 'projects', 'contacts', 'store', 'monitor']
+        .map(id => ({ id, label_key: `eve.dashboard.category.${id}`, color: '#4477bb', visible: true }));
+    const layout = createDashboardLayout({ width: 1000, height: 1000, toolboxHeight: 60,
+        categories, tokens, handedness, itemsByCategory: new Map() });
+    assert.equal(layout.create_rect, undefined);
+    for (const lane of layout.lanes) {
+        assert.equal(lane.create_rect.width, lane.header_rect.width);
+        assert.equal(lane.create_rect.height, lane.header_rect.height);
+        assert.equal(lane.create_rect.y, lane.header_rect.y);
+        assert.equal(lane.create_rect.x, lane.header_rect.x + (handedness === 'left' ? 1 : -1) * lane.header_rect.width);
+    }
+    const records = buildDashboardRecords({ layout, tokens });
+    assert.equal(records.filter(record => record.id.startsWith('__eve_dashboard_create_bg_')).length, 6);
 });

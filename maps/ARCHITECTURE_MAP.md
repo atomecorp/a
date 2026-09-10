@@ -1,5 +1,12 @@
 # Atome / eVe Architecture Map
 
+### Shared presentation ownership — 2026-09-10
+
+Creation stays in the existing Dashboard actions and canonical project/contact/calendar APIs; Plus controls only select the appropriate owner or open a draft. List expansion is disposable view state, while selection and Mute/Solo still consume canonical records and intents. Shared pointer/menu owners decide held palette completion.
+
+Scroll layout measurement is separated from gesture scheduling without introducing a second scroller. Capture preview reuses the panel host, record-preview component and existing WebGPU texture projection. One acquired stream supplies a shared frame buffer; presentation cleanup unregisters its source and timers without stopping the recorder's tracks. The recorder remains the sole acquisition/stop owner. Native camera/gesture endurance and before/after timing evidence remain open; successful unit contracts are not native acceptance.
+
+
 ### Composition lifecycle and recursive windows — 2026-09-09
 
 The canonical combine command owns structural changes. The existing occurrence kernel owns cutting arithmetic; the duplicate planner owns cloning/remapping; the transform planner owns spatial translation. The recursive transport compiler projects group source windows and reads canonical meta parentage via the existing record reader. No alternate hierarchy, renderer, source file mutation or DOM state is introduced. List/Matrix reset cancels the gesture before clearing state; the gesture disposes its composition palette.

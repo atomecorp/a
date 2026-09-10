@@ -1,5 +1,14 @@
 # Atome / eVe Code Map
 
+### Dashboard, List and capture repairs — 2026-09-10
+
+`eVe/domains/dashboard/dashboard_layout.js` and `dashboard_records.js` project one creation block for every category. `dashboard_header_creation_actions.js` routes category intentions to the existing guide and panels. News template logic remains owned by the News modules.
+
+`project_view_list_content.js` owns transient name expansion. The shared selectable-list drag session recognizes hold release and cancels that interpretation after a drag. Surface mount/unmount clear expansion on project changes, including a project opened in Natural. `text_editing_layout.js` fits compact labels without changing font size. `bevy_ui_scroll_layout.js` now owns both content extents and scrollbar geometry; `bevy_ui_scroll_runtime.js` owns gestures and offsets.
+
+`eVe/intuition/tools/capture_video_preview_panel.js` consumes the standard panel host and `bevy_panel_record_preview.js`. Capture feedback fans the existing stream's immutable frame buffer to both the icon and panel. The recording API retains acquisition and stop ownership. Pointer fixtures now compose live shared controls instead of importing the retired Panel Lab.
+
+
 ### Context scope lifetime — 2026-09-09
 
 `project_view_surface_context_runtime` retains project/navigation identity and context revision through owner resolution and invocation. Old navigation cannot create a container rail under a new project ID; late reads and retained closures become stale. Real Dashboard cross-project return and 15 context/readiness regressions verify this owner.

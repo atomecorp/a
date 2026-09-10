@@ -1,5 +1,12 @@
 # Atome / eVe API Map
 
+### Category drafts and capture presentation — 2026-09-10
+
+Dashboard `runForHeader` dispatches by category. Calendar and Contact use the existing panel-opening context `{ createNew: true, projectId }`; Calendar no longer writes an event before validation. Projects use the existing guided creation callback. Store and Monitor expose no creation action. News opening and template persistence are preserved.
+
+The capture preview exposes session-scoped `pushFrame` and `dispose` only. Frames must match the session and increase in sequence. Closing the standard panel discards its presentation state without invoking recording stop. Cancellation during an asynchronous panel/source opening releases late resources. There is no new persistence or camera-acquisition API.
+
+
 ### Context scope lifetime — 2026-09-09
 
 `project_view_surface_context_runtime` retains project/navigation identity and context revision through owner resolution and invocation. Old navigation cannot create a container rail under a new project ID; late reads and retained closures become stale. Real Dashboard cross-project return and 15 context/readiness regressions verify this owner.

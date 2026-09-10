@@ -1,5 +1,14 @@
 # Atome / eVe Design Map
 
+### Compact names and category Plus controls — 2026-09-10
+
+Each Dashboard header has an adjacent equal-size Plus block in either handed layout. Its category color is darkened slightly and the larger Plus is centered. News content is unchanged by this work.
+
+List names start as squares equal to Mute. Simple click selects, drag moves, double-click renames; stationary long press followed by release toggles every name. A recognized drag cancels this toggle. Expanded fields share a width and scroll horizontally for exceptional names. Expansion survives representation changes within one project, and clears when another project opens. Selection is a projected translucent highlight above media/progress, independent of mixing and playback. Mute is gray/yellow and Solo black/red for inactive/active states.
+
+Held palette selection closes before invocation; separate clicks retain the existing open-menu behavior. Video capture has a standard resizable internal preview initially around one quarter of the workspace, with proportional content and footer fullscreen. Closing it only hides the large preview. Native acceptance limits are recorded in FRAMEWORK_STATE.
+
+
 ### Explicit composition choices — 2026-09-09
 
 A 500 ms armed overlap reveals Before/After/Front/Behind/Overwrite/Insert beside the pointer using the shared tool surface, metrics, icon registry, skin and popup placement. The original held gesture chooses on release; leaving or Escape cancels. Shared tool factories center content unless a consumer overrides layout. Selection-to-Natural promotion preserves selection/edition instead of silently entering edition.

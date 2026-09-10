@@ -200,7 +200,7 @@ test('recording visual runtime rejects stale scope frames and stale cleanup', as
     await runtime.setToolRecordingVisual({
         toolId: 'ui.capture.audio', sessionId: 'new_session', kind: 'audio_scope', phase: 'recording'
     });
-    assert.equal(state.activePaletteKey, 'capture');
+    assert.equal(state.activePaletteKey, '');
     assert.equal(runtime.pushToolAudioScope({
         toolId: 'ui.capture.audio', sessionId: 'old_session', sequence: 1,
         sampleRate: 48_000, channels: 1, pairs: [[-0.5, 0.5]]
@@ -220,11 +220,11 @@ test('recording visual runtime rejects stale scope frames and stale cleanup', as
     assert.equal(await runtime.clearToolRecordingVisual({
         toolId: 'ui.capture.audio', sessionId: 'new_session'
     }), true);
-    assert.equal(state.activePaletteKey, 'capture');
+    assert.equal(state.activePaletteKey, '');
     assert.deepEqual(buildBevyMainMenuItems(content, {
         activePaletteKey: state.activePaletteKey,
         recordingVisualByToolId: state.recordingVisualByToolId
-    }).map((item) => item.key), ['atome', 'capture', 'audio', 'video', 'photo']);
+    }).map((item) => item.key), ['atome', 'capture']);
 });
 
 test('audio scope keeps 64 real history columns, stays still in silence and redraws at most 30 Hz', async () => {
