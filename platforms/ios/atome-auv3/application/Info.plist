@@ -196,5 +196,22 @@
     <array>
         <string>group.atome.one.openurl.activate</string>
     </array>
+
+    <!-- The app's own backend is a loopback server, which App Transport
+         Security has always exempted, so no ATS entry was ever needed. A
+         DEVICE cannot use a developer's Fastify on the LAN that way: an
+         `http://192.168.x.x:3001` load is a non-loopback insecure load and ATS
+         refuses it outright, with no error the web layer can see. That is why
+         choosing a custom server on the phone could not work at all.
+
+         `NSAllowsLocalNetworking` is the narrow key for exactly this: it permits
+         insecure loads to local-network hosts (private IPv4 ranges, `.local`)
+         and leaves ATS fully in force for every public host. It is NOT
+         `NSAllowsArbitraryLoads`. -->
+    <key>NSAppTransportSecurity</key>
+    <dict>
+        <key>NSAllowsLocalNetworking</key>
+        <true/>
+    </dict>
 </dict>
 </plist>

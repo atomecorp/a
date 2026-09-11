@@ -81,5 +81,14 @@
         </dict>
     </dict>
 
+    <!-- Same reason as the host app: a developer's Fastify on the LAN is an
+         insecure non-loopback load, which ATS refuses by default. The
+         extension shares the host's backend resolution, so it needs the same
+         narrow permission. -->
+    <key>NSAppTransportSecurity</key>
+    <dict>
+        <key>NSAllowsLocalNetworking</key>
+        <true/>
+    </dict>
 </dict>
 </plist>

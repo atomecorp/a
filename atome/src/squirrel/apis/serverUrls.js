@@ -342,6 +342,16 @@ export function getCloudServerUrl() {
             return resolveCanonicalFastifyHttpBase(window.location.origin);
         }
 
+        // Embedded iOS is a native runtime, so it used to take the generic
+        // branch below and be handed a loopback origin — a port on the PHONE,
+        // where no Fastify can run. That made the production default at the foot
+        // of this function unreachable and left every cloud call, the
+        // server-side OpenAI credential vault included, pointing at nothing.
+        // An explicit override is read above and still wins.
+        if (isEmbeddedIosRuntime()) {
+            return 'https://atome.one';
+        }
+
         if (isTauri()) {
             return resolveCanonicalFastifyHttpBase(buildLoopbackOrigin(cloudPort));
         }
@@ -372,10 +382,6 @@ export function getCloudServerUrl() {
             // If port is default (80/443), don't include it
             const port = (loc.port && loc.port !== '80' && loc.port !== '443') ? `:${loc.port}` : '';
             return resolveCanonicalFastifyHttpBase(`${protocol}//${host}${port}`);
-        }
-
-        if (isEmbeddedIosRuntime()) {
-            return 'https://atome.one';
         }
     }
 

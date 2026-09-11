@@ -65,17 +65,21 @@ function isTauriProdWebview() {
 function resolveTauriProdFastifyHttpBase() {
     if (typeof window === 'undefined') return 'https://atome.one';
 
-    const explicit = (typeof window.__SQUIRREL_TAURI_FASTIFY_URL__ === 'string')
-        ? window.__SQUIRREL_TAURI_FASTIFY_URL__.trim()
-        : '';
+    // Every candidate goes through the same validator: on the phone a loopback
+    // base is not a usable cloud server, and one that leaked into a global
+    // earlier in the session must not outrank the real default below.
+    const usable = (value) => {
+        const candidate = typeof value === 'string' ? value.trim() : '';
+        return candidate && !isInvalidFastifyLoopbackBase(candidate) ? candidate : '';
+    };
+
+    const explicit = usable(window.__SQUIRREL_TAURI_FASTIFY_URL__);
     if (explicit) return explicit;
 
     const override = readTauriFastifyOverride();
     if (override) return override;
 
-    const already = (typeof window.__SQUIRREL_FASTIFY_URL__ === 'string')
-        ? window.__SQUIRREL_FASTIFY_URL__.trim()
-        : '';
+    const already = usable(window.__SQUIRREL_FASTIFY_URL__);
     if (already) return already;
 
     return 'https://atome.one';
@@ -148,6 +152,22 @@ function isDisallowedFastifyLoopbackPort(base, config = null) {
 
 function isInvalidFastifyLoopbackBase(base) {
     if (typeof base !== 'string' || !base.trim()) return false;
+    // A loopback Fastify base is not merely suspicious on an embedded iOS
+    // runtime, it is impossible: Fastify is a Node server and never runs on the
+    // device, and the loopback port that DOES answer there is the local Swift
+    // backend, which speaks a different contract. The desktop guard below was
+    // scoped to desktop, so the phone happily accepted `http://localhost:3001`
+    // — the “Local test” server the Home panel offers by default — and then
+    // every cloud call, the server-side OpenAI credential vault included, went
+    // to a port nothing serves. That is what the app reported as “key status
+    // unavailable — check the connection”.
+    if (isEmbeddedIosRuntime()) {
+        try {
+            return isLoopbackHost(new URL(base.trim()).hostname);
+        } catch (_) {
+            return false;
+        }
+    }
     if (!isDesktopTauriRuntime()) return false;
     const localPort = readLocalTauriHttpPort();
     if (isDisallowedFastifyLoopbackPort(base)) return true;
