@@ -12,7 +12,7 @@ import {
     closeDatabase as closeDriver
 } from './driver.js';
 import { AsyncLocalStorage } from 'node:async_hooks';
-import { runAdoleSchemaMigrations } from './adole_schema_migrations.js';
+import { prepareAdoleSchemaColumns, runAdoleSchemaMigrations } from './adole_schema_migrations.js';
 
 let db = null;
 let isAsync = false;
@@ -68,6 +68,8 @@ async function openDatabase(config) {
 
     // A schema failure used to be logged as "already exists or error" and
     // swallowed, leaving the server running against a half-built database.
+    // Existing tables must gain columns before schema indexes reference them.
+    await prepareAdoleSchemaColumns(query);
     await query('exec', schema);
     await runAdoleSchemaMigrations(query);
     await query('exec', `PRAGMA user_version = ${expectedVersion}`);

@@ -1,4 +1,16 @@
-# AUv3 Deployment Script
+# AUv3 Deployment Script (local device, development)
+
+`auv3.sh` builds a **Debug** AUv3 and installs it on a connected device so you
+can test it in a host app. It is not a distribution path: it does not archive,
+does not sign for distribution, does not notarize, and does not upload
+anything.
+
+For release paths, see instead:
+
+- **iOS app + AUv3 → TestFlight**: `scripts/XCode_testflight_generator`,
+  documented in
+  [`platforms/ios/atome-auv3/README.md`](../../platforms/ios/atome-auv3/README.md).
+- **macOS desktop (Tauri)**: [desktop_tauri_distribution.md](desktop_tauri_distribution.md).
 
 ## Usage
 

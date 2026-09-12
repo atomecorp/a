@@ -1,6 +1,7 @@
 import { createVoiceService } from './service.js';
 import { bootstrapVoicePanel, shouldEnableVoicePanel } from './panel.js';
 import { writeVoiceDiagnostic } from './telemetry.js';
+import { loadModulesSequentially } from '../../utils/module_loader_runtime.js';
 import { readEnv } from '../shared/scalars.js';
 
 const READY_PROMISE_KEY = '__SQUIRREL_VOICE_READY_PROMISE__';
@@ -14,7 +15,23 @@ const traceVoiceBootstrap = (env, event, payload = {}) => writeVoiceDiagnostic(
 );
 
 
-const defaultImportModule = (path) => import(path);
+// The packaged runtime has no file at these paths: it bundles them and resolves
+// each one through `__ATOME_PACKAGED_MODULES__` by id. Importing the path
+// directly is what made the whole voice bridge fail to load on iOS, leaving the
+// assistant able to open and to say nothing but that the request failed.
+const defaultImportModule = (descriptor) => loadModulesSequentially({
+    modules: [descriptor],
+    baseUrl: import.meta.url,
+    logPrefix: '[voice bridge]'
+});
+
+// Ids the iOS packager collects from these literals; the two playback owners
+// share eVe's ids because they are the same modules, loaded by the same
+// registry, and a second id for one module would bundle it twice.
+const VOICE_BRIDGE_AUDIO_FACADE = { id: 'eve.audio_facade', path: '../../application/audio_runtime/audio.facade.js' };
+const VOICE_BRIDGE_BACKEND_KIRA = { id: 'eve.backend_kira', path: '../../application/audio_runtime/backend.kira.js' };
+const VOICE_BRIDGE_RECORD_AUDIO = { id: 'atome.record_audio_api', path: '../../application/audio_runtime/record_audio_api.js' };
+const VOICE_BRIDGE_STT = { id: 'atome.stt_api', path: '../../application/audio_runtime/stt_api.js' };
 
 const isTauriLikeEnv = (env) => {
     if (!env || typeof env !== 'object') return false;
@@ -48,20 +65,20 @@ export const ensureVoiceBridgeModules = async ({
     // Install their shared playback owners in the same order; ESM imports are
     // shared with the project bootstrap and never install a second engine.
     if (readEnv(env, 'document')) {
-        await importModule('../../application/audio_runtime/audio.facade.js');
-        await importModule('../../application/audio_runtime/backend.kira.js');
+        await importModule(VOICE_BRIDGE_AUDIO_FACADE);
+        await importModule(VOICE_BRIDGE_BACKEND_KIRA);
         loaded.push('audio_facade', 'backend_kira');
     }
 
     if (tauri && (typeof readEnv(env, 'record_start') !== 'function' || typeof readEnv(env, 'record_stop') !== 'function')) {
-        await importModule('../../application/audio_runtime/record_audio_api.js');
+        await importModule(VOICE_BRIDGE_RECORD_AUDIO);
         loaded.push('record_audio_api');
     }
 
     const tauriGlobal = readEnv(env, '__TAURI__');
     const tauriInternals = readEnv(env, '__TAURI_INTERNALS__');
     if (tauri && !(tauriGlobal?.stt || tauriInternals?.stt)) {
-        await importModule('../../application/audio_runtime/stt_api.js');
+        await importModule(VOICE_BRIDGE_STT);
         loaded.push('stt_api');
     }
 

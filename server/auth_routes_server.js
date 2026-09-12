@@ -38,7 +38,11 @@ export function registerServerIdentityRoutes(server, { dataSource, isProduction 
      * Client sends a random challenge, server signs it with private key
      * Client can verify signature using server's public key
      */
-    server.post('/api/server/verify', async (request, reply) => {
+    // Public signed challenge: no account data, cookie or credential is used.
+    // WKWebView's atome:// origin is opaque; keep other routes' CORS restricted.
+    const verificationCors = { origin: '*', credentials: false, methods: ['POST'], allowedHeaders: ['content-type', 'accept'] };
+    server.options('/api/server/verify', { config: { cors: verificationCors } }, (request, reply) => reply.code(204).send());
+    server.post('/api/server/verify', { config: { cors: verificationCors } }, async (request, reply) => {
         const { challenge } = request.body || {};
 
         // Validate challenge

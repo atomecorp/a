@@ -2,6 +2,8 @@ import { normalizePermissionConditions } from '../atome/src/squirrel/conditions/
 
 async function ensureColumn({ query, table, column, ddl }) {
     const columns = await query('all', `PRAGMA table_info(${table})`);
+    // Fresh databases receive the complete table from schema.sql.
+    if (!columns?.length) return;
     const names = new Set((columns || []).map((col) => col.name));
     if (!names.has(column)) await query('run', ddl);
 }
@@ -220,6 +222,7 @@ async function backfillEventSequences(query) {
 
 async function ensureStateCurrentColumns(query) {
     const columns = await query('all', "PRAGMA table_info(state_current)");
+    if (!columns?.length) return;
     const names = new Set((columns || []).map((col) => col.name));
     if (names.has('owner_id')) return;
     await query('run', "ALTER TABLE state_current ADD COLUMN owner_id TEXT");
@@ -408,16 +411,20 @@ async function refreshUsersView(query) {
     COMMIT;`);
 }
 
-async function runAdoleSchemaMigrations(query) {
+async function prepareAdoleSchemaColumns(query) {
     await ensurePermissionsColumns(query);
-    await migratePermissionConditions(query);
     await ensureSnapshotColumns(query);
     await ensureEventColumns(query);
+    await ensureStateCurrentColumns(query);
+}
+
+async function runAdoleSchemaMigrations(query) {
+    await prepareAdoleSchemaColumns(query);
+    await migratePermissionConditions(query);
     await ensureSyncEventTables(query);
     await backfillEventSequences(query);
-    await ensureStateCurrentColumns(query);
     await ensurePrincipalIdentityTables(query);
     await refreshUsersView(query);
 }
 
-export { runAdoleSchemaMigrations };
+export { prepareAdoleSchemaColumns, runAdoleSchemaMigrations };

@@ -2814,7 +2814,7 @@ enum AiSRuntime {
         )
     }
 
-    private static func findAnyAtomeMeta(_ db: OpaquePointer?, atomeId: String) throws -> AtomeMeta? {
+    static func findAnyAtomeMeta(_ db: OpaquePointer?, atomeId: String) throws -> AtomeMeta? {
         let rows = try query(db, """
             SELECT atome_id, atome_type, parent_id, owner_id, creator_id, created_at, updated_at, created_source, sync_status
             FROM atomes
@@ -2879,7 +2879,7 @@ enum AiSRuntime {
         }
     }
 
-    private static func upsertParticle(_ db: OpaquePointer?, atomeId: String, key: String, value: Any, changedBy: String, now: String) throws {
+    static func upsertParticle(_ db: OpaquePointer?, atomeId: String, key: String, value: Any, changedBy: String, now: String) throws {
         let newValue = try jsonString(value)
         let previousRows = try query(db, "SELECT particle_id, particle_value, version FROM particles WHERE atome_id = ? AND particle_key = ? LIMIT 1", [.text(atomeId), .text(key)])
         let oldValue = previousRows.first?["particle_value"] as? String
@@ -2934,7 +2934,7 @@ enum AiSRuntime {
         return stringValue(parseJSONValue(raw))
     }
 
-    private static func upsertStateCurrent(_ db: OpaquePointer?, atomeId: String, ownerId: String, projectId: String? = nil, clearProjectId: Bool = false, properties: [String: Any], now: String) throws {
+    static func upsertStateCurrent(_ db: OpaquePointer?, atomeId: String, ownerId: String, projectId: String? = nil, clearProjectId: Bool = false, properties: [String: Any], now: String) throws {
         let encoded = try jsonString(properties)
         try execute(db, """
             INSERT INTO state_current (atome_id, owner_id, project_id, properties, updated_at, version)
@@ -2946,244 +2946,6 @@ enum AiSRuntime {
                 updated_at = excluded.updated_at,
                 version = state_current.version + 1
             """, [.text(atomeId), .text(ownerId), projectId.map(SQLiteBinding.text) ?? .null, .text(encoded), .text(now), .int(clearProjectId ? 1 : 0)])
-    }
-
-    private static func normalizeEventInput(_ event: [String: Any], defaultActorId: String?) throws -> [String: Any] {
-        let kind = normalizedOptionalString(event["kind"] ?? event["event"]) ?? ""
-        if kind.isEmpty {
-            throw AiSError("Missing event kind")
-        }
-        let atomeId = normalizedOptionalString(event["atome_id"] ?? event["atomeId"] ?? event["id"])
-        if kind != "snapshot" && (atomeId == nil || atomeId == "") {
-            throw AiSError("Missing event atome_id")
-        }
-        var normalized: [String: Any] = [
-            "id": normalizedOptionalString(event["id"] ?? event["event_id"] ?? event["eventId"]) ?? UUID().uuidString.lowercased(),
-            "ts": normalizedOptionalString(event["ts"] ?? event["timestamp"]) ?? isoNow(),
-            "kind": kind
-        ]
-        if let atomeId { normalized["atome_id"] = atomeId }
-        let globalScope = normalizedOptionalString(event["scope"]) == "global"
-        if !globalScope, let projectId = normalizedOptionalString(event["project_id"] ?? event["projectId"]) { normalized["project_id"] = projectId }
-        if globalScope {
-            var payload = (resolveEventPayload(event) as? [String: Any]) ?? [:]
-            payload["scope"] = "global"
-            normalized["payload"] = payload
-        } else if let payload = resolveEventPayload(event) {
-            normalized["payload"] = payload
-        }
-        if let txId = normalizedOptionalString(event["tx_id"] ?? event["txId"]) { normalized["tx_id"] = txId }
-        if let gestureId = normalizedOptionalString(event["gesture_id"] ?? event["gestureId"]) { normalized["gesture_id"] = gestureId }
-        if let ownerId = normalizedOptionalString(event["owner_id"] ?? event["ownerId"] ?? event["owner"]) { normalized["owner_id"] = ownerId }
-        if let actor = event["actor"] {
-            normalized["actor"] = actor
-        } else if let defaultActorId, !defaultActorId.isEmpty {
-            normalized["actor"] = ["type": "user", "id": defaultActorId]
-        }
-        return normalized
-    }
-
-    private static func resolveEventPayload(_ event: [String: Any]) -> Any? {
-        if let payload = event["payload"] { return payload }
-        if let props = event["props"] as? [String: Any] { return ["props": props] }
-        if let props = event["properties"] as? [String: Any] { return ["props": props] }
-        if let patch = event["patch"] as? [String: Any] { return ["props": patch] }
-        if let delta = event["delta"] as? [String: Any] { return ["props": delta] }
-        return nil
-    }
-
-    private static func extractEventPatch(kind: String, payload: Any?, ts: String) -> [String: Any]? {
-        if kind == "delete" {
-            return ["__deleted": true, "deleted_at": ts]
-        }
-        guard let payloadObj = payload as? [String: Any] else { return nil }
-        if let patch = payloadObj["props"] as? [String: Any] { return patch }
-        if let patch = payloadObj["properties"] as? [String: Any] { return patch }
-        if let patch = payloadObj["patch"] as? [String: Any] { return patch }
-        if let patch = payloadObj["delta"] as? [String: Any] { return patch }
-        return nil
-    }
-
-    private static let eventMetaParticleKeys: Set<String> = [
-        "type", "atome_type", "kind",
-        "parent_id", "parentId",
-        "project_id", "projectId",
-        "__deleted", "deleted_at"
-    ]
-
-    private static func resolveActorId(_ actor: Any?) -> String? {
-        guard let actor = actor as? [String: Any] else { return nil }
-        return normalizedOptionalString(actor["id"] ?? actor["user_id"] ?? actor["userId"])
-    }
-
-    private static func resolveEventType(_ patch: [String: Any]) -> String? {
-        normalizedOptionalString(patch["type"] ?? patch["atome_type"] ?? patch["kind"])
-    }
-
-    private static func resolveEventParentId(_ patch: [String: Any]) -> String? {
-        normalizedOptionalString(patch["parent_id"] ?? patch["parentId"] ?? patch["project_id"] ?? patch["projectId"])
-    }
-
-    private static func stripEventMetaPatch(_ patch: [String: Any]) -> [String: Any] {
-        var filtered: [String: Any] = [:]
-        for (key, value) in patch where !eventMetaParticleKeys.contains(key) {
-            filtered[key] = value
-        }
-        return filtered
-    }
-
-    private static func appendEvent(_ db: OpaquePointer?, event: [String: Any]) throws {
-        let eventId = stringValue(event["id"])
-        let existing = try query(db, "SELECT id FROM events WHERE id = ? LIMIT 1", [.text(eventId)])
-        if !existing.isEmpty { return }
-        let payloadString = try jsonString(event["payload"] ?? NSNull())
-        let actorString = try jsonString(event["actor"] ?? NSNull())
-        let actorId = resolveActorId(event["actor"]) ?? "local"
-        let scopeId = normalizedOptionalString(event["project_id"] ?? event["atome_id"]) ?? "account"
-        let streamId = normalizedOptionalString(event["stream_id"] ?? event["stream"])
-            ?? "ais:\(actorId):\(scopeId)"
-        let sequence = intValue(event["sequence"], defaultValue: 0) > 0
-            ? intValue(event["sequence"], defaultValue: 0)
-            : ((try query(db,
-                "SELECT COALESCE(MAX(sequence), 0) + 1 AS next_sequence FROM events WHERE stream_id = ?",
-                [.text(streamId)]).first?["next_sequence"] as? Int64) ?? 1)
-        try execute(db, """
-            INSERT INTO events (
-                id, ts, atome_id, project_id, kind, payload, actor, tx_id, gesture_id,
-                stream_id, sequence, source, lww_decisions, projection
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, [
-            .text(eventId),
-            .text(stringValue(event["ts"])),
-            normalizedOptionalString(event["atome_id"]).map(SQLiteBinding.text) ?? .null,
-            normalizedOptionalString(event["project_id"]).map(SQLiteBinding.text) ?? .null,
-            .text(stringValue(event["kind"])),
-            .text(payloadString),
-            .text(actorString),
-            normalizedOptionalString(event["tx_id"]).map(SQLiteBinding.text) ?? .null,
-            normalizedOptionalString(event["gesture_id"]).map(SQLiteBinding.text) ?? .null,
-            .text(streamId),
-            .int(sequence),
-            normalizedOptionalString(event["source"]).map(SQLiteBinding.text) ?? .text("ais"),
-            .text(try jsonString(event["lww_decisions"] ?? NSNull())),
-            .text(try jsonString(event["projection"] ?? NSNull()))
-        ])
-        _ = try applyEventToStateCurrent(db, event: event)
-    }
-
-    private static func appendEvents(_ db: OpaquePointer?, events: [[String: Any]]) throws {
-        for event in events {
-            try appendEvent(db, event: event)
-        }
-    }
-
-    private static func applyEventToStateCurrent(_ db: OpaquePointer?, event: [String: Any]) throws -> [String: Any]? {
-        let atomeId = stringValue(event["atome_id"])
-        if atomeId.isEmpty { return nil }
-        let ts = normalizedOptionalString(event["ts"]) ?? isoNow()
-        let kind = stringValue(event["kind"])
-        guard let patch = extractEventPatch(kind: kind, payload: event["payload"], ts: ts) else { return nil }
-
-        let actorId = resolveActorId(event["actor"])
-        let patchOwnerId = normalizedOptionalString(patch["owner_id"] ?? patch["ownerId"] ?? patch["owner"])
-        let eventOwnerId = normalizedOptionalString(event["owner_id"] ?? event["ownerId"] ?? event["owner"])
-        let patchType = resolveEventType(patch)
-        let patchParentId = resolveEventParentId(patch)
-        let deleted = boolValue(patch["__deleted"])
-        let particlePatch = stripEventMetaPatch(patch)
-        let existingMeta = try findAnyAtomeMeta(db, atomeId: atomeId)
-
-        let resolvedOwnerId = firstNonEmptyString([
-            eventOwnerId,
-            patchOwnerId,
-            actorId,
-            existingMeta?.ownerId
-        ]) ?? atomeId
-        try upsertAtomeFromEvent(
-            db,
-            atomeId: atomeId,
-            atomeType: patchType,
-            parentId: patchParentId,
-            ownerId: resolvedOwnerId,
-            creatorId: existingMeta?.creatorId ?? resolvedOwnerId,
-            deleted: deleted,
-            now: ts
-        )
-
-        let changedBy = firstNonEmptyString([actorId, resolvedOwnerId]) ?? atomeId
-        for (key, value) in particlePatch {
-            try upsertParticle(db, atomeId: atomeId, key: key, value: value, changedBy: changedBy, now: ts)
-        }
-
-        let existingState = try loadStateCurrentEntry(db, atomeId: atomeId)
-        var nextProps = existingState?.properties ?? [:]
-        for (key, value) in patch { nextProps[key] = value }
-        if nextProps["type"] == nil, let patchType { nextProps["type"] = patchType }
-        if nextProps["type"] == nil, let existingType = existingMeta?.atomeType, !existingType.isEmpty { nextProps["type"] = existingType }
-        if let parentId = patchParentId ?? existingMeta?.parentId {
-            if nextProps["parent_id"] == nil { nextProps["parent_id"] = parentId }
-            if nextProps["parentId"] == nil { nextProps["parentId"] = parentId }
-        }
-        let payloadObject = event["payload"] as? [String: Any]
-        let globalScope = normalizedOptionalString(payloadObject?["scope"]) == "global"
-        let projectId = globalScope ? nil : firstNonEmptyString([
-            normalizedOptionalString(event["project_id"] ?? event["projectId"]),
-            normalizedOptionalString(patch["project_id"] ?? patch["projectId"]),
-            existingState?.projectId
-        ])
-        if let projectId {
-            if nextProps["project_id"] == nil { nextProps["project_id"] = projectId }
-            if nextProps["projectId"] == nil { nextProps["projectId"] = projectId }
-        }
-        let stateOwnerId = firstNonEmptyString([
-            eventOwnerId,
-            patchOwnerId,
-            existingState?.ownerId,
-            resolvedOwnerId
-        ]) ?? resolvedOwnerId
-        try upsertStateCurrent(db, atomeId: atomeId, ownerId: stateOwnerId, projectId: projectId, clearProjectId: globalScope, properties: nextProps, now: ts)
-        return try getStateCurrent(db, atomeId: atomeId)
-    }
-
-    private static func upsertAtomeFromEvent(_ db: OpaquePointer?, atomeId: String, atomeType: String?, parentId: String?, ownerId: String?, creatorId: String?, deleted: Bool, now: String) throws {
-        let existing = try findAnyAtomeMeta(db, atomeId: atomeId)
-        if existing == nil {
-            try execute(db, """
-                INSERT INTO atomes (atome_id, atome_type, parent_id, owner_id, creator_id, created_at, updated_at, deleted_at, created_source, sync_status)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'ais', 'local')
-                """, [
-                .text(atomeId),
-                .text(atomeType ?? "generic"),
-                parentId.map(SQLiteBinding.text) ?? .null,
-                ownerId.map(SQLiteBinding.text) ?? .null,
-                (creatorId ?? ownerId).map(SQLiteBinding.text) ?? .null,
-                .text(now),
-                .text(now),
-                deleted ? .text(now) : .null
-            ])
-            return
-        }
-
-        var updates: [String] = ["updated_at = ?", "deleted_at = ?", "sync_status = 'local'"]
-        var bindings: [SQLiteBinding] = [.text(now), deleted ? .text(now) : .null]
-        if let atomeType, !atomeType.isEmpty {
-            updates.append("atome_type = ?")
-            bindings.append(.text(atomeType))
-        }
-        if let parentId, !parentId.isEmpty {
-            updates.append("parent_id = ?")
-            bindings.append(.text(parentId))
-        }
-        if let ownerId, !ownerId.isEmpty {
-            updates.append("owner_id = ?")
-            bindings.append(.text(ownerId))
-        }
-        if let creatorId, !creatorId.isEmpty {
-            updates.append("creator_id = COALESCE(creator_id, ?)")
-            bindings.append(.text(creatorId))
-        }
-        bindings.append(.text(atomeId))
-        try execute(db, "UPDATE atomes SET \(updates.joined(separator: ", ")) WHERE atome_id = ?", bindings)
     }
 
     private static func getStateCurrent(_ db: OpaquePointer?, atomeId: String) throws -> [String: Any]? {
@@ -3291,7 +3053,7 @@ enum AiSRuntime {
         return intValue(try query(db, sql, bindings).first?["total"], defaultValue: 0)
     }
 
-    private static func loadStateCurrentEntry(_ db: OpaquePointer?, atomeId: String) throws -> StateCurrentEntry? {
+    static func loadStateCurrentEntry(_ db: OpaquePointer?, atomeId: String) throws -> StateCurrentEntry? {
         let rows = try query(db, """
             SELECT atome_id, owner_id, project_id, properties, updated_at, version
             FROM state_current
@@ -3450,7 +3212,7 @@ enum AiSRuntime {
         return rows.first?["snapshot_id"] as? Int64 ?? 0
     }
 
-    private static func execute(_ db: OpaquePointer?, _ sql: String, _ bindings: [SQLiteBinding] = []) throws {
+    static func execute(_ db: OpaquePointer?, _ sql: String, _ bindings: [SQLiteBinding] = []) throws {
         var statement: OpaquePointer?
         guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK else {
             throw AiSError(lastError(db))
@@ -3463,7 +3225,7 @@ enum AiSRuntime {
         }
     }
 
-    private static func query(_ db: OpaquePointer?, _ sql: String, _ bindings: [SQLiteBinding] = []) throws -> [[String: Any]] {
+    static func query(_ db: OpaquePointer?, _ sql: String, _ bindings: [SQLiteBinding] = []) throws -> [[String: Any]] {
         var statement: OpaquePointer?
         guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK else {
             throw AiSError(lastError(db))
@@ -3720,7 +3482,7 @@ enum AiSRuntime {
         return value as? String
     }
 
-    private static func jsonString(_ value: Any) throws -> String {
+    static func jsonString(_ value: Any) throws -> String {
         guard JSONSerialization.isValidJSONObject(["value": value]) else {
             if let string = value as? String {
                 let data = try JSONSerialization.data(withJSONObject: string, options: [.fragmentsAllowed])
@@ -3754,26 +3516,26 @@ enum AiSRuntime {
         }
     }
 
-    private static func stringValue(_ value: Any?) -> String {
+    static func stringValue(_ value: Any?) -> String {
         if let value = value as? String { return value }
         if let value = value as? NSString { return value as String }
         if let value = value as? NSNumber { return value.stringValue }
         return ""
     }
 
-    private static func normalizedOptionalString(_ value: Any?) -> String? {
+    static func normalizedOptionalString(_ value: Any?) -> String? {
         let resolved = stringValue(value).trimmingCharacters(in: .whitespacesAndNewlines)
         return resolved.isEmpty ? nil : resolved
     }
 
-    private static func firstNonEmptyString(_ values: [String?]) -> String? {
+    static func firstNonEmptyString(_ values: [String?]) -> String? {
         for value in values {
             if let value, !value.isEmpty { return value }
         }
         return nil
     }
 
-    private static func intValue(_ value: Any?, defaultValue: Int64) -> Int64 {
+    static func intValue(_ value: Any?, defaultValue: Int64) -> Int64 {
         if let value = value as? Int64 { return value }
         if let value = value as? Int { return Int64(value) }
         if let value = value as? NSNumber { return value.int64Value }
@@ -3781,7 +3543,7 @@ enum AiSRuntime {
         return defaultValue
     }
 
-    private static func isoNow() -> String {
+    static func isoNow() -> String {
         ISO8601DateFormatter().string(from: Date())
     }
 
@@ -3794,7 +3556,7 @@ enum AiSRuntime {
         return String(cString: sqlite3_errmsg(db))
     }
 
-    private static func boolValue(_ value: Any?) -> Bool {
+    static func boolValue(_ value: Any?) -> Bool {
         if let value = value as? Bool { return value }
         if let value = value as? NSNumber { return value.boolValue }
         if let value = value as? String { return value == "true" || value == "1" }
@@ -3809,7 +3571,7 @@ fileprivate struct UserRecord {
     let deletedAt: String?
 }
 
-fileprivate struct AtomeMeta {
+struct AtomeMeta {
     let atomeId: String
     let atomeType: String
     let parentId: String?
@@ -3821,7 +3583,7 @@ fileprivate struct AtomeMeta {
     let syncStatus: String
 }
 
-fileprivate struct StateCurrentEntry {
+struct StateCurrentEntry {
     let atomeId: String
     let ownerId: String?
     let projectId: String?
@@ -3830,13 +3592,13 @@ fileprivate struct StateCurrentEntry {
     let version: Int64
 }
 
-fileprivate enum SQLiteBinding {
+enum SQLiteBinding {
     case text(String)
     case int(Int64)
     case null
 }
 
-fileprivate struct AiSError: LocalizedError {
+struct AiSError: LocalizedError {
     let message: String
     init(_ message: String) { self.message = message }
     var errorDescription: String? { message }

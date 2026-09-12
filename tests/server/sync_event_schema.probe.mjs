@@ -77,3 +77,33 @@ test('event streams use stable sequences and property history links to canonical
         delete process.env.SQLITE_PATH;
     }
 });
+
+test('bootstrap upgrades legacy columns before creating dependent indexes and preserves events', async () => {
+    const { default: Database } = await import('better-sqlite3');
+    const root = path.resolve('temp');
+    fs.mkdirSync(root, { recursive: true });
+    const directory = fs.mkdtempSync(path.join(root, 'legacy-schema-'));
+    const databasePath = path.join(directory, 'legacy.db');
+    const legacy = new Database(databasePath);
+    legacy.exec(`CREATE TABLE events (
+        id TEXT PRIMARY KEY, atome_id TEXT, ts TEXT NOT NULL,
+        kind TEXT NOT NULL, payload TEXT
+    );
+    INSERT INTO events VALUES ('legacy-event', 'legacy-object', '2026-01-01', 'set', '{"props":{"left":12}}');`);
+    legacy.close();
+    const core = await import('../../database/adole_db_core.js');
+    try {
+        await core.initDatabase({ path: databasePath });
+        const row = await core.query('get', 'SELECT * FROM events WHERE id = ?', ['legacy-event']);
+        assert.equal(row.payload, '{"props":{"left":12}}');
+        assert.ok(row.stream_id);
+        assert.equal(row.sequence, 1);
+        assert.equal((await core.query('get', 'PRAGMA integrity_check')).integrity_check, 'ok');
+        await core.closeDatabase();
+        await core.initDatabase({ path: databasePath });
+        assert.deepEqual(await core.query('get', 'SELECT * FROM events WHERE id = ?', ['legacy-event']), row);
+    } finally {
+        await core.closeDatabase();
+        fs.rmSync(directory, { recursive: true, force: true });
+    }
+});

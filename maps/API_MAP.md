@@ -2515,3 +2515,35 @@ OpenAI live repair (2026-09-10 20:15): eVe.js owns installation of the existing 
 2026-09-10: Runtime V2 listTools projects canonical built-ins through tool_runtime_builtin_resolver.js alongside custom persisted records, preserving explicit disabling. MCP discovery and direct built-in resolution share the same definitions. Failed AI provider resolution is rejected by assistant_session_controller.js instead of silently selecting local speech. Controlled regression evidence and unvalidated Safari/Tauri/iOS lanes are recorded in FRAMEWORK_STATE.md.
 
 2026-09-10 Direct image application: user supersedes mandatory image preview/Apply. assistant_media_session.generate now imports generated/edited PNGs immediately through the existing canonical importer by default, preserving originals and undo. Explicit internal previewOnly remains available for callers requesting a preview; the assistant tool no longer advertises mandatory approval. Regression checks cover one immediate import and refusal of a second Apply. Safari text failure remains unresolved; this change does not claim Safari acceptance.
+
+2026-09-11 Native account-link verification: only POST /api/server/verify and its explicit OPTIONS preflight allow credential-free cross-origin access (including opaque WKWebView origins). The endpoint returns a signed public challenge; no account secret or cookie is used. Other routes retain their restricted CORS policy. auth_fastify_token preserves a failed provisioning error as link reason instead of replacing it with cache_login_failed.
+
+- Native availability: public `GET /health` permits credential-free CORS (including opaque WKWebView origins); account routes retain restricted CORS. `adole_connection.js` uses this route before opening the Fastify WebSocket, so an unreadable health response prevents account linking.
+
+OpenAI credential migration (2026-09-11): `provider_client.resolveOpenAiCredentialStatus` is the shared Home/assistant/catalog owner for migrating the authenticated account's legacy local token into the server vault. Existing server credentials are authoritative; successful storage precedes local removal. `provider_broker` enforces the expected principal before dispatch and on retries. No server secret is returned to clients. Regression evidence: `tests/eve/openai_credential_migration.test.mjs`.
+
+### iOS event journal latency and atomic projection (2026-09-11)
+
+`platforms/ios/atome-auv3/Common/AiSRuntimeEvents.swift` owns event normalization, journal append and projection as an extension of the existing AiSRuntime, extracted from LocalHTTPServer. Each event uses a SQLite savepoint so journal, particles and state-current commit or roll back together; enclosing remote-sync transactions retain ownership. Sequential batches retain per-event semantics. Sequence allocation includes `sequence IS NOT NULL`, matching the existing partial stream/sequence index rather than scanning the journal. The executable Swift probe covers rollback, duplicate IDs, nested transactions and index selection. Physical iPhone startup: 453 events / 1379 ms cumulative handler time, p50 3 ms, p95 4 ms, zero observed local request timeouts; assistant network and Flower acceptance remain open.
+
+### Flower layer band, iOS provider relay and voice bridge (2026-09-11)
+
+`bevy_ui_flower_model.js` owns the Flower's absolute stacking: the renderer puts every node on one flat scale (`GlobalZIndex(style.z_index ?? 0)`), so the corolla carries `workspaceSceneLayerOrder('flower')` down its whole subtree, the way `bevy_panel_tree.js` carries its own. A node left without a `z_index` is painted at 0, underneath every panel. `bevy_ui_flower_runtime.js` owns dismissal on the native surface, where the document-level owner never sees the press: the presentation root closes on a press outside the corolla and ignores only the reprojection of the still-held opening pointer (not released, and within `RIBBON_TOKENS.flowerOriginPressTolerancePx` of the opening point). Regression owner: `tests/eve/bevy_ui_flower_contract.probe.mjs`.
+
+`FastifySyncClient.reloadConfiguration` (iOS) is idempotent: the application re-publishes the same remote configuration before every authenticated request, and disconnecting on each one closed the provider channels carrying the in-flight assistant request (`provider_connection_closed`). Only a changed configuration disconnects.
+
+`atome/src/squirrel/voice/bootstrap.js` loads its bridge modules as `{ id, path }` descriptors through `loadModulesSequentially`, so the packaged runtime resolves them by id from `__ATOME_PACKAGED_MODULES__`. The packaged bundle has no file at those paths; importing them directly failed the whole voice bridge on iOS. Regression owners: `tests/eve/voice_playback_bootstrap.test.mjs`, `tests/atome/src/squirrel/voice/bootstrap.probe.mjs`.
+
+### Panel input sessions under the Flower menu (2026-09-11)
+
+`text_editing_session.js` owns whether a blur ends a session: `retainOnBlur` (stay
+active, look unfocused — scene text) and `reclaimFocusOnBlur` (take the DOM focus back
+— an input box with its own menu over it) are values or predicates resolved at blur
+time. `bevy_panel_text_editing.js` holds its session while the Flower it opened stands,
+released by that menu's `onClose`, and its `paste()` replaces the whole value.
+`bevy_ui_pointer_runtime.js` refuses the focus to a press landing on the `flower` layer,
+which the hit result now carries from `bevy_ui_runtime.js`. `bevy_ui_flower_runtime.js`
+owns its geometry across surface changes through `subscribeRenderSurfaceSize`,
+re-deriving the centre from the stored opening point, and never interrupts a close.
+Root cause, evidence and rejected hypotheses:
+`known-bug-solutions/ios-panel-input-fast-tap-blur/README.md`.

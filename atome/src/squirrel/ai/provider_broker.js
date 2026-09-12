@@ -51,10 +51,11 @@ const isTransportSilence = (result) => result?.status === 0
 
 // Online provider traffic uses the platform’s authenticated application socket. The application never retrieves a stored OpenAI credential.
 export const requestProviderService = async (action, payload = {}, {
-    signal = null, onProgress = null, transport = null, usageTracker = aiQuotaTracker, principal = () => getSessionState()?.user?.id
+    expectedPrincipal = null, signal = null, onProgress = null, transport = null, usageTracker = aiQuotaTracker, principal = () => getSessionState()?.user?.id
 } = {}) => {
     signal?.throwIfAborted();
     const requestPrincipal = principal();
+    if (expectedPrincipal !== null && requestPrincipal !== expectedPrincipal) throw new Error('provider_principal_changed');
     let token;
     // Returns the token to retry with once the host relay owns a usable remote
     // link again, or a typed reason when the link itself cannot be rebuilt.
@@ -89,14 +90,17 @@ export const requestProviderService = async (action, payload = {}, {
         void transport.send({ type: 'ai-provider', action: 'cancel', operation_id: requestId, token }).catch(error => reportRuntimeError(error, 'ai:provider:cancel'));
     };
     signal?.addEventListener('abort', cancel, { once: true });
-    const attempt = () => transport.send({
-        type: 'ai-provider', action, requestId, token,
-        ...(action === 'credential.store' ? { key: payload.key } : { payload })
-    }, {
-        timeoutMs: PROVIDER_ACTION_TIMEOUT_MS[action] ?? DEFAULT_PROVIDER_TIMEOUT_MS,
-        signal,
-        onProgress: event => { if (!signal?.aborted) onProgress?.(event); }
-    });
+    const attempt = () => {
+        if (principal() !== requestPrincipal) throw new Error('provider_principal_changed');
+        return transport.send({
+            type: 'ai-provider', action, requestId, token,
+            ...(action === 'credential.store' ? { key: payload.key } : { payload })
+        }, {
+            timeoutMs: PROVIDER_ACTION_TIMEOUT_MS[action] ?? DEFAULT_PROVIDER_TIMEOUT_MS,
+            signal,
+            onProgress: event => { if (!signal?.aborted) onProgress?.(event); }
+        });
+    };
     try {
         let result = await attempt();
         signal?.throwIfAborted();

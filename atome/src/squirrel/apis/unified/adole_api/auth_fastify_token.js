@@ -208,6 +208,12 @@ const ensureFastifyTokenLocal = async () => {
                 markFastifyAuthValid();
                 return { ok: true, reason: 'remote_counterpart_provisioned' };
             }
+            // A refused provisioning used to fall through to the generic login
+            // branch, which reported `cache_login_failed` and hid the real
+            // upstream reason; the caller needs the refusal it actually got.
+            const reason = provisioned.error || 'remote_account_provision_failed';
+            blockFastifyRelogin(reason, FASTIFY_RELOGIN_FAILURE_MS);
+            return { ok: false, reason, error: reason };
         }
         const status = Number(loginResult?.raw?.status || 0);
         blockFastifyRelogin(

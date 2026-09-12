@@ -127,6 +127,13 @@ export const handleWsAiProviderOperation = async (message, connection, {
         entry.timer = timeout;
         const vault = await resolveVault(connection?._wsApiVaultRouter?.provider, principal);
         if (action === 'credential.store') {
+            const candidate = String(message.key || '').trim();
+            const validation = await fetchImpl(`${ROOT}/models`, {
+                method: 'GET', redirect: 'error', signal: controller.signal,
+                headers: { Authorization: `Bearer ${candidate}` }
+            });
+            if (!validation.ok) throw await providerError(validation);
+            if (resolvePrincipal(connection, message) !== principal) throw new Error('provider_principal_changed');
             const stored = await vault.store('openai', message.key);
             await realtime({ action: 'realtime-close-all', payload: {}, connection, principal });
             active.forEach(pending => { if (pending !== entry && pending.principal === principal) pending.controller.abort(); });

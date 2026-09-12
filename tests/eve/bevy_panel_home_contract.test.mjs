@@ -462,3 +462,14 @@ test('stored provider keys show a fixed mask without repopulating the editor or 
     assert.equal(JSON.stringify(unknown).includes('••••••••'), false);
     assert.notDeepEqual(unknown.find(node => node.id === 'home_key_openai_status'), render({ configured: false }).find(node => node.id === 'home_key_openai_status'));
 });
+
+test('Home keeps all section headers available while the profile is pending or timed out', () => {
+    for (const phase of [{ loading: true }, { loadError: 'Request timeout' }]) {
+        const intents = [];
+        const nodes = buildHomeContent(baseState(phase), { emit: value => intents.push(value), bodyWidth: 452, editing });
+        const all = flatten(nodes);
+        assert.equal(all.filter(node => /home_(identity|bio|profile|passkeys|preferences|security|privacy)_accordion$/.test(node.id)).length, 7);
+        assert.ok(all.some(node => node.id === 'home_identity_status'));
+        if (phase.loadError) assert.ok(all.some(node => node.id === 'home_identity_retry'));
+    }
+});

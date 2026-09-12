@@ -1004,7 +1004,7 @@ async function startServer() {
     });
 
     // Health check endpoint for load balancers and monitoring
-    server.get('/health', async () => {
+    server.get('/health', { config: { cors: { origin: '*', credentials: false, methods: ['GET'] } } }, async () => {
       return {
         status: 'ok',
         version: SERVER_VERSION,

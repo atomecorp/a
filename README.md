@@ -174,12 +174,14 @@ The generated JS is still plain ES modules and ends up calling helpers like `cre
 
 - The root `CMakeLists.txt` builds shared targets: `dsp_core`, `ring_buffer`, `disk_reader`.
 - `platforms/web/audio-wasm` exposes the browser audio engine source, and `platforms/ios/atome-auv3` renders the Squirrel UI via WKWebView while routing audio through the Swift native AUv3 engine.
-- `auv3.sh`, `build_PWA_app.sh`, and `scripts/run_fastify.sh`/`run_tauri.sh` automate packaging for each runtime.
+- `scripts/run_fastify.sh` and `scripts/run_tauri.sh` are development launchers; `auv3.sh` deploys a debug AUv3 build to a connected device and `build_PWA_app.sh` packages the PWA. Release artifacts come from `./run.sh --tauri-prod` (macOS bundle) and `scripts/XCode_testflight_generator` (iOS/AUv3 upload).
 - Historical incident records are retained under `atome/documentations/archive/problem-solving/`; they are not current architecture contracts.
 
 ## Documentation & references
 
-- `documentations/auv3_deployment.md` – steps to package and notarize the AUv3 build.
+- `documentations/auv3_deployment.md` – local-device deploy of the AUv3 build with `auv3.sh` (development only, not a distribution path).
+- `platforms/ios/atome-auv3/README.md` – the iOS/AUv3 TestFlight release path (`scripts/XCode_testflight_generator`).
+- `documentations/desktop_tauri_distribution.md` – macOS/Tauri production bundle, and what is still missing for a signed, notarized Apple distribution.
 - `documentations/auv3_webview_audio_injection.md` – explains audio injection between WKWebView and the DSP core.
 - `documentations/README.md` – active documentation index and archive boundary.
 

@@ -1,6 +1,7 @@
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { runInNewContext } from 'node:vm';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
     createServerIdentityKeyPair,
@@ -144,4 +145,40 @@ describe('production server identity deployment', () => {
         expect(generator).toContain('createServerIdentityKeyPair');
         expect(generator).not.toContain("crypto.generateKeyPairSync('rsa'");
     });
+});
+
+it('allows credential-free native identity verification without opening account routes', async () => {
+    const { default: fastify } = await import('fastify');
+    const { default: cors } = await import('@fastify/cors');
+    const { registerServerIdentityRoutes } = await import('../../server/auth_routes_server.js');
+    const app = fastify();
+    await app.register(cors, { origin: false, credentials: true });
+    registerServerIdentityRoutes(app, {});
+    // Execute the existing health registration, rather than recreating its CORS policy.
+    const source = readFileSync(new URL('../../server/server.js', import.meta.url), 'utf8');
+    const healthRegistration = source.slice(source.indexOf("server.get('/health'"), source.indexOf("server.post('/api/uploads'"));
+    runInNewContext(healthRegistration, {
+        server: app, SERVER_VERSION: 'test', EVE_VERSION: 'test', DATABASE_ENABLED: true, process
+    });
+    app.get('/private-probe', () => ({ ok: true }));
+    try {
+        for (const origin of ['null', 'atome://', 'http://127.0.0.1:49152']) {
+            const headers = { origin, 'access-control-request-method': 'POST', 'access-control-request-headers': 'content-type' };
+            const preflight = await app.inject({ method: 'OPTIONS', url: '/api/server/verify', headers });
+            expect(preflight.statusCode).toBe(204);
+            expect(preflight.headers['access-control-allow-origin']).toBe('*');
+            expect(preflight.headers['access-control-allow-credentials']).toBeUndefined();
+            const response = await app.inject({ method: 'POST', url: '/api/server/verify', headers: { origin }, payload: {} });
+            expect(response.statusCode).toBe(400);
+            expect(response.headers['access-control-allow-origin']).toBe('*');
+            expect(response.headers['access-control-allow-credentials']).toBeUndefined();
+            const health = await app.inject({ url: '/health', headers: { origin } });
+            expect(health.statusCode).toBe(200);
+            expect(health.json().status).toBe('ok');
+            expect(health.headers['access-control-allow-origin']).toBe('*');
+            expect(health.headers['access-control-allow-credentials']).toBeUndefined();
+            const restricted = await app.inject({ url: '/private-probe', headers: { origin } });
+            expect(restricted.headers['access-control-allow-origin']).toBeUndefined();
+        }
+    } finally { await app.close(); }
 });

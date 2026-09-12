@@ -3,7 +3,7 @@ import Foundation
 final class FastifySyncClient {
     static let shared = FastifySyncClient()
 
-    private struct Configuration {
+    private struct Configuration: Equatable {
         let apiURL: URL
         let syncURL: URL
         let token: String
@@ -45,10 +45,18 @@ final class FastifySyncClient {
         queue.async { [weak self] in self?.connectLocked() }
     }
 
+    // The application re-publishes the same remote configuration before every
+    // authenticated request. Tearing the client down each time also closed the
+    // provider channels, so the socket carrying an assistant request died of the
+    // very call that prepared it, and the user read `provider_connection_closed`.
+    // Only a configuration that actually changed justifies a disconnect.
     func reloadConfiguration() {
         queue.async { [weak self] in
-            self?.disconnectLocked()
-            self?.connectLocked()
+            guard let self else { return }
+            let next = self.resolveConfiguration()
+            if let next, let current = self.configuration, current == next, self.connected { return }
+            self.disconnectLocked()
+            self.connectLocked()
         }
     }
 
