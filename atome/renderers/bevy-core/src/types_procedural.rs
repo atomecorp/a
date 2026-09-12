@@ -116,7 +116,9 @@ impl AtomeProceduralSdf {
             background_blur_px: finite_or(self.background_blur_px, 48.0).clamp(0.0, 128.0),
             lens_refraction_px: finite_or(self.lens_refraction_px, 24.0).clamp(0.0, 128.0),
             assistant_background_tint: self.assistant_background_tint.map(|value| finite_or(value, 0.0).clamp(0.0, 1.0)),
-            mode: finite_or(self.mode, 0.0).clamp(0.0, 1.0),
+            // 0 = assistant, 1 = flower liquide, 2 = goutte « design Claude »,
+            // 3-4 reserves aux versions de design suivantes (procedural_sdf.wgsl).
+            mode: finite_or(self.mode, 0.0).clamp(0.0, 4.0),
             flower_count: finite_or(self.flower_count, 0.0).clamp(0.0, 8.0),
             flower_core_radius: finite_or(self.flower_core_radius, 0.0).max(0.0),
             flower_bridge_width: finite_or(self.flower_bridge_width, 0.0).max(0.0),

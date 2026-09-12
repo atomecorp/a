@@ -88,6 +88,221 @@ fn flower_liquid(pixel_position: vec2<f32>, screen_uv: vec2<f32>) -> vec4<f32> {
     return vec4(color, alpha);
 }
 
+// --- WATER DROP (design Claude) — début -----------------------------------
+// Branche de design ISOLEE, selectionnee par `material.flower.x` (mode) > 1.5.
+// Elle ne partage aucun etat avec la branche assistant (mode 0) ni avec
+// `flower_liquid` (mode 1) : supprimer ce bloc et sa ligne d'aiguillage dans
+// `fragment` suffit a la retirer entierement.
+//
+// Regle du bloc : AUCUN nombre de design ici. Chaque reglage arrive par un
+// uniforme, pour que l'iteration de rendu se fasse en JS sans rebuild du wasm
+// (un changement de ce fichier invalide le crate via `include_str!`). Seuls
+// restent des facteurs de forme mathematiques, tous modules par un uniforme.
+//
+// La correspondance slot <-> token de design est la table §2 de
+// eVe/intuition/water_drop/water_drop_claude_design.js. Les noms de champs du
+// contrat `procedural_sdf` sont ceux de l'assistant ; en mode 2 ils portent une
+// autre semantique, et cette table est la seule source de verite.
+//
+// Rappel verifie : `optics.y/z/w` viennent de la ressource Bevy
+// `AssistantOpticsSettings` et NON du JS (procedural_sdf.rs:165-170, seul
+// `optics.x` est reecrit). Ce bloc ne les lit donc jamais : le mix de verre et
+// la bande de refraction passent par `transition.x` et `transition.y`.
+
+// Rayon canonique de la coque dans le repere normalise, partage avec la branche
+// assistant pour que `assistant_size` signifie le meme diametre dans tous les modes.
+const WATER_DROP_SHELL_RADIUS: f32 = 0.84;
+const WATER_DROP_TAU: f32 = 6.2831853;
+
+fn water_drop_rotate(point: vec2<f32>, angle: f32) -> vec2<f32> {
+    let cosine = cos(angle);
+    let sine = sin(angle);
+    return vec2(point.x * cosine - point.y * sine, point.x * sine + point.y * cosine);
+}
+
+// Un reflet speculaire credible n'est pas une ellipse floue : c'est un noyau NET
+// qui garde un bord franc, plus une diffusion large et faible autour. D'ou la
+// puissance appliquee a la gaussienne (`exponent`), qui resserre le noyau sans
+// le retrecir, et le `bloom` separe qui porte la diffusion.
+fn water_drop_specular(point: vec2<f32>, spec: vec4<f32>, rotation: f32, sharpness: f32) -> f32 {
+    let local = water_drop_rotate(point - spec.xy, rotation) / max(spec.zw, vec2(0.0001));
+    let squared = dot(local, local);
+    let exponent = mix(1.6, 16.0, clamp(sharpness, 0.0, 1.0));
+    let core = pow(exp(-squared), exponent);
+    let bloom = exp(-squared * 0.28) * 0.20;
+    return core + bloom;
+}
+
+fn water_drop_claude(pixel_position: vec2<f32>, screen_uv: vec2<f32>) -> vec4<f32> {
+    let center = material.geometry.zw;
+    let diameter = max(material.shape.x, 1.0);
+    let half_diameter = diameter * 0.5;
+    let reveal = clamp(material.transition.z, 0.0, 1.015);
+    let fade = 1.0 - clamp(material.transition.w, 0.0, 1.0);
+
+    // 1. Repere normalise : rayon 1.0 == moitie du diametre demande.
+    var point = (pixel_position - center) / half_diameter;
+
+    // 2. Deformation de contact — reprise de la branche assistant (l. 132-137).
+    //    Le doigt ENFONCE la surface liquide au lieu de scaler un bouton :
+    //    creux gaussien local sous le contact, puis etirement directionnel.
+    let contact_point = material.contact.xy;
+    let attraction = clamp(material.contact.z, 0.0, 0.8);
+    let stretch = clamp(material.contact.w, 0.0, 1.0);
+    let contact_delta = point - contact_point;
+    let contact_falloff = exp(-dot(contact_delta, contact_delta) * 2.6);
+    let contact_direction = normalize(contact_point + vec2(0.0001));
+    point -= contact_direction * attraction * contact_falloff * (0.18 + stretch * 0.28);
+    let directional_position = dot(point, contact_direction);
+    point -= contact_direction * directional_position * stretch * 0.16;
+
+    // 3. Coque : squash `morph.xy`, respiration `dynamics.y`, echelle d'ouverture.
+    let squash = vec2(
+        clamp(material.morph.x, 0.55, 1.45),
+        clamp(material.morph.y, 0.55, 1.45)
+    );
+    let breathe = 1.0 + clamp(material.dynamics.y, -0.06, 0.06);
+    let shell_point = point / (squash * breathe * max(reveal, 0.001));
+    let radial = length(shell_point);
+    let shell_distance = radial - WATER_DROP_SHELL_RADIUS;
+    let angle = atan2(shell_point.y, shell_point.x);
+    // `shape.y` (flower_edge_softness) est en pixels : le SDF est normalise.
+    let edge_softness = max(material.shape.y, 0.5) / half_diameter;
+    let shell_mask = 1.0 - smoothstep(-edge_softness, edge_softness, shell_distance);
+
+    // 4. Fresnel : 0 au centre, 1 au bord de la coque. `flower.y` = exposant.
+    let sphere = clamp(radial / WATER_DROP_SHELL_RADIUS, 0.0, 1.0);
+    let fresnel = pow(
+        clamp(1.0 - sqrt(max(0.0, 1.0 - sphere * sphere)), 0.0, 1.0),
+        max(material.flower.y, 0.05)
+    );
+
+    // 5. Refraction : la lentille ne devie le fond que dans une bande peripherique,
+    //    `transition.y` en fixe le debut (remplace `optics.z`, non pilotable).
+    let band_start = clamp(material.transition.y, 0.0, 0.95);
+    let band_end = mix(band_start, 1.0, 0.78);
+    let refraction_band = smoothstep(band_start, band_end, sphere)
+        * (1.0 - smoothstep(0.97, 1.0, sphere));
+    let refraction_direction = normalize(shell_point + vec2(0.0001));
+    // Taille du workspace en pixels PHYSIQUES : `optics.x` est un decalage en
+    // pixels et doit etre divise par elle pour devenir un decalage d'UV.
+    let screen_dimensions = max(material.geometry.xy, vec2(1.0)) * max(material.shape.z, 1.0);
+    let refraction_uv = refraction_direction
+        * material.optics.x
+        * refraction_band
+        / max(screen_dimensions, vec2(1.0));
+    let safe_margin = vec2(material.optics.x + material.optics.x) / max(screen_dimensions, vec2(1.0));
+    let refracted_uv = clamp(screen_uv + refraction_uv, safe_margin, vec2(1.0) - safe_margin);
+
+    // 6. Verre : `transition.x` dose le flou (remplace `optics.y`, fige a 1.0
+    //    cote Rust — c'est ce qui rend le fond lisible A TRAVERS la goutte).
+    let original_color = textureSample(original_texture, original_sampler, refracted_uv).rgb;
+    let blurred_color = textureSample(blurred_texture, blurred_sampler, refracted_uv).rgb;
+    var glass = mix(original_color, blurred_color, clamp(material.transition.x, 0.0, 1.0));
+
+    // 7. Eclaircissement du fond, en fusion « screen » : `1 - (1-a)(1-b)` remonte
+    //    les basses lumieres SANS ecraser le contraste, contrairement a un simple
+    //    melange vers le blanc. C'est ce qui rend un contenu sombre lisible
+    //    par-dessus n'importe quel fond, meme noir.
+    let lift_color = clamp(
+        vec3(material.destructive.x, material.destructive.y, material.destructive.z),
+        vec3(0.0),
+        vec3(1.0)
+    );
+    // `focus` concentre l'eclaircissement au CENTRE, la ou vit le contenu, et le
+    // laisse retomber vers le bord. Un relevement uniforme aplatit tout le disque
+    // et la goutte cesse de ressembler a du verre ; concentre, il rend le contenu
+    // lisible tout en gardant un pourtour vitreux — et il lit comme une lentille
+    // qui concentre la lumiere.
+    let lift_focus = clamp(material.flower_petals[3].w, 0.0, 1.0);
+    // `falloff` resserre la chute vers le bord. Il ne s'agit pas d'un detail :
+    // un reflet speculaire BLANC n'a aucune marge sur une surface deja eclaircie.
+    // En concentrant le relevement sous le contenu et en laissant la peripherie
+    // sombre, les reflets retrouvent leur contraste — et la goutte redevient
+    // transparente la ou on regarde a travers.
+    let lift_falloff = mix(1.0, 5.0, clamp(material.flower_petals[6].w, 0.0, 1.0));
+    let lift_profile = pow(max(1.0 - sphere * sphere, 0.0), lift_falloff);
+    let lift_amount = clamp(material.destructive.w, 0.0, 1.0)
+        * mix(1.0, lift_profile, lift_focus);
+    glass = mix(glass, vec3(1.0) - (vec3(1.0) - glass) * (vec3(1.0) - lift_color), lift_amount);
+
+    // 8. Teinte du verre, densifiee vers le bord par le Fresnel.
+    let tint = material.assistant_background_tint;
+    glass = mix(glass, tint.rgb, clamp(tint.a * (1.0 + fresnel), 0.0, 1.0));
+
+    // 9. Liseré d'epaisseur ET d'intensite VARIABLES. Un anneau uniforme lit comme
+    //    un trait de contour vectoriel ; une vraie sphere n'accroche la lumiere que
+    //    d'un cote. `gesture.y` donne l'angle de la lumiere, `dynamics.x` le nombre
+    //    de lobes fins, `dynamics.w` l'amplitude de la variation (0 = uniforme).
+    let light_angle = clamp(material.gesture.y, 0.0, 1.0) * WATER_DROP_TAU;
+    let rim_lobes = max(material.dynamics.x, 1.0);
+    let rim_variation = clamp(material.dynamics.w, 0.0, 1.0);
+    let lobe_primary = 0.5 + 0.5 * cos(angle - light_angle);
+    let lobe_fine = 0.5 + 0.5 * cos(angle * rim_lobes + light_angle * 2.0);
+    let lobe_blend = lobe_primary * 0.72 + lobe_fine * 0.28;
+    let rim_profile = mix(1.0, mix(0.20, 1.90, lobe_blend), rim_variation);
+    let rim_gain = mix(1.0, mix(0.35, 1.30, lobe_blend), rim_variation);
+    let rim_width = max(material.flower.z, 0.0001) * rim_profile / half_diameter;
+    let rim_band = 1.0 - smoothstep(0.0, rim_width, abs(shell_distance));
+    let rim_amount = clamp(fresnel * 0.55 + rim_band * 0.95, 0.0, 1.0)
+        * clamp(material.morph.z, 0.0, 1.0)
+        * rim_gain
+        * shell_mask;
+
+    // 10. Irisation : le contour d'une bulle disperse la lumiere et vire en teinte
+    //     le long du bord. Deux couleurs melangees par l'angle, dosees par le
+    //     Fresnel pour ne vivre QUE sur le bord.
+    let iridescence_a = material.flower_petals[5];
+    let iridescence_b = material.flower_petals[6];
+    let iridescence_shape = material.flower_petals[7];
+    let iridescence_blend = 0.5 + 0.5 * sin(angle * iridescence_shape.x + iridescence_shape.y);
+    let iridescence_color = mix(
+        clamp(iridescence_a.rgb, vec3(0.0), vec3(1.0)),
+        clamp(iridescence_b.rgb, vec3(0.0), vec3(1.0)),
+        iridescence_blend
+    );
+    let rim_color = mix(
+        material.flower_tint.rgb,
+        iridescence_color,
+        clamp(iridescence_a.w, 0.0, 1.0) * fresnel
+    );
+
+    // 11. Deux reflets speculaires orientes, chacun avec sa nettete et sa taille.
+    //     `spec_clip` les eteint juste avant le bord : un reflet qui bave sur le
+    //     liseré detruit l'illusion de volume.
+    let spec_power = material.flower_petals[2];   // [forceP, forceC, sigmaHalo, netteteP]
+    let spec_shape = material.flower_petals[3];   // [rotationP, rotationC, netteteC, libre]
+    let spec_color = material.flower_petals[4];   // [R, G, B, dose de couleur]
+    let spec_clip = 1.0 - smoothstep(0.80, 1.0, sphere);
+    let highlight = (
+        water_drop_specular(point, material.flower_petals[0], spec_shape.x, spec_power.w) * spec_power.x
+        + water_drop_specular(point, material.flower_petals[1], spec_shape.y, spec_shape.z) * spec_power.y
+    ) * clamp(material.morph.w, 0.0, 1.0) * shell_mask * spec_clip;
+
+    // 12. Halo externe diffus. `flower.w` = opacite, `flower_petals[2].z` = sigma.
+    let halo = gaussian_tail(max(shell_distance, 0.0), max(spec_power.z, 0.0001))
+        * (1.0 - shell_mask)
+        * clamp(material.flower.w, 0.0, 1.0);
+
+    // 13. Composition, identique en forme a la branche assistant : on accumule en
+    //     premultiplie puis on redivise par l'alpha pour sortir en alpha droit.
+    let reveal_alpha = clamp(reveal, 0.0, 1.0) * fade;
+    let glass_alpha = shell_mask * reveal_alpha;
+    let rim_alpha = rim_amount * reveal_alpha;
+    let halo_alpha = halo * reveal_alpha;
+    let highlight_alpha = highlight * reveal_alpha;
+    let base_alpha = max(max(glass_alpha, rim_alpha), max(halo_alpha, highlight_alpha));
+    if base_alpha < 0.002 { discard; }
+    var color = glass * glass_alpha;
+    color = mix(color, rim_color, rim_alpha * clamp(material.flower_tint.a, 0.0, 1.0));
+    color += rim_color * halo_alpha;
+    color += mix(vec3(1.0), clamp(spec_color.rgb, vec3(0.0), vec3(1.0)), clamp(spec_color.w, 0.0, 1.0))
+        * highlight_alpha;
+    let alpha = clamp(base_alpha, 0.0, 1.0);
+    return vec4(color / max(alpha, 0.001), alpha);
+}
+// --- WATER DROP (design Claude) — fin --------------------------------------
+
 @fragment
 fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
     let uv = mesh.uv;
@@ -104,6 +319,11 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
     // This material owns one full-workspace quad. Its interpolated UVs map
     // directly to the workspace capture regardless of viewport or DPR.
     let screen_uv = uv;
+    // L'ordre compte : `> 1.5` doit passer avant `> 0.5`, sinon le mode 2
+    // tomberait dans `flower_liquid`. Voir le bloc WATER DROP ci-dessus.
+    if material.flower.x > 1.5 {
+        return water_drop_claude(pixel_position, screen_uv);
+    }
     if material.flower.x > 0.5 {
         return flower_liquid(pixel_position, screen_uv);
     }
