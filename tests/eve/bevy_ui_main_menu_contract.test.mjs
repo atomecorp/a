@@ -13,6 +13,7 @@ import { MAIN_HANDLE_ICON } from '../../eVe/intuition/ribbon/tokens.js';
 import { BEVY_MENU_TOKENS } from '../../eVe/intuition/ribbon/bevy_ui_menu_surface.js';
 import { EVE_BUTTON_SKIN_TOKENS } from '../../eVe/elements/skin/button_skin.js';
 import { EVE_COMMON_SKIN_TOKENS } from '../../eVe/elements/skin/tokens.js';
+import { resolveLiquidSystemSurfaceUniforms } from '../../eVe/intuition/liquid/intuition_liquid_menu_renderer.js';
 import { TOOL_KEYS, menuContent, installDom, findNode, waitFrame, waitMs, createRuntimeHarness } from './bevy_ui_main_menu_test_helpers.mjs';
 
 const collectJavaScriptSources = (directory) => readdirSync(directory, { withFileTypes: true })
@@ -35,6 +36,14 @@ test('standard menu tools inherit the canonical button surface while Flower over
     assert.equal(BEVY_MENU_TOKENS.shape.paletteRadiusPx, button.radiusPx);
     assert.equal(BEVY_MENU_TOKENS.chrome.outlineRadiusPx, button.radiusPx);
     assert.notEqual(BEVY_MENU_TOKENS.shape.flowerRadiusPx, button.radiusPx);
+});
+
+test('liquid Flower and main-menu projections derive their backdrop and shadow from the system surface', () => {
+    const material = EVE_COMMON_SKIN_TOKENS.bevy.systemSurface;
+    const uniforms = resolveLiquidSystemSurfaceUniforms({ flower_petals: [] }, [{ diameter: 60 }]);
+    assert.equal(uniforms.background_blur_px, material.backdrop.blurPx);
+    assert.deepEqual(uniforms.assistant_background_tint, material.backdrop.tint);
+    assert.deepEqual(uniforms.flower_petals[20], [...material.shadow.color, material.shadow.color[3]]);
 });
 
 test('Capture screen icon is canonical before and after its lazy module loads', () => {

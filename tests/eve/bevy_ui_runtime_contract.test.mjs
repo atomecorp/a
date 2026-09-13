@@ -390,6 +390,39 @@ test('BevyUI runtime uses the project overlay path without native WASM UI ops by
     assert.equal(runtime.state.nativeUiEnabled, false);
 });
 
+test('BevyUI panel translation moves flattened overlay content exactly once', async () => {
+    clearAllProjectScenes();
+    const surface = createSurface();
+    surface.getBoundingClientRect = () => ({ left: 0, top: 0, right: 240, bottom: 160, width: 240, height: 160 });
+    const runtime = createEveBevyUiRuntime({ imageResolverFactory: () => async () => null, requestFrame: () => 0 });
+    const treeId = 'panel_motion_fixture';
+    await runtime.mountTree({
+        id: treeId,
+        surface,
+        tree: {
+            id: treeId,
+            root: {
+                id: 'panel_motion_root', kind: 'root', style: { size: [240, 160] }, children: [{
+                    id: 'panel_motion_panel', kind: 'panel', style: { position: [20, 30], size: [160, 100], overflow: 'hidden' }, children: [{
+                        id: 'panel_motion_content', kind: 'label', text: 'Content', style: { position: [12, 16], size: [80, 20] }
+                    }]
+                }]
+            }
+        }
+    });
+    await runtime.updateTreeMotion({
+        id: treeId,
+        updates: [{ nodeId: 'panel_motion_panel', position: [50, 45], translateTree: [30, 15] }]
+    });
+    const records = getProjectSceneState('__eve_dashboard_workspace__').records;
+    const record = records.find((entry) => String(entry.id).includes('panel_motion_content'));
+
+    assert.deepEqual([record.properties.left, record.properties.top], [32, 46]);
+    assert.deepEqual(runtime.state.sourceTrees.get(treeId).tree.root.children[0].style.position, [50, 45]);
+    await runtime.unmountTree(treeId);
+    clearAllProjectScenes();
+});
+
 test('BevyUI explicit vertical drag handlers take priority over ancestor scrolling', async () => {
     const dom = installDom('<!doctype html><html><body><canvas id="eve_surface_project"></canvas></body></html>');
     const surface = dom.window.document.getElementById('eve_surface_project');

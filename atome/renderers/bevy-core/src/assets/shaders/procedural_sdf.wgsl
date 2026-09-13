@@ -13,7 +13,10 @@ struct ProceduralSdfUniform {
     flower: vec4<f32>,
     flower_tint: vec4<f32>,
     assistant_background_tint: vec4<f32>,
-    flower_petals: array<vec4<f32>, 8>,
+    flower_petals: array<vec4<f32>, 24>,
+    liquid_drops: array<vec4<f32>, 24>,
+    liquid_drop_shapes: array<vec4<f32>, 24>,
+    liquid_drop_count: vec4<f32>,
 }
 
 @group(#{MATERIAL_BIND_GROUP}) @binding(0) var<uniform> material: ProceduralSdfUniform;
@@ -88,7 +91,7 @@ fn flower_liquid(pixel_position: vec2<f32>, screen_uv: vec2<f32>) -> vec4<f32> {
     return vec4(color, alpha);
 }
 
-// --- WATER DROP (design Claude) — début -----------------------------------
+// --- INTUITION LIQUID — début -----------------------------------
 // Branche de design ISOLEE, selectionnee par `material.flower.x` (mode) > 1.5.
 // Elle ne partage aucun etat avec la branche assistant (mode 0) ni avec
 // `flower_liquid` (mode 1) : supprimer ce bloc et sa ligne d'aiguillage dans
@@ -100,7 +103,7 @@ fn flower_liquid(pixel_position: vec2<f32>, screen_uv: vec2<f32>) -> vec4<f32> {
 // restent des facteurs de forme mathematiques, tous modules par un uniforme.
 //
 // La correspondance slot <-> token de design est la table §2 de
-// eVe/intuition/water_drop/water_drop_claude_design.js. Les noms de champs du
+// eVe/intuition/liquid/intuition_liquid_design.js. Les noms de champs du
 // contrat `procedural_sdf` sont ceux de l'assistant ; en mode 2 ils portent une
 // autre semantique, et cette table est la seule source de verite.
 //
@@ -111,10 +114,25 @@ fn flower_liquid(pixel_position: vec2<f32>, screen_uv: vec2<f32>) -> vec4<f32> {
 
 // Rayon canonique de la coque dans le repere normalise, partage avec la branche
 // assistant pour que `assistant_size` signifie le meme diametre dans tous les modes.
-const WATER_DROP_SHELL_RADIUS: f32 = 0.84;
-const WATER_DROP_TAU: f32 = 6.2831853;
+const INTUITION_LIQUID_SHELL_RADIUS: f32 = 0.84;
+const INTUITION_LIQUID_TAU: f32 = 6.2831853;
 
-fn water_drop_rotate(point: vec2<f32>, angle: f32) -> vec2<f32> {
+// Rectangle arrondi. Sans lui, un panneau — qui est un rectangle, pas un disque —
+// ne pourrait pas etre rendu en liquide autrement qu'en l'ecrasant en ellipse.
+fn intuition_liquid_rounded_box(point: vec2<f32>, half_size: vec2<f32>, corner: f32) -> f32 {
+    let radius = min(corner, min(half_size.x, half_size.y));
+    let outer = abs(point) - half_size + vec2(radius);
+    return length(max(outer, vec2(0.0))) + min(max(outer.x, outer.y), 0.0) - radius;
+}
+
+// Couleur en alpha droit + couverture, pour qu'une goutte puisse etre composee avec
+// ses voisines au lieu d'ecrire directement dans la cible.
+struct IntuitionLiquidSample {
+    color: vec3<f32>,
+    alpha: f32,
+}
+
+fn intuition_liquid_rotate(point: vec2<f32>, angle: f32) -> vec2<f32> {
     let cosine = cos(angle);
     let sine = sin(angle);
     return vec2(point.x * cosine - point.y * sine, point.x * sine + point.y * cosine);
@@ -124,8 +142,8 @@ fn water_drop_rotate(point: vec2<f32>, angle: f32) -> vec2<f32> {
 // qui garde un bord franc, plus une diffusion large et faible autour. D'ou la
 // puissance appliquee a la gaussienne (`exponent`), qui resserre le noyau sans
 // le retrecir, et le `bloom` separe qui porte la diffusion.
-fn water_drop_specular(point: vec2<f32>, spec: vec4<f32>, rotation: f32, sharpness: f32) -> f32 {
-    let local = water_drop_rotate(point - spec.xy, rotation) / max(spec.zw, vec2(0.0001));
+fn intuition_liquid_specular(point: vec2<f32>, spec: vec4<f32>, rotation: f32, sharpness: f32) -> f32 {
+    let local = intuition_liquid_rotate(point - spec.xy, rotation) / max(spec.zw, vec2(0.0001));
     let squared = dot(local, local);
     let exponent = mix(1.6, 16.0, clamp(sharpness, 0.0, 1.0));
     let core = pow(exp(-squared), exponent);
@@ -133,9 +151,42 @@ fn water_drop_specular(point: vec2<f32>, spec: vec4<f32>, rotation: f32, sharpne
     return core + bloom;
 }
 
-fn water_drop_claude(pixel_position: vec2<f32>, screen_uv: vec2<f32>) -> vec4<f32> {
-    let center = material.geometry.zw;
-    let diameter = max(material.shape.x, 1.0);
+// Un arc de lumiere qui EPOUSE le contour. Sa position est un ANGLE sur le
+// cercle et un rayon, pas une coordonnee dans le plan : c'est exactement ce qui
+// separe le reflet d'une vraie bulle — il suit la courbure, il s'etire le long
+// du bord — d'une tache gaussienne posee par-dessus. Les deux profils sont
+// eleves au carre pour adoucir les extremites, sinon l'arc a des bouts francs.
+//   geom = [angleCentre (en tours), demi-largeur angulaire (en tours),
+//           position radiale (1.0 = sur le bord), demi-epaisseur radiale]
+fn intuition_liquid_arc(angle_turns: f32, sphere: f32, geom: vec4<f32>, softness: f32) -> f32 {
+    // Ecart angulaire le plus court, ramene sur [-0.5, 0.5] : sans ce repliement
+    // un arc a cheval sur l'origine des angles se couperait en deux.
+    let delta = fract(angle_turns - geom.x + 0.5) - 0.5;
+    let angular = 1.0 - smoothstep(0.0, max(geom.y, 0.0001), abs(delta));
+    let radial = 1.0 - smoothstep(0.0, max(geom.w, 0.0001), abs(sphere - geom.z));
+    // `softness` est la DIFFUSION, independante de la taille : 0 concentre la
+    // lumiere au coeur de l'arc, 1 l'etale jusqu'aux extremites. Un exposant
+    // eleve resserre, un exposant sous 1 elargit et adoucit.
+    let spread = mix(3.0, 0.55, clamp(softness, 0.0, 1.0));
+    return pow(angular, spread) * pow(radial, spread);
+}
+
+// Le rendu d'UNE goutte. Le style vient des uniformes et il est PARTAGE par toutes
+// les gouttes ; seule la geometrie — centre, diametre, enfoncement — arrive en
+// parametre. C'est ce qui permet a un menu entier de tenir dans un seul quad et un
+// seul materiau.
+//
+// Elle ne fait JAMAIS `discard` : un fragment hors de cette goutte-ci peut tres bien
+// appartenir a la suivante. Elle renvoie un alpha nul, et l'appelant tranche.
+fn intuition_liquid_drop(
+    pixel_position: vec2<f32>,
+    screen_uv: vec2<f32>,
+    center: vec2<f32>,
+    diameter_in: f32,
+    drop_contact: vec4<f32>,
+    drop_shape: vec4<f32>
+) -> IntuitionLiquidSample {
+    let diameter = max(diameter_in, 1.0);
     let half_diameter = diameter * 0.5;
     let reveal = clamp(material.transition.z, 0.0, 1.015);
     let fade = 1.0 - clamp(material.transition.w, 0.0, 1.0);
@@ -146,9 +197,9 @@ fn water_drop_claude(pixel_position: vec2<f32>, screen_uv: vec2<f32>) -> vec4<f3
     // 2. Deformation de contact — reprise de la branche assistant (l. 132-137).
     //    Le doigt ENFONCE la surface liquide au lieu de scaler un bouton :
     //    creux gaussien local sous le contact, puis etirement directionnel.
-    let contact_point = material.contact.xy;
-    let attraction = clamp(material.contact.z, 0.0, 0.8);
-    let stretch = clamp(material.contact.w, 0.0, 1.0);
+    let contact_point = drop_contact.xy;
+    let attraction = clamp(drop_contact.z, 0.0, 0.8);
+    let stretch = clamp(drop_contact.w, 0.0, 1.0);
     let contact_delta = point - contact_point;
     let contact_falloff = exp(-dot(contact_delta, contact_delta) * 2.6);
     let contact_direction = normalize(contact_point + vec2(0.0001));
@@ -163,15 +214,38 @@ fn water_drop_claude(pixel_position: vec2<f32>, screen_uv: vec2<f32>) -> vec4<f3
     );
     let breathe = 1.0 + clamp(material.dynamics.y, -0.06, 0.06);
     let shell_point = point / (squash * breathe * max(reveal, 0.001));
-    let radial = length(shell_point);
-    let shell_distance = radial - WATER_DROP_SHELL_RADIUS;
     let angle = atan2(shell_point.y, shell_point.x);
+    // La FORME. Genre 0 = disque, genre 1 = rectangle arrondi. Tout le reste du
+    // rendu — Fresnel, liseré, arcs, reflets, ombre — ne lit que `shell_distance`
+    // et `sphere`, donc il suit la forme sans une ligne de plus.
+    var shell_distance = length(shell_point) - INTUITION_LIQUID_SHELL_RADIUS;
+    if drop_shape.z > 0.5 {
+        // Hauteur et rayon de coin arrivent en PIXELS ; le SDF travaille en unites
+        // normalisees ou 1.0 vaut la moitie de la largeur demandee.
+        //
+        // Un rectangle ne suit PAS la convention du disque. Le disque se dessine a
+        // `INTUITION_LIQUID_SHELL_RADIUS` (0.84) de son rayon nominal, ce qui lui
+        // laisse de la marge pour son halo ; un panneau, lui, doit couvrir sa boite
+        // exactement, sinon son fond ne recouvre pas son contenu. D'ou 1.0 en x, et
+        // le simple rapport hauteur/largeur en y.
+        let half_size = vec2(
+            1.0,
+            max(drop_shape.x, 1.0) / max(diameter, 1.0)
+        );
+        shell_distance = intuition_liquid_rounded_box(
+            shell_point,
+            half_size,
+            max(drop_shape.y, 0.0) / half_diameter
+        );
+    }
     // `shape.y` (flower_edge_softness) est en pixels : le SDF est normalise.
     let edge_softness = max(material.shape.y, 0.5) / half_diameter;
     let shell_mask = 1.0 - smoothstep(-edge_softness, edge_softness, shell_distance);
 
-    // 4. Fresnel : 0 au centre, 1 au bord de la coque. `flower.y` = exposant.
-    let sphere = clamp(radial / WATER_DROP_SHELL_RADIUS, 0.0, 1.0);
+    // 4. Fresnel : 0 au coeur, 1 au bord. Derive de la DISTANCE et non du rayon,
+    //    pour valoir aussi bien pour un rectangle que pour un disque — sur un
+    //    disque les deux expressions sont identiques.
+    let sphere = clamp(1.0 + (shell_distance / INTUITION_LIQUID_SHELL_RADIUS), 0.0, 1.0);
     let fresnel = pow(
         clamp(1.0 - sqrt(max(0.0, 1.0 - sphere * sphere)), 0.0, 1.0),
         max(material.flower.y, 0.05)
@@ -196,8 +270,13 @@ fn water_drop_claude(pixel_position: vec2<f32>, screen_uv: vec2<f32>) -> vec4<f3
 
     // 6. Verre : `transition.x` dose le flou (remplace `optics.y`, fige a 1.0
     //    cote Rust — c'est ce qui rend le fond lisible A TRAVERS la goutte).
-    let original_color = textureSample(original_texture, original_sampler, refracted_uv).rgb;
-    let blurred_color = textureSample(blurred_texture, blurred_sampler, refracted_uv).rgb;
+    // `textureSampleLevel` et non `textureSample` : le rejet precoce par goutte,
+    // cote appelant, rend le flux de controle NON UNIFORME, ce que `textureSample`
+    // interdit (il derive son LOD des quads voisins). Les cibles de capture et de
+    // flou n'ont de toute facon pas de mipmaps : le niveau 0 est le seul qui existe,
+    // le rendu est identique et la contrainte disparait.
+    let original_color = textureSampleLevel(original_texture, original_sampler, refracted_uv, 0.0).rgb;
+    let blurred_color = textureSampleLevel(blurred_texture, blurred_sampler, refracted_uv, 0.0).rgb;
     var glass = mix(original_color, blurred_color, clamp(material.transition.x, 0.0, 1.0));
 
     // 7. Eclaircissement du fond, en fusion « screen » : `1 - (1-a)(1-b)` remonte
@@ -234,7 +313,7 @@ fn water_drop_claude(pixel_position: vec2<f32>, screen_uv: vec2<f32>) -> vec4<f3
     //    un trait de contour vectoriel ; une vraie sphere n'accroche la lumiere que
     //    d'un cote. `gesture.y` donne l'angle de la lumiere, `dynamics.x` le nombre
     //    de lobes fins, `dynamics.w` l'amplitude de la variation (0 = uniforme).
-    let light_angle = clamp(material.gesture.y, 0.0, 1.0) * WATER_DROP_TAU;
+    let light_angle = clamp(material.gesture.y, 0.0, 1.0) * INTUITION_LIQUID_TAU;
     let rim_lobes = max(material.dynamics.x, 1.0);
     let rim_variation = clamp(material.dynamics.w, 0.0, 1.0);
     let lobe_primary = 0.5 + 0.5 * cos(angle - light_angle);
@@ -267,6 +346,35 @@ fn water_drop_claude(pixel_position: vec2<f32>, screen_uv: vec2<f32>) -> vec4<f3
         clamp(iridescence_a.w, 0.0, 1.0) * fresnel
     );
 
+    // 10b. Quatre arcs de lumiere sur le contour (petals[8..19], par triplets
+    //      geometrie + teinte + diffusion/luminosite). Ils portent les reflets
+    //      colores qui courent le long du bord d'une bulle. Un arc d'intensite
+    //      nulle ne coute qu'un test.
+    let angle_turns = angle / INTUITION_LIQUID_TAU;
+    // Le masque des arcs deborde un peu au-dela du bord : sur une vraie bulle la
+    // lumiere du contour bave vers l'exterieur, elle ne s'arrete pas net.
+    let arc_mask = 1.0 - smoothstep(-edge_softness, edge_softness * 6.0, shell_distance);
+    var arc_color = vec3(0.0);
+    var arc_value = 0.0;
+    for (var arc_index = 0u; arc_index < 4u; arc_index = arc_index + 1u) {
+        let arc_base = 8u + arc_index * 3u;
+        let arc_geometry = material.flower_petals[arc_base];
+        let arc_tint = material.flower_petals[arc_base + 1u];
+        let arc_shape = material.flower_petals[arc_base + 2u];
+        let arc_intensity = clamp(arc_tint.w, 0.0, 1.0);
+        if arc_intensity <= 0.001 { continue; }
+        // `brightness` n'est PAS borne a 1 : au-dela, l'arc sature vers le blanc
+        // au coeur tout en gardant sa teinte sur les flancs. C'est ce qui le rend
+        // lumineux plutot que simplement colore.
+        let value = intuition_liquid_arc(angle_turns, sphere, arc_geometry, arc_shape.x)
+            * arc_intensity
+            * max(arc_shape.y, 0.0);
+        arc_color += clamp(arc_tint.rgb, vec3(0.0), vec3(1.0)) * value;
+        arc_value = max(arc_value, value);
+    }
+    arc_color *= arc_mask;
+    arc_value *= arc_mask;
+
     // 11. Deux reflets speculaires orientes, chacun avec sa nettete et sa taille.
     //     `spec_clip` les eteint juste avant le bord : un reflet qui bave sur le
     //     liseré detruit l'illusion de volume.
@@ -275,14 +383,29 @@ fn water_drop_claude(pixel_position: vec2<f32>, screen_uv: vec2<f32>) -> vec4<f3
     let spec_color = material.flower_petals[4];   // [R, G, B, dose de couleur]
     let spec_clip = 1.0 - smoothstep(0.80, 1.0, sphere);
     let highlight = (
-        water_drop_specular(point, material.flower_petals[0], spec_shape.x, spec_power.w) * spec_power.x
-        + water_drop_specular(point, material.flower_petals[1], spec_shape.y, spec_shape.z) * spec_power.y
+        intuition_liquid_specular(point, material.flower_petals[0], spec_shape.x, spec_power.w) * spec_power.x
+        + intuition_liquid_specular(point, material.flower_petals[1], spec_shape.y, spec_shape.z) * spec_power.y
     ) * clamp(material.morph.w, 0.0, 1.0) * shell_mask * spec_clip;
 
     // 12. Halo externe diffus. `flower.w` = opacite, `flower_petals[2].z` = sigma.
     let halo = gaussian_tail(max(shell_distance, 0.0), max(spec_power.z, 0.0001))
         * (1.0 - shell_mask)
         * clamp(material.flower.w, 0.0, 1.0);
+
+    // 12b. Ombre portee avec OCCLUSION. Elle est multipliee par `(1 - shell_mask)`,
+    //      donc elle ne vit QUE dehors : elle ne peut jamais se voir a travers le
+    //      verre, meme quand celui-ci est presque transparent. C'est exactement le
+    //      comportement d'une box-shadow CSS, qui ne traverse pas son element.
+    //      petals[20] = [R, G, B, opacite], petals[21] = [decalageX, decalageY,
+    //      etalement, elargissement].
+    let shadow_tint = material.flower_petals[20];
+    let shadow_shape = material.flower_petals[21];
+    let shadow_point = (point - shadow_shape.xy) / (squash * breathe * max(reveal, 0.001));
+    let shadow_distance = length(shadow_point)
+        - (INTUITION_LIQUID_SHELL_RADIUS + clamp(shadow_shape.w, 0.0, 1.0));
+    let shadow_value = gaussian_tail(max(shadow_distance, 0.0), max(shadow_shape.z, 0.0001))
+        * (1.0 - shell_mask)
+        * clamp(shadow_tint.w, 0.0, 1.0);
 
     // 13. Composition, identique en forme a la branche assistant : on accumule en
     //     premultiplie puis on redivise par l'alpha pour sortir en alpha droit.
@@ -291,17 +414,84 @@ fn water_drop_claude(pixel_position: vec2<f32>, screen_uv: vec2<f32>) -> vec4<f3
     let rim_alpha = rim_amount * reveal_alpha;
     let halo_alpha = halo * reveal_alpha;
     let highlight_alpha = highlight * reveal_alpha;
-    let base_alpha = max(max(glass_alpha, rim_alpha), max(halo_alpha, highlight_alpha));
-    if base_alpha < 0.002 { discard; }
-    var color = glass * glass_alpha;
+    let arc_alpha = arc_value * reveal_alpha;
+    let shadow_alpha = shadow_value * reveal_alpha;
+    let base_alpha = max(
+        max(max(glass_alpha, rim_alpha), shadow_alpha),
+        max(max(halo_alpha, highlight_alpha), arc_alpha)
+    );
+    // Pas de `discard` ici : voir l'en-tete. Une goutte qui ne couvre pas ce
+    // fragment rend simplement un alpha nul.
+    if base_alpha < 0.002 { return IntuitionLiquidSample(vec3(0.0), 0.0); }
+    // L'ombre est DERRIERE le verre : on la pose d'abord, le verre la recouvre.
+    var color = clamp(shadow_tint.rgb, vec3(0.0), vec3(1.0)) * shadow_alpha;
+    color = color * (1.0 - glass_alpha) + glass * glass_alpha;
     color = mix(color, rim_color, rim_alpha * clamp(material.flower_tint.a, 0.0, 1.0));
     color += rim_color * halo_alpha;
     color += mix(vec3(1.0), clamp(spec_color.rgb, vec3(0.0), vec3(1.0)), clamp(spec_color.w, 0.0, 1.0))
         * highlight_alpha;
+    color += arc_color * reveal_alpha;
     let alpha = clamp(base_alpha, 0.0, 1.0);
-    return vec4(color / max(alpha, 0.001), alpha);
+    // Couleur en alpha DROIT, comme la sortie du fragment : l'appelant compose
+    // ensuite les gouttes entre elles avec un « over » classique.
+    return IntuitionLiquidSample(color / max(alpha, 0.001), alpha);
 }
-// --- WATER DROP (design Claude) — fin --------------------------------------
+
+// Point d'entree du mode liquide : il boucle sur les gouttes et les compose.
+//
+// `liquid_drop_count.x` porte leur NOMBRE, `liquid_drops[i]` la geometrie de la
+// i-eme : `[centreX, centreY, diametre, enfoncement]`. A zero goutte declaree on
+// retombe sur le couple historique `geometry.zw` / `shape.x`, ce qui garde le contrat
+// mono-goutte intact pour l'outil de test.
+//
+// Rejet precoce : une goutte dont le fragment sort de sa boite englobante est ecartee
+// en quelques ALU, AVANT les deux `textureSample`. C'est ce qui rend le multi-gouttes
+// abordable — sans lui, chaque pixel paierait le shader complet pour chaque goutte.
+fn intuition_liquid(pixel_position: vec2<f32>, screen_uv: vec2<f32>) -> vec4<f32> {
+    let declared = i32(round(material.liquid_drop_count.x));
+    let count = max(declared, 1);
+    var color = vec3(0.0);
+    var alpha = 0.0;
+    for (var index = 0; index < count; index = index + 1) {
+        var center = material.geometry.zw;
+        var diameter = material.shape.x;
+        var drop_contact = material.contact;
+        if declared > 0 {
+            let slot = material.liquid_drops[index];
+            center = slot.xy;
+            diameter = slot.z;
+            // Une goutte de menu n'a qu'un enfoncement scalaire : le point de contact
+            // est son propre centre, l'etirement suit la meme dose.
+            drop_contact = vec4(0.0, 0.0, clamp(slot.w, 0.0, 0.8), clamp(slot.w, 0.0, 1.0));
+        }
+        // Boite englobante genereuse : halo, ombre et debord des arcs sortent du
+        // disque. 1.6 fois le rayon les couvre tous.
+        var reach = max(diameter, 1.0) * 0.8 * 1.6;
+        if declared > 0 {
+            let shape = material.liquid_drop_shapes[index];
+            // Un rectangle occupe sa demi-diagonale, plus la marge du halo et de
+            // l'ombre. Le rejet doit l'englober, sinon il coupe les coins.
+            if shape.z > 0.5 {
+                let half_box = vec2(max(diameter, 1.0), max(shape.x, 1.0)) * 0.5;
+                reach = max(reach, length(half_box) * 1.35);
+            }
+        }
+        let delta = pixel_position - center;
+        if dot(delta, delta) > reach * reach { continue; }
+        var drop_shape = vec4(0.0, 0.0, 0.0, 0.0);
+        if declared > 0 { drop_shape = material.liquid_drop_shapes[index]; }
+        let contribution_sample = intuition_liquid_drop(pixel_position, screen_uv, center, diameter, drop_contact, drop_shape);
+        if contribution_sample.alpha < 0.002 { continue; }
+        // Composition « over » : ce qui est deja accumule est devant.
+        let contribution = contribution_sample.alpha * (1.0 - alpha);
+        color = color * alpha + contribution_sample.color * contribution;
+        alpha = alpha + contribution;
+        color = color / max(alpha, 0.001);
+    }
+    if alpha < 0.002 { discard; }
+    return vec4(color, clamp(alpha, 0.0, 1.0));
+}
+// --- INTUITION LIQUID — fin --------------------------------------
 
 @fragment
 fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
@@ -320,9 +510,9 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
     // directly to the workspace capture regardless of viewport or DPR.
     let screen_uv = uv;
     // L'ordre compte : `> 1.5` doit passer avant `> 0.5`, sinon le mode 2
-    // tomberait dans `flower_liquid`. Voir le bloc WATER DROP ci-dessus.
+    // tomberait dans `flower_liquid`. Voir le bloc INTUITION LIQUID ci-dessus.
     if material.flower.x > 1.5 {
-        return water_drop_claude(pixel_position, screen_uv);
+        return intuition_liquid(pixel_position, screen_uv);
     }
     if material.flower.x > 0.5 {
         return flower_liquid(pixel_position, screen_uv);

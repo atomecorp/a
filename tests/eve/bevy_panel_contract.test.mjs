@@ -100,6 +100,10 @@ test('style projections keep one source for system depth and panel control paint
     assert.equal(EVE_CONTROL_PRESETS.fieldLabel.css.textShadow, SYSTEM_UI_INPUT_TOKENS.textShadow);
 
     const panel = EVE_PANEL_SKIN_TOKENS.bevyPanel;
+    assert.equal(panel.material, EVE_COMMON_SKIN_TOKENS.bevy.systemSurface);
+    assert.equal(panel.controlMaterial, EVE_COMMON_SKIN_TOKENS.bevy.systemSurface);
+    assert.equal(BEVY_PANEL_TOKENS.controlMaterial, EVE_COMMON_SKIN_TOKENS.bevy.systemSurface);
+    assert.equal(BEVY_MENU_TOKENS.surface.material, EVE_COMMON_SKIN_TOKENS.bevy.systemSurface);
     assert.equal(panel.colors.control, panel.actionButton.idleBackground);
     assert.equal(panel.colors.control, panel.table.rowBackground);
     assert.equal(panel.colors.control, panel.select.optionBackground);

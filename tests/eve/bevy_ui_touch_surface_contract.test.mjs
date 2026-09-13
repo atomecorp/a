@@ -138,12 +138,14 @@ test('Atome contextual edit stays on one clipped Bevy tree with handed rail and 
     };
     const right = buildAtomeContextualEditTree(input);
     const rail = findNode(right.root, 'eve_bevy_panel_atome_contextual_edit_rail');
-    const railBackground = findNode(right.root, 'eve_bevy_panel_atome_contextual_edit_rail_background');
+    const railShadow = findNode(right.root, 'eve_bevy_panel_atome_contextual_edit_rail_shadow');
     const contextualSurface = findNode(right.root, 'atome_contextual_edit_a_surface');
     const outline = findNode(right.root, 'atome_contextual_edit_a_outline');
     const footerBackground = findNode(right.root, 'atome_contextual_edit_a_footer_background');
     assert.deepEqual(rail.style.position, [740, 360]);
-    assert.equal(railBackground, null, 'the rail is a transparent layout; only its tool surfaces own the shared shadow');
+    assert.equal(railShadow.style.shadow, BEVY_MENU_TOKENS.surface.material.shadow);
+    assert.deepEqual(railShadow.style.position, rail.style.position);
+    assert.deepEqual(railShadow.style.size, rail.style.size);
     assert.deepEqual(contextualSurface.style.position, [40, 50]);
     assert.deepEqual(contextualSurface.style.size, [200, 120 + BEVY_MENU_TOKENS.footerHeightPx]);
     assert.equal(contextualSurface.style.shadow, BEVY_MENU_TOKENS.surface.material.shadow);

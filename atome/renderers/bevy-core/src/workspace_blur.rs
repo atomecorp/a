@@ -236,6 +236,22 @@ pub fn set_workspace_blur_radius(
     let mut materials = world
         .get_resource_mut::<Assets<WorkspaceBlurMaterial>>()
         .ok_or_else(|| "bevy_workspace_blur_material_assets_required".to_string())?;
+    // Sortie AVANT toute mutation quand le rayon ne change pas. Cette fonction est
+    // appelee a chaque `patch_procedural_sdf`, donc a chaque frame animee : sans ce
+    // test, `Assets::get_mut` marquait les deux materiaux de flou comme modifies a
+    // chaque appel et Bevy re-preparait leur buffer et leur bind group pour rien.
+    // Le cout etait paye par frame et par goutte animee.
+    let unchanged = materials
+        .get(&blur.horizontal_material)
+        .map(|material| material.uniform.direction_radius.z == radius)
+        .unwrap_or(false)
+        && materials
+            .get(&blur.vertical_material)
+            .map(|material| material.uniform.direction_radius.z == radius)
+            .unwrap_or(false);
+    if unchanged {
+        return Ok(());
+    }
     let mut horizontal = materials
         .get_mut(&blur.horizontal_material)
         .ok_or_else(|| "bevy_workspace_horizontal_blur_material_missing".to_string())?;

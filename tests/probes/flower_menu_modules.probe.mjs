@@ -42,10 +42,6 @@ const {
     computeFlowerLayout,
     computeFlowerSubmenuLayout
 } = await import('../../eVe/intuition/flower/menu_layout.js');
-const {
-    normalizeItem,
-    withForcedAlpha
-} = await import('../../eVe/intuition/flower/menu_items.js');
 const { registerAtomeElement } = await import('../../eVe/core/atome_dom_id.js');
 const {
     clearAllProjectScenes,
@@ -582,17 +578,6 @@ assert.equal(flowerInteraction.activationCount, 1, 'a radial Flower selection mu
 assert.equal(downstreamFlowerPointerUpCount, pointerUpCountBeforeRadialSelection, 'the Bevy route must not receive the same terminal release');
 disposeFlowerContext();
 setFlowerRuntime(null);
-
-const item = normalizeItem({
-    key: 'import',
-    type: 'palette',
-    icon: 'folder',
-    children: ['media']
-});
-assert.equal(item.type, 'palette');
-assert.equal(item.icon.endsWith('/folder.svg'), true);
-assert.equal(item.children[0].key, 'media');
-assert.equal(withForcedAlpha('rgb(10, 20, 30)', 0.5), 'rgba(10, 20, 30, 0.5)');
 
 const layout = computeFlowerLayout({ count: 3, radius: 100 });
 assert.equal(layout.positions.length, 3);

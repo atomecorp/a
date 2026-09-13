@@ -33,7 +33,10 @@ pub struct ProceduralSdfUniform {
     pub flower: Vec4,
     pub flower_tint: Vec4,
     pub assistant_background_tint: Vec4,
-    pub flower_petals: [Vec4; 8],
+    pub flower_petals: [Vec4; 24],
+    pub liquid_drops: [Vec4; 24],
+    pub liquid_drop_shapes: [Vec4; 24],
+    pub liquid_drop_count: Vec4,
 }
 
 #[derive(Asset, TypePath, AsBindGroup, Debug, Clone)]
@@ -144,6 +147,11 @@ fn material_from_contract(
             ),
             assistant_background_tint: Vec4::from_array(normalized.assistant_background_tint),
             flower_petals: normalized.flower_petals.map(Vec4::from_array),
+            liquid_drops: normalized.liquid_drops.map(Vec4::from_array),
+            liquid_drop_shapes: normalized.liquid_drop_shapes.map(Vec4::from_array),
+            // Un scalaire seul romprait l'alignement std140 du bloc : on le pousse
+            // dans un vec4, comme tous les autres reglages de ce materiau.
+            liquid_drop_count: Vec4::new(normalized.liquid_drop_count, 0.0, 0.0, 0.0),
         },
         original_backdrop,
         blurred_backdrop,

@@ -60,7 +60,24 @@ pub struct AtomeProceduralSdf {
     #[serde(default)]
     pub flower_tint: [f32; 4],
     #[serde(default)]
-    pub flower_petals: [[f32; 4]; 8],
+    // 16 et non 8 : les 8 premiers portent le contrat flower/assistant
+    // historique, les suivants les arcs de lumiere du mode goutte d'eau.
+    pub flower_petals: [[f32; 4]; 24],
+    // Les GOUTTES du mode liquide, separees du style a dessein : `flower_petals`
+    // porte le style PARTAGE par toutes les gouttes, `liquid_drops` la geometrie
+    // PROPRE a chacune — `[centreX, centreY, diametre, enfoncement]`.
+    // Deux tableaux plutot qu'un seul de 48 : serde et Default ne s'implementent
+    // que jusqu'a 32 elements, et la separation dit d'elle-meme ce qui est partage.
+    #[serde(default)]
+    pub liquid_drops: [[f32; 4]; 24],
+    // Forme de chaque goutte : `[hauteur, rayon des coins, genre, -]`.
+    // Genre 0 = disque (seul `liquid_drops[i].z`, le diametre, compte) ;
+    // genre 1 = rectangle arrondi (la largeur reste `liquid_drops[i].z`).
+    // Tout a zero = disque, donc le contrat existant ne bouge pas.
+    #[serde(default)]
+    pub liquid_drop_shapes: [[f32; 4]; 24],
+    #[serde(default)]
+    pub liquid_drop_count: f32,
 }
 
 fn default_reveal() -> f32 { 1.0 }
@@ -129,6 +146,19 @@ impl AtomeProceduralSdf {
                 finite_or(self.flower_tint[2], 0.0).clamp(0.0, 1.0),
                 finite_or(self.flower_tint[3], 0.0).clamp(0.0, 1.0),
             ],
+            liquid_drops: self.liquid_drops.map(|drop| [
+                finite_or(drop[0], 0.0),
+                finite_or(drop[1], 0.0),
+                finite_or(drop[2], 0.0).max(0.0),
+                finite_or(drop[3], 0.0).clamp(0.0, 1.0),
+            ]),
+            liquid_drop_shapes: self.liquid_drop_shapes.map(|shape| [
+                finite_or(shape[0], 0.0).max(0.0),
+                finite_or(shape[1], 0.0).max(0.0),
+                finite_or(shape[2], 0.0).clamp(0.0, 1.0),
+                finite_or(shape[3], 0.0),
+            ]),
+            liquid_drop_count: finite_or(self.liquid_drop_count, 0.0).clamp(0.0, 24.0),
             flower_petals: self.flower_petals.map(|petal| [
                 finite_or(petal[0], 0.0),
                 finite_or(petal[1], 0.0),
