@@ -67,7 +67,8 @@ const handleOperation = async (operation, payload = {}) => {
     if (operation === 'history:apply') {
         const { executeAtomeHistoryCommand } = await import('./atomeHistoryCommands.js');
         return executeAtomeHistoryCommand({ operation: payload.operation, sourceTxId: payload.sourceTxId,
-            requestId: payload.requestId, authenticatedUserId: principalId });
+            atomeIds: payload.atomeIds || payload.atome_ids || [], requestId: payload.requestId,
+            authenticatedUserId: principalId });
     }
     if (operation === 'state:get') return db.getStateCurrent(payload.atome_id || payload.atomeId);
     if (operation === 'state:list') {

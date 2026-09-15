@@ -21,6 +21,7 @@ import {
 import { sceneState } from '../../eVe/domains/rendering/project_scene_state.js';
 import { createRenderScene, hitTestRenderScene } from '../../eVe/domains/rendering/scene_graph.js';
 import { createVirtualSceneTree } from '../../eVe/domains/rendering/virtual_scene_contract.js';
+import { getRenderSurfaceState } from '../../eVe/domains/rendering/surface_runtime.js';
 import { setAtomeContextualEditApi } from '../../eVe/intuition/runtime/eve_intuition/atome_contextual_edit_registry.js';
 import {
     startProjectAudioPlaybackProgress,
@@ -451,6 +452,53 @@ test('Project scene drag intent commits canonical geometry through commitBatch',
     assert.equal(getProjectSceneState('project_drag').records[0].properties.top, 30);
 });
 
+test('Natural release outside a hovered composition choice keeps only the final spatial drop', async () => {
+    clearAllProjectScenes();
+    const dom = projectDom();
+    const commits = [];
+    dom.window.Atome = {
+        commitBatch: async (events) => {
+            commits.push(events);
+            return { ok: true };
+        }
+    };
+    const source = makeRecord('composition_cancel_source', 'shape', 2);
+    const target = makeRecord('composition_cancel_target', 'shape', 1);
+    source.parent_id = 'project_composition_cancel';
+    target.parent_id = 'project_composition_cancel';
+    Object.assign(source.properties, { left: 10, top: 20, width: 20, height: 20 });
+    Object.assign(target.properties, { left: 80, top: 20, width: 30, height: 30 });
+    await renderProjectScene({
+        projectId: 'project_composition_cancel', records: [source, target],
+        host: dom.window.document.getElementById('project'), compositor: createTestCompositor()
+    });
+    const canvas = dom.window.document.getElementById('eve_surface_project');
+    dom.window.document.dispatchEvent(new dom.window.MouseEvent('pointerdown', { clientX: 15, clientY: 25, bubbles: true }));
+    dom.window.document.dispatchEvent(new dom.window.MouseEvent('pointermove', { clientX: 90, clientY: 30, bubbles: true }));
+    await new Promise((resolve) => setTimeout(resolve, 550));
+    const session = getRenderSurfaceState(canvas)?.pointerSession;
+    assert.ok(session?.compositionChoice);
+    const option = session.compositionChoice.options.find((entry) => entry.key === 'front');
+    const optionPoint = {
+        x: option.box.x + option.box.width / 2,
+        y: option.box.y + option.box.height / 2
+    };
+    dom.window.document.dispatchEvent(new dom.window.MouseEvent('pointermove', {
+        clientX: optionPoint.x, clientY: optionPoint.y, bubbles: true
+    }));
+    assert.equal(session.compositionChoice.selected, 'front');
+    dom.window.document.dispatchEvent(new dom.window.MouseEvent('pointerup', { clientX: 200, clientY: 200, bubbles: true }));
+    await nextTick();
+    await nextTick();
+
+    const committedSet = finalSetCommit(commits);
+    assert.equal(committedSet.atome_id, source.id);
+    assert.deepEqual(committedSet.props, { left: 195, top: 195 });
+    assert.equal(source.parent_id, 'project_composition_cancel');
+    assert.equal(target.parent_id, 'project_composition_cancel');
+    assert.equal(getRenderSurfaceState(canvas)?.pointerSession, null);
+});
+
 test('Project scene canvas click selects through the existing selection runtime', async () => {
     clearAllProjectScenes();
     const dom = projectDom();
@@ -506,6 +554,36 @@ test('Natural selects a transparent structural Molecule with the canonical WebGP
     assert.notEqual(scene.byId.get(member.id).visual.selected, true);
 });
 
+test('Natural selection keeps Molecule members locked until contextual edition begins', async () => {
+    clearAllProjectScenes();
+    const dom = projectDom();
+    const owner = makeRecord('locked_molecule', 'group', 1);
+    Object.assign(owner.properties, { molecule_entity: 'molecule', left: 10, top: 20, width: 70, height: 20 });
+    const member = makeRecord('locked_member', 'shape', 2);
+    member.parent_id = owner.id;
+    Object.assign(member.properties, { left: 10, top: 20, width: 20, height: 20 });
+    let contextLevel = 'selection';
+    setAtomeContextualEditApi({
+        readState: () => ({ activeAtomeId: owner.id, contextLevel }),
+        isEditing: (atomeId) => atomeId === owner.id && contextLevel === 'edition'
+    });
+    await renderProjectScene({
+        projectId: 'project_locked_molecule', records: [owner, member],
+        host: dom.window.document.getElementById('project'), compositor: createTestCompositor()
+    });
+    const canvas = dom.window.document.getElementById('eve_surface_project');
+
+    dom.window.document.dispatchEvent(new dom.window.MouseEvent('pointerdown', { clientX: 15, clientY: 25, bubbles: true }));
+    assert.equal(getRenderSurfaceState(canvas)?.pointerSession?.atome_id, owner.id);
+    dom.window.document.dispatchEvent(new dom.window.MouseEvent('pointerup', { clientX: 15, clientY: 25, bubbles: true }));
+
+    contextLevel = 'edition';
+    dom.window.document.dispatchEvent(new dom.window.MouseEvent('pointerdown', { clientX: 15, clientY: 25, bubbles: true }));
+    assert.equal(getRenderSurfaceState(canvas)?.pointerSession?.atome_id, member.id);
+    dom.window.document.dispatchEvent(new dom.window.MouseEvent('pointerup', { clientX: 15, clientY: 25, bubbles: true }));
+    setAtomeContextualEditApi(null);
+});
+
 test('Natural member editing commits the member and refreshed Molecule union in one batch', async () => {
     clearAllProjectScenes();
     const dom = projectDom();
@@ -526,7 +604,10 @@ test('Natural member editing commits the member and refreshed Molecule union in 
     const second = makeRecord('edited_member_second', 'shape', 3);
     second.parent_id = owner.id;
     Object.assign(second.properties, { left: '60px', top: '20px', width: '20px', height: '20px' });
-    setAtomeContextualEditApi({ readState: () => ({ activeAtomeId: owner.id }) });
+    setAtomeContextualEditApi({
+        readState: () => ({ activeAtomeId: owner.id, contextLevel: 'edition' }),
+        isEditing: (atomeId) => atomeId === owner.id
+    });
     await renderProjectScene({
         projectId: 'project_molecule_member_edit',
         records: [owner, first, second],

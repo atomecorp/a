@@ -229,14 +229,18 @@ export async function projectEventForRead(event, principalId) {
         if (await db.canRead(atomeId, principalId, key)) projectedDeletes.push(key);
     }
     const keys = [...Object.keys(projectedPatch), ...projectedDeletes];
+    const historyMetadata = event?.payload?.source_tx_id
+        ? { source_tx_id: event.payload.source_tx_id, source_event_id: event.payload.source_event_id }
+        : {};
     if (!keys.length) {
         if (
-            String(event?.kind || '').toLowerCase() === 'delete'
+            (String(event?.kind || '').toLowerCase() === 'delete'
+                || (event.gesture_id && ['set', 'gesture_end'].includes(event.kind)))
             && await canReadAnyAtomeProperty(atomeId, principalId)
         ) {
             return {
                 ...event,
-                payload: { props: {}, delete_keys: [], property_versions: {} }
+                payload: { ...historyMetadata, props: {}, delete_keys: [], property_versions: {} }
             };
         }
         return null;
@@ -250,6 +254,7 @@ export async function projectEventForRead(event, principalId) {
     return {
         ...event,
         payload: {
+            ...historyMetadata,
             props: projectedPatch,
             delete_keys: projectedDeletes,
             property_versions: propertyVersions

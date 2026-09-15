@@ -144,7 +144,7 @@ const mixedSelectionMode = resolveFlowerSelectionMode({
 });
 assert.equal(mixedSelectionMode.useSelection, true);
 assert.equal(mixedSelectionMode.mixedKinds, true);
-assert.deepEqual(FLOWER_MIXED_SELECTION_TOOL_KEYS, ['info', 'play', 'delete', 'communicate']);
+assert.deepEqual(FLOWER_MIXED_SELECTION_TOOL_KEYS, ['info', 'play', 'copy', 'paste', 'delete', 'communicate']);
 assert.deepEqual(
     resolveFlowerTransportSelectionIds({
         atomeId: 'shape_a',

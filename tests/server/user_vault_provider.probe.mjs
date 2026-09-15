@@ -63,6 +63,26 @@ test('one principal owns one isolated vault process, SQLite database, file root 
         const redo = await handleWsAtomeOperation({ type: 'history', action: 'redo', source_tx_id: 'curve', requestId: 'redo_curve' }, connection);
         assert.equal(redo.ok, true, JSON.stringify(redo));
         assert.equal((await provider.request(alice, 'state:get', { atome_id: 'vault_alice_shape' })).properties.left, 24);
+        for (const id of ['partial_a', 'partial_b']) {
+            await provider.request(alice, 'event:commit', { event: {
+                id: `partial_init_${id}`, kind: 'set', atome_id: id,
+                actor: { type: 'user', id: alice }, payload: { props: { left: 0 } }
+            } });
+        }
+        await provider.request(alice, 'event:commit-batch', { tx_id: 'partial_move', events: ['partial_a', 'partial_b'].map((id) => ({
+            id: `partial_move_${id}`, kind: 'set', atome_id: id, tx_id: 'partial_move',
+            actor: { type: 'user', id: alice }, payload: { props: { left: 40 } }
+        })) });
+        const undoPartial = await handleWsAtomeOperation({ type: 'history', action: 'undo', source_tx_id: 'partial_move',
+            atome_ids: ['partial_a'], requestId: 'undo_partial_a' }, connection);
+        assert.equal(undoPartial.ok, true, JSON.stringify(undoPartial));
+        assert.equal((await provider.request(alice, 'state:get', { atome_id: 'partial_a' })).properties.left, 0);
+        assert.equal((await provider.request(alice, 'state:get', { atome_id: 'partial_b' })).properties.left, 40);
+        const redoPartial = await handleWsAtomeOperation({ type: 'history', action: 'redo', source_tx_id: 'partial_move',
+            atome_ids: ['partial_a'], requestId: 'redo_partial_a' }, connection);
+        assert.equal(redoPartial.ok, true, JSON.stringify(redoPartial));
+        assert.equal((await provider.request(alice, 'state:get', { atome_id: 'partial_a' })).properties.left, 40);
+        assert.equal((await provider.request(alice, 'state:get', { atome_id: 'partial_b' })).properties.left, 40);
         const denied = await handleWsAtomeOperation({ type: 'history', action: 'undo', source_tx_id: 'curve', requestId: 'foreign_curve' },
             { _wsApiUserId: bob, _wsApiVaultRouter: router });
         assert.equal(denied.ok, false);

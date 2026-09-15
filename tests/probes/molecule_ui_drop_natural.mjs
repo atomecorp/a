@@ -32,8 +32,21 @@ export const validateNaturalMoleculeDrop = async ({ page, project, fixture, repo
     const spareState = await page.evaluate(async (id) => window.Atome.getStateCurrent(id), fixture.spareId);
     assert(['', project.id].includes(stateParentId(spareState)),
         `natural_non_overlap_reparented:${stateParentId(spareState)}`);
-    const source = await recordCenter(page, project.id, (record) => record.id === fixture.imageId, { sceneCoordinates: true });
+    let source = await recordCenter(page, project.id, (record) => record.id === fixture.imageId, { sceneCoordinates: true });
     const target = await recordCenter(page, project.id, (record) => record.id === fixture.audioId, { sceneCoordinates: true });
+    const cancelledTrace = await drag({
+        page, source, destination: target, holdMs: 700,
+        compositionChoice: 'front', compositionExit: true
+    });
+    await waitForStableScene(page, project.id);
+    const cancelledMembership = await readMembership(page, {
+        sourceId: fixture.imageId, targetId: fixture.audioId
+    });
+    assert(cancelledMembership.sourceParent === project.id && cancelledMembership.targetParent === project.id,
+        `natural_palette_exit_combined:${JSON.stringify(cancelledMembership)}`);
+    source = await recordCenter(page, project.id, (record) => record.id === fixture.imageId, { sceneCoordinates: true });
+    assert(Math.hypot(source.x - cancelledTrace.releasePoint.x, source.y - cancelledTrace.releasePoint.y) <= 3,
+        `natural_palette_exit_position:${JSON.stringify({ source, cancelledTrace })}`);
     let armed = null;
     const dragTrace = await drag({
         page, source, destination: target, holdMs: 700, compositionChoice: 'front',

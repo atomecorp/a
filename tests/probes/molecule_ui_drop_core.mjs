@@ -145,7 +145,7 @@ export const screenshot = async ({ page, report, outDir, name, preservePointer =
 
 export const drag = async ({
     page, source, destination, holdMs = 0, armedShot = null, steps = 16,
-    postArmOffset = null, waypoint = null, compositionChoice = null
+    postArmOffset = null, waypoint = null, compositionChoice = null, compositionExit = false
 }) => {
     const from = await playwrightPointForClientTarget(page, source);
     const to = await playwrightPointForClientTarget(page, destination);
@@ -166,6 +166,7 @@ export const drag = async ({
             to.y + Number(postArmOffset.y || 0)
         );
     }
+    let releasePoint = to;
     if (compositionChoice) {
         const options = await page.evaluate(() => window.eveBevyUiRuntime?.state?.trees
             ?.get('eve_bevy_panel_composition_choices')?.tree?.root.children.map(node => ({
@@ -175,9 +176,42 @@ export const drag = async ({
         assert(selected, 'composition_choice_not_mounted:' + compositionChoice);
         for (const option of [options[0], selected]) await page.mouse.move(
             option.position[0] + option.size[0] / 2, option.position[1] + option.size[1] / 2, { steps: 8 });
+        releasePoint = {
+            x: selected.position[0] + selected.size[0] / 2,
+            y: selected.position[1] + selected.size[1] / 2
+        };
+        if (compositionExit) {
+            releasePoint = await page.evaluate((items) => {
+                const surface = document.getElementById('eve_surface_project');
+                const rect = surface?.getBoundingClientRect?.() || { width: innerWidth, height: innerHeight };
+                const left = Math.min(...items.map(item => item.position[0]));
+                const top = Math.min(...items.map(item => item.position[1]));
+                const right = Math.max(...items.map(item => item.position[0] + item.size[0]));
+                const bottom = Math.max(...items.map(item => item.position[1] + item.size[1]));
+                const candidates = [
+                    { x: (left + right) / 2, y: bottom + 24 },
+                    { x: (left + right) / 2, y: top - 24 },
+                    { x: right + 24, y: (top + bottom) / 2 },
+                    { x: left - 24, y: (top + bottom) / 2 }
+                ];
+                return candidates.find(point => point.x > 48 && point.y > 48
+                    && point.x < rect.width - 48 && point.y < rect.height - 48)
+                    || { x: rect.width / 2, y: rect.height - 48 };
+            }, options);
+            await page.mouse.move(releasePoint.x, releasePoint.y, { steps: 8 });
+        }
     }
     await page.mouse.up();
-    return { from, to };
+    await page.evaluate(async () => {
+        const { waitForPendingMutations } = await import('/eVe/core/atome_commit_state.js');
+        await waitForPendingMutations();
+    });
+    if (compositionChoice) {
+        const paletteMounted = await page.evaluate(() => window.eveBevyUiRuntime?.state?.trees
+            ?.has('eve_bevy_panel_composition_choices') === true);
+        assert(!paletteMounted, 'composition_choice_not_disposed_after_release');
+    }
+    return { from, to, releasePoint };
 };
 
 export const structuredDropTarget = (page, input) => page.evaluate(async (options) => {

@@ -4,12 +4,14 @@ import {
     eventPropertyPatch,
     eventTouchedPropertyKeys
 } from '../database/adole_event_contract.js';
+import { classifyHistoryEvent, HISTORY_EVENT_CLASS } from '../database/adole_history_transactions.js';
 import { commitAtomeEvents } from './atomeRoutes.orm.js';
 import { wsResponse, wsErrorResponse, requestIdOf } from './wsResponse.js';
 
 export async function handleAtomeHistoryCommand(message, userId, connection) {
     const options = { operation: String(message.action || message.action_type || message.op || ''),
-        sourceTxId: message.source_tx_id || message.sourceTxId || null, requestId: requestIdOf(message) };
+        sourceTxId: message.source_tx_id || message.sourceTxId || null,
+        atomeIds: message.atome_ids || message.atomeIds || [], requestId: requestIdOf(message) };
     const router = connection?._wsApiVaultRouter;
     const result = router ? await router.applyHistory(userId, options)
         : await executeAtomeHistoryCommand({ ...options, authenticatedUserId: userId });
@@ -42,6 +44,50 @@ const currentProperties = async (atomeId, keys) => {
 
 const sameValue = (left, right) => JSON.stringify(left) === JSON.stringify(right);
 
+const collapseContinuousGestureEvents = (events = []) => {
+    const hasFrames = events.some((event) => (
+        classifyHistoryEvent(event).class === HISTORY_EVENT_CLASS.CONTINUOUS_FRAME
+    ));
+    if (!hasFrames) return events.filter((event) => classifyHistoryEvent(event).undo_visible);
+    const groups = new Map();
+    for (const event of events) {
+        const atomeId = String(event?.atome_id || '');
+        if (!atomeId) continue;
+        if (!groups.has(atomeId)) groups.set(atomeId, []);
+        groups.get(atomeId).push(event);
+    }
+    return Array.from(groups.values()).map((group) => {
+        const marker = group.filter((event) => classifyHistoryEvent(event).undo_visible).at(-1) || group.at(-1);
+        const props = {};
+        const before = {};
+        const beforeMissing = new Set();
+        const firstTouch = new Set();
+        let beforeIdentity;
+        for (const event of group) {
+            const payload = event?.payload && typeof event.payload === 'object' ? event.payload : {};
+            const patch = eventPropertyPatch(event) || {};
+            for (const key of eventTouchedPropertyKeys(event)) {
+                if (!firstTouch.has(key)) {
+                    if (Object.hasOwn(payload.before || {}, key)) before[key] = payload.before[key];
+                    else if ((payload.before_missing || []).includes(key)) beforeMissing.add(key);
+                    firstTouch.add(key);
+                }
+                if (Object.hasOwn(patch, key)) props[key] = patch[key];
+            }
+            if (beforeIdentity === undefined && Object.hasOwn(payload, 'before_identity')) {
+                beforeIdentity = payload.before_identity;
+            }
+        }
+        return {
+            ...marker,
+            payload: {
+                ...(marker?.payload || {}), props, before, before_missing: Array.from(beforeMissing),
+                ...(beforeIdentity === undefined ? {} : { before_identity: beforeIdentity })
+            }
+        };
+    });
+};
+
 const historyPayload = (source, operation) => {
     if (operation === 'redo') {
         return {
@@ -59,6 +105,7 @@ const historyPayload = (source, operation) => {
 export async function executeAtomeHistoryCommand({
     operation,
     sourceTxId,
+    atomeIds = [],
     requestId,
     authenticatedUserId
 } = {}) {
@@ -66,7 +113,12 @@ export async function executeAtomeHistoryCommand({
     if (!sourceTxId) return { ok: false, error: 'history_source_transaction_required' };
     if (!requestId) return { ok: false, error: 'history_request_id_required' };
 
-    const sourceEvents = await db.listEvents({ txId: sourceTxId, order: 'asc', limit: 10000 });
+    const requestedIds = new Set((Array.isArray(atomeIds) ? atomeIds : []).map(String).filter(Boolean));
+    const transactionEvents = await db.listEvents({ txId: sourceTxId, order: 'asc', limit: 10000 });
+    const undoVisibleEvents = collapseContinuousGestureEvents(transactionEvents);
+    const sourceEvents = requestedIds.size
+        ? undoVisibleEvents.filter((event) => requestedIds.has(String(event?.atome_id || '')))
+        : undoVisibleEvents;
     if (!sourceEvents.length) return { ok: false, error: 'history_source_transaction_not_found' };
     if (sourceEvents.some((event) => (
         String(event?.kind || '').toLowerCase() !== 'delete'

@@ -82,6 +82,16 @@ export const validateMatrixMoleculeDrop = async ({ page, project, fixture, repor
     }, [fixture.imageId, fixture.audioId]);
     assert(earlyDrop.every((id) => id === project.id), `matrix_combined_before_dwell:${JSON.stringify(earlyDrop)}`);
     await drag({
+        page, source, destination: overlap, holdMs: 700,
+        compositionChoice: 'front', compositionExit: true
+    });
+    const cancelledDrop = await page.evaluate(async ({ ids, projectId }) => {
+        const states = await Promise.all(ids.map((id) => window.Atome.getStateCurrent(id)));
+        return states.every((state) => String(state?.parent_id || state?.props?.parent_id
+            || state?.properties?.parent_id || state?.meta?.parent_id || '') === projectId);
+    }, { ids: [fixture.imageId, fixture.audioId], projectId: project.id });
+    assert(cancelledDrop, 'matrix_palette_exit_combined');
+    await drag({
         page, source, destination: overlap, holdMs: 700, compositionChoice: 'front',
         armedShot: async () => {
             report.matrixDropFeedback = await page.evaluate(() => {

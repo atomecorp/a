@@ -10,6 +10,7 @@ import { handleHomeVaultEvent } from "../../eVe/intuition/runtime/bevy_panel/bev
 import { resolveBevyPanelGeometry } from "../../eVe/intuition/runtime/bevy_panel/bevy_panel_layout.js";
 import { setMainMenuRuntime } from "../../eVe/intuition/ribbon/bevy_ui_product_registry.js";
 import { buildHomeContent, buildHomeFixedContent } from "../../eVe/intuition/runtime/bevy_panel/bevy_panel_home_view.js";
+import { normalizeVisualPreferences } from '../../eVe/intuition/tools/user_visual_preferences_model.js';
 
 const baseState = (overrides = {}) => ({
     profile: normalizeHomeProfile({ name: 'Ada', preferences: { language: 'en' } }, { preserveEmptyItems: true }),
@@ -112,11 +113,23 @@ test('Home is a seven-section Bevy composition with the restored nested hierarch
     ].forEach((id) => assert.ok(all.some((entry) => entry.id === id), id));
     assert.ok(all.some((entry) => entry.id === 'home_display_source'));
     assert.ok(all.some((entry) => entry.id === 'home_handedness'));
+    assert.ok(all.some((entry) => entry.id === 'home_render_style'));
+    assert.ok(all.some((entry) => entry.id === 'home_navigation_taxonomy'));
+    assert.equal(flatten(buildHomeContent({ ...state, expanded: 'bio' }, { emit: () => {}, bodyWidth: 452, editing }))
+        .some((entry) => entry.id === 'home_navigation_taxonomy'), false);
     assert.ok(all.some((entry) => entry.id === 'home_accessibility_auditory'));
     assert.ok(all.some((entry) => entry.id === 'home_server_select'));
     assert.equal(all.some((entry) => /professional/i.test(entry.id || '')), false);
     assert.equal(fixed[0].id, 'home_session_exit');
     assert.equal(profileDisplayName(state.profile), 'Ada');
+});
+
+test('menu rendering stays flat and the legacy taxonomy is the profile default', () => {
+    assert.deepEqual(normalizeVisualPreferences({}), {
+        handedness: 'right', renderStyle: 'flat', navigationTaxonomy: 'legacy', liquidTheme: 'eau'
+    });
+    assert.equal(normalizeVisualPreferences({ navigationTaxonomy: 'modern' }).navigationTaxonomy, 'modern');
+    assert.equal(normalizeVisualPreferences({ navigationTaxonomy: 'unsupported' }).navigationTaxonomy, 'legacy');
 });
 
 test('profile reconstruction never derives the technical username from display identity or phone', () => {

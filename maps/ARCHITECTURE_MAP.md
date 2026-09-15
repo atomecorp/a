@@ -1,5 +1,23 @@
 # Atome / eVe Architecture Map
 
+### Natural selection and contextual lifetime — 2026-09-15
+
+The canonical selection may target either a scene Atome or the project itself. `atome_contextual_edit_runtime.js` derives the Natural rail exclusively from a selected scene Atome: a project replacement selection clears the obsolete selection-level entry and active rail target. Explicit edition entries remain session state and are not silently converted into project selection. The transition adds no DOM authority, renderer, persistent state, mutation route, or parallel listener.
+
+### Natural Molecule interaction ownership — 2026-09-15
+
+`surface_interaction_runtime.js` releases descendants only when the contextual owner reports `isEditing(activeAtomeId)`, never from selection presence alone. `atome_contextual_edit_runtime.js` retains the selection/edition distinction, keeps the nearest edited Molecule active when one of its descendants is selected, resets the ordinary rail scroll on edition entry, and gives a non-prevented Escape to the active group edition. Its existing surface-interceptor layer consumes the canonical target already resolved by the surface, rather than performing a competing hit-test, then combines scene ancestry with projected Molecule geometry: descendant presses continue normally, non-descendant hits inside the frame are consumed as Molecule background, and a press outside the frame exits then returns `false` so canonical selection/drag routing receives that same press. `project_view_molecule_info.js` prepends the standard Retour definition only for Natural Molecule canvas edition and dispatches the existing `atome.edit.exit` scene intent. No Atome schema or public API changes.
+
+### Shared transform and history boundaries — 2026-09-14
+
+Ordinary object drag is translation regardless of selection. Alt/Option chooses proportional resize at gesture start; the surface pinch lifecycle retains the same selected targets and commits through scene intentions. Geometry, typography and limits are calculated in the existing surface pointer owner, reused by Size and contextual object dragging. No per-object controls, renderer, DOM authority or Atome model fields are added.
+
+A completed scene gesture registers its pending commit synchronously. Undo/Redo await persistence and projection, then use the existing transaction journal. Multi-target mutations use one batch with a gesture transaction identifier. Journal projection must retain final empty gesture markers and history source references without leaking private properties.
+
+Undo resolution tracks active source events within each transaction. Selection-scoped commands carry only their Atome IDs through the existing WebSocket/vault history route; project-scoped commands carry every remaining target. Redo retains the same target subset. Flower pointer ownership terminates an armed DOM or WebGPU manipulation session immediately, without changing the canonical selection.
+
+Lasso retains rectangle/project/selection IDs in runtime context, not DOM attributes. Its waiting rectangle hands activation to the standard Flower owner; Copy/Paste consume that captured selection and capture uses the existing Bevy preview compositor instead of cloning DOM. Multi-selection Flower uses the same explicit selection payload. Structured preview multi-selection/pinch parity and physical runtime acceptance remain to verify; this entry is not full cross-runtime acceptance.
+
 Native inbound media transfer is owned by local_atome_sync_media and invoked by local_atome_ws_sync before event delivery. It downloads through authenticated Fastify asset-ID lookup, scopes local files by media ownership, and recovers missing previously projected assets on reconnect. Provider-generated images use the ordinary importer; rendering does not own synchronization. RenderAtom retains the explicit media owner through shared readMediaUserId rather than replacing it with local Atome ownership.
 
 Assistant text and Realtime use the action instructions owned by conversation_session and the same authorized MCP schemas. ui.ai.image.generate and ui.draw.edit are available initially; other tools retain progressive discovery. No second tool registry or execution path is introduced.

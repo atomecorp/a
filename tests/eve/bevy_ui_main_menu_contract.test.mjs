@@ -14,6 +14,7 @@ import { BEVY_MENU_TOKENS } from '../../eVe/intuition/ribbon/bevy_ui_menu_surfac
 import { EVE_BUTTON_SKIN_TOKENS } from '../../eVe/elements/skin/button_skin.js';
 import { EVE_COMMON_SKIN_TOKENS } from '../../eVe/elements/skin/tokens.js';
 import { resolveLiquidSystemSurfaceUniforms } from '../../eVe/intuition/liquid/intuition_liquid_menu_renderer.js';
+import { modernFlowerKeys, normalizeNavigationTaxonomy } from '../../eVe/intuition/menu/navigation_taxonomy.js';
 import { TOOL_KEYS, menuContent, installDom, findNode, waitFrame, waitMs, createRuntimeHarness } from './bevy_ui_main_menu_test_helpers.mjs';
 
 const collectJavaScriptSources = (directory) => readdirSync(directory, { withFileTypes: true })
@@ -141,6 +142,24 @@ test('BevyUI main menu model keeps the required item order and fixed dashboard h
     assert.deepEqual(items.slice(1).map((item) => item.label), TOOL_KEYS);
     assert.deepEqual(items.slice(1).map((item) => item.icon), TOOL_KEYS.map((key) => `./assets/images/icons/${key}.svg`));
     assert.equal(items.some((item) => item.key === 'legacy_menu'), false);
+});
+
+test('modern taxonomy keeps Legacy untouched and hides the edit menu outside an editable project', () => {
+    assert.equal(normalizeNavigationTaxonomy(), 'legacy');
+    const legacy = buildBevyMainMenuItems(menuContent());
+    assert.deepEqual(buildBevyMainMenuItems(menuContent(), { navigationTaxonomy: 'legacy' }), legacy);
+    assert.deepEqual(buildBevyMainMenuItems(menuContent(), {
+        navigationTaxonomy: 'modern', taxonomyContext: 'dashboard'
+    }), []);
+    const modern = buildBevyMainMenuItems(menuContent(), {
+        navigationTaxonomy: 'modern', taxonomyContext: 'edit'
+    });
+    assert.equal(modern.some((item) => item.key === 'taxonomy_project'), true);
+    assert.equal(modern.some((item) => item.key === 'view'), true);
+    assert.equal(modern.some((item) => item.key === 'home'), false);
+    assert.deepEqual(modernFlowerKeys({ kind: 'audio', selected: true }), [
+        'ai', 'dashboard', 'capture', 'find', 'montage', 'mix', 'export', 'info'
+    ]);
 });
 
 test('BevyUI main menu Atome tool toggles the Dashboard', async () => {

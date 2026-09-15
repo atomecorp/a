@@ -45,6 +45,13 @@ export const validateListMoleculeDrop = async ({ page, project, fixture, report,
     assert(early.sourceParent === project.id && early.targetParent === project.id,
         `list_combined_before_dwell:${JSON.stringify(early)}`);
     await drag({
+        page, source: image, destination: overlapDestination, holdMs: 700,
+        compositionChoice: 'front', compositionExit: true
+    });
+    const cancelled = await readMembership(page, { sourceId: fixture.imageId, targetId: fixture.audioId });
+    assert(cancelled.sourceParent === project.id && cancelled.targetParent === project.id,
+        `list_palette_exit_combined:${JSON.stringify(cancelled)}`);
+    await drag({
         page, source: image, destination: overlapDestination, holdMs: 700, compositionChoice: 'front',
         armedShot: () => screenshot({
             page, report, outDir,

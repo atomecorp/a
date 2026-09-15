@@ -15,9 +15,15 @@ globalThis.cancelAnimationFrame = (id) => window.clearTimeout(id);
 
 const { createDragRuntime } = await import('../../eVe/core/atome_events/drag_runtime.js');
 const {
+    FLOWER_POINTER_TAKEOVER_EVENT,
+    clearFlowerPointerLock,
+    setFlowerPointerLock,
     getAtomeRuntimeState,
     registerAtomeElement
-} = await import('../../eVe/core/atome_dom_id.js');
+} = {
+    ...await import('../../eVe/intuition/flower/context_pointer_lock.js'),
+    ...await import('../../eVe/core/atome_dom_id.js')
+};
 
 const defineReadonly = (target, key, value) => {
     Object.defineProperty(target, key, {
@@ -153,6 +159,20 @@ runtime.bindDrag(host, 'flower_drag_atom', {
         updatePropsCalls.push(args);
     }
 });
+
+host.dispatchEvent(makePointerEvent('pointerdown', {
+    clientX: 100,
+    clientY: 100
+}));
+
+assert.equal(FLOWER_POINTER_TAKEOVER_EVENT, 'eve:flower-pointer-takeover');
+setFlowerPointerLock(31, { phase: 'test_takeover' });
+assert.equal(getAtomeRuntimeState(host)?.drag?.active, false);
+assert.equal(activeDragSessions.size, 0);
+document.dispatchEvent(makePointerEvent('pointermove', { clientX: 140, clientY: 150 }));
+assert.equal(host.style.left, '10px');
+assert.equal(host.style.top, '20px');
+clearFlowerPointerLock(31);
 
 host.dispatchEvent(makePointerEvent('pointerdown', {
     clientX: 100,

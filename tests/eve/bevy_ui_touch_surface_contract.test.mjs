@@ -18,6 +18,7 @@ import { EVE_COMMON_SKIN_TOKENS } from '../../eVe/elements/skin/tokens.js';
 import { buildBevyUiFlowerTree } from '../../eVe/intuition/ribbon/bevy_ui_flower_model.js';
 import { buildBevyMainMenuTree } from '../../eVe/intuition/ribbon/bevy_ui_main_menu_model.js';
 import { createAtomeContextualEditRuntime } from '../../eVe/intuition/runtime/eve_intuition/atome_contextual_edit_runtime.js';
+import { createAtomeContextualSurfaceInterceptor } from '../../eVe/intuition/runtime/eve_intuition/atome_contextual_edit_handlers.js';
 import { resolveComposedInteractionTarget } from '../../eVe/domains/rendering/surface_interaction_runtime.js';
 import { createAtomeEditFooterModelRuntime } from '../../eVe/intuition/runtime/eve_intuition/atome_edit_footer_model_runtime.js';
 import { projectViewPlayback } from '../../eVe/domains/rendering/project_view_playback_runtime.js';
@@ -282,10 +283,8 @@ test('Atome contextual footer follows projected media bounds and uses compact da
     for (const id of [
         'atome_contextual_edit_media_footer_background',
         'atome_contextual_edit_media_footer',
-        'atome_contextual_edit_media_resize_left',
         'atome_contextual_edit_media_close',
-        'atome_contextual_edit_media_drag',
-        'atome_contextual_edit_media_resize_right'
+        'atome_contextual_edit_media_drag'
     ]) {
         assert.equal(findNode(tree.root, id).style.size[1], footerHeight, id);
         assert.equal(findNode(tree.root, id).style.shadow, undefined, id);
@@ -316,37 +315,17 @@ test('Atome contextual footer follows projected media bounds and uses compact da
     assert.equal(footerTitle.style.size[1], footerHeight);
     assert.equal(footerTitle.style.position[0] + (footerTitle.style.size[0] / 2), footer.style.size[0] / 2, 'footer title must center against the complete footer width');
     assert.equal(footerTitle.style.position[1], BEVY_MENU_TOKENS.footerTitleOffsetYPx, 'footer title must use the shared optical downward offset');
-    for (const id of [
-        'atome_contextual_edit_media_resize_left_icon',
-        'atome_contextual_edit_media_title',
-        'atome_contextual_edit_media_resize_right_icon'
-    ]) {
-        assert.deepEqual(findNode(tree.root, id).image.tint, EVE_COMMON_SKIN_TOKENS.systemContent.gpu, id);
-    }
-    assert.deepEqual(findNode(tree.root, 'atome_contextual_edit_media_resize_left_icon').style.scale, [-1, 1]);
-    assert.deepEqual(findNode(tree.root, 'atome_contextual_edit_media_resize_right_icon').style.scale, [1, 1]);
-    for (const id of [
-        'atome_contextual_edit_media_resize_left_icon',
-        'atome_contextual_edit_media_resize_right_icon'
-    ]) {
-        const icon = findNode(tree.root, id);
-        assert.equal(icon.image.source, BEVY_CORNER_RESIZE_GRIP_ICON_SOURCE, id);
-        assert.equal(icon.image.fit, 'fill', id);
-        assert.deepEqual(icon.style.size, [11, 15], id);
-    }
-    assert.deepEqual(findNode(tree.root, 'atome_contextual_edit_media_resize_left_icon').style.position, [0, 15]);
-    assert.deepEqual(findNode(tree.root, 'atome_contextual_edit_media_resize_right_icon').style.position, [11, 15]);
+    assert.deepEqual(findNode(tree.root, 'atome_contextual_edit_media_title').image.tint, EVE_COMMON_SKIN_TOKENS.systemContent.gpu);
+    assert.equal(findNode(tree.root, 'atome_contextual_edit_media_resize_left'), null);
+    assert.equal(findNode(tree.root, 'atome_contextual_edit_media_resize_right'), null);
     assert.ok(findNode(tree.root, 'atome_contextual_tool_detail_background'));
 });
 
-test('Atome contextual drag and homothetic resize stay above the main toolbox', () => {
+test('Atome contextual drag stays above the main toolbox', () => {
     const limits = { viewportWidth: 800, viewportHeight: 600, mainMenuHeight: 52 };
     assert.deepEqual(contextualGestureProps({
         ...limits, gesture: { mode: 'drag', origin: { x: 40, y: 30, width: 200, height: 100 }, dx: 900, dy: 900 }
     }), { left: 600, top: 600 - 52 - BEVY_MENU_TOKENS.footerHeightPx - 100 });
-    assert.deepEqual(contextualGestureProps({
-        ...limits, gesture: { mode: 'resize', edge: 'right', origin: { x: 0, y: 30, width: 100, height: 100 }, dx: 900, dy: 900 }
-    }), { width: 600 - 52 - 30 - BEVY_MENU_TOKENS.footerHeightPx, height: 600 - 52 - 30 - BEVY_MENU_TOKENS.footerHeightPx });
 });
 
 test('Atome contextual rail projects visible tool records inside the lateral rail', async () => {
@@ -365,8 +344,7 @@ test('Atome contextual rail projects visible tool records inside the lateral rai
         editing: [{ atomeId: 'a', kind: 'image' }], activeAtomeId: 'a',
         definitions: [{ key: 'detail', label: 'detail', icon: 'edit', toolType: 'standard' }],
         handlers: {
-            atome_contextual_edit_a_drag: { drag: () => null },
-            atome_contextual_edit_a_resize_left: { drag: () => null }
+            atome_contextual_edit_a_drag: { drag: () => null }
         }
     });
     await runtime.mountTree({ id: tree.id, surface, tree });
@@ -384,7 +362,7 @@ test('Atome contextual rail projects visible tool records inside the lateral rai
     const centeredTitleHit = runtime.hitTestAtClientPoint({ surface, clientX: 140, clientY: 185 });
     assert.equal(centeredTitleHit?.nodeId, 'atome_contextual_edit_a_drag', 'centered title must not obstruct the drag target');
     const outerGripHit = runtime.hitTestAtClientPoint({ surface, clientX: 42, clientY: 172 });
-    assert.equal(outerGripHit?.nodeId, 'atome_contextual_edit_a_resize_left', 'reduced grip artwork must preserve the full resize target');
+    assert.notEqual(outerGripHit?.nodeId, 'atome_contextual_edit_a_resize_left', 'no resize target remains on the footer edge');
 });
 
 test('structured List and Matrix rows carry persistent Play through production rail resolution into the Bevy tree', async () => {
@@ -477,16 +455,17 @@ test('Atome contextual runtime keeps local edits and emits one canonical homothe
     assert.equal(runtime.readState().menuVisible, false);
     runtime.activate({ atomeId: 'a' });
     await runtime.render();
-    const grip = findNode(rendered.at(-1).root, 'atome_contextual_edit_a_resize_left');
-    grip.on.press({ client_x: 40, client_y: 130 });
+    const grip = findNode(rendered.at(-1).root, 'atome_contextual_edit_a_drag');
+    grip.on.press({ client_x: 40, client_y: 130, alt_key: true });
     grip.on.drag({ delta_x: 20, delta_y: 0 });
     await runtime.render();
-    assert.deepEqual(findNode(rendered.at(-1).root, 'atome_contextual_edit_a_footer').style.position, [60, 120]);
-    assert.deepEqual(findNode(rendered.at(-1).root, 'atome_contextual_edit_a_footer').style.size, [180, BEVY_MENU_TOKENS.footerHeightPx]);
+    assert.deepEqual(findNode(rendered.at(-1).root, 'atome_contextual_edit_a_footer').style.position, [40, 140]);
+    assert.deepEqual(findNode(rendered.at(-1).root, 'atome_contextual_edit_a_footer').style.size, [220.00000000000003, BEVY_MENU_TOKENS.footerHeightPx]);
     grip.on.release();
     await Promise.resolve();
     assert.deepEqual(intents.map((intent) => intent.kind), ['resize.start', 'resize.move', 'resize.end']);
-    assert.deepEqual(intents[2].props, { left: 60, width: 180, height: 90 });
+    assert.deepEqual(intents[2].props, { left: 40, top: 30, width: 220.00000000000003, height: 110.00000000000001 });
+    assert.equal(intents[1].gesture_id, intents[2].gesture_id);
     assert.equal(intents[2].commit, true);
 });
 
@@ -561,6 +540,106 @@ test('Natural Molecule editing reuses the canonical Atome frame and close restor
     findNode(tree, 'atome_contextual_edit_natural_molecule_close').on.activate();
     assert.equal(runtime.readState().activeAtomeId, '');
     assert.equal(resolveComposedInteractionTarget(scene.scene, memberAtom, runtime.readState().activeAtomeId)?.id, ownerAtom.id);
+});
+
+test('Natural Molecule keeps inside background presses and exits only beyond its frame', () => {
+    const owner = { id: 'molecule', parentId: '' };
+    const member = { id: 'member', parentId: owner.id };
+    const outside = { id: 'outside', parentId: '' };
+    const project = { project_id: 'outside_exit', scene: { byId: new Map([
+        [owner.id, owner], [member.id, member], [outside.id, outside]
+    ]) } };
+    const state = {
+        suspended: false, activeAtomeId: owner.id,
+        editingByAtomeId: new Map([[owner.id, {
+            atomeId: owner.id, kind: 'group', contextLevel: 'edition', projectId: project.project_id
+        }]])
+    };
+    let target = member;
+    const exits = [];
+    const intercept = createAtomeContextualSurfaceInterceptor({
+        state, editingEntries: () => Array.from(state.editingByAtomeId.values()),
+        activeProjectState: () => project, hitTestScene: () => target, readSceneState: () => project,
+        projectedGeometryFor: () => ({ x: 10, y: 10, width: 100, height: 80 }),
+        readRenderedGeometry: () => new Map(), surfaceResolver: () => ({
+            getBoundingClientRect: () => ({ left: 5, top: 5 })
+        }), scheduleRender: () => {},
+        activate: () => ({ ok: true }),
+        exit: ({ atomeId }) => { exits.push(atomeId); state.editingByAtomeId.delete(atomeId); }
+    });
+    target = outside;
+    assert.equal(intercept({
+        phase: 'pointerdown', target: member, event: { clientX: 20, clientY: 20 }
+    }), false, 'the surface-resolved member must win over a conflicting secondary hit test');
+    assert.deepEqual(exits, []);
+    assert.equal(intercept({ phase: 'pointerdown', event: { clientX: 50, clientY: 50 } }), true);
+    assert.deepEqual(exits, []);
+    target = null;
+    assert.equal(intercept({ phase: 'pointerdown', event: { clientX: 300, clientY: 200 } }), false);
+    assert.deepEqual(exits, [owner.id]);
+});
+
+test('selecting a Molecule member keeps the Molecule as contextual edition owner', () => {
+    const dom = new JSDOM('');
+    const oldWindow = globalThis.window;
+    globalThis.window = dom.window;
+    dom.window.__eveWorkspaceMode = { mode: 'project', projectId: 'member_selection' };
+    dom.window.requestAnimationFrame = () => 1;
+    const ownerRecord = { id: 'selection_owner', project_id: 'member_selection', type: 'group' };
+    const memberRecord = { id: 'selection_member', project_id: 'member_selection', type: 'shape' };
+    const owner = { id: ownerRecord.id, parentId: '' };
+    const member = { id: memberRecord.id, parentId: owner.id };
+    const project = {
+        project_id: 'member_selection', records: [ownerRecord, memberRecord],
+        scene: { byId: new Map([[owner.id, owner], [member.id, member]]) }
+    };
+    const runtime = createAtomeContextualEditRuntime({
+        legacyState: {}, resolveDefinitions: () => [], invokeDefinition: async () => ({ ok: true }),
+        surfaceResolver: () => null, findSceneByAtomeId: () => project, readSceneState: () => project
+    });
+    try {
+        runtime.install();
+        runtime.enter({ atomeId: owner.id, kind: 'group', contextLevel: 'edition' });
+        dom.window.dispatchEvent(new dom.window.CustomEvent('adole-atome-selected', {
+            detail: { selected: [member.id], atomeId: member.id }
+        }));
+        assert.equal(runtime.readState().activeAtomeId, owner.id);
+        assert.equal(runtime.isEditing(owner.id), true);
+        assert.equal(runtime.hasContext(member.id), false);
+    } finally {
+        dom.window.close();
+        globalThis.window = oldWindow;
+    }
+});
+
+test('Natural Molecule entry resets the rail and Escape leaves child cancellation first', () => {
+    const dom = new JSDOM('');
+    const oldWindow = globalThis.window;
+    globalThis.window = dom.window;
+    dom.window.__eveWorkspaceMode = { mode: 'project', projectId: 'escape_project' };
+    dom.window.requestAnimationFrame = () => 1;
+    const record = { id: 'escape_molecule', project_id: 'escape_project', type: 'group' };
+    const project = { project_id: 'escape_project', records: [record], scene: { byId: new Map() } };
+    const runtime = createAtomeContextualEditRuntime({
+        legacyState: {}, resolveDefinitions: () => [], invokeDefinition: async () => ({ ok: true }),
+        surfaceResolver: () => null, findSceneByAtomeId: (id) => id === record.id ? project : null,
+        readSceneState: () => project
+    });
+    try {
+        runtime.install();
+        runtime.state.railScrollOffset = 180;
+        runtime.enter({ atomeId: record.id, kind: 'group', contextLevel: 'edition' });
+        assert.equal(runtime.state.railScrollOffset, 0);
+        const childEscape = new dom.window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true });
+        childEscape.preventDefault();
+        dom.window.dispatchEvent(childEscape);
+        assert.equal(runtime.isEditing(record.id), true);
+        dom.window.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+        assert.equal(runtime.isEditing(record.id), false);
+    } finally {
+        dom.window.close();
+        globalThis.window = oldWindow;
+    }
 });
 
 test('Structured row context accepts its canonical record when Natural has no projected scene', async () => {

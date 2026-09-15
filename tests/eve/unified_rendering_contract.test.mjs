@@ -463,11 +463,12 @@ test('Project view overlay routes Bevy surface interception without DOM dashboar
     assert.equal(event.defaultPrevented, true);
 });
 
-test('Single-line text keeps a central drag core outside its resize edges', () => {
+test('Single-line text moves from every edge and resizes only with Alt', () => {
     const atom = { bounds: { x: 900, y: 180, width: 131, height: 24 }, capabilities: { resizable: true } };
     assert.equal(resolveResizeHandle(atom, { x: 965.5, y: 192 }), null);
-    assert.deepEqual(resolveResizeHandle(atom, { x: 1031, y: 204 }), { axisX: 'e', axisY: 's' });
-    assert.deepEqual(resolveResizeHandle(atom, { x: 965.5, y: 203 }), { axisX: null, axisY: 's' });
+    assert.equal(resolveResizeHandle(atom, { x: 1031, y: 204 }), null);
+    assert.equal(resolveResizeHandle(atom, { x: 965.5, y: 203 }), null);
+    assert.deepEqual(resolveResizeHandle(atom, { altKey: true }), { axisX: 'e', axisY: 's' });
 });
 
 test('Text bridge keeps one hidden root, commits through canonical mutation, and cancels without mutation', async () => {

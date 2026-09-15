@@ -120,3 +120,42 @@ l'animation, l'accessibilité et la teinture des SVG n'ont pas été touchés.
 
 ### Menus contextuels
 Couverts sans une ligne : les sept points d'entrée convergent tous vers ce Flower.
+
+## Lots 5 et 6 — Ruban et panneaux ✅
+
+Même montage que le Flower, sur des géométries déjà pures.
+
+- **Ruban** : `buildBevyMainMenuTree` expose `itemBoxes` — même canal latéral que
+  `tree.layout`, qui voyage ainsi depuis toujours. Le verre est la **quatrième**
+  consommatrice de ces boîtes (après l'arbre, les accents et la motion), donc aucune
+  géométrie recalculée et aucune dérive possible.
+- **Panneaux** : fond effacé en mode liquide, verre posé depuis la `geometry` déjà
+  fournie par `bevy_panel_runtime`. A demandé une **forme par goutte** : un panneau
+  est un rectangle arrondi, pas un disque. Ajout de `liquid_drop_shapes` et d'un SDF
+  de boîte arrondie dans le shader.
+  Piège corrigé : un rectangle ne suit pas la convention du disque. Le disque se
+  dessine à 0,84 de son rayon nominal pour laisser place à son halo ; un panneau doit
+  couvrir sa boîte **exactement**, sinon son fond ne recouvre pas son contenu.
+- Ruban, Flower et panneaux **s'abonnent** à la préférence : basculer le style
+  repeint tout de suite, au lieu d'attendre un rendu fortuit.
+
+## Le bug qui vidait tout ✅
+
+Symptôme : mode liquide actif, zéro surface montée, **aucune erreur remontée**.
+
+Cause : `resolveLiquidSystemSurfaceUniforms` faisait
+`petals[20] = [...shadow.color, shadow.color[3]]` alors que
+`systemSurface.shadow.color` est **déjà un RGBA** — l'alpha était ajouté deux fois,
+l'emplacement faisait cinq composantes. La validation de projection rejette le
+record, et comme **un seul record fautif fait échouer la projection entière**, il
+emportait avec lui ruban, panneaux et Flower.
+
+Deux correctifs : la ligne, et `petal4()` qui normalise **chaque** emplacement à
+quatre nombres finis. Un habillage ne doit pas pouvoir faire tomber le rendu des
+autres surfaces parce qu'une couleur a une composante de trop. La probe vérifie
+désormais cet invariant sur les trois tableaux d'uniformes.
+
+## État
+
+Rien n'est commité ni poussé. Trois fichiers modifiés dans `eVe`, tous les autres
+lots déjà commités en amont.
