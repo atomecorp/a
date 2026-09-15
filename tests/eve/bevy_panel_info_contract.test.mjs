@@ -877,13 +877,19 @@ test('Info distinguishes a missing current project from an unavailable data sour
 test('ui.duplicate creates typed atomic copies with relative placement and internal relationship remapping', async () => {
     const previousWindow = globalThis.window;
     const sources = [
-        { atome_id: 'image', type: 'image', project_id: 'old', parent_id: 'old', properties: { left: '10px', top: '20px', source: '/image.png', media_type: 'image/png', metadata: { a: 1 } } },
+        { atome_id: 'image', type: 'image', project_id: 'old', parent_id: 'group', properties: { left: '10px', top: '20px', source: '/image.png', media_type: 'image/png', metadata: { a: 1 } } },
         { atome_id: 'video', type: 'video', project_id: 'old', parent_id: 'image', properties: { left: '40px', top: '50px', source: '/video.mp4', controls: true } },
         { atome_id: 'audio', type: 'sound', project_id: 'old', parent_id: 'old', properties: { left: 70, top: 80, source: '/audio.wav', loop: true } },
         { atome_id: 'text', type: 'richText', project_id: 'old', parent_id: 'old', properties: { left: 100, top: 110, text: '<b>Hello</b>', rich_text: { bold: true } } },
         { atome_id: 'shape', type: 'shape', project_id: 'old', parent_id: 'old', properties: { left: 130, top: 140, color: '#123456', width: 20, height: 30 } },
         { atome_id: 'svg', type: 'shape', project_id: 'old', parent_id: 'old', properties: { left: 160, top: 170, svg: '<svg></svg>', path: 'M0 0L1 1' } },
-        { atome_id: 'group', type: 'group', project_id: 'old', parent_id: 'old', properties: { left: 190, top: 200, group_steps: [['image', 'outside']], group_member_ids: ['image', 'outside'] } }
+        { atome_id: 'group', type: 'group', project_id: 'old', parent_id: 'old', properties: {
+            left: 190, top: 200, group_steps: [['image', 'outside']], group_member_ids: ['image', 'outside'],
+            molecule_timeline: {
+                project_id: 'old', owner_atome_id: 'group', timeline_id: 'tl_group',
+                clips: [{ source: { type: 'atome', atome_id: 'image' }, source_atome_id: 'image' }]
+            }
+        } }
     ];
     const original = structuredClone(sources);
     const batches = [];
@@ -928,9 +934,14 @@ test('ui.duplicate creates typed atomic copies with relative placement and inter
         assert.equal(eventsBySource.get('image').props.left, '300px');
         assert.equal(eventsBySource.get('video').props.left, '330px');
         assert.equal(eventsBySource.get('video').parent_id, result.source_to_duplicate.image);
+        assert.equal(eventsBySource.get('image').parent_id, result.source_to_duplicate.group);
         assert.equal(eventsBySource.get('shape').parent_id, 'project_new');
         assert.deepEqual(eventsBySource.get('group').props.group_steps, [[result.source_to_duplicate.image]]);
         assert.deepEqual(eventsBySource.get('group').props.group_member_ids, [result.source_to_duplicate.image]);
+        assert.equal(eventsBySource.get('group').props.molecule_timeline.project_id, 'project_new');
+        assert.equal(eventsBySource.get('group').props.molecule_timeline.owner_atome_id, result.source_to_duplicate.group);
+        assert.equal(eventsBySource.get('group').props.molecule_timeline.timeline_id, `tl_${result.source_to_duplicate.group}`);
+        assert.equal(eventsBySource.get('group').props.molecule_timeline.clips[0].source.atome_id, result.source_to_duplicate.image);
     } finally {
         globalThis.window = previousWindow;
     }

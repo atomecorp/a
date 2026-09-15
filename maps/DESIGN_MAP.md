@@ -1,5 +1,11 @@
 # Atome / eVe Design Map
 
+### Composition release, Paste and standard icons — 2026-09-15
+
+The original held surface gesture keeps ownership while the overlap palette is visible and resolves its final enabled choice at release. Front/Behind and the other four options remain ordinary shared-tool choices; no iOS-only surface or visual state is introduced. Paste is an immediate click/shortcut/Flower action, while its history panel is available only from the existing long press. Copying one visible closed Molecule includes its complete structural subtree; Paste translates that whole structure to the project point where the Flower opened and selects the new closed Molecule as one object, not an arbitrary member. Copy, Paste and Matrix use canonical `128 × 128` SVG assets without intrinsic `1em` sizing; the View palette and reflected View button both use `matrix.svg`, with no per-platform scale override.
+
+Dragging a closed Molecule over an Atome exposes the same six-choice composition palette as an Atome drag. The source Molecule stays visually and structurally closed while the choice is made and becomes one nested child of the resulting Molecule. A Molecule context exposes the existing inverse action with the localized French label « Dégrouper »; it restores the direct members without a second menu or hierarchy implementation.
+
 ### Natural project deselection feedback — 2026-09-15
 
 In Natural view, selecting an Atome shows its existing contextual side rail. Clicking empty project space replaces that Atome selection with the project selection and removes both the Atome selection outline and its contextual rail in the same interaction. No contextual chrome remains attached to the previously selected Atome.
@@ -413,6 +419,11 @@ Role:
 - Project-background double-tap takes priority over lasso activation during its
   bounded second press, so slight touch or mouse motion cannot create the
   narrow, tall lasso column instead of the compact `132 × 24 px` text block.
+  The second accepted project-background press synchronously focuses the one
+  hidden text editor; release still owns the single creation, and the consumed
+  terminal click re-focuses that same editor after WebKit's tap default action
+  so iOS presents the keyboard. A cancelled or intentional drag aborts the
+  provisional focus before becoming a lasso.
   An intentional drag beyond the double-tap distance still creates a lasso.
   Native selection-only changes from the focused hidden textarea, including
   the iOS space-bar trackpad, update the same white one-pixel WebGPU caret

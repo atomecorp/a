@@ -1,5 +1,9 @@
 # Atome / eVe API Map
 
+### Direct Paste routing — 2026-09-15
+
+No public API changes. Internally, `tool.main.copy` and `tool.main.paste` are real momentary proxies to `ui.copy.action` and `ui.paste.action`; they discard the ribbon button's DOM identity, forward canonical selection/project context, and `ui.paste.panel` remains separately registered for long-press history access. The mounted `project_view_<id>` projection is the last-resort current-project resolver when shell globals lag behind. Copy snapshots the complete Molecule subtree from canonical parentage and timeline/member references, while its clipboard group records the selected root IDs. Outside text editing, `pasteFromClipboard` uses the newest internal Atome group before consulting external system text and delegates reconstruction, relative placement, parent/timeline remapping and the single Undo transaction to the existing duplicate owner; the returned source-to-clone map selects only the cloned roots. The existing `drop_position` is the project-space point captured at Flower opening, including when the pointer visually hits a member of a closed Molecule.
+
 ### Transform/lasso/history integration — 2026-09-14
 
 No public API or Atome schema addition. Resize inputs reuse existing scene resize intentions, canonical commit/commitBatch, and the Size action. The contextual rail uses existing `ui.undo.action` and `ui.redo` (there is no new `ui.redo.action`). Lasso deletion uses `ui.delete.selection` with its captured selection IDs and project; Text/Capture/Molecule/Shape callbacks retain the same rectangle context. Empty selections disable Molecule and Delete. Gesture completion and `source_tx_id`/`source_event_id` remain readable journal metadata under existing property authorization.
@@ -638,7 +642,12 @@ session during its second pointerdown; surface state marks that gesture so the
 following `dblclick` keeps the caret at the end instead of misclassifying it as
 an already-active selection request. A project-background double-tap is
 classified before lasso activation for its bounded second press and enters the
-same single `132 × 24 px` point-text creation API. The shared text session also
+same single `132 × 24 px` point-text creation API. Its second accepted
+`pointerdown` calls the closed `window.__eveTextTool.prepareProvisionalFocus`
+bridge while WebKit still recognizes the user activation; the matching
+`pointerup` creates exactly once, then the consumed derived `click` calls
+`focusActiveTextEditor` on that same editor after WebKit's tap default action.
+Drag/cancel calls `cancelProvisionalFocus`. The shared text session also
 consumes native document `selectionchange` while its hidden textarea owns
 focus; this updates only the runtime selection/caret snapshot used by WebGPU,
 including iOS space-bar trackpad motion.

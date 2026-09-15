@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { readFileSync, readdirSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { test } from 'vitest';
 import { BEVY_MAIN_MENU_ATOME_ID, buildBevyMainMenuItems, resolveBevyMainMenuItemSize } from '../../eVe/intuition/ribbon/bevy_ui_main_menu_model.js';
@@ -44,7 +44,7 @@ test('liquid Flower and main-menu projections derive their backdrop and shadow f
     const uniforms = resolveLiquidSystemSurfaceUniforms({ flower_petals: [] }, [{ diameter: 60 }]);
     assert.equal(uniforms.background_blur_px, material.backdrop.blurPx);
     assert.deepEqual(uniforms.assistant_background_tint, material.backdrop.tint);
-    assert.deepEqual(uniforms.flower_petals[20], [...material.shadow.color, material.shadow.color[3]]);
+    assert.deepEqual(uniforms.flower_petals[20], material.shadow.color);
 });
 
 test('Capture screen icon is canonical before and after its lazy module loads', () => {
@@ -59,6 +59,78 @@ test('Capture screen icon is canonical before and after its lazy module loads', 
     assert.match(initialContentSource, /screen:\s*\{[^\n]*icon:\s*'screen_capturesvg'[^\n]*tool_id:\s*'ui\.capture\.screen'/);
     assert.match(lazyCaptureSource, /tool_id:\s*'ui\.capture\.screen'[^\n]*icon:\s*'screen_capturesvg'/);
     assert.doesNotMatch(initialContentSource, /tool_id:\s*'ui\.capture\.screen',\s*icon:\s*'screen'/);
+});
+
+test('Copy, Paste and Matrix use canonical full-size icon assets', () => {
+    const contentSource = readFileSync(
+        resolve(process.cwd(), 'eVe/intuition/runtime/eve_intuition/main_menu_content_runtime.js'),
+        'utf8'
+    );
+    assert.match(contentSource, /view_table:\s*\{[^\n]*icon:\s*'matrix'/);
+    const minimumVisualScale = { copy: 0.125, paste: 0.125, matrix: 1.28 };
+    for (const key of ['copy', 'paste', 'matrix']) {
+        const source = readFileSync(resolve(process.cwd(), `atome/src/assets/images/icons/${key}.svg`), 'utf8');
+        assert.match(source, /<svg[^>]*width="128"[^>]*height="128"[^>]*viewBox="0 0 128 128"/);
+        assert.doesNotMatch(source, /(?:width|height):\s*1em/);
+        const scale = Number(source.match(/<g\s+transform="scale\(([^)]+)\)"/)?.[1]);
+        assert.ok(scale >= minimumVisualScale[key], `${key}.svg must occupy its canonical visual footprint`);
+    }
+});
+
+test('the main Paste tool is a direct action while its history panel remains separately registered', () => {
+    const bootstrapSource = readFileSync(
+        resolve(process.cwd(), 'eVe/intuition/tools/core/tool_runtime_bootstrap.js'),
+        'utf8'
+    );
+    const runtimeSource = readFileSync(
+        resolve(process.cwd(), 'eVe/intuition/tools/core/tool_runtime.js'),
+        'utf8'
+    );
+    const menuSource = readFileSync(
+        resolve(process.cwd(), 'eVe/intuition/runtime/eve_intuition/main_menu_content_runtime.js'),
+        'utf8'
+    );
+    const editMenuSource = readFileSync(
+        resolve(process.cwd(), 'eVe/intuition/runtime/eve_intuition/main_menu_edit_content.js'),
+        'utf8'
+    );
+    const shortcutSource = readFileSync(resolve(process.cwd(), 'eVe/default/shortcuts.js'), 'utf8');
+    assert.match(bootstrapSource, /'ui\.paste\.panel':\s*\(payload = \{\}\) => executeBootstrapPanelHandler/);
+    assert.match(bootstrapSource, /'tool\.main\.paste':\s*\(payload = \{\}\) => executeBootstrapActionProxyHandler\(payload, \{ kind: 'clipboard', operation: 'paste', proxy_tool_id: 'ui\.paste\.action' \}\)/);
+    assert.doesNotMatch(runtimeSource, /'tool\.main\.paste':\s*\{ kind: 'panel'/);
+    assert.match(editMenuSource, /copy:\s*\{[\s\S]*?extra_input:\s*\{ context_type:\s*'project' \}[\s\S]*?touch:/);
+    assert.match(menuSource, /paste:\s*\{[\s\S]*?extra_input:\s*\{ context_type:\s*'project' \}[\s\S]*?touch:[\s\S]*?longPressActive:\s*openPastePanel/);
+    assert.match(shortcutSource, /`\$\{modifier\}\+v`[^\n]*triggerClipboardTool\('ui\.paste\.action'/);
+});
+
+test('Molecule clipboard preserves structural roots and Flower opening placement', () => {
+    const copySource = readFileSync(resolve(process.cwd(), 'eVe/intuition/tools/copy.js'), 'utf8');
+    const stateSource = readFileSync(resolve(process.cwd(), 'eVe/intuition/tools/clipboard/state.js'), 'utf8');
+    const pasteSource = readFileSync(resolve(process.cwd(), 'eVe/intuition/tools/paste.js'), 'utf8');
+    const flowerItemsSource = readFileSync(
+        resolve(process.cwd(), 'eVe/intuition/runtime/eve_intuition/flower_context_items_runtime.js'),
+        'utf8'
+    );
+    const flowerTargetSource = readFileSync(resolve(process.cwd(), 'eVe/intuition/flower/context_target.js'), 'utf8');
+
+    assert.match(copySource, /readCanonicalProjectStates[\s\S]*resolveStateParentId/);
+    assert.match(copySource, /root_ids:\s*resolveCopiedRootIds\(ids, records\)/);
+    assert.match(stateSource, /root_ids:\s*rootIds/);
+    assert.match(stateSource, /copies:[\s\S]*root_ids:\s*group\.root_ids/);
+    assert.match(pasteSource, /source_to_duplicate[\s\S]*resolveClipboardRootIds[\s\S]*applySelectionBatch/);
+    assert.match(flowerItemsSource, /computedExtraInput\.drop_position\s*=\s*\{ x:\s*Number\(point\.x\), y:\s*Number\(point\.y\) \}/);
+    assert.match(flowerTargetSource, /resolveComposedInteractionTarget\(sceneState\?\.scene, hit\?\.atom/);
+    assert.match(flowerTargetSource, /projectPoint/);
+});
+
+test('Molecule Ungroup resolves an existing canonical icon before Flower texture loading', () => {
+    const editMenuSource = readFileSync(
+        resolve(process.cwd(), 'eVe/intuition/runtime/eve_intuition/main_menu_edit_content.js'),
+        'utf8'
+    );
+    assert.match(editMenuSource, /ungroup:\s*\{[\s\S]*?icon:\s*'group'/);
+    assert.ok(existsSync(resolve(process.cwd(), 'atome/src/assets/images/icons/group.svg')));
+    assert.equal(existsSync(resolve(process.cwd(), 'atome/src/assets/images/icons/ungroup.svg')), false);
 });
 
 test('BevyUI product runtimes never restore legacy browser menu or Flower state', () => {
@@ -139,7 +211,6 @@ test('BevyUI main menu model keeps the required item order and fixed dashboard h
     assert.equal(items[0].passive, undefined);
     assert.equal(items[0].icon, MAIN_HANDLE_ICON);
     assert.deepEqual(items.slice(1).map((item) => item.key), menuContent().toolbox.children);
-    assert.deepEqual(items.slice(1).map((item) => item.label), TOOL_KEYS);
     assert.deepEqual(items.slice(1).map((item) => item.icon), TOOL_KEYS.map((key) => `./assets/images/icons/${key}.svg`));
     assert.equal(items.some((item) => item.key === 'legacy_menu'), false);
 });

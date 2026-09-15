@@ -20,11 +20,17 @@ extension AiSRuntime {
         if let atomeId { normalized["atome_id"] = atomeId }
         let globalScope = normalizedOptionalString(event["scope"]) == "global"
         if !globalScope, let projectId = normalizedOptionalString(event["project_id"] ?? event["projectId"]) { normalized["project_id"] = projectId }
+        var payload = (resolveEventPayload(event) as? [String: Any]) ?? [:]
+        if let parentId = normalizedOptionalString(event["parent_id"] ?? event["parentId"]) {
+            // Membership is event-envelope metadata. Keep it beside `props` in
+            // the persisted payload so batch normalization cannot discard it.
+            payload["parent_id"] = parentId
+            normalized["parent_id"] = parentId
+        }
         if globalScope {
-            var payload = (resolveEventPayload(event) as? [String: Any]) ?? [:]
             payload["scope"] = "global"
             normalized["payload"] = payload
-        } else if let payload = resolveEventPayload(event) {
+        } else if !payload.isEmpty {
             normalized["payload"] = payload
         }
         if let txId = normalizedOptionalString(event["tx_id"] ?? event["txId"]) { normalized["tx_id"] = txId }
@@ -153,7 +159,11 @@ extension AiSRuntime {
         let patchOwnerId = normalizedOptionalString(patch["owner_id"] ?? patch["ownerId"] ?? patch["owner"])
         let eventOwnerId = normalizedOptionalString(event["owner_id"] ?? event["ownerId"] ?? event["owner"])
         let patchType = resolveEventType(patch)
-        let patchParentId = resolveEventParentId(patch)
+        let payloadObject = event["payload"] as? [String: Any]
+        let patchParentId = normalizedOptionalString(
+            event["parent_id"] ?? event["parentId"]
+            ?? payloadObject?["parent_id"] ?? payloadObject?["parentId"]
+        ) ?? resolveEventParentId(patch)
         let deleted = boolValue(patch["__deleted"])
         let particlePatch = stripEventMetaPatch(patch)
         let existingMeta = try findAnyAtomeMeta(db, atomeId: atomeId)
@@ -185,11 +195,11 @@ extension AiSRuntime {
         for (key, value) in patch { nextProps[key] = value }
         if nextProps["type"] == nil, let patchType { nextProps["type"] = patchType }
         if nextProps["type"] == nil, let existingType = existingMeta?.atomeType, !existingType.isEmpty { nextProps["type"] = existingType }
-        if let parentId = patchParentId ?? existingMeta?.parentId {
-            if nextProps["parent_id"] == nil { nextProps["parent_id"] = parentId }
-            if nextProps["parentId"] == nil { nextProps["parentId"] = parentId }
-        }
-        let payloadObject = event["payload"] as? [String: Any]
+        // Structural parentage lives in `atomes.parent_id`; remove stale legacy
+        // copies before storing state_current. Serialization projects the current
+        // metadata back for callers that still read it from `properties`.
+        nextProps.removeValue(forKey: "parent_id")
+        nextProps.removeValue(forKey: "parentId")
         let globalScope = normalizedOptionalString(payloadObject?["scope"]) == "global"
         let projectId = globalScope ? nil : firstNonEmptyString([
             normalizedOptionalString(event["project_id"] ?? event["projectId"]),

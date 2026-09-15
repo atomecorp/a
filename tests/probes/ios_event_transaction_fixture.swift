@@ -49,6 +49,17 @@ extension AiSRuntime {
         try appendEvent(connection, event: event("event-after", "after"))
         check(try count("events") == 2)
         check(try count("state_current") == 2)
+        let member = try normalizeEventInput([
+            "id": "event-parent", "atome_id": "object-1", "project_id": "project-1",
+            "parent_id": "molecule-1", "kind": "set", "props": ["width": 44]
+        ], defaultActorId: "owner")
+        check((member["payload"] as? [String: Any])?["parent_id"] as? String == "molecule-1")
+        try appendEvent(connection, event: member)
+        let parent = try query(connection, "SELECT parent_id FROM atomes WHERE atome_id = ?", [.text("object-1")]).first?["parent_id"] as? String
+        check(parent == "molecule-1")
+        let stored = try loadStateCurrentEntry(connection, atomeId: "object-1")
+        check(stored?.properties["parent_id"] == nil)
+        check(try getStateCurrent(connection, atomeId: "object-1")?["parent_id"] as? String == "molecule-1")
         print("AiS transaction checks passed")
     }
 }

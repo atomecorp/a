@@ -1,5 +1,13 @@
 # Atome / eVe Architecture Map
 
+### Composition terminal ownership and deterministic Paste — 2026-09-15
+
+An active project-surface pointer session remains the terminal-event owner while its overlap-choice palette is visible. `surface_interaction_runtime.js` performs the final choice hit-test before one `drag.end`; only events not owned by that session may enter the BevyUI surface interceptor, and `pointercancel` still cancels without composition. All six choices continue through `combineCanonicalMolecule` and the canonical mutation/history pipeline.
+
+A single closed Molecule remains one composition source even though its movement batch contains its canonical descendants. The pointer session carries that source cardinality independently through palette arming and terminal dispatch; this permits Molecule-on-Atome composition while retaining the multi-selection exclusion. `combineCanonicalMolecule` keeps the source envelope intact beneath the newly created Molecule. Contextual Ungroup remains the inverse structural action: Flower targets the closed owner and delegates to the existing atomic `ungroupCanonicalMolecule` transaction.
+
+Outside active text editing, the internal eVe clipboard group is the authoritative object source. The system clipboard is imported only when no internal group exists, so the descriptive text mirrored by Copy cannot replace the last copied Atome selection. A selected Molecule is expanded recursively from canonical parentage and member references at copy time; the copied group separately preserves the selected structural roots. Main Copy/Paste strip the tool-button DOM target, forward selection/project context, and delegate to `ui.copy.action` / `ui.paste.action`; the mounted project surface supplies the project ID only when the normal shell owners lag. Paste continues through the canonical duplicate planner, preserves relative structure, remaps parents and Molecule timeline ownership into the destination project, selects only the cloned roots and records one transaction. Flower resolves a member hit through the same closed-Molecule interaction owner as the surface and forwards the project-space point captured when the menu opened. `ui.paste.panel` remains the optional history surface reached by a long press.
+
 ### Natural selection and contextual lifetime — 2026-09-15
 
 The canonical selection may target either a scene Atome or the project itself. `atome_contextual_edit_runtime.js` derives the Natural rail exclusively from a selected scene Atome: a project replacement selection clears the obsolete selection-level entry and active rail target. Explicit edition entries remain session state and are not silently converted into project selection. The transition adds no DOM authority, renderer, persistent state, mutation route, or parallel listener.
@@ -602,6 +610,11 @@ BevyUI panel architecture:
   threshold is evaluated, while motion beyond the double-tap bound still
   becomes a normal lasso. A successful background double-tap therefore enters
   the single compact `132 × 24 px` project-text creation path exactly once.
+  On iOS its provisional hidden editor is focused synchronously during the
+  accepted second press, before background `preventDefault`; creation remains
+  owned by release. The consumed terminal click re-focuses that same canonical
+  editor after WebKit completes the tap default action; pointer movement or
+  cancellation aborts the provisional focus before lasso ownership resumes.
   The active hidden editor mirrors document-level native `selectionchange`
   events into the canonical text session, allowing the iOS space-bar trackpad
   to move the WebGPU caret without changing the text value.

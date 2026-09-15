@@ -239,6 +239,85 @@ test('shared-canvas BevyUI hit keeps menu ownership while Text is armed', () => 
     assert.equal(document.querySelectorAll('.eve-atome-lasso').length, 0);
 });
 
+test('project background second touch focuses the provisional editor before pointerup', () => {
+    const dom = new JSDOM('<!doctype html><main id="project_view_project_a"></main>');
+    globalThis.window = dom.window;
+    globalThis.document = dom.window.document;
+    globalThis.Element = dom.window.Element;
+    globalThis.HTMLElement = dom.window.HTMLElement;
+    globalThis.Node = dom.window.Node;
+    const layer = document.getElementById('project_view_project_a');
+    Object.defineProperty(layer, 'clientWidth', { value: 500 });
+    Object.defineProperty(layer, 'clientHeight', { value: 400 });
+    layer.getBoundingClientRect = () => ({ left: 0, top: 0, width: 500, height: 400 });
+    const provisionalFocusCalls = [];
+    const provisionalCancelCalls = [];
+    const activeEditorFocusCalls = [];
+    window.__eveTextTool = {
+        prepareProvisionalFocus: (payload) => provisionalFocusCalls.push(payload),
+        cancelProvisionalFocus: () => provisionalCancelCalls.push(true),
+        focusActiveTextEditor: () => activeEditorFocusCalls.push(true)
+    };
+    const runtime = createProjectLayerRuntime({
+        hasBindMark: () => false,
+        setBindMark: () => {},
+        isSystemRootHost: () => false,
+        isToolHost: () => false,
+        isToolUiTarget: () => false,
+        isPrimaryPointerActivation: () => true,
+        isFlowerPointerLocked: () => false,
+        markFlowerPointerGestureArmed: () => {},
+        clearFlowerPointerGestureArmed: () => {},
+        isValidProjectIdCandidate: (value) => !!String(value || '').trim(),
+        hitTestBevyUiAtClientPoint: () => null,
+        hitTestProjectSceneAtClientPoint: () => null,
+        collectProjectSceneAtomsInClientRect: () => [],
+        applySelectionIntent: (id) => id,
+        applySelectionBatch: () => [],
+        clearAllSelection: () => {},
+        isTextToolActive: () => false,
+        isTemporaryBackgroundTextToolSessionActive: () => false,
+        notifyTextToolProjectBackgroundClick: () => {}
+    });
+    runtime.bindProjectLayerEvents(layer);
+    const dispatchTouch = (target, type, pointerId) => {
+        const event = new window.MouseEvent(type, {
+            bubbles: true,
+            cancelable: true,
+            clientX: 120,
+            clientY: 90,
+            buttons: type === 'pointerup' ? 0 : 1
+        });
+        Object.defineProperty(event, 'pointerId', { value: pointerId });
+        Object.defineProperty(event, 'pointerType', { value: 'touch' });
+        target.dispatchEvent(event);
+    };
+
+    dispatchTouch(layer, 'pointerdown', 1);
+    dispatchTouch(document, 'pointerup', 1);
+    dispatchTouch(layer, 'click', 1);
+    dispatchTouch(layer, 'pointerdown', 2);
+
+    assert.equal(provisionalFocusCalls.length, 1);
+    assert.equal(provisionalFocusCalls[0].clientX, 120);
+    assert.equal(provisionalFocusCalls[0].clientY, 90);
+
+    dispatchTouch(document, 'pointerup', 2);
+    dispatchTouch(layer, 'click', 2);
+    assert.equal(provisionalFocusCalls.length, 1);
+    assert.equal(provisionalCancelCalls.length, 0);
+    assert.equal(activeEditorFocusCalls.length, 1);
+
+    dispatchTouch(layer, 'pointerdown', 3);
+    dispatchTouch(document, 'pointerup', 3);
+    dispatchTouch(layer, 'click', 3);
+    dispatchTouch(layer, 'pointerdown', 4);
+    dispatchTouch(document, 'pointercancel', 4);
+    assert.equal(provisionalFocusCalls.length, 2);
+    assert.equal(provisionalCancelCalls.length, 1);
+    dom.window.close();
+});
+
 test('Page is a latch and resolves a canonical frame regardless of drag direction', () => {
     const identity = (definition) => definition;
     const definitions = buildBootstrapDefsA(identity, identity, 'calendar', 'registered');

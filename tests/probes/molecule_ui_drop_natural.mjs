@@ -102,10 +102,40 @@ export const validateNaturalMoleculeDrop = async ({ page, project, fixture, repo
     await reloadProjection(page, project.id);
     await screenshot({ page, report, outDir, name: 'drop_natural_after_reload' });
     if (CORE_ONLY) {
-        const clean = await assertNoParasites(page, project.id, [fixture.audioId, fixture.imageId]);
+        const moleculeId = molecule.sourceParent;
+        const sourceMolecule = await recordCenter(page, project.id, (record) => record.id === moleculeId, { sceneCoordinates: true });
+        const targetAtome = await recordCenter(page, project.id, (record) => record.id === fixture.spareId, { sceneCoordinates: true });
+        await drag({ page, source: sourceMolecule, destination: targetAtome, holdMs: 700, compositionChoice: 'front' });
+        const nested = await waitForMolecule(page, { sourceId: moleculeId, targetId: fixture.spareId });
+        const childParents = await page.evaluate(async (ids) => {
+            const states = await Promise.all(ids.map((id) => window.Atome.getStateCurrent(id)));
+            return states.map((state) => state?.parent_id || state?.parentId || state?.meta?.parent_id || '');
+        }, [fixture.audioId, fixture.imageId]);
+        assert(nested.sourceParent && nested.sourceParent === nested.targetParent && nested.sourceParent !== moleculeId,
+            `natural_molecule_source_not_nested:${JSON.stringify(nested)}`);
+        assert(childParents.every((parentId) => parentId === moleculeId),
+            `natural_molecule_source_flattened:${JSON.stringify({ moleculeId, childParents })}`);
+        const nestedMolecule = await recordCenter(page, project.id, (record) => record.id === nested.sourceParent, { sceneCoordinates: true });
+        await page.mouse.click(nestedMolecule.x, nestedMolecule.y, { button: 'right' });
+        const flowerUngroup = await waitFor(page, async () => {
+            const flower = await import('/eVe/intuition/flower/index.js');
+            const tree = window.eveBevyUiRuntime?.state?.trees?.get?.('eve_bevy_ui_flower')?.tree || null;
+            const ids = [];
+            const visit = (node) => {
+                if (!node || typeof node !== 'object') return;
+                ids.push(String(node.id || ''));
+                (node.children || []).forEach(visit);
+            };
+            visit(tree?.root);
+            return { ok: flower.isFlowerMenuOpen?.() === true && ids.some((id) => id.includes('_item_ungroup_')), ids };
+        });
+        assert(flowerUngroup.ok, `natural_molecule_ungroup_missing:${JSON.stringify(flowerUngroup)}`);
+        await screenshot({ page, report, outDir, name: 'drop_natural_nested_flower' });
+        await page.evaluate(async () => (await import('/eVe/intuition/flower/index.js')).closeFlowerMenu?.());
+        const clean = await assertNoParasites(page, project.id, [moleculeId, fixture.spareId, fixture.audioId, fixture.imageId]);
         assert(clean.ok, `natural_parasitic_projection:${JSON.stringify(clean)}`);
         return {
-            molecule, playbackModes: [], children: [], clean, core_only: true,
+            molecule, nested, childParents, flowerUngroup, playbackModes: [], children: [], clean, core_only: true,
             membership: await readMembership(page, {
                 sourceId: fixture.imageId, targetId: fixture.audioId, spareId: fixture.spareId
             })
