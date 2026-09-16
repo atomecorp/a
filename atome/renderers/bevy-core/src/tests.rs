@@ -233,12 +233,11 @@ fn backdrop_fixture_keeps_text_and_image_in_capture_and_large_glass_circle_in_pr
         .resource::<Assets<crate::backdrop_surface::BackdropSurfaceMaterial>>()
         .get(&material_handle)
         .unwrap();
+    assert_eq!(material.uniform.size_radius_capture_scale.z, 170.0);
     assert_eq!(
-        material.uniform.workspace_size.xy(),
-        Vec2::new(640.0, 480.0)
+        material.uniform.size_radius_capture_scale.w,
+        crate::workspace_blur::WORKSPACE_BACKDROP_DOWNSCALE as f32
     );
-    assert_eq!(material.uniform.size_radius.z, 170.0);
-    assert_eq!(material.uniform.size_radius.w, 12.0);
     let circle_layers = app
         .world()
         .get::<bevy::camera::visibility::RenderLayers>(circle_entity)
@@ -267,15 +266,15 @@ fn backdrop_fixture_keeps_text_and_image_in_capture_and_large_glass_circle_in_pr
         },
     )
     .unwrap();
-    let material = app
+    let resized_material_handle = app
         .world()
-        .resource::<Assets<crate::backdrop_surface::BackdropSurfaceMaterial>>()
-        .get(&material_handle)
-        .unwrap();
+        .get::<bevy::sprite_render::MeshMaterial2d<crate::backdrop_surface::BackdropSurfaceMaterial>>(circle_entity)
+        .unwrap()
+        .0
+        .clone();
     assert_eq!(
-        material.uniform.workspace_size.xy(),
-        Vec2::new(1600.0, 900.0),
-        "a mounted Flower backdrop must sample the resized workspace instead of its stale opening viewport"
+        resized_material_handle, material_handle,
+        "surface resize must keep the shared backdrop material resident because its shader derives target size from the capture texture"
     );
 }
 
@@ -349,7 +348,10 @@ fn backdrop_style_patch_updates_the_resident_material_without_reallocation() {
         .unwrap();
     assert_eq!(resident_handle, material_handle);
     assert_eq!(app.world().get::<Mesh2d>(entity).unwrap().0, mesh_handle);
-    assert_eq!(material.uniform.size_radius.w, 18.0);
+    assert_eq!(
+        material.uniform.size_radius_capture_scale.w,
+        crate::workspace_blur::WORKSPACE_BACKDROP_DOWNSCALE as f32
+    );
     assert_eq!(material.uniform.tint, Vec4::new(0.24, 0.29, 0.37, 1.0));
     assert_eq!(
         app.world()

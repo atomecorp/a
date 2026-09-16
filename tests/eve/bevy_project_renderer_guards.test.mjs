@@ -85,8 +85,8 @@ test('direct transforms publish the complete backdrop pipeline while glass is vi
 
     assert.equal(result.ok, true);
     assert.equal(calls.filter((call) => call.type === 'transform').length, 1);
-    assert.equal(calls.filter((call) => call.type === 'redraw').length, 1);
-    assert.equal(delayedRedraws, 3);
+    assert.equal(calls.filter((call) => call.type === 'redraw').length, 0);
+    assert.equal(delayedRedraws, 4);
 });
 
 test('Bevy startup without diagnostics waits across the runner boundary and rejects asynchronous panics', async () => {

@@ -16,7 +16,7 @@ use crate::{
     workspace_backdrop::{
         set_workspace_backdrop_enabled, AtomeWorkspaceBackdrop, FLOWER_PRESENTATION_LAYER,
     },
-    workspace_blur::set_workspace_blur_radius,
+    workspace_blur::{set_workspace_blur_radius, WORKSPACE_BACKDROP_DOWNSCALE},
 };
 
 const BACKDROP_SURFACE_SHADER_HANDLE: Handle<Shader> =
@@ -24,9 +24,8 @@ const BACKDROP_SURFACE_SHADER_HANDLE: Handle<Shader> =
 
 #[derive(Clone, Copy, Debug, ShaderType)]
 pub struct BackdropSurfaceUniform {
-    pub size_radius: Vec4,
+    pub size_radius_capture_scale: Vec4,
     pub tint: Vec4,
-    pub workspace_size: Vec4,
 }
 
 #[derive(Asset, TypePath, AsBindGroup, Debug, Clone)]
@@ -73,21 +72,19 @@ fn material_from_contract(
     contract: AtomeBackdropStyle,
     logical_size: [f32; 2],
     corner_radius: f32,
-    workspace_size: [f32; 2],
     original_backdrop: Handle<Image>,
     blurred_backdrop: Handle<Image>,
 ) -> BackdropSurfaceMaterial {
     let style = contract.normalized().expect("validated backdrop style");
     BackdropSurfaceMaterial {
         uniform: BackdropSurfaceUniform {
-            size_radius: Vec4::new(logical_size[0].max(1.0), logical_size[1].max(1.0), corner_radius.max(0.0), style.blur_px),
-            tint: Vec4::from_array(style.tint),
-            workspace_size: Vec4::new(
-                workspace_size[0].max(1.0),
-                workspace_size[1].max(1.0),
-                0.0,
-                0.0,
+            size_radius_capture_scale: Vec4::new(
+                logical_size[0].max(1.0),
+                logical_size[1].max(1.0),
+                corner_radius.max(0.0),
+                WORKSPACE_BACKDROP_DOWNSCALE as f32,
             ),
+            tint: Vec4::from_array(style.tint),
         },
         original_backdrop,
         blurred_backdrop,
@@ -106,12 +103,14 @@ pub fn insert_backdrop_surface(
         .ok_or_else(|| "bevy_backdrop_style_invalid".to_string())?;
     let (original_backdrop, blurred_backdrop, blur_pipeline) = world
         .get_resource::<AtomeWorkspaceBackdrop>()
-        .map(|state| (state.image.clone(), state.blur.vertical_image.clone(), state.blur.clone()))
+        .map(|state| {
+            (
+                state.image.clone(),
+                state.blur.vertical_image.clone(),
+                state.blur.clone(),
+            )
+        })
         .ok_or_else(|| "bevy_workspace_backdrop_required".to_string())?;
-    let workspace_size = {
-        let config = world.resource::<crate::types::AtomeBevyRendererConfig>();
-        [config.width, config.height]
-    };
     set_workspace_blur_radius(world, &blur_pipeline, style.blur_px)?;
     let mesh = {
         let mut meshes = world
@@ -127,7 +126,6 @@ pub fn insert_backdrop_surface(
             style,
             logical_size,
             corner_radius,
-            workspace_size,
             original_backdrop,
             blurred_backdrop,
         ))
@@ -145,7 +143,10 @@ pub fn resize_backdrop_surface(
     entity: Entity,
     logical_size: [f32; 2],
 ) -> Result<(), String> {
-    if world.get::<MeshMaterial2d<BackdropSurfaceMaterial>>(entity).is_none() {
+    if world
+        .get::<MeshMaterial2d<BackdropSurfaceMaterial>>(entity)
+        .is_none()
+    {
         return Ok(());
     }
     let mesh = {
@@ -155,31 +156,6 @@ pub fn resize_backdrop_surface(
         video_quad_mesh_handle_from_size(&mut meshes, logical_size, [0.0, 0.0, 1.0, 1.0])
     };
     world.entity_mut(entity).insert(Mesh2d(mesh));
-    Ok(())
-}
-
-pub fn resize_backdrop_surface_workspace(
-    world: &mut World,
-    logical_size: [f32; 2],
-) -> Result<(), String> {
-    let material_handles: Vec<_> = world
-        .query::<&MeshMaterial2d<BackdropSurfaceMaterial>>()
-        .iter(world)
-        .map(|material| material.0.clone())
-        .collect();
-    if material_handles.is_empty() {
-        return Ok(());
-    }
-    let mut materials = world
-        .get_resource_mut::<Assets<BackdropSurfaceMaterial>>()
-        .ok_or_else(|| "bevy_backdrop_surface_assets_required".to_string())?;
-    for handle in material_handles {
-        let mut material = materials
-            .get_mut(&handle)
-            .ok_or_else(|| "bevy_backdrop_surface_material_missing".to_string())?;
-        material.uniform.workspace_size.x = logical_size[0].max(1.0);
-        material.uniform.workspace_size.y = logical_size[1].max(1.0);
-    }
     Ok(())
 }
 
@@ -206,7 +182,6 @@ pub fn patch_backdrop_surface(
     let mut material = materials
         .get_mut(&handle)
         .ok_or_else(|| "bevy_backdrop_surface_material_missing".to_string())?;
-    material.uniform.size_radius.w = style.blur_px;
     material.uniform.tint = Vec4::from_array(style.tint);
     Ok(())
 }

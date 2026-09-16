@@ -1,9 +1,8 @@
 #import bevy_sprite::mesh2d_vertex_output::VertexOutput
 
 struct BackdropSurfaceUniform {
-    size_radius: vec4<f32>,
+    size_radius_capture_scale: vec4<f32>,
     tint: vec4<f32>,
-    workspace_size: vec4<f32>,
 }
 
 @group(#{MATERIAL_BIND_GROUP}) @binding(0) var<uniform> material: BackdropSurfaceUniform;
@@ -20,16 +19,16 @@ fn rounded_rect_distance(point: vec2<f32>, size: vec2<f32>, radius: f32) -> f32 
 
 @fragment
 fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
-    let size = max(material.size_radius.xy, vec2(1.0));
+    let size = max(material.size_radius_capture_scale.xy, vec2(1.0));
     let point = mesh.uv * size;
-    let distance = rounded_rect_distance(point, size, material.size_radius.z);
+    let distance = rounded_rect_distance(point, size, material.size_radius_capture_scale.z);
     let edge = 1.0 - smoothstep(-0.6, 0.6, distance);
-    let workspace_size = max(material.workspace_size.xy, vec2(1.0));
+    let surface_pixel_size = max(
+        vec2<f32>(textureDimensions(original_texture)) * material.size_radius_capture_scale.w,
+        vec2(1.0)
+    );
     let screen_uv = clamp(
-        vec2(
-            mesh.world_position.x / workspace_size.x + 0.5,
-            0.5 - mesh.world_position.y / workspace_size.y
-        ),
+        mesh.position.xy / surface_pixel_size,
         vec2(0.0),
         vec2(1.0)
     );

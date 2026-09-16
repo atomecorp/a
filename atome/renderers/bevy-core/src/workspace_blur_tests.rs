@@ -218,7 +218,7 @@ fn workspace_capture_never_sees_presentation_content() {
 }
 
 #[test]
-fn flower_backdrop_uses_screen_coordinates_for_gaussian_passes_and_logical_coordinates_for_composition() {
+fn shared_backdrop_uses_current_capture_dimensions_for_composition() {
     let blur_shader = include_str!("assets/shaders/workspace_blur.wgsl");
     assert!(blur_shader.contains("fn gaussian_blur("));
     assert!(blur_shader.contains("mesh.position,"));
@@ -226,14 +226,17 @@ fn flower_backdrop_uses_screen_coordinates_for_gaussian_passes_and_logical_coord
     assert!(!blur_shader.contains("3.2307692308"));
 
     let shader = include_str!("assets/shaders/backdrop_surface.wgsl");
-    assert!(shader.contains("mesh.world_position.x / workspace_size.x + 0.5"));
-    assert!(shader.contains("0.5 - mesh.world_position.y / workspace_size.y"));
-    assert!(!shader.contains("mesh.position.xy / max(dimensions"));
+    assert!(shader.contains("mesh.position.xy / surface_pixel_size"));
+    assert!(shader
+        .contains("textureDimensions(original_texture)) * material.size_radius_capture_scale.w"));
+    assert!(!shader.contains("mesh.world_position"));
 
     let uniform = BackdropSurfaceUniform {
-        size_radius: Vec4::ZERO,
+        size_radius_capture_scale: Vec4::new(0.0, 0.0, 0.0, WORKSPACE_BACKDROP_DOWNSCALE as f32),
         tint: Vec4::ZERO,
-        workspace_size: Vec4::new(1280.0, 720.0, 0.0, 0.0),
     };
-    assert_eq!(uniform.workspace_size.xy(), Vec2::new(1280.0, 720.0));
+    assert_eq!(
+        uniform.size_radius_capture_scale.w,
+        WORKSPACE_BACKDROP_DOWNSCALE as f32
+    );
 }
