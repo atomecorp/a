@@ -55,7 +55,10 @@ const sourceSlice = (source, startPattern, endPattern) => {
     return tail.slice(0, end);
 };
 
-test('direct transforms publish the complete backdrop pipeline while glass is visible', () => {
+test.each([
+    ['standard', { backdrop: { blurPx: 18, tint: [0, 0, 0, 0.3] } }],
+    ['liquid', { procedural: { background_blur_px: 18 } }]
+])('direct transforms publish the complete backdrop pipeline while %s glass is visible', (_kind, material) => {
     const dom = new JSDOM('<!doctype html><html><body><canvas id="backdrop_transform"></canvas></body></html>');
     const surface = dom.window.document.getElementById('backdrop_transform');
     const calls = [];
@@ -70,7 +73,7 @@ test('direct transforms publish the complete backdrop pipeline while glass is vi
     };
     const glass = {
         id: 'menu_glass',
-        material: { backdrop: { blurPx: 18, tint: [0, 0, 0, 0.3] } }
+        material
     };
     setSurfaceRuntimeState(surface, {
         started: true,
@@ -638,8 +641,6 @@ test('Bevy style diffs forward opacity to the WASM style export', async () => {
     dom.window.cancelAnimationFrame = () => {};
     const calls = [];
     const wasmModule = {
-        default: async () => {},
-        run_atome_bevy_renderer: () => calls.push({ type: 'run' }),
         apply_atome_bevy_ops: (ops) => calls.push({ type: 'ops', ops }),
         request_atome_bevy_redraw: () => calls.push({ type: 'redraw' })
     };
@@ -659,20 +660,20 @@ test('Bevy style diffs forward opacity to the WASM style export', async () => {
         visible: true,
         children: []
     };
-    await startBevyWebRenderer({
-        surface: canvas,
-        width: 100,
-        height: 80,
-        virtualScene: {
-            id: 'opacity_scene',
-            revision: 1,
-            roots: [node.id],
-            nodes: [node],
-            byId: new Map([[node.id, node]])
-        },
-        wasmModule
+    setSurfaceRuntimeState(canvas, {
+        started: true,
+        wasmModule,
+        node_count: 1,
+        virtual_scene: { nodes: [node], byId: new Map([[node.id, node]]) },
+        skipped_nodes: [],
+        deferred_nodes: []
     });
-    calls.length = 0;
+    let delayedRedraws = 0;
+    dom.window.setTimeout = () => ++delayedRedraws;
+    const liquidGlass = {
+        id: 'liquid_glass',
+        material: { procedural: { background_blur_px: 18 } }
+    };
     await applyBevyWebRendererDiffs({
         surface: canvas,
         ops: [{
@@ -680,7 +681,13 @@ test('Bevy style diffs forward opacity to the WASM style export', async () => {
             id: node.id,
             patch: { opacity: 0.38 }
         }],
-        virtualScene: null
+        virtualScene: {
+            id: 'opacity_scene',
+            revision: 2,
+            roots: [node.id, liquidGlass.id],
+            nodes: [node, liquidGlass],
+            byId: new Map([[node.id, node], [liquidGlass.id, liquidGlass]])
+        }
     });
 
     assert.deepEqual(calls.flatMap((call) => call.ops || []).find((op) => op.type === 'style')?.patch, {
@@ -689,7 +696,8 @@ test('Bevy style diffs forward opacity to the WASM style export', async () => {
         selected: undefined,
         opacity: 0.38
     });
-    assert.equal(calls.filter((call) => call.type === 'redraw').length, 1);
+    assert.equal(calls.filter((call) => call.type === 'redraw').length, 0);
+    assert.equal(delayedRedraws, 4);
 });
 
 test('live project video without poster cannot enter the RGBA media resolver path', async () => {

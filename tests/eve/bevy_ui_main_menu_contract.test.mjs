@@ -61,14 +61,14 @@ test('Capture screen icon is canonical before and after its lazy module loads', 
     assert.doesNotMatch(initialContentSource, /tool_id:\s*'ui\.capture\.screen',\s*icon:\s*'screen'/);
 });
 
-test('Copy, Paste and Matrix use canonical full-size icon assets', () => {
+test('Copy, Cut, Paste and Matrix use canonical full-size icon assets', () => {
     const contentSource = readFileSync(
         resolve(process.cwd(), 'eVe/intuition/runtime/eve_intuition/main_menu_content_runtime.js'),
         'utf8'
     );
     assert.match(contentSource, /view_table:\s*\{[^\n]*icon:\s*'matrix'/);
-    const minimumVisualScale = { copy: 0.125, paste: 0.125, matrix: 1.28 };
-    for (const key of ['copy', 'paste', 'matrix']) {
+    const minimumVisualScale = { copy: 0.125, cut: 0.125, paste: 0.125, matrix: 1.28 };
+    for (const key of ['copy', 'cut', 'paste', 'matrix']) {
         const source = readFileSync(resolve(process.cwd(), `atome/src/assets/images/icons/${key}.svg`), 'utf8');
         assert.match(source, /<svg[^>]*width="128"[^>]*height="128"[^>]*viewBox="0 0 128 128"/);
         assert.doesNotMatch(source, /(?:width|height):\s*1em/);

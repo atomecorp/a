@@ -21,6 +21,12 @@ The issue is not a CSS `backdrop-filter`, DOM stacking, or a missing menu
 reprojection. Adding a DOM blur surface would create a second visual authority
 and would not repair the WebGPU capture lifecycle.
 
+A later Dashboard-to-project reproduction exposed the remaining alias gap:
+liquid Flower/main-menu surfaces carry the same blur as
+`material.procedural.background_blur_px`, while the active-glass redraw guard
+recognized only `material.backdrop`. Style/scene changes could therefore take
+the one-redraw fast path and freeze an intermediate Dashboard capture.
+
 ## Durable correction
 
 - The one shared backdrop shader derives its sampling extent from the current
@@ -30,6 +36,9 @@ and would not repair the WebGPU capture lifecycle.
 - `bevy_web_renderer_runtime.js` detects active non-zero backdrop blur and
   reuses the existing bounded presentation-prime scheduler after direct
   transforms and settled diffs.
+- The detector treats standard `material.backdrop` and liquid
+  `material.procedural.background_blur_px` as the same active glass. No
+  Dashboard-specific shader, capture, or redraw scheduler exists.
 - Every presentation-prime retry, including the zero-delay retry, is dispatched
   through the owner window timer. This prevents a generated WASM/Winit closure
   from being re-entered while its callback is still active.
