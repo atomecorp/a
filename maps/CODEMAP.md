@@ -2,7 +2,7 @@
 
 ### Canvas lasso Delete and iOS Molecule parentage — 2026-09-16
 
-`eVe/intuition/runtime/eve_intuition/atome_edit_footer_definition_invocation_runtime.js` distinguishes a structured List/Matrix rail (`record.structured_context`) from the Natural canvas rail. Structured Delete remains bound to its active row; canvas Delete forwards the complete canonical selection, including every invisible Molecule owner selected by a lasso. `eVe/intuition/runtime/tool_runtime_molecule_structure.js` remains the whole-owner deletion authority. Native iOS event projection persists structural `parent_id`; derived `molecule_timeline` clips are not membership authority and must not keep an empty Molecule alive.
+`eVe/intuition/runtime/eve_intuition/atome_edit_footer_definition_invocation_runtime.js` distinguishes a structured List/Matrix rail (`record.structured_context`) from the Natural canvas rail. Structured Delete remains bound to its active row; canvas Delete forwards the complete canonical selection, including every invisible Molecule owner selected by a lasso. `eVe/intuition/tools/core/tool_runtime_molecule_structure.js` remains the whole-owner deletion authority. Native iOS event projection persists structural `parent_id`; derived `molecule_timeline` clips are not membership authority and must not keep an empty Molecule alive.
 
 ### Molecule-source composition and contextual Ungroup — 2026-09-15
 
@@ -797,7 +797,7 @@ Selection-style tool ownership:
 - `eVe/intuition/tools/selection_style_state.js` owns the text-selection memory / style-intent mutable state singletons and the timing/selector constants; `selection_style_ranges.js` owns the stateless DOM-range serialization and numeric/font-size helpers.
 - `eVe/intuition/tools/selection_style_context.js` owns the selection target resolvers (selection ids, focused/editing text host, text-style intent, host elements, style-tool interaction targets); `selection_style_text_selection.js` owns the live/remembered editable and preview text-range contexts and the current text-size resolution.
 - `eVe/intuition/tools/selection_style_memory.js` owns capturing/restoring the active text range selection for style tools and the selectionchange/pointerdown bridge.
-- `eVe/intuition/tools/selection_style_atome.js` owns canonical Atome state/property reads, media/text classification, the canonical property update path, and per-selection mutation resolution/application; `selection_style_svg_layer.js` owns selected project SVG-layer color application through that update path.
+- `eVe/intuition/tools/selection_style_atome.js` owns canonical Atome state/property reads, media/text classification, the canonical property update path, and per-selection mutation resolution/application. A selected structural Molecule resolves through canonical `parent_id` ancestry to every live non-Molecule descendant, recursively and without painting transparent Molecule owners; explicit Size remains on its existing recursive transform route. `selection_style_svg_layer.js` owns selected project SVG-layer color application through that update path.
 
 Finder tool ownership:
 

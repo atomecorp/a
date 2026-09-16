@@ -125,3 +125,34 @@ test('Color paints every selected SVG stroke without adding a fill or targeting 
         assert.equal(event.props.background, undefined);
     }
 });
+
+test('selection style treatments recurse through nested Molecules without painting structural owners', async () => {
+    const records = new Map([
+        ['molecule_root', { atome_id: 'molecule_root', type: 'group', project_id: 'project_1', parent_id: 'project_1', properties: { kind: 'group' } }],
+        ['text_child', { atome_id: 'text_child', type: 'text', project_id: 'project_1', parent_id: 'molecule_root', properties: { kind: 'text', text: 'Child' } }],
+        ['molecule_nested', { atome_id: 'molecule_nested', type: 'group', project_id: 'project_1', parent_id: 'molecule_root', properties: { kind: 'group' } }],
+        ['shape_nested', { atome_id: 'shape_nested', type: 'shape', project_id: 'project_1', parent_id: 'molecule_nested', properties: { kind: 'shape' } }],
+        ['text_nested', { atome_id: 'text_nested', type: 'text', project_id: 'project_1', parent_id: 'molecule_nested', properties: { kind: 'text', text: 'Nested' } }],
+        ['deleted_nested', { atome_id: 'deleted_nested', type: 'shape', project_id: 'project_1', parent_id: 'molecule_nested', __deleted: true, properties: { kind: 'shape' } }]
+    ]);
+    const commits = [];
+    globalThis.window = {
+        addEventListener() {}, removeEventListener() {},
+        Atome: {
+            getStateCurrent: async (id) => records.get(id),
+            listStateCurrent: async () => ({ items: [...records.values()] }),
+            commit: async (event) => { commits.push(event); return { ok: true }; }
+        }
+    };
+    const { applyColorToSelection, applyFontToSelection } = await import('../../eVe/intuition/tools/selection_style_apply.js');
+    const { applySelectionStyleMutation } = await import('../../eVe/intuition/tools/selection_style_atome.js');
+
+    assert.equal((await applyColorToSelection('#336699', { selectionIds: ['molecule_root'] })).ok, true);
+    assert.deepEqual(commits.splice(0).map((event) => event.atome_id), ['text_child', 'shape_nested', 'text_nested']);
+
+    assert.equal((await applyFontToSelection('Georgia', { selectionIds: ['molecule_root'] })).ok, true);
+    assert.deepEqual(commits.splice(0).map((event) => event.atome_id), ['text_child', 'text_nested']);
+
+    assert.equal((await applySelectionStyleMutation(() => ({ opacity: 0.4 }), { selectionIds: ['molecule_root'] })).ok, true);
+    assert.deepEqual(commits.map((event) => event.atome_id), ['text_child', 'shape_nested', 'text_nested']);
+});

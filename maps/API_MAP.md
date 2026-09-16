@@ -612,7 +612,10 @@ through `invokeToolGateway`; the tool handlers then enter the selection-style
 facade exactly once. The standard component runtimes expose presentation intent
 only and do not add MCP or mutation routes. Internally, persisted
 `rich_text.spans` may carry optional canonical `font_family` strings and numeric
-pixel `font_size` values alongside `bold` and `color`.
+pixel `font_size` values alongside `bold` and `color`. The existing apply APIs
+also accept a structural Molecule selection: internal target resolution expands
+canonical `parent_id` ancestry to live visual descendants at any depth, while
+structural Molecule owners remain transparent and no new public API is exposed.
 The superseded passive Family 9/17 prototype adds two further closed Squirrel
 presentation APIs: `normalizeMediaCardPresentation` and
 `normalizeSelectionSummaryPresentation`. Their Bevy builders are passive and
