@@ -10,8 +10,10 @@ import {
 } from '../../eVe/domains/rendering/webgpu_compositor.js';
 import {
     applyBevyWebRendererDiffs,
+    applyBevyWebRendererTransformPatch,
     startBevyWebRenderer
 } from '../../eVe/domains/rendering/bevy_web_renderer_runtime.js';
+import { setSurfaceRuntimeState } from '../../eVe/domains/rendering/bevy_web_renderer_helpers.js';
 import {
     createVideoFrameDispatcher,
     scheduleBevyRun
@@ -52,6 +54,40 @@ const sourceSlice = (source, startPattern, endPattern) => {
     assert.notEqual(end, -1);
     return tail.slice(0, end);
 };
+
+test('direct transforms publish the complete backdrop pipeline while glass is visible', () => {
+    const dom = new JSDOM('<!doctype html><html><body><canvas id="backdrop_transform"></canvas></body></html>');
+    const surface = dom.window.document.getElementById('backdrop_transform');
+    const calls = [];
+    let delayedRedraws = 0;
+    dom.window.setTimeout = () => {
+        delayedRedraws += 1;
+        return delayedRedraws;
+    };
+    const wasmModule = {
+        apply_atome_bevy_transform: (patch) => calls.push({ type: 'transform', patch }),
+        request_atome_bevy_redraw: () => calls.push({ type: 'redraw' })
+    };
+    const glass = {
+        id: 'menu_glass',
+        material: { backdrop: { blurPx: 18, tint: [0, 0, 0, 0.3] } }
+    };
+    setSurfaceRuntimeState(surface, {
+        started: true,
+        wasmModule,
+        virtual_scene: { nodes: [glass], byId: new Map([[glass.id, glass]]) }
+    });
+
+    const result = applyBevyWebRendererTransformPatch({
+        surface,
+        patch: { id: 'moving_image', logical_position: [40, 50], logical_size: [200, 120] }
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(calls.filter((call) => call.type === 'transform').length, 1);
+    assert.equal(calls.filter((call) => call.type === 'redraw').length, 1);
+    assert.equal(delayedRedraws, 3);
+});
 
 test('Bevy startup without diagnostics waits across the runner boundary and rejects asynchronous panics', async () => {
     let requestedFrames = 0;
@@ -231,7 +267,7 @@ test('Bevy project renderer guards lock canvas ownership, drag, and video playba
         /;\s*$/
     );
     assert.match(applyDiffsBody, /opsNeedMediaSourceSync\(ops\)/);
-    assert.match(applyDiffsBody, /needsPresentationPrime = effectsChanged \|\| opsNeedPresentationRedrawPrime\(ops\)/);
+    assert.match(applyDiffsBody, /needsPresentationPrime = effectsChanged[\s\S]*opsNeedPresentationRedrawPrime\(ops\)[\s\S]*virtualSceneHasBackdrop\(nextState\.virtual_scene\)/);
     assert.match(applyDiffsBody, /if\s*\(\s*!needsPresentationPrime\s*\)/);
     assert.doesNotMatch(applyDiffsBody, /if\s*\(\s*virtualScene\s*\)\s*\{\s*syncBevyVideoDecodeSources/);
     const videoResourceBody = sourceSlice(
