@@ -255,6 +255,28 @@ fn backdrop_fixture_keeps_text_and_image_in_capture_and_large_glass_circle_in_pr
             .get::<bevy::camera::visibility::RenderLayers>(entity)
             .is_none());
     }
+
+    apply_surface(
+        app.world_mut(),
+        AtomeSurfacePatch {
+            width: 1600.0,
+            height: 900.0,
+            pixel_width: Some(2400.0),
+            pixel_height: Some(1350.0),
+            device_pixel_ratio: Some(1.5),
+        },
+    )
+    .unwrap();
+    let material = app
+        .world()
+        .resource::<Assets<crate::backdrop_surface::BackdropSurfaceMaterial>>()
+        .get(&material_handle)
+        .unwrap();
+    assert_eq!(
+        material.uniform.workspace_size.xy(),
+        Vec2::new(1600.0, 900.0),
+        "a mounted Flower backdrop must sample the resized workspace instead of its stale opening viewport"
+    );
 }
 
 #[test]

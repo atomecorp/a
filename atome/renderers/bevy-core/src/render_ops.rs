@@ -5,6 +5,7 @@ use crate::{
     backdrop_blur::apply_scene_effects,
     backdrop_surface::{
         patch_backdrop_surface, refresh_workspace_backdrop_enabled, resize_backdrop_surface,
+        resize_backdrop_surface_workspace,
     },
     background::{apply_surface_background, resize_surface_background},
     clip::apply_entity_clip,
@@ -244,6 +245,7 @@ pub fn apply_surface(world: &mut World, patch: AtomeSurfacePatch) -> Result<(), 
         Vec2::new(width, height),
         UVec2::new(pixel_width, pixel_height),
     )?;
+    resize_backdrop_surface_workspace(world, [width, height])?;
     let ids: Vec<String> = world
         .resource::<AtomeEntityTable>()
         .by_id

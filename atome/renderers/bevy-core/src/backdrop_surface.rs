@@ -158,6 +158,31 @@ pub fn resize_backdrop_surface(
     Ok(())
 }
 
+pub fn resize_backdrop_surface_workspace(
+    world: &mut World,
+    logical_size: [f32; 2],
+) -> Result<(), String> {
+    let material_handles: Vec<_> = world
+        .query::<&MeshMaterial2d<BackdropSurfaceMaterial>>()
+        .iter(world)
+        .map(|material| material.0.clone())
+        .collect();
+    if material_handles.is_empty() {
+        return Ok(());
+    }
+    let mut materials = world
+        .get_resource_mut::<Assets<BackdropSurfaceMaterial>>()
+        .ok_or_else(|| "bevy_backdrop_surface_assets_required".to_string())?;
+    for handle in material_handles {
+        let mut material = materials
+            .get_mut(&handle)
+            .ok_or_else(|| "bevy_backdrop_surface_material_missing".to_string())?;
+        material.uniform.workspace_size.x = logical_size[0].max(1.0);
+        material.uniform.workspace_size.y = logical_size[1].max(1.0);
+    }
+    Ok(())
+}
+
 pub fn patch_backdrop_surface(
     world: &mut World,
     entity: Entity,
