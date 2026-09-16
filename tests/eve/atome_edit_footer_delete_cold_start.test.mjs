@@ -9,7 +9,7 @@ vi.mock('../../eVe/domains/rendering/project_view_surface_runtime.js', () => ({
 import { createAtomeEditFooterDefinitionInvocationRuntime } from '../../eVe/intuition/runtime/eve_intuition/atome_edit_footer_definition_invocation_runtime.js';
 import { feedContextualRailWithRow } from '../../eVe/domains/rendering/project_view_contextual_rail.js';
 
-test('footer Delete prepares its lazy canonical handler before unified invocation', async () => {
+test('canvas footer Delete prepares its lazy canonical handler and preserves a lasso selection', async () => {
     const dom = new JSDOM('<!doctype html><button id="delete"></button>');
     globalThis.window = dom.window;
     globalThis.document = dom.window.document;
@@ -38,13 +38,56 @@ test('footer Delete prepares its lazy canonical handler before unified invocatio
 
     const result = await runtime.invokeAtomeEditFooterToolDefinitionWithContext({
         key: 'delete', toolId: 'ui.delete.selection', selectionRequired: true
-    }, { atomeId: 'selected_a', payload: { domEl: dom.window.document.getElementById('delete') } });
+    }, {
+        atomeId: 'selected_a',
+        railOnly: true,
+        record: { id: 'selected_a', type: 'group' },
+        payload: { domEl: dom.window.document.getElementById('delete') }
+    });
 
     assert.equal(result.ok, true);
     assert.equal(loaded, true);
     assert.equal(calls.length, 1);
-    assert.deepEqual(calls[0].extraInput.selection_ids, ['selected_a']);
-    assert.equal(payloadOptions[0].preferActiveAtomeOnly, true);
+    assert.deepEqual(calls[0].extraInput.selection_ids, ['stale_a', 'selected_a']);
+    assert.equal(payloadOptions[0].preferActiveAtomeOnly, false);
+    dom.window.close();
+    delete globalThis.window;
+    delete globalThis.document;
+    delete globalThis.HTMLElement;
+});
+
+test('structured row Delete remains scoped to its active canonical record', async () => {
+    const dom = new JSDOM('<!doctype html><button id="delete"></button>');
+    globalThis.window = dom.window;
+    globalThis.document = dom.window.document;
+    globalThis.HTMLElement = dom.window.HTMLElement;
+    const calls = [];
+    const runtime = createAtomeEditFooterDefinitionInvocationRuntime({
+        state: { activeAtomeId: 'selected_row' },
+        ensureDeletePanelModule: async () => {},
+        maybeBlockSelectionRequiredToolActivation: () => null,
+        handleFinderTouch: async () => ({ ok: true }),
+        getFinderToolEl: () => null,
+        invokeToolFromUiButton: async () => ({ ok: true }),
+        invokeUnifiedContextTool: async (input) => { calls.push(input); return { ok: true }; },
+        resolveDefinitionToolId: (definition) => definition.toolId,
+        buildToolExtraInput: (options) => ({
+            selection_ids: options.preferActiveAtomeOnly ? [options.activeAtomeId] : ['other_row', options.activeAtomeId]
+        }),
+        isContextBoundTransportToolId: () => false
+    });
+
+    const result = await runtime.invokeAtomeEditFooterToolDefinitionWithContext({
+        key: 'delete', toolId: 'ui.delete.selection', selectionRequired: true
+    }, {
+        atomeId: 'selected_row',
+        railOnly: true,
+        record: { id: 'selected_row', structured_context: true },
+        payload: { domEl: dom.window.document.getElementById('delete') }
+    });
+
+    assert.equal(result.ok, true);
+    assert.deepEqual(calls[0].extraInput.selection_ids, ['selected_row']);
     dom.window.close();
     delete globalThis.window;
     delete globalThis.document;

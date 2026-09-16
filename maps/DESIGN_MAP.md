@@ -1,5 +1,9 @@
 # Atome / eVe Design Map
 
+### Invisible empty Molecules and lasso Delete — 2026-09-16
+
+An empty Molecule has no independent visual content: it may still be outlined by lasso selection so legacy orphan owners can be found and explicitly deleted. A Natural canvas Delete applies to the whole captured lasso selection, while a List/Matrix row Delete stays scoped to that row. New iOS Molecules retain canonical child parentage, and the existing lifecycle removes a Molecule when its last child disappears. There is no implicit startup purge: a future property-bearing container needs an explicit product model rather than being inferred from stale geometry or timeline projection.
+
 ### Composition release, Paste and standard icons — 2026-09-15
 
 The original held surface gesture keeps ownership while the overlap palette is visible and resolves its final enabled choice at release. Front/Behind and the other four options remain ordinary shared-tool choices; no iOS-only surface or visual state is introduced. Paste is an immediate click/shortcut/Flower action, while its history panel is available only from the existing long press. Copying one visible closed Molecule includes its complete structural subtree; Paste translates that whole structure to the project point where the Flower opened and selects the new closed Molecule as one object, not an arbitrary member. Copy, Paste and Matrix use canonical `128 × 128` SVG assets without intrinsic `1em` sizing; the View palette and reflected View button both use `matrix.svg`, with no per-platform scale override.

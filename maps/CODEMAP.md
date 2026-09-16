@@ -1,5 +1,9 @@
 # Atome / eVe Code Map
 
+### Canvas lasso Delete and iOS Molecule parentage — 2026-09-16
+
+`eVe/intuition/runtime/eve_intuition/atome_edit_footer_definition_invocation_runtime.js` distinguishes a structured List/Matrix rail (`record.structured_context`) from the Natural canvas rail. Structured Delete remains bound to its active row; canvas Delete forwards the complete canonical selection, including every invisible Molecule owner selected by a lasso. `eVe/intuition/runtime/tool_runtime_molecule_structure.js` remains the whole-owner deletion authority. Native iOS event projection persists structural `parent_id`; derived `molecule_timeline` clips are not membership authority and must not keep an empty Molecule alive.
+
 ### Molecule-source composition and contextual Ungroup — 2026-09-15
 
 `surface_text_pointer_runtime.js` records the number of gesture sources separately from `surface_pointer_runtime.js` expanding a single Molecule to its descendants for collective motion. `project_view_drop_feedback.js`, `surface_interaction_runtime.js`, and `project_scene_engine.js` carry that source count through the existing held composition palette and terminal `drag.end`, so one Molecule source can use all six choices without enabling composition for a genuine multi-selection. The result still delegates to `combineCanonicalMolecule`, which preserves the source Molecule envelope and nests it inside the new wrapper. Flower continues to resolve closed descendants to their Molecule owner; its existing `ungroup` capability invokes `ungroupCanonicalMolecule`, with the French presentation labelled « Dégrouper ».

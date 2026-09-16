@@ -1,5 +1,9 @@
 # Atome / eVe API Map
 
+### Canvas lasso Delete and empty Molecule lifecycle — 2026-09-16
+
+No public API or schema addition. `ui.delete.selection` receives the complete canvas selection even when invoked from the Natural contextual rail; only records explicitly marked `structured_context` narrow Delete to one List/Matrix row. Molecule membership is defined by canonical `parent_id`, not stale derived timeline clips. Native iOS ingestion preserves that field, and the existing Molecule lifecycle removes the owner when its final canonical member is deleted. Historical empty owners remain explicitly deletable through the same action rather than being silently purged at startup.
+
 ### Direct Paste routing — 2026-09-15
 
 No public API changes. Internally, `tool.main.copy` and `tool.main.paste` are real momentary proxies to `ui.copy.action` and `ui.paste.action`; they discard the ribbon button's DOM identity, forward canonical selection/project context, and `ui.paste.panel` remains separately registered for long-press history access. The mounted `project_view_<id>` projection is the last-resort current-project resolver when shell globals lag behind. Copy snapshots the complete Molecule subtree from canonical parentage and timeline/member references, while its clipboard group records the selected root IDs. Outside text editing, `pasteFromClipboard` uses the newest internal Atome group before consulting external system text and delegates reconstruction, relative placement, parent/timeline remapping and the single Undo transaction to the existing duplicate owner; the returned source-to-clone map selects only the cloned roots. The existing `drop_position` is the project-space point captured at Flower opening, including when the pointer visually hits a member of a closed Molecule.
