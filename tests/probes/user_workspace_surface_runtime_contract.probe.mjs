@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { setMainMenuRuntime } from '../../eVe/intuition/ribbon/bevy_ui_product_registry.js';
+import { registerPanelGlobals } from '../../eVe/intuition/panel_globals.js';
 import { installMockBrowserEnv } from '../strangler_v2/_env.mjs';
 
 const { window, document } = installMockBrowserEnv();
@@ -16,6 +17,11 @@ window.__currentProject = { id: 'project_resident', name: 'Resident project' };
 window.__eveWorkspaceMode = { mode: 'project', projectId: 'project_resident' };
 
 const calls = [];
+registerPanelGlobals('dashboard_close_fixture', {
+    close: async (context) => {
+        calls.push({ name: 'closePanel', context });
+    }
+});
 setMainMenuRuntime({
     measure: () => ({ active: true, treeMounted: true }),
     showFully: () => {
@@ -76,7 +82,8 @@ assert.equal(window.__eveWorkspaceMode.mode, 'dashboard');
 assert.equal(window.__eveWorkspaceMode.projectId, 'project_resident');
 assert.equal(canvas.parentElement, projectHost);
 assert.equal(document.querySelectorAll('#eve_surface_project').length, 1);
-assert.deepEqual(calls.map((entry) => entry.name), ['open']);
+assert.deepEqual(calls.map((entry) => entry.name), ['closePanel', 'open']);
+assert.equal(calls[0].context?.source?.type, 'dashboard.open');
 assert.equal(calls.some((entry) => entry.name === 'loadProjectAtomes'), false);
 
 calls.length = 0;
@@ -85,14 +92,14 @@ assert.equal(closed.suspended, true);
 assert.equal(window.__eveWorkspaceMode.mode, 'project');
 assert.equal(window.__eveWorkspaceMode.projectId, 'project_resident');
 assert.equal(canvas.parentElement, projectHost);
-assert.deepEqual(calls.map((entry) => entry.name), ['close']);
+assert.deepEqual(calls.map((entry) => entry.name), ['close', 'showFully']);
 assert.equal(calls.some((entry) => entry.name === 'loadProjectAtomes'), false);
 
 calls.length = 0;
 const reopened = await toggleWorkspaceDashboardAndMainMenu({ source: 'main_handle' });
 assert.equal(reopened.ok, true);
 assert.equal(reopened.sceneProjectId, 'project_resident');
-assert.deepEqual(calls.map((entry) => entry.name), ['open']);
+assert.deepEqual(calls.map((entry) => entry.name), ['closePanel', 'open']);
 
 await toggleWorkspaceDashboardAndMainMenu();
 const runtime = window.eveDashboardBevyUiRuntime;

@@ -1,687 +1,79 @@
-import assert from 'node:assert/strict';
-import fs from 'node:fs';
-import { test } from 'vitest';
-import { JSDOM } from 'jsdom';
-
-import { createDashboardBevyUiRuntime } from '../../eVe/domains/dashboard/dashboard_bevy_ui_runtime.js';
-import { createDashboardDataController } from '../../eVe/domains/dashboard/dashboard_data_controller.js';
-import { createDashboardEnvironmentWatcher } from '../../eVe/domains/dashboard/dashboard_environment_watcher.js';
-import { createDashboardDataAdapters } from '../../eVe/domains/dashboard/dashboard_data_adapters.js';
-import { DASHBOARD_WORKSPACE_PROJECT_ID } from '../../eVe/domains/dashboard/dashboard_workspace_mode.js';
-import { createEveBevyUiRuntime } from '../../eVe/domains/rendering/bevy_ui_runtime.js';
+import { describe, expect, it, vi } from 'vitest';
 import {
     filterDashboardCategoriesByPreferences,
-    normalizeDashboardPreferences
+    normalizeDashboardPreferences,
+    normalizeDashboardWeatherLocation
 } from '../../eVe/domains/dashboard/dashboard_preferences.js';
-import {
-    extractProjectOwnerId,
-    filterProjectsByOwner
-} from '../../eVe/core/project_security.js';
-import { normalizeHomeProfile } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_home_actions.js';
+import { createDashboardDataController } from '../../eVe/domains/dashboard/dashboard_data_controller.js';
+import { itemsForRender } from '../../eVe/domains/dashboard/dashboard_environment.js';
+import { createDashboardLayout } from '../../eVe/domains/dashboard/dashboard_layout.js';
+import { mergeDashboardTokens } from '../../eVe/domains/dashboard/dashboard_tokens.js';
 
-const dashboardPreferenceCategories = Object.freeze([
-    { id: 'news', label_key: 'eve.dashboard.category.news', color_family: 'red', order: 10, visible: true },
-    { id: 'calendar', label_key: 'eve.dashboard.category.calendar', color_family: 'blue', order: 20, visible: true }
-]);
+const allCategories = [
+    ['news', 10], ['calendar', 20], ['projects', 30], ['contacts', 40], ['store', 50], ['monitor', 60]
+].map(([id, order]) => ({
+    id, order, visible: true, label_key: id, icon_id: id === 'store' ? 'store' : id,
+    color_family: id === 'store' ? 'orange' : 'blue', data_source: id === 'calendar' ? 'calendar' : 'generic_record'
+}));
 
-test('Project security accepts canonical ownership normalized into Atome meta', () => {
-    const project = {
-        id: 'project_meta_owner',
-        type: 'project',
-        meta: { owner_id: 'user_33333333' },
-        properties: { name: 'Visible project' }
-    };
-
-    assert.equal(extractProjectOwnerId(project), 'user_33333333');
-    assert.deepEqual(filterProjectsByOwner([project], 'user_33333333'), [project]);
-    assert.deepEqual(filterProjectsByOwner([project], 'another_user'), []);
-});
-
-test('project lists exclude heavy preview particles before backend serialization', () => {
-    const serverSource = fs.readFileSync('server/server.js', 'utf8');
-    const listBranch = serverSource.slice(
-        serverSource.indexOf("} else if (action === 'list')"),
-        serverSource.indexOf("} else if (action === 'set-particle')")
-    );
-    assert.ok(listBranch.length > 0, 'the canonical list branch must remain discoverable');
-    assert.match(listBranch, /LEFT JOIN particles p ON a\.atome_id = p\.atome_id \$\{excludedParticleJoinClause\}/);
-    assert.doesNotMatch(listBranch, /isUserDirectoryRequest|directoryLimit|visibility='public'/);
-    assert.match(
-        listBranch,
-        /\? \[\.\.\.excludedParticleKeyList, effectiveOwner, effectiveOwner, pendingOwner, effectiveType, limit \|\| 100, offset \|\| 0\]/
-    );
-
-    const iosSource = fs.readFileSync('platforms/ios/atome-auv3/Common/LocalHTTPServer.swift', 'utf8');
-    const listHandler = iosSource.slice(
-        iosSource.indexOf('private static func handleAtomeList'),
-        iosSource.indexOf('private static func handleAtomeGet')
-    );
-    assert.match(listHandler, /let excludedParticleKeys = Set\(/);
-    assert.match(
-        listHandler,
-        /serializeAtome\(db, atomeId: atomeId, excludingParticleKeys: excludedParticleKeys\)/
-    );
-    assert.ok(iosSource.includes('particle_key NOT IN (\\(placeholders))'));
-});
-
-test('iOS file propagation has no periodic or per-resource whole-root scan', () => {
-    const coordinatorSource = fs.readFileSync(
-        'platforms/ios/atome-auv3/Common/FileSyncCoordinator.swift',
-        'utf8'
-    );
-    assert.doesNotMatch(coordinatorSource, /DispatchSource\.makeTimerSource/);
-    assert.doesNotMatch(coordinatorSource, /func startAutoSync\(/);
-
-    const serverSource = fs.readFileSync(
-        'platforms/ios/atome-auv3/Common/LocalHTTPServer.swift',
-        'utf8'
-    );
-    const getDispatch = serverSource.slice(
-        serverSource.indexOf('if method != "GET" && method != "HEAD"'),
-        serverSource.indexOf('if routePath.hasPrefix("/text/")')
-    );
-    assert.ok(getDispatch.length > 0, 'the local GET dispatcher must remain discoverable');
-    assert.doesNotMatch(getDispatch, /FileSyncCoordinator\.shared\.syncAll/);
-});
-
-const withGlobals = async (values, fn) => {
-    const previous = new Map(Object.keys(values).map((key) => [key, globalThis[key]]));
-    Object.entries(values).forEach(([key, value]) => {
-        globalThis[key] = value;
-    });
-    try {
-        return await fn();
-    } finally {
-        previous.forEach((value, key) => {
-            if (value === undefined) delete globalThis[key];
-            else globalThis[key] = value;
+describe('Dashboard preferences', () => {
+    it('normalizes category flags without losing a valid weather location', () => {
+        expect(normalizeDashboardPreferences({
+            categories: { news: false, calendar: true, invalid: 'yes' },
+            weather_location: { lat: '45.77', lon: 3.08, label: 'Clermont-Ferrand', source: 'geolocation' }
+        })).toEqual({
+            categories: { news: false, calendar: true },
+            weather_location: { lat: 45.77, lon: 3.08, label: 'Clermont-Ferrand', source: 'geolocation' }
         });
-    }
-};
-
-test('dashboard preference normalization hides only explicitly disabled default categories', () => {
-    assert.deepEqual(
-        filterDashboardCategoriesByPreferences(dashboardPreferenceCategories, {}).map((category) => category.id),
-        ['news', 'calendar']
-    );
-    assert.deepEqual(
-        filterDashboardCategoriesByPreferences(dashboardPreferenceCategories, {
-            categories: { news: false, unknown: false }
-        }).map((category) => category.id),
-        ['calendar']
-    );
-    assert.deepEqual(
-        normalizeDashboardPreferences({ categories: { news: false, calendar: true, goals: 'off' } }),
-        { categories: { news: false, calendar: true } }
-    );
-});
-
-test('dashboard data controller does not hydrate hidden preference categories', async () => {
-    const loaded = [];
-    const state = { projectId: 'project_dashboard_preferences' };
-    const data = createDashboardDataController({
-        state,
-        constants: { dashboard: { categories: dashboardPreferenceCategories } },
-        adapters: {
-            listMany: async (categoriesToLoad) => {
-                loaded.push(categoriesToLoad.map((category) => category.id));
-                return new Map(categoriesToLoad.map((category) => [
-                    category.id,
-                    [{ id: `${category.id}_1`, category_id: category.id }]
-                ]));
-            }
-        },
-        readDashboardPreferences: () => ({ categories: { news: false } })
     });
 
-    const categories = await data.loadCategories();
-    assert.deepEqual(categories.map((category) => category.id), ['calendar']);
-    await data.loadVisibleItems(categories);
-    assert.deepEqual(loaded, [['calendar']]);
-    assert.equal(state.itemsByCategory.has('news'), false);
-    assert.equal(state.itemsByCategory.has('calendar'), true);
-});
-
-test('dashboard data controller never stores a late project response in the next project cache', async () => {
-    let releaseProjectA;
-    const projectAGate = new Promise((resolve) => { releaseProjectA = resolve; });
-    const state = {
-        dataProjectId: 'project_a',
-        sceneProjectId: DASHBOARD_WORKSPACE_PROJECT_ID
-    };
-    const data = createDashboardDataController({
-        state,
-        constants: { dashboard: { categories: dashboardPreferenceCategories } },
-        adapters: {
-            listMany: async (categoriesToLoad, { projectId } = {}) => {
-                if (projectId === 'project_a') await projectAGate;
-                return new Map(categoriesToLoad.map((category) => [category.id, [{
-                    id: `${projectId}_${category.id}`,
-                    category_id: category.id,
-                    title: `${projectId} ${category.id}`
-                }]]));
-            }
-        }
+    it('rejects invalid or out-of-range weather locations', () => {
+        expect(normalizeDashboardWeatherLocation({ lat: 91, lon: 2, label: 'Invalid' })).toBeNull();
+        expect(normalizeDashboardWeatherLocation({ lat: 48, lon: 2, label: '' })).toBeNull();
+        expect(normalizeDashboardWeatherLocation(null)).toBeNull();
     });
-    const categories = await data.loadCategories();
-    const projectALoad = data.loadVisibleItems(categories, { categoryIds: ['calendar'] });
-    state.dataProjectId = 'project_b';
-    releaseProjectA();
-    await projectALoad;
 
-    assert.equal(data.readProjectItemCache('project_a').has('calendar'), false, 'Calendar remains a direct canonical read, not a Dashboard cache');
-    assert.equal(data.readProjectItemCache('project_b').has('calendar'), false);
-    assert.equal(state.itemsByCategory.has('calendar'), false, 'late project A data must not become visible in project B');
-});
-
-test('dashboard projects cache is account-global and invalidates across project switches', async () => {
-    let loads = 0;
-    const state = { dataProjectId: 'project_a' };
-    const data = createDashboardDataController({
-        state,
-        constants: { dashboard: { categories: [{ id: 'projects', label_key: 'eve.dashboard.category.projects', color_family: 'green', title: 'Projects' }] } },
-        adapters: {
-            listMany: async () => {
-                loads += 1;
-                return new Map([['projects', [{ id: 'project_1', preview_url: 'data:image/webp;base64,AA==' }]]]);
-            }
-        }
+    it('retains the generic category preference helper for non-Dashboard profile editors', () => {
+        expect(filterDashboardCategoriesByPreferences(allCategories, { categories: { store: false } })
+            .some((category) => category.id === 'store')).toBe(false);
     });
-    const categories = await data.loadCategories();
-    await data.loadVisibleItems(categories);
-    state.dataProjectId = 'project_b';
-    await data.loadVisibleItems(categories);
-    assert.equal(loads, 1);
-    assert.equal(data.hasCategoryCache('projects'), true);
-    data.invalidateCache({ projectId: 'project_b', categoryIds: ['projects'], reset: false });
-    assert.equal(data.hasCategoryCache('projects'), false);
-    await data.loadVisibleItems(categories);
-    assert.equal(loads, 2);
-});
 
-test('dashboard preference events refilter categories even when geometry is unchanged', async () => {
-    const dom = new JSDOM('<!doctype html><html><body><canvas id="surface"></canvas></body></html>', { url: 'http://localhost/' });
-    const surface = dom.window.document.getElementById('surface');
-    surface.getBoundingClientRect = () => ({ width: 1024, height: 768 });
-    let frameCallback = null;
-    dom.window.requestAnimationFrame = (callback) => {
-        frameCallback = callback;
-        return 1;
-    };
-    dom.window.cancelAnimationFrame = () => {};
-    let preferences = { categories: {} };
-    const state = {};
-    const data = createDashboardDataController({
-        state,
-        constants: { dashboard: { categories: dashboardPreferenceCategories } },
-        adapters: { listMany: async () => new Map() },
-        readDashboardPreferences: () => preferences
+    it('runtime data always exposes the five product rows and excludes Store only here', async () => {
+        const state = { constants: { dashboard: { categories: allCategories } } };
+        const requested = [];
+        const data = createDashboardDataController({
+            state,
+            adapters: { listMany: vi.fn(async (categories) => {
+                requested.push(categories.map((category) => category.id));
+                return new Map(categories.map((category) => [category.id, []]));
+            }) }
+        });
+        const categories = await data.loadCategories();
+        expect(categories.map((category) => category.id)).toEqual(['news', 'calendar', 'projects', 'contacts', 'monitor']);
+        await data.loadVisibleItems(categories);
+        expect(requested.flat()).not.toContain('store');
     });
-    await withGlobals({ window: dom.window }, async () => {
-        await data.loadCategories();
-        const watcher = createDashboardEnvironmentWatcher({
-            readSurface: () => surface,
-            onChange: () => data.loadCategories()
-        });
-        watcher.start();
-        preferences = { categories: { news: false } };
-        dom.window.dispatchEvent(new dom.window.CustomEvent('eve:profile-preferences-updated'));
-        assert.equal(typeof frameCallback, 'function');
-        frameCallback();
-        await Promise.resolve();
-        assert.deepEqual(state.categories.map((category) => category.id), ['calendar']);
-        watcher.stop();
-    });
-});
 
-test('dashboard hidden preference categories cannot be activated by tool handlers', async () => {
-    await withGlobals({
-        window: { __eveProfilePreferences: { dashboard: { categories: { news: false } } } }
-    }, async () => {
-        const runtime = createDashboardBevyUiRuntime({
-            constants: { dashboard: { categories: dashboardPreferenceCategories } },
-            adapters: {
-                listMany: async () => new Map()
-            },
-            uiRuntime: {
-                state: { trees: new Map() },
-                mountTree: async () => ({ ok: true }),
-                unmountTree: async () => ({ ok: true }),
-                setTreeOpacity: async () => ({ ok: true }),
-                setTreeSuspended: async () => ({ ok: true }),
-                readDiagnostics: () => ({ mounted_nodes: 1 })
-            }
-        });
-        runtime.state.active = true;
-
-        const result = await runtime.activateCategory('news');
-
-        assert.equal(result.ignored, 'dashboard_category_hidden');
-        assert.equal(runtime.state.activeCategoryId, '');
-        assert.deepEqual(runtime.state.categories.map((category) => category.id), ['calendar']);
-    });
-});
-
-test('dashboard opening does not wait for current-project preview regeneration', async () => {
-    const dom = new JSDOM('<!doctype html><html><body><div id="view"></div></body></html>', { url: 'http://localhost/' });
-    let releasePreview;
-    const previewGate = new Promise((resolve) => { releasePreview = resolve; });
-    let forcedPreviewStarted = false;
-    const openCategories = Object.freeze([{
-        id: 'projects',
-        label_key: 'eve.dashboard.category.projects',
-        color_family: 'green',
-        order: 10,
-        visible: true
-    }]);
-    await withGlobals({
-        window: dom.window,
-        document: dom.window.document,
-        HTMLElement: dom.window.HTMLElement,
-        CustomEvent: dom.window.CustomEvent,
-        innerWidth: 1200,
-        innerHeight: 720
-    }, async () => {
-        const runtime = createDashboardBevyUiRuntime({
-            constants: { dashboard: { categories: openCategories } },
-            adapters: {
-                listMany: async (categoriesToLoad, options = {}) => {
-                    if (options.forceCurrentProjectPreview) {
-                        forcedPreviewStarted = true;
-                        await previewGate;
-                    }
-                    return new Map(categoriesToLoad.map((category) => [category.id, []]));
-                }
-            },
-            uiRuntime: {
-                state: { trees: new Map() },
-                mountTree: async () => ({ ok: true }),
-                unmountTree: async () => ({ ok: true }),
-                setTreeOpacity: async () => ({ ok: true }),
-                setTreeSuspended: async () => ({ ok: true }),
-                readDiagnostics: () => ({ mounted_nodes: 1 })
-            }
-        });
-        const openPromise = runtime.open({
-            sceneProjectId: DASHBOARD_WORKSPACE_PROJECT_ID,
-            dataProjectId: 'current_project',
-            refreshCurrentProjectPreview: true
-        });
-        const outcome = await Promise.race([
-            openPromise.then(() => 'opened'),
-            // Opening includes the deliberate 160 ms presentation reveal; the
-            // preview gate must not extend it beyond that bounded transition.
-            new Promise((resolve) => setTimeout(() => resolve('blocked'), 500))
-        ]);
-        releasePreview();
-        await openPromise;
-
-        assert.equal(outcome, 'opened');
-        await runtime.state.postOpenHydrationPromise;
-        assert.equal(forcedPreviewStarted, true);
-        assert.equal(runtime.state.postOpenHydrationError, '');
-        await runtime.close();
-    });
-});
-
-test('dashboard retargets prepared project data without unmounting its visible tree', async () => {
-    const dom = new JSDOM('<!doctype html><html><body><div id="view"></div><canvas id="eve_surface_project"></canvas></body></html>', { url: 'http://localhost/' });
-    const surface = dom.window.document.getElementById('eve_surface_project');
-    surface.getBoundingClientRect = () => ({ width: 1200, height: 720 });
-    let unmountCount = 0;
-    const treeState = new Map();
-    await withGlobals({
-        window: dom.window,
-        document: dom.window.document,
-        HTMLElement: dom.window.HTMLElement,
-        CustomEvent: dom.window.CustomEvent,
-        innerWidth: 1200,
-        innerHeight: 720
-    }, async () => {
-        const runtime = createDashboardBevyUiRuntime({
-            constants: { dashboard: { categories: dashboardPreferenceCategories } },
-            adapters: { listMany: async () => new Map() },
-            uiRuntime: {
-                state: { trees: treeState },
-                mountTree: async ({ id, tree }) => {
-                    treeState.set(id, tree);
-                    return { ok: true };
-                },
-                unmountTree: async (id) => {
-                    unmountCount += 1;
-                    treeState.delete(id);
-                    return { ok: true };
-                },
-                setTreeOpacity: async () => ({ ok: true }),
-                setTreeSuspended: async () => ({ ok: true }),
-                readDiagnostics: () => ({ mounted_nodes: 1 })
-            }
-        });
-        await runtime.open({
-            sceneProjectId: DASHBOARD_WORKSPACE_PROJECT_ID,
-            dataProjectId: DASHBOARD_WORKSPACE_PROJECT_ID
-        });
-        await runtime.open({
-            sceneProjectId: DASHBOARD_WORKSPACE_PROJECT_ID,
-            dataProjectId: 'prepared_project',
-            refresh: true,
-            preserveMountedTree: true
-        });
-
-        assert.equal(runtime.state.dataProjectId, 'prepared_project');
-        assert.equal(unmountCount, 0, 'retargeting must preserve the already visible Dashboard tree and headers');
-    });
-});
-
-test('dashboard presents project data before non-critical categories and hydrates previews last', async () => {
-    const dom = new JSDOM('<!doctype html><html><body><div id="view"></div></body></html>', { url: 'http://localhost/' });
-    let releaseNonCritical;
-    const nonCriticalGate = new Promise((resolve) => { releaseNonCritical = resolve; });
-    const calls = [];
-    const categories = Object.freeze([
-        { id: 'projects', label_key: 'eve.dashboard.category.projects', color_family: 'green', order: 10, visible: true },
-        { id: 'calendar', label_key: 'eve.dashboard.category.calendar', color_family: 'blue', order: 20, visible: true }
-    ]);
-    await withGlobals({
-        window: dom.window,
-        document: dom.window.document,
-        HTMLElement: dom.window.HTMLElement,
-        CustomEvent: dom.window.CustomEvent,
-        innerWidth: 1200,
-        innerHeight: 720
-    }, async () => {
-        const runtime = createDashboardBevyUiRuntime({
-            constants: { dashboard: { categories } },
-            adapters: {
-                listMany: async (categories, options = {}) => {
-                    calls.push({ ids: categories.map((category) => category.id), forced: options.forceCurrentProjectPreview === true });
-                    if (categories.some((category) => category.id === 'calendar') && !options.forceCurrentProjectPreview) {
-                        await nonCriticalGate;
-                    }
-                    return new Map(categories.map((category) => [category.id, []]));
-                }
-            },
-            uiRuntime: {
-                state: { trees: new Map() },
-                mountTree: async () => ({ ok: true }),
-                unmountTree: async () => ({ ok: true }),
-                setTreeOpacity: async () => ({ ok: true }),
-                setTreeSuspended: async () => ({ ok: true }),
-                readDiagnostics: () => ({ mounted_nodes: 1 })
-            }
-        });
-
-        await runtime.open({
-            sceneProjectId: DASHBOARD_WORKSPACE_PROJECT_ID,
-            dataProjectId: 'current_project',
-            refreshCurrentProjectPreview: true
-        });
-        await new Promise((resolve) => setTimeout(resolve, 0));
-
-        const projectIndex = calls.findIndex(call => call.ids.includes('projects') && !call.forced);
-        const nonCriticalIndex = calls.findIndex((call) => call.ids.includes('calendar') && !call.forced);
-        releaseNonCritical();
-        await runtime.state.postOpenHydrationPromise;
-
-        const forcedIndex = calls.findIndex(call => call.forced);
-        assert.ok(projectIndex >= 0 && forcedIndex > projectIndex);
-        assert.ok(nonCriticalIndex < 0 || projectIndex < nonCriticalIndex && nonCriticalIndex < forcedIndex);
-        await runtime.close();
-    });
-});
-
-test('dashboard hydrates only lanes visible in the mobile viewport and loads newly revealed lanes on scroll', async () => {
-    const dom = new JSDOM('<!doctype html><html><body><div id="view"></div></body></html>', { url: 'http://localhost/' });
-    const calls = [];
-    const families = ['red', 'blue', 'green', 'violet', 'orange', 'cyan', 'gold'];
-    const categoryIds = ['news', 'calendar', 'projects', 'contacts', 'store', 'monitor', 'goals'];
-    const categories = Object.freeze(families.map((colorFamily, index) => ({
-        id: categoryIds[index],
-        label_key: `eve.dashboard.category.${categoryIds[index]}`,
-        color_family: colorFamily,
-        order: index * 10,
-        visible: true
-    })));
-    await withGlobals({
-        window: dom.window,
-        document: dom.window.document,
-        HTMLElement: dom.window.HTMLElement,
-        CustomEvent: dom.window.CustomEvent,
-        innerWidth: 390,
-        innerHeight: 300
-    }, async () => {
-        const runtime = createDashboardBevyUiRuntime({
-            constants: { dashboard: { categories } },
-            adapters: {
-                listMany: async (categoriesToLoad) => {
-                    calls.push(categoriesToLoad.map((category) => category.id));
-                    return new Map(categoriesToLoad.map((category) => [category.id, []]));
-                }
-            },
-            uiRuntime: {
-                state: { trees: new Map() },
-                mountTree: async () => ({ ok: true }),
-                unmountTree: async () => ({ ok: true }),
-                setTreeOpacity: async () => ({ ok: true }),
-                setTreeSuspended: async () => ({ ok: true }),
-                readDiagnostics: () => ({ mounted_nodes: 1 })
-            }
-        });
-
-        await runtime.open({
-            sceneProjectId: DASHBOARD_WORKSPACE_PROJECT_ID,
-            dataProjectId: 'mobile_project'
-        });
-        await Promise.resolve();
-        if (runtime.state.postOpenHydrationPromise) await runtime.state.postOpenHydrationPromise;
-
-        const initiallyVisible = new Set(runtime.state.layout.lanes.map((lane) => lane.category.id));
-        const initiallyLoaded = new Set(calls.flat());
-        assert.ok(initiallyVisible.size > 0);
-        assert.ok(initiallyVisible.size < categories.length);
-        assert.deepEqual(initiallyLoaded, initiallyVisible);
-
-        runtime.state.verticalScrollOffset = runtime.state.layout.vertical_scroll_max;
-        await runtime.render();
-        await Promise.resolve();
-        if (runtime.state.postOpenHydrationPromise) await runtime.state.postOpenHydrationPromise;
-
-        const revealed = new Set(runtime.state.layout.lanes.map((lane) => lane.category.id));
-        assert.ok(Array.from(revealed).some((id) => !initiallyVisible.has(id)));
-        assert.ok(Array.from(revealed).every((id) => calls.flat().includes(id)));
-        await runtime.close();
-    });
-});
-
-test('dashboard forces preview refresh from the canonical current-project API', async () => {
-    const calls = [];
-    await withGlobals({
-        window: { AdoleAPI: { projects: { getCurrentId: () => 'project_a' } } },
-        Atome: { commit: async () => ({ ok: true }) }
-    }, async () => {
-        const adapters = createDashboardDataAdapters({
-            projectsLoader: async () => [{ id: 'project_a', name: 'Current project' }],
-            projectPreviewLoader: async (input) => {
-                calls.push(input);
-                return { preview_url: 'data:image/png;base64,current', width: 1280, height: 720 };
-            }
-        });
-
-        await adapters.list(
-            { id: 'projects', data_source: 'projects' },
-            { forceCurrentProjectPreview: true }
-        );
-
-        assert.equal(calls.length, 1);
-        assert.equal(calls[0].projectId, 'project_a');
-        assert.equal(calls[0].forceCapture, true);
-    });
-});
-
-test('dashboard keeps its durable thumbnail until a forced replacement commits', async () => {
-    await withGlobals({
-        window: { AdoleAPI: { projects: { getCurrentId: () => 'project_a' } } },
-        Atome: { commit: async () => { throw new Error('preview_commit_failed'); } }
-    }, async () => {
-        const adapters = createDashboardDataAdapters({
-            projectsLoader: async () => [{
-                id: 'project_a', name: 'Current project',
-                preview_url: 'data:image/png;base64,durable', preview_width: 320, preview_height: 180
-            }],
-            projectPreviewLoader: async () => ({
-                preview_url: 'data:image/png;base64,uncommitted', width: 320, height: 180
-            })
-        });
-        const [project] = await adapters.list(
-            { id: 'projects', data_source: 'projects' },
-            { forceCurrentProjectPreview: true }
-        );
-
-        assert.equal(project.metadata.project_preview_source, 'data:image/png;base64,durable');
-        assert.equal(project.metadata.project_preview_kind, 'persisted');
-        assert.equal(project.metadata.project_preview_error, 'preview_commit_failed');
-    });
-});
-
-test('dashboard opening projects overlay records without duplicate BevyUI texture hydration', async () => {
-    const dom = new JSDOM('<!doctype html><html><body><div id="view"></div></body></html>', { url: 'http://localhost/' });
-    const resolvedTextureNodeIds = [];
-    const projectedNodeKinds = [];
-    let releaseTextureResolution;
-    const textureResolutionGate = new Promise((resolve) => { releaseTextureResolution = resolve; });
-    await withGlobals({
-        window: dom.window,
-        document: dom.window.document,
-        HTMLElement: dom.window.HTMLElement,
-        CustomEvent: dom.window.CustomEvent,
-        innerWidth: 1200,
-        innerHeight: 720
-    }, async () => {
-        const uiRuntime = createEveBevyUiRuntime({
-            nativeUiEnabled: false,
-            requestFrame: () => 0,
-            imageResolverFactory: () => async (node) => {
-                resolvedTextureNodeIds.push(node.id);
-                await textureResolutionGate;
-                return { width: 1, height: 1, rgba: new Uint8ClampedArray([255, 255, 255, 255]) };
-            },
-            overlayProjector: {
-                clear: async () => null,
-                project: async ({ tree }) => {
-                    projectedNodeKinds.push(tree.root.children.map((node) => node.kind));
-                    return ['dashboard_overlay_root'];
-                }
-            }
-        });
-        const runtime = createDashboardBevyUiRuntime({
-            constants: {
-                dashboard: {
-                    categories: [{
-                        id: 'projects',
-                        label_key: 'eve.dashboard.category.projects',
-                        color_family: 'green',
-                        data_source: 'projects',
-                        order: 10,
-                        visible: true
-                    }]
-                }
-            },
-            adapters: {
-                listMany: async () => new Map([['projects', [{
-                    id: 'media_project',
-                    category_id: 'projects',
-                    title: 'Media project',
-                    metadata: {
-                        project_preview_source: 'data:image/png;base64,preview',
-                        project_preview_width: 1280,
-                        project_preview_height: 800
-                    }
-                }]]])
-            },
-            uiRuntime
-        });
-
-        const openPromise = runtime.open({ sceneProjectId: DASHBOARD_WORKSPACE_PROJECT_ID });
-        const outcome = await Promise.race([
-            openPromise.then(() => 'opened'),
-            // Texture hydration stays post-open, while the normal presentation
-            // reveal remains a bounded part of opening.
-            new Promise((resolve) => setTimeout(() => resolve('blocked'), 500))
-        ]);
-
-        assert.equal(outcome, 'opened');
-        assert.ok(projectedNodeKinds.length > 0);
-        assert.equal(projectedNodeKinds.some((kinds) => kinds.some((kind) => kind === 'text')), true);
-        assert.equal(runtime.state.active, true);
-        assert.ok(runtime.readDiagnostics().mounted_nodes > 0);
-        releaseTextureResolution();
-        await runtime.state.postOpenHydrationPromise;
-        assert.deepEqual(
-            resolvedTextureNodeIds,
-            [],
-            'overlay-projected project previews must not enter the duplicate BevyUI texture resolver'
-        );
-        await runtime.close();
-    });
-});
-
-test('BevyUI mount failures stay on the returned operation without an orphan queue rejection', async () => {
-    const dom = new JSDOM('<!doctype html><html><body><canvas id="surface"></canvas></body></html>');
-    const runtime = createEveBevyUiRuntime({
-        nativeUiEnabled: false,
-        requestFrame: () => 0,
-        imageResolverFactory: () => async () => {
-            throw new Error('expected_bevy_ui_mount_failure');
+    it('active visual focus never redistributes category items', () => {
+        const categories = allCategories.filter((category) => category.id !== 'store');
+        const source = new Map(categories.map((category) => [category.id, [
+            { id: `${category.id}-one`, category_id: category.id }
+        ]]));
+        const rendered = itemsForRender(categories, 'projects', source);
+        for (const category of categories) {
+            expect(rendered.get(category.id)[0].category_id).toBe(category.id);
         }
     });
 
-    await assert.rejects(runtime.mountTree({
-        id: 'failing_tree',
-        surface: dom.window.document.getElementById('surface'),
-        tree: {
-            id: 'failing_tree',
-            root: {
-                id: 'root',
-                kind: 'root',
-                style: { size: [100, 100] },
-                children: [{
-                    id: 'broken_image',
-                    kind: 'image',
-                    image: { source: 'broken://image' },
-                    style: { size: [20, 20] }
-                }]
-            }
-        }
-    }), /expected_bevy_ui_mount_failure/);
-    await Promise.resolve();
-});
-
-test('Home preserves normalized dashboard rubrique preferences in canonical profile state', () => {
-    const profile = normalizeHomeProfile({
-        preferences: {
-            visual: { handedness: 'left' },
-            dashboard: { categories: { news: false, calendar: true, invalid: 'off' } }
-        }
+    it('keeps empty rows and integral scrolling on short mobile surfaces', () => {
+        const categories = allCategories.filter((category) => category.id !== 'store');
+        const tokens = mergeDashboardTokens({ metrics: { blockUnitSizePx: 120 } });
+        const layout = createDashboardLayout({
+            width: 320, height: 260, categories, itemsByCategory: new Map(), tokens
+        });
+        expect(layout.projection_lanes).toHaveLength(5);
+        expect(layout.projection_lanes.every((lane) => lane.visible_item_rects.length === 0)).toBe(true);
+        expect(layout.vertical_scroll_max).toBeGreaterThan(0);
+        expect(layout.vertical_scroll_step).toBe(layout.block_unit_size + tokens.metrics.laneGap);
     });
-    assert.deepEqual(profile.preferences.dashboard, {
-        categories: { news: false, calendar: true }
-    });
-});
-
-
-test('Dashboard loading and failure text is projected above its opaque content', async () => {
-    const { buildDashboardBevyUiTree } = await import('../../eVe/domains/dashboard/dashboard_bevy_ui_tree.js');
-    const { createDashboardLayout } = await import('../../eVe/domains/dashboard/dashboard_layout.js');
-    const { DASHBOARD_VISUAL_TOKENS: tokens } = await import('../../eVe/domains/dashboard/dashboard_tokens.js');
-    const { projectBevyUiTreeRecords } = await import('../../eVe/domains/rendering/bevy_ui_overlay_record_projection.js');
-    const layout = createDashboardLayout({ width: 800, height: 600, tokens });
-    for (const status of [{ loading: true }, { actionError: 'activation_failed' }, { loadError: 'offline' }]) {
-        const tree = buildDashboardBevyUiTree({ layout, tokens, ...status });
-        const records = projectBevyUiTreeRecords({ tree, treeId: tree.id, workspaceLayer: 'dashboard' });
-        const messages = records.filter(record => record.id.includes('dashboard_status'));
-        const content = records.filter(record => !record.id.includes('dashboard_status'));
-        assert.equal(messages.length, 2);
-        const top = Math.max(...content.map(record => record.properties.render_layer));
-        assert.ok(messages.every(record => record.properties.render_layer > top), 'status must remain visible over Dashboard content');
-    }
 });

@@ -449,7 +449,11 @@ Primary sources:
 - `eVe/domains/dashboard/dashboard_data_controller.js`
 - `eVe/domains/dashboard/dashboard_environment.js`
 - `eVe/domains/dashboard/dashboard_environment_watcher.js`
-- `eVe/domains/dashboard/dashboard_focus_transition.js`
+- `eVe/domains/dashboard/dashboard_glass_material.js`
+- `eVe/domains/dashboard/dashboard_header_records.js`
+- `eVe/domains/dashboard/dashboard_card_records.js`
+- `eVe/domains/dashboard/dashboard_weather_card_records.js`
+- `eVe/domains/dashboard/dashboard_weather_preferences.js`
 - `eVe/domains/dashboard/dashboard_bevy_ui_runtime.js`
 - `eVe/domains/dashboard/dashboard_preferences.js`
 - `eVe/domains/dashboard/dashboard_bevy_ui_runtime.js`
@@ -469,7 +473,7 @@ Exposure:
 - Surface interaction hook: `setRenderSurfaceInteractionInterceptor(zone, interceptor)` in `surface_runtime.js`.
 - Project scene UI-intent hook: `setProjectSceneUiIntentHandler(handler)` in `project_scene_runtime.js`, registered by eVe boot for `atome.edit.enter`, `atome.edit.activate`, `atome.edit.exit`, and `atome.edit.fullscreen.toggle` across all project render/update paths.
 - Tool ids: `tool.dashboard.news`, `tool.dashboard.monitor`, `tool.dashboard.goals`, and hidden future `tool.dashboard.store`.
-- Entry points: the visible BevyUI main-menu Atome tool opens/closes the Dashboard in active workspaces through `toggleWorkspaceDashboardAndMainMenu({ source: "bevy_ui_main_menu_atome" })`. Successful authenticated and anonymous workspace openings route through `eVe/intuition/tools/user_workspace_surface_runtime.js`, which attaches the shared canvas to the neutral Dashboard workspace, reasserts the internally registered menu through `workspace_main_menu_visibility.js`, opens the Dashboard runtime, and verifies readiness from mounted overlay records. No browser menu alias or private DOM ribbon handle participates in this route. An explicit project-to-Dashboard transition alone requests current-project preview refresh; boot/auth/anonymous entry never loads a user project. Direct `tool.main.home` remains the user/Home panel route.
+- Entry points: the visible BevyUI main-menu Atome tool opens/closes the Dashboard in active workspaces through `toggleWorkspaceDashboardAndMainMenu({ source: "bevy_ui_main_menu_atome" })`. Successful authenticated and anonymous workspace openings route through `eVe/intuition/tools/user_workspace_surface_runtime.js`, which awaits `closeAllPanels(...)`, attaches the shared canvas to the neutral Dashboard workspace, suspends the internally registered menu through `workspace_main_menu_visibility.js`, opens the Dashboard runtime, and verifies readiness from mounted overlay records. No browser menu alias or private DOM ribbon handle participates in this route. An explicit project-to-Dashboard transition alone requests current-project preview refresh; boot/auth/anonymous entry never loads a user project. Direct `tool.main.home` remains the user/Home panel route.
 - Atome contextual-edit bridge: the module registry in `atome_contextual_edit_registry.js` exposes the closed runtime methods `enter`, `activate`, `exit`, `toggleFullscreen`, and `readState`; `readState()` reports the session-only `suspended` flag and suppresses `menuVisible` outside project mode. There is no window-global footer API.
 
 Boundary status: Semi-public closed eVe product runtime. Dashboard item lists are read-only projections; Calendar, Contacts, and Projects are reached through their existing APIs/adapters. Store is an explicit no-op until its domain is defined.
@@ -477,7 +481,7 @@ Boundary status: Semi-public closed eVe product runtime. Dashboard item lists ar
 Effect model:
 
 - Dashboard open is progressive within one canonical BevyUI projection path: structural shape records are mounted and faded first, then the existing post-open task mounts the complete tree. This is not a fallback renderer or a second state owner.
-- Open/close/render are ephemeral Bevy UI tree operations over the neutral Dashboard scene by default. Opening builds a disposable Bevy UI tree whose nodes carry canonical dashboard overlay records under the `__eve_bevy_ui_` prefix, mounts that tree through the shared `eve_surface_project` Bevy UI runtime, starts the tree opacity at `0`, then fades it to its resolved visual opacity. Rubrique focus animation is internal runtime state owned by `dashboard_focus_transition.js` and represented in the mounted tree without DOM, CSS animation, a second canvas, or an alternate renderer path. Closing cancels pending dashboard work, fades the mounted tree opacity to `0`, unmounts the `dashboard_bevy_ui` tree, and clears runtime layout/focus state; a closed Dashboard therefore leaves zero Dashboard Bevy UI nodes in the active surface. Warmup is data-only and never mounts Bevy UI nodes or writes hidden/offscreen records into the scene.
+- Open/close/render are ephemeral Bevy UI tree operations over the neutral Dashboard scene by default. Opening suspends the main-menu tree, builds a disposable Bevy UI tree whose nodes carry canonical dashboard overlay records under the `__eve_bevy_ui_` prefix, mounts that tree through the shared `eve_surface_project` Bevy UI runtime, starts the tree opacity at `0`, then fades it to its resolved visual opacity. Header focus is a visual active-state toggle and never redistributes records or starts an animation controller. Closing cancels pending dashboard work, fades the mounted tree opacity to `0`, unmounts the `dashboard_bevy_ui` tree, and clears runtime layout/focus state; a closed Dashboard therefore leaves zero Dashboard Bevy UI nodes in the active surface. The menu resumes only after effective project activation. Warmup is data-only and never mounts Bevy UI nodes or writes hidden/offscreen records into the scene.
 - Dashboard render calls keep a Bevy UI tree/layout cache and remount only the current dashboard tree through `dashboard_bevy_ui_runtime.js`; overlay records remain owned by the Bevy UI projection path instead of the deleted legacy dashboard record scheduler. Layout resolution reuses the environment watcher snapshot and item projection uses `createDashboardItemsForRenderMemo()` so pointermove, wheel, fade, and inertial frames do not repeat environment DOM reads or item dedupe work. Pointermove, wheel, and inertial scroll are coalesced through a cancellable `requestAnimationFrame` scheduler so close cannot be followed by a stale visible dashboard render.
 - Vertical wheel input resolves directly to a canonical lane snap point and one coalesced render. `layout.lanes` remains the visible hit-test set, while `layout.projection_lanes` retains every category at a visible or off-canvas position so GPU record ids remain stable across scroll.
 - `dashboard_data_controller.js` owns per-`projectId` dashboard item cache, targeted category invalidation, visible-category hydration, and cache-first category activation. A missing focused-category cache loads that category before treating it as empty, while stale cached categories paint immediately and are refreshed only by explicit invalidation.
@@ -1483,7 +1487,10 @@ directory commands. `/ws/sync` is server-driven delivery/replay and has no pull
 or mutation action. Incoming control frames are processed serially per
 connection, preserving their arrival order and bounding vault replay admission;
 an internal processing rejection closes only the affected connection with
-`sync_processing_failed`.
+`sync_processing_failed`. `UserVaultProvider` starts workers without inheriting
+the orchestrator's Node execution flags, waits for their graceful exit, and
+force-stops only an owned unresponsive child after the bounded timeout.
+`userVaultProcess.js` treats IPC disconnection as server-owner termination.
 
 Boundary status: Open framework security. eVe may call these contracts but must not own product-specific bypasses.
 
@@ -2572,3 +2579,12 @@ owns its geometry across surface changes through `subscribeRenderSurfaceSize`,
 re-deriving the centre from the stored opening point, and never interrupts a close.
 Root cause, evidence and rejected hypotheses:
 `known-bug-solutions/ios-panel-input-fast-tap-blur/README.md`.
+
+### 2026-09-16 — Dashboard API interne plein écran (état courant)
+
+- `createDashboardLayout()` expose `surface_rect`, cinq `projection_lanes`, des cartes unitaires et les offsets/snap points ; il n’expose plus `create_rect` et n’utilise plus la hauteur du menu.
+- `normalizeDashboardPreferences()` conserve `categories` pour les éditeurs de profil existants et valide `weather_location: { lat, lon, label, source }`. Le runtime montre toujours les cinq rubriques produit ; Store reste un outil séparé.
+- `createDashboardNewsModules()` injecte météo, permission/géolocalisation, géocodage inverse, lecture/persistance, horloge et intervalle. `reverseGeocodePlace()` étend Finder. `persistDashboardWeatherLocation()` passe par `loadUserProfile`/`upsertUserProfile`, sans stockage parallèle.
+- `setWorkspaceMainMenuDashboardSuspended(boolean)` est l’opération interne unique de suspension/réactivation du menu Dashboard ; elle démonte/remonte sa projection BevyUI et retire sa surface liquide sans modifier son contenu canonique.
+- `buildDashboardRecords()` projette une base opaque, l’image profil `cover`, le verre canonique et les médias directs. Aucun nouvel API public, MCP, renderer, canvas ou chemin de mutation n’est introduit.
+- `dashboardContentGlassStyle(categoryColor, tokens)` construit la base obligatoire de chaque cellule hors en-tête à partir de `tokens.contentGlass` et retourne remplissage transparent, matériau backdrop teinté/flouté et opacité média. Les builders météo et carte partagent cette opération ; une image reste une couche interne translucide et ne remplace jamais la surface vitrée.

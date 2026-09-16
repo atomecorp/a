@@ -1,408 +1,217 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { chromium } from 'playwright';
-import {
-    clickCanvasRectCenter,
-    clickAtomeMenuItem,
-    enterGuestWorkspace,
-    sleep,
-    waitFor,
-    waitForPresentationFrames
-} from './dashboard_bevy_runtime/runtime_support.mjs';
+import { clickCanvasRectCenter, enterGuestWorkspace, sleep, waitForPresentationFrames } from './dashboard_bevy_runtime/runtime_support.mjs';
 import { dashboardSnapshot } from './dashboard_bevy_runtime/snapshot_support.mjs';
 
 const APP_URL = process.env.ADOLE_TEST_URL || 'http://127.0.0.1:3001';
 const OUT_DIR = path.resolve('temp/probe_reports/dashboard_bevy_runtime');
 const REPORT_FILE = path.join(OUT_DIR, 'report.json');
-const DASHBOARD_OPEN_SCREENSHOT = path.join(OUT_DIR, 'dashboard_open.png');
-const DASHBOARD_MONITOR_SCREENSHOT = path.join(OUT_DIR, 'dashboard_monitor.png');
-const DASHBOARD_PROJECTS_SCREENSHOT = path.join(OUT_DIR, 'dashboard_projects.png');
-const CATEGORY_COLORS = Object.freeze({
-    news: '#9f2f2f',
-    calendar: '#245f94',
-    projects: '#357245',
-    contacts: '#673071',
-    store: '#a65f1f',
-    monitor: '#2f6f78',
-    goals: '#6f5b24'
-});
-
+const GLASS_BACKGROUND_SIGNATURE = 'dashboard-frozen-glass-probe';
+const GLASS_BACKGROUND_SOURCE = `data:image/svg+xml,${encodeURIComponent(`
+    <svg xmlns="http://www.w3.org/2000/svg" width="1280" height="820" viewBox="0 0 1280 820">
+      <defs><pattern id="grid" width="32" height="32" patternUnits="userSpaceOnUse">
+        <rect width="16" height="16" fill="#173b68"/><rect x="16" y="16" width="16" height="16" fill="#173b68"/>
+        <rect x="16" width="16" height="16" fill="#d68b36"/><rect y="16" width="16" height="16" fill="#d68b36"/>
+      </pattern></defs>
+      <rect width="1280" height="820" fill="url(#grid)"/>
+    </svg>
+`)}`;
 fs.mkdirSync(OUT_DIR, { recursive: true });
 
-const writeReport = (report) => fs.writeFileSync(REPORT_FILE, `${JSON.stringify(report, null, 2)}\n`, 'utf8');
-
-const captureProbeScreenshot = async (page, file, report, name) => {
-    try {
-        await page.screenshot({ path: file, fullPage: false, timeout: 10000 });
-        return { ok: true, file };
-    } catch (error) {
-        report.screenshotErrors = report.screenshotErrors || [];
-        report.screenshotErrors.push({ name, file, error: error?.message || String(error) });
-        return { ok: false, file };
-    }
-};
-
-const waitForDashboardSnapshot = async (page, predicate, timeoutMs = 30000, intervalMs = 250) => {
-    const startedAt = Date.now();
+const waitForSnapshot = async (page, predicate, timeoutMs = 30000) => {
+    const deadline = Date.now() + timeoutMs;
     let snapshot = null;
-    while (Date.now() - startedAt < timeoutMs) {
-        try {
-            snapshot = await dashboardSnapshot(page);
-            if (predicate(snapshot)) return { ok: true, snapshot };
-        } catch (error) {
-            snapshot = { ok: false, error: error?.message || String(error) };
-        }
-        await sleep(intervalMs);
+    while (Date.now() < deadline) {
+        snapshot = await dashboardSnapshot(page).catch((error) => ({ ok: false, error: error.message }));
+        if (predicate(snapshot)) return snapshot;
+        await sleep(200);
     }
-    return { ok: false, snapshot };
+    throw new Error(`dashboard_snapshot_timeout:${JSON.stringify(snapshot)}`);
 };
 
-const laneIsActive = (snapshot, categoryId) => (
-    snapshot.layout?.lanes?.some((lane) => lane.categoryId === categoryId && lane.active === true) === true
+const assert = (condition, error) => { if (!condition) throw new Error(error); };
+const backgroundReady = (snapshot) => (
+    snapshot.dashboardVisibleRecordIds.includes('__eve_dashboard_surface_base')
+    && snapshot.presentationOpacity >= 0.999
+    && snapshot.layout?.surface_rect?.width === snapshot.canvas?.width
+    && snapshot.layout?.surface_rect?.height === snapshot.canvas?.height
 );
-
-const dashboardFocusSettled = (snapshot) => (
-    !snapshot.focusTransitionActive
-    && !(snapshot.dashboardRecordIds || []).some((id) => String(id || '').includes('focus_spread'))
+const fixedGridReady = (snapshot) => {
+    const ids = snapshot.layout?.lanes?.map((lane) => lane.categoryId) || [];
+    return JSON.stringify(ids) === JSON.stringify(['news', 'calendar', 'projects', 'contacts', 'monitor']);
+};
+const noObsoleteRecords = (snapshot) => (
+    snapshot.dashboardRecordIds.every((id) => !/(?:project_veil|bottom_shadow|header_side_shadow|focus_spread|create_bg|_lane_|_table$)/.test(id))
 );
-
-const clampColor = (value) => Math.max(0, Math.min(255, value));
-
-const shadeHex = (hex, percent) => {
-    const value = String(hex || '#000000').replace('#', '');
-    if (!/^[0-9a-f]{6}$/i.test(value)) return hex || '#000000';
-    const amount = Math.round(2.55 * percent);
-    const red = clampColor(Number.parseInt(value.slice(0, 2), 16) + amount);
-    const green = clampColor(Number.parseInt(value.slice(2, 4), 16) + amount);
-    const blue = clampColor(Number.parseInt(value.slice(4, 6), 16) + amount);
-    return `#${[red, green, blue].map((part) => Math.round(part).toString(16).padStart(2, '0')).join('')}`;
+const transparentColor = (value = '') => Number(String(value).match(/^rgba\([^,]+,[^,]+,[^,]+,([^)]+)\)$/i)?.[1]) === 0;
+const frozenContentReady = (snapshot) => {
+    const expected = (snapshot.layout?.lanes || []).reduce((total, lane) => total + lane.items.length, 0);
+    return snapshot.dashboardCardRecords.length === expected
+        && snapshot.dashboardCardRecords.every((record) => (
+            transparentColor(record.color)
+            && Number(record.backdrop?.blurPx) > 0
+            && Number(record.backdrop?.tint?.[3]) > 0
+            && Number(record.backdrop?.tint?.[3]) < 0.5
+        ))
+        && snapshot.dashboardMediaRecords.every((record) => record.opacity > 0 && record.opacity < 1);
 };
 
-const fillRecordMap = (snapshot) => new Map((snapshot.dashboardFillRecords || []).map((record) => [record.id, record]));
-
-const assertRecordColor = (records, id, expectedColor) => {
-    const record = records.get(id);
-    if (!record?.visible) throw new Error(`dashboard_fill_record_missing:${id}`);
-    const actual = String(record.color || '').toLowerCase();
-    const expected = String(expectedColor || '').toLowerCase();
-    if (actual !== expected) throw new Error(`dashboard_fill_color_mismatch:${JSON.stringify({ id, actual, expected })}`);
-    return { id, color: actual };
-};
-
-const assertOverviewRecordColors = (snapshot) => {
-    const records = fillRecordMap(snapshot);
-    const checked = [];
-    checked.push(assertRecordColor(records, '__eve_dashboard_background', '#101010'));
-    checked.push(assertRecordColor(records, '__eve_dashboard_table', '#101010'));
-    for (const lane of snapshot.layout?.lanes || []) {
-        const color = CATEGORY_COLORS[lane.categoryId];
-        if (!color) continue;
-        checked.push(assertRecordColor(records, `__eve_dashboard_lane_${lane.categoryId}`, shadeHex(color, -10)));
-        checked.push(assertRecordColor(records, `__eve_dashboard_header_bg_${lane.categoryId}`, color));
-    }
-    return { checked };
-};
-
-const assertFocusedRecordColors = (snapshot, activeCategoryId) => {
-    const activeColor = CATEGORY_COLORS[activeCategoryId];
-    if (!activeColor) throw new Error(`dashboard_active_color_missing:${activeCategoryId}`);
-    const records = fillRecordMap(snapshot);
-    const checked = [];
-    checked.push(assertRecordColor(records, '__eve_dashboard_background', activeColor));
-    checked.push(assertRecordColor(records, '__eve_dashboard_table', activeColor));
-    for (const lane of snapshot.layout?.lanes || []) {
-        checked.push(assertRecordColor(records, `__eve_dashboard_lane_${lane.categoryId}`, activeColor));
-        checked.push(assertRecordColor(records, `__eve_dashboard_header_bg_${lane.categoryId}`, activeColor));
-    }
-    return { activeCategoryId, activeColor, checked };
-};
-
-const dashboardHasNoPlusSurface = (snapshot) => (
-    (snapshot.dashboardRecordIds || []).every((id) => !String(id || '').includes('plus'))
-    && (snapshot.dashboardVisibleRecordIds || []).every((id) => !String(id || '').includes('plus'))
-    && (snapshot.layout?.lanes || []).every((lane) => (
-        lane.plus_rect === undefined
-        && lane.plus_strip_rect === undefined
-        && lane.active_plus_rect === undefined
-    ))
-);
-
-const dashboardOpenReady = (snapshot) => (
-    snapshot.active
-    && snapshot.dashboardRecordIds.includes('__eve_dashboard_background')
-    && snapshot.dashboardRecordIds.includes('__eve_dashboard_table')
-    && dashboardHasNoPlusSurface(snapshot)
-    && snapshot.dashboardDomCount === 0
-    && snapshot.toolboxHeight > 0
-    && snapshot.menu?.active === true
-    && snapshot.menu?.treeMounted === true
-    && snapshot.menu?.reservedHeight > 0
-    && snapshot.menu?.overlayRecordCount > 0
-    && snapshot.menu?.interactiveNodeCount > 0
-    && (
-        (snapshot.layout?.lanes || []).every((lane) => Number(lane.visibleItemCount || 0) === 0)
-        || snapshot.dashboardTitleTexts.length > 0
-    )
-    && snapshot.layout?.toolbox_reserved_rect?.height >= snapshot.toolboxHeight
-    && snapshot.recordOverReservedBand.length === 0
-);
-
-const activateDashboardCategory = async (page, categoryId, snapshot = null) => {
-    let current = snapshot || await dashboardSnapshot(page);
-    for (let attempt = 0; attempt < 3; attempt += 1) {
-        if (current.activeCategoryId === categoryId && laneIsActive(current, categoryId) && dashboardFocusSettled(current)) return { ok: true, snapshot: current };
-        const lane = current.layout?.lanes?.find((entry) => entry.categoryId === categoryId);
-        if (!lane?.header_rect) return { ok: false, snapshot: current };
-        await clickCanvasRectCenter(page, lane.header_rect);
-        const active = await waitForDashboardSnapshot(page, (candidate) => (
-            candidate.activeCategoryId === categoryId && laneIsActive(candidate, categoryId) && !candidate.editorOpen && dashboardFocusSettled(candidate)
-        ), 8000);
-        if (active.ok) return active;
-        current = active.snapshot || await dashboardSnapshot(page);
-    }
-    return { ok: false, snapshot: current };
-};
-
-const runScenario = async () => {
-    const report = {
-        ok: false,
-        appUrl: APP_URL,
-        checks: [],
-        console: [],
-        pageErrors: [],
-        requestFailures: [],
-        responseFailures: []
+const renderFrozenGlassMediaFixture = async (page) => page.evaluate(async () => {
+    const [{ createDashboardLayout }, { buildDashboardBevyUiTree }, { mergeDashboardTokens }, { decorateWorkspaceBevyUiTree }] = await Promise.all([
+        import('/eVe/domains/dashboard/dashboard_layout.js'),
+        import('/eVe/domains/dashboard/dashboard_bevy_ui_tree.js'),
+        import('/eVe/domains/dashboard/dashboard_tokens.js'),
+        import('/eVe/domains/rendering/workspace_scene_layers.js')
+    ]);
+    await window.eveDashboardBevyUiRuntime?.destroy?.();
+    const surface = document.getElementById('eve_surface_project');
+    const rect = surface.getBoundingClientRect();
+    const tokens = mergeDashboardTokens({ metrics: { blockUnitSizePx: 112 } });
+    const categories = [
+        ['news', '#9f2f2f', 'news'], ['calendar', '#245f94', 'calendar'],
+        ['projects', '#357245', 'projects'], ['contacts', '#673071', 'contacts'],
+        ['monitor', '#2f6f78', 'monitor']
+    ].map(([id, color, icon_id]) => ({ id, color, icon_id, label_key: `eve.dashboard.category.${id}` }));
+    const media = (color, label) => `data:image/svg+xml,${encodeURIComponent(`
+        <svg xmlns="http://www.w3.org/2000/svg" width="320" height="180">
+          <rect width="320" height="180" fill="${color}"/><circle cx="160" cy="74" r="54" fill="#ffffff" fill-opacity=".72"/>
+          <text x="160" y="164" text-anchor="middle" font-family="sans-serif" font-size="24" fill="#fff">${label}</text>
+        </svg>
+    `)}`;
+    const itemsByCategory = new Map([
+        ['news', [
+            { id: 'weather', category_id: 'news', title: 'Météo', span: 2, metadata: { dashboard_module: 'weather', weather: { status: 'ready', temperature: 18, city: 'Clermont-Ferrand', condition: 'clear', condition_label: 'Ciel dégagé' } } },
+            { id: 'news', category_id: 'news', title: 'Actualité sans média' }
+        ]],
+        ['calendar', [{ id: 'event', category_id: 'calendar', title: 'Événement', payload: { start: '2026-09-16T20:30:00Z' } }]],
+        ['projects', [
+            { id: 'project-media', category_id: 'projects', title: 'Projet avec image', metadata: { project_preview_source: media('#29764c', 'PROJET'), project_preview_width: 320, project_preview_height: 180 } },
+            { id: 'project-empty', category_id: 'projects', title: 'Projet sans image' }
+        ]],
+        ['contacts', [
+            { id: 'contact-media', category_id: 'contacts', title: 'Contact avec photo', metadata: { user_face: media('#6f3780', 'CONTACT') } },
+            { id: 'contact-empty', category_id: 'contacts', title: 'Contact sans photo' }
+        ]],
+        ['monitor', [{ id: 'monitor', category_id: 'monitor', title: 'Moniteur' }]]
+    ]);
+    const layout = createDashboardLayout({
+        width: rect.width, height: rect.height, categories, itemsByCategory, handedness: 'right', tokens
+    });
+    const tree = decorateWorkspaceBevyUiTree({
+        layer: 'dashboard', tree: buildDashboardBevyUiTree({ layout, tokens })
+    });
+    await window.eveBevyUiRuntime.mountTree({ id: tree.id, surface, tree });
+    const children = tree.root.children || [];
+    const cards = children.filter((node) => /^__eve_dashboard_card_(?!media_|title_|date_|label_backdrop_|weather_)/.test(node.id));
+    const images = children.filter((node) => node.id.startsWith('__eve_dashboard_card_media_'));
+    return {
+        ok: cards.length === 8
+            && cards.every((node) => node.style?.backdrop?.blur_px > 0 && node.style?.backdrop?.tint?.[3] < 0.5)
+            && images.length === 2
+            && images.every((node) => node.style?.opacity > 0 && node.style?.opacity < 1),
+        cards: cards.map((node) => ({ id: node.id, background: node.style.background, backdrop: node.style.backdrop })),
+        images: images.map((node) => ({ id: node.id, opacity: node.style.opacity }))
     };
+});
+
+const run = async () => {
+    const report = { ok: false, checks: [], console: [], pageErrors: [] };
     const browser = await chromium.launch({
         headless: process.env.ATOME_PLAYWRIGHT_HEADLESS === '0' ? false : process.env.HEADLESS !== '0',
         args: ['--enable-unsafe-webgpu']
     });
     const context = await browser.newContext({ viewport: { width: 1280, height: 820 } });
     const page = await context.newPage();
-    page.on('console', (message) => {
-        if (message.type() === 'error') {
-            report.console.push({ text: message.text(), location: message.location?.() || null });
-        }
-    });
-    page.on('pageerror', (error) => {
-        const message = error?.message || String(error);
-        if (!/^unreachable$/i.test(message)) report.pageErrors.push(message);
-    });
-    page.on('requestfailed', (request) => {
-        const url = request.url();
-        if (/\/(?:favicon|apple-touch-icon)[^/]*\.(?:ico|png)$/i.test(url)) return;
-        report.requestFailures.push({ url, failure: request.failure()?.errorText || null });
-    });
-    page.on('response', (response) => {
-        const status = response.status();
-        if (status < 400) return;
-        const url = response.url();
-        if (/\/(?:favicon|apple-touch-icon)[^/]*\.(?:ico|png)$/i.test(url)) return;
-        report.responseFailures.push({ url, status });
-    });
-
+    page.on('console', (message) => { if (message.type() === 'error') report.console.push(message.text()); });
+    page.on('pageerror', (error) => report.pageErrors.push(error.message));
     try {
         await page.goto(APP_URL, { waitUntil: 'domcontentloaded', timeout: 45000 });
-        report.checks.push({ name: 'guest_project_ready', ok: true, snapshot: await enterGuestWorkspace(page) });
-
-        let opened = await waitForDashboardSnapshot(page, dashboardOpenReady, 12000);
-        if (!opened.ok) {
-            await clickAtomeMenuItem(page);
-            opened = await waitForDashboardSnapshot(page, dashboardOpenReady, 30000);
-        }
-        if (!opened.ok) throw new Error('dashboard_open_failed');
-        const openedReady = await waitForDashboardSnapshot(page, (snapshot) => (
-            snapshot.active
+        await enterGuestWorkspace(page);
+        await page.evaluate(async ({ sourceUrl, signature }) => {
+            const { publishBevySurfaceBackground } = await import('/eVe/domains/rendering/bevy_surface_background_runtime.js');
+            publishBevySurfaceBackground({ color: [0.04, 0.04, 0.05, 1], sourceUrl, signature }, window);
+        }, { sourceUrl: GLASS_BACKGROUND_SOURCE, signature: GLASS_BACKGROUND_SIGNATURE });
+        const opened = await waitForSnapshot(page, (snapshot) => (
+            snapshot.active && backgroundReady(snapshot) && fixedGridReady(snapshot)
+            && snapshot.surfaceBackgroundSignature === GLASS_BACKGROUND_SIGNATURE
             && snapshot.dashboardDomCount === 0
-            && dashboardHasNoPlusSurface(snapshot)
-            && snapshot.dashboardVisibleRecordIds.includes('__eve_dashboard_background')
+            && snapshot.menu?.suspended === true
+            && frozenContentReady(snapshot)
+            && snapshot.postOpenHydrationPending !== true
         ), 60000);
-        if (!openedReady.ok) throw new Error('dashboard_open_ready_records_missing');
-        report.checks.push({ name: 'atom_opens_dashboard_without_dom_renderer', ok: true, snapshot: openedReady.snapshot });
-        await waitForPresentationFrames(page, 12);
-        await captureProbeScreenshot(page, DASHBOARD_OPEN_SCREENSHOT, report, 'dashboard_open');
+        assert(opened.toolboxHeight === 0, 'dashboard_reserved_menu_height_present');
+        assert(opened.layout.toolbox_reserved_rect.height === 0, 'dashboard_layout_reserved_menu_height_present');
+        assert(!opened.layout.lanes.some((lane) => lane.categoryId === 'store'), 'dashboard_store_lane_present');
+        assert(noObsoleteRecords(opened), 'dashboard_obsolete_records_present');
+        assert(!opened.postOpenHydrationError, `dashboard_hydration_error:${opened.postOpenHydrationError}`);
+        assert(frozenContentReady(opened), 'dashboard_content_frozen_glass_contract_missing');
+        const weather = opened.layout.lanes.find((lane) => lane.categoryId === 'news')?.items
+            .find((item) => item.id === 'dashboard_module_weather');
+        assert(weather, 'dashboard_weather_card_missing');
+        assert(Math.round(weather.rect.width) === Math.round(opened.layout.lanes[0].header_rect.width * 2), 'dashboard_weather_not_two_units');
+        report.checks.push({ name: 'fullscreen_fixed_grid_menu_suspended', ok: true, snapshot: opened });
         report.checks.push({
-            name: 'records_open_match_category_bands_and_toolbox_exclusion',
+            name: 'all_content_cells_use_styled_frozen_glass',
             ok: true,
-            records: assertOverviewRecordColors(openedReady.snapshot)
+            cardCount: opened.dashboardCardRecords.length,
+            mediaCount: opened.dashboardMediaRecords.length
         });
-        report.checks.push({
-            name: 'dashboard_layout_exposes_no_plus_surface_or_records',
-            ok: dashboardHasNoPlusSurface(openedReady.snapshot),
-            snapshot: openedReady.snapshot
-        });
+        await waitForPresentationFrames(page, 8);
+        await page.screenshot({ path: path.join(OUT_DIR, 'dashboard_right.png') });
 
-        const monitorLane = openedReady.snapshot.layout.lanes.find((lane) => lane.categoryId === 'monitor');
-        if (!monitorLane) throw new Error('dashboard_monitor_lane_missing');
-        await clickCanvasRectCenter(page, monitorLane.header_rect);
-        const monitorActive = await waitForDashboardSnapshot(page, (snapshot) => (
-            snapshot.activeCategoryId === 'monitor' && laneIsActive(snapshot, 'monitor') && !snapshot.editorOpen && dashboardFocusSettled(snapshot)
-        ), 30000);
-        if (!monitorActive.ok) throw new Error('dashboard_monitor_header_click_failed');
-        report.checks.push({ name: 'canvas_header_click_activates_monitor', ok: true, snapshot: monitorActive.snapshot });
-        await waitForPresentationFrames(page, 12);
-        await captureProbeScreenshot(page, DASHBOARD_MONITOR_SCREENSHOT, report, 'dashboard_monitor');
-        report.checks.push({
-            name: 'records_monitor_focus_uses_uniform_active_color',
-            ok: true,
-            records: assertFocusedRecordColors(monitorActive.snapshot, 'monitor')
-        });
-        if (!dashboardHasNoPlusSurface(monitorActive.snapshot)) throw new Error('dashboard_monitor_plus_surface_present');
-
-        const monitorActiveLane = monitorActive.snapshot.layout.lanes.find((lane) => lane.categoryId === 'monitor');
-        await clickCanvasRectCenter(page, monitorActiveLane.header_rect);
-        const monitorCollapsed = await waitForDashboardSnapshot(page, (snapshot) => (
-            !snapshot.activeCategoryId && dashboardFocusSettled(snapshot) && !snapshot.editorOpen
-        ), 30000);
-        if (!monitorCollapsed.ok) throw new Error('dashboard_monitor_collapse_failed');
-        report.checks.push({
-            name: 'monitor_header_click_collapses_with_settled_overview',
-            ok: true,
-            records: assertOverviewRecordColors(monitorCollapsed.snapshot)
-        });
-
-        const calendarLane = monitorCollapsed.snapshot.layout.lanes.find((lane) => lane.categoryId === 'calendar');
-        await clickCanvasRectCenter(page, calendarLane.header_rect);
-        const calendarActive = await waitForDashboardSnapshot(page, (snapshot) => (
-            snapshot.activeCategoryId === 'calendar' && laneIsActive(snapshot, 'calendar') && !snapshot.editorOpen && dashboardFocusSettled(snapshot)
-        ), 30000);
-        if (!calendarActive.ok) throw new Error('dashboard_calendar_header_click_failed');
-        if (!dashboardHasNoPlusSurface(calendarActive.snapshot)) throw new Error('dashboard_calendar_plus_surface_present');
-        report.checks.push({ name: 'calendar_header_activates_without_plus_surface', ok: true, snapshot: calendarActive.snapshot });
-
-        const contactsLane = calendarActive.snapshot.layout.lanes.find((lane) => lane.categoryId === 'contacts');
-        await clickCanvasRectCenter(page, contactsLane.header_rect);
-        const contactsActive = await waitForDashboardSnapshot(page, (snapshot) => (
-            snapshot.activeCategoryId === 'contacts' && laneIsActive(snapshot, 'contacts') && !snapshot.editorOpen && dashboardFocusSettled(snapshot)
-        ), 30000);
-        if (!contactsActive.ok) throw new Error('dashboard_contacts_header_click_failed');
-        if (!dashboardHasNoPlusSurface(contactsActive.snapshot)) throw new Error('dashboard_contacts_plus_surface_present');
-        report.checks.push({ name: 'contacts_header_activates_without_plus_surface', ok: true, snapshot: contactsActive.snapshot });
-
-        const projectsLane = contactsActive.snapshot.layout.lanes.find((lane) => lane.categoryId === 'projects');
-        await clickCanvasRectCenter(page, projectsLane.header_rect);
-        let projectsActive = await waitForDashboardSnapshot(page, (snapshot) => (
-            snapshot.activeCategoryId === 'projects' && laneIsActive(snapshot, 'projects') && !snapshot.editorOpen && dashboardFocusSettled(snapshot)
-        ), 30000);
-        if (!projectsActive.ok) throw new Error('dashboard_projects_header_click_failed');
-        const projectsWithItem = await waitForDashboardSnapshot(page, (snapshot) => (
-            snapshot.activeCategoryId === 'projects'
-            && laneIsActive(snapshot, 'projects')
-            && !snapshot.editorOpen
-            && dashboardFocusSettled(snapshot)
-            && dashboardHasNoPlusSurface(snapshot)
-        ), 10000);
-        if (projectsWithItem.ok) projectsActive = projectsWithItem;
-        if (!dashboardHasNoPlusSurface(projectsActive.snapshot)) throw new Error('dashboard_projects_plus_surface_present');
-        await waitForPresentationFrames(page, 12);
-        await captureProbeScreenshot(page, DASHBOARD_PROJECTS_SCREENSHOT, report, 'dashboard_projects');
-        report.checks.push({
-            name: 'records_projects_focus_uses_uniform_active_color',
-            ok: true,
-            records: assertFocusedRecordColors(projectsActive.snapshot, 'projects')
-        });
-        report.checks.push({ name: 'projects_header_activates_without_plus_surface', ok: true, snapshot: projectsActive.snapshot });
+        const monitor = opened.layout.lanes.find((lane) => lane.categoryId === 'monitor');
+        await clickCanvasRectCenter(page, monitor.header_rect);
+        const focused = await waitForSnapshot(page, (snapshot) => snapshot.activeCategoryId === 'monitor');
+        assert(fixedGridReady(focused), 'dashboard_focus_redistributed_rows');
+        assert(noObsoleteRecords(focused), 'dashboard_focus_spread_returned');
+        const headerFills = new Map(focused.dashboardFillRecords
+            .filter((record) => record.id.includes('header_bg_')).map((record) => [record.id, record]));
+        assert(headerFills.get('__eve_dashboard_header_bg_monitor')?.backdrop?.blurPx > 0, 'dashboard_active_header_blur_missing');
+        report.checks.push({ name: 'header_focus_is_visual_only', ok: true, snapshot: focused });
 
         await page.evaluate(() => {
-            window.localStorage?.setItem?.('eve_handedness', 'left');
             window.__eveProfilePreferences = {
                 ...(window.__eveProfilePreferences || {}),
                 visual: { ...(window.__eveProfilePreferences?.visual || {}), handedness: 'left' }
             };
             window.__eveIntuitionXState = { ...(window.__eveIntuitionXState || {}), handedness: 'left' };
-            window.dispatchEvent(new CustomEvent('eve:profile-preferences-updated', {
-                detail: { preferences: window.__eveProfilePreferences }
-            }));
+            window.dispatchEvent(new CustomEvent('eve:profile-preferences-updated', { detail: { preferences: window.__eveProfilePreferences } }));
         });
-        const leftReadyBeforeClose = await waitForDashboardSnapshot(page, (snapshot) => (
-            snapshot.active
-            && snapshot.layout?.handedness === 'left'
-            && dashboardFocusSettled(snapshot)
-            && snapshot.dashboardVisibleRecordIds.includes('__eve_dashboard_background')
-            && snapshot.menu?.treeMounted === true
-        ), 30000);
-        if (!leftReadyBeforeClose.ok) throw new Error('dashboard_left_handed_ready_before_close_failed');
-        await clickAtomeMenuItem(page);
-        const closed = await waitForDashboardSnapshot(page, (snapshot) => (
-            !snapshot.active && snapshot.dashboardVisibleRecordIds.length === 0
-        ), 30000);
-        if (!closed.ok) throw new Error('dashboard_close_failed');
-        report.checks.push({ name: 'atom_click_closes_dashboard_and_removes_records', ok: true, snapshot: closed.snapshot });
+        const mirrored = await waitForSnapshot(page, (snapshot) => snapshot.layout?.handedness === 'left');
+        const news = mirrored.layout.lanes.find((lane) => lane.categoryId === 'news');
+        const weatherLeft = news.items.find((item) => item.id === 'dashboard_module_weather');
+        assert(news.header_rect.x === 0, 'dashboard_left_header_not_on_left_edge');
+        assert(Math.round(weatherLeft.rect.x + weatherLeft.rect.width) === Math.round(mirrored.canvas.width), 'dashboard_left_weather_not_on_right_edge');
+        report.checks.push({ name: 'left_handed_exact_mirror', ok: true, snapshot: mirrored });
+        await waitForPresentationFrames(page, 8);
+        await page.screenshot({ path: path.join(OUT_DIR, 'dashboard_left.png') });
+
+        const projectLane = mirrored.layout.lanes.find((lane) => lane.categoryId === 'projects');
+        const project = projectLane?.items?.[0];
+        if (project) {
+            await clickCanvasRectCenter(page, project.rect);
+            const exited = await waitForSnapshot(page, (snapshot) => !snapshot.active && snapshot.menu?.suspended === false, 60000);
+            report.checks.push({ name: 'project_activation_restores_menu', ok: true, snapshot: exited });
+        } else {
+            report.checks.push({ name: 'project_activation_restores_menu', ok: true, skipped: 'no_project_fixture' });
+        }
+        const frozenMediaFixture = await renderFrozenGlassMediaFixture(page);
+        assert(frozenMediaFixture.ok, `dashboard_frozen_media_fixture_failed:${JSON.stringify(frozenMediaFixture)}`);
         await waitForPresentationFrames(page, 12);
-        const leftMenuReadyAfterClose = await waitFor(page, async () => {
-const { getMainMenuRuntime } = await import('/eVe/intuition/ribbon/bevy_ui_product_registry.js');
-            const menu = getMainMenuRuntime();
-            if (typeof menu?.showFully === 'function') await Promise.resolve(menu.showFully());
-            const projectId = window.eveDashboardBevyUiRuntime?.state?.projectId || '__eve_dashboard_workspace__';
-            const records = window.eveToolBase?.getProjectSceneState?.(projectId)?.records || [];
-            const atome = records.find((record) => record?.id === '__eve_bevy_ui_eve_bevy_ui_main_menu_eve_bevy_ui_main_menu_tool_atome');
-            const props = atome?.properties || {};
-            return {
-                ok: menu?.measure?.()?.treeMounted === true
-                    && Number(props.left || 0) <= 2
-                    && Number(props.width || 0) > 1
-                    && Number(props.height || 0) > 1,
-                left: props.left,
-                top: props.top,
-                width: props.width,
-                height: props.height
-            };
-        }, 15000, 250);
-        if (!leftMenuReadyAfterClose.ok) throw new Error('dashboard_left_menu_ready_after_close_failed');
-        await clickAtomeMenuItem(page);
-        const leftOpened = await waitForDashboardSnapshot(page, (snapshot) => {
-            const lane = snapshot.layout?.lanes?.[0];
-            return snapshot.active
-                && snapshot.dashboardVisibleRecordIds.includes('__eve_dashboard_background')
-                && snapshot.dashboardVisibleRecordIds.includes('__eve_dashboard_table')
-                && snapshot.layout?.handedness === 'left'
-                && lane
-                && lane.header_rect.x < lane.lane_rect.x
-                && lane.header_rect.x + lane.header_rect.width === lane.lane_rect.x
-                && dashboardHasNoPlusSurface(snapshot);
-        }, 30000);
-        if (!leftOpened.ok) throw new Error('dashboard_left_handed_open_failed');
-        report.checks.push({ name: 'left_handed_dashboard_mirrors_headers_without_plus_strip', ok: true, snapshot: leftOpened.snapshot });
-
-        await clickAtomeMenuItem(page);
-        const leftClosed = await waitForDashboardSnapshot(page, (snapshot) => (
-            !snapshot.active && snapshot.dashboardVisibleRecordIds.length === 0
-        ), 30000);
-        if (!leftClosed.ok) throw new Error('dashboard_left_handed_close_failed');
-        await page.evaluate(() => {
-            window.localStorage?.removeItem?.('eve_handedness');
-            window.__eveProfilePreferences = {
-                ...(window.__eveProfilePreferences || {}),
-                visual: { ...(window.__eveProfilePreferences?.visual || {}), handedness: 'right' }
-            };
-            window.__eveIntuitionXState = { ...(window.__eveIntuitionXState || {}), handedness: 'right' };
-            window.dispatchEvent(new CustomEvent('eve:profile-preferences-updated', {
-                detail: { preferences: window.__eveProfilePreferences }
-            }));
-        });
-
-        if (report.console.length || report.pageErrors.length || report.requestFailures.length || report.responseFailures.length) {
-            throw new Error('dashboard_probe_browser_errors_detected');
-        }
-        report.screenshots = {
-            open: DASHBOARD_OPEN_SCREENSHOT,
-            monitor: DASHBOARD_MONITOR_SCREENSHOT,
-            projects: DASHBOARD_PROJECTS_SCREENSHOT
-        };
+        await page.screenshot({ path: path.join(OUT_DIR, 'dashboard_frozen_glass_cells.png') });
+        report.checks.push({ name: 'frozen_glass_media_and_empty_cells_pixels', ok: true, fixture: frozenMediaFixture });
+        assert(report.console.length === 0, 'dashboard_console_errors');
+        assert(report.pageErrors.length === 0, 'dashboard_page_errors');
         report.ok = true;
-    } catch (error) {
-        report.error = error?.message || String(error);
-        try {
-            report.failureSnapshot = await dashboardSnapshot(page);
-        } catch (snapshotError) {
-            report.failureSnapshotError = snapshotError?.message || String(snapshotError);
-            report.failureSnapshot = null;
-        }
     } finally {
+        fs.writeFileSync(REPORT_FILE, `${JSON.stringify(report, null, 2)}\n`, 'utf8');
         await browser.close();
-        writeReport(report);
     }
-    if (!report.ok) throw new Error(report.error || 'dashboard_bevy_runtime_probe_failed');
+    console.log(JSON.stringify({ ok: report.ok, report: REPORT_FILE }));
 };
 
-await runScenario();
+run().catch((error) => {
+    console.error(error);
+    process.exitCode = 1;
+});

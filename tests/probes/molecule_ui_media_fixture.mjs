@@ -202,10 +202,8 @@ export const reloadBrowserProject = async (page, project) => {
             }
             await clickCanvasTarget(page, projectsHeader);
             projectsFocused = await waitFor(page, () => ({
-                ok: window.eveDashboardBevyUiRuntime?.state?.activeCategoryId === 'projects'
-                    && !window.eveDashboardBevyUiRuntime?.state?.focusTransition,
-                activeCategoryId: window.eveDashboardBevyUiRuntime?.state?.activeCategoryId || '',
-                focusTransition: window.eveDashboardBevyUiRuntime?.state?.focusTransition || null
+                ok: window.eveDashboardBevyUiRuntime?.state?.activeCategoryId === 'projects',
+                activeCategoryId: window.eveDashboardBevyUiRuntime?.state?.activeCategoryId || ''
             }), null, 8000).then(() => true).catch(() => false);
             if (!projectsFocused) await wait(300);
         }
@@ -286,4 +284,3 @@ export const reloadBrowserProject = async (page, project) => {
         };
     }, project.id, 30000);
 };
-

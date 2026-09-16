@@ -154,12 +154,21 @@ await new Promise((resolve, reject) => {
 fs.chmodSync(socketPath, 0o600);
 process.send?.({ type: 'vault-ready', principalId, pid: process.pid, socketPath });
 
-const shutdown = async () => {
-    await new Promise((resolve) => server.close(resolve));
-    await db.closeDatabase().catch(() => {});
-    if (fs.existsSync(socketPath)) fs.unlinkSync(socketPath);
-    process.exit(0);
+let shutdownPromise = null;
+const shutdown = () => {
+    if (shutdownPromise) return shutdownPromise;
+    shutdownPromise = (async () => {
+        const forcedExit = setTimeout(() => process.exit(0), 3000);
+        forcedExit.unref();
+        await new Promise((resolve) => server.close(resolve));
+        await db.closeDatabase().catch(() => {});
+        if (fs.existsSync(socketPath)) fs.unlinkSync(socketPath);
+        clearTimeout(forcedExit);
+        process.exit(0);
+    })();
+    return shutdownPromise;
 };
 
 process.once('SIGTERM', shutdown);
 process.once('SIGINT', shutdown);
+process.once('disconnect', shutdown);

@@ -74,6 +74,7 @@ export class UserVaultProvider {
         fs.mkdirSync(vaultRoot, { recursive: true, mode: 0o700 });
         const child = fork(new URL('./userVaultProcess.js', import.meta.url), [id, vaultRoot, socketPath], {
             env: { ...process.env, SQUIRREL_VAULT_IPC_SECRET: secret },
+            execArgv: [],
             stdio: ['ignore', 'ignore', 'pipe', 'ipc']
         });
         const record = { child, principalId: id, vaultRoot, socketPath, secret, ready: false };
@@ -118,8 +119,19 @@ export class UserVaultProvider {
         this.children.delete(id);
         if (record.child.exitCode == null) {
             await new Promise((resolve) => {
-                const timer = setTimeout(resolve, 3000);
-                record.child.once('exit', () => { clearTimeout(timer); resolve(); });
+                let settled = false;
+                const finish = () => {
+                    if (settled) return;
+                    settled = true;
+                    clearTimeout(forceTimer);
+                    clearTimeout(fallbackTimer);
+                    resolve();
+                };
+                const forceTimer = setTimeout(() => {
+                    if (record.child.exitCode == null) record.child.kill('SIGKILL');
+                }, 3000);
+                const fallbackTimer = setTimeout(finish, 4000);
+                record.child.once('exit', finish);
                 record.child.kill('SIGTERM');
             });
         }

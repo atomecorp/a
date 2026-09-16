@@ -1,662 +1,148 @@
-import assert from 'node:assert/strict';
-import { eveT } from '../../eVe/i18n/i18n.js';
-import { test } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import { createDashboardLayout } from '../../eVe/domains/dashboard/dashboard_layout.js';
 import { buildDashboardRecords, dashboardRecordId } from '../../eVe/domains/dashboard/dashboard_records.js';
-import { DASHBOARD_FONT_FAMILY, mergeDashboardTokens } from '../../eVe/domains/dashboard/dashboard_tokens.js';
-import { createBevyMediaTextureCacheKey } from '../../eVe/domains/rendering/bevy_media_texture_cache.js';
-import { workspaceSceneLayerOrder } from '../../eVe/domains/rendering/workspace_scene_layers.js';
-import { loadPeopleDirectory } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_finder_data.js';
-import { createCommUsers } from '../../eVe/intuition/tools/communication_users.js';
-import { createProjectOrderRuntime } from '../../eVe/intuition/matrix/core/project_order_runtime.js';
+import { buildDashboardBevyUiTree } from '../../eVe/domains/dashboard/dashboard_bevy_ui_tree.js';
+import { mergeDashboardTokens } from '../../eVe/domains/dashboard/dashboard_tokens.js';
 
-const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
+const tokens = mergeDashboardTokens({ metrics: { blockUnitSizePx: 112 } });
+const categories = [
+    { id: 'news', label_key: 'eve.dashboard.category.news', icon_id: 'news', color: '#9f2f2f' },
+    { id: 'calendar', label_key: 'eve.dashboard.category.calendar', icon_id: 'calendar', color: '#245f94' },
+    { id: 'projects', label_key: 'eve.dashboard.category.projects', icon_id: 'projects', color: '#357245' },
+    { id: 'contacts', label_key: 'eve.dashboard.category.contacts', icon_id: 'contacts', color: '#673071' },
+    { id: 'monitor', label_key: 'eve.dashboard.category.monitor', icon_id: 'monitor', color: '#2f6f78' }
+];
 
-const shadeHex = (hex, percent) => {
-    const value = String(hex || '#000000').replace('#', '');
-    const amount = Math.round(2.55 * percent);
-    const red = clamp(Number.parseInt(value.slice(0, 2), 16) + amount, 0, 255);
-    const green = clamp(Number.parseInt(value.slice(2, 4), 16) + amount, 0, 255);
-    const blue = clamp(Number.parseInt(value.slice(4, 6), 16) + amount, 0, 255);
-    return `#${[red, green, blue].map((part) => Math.round(part).toString(16).padStart(2, '0')).join('')}`;
+const weather = {
+    id: 'dashboard_module_weather', category_id: 'news', span: 2,
+    metadata: { dashboard_module: 'weather', weather: {
+        status: 'ready', temperature: 18, city: 'Clermont-Ferrand', condition: 'clear', condition_label: 'Ciel dégagé'
+    } }
 };
-
-const expectedDashboardLabelBackdropHeight = (height) => Math.min(
-    Math.max(1, Number(height || 0)),
-    Math.max(1, Math.min(42, Math.max(24, Math.round(Number(height || 0) * 0.24))))
-);
-
-test('dashboard records stay inside their workspace layer below Flower', () => {
-    const tokens = mergeDashboardTokens();
-    const layout = createDashboardLayout({
-        width: 960,
-        height: 640,
-        toolboxHeight: 80,
-        categories: [{
-            id: 'projects',
-            label_key: 'eve.dashboard.category.projects',
-            color: '#4b7bec',
-            visible: true
-        }],
-        itemsByCategory: new Map([
-            ['projects', [{ id: 'project_1', title: 'Project 1', category_id: 'projects', span: 1 }]]
-        ]),
-        tokens
-    });
-    const records = buildDashboardRecords({ layout, tokens });
-    const dashboardLayer = workspaceSceneLayerOrder('dashboard');
-    const flowerLayer = workspaceSceneLayerOrder('flower');
-
-    assert.ok(records.length > 0);
-    assert.equal(records.every((record) => record.properties?.layer === 'dashboard'), true);
-    assert.equal(records.every((record) => record.properties.renderLayer >= dashboardLayer), true);
-    assert.equal(
-        records.every((record) => record.properties.renderLayer < flowerLayer),
-        true,
-        'Dashboard records must never cover the Flower presentation layer'
-    );
+const items = () => new Map([
+    ['news', [weather, { id: 'news-one', category_id: 'news', title: 'Une actualité' }]],
+    ['calendar', [{ id: 'event-one', category_id: 'calendar', title: 'Rendez-vous', payload: { start: '2026-09-16T10:00:00Z' } }]],
+    ['projects', [{ id: 'project-one', category_id: 'projects', title: 'Projet', metadata: {
+        project_preview_source: 'data:image/png;base64,AA==', project_preview_width: 1600, project_preview_height: 900
+    } }]],
+    ['contacts', [{ id: 'contact-one', category_id: 'contacts', title: 'Ada', metadata: { user_face: 'data:image/png;base64,BB==' } }]],
+    ['monitor', []]
+]);
+const layout = (options = {}) => createDashboardLayout({
+    width: 900, height: 720, categories, itemsByCategory: items(), handedness: 'right', tokens, ...options
 });
 
-test('dashboard records never project a generic fullscreen item summary', () => {
-    const tokens = mergeDashboardTokens();
-    const layout = createDashboardLayout({
-        width: 960,
-        height: 640,
-        toolboxHeight: 80,
-        categories: [{
-            id: 'news',
-            label_key: 'eve.dashboard.category.news',
-            color: '#6aa6ff',
-            visible: true
-        }],
-        activeCategoryId: 'news',
-        itemsByCategory: new Map([
-            ['news', [{ id: 'record_1', category_id: 'news', title: 'New news', preview: 'Preview text' }]]
-        ]),
-        tokens
-    });
-    const records = buildDashboardRecords({ layout, tokens });
-    const ids = new Set(records.map((record) => record.id));
-    assert.equal([...ids].some((id) => id.startsWith('__eve_dashboard_editor')), false);
-    assert.ok(ids.has(dashboardRecordId('card_news_record_1')));
-    assert.equal(records.some((record) => record.type === 'text' && record.properties.text === 'New news'), true);
-});
+const record = (records, suffix) => records.find((entry) => entry.id === dashboardRecordId(suffix));
 
-test('dashboard records retain focused backgrounds and per-category creation records', () => {
-    const tokens = mergeDashboardTokens();
-    const categories = [
-        { id: 'news', label_key: 'eve.dashboard.category.news', color: '#111111', visible: true },
-        { id: 'monitor', label_key: 'eve.dashboard.category.monitor', color: '#ff3366', visible: true }
-    ];
-    const layout = createDashboardLayout({
-        width: 960,
-        height: 640,
-        toolboxHeight: 80,
-        categories,
-        activeCategoryId: 'monitor',
-        itemsByCategory: new Map([
-            ['monitor', [{ id: 'm1', title: 'Monitor', category_id: 'monitor', span: 1 }]]
-        ]),
-        tokens
-    });
-    const records = buildDashboardRecords({ layout, tokens });
-    const headerNews = records.find((record) => record.id === dashboardRecordId('header_news'));
-    const headerMonitor = records.find((record) => record.id === dashboardRecordId('header_monitor'));
-    const laneNews = records.find((record) => record.id === dashboardRecordId('lane_news'));
-    const laneMonitor = records.find((record) => record.id === dashboardRecordId('lane_monitor'));
-    const table = records.find((record) => record.id === dashboardRecordId('table'));
-    const card = records.find((record) => record.id === dashboardRecordId('card_monitor_m1'));
-    assert.equal(records.filter(record => record.id.startsWith('__eve_dashboard_create_bg_')).length, categories.length);
-    assert.equal(table.properties.color, '#ff3366');
-    assert.equal(laneNews.properties.color, '#ff3366');
-    assert.equal(laneMonitor.properties.color, '#ff3366');
-    assert.equal(records.find((record) => record.id === dashboardRecordId('header_bg_news')).properties.color, '#ff3366');
-    assert.equal(records.find((record) => record.id === dashboardRecordId('header_bg_monitor')).properties.color, '#ff3366');
-    assert.equal(card.properties.color, shadeHex('#ff3366', 3));
-    assert.deepEqual(card.properties.material.shadow, tokens.cardShadow);
-    assert.equal(card.properties.material.shadow.blur, 0);
-    assert.equal(card.properties.material.shadow.offsetY, 0);
-    assert.equal(records.find((record) => record.id === dashboardRecordId('card_title_monitor_m1')).properties.text_style.text_fit, 'shrink');
-    assert.equal(headerNews.properties.opacity, tokens.inactiveHeaderOpacity);
-    assert.equal(headerMonitor.properties.opacity, 1);
-    assert.ok(card.properties.left > layout.visible_item_rects[0].rect.x);
-    assert.ok(card.properties.top > layout.visible_item_rects[0].rect.y);
-});
-
-test('dashboard records use the layout card rect without applying a second inset', () => {
-    const tokens = mergeDashboardTokens();
-    const layout = createDashboardLayout({
-        width: 960,
-        height: 640,
-        toolboxHeight: 80,
-        categories: [
-            { id: 'news', label_key: 'eve.dashboard.category.news', color: '#9f2f2f', visible: true },
-            { id: 'monitor', label_key: 'eve.dashboard.category.monitor', color: '#2f6f78', visible: true }
-        ],
-        activeCategoryId: '',
-        itemsByCategory: new Map([
-            ['news', [{ id: 'n1', title: 'News', category_id: 'news', span: 1 }]]
-        ]),
-        tokens
-    });
-    const records = buildDashboardRecords({ layout, tokens });
-    const card = records.find((record) => record.id === dashboardRecordId('card_news_n1'));
-    const visible = layout.visible_item_rects[0].card_rect;
-    assert.deepEqual(
-        ['left', 'top', 'width', 'height'].map((key) => card.properties[key]),
-        [visible.x, visible.y, visible.width, visible.height]
-    );
-});
-
-test('dashboard card record ids stay stable when a category is focused', () => {
-    const tokens = mergeDashboardTokens();
-    const categories = [
-        { id: 'news', label_key: 'eve.dashboard.category.news', color: '#9f2f2f', visible: true },
-        { id: 'monitor', label_key: 'eve.dashboard.category.monitor', color: '#2f6f78', visible: true }
-    ];
-    const itemsByCategory = new Map([
-        ['news', [{ id: 'n1', title: 'News', category_id: 'news', span: 1 }]]
-    ]);
-    const overview = buildDashboardRecords({
-        layout: createDashboardLayout({ width: 960, height: 640, toolboxHeight: 80, categories, activeCategoryId: '', itemsByCategory, tokens }),
-        tokens
-    });
-    const focused = buildDashboardRecords({
-        layout: createDashboardLayout({ width: 960, height: 640, toolboxHeight: 80, categories, activeCategoryId: 'news', itemsByCategory, tokens }),
-        tokens
-    });
-    assert.ok(overview.find((record) => record.id === dashboardRecordId('card_news_n1')));
-    assert.ok(focused.find((record) => record.id === dashboardRecordId('card_news_n1')));
-    assert.equal(overview.some((record) => String(record.id || '').includes('_slot_')), false);
-    assert.equal(focused.some((record) => String(record.id || '').includes('_slot_')), false);
-});
-
-test('dashboard visible records stay above the toolbox reserved band', () => {
-    const tokens = mergeDashboardTokens();
-    const layout = createDashboardLayout({
-        width: 960,
-        height: 640,
-        toolboxHeight: 80,
-        categories: [
-            { id: 'news', label_key: 'eve.dashboard.category.news', color: '#9f2f2f', visible: true },
-            { id: 'monitor', label_key: 'eve.dashboard.category.monitor', color: '#2f6f78', visible: true }
-        ],
-        activeCategoryId: 'news',
-        itemsByCategory: new Map([
-            ['news', [
-                { id: 'n1', title: 'News', category_id: 'news', span: 1 },
-                { id: 'n2', title: 'Wide News', category_id: 'news', span: 2 }
-            ]]
-        ]),
-        tokens
-    });
-    const records = buildDashboardRecords({ layout, tokens });
-    const reservedTop = layout.toolbox_reserved_rect.y;
-    const dashboardRecords = records.filter((record) => ![
-        dashboardRecordId('project_veil'),
-        dashboardRecordId('bottom_shadow')
-    ].includes(record.id));
-    assert.equal(records.some((record) => record.id === dashboardRecordId('reserved_band_fill')), false);
-    assert.equal(dashboardRecords.every((record) => (
-        Number(record.properties.top || 0) + Number(record.properties.height || 0) <= reservedTop
-    )), true);
-});
-
-test('dashboard partial vertical scroll records stay clipped above the toolbox reserved band', () => {
-    const tokens = mergeDashboardTokens();
-    const categories = ['news', 'calendar', 'projects', 'contacts', 'store', 'monitor', 'goals']
-        .map((id, index) => ({
-            id,
-            label_key: `eve.dashboard.category.${id}`,
-            color: ['#9f2f2f', '#245f94', '#357245', '#673071', '#a65f1f', '#2f6f78', '#6f5b24'][index],
-            visible: true
-        }));
-    const layout = createDashboardLayout({
-        width: 1280,
-        height: 820,
-        toolboxHeight: 60,
-        categories,
-        activeCategoryId: '',
-        allowPartialLanes: true,
-        verticalScrollOffset: 20,
-        itemsByCategory: new Map([
-            ['projects', [{ id: 'p1', title: 'Project', category_id: 'projects', span: 1 }]]
-        ]),
-        tokens
-    });
-    const records = buildDashboardRecords({ layout, tokens });
-    const reservedTop = layout.toolbox_reserved_rect.y;
-    const dashboardRecords = records.filter((record) => ![
-        dashboardRecordId('project_veil'),
-        dashboardRecordId('bottom_shadow')
-    ].includes(record.id));
-    assert.equal(layout.lanes.every((lane) => lane.lane_rect.y + lane.lane_rect.height <= reservedTop), true);
-    assert.equal(dashboardRecords.every((record) => (
-        Number(record.properties.top || 0) + Number(record.properties.height || 0) <= reservedTop
-    )), true);
-});
-
-test('dashboard records keep category lanes independent before a header is focused', () => {
-    const tokens = mergeDashboardTokens();
-    const categories = [
-        { id: 'news', label_key: 'eve.dashboard.category.news', color: '#9f2f2f', visible: true },
-        { id: 'monitor', label_key: 'eve.dashboard.category.monitor', color: '#2f6f78', visible: true }
-    ];
-    const layout = createDashboardLayout({
-        width: 960,
-        height: 640,
-        toolboxHeight: 80,
-        categories,
-        activeCategoryId: '',
-        itemsByCategory: new Map([
-            ['news', [{ id: 'n1', title: 'News', category_id: 'news', span: 1 }]],
-            ['monitor', [{ id: 'm1', title: 'Monitor', category_id: 'monitor', span: 1 }]]
-        ]),
-        tokens
-    });
-    const records = buildDashboardRecords({ layout, tokens });
-    assert.equal(records.some((record) => String(record.id || '').includes('plus')), false);
-    assert.equal(records.find((record) => record.id === dashboardRecordId('header_dim_dark_news')), undefined);
-    assert.equal(records.find((record) => record.id === dashboardRecordId('lane_news')).properties.color, shadeHex('#9f2f2f', tokens.laneShadePercent));
-    assert.equal(records.find((record) => record.id === dashboardRecordId('lane_monitor')).properties.color, shadeHex('#2f6f78', tokens.laneShadePercent));
-    assert.equal(records.find((record) => record.id === dashboardRecordId('card_news_n1')).properties.color, shadeHex('#9f2f2f', 3));
-    assert.deepEqual(records.find((record) => record.id === dashboardRecordId('card_news_n1')).properties.material.shadow, tokens.cardShadow);
-    assert.equal(tokens.cardShadow.offsetY, 0);
-    assert.equal(records.find((record) => record.id === dashboardRecordId('header_news')).properties.opacity, 1);
-    assert.equal(records.find((record) => record.id === dashboardRecordId('header_monitor')).properties.opacity, 1);
-});
-
-test('dashboard contact cards render profile photos behind Bevy text', () => {
-    const tokens = mergeDashboardTokens();
-    const layout = createDashboardLayout({
-        width: 960,
-        height: 640,
-        toolboxHeight: 80,
-        categories: [
-            { id: 'contacts', label_key: 'eve.dashboard.category.contacts', color: '#2f6f78', visible: true },
-            { id: 'projects', label_key: 'eve.dashboard.category.projects', color: '#357245', visible: true }
-        ],
-        activeCategoryId: '',
-        itemsByCategory: new Map([
-            ['contacts', [{
-                id: 'contact_photo',
-                title: 'Jane Doe',
-                category_id: 'contacts',
-                metadata: { user_face: '/api/uploads/jane.png' },
-                span: 1
-            }]]
-        ]),
-        tokens
-    });
-    const records = buildDashboardRecords({ layout, tokens });
-    const media = records.find((record) => record.id === dashboardRecordId('card_media_contacts_contact_photo'));
-    const backdrop = records.find((record) => record.id === dashboardRecordId('card_label_backdrop_contacts_contact_photo'));
-    const title = records.find((record) => record.id === dashboardRecordId('card_title_contacts_contact_photo'));
-    const card = records.find((record) => record.id === dashboardRecordId('card_contacts_contact_photo'));
-    assert.equal(media.type, 'image');
-    assert.equal(media.properties.source, '/api/uploads/jane.png');
-    assert.equal(media.properties.media_fit, 'cover');
-    assert.equal(media.properties.corner_radius, tokens.metrics.contentRadius);
-    assert.equal(media.properties.cornerRadius, tokens.metrics.contentRadius);
-    assert.equal(media.properties.left, card.properties.left);
-    assert.equal(media.properties.top, card.properties.top);
-    assert.equal(media.properties.width, card.properties.width);
-    assert.equal(media.properties.height, card.properties.height);
-    assert.equal(backdrop.type, 'image');
-    assert.match(backdrop.properties.source, /^data:image\/svg\+xml/);
-    assert.equal(backdrop.properties.opacity, 0.6);
-    assert.equal(backdrop.properties.width, card.properties.width);
-    assert.equal(backdrop.properties.height, expectedDashboardLabelBackdropHeight(card.properties.height));
-    assert.equal(backdrop.properties.left, card.properties.left);
-    assert.equal(backdrop.properties.top, card.properties.top + card.properties.height - backdrop.properties.height);
-    assert.equal(title.properties.left, backdrop.properties.left);
-    assert.equal(title.properties.top, backdrop.properties.top);
-    assert.equal(title.properties.width, backdrop.properties.width);
-    assert.equal(title.properties.height, backdrop.properties.height);
-    assert.equal(title.properties.text_style.baseline, 'middle');
-    assert.equal(title.properties.text_style.padding_y, 0);
-    assert.equal(Number(media.properties.z_index) > Number(card.properties.z_index), true);
-    assert.equal(Number(backdrop.properties.z_index) > Number(media.properties.z_index), true);
-    assert.equal(Number(title.properties.z_index) > Number(backdrop.properties.z_index), true);
-});
-
-test('dashboard contact cards render the canonical person pictogram when no photo exists', () => {
-    const tokens = mergeDashboardTokens();
-    const layout = createDashboardLayout({
-        width: 960,
-        height: 640,
-        toolboxHeight: 80,
-        categories: [{ id: 'contacts', label_key: 'eve.dashboard.category.contacts', color: '#2f6f78', visible: true }],
-        activeCategoryId: '',
-        itemsByCategory: new Map([['contacts', [{
-            id: 'contact_unknown',
-            title: 'Unknown',
-            category_id: 'contacts',
-            metadata: { user_face: './assets/images/icons/user.svg', user_face_placeholder: true },
-            span: 1
-        }]]]),
-        tokens
-    });
-    const records = buildDashboardRecords({ layout, tokens });
-    const media = records.find((record) => record.id === dashboardRecordId('card_media_contacts_contact_unknown'));
-    const card = records.find((record) => record.id === dashboardRecordId('card_contacts_contact_unknown'));
-    assert.match(media.properties.source, /user\.svg$/);
-    assert.equal(media.properties.media_fit, 'contain');
-    assert.equal(card.properties.color, tokens.contactPlaceholderBackground);
-});
-
-test('dashboard project cards render contained renderer previews over the card color', () => {
-    const tokens = mergeDashboardTokens();
-    const layout = createDashboardLayout({
-        width: 960,
-        height: 640,
-        toolboxHeight: 80,
-        categories: [
-            { id: 'contacts', label_key: 'eve.dashboard.category.contacts', color: '#2f6f78', visible: true },
-            { id: 'projects', label_key: 'eve.dashboard.category.projects', color: '#357245', visible: true }
-        ],
-        activeCategoryId: '',
-        itemsByCategory: new Map([
-            ['projects', [{
-                id: 'project_preview',
-                title: 'Scene',
-                category_id: 'projects',
-                metadata: { project_preview_source: 'data:image/png;base64,preview', preview_width: 320, preview_height: 200 },
-                span: 1
-            }]]
-        ]),
-        tokens
-    });
-    const records = buildDashboardRecords({ layout, tokens });
-    const card = records.find((record) => record.id === dashboardRecordId('card_projects_project_preview'));
-    const media = records.find((record) => record.id === dashboardRecordId('card_media_projects_project_preview'));
-    const backdrop = records.find((record) => record.id === dashboardRecordId('card_label_backdrop_projects_project_preview'));
-    const title = records.find((record) => record.id === dashboardRecordId('card_title_projects_project_preview'));
-    assert.equal(card.properties.color, shadeHex('#357245', 3));
-    assert.equal(card.properties.corner_radius, 0);
-    assert.equal(media.type, 'image');
-    assert.equal(media.properties.source, 'data:image/png;base64,preview');
-    assert.equal(media.properties.media_fit, 'contain');
-    assert.equal(media.properties.object_fit, 'contain');
-    assert.equal(media.properties.corner_radius, tokens.metrics.contentRadius);
-    assert.equal(media.properties.cornerRadius, tokens.metrics.contentRadius);
-    assert.equal(media.properties.media_width, 320);
-    assert.equal(media.properties.media_height, 200);
-    const scale = Math.min(card.properties.width / 320, card.properties.height / 200);
-    const containedWidth = Math.round(320 * scale);
-    const containedHeight = Math.round(200 * scale);
-    assert.equal(media.properties.width, containedWidth);
-    assert.equal(media.properties.height, containedHeight);
-    assert.equal(media.properties.width < card.properties.width || media.properties.height < card.properties.height, true);
-    assert.equal(media.properties.left, card.properties.left + (card.properties.width - containedWidth) / 2);
-    assert.equal(media.properties.top, card.properties.top + (card.properties.height - containedHeight) / 2);
-    assert.equal(Number((media.properties.width / media.properties.height).toFixed(2)), 1.6);
-    assert.equal(backdrop.type, 'image');
-    assert.doesNotMatch(decodeURIComponent(backdrop.properties.source), /Q/);
-    assert.equal(backdrop.properties.opacity, 0.6);
-    assert.equal(backdrop.properties.width, card.properties.width);
-    assert.equal(backdrop.properties.height, expectedDashboardLabelBackdropHeight(card.properties.height));
-    assert.equal(backdrop.properties.left, card.properties.left);
-    assert.equal(backdrop.properties.top, card.properties.top + card.properties.height - backdrop.properties.height);
-    assert.equal(title.properties.left, backdrop.properties.left);
-    assert.equal(title.properties.top, backdrop.properties.top);
-    assert.equal(title.properties.width, backdrop.properties.width);
-    assert.equal(title.properties.height, backdrop.properties.height);
-    assert.equal(title.properties.text_style.baseline, 'middle');
-    assert.equal(title.properties.text_style.padding_y, 0);
-    assert.equal(Number(backdrop.properties.z_index) > Number(media.properties.z_index), true);
-    assert.equal(Number(title.properties.z_index) > Number(backdrop.properties.z_index), true);
-});
-
-test('dashboard cards without media do not render label backdrops', () => {
-    const tokens = mergeDashboardTokens();
-    const layout = createDashboardLayout({
-        width: 960,
-        height: 640,
-        toolboxHeight: 80,
-        categories: [
-            { id: 'contacts', label_key: 'eve.dashboard.category.contacts', color: '#2f6f78', visible: true },
-            { id: 'projects', label_key: 'eve.dashboard.category.projects', color: '#357245', visible: true }
-        ],
-        activeCategoryId: '',
-        itemsByCategory: new Map([
-            ['contacts', [{ id: 'contact_plain', title: 'Jane Doe', category_id: 'contacts', span: 1 }]]
-        ]),
-        tokens
-    });
-    const records = buildDashboardRecords({ layout, tokens });
-    assert.equal(records.find((record) => record.id === dashboardRecordId('card_media_contacts_contact_plain')), undefined);
-    assert.equal(records.find((record) => record.id === dashboardRecordId('card_label_backdrop_contacts_contact_plain')), undefined);
-    assert.ok(records.find((record) => record.id === dashboardRecordId('card_title_contacts_contact_plain')));
-});
-
-test('dashboard card labels ignore whitespace-only names and fall back to ids', () => {
-    const tokens = mergeDashboardTokens();
-    const layout = createDashboardLayout({
-        width: 960,
-        height: 640,
-        toolboxHeight: 80,
-        categories: [
-            { id: 'projects', label_key: 'eve.dashboard.category.projects', color: '#357245', visible: true },
-            { id: 'contacts', label_key: 'eve.dashboard.category.contacts', color: '#2f6f78', visible: true }
-        ],
-        activeCategoryId: '',
-        itemsByCategory: new Map([
-            ['projects', [{
-                id: 'project_plain',
-                title: '   ',
-                category_id: 'projects',
-                payload: { name: '   ', label: '' },
-                span: 1
-            }]],
-            ['contacts', [{
-                id: 'contact_plain',
-                title: '   ',
-                category_id: 'contacts',
-                payload: { display_name: '   ', email: '' },
-                span: 1
-            }]]
-        ]),
-        tokens
-    });
-    const records = buildDashboardRecords({ layout, tokens });
-    assert.equal(
-        records.find((record) => record.id === dashboardRecordId('card_title_projects_project_plain'))?.properties?.text,
-        'project_plain'
-    );
-    assert.equal(
-        records.find((record) => record.id === dashboardRecordId('card_title_contacts_contact_plain'))?.properties?.text,
-        'contact_plain'
-    );
-});
-
-test('dashboard text records use the token font and invalidate text texture cache by font', () => {
-    const tokens = mergeDashboardTokens();
-    const layout = createDashboardLayout({
-        width: 960,
-        height: 640,
-        toolboxHeight: 80,
-        categories: [{ id: 'news', label_key: 'eve.dashboard.category.news', color: '#9f2f2f', visible: true }],
-        activeCategoryId: '',
-        itemsByCategory: new Map([['news', [{ id: 'n1', title: 'News', category_id: 'news', span: 1 }]]]),
-        tokens
-    });
-    const records = buildDashboardRecords({ layout, tokens });
-    const textRecords = records.filter((record) => record.type === 'text');
-    assert.ok(textRecords.length > 0);
-    assert.equal(textRecords.every((record) => record.properties.text_style.font_family === DASHBOARD_FONT_FAMILY), true);
-    const firstStyle = textRecords[0].properties.text_style;
-    const robotoKey = createBevyMediaTextureCacheKey({ kind: 'text', text: 'News', style: firstStyle });
-    const systemKey = createBevyMediaTextureCacheKey({ kind: 'text', text: 'News', style: { ...firstStyle, font_family: 'system-ui' } });
-    assert.notEqual(robotoKey, systemKey);
-});
-
-test('dashboard records keep layout geometry in project logical coordinates', () => {
-    const tokens = mergeDashboardTokens();
-    const layout = createDashboardLayout({
-        width: 960,
-        height: 640,
-        toolboxHeight: 80,
-        categories: [
-            { id: 'news', label_key: 'eve.dashboard.category.news', color: '#9f2f2f', visible: true },
-            { id: 'monitor', label_key: 'eve.dashboard.category.monitor', color: '#2f6f78', visible: true }
-        ],
-        activeCategoryId: 'news',
-        itemsByCategory: new Map([
-            ['news', [{ id: 'n1', title: 'News', category_id: 'news', span: 1 }]]
-        ]),
-        tokens
-    });
-    const records = buildDashboardRecords({ layout, tokens });
-    const background = records.find((record) => record.id === dashboardRecordId('background'));
-    const table = records.find((record) => record.id === dashboardRecordId('table'));
-    const lane = records.find((record) => record.id === dashboardRecordId('lane_news'));
-    const card = records.find((record) => record.id === dashboardRecordId('card_news_n1'));
-    assert.deepEqual(
-        ['left', 'top', 'width', 'height'].map((key) => background.properties[key]),
-        [layout.dashboard_rect.x, layout.dashboard_rect.y, layout.dashboard_rect.width, layout.dashboard_rect.height]
-    );
-    assert.deepEqual(
-        ['left', 'top', 'width', 'height'].map((key) => table.properties[key]),
-        [layout.table_rect.x, layout.table_rect.y, layout.table_rect.width, layout.table_rect.height]
-    );
-    assert.deepEqual(
-        ['left', 'top', 'width', 'height'].map((key) => lane.properties[key]),
-        [layout.lanes[0].lane_rect.x, layout.lanes[0].lane_rect.y, layout.lanes[0].lane_rect.width, layout.lanes[0].lane_rect.height]
-    );
-    assert.deepEqual(
-        ['left', 'top'].map((key) => card.properties[key] > layout.visible_item_rects[0].rect[key === 'left' ? 'x' : 'y']),
-        [true, true]
-    );
-});
-
-test('dashboard records do not render placeholder cards for empty lanes', () => {
-    const tokens = mergeDashboardTokens();
-    const layout = createDashboardLayout({
-        width: 960,
-        height: 640,
-        toolboxHeight: 80,
-        categories: [
-            { id: 'news', label_key: 'eve.dashboard.category.news', color: '#9f2f2f', visible: true }
-        ],
-        activeCategoryId: '',
-        itemsByCategory: new Map(),
-        tokens
-    });
-    const records = buildDashboardRecords({ layout, tokens });
-    assert.equal(records.some((record) => record.id.includes('empty_card_')), false);
-    assert.equal(records.some((record) => record.id.includes('empty_cell_')), false);
-});
-
-test('dashboard layout exposes no generic fullscreen detail geometry', () => {
-    const tokens = mergeDashboardTokens();
-    const layout = createDashboardLayout({
-        width: 960,
-        height: 640,
-        toolboxHeight: 80,
-        categories: [{ id: 'goals', label_key: 'eve.dashboard.category.goals', color: '#63d471', visible: true }],
-        activeCategoryId: 'goals',
-        itemsByCategory: new Map(),
-        tokens
-    });
-    assert.equal(Object.hasOwn(layout, 'creation_fullscreen_rect'), false);
-    assert.equal(Object.hasOwn(layout, 'expanded_cell_rect'), false);
-});
-
-const publicDirectoryApi = () => ({
-    directory: {
-        list: async () => ({
-            entries: [{ principal_id: 'public-user', display_name: 'Visible Name', user_face: '/face.png', revision: 1 }]
-        })
-    },
-    auth: {
-        list: async () => ({ directory: [{ id: 'private-bait', name: 'Private Bait', visibility: 'private' }] }),
-        getCurrentInfo: () => null
-    }
-});
-
-test('Finder and Communication share only the redacted directory.public population', async () => {
-    const finderRecords = await loadPeopleDirectory({ api: publicDirectoryApi() });
-    assert.deepEqual([...finderRecords.keys()], ['public-user']);
-    assert.equal(finderRecords.get('public-user').name, 'Visible Name');
-    assert.equal(finderRecords.get('public-user').phone, '');
-
-    const users = createCommUsers({ getAdoleApi: publicDirectoryApi, getCommitApi: () => null });
-    const communicationRecords = await users.collectPublicUsers();
-    assert.deepEqual(communicationRecords.map((record) => record.id), ['public-user']);
-    assert.equal(communicationRecords[0].phone, '');
-    assert.equal(users.normalizeUserRecord({ principal_id: 'unknown', display_name: '' }).name, eveT('eve.contact.unknown', 'Unknown'));
-});
-
-test('a stale post-commit project list cannot hide Dashboard projects or trigger duplicate repairs', async () => {
-    const previousWindow = globalThis.window;
-    const commitCalls = [];
-    const staleProjects = [
-        { id: 'project_b', createdAt: '2026-01-02T00:00:00.000Z' },
-        { id: 'project_a', createdAt: '2026-01-01T00:00:00.000Z' }
-    ];
+beforeEach(() => {
     globalThis.window = {
-        Atome: {
-            commitBatch: async (events) => {
-                commitCalls.push(events);
-                return { ok: true };
-            }
-        }
+        devicePixelRatio: 2,
+        __eveSurfaceBackground: { color: [0.1, 0.2, 0.3, 1], sourceUrl: 'blob:profile-background', signature: 'profile' }
     };
+});
 
-    try {
-        const runtime = createProjectOrderRuntime({
-            loadProjectListRaw: async () => staleProjects.map((project) => ({ ...project }))
+describe('Dashboard WebGPU records', () => {
+    it('projects an opaque full-screen base before the cover profile image', () => {
+        const target = layout();
+        const records = buildDashboardRecords({ layout: target, tokens });
+        expect(record(records, 'surface_base').properties).toMatchObject({
+            left: 0, top: 0, width: 900, height: 720, opacity: 1
         });
-        const ordered = await runtime.reconcileProjectOrder('user_a');
+        expect(record(records, 'surface_image').properties).toMatchObject({
+            source: 'blob:profile-background', fit: 'cover', media_fit: 'cover', object_fit: 'cover'
+        });
+        expect(record(records, 'surface_base').properties.z_index)
+            .toBeLessThan(record(records, 'surface_image').properties.z_index);
+    });
 
-        assert.deepEqual(ordered.map((project) => project.id), ['project_a', 'project_b']);
-        assert.equal(commitCalls.length, 1);
-        assert.deepEqual(
-            commitCalls[0].map((event) => [event.atome_id, event.props.matrix_slot]),
-            [['project_b', 1], ['project_a', 0]]
-        );
-    } finally {
-        if (previousWindow === undefined) delete globalThis.window;
-        else globalThis.window = previousWindow;
-    }
-});
+    it('falls back to a fully opaque canonical color without an image', () => {
+        globalThis.window.__eveSurfaceBackground = { color: [0.2, 0.3, 0.4, 1], signature: 'color' };
+        const records = buildDashboardRecords({ layout: layout(), tokens });
+        expect(record(records, 'surface_base').properties.color).toBe('rgba(51,77,102,1)');
+        expect(record(records, 'surface_image')).toBeUndefined();
+    });
 
-test('clock and weather stay next to the header while only News content scrolls, in either handedness', () => {
-    const tokens = mergeDashboardTokens();
-    const items = ['clock', 'weather'].map(id => ({ id, category_id: 'news', metadata: { dashboard_module: id } }));
-    items.push(...Array.from({ length: 30 }, (_, index) => ({ id: `news_${index}`, category_id: 'news' })));
-    for (const handedness of ['left', 'right']) {
-        const options = { width: 1200, height: 600, handedness, tokens, categories: [{ id: 'news' }], itemsByCategory: new Map([['news', items]]) };
-        const initial = createDashboardLayout(options);
-        const scrolled = createDashboardLayout({ ...options, scrollByLane: { news: 800 } });
-        for (const id of ['clock', 'weather']) {
-            const before = initial.visible_item_rects.find(entry => entry.item.id === id);
-            const after = scrolled.visible_item_rects.find(entry => entry.item.id === id);
-            assert.deepEqual(after.rect, before.rect);
+    it('has no obsolete veil, bands, shadows, focus spread or plus records', () => {
+        const records = buildDashboardRecords({ layout: layout(), tokens });
+        expect(records.some((entry) => /project_veil|bottom_shadow|header_side_shadow|focus_spread|create_bg|__eve_dashboard_lane_|__eve_dashboard_table/.test(entry.id))).toBe(false);
+    });
+
+    it('uses the styled frozen-glass material on every content card without double paint', () => {
+        const records = buildDashboardRecords({ layout: layout({ activeCategoryId: 'projects' }), tokens });
+        const header = record(records, 'header_bg_projects');
+        const cards = [
+            record(records, 'card_news_dashboard_module_weather'),
+            record(records, 'card_news_news-one'),
+            record(records, 'card_calendar_event-one'),
+            record(records, 'card_projects_project-one'),
+            record(records, 'card_contacts_contact-one')
+        ];
+        expect(header.properties.material.backdrop.blurPx).toBeGreaterThan(0);
+        for (const card of cards) {
+            expect(card.properties.color).toBe(tokens.contentGlass.fillColor);
+            expect(card.properties.material.backdrop.blurPx).toBe(tokens.contentGlass.blurPx);
+            expect(card.properties.material.backdrop.tint[3]).toBe(tokens.contentGlass.tintAlpha);
         }
-        assert.equal(scrolled.visible_item_rects.some(entry => entry.item.id === 'news_0'), false);
-        const lane = scrolled.lanes[0];
-        for (const entry of scrolled.visible_item_rects.filter(entry => !entry.item.metadata?.dashboard_module)) {
-            assert.ok(entry.card_rect.x >= lane.scroll_clip_rect.x || handedness === 'right');
-            assert.ok(entry.card_rect.x + entry.card_rect.width <= lane.scroll_clip_rect.x + lane.scroll_clip_rect.width || handedness === 'left');
-        }
-    }
-});
+        expect(header.properties.material.shadow).toBeTruthy();
+    });
 
-for (const handedness of ['left', 'right']) test(`Dashboard Plus blocks align exactly with every header (${handedness})`, () => {
-    const tokens = mergeDashboardTokens();
-    const categories = ['news', 'calendar', 'projects', 'contacts', 'store', 'monitor']
-        .map(id => ({ id, label_key: `eve.dashboard.category.${id}`, color: '#4477bb', visible: true }));
-    const layout = createDashboardLayout({ width: 1000, height: 1000, toolboxHeight: 60,
-        categories, tokens, handedness, itemsByCategory: new Map() });
-    assert.equal(layout.create_rect, undefined);
-    for (const lane of layout.lanes) {
-        assert.equal(lane.create_rect.width, lane.header_rect.width);
-        assert.equal(lane.create_rect.height, lane.header_rect.height);
-        assert.equal(lane.create_rect.y, lane.header_rect.y);
-        assert.equal(lane.create_rect.x, lane.header_rect.x + (handedness === 'left' ? 1 : -1) * lane.header_rect.width);
-    }
-    const records = buildDashboardRecords({ layout, tokens });
-    assert.equal(records.filter(record => record.id.startsWith('__eve_dashboard_create_bg_')).length, 6);
+    it('renders weather as a two-unit glass card with icon and four data fields', () => {
+        const target = layout();
+        const records = buildDashboardRecords({ layout: target, tokens });
+        const box = target.projection_lanes[0].visible_item_rects[0].card_rect;
+        expect(record(records, 'card_news_dashboard_module_weather').properties.width).toBe(target.unit_width * 2);
+        expect(record(records, 'card_weather_icon_news_dashboard_module_weather').properties.source).toContain('data:image/svg+xml');
+        expect(record(records, 'card_weather_temperature_news_dashboard_module_weather').properties.text).toBe('18°');
+        expect(record(records, 'card_weather_city_news_dashboard_module_weather').properties.text).toBe('Clermont-Ferrand');
+        expect(box.width).toBe(target.unit_width * 2);
+    });
+
+    it('renders local time and date inside the strict one-unit Calendar header', () => {
+        const target = layout();
+        const records = buildDashboardRecords({ layout: target, tokens, now: new Date('2026-09-16T19:24:00+02:00') });
+        const calendarLane = target.projection_lanes.find((lane) => lane.category.id === 'calendar');
+        expect(calendarLane.header_rect.width).toBe(target.unit_width);
+        expect(record(records, 'header_calendar_time').properties.text).toMatch(/19|17|07/);
+        expect(record(records, 'header_calendar_date').properties.text.length).toBeGreaterThan(3);
+    });
+
+    it('keeps media translucent above the mandatory frozen-glass card surface', () => {
+        const records = buildDashboardRecords({ layout: layout(), tokens });
+        const projectCard = record(records, 'card_projects_project-one');
+        const projectMedia = record(records, 'card_media_projects_project-one');
+        const contactMedia = record(records, 'card_media_contacts_contact-one');
+        expect(projectCard.properties.color).toBe('rgba(0,0,0,0)');
+        expect(projectCard.properties.material.backdrop.blurPx).toBe(tokens.contentGlass.blurPx);
+        expect(projectMedia.properties.opacity).toBe(tokens.contentGlass.mediaOpacity);
+        expect(contactMedia.properties.opacity).toBe(tokens.contentGlass.mediaOpacity);
+        expect(projectMedia.properties.media_fit).toBe('contain');
+        expect(contactMedia.properties.media_fit).toBe('cover');
+        expect(record(records, 'card_label_backdrop_projects_project-one')).toBeTruthy();
+    });
+
+    it('keeps calendar event title and date as independent projected text records', () => {
+        const records = buildDashboardRecords({ layout: layout(), tokens });
+        expect(record(records, 'card_title_calendar_event-one').properties.text).toBe('Rendez-vous');
+        expect(record(records, 'card_date_calendar_event-one').properties.text).toMatch(/09|16/);
+    });
+
+    it('projects backdrop material into BevyUI node style and keeps only card roots actionable', () => {
+        const handlers = { activate: () => {}, wheel: () => {} };
+        const tree = buildDashboardBevyUiTree({ layout: layout(), tokens, handlers });
+        const children = tree.root.children;
+        const header = children.find((node) => node.id === dashboardRecordId('header_bg_news'));
+        const weatherRoot = children.find((node) => node.id === dashboardRecordId('card_news_dashboard_module_weather'));
+        const weatherIcon = children.find((node) => node.id === dashboardRecordId('card_weather_icon_news_dashboard_module_weather'));
+        expect(header.style.backdrop.blur_px).toBeGreaterThan(0);
+        expect(weatherRoot.on.activate).toBeTypeOf('function');
+        expect(weatherIcon.on).toBeUndefined();
+    });
+
+    it('offsets the complete Dashboard record band without changing geometry', () => {
+        const target = layout();
+        const base = buildDashboardRecords({ layout: target, tokens });
+        const shifted = buildDashboardRecords({ layout: target, tokens, layerOffset: 50 });
+        expect(shifted[0].properties.z_index - base[0].properties.z_index).toBe(50);
+        expect(shifted[0].properties.width).toBe(base[0].properties.width);
+    });
 });

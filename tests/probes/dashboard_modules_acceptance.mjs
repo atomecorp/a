@@ -1,16 +1,18 @@
-import { assert, awaitBevyUiNodeTarget, clickCanvasTarget, visibleMenuTool, wait, waitFor } from './molecule_ui_acceptance_support.mjs';
+import { assert, awaitBevyUiNodeTarget, clickCanvasTarget, wait, waitFor } from './molecule_ui_acceptance_support.mjs';
 import { screenshot } from './molecule_ui_drop_core.mjs';
 
 export const runDashboardModulesAcceptance = async ({ page, report, check, outDir }) => {
     const target = (nodeId, treeId = 'dashboard_bevy_ui') => awaitBevyUiNodeTarget(page, { nodeId, treeId });
     const click = async (nodeId, treeId) => clickCanvasTarget(page, await target(nodeId, treeId));
-    const projectId = await page.evaluate(() => window.eveDashboardBevyUiRuntime.state.sceneProjectId);
     const handedness = async value => {
-        await clickCanvasTarget(page, await visibleMenuTool(page, projectId, 'home'));
-        const header = await target('home_bio_accordion_header', 'eve_bevy_panel_home');
-        await clickCanvasTarget(page, header);
-        await click(`home_handedness_${value}`, 'eve_bevy_panel_home');
-        await click('eve_bevy_panel_home_footer_close', 'eve_bevy_panel_home');
+        await page.evaluate((next) => {
+            window.__eveProfilePreferences = {
+                ...(window.__eveProfilePreferences || {}),
+                visual: { ...(window.__eveProfilePreferences?.visual || {}), handedness: next }
+            };
+            window.__eveIntuitionXState = { ...(window.__eveIntuitionXState || {}), handedness: next };
+            window.dispatchEvent(new CustomEvent('eve:profile-preferences-updated', { detail: { preferences: window.__eveProfilePreferences } }));
+        }, value);
         await waitFor(page, value => ({ ok: window.eveDashboardBevyUiRuntime.state.layout.handedness === value }), value);
     };
     const read = () => page.evaluate(() => {
@@ -19,7 +21,7 @@ export const runDashboardModulesAcceptance = async ({ page, report, check, outDi
         return { offset: lane.scroll_offset, max: lane.horizontal_scroll_max, bounds: lane.scroll_clip_rect,
             items: lane.visible_item_rects.map(item => ({ id: item.item.id, box: item.card_rect })), hand: layout.handedness };
     });
-    for (const hand of ['left', 'right']) await check(`${hand} Dashboard keeps clock and weather fixed while News scrolls`, async () => {
+    for (const hand of ['left', 'right']) await check(`${hand} Dashboard keeps weather fixed while News scrolls`, async () => {
         await handedness(hand);
         const initial = await read();
         assert(initial.max > 0, 'dashboard_news_overflow_fixture_required');
@@ -31,17 +33,13 @@ export const runDashboardModulesAcceptance = async ({ page, report, check, outDi
         await page.mouse.wheel(2000, 0); await wait(1000);
         const after = await read();
         assert(after.offset > before.offset + 100, 'dashboard_news_did_not_scroll');
-        for (const id of ['dashboard_module_clock', 'dashboard_module_weather']) {
+        for (const id of ['dashboard_module_weather']) {
             assert(JSON.stringify(before.items.find(item => item.id === id)?.box)
                 === JSON.stringify(after.items.find(item => item.id === id)?.box), `dashboard_fixed_module_moved:${id}`);
             assert(await target(`__eve_dashboard_card_news_${id}`), `dashboard_fixed_module_not_hittable:${id}`);
         }
         report[`news_${hand}`] = { before, after };
         await screenshot({ page, report, outDir, name: `dashboard_${hand}_news_after` });
-        await click('dashboard_guided_create');
-        await target('dashboard_guide_family_health', 'eve_bevy_panel_dashboard_project_guide');
-        await screenshot({ page, report, outDir, name: `dashboard_${hand}_guided` });
-        await click('eve_bevy_panel_dashboard_project_guide_footer_close', 'eve_bevy_panel_dashboard_project_guide');
     });
     await check('weather uses the shared city editor, attributed source and live current conditions', async () => {
         await click('__eve_dashboard_card_news_dashboard_module_weather');

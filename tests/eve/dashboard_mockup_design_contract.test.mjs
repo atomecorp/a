@@ -11,15 +11,21 @@ const defaultCategories = async () => {
     return normalizeDashboardCategories(readDashboardDefaults(JSON.parse(raw)).categories);
 };
 
-test('dashboard Bevy defaults keep the approved square-cell override over the stable R&D reference', async () => {
+test('dashboard Bevy defaults keep the approved glass-grid override over the historical R&D reference', async () => {
     const source = await mockupSource();
     assert.match(source, /let selectedCategory\s*=\s*-1;/);
     assert.match(source, /const HEADER_WIDTH_RATIO\s*=\s*1\.5;/);
     assert.doesNotMatch(source, /HEADER_ADD_RATIO/);
     assert.match(source, /const CELL_EXPAND_DURATION\s*=\s*300;/);
     assert.match(source, /const CONTENT_RADIUS\s*=\s*10;/);
-    assert.equal(Object.hasOwn(DASHBOARD_VISUAL_TOKENS.transitions, 'fullscreenMs'), false);
-    assert.equal(DASHBOARD_VISUAL_TOKENS.metrics.contentRadius, 0);
+    assert.equal(DASHBOARD_VISUAL_TOKENS.transitions, undefined);
+    assert.equal(DASHBOARD_VISUAL_TOKENS.metrics.contentRadius, 8);
+    assert.equal(DASHBOARD_VISUAL_TOKENS.metrics.gap, 8);
+    assert.equal(DASHBOARD_VISUAL_TOKENS.metrics.laneGap, 8);
+    assert.ok(DASHBOARD_VISUAL_TOKENS.contentGlass.tintAlpha > 0);
+    assert.ok(DASHBOARD_VISUAL_TOKENS.contentGlass.tintAlpha < 0.5);
+    assert.ok(DASHBOARD_VISUAL_TOKENS.contentGlass.blurPx > 0);
+    assert.ok(DASHBOARD_VISUAL_TOKENS.contentGlass.mediaOpacity < 1);
 });
 
 test('dashboard JSON palette mirrors the R&D mockup category palette', async () => {

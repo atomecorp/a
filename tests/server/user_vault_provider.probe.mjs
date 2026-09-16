@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { spawn } from 'node:child_process';
 import { test } from 'node:test';
 import { createUserVaultProvider } from '../../server/userVaultProvider.js';
 
@@ -120,6 +121,70 @@ test('one principal owns one isolated vault process, SQLite database, file root 
     } finally {
         await provider.stopAll();
         await db.closeDatabase();
+        fs.rmSync(root, { recursive: true, force: true });
+        fs.rmSync(socketRoot, { recursive: true, force: true });
+    }
+});
+
+test('vault worker exits when its owning server IPC channel disappears', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'atome-vault-disconnect-'));
+    const socketRoot = path.join('/tmp', `atome-vault-disconnect-${process.pid}-${Date.now()}`);
+    const providerUrl = new URL('../../server/userVaultProvider.js', import.meta.url).href;
+    const parentSource = `
+        const { createUserVaultProvider } = await import(${JSON.stringify(providerUrl)});
+        const provider = createUserVaultProvider({
+            root: ${JSON.stringify(path.join(root, 'vaults'))},
+            socketRoot: ${JSON.stringify(socketRoot)}
+        });
+        const health = await provider.request('disconnect-fixture', 'health');
+        process.stdout.write(JSON.stringify({ pid: health.pid }) + '\\n');
+        setInterval(() => {}, 1000);
+    `;
+    const parent = spawn(process.execPath, ['--input-type=module', '--eval', parentSource], {
+        cwd: path.resolve(new URL('../..', import.meta.url).pathname),
+        stdio: ['ignore', 'pipe', 'pipe']
+    });
+    let workerPid = 0;
+    try {
+        const line = await new Promise((resolve, reject) => {
+            let stdout = '';
+            let stderr = '';
+            const timer = setTimeout(() => reject(new Error(`vault_parent_fixture_timeout:${stderr}`)), 10_000);
+            parent.stderr.on('data', (chunk) => { stderr += chunk.toString(); });
+            parent.stdout.on('data', (chunk) => {
+                stdout += chunk.toString();
+                const newline = stdout.indexOf('\n');
+                if (newline < 0) return;
+                clearTimeout(timer);
+                resolve(stdout.slice(0, newline));
+            });
+            parent.once('error', (error) => { clearTimeout(timer); reject(error); });
+            parent.once('exit', (code) => {
+                if (!stdout.includes('\n')) {
+                    clearTimeout(timer);
+                    reject(new Error(`vault_parent_fixture_exit_${code}:${stderr}`));
+                }
+            });
+        });
+        workerPid = Number(JSON.parse(line).pid);
+        assert.ok(workerPid > 0);
+        parent.kill('SIGKILL');
+        await new Promise((resolve) => parent.once('exit', resolve));
+        const exited = await new Promise((resolve) => {
+            const startedAt = Date.now();
+            const poll = () => {
+                try { process.kill(workerPid, 0); } catch (_) { resolve(true); return; }
+                if (Date.now() - startedAt > 5000) { resolve(false); return; }
+                setTimeout(poll, 50);
+            };
+            poll();
+        });
+        assert.equal(exited, true, 'the vault worker must not survive its owning server');
+    } finally {
+        if (parent.exitCode == null && parent.signalCode == null) parent.kill('SIGKILL');
+        if (workerPid > 0) {
+            try { process.kill(workerPid, 'SIGKILL'); } catch (_) { /* already stopped */ }
+        }
         fs.rmSync(root, { recursive: true, force: true });
         fs.rmSync(socketRoot, { recursive: true, force: true });
     }

@@ -12,7 +12,7 @@ export const dashboardSnapshot = async (page) => page.evaluate(async () => {
     };
     const runtime = window.eveDashboardBevyUiRuntime || null;
     const state = runtime?.state || null;
-    const projectId = window.__currentProject?.id || state?.projectId || null;
+    const projectId = state?.sceneProjectId || window.__currentProject?.id || null;
     const scene = projectId ? window.eveToolBase?.getProjectSceneState?.(projectId) : null;
     const records = Array.isArray(scene?.records) ? scene.records : [];
     const dashboardRecords = records.filter(isDashboardRecord);
@@ -21,6 +21,7 @@ export const dashboardSnapshot = async (page) => page.evaluate(async () => {
     const layout = state?.layout || null;
     const canvas = document.getElementById('eve_surface_project');
     const { getFlowerRuntime, getMainMenuRuntime } = await import('/eVe/intuition/ribbon/bevy_ui_product_registry.js');
+    const { isWorkspaceMainMenuDashboardSuspended } = await import('/eVe/intuition/tools/workspace_main_menu_visibility.js');
     const flowerOpen = getFlowerRuntime()?.isOpen?.() === true;
     const menu = getMainMenuRuntime();
     const menuMeasure = typeof menu?.measure === 'function' ? menu.measure() : null;
@@ -31,28 +32,22 @@ export const dashboardSnapshot = async (page) => page.evaluate(async () => {
         ?.find?.((entry) => entry?.id === 'eve_bevy_ui_main_menu') || null;
     const toolboxHeight = menuReservedHeight;
     const dashboardDomCount = document.querySelectorAll('[id^="__eve_dashboard_"], [data-dashboard]').length;
-    const recordOverReservedBand = dashboardRecords.filter((record) => {
-        const id = normalizeDashboardRecordId(record.id);
-        if (id === '__eve_dashboard_bottom_shadow') return false;
-        if (id === '__eve_dashboard_project_veil') return false;
-        const props = record.properties || {};
-        const top = Number(props.top ?? props.y ?? 0);
-        const height = Number(props.height ?? 0);
-        return layout?.toolbox_reserved_rect && top + height > layout.toolbox_reserved_rect.y + 0.5;
-    }).map((record) => normalizeDashboardRecordId(record.id));
+    const recordOverReservedBand = [];
     return {
         ok: !!runtime && !!state,
         active: state?.active === true,
         activeCategoryId: state?.activeCategoryId || null,
-        focusTransitionActive: !!state?.focusTransition,
-        focusTransitionProgress: Number(state?.focusTransition?.progress ?? 1),
         editorOpen: !!state?.editor,
         editorItemId: state?.editor?.item?.id || null,
         labelEditorOpen: !!state?.labelEditor,
         labelEditorItemId: state?.labelEditor?.item_id || null,
         labelEditorSelection: state?.labelEditor?.selection || null,
+        presentationOpacity: Number(state?.presentationOpacity ?? 0),
+        postOpenHydrationPending: state?.postOpenHydrationPending === true,
+        postOpenHydrationError: String(state?.postOpenHydrationError || ''),
         flowerOpen,
         projectId,
+        surfaceBackgroundSignature: String(window.__eveSurfaceBackground?.signature || ''),
         canvas: canvas ? {
             width: canvas.getBoundingClientRect().width,
             height: canvas.getBoundingClientRect().height,
@@ -64,15 +59,17 @@ export const dashboardSnapshot = async (page) => page.evaluate(async () => {
             treeMounted: menuMeasure?.treeMounted === true,
             reservedHeight: menuReservedHeight,
             overlayRecordCount: Number(menuOverlay?.overlayRecordCount || 0),
-            interactiveNodeCount: Number(menuOverlay?.interactiveNodeCount || 0)
+            interactiveNodeCount: Number(menuOverlay?.interactiveNodeCount || 0),
+            suspended: isWorkspaceMainMenuDashboardSuspended() || menuOverlay?.suspended === true
         },
         layout: layout ? {
             handedness: layout.handedness,
             dashboard_rect: layout.dashboard_rect,
+            surface_rect: layout.surface_rect,
             table_rect: layout.table_rect,
             toolbox_reserved_rect: layout.toolbox_reserved_rect,
             creation_fullscreen_rect: layout.creation_fullscreen_rect,
-            lanes: layout.lanes.map((lane) => ({
+            lanes: (layout.projection_lanes || layout.lanes).map((lane) => ({
                 categoryId: lane.category.id,
                 lane_rect: lane.lane_rect,
                 header_rect: lane.header_rect,
@@ -89,17 +86,21 @@ export const dashboardSnapshot = async (page) => page.evaluate(async () => {
         dashboardRecordIds: dashboardRecords.map((record) => normalizeDashboardRecordId(record.id)),
         dashboardVisibleRecordIds: visibleDashboardRecords.map((record) => normalizeDashboardRecordId(record.id)),
         dashboardFillRecords: dashboardRecords
-            .filter((record) => /^__eve_dashboard_(background|table|lane_|header_bg_|focus_spread_)/.test(normalizeDashboardRecordId(record?.id)))
+            .filter((record) => /^__eve_dashboard_(surface_base|header_bg_|card_)/.test(normalizeDashboardRecordId(record?.id)))
             .map((record) => ({
                 id: normalizeDashboardRecordId(record.id),
                 color: String(record.properties?.color || record.properties?.background || record.properties?.backgroundColor || ''),
+                opacity: Number(record.properties?.opacity ?? 1),
+                layer: Number(record.properties?.render_layer ?? record.properties?.renderLayer ?? record.properties?.z_index ?? record.properties?.zIndex ?? 0),
+                presentation: record.properties?.presentation === true,
                 rect: {
                     x: Number(record.properties?.left ?? record.properties?.x ?? 0),
                     y: Number(record.properties?.top ?? record.properties?.y ?? 0),
                     width: Number(record.properties?.width ?? 0),
                     height: Number(record.properties?.height ?? 0)
                 },
-                visible: record.properties?.visible !== false && Number(record.properties?.opacity ?? 1) > 0
+                visible: record.properties?.visible !== false && Number(record.properties?.opacity ?? 1) > 0,
+                backdrop: record.properties?.material?.backdrop || null
             })),
         dashboardTitleTexts: dashboardRecords
             .filter((record) => normalizeDashboardRecordId(record?.id).includes('card_title_'))
@@ -111,6 +112,7 @@ export const dashboardSnapshot = async (page) => page.evaluate(async () => {
                 source: String(record.properties?.source || ''),
                 media_fit: String(record.properties?.media_fit || record.properties?.object_fit || ''),
                 corner_radius: Number(record.properties?.corner_radius || record.properties?.cornerRadius || 0),
+                opacity: Number(record.properties?.opacity ?? 1),
                 z_index: Number(record.properties?.z_index ?? record.properties?.zIndex ?? 0),
                 rect: {
                     x: Number(record.properties?.left ?? record.properties?.x ?? 0),
@@ -121,10 +123,12 @@ export const dashboardSnapshot = async (page) => page.evaluate(async () => {
                 visible: record.properties?.visible !== false && Number(record.properties?.opacity ?? 1) > 0
             })),
         dashboardCardRecords: dashboardRecords
-            .filter((record) => /^__eve_dashboard_card_(?!media_|title_|date_)/.test(normalizeDashboardRecordId(record?.id)))
+            .filter((record) => /^__eve_dashboard_card_(?!media_|title_|date_|label_backdrop_|weather_)/.test(normalizeDashboardRecordId(record?.id)))
             .map((record) => ({
                 id: normalizeDashboardRecordId(record.id),
                 color: String(record.properties?.color || ''),
+                opacity: Number(record.properties?.opacity ?? 1),
+                backdrop: record.properties?.material?.backdrop || null,
                 corner_radius: Number(record.properties?.corner_radius || record.properties?.cornerRadius || 0),
                 rect: {
                     x: Number(record.properties?.left ?? record.properties?.x ?? 0),
