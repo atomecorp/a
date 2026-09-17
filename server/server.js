@@ -14,6 +14,7 @@ import pino from 'pino';
 import { coerceLogEnvelope, isValidLogEnvelope } from '../atome/src/shared/logging.js';
 import { handleWsAtomeOperation } from './wsAtomeOperations.js';
 import { createUserVaultRouter } from './userVaultRouter.js';
+import { applyOpaqueNativeOriginCors } from './cors_policies.js';
 import { createWsSyncRuntime } from './wsSyncRuntime.js';
 import { createSyncSharingService } from './syncSharingService.js';
 import { createDirectoryPublicService } from './directoryPublicService.js';
@@ -519,6 +520,30 @@ async function startServer() {
       }
       return payload;
     });
+
+    // The iOS/AUv3 WebView is served from the custom `atome:` scheme, an opaque
+    // origin that can never join the credentialed allowlist above. Without this
+    // it receives no CORS header at all and cannot read a single http response,
+    // which is what kept an imported or downloaded wallpaper from ever
+    // appearing on the phone. Media routes answer it the way
+    // /api/server/verify already does: wildcard origin, no credentials, bearer
+    // token in the header. Every other route stays restricted.
+    server.addHook('onSend', async (request, reply, payload) => {
+      applyOpaqueNativeOriginCors(request, reply);
+      return payload;
+    });
+
+    // @fastify/cors answers a preflight only for an allowlisted origin; from the
+    // opaque one it falls through to route matching and a missing OPTIONS route
+    // means a 404, which fails the preflight before the real request is sent.
+    for (const preflightRoute of [
+      '/api/uploads',
+      '/api/uploads/*',
+      '/api/recordings/*',
+      '/api/extract-audio/*'
+    ]) {
+      server.options(preflightRoute, (request, reply) => reply.code(204).send());
+    }
 
     // Always-on diagnostic endpoint (useful in production to confirm which code is running)
     server.get('/__whoami', async () => {
