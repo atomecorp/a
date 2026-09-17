@@ -2537,12 +2537,16 @@ This section supersedes earlier Dashboard lifecycle descriptions in this map. `e
   not compatibility owners. Login, workspace/session, model-only preference,
   and profile-domain owners remain because their responsibilities are outside
   visible Home composition.
-- `bevy_panel_layout.js` / `bevy_panel_runtime.js` own the internal
-  `openAtHandednessEdge` geometry option consumed by Home and Font. Font also
-  opts into `openBesideContextualRail`: its surface resolves an optional inset
-  from the canonical contextual-edit registry and shared main-menu item width,
-  the panel runtime forwards that number, and the layout places Font beside,
-  never under, the rail. Without a visible rail the inset is zero.
+- `bevy_panel_layout.js` / `bevy_panel_runtime.js` own the internal explicit
+  `{ rect, edge }` anchor, deterministic content measurement and compact
+  viewport clamping used by every registered surface. Bottom tools glue above
+  their anchor and side-rail tools glue inside the left/right rail while
+  remaining centered on the invoking geometry. `bevy_panel_geometry_gesture_runtime.js`
+  owns drag/resize/footer geometry sessions separately from surface lifecycle.
+  Color, Font and Size are shared-canvas Bevy surfaces; Color no longer creates
+  `eve_couleur_dialog` or imports panel-local CSS. Background, Delete and Layer
+  remain legacy surfaces and consume the common dialog chrome/natural sizing
+  while following their existing retirement path.
 - `dashboard_environment_watcher.js` emits a forced change for
   `eve:profile-preferences-updated`; `dashboard_bevy_ui_runtime.js` delegates the
   resulting refilter to its existing data controller.

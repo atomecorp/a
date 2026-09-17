@@ -18,6 +18,10 @@ const {
     SIZE_PRESETS,
     createSizePanelSurface
 } = await import('../../eVe/intuition/runtime/bevy_panel/bevy_panel_size_runtime.js');
+const {
+    COLOR_SWATCHES,
+    createColorPanelSurface
+} = await import('../../eVe/intuition/runtime/bevy_panel/bevy_panel_color_runtime.js');
 const { resolveBevyPanelGeometry } = await import('../../eVe/intuition/runtime/bevy_panel/bevy_panel_layout.js');
 const { setMainMenuRuntime } = await import('../../eVe/intuition/ribbon/bevy_ui_product_registry.js');
 const { resolveBevyMainMenuItemSize } = await import('../../eVe/intuition/ribbon/bevy_ui_main_menu_model.js');
@@ -30,11 +34,10 @@ const findNode = (node, id) => {
     return (node.children || []).map((child) => findNode(child, id)).find(Boolean) || null;
 };
 
-test('Size composes the canonical numeric field, preset chips, and selection summary', async () => {
+test('Size keeps only its canonical numeric field and presets', async () => {
     const applies = [];
     const runtime = createSizePanelSurface({
         applySize: async (value, options) => { applies.push({ value, options }); return { ok: true, count: 2 }; },
-        selectionCount: () => 2,
         currentTextSize: () => 72
     });
     const cleanup = runtime.surface.onOpen({ refresh: () => {} });
@@ -45,7 +48,8 @@ test('Size composes the canonical numeric field, preset chips, and selection sum
             emit: (intent) => emitted.push(intent)
         });
         assert.equal(runtime.surface.surfaceId, 'eve_bevy_panel_size');
-        assert.equal(findNode(content, 'size_selection_summary_count').text, '2');
+        assert.equal(findNode(content, 'size_hint'), null);
+        assert.equal(findNode(content, 'size_selection_summary'), null);
         assert.equal(findNode(content, 'size_numeric_field_input').kind, 'number_input');
         assert.equal(findNode(content, 'size_numeric_field_decrement').kind, 'button');
         assert.equal(findNode(content, 'size_numeric_field_increment').kind, 'button');
@@ -75,15 +79,15 @@ test('Size composes the canonical numeric field, preset chips, and selection sum
 test('Font composes the canonical selectable list and applies only known families', async () => {
     const applies = [];
     const runtime = createFontPanelSurface({
-        applyFont: async (value) => { applies.push(value); return { ok: true, count: 1 }; },
-        selectionCount: () => 1
+        applyFont: async (value) => { applies.push(value); return { ok: true, count: 1 }; }
     });
     const cleanup = runtime.surface.onOpen({ refresh: () => {} });
     try {
         const content = runtime.surface.buildContent(runtime.readState(), { bodyWidth: 358, emit: () => {} });
         const list = findNode(content, 'font_families');
         assert.equal(runtime.surface.surfaceId, 'eve_bevy_panel_font');
-        assert.equal(findNode(content, 'font_selection_summary_count').text, '1');
+        assert.equal(findNode(content, 'font_hint'), null);
+        assert.equal(findNode(content, 'font_selection_summary'), null);
         assert.equal(list.children.length, FONT_CHOICES.length);
         assert.equal(list.children.every((row) => row.kind === 'button'), true);
         assert.equal(findNode(content, 'font_families_option_0_label').style.font_family, undefined);
@@ -102,7 +106,7 @@ test('Font composes the canonical selectable list and applies only known familie
     assert.equal(runtime.readState().activeFont, 'Arial');
 });
 
-test('Font opens beside the contextual toolbox without changing its bottom anchor', () => {
+test('Font opens glued beside the contextual rail and vertically centered on it', () => {
     const runtime = createFontPanelSurface();
     const surface = { getBoundingClientRect: () => ({ width: 1024, height: 768 }) };
     const railWidth = resolveBevyMainMenuItemSize();
@@ -121,8 +125,7 @@ test('Font opens beside the contextual toolbox without changing its bottom ancho
         openAtHandednessEdge: runtime.surface.openAtHandednessEdge,
         handednessEdgeInsetPx: railWidth
     });
-    assert.deepEqual([left.x, left.y, left.width], [railWidth, 194, 400]);
-    assert.equal(left.y + left.height, 768 - 74);
+    assert.deepEqual([left.x, left.y, left.width], [railWidth, 97, 400]);
 
     setMainMenuRuntime({ handedness: 'right', getReservedHeight: () => 74 });
     const right = resolveBevyPanelGeometry({
@@ -132,7 +135,7 @@ test('Font opens beside the contextual toolbox without changing its bottom ancho
         openAtHandednessEdge: runtime.surface.openAtHandednessEdge,
         handednessEdgeInsetPx: railWidth
     });
-    assert.deepEqual([right.x, right.y, right.width], [1024 - railWidth - 400, 194, 400]);
+    assert.deepEqual([right.x, right.y, right.width], [1024 - railWidth - 400, 97, 400]);
     assert.equal(right.x + right.width, 1024 - railWidth);
 
     const withoutContextualRail = resolveBevyPanelGeometry({
@@ -151,16 +154,40 @@ test('Font opens beside the contextual toolbox without changing its bottom ancho
         openAtHandednessEdge: runtime.surface.openAtHandednessEdge,
         handednessEdgeInsetPx: railWidth
     });
-    assert.deepEqual([narrow.x, narrow.y, narrow.width, narrow.height], [0, 270, 390 - railWidth, 500]);
+    assert.deepEqual([narrow.x, narrow.y, narrow.width, narrow.height], [0, 135, 370, 500]);
 });
 
-test('Size and Font bridges retain public tools and contain no legacy DOM route', () => {
+test('Color keeps swatches, RGBA value and channels without redundant labels', async () => {
+    const applies = [];
+    const runtime = createColorPanelSurface({
+        applyColor: async (channels) => { applies.push(channels); return { ok: true }; }
+    });
+    const emitted = [];
+    const content = runtime.surface.buildContent(runtime.readState(), {
+        bodyWidth: 358,
+        emit: (intent) => emitted.push(intent)
+    });
+    assert.equal(findNode(content, 'color_hint'), null);
+    assert.equal(findNode(content, 'color_selection_summary'), null);
+    assert.equal(findNode(content, 'color_base_label'), null);
+    assert.equal(findNode(content, 'color_rgba_text').text, 'rgba(248, 248, 248, 1.00)');
+    assert.equal(COLOR_SWATCHES.length, 12);
+    assert.ok(['r', 'g', 'b', 'a'].every((key) => findNode(content, `color_channel_${key}_input`)?.kind === 'number_input'));
+    findNode(content, 'color_swatch_0_2').on.activate();
+    await runtime.surface.handleEvent(emitted.pop(), { refresh: () => {} });
+    assert.deepEqual(applies.at(-1), { r: 244, g: 67, b: 54, a: 100 });
+});
+
+test('Size, Font and Color bridges retain public tools and contain no legacy DOM route', () => {
     const sizeSource = readFileSync(new URL('../../eVe/intuition/tools/size.js', import.meta.url), 'utf8');
     const fontSource = readFileSync(new URL('../../eVe/intuition/tools/font.js', import.meta.url), 'utf8');
+    const colorSource = readFileSync(new URL('../../eVe/intuition/tools/couleur.js', import.meta.url), 'utf8');
     assert.match(sizeSource, /ui\.size\.apply/);
     assert.match(fontSource, /ui\.font\.apply/);
-    [sizeSource, fontSource].forEach((source) => {
+    assert.match(colorSource, /ui\.couleur\.apply/);
+    [sizeSource, fontSource, colorSource].forEach((source) => {
         assert.doesNotMatch(source, /createEveDialog|document\.createElement|dataset\.|style\.display/);
     });
     assert.doesNotMatch(sizeSource, /elastic_slider|createElasticSlider/);
+    assert.doesNotMatch(colorSource, /elastic_slider|createElasticSlider|style_panels_visual/);
 });

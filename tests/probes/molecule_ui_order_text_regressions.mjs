@@ -367,9 +367,11 @@ const runVisualInlineEditing = async ({ page, creation, report, outDir }) => {
     }, { timeoutMs: 10000, intervalMs: 150 });
     assert(flowerColor, `focused_visual_flower_color_target_missing:${JSON.stringify(flowerColorNode)}`);
     await clickCanvasTarget(page, flowerColor);
-    const colorDialog = page.locator('#eve_couleur_dialog');
-    await colorDialog.waitFor({ state: 'visible', timeout: 10000 });
-    await colorDialog.locator('.eve-style-tool-swatch[data-color="#f44336"]').click();
+    const redSwatch = await awaitBevyUiNodeTarget(page, {
+        nodeId: 'color_swatch_0_2', treeId: 'eve_bevy_panel_couleur', step: 2
+    }, { timeoutMs: 10000, intervalMs: 150 });
+    assert(redSwatch, 'focused_visual_color_red_swatch_missing');
+    await clickCanvasTarget(page, redSwatch);
     const styledDraft = await waitFor(page, async ({ id, projectId }) => {
         const state = window.eveToolBase?.getProjectSceneState?.(projectId) || null;
         const record = (state?.records || []).find((entry) => String(entry?.id || entry?.atome_id || '') === id) || null;
@@ -379,8 +381,15 @@ const runVisualInlineEditing = async ({ page, creation, report, outDir }) => {
             richText
         };
     }, { id: textId, projectId: project.id }, 10000);
-    await colorDialog.locator('[data-eve-panel-close="true"]').click();
-    await colorDialog.waitFor({ state: 'hidden', timeout: 10000 });
+    const colorClose = await awaitBevyUiNodeTarget(page, {
+        nodeId: 'eve_bevy_panel_couleur_footer_close', treeId: 'eve_bevy_panel_couleur', step: 2
+    }, { timeoutMs: 10000, intervalMs: 150 });
+    assert(colorClose, 'focused_visual_color_close_missing');
+    await clickCanvasTarget(page, colorClose);
+    await waitFor(page, () => ({
+        ok: !(window.eveBevyUiRuntime?.readOverlayDiagnostics?.()?.trees || [])
+            .some((entry) => entry.id === 'eve_bevy_panel_couleur')
+    }), null, 10000);
     await waitFor(page, () => ({
         ok: Boolean(document.querySelector('#eve_hidden_text_service [data-role="active-text-editor"]'))
     }));

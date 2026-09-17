@@ -427,7 +427,7 @@ test('Home list additions retain blank stable rows immediately above the canonic
     }
 });
 
-test('Home opening geometry follows handedness and remains bottom-aligned on desktop and mobile', () => {
+test('Home opening geometry follows handedness, side centering and compact mobile sizing', () => {
     const previousWindow = globalThis.window;
     globalThis.window = {};
     const desktopSurface = { getBoundingClientRect: () => ({ width: 1024, height: 768 }) };
@@ -439,7 +439,7 @@ test('Home opening geometry follows handedness and remains bottom-aligned on des
             allowMobileFloating: true,
             openAtHandednessEdge: true
         });
-        assert.deepEqual([left.x, left.y, left.width, left.height], [0, 74, 480, 620]);
+        assert.deepEqual([left.x, left.y, left.width, left.height], [0, 37, 480, 620]);
 
         setMainMenuRuntime({ handedness: 'right', getReservedHeight: () => 74 });
         const right = resolveBevyPanelGeometry({
@@ -448,7 +448,7 @@ test('Home opening geometry follows handedness and remains bottom-aligned on des
             allowMobileFloating: true,
             openAtHandednessEdge: true
         });
-        assert.deepEqual([right.x, right.y, right.width, right.height], [544, 74, 480, 620]);
+        assert.deepEqual([right.x, right.y, right.width, right.height], [544, 37, 480, 620]);
 
         const mobile = resolveBevyPanelGeometry({
             surface: { getBoundingClientRect: () => ({ width: 390, height: 844 }) },
@@ -456,7 +456,7 @@ test('Home opening geometry follows handedness and remains bottom-aligned on des
             allowMobileFloating: true,
             openAtHandednessEdge: true
         });
-        assert.deepEqual([mobile.x, mobile.y, mobile.width, mobile.height], [0, 150, 390, 620]);
+        assert.deepEqual([mobile.x, mobile.y, mobile.width, mobile.height], [20, 75, 370, 620]);
     } finally {
         if (previousWindow === undefined) delete globalThis.window;
         else globalThis.window = previousWindow;

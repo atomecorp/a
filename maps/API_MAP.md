@@ -551,6 +551,7 @@ Ownership: eVe closed panel projection over the shared BevyUI runtime.
 Primary sources:
 
 - `eVe/intuition/runtime/bevy_panel/bevy_panel_runtime.js`
+- `eVe/intuition/runtime/bevy_panel/bevy_panel_geometry_gesture_runtime.js`
 - `eVe/intuition/runtime/bevy_panel/bevy_panel_accordion.js`
 - `eVe/intuition/runtime/bevy_panel/bevy_panel_select.js`
 - `atome/src/squirrel/components/select_contract.js`
@@ -560,6 +561,14 @@ Primary sources:
 - `eVe/intuition/runtime/eve_intuition/panel_surface_runtime.js`
 
 Exposure: existing semi-public closed `openPanelSurface(surfaceKey, context)` and `closePanelSurface(surfaceKey, context)` route registered Bevy panel surfaces to `openBevyPanelSurface(...)` / `closeBevyPanelSurface(...)`. Migrated panels mount disposable BevyUI trees named `eve_bevy_panel_<surface>` on `eve_surface_project`; non-migrated panels remain on the existing registered surface path until they are migrated and verified.
+
+`openPanelSurface` keeps its public signature. The internal Bevy context may carry
+`anchor: { rect, edge }`, where `edge` is `bottom`, `left`, or `right`; the
+shared layout owner uses it to glue and center the surface against the invoking
+tool or rail. The runtime builds content, measures its natural height with the
+shared Bevy layout engine, then clamps the panel to the viewport. Color, Font,
+and Size are registered shared-canvas surfaces; their writes still re-enter the
+existing `ui.couleur.apply`, `ui.font.apply`, and `ui.size.apply` commands.
 
 The temporary development/test-only `ui.dev.panel_lab` tool is not a public or semi-public API. It is registered only when the internal Panel Lab gate is enabled, delegates to the same closed panel route, and must be removed after the shared component migration is complete. Its short activation toggles the Lab through that route; its 520 ms long press is a development-only `window.location.reload()` action and suppresses the matching toggle activation. Native iOS Debug configurations set the existing `window.__EVE_PANEL_LAB__` gate through the shared `WKUserScript` document-start bootstrap only when `-AtomePanelLab` or `ATOME_IOS_PANEL_LAB=1` is supplied; normal Debug launches and all Release configurations do not set it.
 

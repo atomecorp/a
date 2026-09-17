@@ -4,7 +4,7 @@ import { test } from 'vitest';
 import { resolveBevyMainMenuItemSize } from '../../eVe/intuition/ribbon/bevy_ui_main_menu_model.js';
 import { setMainMenuRuntime } from '../../eVe/intuition/ribbon/bevy_ui_product_registry.js';
 import { isBevyPanelMobileSurface, resolveBevyPanelGeometry } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_layout.js';
-import { buildBevyPanelTree } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_tree.js';
+import { buildBevyPanelTree, measurePanelNaturalHeight } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_tree.js';
 import { BEVY_PANEL_TOKENS } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_tokens.js';
 import { setAtomeContextualEditApi } from '../../eVe/intuition/runtime/eve_intuition/atome_contextual_edit_registry.js';
 import {
@@ -98,7 +98,38 @@ test('the shared fixed area measures a taller responsive action block', () => {
         [320, 72 + (BEVY_PANEL_TOKENS.paddingPx * 2)]);
 });
 
-test('Panel Lab can retain floating geometry on a mobile viewport', () => {
+test('shared panel geometry glues bottom and side anchors without a gap', () => {
+    const surface = { getBoundingClientRect: () => ({ left: 100, top: 50, width: 1000, height: 800 }) };
+    const base = { surface, defaultGeometry: { width: 300, height: 180 }, naturalHeight: 180 };
+    const bottom = resolveBevyPanelGeometry({
+        ...base,
+        anchor: { edge: 'bottom', rect: { left: 500, right: 560, top: 700, bottom: 740, width: 60, height: 40 } }
+    });
+    assert.deepEqual([bottom.x, bottom.y, bottom.width, bottom.height], [280, 470, 300, 180]);
+    const left = resolveBevyPanelGeometry({
+        ...base,
+        anchor: { edge: 'left', rect: { left: 100, right: 160, top: 250, bottom: 310, width: 60, height: 60 } }
+    });
+    assert.deepEqual([left.x, left.y], [60, 140]);
+    const right = resolveBevyPanelGeometry({
+        ...base,
+        anchor: { edge: 'right', rect: { left: 1040, right: 1100, top: 250, bottom: 310, width: 60, height: 60 } }
+    });
+    assert.deepEqual([right.x, right.y], [640, 140]);
+});
+
+test('natural panel height is exactly content, padding, gaps and footer', () => {
+    assert.equal(measurePanelNaturalHeight({
+        width: 320,
+        bodyChildren: [
+            { id: 'a', kind: 'panel', style: { size: [300, 32] }, children: [] },
+            { id: 'b', kind: 'panel', style: { size: [300, 32] }, children: [] }
+        ],
+        bodyGap: 8
+    }), 128);
+});
+
+test('mobile panels stay compact and retain floating geometry through viewport changes', () => {
     const surface = {
         getBoundingClientRect: () => ({ width: 390, height: 844 })
     };
@@ -109,19 +140,11 @@ test('Panel Lab can retain floating geometry on a mobile viewport', () => {
         defaultGeometry,
         allowMobileFloating: true
     });
-    assert.deepEqual(
-        standardMobileGeometry,
-        { x: 0, y: 0, width: 390, height: 770, toolboxReservedHeight: 74, mobile: true, placement: null },
-        'product panels must retain their existing mobile fullscreen policy'
-    );
-    assert.deepEqual(
-        panelLabGeometry,
-        {
-            x: 0, y: 430, width: 390, height: 340, toolboxReservedHeight: 74, mobile: false,
-            placement: { left: 260, bottomGap: 0, width: 390, height: 340 }
-        },
-        'Panel Lab must open with its bottom edge against the mobile main toolbar'
-    );
+    assert.equal(standardMobileGeometry.width, 370);
+    assert.equal(standardMobileGeometry.height, 340);
+    assert.deepEqual([standardMobileGeometry.x, standardMobileGeometry.y], [10, 430]);
+    assert.equal(standardMobileGeometry.mobile, true);
+    assert.deepEqual(panelLabGeometry, standardMobileGeometry, 'all product panels must share the compact mobile policy');
     const resizedPanelLabGeometry = resolveBevyPanelGeometry({
         surface,
         defaultGeometry: { x: 70, y: 160, width: 300, height: 280 },
@@ -131,7 +154,7 @@ test('Panel Lab can retain floating geometry on a mobile viewport', () => {
     assert.deepEqual(
         resizedPanelLabGeometry,
         {
-            x: 70, y: 160, width: 300, height: 280, toolboxReservedHeight: 74, mobile: false,
+            x: 70, y: 160, width: 300, height: 280, toolboxReservedHeight: 74, mobile: true, docked: false,
             placement: { left: 70, bottomGap: 330, width: 300, height: 280 }
         },
         'Panel Lab mobile drag and resize results must not be replaced by fullscreen geometry'
@@ -148,8 +171,8 @@ test('Panel Lab can retain floating geometry on a mobile viewport', () => {
     assert.deepEqual(
         keyboardGeometry,
         {
-            x: 0, y: 49, width: 390, height: 340, toolboxReservedHeight: 74, mobile: false,
-            placement: { left: 260, bottomGap: 0, width: 390, height: 340 }
+            x: 10, y: 49, width: 370, height: 340, toolboxReservedHeight: 74, mobile: true, docked: false,
+            placement: { left: 10, bottomGap: 0, width: 370, height: 340 }
         },
         'keyboard contraction must clamp the floating panel without overwriting its full-viewport geometry'
     );
@@ -165,7 +188,7 @@ test('Panel Lab can retain floating geometry on a mobile viewport', () => {
     );
 });
 
-test('Contact docks beside the active Dashboard header and above the main menu', () => {
+test('Contact uses the same content-sized compact geometry as every panel', () => {
     const previousWindow = globalThis.window;
     const previousDocument = globalThis.document;
     const dom = new JSDOM('<!doctype html><html><body></body></html>');
@@ -180,15 +203,17 @@ test('Contact docks beside the active Dashboard header and above the main menu',
             defaultGeometry: { width: 420, height: 620 },
             dockToDashboardHeader: true
         }), {
-            x: 120, y: 0, width: 420, height: 726, toolboxReservedHeight: 74, mobile: false, placement: null
-        }, 'a left header must stay visible beside the docked Contact panel');
+            x: 290, y: 106, width: 420, height: 620, toolboxReservedHeight: 74, mobile: false, docked: true,
+            placement: { left: 290, bottomGap: 0, width: 420, height: 620 }
+        });
         assert.deepEqual(resolveBevyPanelGeometry({
             surface: mobileSurface,
             defaultGeometry: { width: 420, height: 620 },
             dockToDashboardHeader: true
         }), {
-            x: 120, y: 0, width: 270, height: 770, toolboxReservedHeight: 74, mobile: true, placement: null
-        }, 'mobile Contact must preserve both the side header and the main menu');
+            x: 10, y: 150, width: 370, height: 620, toolboxReservedHeight: 74, mobile: true, docked: true,
+            placement: { left: 10, bottomGap: 0, width: 370, height: 620 }
+        });
 
         setMainMenuRuntime({ handedness: 'right', getReservedHeight: () => 74 }, dom.window);
         assert.deepEqual(resolveBevyPanelGeometry({
@@ -196,8 +221,9 @@ test('Contact docks beside the active Dashboard header and above the main menu',
             defaultGeometry: { width: 420, height: 620 },
             dockToDashboardHeader: true
         }), {
-            x: 460, y: 0, width: 420, height: 726, toolboxReservedHeight: 74, mobile: false, placement: null
-        }, 'a right header must stay visible beside the docked Contact panel');
+            x: 290, y: 106, width: 420, height: 620, toolboxReservedHeight: 74, mobile: false, docked: true,
+            placement: { left: 290, bottomGap: 0, width: 420, height: 620 }
+        });
     } finally {
         setMainMenuRuntime(null, dom.window);
         globalThis.window = previousWindow;
@@ -260,7 +286,7 @@ test('A docked Contact-style panel unlocks its footer drag and resize handles on
         await dragHandle.on.drag({ client_x: 100, client_y: 20 });
         dragHandle.on.release();
         const movedPanel = findNode(mounted.at(-1), 'eve_bevy_panel_mobile_docked_fixture_panel');
-        assert.equal(movedPanel.style.position[0], 100, 'a mobile footer drag must release the initial dock and move the panel');
+        assert.equal(movedPanel.style.position[0], 0, 'a mobile footer drag must release the initial dock and move the compact panel');
         await closeBevyPanelSurface('mobile_docked_fixture');
     } finally {
         setMainMenuRuntime(null, dom.window);
@@ -327,7 +353,7 @@ test('Bevy panel restores its pre-keyboard position after the iOS viewport expan
     });
     await openBevyPanelSurface('ios_keyboard_restore_fixture');
     const panelId = 'eve_bevy_panel_ios_keyboard_restore_fixture_panel';
-    assert.deepEqual(findNode(mounted.at(-1), panelId).style.position, [0, 430]);
+    assert.deepEqual(findNode(mounted.at(-1), panelId).style.position, [10, 734]);
 
     viewportHeight = 500;
     viewport.dispatchEvent(new dom.window.Event('resize'));
@@ -336,7 +362,7 @@ test('Bevy panel restores its pre-keyboard position after the iOS viewport expan
     viewportHeight = 463;
     viewport.dispatchEvent(new dom.window.Event('resize'));
     await new Promise((resolve) => dom.window.setTimeout(resolve, 120));
-    assert.deepEqual(findNode(mounted.at(-1), panelId).style.position, [0, 49]);
+    assert.deepEqual(findNode(mounted.at(-1), panelId).style.position, [10, 353]);
     assert.equal(mounted.length, 2, 'one settled keyboard transition must produce one panel update');
 
     viewportHeight = 844;
@@ -344,7 +370,7 @@ test('Bevy panel restores its pre-keyboard position after the iOS viewport expan
     await new Promise((resolve) => dom.window.setTimeout(resolve, 120));
     assert.deepEqual(
         findNode(mounted.at(-1), panelId).style.position,
-        [0, 430],
+        [10, 734],
         'keyboard dismissal must restore the exact pre-keyboard position'
     );
     await closeBevyPanelSurface('ios_keyboard_restore_fixture');
@@ -406,7 +432,11 @@ test('structural viewport resize and orientation reanchor every open Bevy panel 
         for (const key of ['resize_fixture_a', 'resize_fixture_b', 'resize_fixture_edge']) {
             const tree = projected.get(`eve_bevy_panel_${key}`);
             const panel = findNode(tree, `eve_bevy_panel_${key}_panel`);
-            assert.equal(panel.style.position[1] + panel.style.size[1], height - 74);
+            if (key === 'resize_fixture_edge') {
+                assert.equal(panel.style.position[1] + (panel.style.size[1] / 2), (height - 74) / 2);
+            } else {
+                assert.equal(panel.style.position[1] + panel.style.size[1], height - 74, key);
+            }
             assert.ok(panel.style.position[0] >= 0 && panel.style.position[0] + panel.style.size[0] <= width);
         }
         width = 390;
@@ -414,15 +444,15 @@ test('structural viewport resize and orientation reanchor every open Bevy panel 
         dom.window.dispatchEvent(new dom.window.Event('resize'));
         await new Promise((resolve) => dom.window.setTimeout(resolve, 120));
         let edgePanel = findNode(projected.get('eve_bevy_panel_resize_fixture_edge'), 'eve_bevy_panel_resize_fixture_edge_panel');
-        assert.deepEqual(edgePanel.style.position, [0, 470]);
-        assert.equal(edgePanel.style.size[0], 390);
+        assert.deepEqual(edgePanel.style.position, [20, 367]);
+        assert.equal(edgePanel.style.size[0], 370);
         width = 1000;
         height = 800;
         dom.window.dispatchEvent(new dom.window.Event('resize'));
         await new Promise((resolve) => dom.window.setTimeout(resolve, 120));
         edgePanel = findNode(projected.get('eve_bevy_panel_resize_fixture_edge'), 'eve_bevy_panel_resize_fixture_edge_panel');
         assert.equal(edgePanel.style.size[0], 480);
-        assert.equal(edgePanel.style.position[1] + edgePanel.style.size[1], height - 74);
+        assert.equal(edgePanel.style.position[1] + (edgePanel.style.size[1] / 2), (height - 74) / 2);
         await closeBevyPanelSurface('resize_fixture_a');
         await closeBevyPanelSurface('resize_fixture_b');
         await closeBevyPanelSurface('resize_fixture_edge');
@@ -488,7 +518,7 @@ test('the panel runtime reserves the contextual rail only while it is visible', 
         await openBevyPanelSurface(surfaceKey);
         let panel = findNode(projected.get(`eve_bevy_panel_${surfaceKey}`), `eve_bevy_panel_${surfaceKey}_panel`);
         assert.equal(panel.style.position[0] + panel.style.size[0], 1000 - resolveBevyMainMenuItemSize());
-        assert.equal(panel.style.position[1] + panel.style.size[1], 800 - 74);
+        assert.equal(panel.style.position[1] + (panel.style.size[1] / 2), (800 - 74) / 2);
         await closeBevyPanelSurface(surfaceKey);
 
         menuVisible = false;

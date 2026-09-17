@@ -70,9 +70,10 @@ const hasNoBorderContour = (style) => (
     || style.borderStyle === 'none'
     || style.borderWidth === '0px'
 );
-assert.equal(closeControl.style.width, '16px', 'shared close control should stay compact inside panel chrome');
-assert.equal(closeControl.style.height, '16px', 'shared close control should preserve square geometry');
-assert.equal(closeControl.style.borderRadius, '3px', 'shared close control should keep a restrained rounded corner');
+assert.equal(closeControl.style.width, '30px', 'shared close control must keep three pixels of air inside the 36 px footer');
+assert.equal(closeControl.style.height, '30px', 'shared close control should preserve circular geometry');
+assert.equal(closeControl.style.borderRadius, '15px', 'shared close control must remain circular');
+assert.equal(closeControl.querySelector('[data-role="eve-panel-close-bar"]')?.style.width, '18px', 'the cross must not shrink with the disc');
 assert.equal(hasNoBorderContour(closeControl.style), true, 'shared close control must not reserve a transparent contour');
 assert.equal(
     SYSTEM_UI_PANEL_CHROME_TOKENS.background,
