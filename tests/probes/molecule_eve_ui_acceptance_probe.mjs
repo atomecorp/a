@@ -98,7 +98,7 @@ const enterProvisionedWorkspace = async (page) => {
             ok: current?.logged === true
                 && window.AdoleAPI?.security?.isAnonymous?.() === false
                 && !!canvas && getComputedStyle(canvas).opacity === '1'
-                && !!(window.__DEBUG__ || window.new_menu_v2),
+                && !!(window.__DEBUG__ || document.getElementById('intuition')),
             anonymous: window.AdoleAPI?.security?.isAnonymous?.() ?? null,
             surface_opacity: canvas ? getComputedStyle(canvas).opacity : null
         };
@@ -307,7 +307,19 @@ const main = async () => {
         await runSetupStep('provisioned_workspace', () => enterProvisionedWorkspace(page), 90000);
         await runSetupStep('profile_handedness', () => page.evaluate(async (handedness) => {
             const home = await import('/eVe/intuition/runtime/bevy_panel/bevy_panel_home_actions.js');
-            const loaded = await home.loadHomeProfile();
+            let loaded = await home.loadHomeProfile();
+            if (loaded?.ok !== true && loaded?.error === 'State not found') {
+                const current = await window.AdoleAPI?.auth?.current?.();
+                const userId = String(current?.user?.id || current?.user_id || current?.id || '');
+                if (!userId) throw new Error('profile_user_id_missing');
+                const created = await home.persistHomeProfile({
+                    userId,
+                    profile: { preferences: { visual: { handedness } } },
+                    guest: false
+                });
+                if (created?.ok !== true) throw new Error(`profile_create_failed:${created?.error || 'unknown'}`);
+                loaded = await home.loadHomeProfile();
+            }
             if (loaded?.ok !== true) throw new Error(`profile_load_failed:${loaded?.error || 'unknown'}`);
             const profile = loaded.profile;
             profile.preferences.visual.handedness = handedness;

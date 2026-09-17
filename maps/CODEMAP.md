@@ -55,7 +55,7 @@ OpenAI acceptance owners: tests/probes/openai_assistant_ui_acceptance.mjs reuses
 
 ### Composition owner convergence — 2026-09-09
 
-- project_view_drop_feedback composes the shared tool factory and popup placement for six explicit choices; it resolves the terminal release point as the sole valid choice. Existing List/Matrix/surface gesture sessions own arming and cleanup, and an outside release cannot reuse a previously hovered choice.
+- project_view_drop_feedback composes the shared tool factory and popup placement for six explicit choices; it resolves the terminal release point as the sole valid choice. Its popup remains a disposable projection while the original Natural/List/Matrix session continues moving the dragged source beneath it. The popup closes beyond a 20 px outer-bound margin without clearing the already armed target, so the same target cannot immediately rearm it; leaving that target restores normal dwell discovery. Existing gesture sessions own final cleanup, and an outside release cannot reuse a previously hovered choice.
 - tool_runtime_molecule_combine delegates cuts to project_view_occurrence_edit_runtime and copies to planCanonicalRecordCopies in tool_runtime_atome_duplicate. Group windows are compiled by project_view_transport_plan; canonical parentage uses atome_record_utils.resolveAtomeParentId.
 - tool_runtime_molecule_structure exposes the existing transform planner for translating whole nested source envelopes.
 

@@ -20,6 +20,7 @@ import {
 } from '../../eVe/domains/rendering/project_scene_runtime.js';
 import { sceneState } from '../../eVe/domains/rendering/project_scene_state.js';
 import { createRenderScene, hitTestRenderScene } from '../../eVe/domains/rendering/scene_graph.js';
+import { updateCompositionChoice } from '../../eVe/domains/rendering/project_view_drop_feedback.js';
 import { createVirtualSceneTree } from '../../eVe/domains/rendering/virtual_scene_contract.js';
 import { getRenderSurfaceState } from '../../eVe/domains/rendering/surface_runtime.js';
 import { setAtomeContextualEditApi } from '../../eVe/intuition/runtime/eve_intuition/atome_contextual_edit_registry.js';
@@ -487,6 +488,12 @@ test('Natural release outside a hovered composition choice keeps only the final 
         clientX: optionPoint.x, clientY: optionPoint.y, bubbles: true
     }));
     assert.equal(session.compositionChoice.selected, 'front');
+    dom.window.document.dispatchEvent(new dom.window.MouseEvent('pointermove', {
+        clientX: 200, clientY: 200, bubbles: true
+    }));
+    await nextTick();
+    assert.equal(session.compositionChoice, null);
+    assert.deepEqual(session.last, { x: 200, y: 200 });
     dom.window.document.dispatchEvent(new dom.window.MouseEvent('pointerup', { clientX: 200, clientY: 200, bubbles: true }));
     await nextTick();
     await nextTick();
@@ -497,6 +504,26 @@ test('Natural release outside a hovered composition choice keeps only the final 
     assert.equal(source.parent_id, 'project_composition_cancel');
     assert.equal(target.parent_id, 'project_composition_cancel');
     assert.equal(getRenderSurfaceState(canvas)?.pointerSession, null);
+});
+
+test('Composition palette retains its full outer 20px margin and dismisses beyond it', () => {
+    let disposed = 0;
+    const choice = {
+        origin: { x: 120, y: 10 }, entered: false, cancelled: false, selected: '',
+        options: ['before', 'after', 'front', 'behind', 'overwrite', 'insert'].map((key, index) => ({
+            key, disabled: false, box: { x: index * 20, y: 0, width: 20, height: 20 }
+        })),
+        refresh: () => {}, dispose: () => { disposed += 1; }
+    };
+    const session = { absorbTargetId: 'target', hoverId: 'target', compositionChoice: choice };
+    updateCompositionChoice(session, { x: 50, y: 10 });
+    assert.equal(choice.selected, 'front');
+    assert.equal(updateCompositionChoice(session, { x: 140, y: 10 }), '');
+    assert.equal(session.compositionChoice, choice);
+    assert.equal(updateCompositionChoice(session, { x: 141, y: 10 }), '');
+    assert.equal(session.compositionChoice, null);
+    assert.equal(session.absorbTargetId, 'target');
+    assert.equal(disposed, 1);
 });
 
 test('Project scene canvas click selects through the existing selection runtime', async () => {
