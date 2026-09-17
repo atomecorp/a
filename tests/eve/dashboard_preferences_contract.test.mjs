@@ -10,7 +10,7 @@ import { createDashboardLayout } from '../../eVe/domains/dashboard/dashboard_lay
 import { mergeDashboardTokens } from '../../eVe/domains/dashboard/dashboard_tokens.js';
 
 const allCategories = [
-    ['news', 10], ['calendar', 20], ['projects', 30], ['contacts', 40], ['store', 50], ['monitor', 60]
+    ['calendar', 10], ['news', 20], ['contacts', 30], ['monitor', 40], ['projects', 50], ['store', 60]
 ].map(([id, order]) => ({
     id, order, visible: true, label_key: id, icon_id: id === 'store' ? 'store' : id,
     color_family: id === 'store' ? 'orange' : 'blue', data_source: id === 'calendar' ? 'calendar' : 'generic_record'
@@ -49,7 +49,7 @@ describe('Dashboard preferences', () => {
             }) }
         });
         const categories = await data.loadCategories();
-        expect(categories.map((category) => category.id)).toEqual(['news', 'calendar', 'projects', 'contacts', 'monitor']);
+        expect(categories.map((category) => category.id)).toEqual(['calendar', 'news', 'contacts', 'monitor', 'projects']);
         await data.loadVisibleItems(categories);
         expect(requested.flat()).not.toContain('store');
     });

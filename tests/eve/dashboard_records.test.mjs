@@ -4,6 +4,7 @@ import { buildDashboardRecords, dashboardRecordId } from '../../eVe/domains/dash
 import { buildDashboardBevyUiTree } from '../../eVe/domains/dashboard/dashboard_bevy_ui_tree.js';
 import { createDashboardBevyUiRuntime } from '../../eVe/domains/dashboard/dashboard_bevy_ui_runtime.js';
 import { mergeDashboardTokens } from '../../eVe/domains/dashboard/dashboard_tokens.js';
+import { formatDashboardDisplayLabel } from '../../eVe/domains/dashboard/dashboard_item_text_fields.js';
 import { DASHBOARD_WORKSPACE_PROJECT_ID } from '../../eVe/domains/dashboard/dashboard_workspace_mode.js';
 import { EVE_COMMON_SKIN_TOKENS } from '../../eVe/elements/skin/tokens.js';
 import { mapVirtualSceneNodeToBevyPayload } from '../../eVe/domains/rendering/bevy_projection_adapter.js';
@@ -13,11 +14,11 @@ import { installMockBrowserEnv } from '../strangler_v2/_env.mjs';
 
 const tokens = mergeDashboardTokens({ metrics: { blockUnitSizePx: 112 } });
 const categories = [
-    { id: 'news', label_key: 'eve.dashboard.category.news', icon_id: 'news', color: '#9f2f2f' },
     { id: 'calendar', label_key: 'eve.dashboard.category.calendar', icon_id: 'calendar', color: '#245f94' },
-    { id: 'projects', label_key: 'eve.dashboard.category.projects', icon_id: 'projects', color: '#357245' },
+    { id: 'news', label_key: 'eve.dashboard.category.news', icon_id: 'news', color: '#9f2f2f' },
     { id: 'contacts', label_key: 'eve.dashboard.category.contacts', icon_id: 'contacts', color: '#673071' },
-    { id: 'monitor', label_key: 'eve.dashboard.category.monitor', icon_id: 'monitor', color: '#2f6f78' }
+    { id: 'monitor', label_key: 'eve.dashboard.category.monitor', icon_id: 'monitor', color: '#2f6f78' },
+    { id: 'projects', label_key: 'eve.dashboard.category.projects', icon_id: 'projects', color: '#357245' }
 ];
 
 const weather = {
@@ -100,11 +101,11 @@ describe('Dashboard WebGPU records', () => {
     it('renders weather as a two-unit glass card with icon and four data fields', () => {
         const target = layout();
         const records = buildDashboardRecords({ layout: target, tokens });
-        const box = target.projection_lanes[0].visible_item_rects[0].card_rect;
+        const box = target.projection_lanes.find((lane) => lane.category.id === 'news').visible_item_rects[0].card_rect;
         expect(record(records, 'card_news_dashboard_module_weather').properties.width).toBe(target.unit_width * 2);
         expect(record(records, 'card_weather_icon_news_dashboard_module_weather').properties.source).toContain('data:image/svg+xml');
         expect(record(records, 'card_weather_temperature_news_dashboard_module_weather').properties.text).toBe('18°');
-        expect(record(records, 'card_weather_city_news_dashboard_module_weather').properties.text).toBe('Clermont-Ferrand');
+        expect(record(records, 'card_weather_city_news_dashboard_module_weather').properties.text).toBe('Clermont.');
         expect(box.width).toBe(target.unit_width * 2);
     });
 
@@ -126,10 +127,10 @@ describe('Dashboard WebGPU records', () => {
             expect(record(records, 'header_calendar')).toBeUndefined();
             expect(record(records, 'header_calendar_time').properties.text).toMatch(/19|17|07/);
             expect(record(records, 'header_calendar_time').properties.text_style.font_size)
-                .toBe(Math.max(16, calendarLane.header_rect.width * 0.19));
+                .toBe(Math.max(surfaceTokens.labelText.font_size + 1, calendarLane.header_rect.width * 0.19));
             expect(record(records, 'header_calendar_date').properties.text.length).toBeGreaterThan(3);
             expect(record(records, 'header_calendar_date').properties.text_style.font_size)
-                .toBe(Math.max(10, calendarLane.header_rect.width * 0.1));
+                .toBe(surfaceTokens.labelText.font_size);
             const time = record(records, 'header_calendar_time').properties;
             const date = record(records, 'header_calendar_date').properties;
             expect(time.top).toBe(Math.round(calendarLane.header_rect.y + calendarLane.header_rect.height * 0.55));
@@ -139,6 +140,38 @@ describe('Dashboard WebGPU records', () => {
             expect(date.top - (time.top + time.height)).toBeGreaterThanOrEqual(Math.floor(calendarLane.header_rect.height * 0.05));
             expect(record(records, 'header_projects')).toBeTruthy();
         }
+    });
+
+    it('uses one fixed ordinary label size and truncates only the settled projection', () => {
+        expect(formatDashboardDisplayLabel('12345678', tokens.labelText)).toBe('12345678');
+        expect(formatDashboardDisplayLabel('123456789', tokens.labelText)).toBe('12345678.');
+        expect(formatDashboardDisplayLabel('e\u0301clairci', tokens.labelText)).toBe('éclairci');
+        expect(formatDashboardDisplayLabel('e\u0301claircie', tokens.labelText)).toBe('éclairci.');
+        const family = '👨‍👩‍👧‍👦';
+        expect(formatDashboardDisplayLabel(family.repeat(9), tokens.labelText)).toBe(`${family.repeat(8)}.`);
+
+        const target = layout();
+        const settled = buildDashboardRecords({ layout: target, tokens });
+        const ordinary = settled.filter((entry) => entry.type === 'text'
+            && !entry.id.endsWith('header_calendar_time')
+            && !entry.id.includes('card_weather_temperature_'));
+        expect(ordinary.length).toBeGreaterThan(0);
+        expect(ordinary.every((entry) => entry.properties.text_style.font_size === 16)).toBe(true);
+        expect(ordinary.every((entry) => entry.properties.text_style.text_fit === undefined)).toBe(true);
+        expect(record(settled, 'header_calendar_time').properties.text_style.font_size).toBeGreaterThan(16);
+        expect(record(settled, 'card_weather_temperature_news_dashboard_module_weather').properties.text_style.font_size).toBeGreaterThan(16);
+        expect(record(settled, 'card_title_news_news-one').properties.text).toBe('Une actu.');
+
+        const editing = buildDashboardRecords({
+            layout: target,
+            tokens,
+            labelEditor: {
+                item_id: 'news-one', category_id: 'news', field_id: 'title',
+                value: 'Une actualité complète', selection: { start: 0, end: 0, caret: 0 }
+            }
+        });
+        expect(record(editing, 'card_title_news_news-one').properties.text).toBe('Une actualité complète');
+        expect(record(editing, 'card_title_news_news-one').properties.text_style.font_size).toBe(16);
     });
 
     it('keeps partial rows square and clips them without deforming their records', () => {
@@ -227,7 +260,7 @@ describe('Dashboard WebGPU records', () => {
         const trees = new Map();
         const runtime = createDashboardBevyUiRuntime({
             constants: { dashboard: { categories: [{
-                ...categories[1], color_family: 'blue', data_source: 'calendar', order: 1
+                ...categories.find((category) => category.id === 'calendar'), color_family: 'blue', data_source: 'calendar', order: 1
             }] } },
             adapters: { listMany: async () => new Map([['calendar', []]]) },
             calendarApiLoader: async () => ({ on: () => () => {} }),
@@ -283,7 +316,7 @@ describe('Dashboard WebGPU records', () => {
 
     it('keeps calendar event title and date as independent projected text records', () => {
         const records = buildDashboardRecords({ layout: layout(), tokens });
-        expect(record(records, 'card_title_calendar_event-one').properties.text).toBe('Rendez-vous');
+        expect(record(records, 'card_title_calendar_event-one').properties.text).toBe('Rendez-v.');
         expect(record(records, 'card_date_calendar_event-one').properties.text).toMatch(/09|16/);
     });
 

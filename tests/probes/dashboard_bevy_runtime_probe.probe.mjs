@@ -72,7 +72,7 @@ const backgroundReady = (snapshot) => (
 );
 const fixedGridReady = (snapshot) => {
     const ids = snapshot.layout?.lanes?.map((lane) => lane.categoryId) || [];
-    return JSON.stringify(ids) === JSON.stringify(['news', 'calendar', 'projects', 'contacts', 'monitor']);
+    return JSON.stringify(ids) === JSON.stringify(['calendar', 'news', 'contacts', 'monitor', 'projects']);
 };
 const noObsoleteRecords = (snapshot) => (
     snapshot.dashboardRecordIds.every((id) => !/(?:project_veil|bottom_shadow|header_side_shadow|focus_spread|create_bg|_lane_|_table$)/.test(id))
@@ -102,9 +102,9 @@ const renderFrozenGlassMediaFixture = async (page) => page.evaluate(async () => 
     const rect = surface.getBoundingClientRect();
     const tokens = mergeDashboardTokens({ metrics: { blockUnitSizePx: 112 } });
     const categories = [
-        ['news', '#9f2f2f', 'news'], ['calendar', '#245f94', 'calendar'],
-        ['projects', '#357245', 'projects'], ['contacts', '#673071', 'contacts'],
-        ['monitor', '#2f6f78', 'monitor']
+        ['calendar', '#245f94', 'calendar'], ['news', '#9f2f2f', 'news'],
+        ['contacts', '#673071', 'contacts'], ['monitor', '#2f6f78', 'monitor'],
+        ['projects', '#357245', 'projects']
     ].map(([id, color, icon_id]) => ({ id, color, icon_id, label_key: `eve.dashboard.category.${id}` }));
     const media = (color, label) => `data:image/svg+xml,${encodeURIComponent(`
         <svg xmlns="http://www.w3.org/2000/svg" width="320" height="180">

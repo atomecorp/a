@@ -36,6 +36,17 @@ test('dashboard JSON palette mirrors the R&D mockup category palette', async () 
     }
 });
 
+test('dashboard defaults expose the canonical bottom-anchored order and ordinary label contract', async () => {
+    const categories = await defaultCategories();
+    assert.deepEqual(categories.map((category) => category.id),
+        ['calendar', 'news', 'contacts', 'monitor', 'projects']);
+    assert.equal(DASHBOARD_VISUAL_TOKENS.labelText.font_size, 16);
+    assert.equal(DASHBOARD_VISUAL_TOKENS.labelText.max_characters, 8);
+    assert.equal(DASHBOARD_VISUAL_TOKENS.labelText.overflow_marker, '.');
+    assert.equal(DASHBOARD_VISUAL_TOKENS.labelText.text_fit, undefined);
+    assert.equal(DASHBOARD_VISUAL_TOKENS.labelText.min_font_size, undefined);
+});
+
 test('dashboard R&D mockup does not reserve a plus strip on focused header', async () => {
     const source = await mockupSource();
     assert.doesNotMatch(source, /addStripW|drawHeaderPlus|plusCategoryFromPointer|headerAddW/);

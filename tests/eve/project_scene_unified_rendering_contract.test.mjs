@@ -20,7 +20,8 @@ import {
 } from '../../eVe/domains/rendering/project_scene_runtime.js';
 import { sceneState } from '../../eVe/domains/rendering/project_scene_state.js';
 import { createRenderScene, hitTestRenderScene } from '../../eVe/domains/rendering/scene_graph.js';
-import { updateCompositionChoice } from '../../eVe/domains/rendering/project_view_drop_feedback.js';
+import { openCompositionChoice, updateCompositionChoice } from '../../eVe/domains/rendering/project_view_drop_feedback.js';
+import { clearStationaryAbsorb } from '../../eVe/domains/rendering/project_view_drop_intent_runtime.js';
 import { createVirtualSceneTree } from '../../eVe/domains/rendering/virtual_scene_contract.js';
 import { getRenderSurfaceState } from '../../eVe/domains/rendering/surface_runtime.js';
 import { setAtomeContextualEditApi } from '../../eVe/intuition/runtime/eve_intuition/atome_contextual_edit_registry.js';
@@ -492,7 +493,7 @@ test('Natural release outside a hovered composition choice keeps only the final 
         clientX: 200, clientY: 200, bubbles: true
     }));
     await nextTick();
-    assert.equal(session.compositionChoice, null);
+    assert.equal(session.compositionChoice.cancelled, true);
     assert.deepEqual(session.last, { x: 200, y: 200 });
     dom.window.document.dispatchEvent(new dom.window.MouseEvent('pointerup', { clientX: 200, clientY: 200, bubbles: true }));
     await nextTick();
@@ -521,9 +522,46 @@ test('Composition palette retains its full outer 20px margin and dismisses beyon
     assert.equal(updateCompositionChoice(session, { x: 140, y: 10 }), '');
     assert.equal(session.compositionChoice, choice);
     assert.equal(updateCompositionChoice(session, { x: 141, y: 10 }), '');
-    assert.equal(session.compositionChoice, null);
+    assert.equal(session.compositionChoice, choice);
+    assert.equal(choice.cancelled, true);
     assert.equal(session.absorbTargetId, 'target');
+    assert.equal(disposed, 0);
+    clearStationaryAbsorb(session);
+    assert.equal(session.compositionChoice, null);
     assert.equal(disposed, 1);
+});
+
+test('Dismissed composition palette reuses one mounted tree for a later stacked target', () => {
+    const calls = { mount: 0, update: 0, unmount: 0 };
+    const runtime = {
+        mountTree: () => { calls.mount += 1; },
+        updateTree: () => { calls.update += 1; },
+        unmountTree: () => { calls.unmount += 1; }
+    };
+    const dependencies = {
+        runtime,
+        surface: { getBoundingClientRect: () => ({ width: 400, height: 300 }) },
+        itemSize: 40,
+        handedness: 'right'
+    };
+    const session = {};
+    const first = openCompositionChoice(session, {
+        point: { x: 100, y: 100 }, targetId: 'stacked_target_a'
+    }, dependencies);
+    updateCompositionChoice(session, { x: 399, y: 299 });
+    assert.equal(first.cancelled, true);
+    assert.deepEqual(calls, { mount: 1, update: 1, unmount: 0 });
+
+    const second = openCompositionChoice(session, {
+        point: { x: 180, y: 120 }, targetId: 'stacked_target_b'
+    }, dependencies);
+    assert.equal(second, first);
+    assert.equal(second.targetId, 'stacked_target_b');
+    assert.equal(second.cancelled, false);
+    assert.deepEqual(calls, { mount: 1, update: 2, unmount: 0 });
+
+    clearStationaryAbsorb(session);
+    assert.deepEqual(calls, { mount: 1, update: 2, unmount: 1 });
 });
 
 test('Project scene canvas click selects through the existing selection runtime', async () => {

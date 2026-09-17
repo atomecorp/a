@@ -36,7 +36,8 @@ export const validateNaturalMoleculeDrop = async ({ page, project, fixture, repo
     const target = await recordCenter(page, project.id, (record) => record.id === fixture.audioId, { sceneCoordinates: true });
     const cancelledTrace = await drag({
         page, source, destination: target, holdMs: 700,
-        compositionChoice: 'front', compositionExit: true
+        compositionChoice: 'front', compositionExit: true,
+        assertSurfaceDragContinues: true
     });
     await waitForStableScene(page, project.id);
     const cancelledMembership = await readMembership(page, {
@@ -47,6 +48,14 @@ export const validateNaturalMoleculeDrop = async ({ page, project, fixture, repo
     source = await recordCenter(page, project.id, (record) => record.id === fixture.imageId, { sceneCoordinates: true });
     assert(Math.hypot(source.x - cancelledTrace.releasePoint.x, source.y - cancelledTrace.releasePoint.y) <= 3,
         `natural_palette_exit_position:${JSON.stringify({ source, cancelledTrace })}`);
+    if (fixture.stackedIds?.length) {
+        report.measurements.stackedPaletteExit = {
+            ok: true,
+            stackedAtomeCount: fixture.stackedIds.length,
+            releasePoint: cancelledTrace.releasePoint,
+            sourcePoint: { x: source.x, y: source.y }
+        };
+    }
     let armed = null;
     const dragTrace = await drag({
         page, source, destination: target, holdMs: 700, compositionChoice: 'front',

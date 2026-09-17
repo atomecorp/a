@@ -22,7 +22,7 @@ export const stateParentId = (state = {}) => String(
     || state.properties?.parent_id || state.meta?.parent_id || state.meta?.parentId || ''
 );
 
-export const createDropFixture = (page, projectId, tag) => page.evaluate(async ({ pid, suffix, media }) => {
+export const createDropFixture = (page, projectId, tag, { stackedExit = false } = {}) => page.evaluate(async ({ pid, suffix, media, stackedExit }) => {
     const selection = await import('/eVe/intuition/runtime/selection.js');
     selection.clearAllSelection();
     const specs = [
@@ -42,6 +42,13 @@ export const createDropFixture = (page, projectId, tag) => page.evaluate(async (
             width: '180px', height: '120px', order: 30
         }
     ];
+    if (stackedExit) {
+        specs.unshift(...Array.from({ length: 12 }, (_, index) => ({
+            id: `${suffix}_stack_${index}`, kind: 'shape', type: 'shape', name: `${suffix} Stack ${index}`,
+            left: '20px', top: '260px', width: '300px', height: '140px',
+            color: '#283040', z_index: -100 - index, order: -100 - index
+        })));
+    }
     const created = [];
     for (const spec of specs) {
         const result = await window.eveToolBase.createAtome({
@@ -54,8 +61,13 @@ export const createDropFixture = (page, projectId, tag) => page.evaluate(async (
     await window.eveDashboardBevyUiRuntime?.destroy?.();
     const workspace = await import('/eVe/domains/dashboard/dashboard_workspace_mode.js');
     workspace.markProjectWorkspaceMode?.(pid);
-    return { ok: true, audioId: created[0], imageId: created[1], spareId: created[2] };
-}, { pid: projectId, suffix: tag, media: MEDIA });
+    const contentOffset = stackedExit ? 12 : 0;
+    return {
+        ok: true,
+        audioId: created[contentOffset], imageId: created[contentOffset + 1], spareId: created[contentOffset + 2],
+        stackedIds: created.slice(0, contentOffset)
+    };
+}, { pid: projectId, suffix: tag, media: MEDIA, stackedExit });
 
 export const switchView = async (page, projectId, mode) => {
     await waitForStableScene(page, projectId);
@@ -145,7 +157,8 @@ export const screenshot = async ({ page, report, outDir, name, preservePointer =
 
 export const drag = async ({
     page, source, destination, holdMs = 0, armedShot = null, steps = 16,
-    postArmOffset = null, waypoint = null, compositionChoice = null, compositionExit = false
+    postArmOffset = null, waypoint = null, compositionChoice = null, compositionExit = false,
+    assertSurfaceDragContinues = false
 }) => {
     const from = await playwrightPointForClientTarget(page, source);
     const to = await playwrightPointForClientTarget(page, destination);
@@ -199,6 +212,19 @@ export const drag = async ({
                     || { x: rect.width / 2, y: rect.height - 48 };
             }, options);
             await page.mouse.move(releasePoint.x, releasePoint.y, { steps: 8 });
+            if (assertSurfaceDragContinues) {
+                const retained = await page.evaluate(async () => {
+                    const { getRenderSurfaceState } = await import('/eVe/domains/rendering/surface_runtime.js');
+                    const session = getRenderSurfaceState(document.getElementById('eve_surface_project'))?.pointerSession;
+                    return session ? {
+                        mode: session.mode,
+                        atomeId: String(session.atome_id || ''),
+                        paletteCancelled: session.compositionChoice?.cancelled === true
+                    } : null;
+                });
+                assert(retained?.mode === 'drag' && retained?.paletteCancelled === true,
+                    `composition_exit_drag_lost:${JSON.stringify(retained)}`);
+            }
         }
     }
     await page.mouse.up();

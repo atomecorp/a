@@ -37,7 +37,9 @@ export const runMoleculeDropAcceptance = async ({ page, report, check, ensurePro
     for (const [mode, validate] of SCENARIOS.filter(([key]) => !requestedView || key === requestedView)) {
         const project = await ensureProject(page, `Molecule Drop ${mode} ${Date.now()}`);
         if (!project?.ok || !project?.id) throw new Error(`${mode}_project_create_failed:${JSON.stringify(project)}`);
-        const fixture = await createDropFixture(page, project.id, `drop_${mode}_${Date.now()}`);
+        const fixture = await createDropFixture(page, project.id, `drop_${mode}_${Date.now()}`, {
+            stackedExit: mode === 'natural' && process.env.MOLECULE_UI_STACKED_DROP === '1'
+        });
         await check(`real ${mode} drop creates one persistent Molecule without floating members`, () => (
             validate({ page, project, fixture, report, outDir })
         ));
