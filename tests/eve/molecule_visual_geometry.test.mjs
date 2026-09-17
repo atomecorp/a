@@ -49,7 +49,23 @@ test('old and nested structural bounds are derived without changing persisted re
     const scene = createRenderScene(projected.map((r) => normalizeRenderAtom(r)));
     const member = hitTestRenderScene(scene, { x: 170, y: 150 });
     expect(resolveComposedInteractionTarget(scene, member).id).toBe('outer');
-    expect(resolveComposedInteractionTarget(scene, member, 'outer').id).toBe('m');
+    expect(resolveComposedInteractionTarget(scene, member, 'outer').id).toBe('a');
+    expect(resolveComposedInteractionTarget(scene, member, 'm').id).toBe('a');
+    expect(resolveComposedInteractionTarget(scene, member, 'a').id).toBe('a');
+});
+
+test('an edited structural ancestor exposes a media leaf through three nested Molecules', () => {
+    const leaf = { id: 'leaf', parentId: 'inner' };
+    const inner = { id: 'inner', parentId: 'middle' };
+    const middle = { id: 'middle', parentId: 'outer' };
+    const outer = { id: 'outer', parentId: '' };
+    const scene = { byId: new Map([leaf, inner, middle, outer].map((atom) => [atom.id, atom])) };
+
+    expect(resolveComposedInteractionTarget(scene, leaf).id).toBe('outer');
+    expect(resolveComposedInteractionTarget(scene, leaf, 'outer').id).toBe('leaf');
+    expect(resolveComposedInteractionTarget(scene, leaf, 'middle').id).toBe('leaf');
+    expect(resolveComposedInteractionTarget(scene, leaf, 'leaf').id).toBe('leaf');
+    expect(resolveComposedInteractionTarget(scene, leaf, (id) => id === 'outer' || id === 'sibling').id).toBe('leaf');
 });
 
 test('selected Molecule resize handles remain available while its empty body cannot drag', () => {

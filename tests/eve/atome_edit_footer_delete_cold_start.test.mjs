@@ -6,10 +6,10 @@ vi.mock('../../eVe/domains/rendering/project_view_surface_runtime.js', () => ({
     playProjectViewSelection: async (selectionIds) => ({ ok: true, selectionIds })
 }));
 
-import { createAtomeEditFooterDefinitionInvocationRuntime } from '../../eVe/intuition/runtime/eve_intuition/atome_edit_footer_definition_invocation_runtime.js';
+import { createAtomeContextualRailDefinitionInvocationRuntime } from '../../eVe/intuition/runtime/eve_intuition/atome_contextual_rail_definition_invocation_runtime.js';
 import { feedContextualRailWithRow } from '../../eVe/domains/rendering/project_view_contextual_rail.js';
 
-test('canvas footer Delete prepares its lazy canonical handler and preserves a lasso selection', async () => {
+test('contextual rail Delete prepares its lazy canonical handler and preserves a lasso selection', async () => {
     const dom = new JSDOM('<!doctype html><button id="delete"></button>');
     globalThis.window = dom.window;
     globalThis.document = dom.window.document;
@@ -17,7 +17,7 @@ test('canvas footer Delete prepares its lazy canonical handler and preserves a l
     let loaded = false;
     const calls = [];
     const payloadOptions = [];
-    const runtime = createAtomeEditFooterDefinitionInvocationRuntime({
+    const runtime = createAtomeContextualRailDefinitionInvocationRuntime({
         state: { activeAtomeId: 'selected_a' },
         ensureDeletePanelModule: async () => { loaded = true; },
         maybeBlockSelectionRequiredToolActivation: () => null,
@@ -36,7 +36,7 @@ test('canvas footer Delete prepares its lazy canonical handler and preserves a l
         isContextBoundTransportToolId: () => false
     });
 
-    const result = await runtime.invokeAtomeEditFooterToolDefinitionWithContext({
+    const result = await runtime.invokeAtomeContextualRailToolDefinitionWithContext({
         key: 'delete', toolId: 'ui.delete.selection', selectionRequired: true
     }, {
         atomeId: 'selected_a',
@@ -62,7 +62,7 @@ test('structured row Delete remains scoped to its active canonical record', asyn
     globalThis.document = dom.window.document;
     globalThis.HTMLElement = dom.window.HTMLElement;
     const calls = [];
-    const runtime = createAtomeEditFooterDefinitionInvocationRuntime({
+    const runtime = createAtomeContextualRailDefinitionInvocationRuntime({
         state: { activeAtomeId: 'selected_row' },
         ensureDeletePanelModule: async () => {},
         maybeBlockSelectionRequiredToolActivation: () => null,
@@ -77,7 +77,7 @@ test('structured row Delete remains scoped to its active canonical record', asyn
         isContextBoundTransportToolId: () => false
     });
 
-    const result = await runtime.invokeAtomeEditFooterToolDefinitionWithContext({
+    const result = await runtime.invokeAtomeContextualRailToolDefinitionWithContext({
         key: 'delete', toolId: 'ui.delete.selection', selectionRequired: true
     }, {
         atomeId: 'selected_row',
@@ -100,7 +100,7 @@ test('structured rail Play delegates the exact List or Matrix record to the proj
     globalThis.document = dom.window.document;
     globalThis.HTMLElement = dom.window.HTMLElement;
     let gatewayCalled = false;
-    const runtime = createAtomeEditFooterDefinitionInvocationRuntime({
+    const runtime = createAtomeContextualRailDefinitionInvocationRuntime({
         state: { activeAtomeId: 'caption_row' },
         ensureDeletePanelModule: async () => {},
         maybeBlockSelectionRequiredToolActivation: () => null,
@@ -112,7 +112,7 @@ test('structured rail Play delegates the exact List or Matrix record to the proj
         buildToolExtraInput: () => ({ selection_ids: ['caption_row'] }),
         isContextBoundTransportToolId: (toolId) => toolId === 'ui.play'
     });
-    const result = await runtime.invokeAtomeEditFooterToolDefinitionWithContext({
+    const result = await runtime.invokeAtomeContextualRailToolDefinitionWithContext({
         key: 'play', toolId: 'ui.play'
     }, {
         atomeId: 'caption_row',

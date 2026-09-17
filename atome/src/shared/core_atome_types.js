@@ -31,7 +31,23 @@ const mediaSchema = Object.freeze({
     media_url: { type: 'string' },
     transcript: { type: 'string' },
     duration: { type: 'number' },
-    duration_sec: { type: 'number' }
+    duration_sec: { type: 'number' },
+    duration_seconds: { type: 'number', minimum: 0 },
+    media_duration_seconds: { type: 'number', minimum: 0 },
+    source_in_seconds: { type: 'number', minimum: 0 },
+    source_out_seconds: { type: 'number', minimum: 0 },
+    media_width: { type: 'number', minimum: 1 },
+    media_height: { type: 'number', minimum: 1 },
+    source_rect: {
+        type: 'object',
+        properties: {
+            x: { type: 'number', minimum: 0 },
+            y: { type: 'number', minimum: 0 },
+            width: { type: 'number', minimum: 1 },
+            height: { type: 'number', minimum: 1 }
+        },
+        required: ['x', 'y', 'width', 'height']
+    }
 });
 
 const capability = (key, effects = ['read']) => ({

@@ -8,6 +8,18 @@ use bevy::{
 use crate::components::{AtomeRoundedRectMaskCache, AtomeRoundedRectMaskCacheKey};
 use crate::types::AtomeTexture;
 
+pub(crate) fn sprite_rect_from_uv(uv_rect: Option<[f32; 4]>, width: u32, height: u32) -> Option<Rect> {
+    let [u, v, w, h] = uv_rect?;
+    let texture_width = width.max(1) as f32;
+    let texture_height = height.max(1) as f32;
+    Some(Rect::new(
+        u.clamp(0.0, 1.0) * texture_width,
+        v.clamp(0.0, 1.0) * texture_height,
+        (u + w).clamp(0.0, 1.0) * texture_width,
+        (v + h).clamp(0.0, 1.0) * texture_height,
+    ))
+}
+
 fn image_from_texture(texture: &AtomeTexture, id: &str) -> Result<Image, String> {
     if texture.width == 0 || texture.height == 0 {
         return Err(format!("bevy_texture_dimension_required:{id}"));

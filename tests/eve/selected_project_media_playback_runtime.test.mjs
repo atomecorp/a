@@ -143,6 +143,32 @@ test('selected project audio playback uses the canonical Kira audio runtime', as
     assert.equal(readProjectAudioPlaybackProgressForId('audio_a'), null);
 });
 
+test('cropped audio starts at source_in and cannot play beyond source_out', async () => {
+    const dom = await createProjectHost([{
+        id: 'audio_crop', type: 'audio', properties: {
+            kind: 'audio', media_url: '/api/recordings/crop.wav', duration_sec: 10,
+            source_in_seconds: 2, source_out_seconds: 6, duration_seconds: 4,
+            left: 0, top: 0, width: 200, height: 48
+        }
+    }]);
+    const calls = [];
+    dom.window.Squirrel = { av: { audio: {
+        unlockPlayback: async () => true,
+        playback: { loadAsset: async () => ({ ok: true, duration_seconds: 10 }) },
+        play_instance: async (payload) => { calls.push(payload); return { ok: true }; },
+        stop_instance: async () => ({ ok: true }),
+        stop: async () => ({ ok: true })
+    } } };
+    const result = await runSelectedProjectMediaPlaybackAction({
+        action: 'play', atomeIds: ['audio_crop'], windowRef: dom.window, documentRef: dom.window.document
+    });
+    assert.equal(result.ok, true);
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].start_seconds, 2);
+    assert.equal(calls[0].duration_seconds, 4);
+    assert.equal(readProjectAudioPlaybackProgressForId('audio_crop'), 0);
+});
+
 test('aggregate playback state drives mixed Play, all-active Stop, and project-scoped shutdown', async () => {
     const dom = await createProjectHost([
         { id: 'audio_mix_a', type: 'sound', properties: { kind: 'sound', media_url: '/api/recordings/a.wav' } },
@@ -1224,7 +1250,7 @@ test('ui.play lets the media reader release completed JeezsFire audio before res
         getAtomeRuntimeState: () => ({}),
         readExplicitLatched: () => null,
         syncToolLatchedState: () => {},
-        getFooterActiveAtomeId: () => ''
+        getContextualRailActiveAtomeId: () => ''
     });
     const play = tools.get('ui.play')?.handler;
     assert.equal(typeof play, 'function');

@@ -128,12 +128,27 @@ pub fn apply_resource(world: &mut World, patch: AtomeResourcePatch) -> Result<()
             image_handle_from_texture(&mut images, &patch.texture, &patch.id)?
         };
         let color = texture_sprite_color(world, entity);
+        let patched_source_rect = if kind == "image" || kind == "audio_waveform" {
+            patch.uv_rect.map(|uv_rect| {
+                uv_rect.and_then(|value| patch.texture.as_ref().and_then(|texture| {
+                    crate::texture::sprite_rect_from_uv(Some(value), texture.width, texture.height)
+                }))
+            })
+        } else {
+            None
+        };
         let mut sprite = world
             .get_mut::<Sprite>(entity)
             .ok_or_else(|| format!("bevy_resource_sprite_missing:{}", patch.id))?;
         sprite.image = handle;
         sprite.color = color;
+        if let Some(source_rect) = patched_source_rect {
+            sprite.rect = source_rect;
+        }
         drop(sprite);
+        if let Some(source_rect) = patched_source_rect {
+            world.entity_mut(entity).insert(AtomeSpriteSourceRect(source_rect));
+        }
         if let Some(texture) = &patch.texture {
             crate::animated_png::install_animation(world, entity, texture)?;
         }

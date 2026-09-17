@@ -7,20 +7,15 @@ import { projectBevyUiTreeRecords } from '../../eVe/domains/rendering/bevy_ui_ov
 import { normalizeBevyUiTree } from '../../eVe/domains/rendering/bevy_ui_tree_normalization.js';
 import { clearAllProjectScenes, getProjectSceneState } from '../../eVe/domains/rendering/project_scene_runtime.js';
 import {
-    buildAtomeContextualEditTree,
-    contextualGestureProps
+    buildAtomeContextualEditTree
 } from '../../eVe/intuition/runtime/eve_intuition/atome_contextual_edit_model.js';
-import {
-    BEVY_CORNER_RESIZE_GRIP_ICON_SOURCE,
-    BEVY_MENU_TOKENS
-} from '../../eVe/intuition/ribbon/bevy_ui_menu_surface.js';
-import { EVE_COMMON_SKIN_TOKENS } from '../../eVe/elements/skin/tokens.js';
+import { BEVY_MENU_TOKENS } from '../../eVe/intuition/ribbon/bevy_ui_menu_surface.js';
 import { buildBevyUiFlowerTree } from '../../eVe/intuition/ribbon/bevy_ui_flower_model.js';
 import { buildBevyMainMenuTree } from '../../eVe/intuition/ribbon/bevy_ui_main_menu_model.js';
 import { createAtomeContextualEditRuntime } from '../../eVe/intuition/runtime/eve_intuition/atome_contextual_edit_runtime.js';
 import { createAtomeContextualSurfaceInterceptor } from '../../eVe/intuition/runtime/eve_intuition/atome_contextual_edit_handlers.js';
 import { resolveComposedInteractionTarget } from '../../eVe/domains/rendering/surface_interaction_runtime.js';
-import { createAtomeEditFooterModelRuntime } from '../../eVe/intuition/runtime/eve_intuition/atome_edit_footer_model_runtime.js';
+import { createAtomeContextualRailModelRuntime } from '../../eVe/intuition/runtime/eve_intuition/atome_contextual_rail_model_runtime.js';
 import { projectViewPlayback } from '../../eVe/domains/rendering/project_view_playback_runtime.js';
 import {
     markDashboardWorkspaceMode,
@@ -127,31 +122,28 @@ test('all three Bevy menu trees stay outside the workspace backdrop capture', ()
     assert.equal(workspaceRecords.every((record) => record.properties.presentation === false), true);
 });
 
-test('Atome contextual edit stays on one clipped Bevy tree with handed rail and 3x slider', () => {
+test('Atome contextual edit keeps only the handed tool rail and 3x slider', () => {
     const surface = { getBoundingClientRect: () => ({ width: 800, height: 600 }) };
     const records = [{ id: 'a', properties: { left: 40, top: 50, width: 200, height: 120 } }, {
         id: 'b', properties: { left: 300, top: 70, width: 160, height: 90 }
     }];
     const input = {
         surface, records, editing: [{ atomeId: 'a' }, { atomeId: 'b' }], activeAtomeId: 'a',
-        fullscreenAtomeId: 'a', definitions: [{ key: 'size', toolType: 'slider' }],
+        definitions: [{ key: 'size', toolType: 'slider' }],
         sliderStateByKey: new Map([['size', { expanded: true }]])
     };
     const right = buildAtomeContextualEditTree(input);
     const rail = findNode(right.root, 'eve_bevy_panel_atome_contextual_edit_rail');
     const railShadow = findNode(right.root, 'eve_bevy_panel_atome_contextual_edit_rail_shadow');
-    const contextualSurface = findNode(right.root, 'atome_contextual_edit_a_surface');
-    const outline = findNode(right.root, 'atome_contextual_edit_a_outline');
-    const footerBackground = findNode(right.root, 'atome_contextual_edit_a_footer_background');
     assert.deepEqual(rail.style.position, [740, 360]);
     assert.equal(railShadow.style.shadow, BEVY_MENU_TOKENS.surface.material.shadow);
     assert.deepEqual(railShadow.style.position, rail.style.position);
     assert.deepEqual(railShadow.style.size, rail.style.size);
-    assert.deepEqual(contextualSurface.style.position, [40, 50]);
-    assert.deepEqual(contextualSurface.style.size, [200, 120 + BEVY_MENU_TOKENS.footerHeightPx]);
-    assert.equal(contextualSurface.style.shadow, BEVY_MENU_TOKENS.surface.material.shadow);
-    assert.equal(outline.style.shadow, undefined, 'the selection outline must not own the exterior shadow');
-    assert.equal(footerBackground.style.shadow, undefined);
+    assert.equal(findNode(right.root, 'atome_contextual_edit_a_surface'), null);
+    assert.equal(findNode(right.root, 'atome_contextual_edit_a_outline'), null);
+    assert.equal(findNode(right.root, 'atome_contextual_edit_a_footer'), null);
+    assert.equal(findNode(right.root, 'atome_contextual_edit_a_close'), null);
+    assert.equal(findNode(right.root, 'atome_contextual_edit_a_drag'), null);
     assert.equal(rail.children.length, 1);
     assert.deepEqual(findNode(rail, 'atome_contextual_tool_size_background').style.size, [60, 60]);
     assert.equal(findNode(right.root, 'atome_contextual_edit_b_footer'), null);
@@ -253,7 +245,7 @@ test('Flower palette accents are individual rounded top arcs', () => {
     assert.equal(accents.every((accent) => accent.style.position[1] === Math.max(BEVY_MENU_TOKENS.paletteAccent.insetPx, 6)), true);
 });
 
-test('Atome contextual footer follows projected media bounds and uses compact dark chrome', () => {
+test('Atome contextual edition has no per-atome footer or solid editor chrome', () => {
     const tree = buildAtomeContextualEditTree({
         surface: { getBoundingClientRect: () => ({ width: 800, height: 600 }) },
         records: [{ id: 'media', properties: { left: 40, top: 50, width: 120 } }],
@@ -261,71 +253,18 @@ test('Atome contextual footer follows projected media bounds and uses compact da
         editing: [{ atomeId: 'media', kind: 'image' }], activeAtomeId: 'media',
         definitions: [{ key: 'detail', label: 'detail', toolType: 'standard' }]
     });
-    const footer = findNode(tree.root, 'atome_contextual_edit_media_footer');
-    const background = findNode(tree.root, 'atome_contextual_edit_media_footer_background');
-    const accent = findNode(tree.root, 'atome_contextual_edit_media_footer_accent');
-    const contextualSurface = findNode(tree.root, 'atome_contextual_edit_media_surface');
-    const footerHeight = BEVY_MENU_TOKENS.footerHeightPx;
-    assert.deepEqual(footer.style.position, [40, 470]);
-    assert.deepEqual(footer.style.size, [310, footerHeight]);
-    assert.deepEqual(contextualSurface.style.position, [40, 50]);
-    assert.deepEqual(contextualSurface.style.size, [310, 420 + footerHeight]);
-    assert.deepEqual(contextualSurface.style.shadow, BEVY_MENU_TOKENS.surface.material.shadow);
-    assert.deepEqual(background.style.background, BEVY_MENU_TOKENS.surface.material.background);
-    assert.deepEqual(background.style.backdrop, BEVY_MENU_TOKENS.surface.material.backdrop);
-    assert.deepEqual(accent.style.position, [40, 470]);
-    assert.deepEqual(accent.style.size, [310, BEVY_MENU_TOKENS.footerAccentThicknessPx]);
-    assert.deepEqual(accent.style.background, BEVY_MENU_TOKENS.footerAccentColor);
-    assert.equal(accent.style.shadow, undefined);
-    assert.equal(accent.style.border, undefined);
-    assert.equal(accent.on, undefined);
-    assert.ok(accent.style.z_index < footer.style.z_index);
     for (const id of [
+        'atome_contextual_edit_media_surface',
+        'atome_contextual_edit_media_outline',
         'atome_contextual_edit_media_footer_background',
         'atome_contextual_edit_media_footer',
         'atome_contextual_edit_media_close',
-        'atome_contextual_edit_media_drag'
+        'atome_contextual_edit_media_drag',
+        'atome_contextual_edit_media_title'
     ]) {
-        assert.equal(findNode(tree.root, id).style.size[1], footerHeight, id);
-        assert.equal(findNode(tree.root, id).style.shadow, undefined, id);
+        assert.equal(findNode(tree.root, id), null, id);
     }
-    const closeIndicator = findNode(tree.root, 'atome_contextual_edit_media_close_indicator');
-    const closeDiameter = BEVY_MENU_TOKENS.footerCloseRing.diameterPx;
-    const closeBorder = BEVY_MENU_TOKENS.footerCloseRing.borderPx;
-    assert.deepEqual(closeIndicator.style.size, [closeDiameter, closeDiameter]);
-    assert.deepEqual(closeIndicator.style.position, [4.5, 7.5]);
-    assert.equal(closeIndicator.kind, 'panel');
-    const closeFill = findNode(tree.root, 'atome_contextual_edit_media_close_indicator_fill');
-    const closeSegments = closeIndicator.children.filter((segment) => segment.id.includes('_segment_'));
-    assert.deepEqual(closeFill.style.size, [closeDiameter - (closeBorder * 2), closeDiameter - (closeBorder * 2)]);
-    assert.deepEqual(closeFill.style.position, [3, 5]);
-    assert.deepEqual(closeFill.style.background, BEVY_MENU_TOKENS.footerCloseRing.fillColor);
-    assert.equal(closeIndicator.children.length, 37);
-    assert.equal(closeSegments.length, 36);
-    assert.ok(closeSegments.every((segment) => (
-        segment.kind === 'panel'
-        && segment.style.background === BEVY_MENU_TOKENS.footerCloseRing.color
-        && segment.style.radius === BEVY_MENU_TOKENS.footerCloseRing.borderPx / 2
-    )));
-    assert.equal(
-        Math.min(...closeSegments.map((segment) => segment.style.position[1])),
-        BEVY_MENU_TOKENS.footerCloseRing.offsetYPx
-    );
-    const footerTitle = findNode(tree.root, 'atome_contextual_edit_media_title');
-    assert.equal(footerTitle.style.size[1], footerHeight);
-    assert.equal(footerTitle.style.position[0] + (footerTitle.style.size[0] / 2), footer.style.size[0] / 2, 'footer title must center against the complete footer width');
-    assert.equal(footerTitle.style.position[1], BEVY_MENU_TOKENS.footerTitleOffsetYPx, 'footer title must use the shared optical downward offset');
-    assert.deepEqual(findNode(tree.root, 'atome_contextual_edit_media_title').image.tint, EVE_COMMON_SKIN_TOKENS.systemContent.gpu);
-    assert.equal(findNode(tree.root, 'atome_contextual_edit_media_resize_left'), null);
-    assert.equal(findNode(tree.root, 'atome_contextual_edit_media_resize_right'), null);
     assert.ok(findNode(tree.root, 'atome_contextual_tool_detail_background'));
-});
-
-test('Atome contextual drag stays above the main toolbox', () => {
-    const limits = { viewportWidth: 800, viewportHeight: 600, mainMenuHeight: 52 };
-    assert.deepEqual(contextualGestureProps({
-        ...limits, gesture: { mode: 'drag', origin: { x: 40, y: 30, width: 200, height: 100 }, dx: 900, dy: 900 }
-    }), { left: 600, top: 600 - 52 - BEVY_MENU_TOKENS.footerHeightPx - 100 });
 });
 
 test('Atome contextual rail projects visible tool records inside the lateral rail', async () => {
@@ -352,17 +291,10 @@ test('Atome contextual rail projects visible tool records inside the lateral rai
     const tool = projected.records.find((record) => record.id.includes('atome_contextual_tool_detail_background'));
     const toolIcon = projected.records.find((record) => record.id.includes('atome_contextual_tool_detail_icon_image'));
     const toolLabel = projected.records.find((record) => record.id.includes('atome_contextual_tool_detail_label_text'));
-    const footer = projected.records.find((record) => record.id.includes('atome_contextual_edit_a_footer_background'));
-    const footerTitle = projected.records.find((record) => record.id.includes('atome_contextual_edit_a_title_text'));
     assert.deepEqual([tool.properties.left, tool.properties.top, tool.properties.width, tool.properties.height], [740, 480, 60, 60]);
-    assert.deepEqual([footer.properties.left, footer.properties.top, footer.properties.width, footer.properties.height], [40, 170, 200, BEVY_MENU_TOKENS.footerHeightPx]);
     assert.ok(toolIcon.properties.renderLayer > tool.properties.renderLayer);
     assert.ok(toolLabel.properties.renderLayer > tool.properties.renderLayer);
-    assert.ok(footerTitle.properties.renderLayer > footer.properties.renderLayer);
-    const centeredTitleHit = runtime.hitTestAtClientPoint({ surface, clientX: 140, clientY: 185 });
-    assert.equal(centeredTitleHit?.nodeId, 'atome_contextual_edit_a_drag', 'centered title must not obstruct the drag target');
-    const outerGripHit = runtime.hitTestAtClientPoint({ surface, clientX: 42, clientY: 172 });
-    assert.notEqual(outerGripHit?.nodeId, 'atome_contextual_edit_a_resize_left', 'no resize target remains on the footer edge');
+    assert.equal(projected.records.some((record) => record.id.includes('atome_contextual_edit_a_footer')), false);
 });
 
 test('structured List and Matrix rows carry persistent Play through production rail resolution into the Bevy tree', async () => {
@@ -372,7 +304,7 @@ test('structured List and Matrix rows carry persistent Play through production r
     }));
     const scene = { project_id: 'structured_project', records, scene: { byId: new Map() } };
     const rendered = [];
-    const model = createAtomeEditFooterModelRuntime({
+    const model = createAtomeContextualRailModelRuntime({
         mainToolIdByKey: { detail: 'ui.detail.panel', delete: 'ui.delete.selection', play: 'ui.play' },
         intuitionContent: {
             detail: { tool_id: 'ui.detail.panel', label: 'Detail' },
@@ -391,11 +323,11 @@ test('structured List and Matrix rows carry persistent Play through production r
         resolveDefinitions: ({ atomeId, kind, railOnly, record }) => {
             const structuredContext = record?.structured_context === true;
             observed.push({ atomeId, kind, railOnly, structuredContext });
-            const keys = model.resolveAtomeEditFooterToolKeysForAtome({
+            const keys = model.resolveAtomeContextualRailToolKeysForAtome({
                 atomeId, kind, toolKeys: ['detail', 'delete', 'play'],
                 hasProjectAutomation: structuredContext === true, railOnly
             });
-            return keys.map((key) => model.resolveAtomeEditFooterToolDefinition(key, { structuredContext, record }));
+            return keys.map((key) => model.resolveAtomeContextualRailToolDefinition(key, { structuredContext, record }));
         },
         invokeDefinition: async () => ({ ok: true }),
         surfaceResolver: () => ({ getBoundingClientRect: () => ({ width: 800, height: 600 }) }),
@@ -429,13 +361,12 @@ test('structured List and Matrix rows carry persistent Play through production r
     assert.equal(observed.every((entry) => entry.railOnly && entry.structuredContext), true);
 });
 
-test('Atome contextual runtime keeps local edits and emits one canonical homothetic resize commit', async () => {
+test('Atome contextual runtime keeps edition ephemeral and renders only its tool rail', async () => {
     const records = [{ id: 'a', properties: { left: 40, top: 30, width: 200, height: 100 } }, {
         id: 'b', properties: { left: 300, top: 40, width: 120, height: 80 }
     }];
     const scene = { project_id: 'project', records, text: null };
     const rendered = [];
-    const intents = [];
     const runtime = createAtomeContextualEditRuntime({
         legacyState: {}, resolveDefinitions: () => [], invokeDefinition: async () => ({ ok: true }),
         surfaceResolver: () => ({ getBoundingClientRect: () => ({ width: 800, height: 600 }) }),
@@ -443,30 +374,22 @@ test('Atome contextual runtime keeps local edits and emits one canonical homothe
             mountTree: async ({ tree }) => rendered.push(tree),
             updateTree: async ({ tree }) => rendered.push(tree), unmountTree: async () => null
         }),
-        emitSceneIntent: async ({ intent }) => { intents.push(intent); return { ok: true }; },
+        emitSceneIntent: async () => ({ ok: true }),
         findSceneByAtomeId: (id) => records.some((record) => record.id === id) ? scene : null,
         readSceneState: () => scene, hitTestScene: () => null, readMainMenuHeight: () => 52,
         updateSceneRecord: async ({ atomeId, properties }) => Object.assign(records.find((record) => record.id === atomeId).properties, properties)
     });
-    runtime.enter({ atomeId: 'a', kind: 'shape' });
+    runtime.enter({ atomeId: 'a', kind: 'image', contextLevel: 'edition' });
     runtime.enter({ atomeId: 'b', kind: 'image' });
     runtime.exit({ atomeId: 'b' });
     assert.deepEqual(runtime.readState().editingAtomeIds, ['a']);
     assert.equal(runtime.readState().menuVisible, false);
     runtime.activate({ atomeId: 'a' });
     await runtime.render();
-    const grip = findNode(rendered.at(-1).root, 'atome_contextual_edit_a_drag');
-    grip.on.press({ client_x: 40, client_y: 130, alt_key: true });
-    grip.on.drag({ delta_x: 20, delta_y: 0 });
-    await runtime.render();
-    assert.deepEqual(findNode(rendered.at(-1).root, 'atome_contextual_edit_a_footer').style.position, [40, 140]);
-    assert.deepEqual(findNode(rendered.at(-1).root, 'atome_contextual_edit_a_footer').style.size, [220.00000000000003, BEVY_MENU_TOKENS.footerHeightPx]);
-    grip.on.release();
-    await Promise.resolve();
-    assert.deepEqual(intents.map((intent) => intent.kind), ['resize.start', 'resize.move', 'resize.end']);
-    assert.deepEqual(intents[2].props, { left: 40, top: 30, width: 220.00000000000003, height: 110.00000000000001 });
-    assert.equal(intents[1].gesture_id, intents[2].gesture_id);
-    assert.equal(intents[2].commit, true);
+    assert.equal(runtime.readState().editMode, 'spatial_crop');
+    assert.ok(findNode(rendered.at(-1).root, 'eve_bevy_panel_atome_contextual_edit_rail'));
+    assert.equal(findNode(rendered.at(-1).root, 'atome_contextual_edit_a_footer'), null);
+    assert.equal(findNode(rendered.at(-1).root, 'atome_contextual_edit_a_drag'), null);
 });
 
 test('Atome contextual runtime reuses its handed rail for virtual Molecule selections without editor chrome', async () => {
@@ -498,7 +421,7 @@ test('Atome contextual runtime reuses its handed rail for virtual Molecule selec
     assert.equal(runtime.readState().menuVisible, true);
 });
 
-test('Natural Molecule editing reuses the canonical Atome frame and close restores owner routing', async () => {
+test('Natural Molecule editing keeps the rail without restoring legacy frame chrome', async () => {
     const rendered = [];
     const invocations = [];
     const ownerRecord = {
@@ -530,14 +453,14 @@ test('Natural Molecule editing reuses the canonical Atome frame and close restor
 
     const tree = rendered.at(-1).root;
     assert.equal(runtime.readState().railOnly, false);
-    assert.ok(findNode(tree, 'atome_contextual_edit_natural_molecule_outline'));
-    assert.ok(findNode(tree, 'atome_contextual_edit_natural_molecule_footer'));
+    assert.equal(findNode(tree, 'atome_contextual_edit_natural_molecule_outline'), null);
+    assert.equal(findNode(tree, 'atome_contextual_edit_natural_molecule_footer'), null);
     findNode(tree, 'atome_contextual_tool_molecule_info').on.activate();
     await Promise.resolve();
     assert.deepEqual(invocations, ['molecule_info']);
     assert.equal(resolveComposedInteractionTarget(scene.scene, memberAtom, runtime.readState().activeAtomeId)?.id, memberAtom.id);
 
-    findNode(tree, 'atome_contextual_edit_natural_molecule_close').on.activate();
+    runtime.exit({ atomeId: ownerRecord.id });
     assert.equal(runtime.readState().activeAtomeId, '');
     assert.equal(resolveComposedInteractionTarget(scene.scene, memberAtom, runtime.readState().activeAtomeId)?.id, ownerAtom.id);
 });
@@ -579,6 +502,42 @@ test('Natural Molecule keeps inside background presses and exits only beyond its
     assert.deepEqual(exits, [owner.id]);
 });
 
+test('clicking another atome or project background exits edition without consuming the click', () => {
+    const edited = { id: 'edited', parentId: '', bounds: { x: 20, y: 20, width: 100, height: 80 } };
+    const other = { id: 'other', parentId: '', bounds: { x: 180, y: 20, width: 100, height: 80 } };
+    const project = { project_id: 'outside_exit', scene: { byId: new Map([
+        [edited.id, edited], [other.id, other]
+    ]) } };
+    const makeState = () => ({
+        suspended: false, activeAtomeId: edited.id,
+        editingByAtomeId: new Map([[edited.id, {
+            atomeId: edited.id, kind: 'image', contextLevel: 'edition', projectId: project.project_id
+        }]])
+    });
+    for (const target of [other, null]) {
+        const state = makeState();
+        const exits = [];
+        const intercept = createAtomeContextualSurfaceInterceptor({
+            state,
+            editingEntries: () => Array.from(state.editingByAtomeId.values()),
+            activeProjectState: () => project,
+            hitTestScene: () => target,
+            readSceneState: () => project,
+            projectedGeometryFor: () => edited.bounds,
+            readRenderedGeometry: () => new Map(),
+            surfaceResolver: () => ({ getBoundingClientRect: () => ({ left: 0, top: 0 }) }),
+            scheduleRender: () => {}, activate: () => {},
+            exit: ({ atomeId }) => { exits.push(atomeId); state.editingByAtomeId.delete(atomeId); }
+        });
+        const consumed = intercept({
+            phase: 'pointerdown', target,
+            event: { clientX: target ? 190 : 500, clientY: target ? 30 : 400 }
+        });
+        assert.equal(consumed, false);
+        assert.deepEqual(exits, [edited.id]);
+    }
+});
+
 test('selecting a Molecule member keeps the Molecule as contextual edition owner', () => {
     const dom = new JSDOM('');
     const oldWindow = globalThis.window;
@@ -606,6 +565,41 @@ test('selecting a Molecule member keeps the Molecule as contextual edition owner
         assert.equal(runtime.readState().activeAtomeId, owner.id);
         assert.equal(runtime.isEditing(owner.id), true);
         assert.equal(runtime.hasContext(member.id), false);
+    } finally {
+        dom.window.close();
+        globalThis.window = oldWindow;
+    }
+});
+
+test('selection cannot replace an edited nested media with its Molecule owner', () => {
+    const dom = new JSDOM('');
+    const oldWindow = globalThis.window;
+    globalThis.window = dom.window;
+    dom.window.__eveWorkspaceMode = { mode: 'project', projectId: 'nested_media_selection' };
+    dom.window.requestAnimationFrame = () => 1;
+    const ownerRecord = { id: 'nested_media_owner', project_id: 'nested_media_selection', type: 'group' };
+    const mediaRecord = { id: 'nested_media_video', project_id: 'nested_media_selection', type: 'video' };
+    const owner = { id: ownerRecord.id, parentId: '' };
+    const media = { id: mediaRecord.id, parentId: owner.id };
+    const project = {
+        project_id: 'nested_media_selection', records: [ownerRecord, mediaRecord],
+        scene: { byId: new Map([[owner.id, owner], [media.id, media]]) }
+    };
+    const runtime = createAtomeContextualEditRuntime({
+        legacyState: {}, resolveDefinitions: () => [], invokeDefinition: async () => ({ ok: true }),
+        surfaceResolver: () => null, findSceneByAtomeId: () => project, readSceneState: () => project
+    });
+    try {
+        runtime.install();
+        runtime.enter({ atomeId: owner.id, kind: 'group', contextLevel: 'edition' });
+        runtime.enter({ atomeId: media.id, kind: 'video', contextLevel: 'edition' });
+        dom.window.dispatchEvent(new dom.window.CustomEvent('adole-atome-selected', {
+            detail: { selected: [media.id], atomeId: media.id }
+        }));
+        assert.equal(runtime.readState().activeAtomeId, media.id);
+        assert.equal(runtime.readState().editMode, 'spatial_crop');
+        assert.equal(runtime.isEditing(owner.id), true);
+        assert.equal(runtime.isEditing(media.id), true);
     } finally {
         dom.window.close();
         globalThis.window = oldWindow;

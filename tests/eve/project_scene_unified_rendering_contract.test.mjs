@@ -20,11 +20,13 @@ import {
 } from '../../eVe/domains/rendering/project_scene_runtime.js';
 import { sceneState } from '../../eVe/domains/rendering/project_scene_state.js';
 import { createRenderScene, hitTestRenderScene } from '../../eVe/domains/rendering/scene_graph.js';
+import { createSurfacePinchRuntime } from '../../eVe/domains/rendering/surface_pinch_runtime.js';
 import { openCompositionChoice, updateCompositionChoice } from '../../eVe/domains/rendering/project_view_drop_feedback.js';
 import { clearStationaryAbsorb } from '../../eVe/domains/rendering/project_view_drop_intent_runtime.js';
 import { createVirtualSceneTree } from '../../eVe/domains/rendering/virtual_scene_contract.js';
 import { getRenderSurfaceState } from '../../eVe/domains/rendering/surface_runtime.js';
 import { setAtomeContextualEditApi } from '../../eVe/intuition/runtime/eve_intuition/atome_contextual_edit_registry.js';
+import { normalizeAtomeContextualKind } from '../../eVe/intuition/runtime/eve_intuition/atome_contextual_kind.js';
 import {
     startProjectAudioPlaybackProgress,
     stopProjectAudioPlaybackProgress
@@ -734,11 +736,12 @@ test('Natural member editing never turns an internal drag into a Molecule absorp
     assert.equal(member.parent_id, owner.id);
 });
 
-test('Project scene double-click enters contextual edit and preserves an included multi-selection', async () => {
+test('Project scene double-click enters SVG vector edit and preserves an included multi-selection', async () => {
     clearAllProjectScenes();
     const dom = projectDom();
     const intents = [];
-    const record = makeRecord('contextual_edit_atom', 'image', 1);
+    const record = makeRecord('contextual_edit_atom', 'shape', 1);
+    record.properties.svg_markup = '<svg viewBox="0 0 10 10"><path d="M0 0L10 10"/></svg>';
     record.properties.left = 10;
     record.properties.top = 20;
     dom.window.__selectedAtomeIds = ['contextual_edit_atom', 'selection_peer'];
@@ -761,7 +764,200 @@ test('Project scene double-click enters contextual edit and preserves an include
     assert.equal(intents.length, 1);
     assert.equal(intents[0].kind, 'atome.edit.enter');
     assert.equal(intents[0].atome_id, 'contextual_edit_atom');
+    assert.equal(intents[0].atome_kind, 'svg');
     setProjectSceneUiIntentHandler(null);
+});
+
+test.each([
+    ['video_recording', 'spatial_crop'],
+    ['audio_recording', 'temporal_crop']
+])('an immediate Ctrl-wheel after %s double-click waits for crop edition instead of resizing', async (kind, editMode) => {
+    clearAllProjectScenes();
+    const dom = projectDom();
+    const intents = [];
+    let releaseEdit;
+    let editing = false;
+    const editGate = new Promise((resolve) => { releaseEdit = resolve; });
+    const record = makeRecord(`pending_${kind}_crop`, kind, 1);
+    Object.assign(record.properties, {
+        left: 10, top: 20, width: 160, height: 90,
+        media_width: 640, media_height: 360,
+        media_duration_seconds: 10, duration_seconds: 10
+    });
+    setAtomeContextualEditApi({
+        readState: () => editing ? {
+            contextLevel: 'edition', activeAtomeId: record.id, editMode
+        } : { contextLevel: 'selection', activeAtomeId: record.id, editMode: '' },
+        isEditing: (id) => editing && id === record.id
+    });
+    setProjectSceneUiIntentHandler(async (intent) => {
+        await editGate;
+        editing = true;
+        return { ok: true, intent };
+    });
+    try {
+        await renderProjectScene({
+            projectId: `project_pending_${kind}_crop`, records: [record],
+            host: dom.window.document.getElementById('project'), compositor: createTestCompositor(),
+            onIntent: async (intent) => { intents.push(intent); }
+        });
+        dom.window.document.dispatchEvent(new dom.window.MouseEvent('dblclick', {
+            clientX: 80, clientY: 60, bubbles: true, cancelable: true
+        }));
+        dom.window.document.dispatchEvent(new dom.window.WheelEvent('wheel', {
+            clientX: 80, clientY: 60, deltaY: -10, ctrlKey: true, bubbles: true, cancelable: true
+        }));
+        await nextTick();
+        assert.equal(intents.some((intent) => intent.kind === 'resize.move'), false);
+        assert.equal(intents.some((intent) => intent.kind === 'media.crop.move'), false);
+
+        releaseEdit();
+        await nextTick();
+        await nextTick();
+        dom.window.document.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Shift', bubbles: true }));
+        await nextTick();
+
+        assert.equal(intents.some((intent) => intent.kind === 'resize.move'), false);
+        assert.equal(intents.filter((intent) => intent.kind === 'media.crop.start').length, 1);
+        assert.equal(intents.filter((intent) => intent.kind === 'media.crop.move').length, 1);
+        assert.equal(intents.filter((intent) => intent.kind === 'media.crop.end').length, 1);
+    } finally {
+        releaseEdit?.();
+        setProjectSceneUiIntentHandler(null);
+        setAtomeContextualEditApi(null);
+    }
+});
+
+test('recording and image aliases normalize to the existing contextual media owners', () => {
+    assert.equal(normalizeAtomeContextualKind('video_recording'), 'video');
+    assert.equal(normalizeAtomeContextualKind('audio_recording'), 'audio');
+    assert.equal(normalizeAtomeContextualKind('audio_waveform'), 'audio');
+    assert.equal(normalizeAtomeContextualKind('sound'), 'audio');
+    assert.equal(normalizeAtomeContextualKind('photo'), 'image');
+    assert.equal(normalizeAtomeContextualKind('picture'), 'image');
+});
+
+test('Natural Molecule double-click targets its canonical owner and enters group edition', async () => {
+    clearAllProjectScenes();
+    const dom = projectDom();
+    const intents = [];
+    const owner = makeRecord('double_click_molecule', 'group', 1);
+    Object.assign(owner.properties, { left: 10, top: 20, width: 100, height: 60, molecule_entity: 'molecule' });
+    const member = makeRecord('double_click_member', 'image', 2);
+    member.parent_id = owner.id;
+    Object.assign(member.properties, { left: 20, top: 30, width: 40, height: 30 });
+    setProjectSceneUiIntentHandler(async (intent) => { intents.push(intent); return { ok: true }; });
+    await renderProjectScene({
+        projectId: 'project_molecule_double_click', records: [owner, member],
+        host: dom.window.document.getElementById('project'), compositor: createTestCompositor()
+    });
+
+    dom.window.document.dispatchEvent(new dom.window.MouseEvent('dblclick', {
+        clientX: 30, clientY: 40, bubbles: true
+    }));
+    await nextTick();
+
+    assert.equal(intents.length, 1);
+    assert.equal(intents[0].kind, 'atome.edit.enter');
+    assert.equal(intents[0].atome_id, owner.id);
+    assert.equal(intents[0].atome_kind, 'group');
+    setProjectSceneUiIntentHandler(null);
+});
+
+test('temporal crop pinch previews and commits once when either touch is released', () => {
+    const atom = {
+        id: 'pinch_audio', type: 'audio_waveform', atomeType: 'audio',
+        bounds: { x: 0, y: 0, width: 100, height: 40 },
+        content: { mediaDuration: 10, sourceInSeconds: 2, sourceOutSeconds: 8 },
+        capabilities: { resizable: true }
+    };
+    const view = { SelectionAPI: { selected: () => ['pinch_audio'] }, __selectedAtomeIds: ['pinch_audio'] };
+    const canvas = { ownerDocument: { defaultView: view } };
+    let state = {
+        scene: { atoms: [atom], byId: new Map([[atom.id, atom]]) },
+        pointerSession: {
+            mode: 'crop.seek', pointer_id: 1, pointerType: 'touch', atome_id: atom.id,
+            start: { x: 25, y: 20 }, last: { x: 25, y: 20 }, origin: atom.bounds,
+            targets: [{ atome_id: atom.id, origin: atom.bounds }], moved: false
+        }
+    };
+    const intents = [];
+    setAtomeContextualEditApi({
+        readState: () => ({ contextLevel: 'edition', activeAtomeId: atom.id, editMode: 'temporal_crop' }),
+        isEditing: () => true
+    });
+    const pinch = createSurfacePinchRuntime({
+        canvas,
+        readState: () => state,
+        writeState: (_canvas, next) => { state = next; },
+        surfacePointFromEvent: (_canvas, event) => ({ x: event.clientX, y: event.clientY }),
+        stopSurfaceEvent: () => {},
+        endSurfacePointerSession: () => { state.pointerSession?.onEnd?.('pointerup'); state = { ...state, pointerSession: null }; },
+        dispatchSurfaceIntent: (_canvas, intent) => { intents.push(intent); },
+        hitTarget: () => atom,
+        nextGestureId: () => 'pinch_audio_gesture'
+    });
+    try {
+        assert.equal(pinch.pointerDown({ pointerType: 'touch', pointerId: 2, clientX: 75, clientY: 20 }), true);
+        assert.equal(pinch.pointerMove({ pointerId: 2, clientX: 100, clientY: 20 }), true);
+        assert.doesNotThrow(() => pinch.pointerEnd({ pointerId: 2 }));
+        assert.equal(intents.filter((intent) => intent.kind === 'media.crop.start').length, 1);
+        assert.equal(intents.filter((intent) => intent.kind === 'media.crop.move').length, 1);
+        assert.equal(intents.filter((intent) => intent.kind === 'media.crop.end').length, 1);
+        assert.equal(intents.at(-1).commit, true);
+        assert.equal(state.pointerSession, null);
+    } finally {
+        setAtomeContextualEditApi(null);
+    }
+});
+
+test('cancelled temporal crop pinch restores its initial window without a commit', () => {
+    const atom = {
+        id: 'cancelled_pinch_audio', type: 'audio_waveform', atomeType: 'audio',
+        bounds: { x: 0, y: 0, width: 100, height: 40 },
+        content: { mediaDuration: 10, sourceInSeconds: 2, sourceOutSeconds: 8 },
+        capabilities: { resizable: true }
+    };
+    const view = { SelectionAPI: { selected: () => [atom.id] }, __selectedAtomeIds: [atom.id] };
+    const canvas = { ownerDocument: { defaultView: view } };
+    let state = {
+        scene: { atoms: [atom], byId: new Map([[atom.id, atom]]) },
+        pointerSession: {
+            mode: 'crop.seek', pointer_id: 1, pointerType: 'touch', atome_id: atom.id,
+            start: { x: 25, y: 20 }, last: { x: 25, y: 20 }, origin: atom.bounds,
+            targets: [{ atome_id: atom.id, origin: atom.bounds }], moved: false
+        }
+    };
+    const intents = [];
+    setAtomeContextualEditApi({
+        readState: () => ({ contextLevel: 'edition', activeAtomeId: atom.id, editMode: 'temporal_crop' }),
+        isEditing: () => true
+    });
+    const pinch = createSurfacePinchRuntime({
+        canvas,
+        readState: () => state,
+        writeState: (_canvas, next) => { state = next; },
+        surfacePointFromEvent: (_canvas, event) => ({ x: event.clientX, y: event.clientY }),
+        stopSurfaceEvent: () => {},
+        endSurfacePointerSession: () => { state.pointerSession?.onEnd?.('pointercancel'); state = { ...state, pointerSession: null }; },
+        dispatchSurfaceIntent: (_canvas, intent) => { intents.push(intent); },
+        hitTarget: () => atom,
+        nextGestureId: () => 'cancelled_pinch_audio_gesture'
+    });
+    try {
+        assert.equal(pinch.pointerDown({ pointerType: 'touch', pointerId: 2, clientX: 75, clientY: 20 }), true);
+        assert.equal(pinch.pointerMove({ pointerId: 2, clientX: 100, clientY: 20 }), true);
+        assert.doesNotThrow(() => pinch.pointerEnd({ pointerId: 2 }, true));
+        const cancel = intents.find((intent) => intent.kind === 'media.crop.cancel');
+        assert.ok(cancel);
+        assert.deepEqual(cancel.props, {
+            source_in_seconds: 2, source_out_seconds: 8, duration_seconds: 6, media_duration_seconds: 10
+        });
+        assert.equal(intents.some((intent) => intent.kind === 'media.crop.end'), false);
+        assert.equal(state.pointerSession, null);
+    } finally {
+        setAtomeContextualEditApi(null);
+    }
 });
 
 test('Project surface resize gesture uses scene hit-test and commits canonical dimensions', async () => {
@@ -785,7 +981,9 @@ test('Project surface resize gesture uses scene hit-test and commits canonical d
         host: dom.window.document.getElementById('project'),
         compositor: createTestCompositor()
     });
-    dom.window.document.dispatchEvent(new dom.window.MouseEvent('pointerdown', { clientX: 49, clientY: 49, bubbles: true }));
+    dom.window.document.dispatchEvent(new dom.window.MouseEvent('pointerdown', {
+        clientX: 49, clientY: 49, bubbles: true, altKey: true
+    }));
     dom.window.document.dispatchEvent(new dom.window.MouseEvent('pointermove', { clientX: 69, clientY: 64, bubbles: true }));
     dom.window.document.dispatchEvent(new dom.window.MouseEvent('pointerup', { clientX: 69, clientY: 64, bubbles: true }));
     await Promise.resolve();
@@ -797,7 +995,7 @@ test('Project surface resize gesture uses scene hit-test and commits canonical d
     assert.equal(commits[0][0].atome_id, 'resize_atom');
     const committedSet = finalSetCommit(commits);
     assert.equal(committedSet.atome_id, 'resize_atom');
-    assert.deepEqual(committedSet.props, { width: 60, height: 45 });
+    assert.deepEqual(committedSet.props, { left: 10, top: 20, width: 60, height: 45 });
     assert.equal(getProjectSceneState('project_resize').records[0].properties.width, 60);
     assert.equal(getProjectSceneState('project_resize').records[0].properties.height, 45);
 });
@@ -823,7 +1021,9 @@ test('Project surface resize preserves aspect ratio when dragging one resize axi
         host: dom.window.document.getElementById('project'),
         compositor: createTestCompositor()
     });
-    dom.window.document.dispatchEvent(new dom.window.MouseEvent('pointerdown', { clientX: 49, clientY: 30, bubbles: true }));
+    dom.window.document.dispatchEvent(new dom.window.MouseEvent('pointerdown', {
+        clientX: 49, clientY: 30, bubbles: true, altKey: true
+    }));
     dom.window.document.dispatchEvent(new dom.window.MouseEvent('pointermove', { clientX: 69, clientY: 30, bubbles: true }));
     dom.window.document.dispatchEvent(new dom.window.MouseEvent('pointerup', { clientX: 69, clientY: 30, bubbles: true }));
     await Promise.resolve();
@@ -833,7 +1033,7 @@ test('Project surface resize preserves aspect ratio when dragging one resize axi
     assert.equal(commits.length, 2);
     assert.equal(commits[0][0].kind, 'gesture_frame');
     const committedSet = finalSetCommit(commits);
-    assert.deepEqual(committedSet.props, { width: 60, height: 30 });
+    assert.deepEqual(committedSet.props, { left: 10, top: 20, width: 60, height: 30 });
     const resized = getProjectSceneState('project_resize_ratio').records[0].properties;
     assert.equal(resized.width / resized.height, 2);
 });
@@ -878,6 +1078,48 @@ test('Project scene direct text and resize intents commit canonically without DO
     assert.equal(dom.window.document.querySelectorAll('.eve-atome,.eve-atome-text').length, 0);
     assert.equal(getProjectSceneState('project_intents').records[0].properties.text, 'Intent text');
     assert.equal(getProjectSceneState('project_intents').records[0].properties.width, 96);
+});
+
+test('media crop previews stay disposable and one gesture end commits once', async () => {
+    clearAllProjectScenes();
+    const dom = projectDom();
+    sceneState.foregroundProjectId = 'project_crop';
+    const commits = [];
+    dom.window.Atome = {
+        commitBatch: async (events) => { commits.push(events); return { ok: true }; }
+    };
+    const calls = [];
+    const record = makeRecord('crop_atom', 'image', 1);
+    Object.assign(record.properties, {
+        media_url: '/image.png', media_width: 1000, media_height: 500,
+        left: 10, top: 20, width: 200, height: 100
+    });
+    await renderProjectScene({
+        projectId: 'project_crop', records: [record],
+        host: dom.window.document.getElementById('project'), compositor: createTestCompositor(calls)
+    });
+    await nextTick(70);
+    const beforePreview = calls.length;
+    const props = { source_rect: { x: 100, y: 50, width: 600, height: 300 } };
+    await emitProjectSceneIntent({
+        projectId: 'project_crop', intent: { kind: 'media.crop.move', atome_id: record.id, props }
+    });
+    assert.equal(commits.length, 0);
+    assert.deepEqual(getProjectSceneState('project_crop').records[0].properties.source_rect, props.source_rect);
+    await nextTick(70);
+    const previewResource = bevyOpsFromCalls(calls.slice(beforePreview))
+        .find((op) => op.type === 'resource' && bevyOpId(op) === record.id);
+    assert.ok(previewResource, 'crop preview must reach the real Bevy resource patch');
+    assert.deepEqual((previewResource.patch || previewResource.payload).uv_rect, [0.1, 0.1, 0.6, 0.6]);
+    await emitProjectSceneIntent({
+        projectId: 'project_crop', intent: {
+            kind: 'media.crop.end', atome_id: record.id, gesture_id: 'crop_gesture', props, commit: true
+        }
+    });
+    assert.equal(commits.length, 1);
+    assert.equal(commits[0].length, 1);
+    assert.equal(commits[0][0].atome_id, record.id);
+    assert.deepEqual(commits[0][0].props.source_rect, props.source_rect);
 });
 
 test('Project scene selection invalidation redraws selected canvas state without DOM Atomes', async () => {

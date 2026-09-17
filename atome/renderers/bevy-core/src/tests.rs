@@ -830,6 +830,57 @@ fn imported_text_textures_use_linear_sampling_without_changing_logical_size() {
 }
 
 #[test]
+fn audio_waveform_uv_window_is_applied_on_spawn_and_resource_update() {
+    let mut world = World::new();
+    world.insert_resource(AtomeEntityTable::default());
+    world.insert_resource(AtomeBevyRendererConfig::empty(640.0, 480.0));
+    world.insert_resource(AtomeRendererDiagnostics::default());
+    world.insert_resource(Assets::<Image>::default());
+    let texture = AtomeTexture {
+        animation: None,
+        width: 100,
+        height: 20,
+        rgba: vec![255; 100 * 20 * 4],
+    };
+    let entity = apply_spawn(
+        &mut world,
+        AtomeRenderNode {
+            id: "waveform_crop".to_string(),
+            kind: "audio_waveform".to_string(),
+            logical_size: [200.0, 40.0],
+            color: Some([1.0, 1.0, 1.0, 1.0]),
+            uv_rect: Some([0.2, 0.0, 0.4, 1.0]),
+            texture: Some(texture.clone()),
+            peaks: Some(vec![0.1, 0.5, 0.8]),
+            ..shape_node("waveform_crop")
+        },
+    )
+    .unwrap();
+
+    let spawned_rect = world.get::<Sprite>(entity).unwrap().rect.unwrap();
+    assert!((spawned_rect.min.x - 20.0).abs() < 0.001);
+    assert!((spawned_rect.max.x - 60.0).abs() < 0.001);
+    assert_eq!([spawned_rect.min.y, spawned_rect.max.y], [0.0, 20.0]);
+    crate::resource_ops::apply_resource(
+        &mut world,
+        AtomeResourcePatch {
+            id: "waveform_crop".to_string(),
+            source: None,
+            texture_size: None,
+            uv_rect: Some(Some([0.5, 0.0, 0.25, 1.0])),
+            texture: Some(texture),
+            peaks: Some(vec![0.1, 0.5, 0.8]),
+        },
+    )
+    .unwrap();
+
+    let updated_rect = world.get::<Sprite>(entity).unwrap().rect.unwrap();
+    assert!((updated_rect.min.x - 50.0).abs() < 0.001);
+    assert!((updated_rect.max.x - 75.0).abs() < 0.001);
+    assert_eq!([updated_rect.min.y, updated_rect.max.y], [0.0, 20.0]);
+}
+
+#[test]
 fn audio_waveform_progress_spawns_and_moves_bevy_playhead_overlay() {
     let mut world = World::new();
     world.insert_resource(AtomeEntityTable::default());

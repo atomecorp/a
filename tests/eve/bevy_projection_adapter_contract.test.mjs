@@ -19,6 +19,20 @@ import {
     getRendererAdapter,
     registerRendererAdapter
 } from '../../eVe/domains/rendering/renderer_adapter_registry.js';
+import { normalizeRenderAtom } from '../../eVe/domains/rendering/render_atom.js';
+import {
+    cropEdgeAtPoint,
+    panSpatialCrop,
+    resizeSpatialCropFrame,
+    spatialCropProps,
+    spatialCropStateForAtom,
+    temporalCropProps,
+    temporalCropStateForAtom,
+    temporalCropUvRect,
+    trimTemporalCrop,
+    zoomSpatialCrop,
+    zoomTemporalCrop
+} from '../../eVe/domains/rendering/media_crop_model.js';
 
 const texture = {
     width: 1,
@@ -167,6 +181,141 @@ test('Bevy renderer adapter registry keeps existing node projections identical',
     assert.deepEqual(procedural.destructive_direction, [1, 0]);
     assert.equal(procedural.destructive_mode, 1);
     assert.deepEqual(procedural.surface_size, [1280, 720]);
+});
+
+test('image and video share the canonical source_rect to UV projection and resource patch', () => {
+    for (const kind of ['image', 'video']) {
+        const node = {
+            id: `${kind}_crop`, kind,
+            bounds: { x: 0, y: 0, width: 320, height: 180 }, renderLayer: 1,
+            content: {
+                source: `/media/${kind}`,
+                naturalWidth: 1000, naturalHeight: 500,
+                sourceRect: { x: 100, y: 50, width: 600, height: 300 }
+            },
+            bevyTexture: texture
+        };
+        const payload = mapVirtualSceneNodeToBevyPayload(node);
+        assert.deepEqual(payload.texture_size, [1000, 500]);
+        assert.deepEqual(payload.uv_rect, [0.1, 0.1, 0.6, 0.6]);
+        const patch = mapVirtualSceneResourceToBevyPatch({
+            id: node.id, node, content: node.content, previousContent: { ...node.content, sourceRect: null }
+        });
+        assert.deepEqual(patch.texture_size, [1000, 500]);
+        assert.deepEqual(patch.uv_rect, [0.1, 0.1, 0.6, 0.6]);
+    }
+});
+
+test('spatial crop pan, zoom and frame resize remain bounded to the source', () => {
+    const atom = {
+        bounds: { x: 10, y: 20, width: 200, height: 100 },
+        content: {
+            source: '/image.png', naturalWidth: 1000, naturalHeight: 500,
+            sourceRect: { x: 100, y: 50, width: 600, height: 300 }
+        }
+    };
+    const crop = spatialCropStateForAtom(atom);
+    assert.deepEqual(panSpatialCrop({ crop, bounds: atom.bounds, delta: { x: 400, y: -200 } }), {
+        x: 0, y: 200, width: 600, height: 300
+    });
+    const zoomed = zoomSpatialCrop({ crop, bounds: atom.bounds, scale: 2, anchor: { x: 110, y: 70 } });
+    assert.deepEqual(zoomed, { x: 250, y: 125, width: 300, height: 150 });
+    assert.deepEqual(spatialCropProps(zoomed), { source_rect: zoomed });
+    const resized = resizeSpatialCropFrame({
+        crop, bounds: atom.bounds, handle: { axisX: 'w', axisY: 'n' }, delta: { x: -100, y: -100 }
+    });
+    assert.ok(Math.abs(resized.frame.x - (-23.33333333333333)) < 0.000001);
+    assert.ok(Math.abs(resized.frame.y - 3.333333333333332) < 0.000001);
+    assert.ok(Math.abs(resized.frame.width - 233.33333333333331) < 0.000001);
+    assert.ok(Math.abs(resized.frame.height - 116.66666666666666) < 0.000001);
+    assert.ok(Math.abs(resized.rect.x) < 0.000001);
+    assert.ok(Math.abs(resized.rect.y) < 0.000001);
+    assert.ok(resized.rect.x + resized.rect.width <= crop.naturalWidth);
+    assert.ok(resized.rect.y + resized.rect.height <= crop.naturalHeight);
+    assert.deepEqual(cropEdgeAtPoint({ point: { x: 4, y: 14 }, bounds: atom.bounds }), {
+        axisX: 'w', axisY: 'n'
+    });
+});
+
+test('a first image crop reuses the visible cover window instead of stretching the full source', () => {
+    const crop = spatialCropStateForAtom({
+        type: 'image',
+        bounds: { x: 0, y: 0, width: 200, height: 200 },
+        content: {
+            source: '/wide-image.png', naturalWidth: 1000, naturalHeight: 500
+        }
+    });
+    assert.deepEqual(crop.rect, { x: 250, y: 0, width: 500, height: 500 });
+    const resized = resizeSpatialCropFrame({
+        crop, bounds: { x: 0, y: 0, width: 200, height: 200 },
+        handle: { axisX: 'e', axisY: null }, delta: { x: 40, y: 0 }
+    });
+    assert.equal(resized.frame.width, 240);
+    assert.equal(resized.rect.width, 600);
+    assert.equal(resized.rect.height, 500);
+    assert.equal(resized.rect.width / resized.rect.height, resized.frame.width / resized.frame.height);
+    assert.deepEqual(spatialCropStateForAtom({
+        type: 'image',
+        bounds: { x: 0, y: 0, width: 200, height: 200 },
+        content: { naturalWidth: 1000, naturalHeight: 500, objectFit: 'fill' }
+    }).rect, { x: 0, y: 0, width: 1000, height: 500 });
+    assert.deepEqual(spatialCropStateForAtom({
+        type: 'image',
+        bounds: { x: 0, y: 0, width: 200, height: 200 },
+        content: { naturalWidth: 1000, naturalHeight: 500, objectFit: 'contain' }
+    }).rect, { x: 250, y: 0, width: 500, height: 500 });
+    assert.deepEqual(spatialCropStateForAtom({
+        type: 'image',
+        bounds: { x: 0, y: 0, width: 200, height: 200 },
+        content: {
+            naturalWidth: 1000, naturalHeight: 500,
+            sourceRect: { x: 0, y: 0, width: 1000, height: 500 }
+        }
+    }).rect, { x: 250, y: 0, width: 500, height: 500 });
+});
+
+test('temporal crop keeps full waveform data and projects a bounded horizontal source window', () => {
+    const crop = temporalCropStateForAtom({ content: {
+        mediaDuration: 10, sourceInSeconds: 2, sourceOutSeconds: 8
+    } });
+    assert.deepEqual(zoomTemporalCrop({ crop, scale: 2, focus: 0.5 }), {
+        sourceIn: 3.5, sourceOut: 6.5, duration: 10
+    });
+    assert.equal(trimTemporalCrop({ crop, edge: 'w', deltaSeconds: 20 }).sourceIn, 7.999);
+    assert.deepEqual(temporalCropProps({ ...crop, sourceIn: 3, sourceOut: 7 }), {
+        source_in_seconds: 3, source_out_seconds: 7,
+        duration_seconds: 4, media_duration_seconds: 10
+    });
+    assert.deepEqual(temporalCropUvRect({ sourceIn: 2, sourceOut: 6, duration: 10 }), [0.2, 0, 0.4, 1]);
+    const normalized = normalizeRenderAtom({
+        id: 'waveform_source', type: 'audio',
+        properties: {
+            left: 0, top: 0, width: 240, height: 48,
+            media_url: '/audio.wav',
+            waveform_peaks: [0, 0.25, 0.75, 1],
+            source_in_seconds: 2,
+            source_out_seconds: 6,
+            media_duration_seconds: 10
+        }
+    });
+    assert.deepEqual(normalized.content.peaks, [0, 0.25, 0.75, 1]);
+    assert.deepEqual(normalized.content.uvRect, [0.2, 0, 0.4, 1]);
+    const waveform = {
+        id: 'waveform_crop', kind: 'audio_waveform',
+        bounds: { x: 0, y: 0, width: 240, height: 48 }, renderLayer: 1,
+        content: { peaks: [0, 0.25, 0.75, 1], uvRect: [0.2, 0, 0.4, 1] },
+        bevyTexture: texture
+    };
+    assert.deepEqual(mapVirtualSceneNodeToBevyPayload(waveform).uv_rect, [0.2, 0, 0.4, 1]);
+    assert.deepEqual(mapVirtualSceneResourceToBevyPatch({
+        id: waveform.id,
+        node: waveform,
+        content: waveform.content,
+        previousContent: { ...waveform.content, uvRect: [0, 0, 1, 1] }
+    }).uv_rect, [0.2, 0, 0.4, 1]);
+    assert.equal(cropEdgeAtPoint({
+        point: { x: 110, y: 20 }, bounds: { x: 10, y: 20, width: 200, height: 100 }, temporal: true
+    }), null);
 });
 
 test('Bevy projection delegates kind-specific node and resource mapping to registered adapters', () => {

@@ -191,18 +191,24 @@ export const validateNaturalMoleculeDrop = async ({ page, project, fixture, repo
         };
         visit(tree?.root);
         const safe = ownerId.replace(/[^a-zA-Z0-9_-]/g, '_');
-        const outline = nodes.get(`atome_contextual_edit_${safe}_outline`) || null;
-        const footer = nodes.get(`atome_contextual_edit_${safe}_footer`) || null;
-        const close = nodes.get(`atome_contextual_edit_${safe}_close`) || null;
+        const obsoleteIds = [
+            `atome_contextual_edit_${safe}_surface`,
+            `atome_contextual_edit_${safe}_outline`,
+            `atome_contextual_edit_${safe}_footer`,
+            `atome_contextual_edit_${safe}_close`,
+            `atome_contextual_edit_${safe}_drag`,
+            `atome_contextual_edit_${safe}_title`
+        ];
+        const obsoleteNodes = obsoleteIds.filter((id) => nodes.has(id));
+        const rail = nodes.get('eve_bevy_panel_atome_contextual_edit_rail') || null;
         return {
             ok: state.activeAtomeId === ownerId && state.railOnly === false
-                && outline?.kind === 'panel' && Array.isArray(outline?.style?.border)
-                && footer?.kind === 'row' && close?.kind === 'button',
+                && state.contextLevel === 'edition' && state.activeKind === 'group'
+                && obsoleteNodes.length === 0 && rail?.kind === 'scroll_area',
             state,
             chrome: {
-                outline: outline ? { kind: outline.kind, style: outline.style } : null,
-                footer: footer ? { kind: footer.kind, style: footer.style } : null,
-                close: close ? { kind: close.kind, style: close.style } : null
+                obsoleteNodes,
+                rail: rail ? { kind: rail.kind, style: rail.style } : null
             }
         };
     }, moleculeId);
@@ -245,16 +251,15 @@ export const validateNaturalMoleculeDrop = async ({ page, project, fixture, repo
             ownerProps, movedProps, siblingProps
         };
     }, { ownerId: moleculeId, movedId: fixture.audioId, siblingId: fixture.imageId, before: memberBefore });
-    const close = await contextualTool(page, [`atome_contextual_edit_${moleculeId.replace(/[^a-zA-Z0-9_-]/g, '_')}_close`]);
-    assert(close, `natural_molecule_close_missing:${JSON.stringify(contextualChrome)}`);
-    await clickCanvasTarget(page, close);
-    await waitFor(page, async () => {
+    const exitTarget = await recordCenter(page, project.id, (record) => record.id === fixture.spareId, { sceneCoordinates: true });
+    await clickCanvasTarget(page, exitTarget);
+    await waitFor(page, async (expectedId) => {
         const { getAtomeContextualEditApi } = await import(
             '/eVe/intuition/runtime/eve_intuition/atome_contextual_edit_registry.js'
         );
         const state = getAtomeContextualEditApi()?.readState?.() || {};
-        return { ok: !state.activeAtomeId, state };
-    });
+        return { ok: state.activeAtomeId === expectedId && state.contextLevel === 'selection', state };
+    }, fixture.spareId);
     report.molecule_selection_visual = await assertClosedMoleculePicking({ page, project, ownerId: moleculeId,
         memberIds: [fixture.audioId, fixture.imageId], report, outDir });
     const reopenedTarget = await recordCenter(page, project.id, (record) => record.id === fixture.audioId, { sceneCoordinates: true });

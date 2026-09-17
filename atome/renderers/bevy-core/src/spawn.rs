@@ -265,6 +265,9 @@ pub fn spawn_node_with_texture_handle(
                 Sprite::from_color(color_from_rgba(color), size)
             };
             sprite.custom_size = Some(size);
+            if let Some(texture) = node.texture.as_ref() {
+                sprite.rect = crate::texture::sprite_rect_from_uv(node.uv_rect, texture.width, texture.height);
+            }
             if has_texture {
                 sprite.color = white_with_opacity(node.opacity);
             } else {
@@ -304,6 +307,9 @@ pub fn spawn_node_with_texture_handle(
                 Sprite::from_color(color_from_rgba(color), size)
             };
             sprite.custom_size = Some(size);
+            if let Some(texture) = node.texture.as_ref() {
+                sprite.rect = crate::texture::sprite_rect_from_uv(node.uv_rect, texture.width, texture.height);
+            }
             if has_texture {
                 sprite.color = white_with_opacity(node.opacity);
             } else {

@@ -1,5 +1,19 @@
 # Atome / eVe API Map
 
+### Internal waveform crop projection — 2026-09-17
+
+No API change is introduced by the crop-entry repair. The existing asynchronous `atome.edit.enter` intent is completed before the next surface gesture is routed, and the established `media.crop.*` intents remain the only gesture path.
+
+Persisted recording kinds are unchanged. The contextual boundary derives `video` from `video_recording`, `audio` from `audio_recording`/`sound`/`audio_waveform`, and `image` from photo/picture aliases before selecting an existing edit owner. Inline SVG continues through the existing vector-edit API.
+
+No public API or persisted-property addition. `source_in_seconds`, `source_out_seconds` and `media_duration_seconds` now derive an internal normalized horizontal `uv_rect` for `audio_waveform`, just as spatial media derives UVs from `source_rect`. Waveform payloads and resource patches accept that existing renderer field; full source peaks remain immutable projection input.
+
+### Media crop properties and internal intents — 2026-09-17
+
+Image and video accept canonical `source_rect: { x, y, width, height }` in source pixels plus `media_width`/`media_height`. Audio and waveform accept `source_in_seconds`, `source_out_seconds`, `duration_seconds` for the kept segment and `media_duration_seconds` for the complete source. Internal scene intents are `media.crop.start`, `media.crop.move`, `media.crop.end`, `media.crop.cancel` and `media.seek`; move/cancel are disposable projections and only end commits. Playback adds the source entry to the local cursor and limits voice duration to the source exit. These extend existing scene, commit, renderer and audio APIs; there is no parallel public crop service.
+
+Crop entry reuses the existing image fit resolver: implicit image fit and explicit `contain` establish a bounded `cover` source window for editing, while explicit `fill` alone keeps the complete source. Group/Molecule double-click continues to emit the existing `atome.edit.enter` intent with the canonical structural kind; no new public intent or persisted edition flag is added.
+
 ### Canvas lasso Delete and empty Molecule lifecycle — 2026-09-16
 
 No public API or schema addition. `ui.delete.selection` receives the complete canvas selection even when invoked from the Natural contextual rail; only records explicitly marked `structured_context` narrow Delete to one List/Matrix row. Molecule membership is defined by canonical `parent_id`, not stale derived timeline clips. Native iOS ingestion preserves that field, and the existing Molecule lifecycle removes the owner when its final canonical member is deleted. Historical empty owners remain explicitly deletable through the same action rather than being silently purged at startup.
@@ -1308,7 +1322,7 @@ Boundary status: Closed product runtime API. Public promotion would require a pr
 
 Ownership: eVe closed Intuition runtime for multi-Atome edit state, Bevy footer/outline projection, fixed contextual rail, canonical gestures, fullscreen, and tool invocation.
 
-Primary sources: `atome_contextual_edit_runtime.js`, `atome_contextual_edit_model.js`, `atome_contextual_edit_registry.js`, `atome_edit_footer_runtime.js`, `atome_edit_footer_model_runtime.js`, and the existing tool definition/invocation owners.
+Primary sources: `atome_contextual_edit_runtime.js`, `atome_contextual_edit_model.js`, `atome_contextual_edit_registry.js`, `atome_contextual_rail_runtime.js`, `atome_contextual_rail_model_runtime.js`, and the existing tool definition/invocation owners.
 
 Exposure: JavaScript module exports consumed by `eVe/intuition/eVeIntuition.js`; these are closed product runtime seams, not public Atome APIs.
 
@@ -1401,7 +1415,7 @@ Boundary status: Closed product runtime API. Public promotion would require a pr
 
 Ownership: eVe closed Atome-edit footer selection and invocation payload boundary.
 
-Primary source: `eVe/intuition/runtime/eve_intuition/atome_edit_footer_selection_runtime.js`.
+Primary source: `eVe/intuition/runtime/eve_intuition/atome_contextual_rail_selection_runtime.js`.
 
 Exposure: JavaScript module export consumed by `eVe/intuition/eVeIntuition.js` and injected into footer row/child/definition runtimes.
 

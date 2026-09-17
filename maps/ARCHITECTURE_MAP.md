@@ -1,5 +1,19 @@
 # Atome / eVe Architecture Map
 
+### Recursive edition and source-space crop projection — 2026-09-17
+
+Double-click crop entry is an ordered interaction boundary: the surface completes canonical selection and contextual `atome.edit.enter` before accepting the immediately following pointer, wheel, or native gesture. This prevents a video/audio crop gesture from falling through to generic transform/zoom while entry is still asynchronous. Inside an edited Molecule, an exact descendant already in edition remains the active contextual target instead of being replaced by its edited ancestor.
+
+Contextual kind normalization is shared with the existing media playback boundary: recording provenance remains persisted as `video_recording`/`audio_recording`, while contextual behavior resolves to `video`/`audio`. Image aliases resolve to `image`; inline SVG uses the established vector editor. No new editor or media route exists.
+
+Closed hierarchy targeting still resolves the outer structural owner. Once any structural ancestor is in contextual edition, the shared surface/Flower resolver preserves the raw descendant through arbitrary nesting; an active media leaf also remains its own gesture target. Cropped images use one bounded natural-aspect source texture whose UV coordinates share the canonical `source_rect` domain. Waveforms keep full peaks in one cached source texture and derive a horizontal UV window from canonical temporal crop properties. Bevy stores the patched UV rect in both `Sprite.rect` and `AtomeSpriteSourceRect`, so generic clip recomputation cannot restore an obsolete crop. Canonical state and history remain unchanged.
+
+### Contextual media crop ownership — 2026-09-17
+
+Double-click edition is an ephemeral contextual session: `text`, `spatial_crop` or `temporal_crop`. The contextual BevyUI owner projects only the existing lateral tool rail; the former per-Atome footer, surface, outline, close/drag controls and fullscreen owner are removed. Natural selection keeps the renderer-owned dotted outline. `surface_interaction_runtime.js`, its pinch owner and the Structured visual interaction adapter all emit the same `media.crop.*` previews and one terminal canonical commit. Spatial crop persists source-pixel `source_rect`; image and video derive the same UV rectangle in the existing Bevy adapter. Temporal crop persists `source_in_seconds`/`source_out_seconds`; waveform projection and the existing Kira playback owner consume the retained window. No DOM overlay, renderer or canonical editing flag is introduced.
+
+Canonical `group`/`molecule` identity remains distinct from the projected `shape` primitive. Closed descendants resolve to their structural owner for selection and double-click, while explicit Molecule edition keeps the established descendant targeting, interior-background absorption, outside-click exit and parent-plus-union `commitBatch` contract. Image crop initializes or repairs its source window with the existing fit calculation before UV projection; audio pinch retains its session through terminal release/cancel.
+
 ### Composition terminal ownership and deterministic Paste — 2026-09-15
 
 An active project-surface pointer session remains the terminal-event owner while its overlap-choice palette is visible. `surface_interaction_runtime.js` performs the final choice hit-test before one `drag.end`; only events not owned by that session may enter the BevyUI surface interceptor, and `pointercancel` still cancels without composition. All six choices continue through `combineCanonicalMolecule` and the canonical mutation/history pipeline.

@@ -8,16 +8,16 @@ const installDebug = (windowRef) => {
     globalThis.window = windowRef;
     globalThis.document = windowRef.document;
     const debug = installEveDebugRuntime({
-        atomeEditFooterState: {},
+        atomeContextualRailState: {},
         ensureMoleculeMediaRuntime: () => ({
             getMediaState: () => ({}),
             runSuite: () => ({}),
             runMediaTransportSuite: () => ({})
         }),
-        readAtomeEditFooterRecordActionBridgeState: () => ({}),
+        readAtomeContextualRailRecordActionBridgeState: () => ({}),
         readSelectionSnapshot: () => ({ ids: [] }),
-        resolveAtomeEditFooterKindFromHost: () => 'shape',
-        showAtomeEditFooter: async () => ({ ok: true })
+        resolveAtomeContextualRailKindFromHost: () => 'shape',
+        showAtomeContextualRail: async () => ({ ok: true })
     });
     return debug;
 };

@@ -785,6 +785,111 @@ test('Bevy media texture resolver honors per-node image texture scale', async ()
     assert.equal(canvases.length, 2);
 });
 
+test('cropped images keep one source-aspect texture across frame and crop previews', async () => {
+    clearBevyMediaTextureCache();
+    const canvases = [];
+    const drawCalls = [];
+    const documentRef = {
+        defaultView: { devicePixelRatio: 1 },
+        createElement: (tagName) => {
+            if (tagName === 'img') {
+                return {
+                    complete: true,
+                    naturalWidth: 800,
+                    naturalHeight: 400,
+                    decode: async () => {},
+                    addEventListener: () => {},
+                    removeEventListener: () => {}
+                };
+            }
+            if (tagName === 'canvas') {
+                const canvas = {
+                    width: 0,
+                    height: 0,
+                    getContext: () => ({
+                        clearRect: () => null,
+                        scale: () => null,
+                        drawImage: (...args) => drawCalls.push(args),
+                        getImageData: (_x, _y, width, height) => ({ data: new Uint8ClampedArray(width * height * 4) })
+                    })
+                };
+                canvases.push(canvas);
+                return canvas;
+            }
+            throw new Error(`unexpected_element:${tagName}`);
+        }
+    };
+    const resolver = createBrowserBevyMediaTextureResolver({
+        documentRef,
+        imageTextureScale: 1,
+        fetchResource: async () => new Response(new Uint8Array([0])),
+        maxTextureSize: 1024
+    });
+    const node = {
+        id: 'source_space_crop', kind: 'image',
+        bounds: { x: 0, y: 0, width: 200, height: 200 },
+        content: {
+            source: 'data:image/png;base64,source-space',
+            naturalWidth: 800, naturalHeight: 400,
+            sourceRect: { x: 200, y: 0, width: 400, height: 400 }
+        }
+    };
+    const first = await resolver(node);
+    const preview = await resolver({
+        ...node,
+        bounds: { ...node.bounds, width: 240 },
+        content: { ...node.content, sourceRect: { x: 160, y: 0, width: 480, height: 400 } }
+    });
+
+    assert.deepEqual([first.width, first.height], [800, 400]);
+    assert.equal(first.width / first.height, 2);
+    assert.deepEqual(preview, first);
+    assert.equal(canvases.length, 1);
+    assert.equal(drawCalls.length, 1);
+    assert.deepEqual(drawCalls[0].slice(1), [0, 0, 800, 400]);
+});
+
+test('waveform texture keeps full peak coordinates across temporal crop previews', async () => {
+    clearBevyMediaTextureCache();
+    const canvases = [];
+    const documentRef = {
+        defaultView: { devicePixelRatio: 1 },
+        createElement: (tagName) => {
+            if (tagName !== 'canvas') throw new Error(`unexpected_element:${tagName}`);
+            const canvas = {
+                width: 0,
+                height: 0,
+                getContext: () => ({
+                    clearRect: () => null,
+                    fillRect: () => null,
+                    getImageData: (_x, _y, width, height) => ({ data: new Uint8ClampedArray(width * height * 4) }),
+                    set fillStyle(_value) {},
+                    set globalAlpha(_value) {}
+                })
+            };
+            canvases.push(canvas);
+            return canvas;
+        }
+    };
+    const resolver = createBrowserBevyMediaTextureResolver({ documentRef, maxTextureSize: 1024 });
+    const node = {
+        id: 'waveform_source_space', kind: 'audio_waveform',
+        bounds: { x: 0, y: 0, width: 400, height: 40 },
+        content: { source: '/audio.wav', duration: 8, peaks: [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8] },
+        material: { fill: '#44cc88' }
+    };
+    const first = await resolver(node);
+    const preview = await resolver({
+        ...node,
+        bounds: { ...node.bounds, width: 200 },
+        content: { ...node.content, uvRect: [0.25, 0, 0.5, 1] }
+    });
+
+    assert.deepEqual([first.width, first.height], [8, 40]);
+    assert.deepEqual(preview, first);
+    assert.equal(canvases.length, 1);
+});
+
 test('Bevy media texture resolver bounds oversized cover textures without changing their ratio', async () => {
     clearBevyMediaTextureCache();
     const drawCalls = [];

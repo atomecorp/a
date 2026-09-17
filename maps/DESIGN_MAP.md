@@ -1,5 +1,15 @@
 # Atome / eVe Design Map
 
+### Source-window crop rendering — 2026-09-17
+
+An edited Molecule exposes media descendants recursively at any nesting depth. Cropped images preserve their natural source ratio beneath the fixed frame; edge changes reveal or hide pixels rather than stretching them. Audio edge trim clips the full waveform horizontally, while pinch zoom enlarges the selected time window without redistributing or changing peak amplitudes.
+
+### Double-click edit and crop — 2026-09-17
+
+The selected Atome keeps only its existing dotted WebGPU outline and lateral Delete/Copy/Play/Size/Colour rail. Double-click text retains caret and selection editing. Double-click image/video fixes the visible frame while interior drag pans and Alt/Option, Ctrl-wheel or pinch zooms the source; a held dotted edge/corner arms frame trimming. Double-click audio limits interaction horizontally: interior drag scrubs, zoom changes the retained time window, and held left/right edges trim it. Clicking another Atome or empty project space closes edition without consuming that click. Escape cancels the active crop session.
+
+Groups and Molécules keep their prior Natural boundary unchanged: a closed member selects and outlines the structural owner, double-click opens that owner, descendants become individually manipulable only in edition, interior blank space is absorbed, and an exterior click exits while retaining its own action. Image crop uses a ratio-preserving source window—never a full-source `fill` unless explicitly authored—so panning, zooming and edge trimming cannot stretch pixels. Audio pinch ends with exactly one commit or restores its initial interval on cancellation.
+
 ### Invisible empty Molecules and lasso Delete — 2026-09-16
 
 An empty Molecule has no independent visual content: it may still be outlined by lasso selection so legacy orphan owners can be found and explicitly deleted. A Natural canvas Delete applies to the whole captured lasso selection, while a List/Matrix row Delete stays scoped to that row. New iOS Molecules retain canonical child parentage, and the existing lifecycle removes a Molecule when its last child disappears. There is no implicit startup purge: a future property-bearing container needs an explicit product model rather than being inferred from stale geometry or timeline projection.
