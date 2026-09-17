@@ -106,15 +106,15 @@ describe('Dashboard WebGPU records', () => {
         expect(record(records, 'header_calendar_date').properties.text.length).toBeGreaterThan(3);
     });
 
-    it('keeps media translucent above the mandatory frozen-glass card surface', () => {
+    it('keeps card media opaque above the transparent frozen-glass support', () => {
         const records = buildDashboardRecords({ layout: layout(), tokens });
         const projectCard = record(records, 'card_projects_project-one');
         const projectMedia = record(records, 'card_media_projects_project-one');
         const contactMedia = record(records, 'card_media_contacts_contact-one');
         expect(projectCard.properties.color).toBe('rgba(0,0,0,0)');
         expect(projectCard.properties.material.backdrop.blurPx).toBe(tokens.contentGlass.blurPx);
-        expect(projectMedia.properties.opacity).toBe(tokens.contentGlass.mediaOpacity);
-        expect(contactMedia.properties.opacity).toBe(tokens.contentGlass.mediaOpacity);
+        expect(projectMedia.properties.opacity).toBe(1);
+        expect(contactMedia.properties.opacity).toBe(1);
         expect(projectMedia.properties.media_fit).toBe('contain');
         expect(contactMedia.properties.media_fit).toBe('cover');
         expect(record(records, 'card_label_backdrop_projects_project-one')).toBeTruthy();

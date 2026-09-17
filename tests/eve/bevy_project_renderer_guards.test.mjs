@@ -88,8 +88,7 @@ test.each([
 
     assert.equal(result.ok, true);
     assert.equal(calls.filter((call) => call.type === 'transform').length, 1);
-    assert.equal(calls.filter((call) => call.type === 'redraw').length, 0);
-    assert.equal(delayedRedraws, 4);
+    assert.equal(calls.filter((call) => call.type === 'redraw').length + delayedRedraws, 1);
 });
 
 test('Bevy startup without diagnostics waits across the runner boundary and rejects asynchronous panics', async () => {
@@ -236,7 +235,7 @@ test('Bevy project renderer guards lock canvas ownership, drag, and video playba
     const previewCaptureFrame = readSource('eVe/domains/rendering/bevy_project_preview_capture_frame.js');
     assert.match(webRenderer, /opsAreTransformOnly/);
     assert.match(webRenderer, /opsNeedMediaSourceSync/);
-    assert.match(webRenderer, /opsNeedPresentationRedrawPrime/);
+    assert.doesNotMatch(webRenderer, /opsNeedPresentationRedrawPrime|virtualSceneHasBackdrop|schedulePresentationRedrawPrime/);
     assert.match(webRenderer, /createBevyMediaResourceRuntime/);
     assert.match(webRendererStartup, /attachBevyWasmDiagnosticsReaders/);
     assert.match(webRendererModuleLoader, /BEVY_WASM_MODULE_PATH = '\/wasm\/squirrel_bevy_renderer\.js'/);
@@ -270,8 +269,8 @@ test('Bevy project renderer guards lock canvas ownership, drag, and video playba
         /;\s*$/
     );
     assert.match(applyDiffsBody, /opsNeedMediaSourceSync\(ops\)/);
-    assert.match(applyDiffsBody, /needsPresentationPrime = effectsChanged[\s\S]*opsNeedPresentationRedrawPrime\(ops\)[\s\S]*virtualSceneHasBackdrop\(nextState\.virtual_scene\)/);
-    assert.match(applyDiffsBody, /if\s*\(\s*!needsPresentationPrime\s*\)/);
+    assert.match(applyDiffsBody, /if\s*\(\s*ops\.length > 0 \|\| effectsChanged\s*\)[\s\S]*scheduleBevyPresentationRedraw\(canvas, module\)/);
+    assert.doesNotMatch(presentationRuntime, /PRESENTATION_REDRAW_PRIME|REDRAW_PRIME_PENDING|schedulePresentationRedrawPrime/);
     assert.doesNotMatch(applyDiffsBody, /if\s*\(\s*virtualScene\s*\)\s*\{\s*syncBevyVideoDecodeSources/);
     const videoResourceBody = sourceSlice(
         mediaResourceRuntime,
@@ -696,8 +695,7 @@ test('Bevy style diffs forward opacity to the WASM style export', async () => {
         selected: undefined,
         opacity: 0.38
     });
-    assert.equal(calls.filter((call) => call.type === 'redraw').length, 0);
-    assert.equal(delayedRedraws, 4);
+    assert.equal(calls.filter((call) => call.type === 'redraw').length + delayedRedraws, 1);
 });
 
 test('live project video without poster cannot enter the RGBA media resolver path', async () => {
@@ -785,6 +783,53 @@ test('Bevy media texture resolver honors per-node image texture scale', async ()
     assert.equal(normal.width, 40);
     assert.equal(normal.height, 20);
     assert.equal(canvases.length, 2);
+});
+
+test('Bevy media texture resolver bounds oversized cover textures without changing their ratio', async () => {
+    clearBevyMediaTextureCache();
+    const drawCalls = [];
+    const documentRef = {
+        defaultView: { devicePixelRatio: 1 },
+        createElement: (tagName) => {
+            if (tagName === 'img') {
+                return {
+                    complete: true,
+                    naturalWidth: 820,
+                    naturalHeight: 820,
+                    decode: async () => {},
+                    addEventListener: () => {},
+                    removeEventListener: () => {}
+                };
+            }
+            if (tagName === 'canvas') {
+                return {
+                    width: 0,
+                    height: 0,
+                    getContext: () => ({
+                        clearRect: () => null,
+                        scale: () => null,
+                        drawImage: (...args) => drawCalls.push(args),
+                        getImageData: (_x, _y, width, height) => ({ data: new Uint8ClampedArray(width * height * 4) })
+                    })
+                };
+            }
+            throw new Error(`unexpected_element:${tagName}`);
+        }
+    };
+    const resolver = createBrowserBevyMediaTextureResolver({ documentRef, maxTextureSize: 1024 });
+    const texture = await resolver({
+        id: 'wide_cover',
+        kind: 'image',
+        bounds: { x: 0, y: 0, width: 1280, height: 820 },
+        content: { source: 'data:image/svg+xml,wide-cover', mediaFit: 'cover' }
+    });
+
+    assert.deepEqual([texture.width, texture.height], [1024, 656]);
+    assert.equal(Number((texture.width / texture.height).toFixed(3)), Number((1280 / 820).toFixed(3)));
+    assert.equal(drawCalls.length, 1);
+    assert.deepEqual(drawCalls[0].slice(5), [0, 0, 1280, 820]);
+    assert.equal(Math.round(drawCalls[0][3]), 820);
+    assert.equal(Math.round(drawCalls[0][4]), 525);
 });
 
 test('Bevy media texture resolver rejects an image whose decode error already settled', async () => {

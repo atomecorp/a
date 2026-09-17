@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { chromium } from 'playwright';
+import { PNG } from 'pngjs';
 import { clickCanvasRectCenter, enterGuestWorkspace, sleep, waitForPresentationFrames } from './dashboard_bevy_runtime/runtime_support.mjs';
 import { dashboardSnapshot } from './dashboard_bevy_runtime/snapshot_support.mjs';
 
@@ -9,7 +10,7 @@ const OUT_DIR = path.resolve('temp/probe_reports/dashboard_bevy_runtime');
 const REPORT_FILE = path.join(OUT_DIR, 'report.json');
 const GLASS_BACKGROUND_SIGNATURE = 'dashboard-frozen-glass-probe';
 const GLASS_BACKGROUND_SOURCE = `data:image/svg+xml,${encodeURIComponent(`
-    <svg xmlns="http://www.w3.org/2000/svg" width="1280" height="820" viewBox="0 0 1280 820">
+    <svg xmlns="http://www.w3.org/2000/svg" width="820" height="820" viewBox="0 0 820 820">
       <defs><pattern id="grid" width="32" height="32" patternUnits="userSpaceOnUse">
         <rect width="16" height="16" fill="#173b68"/><rect x="16" y="16" width="16" height="16" fill="#173b68"/>
         <rect x="16" width="16" height="16" fill="#d68b36"/><rect y="16" width="16" height="16" fill="#d68b36"/>
@@ -31,6 +32,38 @@ const waitForSnapshot = async (page, predicate, timeoutMs = 30000) => {
 };
 
 const assert = (condition, error) => { if (!condition) throw new Error(error); };
+const median = (values) => values.slice().sort((a, b) => a - b)[Math.floor(values.length / 2)];
+const checkerRunLength = (png, axis) => {
+    const horizontal = axis === 'horizontal';
+    const fixed = horizontal ? Math.round(png.height / 2) : Math.round(png.width / 2);
+    const start = horizontal ? 300 : 100;
+    const end = horizontal ? png.width - 300 : png.height - 100;
+    const classes = [];
+    for (let value = start; value < end; value += 1) {
+        const x = horizontal ? value : fixed;
+        const y = horizontal ? fixed : value;
+        const offset = (y * png.width + x) * 4;
+        classes.push(png.data[offset] > png.data[offset + 2]);
+    }
+    const runs = [];
+    for (let index = 1, length = 1; index <= classes.length; index += 1) {
+        if (index < classes.length && classes[index] === classes[index - 1]) {
+            length += 1;
+        } else {
+            if (length >= 8 && length <= 48) runs.push(length);
+            length = 1;
+        }
+    }
+    if (runs.length < 8) throw new Error(`dashboard_checker_runs_missing:${axis}:${JSON.stringify(runs)}`);
+    return median(runs);
+};
+const checkerCellSize = (buffer) => {
+    const png = PNG.sync.read(buffer);
+    return {
+        horizontal: checkerRunLength(png, 'horizontal'),
+        vertical: checkerRunLength(png, 'vertical')
+    };
+};
 const backgroundReady = (snapshot) => (
     snapshot.dashboardVisibleRecordIds.includes('__eve_dashboard_surface_base')
     && snapshot.presentationOpacity >= 0.999
@@ -54,7 +87,7 @@ const frozenContentReady = (snapshot) => {
             && Number(record.backdrop?.tint?.[3]) > 0
             && Number(record.backdrop?.tint?.[3]) < 0.5
         ))
-        && snapshot.dashboardMediaRecords.every((record) => record.opacity > 0 && record.opacity < 1);
+        && snapshot.dashboardMediaRecords.every((record) => record.opacity === 1);
 };
 
 const renderFrozenGlassMediaFixture = async (page) => page.evaluate(async () => {
@@ -109,7 +142,7 @@ const renderFrozenGlassMediaFixture = async (page) => page.evaluate(async () => 
         ok: cards.length === 8
             && cards.every((node) => node.style?.backdrop?.blur_px > 0 && node.style?.backdrop?.tint?.[3] < 0.5)
             && images.length === 2
-            && images.every((node) => node.style?.opacity > 0 && node.style?.opacity < 1),
+            && images.every((node) => node.style?.opacity === 1),
         cards: cards.map((node) => ({ id: node.id, background: node.style.background, backdrop: node.style.backdrop })),
         images: images.map((node) => ({ id: node.id, opacity: node.style.opacity }))
     };
@@ -158,7 +191,11 @@ const run = async () => {
             mediaCount: opened.dashboardMediaRecords.length
         });
         await waitForPresentationFrames(page, 8);
-        await page.screenshot({ path: path.join(OUT_DIR, 'dashboard_right.png') });
+        const rightCapture = await page.screenshot({ path: path.join(OUT_DIR, 'dashboard_right.png') });
+        const checker = checkerCellSize(rightCapture);
+        assert(Math.abs(checker.horizontal - checker.vertical) <= 2,
+            `dashboard_background_aspect_ratio_changed:${JSON.stringify(checker)}`);
+        report.checks.push({ name: 'background_cover_preserves_source_ratio', ok: true, checker });
 
         const monitor = opened.layout.lanes.find((lane) => lane.categoryId === 'monitor');
         await clickCanvasRectCenter(page, monitor.header_rect);

@@ -1,55 +1,45 @@
 use bevy::{
-    asset::{load_internal_asset, uuid_handle},
-    camera::{visibility::RenderLayers, ClearColorConfig, RenderTarget},
-    prelude::*,
-    reflect::TypePath,
-    render::{
-        render_resource::{AsBindGroup, ShaderType},
-        RenderApp,
+    core_pipeline::{
+        mip_generation::{generate_mips_for_phase, MipGenerationJobs, MipGenerationPhaseId, MipGenerationPipelines},
+        Core2d, Core2dSystems,
     },
-    shader::{Shader, ShaderRef},
-    sprite_render::{Material2d, Material2dPlugin},
+    prelude::*,
+    render::{
+        extract_component::ExtractComponentPlugin,
+        extract_resource::ExtractResourcePlugin,
+        render_asset::RenderAssets,
+        render_resource::PipelineCache,
+        renderer::{RenderContext, ViewQuery},
+        texture::GpuImage,
+        Extract, ExtractSchedule, RenderApp,
+    },
 };
 
-use crate::{
-    render_math::atome_camera_projection, types::AtomeBevyRendererConfig,
-    video_external_texture::video_quad_mesh_handle_from_size,
-};
+use crate::workspace_backdrop::{AtomeWorkspaceBackdrop, AtomeWorkspaceCamera};
 
-const WORKSPACE_BLUR_SHADER_HANDLE: Handle<Shader> =
-    uuid_handle!("d0d51834-814a-40c6-a889-cc3bcb5c3b37");
-pub const HORIZONTAL_BLUR_LAYER: usize = 2;
-pub const VERTICAL_BLUR_LAYER: usize = 3;
-
-/// Linear factor by which the workspace capture and both Gaussian ping-pong
-/// targets are shrunk relative to the presented surface.
-///
-/// A separable Gaussian costs `pixels × taps × 2 passes`, and both terms scale
-/// with resolution: the tap count is proportional to the radius in target
-/// texels, so shrinking the target by `N` divides the pixel count by `N²` and
-/// the tap count by `N` — a combined `N³` reduction. At the default 48 px
-/// radius on a device pixel ratio of 3 the full-resolution pipeline needed
-/// ~145 taps per pixel per pass over ~3.0 Mpx, roughly 870 M texture fetches
-/// per frame; at `N = 4` that becomes ~37 taps over ~0.19 Mpx.
-///
-/// Blurring is a low-pass filter, so the discarded detail is exactly what the
-/// filter would have removed anyway — the result stays visually equivalent.
+/// Linear reduction applied before building the GPU blur pyramid. Capturing at
+/// quarter resolution removes detail that a backdrop blur would discard while
+/// reducing both capture bandwidth and every following mip level by 16x.
 pub const WORKSPACE_BACKDROP_DOWNSCALE: u32 = 4;
+const WORKSPACE_BLUR_MIP_PHASE: MipGenerationPhaseId = MipGenerationPhaseId(0xA70);
 
-/// Pixel size of the capture and blur render targets for a given surface size.
 pub fn backdrop_capture_pixel_size(surface_pixel_size: UVec2) -> UVec2 {
     UVec2::new(
-        (surface_pixel_size.x / WORKSPACE_BACKDROP_DOWNSCALE).max(1),
-        (surface_pixel_size.y / WORKSPACE_BACKDROP_DOWNSCALE).max(1),
+        surface_pixel_size.x.div_ceil(WORKSPACE_BACKDROP_DOWNSCALE),
+        surface_pixel_size.y.div_ceil(WORKSPACE_BACKDROP_DOWNSCALE),
     )
 }
 
-/// Blur radius expressed in target texels.
-///
-/// The public token is a logical-pixel radius; it becomes physical pixels
-/// through the device pixel ratio, then target texels through the downscale.
-fn blur_radius_in_target_texels(logical_radius_px: f32, device_pixel_ratio: f32) -> f32 {
-    logical_radius_px * device_pixel_ratio.max(1.0) / WORKSPACE_BACKDROP_DOWNSCALE as f32
+/// Full mip count, bounded by Bevy's single-pass downsampler capacity.
+pub fn backdrop_mip_level_count(pixel_size: UVec2) -> u32 {
+    (u32::BITS - pixel_size.max_element().max(1).leading_zeros()).min(12)
+}
+
+/// Converts a public logical-pixel radius into an interpolated pyramid level.
+pub fn backdrop_blur_lod(logical_radius_px: f32, device_pixel_ratio: f32) -> f32 {
+    let radius_in_capture_texels =
+        logical_radius_px.clamp(0.0, 128.0) * device_pixel_ratio.max(1.0) / WORKSPACE_BACKDROP_DOWNSCALE as f32;
+    (radius_in_capture_texels.max(0.5) * 2.0).log2().max(0.0)
 }
 
 #[derive(Resource, Clone, Copy, Debug, PartialEq)]
@@ -95,23 +85,22 @@ impl AssistantOpticsSettings {
     }
 }
 
-#[derive(Clone, Copy, Debug, ShaderType)]
-pub struct WorkspaceBlurUniform {
-    pub direction_radius: Vec4,
-}
-
-#[derive(Asset, TypePath, AsBindGroup, Debug, Clone)]
-pub struct WorkspaceBlurMaterial {
-    #[uniform(0)]
-    pub uniform: WorkspaceBlurUniform,
-    #[texture(1)]
-    #[sampler(2)]
-    pub source: Handle<Image>,
-}
-
-impl Material2d for WorkspaceBlurMaterial {
-    fn fragment_shader() -> ShaderRef {
-        WORKSPACE_BLUR_SHADER_HANDLE.into()
+/// Recomputes only the per-material LOD when the WebView DPR changes. Public
+/// radii remain stored on their owning material; no global radius can leak from
+/// one panel to another.
+pub fn refresh_backdrop_blur_metrics(world: &mut World, device_pixel_ratio: f32) {
+    if let Some(mut materials) = world.get_resource_mut::<Assets<crate::backdrop_surface::BackdropSurfaceMaterial>>() {
+        for (_, material) in materials.iter_mut() {
+            let logical_radius = material.uniform.blur.x;
+            material.uniform.blur.y = device_pixel_ratio;
+            material.uniform.blur.z = backdrop_blur_lod(logical_radius, device_pixel_ratio);
+        }
+    }
+    if let Some(mut materials) = world.get_resource_mut::<Assets<crate::procedural_sdf::ProceduralSdfMaterial>>() {
+        for (_, material) in materials.iter_mut() {
+            material.uniform.shape.z = device_pixel_ratio.max(1.0);
+            material.uniform.shape.w = backdrop_blur_lod(material.uniform.gesture.z, device_pixel_ratio);
+        }
     }
 }
 
@@ -120,172 +109,46 @@ pub struct WorkspaceBlurPlugin;
 impl Plugin for WorkspaceBlurPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<AssistantOpticsSettings>();
-        app.init_resource::<Assets<Shader>>();
-        load_internal_asset!(
-            app,
-            WORKSPACE_BLUR_SHADER_HANDLE,
-            "assets/shaders/workspace_blur.wgsl",
-            Shader::from_wgsl
-        );
-        app.init_resource::<Assets<WorkspaceBlurMaterial>>();
-        if app.get_sub_app_mut(RenderApp).is_some() {
-            app.add_plugins(Material2dPlugin::<WorkspaceBlurMaterial>::default());
+        if app.get_sub_app_mut(RenderApp).is_none() {
+            return;
         }
+        app.add_plugins((
+            ExtractResourcePlugin::<AtomeWorkspaceBackdrop>::default(),
+            ExtractComponentPlugin::<AtomeWorkspaceCamera>::default(),
+        ));
+        app.sub_app_mut(RenderApp)
+            .add_systems(ExtractSchedule, enqueue_workspace_blur_mips)
+            .add_systems(Core2d, generate_workspace_blur_mips.in_set(Core2dSystems::PostProcess));
     }
 }
 
-#[derive(Clone)]
-pub struct WorkspaceBlurPipeline {
-    pub horizontal_image: Handle<Image>,
-    pub vertical_image: Handle<Image>,
-    pub horizontal_camera: Entity,
-    pub vertical_camera: Entity,
-    pub horizontal_quad: Entity,
-    pub vertical_quad: Entity,
-    pub horizontal_material: Handle<WorkspaceBlurMaterial>,
-    pub vertical_material: Handle<WorkspaceBlurMaterial>,
-}
-
-pub fn spawn_workspace_blur_pipeline(
-    commands: &mut Commands,
-    images: &mut Assets<Image>,
-    meshes: &mut Assets<Mesh>,
-    materials: &mut Assets<WorkspaceBlurMaterial>,
-    config: &AtomeBevyRendererConfig,
-    source: Handle<Image>,
-    target_image: impl Fn() -> Image,
-    settings: AssistantOpticsSettings,
-) -> WorkspaceBlurPipeline {
-    let horizontal_image = images.add(target_image());
-    let vertical_image = images.add(target_image());
-    let mesh = video_quad_mesh_handle_from_size(
-        meshes,
-        [config.width, config.height],
-        [0.0, 0.0, 1.0, 1.0],
-    );
-    let radius = blur_radius_in_target_texels(
-        settings.normalized().blur_radius_px,
-        config.device_pixel_ratio,
-    );
-    let horizontal_material = materials.add(WorkspaceBlurMaterial {
-        uniform: WorkspaceBlurUniform {
-            direction_radius: Vec4::new(1.0, 0.0, radius, 0.0),
-        },
-        source,
-    });
-    let vertical_material = materials.add(WorkspaceBlurMaterial {
-        uniform: WorkspaceBlurUniform {
-            direction_radius: Vec4::new(0.0, 1.0, radius, 0.0),
-        },
-        source: horizontal_image.clone(),
-    });
-    let horizontal_quad = commands
-        .spawn((
-            Mesh2d(mesh.clone()),
-            MeshMaterial2d(horizontal_material.clone()),
-            Visibility::Hidden,
-            RenderLayers::layer(HORIZONTAL_BLUR_LAYER),
-        ))
-        .id();
-    let vertical_quad = commands
-        .spawn((
-            Mesh2d(mesh),
-            MeshMaterial2d(vertical_material.clone()),
-            Visibility::Hidden,
-            RenderLayers::layer(VERTICAL_BLUR_LAYER),
-        ))
-        .id();
-    let horizontal_camera = spawn_blur_camera(
-        commands,
-        config,
-        -2,
-        horizontal_image.clone(),
-        HORIZONTAL_BLUR_LAYER,
-    );
-    let vertical_camera = spawn_blur_camera(
-        commands,
-        config,
-        -1,
-        vertical_image.clone(),
-        VERTICAL_BLUR_LAYER,
-    );
-    WorkspaceBlurPipeline {
-        horizontal_image,
-        vertical_image,
-        horizontal_camera,
-        vertical_camera,
-        horizontal_quad,
-        vertical_quad,
-        horizontal_material,
-        vertical_material,
+fn enqueue_workspace_blur_mips(backdrop: Extract<Res<AtomeWorkspaceBackdrop>>, mut jobs: ResMut<MipGenerationJobs>) {
+    if backdrop.enabled {
+        jobs.add(WORKSPACE_BLUR_MIP_PHASE, backdrop.image.id());
     }
 }
 
-pub fn set_workspace_blur_radius(
-    world: &mut World,
-    blur: &WorkspaceBlurPipeline,
-    logical_radius_px: f32,
-) -> Result<(), String> {
-    let device_pixel_ratio = world
-        .get_resource::<AtomeBevyRendererConfig>()
-        .map(|config| config.device_pixel_ratio)
-        .unwrap_or(1.0)
-        .max(1.0);
-    let radius =
-        blur_radius_in_target_texels(logical_radius_px.clamp(0.0, 128.0), device_pixel_ratio);
-    let mut materials = world
-        .get_resource_mut::<Assets<WorkspaceBlurMaterial>>()
-        .ok_or_else(|| "bevy_workspace_blur_material_assets_required".to_string())?;
-    // Sortie AVANT toute mutation quand le rayon ne change pas. Cette fonction est
-    // appelee a chaque `patch_procedural_sdf`, donc a chaque frame animee : sans ce
-    // test, `Assets::get_mut` marquait les deux materiaux de flou comme modifies a
-    // chaque appel et Bevy re-preparait leur buffer et leur bind group pour rien.
-    // Le cout etait paye par frame et par goutte animee.
-    let unchanged = materials
-        .get(&blur.horizontal_material)
-        .map(|material| material.uniform.direction_radius.z == radius)
-        .unwrap_or(false)
-        && materials
-            .get(&blur.vertical_material)
-            .map(|material| material.uniform.direction_radius.z == radius)
-            .unwrap_or(false);
-    if unchanged {
-        return Ok(());
-    }
-    let mut horizontal = materials
-        .get_mut(&blur.horizontal_material)
-        .ok_or_else(|| "bevy_workspace_horizontal_blur_material_missing".to_string())?;
-    horizontal.uniform.direction_radius.z = radius;
-    drop(horizontal);
-    let mut vertical = materials
-        .get_mut(&blur.vertical_material)
-        .ok_or_else(|| "bevy_workspace_vertical_blur_material_missing".to_string())?;
-    vertical.uniform.direction_radius.z = radius;
-    Ok(())
-}
-
-fn spawn_blur_camera(
-    commands: &mut Commands,
-    config: &AtomeBevyRendererConfig,
-    order: isize,
-    target: Handle<Image>,
-    layer: usize,
-) -> Entity {
-    commands
-        .spawn((
-            Camera2d,
-            Camera {
-                order,
-                is_active: false,
-                clear_color: ClearColorConfig::Custom(Color::NONE),
-                ..default()
-            },
-            // A separable Gaussian blur samples a texture through a full-screen
-            // quad; there is no geometry edge for MSAA to resolve.
-            Msaa::Off,
-            RenderTarget::Image(target.into()),
-            atome_camera_projection(config.width, config.height),
-            RenderLayers::layer(layer),
-        ))
-        .id()
+fn generate_workspace_blur_mips(
+    _capture_view: ViewQuery<(), With<AtomeWorkspaceCamera>>,
+    backdrop: Res<AtomeWorkspaceBackdrop>,
+    jobs: Res<MipGenerationJobs>,
+    pipeline_cache: Res<PipelineCache>,
+    pipelines: Option<Res<MipGenerationPipelines>>,
+    gpu_images: Res<RenderAssets<GpuImage>>,
+    mut context: RenderContext,
+) {
+    let Some(pipelines) = pipelines else {
+        return;
+    };
+    let (Some(capture), Some(pyramid)) =
+        (gpu_images.get(backdrop.capture_image.id()), gpu_images.get(backdrop.image.id()))
+    else {
+        return;
+    };
+    context.command_encoder().copy_texture_to_texture(
+        capture.texture.as_image_copy(),
+        pyramid.texture.as_image_copy(),
+        capture.texture_descriptor.size,
+    );
+    generate_mips_for_phase(WORKSPACE_BLUR_MIP_PHASE, &jobs, &pipeline_cache, &pipelines, &gpu_images, &mut context);
 }

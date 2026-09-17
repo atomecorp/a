@@ -11,15 +11,27 @@ use crate::{
 
 const BACKGROUND_DEPTH: f32 = -BEVY_LAYER_DEPTH_LIMIT - 1.0;
 
-fn cover_size(surface_width: f32, surface_height: f32, texture_size: Option<[u32; 2]>) -> Vec2 {
+fn cover_source_rect(
+    surface_width: f32,
+    surface_height: f32,
+    texture_size: Option<[u32; 2]>,
+) -> Option<Rect> {
     let Some([texture_width, texture_height]) = texture_size else {
-        return Vec2::new(surface_width, surface_height);
+        return None;
     };
     if texture_width == 0 || texture_height == 0 {
-        return Vec2::new(surface_width, surface_height);
+        return None;
     }
-    let scale = (surface_width / texture_width as f32).max(surface_height / texture_height as f32);
-    Vec2::new(texture_width as f32 * scale, texture_height as f32 * scale)
+    let texture = Vec2::new(texture_width as f32, texture_height as f32);
+    let surface_aspect = surface_width.max(1.0) / surface_height.max(1.0);
+    let texture_aspect = texture.x / texture.y;
+    let crop_size = if texture_aspect > surface_aspect {
+        Vec2::new(texture.y * surface_aspect, texture.y)
+    } else {
+        Vec2::new(texture.x, texture.x / surface_aspect)
+    };
+    let inset = (texture - crop_size) * 0.5;
+    Some(Rect::from_corners(inset, inset + crop_size))
 }
 
 fn background_sprite(
@@ -52,7 +64,8 @@ fn background_components(
     Transform,
 ) {
     let texture_size = patch.texture_size();
-    let size = cover_size(surface_width, surface_height, texture_size);
+    let size = Vec2::new(surface_width, surface_height);
+    let source_rect = cover_source_rect(surface_width, surface_height, texture_size);
     (
         AtomeSurfaceBackground,
         AtomeSurfaceBackgroundVisual {
@@ -62,6 +75,7 @@ fn background_components(
         },
         Sprite {
             custom_size: Some(size),
+            rect: source_rect,
             ..sprite
         },
         Transform::from_translation(Vec3::new(0.0, 0.0, BACKGROUND_DEPTH)),
@@ -103,10 +117,7 @@ pub fn resize_surface_background(world: &mut World) {
     };
     let mut query = world.query::<(&mut Sprite, &AtomeSurfaceBackgroundVisual)>();
     for (mut sprite, visual) in query.iter_mut(world) {
-        sprite.custom_size = Some(cover_size(
-            surface_width,
-            surface_height,
-            visual.texture_size,
-        ));
+        sprite.custom_size = Some(Vec2::new(surface_width, surface_height));
+        sprite.rect = cover_source_rect(surface_width, surface_height, visual.texture_size);
     }
 }

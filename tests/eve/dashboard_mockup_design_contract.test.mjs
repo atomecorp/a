@@ -25,7 +25,7 @@ test('dashboard Bevy defaults keep the approved glass-grid override over the his
     assert.ok(DASHBOARD_VISUAL_TOKENS.contentGlass.tintAlpha > 0);
     assert.ok(DASHBOARD_VISUAL_TOKENS.contentGlass.tintAlpha < 0.5);
     assert.ok(DASHBOARD_VISUAL_TOKENS.contentGlass.blurPx > 0);
-    assert.ok(DASHBOARD_VISUAL_TOKENS.contentGlass.mediaOpacity < 1);
+    assert.equal(DASHBOARD_VISUAL_TOKENS.contentGlass.mediaOpacity, undefined);
 });
 
 test('dashboard JSON palette mirrors the R&D mockup category palette', async () => {

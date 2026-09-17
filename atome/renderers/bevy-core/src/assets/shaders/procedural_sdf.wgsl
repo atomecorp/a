@@ -1,4 +1,6 @@
 #import bevy_sprite::mesh2d_vertex_output::VertexOutput
+#import bevy_sprite::mesh2d_view_bindings::view
+#import bevy_render::view::frag_coord_to_uv
 
 struct ProceduralSdfUniform {
     morph: vec4<f32>,
@@ -20,10 +22,25 @@ struct ProceduralSdfUniform {
 }
 
 @group(#{MATERIAL_BIND_GROUP}) @binding(0) var<uniform> material: ProceduralSdfUniform;
-@group(#{MATERIAL_BIND_GROUP}) @binding(1) var original_texture: texture_2d<f32>;
-@group(#{MATERIAL_BIND_GROUP}) @binding(2) var original_sampler: sampler;
-@group(#{MATERIAL_BIND_GROUP}) @binding(3) var blurred_texture: texture_2d<f32>;
-@group(#{MATERIAL_BIND_GROUP}) @binding(4) var blurred_sampler: sampler;
+@group(#{MATERIAL_BIND_GROUP}) @binding(1) var backdrop_texture: texture_2d<f32>;
+@group(#{MATERIAL_BIND_GROUP}) @binding(2) var backdrop_sampler: sampler;
+
+fn sample_aligned_mip(uv: vec2<f32>, lod: f32) -> vec3<f32> {
+    let source_lod = min(max(lod, 0.0), 1.0);
+    let texel = 1.0 / vec2<f32>(textureDimensions(backdrop_texture, 0));
+    let center_uv = uv + texel * ((exp2(source_lod) - 1.0) * 0.5);
+    let offset = texel * max(exp2(max(lod, 0.0)) - 1.0, 0.0) * 0.45;
+    let axis = textureSampleLevel(backdrop_texture, backdrop_sampler, center_uv + vec2(offset.x, 0.0), source_lod).rgb
+        + textureSampleLevel(backdrop_texture, backdrop_sampler, center_uv - vec2(offset.x, 0.0), source_lod).rgb
+        + textureSampleLevel(backdrop_texture, backdrop_sampler, center_uv + vec2(0.0, offset.y), source_lod).rgb
+        + textureSampleLevel(backdrop_texture, backdrop_sampler, center_uv - vec2(0.0, offset.y), source_lod).rgb;
+    let diagonal = textureSampleLevel(backdrop_texture, backdrop_sampler, center_uv + offset, source_lod).rgb
+        + textureSampleLevel(backdrop_texture, backdrop_sampler, center_uv - offset, source_lod).rgb
+        + textureSampleLevel(backdrop_texture, backdrop_sampler, center_uv + vec2(offset.x, -offset.y), source_lod).rgb
+        + textureSampleLevel(backdrop_texture, backdrop_sampler, center_uv + vec2(-offset.x, offset.y), source_lod).rgb;
+    return textureSampleLevel(backdrop_texture, backdrop_sampler, center_uv, source_lod).rgb * 0.2
+        + (axis + diagonal) * 0.1;
+}
 
 fn sd_ellipse(point: vec2<f32>, radius: vec2<f32>) -> f32 {
     let scaled = point / radius;
@@ -82,8 +99,8 @@ fn flower_liquid(pixel_position: vec2<f32>, screen_uv: vec2<f32>) -> vec4<f32> {
     }
     let mask = 1.0 - smoothstep(-edge_softness, edge_softness, distance);
     if mask < 0.002 { discard; }
-    let original_color = textureSample(original_texture, original_sampler, screen_uv).rgb;
-    let blurred_color = textureSample(blurred_texture, blurred_sampler, screen_uv).rgb;
+    let original_color = textureSampleLevel(backdrop_texture, backdrop_sampler, screen_uv, 0.0).rgb;
+    let blurred_color = sample_aligned_mip(screen_uv, material.shape.w);
     let glass = mix(original_color, blurred_color, 0.88);
     let tint_amount = clamp(material.flower_tint.a, 0.0, 1.0);
     let color = mix(glass, material.flower_tint.rgb, tint_amount);
@@ -270,13 +287,11 @@ fn intuition_liquid_drop(
 
     // 6. Verre : `transition.x` dose le flou (remplace `optics.y`, fige a 1.0
     //    cote Rust — c'est ce qui rend le fond lisible A TRAVERS la goutte).
-    // `textureSampleLevel` et non `textureSample` : le rejet precoce par goutte,
-    // cote appelant, rend le flux de controle NON UNIFORME, ce que `textureSample`
-    // interdit (il derive son LOD des quads voisins). Les cibles de capture et de
-    // flou n'ont de toute facon pas de mipmaps : le niveau 0 est le seul qui existe,
-    // le rendu est identique et la contrainte disparait.
-    let original_color = textureSampleLevel(original_texture, original_sampler, refracted_uv, 0.0).rgb;
-    let blurred_color = textureSampleLevel(blurred_texture, blurred_sampler, refracted_uv, 0.0).rgb;
+    // `textureSampleLevel` et non `textureSample` : le rejet precoce par goutte
+    // rend le flux de controle non uniforme. Le niveau 0 conserve la capture et
+    // `shape.w` choisit le rayon dans la pyramide generee pour cette meme frame.
+    let original_color = textureSampleLevel(backdrop_texture, backdrop_sampler, refracted_uv, 0.0).rgb;
+    let blurred_color = sample_aligned_mip(refracted_uv, material.shape.w);
     var glass = mix(original_color, blurred_color, clamp(material.transition.x, 0.0, 1.0));
 
     // 7. Eclaircissement du fond, en fusion « screen » : `1 - (1-a)(1-b)` remonte
@@ -506,9 +521,11 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
     // refraction offset below is a physical-pixel amount and must be divided by
     // the physical surface size to become a UV offset.
     let screen_dimensions = surface_size * max(material.shape.z, 1.0);
-    // This material owns one full-workspace quad. Its interpolated UVs map
-    // directly to the workspace capture regardless of viewport or DPR.
-    let screen_uv = uv;
+    let screen_uv = clamp(
+        frag_coord_to_uv(mesh.position.xy, view.viewport),
+        vec2(0.0),
+        vec2(1.0)
+    );
     // L'ordre compte : `> 1.5` doit passer avant `> 0.5`, sinon le mode 2
     // tomberait dans `flower_liquid`. Voir le bloc INTUITION LIQUID ci-dessus.
     if material.flower.x > 1.5 {
@@ -601,8 +618,8 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
         / max(screen_dimensions, vec2(1.0));
     let safe_margin = vec2(material.optics.x + material.optics.x) / max(screen_dimensions, vec2(1.0));
     let refracted_uv = clamp(screen_uv + refraction_uv, safe_margin, vec2(1.0) - safe_margin);
-    let original_color = textureSample(original_texture, original_sampler, refracted_uv).rgb;
-    let blurred_color = textureSample(blurred_texture, blurred_sampler, refracted_uv).rgb;
+    let original_color = textureSampleLevel(backdrop_texture, backdrop_sampler, refracted_uv, 0.0).rgb;
+    let blurred_color = sample_aligned_mip(refracted_uv, material.shape.w);
     let glass_color = mix(original_color, blurred_color, material.optics.y);
     let tinted_glass_color = mix(glass_color, material.assistant_background_tint.rgb, material.assistant_background_tint.a);
     let glass_alpha = shell_mask * shell_shape_reveal;

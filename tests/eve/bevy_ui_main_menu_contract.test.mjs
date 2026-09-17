@@ -47,6 +47,16 @@ test('liquid Flower and main-menu projections derive their backdrop and shadow f
     assert.deepEqual(uniforms.flower_petals[20], material.shadow.color);
 });
 
+test('system glass keeps white content readable over the brightest backdrop', () => {
+    const alpha = EVE_COMMON_SKIN_TOKENS.bevy.systemSurface.backdrop.tint[3];
+    const linearChannel = 1 - alpha;
+    const brightestBackdropChannel = 255 * (linearChannel <= 0.0031308
+        ? linearChannel * 12.92
+        : 1.055 * (linearChannel ** (1 / 2.4)) - 0.055);
+    assert.ok(alpha < 1, 'system glass must retain the live backdrop');
+    assert.ok(brightestBackdropChannel <= 120, 'a white backdrop must not wash the system surface to white');
+});
+
 test('Capture screen icon is canonical before and after its lazy module loads', () => {
     const initialContentSource = readFileSync(
         resolve(process.cwd(), 'eVe/intuition/runtime/eve_intuition/main_menu_content_runtime.js'),

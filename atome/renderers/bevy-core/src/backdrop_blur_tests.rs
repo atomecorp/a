@@ -1,58 +1,26 @@
-use bevy::{color::Alpha, image::Image, prelude::*};
+use bevy::prelude::*;
 
-use crate::*;
-
-fn shape_node(id: &str) -> AtomeRenderNode {
-    AtomeRenderNode {
-        id: id.to_string(),
-        kind: "shape".to_string(),
-        parent_id: None,
-        logical_position: [12.0, 24.0],
-        logical_size: [120.0, 50.0],
-        clip_rect: None,
-        scale: [1.0, 1.0],
-        rotation: 0.0,
-        origin: [0.0, 0.0],
-        layer: 3,
-        opacity: 1.0,
-        corner_radius: 0.0,
-        corner_radii: None,
-        shadow: None,
-        backdrop: None,
-        presentation: false,
-        color: Some([0.1, 0.2, 0.3, 1.0]),
-        text: None,
-        source: None,
-        texture_size: None,
-        uv_rect: None,
-        texture: None,
-        peaks: None,
-        playback_progress: None,
-        selected: None,
-        filters: None,
-        transition: None,
-        procedural: None,
-    }
-}
+use crate::{
+    backdrop_surface::BackdropSurfaceMaterial,
+    components::{AtomeBackdropBlurState, AtomeBackdropBlurVisual},
+    plugin::AtomeBevyRendererPlugin,
+    types::{AtomeBevyRendererConfig, AtomeSceneEffect, AtomeSceneEffectsPatch},
+    workspace_blur::backdrop_blur_lod,
+};
 
 #[test]
-fn backdrop_blur_effect_spawns_samples_and_restores_original_sprite() {
-    let mut world = World::new();
-    world.insert_resource(AtomeEntityTable::default());
-    world.insert_resource(AtomeBevyRendererConfig::empty(640.0, 480.0));
-    world.insert_resource(AtomeRendererDiagnostics::default());
-    world.insert_resource(AtomeBackdropBlurState::default());
-    world.insert_resource(Assets::<Image>::default());
+fn scene_effect_uses_one_shared_gpu_backdrop_surface() {
+    let mut app = App::new();
+    app.add_plugins(AtomeBevyRendererPlugin::new(AtomeBevyRendererConfig::empty(640.0, 480.0)));
+    app.update();
 
-    let entity = apply_spawn(&mut world, shape_node("blurred_shape")).unwrap();
-    let original_color = world.get::<Sprite>(entity).unwrap().color;
     crate::backdrop_blur::apply_scene_effects(
-        &mut world,
+        app.world_mut(),
         AtomeSceneEffectsPatch {
             effects: vec![AtomeSceneEffect {
                 id: "dashboard_blur".to_string(),
                 kind: "backdrop_blur".to_string(),
-                bounds: [0.0, 0.0, 640.0, 480.0],
+                bounds: [20.0, 30.0, 320.0, 180.0],
                 source_layer_max: 10,
                 target_layer: 10,
                 radius: 30.0,
@@ -63,29 +31,14 @@ fn backdrop_blur_effect_spawns_samples_and_restores_original_sprite() {
     )
     .unwrap();
 
-    assert_eq!(
-        world.resource::<AtomeBackdropBlurState>().entities.len(),
-        16
-    );
-    let mut query = world.query_filtered::<&Transform, With<AtomeBackdropBlurVisual>>();
-    let max_horizontal_offset = query
-        .iter(&world)
-        .map(|transform| (transform.translation.x - 10.0).abs())
-        .fold(0.0, f32::max);
-    assert!(max_horizontal_offset >= 30.0);
-    assert!(
-        world.get::<Sprite>(entity).unwrap().color.alpha() < original_color.alpha(),
-        "source sprite should be reduced while blur samples cover it"
-    );
+    let entity = app.world().resource::<AtomeBackdropBlurState>().entities[0];
+    assert!(app.world().get::<AtomeBackdropBlurVisual>(entity).is_some());
+    let material_handle = app.world().get::<MeshMaterial2d<BackdropSurfaceMaterial>>(entity).unwrap();
+    let material = app.world().resource::<Assets<BackdropSurfaceMaterial>>().get(&material_handle.0).unwrap();
+    assert_eq!(material.uniform.blur.x, 30.0);
+    assert_eq!(material.uniform.blur.z, backdrop_blur_lod(30.0, 1.0));
 
-    crate::backdrop_blur::apply_scene_effects(
-        &mut world,
-        AtomeSceneEffectsPatch {
-            effects: Vec::new(),
-        },
-    )
-    .unwrap();
-
-    assert_eq!(world.resource::<AtomeBackdropBlurState>().entities.len(), 0);
-    assert_eq!(world.get::<Sprite>(entity).unwrap().color, original_color);
+    crate::backdrop_blur::apply_scene_effects(app.world_mut(), AtomeSceneEffectsPatch { effects: Vec::new() }).unwrap();
+    assert!(app.world().resource::<AtomeBackdropBlurState>().entities.is_empty());
+    assert!(!app.world().entities().contains(entity));
 }

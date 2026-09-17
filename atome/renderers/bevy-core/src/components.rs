@@ -2,9 +2,8 @@ use bevy::{image::Image, prelude::*};
 use std::collections::{HashMap, VecDeque};
 
 use crate::types::{
-    default_transform_origin, default_transform_scale, normalize_transform_origin,
-    normalize_transform_rotation, normalize_transform_scale, AtomeRenderScene, AtomeSceneEffect,
-    AtomeShadowStyle, SelectionVisualStyle,
+    default_transform_origin, default_transform_scale, normalize_transform_origin, normalize_transform_rotation,
+    normalize_transform_scale, AtomeRenderScene, AtomeSceneEffect, AtomeShadowStyle, SelectionVisualStyle,
 };
 
 #[derive(Clone, Debug, Component)]
@@ -40,11 +39,7 @@ pub struct AtomeLocalTransform {
 
 impl Default for AtomeLocalTransform {
     fn default() -> Self {
-        Self {
-            scale: default_transform_scale(),
-            rotation: 0.0,
-            origin: default_transform_origin(),
-        }
+        Self { scale: default_transform_scale(), rotation: 0.0, origin: default_transform_origin() }
     }
 }
 
@@ -196,7 +191,6 @@ pub struct AtomeBackdropBlurVisual;
 pub struct AtomeBackdropBlurState {
     pub effects: Vec<AtomeSceneEffect>,
     pub entities: Vec<Entity>,
-    pub original_sprite_colors: HashMap<Entity, Color>,
 }
 
 #[derive(Clone, Debug, Resource, Default)]
@@ -274,10 +268,6 @@ pub fn normalize_surface_dpr(value: f32) -> f32 {
 }
 
 pub fn normalize_surface_pixel(value: f32, fallback: f32) -> u32 {
-    let candidate = if value.is_finite() && value > 0.0 {
-        value
-    } else {
-        fallback
-    };
+    let candidate = if value.is_finite() && value > 0.0 { value } else { fallback };
     candidate.max(1.0).round() as u32
 }

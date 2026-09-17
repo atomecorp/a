@@ -1,19 +1,18 @@
 use bevy::{
     camera::{visibility::RenderLayers, ClearColorConfig},
     prelude::*,
-    sprite_render::MeshMaterial2d,
+    render::render_resource::TextureUsages,
 };
 
 use crate::{
-    backdrop_surface::BackdropSurfaceUniform,
     plugin::AtomeBevyRendererPlugin,
     types::AtomeBevyRendererConfig,
     workspace_backdrop::{
-        set_workspace_backdrop_enabled, AtomePresentationCamera, AtomeWorkspaceBackdrop,
-        FLOWER_PRESENTATION_LAYER, WORKSPACE_CAPTURE_LAYER,
+        set_workspace_backdrop_enabled, AtomePresentationCamera, AtomeWorkspaceBackdrop, FLOWER_PRESENTATION_LAYER,
+        WORKSPACE_CAPTURE_LAYER,
     },
     workspace_blur::{
-        backdrop_capture_pixel_size, AssistantOpticsSettings, WorkspaceBlurMaterial,
+        backdrop_blur_lod, backdrop_capture_pixel_size, backdrop_mip_level_count, AssistantOpticsSettings,
         WORKSPACE_BACKDROP_DOWNSCALE,
     },
 };
@@ -33,210 +32,83 @@ fn assistant_optics_settings_are_bounded() {
     assert_eq!(settings.glass_mix, 1.0);
     assert_eq!(settings.rim_refraction_start, 0.95);
     assert_eq!(settings.halo_opacity, 0.10);
-    let defaults = AssistantOpticsSettings::default();
-    assert_eq!(defaults.blur_radius_px, 48.0);
-    assert_eq!(defaults.glass_mix, 1.0);
-    assert_eq!(defaults.sdf_uniform(2.0).x, 48.0);
+    assert_eq!(AssistantOpticsSettings::default().sdf_uniform(2.0).x, 48.0);
 }
 
 #[test]
-fn every_camera_disables_msaa() {
-    // Bevy defaults cameras to `Msaa::Sample4`, which quadruples the raster
-    // bandwidth of every pass. Shapes are antialiased analytically in the
-    // shaders, so MSAA is pure cost here — and fill rate is the dominant
-    // power draw on the iOS GPU at a device pixel ratio of 3.
+fn capture_and_blur_pyramid_are_downscaled_gpu_targets() {
     let mut app = App::new();
-    app.add_plugins(AtomeBevyRendererPlugin::new(
-        AtomeBevyRendererConfig::empty(640.0, 480.0),
-    ));
+    app.add_plugins(AtomeBevyRendererPlugin::new(AtomeBevyRendererConfig::with_surface_metrics(
+        640.0,
+        480.0,
+        1280.0,
+        960.0,
+        2.0,
+        Default::default(),
+    )));
     app.update();
-    let state = app.world().resource::<AtomeWorkspaceBackdrop>().clone();
-    let presentation_camera = app
-        .world_mut()
-        .query_filtered::<Entity, With<AtomePresentationCamera>>()
-        .single(app.world())
-        .unwrap();
-    for camera in [
-        presentation_camera,
-        state.camera,
-        state.blur.horizontal_camera,
-        state.blur.vertical_camera,
-    ] {
-        assert_eq!(
-            app.world().get::<Msaa>(camera).copied(),
-            Some(Msaa::Off),
-            "camera {camera:?} must opt out of MSAA"
-        );
-    }
-}
-
-#[test]
-fn backdrop_capture_and_blur_targets_are_downscaled_together() {
-    // The Gaussian passes rely on source and target sharing a size
-    // (`frag_coord / textureDimensions(source)`), so the capture and both
-    // ping-pong targets must be downscaled by the same factor — never one
-    // without the others.
-    let mut app = App::new();
-    app.add_plugins(AtomeBevyRendererPlugin::new(
-        AtomeBevyRendererConfig::with_surface_metrics(
-            640.0,
-            480.0,
-            1280.0,
-            960.0,
-            2.0,
-            Default::default(),
-        ),
-    ));
-    app.update();
-    let state = app.world().resource::<AtomeWorkspaceBackdrop>().clone();
-    assert_eq!(state.pixel_size, UVec2::new(1280, 960));
+    let state = app.world().resource::<AtomeWorkspaceBackdrop>();
     let expected = backdrop_capture_pixel_size(state.pixel_size);
-    assert_eq!(
-        expected,
-        UVec2::new(
-            1280 / WORKSPACE_BACKDROP_DOWNSCALE,
-            960 / WORKSPACE_BACKDROP_DOWNSCALE
-        )
-    );
-    let images = app.world().resource::<Assets<Image>>();
-    for handle in [
-        &state.image,
-        &state.blur.horizontal_image,
-        &state.blur.vertical_image,
-    ] {
-        let size = images.get(handle).unwrap().texture_descriptor.size;
-        assert_eq!(
-            (size.width, size.height),
-            (expected.x, expected.y),
-            "capture and blur targets must all share the downscaled size"
-        );
-    }
+    assert_eq!(expected, UVec2::new(320, 240));
+    let image = app.world().resource::<Assets<Image>>().get(&state.image).unwrap();
+    assert_eq!((image.texture_descriptor.size.width, image.texture_descriptor.size.height), (expected.x, expected.y));
+    assert_eq!(image.texture_descriptor.mip_level_count, backdrop_mip_level_count(expected));
+    assert!(image.texture_descriptor.usage.contains(TextureUsages::STORAGE_BINDING));
+    assert!(image.data.is_none());
+    let capture = app.world().resource::<Assets<Image>>().get(&state.capture_image).unwrap();
+    assert_eq!(capture.texture_descriptor.mip_level_count, 1);
+    assert!(capture.texture_descriptor.usage.contains(TextureUsages::COPY_SRC));
 }
 
 #[test]
-fn workspace_blur_pipeline_has_ordered_reusable_passes() {
+fn blur_radius_is_per_surface_and_dpr_aware() {
+    let ui = backdrop_blur_lod(18.0, 1.5);
+    let assistant = backdrop_blur_lod(48.0, 1.5);
+    assert!(assistant > ui);
+    assert!(backdrop_blur_lod(18.0, 2.0) > ui);
+    assert_eq!(backdrop_blur_lod(0.0, 1.0), 0.0);
+}
+
+#[test]
+fn backdrop_uses_only_capture_and_presentation_cameras() {
     let mut app = App::new();
-    app.add_plugins(AtomeBevyRendererPlugin::new(
-        AtomeBevyRendererConfig::empty(640.0, 480.0),
-    ));
+    app.add_plugins(AtomeBevyRendererPlugin::new(AtomeBevyRendererConfig::empty(640.0, 480.0)));
     app.update();
     let state = app.world().resource::<AtomeWorkspaceBackdrop>().clone();
+    let presentation =
+        app.world_mut().query_filtered::<Entity, With<AtomePresentationCamera>>().single(app.world()).unwrap();
+    let camera_count = {
+        let world = app.world_mut();
+        let mut query = world.query::<&Camera>();
+        query.iter(world).count()
+    };
+    assert_eq!(camera_count, 2);
+    assert_eq!(app.world().get::<Msaa>(state.camera), Some(&Msaa::Off));
+    assert_eq!(app.world().get::<Msaa>(presentation), Some(&Msaa::Off));
     assert_eq!(app.world().get::<Camera>(state.camera).unwrap().order, -3);
-    assert!(
-        matches!(
-            app.world().get::<Camera>(state.camera).unwrap().clear_color,
-            ClearColorConfig::Custom(_)
-        ),
-        "the capture texture is cleared every frame before the workspace is rendered"
-    );
-    assert_eq!(
-        app.world()
-            .get::<Camera>(state.blur.horizontal_camera)
-            .unwrap()
-            .order,
-        -2
-    );
-    assert_eq!(
-        app.world()
-            .get::<Camera>(state.blur.vertical_camera)
-            .unwrap()
-            .order,
-        -1
-    );
-
-    let horizontal_handle = app
-        .world()
-        .get::<MeshMaterial2d<WorkspaceBlurMaterial>>(state.blur.horizontal_quad)
-        .unwrap()
-        .0
-        .clone();
-    let vertical_handle = app
-        .world()
-        .get::<MeshMaterial2d<WorkspaceBlurMaterial>>(state.blur.vertical_quad)
-        .unwrap()
-        .0
-        .clone();
-    let materials = app.world().resource::<Assets<WorkspaceBlurMaterial>>();
-    let horizontal = materials.get(&horizontal_handle).unwrap();
-    let vertical = materials.get(&vertical_handle).unwrap();
-    assert_eq!(horizontal.source, state.image);
-    assert_eq!(vertical.source, state.blur.horizontal_image);
-    // The 48 px default token is a *logical* radius; the passes work in target
-    // texels, which are `WORKSPACE_BACKDROP_DOWNSCALE` times coarser than
-    // physical pixels (device pixel ratio is 1 in this fixture).
-    let expected_radius = 48.0 / WORKSPACE_BACKDROP_DOWNSCALE as f32;
-    assert_eq!(
-        horizontal.uniform.direction_radius,
-        Vec4::new(1.0, 0.0, expected_radius, 0.0)
-    );
-    assert_eq!(
-        vertical.uniform.direction_radius,
-        Vec4::new(0.0, 1.0, expected_radius, 0.0)
-    );
-
-    for _ in 0..5 {
-        set_workspace_backdrop_enabled(app.world_mut(), true).unwrap();
-        for camera in [
-            state.camera,
-            state.blur.horizontal_camera,
-            state.blur.vertical_camera,
-        ] {
-            assert!(app.world().get::<Camera>(camera).unwrap().is_active);
-        }
-        set_workspace_backdrop_enabled(app.world_mut(), false).unwrap();
-        for camera in [
-            state.camera,
-            state.blur.horizontal_camera,
-            state.blur.vertical_camera,
-        ] {
-            assert!(!app.world().get::<Camera>(camera).unwrap().is_active);
-        }
-    }
+    assert!(matches!(app.world().get::<Camera>(state.camera).unwrap().clear_color, ClearColorConfig::Custom(_)));
+    set_workspace_backdrop_enabled(app.world_mut(), true).unwrap();
+    assert!(app.world().get::<Camera>(state.camera).unwrap().is_active);
+    set_workspace_backdrop_enabled(app.world_mut(), false).unwrap();
+    assert!(!app.world().get::<Camera>(state.camera).unwrap().is_active);
 }
 
 #[test]
-fn workspace_capture_never_sees_presentation_content() {
+fn capture_isolated_and_shaders_use_the_canonical_viewport() {
     let mut app = App::new();
-    app.add_plugins(AtomeBevyRendererPlugin::new(
-        AtomeBevyRendererConfig::empty(640.0, 480.0),
-    ));
+    app.add_plugins(AtomeBevyRendererPlugin::new(AtomeBevyRendererConfig::empty(640.0, 480.0)));
     app.update();
-    let capture_camera = app.world().resource::<AtomeWorkspaceBackdrop>().camera;
-    let capture_layers = app.world().get::<RenderLayers>(capture_camera).unwrap();
+    let capture = app.world().resource::<AtomeWorkspaceBackdrop>().camera;
+    let capture_layers = app.world().get::<RenderLayers>(capture).unwrap();
     assert!(capture_layers.intersects(&RenderLayers::layer(WORKSPACE_CAPTURE_LAYER)));
     assert!(!capture_layers.intersects(&RenderLayers::layer(FLOWER_PRESENTATION_LAYER)));
 
-    let presentation_camera = app
-        .world_mut()
-        .query_filtered::<Entity, With<AtomePresentationCamera>>()
-        .iter(app.world())
-        .next()
-        .unwrap();
-    let presentation_layers = app.world().get::<RenderLayers>(presentation_camera).unwrap();
-    assert!(presentation_layers.intersects(&RenderLayers::layer(WORKSPACE_CAPTURE_LAYER)));
-    assert!(presentation_layers.intersects(&RenderLayers::layer(FLOWER_PRESENTATION_LAYER)));
-}
-
-#[test]
-fn shared_backdrop_uses_current_capture_dimensions_for_composition() {
-    let blur_shader = include_str!("assets/shaders/workspace_blur.wgsl");
-    assert!(blur_shader.contains("fn gaussian_blur("));
-    assert!(blur_shader.contains("mesh.position,"));
-    assert!(blur_shader.contains("radius * (4.0 / 1.5)"));
-    assert!(!blur_shader.contains("3.2307692308"));
-
-    let shader = include_str!("assets/shaders/backdrop_surface.wgsl");
-    assert!(shader.contains("mesh.position.xy / surface_pixel_size"));
-    assert!(shader
-        .contains("textureDimensions(original_texture)) * material.size_radius_capture_scale.w"));
-    assert!(!shader.contains("mesh.world_position"));
-
-    let uniform = BackdropSurfaceUniform {
-        size_radius_capture_scale: Vec4::new(0.0, 0.0, 0.0, WORKSPACE_BACKDROP_DOWNSCALE as f32),
-        tint: Vec4::ZERO,
-    };
-    assert_eq!(
-        uniform.size_radius_capture_scale.w,
-        WORKSPACE_BACKDROP_DOWNSCALE as f32
-    );
+    for shader in
+        [include_str!("assets/shaders/backdrop_surface.wgsl"), include_str!("assets/shaders/procedural_sdf.wgsl")]
+    {
+        assert!(shader.contains("frag_coord_to_uv(mesh.position.xy, view.viewport)"));
+        assert!(shader.contains("textureSampleLevel"));
+        assert!(!shader.contains("textureDimensions(original_texture)"));
+    }
+    assert_eq!(WORKSPACE_BACKDROP_DOWNSCALE, 4);
 }

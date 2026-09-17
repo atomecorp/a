@@ -390,5 +390,5 @@ test('shared panel material remains canonical after retirement of the specimen-o
     assert.equal(BEVY_MENU_TOKENS.surface.material, material);
     assert.deepEqual(material.shadow.offset, [0, 0]);
     assert.equal(material.shadow.spread, 0);
-    assert.deepEqual(material.backdrop, { blurPx: 18, tint: [0, 0, 0, 0.3] });
+    assert.deepEqual(material.backdrop, { blurPx: 18, tint: [0, 0, 0, 0.84] });
 });
