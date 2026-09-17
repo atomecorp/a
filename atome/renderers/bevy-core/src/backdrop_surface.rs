@@ -12,7 +12,9 @@ use bevy::{
 
 use crate::{
     types::AtomeBackdropStyle,
-    video_external_texture::video_quad_mesh_handle_from_size,
+    video_external_texture::{
+        video_quad_mesh_from_size, video_quad_mesh_handle_from_size,
+    },
     workspace_backdrop::{set_workspace_backdrop_enabled, AtomeWorkspaceBackdrop, FLOWER_PRESENTATION_LAYER},
     workspace_blur::backdrop_blur_lod,
 };
@@ -123,7 +125,10 @@ pub fn insert_backdrop_surface(
 }
 
 pub fn resize_backdrop_surface(world: &mut World, entity: Entity, logical_size: [f32; 2]) -> Result<(), String> {
-    if world.get::<MeshMaterial2d<BackdropSurfaceMaterial>>(entity).is_none() {
+    if world
+        .get::<MeshMaterial2d<BackdropSurfaceMaterial>>(entity)
+        .is_none()
+    {
         return Ok(());
     }
     let mesh = {
@@ -132,6 +137,32 @@ pub fn resize_backdrop_surface(world: &mut World, entity: Entity, logical_size: 
         video_quad_mesh_handle_from_size(&mut meshes, logical_size, [0.0, 0.0, 1.0, 1.0])
     };
     world.entity_mut(entity).insert(Mesh2d(mesh));
+    Ok(())
+}
+
+pub(crate) fn crop_backdrop_surface(
+    world: &mut World,
+    entity: Entity,
+    visible_size: [f32; 2],
+    uv_rect: [f32; 4],
+) -> Result<(), String> {
+    if world
+        .get::<MeshMaterial2d<BackdropSurfaceMaterial>>(entity)
+        .is_none()
+    {
+        return Ok(());
+    }
+    let handle = world
+        .get::<Mesh2d>(entity)
+        .map(|mesh| mesh.0.clone())
+        .ok_or_else(|| "bevy_backdrop_surface_mesh_missing".to_string())?;
+    let mut meshes = world
+        .get_resource_mut::<Assets<Mesh>>()
+        .ok_or_else(|| "bevy_mesh_assets_required".to_string())?;
+    let mut mesh = meshes
+        .get_mut(&handle)
+        .ok_or_else(|| "bevy_backdrop_surface_mesh_asset_missing".to_string())?;
+    *mesh = video_quad_mesh_from_size(visible_size, uv_rect);
     Ok(())
 }
 

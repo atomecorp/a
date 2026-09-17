@@ -154,6 +154,69 @@ fn shape_shadow_uses_bevy_overlay_without_changing_logical_size() {
 }
 
 #[test]
+fn repeated_shape_shadow_updates_replace_the_overlay_without_accumulating_entities() {
+    let mut world = test_world();
+    let shadow = AtomeShadowStyle {
+        color: [0.0, 0.0, 0.0, 0.7],
+        blur: 8.0,
+        offset_x: 0.0,
+        offset_y: 0.0,
+        spread: 0.0,
+    };
+    let entity = apply_spawn(
+        &mut world,
+        AtomeRenderNode {
+            shadow: Some(shadow),
+            ..shape_node("single_shadow_owner")
+        },
+    )
+    .unwrap();
+    let mut previous = world
+        .get::<AtomeShapeShadowOverlay>(entity)
+        .unwrap()
+        .entities[0];
+    let live_entity_count = world.iter_entities().count();
+
+    for _ in 0..3 {
+        apply_style(
+            &mut world,
+            AtomeStylePatch {
+                id: "single_shadow_owner".to_string(),
+                color: None,
+                shadow: Some(Some(shadow)),
+                backdrop: None,
+                selected: None,
+                opacity: None,
+                playback_progress: None,
+                filters: None,
+                transition: None,
+                procedural: None,
+            },
+        )
+        .unwrap();
+        let overlay = world.get::<AtomeShapeShadowOverlay>(entity).unwrap();
+        assert_eq!(overlay.entities.len(), 1);
+        assert_eq!(overlay.image_handles.len(), 1);
+        assert!(world.get_entity(previous).is_err());
+        previous = overlay.entities[0];
+    }
+
+    assert_eq!(
+        world.iter_entities().count(),
+        live_entity_count,
+        "shadow rebuilds must not increase the live entity count"
+    );
+    assert_eq!(world.resource::<Assets<Image>>().len(), 1);
+    assert_eq!(
+        world
+            .resource::<AtomeShapeShadowTextureCache>()
+            .handles
+            .len(),
+        1
+    );
+}
+
+#[test]
 fn shape_shadow_translation_reuses_existing_texture() {
     let mut world = test_world();
     let entity = apply_spawn(

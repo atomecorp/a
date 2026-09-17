@@ -1,6 +1,7 @@
 use bevy::{image::Image, prelude::*};
 
 use crate::{
+    backdrop_surface::crop_backdrop_surface,
     components::*,
     render_math::{atome_rect_transform_with_local, depth_for_layer},
 };
@@ -92,5 +93,16 @@ pub fn apply_entity_clip(world: &mut World, entity: Entity) -> Result<(), String
             ));
         }
     }
+    crop_backdrop_surface(
+        world,
+        entity,
+        [visible[2], visible[3]],
+        [
+            (visible[0] - original[0]) / original[2],
+            (visible[1] - original[1]) / original[3],
+            visible[2] / original[2],
+            visible[3] / original[3],
+        ],
+    )?;
     Ok(())
 }

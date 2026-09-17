@@ -79,11 +79,7 @@ pub fn insert_video_external_texture_component_for_node(
     }
 }
 
-pub fn video_quad_mesh_handle_from_size(
-    meshes: &mut Assets<Mesh>,
-    logical_size: [f32; 2],
-    uv_rect: [f32; 4],
-) -> Handle<Mesh> {
+pub(crate) fn video_quad_mesh_from_size(logical_size: [f32; 2], uv_rect: [f32; 4]) -> Mesh {
     let width = logical_size[0].max(1.0);
     let height = logical_size[1].max(1.0);
     let half_width = width / 2.0;
@@ -103,7 +99,15 @@ pub fn video_quad_mesh_handle_from_size(
     );
     mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, video_quad_uvs(uv_rect));
     mesh.insert_indices(Indices::U32(vec![0, 1, 2, 2, 1, 3]));
-    meshes.add(mesh)
+    mesh
+}
+
+pub fn video_quad_mesh_handle_from_size(
+    meshes: &mut Assets<Mesh>,
+    logical_size: [f32; 2],
+    uv_rect: [f32; 4],
+) -> Handle<Mesh> {
+    meshes.add(video_quad_mesh_from_size(logical_size, uv_rect))
 }
 
 pub fn insert_video_quad_mesh(

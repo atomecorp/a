@@ -1,4 +1,4 @@
-use bevy::{image::ImageSampler, prelude::*};
+use bevy::{image::ImageSampler, mesh::VertexAttributeValues, prelude::*};
 
 use crate::selection_overlay::build_shadow_texture_rgba;
 use crate::*;
@@ -364,6 +364,92 @@ fn shape_clip_crops_on_spawn_and_restores_on_transform_update() {
     )
     .unwrap();
     assert_vec2_near(world.get::<Sprite>(entity).unwrap().custom_size, Vec2::new(120.0, 50.0));
+}
+
+#[test]
+fn backdrop_clip_crops_the_resident_mesh_without_stretching_or_accumulating_assets() {
+    let glass = AtomeRenderNode {
+        clip_rect: Some([42.0, 34.0, 50.0, 30.0]),
+        backdrop: Some(AtomeBackdropStyle {
+            blur_px: 12.0,
+            tint: [0.2, 0.3, 0.4, 0.5],
+        }),
+        ..shape_node("clipped_backdrop")
+    };
+    let mut app = App::new();
+    app.add_plugins(AtomeBevyRendererPlugin::new(
+        AtomeBevyRendererConfig::empty(640.0, 480.0),
+    ));
+    app.update();
+    let entity = apply_spawn(app.world_mut(), glass).unwrap();
+    let mesh_handle = app.world().get::<Mesh2d>(entity).unwrap().0.clone();
+    let mesh_count = app.world().resource::<Assets<Mesh>>().len();
+    let mesh = app.world().resource::<Assets<Mesh>>().get(&mesh_handle).unwrap();
+    let Some(VertexAttributeValues::Float32x3(positions)) =
+        mesh.attribute(Mesh::ATTRIBUTE_POSITION)
+    else {
+        panic!("backdrop mesh should carry Float32x3 positions");
+    };
+    assert_eq!(
+        positions,
+        &vec![
+            [-25.0, -15.0, 0.0],
+            [25.0, -15.0, 0.0],
+            [-25.0, 15.0, 0.0],
+            [25.0, 15.0, 0.0]
+        ]
+    );
+    let Some(VertexAttributeValues::Float32x2(uvs)) = mesh.attribute(Mesh::ATTRIBUTE_UV_0) else {
+        panic!("backdrop mesh should carry Float32x2 UVs");
+    };
+    let expected_uvs = [
+        [0.25, 0.8],
+        [2.0 / 3.0, 0.8],
+        [0.25, 0.2],
+        [2.0 / 3.0, 0.2],
+    ];
+    for (actual, expected) in uvs.iter().zip(expected_uvs) {
+        assert!(
+            (actual[0] - expected[0]).abs() < 0.00001,
+            "u: {actual:?} != {expected:?}"
+        );
+        assert!(
+            (actual[1] - expected[1]).abs() < 0.00001,
+            "v: {actual:?} != {expected:?}"
+        );
+    }
+
+    apply_transform(
+        app.world_mut(),
+        AtomeTransformPatch {
+            id: "clipped_backdrop".to_string(),
+            logical_position: [12.0, 24.0],
+            logical_size: [120.0, 50.0],
+            scale: [1.0, 1.0],
+            rotation: 0.0,
+            origin: [0.0, 0.0],
+            clip_rect: None,
+        },
+    )
+    .unwrap();
+
+    assert_eq!(app.world().get::<Mesh2d>(entity).unwrap().0, mesh_handle);
+    assert_eq!(app.world().resource::<Assets<Mesh>>().len(), mesh_count);
+    let restored = app.world().resource::<Assets<Mesh>>().get(&mesh_handle).unwrap();
+    let Some(VertexAttributeValues::Float32x3(restored_positions)) =
+        restored.attribute(Mesh::ATTRIBUTE_POSITION)
+    else {
+        panic!("restored backdrop mesh should carry Float32x3 positions");
+    };
+    assert_eq!(
+        restored_positions,
+        &vec![
+            [-60.0, -25.0, 0.0],
+            [60.0, -25.0, 0.0],
+            [-60.0, 25.0, 0.0],
+            [60.0, 25.0, 0.0]
+        ]
+    );
 }
 
 #[test]
