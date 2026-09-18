@@ -151,7 +151,7 @@ test('activating Text never wakes a lazy inactive Code toggle', async () => {
     assert.equal(globalThis.window.eveCodeToolApi, undefined);
 });
 
-test('the latched Create state changes the real WebGPU tool background and restores it when off', () => {
+test('the latched Create tool takes its palette slot instead of a sibling button', () => {
     const content = createMainMenuCreateContent({
         translate: (_key, fallback) => fallback,
         createToolId: 'tool.main.create',
@@ -164,7 +164,7 @@ test('the latched Create state changes the real WebGPU tool background and resto
         surface,
         itemSize: 60,
         state: {
-            activePaletteKey: 'create',
+            activePaletteKey: latched ? '' : 'create',
             externalOpenByToolId: new Map(),
             hoveredId: '',
             latchedByToolId: new Map([['ui.text.create', latched]]),
@@ -180,14 +180,82 @@ test('the latched Create state changes the real WebGPU tool background and resto
         }
         return null;
     };
-    const id = 'eve_bevy_ui_main_menu_tool_create__text_create_background';
-    const inactive = find(treeFor(false).root, id)?.style?.background;
-    const active = find(treeFor(true).root, id)?.style?.background;
-    assert.ok(inactive);
-    assert.ok(active);
-    assert.notDeepEqual(active, inactive);
-    assert.deepEqual(find(treeFor(false).root, id).style.background, inactive);
-    assert.deepEqual(find(treeFor(true).root, id.replace(/_background$/, '')).style.background, active);
+    const slotId = 'eve_bevy_ui_main_menu_tool_create';
+    const childId = 'eve_bevy_ui_main_menu_tool_create__text_create_background';
+    const slot = (latched) => find(treeFor(latched).root, slotId);
+    // Le libelle se lit sur l'accessibilite du noeud, l'icone sur son enfant.
+    const slotLabel = (latched) => slot(latched).accessibility.label;
+    const slotIcon = (latched) => find(treeFor(latched).root, `${slotId}_icon`).image.source;
+    const childLabel = find(treeFor(false).root, 'eve_bevy_ui_main_menu_tool_create__text_create').accessibility.label;
+    // Eteint : la palette affiche ses propres choix et son propre libelle.
+    assert.ok(find(treeFor(false).root, childId));
+    assert.ok(slotLabel(false));
+    // Allume (R2/R3) : le choix de la palette est remplace par l'emplacement de
+    // l'outil actif, qui porte son icone ET SON libelle.
+    assert.equal(slotLabel(true), childLabel);
+    assert.notEqual(slotLabel(true), slotLabel(false));
+    assert.notEqual(slotIcon(true), slotIcon(false));
+    assert.equal(find(treeFor(true).root, childId), null);
+    // L'emplacement se lit comme allume, palette refermee : meme peignage que le
+    // ruban actif, alors que la palette eteinte ne l'aurait pas.
+    assert.deepEqual(slot(true).style.translation, [0, 2]);
+});
+
+// Le constructeur du contenu du ruban exige l'ensemble de ses dependances. Ce
+// contrat ne porte que sur la palette Mode : les autres restent des stubs inertes.
+const modeContentDependencies = (translate) => {
+    const inert = [
+        'applyDeleteSelection', 'closeBackgroundPanel', 'closeCalendarPanel', 'closeCanonicalHomePanel',
+        'closeCommunicatePanel', 'closeCouleurPanel', 'closeDeletePanel', 'closeFinderPanel',
+        'closeFontPanel', 'closeInfoPanel', 'closeLayerPanel', 'closeMatrixView', 'closePastePanel',
+        'closeTimelinePanel', 'closeUndoPanel', 'defaultOrientation', 'directionValueToLabel',
+        'ensureActivitiesModule', 'ensureCopyModule', 'ensurePastePanelModule', 'handleAiTouch',
+        'handleFinderTouch', 'invokeTool', 'openBackgroundPanel', 'openCalendarPanel',
+        'openCanonicalHomePanel', 'openCommunicatePanel', 'openCouleurPanel', 'openDeletePanel',
+        'openFinderPanel', 'openFontPanel', 'openInfoPanel', 'openLayerPanel', 'openMatrixView',
+        'openPastePanel', 'openTimelinePanel', 'openUndoPanel', 'orientationChanged'
+    ];
+    return Object.fromEntries([
+        ...inert.map((name) => [name, () => null]),
+        ['directionValues', []],
+        ['mainToolIdByKey', { mode: 'ui.mode', create: 'tool.main.create', draw: 'tool.main.draw' }],
+        ['translate', translate]
+    ]);
+};
+
+test('the Mode palette reads its current choice from the canonical work-mode owner', async () => {
+    const { createMainMenuContentRuntime } = await import('../../eVe/intuition/runtime/eve_intuition/main_menu_content_runtime.js');
+    const { performState } = await import('../../eVe/intuition/tools/perform_state.js');
+    const content = createMainMenuContentRuntime({
+        ...modeContentDependencies((_key, fallback) => fallback),
+        t: (_key, fallback) => fallback,
+        trackContextMenuState: () => {}, announceContextMenuState: () => {}
+    });
+    const previousPerform = performState.active;
+    try {
+        performState.active = false;
+        assert.equal(content.mode.selectedChildKey(), 'mode_edit');
+        performState.active = true;
+        assert.equal(content.mode.selectedChildKey(), 'perform');
+    } finally {
+        performState.active = previousPerform;
+    }
+    // Le mode de travail est celui de `getProjectWorkMode` : consommer -> mode_consume.
+    const workMode = await import('../../eVe/domains/rendering/project_work_mode_state.js');
+    const dom = new JSDOM('<!doctype html>');
+    const previousWindow = globalThis.window;
+    globalThis.window = dom.window;
+    dom.window.__eveWorkspaceMode = { mode: 'project', projectId: 'mode_project' };
+    dom.window.__currentProject = { id: 'mode_project' };
+    dom.window.evePerformApi = { deactivate: async () => ({ ok: true }) };
+    try {
+        await workMode.setProjectWorkMode('consume', { windowRef: dom.window });
+        assert.equal(content.mode.selectedChildKey(), 'mode_consume');
+        await workMode.setProjectWorkMode('edit', { windowRef: dom.window });
+        assert.equal(content.mode.selectedChildKey(), 'mode_edit');
+    } finally {
+        globalThis.window = previousWindow;
+    }
 });
 
 test('shared-canvas BevyUI hit keeps menu ownership while Text is armed', () => {

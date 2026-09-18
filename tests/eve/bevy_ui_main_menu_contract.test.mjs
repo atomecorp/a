@@ -525,3 +525,149 @@ test('assistant slider can select the minimum immediately after the maximum with
         assert.deepEqual(selected, [5, 1]);
     } finally { h.runtime.destroy(); h.restore(); }
 });
+
+// ---------------------------------------------------------------------------
+// Fermeture des palettes + emplacement d'outil actif (R1 a R5)
+// ---------------------------------------------------------------------------
+const choicePaletteContent = () => ({
+    toolbox: { children: ['create', 'view', 'draw'] },
+    create: { atome_tool: true, label: 'Create', icon: 'add', tool_id: 'tool.main.create',
+        type: 'palette', tool_type: 'palette', action: 'momentary', submenuInstantOnClick: true,
+        children: ['text_create', 'create_draw'] },
+    text_create: { atome_tool: true, label: 'Text', icon: 'edit', tool_id: 'ui.text.create',
+        type: 'tool', action: 'toggle', latch: true },
+    create_draw: { atome_tool: true, label: 'Draw', icon: 'draw', tool_id: 'tool.main.draw',
+        type: 'palette', tool_type: 'palette', action: 'toggle', latch: true, children: ['draw_size'] },
+    draw_size: { label: 'Size', icon: 'size', type: 'slider', tool_id: 'ui.draw.size',
+        slider_min: 1, slider_max: 100, slider_value: 10 },
+    draw: { atome_tool: true, label: 'Draw', icon: 'draw', tool_id: 'tool.main.draw',
+        type: 'palette', tool_type: 'palette', action: 'momentary', children: ['draw_size'] },
+    view: { atome_tool: true, label: 'View', icon: 'visible_true', tool_id: 'tool.main.view',
+        type: 'palette', tool_type: 'palette', action: 'momentary', submenuInstantOnClick: true,
+        children: ['view_list', 'view_table'] },
+    view_list: { atome_tool: true, label: 'List', icon: 'hamburger', tool_id: 'ui.view.mode.list',
+        type: 'tool', action: 'momentary' },
+    view_table: { atome_tool: true, label: 'Matrix', icon: 'matrix', tool_id: 'ui.view.mode.table',
+        type: 'tool', action: 'momentary' }
+});
+
+test('a leaf palette choice closes the palette, a cursor keeps it open and a nested palette opens its level', async () => {
+    const invocations = [];
+    const harness = createRuntimeHarness({ content: choicePaletteContent(),
+        onInvoke: (entry) => { invocations.push(entry?.key); return { ok: true }; } });
+    const latest = () => harness.calls.at(-1).payload.tree;
+    const node = (id) => findNode(latest().root, id);
+    try {
+        await harness.runtime.showFully();
+        await node('eve_bevy_ui_main_menu_tool_view').on.activate({});
+        await waitMs(350);
+        assert.equal(harness.runtime.measure().activePaletteKey, 'view');
+        // R1 — un clic direct sur un enfant referme la palette.
+        await node('eve_bevy_ui_main_menu_tool_view__view_list').on.activate({});
+        assert.deepEqual(invocations, ['view_list']);
+        assert.equal(harness.runtime.measure().activePaletteKey, '');
+        // R1 — l'appui-glisse choisit le meme enfant et referme pareil.
+        await node('eve_bevy_ui_main_menu_tool_view').on.activate({});
+        await waitMs(350);
+        await node('eve_bevy_ui_main_menu_tool_view__view_table').on.palette_choose({});
+        assert.deepEqual(invocations, ['view_list', 'view_table']);
+        assert.equal(harness.runtime.measure().activePaletteKey, '');
+        // R1 — une palette imbriquee n'est pas un choix : elle ouvre son niveau.
+        await node('eve_bevy_ui_main_menu_tool_create').on.activate({});
+        await waitMs(350);
+        await node('eve_bevy_ui_main_menu_tool_create__create_draw').on.activate({});
+        await waitMs(350);
+        assert.equal(harness.runtime.measure().activePaletteKey, 'create_draw');
+        // R1 — un curseur ne referme rien : il ne porte meme pas d'activation.
+        const sliderId = 'eve_bevy_ui_main_menu_tool_create_draw__draw_size';
+        assert.equal(typeof node(sliderId)?.on?.activate, 'undefined');
+        assert.equal(typeof node(sliderId)?.on?.palette_choose, 'undefined');
+        node(sliderId).on.press({});
+        assert.equal(harness.runtime.measure().activePaletteKey, 'create_draw');
+    } finally { harness.runtime.destroy(); harness.restore(); }
+});
+
+test('a latched tool takes its palette slot and that slot turns it off without opening the palette', async () => {
+    const invocations = [];
+    const harness = createRuntimeHarness({ content: choicePaletteContent(),
+        onInvoke: (entry, source, payload) => {
+            invocations.push({ key: entry?.key, previousLatched: payload?.previousLatched });
+            return entry?.key === 'text_create'
+                ? { ok: true, nextLatched: payload?.previousLatched !== true }
+                : { ok: true };
+        } });
+    const latest = () => harness.calls.at(-1).payload.tree;
+    const node = (id) => findNode(latest().root, id);
+    const slot = () => node('eve_bevy_ui_main_menu_tool_create');
+    const slotIcon = () => node('eve_bevy_ui_main_menu_tool_create_icon').image.source;
+    try {
+        await harness.runtime.showFully();
+        // Le verrou arrive par le canal canonique, jamais fabrique par le rendu.
+        harness.runtime.setToolLatchedState({ tool_id: 'ui.text.create', latched: true });
+        await waitMs(20);
+        assert.equal(harness.runtime.getToolLatchedState({ tool_id: 'ui.text.create' }), true);
+        // R2 — l'emplacement porte l'icone ET le libelle de l'outil actif : le
+        // libelle se lit sur l'accessibilite du noeud, l'icone sur son enfant.
+        assert.equal(slot().accessibility.label, 'Text');
+        assert.match(slotIcon(), /edit\.svg$/);
+        // L'emplacement reste une palette : il ouvrirait son niveau s'il n'etait pas allume.
+        assert.equal(typeof slot().on.palette_open, 'function');
+        // R4 — l'appui eteint l'outil par le chemin canonique et n'ouvre pas la palette.
+        await node('eve_bevy_ui_main_menu_tool_create').on.activate({});
+        assert.deepEqual(invocations, [{ key: 'text_create', previousLatched: true }]);
+        assert.equal(harness.runtime.measure().activePaletteKey, '');
+        assert.equal(harness.runtime.getToolLatchedState({ tool_id: 'ui.text.create' }), false);
+        await waitMs(20);
+        // R2 — l'extinction rend a la palette son icone et son libelle.
+        assert.equal(slot().accessibility.label, 'Create');
+        assert.match(slotIcon(), /add\.svg$/);
+    } finally { harness.runtime.destroy(); harness.restore(); }
+});
+
+test('a latched tool that owns options replaces its palette other choices in the ribbon', async () => {
+    const harness = createRuntimeHarness({ content: choicePaletteContent(), onInvoke: () => ({ ok: true }) });
+    const latest = () => harness.calls.at(-1).payload.tree;
+    const node = (id) => findNode(latest().root, id);
+    try {
+        await harness.runtime.showFully();
+        await node('eve_bevy_ui_main_menu_tool_create').on.activate({});
+        await waitMs(350);
+        assert.ok(node('eve_bevy_ui_main_menu_tool_create__text_create'));
+        assert.equal(node('eve_bevy_ui_main_menu_tool_create__draw_size'), null);
+        // R3 — les autres choix disparaissent au profit des options de l'outil actif.
+        harness.runtime.setToolLatchedState({ tool_id: 'tool.main.draw', latched: true });
+        await waitMs(20);
+        assert.equal(node('eve_bevy_ui_main_menu_tool_create__text_create'), null);
+        assert.equal(node('eve_bevy_ui_main_menu_tool_create__create_draw'), null);
+        assert.ok(node('eve_bevy_ui_main_menu_tool_create__draw_size'));
+        assert.equal(node('eve_bevy_ui_main_menu_tool_create').accessibility.label, 'Draw');
+        // Eteint, les autres choix reviennent : il faut l'eteindre pour les revoir.
+        harness.runtime.setToolLatchedState({ tool_id: 'tool.main.draw', latched: false });
+        await waitMs(20);
+        assert.ok(node('eve_bevy_ui_main_menu_tool_create__text_create'));
+        assert.equal(node('eve_bevy_ui_main_menu_tool_create__draw_size'), null);
+    } finally { harness.runtime.destroy(); harness.restore(); }
+});
+
+test('View and Mode slots present the current choice and still open their palette', async () => {
+    let currentView = 'view_list';
+    const content = choicePaletteContent();
+    content.view.selectedChildKey = () => currentView;
+    const harness = createRuntimeHarness({ content, onInvoke: () => ({ ok: true }) });
+    const latest = () => harness.calls.at(-1).payload.tree;
+    const node = (id) => findNode(latest().root, id);
+    try {
+        await harness.runtime.showFully();
+        assert.match(node('eve_bevy_ui_main_menu_tool_view_icon').image.source, /hamburger\.svg$/);
+        assert.equal(node('eve_bevy_ui_main_menu_tool_view').accessibility.label, 'List');
+        // Le choix change chez son proprietaire canonique, pas dans le rendu.
+        currentView = 'view_table';
+        await harness.runtime.refresh();
+        assert.match(node('eve_bevy_ui_main_menu_tool_view_icon').image.source, /matrix\.svg$/);
+        assert.equal(node('eve_bevy_ui_main_menu_tool_view').accessibility.label, 'Matrix');
+        // R5 — un choix momentane n'a rien a eteindre : l'appui rouvre la palette.
+        await node('eve_bevy_ui_main_menu_tool_view').on.activate({});
+        await waitMs(350);
+        assert.equal(harness.runtime.measure().activePaletteKey, 'view');
+    } finally { harness.runtime.destroy(); harness.restore(); }
+});
