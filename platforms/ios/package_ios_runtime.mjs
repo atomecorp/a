@@ -287,8 +287,10 @@ const copyRuntimeFiles = async (root, prefix) => {
 await copyRuntimeFiles(sourceRoot, 'src');
 await copyRuntimeFiles(eveRoot, 'eVe');
 
-for (const name of ['server_config.json', 'version.txt']) {
-    const source = path.join(projectRoot, name);
+// The runtime keeps `version.txt` at its root (ServerInfoProvider reads it
+// there); its source is the atome version, which lives in `atome/`.
+for (const [name, sourceRelative] of [['server_config.json', 'server_config.json'], ['version.txt', 'atome/version.txt']]) {
+    const source = path.join(projectRoot, sourceRelative);
     try {
         if ((await stat(source)).isFile()) await cp(source, path.join(outputRoot, name));
     } catch { }

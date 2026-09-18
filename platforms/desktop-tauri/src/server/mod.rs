@@ -1558,6 +1558,8 @@ fn read_version_candidate(candidate: &Path) -> Option<String> {
 fn load_version(static_dir: &Path) -> String {
     let project_root = project_root_from_static_dir(static_dir);
     let mut candidates = Vec::new();
+    // The atome version lives in atome/; the bundle still ships it at its root.
+    candidates.push(project_root.join("atome").join("version.txt"));
     candidates.push(project_root.join("version.txt"));
     candidates.push(project_root.join("atome").join("src").join("version.json"));
     candidates.push(static_dir.join("version.txt"));

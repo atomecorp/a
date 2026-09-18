@@ -14,6 +14,11 @@ readonly DISTRIBUTION_METHOD="app-store-connect"
 readonly APP_STORE_CONNECT_DIRECTORY="$HOME/.appstoreconnect"
 readonly APP_STORE_CONNECT_KEY_DIRECTORY="$APP_STORE_CONNECT_DIRECTORY/private_keys"
 readonly APP_STORE_CONNECT_ISSUER_ID_FILE="$APP_STORE_CONNECT_DIRECTORY/issuer-id"
+readonly ATOME_VERSION_FILE="$REPO_ROOT/atome/version.txt"
+readonly EVE_VERSION_FILE="$REPO_ROOT/eVe/version.txt"
+# Derived copy of the atome version, read by the GitHub auto-sync and by
+# publish-to-github.sh; only its "version" key is rewritten.
+readonly ATOME_VERSION_JSON_FILE="$REPO_ROOT/atome/src/version.json"
 readonly EXPORT_COMPLIANCE_OPTION="2"
 readonly EXPORT_COMPLIANCE_SELECTION="Standard encryption algorithms instead of, or in addition to, the encryption used in or accessed through Apple's operating system"
 
@@ -35,6 +40,9 @@ SIGNING_IDENTITY=""
 API_KEY_ID=""
 API_ISSUER_ID=""
 API_PRIVATE_KEY_PATH=""
+ATOME_VERSION=""
+EVE_VERSION=""
+PRODUCT_VERSION_BACKUPS=()
 EXTENSION_TARGET_COUNT=0
 EXTENSION_TARGETS=()
 
@@ -82,11 +90,13 @@ GUIDANCE
 
 fail() {
     printf '\nFAILED\nStep: %s\nReason: %s\n' "$CURRENT_STEP" "$1" >&2
+    restore_product_version_files
     exit 1
 }
 
 on_error() {
     local exit_code=$?
+    restore_product_version_files
     printf '\nFAILED\nStep: %s\nExit code: %s\n' "$CURRENT_STEP" "$exit_code" >&2
     exit "$exit_code"
 }
@@ -276,6 +286,7 @@ discover_release_targets() {
 
     NEXT_BUILD=$((10#$CURRENT_BUILD + 1))
     increment_marketing_version
+    align_with_product_versions
 }
 
 increment_marketing_version() {
@@ -292,6 +303,65 @@ increment_marketing_version() {
     next_component=$((10#$version_component + 1))
     printf -v next_component "%0${component_width}d" "$next_component"
     NEXT_MARKETING_VERSION="$version_prefix.$next_component"
+}
+
+read_product_version() {
+    local file="$1"
+    local version
+
+    [ -f "$file" ] || fail "Version file is missing: $file"
+    if [[ "$file" == *.json ]]; then
+        version="$(/usr/bin/ruby -rjson -e 'print JSON.parse(File.read(ARGV[0])).fetch("version", "")' "$file")"
+    else
+        version="$(tr -d '[:space:]' < "$file")"
+    fi
+    [[ "$version" =~ ^[0-9]+(\.[0-9]+)+$ ]] || fail "$file must hold dot-separated numeric components, found: $version"
+    printf '%s' "$version"
+}
+
+highest_version() {
+    /usr/bin/ruby -e 'puts ARGV.max_by { |version| Gem::Version.new(version) }' "$@"
+}
+
+# The App Store version, atome and eVe move together. The next release is the
+# highest of the incremented Xcode ledger and both product version files, so a
+# product version bumped by hand is published as is instead of being overtaken.
+align_with_product_versions() {
+    ATOME_VERSION="$(read_product_version "$ATOME_VERSION_FILE")"
+    EVE_VERSION="$(read_product_version "$EVE_VERSION_FILE")"
+    NEXT_MARKETING_VERSION="$(highest_version "$NEXT_MARKETING_VERSION" "$ATOME_VERSION" "$EVE_VERSION" \
+        "$(read_product_version "$ATOME_VERSION_JSON_FILE")")"
+}
+
+# Written before the archive so the published bundle carries its own version;
+# restored if the release does not complete.
+write_product_version_files() {
+    local file
+    local content
+
+    for file in "$ATOME_VERSION_FILE" "$EVE_VERSION_FILE" "$ATOME_VERSION_JSON_FILE"; do
+        # The sentinel keeps a trailing newline that $(...) would strip.
+        content="$(cat "$file"; printf x)"
+        PRODUCT_VERSION_BACKUPS+=("$file" "${content%x}")
+        if [[ "$file" == *.json ]]; then
+            /usr/bin/ruby -rjson -e '
+                document = JSON.parse(File.read(ARGV[0]))
+                document["version"] = ARGV[1]
+                File.write(ARGV[0], JSON.pretty_generate(document) + "\n")
+            ' "$file" "$NEXT_MARKETING_VERSION"
+        else
+            printf '%s' "$NEXT_MARKETING_VERSION" > "$file"
+        fi
+    done
+}
+
+restore_product_version_files() {
+    local index
+
+    for ((index = 0; index < ${#PRODUCT_VERSION_BACKUPS[@]}; index += 2)); do
+        printf '%s' "${PRODUCT_VERSION_BACKUPS[index + 1]}" > "${PRODUCT_VERSION_BACKUPS[index]}"
+    done
+    PRODUCT_VERSION_BACKUPS=()
 }
 
 validate_environment() {
@@ -407,7 +477,9 @@ print_release_summary() {
     printf '%s\n' "Embedded extension targets: ${EXTENSION_TARGETS[*]:-none}"
     printf '%s\n' "Signing: $SIGNING_STYLE (${SIGNING_IDENTITY:-unspecified}), team $TEAM_ID"
     printf '%s\n' "Current version: $MARKETING_VERSION"
-    printf '%s\n' "New version: $NEXT_MARKETING_VERSION"
+    printf '%s\n' "atome version: $ATOME_VERSION ($ATOME_VERSION_FILE)"
+    printf '%s\n' "eVe version: $EVE_VERSION ($EVE_VERSION_FILE)"
+    printf '%s\n' "New version (App Store, atome, eVe): $NEXT_MARKETING_VERSION"
     printf '%s\n' "Current build: $CURRENT_BUILD"
     printf '%s\n' "New build: $NEXT_BUILD"
 }
@@ -441,6 +513,7 @@ main() {
     if [ "$DRY_RUN" = true ]; then
         printf '\nDRY RUN SUCCESS\n'
         printf '%s\n' "No version was changed. No archive, export, or upload was started."
+        printf '%s\n' "Planned version files: atome/version.txt, eVe/version.txt, atome/src/version.json -> $NEXT_MARKETING_VERSION"
         printf '%s\n' "Planned archive: xcodebuild archive ... CURRENT_PROJECT_VERSION=$NEXT_BUILD"
         printf '%s\n' "Planned export method: $DISTRIBUTION_METHOD"
         printf '%s\n' "Planned uploader: xcrun altool with App Store Connect API-key authentication"
@@ -462,6 +535,9 @@ main() {
     export_path="$run_directory/export"
     export_options_path="$run_directory/ExportOptions.plist"
     write_export_options "$export_options_path"
+
+    CURRENT_STEP="Writing product versions"
+    write_product_version_files
 
     CURRENT_STEP="Release archive"
     xcodebuild_for_container \
@@ -494,6 +570,8 @@ main() {
 
     CURRENT_STEP="Persisting published version"
     persist_version_ledger
+    # Published: the written product versions are now the truth.
+    PRODUCT_VERSION_BACKUPS=()
 
     printf '\nSUCCESS\n\n'
     printf '%s\n' "Version: $NEXT_MARKETING_VERSION"

@@ -9,7 +9,8 @@ import { fileURLToPath } from 'url';
 
 const PROJECT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 let versionWatchersStarted = false;
-const VERSION_FILE = path.join(PROJECT_ROOT, 'version.txt');
+// The atome version lives with atome; eVe keeps its own.
+const VERSION_FILE = path.join(PROJECT_ROOT, 'atome', 'version.txt');
 const EVE_VERSION_FILE = path.join(PROJECT_ROOT, 'eVe', 'version.txt');
 const VERSION_FILE_WATCH_INTERVAL_MS = 1500;
 export let SERVER_VERSION = 'unknown';
@@ -30,7 +31,7 @@ export async function loadVersionFile(filePath, label) {
 }
 
 export async function loadServerVersion() {
-  return loadVersionFile(VERSION_FILE, 'version.txt');
+  return loadVersionFile(VERSION_FILE, 'atome/version.txt');
 }
 
 export async function loadEveVersion() {
