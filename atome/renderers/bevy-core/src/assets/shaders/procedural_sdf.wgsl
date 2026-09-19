@@ -19,27 +19,71 @@ struct ProceduralSdfUniform {
     liquid_drops: array<vec4<f32>, 24>,
     liquid_drop_shapes: array<vec4<f32>, 24>,
     liquid_drop_count: vec4<f32>,
+    // INTUITION MYSTIC. Appended in the SAME order as `ProceduralSdfUniform`
+    // (procedural_sdf.rs): the bind group is order sensitive, so a field added
+    // here without a field added there shifts every uniform after it.
+    // `mystic_tiles[i]`  = [centerX, centerY (bottom origin), half side, corner radius]
+    // `mystic_tile_motion[i]` = [progress 0..1, axis (0 = X, 1 = Y), direction, -]
+    // `mystic_tile_colors[i]` = [R, G, B, family dose]
+    // `mystic_count` = [tile count, hole dose, shadow blur, -]
+    // `mystic_style` = [perspective in tiles, rim thickness, rim dose, edge softness]
+    mystic_tiles: array<vec4<f32>, 24>,
+    mystic_tile_motion: array<vec4<f32>, 24>,
+    mystic_tile_colors: array<vec4<f32>, 24>,
+    mystic_count: vec4<f32>,
+    mystic_style: vec4<f32>,
 }
 
 @group(#{MATERIAL_BIND_GROUP}) @binding(0) var<uniform> material: ProceduralSdfUniform;
 @group(#{MATERIAL_BIND_GROUP}) @binding(1) var backdrop_texture: texture_2d<f32>;
 @group(#{MATERIAL_BIND_GROUP}) @binding(2) var backdrop_sampler: sampler;
 
+const BACKDROP_BLUR_LEVEL_SHIFT: f32 = 0.4;
+
+// Backdrop blur, read from the capture's mip pyramid. Each level is a 2x box
+// average of the one below; sampling one of them with a plain bilinear fetch
+// shows its texel grid, and spreading sparse taps over a finer level (the old
+// approach) left ghosts and blocks. Here every level is read through a cubic
+// B-spline — four bilinear fetches — and two adjacent levels are blended, so the
+// radius varies continuously and the result is a smooth, near Gaussian blur.
+// The pyramid is rebuilt every frame: whatever moves behind the glass stays live.
+fn backdrop_bspline_level(uv: vec2<f32>, level: f32) -> vec3<f32> {
+    let base = vec2<f32>(textureDimensions(backdrop_texture, 0));
+    let actual = max(vec2<f32>(textureDimensions(backdrop_texture, i32(level))), vec2(1.0));
+    // Texel coordinates in the IDEAL level grid: an odd base size rounds the
+    // stored level down, and a texel keeps covering the same base footprint.
+    let st = uv * (base / exp2(level)) - 0.5;
+    let cell = floor(st);
+    let f = st - cell;
+    let f2 = f * f;
+    let f3 = f2 * f;
+    let w0 = (1.0 - 3.0 * f + 3.0 * f2 - f3) / 6.0;
+    let w1 = (4.0 - 6.0 * f2 + 3.0 * f3) / 6.0;
+    let w2 = (1.0 + 3.0 * f + 3.0 * f2 - 3.0 * f3) / 6.0;
+    let w3 = f3 / 6.0;
+    let g0 = w0 + w1;
+    let g1 = w2 + w3;
+    let p0 = (cell - 0.5 + w1 / g0) / actual;
+    let p1 = (cell + 1.5 + w3 / g1) / actual;
+    return g0.y * (g0.x * textureSampleLevel(backdrop_texture, backdrop_sampler, vec2(p0.x, p0.y), level).rgb
+            + g1.x * textureSampleLevel(backdrop_texture, backdrop_sampler, vec2(p1.x, p0.y), level).rgb)
+        + g1.y * (g0.x * textureSampleLevel(backdrop_texture, backdrop_sampler, vec2(p0.x, p1.y), level).rgb
+            + g1.x * textureSampleLevel(backdrop_texture, backdrop_sampler, vec2(p1.x, p1.y), level).rgb);
+}
+
 fn sample_aligned_mip(uv: vec2<f32>, lod: f32) -> vec3<f32> {
-    let source_lod = min(max(lod, 0.0), 1.0);
-    let texel = 1.0 / vec2<f32>(textureDimensions(backdrop_texture, 0));
-    let center_uv = uv + texel * ((exp2(source_lod) - 1.0) * 0.5);
-    let offset = texel * max(exp2(max(lod, 0.0)) - 1.0, 0.0) * 0.45;
-    let axis = textureSampleLevel(backdrop_texture, backdrop_sampler, center_uv + vec2(offset.x, 0.0), source_lod).rgb
-        + textureSampleLevel(backdrop_texture, backdrop_sampler, center_uv - vec2(offset.x, 0.0), source_lod).rgb
-        + textureSampleLevel(backdrop_texture, backdrop_sampler, center_uv + vec2(0.0, offset.y), source_lod).rgb
-        + textureSampleLevel(backdrop_texture, backdrop_sampler, center_uv - vec2(0.0, offset.y), source_lod).rgb;
-    let diagonal = textureSampleLevel(backdrop_texture, backdrop_sampler, center_uv + offset, source_lod).rgb
-        + textureSampleLevel(backdrop_texture, backdrop_sampler, center_uv - offset, source_lod).rgb
-        + textureSampleLevel(backdrop_texture, backdrop_sampler, center_uv + vec2(offset.x, -offset.y), source_lod).rgb
-        + textureSampleLevel(backdrop_texture, backdrop_sampler, center_uv + vec2(-offset.x, offset.y), source_lod).rgb;
-    return textureSampleLevel(backdrop_texture, backdrop_sampler, center_uv, source_lod).rgb * 0.2
-        + (axis + diagonal) * 0.1;
+    // A B-spline read of level k spreads about 0.65 x 2^k base texels, where
+    // `lod` targets 0.5 x 2^lod: hence the small shift down.
+    let top = f32(textureNumLevels(backdrop_texture) - 1u);
+    let level = clamp(lod - BACKDROP_BLUR_LEVEL_SHIFT, 0.0, top);
+    let low = floor(level);
+    let high = min(low + 1.0, top);
+    let blend = level - low;
+    let near = backdrop_bspline_level(uv, low);
+    if blend < 0.001 || high == low {
+        return near;
+    }
+    return mix(near, backdrop_bspline_level(uv, high), blend);
 }
 
 fn sd_ellipse(point: vec2<f32>, radius: vec2<f32>) -> f32 {
@@ -73,6 +117,16 @@ fn smooth_union(left: f32, right: f32, radius: f32) -> f32 {
     let safe_radius = max(radius, 0.0001);
     let blend = clamp(0.5 + 0.5 * (right - left) / safe_radius, 0.0, 1.0);
     return mix(right, left, blend) - safe_radius * blend * (1.0 - blend);
+}
+
+// Shared shape: a rounded rectangle. Two designs cut a plate with it — the
+// liquid drop and the mystic tile — so the SDF lives with the other shape
+// helpers instead of inside one design's block. `point` and `half_size` are in
+// the same unit, `corner` is the radius, clamped to the half size.
+fn sd_rounded_box(point: vec2<f32>, half_size: vec2<f32>, corner: f32) -> f32 {
+    let radius = min(corner, min(half_size.x, half_size.y));
+    let outer = abs(point) - half_size + vec2(radius);
+    return length(max(outer, vec2(0.0))) + min(max(outer.x, outer.y), 0.0) - radius;
 }
 
 fn flower_liquid(pixel_position: vec2<f32>, screen_uv: vec2<f32>) -> vec4<f32> {
@@ -133,14 +187,6 @@ fn flower_liquid(pixel_position: vec2<f32>, screen_uv: vec2<f32>) -> vec4<f32> {
 // assistant pour que `assistant_size` signifie le meme diametre dans tous les modes.
 const INTUITION_LIQUID_SHELL_RADIUS: f32 = 0.84;
 const INTUITION_LIQUID_TAU: f32 = 6.2831853;
-
-// Rectangle arrondi. Sans lui, un panneau — qui est un rectangle, pas un disque —
-// ne pourrait pas etre rendu en liquide autrement qu'en l'ecrasant en ellipse.
-fn intuition_liquid_rounded_box(point: vec2<f32>, half_size: vec2<f32>, corner: f32) -> f32 {
-    let radius = min(corner, min(half_size.x, half_size.y));
-    let outer = abs(point) - half_size + vec2(radius);
-    return length(max(outer, vec2(0.0))) + min(max(outer.x, outer.y), 0.0) - radius;
-}
 
 // Couleur en alpha droit + couverture, pour qu'une goutte puisse etre composee avec
 // ses voisines au lieu d'ecrire directement dans la cible.
@@ -249,7 +295,7 @@ fn intuition_liquid_drop(
             1.0,
             max(drop_shape.x, 1.0) / max(diameter, 1.0)
         );
-        shell_distance = intuition_liquid_rounded_box(
+        shell_distance = sd_rounded_box(
             shell_point,
             half_size,
             max(drop_shape.y, 0.0) / half_diameter
@@ -508,6 +554,193 @@ fn intuition_liquid(pixel_position: vec2<f32>, screen_uv: vec2<f32>) -> vec4<f32
 }
 // --- INTUITION LIQUID — fin --------------------------------------
 
+// --- INTUITION MYSTIC — start -----------------------------------
+// ISOLATED design branch, selected by `material.flower.x` (mode) > 2.5, which must
+// be tested BEFORE `> 1.5` and `> 0.5` in `fragment`. It shares no state with the
+// assistant branch (mode 0), `flower_liquid` (mode 1) or liquid (mode 2): removing
+// this block and its dispatch line is enough to take it out entirely.
+//
+// Same rule as the liquid block: NO design number here. Every setting arrives
+// through a uniform, so render iteration happens in JS without a wasm rebuild
+// (changing this file invalidates the crate through `include_str!`). Only
+// mathematical shape factors remain.
+//
+// A tile is a PLATE that turns, not a flattening: a point of the plate `aside`
+// from its centre is projected by a real perspective division around the eye
+// distance `mystic_style.x` (expressed in tiles, hence independent of tile size).
+// Its two faces are the SAME rectangle: the workspace side while it turns away,
+// the menu side once it has passed the profile position. No extra geometry.
+//
+// A cell detaches from the picture in two halves. The plate takes the piece of
+// image it was cut from with it — sampled at its own unrotated coordinate, so the
+// image stays glued to the plate — and the cell it leaves behind is filled with
+// the menu surface itself: the HOLE. The plate is drawn first and the hole second,
+// because this loop accumulates FRONT-first: what is already in the buffer stays
+// in front, so a plate always covers its own hole while it is flat, and reveals it
+// as it turns.
+const INTUITION_MYSTIC_PI: f32 = 3.14159265;
+// Projection denominator guard: a point of the plate can never reach the eye plane,
+// and the Rust validation already bounds the perspective.
+const INTUITION_MYSTIC_EYE_MIN: f32 = 0.02;
+
+// The menu plate of one cell: the shared system glass, tinted by the family of the
+// rung the tile reached, with the light rim that keeps a plate from reading as a
+// hole in the image. `box_distance` is that cell's own rounded box.
+fn intuition_mystic_plate(box_distance: f32, screen_uv: vec2<f32>, family: vec4<f32>, glass_mix: f32, tint: vec4<f32>) -> vec3<f32> {
+    let border_px = max(material.mystic_style.y, 0.0);
+    let rim_dose = clamp(material.mystic_style.z, 0.0, 1.0);
+    let original = textureSampleLevel(backdrop_texture, backdrop_sampler, screen_uv, 0.0).rgb;
+    let blurred = sample_aligned_mip(screen_uv, material.shape.w);
+    var plate = mix(original, blurred, glass_mix);
+    plate = mix(plate, tint.rgb, tint.a);
+    plate = mix(plate, family.rgb, family.a);
+    let rim = 1.0 - smoothstep(0.0, max(border_px, 0.001), -box_distance);
+    return mix(plate, vec3(1.0), rim_dose * rim);
+}
+
+fn intuition_mystic(pixel_position: vec2<f32>, screen_uv: vec2<f32>) -> vec4<f32> {
+    let declared = i32(round(material.mystic_count.x));
+    if declared <= 0 {
+        return vec4<f32>(0.0, 0.0, 0.0, 0.0);
+    }
+    let count = min(declared, 24);
+    // `mystic_count.y` is the dose of the HOLE: how much of the menu surface fills
+    // the cell a turning plate leaves behind.
+    let hole_dose = clamp(material.mystic_count.y, 0.0, 1.0);
+    let shadow_blur = max(material.mystic_count.z, 1.0);
+    let perspective = max(material.mystic_style.x, 0.5);
+    let border_px = max(material.mystic_style.y, 0.0);
+    let softness = max(material.mystic_style.w, 0.25);
+    // `flower_tint` carries the contact shadow, `assistant_background_tint` the
+    // glass tint: both come from the same tokens as the rest of the product, no
+    // colour is chosen here.
+    let shadow_color = clamp(material.flower_tint.rgb, vec3(0.0), vec3(1.0));
+    let shadow_dose = clamp(material.flower_tint.a, 0.0, 1.0);
+    let tint = clamp(material.assistant_background_tint, vec4(0.0), vec4(1.0));
+    let glass_mix = clamp(material.transition.x, 0.0, 1.0);
+    let surface = max(material.geometry.xy, vec2(1.0));
+
+    var color = vec3(0.0);
+    var alpha = 0.0;
+    for (var index = 0; index < count; index = index + 1) {
+        let tile = material.mystic_tiles[index];
+        if tile.z <= 0.5 { continue; }
+        let half_side = max(tile.z, 1.0);
+        let motion = material.mystic_tile_motion[index];
+        let progress = clamp(motion.x, 0.0, 1.0);
+        // A tile that has not started turning is not part of the menu yet: it
+        // paints nothing at all, so the workspace behind the record is what the
+        // user sees — and nothing is frosted while nothing is moving.
+        if progress <= 0.0 { continue; }
+        let delta = pixel_position - tile.xy;
+        // Bounding box, BEFORE the two `textureSample` calls: a resting tile covers
+        // its own cell, a tile that turns overflows through the perspective division.
+        // The rest of the screen only pays four comparisons.
+        let turning = progress < 1.0;
+        let reach = select(half_side, perspective * half_side * 2.0, turning)
+            + max(shadow_blur, softness) + border_px + 1.0;
+        if abs(delta.x) > reach || abs(delta.y) > reach { continue; }
+
+        // Flip axis: `motion.y` at 0 turns around X (the tile tips up or down), at 1
+        // around Y (left or right). `motion.z` gives the direction: the edge that
+        // rises faces the viewer.
+        let turning_y = motion.y < 0.5;
+        let along = select(delta.x, delta.y, turning_y);
+        let across = select(delta.y, delta.x, turning_y);
+        let cosine = cos(progress * INTUITION_MYSTIC_PI);
+        let sine = sin(progress * INTUITION_MYSTIC_PI) * select(-1.0, 1.0, motion.z >= 0.0);
+        let eye = perspective * half_side * 2.0;
+        let family = clamp(material.mystic_tile_colors[index], vec4(0.0), vec4(1.0));
+
+        // THE PLATE. Inverse projection: for this pixel, the plate coordinate that
+        // projects onto it. A zero denominator means the pixel sits on the profile
+        // line, and a coordinate outside the plate is simply not on it — either way
+        // the cell still has its hole below, so the tile is not skipped.
+        var plate_mask = 0.0;
+        var box_distance = 0.0;
+        var aside = 0.0;
+        var bside = 0.0;
+        // The contact shadow below fades over the distance from this pixel to the
+        // plate's silhouette, so that distance has to be KNOWN even where the pixel
+        // is not on the plate. Reading it as zero outside the plate — the previous
+        // form — made every pixel of the tile's whole `reach` look like it touched
+        // the plate, and one dark rectangle flooded the workspace for as long as the
+        // plate turned. A pixel that never projects onto the plate plane (the
+        // profile line, where the plate stands edge-on) keeps the cell's own
+        // footprint, which is where that plate stands.
+        let footprint_distance = sd_rounded_box(delta, vec2(half_side), clamp(tile.w, 0.0, half_side));
+        var contact_distance = footprint_distance;
+        let denominator = cosine * eye + along * sine;
+        if abs(denominator) > 0.0001 {
+            let candidate_aside = along * eye / denominator;
+            let depth = max(eye - candidate_aside * sine, eye * INTUITION_MYSTIC_EYE_MIN);
+            let candidate_bside = across * depth / eye;
+            contact_distance = sd_rounded_box(
+                vec2(candidate_aside, candidate_bside),
+                vec2(half_side),
+                clamp(tile.w, 0.0, half_side)
+            );
+            if abs(candidate_aside) <= half_side && abs(candidate_bside) <= half_side {
+                aside = candidate_aside;
+                bside = candidate_bside;
+                box_distance = contact_distance;
+                plate_mask = 1.0 - smoothstep(-softness, softness, box_distance);
+            }
+        }
+        if plate_mask > 0.002 {
+            var plate_color = vec3(0.0);
+            if cosine < 0.0 {
+                // MENU side: the shared system surface, tinted by the rung.
+                plate_color = intuition_mystic_plate(box_distance, screen_uv, family, glass_mix, tint);
+            } else {
+                // WORKSPACE side: the piece of image the plate was cut from, still
+                // carried by it — FULLY opaque, so the picture really leaves with
+                // the plate instead of ghosting over the hole. The plate coordinate
+                // IS the source offset, so at rest the sample lands on its own pixel.
+                let source = select(tile.xy + vec2(aside, bside), tile.xy + vec2(bside, aside), turning_y);
+                let source_uv = clamp(
+                    vec2(source.x / surface.x, 1.0 - (source.y / surface.y)),
+                    vec2(0.0),
+                    vec2(1.0)
+                );
+                plate_color = textureSampleLevel(backdrop_texture, backdrop_sampler, source_uv, 0.0).rgb;
+            }
+            let contribution = plate_mask * (1.0 - alpha);
+            color = color * alpha + plate_color * contribution;
+            alpha = alpha + contribution;
+            color = color / max(alpha, 0.001);
+        }
+
+        // Contact shadow, BEHIND the plate and only OUTSIDE it: `(1 - mask)` keeps
+        // it from showing through the menu, and gating it on the sine keeps a tile
+        // lying flat from drawing a grid of halos over the workspace. Drawn after
+        // the plate, so the hole (drawn next) is behind it.
+        let lifted = abs(sine);
+        let shadow_value = (1.0 - smoothstep(0.0, shadow_blur, max(contact_distance, 0.0)))
+            * shadow_dose * (1.0 - plate_mask) * lifted;
+        let shadow_contribution = shadow_value * (1.0 - alpha);
+        color = color * alpha + shadow_color * shadow_contribution;
+        alpha = alpha + shadow_contribution;
+        color = color / max(alpha, 0.001);
+
+        // THE HOLE. The cell's own footprint, filled with the menu plate and laid
+        // flat under the turning plate: this is what the user sees where the plate
+        // used to be, and what makes the cell read as CUT OUT of the workspace.
+        let hole_distance = sd_rounded_box(delta, vec2(half_side), clamp(tile.w, 0.0, half_side));
+        let hole_mask = (1.0 - smoothstep(-softness, softness, hole_distance)) * hole_dose;
+        if hole_mask > 0.002 {
+            let hole_color = intuition_mystic_plate(hole_distance, screen_uv, family, glass_mix, tint);
+            let hole_contribution = hole_mask * (1.0 - alpha);
+            color = color * alpha + hole_color * hole_contribution;
+            alpha = alpha + hole_contribution;
+            color = color / max(alpha, 0.001);
+        }
+    }
+    if alpha < 0.002 { discard; }
+    return vec4(clamp(color, vec3(0.0), vec3(1.0)), clamp(alpha, 0.0, 1.0));
+}
+// --- INTUITION MYSTIC — end --------------------------------------
+
 @fragment
 fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
     let uv = mesh.uv;
@@ -526,8 +759,13 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
         vec2(0.0),
         vec2(1.0)
     );
-    // L'ordre compte : `> 1.5` doit passer avant `> 0.5`, sinon le mode 2
-    // tomberait dans `flower_liquid`. Voir le bloc INTUITION LIQUID ci-dessus.
+    // The order matters: from the MOST SPECIFIC mode to the most general, `> 2.5`,
+    // then `> 1.5`, then `> 0.5`; otherwise mode 3 would fall into the liquid and
+    // mode 2 into `flower_liquid`. See the INTUITION MYSTIC and INTUITION LIQUID
+    // blocks above.
+    if material.flower.x > 2.5 {
+        return intuition_mystic(pixel_position, screen_uv);
+    }
     if material.flower.x > 1.5 {
         return intuition_liquid(pixel_position, screen_uv);
     }

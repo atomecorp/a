@@ -55,7 +55,7 @@ pub fn apply_scene_effects(world: &mut World, patch: AtomeSceneEffectsPatch) -> 
             entity,
             [width, height],
             0.0,
-            AtomeBackdropStyle { blur_px: effect.radius, tint: effect.tint },
+            AtomeBackdropStyle { blur_px: effect.radius, tint: effect.tint, tint_fade: 0.0 },
         )?;
         created.push(entity);
     }

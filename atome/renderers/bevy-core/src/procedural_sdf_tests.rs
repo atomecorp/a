@@ -174,3 +174,57 @@ fn procedural_sdf_flower_mode_uses_one_antialiased_smooth_union_mask() {
     assert!(shader.contains("smoothstep(-edge_softness, edge_softness, distance)"));
     assert!(!shader.contains("flower_copy"));
 }
+
+#[test]
+fn procedural_sdf_mystic_mode_is_one_isolated_turning_tile_branch() {
+    let shader = include_str!("assets/shaders/procedural_sdf.wgsl");
+    // The branch exists, and it is reachable: the dispatch walks from the most
+    // specific mode to the most general one, so mode 3 can never fall through
+    // into the liquid glass and mode 2 can never fall into the corolla.
+    assert!(shader.contains("fn intuition_mystic(pixel_position: vec2<f32>, screen_uv: vec2<f32>)"));
+    let mystic = shader.find("material.flower.x > 2.5").expect("mystic dispatch");
+    let liquid = shader.find("material.flower.x > 1.5").expect("liquid dispatch");
+    let flower = shader.find("material.flower.x > 0.5").expect("flower dispatch");
+    assert!(mystic < liquid && liquid < flower);
+    // Both plates are rounded rectangles, so the SDF is shared instead of
+    // copy-pasted into each design branch. Mystic calls it three times — the
+    // turning plate, the flat hole it leaves in its cell, and the cell's own
+    // footprint, which is the distance the contact shadow fades over when a pixel
+    // never projects onto the plate plane — hence five call sites in all, the
+    // definition included.
+    assert!(shader.contains("fn sd_rounded_box"));
+    assert!(!shader.contains("intuition_liquid_rounded_box"));
+    assert_eq!(shader.matches("sd_rounded_box(").count(), 5);
+    // The contact shadow fades over the distance to the PLATE, never over a
+    // distance that reads as zero off the plate: that is what turned the whole
+    // `reach` of a turning tile into one dark rectangle.
+    assert!(shader.contains("let shadow_value = (1.0 - smoothstep(0.0, shadow_blur, max(contact_distance, 0.0)))"));
+    assert!(!shader.contains("smoothstep(0.0, shadow_blur, max(box_distance, 0.0))"));
+    // The tile turns around a real perspective divide, and its two faces are the
+    // same rectangle: the workspace side reads the plate coordinate as its own
+    // source offset, the menu side reads the shared system glass.
+    assert!(shader.contains("let candidate_aside = along * eye / denominator"));
+    assert!(shader.contains("let candidate_bside = across * depth / eye"));
+    assert!(shader.contains("let source = select(tile.xy + vec2(aside, bside), tile.xy + vec2(bside, aside), turning_y)"));
+    assert!(shader.contains("mix(plate, tint.rgb, tint.a)"));
+    assert!(shader.contains("material.mystic_tile_colors[index]"));
+    assert!(shader.contains("material.mystic_tile_motion[index]"));
+    // The back face carries the workspace WHOLE — no fade gating its opacity — and
+    // the cell it leaves behind is filled with the menu plate: the hole.
+    assert!(shader.contains("plate_color = textureSampleLevel(backdrop_texture, backdrop_sampler, source_uv, 0.0).rgb"));
+    assert!(!shader.contains("back_alpha"));
+    assert!(shader.contains("let hole_distance = sd_rounded_box(delta, vec2(half_side)"));
+    assert!(shader.contains("* hole_dose"));
+    // The contact shadow is occluded by the plate it belongs to, and only a plate
+    // that is really turning carries one.
+    assert!(shader.contains("* shadow_dose * (1.0 - plate_mask) * lifted"));
+    assert!(shader.contains("let lifted = abs(sine)"));
+    // A tile that has not started turning paints nothing at all.
+    assert!(shader.contains("if progress <= 0.0 { continue; }"));
+    // Every mystic uniform is declared, and in the bind group order.
+    let mut order = vec![shader.find("liquid_drop_count: vec4<f32>").expect("liquid drop count")];
+    for field in ["mystic_tiles", "mystic_tile_motion", "mystic_tile_colors", "mystic_count", "mystic_style"] {
+        order.push(shader.find(&format!("{field}:")).expect("mystic uniform"));
+    }
+    assert!(order.windows(2).all(|pair| pair[0] < pair[1]), "mystic uniforms follow liquid_drop_count in order");
+}

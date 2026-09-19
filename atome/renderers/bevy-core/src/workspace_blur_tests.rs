@@ -1,7 +1,7 @@
 use bevy::{
     camera::{visibility::RenderLayers, ClearColorConfig},
     prelude::*,
-    render::render_resource::TextureUsages,
+    render::render_resource::{TextureFormat, TextureUsages},
 };
 
 use crate::{
@@ -55,9 +55,17 @@ fn capture_and_blur_pyramid_are_downscaled_gpu_targets() {
     assert_eq!(image.texture_descriptor.mip_level_count, backdrop_mip_level_count(expected));
     assert!(image.texture_descriptor.usage.contains(TextureUsages::STORAGE_BINDING));
     assert!(image.data.is_none());
+    // A texture that carries `STORAGE_BINDING` may not expose an sRGB view: the
+    // bind group of the mip pass — and of every material that samples the pyramid
+    // — is rejected outright. The whole chain therefore stays linear.
+    assert_eq!(image.texture_descriptor.format, TextureFormat::Rgba8Unorm);
+    assert!(image.texture_descriptor.view_formats.is_empty());
+    assert!(image.texture_view_descriptor.is_none());
     let capture = app.world().resource::<Assets<Image>>().get(&state.capture_image).unwrap();
     assert_eq!(capture.texture_descriptor.mip_level_count, 1);
     assert!(capture.texture_descriptor.usage.contains(TextureUsages::COPY_SRC));
+    assert_eq!(capture.texture_descriptor.format, TextureFormat::Rgba8Unorm);
+    assert!(capture.texture_view_descriptor.is_none());
 }
 
 #[test]

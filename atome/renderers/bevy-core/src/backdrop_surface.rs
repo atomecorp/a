@@ -23,9 +23,12 @@ const BACKDROP_SURFACE_SHADER_HANDLE: Handle<Shader> = uuid_handle!("c7a899e6-7d
 
 #[derive(Clone, Copy, Debug, ShaderType)]
 pub struct BackdropSurfaceUniform {
+    /// x/y: logical size, z: corner radius, w: the record opacity. The glass is
+    /// a visual like any other: at opacity 0 it must vanish, blur and tint both.
     pub size_radius: Vec4,
     pub tint: Vec4,
-    /// x: public logical radius, y: device pixel ratio, z: sampled mip level.
+    /// x: public logical radius, y: device pixel ratio, z: sampled mip level,
+    /// w: tint fade (share of the tint alpha removed at the bottom edge).
     pub blur: Vec4,
 }
 
@@ -72,17 +75,23 @@ fn material_from_contract(
     corner_radius: f32,
     backdrop: Handle<Image>,
     device_pixel_ratio: f32,
+    opacity: f32,
 ) -> BackdropSurfaceMaterial {
     let style = contract.normalized().expect("validated backdrop style");
     BackdropSurfaceMaterial {
         uniform: BackdropSurfaceUniform {
-            size_radius: Vec4::new(logical_size[0].max(1.0), logical_size[1].max(1.0), corner_radius.max(0.0), 0.0),
+            size_radius: Vec4::new(
+                logical_size[0].max(1.0),
+                logical_size[1].max(1.0),
+                corner_radius.max(0.0),
+                opacity.clamp(0.0, 1.0),
+            ),
             tint: Vec4::from_array(style.tint),
             blur: Vec4::new(
                 style.blur_px,
                 device_pixel_ratio,
                 backdrop_blur_lod(style.blur_px, device_pixel_ratio),
-                0.0,
+                style.tint_fade,
             ),
         },
         backdrop,
@@ -105,6 +114,7 @@ pub fn insert_backdrop_surface(
         .get_resource::<crate::types::AtomeBevyRendererConfig>()
         .map(|config| config.device_pixel_ratio)
         .unwrap_or(1.0);
+    let opacity = world.get::<crate::components::AtomeVisualOpacity>(entity).map(|value| value.0).unwrap_or(1.0);
     let mesh = {
         let mut meshes =
             world.get_resource_mut::<Assets<Mesh>>().ok_or_else(|| "bevy_mesh_assets_required".to_string())?;
@@ -114,7 +124,7 @@ pub fn insert_backdrop_surface(
         let mut materials = world
             .get_resource_mut::<Assets<BackdropSurfaceMaterial>>()
             .ok_or_else(|| "bevy_backdrop_surface_assets_required".to_string())?;
-        materials.add(material_from_contract(style, logical_size, corner_radius, backdrop, device_pixel_ratio))
+        materials.add(material_from_contract(style, logical_size, corner_radius, backdrop, device_pixel_ratio, opacity))
     };
     world.entity_mut(entity).insert((
         Mesh2d(mesh),
@@ -183,13 +193,50 @@ pub fn patch_backdrop_surface(world: &mut World, entity: Entity, contract: Atome
         materials.get_mut(&handle).ok_or_else(|| "bevy_backdrop_surface_material_missing".to_string())?;
     material.uniform.tint = Vec4::from_array(style.tint);
     material.uniform.blur =
-        Vec4::new(style.blur_px, device_pixel_ratio, backdrop_blur_lod(style.blur_px, device_pixel_ratio), 0.0);
+        Vec4::new(style.blur_px, device_pixel_ratio, backdrop_blur_lod(style.blur_px, device_pixel_ratio), style.tint_fade);
     Ok(())
+}
+
+/// Follows the record opacity. Returns true when the glass switched between
+/// shown and hidden, so the caller knows the capture camera may toggle.
+pub fn sync_backdrop_surface_opacity(world: &mut World, entity: Entity, opacity: f32) -> bool {
+    let Some(handle) = world.get::<MeshMaterial2d<BackdropSurfaceMaterial>>(entity).map(|material| material.0.clone())
+    else {
+        return false;
+    };
+    let Some(mut materials) = world.get_resource_mut::<Assets<BackdropSurfaceMaterial>>() else {
+        return false;
+    };
+    let Some(mut material) = materials.get_mut(&handle) else {
+        return false;
+    };
+    let next = opacity.clamp(0.0, 1.0);
+    let was_visible = material.uniform.size_radius.w > 0.0;
+    material.uniform.size_radius.w = next;
+    was_visible != (next > 0.0)
 }
 
 pub fn refresh_workspace_backdrop_enabled(world: &mut World) -> Result<(), String> {
     let assistant_count =
         world.query::<&MeshMaterial2d<crate::procedural_sdf::ProceduralSdfMaterial>>().iter(world).count();
-    let surface_count = world.query::<&MeshMaterial2d<BackdropSurfaceMaterial>>().iter(world).count();
-    set_workspace_backdrop_enabled(world, assistant_count + surface_count > 0)
+    // Hidden glass samples nothing: while every system surface is suspended (a
+    // drag strips the chrome) the workspace is no longer captured twice.
+    let visible_surface_count = {
+        let handles: Vec<_> = world
+            .query::<&MeshMaterial2d<BackdropSurfaceMaterial>>()
+            .iter(world)
+            .map(|material| material.0.clone())
+            .collect();
+        let materials = world.get_resource::<Assets<BackdropSurfaceMaterial>>();
+        handles
+            .iter()
+            .filter(|handle| {
+                materials
+                    .and_then(|assets| assets.get(*handle))
+                    .map(|material| material.uniform.size_radius.w > 0.0)
+                    .unwrap_or(true)
+            })
+            .count()
+    };
+    set_workspace_backdrop_enabled(world, assistant_count + visible_surface_count > 0)
 }

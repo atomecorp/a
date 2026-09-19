@@ -129,7 +129,9 @@ test('Molecule clipboard preserves structural roots and Flower opening placement
     assert.match(stateSource, /copies:[\s\S]*root_ids:\s*group\.root_ids/);
     assert.match(pasteSource, /source_to_duplicate[\s\S]*resolveClipboardRootIds[\s\S]*applySelectionBatch/);
     assert.match(flowerItemsSource, /computedExtraInput\.drop_position\s*=\s*\{ x:\s*Number\(point\.x\), y:\s*Number\(point\.y\) \}/);
-    assert.match(flowerTargetSource, /resolveComposedInteractionTarget\(sceneState\?\.scene, hit\?\.atom/);
+    // Le contrat est l'appel compose (scene + atome leve), pas sa mise en page :
+    // l'argument peut passer a la ligne sans que le contrat change.
+    assert.match(flowerTargetSource, /resolveComposedInteractionTarget\(\s*sceneState\?\.scene,\s*hit\?\.atom/);
     assert.match(flowerTargetSource, /projectPoint/);
 });
 

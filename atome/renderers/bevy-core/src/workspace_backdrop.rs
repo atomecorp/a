@@ -38,12 +38,22 @@ pub struct AtomeWorkspaceBackdrop {
     pub pixel_size: UVec2,
 }
 
+/// The workspace capture, and the ONLY colour space of the whole backdrop chain.
+///
+/// It is deliberately created WITHOUT an sRGB view. `blur_pyramid_image` derives
+/// from this image and turns it into a STORAGE texture, and WebGPU refuses an
+/// sRGB view on a texture that carries `STORAGE_BINDING` — creating that view
+/// fails, which made every `ProceduralSdfMaterial` and `BackdropSurfaceMaterial`
+/// bind group invalid and killed the entire presentation frame with no Rust-side
+/// error at all. The capture, the pyramid and the two shaders that sample it now
+/// all speak the same colour space, linear `Rgba8Unorm`: nothing encodes, nothing
+/// decodes, and the mip pass averages real light instead of encoded bytes.
 fn capture_image(width: u32, height: u32) -> Image {
     let mut image = Image::new_target_texture(
         width.max(1),
         height.max(1),
         TextureFormat::Rgba8Unorm,
-        Some(TextureFormat::Rgba8UnormSrgb),
+        None,
     );
     image.texture_descriptor.usage |= TextureUsages::COPY_SRC;
     image.data = None;
@@ -55,6 +65,12 @@ fn blur_pyramid_image(width: u32, height: u32) -> Image {
     image.texture_descriptor.mip_level_count = backdrop_mip_level_count(UVec2::new(width.max(1), height.max(1)));
     image.texture_descriptor.usage =
         TextureUsages::TEXTURE_BINDING | TextureUsages::COPY_DST | TextureUsages::STORAGE_BINDING;
+    // A storage texture can never be viewed as sRGB, and the mip generation writes
+    // every level through that same storage view. The view is therefore pinned to
+    // the texture's own linear format here, in the one place that knows this image
+    // is written by a compute pass.
+    image.texture_descriptor.view_formats = &[];
+    image.texture_view_descriptor = None;
     image.sampler = ImageSampler::Descriptor(ImageSamplerDescriptor::linear());
     image
 }

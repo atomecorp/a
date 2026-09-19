@@ -34,6 +34,11 @@ pub struct ProceduralSdfUniform {
     pub liquid_drops: [Vec4; 24],
     pub liquid_drop_shapes: [Vec4; 24],
     pub liquid_drop_count: Vec4,
+    pub mystic_tiles: [Vec4; 24],
+    pub mystic_tile_motion: [Vec4; 24],
+    pub mystic_tile_colors: [Vec4; 24],
+    pub mystic_count: Vec4,
+    pub mystic_style: Vec4,
 }
 
 #[derive(Asset, TypePath, AsBindGroup, Debug, Clone)]
@@ -140,6 +145,11 @@ fn material_from_contract(
             // Un scalaire seul romprait l'alignement std140 du bloc : on le pousse
             // dans un vec4, comme tous les autres reglages de ce materiau.
             liquid_drop_count: Vec4::new(normalized.liquid_drop_count, 0.0, 0.0, 0.0),
+            mystic_tiles: normalized.mystic_tiles.map(Vec4::from_array),
+            mystic_tile_motion: normalized.mystic_tile_motion.map(Vec4::from_array),
+            mystic_tile_colors: normalized.mystic_tile_colors.map(Vec4::from_array),
+            mystic_count: Vec4::from_array(normalized.mystic_count),
+            mystic_style: Vec4::from_array(normalized.mystic_style),
         },
         backdrop,
     }

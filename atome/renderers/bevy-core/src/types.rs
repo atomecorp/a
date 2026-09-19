@@ -390,6 +390,10 @@ pub struct AtomeTexture {
 pub struct AtomeBackdropStyle {
     pub blur_px: f32,
     pub tint: [f32; 4],
+    /// Share of the tint alpha removed at the bottom edge (0 = uniform tint).
+    /// The hue never changes; the glass only grows clearer downwards.
+    #[serde(default)]
+    pub tint_fade: f32,
 }
 
 impl AtomeBackdropStyle {
@@ -400,6 +404,7 @@ impl AtomeBackdropStyle {
         Some(Self {
             blur_px: self.blur_px.clamp(0.0, 32.0),
             tint: self.tint.map(|value| value.clamp(0.0, 1.0)),
+            tint_fade: if self.tint_fade.is_finite() { self.tint_fade.clamp(0.0, 1.0) } else { 0.0 },
         })
     }
 }

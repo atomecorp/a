@@ -114,6 +114,37 @@ test('Home is a seven-section Bevy composition with the restored nested hierarch
     assert.ok(all.some((entry) => entry.id === 'home_display_source'));
     assert.ok(all.some((entry) => entry.id === 'home_handedness'));
     assert.ok(all.some((entry) => entry.id === 'home_render_style'));
+    // Le reglage de l'espacement des tuiles Mystic, a cote de celui de l'arrondi :
+    // les deux ne se lisent que quand le menu mystique est le style de rendu, mais
+    // le panneau les presente toujours, comme l'arrondi.
+    assert.ok(all.some((entry) => entry.id === 'home_mystic_gap'));
+    // Le reglage de la duree d'ouverture, monte par le VRAI panneau (donc avec son
+    // propre runtime de champ numerique, celui de Taille et Couleur) : il se lit
+    // sous l'arrondi et l'espace, et avant la taxonomie.
+    const timed = flatten(homeSurface.buildContent(
+        { ...state, expanded: 'preferences' }, { emit: () => {}, bodyWidth: 452 }
+    ));
+    const timedIds = timed.map((entry) => entry.id);
+    const gapIndex = timedIds.indexOf('home_mystic_gap');
+    const timingIndex = timedIds.indexOf('home_mystic_timing');
+    const taxonomyIndex = timedIds.indexOf('home_navigation_taxonomy');
+    assert.ok(gapIndex >= 0 && timingIndex >= 0 && taxonomyIndex >= 0, 'le champ du timing est monte');
+    assert.ok(gapIndex < timingIndex && timingIndex < taxonomyIndex,
+        'le timing se lit apres l\'espace des tuiles et avant la taxonomie');
+    ['home_mystic_timing_title', 'home_mystic_timing_label', 'home_mystic_timing_decrement',
+        'home_mystic_timing_input', 'home_mystic_timing_increment', 'home_mystic_timing_unit']
+        .forEach((id) => assert.ok(timedIds.includes(id), id));
+    // Le champ affiche la valeur STOCKEE (defaut 2 s), et il est saisissable : le
+    // pas a pas et la saisie sont ceux du composant standard, pas une variante.
+    const timingInput = timed.find((entry) => entry.id === 'home_mystic_timing_input');
+    assert.equal(timingInput.kind, 'number_input');
+    assert.equal(timed.find((entry) => entry.id === 'home_mystic_timing_input_text').text, '2');
+    assert.equal(timed.find((entry) => entry.id === 'home_mystic_timing_unit').text, 's');
+    assert.equal(typeof timingInput.on.press, 'function');
+    assert.equal(typeof timingInput.on.focus, 'function');
+    assert.equal(typeof timingInput.on.drag, 'function');
+    assert.equal(typeof timed.find((entry) => entry.id === 'home_mystic_timing_increment').on.activate, 'function');
+    assert.equal(typeof timed.find((entry) => entry.id === 'home_mystic_timing_decrement').on.activate, 'function');
     assert.ok(all.some((entry) => entry.id === 'home_navigation_taxonomy'));
     assert.equal(flatten(buildHomeContent({ ...state, expanded: 'bio' }, { emit: () => {}, bodyWidth: 452, editing }))
         .some((entry) => entry.id === 'home_navigation_taxonomy'), false);
@@ -126,8 +157,28 @@ test('Home is a seven-section Bevy composition with the restored nested hierarch
 
 test('menu rendering stays flat and the legacy taxonomy is the profile default', () => {
     assert.deepEqual(normalizeVisualPreferences({}), {
-        handedness: 'right', renderStyle: 'flat', navigationTaxonomy: 'legacy', liquidTheme: 'eau'
+        handedness: 'right', renderStyle: 'flat', navigationTaxonomy: 'legacy', liquidTheme: 'eau',
+        mysticRoundness: 1, mysticTileGap: 1, mysticOpeningMs: 2000
     });
+    // The three menu surface renderers are canonical values; an unknown style falls
+    // back to `flat`, so no profile can ask for a renderer that does not exist.
+    assert.equal(normalizeVisualPreferences({ renderStyle: 'liquid' }).renderStyle, 'liquid');
+    assert.equal(normalizeVisualPreferences({ renderStyle: 'mystic' }).renderStyle, 'mystic');
+    assert.equal(normalizeVisualPreferences({ renderStyle: 'hologram' }).renderStyle, 'flat');
+    assert.equal(normalizeVisualPreferences({ mysticRoundness: 0.5 }).mysticRoundness, 0.5);
+    assert.equal(normalizeVisualPreferences({ mysticRoundness: 'unsupported' }).mysticRoundness, 1);
+    // L'espace entre les tuiles: jamais sous 1 px, meme demande explicitement.
+    assert.equal(normalizeVisualPreferences({ mysticTileGap: 3 }).mysticTileGap, 3);
+    assert.equal(normalizeVisualPreferences({ mysticTileGap: 0 }).mysticTileGap, 1);
+    assert.equal(normalizeVisualPreferences({ mysticTileGap: 400 }).mysticTileGap, 12);
+    // Le timing d'ouverture du menu Mystique: la preference est en millisecondes,
+    // bornee entre 0,3 s et 6 s. Un menu instantane n'est plus une cascade, et
+    // au-dela de 6 s l'attente n'est plus une ouverture.
+    assert.equal(normalizeVisualPreferences({ mysticOpeningMs: 300 }).mysticOpeningMs, 300);
+    assert.equal(normalizeVisualPreferences({ mysticOpeningMs: 6000 }).mysticOpeningMs, 6000);
+    assert.equal(normalizeVisualPreferences({ mysticOpeningMs: 100 }).mysticOpeningMs, 300);
+    assert.equal(normalizeVisualPreferences({ mysticOpeningMs: 9000 }).mysticOpeningMs, 6000);
+    assert.equal(normalizeVisualPreferences({ mysticOpeningMs: 'x' }).mysticOpeningMs, 2000);
     assert.equal(normalizeVisualPreferences({ navigationTaxonomy: 'modern' }).navigationTaxonomy, 'modern');
     assert.equal(normalizeVisualPreferences({ navigationTaxonomy: 'unsupported' }).navigationTaxonomy, 'legacy');
 });

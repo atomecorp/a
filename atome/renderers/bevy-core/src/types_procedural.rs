@@ -78,6 +78,26 @@ pub struct AtomeProceduralSdf {
     pub liquid_drop_shapes: [[f32; 4]; 24],
     #[serde(default)]
     pub liquid_drop_count: f32,
+    // The MYSTIC TILES, deliberately kept apart from the style: `mystic_tiles`
+    // carries the geometry OWNED by each one — `[centerX, centerY, half side, corner
+    // radius]` —, `mystic_tile_motion` its flip `[progress, axis, direction,
+    // -]`, and `mystic_tile_colors` the family of the tile it reached
+    // `[R, G, B, dose]`. Three arrays rather than one of 48: for the same reason as
+    // the drops, the split states by itself what belongs to the tile alone.
+    #[serde(default)]
+    pub mystic_tiles: [[f32; 4]; 24],
+    #[serde(default)]
+    pub mystic_tile_motion: [[f32; 4]; 24],
+    #[serde(default)]
+    pub mystic_tile_colors: [[f32; 4]; 24],
+    // `[tile count, hole dose, shadow blur, -]`. The hole is the menu plate laid
+    // flat in the cell a turning tile leaves behind; the dose is how opaque it is.
+    #[serde(default)]
+    pub mystic_count: [f32; 4],
+    // `[perspective in tiles, rim thickness, rim dose, edge softness
+    // in pixels]`.
+    #[serde(default)]
+    pub mystic_style: [f32; 4],
 }
 
 fn default_reveal() -> f32 { 1.0 }
@@ -159,6 +179,39 @@ impl AtomeProceduralSdf {
                 finite_or(shape[3], 0.0),
             ]),
             liquid_drop_count: finite_or(self.liquid_drop_count, 0.0).clamp(0.0, 24.0),
+            // One mystic tile: its box, its flip and its family. The cap
+            // is the same as the shader's, so an extra tile is ignored
+            // rather than written past the array.
+            mystic_tiles: self.mystic_tiles.map(|tile| [
+                finite_or(tile[0], 0.0),
+                finite_or(tile[1], 0.0),
+                finite_or(tile[2], 0.0).max(0.0),
+                finite_or(tile[3], 0.0).max(0.0),
+            ]),
+            mystic_tile_motion: self.mystic_tile_motion.map(|motion| [
+                finite_or(motion[0], 0.0).clamp(0.0, 1.0),
+                finite_or(motion[1], 0.0).clamp(0.0, 1.0),
+                if finite_or(motion[2], 1.0) < 0.0 { -1.0 } else { 1.0 },
+                finite_or(motion[3], 0.0),
+            ]),
+            mystic_tile_colors: self.mystic_tile_colors.map(|color| [
+                finite_or(color[0], 0.0).clamp(0.0, 1.0),
+                finite_or(color[1], 0.0).clamp(0.0, 1.0),
+                finite_or(color[2], 0.0).clamp(0.0, 1.0),
+                finite_or(color[3], 0.0).clamp(0.0, 1.0),
+            ]),
+            mystic_count: [
+                finite_or(self.mystic_count[0], 0.0).clamp(0.0, 24.0),
+                finite_or(self.mystic_count[1], 0.0).clamp(0.0, 1.0),
+                finite_or(self.mystic_count[2], 0.0).clamp(0.0, 64.0),
+                0.0,
+            ],
+            mystic_style: [
+                finite_or(self.mystic_style[0], 2.5).clamp(0.5, 8.0),
+                finite_or(self.mystic_style[1], 1.2).clamp(0.0, 8.0),
+                finite_or(self.mystic_style[2], 0.5).clamp(0.0, 1.0),
+                finite_or(self.mystic_style[3], 0.6).clamp(0.25, 8.0),
+            ],
             flower_petals: self.flower_petals.map(|petal| [
                 finite_or(petal[0], 0.0),
                 finite_or(petal[1], 0.0),

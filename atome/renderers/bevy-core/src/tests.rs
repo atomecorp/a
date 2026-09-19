@@ -172,7 +172,7 @@ fn backdrop_fixture_keeps_text_and_image_in_capture_and_large_glass_circle_in_pr
         clip_rect: None,
         corner_radius: 170.0,
         corner_radii: None,
-        backdrop: Some(AtomeBackdropStyle { blur_px: 12.0, tint: [0.36, 0.4, 0.47, 0.58] }),
+        backdrop: Some(AtomeBackdropStyle { blur_px: 12.0, tint: [0.36, 0.4, 0.47, 0.58], tint_fade: 0.3 }),
         presentation: true,
         ..shape_node("backdrop_fixture_circle")
     };
@@ -196,6 +196,10 @@ fn backdrop_fixture_keeps_text_and_image_in_capture_and_large_glass_circle_in_pr
         .unwrap();
     assert_eq!(material.uniform.size_radius.z, 170.0);
     assert_eq!(material.uniform.blur.z, crate::workspace_blur::backdrop_blur_lod(12.0, 1.0));
+    // The tint fade reaches the shader untouched, and is clamped like the tint.
+    assert_eq!(material.uniform.blur.w, 0.3);
+    let excessive = AtomeBackdropStyle { blur_px: 8.0, tint: [0.0, 0.0, 0.0, 0.5], tint_fade: 4.0 };
+    assert_eq!(excessive.normalized().unwrap().tint_fade, 1.0);
     let circle_layers = app.world().get::<bevy::camera::visibility::RenderLayers>(circle_entity).unwrap();
     assert!(circle_layers.intersects(&bevy::camera::visibility::RenderLayers::layer(
         crate::workspace_backdrop::FLOWER_PRESENTATION_LAYER,
@@ -238,7 +242,7 @@ fn backdrop_fixture_keeps_text_and_image_in_capture_and_large_glass_circle_in_pr
 #[test]
 fn backdrop_style_patch_updates_the_resident_material_without_reallocation() {
     let glass = AtomeRenderNode {
-        backdrop: Some(AtomeBackdropStyle { blur_px: 9.0, tint: [0.03, 0.06, 0.09, 0.52] }),
+        backdrop: Some(AtomeBackdropStyle { blur_px: 9.0, tint: [0.03, 0.06, 0.09, 0.52], tint_fade: 0.0 }),
         presentation: true,
         ..shape_node("backdrop_patch_fixture")
     };
@@ -264,7 +268,7 @@ fn backdrop_style_patch_updates_the_resident_material_without_reallocation() {
             id: "backdrop_patch_fixture".to_string(),
             color: None,
             shadow: None,
-            backdrop: Some(Some(AtomeBackdropStyle { blur_px: 18.0, tint: [0.24, 0.29, 0.37, 1.0] })),
+            backdrop: Some(Some(AtomeBackdropStyle { blur_px: 18.0, tint: [0.24, 0.29, 0.37, 1.0], tint_fade: 0.0 })),
             selected: None,
             opacity: None,
             playback_progress: None,
@@ -292,6 +296,61 @@ fn backdrop_style_patch_updates_the_resident_material_without_reallocation() {
     );
     assert_eq!(app.world().resource::<Assets<Mesh>>().len(), mesh_count);
     assert_eq!(app.world().resource::<Assets<Image>>().len(), image_count);
+}
+
+#[test]
+fn backdrop_glass_follows_record_opacity_and_releases_the_capture_when_hidden() {
+    let glass = AtomeRenderNode {
+        backdrop: Some(AtomeBackdropStyle { blur_px: 18.0, tint: [0.0, 0.0, 0.0, 0.84], tint_fade: 0.0 }),
+        presentation: true,
+        ..shape_node("backdrop_opacity_fixture")
+    };
+    let mut app = App::new();
+    app.add_plugins(AtomeBevyRendererPlugin::new(AtomeBevyRendererConfig::new(
+        640.0,
+        480.0,
+        AtomeRenderScene { nodes: vec![glass], effects: Vec::new(), selection_style: None },
+    )));
+    app.update();
+
+    let entity = app.world().resource::<AtomeEntityTable>().by_id["backdrop_opacity_fixture"];
+    let handle =
+        app.world().get::<MeshMaterial2d<crate::backdrop_surface::BackdropSurfaceMaterial>>(entity).unwrap().0.clone();
+    let opacity_of = |app: &App| {
+        app.world()
+            .resource::<Assets<crate::backdrop_surface::BackdropSurfaceMaterial>>()
+            .get(&handle)
+            .unwrap()
+            .uniform
+            .size_radius
+            .w
+    };
+    let capture_active = |app: &App| {
+        let camera = app.world().resource::<crate::workspace_backdrop::AtomeWorkspaceBackdrop>().camera;
+        app.world().get::<Camera>(camera).unwrap().is_active
+    };
+    assert_eq!(opacity_of(&app), 1.0);
+    assert!(capture_active(&app));
+
+    let patch = |opacity: f32| AtomeStylePatch {
+        id: "backdrop_opacity_fixture".to_string(),
+        color: None,
+        shadow: None,
+        backdrop: None,
+        selected: None,
+        opacity: Some(opacity),
+        playback_progress: None,
+        filters: None,
+        transition: None,
+        procedural: None,
+    };
+    apply_style(app.world_mut(), patch(0.0)).unwrap();
+    assert_eq!(opacity_of(&app), 0.0);
+    assert!(!capture_active(&app), "hidden glass must not keep the workspace capture running");
+
+    apply_style(app.world_mut(), patch(1.0)).unwrap();
+    assert_eq!(opacity_of(&app), 1.0);
+    assert!(capture_active(&app));
 }
 
 #[test]
@@ -373,6 +432,7 @@ fn backdrop_clip_crops_the_resident_mesh_without_stretching_or_accumulating_asse
         backdrop: Some(AtomeBackdropStyle {
             blur_px: 12.0,
             tint: [0.2, 0.3, 0.4, 0.5],
+            tint_fade: 0.0,
         }),
         ..shape_node("clipped_backdrop")
     };

@@ -4,7 +4,9 @@ use crate::workspace_backdrop::resize_workspace_backdrop;
 use crate::workspace_blur::refresh_backdrop_blur_metrics;
 use crate::{
     backdrop_blur::apply_scene_effects,
-    backdrop_surface::{patch_backdrop_surface, refresh_workspace_backdrop_enabled, resize_backdrop_surface},
+    backdrop_surface::{
+        patch_backdrop_surface, refresh_workspace_backdrop_enabled, resize_backdrop_surface, sync_backdrop_surface_opacity,
+    },
     background::{apply_surface_background, resize_surface_background},
     clip::apply_entity_clip,
     procedural_sdf::{patch_procedural_sdf, resize_procedural_sdf},
@@ -272,6 +274,9 @@ pub fn apply_style(world: &mut World, patch: AtomeStylePatch) -> Result<(), Stri
             video.opacity = normalized_opacity;
         }
         sync_shape_shadow_overlay_opacity(world, entity, normalized_opacity);
+        if sync_backdrop_surface_opacity(world, entity, normalized_opacity) {
+            refresh_workspace_backdrop_enabled(world)?;
+        }
     }
     if let Some(filters) = patch.filters {
         if let Some(mut video) = world.get_mut::<crate::video_external_texture::AtomeVideoExternalTexture>(entity) {
