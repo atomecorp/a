@@ -297,7 +297,10 @@ app_gpt() {
   echo "Desktop app back on ChatGPT (${model:-default model}). Quit the app (Cmd+Q) and reopen it."
 }
 
-case "${1:-}" in
+# Commands are case-insensitive (deepSeek == deepseek). macOS bash 3.2 has no ${1,,}.
+COMMAND="$(printf '%s' "${1:-}" | tr '[:upper:]' '[:lower:]')"
+
+case "$COMMAND" in
   # Plain names switch config.toml (read by the desktop app AND the CLI).
   gpt|openai|app-gpt|app-openai)
     app_gpt
