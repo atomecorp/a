@@ -5,6 +5,7 @@ This directory contains active Atome framework contracts and platform/API refere
 Primary framework contracts:
 
 - atome_structur_to_respect.md: canonical Atome ownership and rendering separation.
+- [deepseek_delegation.md](deepseek_delegation.md): guarded task delegation to DeepSeek from ChatGPT/Codex.
 - bevy_integration.md: shared Bevy/WebGPU rendering integration.
 - security_architecture.md and sync_protocol.md: security and synchronization contracts.
 - CRUD_apis.md, AI.md, and tools_api_and_coding.md: mutation, AI, and tool interfaces.
