@@ -37,6 +37,10 @@ struct ProceduralSdfUniform {
 @group(#{MATERIAL_BIND_GROUP}) @binding(0) var<uniform> material: ProceduralSdfUniform;
 @group(#{MATERIAL_BIND_GROUP}) @binding(1) var backdrop_texture: texture_2d<f32>;
 @group(#{MATERIAL_BIND_GROUP}) @binding(2) var backdrop_sampler: sampler;
+@group(#{MATERIAL_BIND_GROUP}) @binding(3) var menu_front: texture_2d<f32>;
+@group(#{MATERIAL_BIND_GROUP}) @binding(4) var menu_front_sampler: sampler;
+@group(#{MATERIAL_BIND_GROUP}) @binding(5) var menu_face: texture_2d<f32>;
+@group(#{MATERIAL_BIND_GROUP}) @binding(6) var menu_face_sampler: sampler;
 
 const BACKDROP_BLUR_LEVEL_SHIFT: f32 = 0.4;
 
@@ -691,7 +695,11 @@ fn intuition_mystic(pixel_position: vec2<f32>, screen_uv: vec2<f32>) -> vec4<f32
             var plate_color = vec3(0.0);
             if cosine < 0.0 {
                 // MENU side: the shared system surface, tinted by the rung.
-                plate_color = intuition_mystic_plate(box_distance, screen_uv, family, glass_mix, tint);
+                let source = select(tile.xy + vec2(-aside, bside), tile.xy + vec2(bside, -aside), turning_y);
+                let face_uv = vec2(source.x / surface.x, 1.0 - source.y / surface.y);
+                let content = textureSampleLevel(menu_face, menu_face_sampler, face_uv, 0.0);
+                plate_color = intuition_mystic_plate(box_distance, face_uv, family, glass_mix, tint);
+                plate_color = mix(plate_color, content.rgb / max(content.a, 0.001), content.a);
             } else {
                 // WORKSPACE side: the piece of image the plate was cut from, still
                 // carried by it — FULLY opaque, so the picture really leaves with
@@ -703,7 +711,7 @@ fn intuition_mystic(pixel_position: vec2<f32>, screen_uv: vec2<f32>) -> vec4<f32
                     vec2(0.0),
                     vec2(1.0)
                 );
-                plate_color = textureSampleLevel(backdrop_texture, backdrop_sampler, source_uv, 0.0).rgb;
+                plate_color = textureSampleLevel(menu_front, menu_front_sampler, source_uv, 0.0).rgb;
             }
             let contribution = plate_mask * (1.0 - alpha);
             color = color * alpha + plate_color * contribution;
@@ -729,7 +737,7 @@ fn intuition_mystic(pixel_position: vec2<f32>, screen_uv: vec2<f32>) -> vec4<f32
         let hole_distance = sd_rounded_box(delta, vec2(half_side), clamp(tile.w, 0.0, half_side));
         let hole_mask = (1.0 - smoothstep(-softness, softness, hole_distance)) * hole_dose;
         if hole_mask > 0.002 {
-            let hole_color = intuition_mystic_plate(hole_distance, screen_uv, family, glass_mix, tint);
+            let hole_color = mix(tint.rgb, family.rgb, family.a);
             let hole_contribution = hole_mask * (1.0 - alpha);
             color = color * alpha + hole_color * hole_contribution;
             alpha = alpha + hole_contribution;

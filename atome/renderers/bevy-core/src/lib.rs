@@ -1,3 +1,4 @@
+pub mod mystic_capture;
 pub mod backdrop_blur;
 pub mod backdrop_surface;
 pub mod background;

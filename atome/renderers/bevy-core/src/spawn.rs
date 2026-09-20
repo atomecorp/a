@@ -354,6 +354,12 @@ pub fn spawn_node_with_texture_handle(
             crate::workspace_backdrop::FLOWER_PRESENTATION_LAYER,
         ));
     }
+    if node.menu_plane > 0 {
+        world.entity_mut(entity).insert(bevy::camera::visibility::RenderLayers::layer(
+            if node.menu_plane == 1 { crate::mystic_capture::MENU_FACE_LAYER }
+            else { crate::mystic_capture::MENU_OVERLAY_LAYER },
+        ));
+    }
     if let Some(texture) = &node.texture {
         if let Err(error) = crate::animated_png::install_animation(world, entity, texture) {
             world.despawn(entity);

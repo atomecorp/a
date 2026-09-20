@@ -30,6 +30,7 @@ fn video_node(id: &str) -> AtomeRenderNode {
         shadow: None,
         backdrop: None,
         presentation: false,
+        menu_plane: 0,
         color: Some([0.1, 0.2, 0.3, 1.0]),
         text: None,
         source: Some("/fixtures/video.mp4".to_string()),

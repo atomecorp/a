@@ -20,6 +20,7 @@ fn textured_image_node(id: &str) -> AtomeRenderNode {
         shadow: None,
         backdrop: None,
         presentation: false,
+        menu_plane: 0,
         color: None,
         text: None,
         source: Some("data:image/png;base64,fixture".to_string()),

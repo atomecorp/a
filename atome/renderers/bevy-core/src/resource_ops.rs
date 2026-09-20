@@ -99,6 +99,7 @@ pub fn apply_resource(world: &mut World, patch: AtomeResourcePatch) -> Result<()
             shadow: None,
             backdrop: None,
             presentation: false,
+            menu_plane: 0,
             color: None,
             text: None,
             source,

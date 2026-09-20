@@ -48,6 +48,12 @@ pub struct ProceduralSdfMaterial {
     #[texture(1)]
     #[sampler(2)]
     pub backdrop: Handle<Image>,
+    #[texture(3)]
+    #[sampler(4)]
+    pub menu_front: Handle<Image>,
+    #[texture(5)]
+    #[sampler(6)]
+    pub menu_face: Handle<Image>,
 }
 
 impl Material2d for ProceduralSdfMaterial {
@@ -151,6 +157,8 @@ fn material_from_contract(
             mystic_count: Vec4::from_array(normalized.mystic_count),
             mystic_style: Vec4::from_array(normalized.mystic_style),
         },
+        menu_front: backdrop.clone(),
+        menu_face: backdrop.clone(),
         backdrop,
     }
 }
@@ -187,7 +195,9 @@ pub fn insert_procedural_sdf(
     world.entity_mut(entity).insert((
         Mesh2d(mesh),
         MeshMaterial2d(material),
-        bevy::camera::visibility::RenderLayers::layer(FLOWER_PRESENTATION_LAYER),
+        bevy::camera::visibility::RenderLayers::layer(if normalized.mode > 2.5 {
+            crate::mystic_capture::MENU_OVERLAY_LAYER
+        } else { FLOWER_PRESENTATION_LAYER }),
     ));
     set_workspace_backdrop_enabled(world, true)?;
     Ok(())
@@ -223,6 +233,10 @@ pub fn patch_procedural_sdf(world: &mut World, entity: Entity, contract: AtomePr
     let backdrop = material.backdrop.clone();
     let mut optics = material.uniform.optics;
     optics.x = normalized.lens_refraction_px * device_pixel_ratio.max(1.0);
+    let front = material.menu_front.clone();
+    let face = material.menu_face.clone();
     *material = material_from_contract(normalized, backdrop, optics, device_pixel_ratio);
+    material.menu_front = front;
+    material.menu_face = face;
     Ok(())
 }

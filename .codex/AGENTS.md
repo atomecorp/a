@@ -215,3 +215,44 @@ Minimum mandatory takeaways:
 - Remove dead, duplicated, obsolete, temporary, and unnecessary code from the touched scope when dependency checks make removal safe.
 - Update maps when ownership, API, design, rendering, or structure changes.
 - Validate with the narrowest relevant executable check first, then widen only when needed.
+
+
+<!-- ATOME_DEEPSEEK_DELEGATION_START -->
+## DeepSeek delegation
+
+Keep the current ChatGPT/Codex model as the main orchestrator. Delegate to DeepSeek only when the user explicitly requests it.
+
+Delegation command:
+
+    printf '%s\n' "<self-contained task + plan + constraints>" | ./scripts/deepseek_delegation_from_GPT.sh run [options]
+
+Translate the user's requested DeepSeek intelligence level as follows:
+- "léger", "faible", "low" -> `--level low`
+- "moyen", "medium" -> `--level high` (DeepSeek maps medium to high)
+- "élevé", "fort", "high" -> `--level high`
+- "maximum", "max", "ultra" -> `--level max`
+
+Translate model requests as follows:
+- "DeepSeek Flash" -> `--model flash`
+- "DeepSeek Pro" -> `--model pro`
+
+Convenient presets:
+- "DeepSeek rapide" -> `--preset fast`
+- "DeepSeek normal" -> `--preset normal`
+- "DeepSeek fort" -> `--preset strong`
+- "DeepSeek maximum" -> `--preset maximum`
+
+If no level/model is requested, use the script's saved defaults.
+
+Procedure:
+1. Build a self-contained delegation prompt containing the user's task, relevant approved plan, constraints, and file scope.
+2. Invoke the script from the project root with the appropriate flags.
+3. Wait for completion in the current turn.
+4. Inspect DeepSeek's modifications/diff yourself.
+5. Run relevant checks when practical.
+6. Report the result and any verification issue in the same Codex conversation.
+
+Do not switch the main GUI conversation away from ChatGPT/OpenAI. DeepSeek is a delegated worker only.
+Do not delegate unless the user explicitly requests DeepSeek or the active project instructions explicitly require it.
+<!-- ATOME_DEEPSEEK_DELEGATION_END -->
+

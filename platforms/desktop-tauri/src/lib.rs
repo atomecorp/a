@@ -15,6 +15,18 @@ use tauri::{Manager, State};
 
 const TAURI_LOCAL_HTTP_PORT: u16 = 3000;
 const TAURI_LOCAL_HTTP_URL: &str = "http://127.0.0.1:3000/";
+const TAURI_LOCAL_HTTP_WAIT_SECS: u64 = 120;
+// Un ecran vide ne dit rien. Celui-ci nomme la panne : le serveur local n'a pas
+// demarre, l'application n'est donc pas chargee — et aucune donnee n'est perdue.
+const TAURI_LOCAL_HTTP_FAILURE_SCRIPT: &str = concat!(
+    "(function(){var b=document.createElement('div');",
+    "b.setAttribute('data-role','atome-local-server-failure');",
+    "b.style.cssText='position:fixed;inset:0;z-index:2147483647;display:flex;align-items:center;justify-content:center;",
+    "padding:32px;background:#1b0d1f;color:#f6eaf8;font:16px/1.5 system-ui,sans-serif;text-align:center';",
+    "b.textContent='Le serveur local (port 3000) n a pas demarre : l application n est pas chargee. ",
+    "Vos donnees sont intactes. Consultez la console du terminal pour la cause, puis relancez.';",
+    "document.body.appendChild(b);})();"
+);
 const TAURI_RUNTIME_INIT_SCRIPT: &str = concat!(
     "window.__SQUIRREL_FORCE_TAURI_RUNTIME__=true;",
     "window.__ATOME_LOCAL_HTTP_PORT__=3000;",
@@ -303,11 +315,36 @@ pub fn run() {
             let navigation_handle = app.handle().clone();
             std::thread::spawn(move || {
                 let address = std::net::SocketAddr::from(([127, 0, 0, 1], TAURI_LOCAL_HTTP_PORT));
-                if !local_http_navigation::wait_for_local_http(
-                    address,
-                    std::time::Duration::from_secs(15),
-                ) {
-                    eprintln!("[tauri] Local Axum server was not ready within 15 seconds");
+                // La fenetre demarre sur l'URL de developpement ; elle n'est renvoyee
+                // vers Axum qu'une fois celui-ci pret. Abandonner au bout de 15 s la
+                // laissait sur ce port : les modules y sont servis en HTML, eVe ne
+                // montait jamais, et l'utilisateur voyait une fenetre vide avec des
+                // erreurs CORS trompeuses. On attend donc plus longtemps, et l'echec
+                // se DIT a l'ecran au lieu de se taire.
+                let mut waited_secs = 0u64;
+                let mut ready = false;
+                while waited_secs < TAURI_LOCAL_HTTP_WAIT_SECS {
+                    if local_http_navigation::wait_for_local_http(
+                        address,
+                        std::time::Duration::from_secs(5),
+                    ) {
+                        ready = true;
+                        break;
+                    }
+                    waited_secs += 5;
+                    eprintln!(
+                        "[tauri] Local Axum server not ready after {}s (port {})",
+                        waited_secs, TAURI_LOCAL_HTTP_PORT
+                    );
+                }
+                if !ready {
+                    eprintln!(
+                        "[tauri] Local Axum server never answered on port {}",
+                        TAURI_LOCAL_HTTP_PORT
+                    );
+                    if let Some(win) = navigation_handle.get_webview_window("main") {
+                        let _ = win.eval(TAURI_LOCAL_HTTP_FAILURE_SCRIPT);
+                    }
                     return;
                 }
                 let Some(win) = navigation_handle.get_webview_window("main") else {

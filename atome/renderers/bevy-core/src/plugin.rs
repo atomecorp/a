@@ -45,6 +45,7 @@ impl Plugin for AtomeBevyRendererPlugin {
             .init_resource::<Time<Real>>()
             .init_non_send::<crate::animated_png::PngAnimations>()
             .add_systems(Update, crate::animated_png::advance_animations)
+            .add_systems(PostUpdate, crate::mystic_capture::sync_menu_capture)
             .add_systems(Startup, spawn_atome_bevy_scene);
     }
 }
@@ -67,7 +68,7 @@ fn spawn_atome_bevy_scene(
         // power draw on mobile GPUs at a device pixel ratio of 3.
         Msaa::Off,
         atome_camera_projection(config.width, config.height),
-        bevy::camera::visibility::RenderLayers::layer(WORKSPACE_CAPTURE_LAYER).with(FLOWER_PRESENTATION_LAYER),
+        bevy::camera::visibility::RenderLayers::layer(WORKSPACE_CAPTURE_LAYER).with(FLOWER_PRESENTATION_LAYER).with(crate::mystic_capture::MENU_OVERLAY_LAYER),
         AtomePresentationCamera,
     ));
     for node in &config.initial_scene.nodes {

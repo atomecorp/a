@@ -204,7 +204,7 @@ impl AtomeProceduralSdf {
                 finite_or(self.mystic_count[0], 0.0).clamp(0.0, 24.0),
                 finite_or(self.mystic_count[1], 0.0).clamp(0.0, 1.0),
                 finite_or(self.mystic_count[2], 0.0).clamp(0.0, 64.0),
-                0.0,
+                finite_or(self.mystic_count[3], 0.0).max(0.0),
             ],
             mystic_style: [
                 finite_or(self.mystic_style[0], 2.5).clamp(0.5, 8.0),

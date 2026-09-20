@@ -21,6 +21,7 @@ fn shape_node(id: &str) -> AtomeRenderNode {
         shadow: None,
         backdrop: None,
         presentation: false,
+        menu_plane: 0,
         color: Some([0.1, 0.2, 0.3, 1.0]),
         text: None,
         source: None,
@@ -54,6 +55,7 @@ fn text_node_with_texture(id: &str) -> AtomeRenderNode {
         shadow: None,
         backdrop: None,
         presentation: false,
+        menu_plane: 0,
         color: Some([1.0, 1.0, 1.0, 1.0]),
         text: Some("Sharp".to_string()),
         source: None,
@@ -144,6 +146,7 @@ fn backdrop_fixture_keeps_text_and_image_in_capture_and_large_glass_circle_in_pr
         shadow: None,
         backdrop: None,
         presentation: false,
+        menu_plane: 0,
         color: Some([1.0, 1.0, 1.0, 1.0]),
         text: None,
         source: Some("fixture://image".to_string()),
@@ -174,6 +177,7 @@ fn backdrop_fixture_keeps_text_and_image_in_capture_and_large_glass_circle_in_pr
         corner_radii: None,
         backdrop: Some(AtomeBackdropStyle { blur_px: 12.0, tint: [0.36, 0.4, 0.47, 0.58], tint_fade: 0.3 }),
         presentation: true,
+        menu_plane: 0,
         ..shape_node("backdrop_fixture_circle")
     };
     let scene = AtomeRenderScene { nodes: vec![image, text, circle], effects: Vec::new(), selection_style: None };
@@ -244,6 +248,7 @@ fn backdrop_style_patch_updates_the_resident_material_without_reallocation() {
     let glass = AtomeRenderNode {
         backdrop: Some(AtomeBackdropStyle { blur_px: 9.0, tint: [0.03, 0.06, 0.09, 0.52], tint_fade: 0.0 }),
         presentation: true,
+        menu_plane: 0,
         ..shape_node("backdrop_patch_fixture")
     };
     let mut app = App::new();
@@ -303,6 +308,7 @@ fn backdrop_glass_follows_record_opacity_and_releases_the_capture_when_hidden() 
     let glass = AtomeRenderNode {
         backdrop: Some(AtomeBackdropStyle { blur_px: 18.0, tint: [0.0, 0.0, 0.0, 0.84], tint_fade: 0.0 }),
         presentation: true,
+        menu_plane: 0,
         ..shape_node("backdrop_opacity_fixture")
     };
     let mut app = App::new();
@@ -967,6 +973,7 @@ fn audio_waveform_progress_spawns_and_moves_bevy_playhead_overlay() {
             shadow: None,
             backdrop: None,
             presentation: false,
+            menu_plane: 0,
             color: Some([0.2, 0.4, 0.6, 1.0]),
             text: None,
             source: None,

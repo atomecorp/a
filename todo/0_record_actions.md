@@ -301,3 +301,20 @@ encore. Assertion de non-régression ajoutée à la probe.
   `backend: 'local_guest'`, qui attend Tauri. « Essayer » ne peut donc pas écrire
   depuis un navigateur, même avec `--test` — il faut un compte connecté. Ce qui
   précède est vérifié sur les modules réels dans l'app, avec des records injectés.
+
+---
+
+# Journal d'exécution — 19 sept. 2026
+
+**§6, la capture spatiale du mode Naturel : traitée.** Détail et vérification dans
+`todo/record_page_placeholder_template_2026-09-19.md`.
+
+- La question laissée ouverte (« le schéma de molecule ne porte aucune géométrie ») est
+  tranchée : la prise Naturel n'est pas une timeline de clips mais un **journal** rangé sur
+  l'hôte (`action_recording`) : instantané de départ + événements `atome:changed` avec leurs
+  valeurs + trames de geste (~30 Hz). Aucune seconde source de vérité : on écoute, on
+  n'instrumente pas (§9).
+- Relire : temps réel (sur la projection, rien n'est écrit pendant la lecture) ou « one shot »
+  (état final), puis état final garanti par commit canonique. Rail Naturel : Record + Relire.
+- Accès sans sélection (bureau) : rec. > Actions / Relire, et le Flower du bureau.
+- En Liste/Matrice rien ne change : sans prise spatiale ouverte, le chemin timeline est intact.

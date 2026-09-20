@@ -359,6 +359,9 @@ pub struct AtomeRenderNode {
     pub backdrop: Option<AtomeBackdropStyle>,
     #[serde(default)]
     pub presentation: bool,
+    /// Compositor-only menu face (1) or overlay (2); never persisted Atome state.
+    #[serde(default)]
+    pub menu_plane: u8,
     pub color: Option<[f32; 4]>,
     pub text: Option<String>,
     pub source: Option<String>,

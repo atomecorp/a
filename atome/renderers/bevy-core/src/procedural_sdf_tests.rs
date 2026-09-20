@@ -80,6 +80,7 @@ fn procedural_sdf_spawns_and_patches_one_full_surface_material_quad() {
             shadow: None,
             backdrop: None,
             presentation: false,
+            menu_plane: 0,
             color: None,
             text: None,
             source: None,
@@ -211,7 +212,7 @@ fn procedural_sdf_mystic_mode_is_one_isolated_turning_tile_branch() {
     assert!(shader.contains("material.mystic_tile_motion[index]"));
     // The back face carries the workspace WHOLE — no fade gating its opacity — and
     // the cell it leaves behind is filled with the menu plate: the hole.
-    assert!(shader.contains("plate_color = textureSampleLevel(backdrop_texture, backdrop_sampler, source_uv, 0.0).rgb"));
+    assert!(shader.contains("plate_color = textureSampleLevel(menu_front, menu_front_sampler, source_uv, 0.0).rgb"));
     assert!(!shader.contains("back_alpha"));
     assert!(shader.contains("let hole_distance = sd_rounded_box(delta, vec2(half_side)"));
     assert!(shader.contains("* hole_dose"));

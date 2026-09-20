@@ -5048,16 +5048,26 @@ pub async fn start_server(static_dir: PathBuf, uploads_dir: PathBuf, data_dir: P
 
     // CORS configuration that allows credentials (required for cookie-based auth)
     // Must specify exact origins when credentials are used (not wildcard *)
+    let mut cors_origins: Vec<HeaderValue> = vec![
+        "http://127.0.0.1:3000".parse::<HeaderValue>().unwrap(),
+        "http://localhost:3000".parse::<HeaderValue>().unwrap(),
+        "http://127.0.0.1:3001".parse::<HeaderValue>().unwrap(),
+        "http://localhost:3001".parse::<HeaderValue>().unwrap(),
+        "http://tauri.localhost".parse::<HeaderValue>().unwrap(),
+        "https://tauri.localhost".parse::<HeaderValue>().unwrap(),
+        "tauri://localhost".parse::<HeaderValue>().unwrap(),
+    ];
+    // Coquille de developpement Tauri (port 1430) : la fenetre y demarre avant
+    // d'etre renvoyee vers Axum. Tant qu'elle y est, chaque appel repondait 200
+    // puis etait rejete par le navigateur, ce qui faisait lire une panne
+    // d'authentification la ou il n'y avait qu'un demarrage en retard. Jamais en
+    // release : 1430 n'est pas un mode de fonctionnement.
+    if cfg!(debug_assertions) {
+        cors_origins.push("http://127.0.0.1:1430".parse::<HeaderValue>().unwrap());
+        cors_origins.push("http://localhost:1430".parse::<HeaderValue>().unwrap());
+    }
     let cors = CorsLayer::new()
-        .allow_origin([
-            "http://127.0.0.1:3000".parse::<HeaderValue>().unwrap(),
-            "http://localhost:3000".parse::<HeaderValue>().unwrap(),
-            "http://127.0.0.1:3001".parse::<HeaderValue>().unwrap(),
-            "http://localhost:3001".parse::<HeaderValue>().unwrap(),
-            "http://tauri.localhost".parse::<HeaderValue>().unwrap(),
-            "https://tauri.localhost".parse::<HeaderValue>().unwrap(),
-            "tauri://localhost".parse::<HeaderValue>().unwrap(),
-        ])
+        .allow_origin(cors_origins)
         .allow_methods([
             Method::GET,
             Method::POST,
