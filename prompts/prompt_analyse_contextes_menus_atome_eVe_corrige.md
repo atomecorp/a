@@ -1,6 +1,13 @@
-# Prompt — Analyse et plan de réalisation du système de contextes et de menus d’atome / eVe
+# Prompt — Réalisation complète du système de contextes et de menus d’atome / eVe
 
 > **Décision fonctionnelle définitive : Mystic remplace Flower partout.** Flower, également appelé Flowers, est l’ancien menu abandonné. Les deux seuls menus contextuels à alimenter sont **Mystic** et le **menu contextuel de la barre latérale droite**. Leurs choix peuvent différer ; leur contexte de référence est commun.
+
+> **Statut au 2026-09-20 — l’analyse et le plan sont livrés ; cette demande porte sur la réalisation complète.**
+> La référence de mise en œuvre est `todo/context_menus_modes_spec_2026-09-20.md` : la lire en entier avant toute
+> action. Les sections 1 à 12 conservent la demande fonctionnelle d’origine et restent la cible ; les sections
+> 13 à 17 pilotent l’exécution (décisions verrouillées, ordre des lots, contrat i18n, commandes de validation,
+> format de preuve). En cas de contradiction entre ce prompt et la spécification, s’arrêter et signaler la
+> contradiction avant toute écriture de code.
 
 ## 1. Mission et résultat attendu
 
@@ -10,7 +17,7 @@ Je souhaite un **audit de l’existant**, une **spécification fonctionnelle coh
 
 Ne te contente pas de reformuler ma demande : confronte les règles ci-dessous au code, relève les contradictions, identifie les composants à modifier et explique comment réaliser la tâche sans reconstruire inutilement le système.
 
-**La première étape demandée est l’analyse et le plan, pas une modification immédiate du code de production.** Propose les schémas et exemples nécessaires à la compréhension de la solution. Prépare ensuite une mise en œuvre par étapes, qui pourra être exécutée lorsque l’implémentation sera demandée.
+**L’analyse et le plan sont livrés : la demande porte désormais sur la réalisation, lot par lot, jusqu’à l’état cible.** La spécification `todo/context_menus_modes_spec_2026-09-20.md` contient l’audit, les décisions, le modèle de données et le plan détaillé ; les sections 13 à 17 ci-dessous imposent l’ordre d’exécution, le contrat i18n, les commandes de validation et le format de preuve. Aucune étape ne s’arrête à une analyse : chaque lot produit du code, des données ou des tests réellement exécutés.
 
 Prends le temps d’examiner les interactions entre les dimensions du système. Présente tes conclusions, les alternatives utiles et les raisons de tes choix, sans dérouler un monologue de raisonnement interne.
 
@@ -18,7 +25,7 @@ Prends le temps d’examiner les interactions entre les dimensions du système. 
 
 ## 2. Sources, méthode et contraintes du projet
 
-Travaille à partir des dépôts et documents réellement accessibles : notamment `atomecorp/a` et le dépôt eVe associé, dont tu vérifieras le nom et la casse. Consulte les consignes locales, par exemple `AGENTS.md`, `Agent.md`, `Work Method.md`, `.codex/Hans.md` et les dossiers de documentation, **uniquement s’ils existent**.
+Lis d’abord, sans exception, `.codex/AGENTS.md`, puis les modules qu’il impose : `.codex/modules/01-root-constitution.md`, `.codex/modules/02-coding-standards-and-prohibitions.md` et, pour toute écriture de code, `.codex/modules/07-future-code-guardrails.md` ; ajoute `03`, `05` et `06` selon la surface touchée. Ces règles sont supérieures à ce prompt et ne peuvent être ni contournées ni réinterprétées. Travaille ensuite à partir des dépôts et documents réellement accessibles : `atomecorp/a` et le dépôt eVe associé, dont tu vérifieras le nom et la casse, ainsi que la spécification `todo/context_menus_modes_spec_2026-09-20.md`.
 
 Repère les implémentations actuelles des modes, des menus, de la sélection, des placeholders, des activités, des profils et des commandes. Réutilise les conventions, services et composants existants autant que possible.
 
@@ -71,7 +78,11 @@ Il existe trois niveaux :
 
 Ce niveau module principalement la quantité d’outils exposés et la pédagogie de leur présentation. Il ne définit pas une autre activité et ne doit pas être confondu avec les permissions d’accès.
 
-Vérifie comment cette maîtrise est actuellement rattachée au profil, à l’activité ou au projet. Ne la réduis pas arbitrairement à une préférence globale si l’existant prévoit une maîtrise différente selon le contexte.
+**Décision acquise le 2026-09-20 (D4) :** la maîtrise est une **hiérarchie**, et la portée la plus précise gagne —
+`effectiveLevel(activité) = activityLevels[activité] ?? profileLevel`. Le niveau par défaut appartient au profil
+utilisateur, puis se décline par activité ; un utilisateur débutant globalement mais confirmé en vidéo résout en
+`advanced` en vidéo. Les **trois modes d’usage sont au niveau projet** : Exécution cesse d’être une préférence
+persistée du profil (`perform_state.js:12`, clé `performMode`).
 
 ### 3.5. Menus cibles et statut définitif de Flower
 
@@ -79,7 +90,7 @@ Vérifie comment cette maîtrise est actuellement rattachée au profil, à l’a
 
 | Menu cible | Rôle et configuration |
 |---|---|
-| **Mystic** | Nouveau menu qui remplace Flower partout. Ses choix, ses regroupements et leur présentation sont définis pour Mystic. Il porte aussi le menu restreint accessible au clic long dans les modes non éditoriaux. |
+| **Mystic** | Nouveau menu qui remplace Flower partout. Ses choix, ses regroupements et leur présentation sont définis pour Mystic. Il porte aussi la surcharge par mode, accessible au clic long dans les modes non éditoriaux. |
 | **Menu contextuel de la barre latérale droite** | Menu distinct, visible uniquement en Édition, avec sa propre composition d’outils et ses propres regroupements. |
 
 Ces deux menus sont **indépendants dans leur composition**, mais conditionnés par le même contexte : mode d’usage, niveau de maîtrise, type de l’objet ou activité explicitement choisie. Ils peuvent avoir des choix communs, différents ou partiellement communs. **Un même contexte n’impose pas la même liste de commandes dans les deux menus.**
@@ -111,7 +122,7 @@ Les éventuelles vues Naturel / Liste / Matrice restent une dimension distincte 
 | Menu principal | Absent | Absent | Présent et stable |
 | Barre latérale contextuelle | Absente | Absente | Liée à la sélection et au contexte |
 | Choix contextuels d’édition dans Mystic | Absents | Absents | Adaptés au contexte, avec une composition propre à Mystic |
-| Mystic au clic long | Quatre entrées fixes + une sortie | Quatre entrées fixes + une sortie | Fonctionnement d’édition à analyser |
+| Mystic au clic long | Surcharge du mode : centre (assistant / IA) + sortie = 2 entrées | Surcharge du mode : centre (assistant / IA) + sortie = 2 entrées | Croix de base : 5 tuiles (centre + 4 bras) |
 | Nouvelles interactions personnalisées sur les objets | Hors périmètre | Hors périmètre | Ne pas développer leur moteur dans cette tâche |
 
 **Important :** l’interdiction de sélection porte sur la sélection éditoriale des objets. Ne supprime pas par erreur le focus nécessaire aux contrôles autorisés, aux menus ou aux placeholders utilisables en Performance.
@@ -123,7 +134,7 @@ En Consultation :
 - Cliquer ou toucher un atome ou un outil ne le sélectionne pas pour l’éditer.
 - Les placeholders sont inactifs : aucune activation, capture ni création d’enregistrement par leur intermédiaire.
 - Aucun menu principal, aucune barre latérale d’édition et aucun contrôle de transformation ne doivent apparaître.
-- Le clic long reste disponible afin d’ouvrir Mystic dans sa composition restreinte.
+- Le clic long reste disponible afin d’ouvrir Mystic avec la surcharge déclarée pour le mode.
 
 Pour cette itération, n’active pas les futures interactions personnalisées attachées aux objets. Leur ajout ultérieur pourra permettre des comportements de consultation, mais ce moteur n’est pas à réaliser maintenant.
 
@@ -141,26 +152,40 @@ Ne traduis donc pas Performance par une interdiction absolue de toute écriture 
 
 Les futures interactions personnalisées appliquées aux objets restent hors périmètre de cette tâche, même si elles devront également pouvoir fonctionner en Performance plus tard.
 
-### 4.4. Mystic restreint et sortie des modes non éditoriaux
+### 4.4. Mystic en mode non éditorial : surcharge et sortie
 
-En Consultation comme en Performance, **le seul parcours normal de sortie demandé est : clic long → Mystic restreint → commande de sortie du mode**.
+En Consultation comme en Performance, **le seul parcours normal de sortie demandé est : clic long → Mystic avec la surcharge déclarée pour le mode → commande de sortie du mode**.
 
 Il s’agit de **Mystic avec une composition adaptée au mode**, pas d’un troisième menu autonome ni d’un retour à Flower.
 
-Ce menu contient **exactement cinq choix** :
+**Règle tranchée le 2026-09-20 (D1, D8, D9) — décision acquise, ne pas la rouvrir :**
 
-1. Les **quatre entrées fixes** prévues par le système.
-2. Une **cinquième entrée** : « Quitter le mode Consultation » ou « Quitter le mode Performance », selon le mode actif.
+- La **base** de Mystic est une croix de **cinq tuiles immuables** : centre (assistant / intelligence artificielle),
+  nord, est, sud, ouest. Elle est déclarée dans le JSON sous `menus.mystic.base` et reste modifiable à tout
+  moment, sans toucher au code.
+- Chaque mode possède **son propre bloc** `menus.mystic.modes[<mode>]`, qui **surcharge** cette base. Une surcharge
+  déclarée **remplace** la base et la composition de contexte **en bloc** : aucune fusion partielle. Un mode sans
+  bloc déclaré — Édition aujourd’hui — affiche la croix de base.
+- En **Consultation** et en **Performance**, la surcharge déclarée contient **exactement deux entrées** : le centre
+  (assistant / intelligence artificielle) et la **sortie du mode** (« Quitter le mode Consultation » / « Quitter
+  le mode Performance »). Aucun bras de la croix n’est affiché ; ils restent déclarés et réactivables par une
+  seule valeur de données.
+- La sortie réutilise la commande existante `mode_edit` et la clé `eve.menu.mode_edit` : **aucune nouvelle
+  commande, aucune nouvelle clé de sortie**.
+- Aucune commande contextuelle d’édition ne s’ajoute par type, activité ou niveau, et le niveau de maîtrise ne
+  retire jamais une entrée requise.
 
-Les quatre libellés ne sont pas énumérés dans cette demande. Retrouve-les dans l’implémentation et les spécifications validées. **N’invente pas ces quatre choix et ne reprends pas une ancienne proposition non validée comme une décision acquise.**
+Si un bras de la croix de base mène à une action incompatible avec un mode non éditorial, il n’est pas affiché
+dans la surcharge : relève le conflit dans le rapport plutôt que de modifier silencieusement la composition.
 
-L’accès à l’assistant / à l’intelligence artificielle doit être pris en compte dans ce menu. Vérifie son appartenance aux quatre entrées fixes ; ne l’ajoute pas automatiquement comme une sixième entrée.
+Le menu de mode ne doit pas recevoir de choix contextuels d’édition supplémentaires à cause du type d’objet, de
+l’activité ou du niveau utilisateur. Le filtrage de maîtrise ne doit pas non plus retirer l’une des entrées
+déclarées. N’ajoute pas une seconde voie de sortie par bouton permanent, clic simple, raccourci d’édition ou
+commande indirecte de l’assistant.
 
-Si une entrée fixe mène aujourd’hui à une action incompatible avec le mode actif, relève le conflit et propose un traitement compatible. Ne laisse pas cette commande contourner les restrictions, et ne modifie pas arbitrairement le nombre de choix.
-
-Mystic restreint ne doit pas recevoir de choix contextuels d’édition supplémentaires à cause du type d’objet, de l’activité ou du niveau utilisateur. Le filtrage de maîtrise ne doit pas non plus retirer l’une des cinq entrées requises. N’ajoute pas une seconde voie de sortie par bouton permanent, clic simple, raccourci d’édition ou commande indirecte de l’assistant.
-
-**Hypothèse à expliciter :** quitter Consultation ou Performance ramène en Édition. Vérifie si une destination est déjà définie ; sinon, présente le retour en Édition comme la recommandation, pas comme une règle déjà confirmée. Quitter un mode ne signifie ni fermer le projet ni déconnecter la session.
+**Décision acquise (D2) :** quitter Consultation ou Performance ramène en Édition. Aucune destination n’est
+définie dans le code actuel ; c’est cette destination qui est implémentée. Quitter un mode ne signifie ni fermer
+le projet ni déconnecter la session.
 
 ### 4.5. Édition
 
@@ -196,7 +221,7 @@ Pour un même mode, une même activité, une même sélection, les mêmes capaci
 
 `outils débutant du menu ⊆ outils intermédiaire du menu ⊆ outils confirmé du menu`
 
-Il n’existe aucune obligation d’égalité ou d’inclusion entre les outils de Mystic et ceux de la barre latérale. La composition restreinte à cinq choix de Mystic en Consultation et Performance reste imposée par le mode.
+Il n’existe aucune obligation d’égalité ou d’inclusion entre les outils de Mystic et ceux de la barre latérale. La surcharge de Mystic en Consultation et en Performance — centre (assistant / IA) et sortie — reste imposée par le mode, indépendamment du niveau de maîtrise.
 
 Un outil commun aux trois niveaux garde le même identifiant, la même action et la même signification. Le niveau débutant peut avoir un libellé plus explicite ou une aide plus visible ; il ne doit pas déclencher une commande différente sous le même nom.
 
@@ -205,6 +230,8 @@ Ne crée pas trois catalogues indépendants copiés-collés pour les niveaux de 
 ---
 
 ## 6. Audit technique à réaliser
+
+*Livré le 2026-09-20 : le résultat de cet audit est la section 2 de `todo/context_menus_modes_spec_2026-09-20.md`. La consigne ci-dessous reste la définition de ce qui doit être su et prouvé.*
 
 Reconstitue le parcours réel : **événement utilisateur → état du contexte → résolution des outils → affichage → exécution de commande**.
 
@@ -242,7 +269,7 @@ La proposition doit couvrir :
 - Les identifiants canoniques des modes, activités, types, niveaux et des deux menus contextuels cibles : Mystic et le menu contextuel de la barre latérale.
 - Un catalogue partagé de commandes / outils avec des références stables.
 - Deux compositions de menu explicitement distinctes : choix, groupes, ordre et règles de visibilité propres à Mystic, d’une part, et à la barre latérale, d’autre part.
-- Les quatre entrées fixes et la sortie spécifique de Mystic dans chacun des deux modes non éditoriaux.
+- La croix de base de Mystic (`base`) et sa surcharge propre à chaque mode (`modes`), y compris les deux entrées déclarées pour Consultation et pour Performance.
 - Les contextes d’édition fondés sur le type ou l’activité, et leur association aux compositions de chacun des deux menus.
 - L’applicabilité selon la sélection et les capacités.
 - La visibilité selon la maîtrise et les variantes pédagogiques de présentation.
@@ -263,11 +290,11 @@ Privilégie des références de commandes et des conditions déclaratives simple
 
 Fournis une arborescence proposée, un schéma de validation adapté à l’existant et des exemples de JSON **syntaxiquement valides**, sans commentaires ni virgules finales.
 
-Les exemples doivent montrer au minimum : un contexte vidéo déterminé par le type ; ce contexte aux trois niveaux de maîtrise pour chacun des deux menus ; une activité de mise en page appliquée à une sélection compatible ; les compositions restreintes de Mystic en Consultation et en Performance.
+Les exemples doivent montrer au minimum : un contexte vidéo déterminé par le type ; ce contexte aux trois niveaux de maîtrise pour chacun des deux menus ; une activité de mise en page appliquée à une sélection compatible ; la croix de base de Mystic et ses surcharges en Consultation et en Performance.
 
 Montre explicitement, pour un **même contexte**, comment Mystic et la barre latérale peuvent proposer des **choix différents**, tout en référençant le même catalogue de commandes. Il ne suffit pas d’illustrer deux présentations graphiques d’une liste identique. Aucun exemple de configuration cible ne doit alimenter Flower.
 
-Les identifiants réels doivent provenir de l’audit. Tout exemple fictif doit être explicitement présenté comme tel, hors du bloc JSON. Vérifie la cohérence des références entre exemples. Les quatre entrées fixes ne doivent pas être remplacées par quatre inventions pour rendre l’exemple apparemment complet.
+Les identifiants réels doivent provenir de l’audit. Tout exemple fictif doit être explicitement présenté comme tel, hors du bloc JSON. Vérifie la cohérence des références entre exemples. Les cinq tuiles de la croix de base ne doivent pas être remplacées par des inventions pour rendre l’exemple apparemment complet.
 
 ---
 
@@ -281,7 +308,7 @@ Décris ses entrées, ses sorties et son ordre de traitement. Un ordre de dépar
 
 Applique cette résolution à Mystic et à la barre latérale avec leurs définitions respectives. Le résultat peut être deux structures distinctes, ou une résolution paramétrée par le menu cible, selon l’architecture existante. Une modification de la composition de Mystic ne doit pas modifier implicitement celle de la barre latérale, et réciproquement. Les définitions des commandes réellement partagées restent communes.
 
-En Consultation et Performance, la branche de résolution imposée par le mode produit **Mystic restreint à cinq choix** et **aucun menu contextuel latéral**. Elle ne doit pas réintroduire la composition d’édition par les filtres d’activité, de type ou de maîtrise.
+En Consultation et Performance, la branche de résolution imposée par le mode produit **la surcharge déclarée de Mystic — aujourd’hui le centre et la sortie, soit deux entrées —** et **aucun menu contextuel latéral**. Elle ne doit pas réintroduire la composition d’édition par les filtres d’activité, de type ou de maîtrise.
 
 Cet ordre est une proposition à confronter au code, pas une raison de masquer des incohérences. Précise notamment le traitement des capacités indisponibles, des commandes inapplicables et des règles de visibilité.
 
@@ -313,6 +340,8 @@ Prévois le point d’extension pour les futures interactions personnalisées su
 
 ## 10. Plan d’implémentation attendu
 
+*Livré le 2026-09-20 : le plan détaillé est la section 6 de `todo/context_menus_modes_spec_2026-09-20.md` ; l’ordre d’exécution est la section 13 de ce prompt.*
+
 Fournis un plan progressif, avec dépendances et étapes de validation. Ne propose pas une réécriture globale par défaut.
 
 Le plan doit couvrir l’audit, la normalisation du modèle de contexte, le choix et la validation des configurations, la résolution commune avec compositions distinctes, les protections d’exécution, le raccordement de Mystic et du menu contextuel latéral, les transitions, les placeholders et les tests de non-régression.
@@ -343,7 +372,7 @@ Prépare une matrice couvrant au minimum les critères suivants :
 
 1. En Consultation, cliquer sur un objet ne le sélectionne pas ; les placeholders ne s’activent pas et n’enregistrent pas ; les menus d’édition restent absents.
 2. En Performance, les mêmes restrictions éditoriales s’appliquent, mais un placeholder peut fonctionner et enregistrer sans déclencher de sélection.
-3. Dans chacun de ces deux modes, le clic long ouvre Mystic avec exactement les quatre choix fixes et la sortie correspondant au mode actif. Aucun choix contextuel d’édition ni sixième entrée n’apparaît, et le niveau de maîtrise ne supprime pas d’entrée requise.
+3. Dans chacun de ces deux modes, le clic long ouvre Mystic avec exactement la surcharge déclarée pour le mode actif — aujourd’hui le centre (assistant / IA) et la sortie, soit deux entrées. Aucun choix contextuel d’édition ni entrée supplémentaire n’apparaît, et le niveau de maîtrise ne supprime pas d’entrée requise.
 4. Le parcours de sortie reste utilisable sur souris et écran tactile. Fermer le menu seul conserve le mode actif.
 5. En Édition, la sélection et les outils contextuels fonctionnent ; le menu principal garde sa structure et sa position lors des changements de contexte.
 6. Sans activité explicite, le type guide les outils. Avec une activité explicite, la règle de priorité retenue s’applique sans présenter des commandes incompatibles avec la sélection.
@@ -359,7 +388,7 @@ Sépare tests de logique, tests d’intégration UI et vérifications UX. Distin
 
 ---
 
-## 12. Format de ta livraison
+## 12. Format du rapport d’analyse (livré le 2026-09-20 — conservé comme référence)
 
 Organise le rapport ainsi :
 
@@ -376,6 +405,152 @@ Pour une ambiguïté non résolue, propose un choix par défaut argumenté, indi
 
 Termine par une recommandation concrète : **quelle organisation JSON adopter pour les deux menus cibles, quels composants conserver ou modifier, dans quel ordre achever la migration vers Mystic, et quels tests prouvent que les trois modes restent cohérents sans dépendance à Flower**.
 
-### Consigne pour la phase de réalisation ultérieure
+---
 
-Lorsque l’implémentation sera explicitement demandée, reprends ce plan après vérification de l’état courant du dépôt. Procède par lots limités, valide les configurations et les références, exécute les tests disponibles, puis rapporte les fichiers modifiés, les comportements obtenus et les limites restantes. N’élargis pas silencieusement le périmètre et ne présente pas un test prévu comme un test exécuté.
+## 13. Exécution — décisions verrouillées, ordre imposé et portes de validation
+
+### 13.1. Décisions verrouillées au 2026-09-20 (ne pas rouvrir)
+
+| Décision | Contenu acquis |
+|---|---|
+| **D1** | La **base** de Mystic est une croix de **cinq tuiles** : centre = assistant / IA, puis nord, est, sud, ouest. Elle est déclarée dans `menus.mystic.base` et reste modifiable en données à tout moment. `find` occupe le nord aujourd’hui ; l’ordre des bras n’a pas à être figé. |
+| **D4** | Maîtrise = **hiérarchie**, la portée la plus précise gagne : `effectiveLevel(activité) = activityLevels[activité] ?? profileLevel`. Les **trois modes sont au niveau projet** ; Exécution cesse d’être une préférence persistée du profil (`perform_state.js:12`, clé `performMode`). |
+| **D8** | Un seul outil **Mode**, avec les libellés réels : `Mode` / `Édition` / `Exécution` / `Consultation` (fr et en). La sortie réutilise la commande `mode_edit` et la clé `eve.menu.mode_edit` : aucune clé ni commande nouvelle. |
+| **D9 (option A)** | **Base = 5, surcharge par mode** : chaque mode a son bloc `menus.<menu>.modes[<mode>]` ; un bloc déclaré remplace la base et la composition de contexte **en bloc** (aucune fusion partielle) ; bloc absent ou `{}` = base. Consultation et Exécution déclarent **2 entrées** (centre + sortie) et sont les seules surcharges ; Édition ne déclare rien. |
+| **D2, D3, D5, D6, D7** | Défauts acceptés : sortie → Édition ; réutilisation de `mode_edit` ; une seule activité `dtp` ; `consultation` comme seul identifiant de mode accepté (l’outil et la clé restent `mode_consume`) ; la palette Mode du menu principal est conservée. |
+
+### 13.2. Forme de données cible (extrait contractuel)
+
+```json
+{
+  "menus": {
+    "mystic": {
+      "base": {
+        "center": { "command": "ai", "slot": "center" },
+        "cross": [
+          { "command": "find", "slot": "north" },
+          { "command": "capture", "slot": "east" },
+          { "command": "dashboard", "slot": "south" },
+          { "command": "communicate", "slot": "west" }
+        ]
+      },
+      "modes": {
+        "consultation": {
+          "center": { "command": "ai", "slot": "center" },
+          "cross": [],
+          "exit": { "command": "mode_edit", "labelKey": "eve.menu.mode_edit" }
+        },
+        "performance": {
+          "center": { "command": "ai", "slot": "center" },
+          "cross": [],
+          "exit": { "command": "mode_edit", "labelKey": "eve.menu.mode_edit" }
+        }
+      }
+    }
+  }
+}
+```
+
+Règles non négociables du document : identifiants et `labelKey` uniquement, **jamais de texte affiché** ;
+fichiers JSON rédigés en anglais ; aucune commande JavaScript, aucun `eval`, aucun langage de règles ; chaque
+identifiant référencé doit exister dans les catalogues JavaScript canoniques, sinon le chargement échoue avec une
+erreur nommée.
+
+### 13.3. Ordre d’exécution (un lot à la fois, porte avant passage au suivant)
+
+| Lot | Objectif | Fichiers principaux | Porte de fin de lot |
+|---|---|---|---|
+| **0** | Geler le comportement actuel avant toute modification | nouveau `tests/eve/context_menus_characterisation.test.mjs` ; lecture de `flower_context_items_runtime.js`, `navigation_taxonomy.js`, `flower_tool_capability_matrix.js`, `atome_contextual_rail_model_runtime.js`, `project_work_mode_state.js` | `npx vitest run tests/eve/context_menus_characterisation.test.mjs` vert ; aucun fichier de production touché |
+| **1** | Un vocabulaire et un propriétaire par dimension | `eVe/domains/rendering/project_work_mode_state.js`, `eVe/intuition/tools/perform_state.js`, `eVe/intuition/tools/user_visual_preferences_model.js`, `eVe/intuition/menu/navigation_taxonomy.js` | trois identifiants de mode acceptés et retournés ; un champ de maîtrise avec portée et défaut documentés ; règle de priorité dans une seule fonction testable ; `npm run check:syntax` |
+| **2** | Document de configuration + chargeur + validateur | nouveaux `eVe/intuition/menu/context_menus.json`, `context_menus_loader.js` ; style d’erreur de `eVe/intuition/contracts/validator.js` | un document invalide échoue avec une erreur nommée ; chaque commande référencée existe dans le catalogue JS canonique |
+| **2.5** | Clés i18n, parité et propriété des libellés | `eVe/i18n/languages_fr_interaction.js`, `eVe/i18n/languages_en_interaction.js` | test de parité fr/en vert + test de présence pour chaque `labelKey` référencé par le document |
+| **3** | Résolveur commun, compositions indépendantes | nouveau `eVe/intuition/menu/context_menu_resolver.js` | tests de logique : indépendance des deux menus, inclusion par niveau, surcharge de mode prioritaire |
+| **4** | Câblage de Mystic et fin du sélecteur Flower/Mystic | `eVe/intuition/ribbon/bevy_ui_flower_model.js`, `eVe/intuition/ribbon/bevy_ui_flower_surface.js`, `eVe/intuition/ribbon/bevy_ui_menu_surface.js`, `eVe/intuition/ribbon/bevy_ui_flower_runtime.js`, `eVe/intuition/runtime/eve_intuition/flower_context_items_runtime.js`, `eVe/intuition/liquid/intuition_liquid_preference.js`, `eVe/intuition/tools/user_visual_preferences_model.js`, `eVe/intuition/flower/menu_layout.js` | avec `renderStyle: 'flat'`, le menu contextuel est Mystic avec la croix de base ; plus aucun chemin ne sélectionne une disposition en pétales ; tests `tests/eve/bevy_ui_flower_contract.probe.mjs`, `tests/eve/bevy_ui_flower_projection.test.mjs`, `tests/probes/flower_menu_modules.probe.mjs` |
+| **5** | Câblage de la barre latérale | `eVe/intuition/runtime/eve_intuition/atome_contextual_rail_runtime.js`, `eVe/intuition/runtime/eve_intuition/atome_contextual_rail_model_runtime.js`, `eVe/intuition/runtime/eve_intuition/atome_contextual_edit_runtime.js`, `eVe/domains/rendering/project_view_contextual_rail.js` | plus aucune table littérale type → outil ; `npm run test:molecule` vert |
+| **6** | Protection réelle à l’exécution | `eVe/domains/rendering/project_work_mode_state.js`, `eVe/intuition/runtime/eve_intuition/atome_contextual_edit_runtime.js`, `eVe/domains/rendering/project_view_placeholder_fill.js`, `eVe/domains/rendering/placeholder_creation_runtime.js`, points d’entrée sélection / transformation | une opération d’édition invoquée directement est refusée en Consultation et en Performance ; le placeholder se comporte différemment dans les deux modes |
+| **7** | Transitions et gestes | propriétaire du mode, `eVe/intuition/runtime/eve_intuition/atome_contextual_edit_runtime.js`, `eVe/intuition/tools/perform.js`, `eVe/intuition/flower/context.js`, `eVe/intuition/flower/context_pointer_lock.js` | aucun état éditorial ne survit à une sortie d’Édition ; fermer le menu ne change pas le mode ; changement de mode pendant un enregistrement défini sans perte silencieuse |
+| **8** | Suppression de Flower | `eVe/intuition/flower/`, `eVe/intuition/ribbon/bevy_ui_flower_*.js`, `eVe/domains/dashboard/dashboard_item_flower_menu.js`, `eVe/intuition/runtime/eve_intuition/flower_context_items_runtime.js`, `eVe/intuition/runtime/eve_intuition/flower_tool_capability_matrix.js` | `rg -i flower` ne retourne plus aucun chemin produit actif ; `npm run check:m0`, `npm run check:m1`, `npm run test:run` verts ; relocaliser d’abord les helpers réutilisables de `flower_tool_capability_matrix.js` |
+| **9** | Non-régression multi-runtime | `tests/eve/*`, `tests/probes/*` + fiche d’acceptation manuelle | critères de la section 11 vérifiés dans les runtimes déclarés ; toute voie non exécutée est rapportée comme non exécutée |
+
+Règles d’exécution : un seul lot à la fois ; aucun lot ne commence avant que la porte du précédent soit franchie
+et rapportée ; à la fin de chaque lot, produire le rapport de la section 16 ; si une porte ne peut pas être
+franchie, s’arrêter et exposer le blocage plutôt que d’élargir le périmètre ; ne jamais présenter un test prévu
+comme un test exécuté ni une voie non exécutée comme corrigée.
+
+---
+
+## 14. Contrat i18n obligatoire
+
+- **JSON en anglais, sans texte affiché** : le document ne porte que des identifiants et des `labelKey`.
+- **Toute chaîne visible passe par `eveT`**, y compris les libellés d’accessibilité, les infobulles et les états d’erreur.
+- **Un seul propriétaire du libellé** : réutiliser `eVe/intuition/shared/tool_presentation.js`
+  (`toolLabelKey`, `resolveToolPresentation`). Ne jamais écrire une quatrième résolution de libellé.
+- **Clés à créer (Lot 2.5)** : `eve.menu.z_order`, `eve.menu.line_splitter`, `eve.menu.record_action`,
+  `eve.menu.midi_binding`, `eve.menu.copy.tip`, `eve.menu.delete.tip` — en `fr` **et** en `en`.
+- **Libellés de mode à corriger** (fr / en) : `eve.menu.mode` = `Mode` / `Mode` ; `eve.menu.mode_edit` = `Édition`
+  / `Edit` ; `eve.menu.mode_consume` = `Consultation` / `Consultation` ; `eve.menu.perform` = `Exécution` /
+  `Exécution`.
+- **Chaînes codées en dur à supprimer** : `flower_context_items_runtime.js:306` (`label: 'Stop'`),
+  `bevy_ui_flower_model.js:192` (`BACK_ITEM`), `mystic_menu_items.js:55` (`MYSTIC_CENTER_FALLBACK`). Réutiliser
+  `eve.menu.taxonomy.dashboard` : la clé `eve.menu.dashboard` **n’existe pas**.
+- **À ne pas « corriger »** : les `label:` de `eVe/intuition/tools/core/tool_runtime_bootstrap_defs_a.js` /
+  `eVe/intuition/tools/core/tool_runtime_bootstrap_defs_b.js` sont l’argument de repli
+  autorisé de `eveT(key, fallback)`, et `label: 'Mystic'` sur la surface SDF est décoratif
+  (`visible_to_accessibility: false`).
+
+---
+
+## 15. Commandes de validation à exécuter
+
+Dans cet ordre, en commençant par le plus étroit :
+
+1. `npm run check:syntax` après chaque édition substantielle.
+2. Vitest ciblé : `npm run test:run -- <chemin-du-test>`.
+3. Socle de garde-fous : `npm run check:m0`, puis `npm run check:m1`.
+4. Suites produit : `npm run test:molecule`, `npm run test:run`, et `npm run test:server-verification` lorsque le
+   chemin touché l’atteint.
+5. UI : `npm run quality:ui` (avec navigateur réel, jamais headless pour l’acceptation visuelle).
+6. Si le rendu ou le shader est touché : reconstruction du renderer concerné avant de conclure.
+
+`.codex/modules/03-debugging-testing-and-ui-validation.md` mentionne `npm run check:m2` ; **ce script n’existe pas
+dans `package.json`** aujourd’hui. Ne pas l’inventer ni l’exécuter à vide : utiliser les commandes ci-dessus et
+signaler l’écart dans le rapport.
+
+---
+
+## 16. Preuve et rapport attendus (format imposé, à la fin de chaque lot)
+
+1. **Fichiers modifiés** : chemins réels, avec la nature du changement.
+2. **Comportement obtenu** : ce qui fonctionne maintenant, en une à trois phrases.
+3. **Tests exécutés** : commande exacte, résultat, et le périmètre réellement couvert.
+4. **Tests prévus mais non exécutés** : liste explicite.
+5. **Voies non exécutées** : navigateur, Tauri, iOS, AUv3, pixels, appareil — distinguées les unes des autres.
+6. **Risque résiduel** et moyen de retour arrière.
+
+Pour toute vérification UI : descendre l’échelle de preuve — disponibilité réelle de l’application, arbre monté,
+pointeur réel, puis pixels ou appareil. Ne jamais conclure depuis un simple `domcontentloaded`, un état de
+document ou un clic simulé.
+
+---
+
+## 17. Interdits et pièges déjà identifiés
+
+- Ne pas rouvrir D1, D4, D8, D9 ni le remplacement définitif de Flower ; ne pas demander de confirmer ces points.
+- Aucun repli Flower, aucun sélecteur, aucune option de réactivation, aucune couche de compatibilité.
+- Le seul repli autorisé est `eveT(key, fallback)` et `ui.label_fallback` ; toute dépendance manquante produit une
+  erreur explicite.
+- Un mode **masqué** n’est pas un mode **interdit** : la garde doit être consultée au point de déclenchement de
+  chaque opération, pas au niveau du pointeur ni du rendu.
+- La maîtrise est une adaptation d’interface, jamais une permission de sécurité.
+- En Performance, préserver le focus nécessaire aux placeholders autorisés tout en supprimant la sélection
+  éditoriale.
+- Aucune seconde voie de sortie de mode : ni bouton permanent, ni clic simple, ni raccourci, ni commande de
+  l’assistant.
+- Aucune écriture directe de l’état : les mutations passent par `window.Atome.commit` / `window.Atome.commitBatch`.
+  L’état canonique reste hors du DOM, qui demeure une projection jetable ; le rendu reste WebGPU.
+- Ne pas agrandir un fichier au-delà de 500 lignes ; s’il est déjà au-dessus, le réduire à l’occasion du lot
+  concerné (`eVe/intuition/runtime/eve_intuition/flower_context_items_runtime.js` = 501 lignes,
+  `eVe/intuition/runtime/eve_intuition/main_menu_content_runtime.js` = 510 lignes).
+- Fichiers temporaires uniquement sous `./temp` ; tests persistants uniquement sous `./tests`.
+- Aucune opération Git en écriture : lecture, diff et blame seulement.
+- Ne jamais élargir silencieusement le périmètre, ni remplacer une correction de fond par un correctif de surface.

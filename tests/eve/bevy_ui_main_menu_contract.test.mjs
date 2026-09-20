@@ -260,83 +260,6 @@ test('BevyUI main menu Atome tool toggles the Dashboard', async () => {
     }
 });
 
-test('BevyUI main menu Atome hold toggles the assistant and suppresses Dashboard activation', async () => {
-    const toggles = [];
-    const assistantToggles = [];
-    const harness = createRuntimeHarness({
-        toggleDashboard: (payload) => toggles.push(payload),
-        toggleAssistant: (payload) => assistantToggles.push(payload)
-    });
-    try {
-        await harness.runtime.showFully();
-        let tree = harness.calls.at(-1).payload.tree;
-        const atome = findNode(tree.root, BEVY_MAIN_MENU_ATOME_ID);
-        atome.on.press({ x: 30, y: 30 });
-        await waitMs(540);
-        tree = harness.calls.at(-1).payload.tree;
-        const currentAtome = findNode(tree.root, BEVY_MAIN_MENU_ATOME_ID);
-        currentAtome.on.release({ x: 30, y: 30 });
-        await currentAtome.on.activate();
-        assert.deepEqual(assistantToggles, [{ source: 'bevy_ui_main_menu_atome' }]);
-        assert.deepEqual(toggles, []);
-    } finally {
-        harness.runtime.destroy();
-        harness.restore();
-    }
-});
-
-test('active assistant survives ten Dashboard toggles before a second hold closes it', async () => {
-    let assistantActive = false;
-    let dashboardToggles = 0;
-    const harness = createRuntimeHarness({
-        toggleDashboard: () => { dashboardToggles += 1; },
-        toggleAssistant: () => { assistantActive = !assistantActive; }
-    });
-    const holdAtome = async () => {
-        const atome = findNode(harness.calls.at(-1).payload.tree.root, BEVY_MAIN_MENU_ATOME_ID);
-        atome.on.press({ x: 30, y: 30 });
-        await waitMs(540);
-        const current = findNode(harness.calls.at(-1).payload.tree.root, BEVY_MAIN_MENU_ATOME_ID);
-        current.on.release({ x: 30, y: 30 });
-        await current.on.activate();
-    };
-    try {
-        await harness.runtime.showFully();
-        await holdAtome();
-        assert.equal(assistantActive, true);
-        for (let index = 0; index < 10; index += 1) {
-            const atome = findNode(harness.calls.at(-1).payload.tree.root, BEVY_MAIN_MENU_ATOME_ID);
-            await atome.on.activate();
-        }
-        assert.equal(dashboardToggles, 10);
-        assert.equal(assistantActive, true);
-        await holdAtome();
-        assert.equal(assistantActive, false);
-        assert.equal(dashboardToggles, 10);
-    } finally {
-        harness.runtime.destroy();
-        harness.restore();
-    }
-});
-
-test('BevyUI main menu Atome movement cancels the assistant hold', async () => {
-    const assistantToggles = [];
-    const harness = createRuntimeHarness({
-        toggleAssistant: (payload) => assistantToggles.push(payload)
-    });
-    try {
-        await harness.runtime.showFully();
-        const atome = findNode(harness.calls.at(-1).payload.tree.root, BEVY_MAIN_MENU_ATOME_ID);
-        atome.on.press({ x: 30, y: 30 });
-        atome.on.drag({ x: 41, y: 30 });
-        await waitMs(540);
-        assert.deepEqual(assistantToggles, []);
-    } finally {
-        harness.runtime.destroy();
-        harness.restore();
-    }
-});
-
 test('BevyUI main menu is the sole dashboard toolbox height authority', async () => {
     const harness = createRuntimeHarness();
     try {
@@ -496,63 +419,6 @@ test('retired Panel Lab shortcuts are absent from product menu content', () => {
     assert.doesNotMatch(source, /panel_lab:/);
 });
 
-test('assistant slider acquisition cancels the hold even below the ordinary hold motion tolerance', async () => {
-    const toggles = [];
-    const h = createRuntimeHarness({ toggleAssistant: () => toggles.push('toggle') });
-    h.window.eveAssistantApi = { getState: () => ({ active: true }), focusText() {}, selectLevel() {} };
-    try {
-        await h.runtime.showFully(); await h.runtime.assistantFieldOpen(); await waitFrame();
-        const icon = findNode(h.calls.at(-1).payload.tree.root, BEVY_MAIN_MENU_ATOME_ID);
-        icon.on.press({ x: 30, y: 30 });
-        icon.on.drag({ x: 23, y: 30, delta_x: -7 });
-        assert.equal(h.runtime.state.sliderStateByKey.get('assistant').dragged, true);
-        await waitMs(540);
-        assert.deepEqual(toggles, []);
-        icon.on.release({ x: 23, y: 30 });
-    } finally { h.runtime.destroy(); h.restore(); }
-});
-
-test('assistant slider can select the minimum immediately after the maximum without an outward gesture', async () => {
-    const selected = [];
-    const h = createRuntimeHarness();
-    h.window.eveAssistantApi = { getState: () => ({ active: true }), focusText() {}, selectLevel: level => selected.push(level) };
-    try {
-        await h.runtime.showFully(); await h.runtime.assistantFieldOpen(); await waitFrame();
-        const icon = findNode(h.calls.at(-1).payload.tree.root, BEVY_MAIN_MENU_ATOME_ID);
-        for (const distance of [180, 7]) {
-            icon.on.press({ x: 30, y: 30 });
-            icon.on.drag({ x: 30 - distance, y: 30, delta_x: -distance });
-            icon.on.release({ x: 30 - distance, y: 30 });
-        }
-        assert.deepEqual(selected, [5, 1]);
-    } finally { h.runtime.destroy(); h.restore(); }
-});
-
-// ---------------------------------------------------------------------------
-// Fermeture des palettes + emplacement d'outil actif (R1 a R5)
-// ---------------------------------------------------------------------------
-const choicePaletteContent = () => ({
-    toolbox: { children: ['create', 'view', 'draw'] },
-    create: { atome_tool: true, label: 'Create', icon: 'add', tool_id: 'tool.main.create',
-        type: 'palette', tool_type: 'palette', action: 'momentary', submenuInstantOnClick: true,
-        children: ['text_create', 'create_draw'] },
-    text_create: { atome_tool: true, label: 'Text', icon: 'edit', tool_id: 'ui.text.create',
-        type: 'tool', action: 'toggle', latch: true },
-    create_draw: { atome_tool: true, label: 'Draw', icon: 'draw', tool_id: 'tool.main.draw',
-        type: 'palette', tool_type: 'palette', action: 'toggle', latch: true, children: ['draw_size'] },
-    draw_size: { label: 'Size', icon: 'size', type: 'slider', tool_id: 'ui.draw.size',
-        slider_min: 1, slider_max: 100, slider_value: 10 },
-    draw: { atome_tool: true, label: 'Draw', icon: 'draw', tool_id: 'tool.main.draw',
-        type: 'palette', tool_type: 'palette', action: 'momentary', children: ['draw_size'] },
-    view: { atome_tool: true, label: 'View', icon: 'visible_true', tool_id: 'tool.main.view',
-        type: 'palette', tool_type: 'palette', action: 'momentary', submenuInstantOnClick: true,
-        children: ['view_list', 'view_table'] },
-    view_list: { atome_tool: true, label: 'List', icon: 'hamburger', tool_id: 'ui.view.mode.list',
-        type: 'tool', action: 'momentary' },
-    view_table: { atome_tool: true, label: 'Matrix', icon: 'matrix', tool_id: 'ui.view.mode.table',
-        type: 'tool', action: 'momentary' }
-});
-
 test('a leaf palette choice closes the palette, a cursor keeps it open and a nested palette opens its level', async () => {
     const invocations = [];
     const harness = createRuntimeHarness({ content: choicePaletteContent(),
@@ -672,4 +538,38 @@ test('View and Mode slots present the current choice and still open their palett
         await waitMs(350);
         assert.equal(harness.runtime.measure().activePaletteKey, 'view');
     } finally { harness.runtime.destroy(); harness.restore(); }
+});
+
+test('the main menu neither exposes nor controls the assistant', async () => {
+ const h=createRuntimeHarness(); let dashboard=0;
+ h.window.eveAssistantApi={getState:()=>({active:true}),listen:()=>{throw Error('unexpected voice activation');}};
+ try { await h.runtime.showFully();
+  assert.equal(h.runtime.assistantFieldOpen,undefined);
+  assert.equal(h.runtime.assistantFieldClose,undefined);
+  const item=findNode(h.calls.at(-1).payload.tree.root,BEVY_MAIN_MENU_ATOME_ID);
+  await item.on.activate();
+  assert.equal(h.runtime.state.sliderStateByKey.has('assistant'),false);
+ } finally {h.runtime.destroy();h.restore();}
+});
+
+const choicePaletteContent = () => ({
+    toolbox: { children: ['create', 'view', 'draw'] },
+    create: { atome_tool: true, label: 'Create', icon: 'add', tool_id: 'tool.main.create',
+        type: 'palette', tool_type: 'palette', action: 'momentary', submenuInstantOnClick: true,
+        children: ['text_create', 'create_draw'] },
+    text_create: { atome_tool: true, label: 'Text', icon: 'edit', tool_id: 'ui.text.create',
+        type: 'tool', action: 'toggle', latch: true },
+    create_draw: { atome_tool: true, label: 'Draw', icon: 'draw', tool_id: 'tool.main.draw',
+        type: 'palette', tool_type: 'palette', action: 'toggle', latch: true, children: ['draw_size'] },
+    draw_size: { label: 'Size', icon: 'size', type: 'slider', tool_id: 'ui.draw.size',
+        slider_min: 1, slider_max: 100, slider_value: 10 },
+    draw: { atome_tool: true, label: 'Draw', icon: 'draw', tool_id: 'tool.main.draw',
+        type: 'palette', tool_type: 'palette', action: 'momentary', children: ['draw_size'] },
+    view: { atome_tool: true, label: 'View', icon: 'visible_true', tool_id: 'tool.main.view',
+        type: 'palette', tool_type: 'palette', action: 'momentary', submenuInstantOnClick: true,
+        children: ['view_list', 'view_table'] },
+    view_list: { atome_tool: true, label: 'List', icon: 'hamburger', tool_id: 'ui.view.mode.list',
+        type: 'tool', action: 'momentary' },
+    view_table: { atome_tool: true, label: 'Matrix', icon: 'matrix', tool_id: 'ui.view.mode.table',
+        type: 'tool', action: 'momentary' }
 });

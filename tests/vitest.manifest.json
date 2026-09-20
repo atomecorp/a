@@ -59,6 +59,7 @@
   "tests/eve/bevy_ui_main_menu_palette_motion.test.mjs",
   "tests/eve/bevy_ui_mystic_menu.test.mjs",
   "tests/eve/mystic_navigation.test.mjs",
+    "tests/eve/context_menus_characterisation.test.mjs",
   "tests/eve/bevy_ui_nested_motion.test.mjs",
   "tests/eve/bevy_ui_overlay_reconciliation.test.mjs",
   "tests/eve/bevy_ui_overlay_scene_routing.test.mjs",

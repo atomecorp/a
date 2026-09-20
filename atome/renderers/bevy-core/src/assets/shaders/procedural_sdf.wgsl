@@ -26,7 +26,7 @@ struct ProceduralSdfUniform {
     // `mystic_tile_motion[i]` = [progress 0..1, axis (0 = X, 1 = Y), direction, -]
     // `mystic_tile_colors[i]` = [R, G, B, family dose]
     // `mystic_count` = [tile count, hole dose, shadow blur, -]
-    // `mystic_style` = [perspective in tiles, rim thickness, rim dose, edge softness]
+    // `mystic_style` = [perspective in tiles, reserved, reserved, edge softness]
     mystic_tiles: array<vec4<f32>, 24>,
     mystic_tile_motion: array<vec4<f32>, 24>,
     mystic_tile_colors: array<vec4<f32>, 24>,
@@ -591,15 +591,12 @@ const INTUITION_MYSTIC_EYE_MIN: f32 = 0.02;
 // rung the tile reached, with the light rim that keeps a plate from reading as a
 // hole in the image. `box_distance` is that cell's own rounded box.
 fn intuition_mystic_plate(box_distance: f32, screen_uv: vec2<f32>, family: vec4<f32>, glass_mix: f32, tint: vec4<f32>) -> vec3<f32> {
-    let border_px = max(material.mystic_style.y, 0.0);
-    let rim_dose = clamp(material.mystic_style.z, 0.0, 1.0);
     let original = textureSampleLevel(backdrop_texture, backdrop_sampler, screen_uv, 0.0).rgb;
     let blurred = sample_aligned_mip(screen_uv, material.shape.w);
     var plate = mix(original, blurred, glass_mix);
     plate = mix(plate, tint.rgb, tint.a);
     plate = mix(plate, family.rgb, family.a);
-    let rim = 1.0 - smoothstep(0.0, max(border_px, 0.001), -box_distance);
-    return mix(plate, vec3(1.0), rim_dose * rim);
+    return plate;
 }
 
 fn intuition_mystic(pixel_position: vec2<f32>, screen_uv: vec2<f32>) -> vec4<f32> {
@@ -613,7 +610,6 @@ fn intuition_mystic(pixel_position: vec2<f32>, screen_uv: vec2<f32>) -> vec4<f32
     let hole_dose = clamp(material.mystic_count.y, 0.0, 1.0);
     let shadow_blur = max(material.mystic_count.z, 1.0);
     let perspective = max(material.mystic_style.x, 0.5);
-    let border_px = max(material.mystic_style.y, 0.0);
     let softness = max(material.mystic_style.w, 0.25);
     // `flower_tint` carries the contact shadow, `assistant_background_tint` the
     // glass tint: both come from the same tokens as the rest of the product, no
@@ -642,7 +638,7 @@ fn intuition_mystic(pixel_position: vec2<f32>, screen_uv: vec2<f32>) -> vec4<f32
         // The rest of the screen only pays four comparisons.
         let turning = progress < 1.0;
         let reach = select(half_side, perspective * half_side * 2.0, turning)
-            + max(shadow_blur, softness) + border_px + 1.0;
+            + max(shadow_blur, softness) + 1.0;
         if abs(delta.x) > reach || abs(delta.y) > reach { continue; }
 
         // Flip axis: `motion.y` at 0 turns around X (the tile tips up or down), at 1

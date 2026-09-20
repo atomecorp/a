@@ -110,7 +110,38 @@ pub fn video_quad_mesh_handle_from_size(
     meshes.add(video_quad_mesh_from_size(logical_size, uv_rect))
 }
 
+/// Le rectangle d'UV D'ORIGINE du quad video, porte par le quad lui-meme.
+/// La decoupe par une page en a besoin pour calculer un sous-rectangle ; le lire
+/// sur `AtomeVideoExternalTexture` ne suffit pas : ce composant peut manquer
+/// (source pas encore resolue), et la video restait alors non decoupee.
+#[derive(Component, Clone, Copy, PartialEq, Debug)]
+pub struct AtomeVideoQuad(pub [f32; 4]);
+
 pub fn insert_video_quad_mesh(
+    world: &mut World,
+    entity: Entity,
+    logical_size: [f32; 2],
+    uv_rect: [f32; 4],
+) -> Result<(), String> {
+    let handle = {
+        let mut meshes = world
+            .get_resource_mut::<Assets<Mesh>>()
+            .ok_or_else(|| "bevy_mesh_assets_required".to_string())?;
+        video_quad_mesh_handle_from_size(&mut meshes, logical_size, uv_rect)
+    };
+    // Le quad repart de sa taille PLEINE : toute decoupe posee auparavant est
+    // caduque. Sans cet oubli, la garde de decoupe croyait le travail deja fait
+    // et la video ressortait de sa page des qu'une ressource changeait.
+    world
+        .entity_mut(entity)
+        .insert((Mesh2d(handle), AtomeVideoQuad(uv_rect)))
+        .remove::<crate::clip::AtomeVideoClipMesh>();
+    Ok(())
+}
+
+/// Le meme quad, redimensionne et recoupe pour une decoupe : il ne touche PAS au
+/// rectangle d'origine, sinon chaque decoupe se recouperait elle-meme.
+pub fn insert_clipped_video_quad_mesh(
     world: &mut World,
     entity: Entity,
     logical_size: [f32; 2],

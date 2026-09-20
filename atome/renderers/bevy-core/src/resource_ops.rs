@@ -115,6 +115,9 @@ pub fn apply_resource(world: &mut World, patch: AtomeResourcePatch) -> Result<()
         };
         insert_video_external_texture_component_for_node(world, entity, &node);
         insert_video_quad_mesh(world, entity, size, uv_rect)?;
+        // Le quad vient d'etre refait en entier : sans cette ligne, une video
+        // posee dans une page en ressortait des sa premiere mise a jour.
+        apply_entity_clip(world, entity)?;
         return Ok(());
     }
     if kind == "image" || kind == "audio_waveform" {
