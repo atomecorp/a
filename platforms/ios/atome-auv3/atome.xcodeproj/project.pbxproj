@@ -183,7 +183,7 @@
 				349603E02818619000E13C15 /* Sources */,
 				349603E12818619000E13C15 /* Frameworks */,
 				349603E22818619000E13C15 /* Resources */,
-				6BARCH020000000000000001 /* Copy Atome Resource Root */,
+				6BARCH020000000000000001 /* Package Atome Runtime */,
 				34960424281861B500E13C15 /* Embed Foundation Extensions */,
 			);
 			buildRules = (
@@ -208,7 +208,7 @@
 				349603FB281861B500E13C15 /* Sources */,
 				349603FC281861B500E13C15 /* Frameworks */,
 				349603FD281861B500E13C15 /* Resources */,
-				6BARCH020000000000000002 /* Copy Atome Resource Root */,
+				6BARCH020000000000000002 /* Package Atome Runtime */,
 			);
 			buildRules = (
 			);
@@ -303,7 +303,7 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXShellScriptBuildPhase section */
-		6BARCH020000000000000001 /* Copy Atome Resource Root */ = {
+		6BARCH020000000000000001 /* Package Atome Runtime */ = {
 			isa = PBXShellScriptBuildPhase;
 			alwaysOutOfDate = 1;
 			buildActionMask = 2147483647;
@@ -322,7 +322,7 @@
 			shellPath = /bin/sh;
 			shellScript = "set -eu\nRESOURCE_ROOT=\"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/atome_runtime\"\nPATH=\"/opt/homebrew/bin:/usr/local/bin:$PATH\"\nNODE_BINARY=\"${NODE_BINARY:-$(command -v node || true)}\"\nif [ -z \"$NODE_BINARY\" ] || [ ! -x \"$NODE_BINARY\" ]; then\n  echo \"error: Package Atome Runtime requires Node.js (set NODE_BINARY or install node in /opt/homebrew/bin or /usr/local/bin).\" >&2\n  exit 127\nfi\necho \"[IOS_RUNTIME_PACKAGE] node=$NODE_BINARY\"\n\"$NODE_BINARY\" \"$SRCROOT/../package_ios_runtime.mjs\" --output=\"$RESOURCE_ROOT\"\n";
 		};
-		6BARCH020000000000000002 /* Copy Atome Resource Root */ = {
+		6BARCH020000000000000002 /* Package Atome Runtime */ = {
 			isa = PBXShellScriptBuildPhase;
 			alwaysOutOfDate = 1;
 			buildActionMask = 2147483647;

@@ -5,14 +5,16 @@ import { resolve } from 'node:path';
 import { test } from 'node:test';
 
 // Compile the actual AiS owner; only device storage and remote transport are stubbed.
-test('AiS events commit journal and projection together, including nested sync rollback', { skip: process.platform !== 'darwin' }, () => {
-    const directory = mkdtempSync(resolve('temp/ios-event-transaction-'));
+// The context-menu resolver rejects any record without `capabilities`, so the shared
+// projection must travel on both read responses exactly as Axum and Fastify project it.
+test('AiS state_current read responses carry the shared capability projection', { skip: process.platform !== 'darwin' }, () => {
+    const directory = mkdtempSync(resolve('temp/ios-state-current-capabilities-'));
     const source = readFileSync('platforms/ios/atome-auv3/Common/LocalHTTPServer.swift', 'utf8');
     const owner = source.slice(source.indexOf('enum AiSRuntime {'));
     assert.ok(owner.startsWith('enum AiSRuntime {'));
     const stateCurrent = readFileSync('platforms/ios/atome-auv3/Common/AiSRuntimeStateCurrent.swift', 'utf8');
     const events = readFileSync('platforms/ios/atome-auv3/Common/AiSRuntimeEvents.swift', 'utf8');
-    const fixture = readFileSync('tests/probes/ios_event_transaction_fixture.swift', 'utf8');
+    const fixture = readFileSync('tests/probes/ios_state_current_capabilities_fixture.swift', 'utf8');
     const path = resolve(directory, 'main.swift');
     writeFileSync(path, 'import Foundation\nimport CryptoKit\nimport SQLite3\n' + owner + '\n' + fixture);
     // The extension compiles as its own file so the production access-control
@@ -24,5 +26,5 @@ test('AiS events commit journal and projection together, including nested sync r
     const binary = resolve(directory, 'probe');
     execFileSync('xcrun', ['swiftc', '-module-cache-path', resolve(directory, 'modules'), path, stateCurrentPath, eventsPath, '-o', binary], { timeout: 120000, stdio: 'pipe' });
     const output = execFileSync(binary, [directory], { timeout: 30000, encoding: 'utf8' });
-    assert.match(output, /AiS transaction checks passed/);
+    assert.match(output, /AiS state_current capability checks passed/);
 });

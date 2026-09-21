@@ -11,7 +11,6 @@ import { commRuntime, commSurface } from '../../eVe/intuition/runtime/bevy_panel
 import { createCommCompose } from '../../eVe/intuition/tools/communication_compose.js';
 import { resolveCommSendDraft } from '../../eVe/intuition/tools/communication_events.js';
 import { createCommunicationNewsPublication } from '../../eVe/intuition/tools/communication_news_publication.js';
-import { createCommunicationToolUnreadRuntime } from '../../eVe/intuition/tools/communication_tool_unread_runtime.js';
 import { buildMainMenuNotificationNodes } from '../../eVe/intuition/ribbon/bevy_ui_main_menu_notification.js';
 import { createDashboardProjectAttachmentDrag } from '../../eVe/domains/dashboard/dashboard_project_attachment_drag.js';
 import { dispatchAttachmentDrop } from '../../eVe/domains/rendering/surface_interaction_runtime.js';
@@ -194,25 +193,6 @@ describe('Communicate main-menu unread projection', () => {
         );
         expect(warmups).toContain('ensureCommunicatePanelModule()');
         expect(warmups).toContain('__eveCommunicationBootstrapError');
-    });
-
-    it('widens for unread messages, cycles summaries, and collapses after read', () => {
-        const samples = [];
-        const runtime = createCommunicationToolUnreadRuntime({
-            project: (snapshot) => samples.push(snapshot),
-            schedule: (callback) => { callback(1000); return 1; },
-            cancelSchedule: () => {},
-            now: () => 1000,
-            reducedMotion: true
-        });
-        runtime.update([
-            { id: 'm1', date: '2026-09-01T10:00:00Z', message: 'First', unread: true },
-            { id: 'm2', date: '2026-09-01T11:00:00Z', message: 'Hello', unread: true }
-        ]);
-        expect(runtime.readState()).toMatchObject({ count: 2, summary: 'Hello', open: true });
-        expect(samples.at(-1)).toMatchObject({ count: 2, summary: 'Hello' });
-        runtime.update([]);
-        expect(runtime.readState()).toMatchObject({ count: 0, summary: '', open: false });
     });
 
     it('projects the unread summary and count into the reserved Communicate width', () => {

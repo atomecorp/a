@@ -1,5 +1,7 @@
 # Atome / eVe Architecture Map
 
+2026-09-21 Mystic gesture reliability: Mouse, touch and pen share candidate/holding/released/cancelled gesture phases. Recognized holds survive permission latency on release; cancellation, new input and context changes invalidate old openings. Existing surface/BevyUI owners relinquish capture once at takeover; painting does not create gestures. Evidence: eVe/documentations/MYSTIC_GESTURE_VALIDATION_2026-09-21.md.
+
 2026-09-21 Mystic navigation follow-up: The context listener no longer competes with the Mystic runtime for hover/back/release actions. Submenu return is armed by the shared hit-test, and immutable geometry survives ordinary hover/animation. Terminal-placement feasibility uses one capacity across pages. Assistant input and voice remain in their existing owners; Dashboard Settings is a header projection without a data lane. Evidence: eVe/documentations/MYSTIC_NAVIGATION_VALIDATION_2026-09-21.md.
 
 2026-09-21 follow-up: Assistant input is composed inside the existing main-menu ribbon; its dock owns the corner gesture and pending-connection Atom image. Existing hidden text editing, shared BevyUI projection and Realtime transport remain canonical. Menu filtering, taxonomy subscriptions, resize notification and liquid mapping are placed in their existing owners. Validation: eVe/documentations/MYSTIC_ASSISTANT_VALIDATION_2026-09-21.md.

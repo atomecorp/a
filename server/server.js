@@ -146,7 +146,7 @@ import { handleWsAtomeDeleteOperation } from './wsAtomeDeleteOperation.js';
 import { executeShellCommand } from './shell.js';
 import { ensureUserHome } from './userHome.js';
 import { createVisioService } from './visio.js';
-import { pushNotificationToUserStack, updateNotificationInUserStack } from './notificationStack.js';
+import { pushNotificationToUserStack, updateNotificationInUserStack, removeNotificationFromUserStack } from './notificationStack.js';
 import {
   ensureUserDownloadsDir,
   resolveUserUploadPath,
@@ -2209,14 +2209,18 @@ async function startServer() {
               });
               return;
             }
-            if (data.action !== 'update') {
+            if (data.action !== 'update' && data.action !== 'remove') {
               safeSend({
                 type: 'notification-stack-response', requestId, success: false,
                 error: 'notification_stack_action_unsupported'
               });
               return;
             }
-            const result = await updateNotificationInUserStack({
+            const result = data.action === 'remove' ? await removeNotificationFromUserStack({
+              userId: attachedUserId,
+              authorId: attachedUserId,
+              notificationId: data.notificationId || data.notification_id || data.id || null
+            }) : await updateNotificationInUserStack({
               userId: attachedUserId,
               authorId: attachedUserId,
               notificationId: data.notificationId || data.notification_id || data.id || null,

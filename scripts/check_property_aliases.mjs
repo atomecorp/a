@@ -13,7 +13,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 const ROOT = process.cwd();
-const BUDGET = 148;
+const BUDGET = 146;
 const ROOTS = ['atome/src', 'eVe'];
 const SKIP = new Set(['node_modules', 'target', 'dist', 'js', 'vendor', 'R&D', 'wasm', 'assets']);
 

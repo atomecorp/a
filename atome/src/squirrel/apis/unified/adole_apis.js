@@ -185,6 +185,13 @@ export const AdoleAPI = {
       return FastifyAdapter.ws.send({
         type: 'notification-stack', action: 'update', notificationId: id, patch
       });
+    },
+    removeNotification: async ({ notificationId = null } = {}) => {
+      const prepared = await auth.ensureFastifyToken();
+      if (!prepared?.ok) throw new Error(prepared?.error || prepared?.reason || 'communication_auth_unavailable');
+      const id = String(notificationId || '').trim();
+      if (!id) throw new Error('communication_notification_id_required');
+      return FastifyAdapter.ws.send({ type: 'notification-stack', action: 'remove', notificationId: id });
     }
   },
   machine: {

@@ -17,10 +17,18 @@ const serverInfoSource = await readFile(
 const rendererWasm = await readFile(
     new URL('../../atome/src/wasm/squirrel_bevy_renderer_bg.wasm', import.meta.url)
 );
-const localHttpServerSource = await readFile(
-    new URL('../../platforms/ios/atome-auv3/Common/LocalHTTPServer.swift', import.meta.url),
-    'utf8'
-);
+// The AiS state_current owner lives beside the server since the capability fix;
+// both sources are inspected as one unit.
+const localHttpServerSource = [
+    await readFile(
+        new URL('../../platforms/ios/atome-auv3/Common/LocalHTTPServer.swift', import.meta.url),
+        'utf8'
+    ),
+    await readFile(
+        new URL('../../platforms/ios/atome-auv3/Common/AiSRuntimeStateCurrent.swift', import.meta.url),
+        'utf8'
+    )
+].join('\n');
 const adoleAdapterSource = await readFile(
     new URL('../../atome/src/squirrel/apis/unified/adole_adapter_atome.js', import.meta.url),
     'utf8'

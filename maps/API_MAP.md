@@ -1,5 +1,7 @@
 # Atome / eVe API Map
 
+2026-09-21 Mystic gesture reliability: Mystic opening revision helpers are internal only. closeMysticMenu invalidates pending access reads. updateHover cannot activate after initial release; explicit BevyUI activation remains unchanged. Removed the unused internal capturePointerSession API and blanket assistant canvas blocker. Evidence: eVe/documentations/MYSTIC_GESTURE_VALIDATION_2026-09-21.md.
+
 2026-09-21 Mystic navigation follow-up: Internal Mystic releaseAt receives the captured initial gesture once; old tree handlers are generation-bound. Hover/release selects the normal canonical command action. tool_runtime_dispatch.js normalizes dashboard to desktop and surface_item to project before existing capability checks. Finder uses inlineSearchOpenWithPanel; Settings uses the existing Home panel. No public API added. Evidence: eVe/documentations/MYSTIC_NAVIGATION_VALIDATION_2026-09-21.md.
 
 2026-09-21 follow-up: Internal assistant state separates connected from microphoneActive. The existing main-menu inline-content owner accepts a tool presentation while its external-width owner reserves layout space. ProviderRelay keeps the same authenticated account/server/environment across token rotation and sends subsequent requests with the latest configured token. Validation: eVe/documentations/MYSTIC_ASSISTANT_VALIDATION_2026-09-21.md.
@@ -1562,6 +1564,13 @@ queueing. eVe Communication uses the internal `eve-comm-share` envelope so an em
 subject, attachment request references, and an optional generic Dashboard News record
 survive offline reconnect. Recipient-side realtime dispatch is `adole-new-message`;
 the durable stack remains authoritative and deduplicates by message id.
+`AdoleAPI.communication.removeNotification({ notificationId })` sends `notification-stack`
+`action:'remove'`: it removes the item from the caller's own stack only (other recipients
+and the sender keep theirs); there is no "delete for everyone" route. The patch whitelist
+is `unread`, `archived`, `status`, `todo`, `urgent` (booleans except `status`). In eVe,
+`window.dispatchEvent(new CustomEvent('eve-comm-send', { detail: { draft, settle } }))`
+sends a self-contained draft (`{ message, recipients, reply }`) through the same chain
+without touching the Communication compose state; `settle({ ok, error })` reports it.
 Read/archive state is persisted by the authenticated self-only
 `AdoleAPI.communication.updateNotification({ notificationId, patch })` action over
 `/ws/api`; Fastify accepts only `unread`, `archived`, and `status`, then returns the

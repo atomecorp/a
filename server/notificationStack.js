@@ -55,6 +55,8 @@ const normalizeNotification = (input = {}) => {
         unread: input.unread !== false,
         status: input.status || null,
         archived: input.archived === true,
+        todo: input.todo === true,
+        urgent: input.urgent === true,
         publication: input.publication && typeof input.publication === 'object' ? input.publication : null
     };
 };
@@ -107,6 +109,8 @@ export async function updateNotificationInUserStack({
     const allowedPatch = {};
     if (typeof patch.unread === 'boolean') allowedPatch.unread = patch.unread;
     if (typeof patch.archived === 'boolean') allowedPatch.archived = patch.archived;
+    if (typeof patch.todo === 'boolean') allowedPatch.todo = patch.todo;
+    if (typeof patch.urgent === 'boolean') allowedPatch.urgent = patch.urgent;
     if (Object.prototype.hasOwnProperty.call(patch, 'status')) allowedPatch.status = patch.status || null;
     if (!Object.keys(allowedPatch).length) return { ok: false, error: 'notification_patch_empty' };
 
@@ -124,4 +128,27 @@ export async function updateNotificationInUserStack({
         notification_stack: next
     }, authorId || userId);
     return { ok: true, count: next.length, stack: next, notification: updatedItem };
+}
+
+// Removes the item from this user's own stack only ("retirer pour moi").
+// Other recipients' stacks and any `type:'message'` atome are untouched.
+export async function removeNotificationFromUserStack({
+    userId,
+    notificationId,
+    authorId = null
+}) {
+    if (!userId || !notificationId) return { ok: false, error: 'missing_user_or_notification_id' };
+    const userAtome = await getAtome(userId);
+    if (!userAtome) return { ok: false, error: 'user_atome_missing' };
+    const stack = resolveStack(userAtome);
+    const next = stack.filter((item) => {
+        const itemId = item?.id || item?.message_id || null;
+        return !itemId || String(itemId) !== String(notificationId);
+    });
+    if (next.length === stack.length) return { ok: false, error: 'notification_not_found' };
+    await updateAtome(userId, {
+        message_stack: next,
+        notification_stack: next
+    }, authorId || userId);
+    return { ok: true, count: next.length, stack: next, removed_id: notificationId };
 }

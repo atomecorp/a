@@ -1,5 +1,7 @@
 # Atome / eVe Code Map
 
+2026-09-21 Mystic gesture reliability: Mystic context.js owns the initial pointer session and asynchronous access resolution. index.js owns the opening revision invalidated by explicit closure. The render runtime no longer recreates pointer sessions during painting; the unused BevyUI capturePointerSession method is removed. Evidence: eVe/documentations/MYSTIC_GESTURE_VALIDATION_2026-09-21.md.
+
 2026-09-21 Mystic navigation follow-up: Mystic context.js forwards hover/release to bevy_ui_mystic_runtime.js; obsolete duplicate dispatch wrappers are removed. mystic_menu_items.js and bevy_ui_mystic_model.js own terminal placement and consistent pagination. assistant_dock.js reuses ribbon input and pauses on opening. dashboard_layout.js, dashboard_records.js and dashboard_actions.js own the Settings header/action. Evidence: eVe/documentations/MYSTIC_NAVIGATION_VALIDATION_2026-09-21.md.
 
 2026-09-21 follow-up: Assistant ownership repair: assistant_dock.js reuses main-menu inline content and external width; assistant_runtime.js waits for realtime_session.js connected state. bevy_ui_main_menu_model.js owns filtering; navigation_taxonomy.js owns selection/subscriptions; bevy_ui_main_menu_resize_runtime.js owns geometry notification; intuition_liquid_menu_renderer.js owns ribbon liquid mapping. provider_relay.rs distinguishes token refresh from identity change. Validation: eVe/documentations/MYSTIC_ASSISTANT_VALIDATION_2026-09-21.md.
@@ -164,12 +166,15 @@ iOS WebContent capacity owners (2026-09-04):
 coalescence, and backend-independent derived-activity-tool quarantine;
 `eVe/core/atome_commit_fetch.js` forwards type/exclusion filters and pages the
 core reader; tool registry callers request 100-row pages.
-`LocalHTTPServer.swift` applies type filtering and exclusions in SQL/row
-serialization, emits only canonical `properties`, frames JSON bytes once, and
-quarantines historical derived activity-selection tools before catalogue
-hydration. The three active-project flag owners request project rows without
-preview payloads. `ios_webcontent_boot_capacity_contract.probe.mjs` locks these
-boundaries and the renderer capacity ceiling.
+`LocalHTTPServer.swift`, with the state-current owner extracted into
+`AiSRuntimeStateCurrent.swift` (see the iOS event journal entry below), applies
+type filtering and exclusions in SQL/row serialization, emits only canonical
+`properties`, adds the read-only `capabilities` projection on the state-current
+`get`/`list` boundary, frames JSON bytes once, and quarantines historical
+derived activity-selection tools before catalogue hydration. The three
+active-project flag owners request project rows without preview payloads.
+`ios_webcontent_boot_capacity_contract.probe.mjs` locks these boundaries and
+the renderer capacity ceiling.
 
 iOS cold-boot owners (2026-09-03): `application/AppDelegate.swift` starts the
 monotonic measurement before constructing `iCloudFileManager`;
@@ -1869,7 +1874,7 @@ Reusable APIs:
 - `eVe/intuition/runtime/eve_intuition/debug_runtime.js` owns the eVeIntuition `window.__DEBUG__` diagnostic facade, deterministic test-mode style injection, footer/selection/timeline debug readers, and project persistence diagnostics.
 - `eVe/intuition/runtime/eve_intuition/main_menu_auth_runtime.js` owns authenticated/disconnected main-menu content patching and initial login-sequence gating. Initial unauthenticated boot opens the shared login sequence directly through `eVe/intuition/tools/user_login_shared_runtime.js`, then lazy-loads the Home module only when the user submits credentials or chooses guest entry. When a workspace becomes active from restored authenticated or anonymous state, it closes the shared login sequence through that singleton owner before exposing authenticated toolbox content, preventing a stale login shell from masking Dashboard Bevy records or intercepting the main handle. `eVeIntuition.js` injects `intuition_content`, translation, and the Home module loader; it must not re-inline auth menu child lists, home patches, or initial-login sequencing.
 - `eVe/intuition/runtime/eve_intuition/main_tool_registration_runtime.js` owns registration of base main-menu definitions as Atome tools, including duplicate name/tool-id guardrails, visible/catalog scope derivation, and handler routing back through the canonical main-tool interaction path. `eVeIntuition.js` keeps only the content declaration and injected tool-runtime dependencies.
-- `eVe/intuition/runtime/eve_intuition/main_menu_content_runtime.js` owns the main Intuition menu content declaration. The visible main sequence is now `home`, `find`, `capture`, `time`, `communicate`, `mode`, and `view`; `ai` remains an inline IA prompt route but is not exposed in the visible toolbox, `capture` is the product capture palette entry used by browser media import, and the unimplemented no-op `help` tool is not exposed. `eVeIntuition.js` injects panel/tool callbacks only and must not re-inline the content object.
+- `eVe/intuition/runtime/eve_intuition/main_menu_content_runtime.js` owns the main Intuition menu content declaration. The visible main sequence is now `help`, `home`, `find`, `capture`, `time`, `communicate`, `mode`, and `view`; `ai` remains an inline IA prompt route but is not exposed in the visible toolbox, `capture` is the product capture palette entry used by browser media import, and `help` (`tool.main.help`) is the Help tool: short press toggles its banner, long press toggles Do Not Disturb. `eVeIntuition.js` injects panel/tool callbacks only and must not re-inline the content object.
 - `eVe/intuition/runtime/eve_intuition/main_menu_runtime.js` composes the closed main-menu owners: catalog, latched-state resolution, selection guard, interaction dispatch, content declaration, auth gate, and Atome-tool registration. `eVeIntuition.js` must consume this composite instead of wiring those owners inline.
 - `eVe/intuition/runtime/eve_intuition/main_tool_interaction_runtime.js` owns main-tool id catalog resolution, dedicated declaration ids, base-tool definition filtering, and canonical main-tool interaction dispatch/latch synchronization. `eVeIntuition.js` consumes the returned catalog and trigger function and must not re-inline `triggerMainToolInteraction`.
 - `eVe/intuition/runtime/eve_intuition/text_tool_runtime.js` composes the text-tool coordinator state and injects the focused `text_tool_editing_runtime.js`, `text_tool_create_runtime.js`, and `text_tool_background_runtime.js` owners. `eVeIntuition.js` must not re-inline text session helpers, text background focus state, or create alternate DOM/non-Bevy text renderers.
@@ -2393,9 +2398,17 @@ The eVe Communication compose owner is `bevy_panel_comm_*`; enabled-recipient st
 embedded Advanced/Conditions, and attachment projection stay there. Delivery routes
 through `AdoleAPI.communication.send`, `server/server.js` direct-message persistence,
 and `server/notificationStack.js`. That server owner also applies authenticated
-self-only read/archive patches through `AdoleAPI.communication.updateNotification`;
-`communication_tool_unread_runtime.js` projects the returned durable unread stack
-through the existing main-menu external-width API.
+self-only read/archive/`todo`/`urgent` patches through `AdoleAPI.communication.updateNotification`
+and self-only removal through `AdoleAPI.communication.removeNotification` ("remove for me").
+Communication publishes every stack change through `subscribeCommNotifications` and
+instantiates the Help tool with `installHelpTool` (it hands Help its API, so Help never
+imports Communication). Help (`eVe/intuition/tools/help_tool*.js`: runtime, pure model,
+node builders, rail context) is the unread entry point: badge, banner (inline-field width
+owner), `help` panel surface (list/reading/confirm/filters), reply through the one
+`eve-comm-send` chain with a self-contained `detail.draft`, side-rail actions via
+`enterVirtual`, Do Not Disturb and filters in `profile.preferences.notifications`.
+The Communication panel has an `archives` view (read or archived items) opened with
+`openCommPanel({ view: 'archives' })`.
 
 Status: Verified.
 
@@ -2788,6 +2801,8 @@ OpenAI credential migration (2026-09-11): `provider_client.resolveOpenAiCredenti
 ### iOS event journal latency and atomic projection (2026-09-11)
 
 `platforms/ios/atome-auv3/Common/AiSRuntimeEvents.swift` owns event normalization, journal append and projection as an extension of the existing AiSRuntime, extracted from LocalHTTPServer. Each event uses a SQLite savepoint so journal, particles and state-current commit or roll back together; enclosing remote-sync transactions retain ownership. Sequential batches retain per-event semantics. Sequence allocation includes `sequence IS NOT NULL`, matching the existing partial stream/sequence index rather than scanning the journal. The executable Swift probe covers rollback, duplicate IDs, nested transactions and index selection. Physical iPhone startup: 453 events / 1379 ms cumulative handler time, p50 3 ms, p95 4 ms, zero observed local request timeouts; assistant network and Mystic acceptance remain open.
+
+`platforms/ios/atome-auv3/Common/AiSRuntimeStateCurrent.swift` owns the state-current read boundary as the same kind of AiSRuntime extension, extracted from LocalHTTPServer: message handling, `get`/`list`/`count`, row loading and serialization, `canReadState` authorization, upserts and Atome-meta lookup. It also owns the single read-only `capabilities` projection, applied only in `handleStateCurrentGet` and `handleStateCurrentList` with the same shape as Axum `project_capabilities_for_read` and Fastify `projectAtomeCapabilitiesForRead`; the shared serializer and snapshot creation never carry capabilities, so eVe `context_menu_resolver.js` keeps its menu-access gate on iOS without adding a second server, state owner or query. Regression owner: `tests/probes/ios_state_current_capabilities.probe.mjs`.
 
 ### Mystic layer band, iOS provider relay and voice bridge (2026-09-11)
 
