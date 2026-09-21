@@ -3,6 +3,12 @@ import path from 'node:path';
 import { randomBytes, createHash } from 'node:crypto';
 import { createEncryptedTokenVault } from '../atome/src/squirrel/security/token_vault.js';
 
+// Providers whose key lives only on the server (never readable by the browser).
+export const SERVER_VAULT_PROVIDERS = Object.freeze(['openai', 'musicgpt', 'runway']);
+const assertProvider = (provider) => {
+    if (!SERVER_VAULT_PROVIDERS.includes(provider)) throw new Error('provider_not_supported');
+};
+
 // Server-only storage adapter for the existing encrypted token vault. Credentials
 // never enter Atome events, user exports, sync or a browser-readable read route.
 export const createProviderCredentialVault = ({ root, secret } = {}) => {
@@ -29,19 +35,19 @@ export const createProviderCredentialVault = ({ root, secret } = {}) => {
     const vault = createEncryptedTokenVault({ storage, secret });
     return {
         async store(provider, value) {
-            if (provider !== 'openai') throw new Error('provider_not_supported');
+            assertProvider(provider);
             const key = String(value || '').trim();
             if (!key || key.length > 1024 || /\s/.test(key)) throw new Error('provider_key_invalid');
             await vault.store(provider, { key });
             return { configured: true };
         },
         async read(provider) {
-            if (provider !== 'openai') throw new Error('provider_not_supported');
+            assertProvider(provider);
             const result = await vault.read(provider);
             return result.ok ? result.value.key : null;
         },
         remove(provider) {
-            if (provider !== 'openai') throw new Error('provider_not_supported');
+            assertProvider(provider);
             vault.remove(provider);
             return { configured: false };
         }

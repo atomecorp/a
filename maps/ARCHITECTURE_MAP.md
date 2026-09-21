@@ -1,8 +1,14 @@
 # Atome / eVe Architecture Map
 
+2026-09-21 follow-up: Assistant input is composed inside the existing main-menu ribbon; its dock owns the corner gesture and pending-connection Atom image. Existing hidden text editing, shared BevyUI projection and Realtime transport remain canonical. Menu filtering, taxonomy subscriptions, resize notification and liquid mapping are placed in their existing owners. Validation: eVe/documentations/MYSTIC_ASSISTANT_VALIDATION_2026-09-21.md.
+
+Assistant cleanup: one Atom control, the existing animated/focused ribbon text field, and actual conversation content only; no separate mic glyph/control or empty status/model block. Dock teardown cancels field motion and hold suppression. No public API or renderer was added.
+
+Current assistant gesture and provider activation evidence: eVe/documentations/MYSTIC_ASSISTANT_VALIDATION_2026-09-21.md.
+
 ### Mystic, assistant dock and context composition — 2026-09-20
 
-Mystic uses the shared Bevy capture/projection pipeline and one geometry/clock for root, submenu and pages. The assistant dock reuses the existing voice/conversation/text owners and belongs to the workspace menu layer. Context JSON/resolver and session project modes replace the old Flower composition/Perform DOM paths. Acceptance is partial; see eVe/documentations/MYSTIC_VALIDATION_2026-09-20.md for implementation gaps and runtime evidence.
+Mystic uses the shared Bevy capture/projection pipeline and one geometry/clock for root, submenu and pages. The assistant dock reuses the existing voice/conversation/text owners and belongs to the workspace menu layer. It shares the footer Atom position and standard hold recognizer; no new renderer or DOM surface is introduced. The Realtime owner publishes actual microphone capture state to the assistant. Mystic removes the obsolete post-release timer and awaits teardown before opening the session. Context JSON/resolver and session project modes replace the old Flower composition/Perform DOM paths. Acceptance is partial; see eVe/documentations/MYSTIC_VALIDATION_2026-09-20.md for implementation gaps and runtime evidence.
 
 
 ### Recursive edition and source-space crop projection — 2026-09-17

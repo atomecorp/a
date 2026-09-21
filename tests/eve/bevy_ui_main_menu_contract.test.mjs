@@ -243,16 +243,16 @@ test('modern taxonomy keeps Legacy untouched and hides the edit menu outside an 
 
 });
 
-test('BevyUI main menu Atome tool toggles the Dashboard', async () => {
+test('BevyUI main menu Atome tool toggles the assistant', async () => {
     const toggles = [];
     const harness = createRuntimeHarness({
-        toggleDashboard: (payload) => toggles.push(payload)
+        invokeAssistant: (action, payload) => toggles.push({ action, ...payload })
     });
     try {
         await harness.runtime.showFully();
         const tree = harness.calls[0].payload.tree;
         await findNode(tree.root, BEVY_MAIN_MENU_ATOME_ID).on.activate();
-        assert.deepEqual(toggles, [{ source: 'bevy_ui_main_menu_atome' }]);
+        assert.deepEqual(toggles, [{ action: 'toggle', source: 'bevy_ui_main_menu_atome' }]);
     } finally {
         harness.restore();
     }
@@ -538,7 +538,7 @@ test('View and Mode slots present the current choice and still open their palett
     } finally { harness.runtime.destroy(); harness.restore(); }
 });
 
-test('the main menu neither exposes nor controls the assistant', async () => {
+test('the main menu keeps assistant input and options owned by the dock', async () => {
  const h=createRuntimeHarness(); let dashboard=0;
  h.window.eveAssistantApi={getState:()=>({active:true}),listen:()=>{throw Error('unexpected voice activation');}};
  try { await h.runtime.showFully();
@@ -570,4 +570,23 @@ const choicePaletteContent = () => ({
         type: 'tool', action: 'momentary' },
     view_table: { atome_tool: true, label: 'Matrix', icon: 'matrix', tool_id: 'ui.view.mode.table',
         type: 'tool', action: 'momentary' }
+});
+
+
+test('Atom long press toggles input once and consumes its trailing short click', async () => {
+    const actions = [];
+    const h = createRuntimeHarness({ invokeAssistant: action => actions.push(action) });
+    try {
+        await h.runtime.showFully();
+        const item = findNode(h.calls.at(-1).payload.tree.root, BEVY_MAIN_MENU_ATOME_ID);
+        item.on.press({ x: 930, y: 690 });
+        await waitMs(560);
+        item.on.release({ x: 930, y: 690 });
+        await item.on.activate();
+        assert.deepEqual(actions, ['toggleInput']);
+        item.on.press({ x: 930, y: 690 });
+        item.on.release({ x: 930, y: 690 });
+        await item.on.activate();
+        assert.deepEqual(actions, ['toggleInput', 'toggle']);
+    } finally { h.runtime.destroy(); h.restore(); }
 });

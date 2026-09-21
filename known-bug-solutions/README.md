@@ -10,6 +10,7 @@ the established solution before attempting a new implementation.
 
 | Symptom | Folder |
 | --- | --- |
+| Assistant appears before connection, loses voice on token refresh, or its input covers ribbon tools | [assistant-connection-ribbon](assistant-connection-ribbon/README.md) |
 | Nested media cannot crop, images stretch, or trimmed waveforms deform | [source-space-media-crop](source-space-media-crop/README.md) |
 | SVG double-click has no WebGPU handles or Color targets an old layer | [svg-vector-edit-webgpu](svg-vector-edit-webgpu/README.md) |
 | Matrix cumulative selection toggles the wrong cell after a store reload | [structured-selection-reload-order](structured-selection-reload-order/README.md) |

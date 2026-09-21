@@ -40,7 +40,21 @@ const isRelinkable = (action, error) => RELAY_PREFLIGHT_FAILURES.has(error)
 const PROVIDER_ACTION_TIMEOUT_MS = Object.freeze({
     'credential.status': 15000,
     'credential.store': 25000,
-    'credential.remove': 15000
+    'credential.remove': 15000,
+    // Audio generation is an async job: every call is a short question, the
+    // minutes are spent between polls, never inside one request.
+    'audio.providers': 15000,
+    'audio.capabilities': 15000,
+    'audio.generate': 60000,
+    'audio.job': 30000,
+    'audio.output': 120000,
+    'video.providers': 15000,
+    'video.capabilities': 15000,
+    'video.estimate': 15000,
+    'video.generate': 60000,
+    'video.job': 30000,
+    'video.cancel': 30000,
+    'video.output': 180000
 });
 const DEFAULT_PROVIDER_TIMEOUT_MS = 180000;
 
@@ -94,7 +108,9 @@ export const requestProviderService = async (action, payload = {}, {
         if (principal() !== requestPrincipal) throw new Error('provider_principal_changed');
         return transport.send({
             type: 'ai-provider', action, requestId, token,
-            ...(action === 'credential.store' ? { key: payload.key } : { payload })
+            ...(action === 'credential.store'
+                ? { key: payload.key, ...(payload.provider ? { provider: payload.provider } : {}) }
+                : { payload })
         }, {
             timeoutMs: PROVIDER_ACTION_TIMEOUT_MS[action] ?? DEFAULT_PROVIDER_TIMEOUT_MS,
             signal,

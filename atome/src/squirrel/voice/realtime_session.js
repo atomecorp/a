@@ -19,7 +19,7 @@ export const createRealtimeSession = ({
     };
     let turnDetection = validateVad(vad);
     let toolSession = null, toolQueue = Promise.resolve();
-    let state = { phase: 'closed', sessionId: null, error: '' };
+    let state = { phase: 'closed', sessionId: null, error: '', connected: false };
     const transcripts = new Map(), heardResponses = new Map();
     let currentResponse = null;
     const flushTranscript = async (responseId, heard) => {
@@ -30,7 +30,9 @@ export const createRealtimeSession = ({
         for (const [, turn] of ready) await onTurn({ id: turn.id, role: 'assistant', text: turn.text, heard, interrupted: !heard });
     };
     const listeners = new Set();
-    const emit = patch => { state = { ...state, ...patch }; listeners.forEach(fn => fn({ ...state })); };
+    const snapshot = () => ({ ...state,
+        microphoneActive: listening && Boolean(stream?.getAudioTracks().some(track => track.readyState === 'live' && track.enabled !== false)) });
+    const emit = patch => { state = { ...state, ...patch }; listeners.forEach(fn => fn(snapshot())); };
     const send = event => {
         if (channel?.readyState === 'open') channel.send(JSON.stringify(event));
     };
@@ -49,7 +51,7 @@ export const createRealtimeSession = ({
         channel?.close(); peer?.close(); channel = null; peer = null;
         unsubscribeControl(); unsubscribeControl = () => {};
         const id = remoteId; remoteId = null;
-        emit({ phase: 'closed', sessionId: null, error: '' });
+        emit({ phase: 'closed', sessionId: null, error: '', connected: false });
         const unfinished = [...transcripts.values()];
         transcripts.clear(); heardResponses.clear(); currentResponse = null;
         const results = await Promise.allSettled([
@@ -119,6 +121,7 @@ export const createRealtimeSession = ({
         });
         if (token !== generation || !listening) { acquired.getTracks().forEach(track => track.stop()); return false; }
         stream = acquired;
+        emit({});
         const sender = peer.getSenders().find(item => item.track?.kind === 'audio');
         if (sender) await sender.replaceTrack(stream.getAudioTracks()[0]);
         else peer.addTrack(stream.getAudioTracks()[0], stream);
@@ -175,7 +178,7 @@ export const createRealtimeSession = ({
             channel = connection.createDataChannel('oai-events');
             channel.onopen = () => {
                 if (token !== generation) return;
-                emit({ phase: listening ? 'listening' : 'idle' });
+                emit({ phase: listening ? 'listening' : 'idle', connected: true });
             };
             channel.onmessage = event => {
                 // Serialize tool calls while keeping speech and interruption events responsive.
@@ -229,7 +232,7 @@ export const createRealtimeSession = ({
             return { vad: { ...turnDetection }, deviceId };
         },
         resume: open,
-        getState: () => ({ ...state }),
-        subscribe(fn) { listeners.add(fn); fn({ ...state }); return () => listeners.delete(fn); }
+        getState: snapshot,
+        subscribe(fn) { listeners.add(fn); fn(snapshot()); return () => listeners.delete(fn); }
     });
 };

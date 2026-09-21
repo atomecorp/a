@@ -1,8 +1,14 @@
 # Atome / eVe Design Map
 
+2026-09-21 follow-up: Atom blinks during connection, then its original glyph disappears beneath the connected assistant. The standard ribbon field pushes neighboring icons without moving the assistant corner. Long press reveals/hides the field; field focus pauses voice, closing it resumes voice. Opening the field alone leaves voice active. No extra microphone icon or unconditional model/status label is added. Validation: eVe/documentations/MYSTIC_ASSISTANT_VALIDATION_2026-09-21.md.
+
+Assistant cleanup: one Atom control, the existing animated/focused ribbon text field, and actual conversation content only; no separate mic glyph/control or empty status/model block. Dock teardown cancels field motion and hold suppression. No public API or renderer was added.
+
+Current assistant gesture and provider activation evidence: eVe/documentations/MYSTIC_ASSISTANT_VALIDATION_2026-09-21.md.
+
 ### Mystic current visual contract — 2026-09-20
 
-Standard tool size, typography and icon metrics also govern Mystic. Borderless tiles expose a frozen composed-scene front and a tool-face back under the same WebGPU perspective. The actual redistributed offset selects the outward axis, vertically on diagonal ties. Submenus use the same mechanism around the chosen item. The assistant has a separate corner dock with text input and microphone control; its main-menu options and anchor dependency are removed. Browser observations and outstanding acceptance: eVe/documentations/MYSTIC_VALIDATION_2026-09-20.md.
+Standard tool size, typography and icon metrics also govern Mystic. Borderless tiles expose a frozen composed-scene front and a tool-face back under the same WebGPU perspective. The actual redistributed offset selects the outward axis, vertically on diagonal ties. Submenus use the same mechanism around the chosen item. The assistant overlays the standard Atom footer tile, mirrored for handedness. Short click toggles its session; long press toggles the text input, pausing capture on text and explicitly resuming voice on close. Its procedural shape reflects the session; no separate microphone glyph is drawn. Browser observations and outstanding acceptance: eVe/documentations/MYSTIC_VALIDATION_2026-09-20.md.
 
 
 ### Source-window crop rendering — 2026-09-17
@@ -41,7 +47,7 @@ The waiting lasso rectangle opens the official animated Mystic: Text, Capture, M
 
 ### Assistant icon and retouch projection — 2026-09-10 (visual acceptance open)
 
-The assistant uses the Mystic 3-second hold/release/2-second stillness gesture or a fresh center click. Its corner dock owns microphone and text controls, reusing the existing conversation, voice and hidden-text services. Clicking the assistant closes it; text focus mutes without automatic resume. Main-menu assistant controls and the five-level hold slider are retired. Provider-backed voice and the complete cross-runtime gesture matrix remain unvalidated.
+Mystic activates the assistant at three seconds while still held, or on a fresh center click, after finishing menu teardown. Release below the threshold and movement beyond ten pixels do not activate it. The old armed/release/stillness stages are removed. Atom remains the assistant entry in the main menu; its former Dashboard click is available through the configured Dashboard tool. The obsolete five-level hold slider remains retired. Home exposes explicit activation of a stored AI provider. See the 2026-09-21 validation record for runtime evidence.
 
 
 ### Compact names and category Plus controls — 2026-09-10

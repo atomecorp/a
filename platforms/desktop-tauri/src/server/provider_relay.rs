@@ -9,8 +9,7 @@ use tokio_tungstenite::{connect_async, tungstenite::Message};
 #[derive(Default)]
 pub(super) struct ProviderRelay {
     owner: String,
-    token: String,
-    endpoint: String,
+    credential: Option<RemoteSyncCredential>,
     sender: Option<mpsc::Sender<Value>>,
     receiver: Option<mpsc::Receiver<Value>>,
     task: Option<JoinHandle<()>>,
@@ -32,7 +31,7 @@ impl ProviderRelay {
         let credential = state.remote_sync_credentials.lock()
             .map_err(|_| "provider_principal_unavailable")?.get(user_id).cloned()
             .ok_or("provider_principal_unavailable")?;
-        if self.owner != user_id || self.token != credential.token || self.endpoint != credential.remote_url {
+        if self.owner != user_id || !same_identity(self.credential.as_ref(), &credential) {
             if let Some(task) = self.task.take() { task.abort(); }
             self.sender = None; self.receiver = None;
         }
@@ -46,8 +45,7 @@ impl ProviderRelay {
             let (mut write, mut read) = socket.split();
             let identity_state = state.clone();
             let owner = user_id.to_string();
-            let token = credential.token.clone();
-            let remote_url = credential.remote_url.clone();
+            let expected_identity = credential.clone();
             self.task = Some(tokio::spawn(async move {
                 let mut pending = std::collections::HashSet::<String>::new();
                 let mut voice_sessions = std::collections::HashSet::<String>::new();
@@ -65,10 +63,10 @@ impl ProviderRelay {
                             if write.send(Message::Text(request.to_string())).await.is_err() { break; }
                         }
                         response = read.next() => {
-                            let Some(Ok(response)) = response else { break; };
-                            let same_owner = identity_state.remote_sync_credentials.lock().ok()
-                                .and_then(|items| items.get(&owner).map(|item| item.token == token && item.remote_url == remote_url)).unwrap_or(false);
-                            if !same_owner { break; }
+                            let response = match response { Some(Ok(value)) => value, Some(Err(_)) | None => break };
+                            let valid = identity_state.remote_sync_credentials.lock().ok()
+                                .map(|items| same_identity(items.get(&owner), &expected_identity)).unwrap_or(false);
+                            if !valid { break; }
                             match response {
                                 Message::Text(text) => {
                                     let Ok(value) = serde_json::from_str::<Value>(&text) else { break; };
@@ -95,12 +93,21 @@ impl ProviderRelay {
                 }
             }));
             self.sender = Some(outgoing); self.receiver = Some(incoming);
-            self.owner = user_id.to_string(); self.token = credential.token; self.endpoint = credential.remote_url;
+            self.owner = user_id.to_string();
         }
         let object = message.as_object_mut().ok_or("provider_request_invalid")?;
-        object.insert("token".to_string(), Value::String(self.token.clone()));
+        object.insert("token".to_string(), Value::String(credential.token.clone()));
+        self.credential = Some(credential);
         self.sender.as_ref().ok_or("provider_connection_closed")?.send(message).await.map_err(|_| "provider_connection_closed".to_string())
     }
+}
+
+// Token refresh does not change the authenticated account. Requests use the
+// latest token; replies remain scoped to the same account, server and environment.
+fn same_identity(current: Option<&RemoteSyncCredential>, expected: &RemoteSyncCredential) -> bool {
+    current.is_some_and(|current| current.remote_user_id == expected.remote_user_id
+        && current.remote_url == expected.remote_url
+        && current.environment_fingerprint == expected.environment_fingerprint)
 }
 
 fn remote_endpoint(credential: &RemoteSyncCredential) -> Result<String, String> {

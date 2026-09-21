@@ -29,7 +29,7 @@ const deferred = () => {
     return { promise, resolve };
 };
 
-test('a real BevyUI long hold reopens after visual close even while the farewell is finishing', async () => {
+test('the shared BevyUI hold recognizer can reopen while the previous farewell finishes', async () => {
     let clock = 0;
     let frameCallback = null;
     let sessionSequence = 0;
@@ -61,7 +61,6 @@ test('a real BevyUI long hold reopens after visual close even while the farewell
         cancelFrame: () => { },
         renderScene: async () => ({ ok: true }),
         clearScene: async () => ({ ok: true }),
-        setInteractionLayer: () => { },
         commandBus: { append: () => { } },
         translate: translateVoiceKey
     });
@@ -122,7 +121,6 @@ test('a real BevyUI long hold reopens after visual close even while the farewell
 test('assistant public API preserves project interaction, trace command, render teardown and clean reopen', async () => {
     const listeners = {};
     const renders = [];
-    const interactions = [];
     const commands = [];
     let sessionSequence = 0;
     let clock = 0;
@@ -169,21 +167,19 @@ test('assistant public API preserves project interaction, trace command, render 
         cancelFrame: () => { },
         renderScene: async (payload) => renders.push(payload),
         clearScene: async () => renders.push({ clear: true }),
-        setInteractionLayer: (...args) => interactions.push(args),
         commandBus: { append: (command) => commands.push(command) },
         translate: (key) => key.endsWith('greeting') ? 'Salut, que veux-tu ?' : 'Assistant vocal eVe'
     });
     await runtime.toggle({ source: 'bevy_ui_main_menu_atome' });
     assert.equal(runtime.getState().active, true);
-    assert.equal(runtime.getState().transition, 'appearing');
+    assert.equal(runtime.getState().transition, 'connecting');
     await advance(419);
-    assert.equal(runtime.getState().sessionId, null);
+    assert.equal(runtime.getState().sessionId, 'session-1');
     await advance(1);
     assert.equal(runtime.getState().sessionId, 'session-1');
     assert.equal(commands[0].command, 'voice.assistant.toggle');
     assert.equal(commands[0].source, 'bevy_ui_main_menu_atome');
-    assert.equal(interactions.length, 0);
-    assert.equal(renders[0].phase, 'opening');
+    assert.ok(['listening', 'speaking'].includes(renders[0].phase));
     const firstClose = runtime.toggle({ source: 'bevy_ui_main_menu_atome' });
     const duplicateClose = runtime.close({ source: 'bevy_ui_main_menu_atome' });
     await advance(320);
@@ -199,7 +195,7 @@ test('assistant public API preserves project interaction, trace command, render 
     assert.equal(runtime.getState().phase, 'closed');
 });
 
-test('closing during appearance speaks only the farewell and remains reopenable', async () => {
+test('closing during connection cancels startup and remains reopenable', async () => {
     let clock = 0;
     let frameCallback = null;
     const spokenTexts = [];
@@ -225,7 +221,6 @@ test('closing during appearance speaks only the farewell and remains reopenable'
         now: () => clock,
         renderScene: async () => ({ ok: true }),
         clearScene: async () => ({ ok: true }),
-        setInteractionLayer: () => { },
         commandBus: { append: () => { } },
         translate: translateVoiceKey
     });
@@ -236,13 +231,13 @@ test('closing during appearance speaks only the farewell and remains reopenable'
     clock = 520;
     frameCallback?.();
     await close;
-    assert.deepEqual(spokenTexts, [voiceTexts.closingGreeting]);
+    assert.deepEqual(spokenTexts, []);
     const { conversation, inputMode, image, ...closedState } = runtime.getState();
     assert.equal(image.phase, 'idle');
     assert.equal(inputMode, 'voice');
     assert.equal(conversation.saved, false);
     assert.deepEqual(closedState, {
-        active: false,
+        active: false, connected: false,
         microphoneActive: false,
         error: '',
         phase: 'closed',
@@ -287,7 +282,6 @@ test('assistant releases visual interaction after animation without waiting for 
         now: () => clock,
         renderScene: async () => ({ ok: true }),
         clearScene: async () => ({ ok: true }),
-        setInteractionLayer: () => { },
         commandBus: { append: () => { } },
         translate: () => 'Salut, que veux-tu ?'
     });
@@ -311,7 +305,7 @@ test('assistant releases visual interaction after animation without waiting for 
     nativeStop.resolve({ ok: true });
 });
 
-test('renderer warmup time is excluded from the 420 ms reveal clock', async () => {
+test('voice connection starts independently of renderer warmup', async () => {
     let clock = 0;
     let frameCallback = null;
     let renderCount = 0;
@@ -343,7 +337,6 @@ test('renderer warmup time is excluded from the 420 ms reveal clock', async () =
             return { ok: true };
         },
         clearScene: async () => ({ ok: true }),
-        setInteractionLayer: () => { },
         commandBus: { append: () => { } },
         translate: () => 'Salut, que veux-tu ?'
     });
@@ -354,7 +347,7 @@ test('renderer warmup time is excluded from the 420 ms reveal clock', async () =
     clock = 919;
     frameCallback?.();
     await Promise.resolve();
-    assert.equal(sessionCount, 0);
+    assert.equal(sessionCount, 1);
     clock = 920;
     frameCallback?.();
     await Promise.resolve();
@@ -402,7 +395,6 @@ test('assistant runtime survives ten complete voiced open and close cycles with 
         cancelFrame: () => { },
         renderScene: async () => ({ ok: true }),
         clearScene: async () => { clearCount += 1; },
-        setInteractionLayer: () => { },
         commandBus: { append: () => { } },
         translate: translateVoiceKey
     });
@@ -471,7 +463,6 @@ test('a native farewell failure cannot strand the assistant or block reopening',
         cancelFrame: () => { },
         renderScene: async () => ({ ok: true }),
         clearScene: async () => ({ ok: true }),
-        setInteractionLayer: () => { },
         commandBus: { append: () => { } },
         translate: translateVoiceKey
     });
@@ -497,4 +488,27 @@ test('a native farewell failure cannot strand the assistant or block reopening',
     for (const error of ['no_active_ai_provider', 'profile_loader_unavailable', 'ai_active_provider_ambiguous']) {
         await assert.rejects(bindVoiceAssistantSession({ provider: { ok: false, error }, voiceApi: null }), new RegExp(error));
     }
+});
+
+test('a cancelled provider lookup cannot close the replacement session or duplicate startup', async () => {
+    let rejectProvider, attempts = 0, time = 0, frame;
+    const voiceApi = withMcpBridge({ ensureReady: async () => true,
+        createSession: async () => ({ session_id: 'replacement' }), subscribe: () => () => {},
+        subscribeTtsFrames: () => () => {}, speak: async () => ({ promise: Promise.resolve() }),
+        startListening: async () => ({ promise: new Promise(() => {}) }), executeUtterance: async () => ({}),
+        cancelListening: async () => ({}), stopSpeaking: async () => ({}), interrupt: async () => ({}) });
+    const runtime = createEveAssistantRuntime({ env: {}, voiceApiResolver: () => voiceApi,
+        providerResolver: async () => ++attempts === 1 ? new Promise((resolve, reject) => { rejectProvider = reject; }) : { ok: true, providerId: 'local' },
+        dockFactory: () => ({ open: async () => {}, close: async () => {}, refresh() {}, blur() {} }),
+        now: () => time, requestFrame: callback => { frame = callback; return 1; }, cancelFrame: () => { frame = null; },
+        renderScene: async () => {}, clearScene: async () => {}, commandBus: { append() {} }, translate: translateVoiceKey });
+    const flush = () => new Promise(resolve => setTimeout(resolve, 0));
+    const original = runtime.open(); await flush();
+    await runtime.open(); assert.equal(attempts, 1); assert.equal(runtime.getState().error, '');
+    const closing = runtime.close(); time += 1000; frame(); await closing;
+    await runtime.open(); await flush();
+    rejectProvider(new Error('expired_lookup')); await original;
+    assert.equal(runtime.getState().active, true); assert.equal(runtime.getState().error, '');
+    assert.equal(runtime.getState().sessionId, 'replacement');
+    const finalClose = runtime.close(); time += 1000; frame(); await finalClose; await runtime.dispose();
 });

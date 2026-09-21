@@ -1,9 +1,17 @@
 # Atome / eVe Code Map
 
+2026-09-21 follow-up: Assistant ownership repair: assistant_dock.js reuses main-menu inline content and external width; assistant_runtime.js waits for realtime_session.js connected state. bevy_ui_main_menu_model.js owns filtering; navigation_taxonomy.js owns selection/subscriptions; bevy_ui_main_menu_resize_runtime.js owns geometry notification; intuition_liquid_menu_renderer.js owns ribbon liquid mapping. provider_relay.rs distinguishes token refresh from identity change. Validation: eVe/documentations/MYSTIC_ASSISTANT_VALIDATION_2026-09-21.md.
+
+Assistant cleanup: one Atom control, the existing animated/focused ribbon text field, and actual conversation content only; no separate mic glyph/control or empty status/model block. Dock teardown cancels field motion and hold suppression. No public API or renderer was added.
+
+Current assistant gesture and provider activation evidence: eVe/documentations/MYSTIC_ASSISTANT_VALIDATION_2026-09-21.md.
+
 ### Mystic canonical owners — 2026-09-20
 
 - `eVe/intuition/menu/context_menus.json`, `eVe/intuition/menu/context_menus_loader.js` and `eVe/intuition/menu/context_menu_resolver.js`: validated separate Mystic/sidebar composition.
-- `eVe/voice/assistant/assistant_dock.js`: independent corner controls and existing text-session composition.
+- `eVe/voice/assistant/assistant_dock.js`: corner controls over the standard Atom tile and existing text-session composition; shared main-menu hold recognition controls text visibility.
+- `atome/src/squirrel/voice/realtime_session.js`: authoritative acquired microphone-track state.
+- `eVe/intuition/runtime/bevy_panel/bevy_panel_home_view.js`: explicit stored-provider activation via the existing vault runtime.
 - `eVe/domains/rendering/project_work_mode_state.js`: session project modes and transition preservation boundary.
 - `eVe/intuition/mystic/mystic_menu_items.js`: configured anchors and pagination.
 - `eVe/intuition/ribbon/bevy_ui_mystic_runtime.js`: pointer, submenu, page and closure lifecycle.

@@ -6,6 +6,10 @@ import { resolveWsApiPrincipal, isWsApiPrincipalProvisioned } from './wsApiIdent
 import { wsResponse } from './wsResponse.js';
 import { resolveProviderCredentialVault } from './providerCredentialVault.js';
 import { readOpenAiEvents, readProviderBytes } from '../atome/src/squirrel/ai/openai_stream.js';
+import { getAudioAiService } from './ai_audio/index.js';
+import { AUDIO_AI_ERRORS } from './ai_audio/service.js';
+import { getVideoAiService } from './ai_video/index.js';
+import { VIDEO_AI_ERRORS } from './ai_video/service.js';
 
 const operations = new WeakMap();
 const ROOT = 'https://api.openai.com/v1';
@@ -46,6 +50,35 @@ const providerError = async (response) => {
     const error = new Error(/^[a-zA-Z0-9_]+$/.test(code) ? code : 'provider_request_failed');
     error.http_status = response.status;
     return error;
+};
+
+// Provider-neutral audio generation: the client never names an endpoint, only
+// canonical `audio.*` actions; keys are read from the principal's server vault.
+const handleAudioAction = async (action, payload, { audio, principal, vault, fetchImpl, signal }) => {
+    const readKey = (credentialId) => vault.read(credentialId);
+    const ctx = { readKey, fetchImpl, signal };
+    if (action === 'audio.providers') return { providers: await audio.listProviders({ readKey }) };
+    if (action === 'audio.capabilities') return audio.getCapabilities(String(payload.provider || ''));
+    if (action === 'audio.generate') return audio.generate(principal, payload.request || payload, ctx);
+    if (action === 'audio.job') return audio.getJob(principal, payload.job_id, ctx);
+    if (action === 'audio.output') return audio.fetchOutput(principal, payload.job_id, payload.index, {
+        ...ctx, preferredFormat: ['wav', 'mp3'].includes(payload.format) ? payload.format : null });
+    throw new Error('provider_operation_not_allowed');
+};
+
+// Same contract for video: canonical `video.*` actions only; the generated file is
+// stored for the principal server-side and returned as a file reference.
+const handleVideoAction = async (action, payload, { video, principal, vault, fetchImpl, signal }) => {
+    const readKey = (credentialId) => vault.read(credentialId);
+    const ctx = { readKey, fetchImpl, signal };
+    if (action === 'video.providers') return { providers: await video.listProviders({ readKey }) };
+    if (action === 'video.capabilities') return video.getCapabilities(String(payload.provider || ''));
+    if (action === 'video.estimate') return video.estimate(payload.request || payload, ctx);
+    if (action === 'video.generate') return video.generate(principal, payload.request || payload, ctx);
+    if (action === 'video.job') return video.getJob(principal, payload.job_id, ctx);
+    if (action === 'video.cancel') return video.cancel(principal, payload.job_id, ctx);
+    if (action === 'video.output') return video.storeOutput(principal, payload.job_id, Number(payload.index) || 0, ctx);
+    throw new Error('provider_operation_not_allowed');
 };
 
 const buildRequestBody = (action, payload) => {
@@ -95,7 +128,9 @@ export const handleWsAiProviderOperation = async (message, connection, {
     resolvePrincipal = resolveWsApiPrincipal,
     provisioned = isWsApiPrincipalProvisioned,
     resolveVault = resolveProviderCredentialVault,
-    fetchImpl = globalThis.fetch, realtime = controlProviderRealtime
+    fetchImpl = globalThis.fetch, realtime = controlProviderRealtime,
+    audio = getAudioAiService(),
+    video = getVideoAiService()
 } = {}) => {
     if (message?.type !== 'ai-provider') return null;
     const reply = (ok, fields) => wsResponse('ai-provider', message, ok, fields);
@@ -126,6 +161,28 @@ export const handleWsAiProviderOperation = async (message, connection, {
         const timeout = setTimeout(() => controller.abort(), 180_000);
         entry.timer = timeout;
         const vault = await resolveVault(connection?._wsApiVaultRouter?.provider, principal);
+        const credentialProvider = String(message.provider || message.payload?.provider || 'openai');
+        const audioCredential = credentialProvider !== 'openai' && action.startsWith('credential.')
+            ? (audio.providerForCredential(credentialProvider) || video.providerForCredential(credentialProvider)) : null;
+        if (credentialProvider !== 'openai' && action.startsWith('credential.') && !audioCredential) throw new Error('provider_not_supported');
+        if (audioCredential) {
+            if (action === 'credential.status') return reply(true, { configured: Boolean(await vault.read(credentialProvider)) });
+            if (action === 'credential.remove') return reply(true, vault.remove(credentialProvider));
+            if (action !== 'credential.store') throw new Error('provider_operation_not_allowed');
+            const candidate = String(message.key || '').trim();
+            if (!candidate || candidate.length > 1024 || /\s/.test(candidate)) throw new Error('provider_key_invalid');
+            await audioCredential.validateKey?.(candidate, { fetchImpl, signal: controller.signal });
+            if (resolvePrincipal(connection, message) !== principal) throw new Error('provider_principal_changed');
+            return reply(true, await vault.store(credentialProvider, candidate));
+        }
+        if (action.startsWith('video.')) {
+            return reply(true, { data: await handleVideoAction(action, message.payload || {}, {
+                video, principal, vault, fetchImpl, signal: controller.signal }) });
+        }
+        if (action.startsWith('audio.')) {
+            return reply(true, { data: await handleAudioAction(action, message.payload || {}, {
+                audio, principal, vault, fetchImpl, signal: controller.signal }) });
+        }
         if (action === 'credential.store') {
             const candidate = String(message.key || '').trim();
             const validation = await fetchImpl(`${ROOT}/models`, {
@@ -203,7 +260,7 @@ export const handleWsAiProviderOperation = async (message, connection, {
     } catch (error) {
         const known = /^(?:provider_|not_authenticated|no_ai_key_configured|invalid_api_key|insufficient_quota|rate_limit_exceeded)/;
         const code = entry?.controller.signal.aborted ? 'provider_cancelled'
-            : known.test(error.message) ? error.message : 'provider_operation_failed';
+            : known.test(error.message) || AUDIO_AI_ERRORS.includes(error.message) || VIDEO_AI_ERRORS.includes(error.message) ? error.message : 'provider_operation_failed';
         return reply(false, { error: code, http_status: error.http_status || null });
     } finally {
         if (entry) { clearTimeout(entry.timer); if (active.get(requestId) === entry) active.delete(requestId); }

@@ -538,3 +538,18 @@ test('Home keeps all section headers available while the profile is pending or t
         if (phase.loadError) assert.ok(all.some(node => node.id === 'home_identity_retry'));
     }
 });
+
+
+test('Home exposes explicit activation for a configured provider without requesting its secret', () => {
+    const intents = [];
+    const state = baseState({ expanded: 'passkeys', vault: { credentials: [],
+        providers: [{ id: 'openai', label: 'OpenAI', models: [], configured: true }] } });
+    const render = () => flatten(buildHomeContent(state, { emit: intent => intents.push(intent), bodyWidth: 452, editing }));
+    const button = render().find(node => node.id === 'home_key_openai_active');
+    assert.equal(typeof button.on.activate, 'function');
+    button.on.activate();
+    assert.deepEqual(intents, [{ type: 'home.key.active.set', provider: 'openai' }]);
+    state.profile.passkeys.keys = [{ provider: 'openai', model: 'gpt-5.6-sol', active: true }];
+    render().find(node => node.id === 'home_key_openai_active').on?.activate?.();
+    assert.equal(intents.length, 1);
+});
