@@ -273,14 +273,14 @@ const { getMainMenuRuntime } = await import('/eVe/intuition/ribbon/bevy_ui_produ
     if (!state.canvasRect || state.canvasRect.width <= 0 || state.canvasRect.height <= 0) throw new Error(`workspace_project_canvas_empty:${label}:${JSON.stringify(state)}`);
 
     await page.mouse.click(state.clientPoint.x, state.clientPoint.y, { button: 'right' });
-    const flower = await waitFor(page, async () => {
-        const module = await import('/eVe/intuition/flower/index.js');
-        return { ok: module.isFlowerMenuOpen?.() === true };
+    const mystic = await waitFor(page, async () => {
+        const module = await import('/eVe/intuition/mystic/index.js');
+        return { ok: module.isMysticMenuOpen?.() === true };
     }, 8000, 100);
-    if (!flower.ok) throw new Error(`workspace_flower_unavailable:${label}:${JSON.stringify(flower.last)}`);
+    if (!mystic.ok) throw new Error(`workspace_mystic_unavailable:${label}:${JSON.stringify(mystic.last)}`);
     await page.evaluate(async () => {
-        const module = await import('/eVe/intuition/flower/index.js');
-        module.closeFlowerMenu?.();
+        const module = await import('/eVe/intuition/mystic/index.js');
+        module.closeMysticMenu?.();
     });
     return { ok: true, state };
 };

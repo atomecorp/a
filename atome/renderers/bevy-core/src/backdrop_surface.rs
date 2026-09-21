@@ -15,7 +15,7 @@ use crate::{
     video_external_texture::{
         video_quad_mesh_from_size, video_quad_mesh_handle_from_size,
     },
-    workspace_backdrop::{set_workspace_backdrop_enabled, AtomeWorkspaceBackdrop, FLOWER_PRESENTATION_LAYER},
+    workspace_backdrop::{set_workspace_backdrop_enabled, AtomeWorkspaceBackdrop, MENU_PRESENTATION_LAYER},
     workspace_blur::backdrop_blur_lod,
 };
 
@@ -129,7 +129,7 @@ pub fn insert_backdrop_surface(
     world.entity_mut(entity).insert((
         Mesh2d(mesh),
         MeshMaterial2d(material),
-        bevy::camera::visibility::RenderLayers::layer(FLOWER_PRESENTATION_LAYER),
+        bevy::camera::visibility::RenderLayers::layer(MENU_PRESENTATION_LAYER),
     ));
     refresh_workspace_backdrop_enabled(world)
 }

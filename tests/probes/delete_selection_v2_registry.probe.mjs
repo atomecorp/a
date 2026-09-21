@@ -27,7 +27,7 @@ const result = await toolRuntimeV2.invokeById({
         selection_ids: ['delete_a', 'delete_b'],
         context_type: 'atome'
     },
-    source: { type: 'ui', layer: 'flower_menu' },
+    source: { type: 'ui', layer: 'mystic_menu' },
     presentation: 'ui'
 });
 

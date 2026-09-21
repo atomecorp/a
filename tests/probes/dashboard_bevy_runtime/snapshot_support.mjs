@@ -20,9 +20,9 @@ export const dashboardSnapshot = async (page) => page.evaluate(async () => {
     const editorRecord = dashboardRecords.find((record) => normalizeDashboardRecordId(record.id) === '__eve_dashboard_editor') || null;
     const layout = state?.layout || null;
     const canvas = document.getElementById('eve_surface_project');
-    const { getFlowerRuntime, getMainMenuRuntime } = await import('/eVe/intuition/ribbon/bevy_ui_product_registry.js');
+    const { getMysticRuntime, getMainMenuRuntime } = await import('/eVe/intuition/ribbon/bevy_ui_product_registry.js');
     const { isWorkspaceMainMenuDashboardSuspended } = await import('/eVe/intuition/tools/workspace_main_menu_visibility.js');
-    const flowerOpen = getFlowerRuntime()?.isOpen?.() === true;
+    const mysticOpen = getMysticRuntime()?.isOpen?.() === true;
     const menu = getMainMenuRuntime();
     const menuMeasure = typeof menu?.measure === 'function' ? menu.measure() : null;
     const menuReservedHeight = typeof menu?.getReservedHeight === 'function'
@@ -45,7 +45,7 @@ export const dashboardSnapshot = async (page) => page.evaluate(async () => {
         presentationOpacity: Number(state?.presentationOpacity ?? 0),
         postOpenHydrationPending: state?.postOpenHydrationPending === true,
         postOpenHydrationError: String(state?.postOpenHydrationError || ''),
-        flowerOpen,
+        mysticOpen,
         projectId,
         surfaceBackgroundSignature: String(window.__eveSurfaceBackground?.signature || ''),
         canvas: canvas ? {

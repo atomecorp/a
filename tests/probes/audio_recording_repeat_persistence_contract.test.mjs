@@ -21,7 +21,7 @@ test('Tauri audio persists two successive viable terminals through Atome.commit'
                     return {
                         success: true,
                         session_id: payload.sessionId,
-                        absolute_file_path: `/tmp/flower_take_${take}.wav`,
+                        absolute_file_path: `/tmp/mystic_take_${take}.wav`,
                         duration_sec: 1,
                         frame_count: 48_000,
                         sample_rate: 48_000,
@@ -34,7 +34,7 @@ test('Tauri audio persists two successive viable terminals through Atome.commit'
             })
         },
         __currentUser: { id: 'local' },
-        __currentProject: { id: 'project_flower_audio' },
+        __currentProject: { id: 'project_mystic_audio' },
         location: { protocol: 'tauri:' },
         localStorage: {
             getItem: (key) => storage.get(key) || null,
@@ -59,10 +59,10 @@ test('Tauri audio persists two successive viable terminals through Atome.commit'
     vi.stubGlobal('localStorage', windowRef.localStorage);
     await import('../../atome/src/application/audio_runtime/record_audio_api.js?tauri-repeat-contract');
     const { startAudioRecording, stopAudioRecording, getAudioRecordingState } = await import(
-        '../../eVe/domains/media/api/audio_api.js?tauri-repeat-flower-audio'
+        '../../eVe/domains/media/api/audio_api.js?tauri-repeat-mystic-audio'
     );
 
-    for (const fileName of ['flower_take_one.wav', 'flower_take_two.wav']) {
+    for (const fileName of ['mystic_take_one.wav', 'mystic_take_two.wav']) {
         const started = await startAudioRecording({ fileName, source: 'mic' });
         assert.equal(started.ok, true, JSON.stringify(started));
         const stopped = await stopAudioRecording();
@@ -76,7 +76,7 @@ test('Tauri audio persists two successive viable terminals through Atome.commit'
     assert.notEqual(commits[0].atome_id, commits[1].atome_id);
     commits.forEach((mutation) => {
         assert.equal(mutation.kind, 'set');
-        assert.equal(mutation.project_id, 'project_flower_audio');
+        assert.equal(mutation.project_id, 'project_mystic_audio');
         assert.equal(mutation.props.kind, 'audio_recording');
         assert.equal(mutation.props.frame_count, 48_000);
         assert.equal(mutation.props.size_bytes, 96_044);

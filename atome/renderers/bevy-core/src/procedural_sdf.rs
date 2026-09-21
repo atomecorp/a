@@ -10,7 +10,7 @@ use bevy::{
     sprite_render::{AlphaMode2d, Material2d, Material2dPlugin},
 };
 
-use crate::workspace_backdrop::{set_workspace_backdrop_enabled, AtomeWorkspaceBackdrop, FLOWER_PRESENTATION_LAYER};
+use crate::workspace_backdrop::{set_workspace_backdrop_enabled, AtomeWorkspaceBackdrop, MENU_PRESENTATION_LAYER};
 use crate::workspace_blur::{backdrop_blur_lod, AssistantOpticsSettings};
 use crate::{types::AtomeProceduralSdf, video_external_texture::video_quad_mesh_handle_from_size};
 
@@ -27,10 +27,10 @@ pub struct ProceduralSdfUniform {
     pub gesture: Vec4,
     pub geometry: Vec4,
     pub shape: Vec4,
-    pub flower: Vec4,
-    pub flower_tint: Vec4,
+    pub surface_style: Vec4,
+    pub surface_tint: Vec4,
     pub assistant_background_tint: Vec4,
-    pub flower_petals: [Vec4; 24],
+    pub surface_parameters: [Vec4; 24],
     pub liquid_drops: [Vec4; 24],
     pub liquid_drop_shapes: [Vec4; 24],
     pub liquid_drop_count: Vec4,
@@ -123,7 +123,7 @@ fn material_from_contract(
             ),
             shape: Vec4::new(
                 normalized.assistant_size,
-                normalized.flower_edge_softness,
+                normalized.surface_edge_softness,
                 // The lens refraction is expressed in physical pixels, so the
                 // shader needs the workspace size in physical pixels to turn it
                 // into a UV offset. It used to read that from
@@ -132,20 +132,20 @@ fn material_from_contract(
                 device_pixel_ratio.max(1.0),
                 backdrop_blur_lod(normalized.background_blur_px, device_pixel_ratio),
             ),
-            flower: Vec4::new(
+            surface_style: Vec4::new(
                 normalized.mode,
-                normalized.flower_count,
-                normalized.flower_core_radius,
-                normalized.flower_bridge_width,
+                normalized.surface_count,
+                normalized.surface_core_radius,
+                normalized.surface_bridge_width,
             ),
-            flower_tint: Vec4::new(
-                normalized.flower_tint[0],
-                normalized.flower_tint[1],
-                normalized.flower_tint[2],
-                normalized.flower_tint[3],
+            surface_tint: Vec4::new(
+                normalized.surface_tint[0],
+                normalized.surface_tint[1],
+                normalized.surface_tint[2],
+                normalized.surface_tint[3],
             ),
             assistant_background_tint: Vec4::from_array(normalized.assistant_background_tint),
-            flower_petals: normalized.flower_petals.map(Vec4::from_array),
+            surface_parameters: normalized.surface_parameters.map(Vec4::from_array),
             liquid_drops: normalized.liquid_drops.map(Vec4::from_array),
             liquid_drop_shapes: normalized.liquid_drop_shapes.map(Vec4::from_array),
             // Un scalaire seul romprait l'alignement std140 du bloc : on le pousse
@@ -197,7 +197,7 @@ pub fn insert_procedural_sdf(
         MeshMaterial2d(material),
         bevy::camera::visibility::RenderLayers::layer(if normalized.mode > 2.5 {
             crate::mystic_capture::MENU_OVERLAY_LAYER
-        } else { FLOWER_PRESENTATION_LAYER }),
+        } else { MENU_PRESENTATION_LAYER }),
     ));
     set_workspace_backdrop_enabled(world, true)?;
     Ok(())

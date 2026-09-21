@@ -18,10 +18,10 @@ import {
 } from '../../eVe/domains/rendering/project_scene_runtime.js';
 import { createVirtualSceneTree } from '../../eVe/domains/rendering/virtual_scene_contract.js';
 import {
-    clearAllFlowerPointerLocks,
-    clearFlowerPointerLock,
-    setFlowerPointerLock
-} from '../../eVe/intuition/flower/context_pointer_lock.js';
+    clearAllMysticPointerLocks,
+    clearMysticPointerLock,
+    setMysticPointerLock
+} from '../../eVe/intuition/mystic/context_pointer_lock.js';
 import { createTestCompositor, installDom } from './unified_rendering_test_helpers.mjs';
 
 const createSurface = () => {
@@ -743,7 +743,7 @@ test('BevyUI runtime drains renderer events into stored JS handlers', async () =
     assert.deepEqual(received, ['open_button']);
 });
 
-test('BevyUI discards the underlying control release when a primary press becomes a Flower long press', async () => {
+test('BevyUI discards the underlying control release when a primary press becomes a Mystic long press', async () => {
     const dom = new JSDOM('<!doctype html><canvas id="eve_surface_project"></canvas>');
     const surface = dom.window.document.getElementById('eve_surface_project');
     surface.getBoundingClientRect = () => ({ left: 0, top: 0, width: 200, height: 120, right: 200, bottom: 120 });
@@ -792,10 +792,10 @@ test('BevyUI discards the underlying control release when a primary press become
         surface.dispatchEvent(pointerEvent('pointerdown'));
         assert.deepEqual(received, ['press'], 'the canonical surface interceptor observes the initial press exactly once');
         assert.deepEqual(capturedPointerIds, [41], 'a BevyUI press must retain its terminal pointer event');
-        assert.equal(setFlowerPointerLock(41, { phase: 'long_press' }), true);
+        assert.equal(setMysticPointerLock(41, { phase: 'long_press' }), true);
         surface.dispatchEvent(pointerEvent('pointerup'));
-        assert.deepEqual(received, ['press'], 'the release must not activate the control beneath an opened Flower');
-        assert.equal(clearFlowerPointerLock(41), true, 'the opening lock must end with its own terminal release');
+        assert.deepEqual(received, ['press'], 'the release must not activate the control beneath an opened Mystic');
+        assert.equal(clearMysticPointerLock(41), true, 'the opening lock must end with its own terminal release');
         surface.dispatchEvent(pointerEvent('pointerdown'));
         surface.dispatchEvent(pointerEvent('pointerup'));
         assert.deepEqual(
@@ -806,7 +806,7 @@ test('BevyUI discards the underlying control release when a primary press become
         assert.deepEqual(releasedPointerIds, [41, 41], 'every handled terminal event must release the captured pointer');
         await runtime.unmountTree('underlying_tree');
     } finally {
-        clearAllFlowerPointerLocks();
+        clearAllMysticPointerLocks();
         globalThis.window = previousWindow;
         globalThis.document = previousDocument;
     }

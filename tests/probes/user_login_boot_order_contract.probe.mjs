@@ -225,7 +225,7 @@ installEveIntuitionBootRuntime({
     ensureEveDeferredRuntime() { deferredOwnerCalls.push('eve_deferred'); },
     ensureFinderPanelModule() {},
     ensureFontPanelModule() {},
-    ensureFlowerContextItemsRuntime() { deferredOwnerCalls.push('flower_items'); },
+    ensureMysticContextItemsRuntime() { deferredOwnerCalls.push('mystic_items'); },
     ensureHomePanelModule() { homeWarmupCalls.push('home'); },
     ensureInfoPanelModule() {},
     ensureLayerPanelModule() {},
@@ -246,7 +246,7 @@ installEveIntuitionBootRuntime({
     getAtomeRuntimeState() {},
     installAtomeContextualRailRuntime() { deferredOwnerCalls.push('footer'); },
     installEveDebugRuntime() {},
-    installIntuitionXFlowerContextRuntime() { deferredOwnerCalls.push('flower'); },
+    installIntuitionXMysticContextRuntime() { deferredOwnerCalls.push('mystic'); },
     installSvgDrawRuntime() {},
     installSvgVectorEditRuntime() {},
     installTextStyleToolSelectionGuard() {},
@@ -284,7 +284,7 @@ installEveIntuitionBootRuntime({
     resolveAtomeContextualRailKindFromHost() {},
     resolveAtomeContextualRailToolDefinitionsForOptions() { return []; },
     resolveCurrentProjectId() { return 'boot_project_valid'; },
-    resolveFlowerContextItems() { return []; },
+    resolveMysticContextItems() { return []; },
     setIntuitionItemEnabled() {},
     showAtomeContextualRail() {},
     syncAtomeContextualRailButtonsForToolStateOnRow() {},
@@ -326,8 +326,8 @@ window.__eveStartDeferredInteractionOwners();
 await new Promise((resolve) => setTimeout(resolve, 1250));
 assert.deepEqual(
     deferredOwnerCalls.slice(0, 5),
-    ['eve_deferred', 'media_reader', 'intuition_deferred', 'flower_items', 'text'],
-    'canonical deferred tool owners must replace bootstrap handlers before Flower is installed'
+    ['eve_deferred', 'media_reader', 'intuition_deferred', 'mystic_items', 'text'],
+    'canonical deferred tool owners must replace bootstrap handlers before Mystic is installed'
 );
 assert.equal(
     deferredOwnerCalls.filter((owner) => owner === 'media_reader').length,

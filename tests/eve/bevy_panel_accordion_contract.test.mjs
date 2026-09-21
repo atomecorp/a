@@ -4,7 +4,6 @@ import { test } from 'vitest';
 import { EVE_DEFAULT_MESSAGES } from '../../eVe/i18n/languages.js';
 import { projectBevyUiTreeRecords } from '../../eVe/domains/rendering/bevy_ui_overlay_record_projection.js';
 import { accordionNode } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_accordion.js';
-import { panelLabSurface } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_lab_surface.js';
 import { BEVY_PANEL_TOKENS } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_tokens.js';
 import { textNode } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_tree.js';
 import { createBevyUiPointerRuntime } from '../../eVe/domains/rendering/bevy_ui_pointer_runtime.js';
@@ -79,37 +78,6 @@ test('shared panel accordion opens a continuous 56 px body and keeps instances i
     );
 });
 
-test('Panel Lab appends the accordion, toggles it through an intent, and resets it on close', () => {
-    panelLabSurface.onOpen();
-    try {
-        const emit = () => {};
-        const closed = panelLabSurface.buildContent(panelLabSurface.readState(), { emit });
-        const dividerIndex = closed.findIndex((node) => node.id === 'panel_lab_accordion_divider');
-        const accordionIndex = closed.findIndex((node) => node.id === 'panel_lab_accordion');
-
-        assert.equal(closed.length, 45);
-        assert.equal(dividerIndex, 15);
-        assert.equal(accordionIndex, dividerIndex + 1);
-        assert.equal(panelLabSurface.readState().accordion.expanded, false);
-        assert.equal(findNode(closed, 'panel_lab_accordion_body'), null);
-        assert.equal(EVE_DEFAULT_MESSAGES.fr['eve.panel_lab.accordion.body'], 'Contenu de la section');
-        assert.equal(EVE_DEFAULT_MESSAGES.en['eve.panel_lab.accordion.title'], 'Section');
-
-        const toggled = panelLabSurface.handleEvent({ type: 'panel_lab.accordion.toggle' });
-        assert.deepEqual(toggled, {
-            ok: true,
-            expanded: true,
-            revealNodeId: 'panel_lab_accordion',
-            revealMarginPx: 10
-        });
-        const open = panelLabSurface.buildContent(panelLabSurface.readState(), { emit });
-        assert.equal(findNode(open, 'panel_lab_accordion_body_text').text, 'Contenu de la section');
-        assert.equal(panelLabSurface.handleEvent({ type: 'panel_lab.accordion.toggle' }).expanded, false);
-    } finally {
-        panelLabSurface.onClose();
-    }
-    assert.equal(panelLabSurface.readState().accordion.expanded, false);
-});
 
 test('native accordion headers use the canonical pointer activation route', () => {
     const emitted = [];

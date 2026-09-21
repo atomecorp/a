@@ -110,3 +110,39 @@ test('project text selection remembers and commits Font/Size span styles through
     ]);
     assert.equal(dom.window.document.querySelectorAll('[data-role="active-text-editor"]').length, 0);
 });
+
+
+test('Performance fills a text placeholder through the canonical editor and refuses ordinary editing', async () => {
+    const { setProjectWorkMode } = await import('../../eVe/domains/rendering/project_work_mode_state.js');
+    clearAllProjectScenes();
+    const dom = new JSDOM('<main id="project"></main>', { pretendToBeVisual: true });
+    const previousWindow = globalThis.window, previousDocument = globalThis.document;
+    globalThis.window = dom.window; globalThis.document = dom.window.document;
+    const projectId = 'placeholder_performance';
+    dom.window.__eveWorkspaceMode = { mode: 'project', projectId };
+    const commits = [];
+    dom.window.Atome = { commit: async event => { commits.push(event); return { ok: true }; } };
+    try {
+        await renderProjectScene({ projectId, host: dom.window.document.getElementById('project'), compositor,
+            records: [{ id: 'placeholder', type: 'text', properties: { text: 'hint', placeholder_kind: 'text', width: 150, height: 40 } },
+                { id: 'ordinary', type: 'text', properties: { text: 'protected', width: 150, height: 40 } }] });
+        await setProjectWorkMode('performance', { windowRef: dom.window, prepare: async () => ({ ok: true }) });
+        const refused = await emitProjectSceneIntent({ projectId, intent: { kind: 'text.edit.begin', atome_id: 'ordinary' } });
+        assert.equal(refused.ok, false);
+        await emitProjectSceneIntent({ projectId, intent: { kind: 'text.edit.begin', atome_id: 'placeholder' } });
+        const editor = dom.window.document.activeElement;
+        assert.equal(editor.tagName, 'TEXTAREA');
+        assert.equal(editor.value, '');
+        editor.value = 'Filled'; editor.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+        const result = await commitProjectSceneTextEdit({ projectId });
+        assert.equal(result.committed, true);
+        assert.equal(commits.at(-1).props.text, 'Filled');
+        assert.equal(commits.at(-1).props.placeholder_kind, null);
+        const again = await emitProjectSceneIntent({ projectId, intent: { kind: 'text.edit.begin', atome_id: 'placeholder' } });
+        assert.equal(again.ok, false);
+    } finally {
+        await setProjectWorkMode('edit', { windowRef: dom.window });
+        clearAllProjectScenes(); dom.window.close();
+        globalThis.window = previousWindow; globalThis.document = previousDocument;
+    }
+});

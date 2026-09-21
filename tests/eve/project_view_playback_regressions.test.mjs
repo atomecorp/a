@@ -67,7 +67,10 @@ test('Natural absorption resolves a visible member hit to its canonical Molecule
     ), 'utf8');
     assert.match(source, /resolveMoleculeAbsorbTargetId\(runtime, overlapTargetId\)/);
     assert.match(source, /if \(isMoleculeRecord\(record\)\) return currentId/);
-    assert.match(source, /sourceId, targetId: resolveMoleculeAbsorbTargetId\(runtime, overlapTargetId\)/);
+    // Le depot MET EN ATTENTE le choix sur le proprietaire canonique resolu ; c'est
+    // le rail contextuel qui l'applique ensuite.
+    assert.match(source, /const targetId = resolveMoleculeAbsorbTargetId\(runtime, overlapTargetId\);/);
+    assert.match(source, /kind: 'composition', targetId, draggedIds: dragged/);
 });
 
 test('canonical sound records become audio clips even when their top-level type is generic', () => {

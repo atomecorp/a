@@ -14,7 +14,7 @@ import { BEVY_MENU_TOKENS } from '../../eVe/intuition/ribbon/bevy_ui_menu_surfac
 import { EVE_BUTTON_SKIN_TOKENS } from '../../eVe/elements/skin/button_skin.js';
 import { EVE_COMMON_SKIN_TOKENS } from '../../eVe/elements/skin/tokens.js';
 import { resolveLiquidSystemSurfaceUniforms } from '../../eVe/intuition/liquid/intuition_liquid_menu_renderer.js';
-import { modernFlowerKeys, normalizeNavigationTaxonomy } from '../../eVe/intuition/menu/navigation_taxonomy.js';
+import { normalizeNavigationTaxonomy } from '../../eVe/intuition/menu/navigation_taxonomy.js';
 import { TOOL_KEYS, menuContent, installDom, findNode, waitFrame, waitMs, createRuntimeHarness } from './bevy_ui_main_menu_test_helpers.mjs';
 
 const collectJavaScriptSources = (directory) => readdirSync(directory, { withFileTypes: true })
@@ -30,21 +30,21 @@ test('system menu content consumes the global content color contract', () => {
     assert.equal(BEVY_MENU_TOKENS.surface.grip, EVE_COMMON_SKIN_TOKENS.systemContent.gpu);
 });
 
-test('standard menu tools inherit the canonical button surface while Flower overrides only its circular geometry', () => {
+test('standard menu tools inherit the canonical button surface while Mystic overrides only its circular geometry', () => {
     const button = EVE_BUTTON_SKIN_TOKENS.bevyButton;
     assert.equal(BEVY_MENU_TOKENS.surface.material, button.surface);
     assert.equal(BEVY_MENU_TOKENS.shape.standardRadiusPx, button.radiusPx);
     assert.equal(BEVY_MENU_TOKENS.shape.paletteRadiusPx, button.radiusPx);
     assert.equal(BEVY_MENU_TOKENS.chrome.outlineRadiusPx, button.radiusPx);
-    assert.notEqual(BEVY_MENU_TOKENS.shape.flowerRadiusPx, button.radiusPx);
+    assert.notEqual(BEVY_MENU_TOKENS.shape.mysticRadiusPx, button.radiusPx);
 });
 
-test('liquid Flower and main-menu projections derive their backdrop and shadow from the system surface', () => {
+test('liquid Mystic and main-menu projections derive their backdrop and shadow from the system surface', () => {
     const material = EVE_COMMON_SKIN_TOKENS.bevy.systemSurface;
-    const uniforms = resolveLiquidSystemSurfaceUniforms({ flower_petals: [] }, [{ diameter: 60 }]);
+    const uniforms = resolveLiquidSystemSurfaceUniforms({ surface_parameters: [] }, [{ diameter: 60 }]);
     assert.equal(uniforms.background_blur_px, material.backdrop.blurPx);
     assert.deepEqual(uniforms.assistant_background_tint, material.backdrop.tint);
-    assert.deepEqual(uniforms.flower_petals[20], material.shadow.color);
+    assert.deepEqual(uniforms.surface_parameters[20], material.shadow.color);
 });
 
 test('system glass keeps white content readable over the brightest backdrop', () => {
@@ -113,29 +113,29 @@ test('the main Paste tool is a direct action while its history panel remains sep
     assert.match(shortcutSource, /`\$\{modifier\}\+v`[^\n]*triggerClipboardTool\('ui\.paste\.action'/);
 });
 
-test('Molecule clipboard preserves structural roots and Flower opening placement', () => {
+test('Molecule clipboard preserves structural roots and Mystic opening placement', () => {
     const copySource = readFileSync(resolve(process.cwd(), 'eVe/intuition/tools/copy.js'), 'utf8');
     const stateSource = readFileSync(resolve(process.cwd(), 'eVe/intuition/tools/clipboard/state.js'), 'utf8');
     const pasteSource = readFileSync(resolve(process.cwd(), 'eVe/intuition/tools/paste.js'), 'utf8');
-    const flowerItemsSource = readFileSync(
-        resolve(process.cwd(), 'eVe/intuition/runtime/eve_intuition/flower_context_items_runtime.js'),
+    const mysticItemsSource = readFileSync(
+        resolve(process.cwd(), 'eVe/intuition/runtime/eve_intuition/mystic_context_items_runtime.js'),
         'utf8'
     );
-    const flowerTargetSource = readFileSync(resolve(process.cwd(), 'eVe/intuition/flower/context_target.js'), 'utf8');
+    const mysticTargetSource = readFileSync(resolve(process.cwd(), 'eVe/intuition/mystic/context_target.js'), 'utf8');
 
     assert.match(copySource, /readCanonicalProjectStates[\s\S]*resolveStateParentId/);
     assert.match(copySource, /root_ids:\s*resolveCopiedRootIds\(ids, records\)/);
     assert.match(stateSource, /root_ids:\s*rootIds/);
     assert.match(stateSource, /copies:[\s\S]*root_ids:\s*group\.root_ids/);
     assert.match(pasteSource, /source_to_duplicate[\s\S]*resolveClipboardRootIds[\s\S]*applySelectionBatch/);
-    assert.match(flowerItemsSource, /computedExtraInput\.drop_position\s*=\s*\{ x:\s*Number\(point\.x\), y:\s*Number\(point\.y\) \}/);
+    assert.match(mysticItemsSource, /computedExtraInput\.drop_position\s*=\s*\{ x:\s*Number\(point\.x\), y:\s*Number\(point\.y\) \}/);
     // Le contrat est l'appel compose (scene + atome leve), pas sa mise en page :
     // l'argument peut passer a la ligne sans que le contrat change.
-    assert.match(flowerTargetSource, /resolveComposedInteractionTarget\(\s*sceneState\?\.scene,\s*hit\?\.atom/);
-    assert.match(flowerTargetSource, /projectPoint/);
+    assert.match(mysticTargetSource, /resolveComposedInteractionTarget\(\s*sceneState\?\.scene,\s*hit\?\.atom/);
+    assert.match(mysticTargetSource, /projectPoint/);
 });
 
-test('Molecule Ungroup resolves an existing canonical icon before Flower texture loading', () => {
+test('Molecule Ungroup resolves an existing canonical icon before Mystic texture loading', () => {
     const editMenuSource = readFileSync(
         resolve(process.cwd(), 'eVe/intuition/runtime/eve_intuition/main_menu_edit_content.js'),
         'utf8'
@@ -145,16 +145,16 @@ test('Molecule Ungroup resolves an existing canonical icon before Flower texture
     assert.equal(existsSync(resolve(process.cwd(), 'atome/src/assets/images/icons/ungroup.svg')), false);
 });
 
-test('BevyUI product runtimes never restore legacy browser menu or Flower state', () => {
+test('BevyUI product runtimes never restore legacy browser menu or Mystic state', () => {
     const forbidden = [
         /window\.new_menu/,
         /eveGoeyMenuApi/,
-        /eveBevyFlowerRuntime/,
-        /__EVE_FLOWER_POINTER_LOCK__/,
-        /__EVE_FLOWER_CONTEXT_HOLD__/,
-        /__EVE_FLOWER_CONTEXT_LONG_PRESS__/,
-        /__EVE_FLOWER_TRACE__/,
-        /__eveFlowerTrace/
+        /eveBevyMysticRuntime/,
+        /__EVE_MYSTIC_POINTER_LOCK__/,
+        /__EVE_MYSTIC_CONTEXT_HOLD__/,
+        /__EVE_MYSTIC_CONTEXT_LONG_PRESS__/,
+        /__EVE_MYSTIC_TRACE__/,
+        /__eveMysticTrace/
     ];
     const violations = collectJavaScriptSources(resolve(process.cwd(), 'eVe'))
         .flatMap((path) => {
@@ -240,9 +240,7 @@ test('modern taxonomy keeps Legacy untouched and hides the edit menu outside an 
     assert.equal(modern.some((item) => item.key === 'taxonomy_project'), true);
     assert.equal(modern.some((item) => item.key === 'view'), true);
     assert.equal(modern.some((item) => item.key === 'home'), false);
-    assert.deepEqual(modernFlowerKeys({ kind: 'audio', selected: true }), [
-        'ai', 'dashboard', 'capture', 'find', 'montage', 'mix', 'export', 'info'
-    ]);
+
 });
 
 test('BevyUI main menu Atome tool toggles the Dashboard', async () => {

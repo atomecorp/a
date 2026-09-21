@@ -1,6 +1,7 @@
 import { assert, clickCanvasTarget, wait, waitFor } from './molecule_ui_acceptance_support.mjs';
 import {
-    drag, readMembership, reloadProjection, screenshot, structuredDropTarget, switchView, waitForMolecule
+    drag, dropChoiceToolIds, readMembership, reloadProjection, screenshot, structuredDropTarget,
+    switchView, waitForMolecule
 } from './molecule_ui_drop_core.mjs';
 import {
     assertNoParasites, chooseMoleculePlaybackMode, disarmMemberPlayback,
@@ -43,16 +44,16 @@ export const validateListMoleculeDrop = async ({ page, project, fixture, report,
     await wait(650);
     const early = await readMembership(page, { sourceId: fixture.imageId, targetId: fixture.audioId });
     assert(early.sourceParent === project.id && early.targetParent === project.id,
-        `list_combined_before_dwell:${JSON.stringify(early)}`);
+        `list_combined_without_choice:${JSON.stringify(early)}`);
+    // Un depot sans choix ne compose rien, mais il propose : six outils dans le rail.
+    await drag({ page, source: image, destination: overlapDestination, holdMs: 700 });
+    const plain = await readMembership(page, { sourceId: fixture.imageId, targetId: fixture.audioId });
+    assert(plain.sourceParent === project.id && plain.targetParent === project.id,
+        `list_plain_drop_combined:${JSON.stringify(plain)}`);
+    const listChoices = await dropChoiceToolIds(page);
+    assert(listChoices.length === 6, `list_drop_choices_missing:${JSON.stringify(listChoices)}`);
     await drag({
-        page, source: image, destination: overlapDestination, holdMs: 700,
-        compositionChoice: 'front', compositionExit: true
-    });
-    const cancelled = await readMembership(page, { sourceId: fixture.imageId, targetId: fixture.audioId });
-    assert(cancelled.sourceParent === project.id && cancelled.targetParent === project.id,
-        `list_palette_exit_combined:${JSON.stringify(cancelled)}`);
-    await drag({
-        page, source: image, destination: overlapDestination, holdMs: 700, compositionChoice: 'front',
+        page, source: image, destination: overlapDestination, holdMs: 700, railChoice: 'front',
         armedShot: () => screenshot({
             page, report, outDir,
             name: 'drop_list_armed_before_release',

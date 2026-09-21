@@ -8,7 +8,6 @@ import { INTERACTIVE_KINDS, SUPPORTED_KINDS } from '../../eVe/domains/rendering/
 import { EVE_DEFAULT_MESSAGES } from '../../eVe/i18n/languages.js';
 import { mediaCardNode } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_media_card.js';
 import { selectionSummaryNode } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_selection_summary.js';
-import { panelLabSurface } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_lab_surface.js';
 import { BEVY_PANEL_TOKENS } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_tokens.js';
 
 const findNode = (node, id) => {
@@ -54,38 +53,4 @@ test('media card and selection summary compose passive native trees from shared 
     assert.equal(findNode(summary, 'summary_count').text, '3');
     assert.deepEqual(media.style.background, BEVY_PANEL_TOKENS.mediaCard.background);
     assert.deepEqual(summary.style.background, BEVY_PANEL_TOKENS.selectionSummary.background);
-});
-
-test('Panel Lab mounts the two independent passive families as one static batch after the numeric field', () => {
-    panelLabSurface.onOpen();
-    try {
-        const before = panelLabSurface.readState();
-        const body = panelLabSurface.buildContent(before, { emit: () => {}, bodyWidth: 400 });
-        const stateIndex = body.findIndex((node) => node.id === 'panel_lab_state_group');
-        const numericField = body.findIndex((node) => node.id === 'panel_lab_numeric_field');
-        const mediaDivider = body.findIndex((node) => node.id === 'panel_lab_media_card_divider');
-        const mediaGroup = body.findIndex((node) => node.id === 'panel_lab_media_card_group');
-        const summaryDivider = body.findIndex((node) => node.id === 'panel_lab_selection_summary_divider');
-        const summaryGroup = body.findIndex((node) => node.id === 'panel_lab_selection_summary_group');
-
-        assert.equal(body.length, 45);
-        assert.equal(numericField, stateIndex + 2);
-        assert.equal(mediaDivider, numericField + 1);
-        assert.equal(mediaGroup, mediaDivider + 1);
-        assert.equal(summaryDivider, mediaGroup + 1);
-        assert.equal(summaryGroup, summaryDivider + 1);
-        assert.deepEqual(body[mediaGroup].style.size, [358, 392]);
-        assert.deepEqual(body[summaryGroup].style.size, [358, 200]);
-        assert.equal(EVE_DEFAULT_MESSAGES.fr['eve.panel_lab.media_card.error.title'], 'Média indisponible');
-        assert.equal(EVE_DEFAULT_MESSAGES.en['eve.panel_lab.selection_summary.many.summary'], 'Three items selected');
-        assert.equal(passiveTree(body[mediaGroup]), true);
-        assert.equal(passiveTree(body[summaryGroup]), true);
-        assert.deepEqual(panelLabSurface.readState(), before);
-
-        const records = projectBevyUiTreeRecords({ tree: { root: body[mediaGroup] }, treeId: 'passive_batch_projection', workspaceLayer: 'panel' });
-        assert.equal(records.some((record) => record.id.includes('panel_lab_media_card_ready_thumbnail')), true);
-        assert.equal(records.every((record) => !String(record.id).includes('data-')), true);
-    } finally {
-        panelLabSurface.onClose();
-    }
 });

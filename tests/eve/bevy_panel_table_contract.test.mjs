@@ -7,7 +7,6 @@ import { hitTestBevyUiNode } from '../../eVe/domains/rendering/bevy_ui_hit_test_
 import { INTERACTIVE_KINDS, SUPPORTED_KINDS } from '../../eVe/domains/rendering/bevy_ui_tree_normalization.js';
 import { selectNode } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_select.js';
 import { EVE_DEFAULT_MESSAGES } from '../../eVe/i18n/languages.js';
-import { panelLabSurface } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_lab_surface.js';
 import { tableNode } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_table.js';
 import { buildBevyPanelTree } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_tree.js';
 import { BEVY_PANEL_TOKENS } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_tokens.js';
@@ -103,13 +102,13 @@ test('shared panel Table composes the native passive table kind from panel token
     assert.equal(table.style.radius, BEVY_PANEL_TOKENS.radiusPx);
 
     assert.deepEqual(header.style.size, [400, tokens.headerHeightPx]);
-    assert.deepEqual(header.style.background, tokens.headerBackground);
+    assert.deepEqual(header.style.background, BEVY_PANEL_TOKENS.controlMaterial.background);
     assert.deepEqual(header.style.radius_corners, [BEVY_PANEL_TOKENS.radiusPx, BEVY_PANEL_TOKENS.radiusPx, 0, 0]);
     assert.equal(findNode(table, 'table_fixture_header_cell_name_label').text, 'Name');
     assert.equal(findNode(table, 'table_fixture_header_cell_name_label').style.opacity, tokens.headerLabelOpacity);
 
     assert.deepEqual(firstRow.style.position, [0, tokens.headerHeightPx]);
-    assert.deepEqual(firstRow.style.background, tokens.rowBackground);
+    assert.deepEqual(firstRow.style.background, BEVY_PANEL_TOKENS.controlMaterial.background);
     assert.equal(firstRow.style.radius_corners, undefined);
     assert.deepEqual(lastRow.style.radius_corners, [0, 0, BEVY_PANEL_TOKENS.radiusPx, BEVY_PANEL_TOKENS.radiusPx]);
     assert.equal(findNode(table, 'table_fixture_row_1_cell_value_label').text, 'Yes');
@@ -161,21 +160,13 @@ test('the same builder renders a headerless two-column property grid', () => {
 });
 
 test('an open Select popup paints above the whole table that follows it in body flow', () => {
-    panelLabSurface.onOpen();
-    let tree = null;
-    try {
-        panelLabSurface.handleEvent({ type: 'panel_lab.select.toggle' });
-        tree = buildBevyPanelTree({
-            id: 'panel_lab',
-            title: 'Panel Lab',
-            geometry: { x: 260, y: 120, width: 420, height: 620 },
-            surfaceSize: { width: 1280, height: 720 },
-            bodyChildren: panelLabSurface.buildContent(panelLabSurface.readState(), { emit: () => {}, bodyWidth: 400 }),
-            bodyGap: 0
-        });
-    } finally {
-        panelLabSurface.onClose();
-    }
+    const tree = buildBevyPanelTree({
+        id: 'panel_lab', title: 'Control overlap',
+        geometry: { x: 260, y: 120, width: 420, height: 620 },
+        surfaceSize: { width: 1280, height: 720 },
+        bodyChildren: [selectNode({ id: 'panel_lab_select', options: [{ value: 'one', label: 'One' }, { value: 'two', label: 'Two' }], value: 'one', expanded: true }),
+            tableNode({ id: 'panel_lab_table', columns, rows, width: 400 })], bodyGap: 0
+    });
 
     const all = collect(tree.root);
     const popup = all.filter((node) => node.id === 'panel_lab_select_options' || node.id.startsWith('panel_lab_select_option_'));
@@ -218,43 +209,6 @@ test('a floating option keeps pointer routing where it overlaps the passive tabl
     assert.equal(hitTestBevyUiNode(root, { x: 40, y: 200 }), null);
 });
 
-test('Panel Lab appends the table after the validated Select and keeps it passive and localized', () => {
-    panelLabSurface.onOpen();
-    try {
-        const body = panelLabSurface.buildContent(panelLabSurface.readState(), { emit: () => {}, bodyWidth: 400 });
-        const dividerIndex = body.findIndex((node) => node.id === 'panel_lab_table_divider');
-        const tableIndex = body.findIndex((node) => node.id === 'panel_lab_table');
-
-        assert.equal(body.length, 45);
-        assert.equal(tableIndex < body.findIndex((node) => node.id === 'panel_lab_action_button_group'), true);
-        assert.equal(tableIndex, dividerIndex + 1);
-        assert.equal(dividerIndex > body.findIndex((node) => node.id === 'panel_lab_select'), true);
-
-        const table = body[tableIndex];
-        assert.equal(table.kind, 'table');
-        assert.deepEqual(table.style.size, [400, 128]);
-        assert.equal(findNode(table, 'panel_lab_table_header_cell_value_label').text, 'Valeur');
-        assert.equal(findNode(table, 'panel_lab_table_row_2_cell_value_label').text, 'Atome');
-        assert.equal(EVE_DEFAULT_MESSAGES.fr['eve.panel_lab.table.row_visible_type'], 'Booléen');
-        assert.equal(EVE_DEFAULT_MESSAGES.en['eve.panel_lab.table.column_value'], 'Value');
-
-        assert.deepEqual(panelLabSurface.handleEvent({ type: 'panel_lab.table.select' }), {
-            ok: false,
-            error: 'panel_lab_intent_unsupported:panel_lab.table.select'
-        });
-
-        const narrow = panelLabSurface.buildContent(panelLabSurface.readState(), { emit: () => {}, bodyWidth: 260 });
-        assert.deepEqual(narrow.find((node) => node.id === 'panel_lab_table').style.size, [260, 128]);
-
-        const records = projectBevyUiTreeRecords({
-            tree: { root: table }, treeId: 'table_projection', workspaceLayer: 'panel'
-        });
-        assert.equal(records.some((record) => record.id.includes('panel_lab_table_row_0')), true);
-        assert.equal(records.every((record) => !String(record.id).includes('data-')), true);
-    } finally {
-        panelLabSurface.onClose();
-    }
-});
 
 // Same regression guard as the accordion: assert the projected record, not the
 // builder tree. The tree-level `radius_corners` assertions above stayed green

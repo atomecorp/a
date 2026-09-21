@@ -114,7 +114,7 @@ test('style projections keep one source for system depth and panel control paint
     assert.equal(panel.actionButton.pressedBackground, panel.select.pressedBackground);
     assert.equal(panel.state.tones.empty, panel.state.tones.loading);
     assert.notEqual(
-        EVE_TOOL_SKIN_TOKENS.bevyMenu.shape.flowerRadiusPx,
+        EVE_TOOL_SKIN_TOKENS.bevyMenu.shape.mysticRadiusPx,
         EVE_TOOL_SKIN_TOKENS.bevyMenu.shape.standardRadiusPx
     );
 });

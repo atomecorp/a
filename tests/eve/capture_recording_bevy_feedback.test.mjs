@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { afterEach, test, vi } from "vitest";
 import { buildBevyMainMenuItems, buildBevyMainMenuTree } from "../../eVe/intuition/ribbon/bevy_ui_main_menu_model.js";
-import { buildBevyUiFlowerTree } from "../../eVe/intuition/ribbon/bevy_ui_flower_model.js";
+import { buildBevyUiMysticTree } from "../../eVe/intuition/ribbon/bevy_ui_mystic_model.js";
 import { createMainMenuRecordingVisualRuntime } from "../../eVe/intuition/ribbon/bevy_ui_main_menu_recording_visual_runtime.js";
 
 import { createAudioScopeFrame } from "../../eVe/domains/media/api/audio_browser_recorder_worklet.js";
@@ -128,27 +128,6 @@ test('recording feedback keeps the main menu visible and projects the preview in
     assert.equal(audioItem.children.some((node) => node.id.endsWith('_icon')), false);
     assert.equal(audioItem.children.some((node) => node.id.endsWith('_label')), false);
     assert.equal(audioItem.children.filter((node) => node.id.includes('_recording_scope_bar_')).length, 64);
-});
-
-test('Flower keeps only its stationary recording tool visible', () => {
-    const items = [
-        { key: 'audio', label: 'Audio', icon: 'microphone', toolId: 'ui.capture.audio' },
-        { key: 'video', label: 'Video', icon: 'video_camera', toolId: 'ui.capture.video' }
-    ];
-    const tree = buildBevyUiFlowerTree({
-        surface,
-        center: { x: 320, y: 240 },
-        items,
-        stationaryItem: items[0],
-        stationaryPoint: { x: 320, y: 240 },
-        recordingVisual: {
-            kind: 'audio_scope', phase: 'recording', sessionId: 'flower_audio_1',
-            scope: { pairs: Array.from({ length: 64 }, () => [-0.25, 0.25]) }
-        }
-    });
-    assert.equal(tree.root.children.length, 1);
-    assert.equal(tree.root.children[0].id.endsWith('_audio_0'), true);
-    assert.equal(tree.root.children[0].children.filter((node) => node.id.includes('_recording_scope_bar_')).length, 64);
 });
 
 test('an orphaned recording visual never hides the canonical main menu', () => {

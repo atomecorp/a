@@ -1106,7 +1106,7 @@ test('footer_tools reload and commit use the established canonical property owne
     }
 });
 
-test('structured List and Matrix contexts always expose the persistent rail Play tool without an inline item control', () => {
+test('structured contexts expose applicable Play while beginner taxonomy filters recording', () => {
     const model = createAtomeContextualRailModelRuntime({
         mainToolIdByKey: { detail: 'ui.detail.panel', delete: 'ui.delete.selection', play: 'ui.play', record_action: 'ui.detail.record.toggle' },
         intuitionContent: {
@@ -1117,9 +1117,9 @@ test('structured List and Matrix contexts always expose the persistent rail Play
                 tool_id: 'ui.detail.record.toggle', label: 'Record', icon: 'record', type: 'palette',
                 selection_required: true, children: ['record_action_key', 'record_action_live', 'record_action_audio', 'record_action_video']
             },
-            record_action_live: {
-                tool_id: 'ui.detail.record.toggle', label: 'Live', icon: 'false', type: 'tool',
-                action: 'toggle', latch: true, selection_required: true, extra_input: { mode: 'live' }
+            record_action_audio: {
+                tool_id: 'ui.detail.record.toggle', label: 'Audio', icon: 'false', type: 'tool',
+                action: 'toggle', latch: true, selection_required: true, extra_input: { mode: 'media', record_source: 'audio' }
             }
         },
         normalizeMainToolKey: (key) => String(key || '').trim().toLowerCase(),
@@ -1133,7 +1133,7 @@ test('structured List and Matrix contexts always expose the persistent rail Play
             atomeId: `${kind}_row`, kind, toolKeys: ['detail', 'delete', 'play', 'record_action'], hasProjectAutomation: true, railOnly: true
         });
         assert.equal(keys.includes('play'), true, `${kind} lacks rail Play`);
-        assert.equal(keys.includes('record_action'), true, `${kind} lacks rail action Record`);
+        assert.equal(keys.includes('record_action'), false, `${kind} bypasses beginner recording visibility`);
         const definition = model.resolveAtomeContextualRailToolDefinition('play', { structuredContext: true });
         assert.equal(definition?.toolId, 'ui.play');
         assert.equal(definition?.label, 'Play');
@@ -1144,7 +1144,7 @@ test('structured List and Matrix contexts always expose the persistent rail Play
         assert.equal(recordDefinition?.icon, 'record');
         assert.equal(recordDefinition?.toolType, 'standard');
         assert.equal(recordDefinition?.latch, true);
-        assert.deepEqual(recordDefinition?.extraInput, { mode: 'live' });
+        assert.deepEqual(recordDefinition?.extraInput, { mode: 'media', record_source: 'audio' });
         assert.deepEqual(recordDefinition?.children, []);
     });
 });

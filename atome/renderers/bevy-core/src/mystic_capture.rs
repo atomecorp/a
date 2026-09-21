@@ -38,7 +38,7 @@ pub fn sync_menu_capture(world: &mut World) {
     let handles: Vec<_> = world.query::<&MeshMaterial2d<ProceduralSdfMaterial>>()
         .iter(world).map(|m| m.0.clone()).collect();
     let menu = handles.into_iter().find(|handle| world.resource::<Assets<ProceduralSdfMaterial>>()
-        .get(handle).is_some_and(|m| m.uniform.flower.x > 2.5));
+        .get(handle).is_some_and(|m| m.uniform.surface_style.x > 2.5));
     let Some(handle) = menu else { release(world); return; };
     let config = world.resource::<AtomeBevyRendererConfig>().clone();
     let size = UVec2::new(config.pixel_width.max(1), config.pixel_height.max(1));

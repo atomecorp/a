@@ -206,7 +206,7 @@ fn backdrop_fixture_keeps_text_and_image_in_capture_and_large_glass_circle_in_pr
     assert_eq!(excessive.normalized().unwrap().tint_fade, 1.0);
     let circle_layers = app.world().get::<bevy::camera::visibility::RenderLayers>(circle_entity).unwrap();
     assert!(circle_layers.intersects(&bevy::camera::visibility::RenderLayers::layer(
-        crate::workspace_backdrop::FLOWER_PRESENTATION_LAYER,
+        crate::workspace_backdrop::MENU_PRESENTATION_LAYER,
     )));
     for id in ["backdrop_fixture_image", "backdrop_fixture_text"] {
         let entity = table.by_id[id];

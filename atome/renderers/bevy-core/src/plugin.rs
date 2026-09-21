@@ -14,7 +14,7 @@ use crate::{
     video_external_texture::{insert_video_external_texture_component_for_node, AtomeVideoExternalTexturePlugin},
     waveform_playback_overlay::rebuild_waveform_playback_overlay,
     workspace_backdrop::{
-        spawn_workspace_backdrop, AtomePresentationCamera, FLOWER_PRESENTATION_LAYER, WORKSPACE_CAPTURE_LAYER,
+        spawn_workspace_backdrop, AtomePresentationCamera, MENU_PRESENTATION_LAYER, WORKSPACE_CAPTURE_LAYER,
     },
     workspace_blur::WorkspaceBlurPlugin,
 };
@@ -68,7 +68,7 @@ fn spawn_atome_bevy_scene(
         // power draw on mobile GPUs at a device pixel ratio of 3.
         Msaa::Off,
         atome_camera_projection(config.width, config.height),
-        bevy::camera::visibility::RenderLayers::layer(WORKSPACE_CAPTURE_LAYER).with(FLOWER_PRESENTATION_LAYER).with(crate::mystic_capture::MENU_OVERLAY_LAYER),
+        bevy::camera::visibility::RenderLayers::layer(WORKSPACE_CAPTURE_LAYER).with(MENU_PRESENTATION_LAYER).with(crate::mystic_capture::MENU_OVERLAY_LAYER),
         AtomePresentationCamera,
     ));
     for node in &config.initial_scene.nodes {

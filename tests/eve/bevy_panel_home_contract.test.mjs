@@ -158,6 +158,7 @@ test('Home is a seven-section Bevy composition with the restored nested hierarch
 test('menu rendering stays flat and the legacy taxonomy is the profile default', () => {
     assert.deepEqual(normalizeVisualPreferences({}), {
         handedness: 'right', renderStyle: 'flat', navigationTaxonomy: 'legacy', liquidTheme: 'eau',
+        masteryLevel: 'beginner', activityLevels: {},
         mysticRoundness: 1, mysticTileGap: 1, mysticOpeningMs: 2000
     });
     // The three menu surface renderers are canonical values; an unknown style falls

@@ -225,21 +225,11 @@ const modeContentDependencies = (translate) => {
 
 test('the Mode palette reads its current choice from the canonical work-mode owner', async () => {
     const { createMainMenuContentRuntime } = await import('../../eVe/intuition/runtime/eve_intuition/main_menu_content_runtime.js');
-    const { performState } = await import('../../eVe/intuition/tools/perform_state.js');
     const content = createMainMenuContentRuntime({
         ...modeContentDependencies((_key, fallback) => fallback),
         t: (_key, fallback) => fallback,
         trackContextMenuState: () => {}, announceContextMenuState: () => {}
     });
-    const previousPerform = performState.active;
-    try {
-        performState.active = false;
-        assert.equal(content.mode.selectedChildKey(), 'mode_edit');
-        performState.active = true;
-        assert.equal(content.mode.selectedChildKey(), 'perform');
-    } finally {
-        performState.active = previousPerform;
-    }
     // Le mode de travail est celui de `getProjectWorkMode` : consommer -> mode_consume.
     const workMode = await import('../../eVe/domains/rendering/project_work_mode_state.js');
     const dom = new JSDOM('<!doctype html>');
@@ -249,7 +239,7 @@ test('the Mode palette reads its current choice from the canonical work-mode own
     dom.window.__currentProject = { id: 'mode_project' };
     dom.window.evePerformApi = { deactivate: async () => ({ ok: true }) };
     try {
-        await workMode.setProjectWorkMode('consume', { windowRef: dom.window });
+        await workMode.setProjectWorkMode('consultation', { windowRef: dom.window, prepare:async()=>({ok:true}) });
         assert.equal(content.mode.selectedChildKey(), 'mode_consume');
         await workMode.setProjectWorkMode('edit', { windowRef: dom.window });
         assert.equal(content.mode.selectedChildKey(), 'mode_edit');
@@ -280,7 +270,7 @@ test('shared-canvas BevyUI hit keeps menu ownership while Text is armed', () => 
         isToolHost: () => false,
         isToolUiTarget: () => false,
         isPrimaryPointerActivation: () => true,
-        isFlowerPointerLocked: () => false,
+        isMysticPointerLocked: () => false,
         isValidProjectIdCandidate: (value) => !!String(value || '').trim(),
         hitTestBevyUiAtClientPoint: (payload) => (uiHits.push(payload), { nodeId: 'main_menu_create' }),
         hitTestProjectSceneAtClientPoint: () => null,
@@ -333,9 +323,9 @@ test('project background second touch focuses the provisional editor before poin
         isToolHost: () => false,
         isToolUiTarget: () => false,
         isPrimaryPointerActivation: () => true,
-        isFlowerPointerLocked: () => false,
-        markFlowerPointerGestureArmed: () => {},
-        clearFlowerPointerGestureArmed: () => {},
+        isMysticPointerLocked: () => false,
+        markMysticPointerGestureArmed: () => {},
+        clearMysticPointerGestureArmed: () => {},
         isValidProjectIdCandidate: (value) => !!String(value || '').trim(),
         hitTestBevyUiAtClientPoint: () => null,
         hitTestProjectSceneAtClientPoint: () => null,
@@ -446,18 +436,18 @@ test('Visual double-click edits the displayed source inline and never creates a 
     assert.equal(railTargets[0].target.id, 'text_inline');
 });
 
-test('Visual long-press opens the canonical Atome Flower context so text style tools remain available', async () => {
+test('Visual long-press opens the canonical Atome Mystic context so text style tools remain available', async () => {
     const menus = [];
     const runtime = createProjectViewVisualInteractionRuntime({
         openAtomeMenu: async (payload) => { menus.push(payload); return { ok: true }; }
     });
     await runtime.longPress({
         event: { client_x: 42, client_y: 84 },
-        record: { id: 'text_flower', type: 'text', project_id: 'project_flower' }
+        record: { id: 'text_mystic', type: 'text', project_id: 'project_mystic' }
     });
     assert.deepEqual(menus, [{
         event: { client_x: 42, client_y: 84 },
-        atomeId: 'text_flower', kind: 'text', projectId: 'project_flower'
+        atomeId: 'text_mystic', kind: 'text', projectId: 'project_mystic'
     }]);
 });
 

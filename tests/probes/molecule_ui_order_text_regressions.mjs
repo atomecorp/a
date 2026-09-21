@@ -348,25 +348,25 @@ const runVisualInlineEditing = async ({ page, creation, report, outDir }) => {
     await editor.press('Enter');
     await editor.type('Again');
     await editor.press('Meta+A');
-    const flowerPreview = (await visualTarget()).target;
-    assert(flowerPreview, 'focused_visual_text_preview_flower_missing');
-    await page.mouse.move(flowerPreview.x, flowerPreview.y);
+    const mysticPreview = (await visualTarget()).target;
+    assert(mysticPreview, 'focused_visual_text_preview_mystic_missing');
+    await page.mouse.move(mysticPreview.x, mysticPreview.y);
     await page.mouse.down();
     await wait(750);
     await page.mouse.up();
-    const flowerColorNode = await waitFor(page, () => {
+    const mysticColorNode = await waitFor(page, () => {
         const tree = (window.eveBevyUiRuntime?.readOverlayDiagnostics?.()?.trees || [])
-            .find((entry) => entry.id === 'eve_bevy_ui_flower');
+            .find((entry) => entry.id === 'eve_bevy_ui_mystic');
         const ids = (tree?.interactiveNodes || []).map((entry) => String(entry?.id || entry));
-        const nodeId = ids.find((id) => id.startsWith('eve_bevy_ui_flower_item_couleur_')) || '';
+        const nodeId = ids.find((id) => id.startsWith('eve_bevy_ui_mystic_item_couleur_')) || '';
         return { ok: Boolean(nodeId), nodeId, ids };
     }, null, 10000);
     await editor.press('Meta+A');
-    const flowerColor = await awaitBevyUiNodeTarget(page, {
-        nodeId: flowerColorNode.nodeId, treeId: 'eve_bevy_ui_flower', step: 2
+    const mysticColor = await awaitBevyUiNodeTarget(page, {
+        nodeId: mysticColorNode.nodeId, treeId: 'eve_bevy_ui_mystic', step: 2
     }, { timeoutMs: 10000, intervalMs: 150 });
-    assert(flowerColor, `focused_visual_flower_color_target_missing:${JSON.stringify(flowerColorNode)}`);
-    await clickCanvasTarget(page, flowerColor);
+    assert(mysticColor, `focused_visual_mystic_color_target_missing:${JSON.stringify(mysticColorNode)}`);
+    await clickCanvasTarget(page, mysticColor);
     const redSwatch = await awaitBevyUiNodeTarget(page, {
         nodeId: 'color_swatch_0_2', treeId: 'eve_bevy_panel_couleur', step: 2
     }, { timeoutMs: 10000, intervalMs: 150 });

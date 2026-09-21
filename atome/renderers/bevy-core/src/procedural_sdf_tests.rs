@@ -165,28 +165,16 @@ fn procedural_sdf_keeps_clear_glass_and_a_continuous_shadow_free_aura() {
 }
 
 #[test]
-fn procedural_sdf_flower_mode_uses_one_antialiased_smooth_union_mask() {
-    let shader = include_str!("assets/shaders/procedural_sdf.wgsl");
-    assert!(shader.contains("fn sd_capsule"));
-    assert!(shader.contains("fn smooth_union"));
-    assert!(shader.contains("fn flower_liquid"));
-    assert!(shader.contains("material.flower_petals[index]"));
-    assert!(shader.contains("sample_aligned_mip(screen_uv, material.shape.w)"));
-    assert!(shader.contains("smoothstep(-edge_softness, edge_softness, distance)"));
-    assert!(!shader.contains("flower_copy"));
-}
-
-#[test]
 fn procedural_sdf_mystic_mode_is_one_isolated_turning_tile_branch() {
     let shader = include_str!("assets/shaders/procedural_sdf.wgsl");
     // The branch exists, and it is reachable: the dispatch walks from the most
     // specific mode to the most general one, so mode 3 can never fall through
     // into the liquid glass and mode 2 can never fall into the corolla.
     assert!(shader.contains("fn intuition_mystic(pixel_position: vec2<f32>, screen_uv: vec2<f32>)"));
-    let mystic = shader.find("material.flower.x > 2.5").expect("mystic dispatch");
-    let liquid = shader.find("material.flower.x > 1.5").expect("liquid dispatch");
-    let flower = shader.find("material.flower.x > 0.5").expect("flower dispatch");
-    assert!(mystic < liquid && liquid < flower);
+    let mystic = shader.find("material.surface_style.x > 2.5").expect("mystic dispatch");
+    let liquid = shader.find("material.surface_style.x > 1.5").expect("liquid dispatch");
+    assert!(mystic < liquid);
+    assert!(!shader.contains("fn flower_liquid("));
     // Both plates are rounded rectangles, so the SDF is shared instead of
     // copy-pasted into each design branch. Mystic calls it three times — the
     // turning plate, the flat hole it leaves in its cell, and the cell's own

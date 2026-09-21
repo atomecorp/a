@@ -51,7 +51,9 @@ test('Project scene drag applies direct Bevy transforms without full projection 
     await flushFrames.animationFrames();
 
     assert.equal(commits.length, 0);
-    const directTransformCalls = renders.slice(callsAfterPointerDown);
+    const moveCalls = renders.slice(callsAfterPointerDown);
+    assert.equal(moveCalls.every(call => call.type === 'transform' || (call.type === 'ops' && call.ops.every(op => op.type === 'style'))), true);
+    const directTransformCalls = moveCalls.filter(call => call.type === 'transform');
     assert.equal(directTransformCalls.length, 1);
     assert.equal(directTransformCalls.every((call) => call.type === 'transform'), true);
     assert.deepEqual(directTransformCalls.at(-1).payload, {
@@ -60,7 +62,8 @@ test('Project scene drag applies direct Bevy transforms without full projection 
         logical_size: [40, 30],
         scale: [1, 1],
         rotation: 0,
-        origin: [0, 0]
+        origin: [0, 0],
+        clip_rect: null
     });
 
     await flushFrames();
@@ -68,7 +71,7 @@ test('Project scene drag applies direct Bevy transforms without full projection 
     assert.equal(commits.length, 1);
     assert.equal(commits[0][0].kind, 'gesture_frame');
     assert.deepEqual(commits[0][0].props, { left: 30, top: 35 });
-    assert.equal(renders.slice(callsAfterPointerDown).every((call) => call.type === 'transform'), true);
+    assert.equal(renders.slice(callsAfterPointerDown).every(call => call.type === 'transform' || (call.type === 'ops' && call.ops.every(op => op.type === 'style'))), true);
     assert.equal(getProjectSceneState('project_gesture_perf').records[0].properties.left, 30);
     assert.equal(getProjectSceneState('project_gesture_perf').records[0].properties.top, 35);
 
@@ -145,7 +148,7 @@ test('Molecule drag coalesces every member to one direct transform per display f
         ['drag_perf_member_a', [28, 32]],
         ['drag_perf_member_b', [88, 57]]
     ]);
-    assert.equal(renders.slice(callsAfterPointerDown).every((call) => call.type === 'transform'), true);
+    assert.equal(renders.slice(callsAfterPointerDown).every(call => call.type === 'transform' || (call.type === 'ops' && call.ops.every(op => op.type === 'style'))), true);
 
     dom.window.document.dispatchEvent(pointerEvent(dom.window, 'pointerup', {
         clientX: 38,
@@ -221,7 +224,9 @@ test('Tauri dense media scene keeps a Molecule drag on one native transform batc
     await flushFrames.animationFrames();
     await Promise.resolve();
 
-    const nativeTransformCalls = nativeCalls.filter((call) => call.command === 'bevy_native_apply_ops');
+    const nativeOps = nativeCalls.filter(call => call.command === 'bevy_native_apply_ops');
+    assert.equal(nativeOps.every(call => call.payload.ops.every(op => ['transform', 'style'].includes(op.type))), true);
+    const nativeTransformCalls = nativeOps.filter(call => call.payload.ops.some(op => op.type === 'transform'));
     const perf = ensureBevyPerfDiagnostics().summary();
     assert.equal(records.length, 40);
     assert.equal(nativeTransformCalls.length, 1);
@@ -332,8 +337,8 @@ test('Project scene pointermove stays on direct Bevy transforms without commits,
         assert.equal(networkCalls.length, 0);
         assert.equal(textureCalls.length, textureCallsAfterPointerDown);
         assert.deepEqual(canvasReadbacks, []);
-        assert.equal(pointerMoveRenderCalls.length, 1);
-        assert.equal(pointerMoveRenderCalls.every((call) => call.type === 'transform'), true);
+        assert.equal(pointerMoveRenderCalls.filter(call => call.type === 'transform').length, 1);
+        assert.equal(pointerMoveRenderCalls.every(call => call.type === 'transform' || (call.type === 'ops' && call.ops.every(op => op.type === 'style'))), true);
         assert.equal(perf.counters['gesture.frame.direct_transform'], 1);
         assert.equal(perf.counters['gesture.frame.coalesced'], 2);
         assert.equal(perf.counters['gesture.frame.projection_fallback'] || 0, 0);

@@ -13,7 +13,7 @@ use bevy::ui::{
     percent, px, widget::ImageNode, BoxShadow, GlobalZIndex, RelativeCursorPosition,
     IsDefaultUiCamera, ScrollPosition, ShadowStyle,
 };
-use crate::workspace_backdrop::FLOWER_PRESENTATION_LAYER;
+use crate::workspace_backdrop::MENU_PRESENTATION_LAYER;
 
 // Tracks the previous frame's Interaction + node-local cursor position so
 // press/release/drag can be derived without an entity-keyed Local<HashMap>
@@ -387,7 +387,7 @@ fn spawn_text_child(world: &mut World, parent: Entity, node: &AtomeUiNode) {
     insert_text_extras(world, text_entity, &node.style);
     world
         .entity_mut(text_entity)
-        .insert(RenderLayers::layer(FLOWER_PRESENTATION_LAYER));
+        .insert(RenderLayers::layer(MENU_PRESENTATION_LAYER));
     world.entity_mut(parent).add_child(text_entity);
 }
 
@@ -482,7 +482,7 @@ fn spawn_ui_node(
     insert_style_extras(world, entity, &node.style);
     world
         .entity_mut(entity)
-        .insert(RenderLayers::layer(FLOWER_PRESENTATION_LAYER));
+        .insert(RenderLayers::layer(MENU_PRESENTATION_LAYER));
     if is_text_kind(&kind) {
         insert_text_extras(world, entity, &node.style);
     }

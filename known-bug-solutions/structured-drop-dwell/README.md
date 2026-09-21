@@ -24,8 +24,22 @@ applies the same offset to its children. It reuses the existing record preview.
 Remaining acceptance: side-zone compositions, nested targets, undo/redo and
 reopening through the Dashboard. Do not infer those from a center-drop result.
 
-## Explicit composition palette — 2026-09-09
+## Supprime — le choix est passe dans le rail (2026-09-20)
 
-The latest approved contract supersedes automatic absorption: after the existing 500 ms dwell, the shared tool palette offers six operations. Release without a chosen option never combines. The original pointer session owns the whole gesture and disposes the palette on release/cancel/reset. Use project_composition_choice_acceptance.mjs; all six choices passed in Natural/List/Matrix, with nested insert/overwrite additionally passing in all three. Canonical history restores membership and spatial position.
+La temporisation d'immobilite ET la palette flottante n'existent plus. Un depot ne
+decide plus rien : il POSE l'objet la ou le doigt l'a lache, puis les memes choix
+(Avant/Apres/Devant/Derriere/Ecraser/Inserer, ou Inclure/Poser dessus pour une
+page) s'affichent comme des outils ordinaires du rail contextuel, jusqu'au prochain
+appui sur un objet. Voir `eVe/domains/rendering/project_view_drop_choice_rail.js`.
 
-A timer initially closed over the first hover point, offsetting its popup from the final pointer. The session now stores the latest normalized surface point; tests must supply the real surfacePointFromEvent contract. Canonical nested-cut playback must read meta.parent_id using the shared record reader. Copy planning remaps timeline owner and child-source IDs; group windows are derived transport slices.
+Ce qui reste de l'episode, et qui vaut pour la suite :
+
+- `resolveStructuredDropIntent` (zones avant/apres/simultane) survit : c'est de la
+  geometrie, pas de la temporisation. Le surlignage de cible se lit desormais sur
+  l'intention, sans aucun delai.
+- L'ancienne palette gelait le point de depot pour que l'objet n'aille pas se poser
+  sous le doigt, et rembobinait ensuite le delta. Sans palette, ces deux
+  contorsions disparaissent — c'etait le signe que le pop-up etait au mauvais
+  endroit du geste.
+- Un depot sur une page n'inclut plus automatiquement : c'etait une reparentage
+  silencieux que subissait tout objet simplement relache au-dessus d'une page.

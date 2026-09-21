@@ -3,7 +3,8 @@ import {
     assert, clickCanvasTarget, recordCenter, wait, waitFor, waitForStableScene
 } from './molecule_ui_acceptance_support.mjs';
 import {
-    drag, readMembership, reloadProjection, screenshot, stateParentId, switchView, waitForMolecule
+    drag, dropChoiceToolIds, readMembership, reloadProjection, screenshot, stateParentId,
+    switchView, waitForMolecule
 } from './molecule_ui_drop_core.mjs';
 import {
     assertNoParasites, chooseMoleculePlaybackMode, contextualTool, disarmMemberPlayback,
@@ -34,31 +35,32 @@ export const validateNaturalMoleculeDrop = async ({ page, project, fixture, repo
         `natural_non_overlap_reparented:${stateParentId(spareState)}`);
     let source = await recordCenter(page, project.id, (record) => record.id === fixture.imageId, { sceneCoordinates: true });
     const target = await recordCenter(page, project.id, (record) => record.id === fixture.audioId, { sceneCoordinates: true });
-    const cancelledTrace = await drag({
-        page, source, destination: target, holdMs: 700,
-        compositionChoice: 'front', compositionExit: true,
-        assertSurfaceDragContinues: true
-    });
+    // Un depot SANS choix ne compose rien : il pose l'objet la ou le doigt l'a
+    // lache, et met les six choix dans le rail. Un clic ailleurs les retire.
+    const plainTrace = await drag({ page, source, destination: target, holdMs: 700 });
     await waitForStableScene(page, project.id);
-    const cancelledMembership = await readMembership(page, {
+    const plainMembership = await readMembership(page, {
         sourceId: fixture.imageId, targetId: fixture.audioId
     });
-    assert(cancelledMembership.sourceParent === project.id && cancelledMembership.targetParent === project.id,
-        `natural_palette_exit_combined:${JSON.stringify(cancelledMembership)}`);
+    assert(plainMembership.sourceParent === project.id && plainMembership.targetParent === project.id,
+        `natural_plain_drop_combined:${JSON.stringify(plainMembership)}`);
+    const offeredChoices = await dropChoiceToolIds(page);
+    assert(offeredChoices.length === 6, `natural_drop_choices_missing:${JSON.stringify(offeredChoices)}`);
     source = await recordCenter(page, project.id, (record) => record.id === fixture.imageId, { sceneCoordinates: true });
-    assert(Math.hypot(source.x - cancelledTrace.releasePoint.x, source.y - cancelledTrace.releasePoint.y) <= 3,
-        `natural_palette_exit_position:${JSON.stringify({ source, cancelledTrace })}`);
+    assert(Math.hypot(source.x - plainTrace.releasePoint.x, source.y - plainTrace.releasePoint.y) <= 3,
+        `natural_plain_drop_position:${JSON.stringify({ source, plainTrace })}`);
     if (fixture.stackedIds?.length) {
-        report.measurements.stackedPaletteExit = {
+        report.measurements.stackedPlainDrop = {
             ok: true,
             stackedAtomeCount: fixture.stackedIds.length,
-            releasePoint: cancelledTrace.releasePoint,
-            sourcePoint: { x: source.x, y: source.y }
+            releasePoint: plainTrace.releasePoint,
+            sourcePoint: { x: source.x, y: source.y },
+            offeredChoices
         };
     }
     let armed = null;
     const dragTrace = await drag({
-        page, source, destination: target, holdMs: 700, compositionChoice: 'front',
+        page, source, destination: target, holdMs: 700, railChoice: 'front',
         armedShot: async () => {
             const pointBeforeScreenshot = await page.evaluate(async () => {
                 const { getRenderSurfaceState } = await import('/eVe/domains/rendering/surface_runtime.js');
@@ -85,8 +87,6 @@ export const validateNaturalMoleculeDrop = async ({ page, project, fixture, repo
                     start: session.start || null,
                     pointBeforeScreenshot,
                     targetId: String(session.overlap_target_id || ''),
-                    stationaryMs: session.overlap_target_id
-                        ? Date.now() - Number(session.overlap_started_at || Date.now()) : 0,
                     targetCount: Array.isArray(session.targets) ? session.targets.length : 0,
                     point,
                     beneath: beneath ? {
@@ -104,9 +104,8 @@ export const validateNaturalMoleculeDrop = async ({ page, project, fixture, repo
             }, { expectedTargetId: fixture.audioId, pointBeforeScreenshot });
         }
     });
-    assert(armed?.moved === true && armed?.targetId === fixture.audioId
-        && armed?.stationaryMs >= 500 && armed?.targetCount === 1,
-    `natural_absorb_not_armed:${JSON.stringify({ armed, dragTrace, source, target, fixture })}`);
+    assert(armed?.moved === true && armed?.targetId === fixture.audioId && armed?.targetCount === 1,
+    `natural_overlap_target_not_resolved:${JSON.stringify({ armed, dragTrace, source, target, fixture })}`);
     const molecule = await waitForMolecule(page, { sourceId: fixture.imageId, targetId: fixture.audioId });
     await reloadProjection(page, project.id);
     await screenshot({ page, report, outDir, name: 'drop_natural_after_reload' });
@@ -114,7 +113,7 @@ export const validateNaturalMoleculeDrop = async ({ page, project, fixture, repo
         const moleculeId = molecule.sourceParent;
         const sourceMolecule = await recordCenter(page, project.id, (record) => record.id === moleculeId, { sceneCoordinates: true });
         const targetAtome = await recordCenter(page, project.id, (record) => record.id === fixture.spareId, { sceneCoordinates: true });
-        await drag({ page, source: sourceMolecule, destination: targetAtome, holdMs: 700, compositionChoice: 'front' });
+        await drag({ page, source: sourceMolecule, destination: targetAtome, holdMs: 700, railChoice: 'front' });
         const nested = await waitForMolecule(page, { sourceId: moleculeId, targetId: fixture.spareId });
         const childParents = await page.evaluate(async (ids) => {
             const states = await Promise.all(ids.map((id) => window.Atome.getStateCurrent(id)));
@@ -126,9 +125,9 @@ export const validateNaturalMoleculeDrop = async ({ page, project, fixture, repo
             `natural_molecule_source_flattened:${JSON.stringify({ moleculeId, childParents })}`);
         const nestedMolecule = await recordCenter(page, project.id, (record) => record.id === nested.sourceParent, { sceneCoordinates: true });
         await page.mouse.click(nestedMolecule.x, nestedMolecule.y, { button: 'right' });
-        const flowerUngroup = await waitFor(page, async () => {
-            const flower = await import('/eVe/intuition/flower/index.js');
-            const tree = window.eveBevyUiRuntime?.state?.trees?.get?.('eve_bevy_ui_flower')?.tree || null;
+        const mysticUngroup = await waitFor(page, async () => {
+            const mystic = await import('/eVe/intuition/mystic/index.js');
+            const tree = window.eveBevyUiRuntime?.state?.trees?.get?.('eve_bevy_ui_mystic')?.tree || null;
             const ids = [];
             const visit = (node) => {
                 if (!node || typeof node !== 'object') return;
@@ -136,15 +135,15 @@ export const validateNaturalMoleculeDrop = async ({ page, project, fixture, repo
                 (node.children || []).forEach(visit);
             };
             visit(tree?.root);
-            return { ok: flower.isFlowerMenuOpen?.() === true && ids.some((id) => id.includes('_item_ungroup_')), ids };
+            return { ok: mystic.isMysticMenuOpen?.() === true && ids.some((id) => id.includes('_item_ungroup_')), ids };
         });
-        assert(flowerUngroup.ok, `natural_molecule_ungroup_missing:${JSON.stringify(flowerUngroup)}`);
-        await screenshot({ page, report, outDir, name: 'drop_natural_nested_flower' });
-        await page.evaluate(async () => (await import('/eVe/intuition/flower/index.js')).closeFlowerMenu?.());
+        assert(mysticUngroup.ok, `natural_molecule_ungroup_missing:${JSON.stringify(mysticUngroup)}`);
+        await screenshot({ page, report, outDir, name: 'drop_natural_nested_mystic' });
+        await page.evaluate(async () => (await import('/eVe/intuition/mystic/index.js')).closeMysticMenu?.());
         const clean = await assertNoParasites(page, project.id, [moleculeId, fixture.spareId, fixture.audioId, fixture.imageId]);
         assert(clean.ok, `natural_parasitic_projection:${JSON.stringify(clean)}`);
         return {
-            molecule, nested, childParents, flowerUngroup, playbackModes: [], children: [], clean, core_only: true,
+            molecule, nested, childParents, mysticUngroup, playbackModes: [], children: [], clean, core_only: true,
             membership: await readMembership(page, {
                 sourceId: fixture.imageId, targetId: fixture.audioId, spareId: fixture.spareId
             })

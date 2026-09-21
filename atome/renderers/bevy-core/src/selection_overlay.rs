@@ -12,7 +12,7 @@ use crate::{
         AtomeBevyRendererConfig, AtomeLayer, AtomeLogicalPosition, AtomeLogicalSize, AtomeSelected,
         AtomeSelectionOverlay, SelectionVisualStyle,
     },
-    workspace_backdrop::FLOWER_PRESENTATION_LAYER,
+    workspace_backdrop::MENU_PRESENTATION_LAYER,
 };
 
 fn inherit_presentation_layer(world: &mut World, source: Entity, entities: &[Entity]) {
@@ -20,7 +20,7 @@ fn inherit_presentation_layer(world: &mut World, source: Entity, entities: &[Ent
         .get::<bevy::camera::visibility::RenderLayers>(source)
         .is_some_and(|layers| {
             layers.intersects(&bevy::camera::visibility::RenderLayers::layer(
-                FLOWER_PRESENTATION_LAYER,
+                MENU_PRESENTATION_LAYER,
             ))
         });
     if !is_presentation {
@@ -28,7 +28,7 @@ fn inherit_presentation_layer(world: &mut World, source: Entity, entities: &[Ent
     }
     for entity in entities {
         world.entity_mut(*entity).insert(
-            bevy::camera::visibility::RenderLayers::layer(FLOWER_PRESENTATION_LAYER),
+            bevy::camera::visibility::RenderLayers::layer(MENU_PRESENTATION_LAYER),
         );
     }
 }

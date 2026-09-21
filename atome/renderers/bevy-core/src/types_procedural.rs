@@ -50,20 +50,20 @@ pub struct AtomeProceduralSdf {
     #[serde(default)]
     pub mode: f32,
     #[serde(default)]
-    pub flower_count: f32,
+    pub surface_count: f32,
     #[serde(default)]
-    pub flower_core_radius: f32,
+    pub surface_core_radius: f32,
     #[serde(default)]
-    pub flower_bridge_width: f32,
-    #[serde(default = "default_flower_edge_softness")]
-    pub flower_edge_softness: f32,
+    pub surface_bridge_width: f32,
+    #[serde(default = "default_surface_edge_softness")]
+    pub surface_edge_softness: f32,
     #[serde(default)]
-    pub flower_tint: [f32; 4],
+    pub surface_tint: [f32; 4],
     #[serde(default)]
     // 16 et non 8 : les 8 premiers portent le contrat flower/assistant
     // historique, les suivants les arcs de lumiere du mode goutte d'eau.
-    pub flower_petals: [[f32; 4]; 24],
-    // Les GOUTTES du mode liquide, separees du style a dessein : `flower_petals`
+    pub surface_parameters: [[f32; 4]; 24],
+    // Les GOUTTES du mode liquide, separees du style a dessein : `surface_parameters`
     // porte le style PARTAGE par toutes les gouttes, `liquid_drops` la geometrie
     // PROPRE a chacune — `[centreX, centreY, diametre, enfoncement]`.
     // Deux tableaux plutot qu'un seul de 48 : serde et Default ne s'implementent
@@ -105,7 +105,7 @@ fn default_surface_size() -> [f32; 2] { [1.0, 1.0] }
 fn default_assistant_size() -> f32 { 1.0 }
 fn default_assistant_blur() -> f32 { 48.0 }
 fn default_assistant_refraction() -> f32 { 24.0 }
-fn default_flower_edge_softness() -> f32 { 1.0 }
+fn default_surface_edge_softness() -> f32 { 1.0 }
 fn finite_or(value: f32, fallback: f32) -> f32 {
     if value.is_finite() { value } else { fallback }
 }
@@ -156,15 +156,15 @@ impl AtomeProceduralSdf {
             // 0 = assistant, 1 = flower liquide, 2 = goutte « design Claude »,
             // 3-4 reserves aux versions de design suivantes (procedural_sdf.wgsl).
             mode: finite_or(self.mode, 0.0).clamp(0.0, 4.0),
-            flower_count: finite_or(self.flower_count, 0.0).clamp(0.0, 8.0),
-            flower_core_radius: finite_or(self.flower_core_radius, 0.0).max(0.0),
-            flower_bridge_width: finite_or(self.flower_bridge_width, 0.0).max(0.0),
-            flower_edge_softness: finite_or(self.flower_edge_softness, 1.0).clamp(0.5, 4.0),
-            flower_tint: [
-                finite_or(self.flower_tint[0], 0.0).clamp(0.0, 1.0),
-                finite_or(self.flower_tint[1], 0.0).clamp(0.0, 1.0),
-                finite_or(self.flower_tint[2], 0.0).clamp(0.0, 1.0),
-                finite_or(self.flower_tint[3], 0.0).clamp(0.0, 1.0),
+            surface_count: finite_or(self.surface_count, 0.0).clamp(0.0, 8.0),
+            surface_core_radius: finite_or(self.surface_core_radius, 0.0).max(0.0),
+            surface_bridge_width: finite_or(self.surface_bridge_width, 0.0).max(0.0),
+            surface_edge_softness: finite_or(self.surface_edge_softness, 1.0).clamp(0.5, 4.0),
+            surface_tint: [
+                finite_or(self.surface_tint[0], 0.0).clamp(0.0, 1.0),
+                finite_or(self.surface_tint[1], 0.0).clamp(0.0, 1.0),
+                finite_or(self.surface_tint[2], 0.0).clamp(0.0, 1.0),
+                finite_or(self.surface_tint[3], 0.0).clamp(0.0, 1.0),
             ],
             liquid_drops: self.liquid_drops.map(|drop| [
                 finite_or(drop[0], 0.0),
@@ -212,7 +212,7 @@ impl AtomeProceduralSdf {
                 finite_or(self.mystic_style[2], 0.5).clamp(0.0, 1.0),
                 finite_or(self.mystic_style[3], 0.6).clamp(0.25, 8.0),
             ],
-            flower_petals: self.flower_petals.map(|petal| [
+            surface_parameters: self.surface_parameters.map(|petal| [
                 finite_or(petal[0], 0.0),
                 finite_or(petal[1], 0.0),
                 finite_or(petal[2], 0.0).max(0.0),

@@ -21,7 +21,7 @@ use crate::{
 /// backdrop surface would create a recursive, ghosted image.
 pub const WORKSPACE_CAPTURE_LAYER: usize = 0;
 /// Foreground UI which is rendered after the captured workspace.
-pub const FLOWER_PRESENTATION_LAYER: usize = 1;
+pub const MENU_PRESENTATION_LAYER: usize = 1;
 
 #[derive(Component)]
 pub struct AtomePresentationCamera;
@@ -111,7 +111,7 @@ pub fn set_workspace_backdrop_enabled(world: &mut World, enabled: bool) -> Resul
         .get_mut::<Camera>(state.camera)
         .ok_or_else(|| "bevy_workspace_backdrop_camera_missing".to_string())?
         .is_active = enabled;
-    let presentation = RenderLayers::layer(WORKSPACE_CAPTURE_LAYER).with(FLOWER_PRESENTATION_LAYER).with(crate::mystic_capture::MENU_OVERLAY_LAYER);
+    let presentation = RenderLayers::layer(WORKSPACE_CAPTURE_LAYER).with(MENU_PRESENTATION_LAYER).with(crate::mystic_capture::MENU_OVERLAY_LAYER);
     let presentation_camera = world
         .query_filtered::<Entity, With<AtomePresentationCamera>>()
         .iter(world)

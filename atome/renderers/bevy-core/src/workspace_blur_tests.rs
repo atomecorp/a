@@ -8,7 +8,7 @@ use crate::{
     plugin::AtomeBevyRendererPlugin,
     types::AtomeBevyRendererConfig,
     workspace_backdrop::{
-        set_workspace_backdrop_enabled, AtomePresentationCamera, AtomeWorkspaceBackdrop, FLOWER_PRESENTATION_LAYER,
+        set_workspace_backdrop_enabled, AtomePresentationCamera, AtomeWorkspaceBackdrop, MENU_PRESENTATION_LAYER,
         WORKSPACE_CAPTURE_LAYER,
     },
     workspace_blur::{
@@ -109,7 +109,7 @@ fn capture_isolated_and_shaders_use_the_canonical_viewport() {
     let capture = app.world().resource::<AtomeWorkspaceBackdrop>().camera;
     let capture_layers = app.world().get::<RenderLayers>(capture).unwrap();
     assert!(capture_layers.intersects(&RenderLayers::layer(WORKSPACE_CAPTURE_LAYER)));
-    assert!(!capture_layers.intersects(&RenderLayers::layer(FLOWER_PRESENTATION_LAYER)));
+    assert!(!capture_layers.intersects(&RenderLayers::layer(MENU_PRESENTATION_LAYER)));
 
     for shader in
         [include_str!("assets/shaders/backdrop_surface.wgsl"), include_str!("assets/shaders/procedural_sdf.wgsl")]

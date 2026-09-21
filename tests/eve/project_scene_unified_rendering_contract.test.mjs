@@ -21,8 +21,6 @@ import {
 import { sceneState } from '../../eVe/domains/rendering/project_scene_state.js';
 import { createRenderScene, hitTestRenderScene } from '../../eVe/domains/rendering/scene_graph.js';
 import { createSurfacePinchRuntime } from '../../eVe/domains/rendering/surface_pinch_runtime.js';
-import { openCompositionChoice, updateCompositionChoice } from '../../eVe/domains/rendering/project_view_drop_feedback.js';
-import { clearStationaryAbsorb } from '../../eVe/domains/rendering/project_view_drop_intent_runtime.js';
 import { createVirtualSceneTree } from '../../eVe/domains/rendering/virtual_scene_contract.js';
 import { getRenderSurfaceState } from '../../eVe/domains/rendering/surface_runtime.js';
 import { setAtomeContextualEditApi } from '../../eVe/intuition/runtime/eve_intuition/atome_contextual_edit_registry.js';
@@ -456,7 +454,7 @@ test('Project scene drag intent commits canonical geometry through commitBatch',
     assert.equal(getProjectSceneState('project_drag').records[0].properties.top, 30);
 });
 
-test('Natural release outside a hovered composition choice keeps only the final spatial drop', async () => {
+test('Natural drop away from any target commits only the final spatial drop', async () => {
     clearAllProjectScenes();
     const dom = projectDom();
     const commits = [];
@@ -479,24 +477,13 @@ test('Natural release outside a hovered composition choice keeps only the final 
     const canvas = dom.window.document.getElementById('eve_surface_project');
     dom.window.document.dispatchEvent(new dom.window.MouseEvent('pointerdown', { clientX: 15, clientY: 25, bubbles: true }));
     dom.window.document.dispatchEvent(new dom.window.MouseEvent('pointermove', { clientX: 90, clientY: 30, bubbles: true }));
-    await new Promise((resolve) => setTimeout(resolve, 550));
-    const session = getRenderSurfaceState(canvas)?.pointerSession;
-    assert.ok(session?.compositionChoice);
-    const option = session.compositionChoice.options.find((entry) => entry.key === 'front');
-    const optionPoint = {
-        x: option.box.x + option.box.width / 2,
-        y: option.box.y + option.box.height / 2
-    };
-    dom.window.document.dispatchEvent(new dom.window.MouseEvent('pointermove', {
-        clientX: optionPoint.x, clientY: optionPoint.y, bubbles: true
-    }));
-    assert.equal(session.compositionChoice.selected, 'front');
+    // Le survol n'ouvre plus rien et ne gele plus le point : l'objet suit le doigt
+    // jusqu'au bout, et le relachement hors de toute cible ne propose aucun choix.
     dom.window.document.dispatchEvent(new dom.window.MouseEvent('pointermove', {
         clientX: 200, clientY: 200, bubbles: true
     }));
     await nextTick();
-    assert.equal(session.compositionChoice.cancelled, true);
-    assert.deepEqual(session.last, { x: 200, y: 200 });
+    assert.deepEqual(getRenderSurfaceState(canvas)?.pointerSession?.last, { x: 200, y: 200 });
     dom.window.document.dispatchEvent(new dom.window.MouseEvent('pointerup', { clientX: 200, clientY: 200, bubbles: true }));
     await nextTick();
     await nextTick();
@@ -507,63 +494,6 @@ test('Natural release outside a hovered composition choice keeps only the final 
     assert.equal(source.parent_id, 'project_composition_cancel');
     assert.equal(target.parent_id, 'project_composition_cancel');
     assert.equal(getRenderSurfaceState(canvas)?.pointerSession, null);
-});
-
-test('Composition palette retains its full outer 20px margin and dismisses beyond it', () => {
-    let disposed = 0;
-    const choice = {
-        origin: { x: 120, y: 10 }, entered: false, cancelled: false, selected: '',
-        options: ['before', 'after', 'front', 'behind', 'overwrite', 'insert'].map((key, index) => ({
-            key, disabled: false, box: { x: index * 20, y: 0, width: 20, height: 20 }
-        })),
-        refresh: () => {}, dispose: () => { disposed += 1; }
-    };
-    const session = { absorbTargetId: 'target', hoverId: 'target', compositionChoice: choice };
-    updateCompositionChoice(session, { x: 50, y: 10 });
-    assert.equal(choice.selected, 'front');
-    assert.equal(updateCompositionChoice(session, { x: 140, y: 10 }), '');
-    assert.equal(session.compositionChoice, choice);
-    assert.equal(updateCompositionChoice(session, { x: 141, y: 10 }), '');
-    assert.equal(session.compositionChoice, choice);
-    assert.equal(choice.cancelled, true);
-    assert.equal(session.absorbTargetId, 'target');
-    assert.equal(disposed, 0);
-    clearStationaryAbsorb(session);
-    assert.equal(session.compositionChoice, null);
-    assert.equal(disposed, 1);
-});
-
-test('Dismissed composition palette reuses one mounted tree for a later stacked target', () => {
-    const calls = { mount: 0, update: 0, unmount: 0 };
-    const runtime = {
-        mountTree: () => { calls.mount += 1; },
-        updateTree: () => { calls.update += 1; },
-        unmountTree: () => { calls.unmount += 1; }
-    };
-    const dependencies = {
-        runtime,
-        surface: { getBoundingClientRect: () => ({ width: 400, height: 300 }) },
-        itemSize: 40,
-        handedness: 'right'
-    };
-    const session = {};
-    const first = openCompositionChoice(session, {
-        point: { x: 100, y: 100 }, targetId: 'stacked_target_a'
-    }, dependencies);
-    updateCompositionChoice(session, { x: 399, y: 299 });
-    assert.equal(first.cancelled, true);
-    assert.deepEqual(calls, { mount: 1, update: 1, unmount: 0 });
-
-    const second = openCompositionChoice(session, {
-        point: { x: 180, y: 120 }, targetId: 'stacked_target_b'
-    }, dependencies);
-    assert.equal(second, first);
-    assert.equal(second.targetId, 'stacked_target_b');
-    assert.equal(second.cancelled, false);
-    assert.deepEqual(calls, { mount: 1, update: 2, unmount: 0 });
-
-    clearStationaryAbsorb(session);
-    assert.deepEqual(calls, { mount: 1, update: 2, unmount: 1 });
 });
 
 test('Project scene canvas click selects through the existing selection runtime', async () => {

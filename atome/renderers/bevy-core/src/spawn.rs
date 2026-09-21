@@ -351,7 +351,7 @@ pub fn spawn_node_with_texture_handle(
     }
     if node.presentation {
         world.entity_mut(entity).insert(bevy::camera::visibility::RenderLayers::layer(
-            crate::workspace_backdrop::FLOWER_PRESENTATION_LAYER,
+            crate::workspace_backdrop::MENU_PRESENTATION_LAYER,
         ));
     }
     if node.menu_plane > 0 {

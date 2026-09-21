@@ -64,7 +64,7 @@ export const absorbMember = async ({
     const waypoint = { x: destination.x < 600 ? 900 : 220, y: 180 };
     let armed = null;
     await drag({
-        page, source, destination, waypoint, holdMs: 700, compositionChoice: 'front',
+        page, source, destination, waypoint, holdMs: 700, railChoice: 'front',
         armedShot: async () => {
             armed = await page.evaluate(async ({ sourceId: draggedId, destination }) => {
                 const { getRenderSurfaceState } = await import('/eVe/domains/rendering/surface_runtime.js');
@@ -76,8 +76,6 @@ export const absorbMember = async ({
                     atomeId: String(session.atome_id || ''),
                     moved: session.moved === true,
                     targetId: String(session.overlap_target_id || ''),
-                    stationaryMs: session.overlap_target_id
-                        ? Date.now() - Number(session.overlap_started_at || Date.now()) : 0,
                     start: session.start || null,
                     last: session.last || null,
                     destination,
@@ -92,8 +90,8 @@ export const absorbMember = async ({
             await screenshot({ page, report, outDir, name: shotName, preservePointer: true });
         }
     });
-    assert(armed?.moved && armed?.targetId && armed.stationaryMs >= 500,
-        `layered_absorb_not_armed:${JSON.stringify({ sourceId, targetId, armed })}`);
+    assert(armed?.moved && armed?.targetId,
+        `layered_overlap_target_not_resolved:${JSON.stringify({ sourceId, targetId, armed })}`);
     await waitFor(page, async ({ id, before, expected }) => {
         const state = await window.Atome.getStateCurrent(id);
         const parent = String(state?.parent_id || state?.parentId || state?.properties?.parent_id

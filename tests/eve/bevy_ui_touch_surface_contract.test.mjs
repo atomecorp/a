@@ -10,7 +10,7 @@ import {
     buildAtomeContextualEditTree
 } from '../../eVe/intuition/runtime/eve_intuition/atome_contextual_edit_model.js';
 import { BEVY_MENU_TOKENS } from '../../eVe/intuition/ribbon/bevy_ui_menu_surface.js';
-import { buildBevyUiFlowerTree } from '../../eVe/intuition/ribbon/bevy_ui_flower_model.js';
+import { buildBevyUiMysticTree } from '../../eVe/intuition/ribbon/bevy_ui_mystic_model.js';
 import { buildBevyMainMenuTree } from '../../eVe/intuition/ribbon/bevy_ui_main_menu_model.js';
 import { createAtomeContextualEditRuntime } from '../../eVe/intuition/runtime/eve_intuition/atome_contextual_edit_runtime.js';
 import { createAtomeContextualSurfaceInterceptor } from '../../eVe/intuition/runtime/eve_intuition/atome_contextual_edit_handlers.js';
@@ -65,6 +65,11 @@ test('BevyUI canvas binding owns touch gestures for mobile pointer scroll', asyn
     assert.equal(dom.window.document.querySelectorAll('button, input, [data-bevy-ui]').length, 0);
 });
 
+const readMenuAccess = async context => ({ ...context,
+    records: [{ id: context.atomeId, capabilities: { write: true, delete: true } }],
+    projectRecord: { capabilities: { create: true } }
+});
+
 const findNode = (node, id) => {
     if (node?.id === id) return node;
     for (const child of node?.children || []) {
@@ -85,7 +90,7 @@ test('all three Bevy menu trees stay outside the workspace backdrop capture', ()
         },
         state: { activePaletteKey: '', latchedByToolId: new Map(), externalOpenByToolId: new Map() }
     });
-    const flower = buildBevyUiFlowerTree({
+    const mystic = buildBevyUiMysticTree({
         surface,
         center: { x: 400, y: 300 },
         items: [{ key: 'view', label: 'Vue', type: 'tool' }]
@@ -95,7 +100,7 @@ test('all three Bevy menu trees stay outside the workspace backdrop capture', ()
         activeAtomeId: 'a',
         definitions: [{ key: 'detail', label: 'detail', toolType: 'standard' }]
     });
-    for (const tree of [main, flower, contextual]) {
+    for (const tree of [main, mystic, contextual]) {
         const normalizedTree = normalizeBevyUiTree({ id: tree.id, tree });
         const records = projectBevyUiTreeRecords({
             tree: normalizedTree,
@@ -230,18 +235,18 @@ test('contextual palettes keep the semantic accent on the rail interior in both 
     assert.equal(leftAccent.style.size[1], 60 - BEVY_MENU_TOKENS.paletteAccent.insetPx * 2);
 });
 
-test('Flower palette accents are individual rounded top arcs', () => {
-    const tree = buildBevyUiFlowerTree({
+test('Mystic palette accents are individual rounded top arcs', () => {
+    const tree = buildBevyUiMysticTree({
         surface: { getBoundingClientRect: () => ({ width: 800, height: 600 }) },
         items: [{ key: 'mode', type: 'palette' }, { key: 'view', type: 'palette' }]
     });
-    const petals = tree.root.children.filter((node) => node.kind === 'icon_button');
+    const petals = tree.root.children.filter((node) => node.kind === 'icon_button' && node.mystic);
     const accents = petals.map((petal) => findNode(petal, `${petal.id}_accent`));
     assert.equal(accents.length, 2);
     assert.equal(accents.every(Boolean), true);
-    assert.equal(accents.every((accent) => accent.style.radius === BEVY_MENU_TOKENS.shape.flowerRadiusPx), true);
-    assert.equal(petals.every((petal) => petal.style.radius === BEVY_MENU_TOKENS.shape.flowerRadiusPx), true);
-    assert.equal(petals.every((petal) => petal.style.shadow === BEVY_MENU_TOKENS.surface.material.shadow), true);
+    assert.equal(accents.every((accent) => accent.style.radius === BEVY_MENU_TOKENS.shape.mysticRadiusPx), true);
+    assert.equal(petals.every((petal) => petal.style.radius === BEVY_MENU_TOKENS.shape.mysticRadiusPx), true);
+    assert.equal(petals.every((petal) => petal.style.shadow === null), true);
     assert.equal(accents.every((accent) => accent.style.position[1] === Math.max(BEVY_MENU_TOKENS.paletteAccent.insetPx, 6)), true);
 });
 
@@ -318,7 +323,7 @@ test('structured List and Matrix rows carry persistent Play through production r
         getAtomeElement: () => null, getAtomeRuntimeState: () => ({}), translate: (_key, fallback) => fallback
     });
     const observed = [];
-    const runtime = createAtomeContextualEditRuntime({
+    const runtime = createAtomeContextualEditRuntime({ readMenuAccess,
         legacyState: {},
         resolveDefinitions: ({ atomeId, kind, railOnly, record }) => {
             const structuredContext = record?.structured_context === true;
@@ -367,7 +372,7 @@ test('Atome contextual runtime keeps edition ephemeral and renders only its tool
     }];
     const scene = { project_id: 'project', records, text: null };
     const rendered = [];
-    const runtime = createAtomeContextualEditRuntime({
+    const runtime = createAtomeContextualEditRuntime({ readMenuAccess,
         legacyState: {}, resolveDefinitions: () => [], invokeDefinition: async () => ({ ok: true }),
         surfaceResolver: () => ({ getBoundingClientRect: () => ({ width: 800, height: 600 }) }),
         bevyRuntimeResolver: () => ({
@@ -395,7 +400,7 @@ test('Atome contextual runtime keeps edition ephemeral and renders only its tool
 test('Atome contextual runtime reuses its handed rail for virtual Molecule selections without editor chrome', async () => {
     const rendered = [];
     const invocations = [];
-    const runtime = createAtomeContextualEditRuntime({
+    const runtime = createAtomeContextualEditRuntime({ readMenuAccess,
         legacyState: {}, resolveDefinitions: () => [], invokeDefinition: async () => ({ ok: true }),
         surfaceResolver: () => ({ getBoundingClientRect: () => ({ width: 800, height: 600 }) }),
         bevyRuntimeResolver: () => ({
@@ -434,7 +439,7 @@ test('Natural Molecule editing keeps the rail without restoring legacy frame chr
         project_id: 'project', records: [ownerRecord],
         scene: { byId: new Map([[ownerAtom.id, ownerAtom], [memberAtom.id, memberAtom]]) }
     };
-    const runtime = createAtomeContextualEditRuntime({
+    const runtime = createAtomeContextualEditRuntime({ readMenuAccess,
         legacyState: {}, resolveDefinitions: () => [], invokeDefinition: async () => ({ ok: true }),
         surfaceResolver: () => ({ getBoundingClientRect: () => ({ width: 800, height: 600 }) }),
         bevyRuntimeResolver: () => ({
@@ -552,7 +557,7 @@ test('selecting a Molecule member keeps the Molecule as contextual edition owner
         project_id: 'member_selection', records: [ownerRecord, memberRecord],
         scene: { byId: new Map([[owner.id, owner], [member.id, member]]) }
     };
-    const runtime = createAtomeContextualEditRuntime({
+    const runtime = createAtomeContextualEditRuntime({ readMenuAccess,
         legacyState: {}, resolveDefinitions: () => [], invokeDefinition: async () => ({ ok: true }),
         surfaceResolver: () => null, findSceneByAtomeId: () => project, readSceneState: () => project
     });
@@ -585,7 +590,7 @@ test('selection cannot replace an edited nested media with its Molecule owner', 
         project_id: 'nested_media_selection', records: [ownerRecord, mediaRecord],
         scene: { byId: new Map([[owner.id, owner], [media.id, media]]) }
     };
-    const runtime = createAtomeContextualEditRuntime({
+    const runtime = createAtomeContextualEditRuntime({ readMenuAccess,
         legacyState: {}, resolveDefinitions: () => [], invokeDefinition: async () => ({ ok: true }),
         surfaceResolver: () => null, findSceneByAtomeId: () => project, readSceneState: () => project
     });
@@ -614,7 +619,7 @@ test('Natural Molecule entry resets the rail and Escape leaves child cancellatio
     dom.window.requestAnimationFrame = () => 1;
     const record = { id: 'escape_molecule', project_id: 'escape_project', type: 'group' };
     const project = { project_id: 'escape_project', records: [record], scene: { byId: new Map() } };
-    const runtime = createAtomeContextualEditRuntime({
+    const runtime = createAtomeContextualEditRuntime({ readMenuAccess,
         legacyState: {}, resolveDefinitions: () => [], invokeDefinition: async () => ({ ok: true }),
         surfaceResolver: () => null, findSceneByAtomeId: (id) => id === record.id ? project : null,
         readSceneState: () => project
@@ -640,7 +645,7 @@ test('Structured row context accepts its canonical record when Natural has no pr
     const rendered = [];
     const invocations = [];
     const record = { id: 'audio_row', project_id: 'project', type: 'audio', properties: { kind: 'audio' } };
-    const runtime = createAtomeContextualEditRuntime({
+    const runtime = createAtomeContextualEditRuntime({ readMenuAccess,
         legacyState: {}, resolveDefinitions: () => [], invokeDefinition: async () => ({ ok: true }),
         surfaceResolver: () => ({ getBoundingClientRect: () => ({ width: 800, height: 600 }) }),
         bevyRuntimeResolver: () => ({
@@ -667,7 +672,7 @@ test('Structured member context promotes in place to canvas tools when Natural v
     const rendered = [];
     const record = { id: 'video_member', type: 'video', properties: { kind: 'video', left: 20, top: 20, width: 160, height: 90 } };
     const scene = { project_id: 'project', records: [record], scene: { byId: new Map() } };
-    const runtime = createAtomeContextualEditRuntime({
+    const runtime = createAtomeContextualEditRuntime({ readMenuAccess,
         legacyState: {},
         resolveDefinitions: () => [{ key: 'z_order', label: 'Plan', icon: 'modules', toolType: 'tool' }],
         invokeDefinition: async () => ({ ok: true }),
@@ -700,7 +705,7 @@ test('Atome contextual Size slider pins on click and closes only after a transie
     const scene = { project_id: 'project', records, text: null };
     const rendered = [];
     const invocations = [];
-    const runtime = createAtomeContextualEditRuntime({
+    const runtime = createAtomeContextualEditRuntime({ readMenuAccess,
         legacyState: {},
         resolveDefinitions: () => [{
             key: 'size', label: 'Size', icon: 'volume', toolType: 'slider',
@@ -768,7 +773,7 @@ test('Dashboard mode clears contextual edit chrome and project return keeps it c
     let unmounts = 0;
     try {
         window.__eveWorkspaceMode = { mode: 'project', projectId: 'project_a', transitioning: false, targetMode: '' };
-        const runtime = createAtomeContextualEditRuntime({
+        const runtime = createAtomeContextualEditRuntime({ readMenuAccess,
             legacyState: {}, resolveDefinitions: () => [], invokeDefinition: async () => ({ ok: true }),
             surfaceResolver: () => window.document.getElementById('eve_surface_project'),
             bevyRuntimeResolver: () => ({
@@ -874,7 +879,7 @@ test('depth palette survives structured target selection and closes on explicit 
     dom.window.__eveWorkspaceMode={mode:'project',projectId:'p'};
     dom.window.requestAnimationFrame=()=>1;
     let tree;
-    const runtime=createAtomeContextualEditRuntime({
+    const runtime=createAtomeContextualEditRuntime({ readMenuAccess,
         legacyState:{},resolveDefinitions:()=>[],invokeDefinition:async()=>({ok:true}),
         surfaceResolver:()=>dom.window.document.getElementById('eve_surface_project'),
         bevyRuntimeResolver:()=>({mountTree:async payload=>{tree=payload.tree;},updateTree:async payload=>{tree=payload.tree;},unmountTree:async()=>{}}),

@@ -5,6 +5,7 @@ import {
     analyzePngSignal,
     assert,
     clickCanvasTarget,
+    findBevyUiNodeTarget,
     playwrightPointForClientTarget,
     visibleMenuTool,
     wait,
@@ -155,10 +156,38 @@ export const screenshot = async ({ page, report, outDir, name, preservePointer =
     return { file, signal, visualSignalPresent };
 };
 
+// Les choix de depot sont des OUTILS du rail contextuel : on les lit et on les
+// clique comme n'importe quel autre outil, apres le relachement.
+export const dropChoiceToolIds = (page) => page.evaluate(() => {
+    const tree = (window.eveBevyUiRuntime?.readOverlayDiagnostics?.()?.trees || [])
+        .find((entry) => entry.id === 'eve_bevy_panel_atome_contextual_edit');
+    return (tree?.interactiveNodes || []).map((entry) => String(entry.id || entry))
+        .filter((id) => id.startsWith('atome_contextual_tool_drop_choice_'));
+});
+
+export const chooseDropChoice = async (page, choice) => {
+    const nodeId = `atome_contextual_tool_drop_choice_${choice}`;
+    await waitFor(page, (expected) => {
+        const tree = (window.eveBevyUiRuntime?.readOverlayDiagnostics?.()?.trees || [])
+            .find((entry) => entry.id === 'eve_bevy_panel_atome_contextual_edit');
+        const ids = (tree?.interactiveNodes || []).map((entry) => String(entry.id || entry));
+        return { ok: ids.includes(expected), ids };
+    }, nodeId);
+    const target = await findBevyUiNodeTarget(page, {
+        nodeId, treeId: 'eve_bevy_panel_atome_contextual_edit', step: 2
+    });
+    assert(target, `drop_choice_tool_missing:${nodeId}`);
+    await clickCanvasTarget(page, target);
+    await page.evaluate(async () => {
+        const { waitForPendingMutations } = await import('/eVe/core/atome_commit_state.js');
+        await waitForPendingMutations();
+    });
+    return target;
+};
+
 export const drag = async ({
     page, source, destination, holdMs = 0, armedShot = null, steps = 16,
-    postArmOffset = null, waypoint = null, compositionChoice = null, compositionExit = false,
-    assertSurfaceDragContinues = false
+    postArmOffset = null, waypoint = null, railChoice = null
 }) => {
     const from = await playwrightPointForClientTarget(page, source);
     const to = await playwrightPointForClientTarget(page, destination);
@@ -172,6 +201,11 @@ export const drag = async ({
     if (holdMs > 0) {
         await wait(holdMs);
     }
+    // Garde permanente : rester immobile au-dessus d'une cible n'ouvre plus AUCUN
+    // pop-up. Le choix ne vit que dans le rail, apres le depot.
+    const popupMounted = await page.evaluate(() => Array.from(window.eveBevyUiRuntime?.state?.trees?.keys?.() || [])
+        .some((id) => String(id).includes('composition_choices')));
+    assert(!popupMounted, 'drop_popup_reappeared_during_drag');
     if (typeof armedShot === 'function') await armedShot();
     if (postArmOffset) {
         await page.mouse.move(
@@ -179,64 +213,15 @@ export const drag = async ({
             to.y + Number(postArmOffset.y || 0)
         );
     }
-    let releasePoint = to;
-    if (compositionChoice) {
-        const options = await page.evaluate(() => window.eveBevyUiRuntime?.state?.trees
-            ?.get('eve_bevy_panel_composition_choices')?.tree?.root.children.map(node => ({
-                key: node.id.replace('composition_choice_', ''), position: node.style.position, size: node.style.size
-            })) || []);
-        const selected = options.find(option => option.key === compositionChoice);
-        assert(selected, 'composition_choice_not_mounted:' + compositionChoice);
-        for (const option of [options[0], selected]) await page.mouse.move(
-            option.position[0] + option.size[0] / 2, option.position[1] + option.size[1] / 2, { steps: 8 });
-        releasePoint = {
-            x: selected.position[0] + selected.size[0] / 2,
-            y: selected.position[1] + selected.size[1] / 2
-        };
-        if (compositionExit) {
-            releasePoint = await page.evaluate((items) => {
-                const surface = document.getElementById('eve_surface_project');
-                const rect = surface?.getBoundingClientRect?.() || { width: innerWidth, height: innerHeight };
-                const left = Math.min(...items.map(item => item.position[0]));
-                const top = Math.min(...items.map(item => item.position[1]));
-                const right = Math.max(...items.map(item => item.position[0] + item.size[0]));
-                const bottom = Math.max(...items.map(item => item.position[1] + item.size[1]));
-                const candidates = [
-                    { x: (left + right) / 2, y: bottom + 24 },
-                    { x: (left + right) / 2, y: top - 24 },
-                    { x: right + 24, y: (top + bottom) / 2 },
-                    { x: left - 24, y: (top + bottom) / 2 }
-                ];
-                return candidates.find(point => point.x > 48 && point.y > 48
-                    && point.x < rect.width - 48 && point.y < rect.height - 48)
-                    || { x: rect.width / 2, y: rect.height - 48 };
-            }, options);
-            await page.mouse.move(releasePoint.x, releasePoint.y, { steps: 8 });
-            if (assertSurfaceDragContinues) {
-                const retained = await page.evaluate(async () => {
-                    const { getRenderSurfaceState } = await import('/eVe/domains/rendering/surface_runtime.js');
-                    const session = getRenderSurfaceState(document.getElementById('eve_surface_project'))?.pointerSession;
-                    return session ? {
-                        mode: session.mode,
-                        atomeId: String(session.atome_id || ''),
-                        paletteCancelled: session.compositionChoice?.cancelled === true
-                    } : null;
-                });
-                assert(retained?.mode === 'drag' && retained?.paletteCancelled === true,
-                    `composition_exit_drag_lost:${JSON.stringify(retained)}`);
-            }
-        }
-    }
+    const releasePoint = postArmOffset
+        ? { x: to.x + Number(postArmOffset.x || 0), y: to.y + Number(postArmOffset.y || 0) }
+        : to;
     await page.mouse.up();
     await page.evaluate(async () => {
         const { waitForPendingMutations } = await import('/eVe/core/atome_commit_state.js');
         await waitForPendingMutations();
     });
-    if (compositionChoice) {
-        const paletteMounted = await page.evaluate(() => window.eveBevyUiRuntime?.state?.trees
-            ?.has('eve_bevy_panel_composition_choices') === true);
-        assert(!paletteMounted, 'composition_choice_not_disposed_after_release');
-    }
+    if (railChoice) await chooseDropChoice(page, railChoice);
     return { from, to, releasePoint };
 };
 

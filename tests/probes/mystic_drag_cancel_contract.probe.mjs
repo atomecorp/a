@@ -15,13 +15,13 @@ globalThis.cancelAnimationFrame = (id) => window.clearTimeout(id);
 
 const { createDragRuntime } = await import('../../eVe/core/atome_events/drag_runtime.js');
 const {
-    FLOWER_POINTER_TAKEOVER_EVENT,
-    clearFlowerPointerLock,
-    setFlowerPointerLock,
+    MYSTIC_POINTER_TAKEOVER_EVENT,
+    clearMysticPointerLock,
+    setMysticPointerLock,
     getAtomeRuntimeState,
     registerAtomeElement
 } = {
-    ...await import('../../eVe/intuition/flower/context_pointer_lock.js'),
+    ...await import('../../eVe/intuition/mystic/context_pointer_lock.js'),
     ...await import('../../eVe/core/atome_dom_id.js')
 };
 
@@ -57,7 +57,7 @@ defineReadonly(stage, 'clientHeight', 400);
 
 const host = document.createElement('div');
 registerAtomeElement(host, {
-    atome_id: 'flower_drag_atom',
+    atome_id: 'mystic_drag_atom',
     kind: 'shape'
 });
 host.style.position = 'absolute';
@@ -74,8 +74,8 @@ const commitBatchCalls = [];
 const updatePropsCalls = [];
 const toolboxPhases = [];
 const activeDragSessions = new Set();
-const currentSelectionIds = ['flower_drag_atom'];
-let flowerLongPressActive = false;
+const currentSelectionIds = ['mystic_drag_atom'];
+let mysticLongPressActive = false;
 
 window.addEventListener('eve:atome-drag-main-toolbox', (event) => {
     toolboxPhases.push(String(event?.detail?.phase || ''));
@@ -90,10 +90,10 @@ const runtime = createDragRuntime({
     isToolHost: () => false,
     beginActiveDragPromotion: () => null,
     normalizePointerId: (id) => (id == null ? null : Number(id)),
-    isFlowerPointerLocked: () => false,
-    isFlowerContextSurfaceHoldCandidateActive: () => false,
-    isFlowerContextSurfaceLongPressActive: () => flowerLongPressActive,
-    isFlowerContextLongPressSelectionActive: () => false,
+    isMysticPointerLocked: () => false,
+    isMysticContextSurfaceHoldCandidateActive: () => false,
+    isMysticContextSurfaceLongPressActive: () => mysticLongPressActive,
+    isMysticContextLongPressSelectionActive: () => false,
     selectionMoveTolerance: 2,
     gestureFrameIntervalMs: 0,
     gestureFrameMaxIntervalMs: 0,
@@ -103,10 +103,10 @@ const runtime = createDragRuntime({
     logAtomeEvents: () => {},
     resolveNearestSnapCandidate: () => null,
     resolveSnapTargets: () => [],
-    generateGestureId: () => 'flower_drag_gesture',
-    generateTxId: () => 'flower_drag_tx',
+    generateGestureId: () => 'mystic_drag_gesture',
+    generateTxId: () => 'mystic_drag_tx',
     getCurrentSelectionIds: () => currentSelectionIds.slice(),
-    resolveAtomeElement: (id) => (String(id) === 'flower_drag_atom' ? host : null),
+    resolveAtomeElement: (id) => (String(id) === 'mystic_drag_atom' ? host : null),
     resolveElementPosition: (element) => ({
         left: Number.parseFloat(element.style.left || '0'),
         top: Number.parseFloat(element.style.top || '0')
@@ -116,10 +116,10 @@ const runtime = createDragRuntime({
     touchLocalInteractionEdit: () => {},
     scheduleLocalInteractionEditRelease: () => {},
     rememberRecentLocalDragEnds: () => {
-        throw new Error('cancelled flower drag must not be remembered as a completed local drag');
+        throw new Error('cancelled mystic drag must not be remembered as a completed local drag');
     },
     applySelectionIntent: () => {
-        throw new Error('cancelled flower drag must not replace selection on release');
+        throw new Error('cancelled mystic drag must not replace selection on release');
     },
     isAtomeSelected: (id) => currentSelectionIds.includes(String(id || '')),
     isInteractiveTargetWithinHost: () => false,
@@ -127,7 +127,7 @@ const runtime = createDragRuntime({
     isPrimaryPointerActivation: () => true,
     isTextToolActive: () => false,
     markAtomeAsEditing: () => {},
-    shouldDeferSelectionReplaceForFlowerContext: () => false,
+    shouldDeferSelectionReplaceForMysticContext: () => false,
     claimActiveDragSession: (id) => {
         activeDragSessions.add(String(id || ''));
         return true;
@@ -143,7 +143,7 @@ const runtime = createDragRuntime({
     })
 });
 
-runtime.bindDrag(host, 'flower_drag_atom', {
+runtime.bindDrag(host, 'mystic_drag_atom', {
     emitCommitBatch: (events = [], options = {}) => {
         commitBatchCalls.push({
             events: events.map((event) => ({
@@ -164,14 +164,14 @@ host.dispatchEvent(makePointerEvent('pointerdown', {
     clientY: 100
 }));
 
-assert.equal(FLOWER_POINTER_TAKEOVER_EVENT, 'eve:flower-pointer-takeover');
-setFlowerPointerLock(31, { phase: 'test_takeover' });
+assert.equal(MYSTIC_POINTER_TAKEOVER_EVENT, 'eve:mystic-pointer-takeover');
+setMysticPointerLock(31, { phase: 'test_takeover' });
 assert.equal(getAtomeRuntimeState(host)?.drag?.active, false);
 assert.equal(activeDragSessions.size, 0);
 document.dispatchEvent(makePointerEvent('pointermove', { clientX: 140, clientY: 150 }));
 assert.equal(host.style.left, '10px');
 assert.equal(host.style.top, '20px');
-clearFlowerPointerLock(31);
+clearMysticPointerLock(31);
 
 host.dispatchEvent(makePointerEvent('pointerdown', {
     clientX: 100,
@@ -187,7 +187,7 @@ assert.equal(host.style.left, '22px');
 assert.equal(host.style.top, '38px');
 assert.equal(getAtomeRuntimeState(host)?.drag?.active, true);
 
-flowerLongPressActive = true;
+mysticLongPressActive = true;
 document.dispatchEvent(makePointerEvent('pointermove', {
     clientX: 150,
     clientY: 160
@@ -201,7 +201,7 @@ assert.equal(updatePropsCalls.length, 0);
 assert.equal(
     commitBatchCalls.some((call) => call.events.some((event) => event.kind === 'gesture_end')),
     false,
-    'flower context activation must cancel the armed drag instead of committing gesture_end'
+    'mystic context activation must cancel the armed drag instead of committing gesture_end'
 );
 assert.equal(toolboxPhases.includes('cancel'), true);
 
@@ -210,16 +210,16 @@ const projectDropSource = await readFile(
     'utf8'
 );
 assert.equal(
-    projectDropSource.includes('isFlowerPointerInteractionActive(moveEvent.pointerId)')
+    projectDropSource.includes('isMysticPointerInteractionActive(moveEvent.pointerId)')
         && projectDropSource.includes('cancel(moveEvent);'),
     true,
-    'tool projection move drag must cancel while the Flower pointer interaction is active'
+    'tool projection move drag must cancel while the Mystic pointer interaction is active'
 );
 assert.equal(
-    projectDropSource.includes('isFlowerPointerInteractionActive(upEvent.pointerId)')
+    projectDropSource.includes('isMysticPointerInteractionActive(upEvent.pointerId)')
         && projectDropSource.includes('cancel(upEvent);'),
     true,
-    'tool projection release must not commit a move while the Flower pointer interaction is active'
+    'tool projection release must not commit a move while the Mystic pointer interaction is active'
 );
 
 const surfaceRuntimeSource = await readFile(
@@ -233,20 +233,20 @@ const projectLayerRuntimeSource = await readFile(
 assert.equal(
     projectLayerRuntimeSource.includes('if (ev.defaultPrevented === true) return;')
         && projectLayerRuntimeSource.indexOf('if (ev.defaultPrevented === true) return;')
-            < projectLayerRuntimeSource.indexOf('markFlowerPointerGestureArmed(ev.pointerId)'),
+            < projectLayerRuntimeSource.indexOf('markMysticPointerGestureArmed(ev.pointerId)'),
     true,
-    'project background must not re-arm Flower after a higher-priority canvas interceptor consumed the press'
+    'project background must not re-arm Mystic after a higher-priority canvas interceptor consumed the press'
 );
 assert.equal(
     surfaceRuntimeSource.includes("eventTarget.addEventListener('pointerdown'")
-        && surfaceRuntimeSource.includes('clearFlowerPointerGestureArmed(readPointerId(event))'),
+        && surfaceRuntimeSource.includes('clearMysticPointerGestureArmed(readPointerId(event))'),
     true,
-    'every reused pointer id must clear stale Flower arming before a new surface press'
+    'every reused pointer id must clear stale Mystic arming before a new surface press'
 );
 assert.equal(
-    surfaceRuntimeSource.includes('isFlowerPointerInteractionActive(session.pointer_id)')
-        && surfaceRuntimeSource.includes("endSurfacePointerSession(canvas, 'flower.active.pointermove', event)")
-        && surfaceRuntimeSource.includes("endSurfacePointerSession(canvas, 'flower.active.pointerup', event)"),
+    surfaceRuntimeSource.includes('isMysticPointerInteractionActive(session.pointer_id)')
+        && surfaceRuntimeSource.includes("endSurfacePointerSession(canvas, 'mystic.active.pointermove', event)")
+        && surfaceRuntimeSource.includes("endSurfacePointerSession(canvas, 'mystic.active.pointerup', event)"),
     true,
-    'WebGPU project surface drag must cancel before drag.move or drag.end when Flower owns the pointer'
+    'WebGPU project surface drag must cancel before drag.move or drag.end when Mystic owns the pointer'
 );

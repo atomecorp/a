@@ -12,10 +12,10 @@ struct ProceduralSdfUniform {
     gesture: vec4<f32>,
     geometry: vec4<f32>,
     shape: vec4<f32>,
-    flower: vec4<f32>,
-    flower_tint: vec4<f32>,
+    surface_style: vec4<f32>,
+    surface_tint: vec4<f32>,
     assistant_background_tint: vec4<f32>,
-    flower_petals: array<vec4<f32>, 24>,
+    surface_parameters: array<vec4<f32>, 24>,
     liquid_drops: array<vec4<f32>, 24>,
     liquid_drop_shapes: array<vec4<f32>, 24>,
     liquid_drop_count: vec4<f32>,
@@ -110,19 +110,6 @@ fn gaussian_tail(distance: f32, sigma: f32) -> f32 {
     return exp(-0.5 * normalized * normalized);
 }
 
-fn sd_capsule(point: vec2<f32>, start: vec2<f32>, end: vec2<f32>, radius: f32) -> f32 {
-    let segment = end - start;
-    let denominator = max(dot(segment, segment), 0.0001);
-    let projection = clamp(dot(point - start, segment) / denominator, 0.0, 1.0);
-    return length(point - (start + segment * projection)) - radius;
-}
-
-fn smooth_union(left: f32, right: f32, radius: f32) -> f32 {
-    let safe_radius = max(radius, 0.0001);
-    let blend = clamp(0.5 + 0.5 * (right - left) / safe_radius, 0.0, 1.0);
-    return mix(right, left, blend) - safe_radius * blend * (1.0 - blend);
-}
-
 // Shared shape: a rounded rectangle. Two designs cut a plate with it — the
 // liquid drop and the mystic tile — so the SDF lives with the other shape
 // helpers instead of inside one design's block. `point` and `half_size` are in
@@ -133,43 +120,9 @@ fn sd_rounded_box(point: vec2<f32>, half_size: vec2<f32>, corner: f32) -> f32 {
     return length(max(outer, vec2(0.0))) + min(max(outer.x, outer.y), 0.0) - radius;
 }
 
-fn flower_liquid(pixel_position: vec2<f32>, screen_uv: vec2<f32>) -> vec4<f32> {
-    let center = material.geometry.zw;
-    let core_radius = material.flower.z;
-    let bridge_width = material.flower.w;
-    let edge_softness = max(material.shape.y, 0.5);
-    var distance = 100000.0;
-    if core_radius > 0.01 {
-        distance = length(pixel_position - center) - core_radius;
-    }
-    for (var index = 0u; index < 8u; index = index + 1u) {
-        if f32(index) >= material.flower.y { break; }
-        let petal = material.flower_petals[index];
-        if petal.w <= 0.001 { continue; }
-        let direction = petal.xy - center;
-        let distance_to_petal = max(length(direction), 0.001);
-        let axis = direction / distance_to_petal;
-        let capsule_start = center + axis * min(core_radius * 0.35, distance_to_petal * 0.12);
-        let capsule_end = petal.xy - axis * max(petal.z * 0.55, 1.0);
-        let link_radius = bridge_width * clamp(petal.w * 2.4, 0.0, 1.0);
-        let capsule = sd_capsule(pixel_position, capsule_start, capsule_end, link_radius);
-        distance = smooth_union(distance, capsule, max(2.0, link_radius * 0.72));
-    }
-    let mask = 1.0 - smoothstep(-edge_softness, edge_softness, distance);
-    if mask < 0.002 { discard; }
-    let original_color = textureSampleLevel(backdrop_texture, backdrop_sampler, screen_uv, 0.0).rgb;
-    let blurred_color = sample_aligned_mip(screen_uv, material.shape.w);
-    let glass = mix(original_color, blurred_color, 0.88);
-    let tint_amount = clamp(material.flower_tint.a, 0.0, 1.0);
-    let color = mix(glass, material.flower_tint.rgb, tint_amount);
-    let alpha = mask * tint_amount;
-    return vec4(color, alpha);
-}
-
 // --- INTUITION LIQUID — début -----------------------------------
-// Branche de design ISOLEE, selectionnee par `material.flower.x` (mode) > 1.5.
+// Branche de design ISOLEE, selectionnee par `material.surface_style.x` (mode) > 1.5.
 // Elle ne partage aucun etat avec la branche assistant (mode 0) ni avec
-// `flower_liquid` (mode 1) : supprimer ce bloc et sa ligne d'aiguillage dans
 // `fragment` suffit a la retirer entierement.
 //
 // Regle du bloc : AUCUN nombre de design ici. Chaque reglage arrive par un
@@ -305,7 +258,7 @@ fn intuition_liquid_drop(
             max(drop_shape.y, 0.0) / half_diameter
         );
     }
-    // `shape.y` (flower_edge_softness) est en pixels : le SDF est normalise.
+    // `shape.y` (surface_edge_softness) est en pixels : le SDF est normalise.
     let edge_softness = max(material.shape.y, 0.5) / half_diameter;
     let shell_mask = 1.0 - smoothstep(-edge_softness, edge_softness, shell_distance);
 
@@ -315,7 +268,7 @@ fn intuition_liquid_drop(
     let sphere = clamp(1.0 + (shell_distance / INTUITION_LIQUID_SHELL_RADIUS), 0.0, 1.0);
     let fresnel = pow(
         clamp(1.0 - sqrt(max(0.0, 1.0 - sphere * sphere)), 0.0, 1.0),
-        max(material.flower.y, 0.05)
+        max(material.surface_style.y, 0.05)
     );
 
     // 5. Refraction : la lentille ne devie le fond que dans une bande peripherique,
@@ -358,13 +311,13 @@ fn intuition_liquid_drop(
     // et la goutte cesse de ressembler a du verre ; concentre, il rend le contenu
     // lisible tout en gardant un pourtour vitreux — et il lit comme une lentille
     // qui concentre la lumiere.
-    let lift_focus = clamp(material.flower_petals[3].w, 0.0, 1.0);
+    let lift_focus = clamp(material.surface_parameters[3].w, 0.0, 1.0);
     // `falloff` resserre la chute vers le bord. Il ne s'agit pas d'un detail :
     // un reflet speculaire BLANC n'a aucune marge sur une surface deja eclaircie.
     // En concentrant le relevement sous le contenu et en laissant la peripherie
     // sombre, les reflets retrouvent leur contraste — et la goutte redevient
     // transparente la ou on regarde a travers.
-    let lift_falloff = mix(1.0, 5.0, clamp(material.flower_petals[6].w, 0.0, 1.0));
+    let lift_falloff = mix(1.0, 5.0, clamp(material.surface_parameters[6].w, 0.0, 1.0));
     let lift_profile = pow(max(1.0 - sphere * sphere, 0.0), lift_falloff);
     let lift_amount = clamp(material.destructive.w, 0.0, 1.0)
         * mix(1.0, lift_profile, lift_focus);
@@ -386,7 +339,7 @@ fn intuition_liquid_drop(
     let lobe_blend = lobe_primary * 0.72 + lobe_fine * 0.28;
     let rim_profile = mix(1.0, mix(0.20, 1.90, lobe_blend), rim_variation);
     let rim_gain = mix(1.0, mix(0.35, 1.30, lobe_blend), rim_variation);
-    let rim_width = max(material.flower.z, 0.0001) * rim_profile / half_diameter;
+    let rim_width = max(material.surface_style.z, 0.0001) * rim_profile / half_diameter;
     let rim_band = 1.0 - smoothstep(0.0, rim_width, abs(shell_distance));
     let rim_amount = clamp(fresnel * 0.55 + rim_band * 0.95, 0.0, 1.0)
         * clamp(material.morph.z, 0.0, 1.0)
@@ -396,9 +349,9 @@ fn intuition_liquid_drop(
     // 10. Irisation : le contour d'une bulle disperse la lumiere et vire en teinte
     //     le long du bord. Deux couleurs melangees par l'angle, dosees par le
     //     Fresnel pour ne vivre QUE sur le bord.
-    let iridescence_a = material.flower_petals[5];
-    let iridescence_b = material.flower_petals[6];
-    let iridescence_shape = material.flower_petals[7];
+    let iridescence_a = material.surface_parameters[5];
+    let iridescence_b = material.surface_parameters[6];
+    let iridescence_shape = material.surface_parameters[7];
     let iridescence_blend = 0.5 + 0.5 * sin(angle * iridescence_shape.x + iridescence_shape.y);
     let iridescence_color = mix(
         clamp(iridescence_a.rgb, vec3(0.0), vec3(1.0)),
@@ -406,7 +359,7 @@ fn intuition_liquid_drop(
         iridescence_blend
     );
     let rim_color = mix(
-        material.flower_tint.rgb,
+        material.surface_tint.rgb,
         iridescence_color,
         clamp(iridescence_a.w, 0.0, 1.0) * fresnel
     );
@@ -423,9 +376,9 @@ fn intuition_liquid_drop(
     var arc_value = 0.0;
     for (var arc_index = 0u; arc_index < 4u; arc_index = arc_index + 1u) {
         let arc_base = 8u + arc_index * 3u;
-        let arc_geometry = material.flower_petals[arc_base];
-        let arc_tint = material.flower_petals[arc_base + 1u];
-        let arc_shape = material.flower_petals[arc_base + 2u];
+        let arc_geometry = material.surface_parameters[arc_base];
+        let arc_tint = material.surface_parameters[arc_base + 1u];
+        let arc_shape = material.surface_parameters[arc_base + 2u];
         let arc_intensity = clamp(arc_tint.w, 0.0, 1.0);
         if arc_intensity <= 0.001 { continue; }
         // `brightness` n'est PAS borne a 1 : au-dela, l'arc sature vers le blanc
@@ -443,19 +396,19 @@ fn intuition_liquid_drop(
     // 11. Deux reflets speculaires orientes, chacun avec sa nettete et sa taille.
     //     `spec_clip` les eteint juste avant le bord : un reflet qui bave sur le
     //     liseré detruit l'illusion de volume.
-    let spec_power = material.flower_petals[2];   // [forceP, forceC, sigmaHalo, netteteP]
-    let spec_shape = material.flower_petals[3];   // [rotationP, rotationC, netteteC, libre]
-    let spec_color = material.flower_petals[4];   // [R, G, B, dose de couleur]
+    let spec_power = material.surface_parameters[2];   // [forceP, forceC, sigmaHalo, netteteP]
+    let spec_shape = material.surface_parameters[3];   // [rotationP, rotationC, netteteC, libre]
+    let spec_color = material.surface_parameters[4];   // [R, G, B, dose de couleur]
     let spec_clip = 1.0 - smoothstep(0.80, 1.0, sphere);
     let highlight = (
-        intuition_liquid_specular(point, material.flower_petals[0], spec_shape.x, spec_power.w) * spec_power.x
-        + intuition_liquid_specular(point, material.flower_petals[1], spec_shape.y, spec_shape.z) * spec_power.y
+        intuition_liquid_specular(point, material.surface_parameters[0], spec_shape.x, spec_power.w) * spec_power.x
+        + intuition_liquid_specular(point, material.surface_parameters[1], spec_shape.y, spec_shape.z) * spec_power.y
     ) * clamp(material.morph.w, 0.0, 1.0) * shell_mask * spec_clip;
 
-    // 12. Halo externe diffus. `flower.w` = opacite, `flower_petals[2].z` = sigma.
+    // 12. Halo externe diffus. `surface_style.w` = opacite, `surface_parameters[2].z` = sigma.
     let halo = gaussian_tail(max(shell_distance, 0.0), max(spec_power.z, 0.0001))
         * (1.0 - shell_mask)
-        * clamp(material.flower.w, 0.0, 1.0);
+        * clamp(material.surface_style.w, 0.0, 1.0);
 
     // 12b. Ombre portee avec OCCLUSION. Elle est multipliee par `(1 - shell_mask)`,
     //      donc elle ne vit QUE dehors : elle ne peut jamais se voir a travers le
@@ -463,8 +416,8 @@ fn intuition_liquid_drop(
     //      comportement d'une box-shadow CSS, qui ne traverse pas son element.
     //      petals[20] = [R, G, B, opacite], petals[21] = [decalageX, decalageY,
     //      etalement, elargissement].
-    let shadow_tint = material.flower_petals[20];
-    let shadow_shape = material.flower_petals[21];
+    let shadow_tint = material.surface_parameters[20];
+    let shadow_shape = material.surface_parameters[21];
     let shadow_point = (point - shadow_shape.xy) / (squash * breathe * max(reveal, 0.001));
     let shadow_distance = length(shadow_point)
         - (INTUITION_LIQUID_SHELL_RADIUS + clamp(shadow_shape.w, 0.0, 1.0));
@@ -491,7 +444,7 @@ fn intuition_liquid_drop(
     // L'ombre est DERRIERE le verre : on la pose d'abord, le verre la recouvre.
     var color = clamp(shadow_tint.rgb, vec3(0.0), vec3(1.0)) * shadow_alpha;
     color = color * (1.0 - glass_alpha) + glass * glass_alpha;
-    color = mix(color, rim_color, rim_alpha * clamp(material.flower_tint.a, 0.0, 1.0));
+    color = mix(color, rim_color, rim_alpha * clamp(material.surface_tint.a, 0.0, 1.0));
     color += rim_color * halo_alpha;
     color += mix(vec3(1.0), clamp(spec_color.rgb, vec3(0.0), vec3(1.0)), clamp(spec_color.w, 0.0, 1.0))
         * highlight_alpha;
@@ -559,9 +512,8 @@ fn intuition_liquid(pixel_position: vec2<f32>, screen_uv: vec2<f32>) -> vec4<f32
 // --- INTUITION LIQUID — fin --------------------------------------
 
 // --- INTUITION MYSTIC — start -----------------------------------
-// ISOLATED design branch, selected by `material.flower.x` (mode) > 2.5, which must
+// ISOLATED design branch, selected by `material.surface_style.x` (mode) > 2.5, which must
 // be tested BEFORE `> 1.5` and `> 0.5` in `fragment`. It shares no state with the
-// assistant branch (mode 0), `flower_liquid` (mode 1) or liquid (mode 2): removing
 // this block and its dispatch line is enough to take it out entirely.
 //
 // Same rule as the liquid block: NO design number here. Every setting arrives
@@ -611,11 +563,11 @@ fn intuition_mystic(pixel_position: vec2<f32>, screen_uv: vec2<f32>) -> vec4<f32
     let shadow_blur = max(material.mystic_count.z, 1.0);
     let perspective = max(material.mystic_style.x, 0.5);
     let softness = max(material.mystic_style.w, 0.25);
-    // `flower_tint` carries the contact shadow, `assistant_background_tint` the
+    // `surface_tint` carries the contact shadow, `assistant_background_tint` the
     // glass tint: both come from the same tokens as the rest of the product, no
     // colour is chosen here.
-    let shadow_color = clamp(material.flower_tint.rgb, vec3(0.0), vec3(1.0));
-    let shadow_dose = clamp(material.flower_tint.a, 0.0, 1.0);
+    let shadow_color = clamp(material.surface_tint.rgb, vec3(0.0), vec3(1.0));
+    let shadow_dose = clamp(material.surface_tint.a, 0.0, 1.0);
     let tint = clamp(material.assistant_background_tint, vec4(0.0), vec4(1.0));
     let glass_mix = clamp(material.transition.x, 0.0, 1.0);
     let surface = max(material.geometry.xy, vec2(1.0));
@@ -765,16 +717,12 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
     );
     // The order matters: from the MOST SPECIFIC mode to the most general, `> 2.5`,
     // then `> 1.5`, then `> 0.5`; otherwise mode 3 would fall into the liquid and
-    // mode 2 into `flower_liquid`. See the INTUITION MYSTIC and INTUITION LIQUID
     // blocks above.
-    if material.flower.x > 2.5 {
+    if material.surface_style.x > 2.5 {
         return intuition_mystic(pixel_position, screen_uv);
     }
-    if material.flower.x > 1.5 {
+    if material.surface_style.x > 1.5 {
         return intuition_liquid(pixel_position, screen_uv);
-    }
-    if material.flower.x > 0.5 {
-        return flower_liquid(pixel_position, screen_uv);
     }
     var point = (pixel_position - assistant_center) / (assistant_size * 0.5);
     let original_point = point;
@@ -869,7 +817,7 @@ fn fragment(mesh: VertexOutput) -> @location(0) vec4<f32> {
     let core_inertia = select(0.0, destructive_pull * mix(0.10, 0.18, gesture_velocity), destructive_active);
     let core_point = (point + destructive_axis * core_inertia - vec2(0.0, -core_drop))
         / ((1.0 + pulse * 0.72 * core_reveal) * core_scale);
-    let petal_count = u32(clamp(round(material.flower.y), 1.0, 5.0));
+    let petal_count = u32(clamp(round(material.surface_style.y), 1.0, 5.0));
     var core_distance = organic_core(core_point, material.morph, time);
     if petal_count > 1u {
         core_distance = 10.0;

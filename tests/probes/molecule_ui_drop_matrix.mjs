@@ -2,7 +2,7 @@ import {
     assert, clickCanvasTarget, findBevyUiNodeTarget, wait, waitFor
 } from './molecule_ui_acceptance_support.mjs';
 import {
-    drag, reloadProjection, screenshot, structuredDropTarget, switchView, waitForMolecule
+    drag, dropChoiceToolIds, reloadProjection, screenshot, structuredDropTarget, switchView, waitForMolecule
 } from './molecule_ui_drop_core.mjs';
 import {
     assertNoParasites, chooseMoleculePlaybackMode, disarmMemberPlayback,
@@ -80,19 +80,19 @@ export const validateMatrixMoleculeDrop = async ({ page, project, fixture, repor
         const states = await Promise.all(ids.map((id) => window.Atome.getStateCurrent(id)));
         return states.map((state) => String(state?.parent_id || state?.props?.parent_id || state?.properties?.parent_id || state?.meta?.parent_id || ''));
     }, [fixture.imageId, fixture.audioId]);
-    assert(earlyDrop.every((id) => id === project.id), `matrix_combined_before_dwell:${JSON.stringify(earlyDrop)}`);
-    await drag({
-        page, source, destination: overlap, holdMs: 700,
-        compositionChoice: 'front', compositionExit: true
-    });
-    const cancelledDrop = await page.evaluate(async ({ ids, projectId }) => {
+    assert(earlyDrop.every((id) => id === project.id), `matrix_combined_without_choice:${JSON.stringify(earlyDrop)}`);
+    // Un depot sans choix ne compose rien, mais il propose : six outils dans le rail.
+    await drag({ page, source, destination: overlap, holdMs: 700 });
+    const plainDrop = await page.evaluate(async ({ ids, projectId }) => {
         const states = await Promise.all(ids.map((id) => window.Atome.getStateCurrent(id)));
         return states.every((state) => String(state?.parent_id || state?.props?.parent_id
             || state?.properties?.parent_id || state?.meta?.parent_id || '') === projectId);
     }, { ids: [fixture.imageId, fixture.audioId], projectId: project.id });
-    assert(cancelledDrop, 'matrix_palette_exit_combined');
+    assert(plainDrop, 'matrix_plain_drop_combined');
+    const matrixChoices = await dropChoiceToolIds(page);
+    assert(matrixChoices.length === 6, `matrix_drop_choices_missing:${JSON.stringify(matrixChoices)}`);
     await drag({
-        page, source, destination: overlap, holdMs: 700, compositionChoice: 'front',
+        page, source, destination: overlap, holdMs: 700, railChoice: 'front',
         armedShot: async () => {
             report.matrixDropFeedback = await page.evaluate(() => {
                 const tree = window.eveBevyUiRuntime?.state?.trees?.get('eve_bevy_ui_project_view');

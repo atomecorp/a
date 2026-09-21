@@ -32,10 +32,7 @@ import { projectViewVisualPanel } from '../../eVe/domains/rendering/project_view
 import { createProjectViewVisualFullscreenRuntime } from '../../eVe/domains/rendering/project_view_visual_fullscreen_runtime.js';
 import { recordsForBevyProjection } from '../../eVe/domains/rendering/project_scene_record_projection.js';
 import { buildBootstrapDefsB } from '../../eVe/intuition/tools/core/tool_runtime_bootstrap_defs_b.js';
-import {
-    FLOWER_TOOL_KEYS_BY_KIND,
-    resolveFlowerToolKeysForKind
-} from '../../eVe/intuition/runtime/eve_intuition/flower_tool_capability_matrix.js';
+import { resolveContextMenu } from '../../eVe/intuition/menu/context_menu_resolver.js';
 import { EVE_DEFAULT_MESSAGES } from '../../eVe/i18n/languages.js';
 import { buildMainMenuRecordingVisualNodes } from '../../eVe/intuition/ribbon/bevy_ui_main_menu_recording_visual_model.js';
 import { createMainMenuRecordingVisualRuntime } from '../../eVe/intuition/ribbon/bevy_ui_main_menu_recording_visual_runtime.js';
@@ -48,28 +45,15 @@ const childPositions = (tree) => Object.fromEntries(
 );
 
 describe('urgent campaign contracts', () => {
-    it('keeps one exact Flower capability matrix for every canonical media kind', () => {
-        expect(resolveFlowerToolKeysForKind('midi')).toEqual([
-            'copy', 'delete', 'info', 'couleur', 'communicate', 'play'
-        ]);
-        expect(resolveFlowerToolKeysForKind('audio')).toEqual([
-            'copy', 'delete', 'info', 'couleur', 'communicate', 'play', 'audio_to_midi'
-        ]);
-        expect(resolveFlowerToolKeysForKind('video')).toEqual([
-            'copy', 'delete', 'info', 'couleur', 'communicate', 'play'
-        ]);
-        expect(resolveFlowerToolKeysForKind('video_recording')).toEqual([
-            'copy', 'delete', 'info', 'couleur', 'communicate', 'play'
-        ]);
-        expect(resolveFlowerToolKeysForKind('image')).toEqual(['copy', 'delete', 'info', 'communicate']);
-        expect(resolveFlowerToolKeysForKind('shape')).toEqual(['copy', 'delete', 'info', 'communicate']);
-        expect(resolveFlowerToolKeysForKind('text')).toEqual([
-            'copy', 'delete', 'info', 'couleur', 'font', 'communicate'
-        ]);
-        expect(Object.isFrozen(FLOWER_TOOL_KEYS_BY_KIND)).toBe(true);
+    it('resolves contextual media tools through the shared JSON owner',()=>{
+        for(const kind of ['audio','video','image','shape','text']) {
+            const keys=resolveContextMenu({context:{kind,selected:true,level:'advanced'}}).map(item=>item.key);
+            expect(keys).toContain('delete'); expect(keys).toContain('copy');
+            expect(keys.includes('font')).toBe(kind==='text');
+        }
     });
 
-    it('uses localized verbs for all contextual Flower actions', () => {
+    it('uses localized verbs for all contextual Mystic actions', () => {
         expect(EVE_DEFAULT_MESSAGES.en).toMatchObject({
             'eve.menu.communicate': 'communicate',
             'eve.menu.couleur': 'colorize',
