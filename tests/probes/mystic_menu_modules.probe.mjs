@@ -186,6 +186,9 @@ assert.equal(audioWaveformSelectionMode.kind, 'audio');
 
 const { CONTEXT_MENUS } = await import('../../eVe/intuition/menu/context_menus_loader.js');
 const catalog = Object.fromEntries(Object.keys(CONTEXT_MENUS.commands).map(key=>[key,{icon:key,tool_id:'ui.'+key}]));
+catalog.communicate.type = 'palette';
+catalog.capture.type = 'palette';
+catalog.capture.children = ['info'];
 const surfaceItemsRuntime = createMysticContextItemsRuntime({
     applyDeleteSelection: async () => ({ ok: true }),
     cloneToolExtraInput: (value) => value,
@@ -203,13 +206,17 @@ const surfaceItemsRuntime = createMysticContextItemsRuntime({
     translate: (_key, fallback) => fallback,
     triggerMainToolInteraction: async () => ({ ok: true })
 });
+const classifiedItems = surfaceItemsRuntime.resolveMysticContextItems({ type: 'surface_item', atomeId: 'surface_project_a' });
+assert.equal(classifiedItems.find(item => item.key === 'communicate').type, 'tool');
+assert.equal(classifiedItems.find(item => item.key === 'communicate').hoverActivate, true);
+assert.equal(classifiedItems.find(item => item.key === 'capture').type, 'palette');
 assert.deepEqual(
     surfaceItemsRuntime.resolveMysticContextItems({
         type: 'surface_item',
         atomeId: 'surface_project_a',
         onRename: () => ({ ok: true })
     }).map((item) => item.key),
-    ['ai', 'home', 'capture', 'dashboard', 'communicate', 'rename', 'duplicate', 'copy', 'paste', 'delete', 'info'],
+    ['ai', 'find', 'capture', 'dashboard', 'communicate', 'rename', 'duplicate', 'copy', 'paste', 'delete', 'info'],
     'Dashboard cards, List rows, and Matrix cells must share the complete surface-item Mystic menu'
 );
 let dashboardProjectDeleteCount = 0;
@@ -352,10 +359,8 @@ setMysticRuntime({
         mysticInteraction.openCount += 1;
         mysticInteraction.open = true;
     },
-    activateButton: () => {
-        mysticInteraction.activationCount += 1;
-        return true;
-    },
+    updateHover: () => mysticInteraction.button,
+    releaseAt: ({ allowActivation }) => { if (allowActivation && mysticInteraction.button) mysticInteraction.activationCount += 1; },
     resolveButtonFromPoint: () => mysticInteraction.button
 });
 const disposeMysticContext = installIntuitionXMysticContextRuntime({ longPressMs: 5 });

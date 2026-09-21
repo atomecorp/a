@@ -1,5 +1,7 @@
 # Atome / eVe API Map
 
+2026-09-21 Mystic navigation follow-up: Internal Mystic releaseAt receives the captured initial gesture once; old tree handlers are generation-bound. Hover/release selects the normal canonical command action. tool_runtime_dispatch.js normalizes dashboard to desktop and surface_item to project before existing capability checks. Finder uses inlineSearchOpenWithPanel; Settings uses the existing Home panel. No public API added. Evidence: eVe/documentations/MYSTIC_NAVIGATION_VALIDATION_2026-09-21.md.
+
 2026-09-21 follow-up: Internal assistant state separates connected from microphoneActive. The existing main-menu inline-content owner accepts a tool presentation while its external-width owner reserves layout space. ProviderRelay keeps the same authenticated account/server/environment across token rotation and sends subsequent requests with the latest configured token. Validation: eVe/documentations/MYSTIC_ASSISTANT_VALIDATION_2026-09-21.md.
 
 Assistant cleanup: one Atom control, the existing animated/focused ribbon text field, and actual conversation content only; no separate mic glyph/control or empty status/model block. Dock teardown cancels field motion and hold suppression. No public API or renderer was added.

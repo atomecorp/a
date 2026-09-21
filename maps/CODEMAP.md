@@ -1,5 +1,7 @@
 # Atome / eVe Code Map
 
+2026-09-21 Mystic navigation follow-up: Mystic context.js forwards hover/release to bevy_ui_mystic_runtime.js; obsolete duplicate dispatch wrappers are removed. mystic_menu_items.js and bevy_ui_mystic_model.js own terminal placement and consistent pagination. assistant_dock.js reuses ribbon input and pauses on opening. dashboard_layout.js, dashboard_records.js and dashboard_actions.js own the Settings header/action. Evidence: eVe/documentations/MYSTIC_NAVIGATION_VALIDATION_2026-09-21.md.
+
 2026-09-21 follow-up: Assistant ownership repair: assistant_dock.js reuses main-menu inline content and external width; assistant_runtime.js waits for realtime_session.js connected state. bevy_ui_main_menu_model.js owns filtering; navigation_taxonomy.js owns selection/subscriptions; bevy_ui_main_menu_resize_runtime.js owns geometry notification; intuition_liquid_menu_renderer.js owns ribbon liquid mapping. provider_relay.rs distinguishes token refresh from identity change. Validation: eVe/documentations/MYSTIC_ASSISTANT_VALIDATION_2026-09-21.md.
 
 Assistant cleanup: one Atom control, the existing animated/focused ribbon text field, and actual conversation content only; no separate mic glyph/control or empty status/model block. Dock teardown cancels field motion and hold suppression. No public API or renderer was added.

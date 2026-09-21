@@ -250,6 +250,15 @@ would be an invention. The audio activity is named `daw`, video is `video`, offi
 
 ### 2.6 Mastery level
 
+> **Mise à jour 2026-09-21 — la dimension existe et se règle.** `masteryLevel` (global, défaut `beginner`) et
+> `activityLevels` (surcharge par activité) vivent dans `user_visual_preferences_model.js`, résolus par
+> `resolveMasteryLevel` (`activityLevels[activity] ?? masteryLevel`). Réglage : panel Home → section
+> « Niveau » (`bevy_panel_home_view.js` `levelBody`) ; « Global » retire la surcharge (intention
+> `home.level.activity.set`). L'outil Activité du menu du bas est désormais permanent et ne porte que le
+> choix d'activité (Mise en page / Bureautique / Vidéo / Audio) ; Liste / Mixage / Timeline de molécule
+> sont passés dans Vue (`intuition/tools/view_molecule_entries.js`). Le texte ci-dessous décrit l'état
+> antérieur.
+
 `[CODE]` **This dimension does not exist.** `DEFAULT_VISUAL_PREFERENCES`
 (`user_visual_preferences_model.js:30-45`) contains `handedness`, `renderStyle`, `navigationTaxonomy`,
 `liquidTheme`, `mysticRoundness`, `mysticTileGap`, `mysticOpeningMs`. No level, mastery, proficiency, beginner,

@@ -1,6 +1,8 @@
 # Atome / eVe Design Map
 
-2026-09-21 follow-up: Atom blinks during connection, then its original glyph disappears beneath the connected assistant. The standard ribbon field pushes neighboring icons without moving the assistant corner. Long press reveals/hides the field; field focus pauses voice, closing it resumes voice. Opening the field alone leaves voice active. No extra microphone icon or unconditional model/status label is added. Validation: eVe/documentations/MYSTIC_ASSISTANT_VALIDATION_2026-09-21.md.
+2026-09-21 Mystic navigation follow-up: Finder/Capture/Dashboard/Communication occupy the configured north/east/south/west extremities and activate on hover. Palettes remain terminal after redistribution; early release leaves Mystic open. Submenu center returns after leaving/re-entering or on a fresh click. Opening assistant text pauses capture immediately; closing resumes only while active. Settings uses a shared header directly above Contacts. Evidence: eVe/documentations/MYSTIC_NAVIGATION_VALIDATION_2026-09-21.md.
+
+2026-09-21 follow-up: Atom blinks during connection, then its original glyph disappears beneath the connected assistant. The standard ribbon field pushes neighboring icons without moving the assistant corner. Long press reveals/hides the field; field focus pauses voice, closing it resumes voice. Opening the field pauses capture immediately, before focus. No extra microphone icon or unconditional model/status label is added. Validation: eVe/documentations/MYSTIC_ASSISTANT_VALIDATION_2026-09-21.md.
 
 Assistant cleanup: one Atom control, the existing animated/focused ribbon text field, and actual conversation content only; no separate mic glyph/control or empty status/model block. Dock teardown cancels field motion and hold suppression. No public API or renderer was added.
 
