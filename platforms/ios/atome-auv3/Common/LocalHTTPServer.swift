@@ -1241,7 +1241,30 @@ final class LocalHTTPServer {
             }
             return "data/users/\(userId)/\(sanitized)/\(baseName)"
         }
-        return "data/users/\(userId)/\(folderName)/\(baseName)"
+        // Un nouvel upload ne remplace jamais un fichier existant : le nom dérivé
+        // reçoit un suffixe `_1`, `_2`… comme le font déjà les deux serveurs
+        // canoniques (`server/fileStorage.js#resolveUserUploadPath` et
+        // `platforms/desktop-tauri/src/server/mod.rs#resolve_user_upload_path`).
+        // Écrire sur un nom existant changeait les octets d'une URL déjà
+        // référencée par un Atome, donc de tout cache indexé par cette URL.
+        let relativeFolder = "data/users/\(userId)/\(folderName)"
+        return "\(relativeFolder)/\(availableUploadName(baseName, in: relativeFolder))"
+    }
+
+    /// Nom de fichier libre dans `relativeFolder` (suffixe `_1`, `_2`…) — même
+    /// politique de déduplication que les serveurs canoniques.
+    private func availableUploadName(_ baseName: String, in relativeFolder: String) -> String {
+        guard let root = iCloudFileManager.shared.getCurrentStorageURL() else { return baseName }
+        let folderURL = root.appendingPathComponent(relativeFolder, isDirectory: true)
+        let ext = (baseName as NSString).pathExtension
+        let stem = ext.isEmpty ? baseName : (baseName as NSString).deletingPathExtension
+        var candidate = baseName
+        var counter = 1
+        while FileManager.default.fileExists(atPath: folderURL.appendingPathComponent(candidate).path) {
+            candidate = ext.isEmpty ? "\(stem)_\(counter)" : "\(stem)_\(counter).\(ext)"
+            counter += 1
+        }
+        return candidate
     }
 
     private func resolveUploadFileURL(fileName: String, userId: String?, folderHints: [String], label: String) -> URL? {

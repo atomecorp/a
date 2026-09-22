@@ -2599,6 +2599,8 @@ OpenAI live repair (2026-09-10 20:15): eVe.js owns installation of the existing 
 
 2026-09-10 Direct image application: user supersedes mandatory image preview/Apply. assistant_media_session.generate now imports generated/edited PNGs immediately through the existing canonical importer by default, preserving originals and undo. Explicit internal previewOnly remains available for callers requesting a preview; the assistant tool no longer advertises mandatory approval. Regression checks cover one immediate import and refusal of a second Apply. Safari text failure remains unresolved; this change does not claim Safari acceptance.
 
+2026-09-22 Generated media identity: `assistant_media_session.js` names every generated image and synthesized speech from its own request through `deriveGeneratedFileName` (`eVe/intuition/tools/ai_generators/media_import.js`), never from one shared constant. A media URL is immutable: the three storage owners (`server/fileStorage.js#resolveUserUploadPath`, `platforms/desktop-tauri/src/server/mod.rs#resolve_user_upload_path`, `platforms/ios/atome-auv3/Common/LocalHTTPServer.swift#availableUploadName`) suffix `stem_1.ext` instead of overwriting an existing name, otherwise `bevy_media_texture_cache.js` (keyed by source) and the HTTP cache keep serving the first bytes of that URL. Evidence: `tests/probes/media_asset_identity_contract.probe.mjs`, `tests/eve/assistant_image_identity.test.mjs`. Not a provider-side generation cache: `LocalAiProxy.swift` reloads ignoring local cache. Rebuilding the iOS app is required for the source change to reach the device.
+
 2026-09-11 Native account-link verification: only POST /api/server/verify and its explicit OPTIONS preflight allow credential-free cross-origin access (including opaque WKWebView origins). The endpoint returns a signed public challenge; no account secret or cookie is used. Other routes retain their restricted CORS policy. auth_fastify_token preserves a failed provisioning error as link reason instead of replacing it with cache_login_failed.
 
 - Native availability: public `GET /health` permits credential-free CORS (including opaque WKWebView origins); account routes retain restricted CORS. `adole_connection.js` uses this route before opening the Fastify WebSocket, so an unreadable health response prevents account linking.
@@ -2619,11 +2621,23 @@ OpenAI credential migration (2026-09-11): `provider_client.resolveOpenAiCredenti
 
 ### Panel input sessions under the Mystic menu (2026-09-11)
 
+The touch target follows the focus (2026-09-22): a retained session keeps its
+hidden editor mounted, so `hidden_text_service_runtime.js` owns
+`setActiveTextEditorHitTest(enabled)` and `text_editing_session.js` applies it —
+`auto` on focus and on `start()`, `none` after a retained blur that does not
+reclaim the focus (scene text), and `none` while a session is conserved for the
+next owner. An unfocused, still-hittable field is opened natively by iOS on the
+first tap that reaches it, so the tool band under it raised the keyboard instead
+of acting. `text_bridge.js` re-focuses its already-active session with
+`focusActiveTextEditor()` when the tap comes from the rendered scene.
+
 `text_editing_session.js` owns whether a blur ends a session: `retainOnBlur` (stay
 active, look unfocused — scene text) and `reclaimFocusOnBlur` (take the DOM focus back
 — an input box with its own menu over it) are values or predicates resolved at blur
-time. `bevy_panel_text_editing.js` holds its session while the Mystic it opened stands,
-released by that menu's `onClose`, and its `paste()` replaces the whole value.
+time. `bevy_panel_text_editing.js` holds its session while the Mystic it opened really
+stands — the recorded field and `isMysticMenuOpen()` at blur time — released by that
+menu's `onClose` or by the first blur after it is gone, including a refused opening, and
+its `paste()` replaces the whole value.
 `bevy_ui_pointer_runtime.js` refuses the focus to a press landing on the `mystic` layer,
 which the hit result now carries from `bevy_ui_runtime.js`. `bevy_ui_mystic_runtime.js`
 owns its geometry across surface changes through `subscribeRenderSurfaceSize`,

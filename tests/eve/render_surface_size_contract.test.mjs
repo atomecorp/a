@@ -3,7 +3,11 @@ import { test } from 'vitest';
 import { JSDOM } from 'jsdom';
 
 import { clearAllProjectScenes, renderProjectScene } from '../../eVe/domains/rendering/project_scene_runtime.js';
-import { ensureRenderSurface } from '../../eVe/domains/rendering/surface_runtime.js';
+import {
+    ensureRenderSurface,
+    reconcileRenderSurfaceSize,
+    syncRenderSurfaceSize
+} from '../../eVe/domains/rendering/surface_runtime.js';
 import { resolveRenderSurfaceSize } from '../../eVe/domains/rendering/surface_size_runtime.js';
 import { mountActiveTextEditor, unmountActiveTextEditor } from '../../eVe/domains/rendering/hidden_text_service_runtime.js';
 import { resolveEffectivePanelViewport } from '../../eVe/intuition/runtime/eve_intuition/panel_layout_geometry.js';
@@ -496,4 +500,53 @@ test('Project render surface and panel follow the iOS keyboard viewport while te
     assert.equal(intents.some((intent) => intent.force_surface_reconcile === true), false);
 
     unmountActiveTextEditor();
+});
+
+test('A silent surface measurement must not swallow the reconciled resize intent', () => {
+    const dom = new JSDOM('<!doctype html><html><body><div id="view"><div id="project_view_alpha"></div></div></body></html>');
+    globalThis.document = dom.window.document;
+    globalThis.window = dom.window;
+    Object.defineProperty(dom.window, 'devicePixelRatio', { configurable: true, value: 1 });
+    Object.defineProperty(dom.window, 'innerWidth', { configurable: true, value: 800 });
+    Object.defineProperty(dom.window, 'innerHeight', { configurable: true, value: 600 });
+    dom.window.requestAnimationFrame = (callback) => dom.window.setTimeout(() => callback(Date.now()), 0);
+    dom.window.cancelAnimationFrame = (id) => dom.window.clearTimeout(id);
+    const view = dom.window.document.getElementById('view');
+    const host = dom.window.document.getElementById('project_view_alpha');
+    setBox(view, 800, 600);
+    setBox(host, 800, 600);
+    const intents = [];
+    const surface = ensureRenderSurface({
+        zone: 'project',
+        host,
+        onIntent: (intent) => {
+            intents.push(intent);
+            return intent;
+        }
+    });
+    assert.equal(intents.length, 0, 'mounting the surface publishes no resize');
+
+    // Rotation: the new viewport is measured before the reconciliation frame —
+    // exactly what the renderer boot and the backing guard do. This measurement
+    // announces nothing, so the engine still knows the previous size.
+    Object.defineProperty(dom.window, 'innerWidth', { configurable: true, value: 874 });
+    Object.defineProperty(dom.window, 'innerHeight', { configurable: true, value: 402 });
+    setBox(view, 874, 402);
+    setBox(host, 874, 402);
+    syncRenderSurfaceSize(surface, host);
+    assert.equal(intents.length, 0, 'a silent measurement publishes nothing');
+
+    assert.equal(reconcileRenderSurfaceSize(surface, { host }), true);
+    assert.equal(intents.length, 1, 'the settled rotation must still reach the engine');
+    assert.equal(intents[0].kind, 'surface.resize');
+    assert.equal(intents[0].surface_size.width, 874);
+    assert.equal(intents[0].surface_size.height, 402);
+    assert.equal(intents[0].previous_size.width, 800);
+    assert.equal(intents[0].previous_size.height, 600);
+
+    // A settled generation is still published once, not once per reconcile.
+    assert.equal(reconcileRenderSurfaceSize(surface, { host }), false);
+    assert.equal(intents.length, 1);
+    assert.equal(surface.style.width, '874px');
+    assert.equal(surface.width, 874);
 });

@@ -9,10 +9,13 @@ import {
     assertExternalRendererTargetAllowed
 } from '../../eVe/domains/rendering/webgpu_compositor.js';
 import {
+    applyBevyWebRendererSurfaceResize,
     applyBevyWebRendererDiffs,
     applyBevyWebRendererTransformPatch,
+    readBevyWebRendererState,
     startBevyWebRenderer
 } from '../../eVe/domains/rendering/bevy_web_renderer_runtime.js';
+import { syncRenderSurfaceSize } from '../../eVe/domains/rendering/surface_runtime.js';
 import { setSurfaceRuntimeState } from '../../eVe/domains/rendering/bevy_web_renderer_helpers.js';
 import {
     createVideoFrameDispatcher,
@@ -25,6 +28,7 @@ import {
 } from '../../eVe/domains/rendering/bevy_perf_diagnostics_runtime.js';
 import { createBrowserBevyMediaTextureResolver } from '../../eVe/domains/rendering/bevy_media_texture_resolver.js';
 import { clearBevyMediaTextureCache } from '../../eVe/domains/rendering/bevy_media_texture_cache.js';
+import { snapshotCaptureCanvas } from '../../eVe/domains/rendering/bevy_project_preview_capture_frame.js';
 import { VIRTUAL_SCENE_DIFF_TYPES } from '../../eVe/domains/rendering/virtual_scene_contract.js';
 
 const repoRoot = dirname(dirname(dirname(fileURLToPath(import.meta.url))));
@@ -985,4 +989,160 @@ test('Bevy external-video shader linearizes the sampled frame before the sRGB ta
     // `frame.rgb` passthrough that would double-encode to the sRGB target.
     assert.match(shader, /return\s+vec4<f32>\(\s*srgb_to_linear\(filtered\)\s*,\s*opacity\s*\)/);
     assert.doesNotMatch(shader, /return\s+vec4<f32>\(\s*frame\.rgb\s*,\s*opacity\s*\)/);
+});
+
+test('Bevy web runtime republishes the surface when only the physical signature changed', async () => {
+    const dom = new JSDOM('<!doctype html><html><body><canvas id="eve_surface_project"></canvas></body></html>');
+    globalThis.window = dom.window;
+    globalThis.document = dom.window.document;
+    Object.defineProperty(dom.window, 'innerWidth', { configurable: true, value: 874 });
+    Object.defineProperty(dom.window, 'innerHeight', { configurable: true, value: 402 });
+    Object.defineProperty(dom.window, 'devicePixelRatio', { configurable: true, value: 1 });
+    const surface = dom.window.document.getElementById('eve_surface_project');
+    const calls = [];
+    const wasmModule = {
+        default: async () => {},
+        run_atome_bevy_renderer: () => calls.push({ type: 'run' }),
+        apply_atome_bevy_surface: (payload) => calls.push({ type: 'surface', payload })
+    };
+    const node = {
+        id: 'physical_signature_atom',
+        kind: 'shape',
+        parentId: null,
+        bounds: { x: 10, y: 20, width: 40, height: 30 },
+        localTransform: { x: 10, y: 20, scaleX: 1, scaleY: 1, rotation: 0, originX: 0, originY: 0 },
+        material: { fill: '#00ff00' },
+        renderLayer: 0,
+        zIndex: 0,
+        selected: false,
+        content: {},
+        text: null,
+        visible: true,
+        children: []
+    };
+
+    // The measurement owner (renderer boot, backing guard) writes the rendered
+    // size without publishing any intent.
+    syncRenderSurfaceSize(surface);
+    await startBevyWebRenderer({
+        surface,
+        width: 874,
+        height: 402,
+        virtualScene: {
+            id: 'physical_signature_scene',
+            revision: 1,
+            roots: [node.id],
+            nodes: [node],
+            byId: new Map([[node.id, node]])
+        },
+        wasmModule
+    });
+    assert.equal(readBevyWebRendererState(surface).pixel_width, 874);
+    assert.equal(readBevyWebRendererState(surface).device_pixel_ratio, 1);
+
+    // A rotation can leave the logical size untouched while the physical backing
+    // moves (here the page scale / DPR). The logical guard must not treat that as
+    // "already applied" and leave the engine on the old physical surface, which
+    // the compositor would stretch into the new box.
+    Object.defineProperty(dom.window, 'devicePixelRatio', { configurable: true, value: 3 });
+    syncRenderSurfaceSize(surface);
+    assert.deepEqual(
+        applyBevyWebRendererSurfaceResize({ surface, width: 874, height: 402 }),
+        { ok: true, resized: true, width: 874, height: 402 }
+    );
+    const surfaces = calls.filter((call) => call.type === 'surface');
+    assert.equal(surfaces.length, 1);
+    assert.deepEqual(surfaces[0].payload, {
+        width: 874,
+        height: 402,
+        pixel_width: 1311,
+        pixel_height: 603,
+        device_pixel_ratio: 1.5
+    });
+    assert.equal(readBevyWebRendererState(surface).pixel_width, 1311);
+
+    // Once genuinely applied, the same request still collapses to a no-op.
+    assert.deepEqual(
+        applyBevyWebRendererSurfaceResize({ surface, width: 874, height: 402 }),
+        { ok: true, resized: false, width: 874, height: 402 }
+    );
+    assert.equal(calls.filter((call) => call.type === 'surface').length, 1);
+});
+
+test('project preview snapshot encodes the WebGPU surface through a bitmap, never through a direct readback', async () => {
+    const previousDocument = globalThis.document;
+    const previousCreateImageBitmap = globalThis.createImageBitmap;
+    const calls = [];
+    const surface = {
+        width: 198,
+        height: 383,
+        // A direct readback of a WebGPU surface is the synchronous GPU round trip
+        // that leaves the iOS interface mute: it must never be reached again.
+        toDataURL: () => {
+            throw new Error('webgpu_surface_readback_forbidden');
+        }
+    };
+    globalThis.document = {
+        createElement: (tag) => {
+            assert.equal(tag, 'canvas');
+            return {
+                id: '',
+                width: 0,
+                height: 0,
+                getContext: () => ({
+                    clearRect: (_x, _y, width, height) => calls.push({ type: 'clear', width, height }),
+                    drawImage: (_bitmap, _x, _y, width, height) => calls.push({ type: 'draw', width, height })
+                }),
+                toDataURL: (format, quality) => {
+                    calls.push({ type: 'encode', format, quality });
+                    return 'data:image/webp;base64,snapshot';
+                }
+            };
+        }
+    };
+    globalThis.createImageBitmap = async (source) => {
+        assert.equal(source, surface, 'the bitmap must be taken from the captured surface');
+        return { width: 132, height: 255, close: () => calls.push({ type: 'close' }) };
+    };
+
+    try {
+        const snapshot = await snapshotCaptureCanvas(surface, 'image/webp');
+
+        assert.equal(snapshot.dataUrl, 'data:image/webp;base64,snapshot');
+        assert.equal(snapshot.width, 132);
+        assert.equal(snapshot.height, 255);
+        assert.deepEqual(calls.filter((entry) => entry.type === 'draw').map((entry) => [entry.width, entry.height]), [[132, 255]]);
+        assert.deepEqual(calls.filter((entry) => entry.type === 'encode').map((entry) => [entry.format, entry.quality]), [['image/webp', 0.72]]);
+        assert.equal(calls.filter((entry) => entry.type === 'close').length, 1);
+    } finally {
+        globalThis.document = previousDocument;
+        globalThis.createImageBitmap = previousCreateImageBitmap;
+    }
+});
+
+test('project preview snapshot fails loudly instead of falling back to a synchronous readback', async () => {
+    const previousCreateImageBitmap = globalThis.createImageBitmap;
+    delete globalThis.createImageBitmap;
+    try {
+        await assert.rejects(
+            () => snapshotCaptureCanvas({ width: 10, height: 10 }),
+            /bevy_project_preview_snapshot_unsupported/
+        );
+    } finally {
+        globalThis.createImageBitmap = previousCreateImageBitmap;
+    }
+});
+
+test('project preview capture names its surface and publishes each phase milestone', () => {
+    const frame = readSource('eVe/domains/rendering/bevy_project_preview_capture_frame.js');
+    const loop = frame.slice(frame.indexOf('const captureVisiblePreview'), frame.indexOf('export const captureProjectPreview'));
+
+    assert.doesNotMatch(frame, /canvas\.toDataURL\(/);
+    assert.match(frame, /createImageBitmap\(canvas\)/);
+    assert.match(frame, /CAPTURE_SURFACE_ROLE = 'preview-capture-webgpu-render-surface'/);
+    assert.match(frame, /data-role', CAPTURE_SURFACE_ROLE/);
+    for (const stage of ['start', 'renderer_ready', 'redraw_ready', 'done', 'empty']) {
+        assert.match(frame, new RegExp(`publishCaptureMilestone\\('${stage}'\\)`), `missing ${stage} milestone`);
+    }
+    assert.match(loop, /publishCaptureMilestone\(`encode\.\$\{encodeMilestones\}`\)/);
 });

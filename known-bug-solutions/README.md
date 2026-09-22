@@ -28,6 +28,8 @@ the established solution before attempting a new implementation.
 | iOS launch shows "Le démarrage continue…" for 10-20 s when the server does not answer | [ios-boot-server-await](ios-boot-server-await/README.md) |
 | iOS launch keeps "Le démarrage continue…" over a Dashboard entry or a late Main Toolbar mount | [ios-boot-presentation-contract](ios-boot-presentation-contract/README.md) |
 | A long press in a panel input box closes the field, the keyboard and the layout on finger lift | [ios-panel-input-fast-tap-blur](ios-panel-input-fast-tap-blur/README.md) |
+| iOS freezes after a rotation: the old frame is stretched, the bottom band stops answering and every tool raises the keyboard | [ios-rotation-freeze](ios-rotation-freeze/README.md) |
+| An AI-generated image or speech keeps displaying an older generation | [ai-generated-media-identity](ai-generated-media-identity/README.md) |
 
 ## Maintenance rules
 
