@@ -62,6 +62,7 @@ const createWindowHarness = ({ createImage } = {}) => {
     globalThis.CustomEvent = TestCustomEvent;
     globalThis.document = documentRef;
     globalThis.window = {
+        CustomEvent: TestCustomEvent,
         addEventListener(type, callback) {
             const callbacks = listeners.get(type) || [];
             callbacks.push(callback);
@@ -75,6 +76,9 @@ const createWindowHarness = ({ createImage } = {}) => {
     return {
         documentRef,
         surfaces,
+        emit(type, detail) {
+            (listeners.get(type) || []).forEach((callback) => callback({ type, detail }));
+        },
         dispatch(detail) {
             window.dispatchEvent(new CustomEvent('eve:surface-background-changed', { detail }));
         },
@@ -349,14 +353,14 @@ test('surface background resize path coalesces and avoids repeated image emissio
 
 test('default surface background color is shared by HTML and generated Bevy background payloads', async () => {
     const cssSource = fs.readFileSync(path.join(repoRoot, 'atome/src/css/squirrel.css'), 'utf8');
-    assert.match(cssSource, /--eve-default-surface-background:\s*#3d0347;/);
+    assert.match(cssSource, /--eve-default-surface-background:\s*#f5f5f7;/);
     assert.match(cssSource, /background:\s*var\(--eve-default-surface-background\);/);
 
     const defaultsUrl = `${pathToFileUrl(path.join(repoRoot, 'eVe/domains/rendering/user_background_pattern_renderer.js'))}?default_color=${Date.now()}`;
     const { DEFAULT_USER_BACKGROUND_PARAMS } = await import(defaultsUrl);
-    assert.equal(DEFAULT_USER_BACKGROUND_PARAMS.backgroundColorR, 61);
-    assert.equal(DEFAULT_USER_BACKGROUND_PARAMS.backgroundColorG, 3);
-    assert.equal(DEFAULT_USER_BACKGROUND_PARAMS.backgroundColorB, 71);
+    assert.equal(DEFAULT_USER_BACKGROUND_PARAMS.backgroundColorR, 245);
+    assert.equal(DEFAULT_USER_BACKGROUND_PARAMS.backgroundColorG, 245);
+    assert.equal(DEFAULT_USER_BACKGROUND_PARAMS.backgroundColorB, 247);
 
     const previousWindow = globalThis.window;
     const previousDocument = globalThis.document;
@@ -408,7 +412,7 @@ test('default surface background color is shared by HTML and generated Bevy back
         };
         const getComputedStyle = (target) => ({
             position: target === view ? 'relative' : '',
-            getPropertyValue: (name) => (name === '--eve-default-surface-background' ? '#3d0347' : '')
+            getPropertyValue: (name) => (name === '--eve-default-surface-background' ? '#f5f5f7' : '')
         });
         globalThis.getComputedStyle = getComputedStyle;
         globalThis.window = {
@@ -436,7 +440,7 @@ test('default surface background color is shared by HTML and generated Bevy back
 
         runtime.start();
 
-        assert.deepEqual(emittedDetail.color, [61 / 255, 3 / 255, 71 / 255, 1]);
+        assert.deepEqual(emittedDetail.color, [245 / 255, 245 / 255, 247 / 255, 1]);
         assert.equal(Object.hasOwn(emittedDetail, 'texture'), false);
     } finally {
         if (previousWindow === undefined) {
@@ -467,6 +471,74 @@ test('Bevy background runtime skips duplicate surface signatures', () => {
     assert.match(source, /SURFACE_APPLICATIONS = new WeakMap/);
     assert.match(source, /previous\?\.signature === signature && previous\?\.rendererState === state/);
     assert.match(source, /IMAGE_TEXTURE_CACHE\.set\(sourceUrl, pending\)/);
+});
+
+test('the wallpaper follows the workspace mode: Dashboard only, clean surface in the project', async () => {
+    const harness = createWindowHarness();
+    const previousGetComputedStyle = globalThis.getComputedStyle;
+    const getComputedStyle = () => ({
+        position: 'relative',
+        getPropertyValue: (name) => (name === '--eve-default-surface-background' ? '#f5f5f7' : '')
+    });
+    globalThis.getComputedStyle = getComputedStyle;
+    globalThis.window.getComputedStyle = getComputedStyle;
+    globalThis.window.innerWidth = 4;
+    globalThis.window.innerHeight = 3;
+    try {
+        const runtimeUrl = `${pathToFileUrl(path.join(repoRoot, 'eVe/domains/rendering/user_surface_background_texture_runtime.js'))}?workspace_mode=${Date.now()}`;
+        const { createUserSurfaceBackgroundTextureRuntime } = await import(runtimeUrl);
+        const { DEFAULT_USER_BACKGROUND_PARAMS } = await import(
+            `${pathToFileUrl(path.join(repoRoot, 'eVe/domains/rendering/user_background_pattern_renderer.js'))}?workspace_mode_defaults=${Date.now()}`
+        );
+        const view = { clientWidth: 4, scrollWidth: 4, clientHeight: 3, scrollHeight: 3, style: {} };
+        const runtime = createUserSurfaceBackgroundTextureRuntime({
+            view,
+            params: {
+                ...DEFAULT_USER_BACKGROUND_PARAMS,
+                backgroundSource: 'image',
+                backgroundImageUrl: '/api/uploads/wallpaper.png'
+            },
+            resolveBackgroundMediaUrl: (value) => value,
+            isProtectedMediaUrl: () => false,
+            resolveProtectedBackgroundObjectUrl: async () => '',
+            clearBackgroundObjectUrl: () => {}
+        });
+
+        runtime.start();
+        const dashboard = globalThis.window.__eveSurfaceBackground;
+        assert.equal(dashboard.signature, 'image:/api/uploads/wallpaper.png');
+        assert.equal(dashboard.sourceUrl, '/api/uploads/wallpaper.png');
+
+        // Leaving the Dashboard is a fade: the Dashboard is still the visible
+        // surface, so the wallpaper must survive the transition untouched.
+        globalThis.window.__eveWorkspaceMode = { mode: 'transition', targetMode: 'project' };
+        harness.emit('eve:workspace-mode-changed', { mode: 'transition', targetMode: 'project' });
+        assert.equal(globalThis.window.__eveSurfaceBackground.signature, 'image:/api/uploads/wallpaper.png');
+
+        globalThis.window.__eveWorkspaceMode = { mode: 'project', projectId: 'project-1' };
+        harness.emit('eve:workspace-mode-changed', { mode: 'project', projectId: 'project-1' });
+        const project = globalThis.window.__eveSurfaceBackground;
+        assert.equal(project.signature, 'project-default-surface-background');
+        assert.equal(project.mode, 'color');
+        assert.equal(project.fit, 'cover');
+        assert.deepEqual(project.color, [245 / 255, 245 / 255, 247 / 255, 1]);
+        assert.equal(Object.hasOwn(project, 'texture'), false);
+        assert.equal(Object.hasOwn(project, 'sourceUrl'), false);
+
+        // Coming back must republish the image, not skip it as a duplicate of the
+        // image that was already applied before the project excursion.
+        globalThis.window.__eveWorkspaceMode = { mode: 'dashboard', projectId: '__eve_dashboard_workspace__' };
+        harness.emit('eve:workspace-mode-changed', { mode: 'dashboard', projectId: '__eve_dashboard_workspace__' });
+        const restored = globalThis.window.__eveSurfaceBackground;
+        assert.equal(restored.signature, 'image:/api/uploads/wallpaper.png');
+        assert.equal(restored.sourceUrl, '/api/uploads/wallpaper.png');
+    } finally {
+        if (previousGetComputedStyle === undefined) {
+            delete globalThis.getComputedStyle;
+        } else {
+            globalThis.getComputedStyle = previousGetComputedStyle;
+        }
+    }
 });
 
 function pathToFileUrl(filePath) {
