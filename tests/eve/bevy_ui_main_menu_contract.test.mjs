@@ -13,8 +13,6 @@ import { MAIN_HANDLE_ICON } from '../../eVe/intuition/ribbon/tokens.js';
 import { BEVY_MENU_TOKENS } from '../../eVe/intuition/ribbon/bevy_ui_menu_surface.js';
 import { EVE_BUTTON_SKIN_TOKENS } from '../../eVe/elements/skin/button_skin.js';
 import { EVE_COMMON_SKIN_TOKENS } from '../../eVe/elements/skin/tokens.js';
-import { resolveLiquidSystemSurfaceUniforms } from '../../eVe/intuition/liquid/intuition_liquid_menu_renderer.js';
-import { normalizeNavigationTaxonomy } from '../../eVe/intuition/menu/navigation_taxonomy.js';
 import { TOOL_KEYS, menuContent, installDom, findNode, waitFrame, waitMs, createRuntimeHarness } from './bevy_ui_main_menu_test_helpers.mjs';
 
 const collectJavaScriptSources = (directory) => readdirSync(directory, { withFileTypes: true })
@@ -37,14 +35,6 @@ test('standard menu tools inherit the canonical button surface while Mystic over
     assert.equal(BEVY_MENU_TOKENS.shape.paletteRadiusPx, button.radiusPx);
     assert.equal(BEVY_MENU_TOKENS.chrome.outlineRadiusPx, button.radiusPx);
     assert.notEqual(BEVY_MENU_TOKENS.shape.mysticRadiusPx, button.radiusPx);
-});
-
-test('liquid Mystic and main-menu projections derive their backdrop and shadow from the system surface', () => {
-    const material = EVE_COMMON_SKIN_TOKENS.bevy.systemSurface;
-    const uniforms = resolveLiquidSystemSurfaceUniforms({ surface_parameters: [] }, [{ diameter: 60 }]);
-    assert.equal(uniforms.background_blur_px, material.backdrop.blurPx);
-    assert.deepEqual(uniforms.assistant_background_tint, material.backdrop.tint);
-    assert.deepEqual(uniforms.surface_parameters[20], material.shadow.color);
 });
 
 test('system glass keeps white content readable over the brightest backdrop', () => {
@@ -227,20 +217,11 @@ test('BevyUI main menu model keeps the required item order and fixed dashboard h
     assert.equal(items.some((item) => item.key === 'legacy_menu'), false);
 });
 
-test('modern taxonomy keeps Legacy untouched and hides the edit menu outside an editable project', () => {
-    assert.equal(normalizeNavigationTaxonomy(), 'legacy');
+test('the main menu is hidden outside an editable work context', () => {
     const legacy = buildBevyMainMenuItems(menuContent());
-    assert.deepEqual(buildBevyMainMenuItems(menuContent(), { navigationTaxonomy: 'legacy' }), legacy);
-    assert.deepEqual(buildBevyMainMenuItems(menuContent(), {
-        navigationTaxonomy: 'modern', taxonomyContext: 'dashboard'
-    }), []);
-    const modern = buildBevyMainMenuItems(menuContent(), {
-        navigationTaxonomy: 'modern', taxonomyContext: 'edit'
-    });
-    assert.equal(modern.some((item) => item.key === 'taxonomy_project'), true);
-    assert.equal(modern.some((item) => item.key === 'view'), true);
-    assert.equal(modern.some((item) => item.key === 'home'), false);
-
+    assert.deepEqual(buildBevyMainMenuItems(menuContent(), { workContext: 'edit' }), legacy);
+    assert.deepEqual(buildBevyMainMenuItems(menuContent(), { workContext: 'consultation' }), []);
+    assert.deepEqual(buildBevyMainMenuItems(menuContent(), { workContext: 'performance' }), []);
 });
 
 test('BevyUI main menu Atome tool toggles the assistant', async () => {

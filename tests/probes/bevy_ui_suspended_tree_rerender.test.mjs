@@ -3,7 +3,6 @@ import { test } from 'vitest';
 import { JSDOM } from 'jsdom';
 
 import { createEveBevyUiRuntime } from '../../eVe/domains/rendering/bevy_ui_runtime.js';
-import { renderLiquidMenuSurface } from '../../eVe/intuition/liquid/intuition_liquid_menu_renderer.js';
 
 const tree = (label) => ({
     id: 'menu_tree',
@@ -52,19 +51,4 @@ test('a suspended BevyUI tree stays invisible when a late owner update rerenders
     assert.deepEqual(nativeOps.at(-1), {
         type: 'set_subtree_opacity', id: 'menu_tree', opacity: 0
     });
-});
-
-test('the liquid main-menu surface cannot remount while Dashboard suspension is active', async () => {
-    const previousWindow = globalThis.window;
-    globalThis.window = { __eveDashboardMainMenuSuspended: true };
-    try {
-        const result = await renderLiquidMenuSurface({
-            key: 'main_menu',
-            drops: [{ centerX: 20, centerY: 20, diameter: 40 }]
-        });
-        assert.equal(result.ok, true);
-    } finally {
-        if (previousWindow === undefined) delete globalThis.window;
-        else globalThis.window = previousWindow;
-    }
 });

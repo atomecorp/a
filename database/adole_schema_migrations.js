@@ -161,6 +161,7 @@ async function ensureSyncEventTables(query) {
         principal_id TEXT PRIMARY KEY,
         display_name TEXT NOT NULL,
         user_face TEXT,
+        card_json TEXT,
         revision INTEGER NOT NULL,
         updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     )`);
@@ -169,6 +170,12 @@ async function ensureSyncEventTables(query) {
         table: 'directory_public_profiles',
         column: 'user_face',
         ddl: 'ALTER TABLE directory_public_profiles ADD COLUMN user_face TEXT'
+    });
+    await ensureColumn({
+        query,
+        table: 'directory_public_profiles',
+        column: 'card_json',
+        ddl: 'ALTER TABLE directory_public_profiles ADD COLUMN card_json TEXT'
     });
     await query('run', `CREATE TABLE IF NOT EXISTS directory_public_events (
         sequence INTEGER PRIMARY KEY AUTOINCREMENT,

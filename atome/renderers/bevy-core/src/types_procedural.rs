@@ -60,8 +60,8 @@ pub struct AtomeProceduralSdf {
     #[serde(default)]
     pub surface_tint: [f32; 4],
     #[serde(default)]
-    // 16 et non 8 : les 8 premiers portent le contrat flower/assistant
-    // historique, les suivants les arcs de lumiere du mode goutte d'eau.
+    // 16 rather than 8: the first 8 carry the historical assistant contract,
+    // the following ones the light arcs of the water-drop mode.
     pub surface_parameters: [[f32; 4]; 24],
     // Les GOUTTES du mode liquide, separees du style a dessein : `surface_parameters`
     // porte le style PARTAGE par toutes les gouttes, `liquid_drops` la geometrie
@@ -153,8 +153,8 @@ impl AtomeProceduralSdf {
             background_blur_px: finite_or(self.background_blur_px, 48.0).clamp(0.0, 128.0),
             lens_refraction_px: finite_or(self.lens_refraction_px, 24.0).clamp(0.0, 128.0),
             assistant_background_tint: self.assistant_background_tint.map(|value| finite_or(value, 0.0).clamp(0.0, 1.0)),
-            // 0 = assistant, 1 = flower liquide, 2 = goutte « design Claude »,
-            // 3-4 reserves aux versions de design suivantes (procedural_sdf.wgsl).
+            // 0 = assistant, 1 = unused (the retired Flower menu), 2 = water drop,
+            // 3-4 reserved for the next design versions (procedural_sdf.wgsl).
             mode: finite_or(self.mode, 0.0).clamp(0.0, 4.0),
             surface_count: finite_or(self.surface_count, 0.0).clamp(0.0, 8.0),
             surface_core_radius: finite_or(self.surface_core_radius, 0.0).max(0.0),

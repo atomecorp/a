@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import { test } from "vitest";
-import { buildUserProperties, mergeUserProfileIdentity, resolveUsername, sanitizeProfileForPersistence } from "../../eVe/domains/user/profile_api_support.js";
+import { buildUserProperties, resolveUsername, sanitizeProfileForPersistence } from "../../eVe/domains/user/profile_api_support.js";
 import { upsertUserProfile } from "../../eVe/domains/user/profile_api.js";
 import { normalizeHomeProfile, mergeHomeProfileUpdate, profileDisplayName } from "../../eVe/intuition/runtime/bevy_panel/bevy_panel_home_actions.js";
 import { homeSurface, readHomePanelState } from "../../eVe/intuition/runtime/bevy_panel/bevy_panel_home_runtime.js";
@@ -23,15 +23,20 @@ const baseState = (overrides = {}) => ({
     busy: false,
     sessionBusy: false,
     expanded: 'identity',
+    subject: null,
     subsections: {
         'profile.competences': true,
         'profile.passions': true,
         'profile.experiences': true,
+        'settings.preferences': true,
+        'settings.level': true,
+        'settings.passkeys': true,
+        'settings.security': true,
+        'settings.privacy': true,
         'passkeys.passwords': true,
         'passkeys.keys': true,
         'preferences.mail': true,
         'preferences.visual': true,
-        'preferences.dashboard': true,
         'preferences.language': true,
         'preferences.server': true
     },
@@ -47,8 +52,8 @@ const baseState = (overrides = {}) => ({
         ],
         connected: false
     },
-    dashboardCategories: [{ id: 'projects', label_key: 'eve.dashboard.category.projects' }],
     rowKeys: {
+        custom_fields: [],
         'bio.biometrics': [],
         'profile.competences': [],
         'profile.passions': [],
@@ -65,15 +70,14 @@ const editing = {
 
 const flatten = (nodes = []) => nodes.flatMap((entry) => [entry, ...flatten(entry?.children || [])]);
 
-test('Home is a seven-section Bevy composition with the restored nested hierarchy', () => {
+test('Home is the card of the current user with a collapsed Settings accordion below it', () => {
     const state = baseState();
     const nodes = buildHomeContent(state, { emit: () => {}, bodyWidth: 452, editing });
     const all = flatten([
         ...nodes,
         ...buildHomeContent({ ...state, expanded: 'bio' }, { emit: () => {}, bodyWidth: 452, editing }),
         ...buildHomeContent({ ...state, expanded: 'profile' }, { emit: () => {}, bodyWidth: 452, editing }),
-        ...buildHomeContent({ ...state, expanded: 'passkeys' }, { emit: () => {}, bodyWidth: 452, editing }),
-        ...buildHomeContent({ ...state, expanded: 'preferences' }, { emit: () => {}, bodyWidth: 452, editing })
+        ...buildHomeContent({ ...state, expanded: 'settings' }, { emit: () => {}, bodyWidth: 452, editing })
     ]);
     const fixed = buildHomeFixedContent(state, { emit: () => {}, bodyWidth: 452 });
 
@@ -83,22 +87,26 @@ test('Home is a seven-section Bevy composition with the restored nested hierarch
         'home_identity_accordion',
         'home_bio_accordion',
         'home_profile_accordion',
-        'home_passkeys_accordion',
-        'home_preferences_accordion',
-        'home_security_accordion',
-        'home_privacy_accordion'
+        'home_settings_accordion'
     ]);
     const initialProjection = flatten(nodes);
     assert.equal(initialProjection.some((entry) => entry.id === 'home_bio_birth'), false);
-    assert.equal(initialProjection.some((entry) => entry.id === 'home_preferences_mail_accordion'), false);
+    assert.equal(initialProjection.some((entry) => entry.id === 'home_settings_content'), false, 'Settings starts collapsed');
     const photo = initialProjection.find((entry) => entry.id === 'home_profile_photo');
     assert.equal(photo.kind, 'button');
-    assert.equal(photo.children.length, 0);
-    assert.deepEqual(photo.style.border, [1, 1, 1, 1]);
     assert.equal(typeof photo.on.activate, 'function');
     assert.equal(typeof photo.on.drop, 'function');
-    assert.equal(initialProjection.some((entry) => entry.id === 'home_profile_photo_change'), false);
-    assert.equal(initialProjection.find((entry) => entry.id === 'home_display_source_heading').text, 'Afficher');
+    assert.ok(initialProjection.some((entry) => entry.id === 'home_custom_fields_add'), 'the card carries its free fields');
+    assert.ok(initialProjection.some((entry) => entry.id === 'home_display_source'));
+    const settings = flatten(buildHomeContent({ ...state, expanded: 'settings' }, { emit: () => {}, bodyWidth: 452, editing }))
+        .find((entry) => entry.id === 'home_settings_content');
+    assert.deepEqual(settings.children.map((entry) => entry.id), [
+        'home_settings_preferences_accordion',
+        'home_settings_level_accordion',
+        'home_settings_passkeys_accordion',
+        'home_settings_security_accordion',
+        'home_settings_privacy_accordion'
+    ]);
     [
         'home_profile_competences_accordion',
         'home_profile_passions_accordion',
@@ -107,81 +115,61 @@ test('Home is a seven-section Bevy composition with the restored nested hierarch
         'home_ai_keys_accordion',
         'home_preferences_mail_accordion',
         'home_preferences_visual_accordion',
-        'home_preferences_dashboard_accordion',
         'home_preferences_language_accordion',
-        'home_preferences_server_accordion'
+        'home_preferences_server_accordion',
+        'home_level_global',
+        'home_sharing_name',
+        'home_privacy_target_phone'
     ].forEach((id) => assert.ok(all.some((entry) => entry.id === id), id));
-    assert.ok(all.some((entry) => entry.id === 'home_display_source'));
+    [
+        'home_preferences_dashboard_accordion', 'home_render_style', 'home_mystic_roundness',
+        'home_mystic_gap', 'home_mystic_timing', 'home_navigation_taxonomy'
+    ].forEach((id) => assert.equal(all.some((entry) => entry.id === id), false, id));
     assert.ok(all.some((entry) => entry.id === 'home_handedness'));
-    assert.ok(all.some((entry) => entry.id === 'home_render_style'));
-    // Le reglage de l'espacement des tuiles Mystic, a cote de celui de l'arrondi :
-    // les deux ne se lisent que quand le menu mystique est le style de rendu, mais
-    // le panneau les presente toujours, comme l'arrondi.
-    assert.ok(all.some((entry) => entry.id === 'home_mystic_gap'));
-    // Le reglage de la duree d'ouverture, monte par le VRAI panneau (donc avec son
-    // propre runtime de champ numerique, celui de Taille et Couleur) : il se lit
-    // sous l'arrondi et l'espace, et avant la taxonomie.
-    const timed = flatten(homeSurface.buildContent(
-        { ...state, expanded: 'preferences' }, { emit: () => {}, bodyWidth: 452 }
-    ));
-    const timedIds = timed.map((entry) => entry.id);
-    const gapIndex = timedIds.indexOf('home_mystic_gap');
-    const timingIndex = timedIds.indexOf('home_mystic_timing');
-    const taxonomyIndex = timedIds.indexOf('home_navigation_taxonomy');
-    assert.ok(gapIndex >= 0 && timingIndex >= 0 && taxonomyIndex >= 0, 'le champ du timing est monte');
-    assert.ok(gapIndex < timingIndex && timingIndex < taxonomyIndex,
-        'le timing se lit apres l\'espace des tuiles et avant la taxonomie');
-    ['home_mystic_timing_title', 'home_mystic_timing_label', 'home_mystic_timing_decrement',
-        'home_mystic_timing_input', 'home_mystic_timing_increment', 'home_mystic_timing_unit']
-        .forEach((id) => assert.ok(timedIds.includes(id), id));
-    // Le champ affiche la valeur STOCKEE (defaut 2 s), et il est saisissable : le
-    // pas a pas et la saisie sont ceux du composant standard, pas une variante.
-    const timingInput = timed.find((entry) => entry.id === 'home_mystic_timing_input');
-    assert.equal(timingInput.kind, 'number_input');
-    assert.equal(timed.find((entry) => entry.id === 'home_mystic_timing_input_text').text, '2');
-    assert.equal(timed.find((entry) => entry.id === 'home_mystic_timing_unit').text, 's');
-    assert.equal(typeof timingInput.on.press, 'function');
-    assert.equal(typeof timingInput.on.focus, 'function');
-    assert.equal(typeof timingInput.on.drag, 'function');
-    assert.equal(typeof timed.find((entry) => entry.id === 'home_mystic_timing_increment').on.activate, 'function');
-    assert.equal(typeof timed.find((entry) => entry.id === 'home_mystic_timing_decrement').on.activate, 'function');
-    assert.ok(all.some((entry) => entry.id === 'home_navigation_taxonomy'));
-    assert.equal(flatten(buildHomeContent({ ...state, expanded: 'bio' }, { emit: () => {}, bodyWidth: 452, editing }))
-        .some((entry) => entry.id === 'home_navigation_taxonomy'), false);
     assert.ok(all.some((entry) => entry.id === 'home_accessibility_auditory'));
     assert.ok(all.some((entry) => entry.id === 'home_server_select'));
-    assert.equal(all.some((entry) => /professional/i.test(entry.id || '')), false);
     assert.equal(fixed[0].id, 'home_session_exit');
     assert.equal(profileDisplayName(state.profile), 'Ada');
 });
 
-test('menu rendering stays flat and the legacy taxonomy is the profile default', () => {
+test('the card of somebody else holds only their shared card and never any setting', () => {
+    const profile = normalizeHomeProfile({
+        name: 'Grace', nickname: 'Amazing', phone: '0600000000',
+        profile: { competences: [{ label: 'COBOL', value: 'Author' }] }
+    }, { preserveEmptyItems: true });
+    const remote = baseState({ profile, subject: { id: 'remote_user', local: false, editable: false } });
+    const nodes = buildHomeContent(remote, { emit: () => {}, bodyWidth: 452, editing });
+    const all = flatten(nodes);
+    assert.deepEqual(nodes.map((entry) => entry.id), ['home_identity_accordion', 'home_profile_accordion']);
+    assert.deepEqual(all.filter((entry) => /^home_identity_[a-z_]+$/.test(entry.id || '') && entry.kind === 'row').map((entry) => entry.id),
+        ['home_identity_name', 'home_identity_nickname', 'home_identity_phone'], 'a read-only card shows only what was shared');
+    assert.equal(all.some((entry) => entry.id === 'home_display_source' || entry.id === 'home_access_select'), false);
+    assert.equal(all.some((entry) => entry.id === 'home_custom_fields_add'), false);
+    assert.equal(all.find((entry) => entry.id === 'home_profile_photo').on, undefined, 'a read-only photo is not a picker');
+
+    const local = baseState({ profile, subject: { id: 'local_ada', local: true, editable: true } });
+    const localAll = flatten(buildHomeContent(local, { emit: () => {}, bodyWidth: 452, editing }));
+    assert.ok(localAll.some((entry) => entry.id === 'home_identity_email'), 'a contact of the address book stays fully editable');
+    assert.ok(localAll.some((entry) => entry.id === 'home_custom_fields_add'));
+    assert.equal(localAll.some((entry) => entry.id === 'home_settings_accordion'), false);
+});
+
+test('only the handedness and the expertise levels remain visual preferences', () => {
     assert.deepEqual(normalizeVisualPreferences({}), {
-        handedness: 'right', renderStyle: 'flat', navigationTaxonomy: 'legacy', liquidTheme: 'eau',
-        masteryLevel: 'beginner', activityLevels: {},
-        mysticRoundness: 1, mysticTileGap: 1, mysticOpeningMs: 2000
+        handedness: 'right', masteryLevel: 'beginner', activityLevels: {}
     });
-    // The three menu surface renderers are canonical values; an unknown style falls
-    // back to `flat`, so no profile can ask for a renderer that does not exist.
-    assert.equal(normalizeVisualPreferences({ renderStyle: 'liquid' }).renderStyle, 'liquid');
-    assert.equal(normalizeVisualPreferences({ renderStyle: 'mystic' }).renderStyle, 'mystic');
-    assert.equal(normalizeVisualPreferences({ renderStyle: 'hologram' }).renderStyle, 'flat');
-    assert.equal(normalizeVisualPreferences({ mysticRoundness: 0.5 }).mysticRoundness, 0.5);
-    assert.equal(normalizeVisualPreferences({ mysticRoundness: 'unsupported' }).mysticRoundness, 1);
-    // L'espace entre les tuiles: jamais sous 1 px, meme demande explicitement.
-    assert.equal(normalizeVisualPreferences({ mysticTileGap: 3 }).mysticTileGap, 3);
-    assert.equal(normalizeVisualPreferences({ mysticTileGap: 0 }).mysticTileGap, 1);
-    assert.equal(normalizeVisualPreferences({ mysticTileGap: 400 }).mysticTileGap, 12);
-    // Le timing d'ouverture du menu Mystique: la preference est en millisecondes,
-    // bornee entre 0,3 s et 6 s. Un menu instantane n'est plus une cascade, et
-    // au-dela de 6 s l'attente n'est plus une ouverture.
-    assert.equal(normalizeVisualPreferences({ mysticOpeningMs: 300 }).mysticOpeningMs, 300);
-    assert.equal(normalizeVisualPreferences({ mysticOpeningMs: 6000 }).mysticOpeningMs, 6000);
-    assert.equal(normalizeVisualPreferences({ mysticOpeningMs: 100 }).mysticOpeningMs, 300);
-    assert.equal(normalizeVisualPreferences({ mysticOpeningMs: 9000 }).mysticOpeningMs, 6000);
-    assert.equal(normalizeVisualPreferences({ mysticOpeningMs: 'x' }).mysticOpeningMs, 2000);
-    assert.equal(normalizeVisualPreferences({ navigationTaxonomy: 'modern' }).navigationTaxonomy, 'modern');
-    assert.equal(normalizeVisualPreferences({ navigationTaxonomy: 'unsupported' }).navigationTaxonomy, 'legacy');
+    assert.deepEqual(normalizeVisualPreferences({
+        handedness: 'left', renderStyle: 'liquid', navigationTaxonomy: 'modern',
+        mysticRoundness: 0, mysticTileGap: 4, mysticOpeningMs: 6000, liquidTheme: 'eau'
+    }), { handedness: 'left', masteryLevel: 'beginner', activityLevels: {} }, 'retired settings are dropped on the next save');
+});
+
+test('the shared card defaults to the name, the first name, the nickname and the photo', () => {
+    assert.deepEqual(normalizeHomeProfile({}).sharing.fields, ['name', 'first_name', 'nickname', 'user_face']);
+    assert.deepEqual(normalizeHomeProfile({ sharing: { fields: ['phone', 'unknown', 'name'] } }).sharing.fields, ['name', 'phone']);
+    assert.deepEqual(normalizeHomeProfile({ sharing: { fields: [] } }).sharing.fields, []);
+    assert.deepEqual(normalizeHomeProfile({ custom_fields: [{ label: 'Site', value: 'ada.dev' }] }).custom_fields,
+        [{ label: 'Site', value: 'ada.dev' }], 'a save from Home keeps the free fields of the card');
 });
 
 test('profile reconstruction never derives the technical username from display identity or phone', () => {
@@ -269,7 +257,7 @@ test('Passwords and keys expose direct AI provider settings without a vault unlo
         configured: id === 'openai'
     }));
     const state = baseState({
-        expanded: 'passkeys',
+        expanded: 'settings',
         vault: {
             unlocked: false,
             credentials: [{ id: 'credential-1', name: 'Site', login: 'ada', configured: true }],
@@ -309,7 +297,7 @@ test('the credential plus creates a stable draft above itself without touching p
         newRowKey: () => 'draft_1',
         refresh: () => {}
     });
-    const all = flatten(buildHomeContent({ ...state, expanded: 'passkeys' }, {
+    const all = flatten(buildHomeContent({ ...state, expanded: 'settings' }, {
         emit: () => {}, bodyWidth: 452, editing
     }));
     const credentials = all.find((entry) => entry.id === 'home_credentials');
@@ -391,36 +379,6 @@ test('Home normalization preserves hidden Pro values and removes every legacy se
     assert.equal('key' in persisted.passkeys.keys[0], false);
 });
 
-test('Contact identity edits preserve the complete canonical Home profile', () => {
-    const merged = mergeUserProfileIdentity({
-        name: 'Before',
-        access: 'private',
-        bio: { birth: '2000-01-01' },
-        profile: { competences: [{ label: 'Piano', value: 'Expert', pro: true }] },
-        preferences: { language: 'fr', dashboard: { news: false } },
-        passkeys: { credentials: [{ label: 'site', login: 'ada' }] }
-    }, {
-        name: 'After', first_name: 'Ada', nickname: 'AA', phone: '0600000000', email: 'ada@example.test'
-    });
-
-    assert.equal(merged.name, 'After');
-    assert.equal(merged.first_name, 'Ada');
-    assert.equal(merged.access, 'private');
-    assert.equal(merged.bio.birth, '2000-01-01');
-    assert.equal(merged.profile.competences[0].label, 'Piano');
-    assert.equal(merged.preferences.language, 'fr');
-    assert.equal(merged.passkeys.credentials[0].login, 'ada');
-
-    const cleared = buildUserProperties(mergeUserProfileIdentity(merged, {
-        name: '', first_name: '', nickname: '', email: '', user_face: ''
-    }));
-    assert.equal(cleared.name, '');
-    assert.equal(cleared.first_name, '');
-    assert.equal(cleared.nickname, '');
-    assert.equal(cleared.email, '');
-    assert.equal(cleared.user_face, '');
-});
-
 test('Home overlays a confirmed Contact update without discarding stored sections', () => {
     const profile = mergeHomeProfileUpdate({
         name: 'Before',
@@ -437,16 +395,10 @@ test('Home overlays a confirmed Contact update without discarding stored section
     assert.equal(profile.bio.birth, '2000-01-01');
     assert.equal(profile.preferences.language, 'fr');
 
-    const contactRuntime = fs.readFileSync(
-        new URL('../../eVe/intuition/runtime/bevy_panel/bevy_panel_contact_runtime.js', import.meta.url),
-        'utf8'
-    );
     const homeRuntime = fs.readFileSync(
         new URL('../../eVe/intuition/runtime/bevy_panel/bevy_panel_home_runtime.js', import.meta.url),
         'utf8'
     );
-    assert.match(contactRuntime, /updateUserProfileIdentity\(draft, \{ userId: state\.currentUserId \}\)/);
-    assert.doesNotMatch(contactRuntime, /upsertUserProfile\(draft/);
     assert.match(homeRuntime, /state\.profile = mergeHomeProfileUpdate\(state\.profile, event\?\.detail\?\.profile\)/);
 });
 
@@ -455,6 +407,7 @@ test('Home list additions retain blank stable rows immediately above the canonic
     assert.match(runtimeSource, /home\.field\.focus'[\s\S]*`\$\{path\}\.\$\{itemIndex\}\.label`/, 'A newly added Home list row must immediately focus its first canonical field');
     assert.match(runtimeSource, /home\.credential\.add'[\s\S]*home\.field\.focus'[\s\S]*credentials\.\$\{credentialId\}\.name/, 'A newly added credential must immediately focus its name field');
     const sections = [
+        ['custom_fields', 'home_custom_fields', 'identity'],
         ['bio.biometrics', 'home_biometrics', 'bio'],
         ['profile.competences', 'home_competences', 'profile'],
         ['profile.passions', 'home_passions', 'profile'],
@@ -516,7 +469,7 @@ test('Home opening geometry follows handedness, side centering and compact mobil
 });
 
 test('stored provider keys show a fixed mask without repopulating the editor or hiding status errors', () => {
-    const render = provider => flatten(buildHomeContent(baseState({ expanded: 'passkeys', vault: {
+    const render = provider => flatten(buildHomeContent(baseState({ expanded: 'settings', vault: {
         credentials: [], providers: [{ id: 'openai', label: 'OpenAI', models: [], ...provider }] }
     }), { emit() {}, bodyWidth: 452, editing }));
     const saved = render({ configured: true });
@@ -533,7 +486,7 @@ test('Home keeps all section headers available while the profile is pending or t
         const intents = [];
         const nodes = buildHomeContent(baseState(phase), { emit: value => intents.push(value), bodyWidth: 452, editing });
         const all = flatten(nodes);
-        assert.equal(all.filter(node => /home_(identity|bio|profile|passkeys|preferences|security|privacy)_accordion$/.test(node.id)).length, 7);
+        assert.equal(all.filter(node => /home_(identity|bio|profile|settings)_accordion$/.test(node.id)).length, 4);
         assert.ok(all.some(node => node.id === 'home_identity_status'));
         if (phase.loadError) assert.ok(all.some(node => node.id === 'home_identity_retry'));
     }
@@ -542,7 +495,7 @@ test('Home keeps all section headers available while the profile is pending or t
 
 test('Home exposes explicit activation for a configured provider without requesting its secret', () => {
     const intents = [];
-    const state = baseState({ expanded: 'passkeys', vault: { credentials: [],
+    const state = baseState({ expanded: 'settings', vault: { credentials: [],
         providers: [{ id: 'openai', label: 'OpenAI', models: [], configured: true }] } });
     const render = () => flatten(buildHomeContent(state, { emit: intent => intents.push(intent), bodyWidth: 452, editing }));
     const button = render().find(node => node.id === 'home_key_openai_active');

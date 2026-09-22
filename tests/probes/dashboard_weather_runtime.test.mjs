@@ -41,6 +41,33 @@ describe('Dashboard weather runtime', () => {
         expect(runtime.state).toMatchObject({ status: 'ready', city: 'Paris', place: saved });
     });
 
+    it('hides the weather and clock modules while a category filter is open and restores them after', async () => {
+        const weather = vi.fn(async () => ({ temperature: 18.4, code: 1, condition: 'cloudy' }));
+        const runtime = createRuntime({ navigatorRef: navigatorFor({ permission: 'granted' }), weather });
+        await runtime.bootstrap();
+        const source = new Map([
+            ['news', [{ id: 'news-one', category_id: 'news' }]],
+            ['calendar', [{ id: 'calendar-one', category_id: 'calendar' }]]
+        ]);
+        const base = runtime.items(source);
+        expect(base.get('news').map((item) => item.id)).toEqual(['dashboard_module_weather', 'news-one']);
+        expect(base.get('calendar').map((item) => item.id)).toEqual(['dashboard_module_clock', 'calendar-one']);
+        const filtered = runtime.items(source, { filteredCategoryId: 'projects' });
+        expect(filtered.get('news').map((item) => item.id)).toEqual(['news-one']);
+        expect(filtered.get('calendar').map((item) => item.id)).toEqual(['calendar-one']);
+        // La source memoisee reste intacte : le retour a l'affichage de base reutilise
+        // les donnees deja chargees, sans nouvelle lecture meteo.
+        expect(source.get('news').map((item) => item.id)).toEqual(['news-one']);
+        const weatherReads = weather.mock.calls.length;
+        const restored = runtime.items(source);
+        expect(restored.get('news')[0]).toMatchObject({
+            id: 'dashboard_module_weather',
+            metadata: { weather: { temperature: 18.4, condition: 'cloudy' } }
+        });
+        expect(restored.get('calendar')[0].id).toBe('dashboard_module_clock');
+        expect(weather.mock.calls.length).toBe(weatherReads);
+    });
+
     it('opens the manual fallback when GPS is unavailable or refused without memory', async () => {
         const unavailable = createRuntime({ navigatorRef: {} });
         await unavailable.bootstrap();

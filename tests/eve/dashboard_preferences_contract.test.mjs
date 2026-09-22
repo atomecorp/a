@@ -1,6 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
-    filterDashboardCategoriesByPreferences,
     normalizeDashboardPreferences,
     normalizeDashboardWeatherLocation
 } from '../../eVe/domains/dashboard/dashboard_preferences.js';
@@ -17,12 +16,11 @@ const allCategories = [
 }));
 
 describe('Dashboard preferences', () => {
-    it('normalizes category flags without losing a valid weather location', () => {
+    it('keeps only a valid weather location and drops the retired category flags', () => {
         expect(normalizeDashboardPreferences({
             categories: { news: false, calendar: true, invalid: 'yes' },
             weather_location: { lat: '45.77', lon: 3.08, label: 'Clermont-Ferrand', source: 'geolocation' }
         })).toEqual({
-            categories: { news: false, calendar: true },
             weather_location: { lat: 45.77, lon: 3.08, label: 'Clermont-Ferrand', source: 'geolocation' }
         });
     });
@@ -31,11 +29,6 @@ describe('Dashboard preferences', () => {
         expect(normalizeDashboardWeatherLocation({ lat: 91, lon: 2, label: 'Invalid' })).toBeNull();
         expect(normalizeDashboardWeatherLocation({ lat: 48, lon: 2, label: '' })).toBeNull();
         expect(normalizeDashboardWeatherLocation(null)).toBeNull();
-    });
-
-    it('retains the generic category preference helper for non-Dashboard profile editors', () => {
-        expect(filterDashboardCategoriesByPreferences(allCategories, { categories: { store: false } })
-            .some((category) => category.id === 'store')).toBe(false);
     });
 
     it('runtime data always exposes the five product rows and excludes Store only here', async () => {
@@ -54,15 +47,27 @@ describe('Dashboard preferences', () => {
         expect(requested.flat()).not.toContain('store');
     });
 
-    it('active visual focus never redistributes category items', () => {
+    it('cascades a filtered category from its own row and leaves no unfiltered row populated', () => {
         const categories = allCategories.filter((category) => category.id !== 'store');
         const source = new Map(categories.map((category) => [category.id, [
             { id: `${category.id}-one`, category_id: category.id }
         ]]));
-        const rendered = itemsForRender(categories, 'projects', source);
-        for (const category of categories) {
-            expect(rendered.get(category.id)[0].category_id).toBe(category.id);
-        }
+        // Trois items filtres : la cascade repart de la rangee Projects puis deborde
+        // sur Calendar et News, dans l'ordre du rail.
+        source.set('projects', [
+            { id: 'projects-one', category_id: 'projects' },
+            { id: 'projects-two', category_id: 'projects' },
+            { id: 'projects-three', category_id: 'projects' }
+        ]);
+        const filtered = itemsForRender(categories, 'projects', source);
+        expect(filtered.get('projects').map((item) => item.id)).toEqual(['projects-one']);
+        expect(filtered.get('calendar').map((item) => item.id)).toEqual(['projects-two']);
+        expect(filtered.get('news').map((item) => item.id)).toEqual(['projects-three']);
+        for (const id of ['contacts', 'monitor']) expect(filtered.get(id)).toEqual([]);
+        // Retour a l'affichage de base : chaque rangee retrouve ses propres items.
+        const restored = itemsForRender(categories, '', source);
+        expect(restored.get('projects')).toEqual(source.get('projects'));
+        expect(restored.get('calendar')).toEqual(source.get('calendar'));
     });
 
     it('keeps empty rows and integral scrolling on short mobile surfaces', () => {

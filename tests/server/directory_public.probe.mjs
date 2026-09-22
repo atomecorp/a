@@ -118,12 +118,14 @@ test('directory.public exposes consented display identities and redacted invalid
         assert.equal(publicEntry.user_face, '/alice.png');
         assert.equal((await service.list({ requesterId: 'public-user' }))
             .some((entry) => entry.principal_id === 'public-user'), false);
+        // A card never configured shares the name, the first name, the nickname and the photo.
         assert.deepEqual(
             Object.keys(publicEntry).sort(),
-            ['display_name', 'principal_id', 'revision', 'updated_at', 'user_face']
+            ['display_name', 'first_name', 'name', 'nickname', 'principal_id', 'revision', 'updated_at', 'user_face']
         );
+        assert.deepEqual([publicEntry.name, publicEntry.first_name, publicEntry.nickname], ['Public', 'Alice', 'Ally']);
         const serialized = JSON.stringify({ entries, events: await service.listEvents(0) });
-        for (const forbidden of ['+33123456789', '+33888888888', '+33777777777', 'alice@example.test', 'never-public', '+33999999999', 'Alice']) {
+        for (const forbidden of ['+33123456789', '+33888888888', '+33777777777', 'alice@example.test', 'never-public', '+33999999999']) {
             assert.equal(serialized.includes(forbidden), false);
         }
         assert.deepEqual(Object.keys(published[0].payload).sort(), ['action', 'principal_id', 'revision']);
@@ -167,6 +169,31 @@ test('directory.public exposes consented display identities and redacted invalid
         assert.equal(restored.display_name, 'Restored');
         assert.equal(restored.revision, published.at(-1).payload.revision,
             'a republished entry revision must match its invalidation after a revoke');
+
+        vaultProfiles.set('public-user', {
+            properties: {
+                phone: '+33123456789',
+                eve_profile: {
+                    access: 'public', nickname: 'Restored', display_name_source: 'nickname',
+                    phone: '+33123456789', sharing: { fields: ['nickname', 'phone'] }
+                }
+            }
+        });
+        await service.refreshPrincipal('public-user');
+        const sharing = (await service.list({ requesterId: 'private-user' }))
+            .find((entry) => entry.principal_id === 'public-user');
+        assert.equal(sharing.phone, '+33123456789', 'a field the owner adds to the card is published');
+        assert.equal(sharing.name, undefined, 'a field the owner removes from the card is not');
+        const protectedPhone = await db.default.setPropertyPrivacyRule(
+            'public-user',
+            'phone',
+            { schemaVersion: 1, root: { source: 'actor', field: 'id', operator: 'eq', value: 'nobody' } },
+            'public-user'
+        );
+        assert.equal(protectedPhone.ok, true);
+        assert.equal((await service.list({ requesterId: 'private-user' }))
+            .find((entry) => entry.principal_id === 'public-user').phone, undefined,
+            'a privacy rule still narrows a shared field');
     } finally {
         await db.closeDatabase().catch(() => {});
         try { fs.unlinkSync(databasePath); } catch (_) { }

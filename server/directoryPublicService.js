@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import db from '../database/adole.js';
 import { normalizePhone } from './auth_crypto.js';
+import { normalizeSharedProfileFields } from '../atome/src/shared/profile_sharing.js';
 
 const parse = (value) => {
     if (value == null) return null;
@@ -26,11 +27,13 @@ const publicProfile = (row, profile) => {
     const selected = candidates.find((value) => value !== null && value !== undefined && text(parse(value)) !== '');
     return text(parse(selected)).toLowerCase() === 'public';
 };
-const displayName = (row, profile) => {
+// The published name is built from the name fields the owner shares: a name kept
+// private never reaches the directory through the display name either.
+const displayName = (row, profile, shared) => {
     const values = {
-        name: rowValue(row, profile, 'name', 'last_name', 'lastname'),
-        firstname: rowValue(row, profile, 'first_name', 'firstname', 'firstName'),
-        nickname: rowValue(row, profile, 'nickname', 'pseudonym', 'pseudo')
+        name: shared.has('name') ? rowValue(row, profile, 'name', 'last_name', 'lastname') : '',
+        firstname: shared.has('first_name') ? rowValue(row, profile, 'first_name', 'firstname', 'firstName') : '',
+        nickname: shared.has('nickname') ? rowValue(row, profile, 'nickname', 'pseudonym', 'pseudo') : ''
     };
     const selected = ['name', 'firstname', 'nickname'].includes(text(profile?.display_name_source))
         ? text(profile.display_name_source)
@@ -60,17 +63,53 @@ const PROFILE_SELECT = `SELECT a.atome_id,
         MAX(CASE WHEN p.particle_key = 'eve_profile' THEN p.particle_value END) AS eve_profile
     FROM atomes a LEFT JOIN particles p ON p.atome_id = a.atome_id`;
 
+const labelledItems = (items) => (Array.isArray(items) ? items : [])
+    .map((item) => ({ label: text(item?.label), value: text(item?.value) }))
+    .filter((item) => item.label || item.value);
+const sharedBio = (bio) => {
+    const source = bio && typeof bio === 'object' ? bio : {};
+    const card = { birth: text(source.birth), weight: text(source.weight), height: text(source.height), biometrics: labelledItems(source.biometrics) };
+    return card.birth || card.weight || card.height || card.biometrics.length ? card : null;
+};
+// The card fields beyond the display name and the photo, each one only when the
+// owner shares it and it holds something.
+const sharedCard = (row, profile, shared) => {
+    const values = {
+        name: rowValue(row, profile, 'name', 'last_name', 'lastname'),
+        first_name: rowValue(row, profile, 'first_name', 'firstname', 'firstName'),
+        nickname: rowValue(row, profile, 'nickname', 'pseudonym', 'pseudo'),
+        phone: rowValue(row, profile, 'phone'),
+        email: text(profile.email),
+        custom_fields: labelledItems(profile.custom_fields),
+        bio: sharedBio(profile.bio),
+        competences: labelledItems(profile.profile?.competences),
+        passions: labelledItems(profile.profile?.passions),
+        experiences: labelledItems(profile.profile?.experiences)
+    };
+    return Object.fromEntries(Object.entries(values).filter(([field, value]) => (
+        shared.has(field) && (Array.isArray(value) ? value.length > 0 : !!value)
+    )));
+};
+
 const projectProfile = (row) => {
     if (!row) return null;
     const profile = parse(row.eve_profile);
     const canonicalProfile = profile && typeof profile === 'object' && !Array.isArray(profile) ? profile : {};
+    const shared = new Set(normalizeSharedProfileFields(canonicalProfile.sharing?.fields));
     return {
         principal_id: String(row.atome_id),
-        display_name: isBootstrapPhoneIdentity(row, canonicalProfile) ? '' : displayName(row, canonicalProfile),
-        user_face: rowValue(row, canonicalProfile, 'user_face'),
+        display_name: isBootstrapPhoneIdentity(row, canonicalProfile) ? '' : displayName(row, canonicalProfile, shared),
+        user_face: shared.has('user_face') ? rowValue(row, canonicalProfile, 'user_face') : '',
+        card: sharedCard(row, canonicalProfile, shared),
         public: publicProfile(row, canonicalProfile)
     };
 };
+
+// A shared field protected by a privacy rule is only published to a reader the
+// rule lets through; the others are shared as they are.
+const PRIVACY_KEY_BY_FIELD = Object.freeze({
+    user_face: 'user_face', phone: 'phone', email: 'email', bio: 'bio', competences: 'competences'
+});
 
 const runBounded = async (items, worker, concurrency = 8) => {
     const entries = Array.isArray(items) ? items : [];
@@ -173,14 +212,16 @@ export class DirectoryPublicService {
         const profile = options.deleted === true ? null : await this.sourceProfile(principalId);
         const previous = await db.query(
             'get',
-            'SELECT display_name, user_face, revision FROM directory_public_profiles WHERE principal_id = ?',
+            'SELECT display_name, user_face, card_json, revision FROM directory_public_profiles WHERE principal_id = ?',
             [principalId]
         );
         if (profile?.public && profile.display_name) {
             const nextPhoto = profile.user_face || null;
+            const nextCard = JSON.stringify(profile.card);
             if (previous
                 && text(previous.display_name) === profile.display_name
-                && text(previous.user_face) === text(nextPhoto)) {
+                && text(previous.user_face) === text(nextPhoto)
+                && text(previous.card_json) === nextCard) {
                 return { unchanged: true, principal_id: String(principalId) };
             }
             const eventRevision = Number((await db.query(
@@ -190,11 +231,12 @@ export class DirectoryPublicService {
             ))?.revision || 0) + 1;
             await db.query(
                 'run',
-                `INSERT INTO directory_public_profiles (principal_id, display_name, user_face, revision)
-                 VALUES (?, ?, ?, ?)
+                `INSERT INTO directory_public_profiles (principal_id, display_name, user_face, card_json, revision)
+                 VALUES (?, ?, ?, ?, ?)
                  ON CONFLICT(principal_id) DO UPDATE SET display_name = excluded.display_name,
-                 user_face = excluded.user_face, revision = excluded.revision, updated_at = datetime('now')`,
-                [principalId, profile.display_name, nextPhoto, eventRevision]
+                 user_face = excluded.user_face, card_json = excluded.card_json, revision = excluded.revision,
+                 updated_at = datetime('now')`,
+                [principalId, profile.display_name, nextPhoto, nextCard, eventRevision]
             );
             return this.record(principalId, 'upsert', eventRevision);
         }
@@ -210,14 +252,14 @@ export class DirectoryPublicService {
         const rows = query
             ? await db.query(
                 'all',
-                `SELECT principal_id, display_name, user_face, revision, updated_at
+                `SELECT principal_id, display_name, user_face, card_json, revision, updated_at
                  FROM directory_public_profiles WHERE lower(display_name) LIKE ?
                  ORDER BY lower(display_name), principal_id LIMIT ? OFFSET ?`,
                 [`%${query}%`, limit, offset]
             )
             : await db.query(
                 'all',
-                `SELECT principal_id, display_name, user_face, revision, updated_at
+                `SELECT principal_id, display_name, user_face, card_json, revision, updated_at
                  FROM directory_public_profiles ORDER BY lower(display_name), principal_id LIMIT ? OFFSET ?`,
                 [limit, offset]
             );
@@ -225,13 +267,16 @@ export class DirectoryPublicService {
         return Promise.all((rows || []).filter((row) => (
             text(row.display_name) && (!requesterId || text(row.principal_id) !== requesterId)
         )).map(async (row) => {
-            const visiblePhoto = row.user_face && requesterId
-                ? await db.allowsPropertyRead(row.principal_id, 'user_face', requesterId, 'directory')
-                : false;
+            const readable = async (field) => !PRIVACY_KEY_BY_FIELD[field] || (!!requesterId
+                && await db.allowsPropertyRead(row.principal_id, PRIVACY_KEY_BY_FIELD[field], requesterId, 'directory'));
+            const card = parse(row.card_json);
+            const fields = card && typeof card === 'object' && !Array.isArray(card) ? Object.entries(card) : [];
+            const visible = await Promise.all(fields.map(async ([field, value]) => ((await readable(field)) ? [[field, value]] : [])));
             return {
+                ...Object.fromEntries(visible.flat()),
                 principal_id: row.principal_id,
                 display_name: text(row.display_name),
-                user_face: visiblePhoto ? text(row.user_face) : null,
+                user_face: row.user_face && await readable('user_face') ? text(row.user_face) : null,
                 revision: Number(row.revision || 0),
                 updated_at: row.updated_at
             };

@@ -5,6 +5,8 @@ const userSource = readFileSync('eVe/intuition/tools/user.js', 'utf8');
 const routeSource = readFileSync('eVe/intuition/tools/user_home_panel_runtime.js', 'utf8');
 const surfaceSource = readFileSync('eVe/intuition/runtime/bevy_panel/bevy_panel_home_runtime.js', 'utf8');
 const viewSource = readFileSync('eVe/intuition/runtime/bevy_panel/bevy_panel_home_view.js', 'utf8');
+const settingsSource = readFileSync('eVe/intuition/runtime/bevy_panel/bevy_panel_home_settings_view.js', 'utf8');
+const securitySource = readFileSync('eVe/intuition/runtime/bevy_panel/bevy_panel_home_security.js', 'utf8');
 const definitions = readFileSync('eVe/intuition/panel_definitions.js', 'utf8');
 
 assert.match(userSource, /window\.open_home_panel = open_home_panel/);
@@ -17,18 +19,20 @@ assert.match(routeSource, /api\.auth\.bootstrap/);
 assert.match(definitions, /surface_id: 'eve_bevy_panel_home'/);
 assert.doesNotMatch(definitions, /eve_user_dialog/);
 
-['identity', 'bio', 'profile', 'passkeys', 'preferences', 'security']
+['identity', 'bio', 'profile', 'settings']
     .forEach((section) => assert.match(viewSource, new RegExp(`\\['${section}'`)));
+['preferences', 'level', 'passkeys', 'security', 'privacy']
+    .forEach((section) => assert.match(settingsSource, new RegExp(`\\['${section}'`)));
 assert.match(viewSource, /id: `home_\$\{key\}_accordion`/);
 assert.match(viewSource, /id: 'home_session_exit'/);
-assert.match(viewSource, /id: 'home_credentials_add'/);
-assert.match(viewSource, /id: 'home_passwords_accordion'/);
-assert.match(viewSource, /id: 'home_ai_keys_accordion'/);
+assert.match(settingsSource, /id: 'home_credentials_add'/);
+assert.match(settingsSource, /id: 'home_passwords_accordion'/);
+assert.match(settingsSource, /id: 'home_ai_keys_accordion'/);
 assert.doesNotMatch(viewSource, /home_professional|eve\.user\.pro\.label/);
 
 assert.match(surfaceSource, /persistHomeProfile/);
-assert.match(surfaceSource, /changeHomePassword/);
-assert.match(surfaceSource, /deleteHomeAccount/);
+assert.match(securitySource, /changeHomePassword/);
+assert.match(securitySource, /deleteHomeAccount/);
 assert.doesNotMatch(surfaceSource, /localStorage|sessionStorage|innerHTML|querySelector|createElement/);
 
 [

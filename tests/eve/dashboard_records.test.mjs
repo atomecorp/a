@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { createDashboardLayout, hitTestDashboardLayout } from '../../eVe/domains/dashboard/dashboard_layout.js';
+import { createDashboardLayout, dashboardHeaderBands, hitTestDashboardLayout } from '../../eVe/domains/dashboard/dashboard_layout.js';
 import { buildDashboardRecords, dashboardRecordId } from '../../eVe/domains/dashboard/dashboard_records.js';
 import { buildDashboardBevyUiTree } from '../../eVe/domains/dashboard/dashboard_bevy_ui_tree.js';
 import { createDashboardBevyUiRuntime } from '../../eVe/domains/dashboard/dashboard_bevy_ui_runtime.js';
@@ -118,7 +118,7 @@ describe('Dashboard WebGPU records', () => {
         expect(box.width).toBe(target.unit_width * 2);
     });
 
-    it('enlarges and lowers header icons while removing the Calendar label', () => {
+    it('keeps every rail tool icon and label inside the upper two thirds band', () => {
         for (const blockUnitSizePx of [80, 112, 144]) {
             const surfaceTokens = mergeDashboardTokens({ metrics: { blockUnitSizePx } });
             const target = layout({ width: blockUnitSizePx * 8, height: blockUnitSizePx * 6, tokens: surfaceTokens });
@@ -126,27 +126,25 @@ describe('Dashboard WebGPU records', () => {
             const calendarLane = target.projection_lanes.find((lane) => lane.category.id === 'calendar');
             for (const lane of target.projection_lanes) {
                 const icon = record(records, `header_icon_${lane.category.id}`);
-                const baseSize = Math.max(20, Math.min(48, lane.header_rect.width * (lane.category.id === 'calendar' ? 0.25 : 0.34)));
-                expect(icon.properties.width).toBe(baseSize * 1.5);
-                expect(icon.properties.height).toBe(baseSize * 1.5);
-                expect(icon.properties.top).toBe(lane.header_rect.y + Math.max(7, lane.header_rect.height * 0.1) + 5);
+                const label = record(records, `header_${lane.category.id}`);
+                const separator = record(records, `header_separator_${lane.category.id}`);
+                const newLabel = record(records, `header_new_${lane.category.id}`);
+                const bands = dashboardHeaderBands(lane.header_rect);
+                expect(icon.properties.width).toBe(icon.properties.height);
+                expect(Math.abs((icon.properties.left + icon.properties.width / 2) - (lane.header_rect.x + lane.header_rect.width / 2))).toBeLessThanOrEqual(0.5);
+                expect(icon.properties.top + icon.properties.height).toBeLessThanOrEqual(label.properties.top);
+                expect(label.properties.top + label.properties.height).toBeLessThanOrEqual(bands.filter.y + bands.filter.height);
+                expect(separator.properties.top + separator.properties.height).toBe(bands.filter.y + bands.filter.height);
+                expect(newLabel.properties.top).toBeGreaterThanOrEqual(bands.new.y);
+                expect(newLabel.properties.top + newLabel.properties.height).toBeLessThanOrEqual(bands.new.y + bands.new.height);
                 expect(icon.properties.material).toBeUndefined();
             }
             expect(calendarLane.header_rect.width).toBe(target.unit_width);
-            expect(record(records, 'header_calendar')).toBeUndefined();
-            expect(record(records, 'header_calendar_time').properties.text).toMatch(/19|17|07/);
-            expect(record(records, 'header_calendar_time').properties.text_style.font_size)
-                .toBe(Math.max(surfaceTokens.labelText.font_size + 1, calendarLane.header_rect.width * 0.19));
-            expect(record(records, 'header_calendar_date').properties.text.length).toBeGreaterThan(3);
-            expect(record(records, 'header_calendar_date').properties.text_style.font_size)
-                .toBe(surfaceTokens.labelText.font_size);
-            const time = record(records, 'header_calendar_time').properties;
-            const date = record(records, 'header_calendar_date').properties;
-            expect(time.top).toBe(Math.round(calendarLane.header_rect.y + calendarLane.header_rect.height * 0.55));
-            expect(time.height).toBe(Math.round(calendarLane.header_rect.height * 0.2));
-            expect(date.top).toBe(Math.round(calendarLane.header_rect.y + calendarLane.header_rect.height * 0.8));
-            expect(date.height).toBe(Math.round(calendarLane.header_rect.height * 0.13));
-            expect(date.top - (time.top + time.height)).toBeGreaterThanOrEqual(Math.floor(calendarLane.header_rect.height * 0.05));
+            const calendarLabel = record(records, 'header_calendar').properties;
+            expect(calendarLabel.text.length).toBeGreaterThan(3);
+            expect(calendarLabel.text_style.align ?? calendarLabel.text_align).toBe('center');
+            expect(calendarLabel.top + calendarLabel.height)
+                .toBeLessThanOrEqual(calendarLane.header_filter_rect.y + calendarLane.header_filter_rect.height);
             expect(record(records, 'header_projects')).toBeTruthy();
         }
     });

@@ -25,13 +25,14 @@ const layoutFor = (handedness = 'right', activeCategoryId = '') => createDashboa
 });
 
 describe('Dashboard fixed grid and visual focus', () => {
-    it('keeps every item on its canonical row when a header becomes active', () => {
-        const rendered = itemsForRender(categories, 'projects', sourceItems);
-        for (const category of categories) {
-            expect(rendered.get(category.id).map((item) => item.category_id)).toEqual(
-                sourceItems.get(category.id).map((item) => item.category_id)
-            );
-        }
+    it('cascades a filtered category from its own row and empties every other row', () => {
+        const filtered = itemsForRender(categories, 'news', sourceItems);
+        expect(filtered.get('news')).toEqual([weather]);
+        expect(filtered.get('calendar').map((item) => item.id)).toEqual(['news-one']);
+        for (const id of ['projects', 'contacts', 'monitor']) expect(filtered.get(id)).toEqual([]);
+        const restored = itemsForRender(categories, '', sourceItems);
+        expect(restored.get('news')).toEqual(sourceItems.get('news'));
+        expect(restored.get('projects')).toEqual(sourceItems.get('projects'));
     });
 
     it('uses five fixed rows, full-screen geometry, exact units and no creation rail', () => {

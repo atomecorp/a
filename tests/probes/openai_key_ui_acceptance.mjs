@@ -19,7 +19,8 @@ try {
   await waitFor(page,async()=>{const {readHomePanelState}=await import('/eVe/intuition/runtime/bevy_panel/bevy_panel_home_runtime.js');return !readHomePanelState().loading;},null,30000);
   await clickCanvasTarget(page,await awaitBevyUiNodeTarget(page,{treeId:'eve_bevy_panel_home',nodeId:'home_identity_accordion_header'}));
   report.stage='keys_section';
-  await clickCanvasTarget(page,await awaitBevyUiNodeTarget(page,{treeId:'eve_bevy_panel_home',nodeId:'home_passkeys_accordion_header'}));
+  await clickCanvasTarget(page,await awaitBevyUiNodeTarget(page,{treeId:'eve_bevy_panel_home',nodeId:'home_settings_accordion_header'}));
+  await clickCanvasTarget(page,await awaitBevyUiNodeTarget(page,{treeId:'eve_bevy_panel_home',nodeId:'home_settings_passkeys_accordion_header'}));
   await waitFor(page,async()=>{const {readHomePanelState}=await import('/eVe/intuition/runtime/bevy_panel/bevy_panel_home_runtime.js');return readHomePanelState().vault.providers.find(p=>p.id==='openai')?.configured===true;},null,30000);
   report.stage='key_field';
   const field=await awaitBevyUiNodeTarget(page,{treeId:'eve_bevy_panel_home',nodeId:'home_key_openai_api_input'});
