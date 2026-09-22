@@ -73,12 +73,13 @@ assert.equal(isTerminalWorkspaceBootFailure({ error: 'bevy_surface_not_ready' })
 const kickstartSource = readFileSync(new URL('../../atome/src/squirrel/kickstart.js', import.meta.url), 'utf8');
 const intuitionSource = readFileSync(new URL('../../eVe/intuition/eVeIntuition.js', import.meta.url), 'utf8');
 const productRuntimeSource = readFileSync(new URL('../../eVe/intuition/ribbon/bevy_ui_product_runtime.js', import.meta.url), 'utf8');
+const mysticContextItemsSource = readFileSync(new URL('../../eVe/intuition/runtime/eve_intuition/mystic_context_items_runtime.js', import.meta.url), 'utf8');
 
 assert.match(kickstartSource, /background:\s*'transparent'/, '#view must stay transparent during boot and cannot emit the gray #272727 frame');
 assert.doesNotMatch(kickstartSource, /background:\s*'#272727'/, '#view must not restore the boot gray background');
 assert.match(productRuntimeSource, /createBevyUiMainMenuRuntime\(\{[\s\S]*?open:\s*false/, 'BevyUI main menu must be created closed so no toolbox frame appears before login choice');
-assert.match(productRuntimeSource, /toggleDashboard:\s*toggleWorkspaceDashboardAndMainMenu/, 'the BevyUI Atome tool must use the workspace Dashboard toggle');
-assert.match(intuitionSource, /createBevyUiProductRuntime\(\{[\s\S]*?toggleWorkspaceDashboardAndMainMenu/, 'boot must inject the canonical workspace Dashboard toggle into the BevyUI product runtime');
+assert.match(mysticContextItemsSource, /toggleWorkspaceDashboardAndMainMenu\(\{\s*source:\s*'modern_mystic_dashboard'\s*\}\)/, 'the BevyUI Atome tool must use the workspace Dashboard toggle');
+assert.match(mysticContextItemsSource, /import\('\.\.\/\.\.\/tools\/user_workspace_surface_runtime\.js'\)[\s\S]*?toggleWorkspaceDashboardAndMainMenu/, 'the canonical Dashboard toggle must stay owned by the workspace surface runtime');
 assert.doesNotMatch(intuitionSource, /void\s+toggleDashboardRuntime\(\)/, 'main handle must not call the low-level dashboard toggle directly');
 
 const runtime = createMainMenuAuthRuntime({
@@ -271,6 +272,10 @@ installEveIntuitionBootRuntime({
     readAtomeContextualRailRecordActionBridgeState() {},
     readExplicitLatched() {},
     readSelectionSnapshot() {},
+    // The project route proves its presentation through the mounted Main
+    // Toolbar, so the Dashboard evidence reader reports an unpresented
+    // Dashboard here.
+    readWorkspacePresentationEvidence: () => ({ ok: false, sceneProjectId: '', mountedNodes: 0 }),
     refreshFinderPanelProjection() {},
     registerAtomeTool() {},
     registerBasicUiToolsRuntime() {},

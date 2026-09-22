@@ -25,6 +25,8 @@ the established solution before attempting a new implementation.
 | Flower or tool glass keeps stale white/image pixels after resize or content movement | [dynamic-backdrop-refresh](dynamic-backdrop-refresh/README.md) |
 | Browser login with a Tauri-created account terminates Fastify during sync | [sync-subscription-burst-fastify-crash](sync-subscription-burst-fastify-crash/README.md) |
 | iOS shows purple then black because WebContent is terminated during boot | [ios-webcontent-boot](ios-webcontent-boot/README.md) |
+| iOS launch shows "Le démarrage continue…" for 10-20 s when the server does not answer | [ios-boot-server-await](ios-boot-server-await/README.md) |
+| iOS launch keeps "Le démarrage continue…" over a Dashboard entry or a late Main Toolbar mount | [ios-boot-presentation-contract](ios-boot-presentation-contract/README.md) |
 | A long press in a panel input box closes the field, the keyboard and the layout on finger lift | [ios-panel-input-fast-tap-blur](ios-panel-input-fast-tap-blur/README.md) |
 
 ## Maintenance rules

@@ -52,6 +52,7 @@ window.eveToolBase = {
 
 const {
     openWorkspaceDashboardWithProjectBootstrap,
+    showPreparedProject,
     toggleWorkspaceDashboardAndMainMenu
 } = await import('../../eVe/intuition/tools/user_workspace_surface_runtime.js');
 
@@ -140,5 +141,22 @@ releaseFirstBootstrap();
 await Promise.all([firstBootstrap, duplicateBootstrap]);
 assert.equal(firstBootstrapCalls, 1);
 assert.equal(duplicateBootstrapCalls, 0, 'auth and boot must share one in-flight project bootstrap');
+
+// A session resume reveals the saved project without any user decision, so its
+// reveal must project canonical local state. A balanced load awaited the
+// authoritative read before this reveal could publish readiness, which is how a
+// slow or unreachable server held the whole boot on the native launch surface.
+const revealCanvas = document.getElementById('eve_surface_project');
+revealCanvas.remove();
+const reveal = await showPreparedProject('project_ready');
+assert.equal(reveal.ok, true);
+const revealLoads = calls.filter((entry) => entry.name === 'project_load');
+assert.equal(revealLoads.length, 1, 'a missing resident surface must be reprojected by the reveal');
+assert.equal(revealLoads[0].projectId, 'project_ready');
+assert.equal(revealLoads[0].options.staleFirst, true,
+    'a resumed session owns no user decision: its reveal must project canonical local state');
+assert.equal(revealLoads[0].options.force, true);
+assert.equal(revealLoads[0].options.forceProjectSurface, true);
+assert.equal(revealLoads[0].options.reason, 'workspace_surface');
 
 console.log('workspace_dashboard_project_bootstrap_contract.test: PASS');

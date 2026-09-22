@@ -44,7 +44,7 @@ test('Dashboard project activation delegates workspace and menu ownership once',
     assert.equal(result.ok, true);
     assert.equal(result.project, project);
     assert.deepEqual(calls, [
-        { project, options: { force: true, staleFirst: false } }
+        { project, options: { force: true, staleFirst: true } }
     ]);
 });
 
@@ -210,7 +210,7 @@ test('Project workspace activation restores the project surface and main menu', 
         id: 'project_alpha',
         name: 'Project Alpha',
         owner_id: 'user_alpha'
-    }, { force: true, staleFirst: false });
+    }, { force: true, staleFirst: true });
 
     const layer = document.getElementById('project_view_project_alpha');
     const canvas = document.getElementById('eve_surface_project');
@@ -233,7 +233,7 @@ test('Project workspace activation restores the project surface and main menu', 
         calls.find((entry) => entry.name === 'loadProjectAtomes')?.options,
         {
             force: true,
-            staleFirst: false,
+            staleFirst: true,
             forceProjectSurface: true,
             viewModePrepared: true,
             reason: 'workspace_activation'
@@ -462,7 +462,7 @@ test('Project workspace activation from dashboard claims the project surface ins
         id: 'project_beta',
         name: 'Project Beta',
         owner_id: 'user_beta'
-    }, { force: true, staleFirst: false });
+    }, { force: true, staleFirst: true });
 
     const projectLayer = document.getElementById('project_view_project_beta');
     const canvas = document.getElementById('eve_surface_project');
@@ -480,7 +480,7 @@ test('Project workspace activation from dashboard claims the project surface ins
         calls.find((entry) => entry.name === 'loadProjectAtomes')?.options,
         {
             force: true,
-            staleFirst: false,
+            staleFirst: true,
             forceProjectSurface: true,
             viewModePrepared: true,
             reason: 'workspace_activation'

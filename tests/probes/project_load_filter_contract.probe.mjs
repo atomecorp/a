@@ -202,4 +202,88 @@ assert.equal(
     'the skipped late-local render must remain observable'
 );
 
+// Offline boot, worst case: the canonical local snapshot takes longer than the
+// 90 ms fast-path budget AND the authoritative read never answers. The budget
+// used to turn that slow local read into a balanced load, so the boot awaited a
+// server that never replied — the 10-20 s "démarrage continue" stall.
+const slowLocalRenders = [];
+let stalledRemoteListCount = 0;
+let releaseStalledRemote = null;
+window.Atome = {
+    listStateCurrent: () => new Promise((resolve) => setTimeout(() => resolve([{
+        id: 'slow_local_atom',
+        atome_id: 'slow_local_atom',
+        type: 'shape',
+        project_id: projectId,
+        owner_id: userId,
+        properties: { kind: 'shape', width: 20, height: 20 }
+    }]), 150))
+};
+const slowRuntime = createToolGenesisProjectLoadRuntime({
+    clearProjectLoadInFlightIfCurrent: () => {},
+    dispatchProjectRenderDone: () => {},
+    emitPerfEvent: () => {},
+    ensureProjectLayer: () => view,
+    fetchSharedOverrideAtomes: async () => [],
+    filterAtomesByOwner: (records) => records,
+    getAdoleApi: () => ({ atomes: { list: () => {
+        stalledRemoteListCount += 1;
+        return new Promise((resolve) => {
+            releaseStalledRemote = () => resolve({ atomes: [{
+                id: 'stalled_remote_atom',
+                atome_id: 'stalled_remote_atom',
+                type: 'shape',
+                project_id: projectId,
+                owner_id: userId,
+                properties: { kind: 'shape', width: 10, height: 10 }
+            }] });
+        });
+    } } }),
+    getProjectLoadInFlight: () => null,
+    getRecentProjectCache: () => null,
+    getSharedProjectOverride: () => null,
+    isAnonymousWorkspace: () => true,
+    isRecordDeleted: () => false,
+    isRenderableAtome: () => true,
+    markProjectLoadCompleted: () => {},
+    perfElapsedMs: () => 1,
+    perfNowMs: () => 0,
+    pickAuthoritativeAtomes: (result) => result?.atomes || [],
+    rememberProjectAtomes: () => {},
+    renderProjectScene: async ({ records }) => {
+        slowLocalRenders.push(records.map((record) => record.id || record.atome_id));
+        return { ok: true };
+    },
+    resolveAtomeProperties: (record) => record?.properties || {},
+    resolveCurrentUserId: () => userId,
+    resolveToolShortcutRole: () => false,
+    setProjectLoadInFlight: () => {},
+    prefetchViewMode: () => Promise.resolve('list'),
+    restoreViewModeAfterLoad: () => {}
+});
+
+window.__eveBootPresentationReady = false;
+const slowBootOutcome = await Promise.race([
+    slowRuntime.loadProjectAtomes(projectId, { force: true, staleFirst: true }).then((records) => ({ records })),
+    new Promise((resolve) => setTimeout(() => resolve('still_waiting_for_the_server'), 1200))
+]);
+assert.notEqual(slowBootOutcome, 'still_waiting_for_the_server',
+    'a stale-first boot must project the local snapshot even when the local read outruns the fast-path budget and the server never answers');
+assert.deepEqual(slowBootOutcome.records.map((record) => record.id), ['slow_local_atom']);
+assert.deepEqual(slowLocalRenders, [['slow_local_atom']],
+    'the pre-presentation projection must stay the canonical local scene');
+assert.equal(stalledRemoteListCount, 0,
+    'stale-first boot must not start the authoritative read before presentation, budget or not');
+
+window.__eveBootPresentationReady = true;
+window.dispatchEvent(new window.CustomEvent('eve:boot-presentation-ready'));
+// The authoritative refresh re-reads the local snapshot first, so it only
+// reaches the network after its own fast-path budget has elapsed.
+await new Promise((resolve) => setTimeout(resolve, 220));
+assert.equal(stalledRemoteListCount, 1, 'presentation must start exactly one authoritative refresh');
+releaseStalledRemote();
+await new Promise((resolve) => setTimeout(resolve, 40));
+assert.deepEqual(slowLocalRenders.at(-1), ['stalled_remote_atom'],
+    'the deferred authoritative refresh must still project the server snapshot once it answers');
+
 console.log('project_load_filter_contract.test: PASS');
