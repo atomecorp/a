@@ -98,7 +98,6 @@
   "tests/eve/dashboard_project_change_events.test.mjs",
   "tests/eve/dashboard_records.test.mjs",
   "tests/eve/dashboard_render_performance_contract.test.mjs",
-  "tests/eve/dashboard_settings.test.mjs",
   "tests/eve/dashboard_workspace_mode_contract.test.mjs",
   "tests/eve/debug_runtime_webgpu_probe.test.mjs",
   "tests/eve/delete_selection_hierarchy.test.mjs",

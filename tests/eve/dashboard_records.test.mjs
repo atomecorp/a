@@ -75,6 +75,15 @@ describe('Dashboard WebGPU records', () => {
         expect(records.some((entry) => /project_veil|bottom_shadow|header_side_shadow|focus_spread|create_bg|__eve_dashboard_lane_|__eve_dashboard_table/.test(entry.id))).toBe(false);
     });
 
+    it('paints no settings header and keeps the rail to the category rows', () => {
+        const target = layout();
+        const records = buildDashboardRecords({ layout: target, tokens });
+        expect(target.settings).toBeUndefined();
+        expect(record(records, 'header_bg_settings')).toBeUndefined();
+        expect(records.some((entry) => entry.id.includes('_settings'))).toBe(false);
+        expect(record(records, 'header_bg_projects')).toBeDefined();
+    });
+
     it('uses the styled frozen-glass material on every content card without double paint', () => {
         const records = buildDashboardRecords({ layout: layout({ activeCategoryId: 'projects' }), tokens });
         const header = record(records, 'header_bg_projects');

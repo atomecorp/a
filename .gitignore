@@ -98,7 +98,6 @@ tests/eve/*
 !tests/eve/create_tools_modes_contract.test.mjs
 !tests/eve/dashboard_mockup_design_contract.test.mjs
 !tests/eve/dashboard_focus_color_contract.test.mjs
-!tests/eve/dashboard_settings.test.mjs
 !tests/eve/dashboard_preferences_contract.test.mjs
 !tests/eve/midi_binding_panel_contract.test.mjs
 !tests/eve/midi_binding_service.test.mjs

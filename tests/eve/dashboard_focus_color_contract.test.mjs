@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createDashboardLayout } from '../../eVe/domains/dashboard/dashboard_layout.js';
+import { createDashboardLayout, hitTestDashboardLayout } from '../../eVe/domains/dashboard/dashboard_layout.js';
 import { itemsForRender } from '../../eVe/domains/dashboard/dashboard_environment.js';
 import { buildDashboardRecords, dashboardRecordId } from '../../eVe/domains/dashboard/dashboard_records.js';
 import { mergeDashboardTokens } from '../../eVe/domains/dashboard/dashboard_tokens.js';
@@ -56,6 +56,22 @@ describe('Dashboard fixed grid and visual focus', () => {
         expect(left.header_rect.x).toBeLessThan(left.visible_item_rects[0].card_rect.x);
         expect(right.visible_item_rects[0].card_rect.x).toBe(0);
         expect(left.visible_item_rects[0].card_rect.x + left.visible_item_rects[0].card_rect.width).toBe(760);
+    });
+
+    it('reserves one rail header per visible category and no settings slot', () => {
+        const layout = layoutFor();
+        expect(layout.settings).toBeUndefined();
+        expect(layout.projection_lanes).toHaveLength(categories.length);
+        expect(new Set(layout.projection_lanes.map((lane) => lane.header_rect.y)).size).toBe(categories.length);
+        expect(layout.vertical_scroll_max).toBe(0);
+        for (const lane of layout.projection_lanes) {
+            const hit = hitTestDashboardLayout(layout, {
+                x: lane.header_rect.x + lane.header_rect.width / 2,
+                y: lane.header_rect.y + lane.header_rect.height / 2
+            });
+            expect(hit.kind).toBe('header');
+            expect(hit.category.id).toBe(lane.category.id);
+        }
     });
 
     it('renders only an active-header emphasis without lane/table/focus-spread records', () => {

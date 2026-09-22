@@ -1,5 +1,7 @@
 # Atome / eVe API Map
 
+2026-09-22 Dashboard rail Settings removal: createDashboardActionRuntime exposes activateItemAction and openProjectItem only — openSettings, the openHomePanel injection and the internal home-module bridge are removed — and hitTestDashboardLayout has no settings kind. The Home panel API is unchanged and reachable from the main-toolbar Home tool. Evidence: eVe/documentations/FRAMEWORK_STATE.md.
+
 2026-09-21 Mystic gesture reliability: Mystic opening revision helpers are internal only. closeMysticMenu invalidates pending access reads. updateHover cannot activate after initial release; explicit BevyUI activation remains unchanged. Removed the unused internal capturePointerSession API and blanket assistant canvas blocker. Evidence: eVe/documentations/MYSTIC_GESTURE_VALIDATION_2026-09-21.md.
 
 2026-09-21 Mystic navigation follow-up: Internal Mystic releaseAt receives the captured initial gesture once; old tree handlers are generation-bound. Hover/release selects the normal canonical command action. tool_runtime_dispatch.js normalizes dashboard to desktop and surface_item to project before existing capability checks. Finder uses inlineSearchOpenWithPanel; Settings uses the existing Home panel. No public API added. Evidence: eVe/documentations/MYSTIC_NAVIGATION_VALIDATION_2026-09-21.md.
