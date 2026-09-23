@@ -97,7 +97,7 @@ test('Home is the card of the current user with a collapsed Settings accordion b
     assert.equal(typeof photo.on.activate, 'function');
     assert.equal(typeof photo.on.drop, 'function');
     assert.ok(initialProjection.some((entry) => entry.id === 'home_custom_fields_add'), 'the card carries its free fields');
-    assert.ok(initialProjection.some((entry) => entry.id === 'home_display_source'));
+    assert.equal(initialProjection.some((entry) => entry.id === 'home_display_source'), false, 'Display lives in the privacy rules');
     const settings = flatten(buildHomeContent({ ...state, expanded: 'settings' }, { emit: () => {}, bodyWidth: 452, editing }))
         .find((entry) => entry.id === 'home_settings_content');
     assert.deepEqual(settings.children.map((entry) => entry.id), [
@@ -186,7 +186,9 @@ test('profile reconstruction never derives the technical username from display i
 });
 
 test('Home replaces the access selector with an inline destructive error when a public name is required', () => {
+    // Display and Access live in Settings > Privacy rules.
     const state = baseState({
+        expanded: 'settings',
         profile: normalizeHomeProfile({ access: 'private' }, { preserveEmptyItems: true }),
         accessError: 'Renseignez un nom avant de rendre ce profil public.'
     });

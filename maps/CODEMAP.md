@@ -2733,7 +2733,7 @@ This section supersedes earlier Dashboard lifecycle descriptions in this map. `e
 # Shared Home/current-Contact profile implementation — 2026-08-30
 
 - `eVe/domains/user/profile_api.js` no longer exposes an identity-only mutation (2026-09-22): the current user's card is edited only in Home.
-- `bevy_panel_contact_runtime.js` unfolds the current user's row with their own card (identity, bio, profile) through `bevy_panel_home_card.js`; their settings stay in Home.
+- `bevy_panel_contact_runtime.js` unfolds the current user's row with the Home card itself (`mountHomeCard` / `buildHomeCard` / `handleHomeCardEvent` from `bevy_panel_home_runtime.js`): same state, same sections, Réglages and session action included.
 - `bevy_panel_home_state.js` contains the Home panel's state construction and read projection extracted from the runtime; it introduces no persistence path.
 # Directory identity and Login reentry repair — 2026-08-30
 
@@ -2863,10 +2863,10 @@ Execution acceptance: the browser text-placeholder fill survived reload, then My
 
 # Home as the single person card — 2026-09-22
 
-- `eVe/intuition/runtime/bevy_panel/bevy_panel_home_*` owns the one card of a person. `bevy_panel_home_view.js` composes Identity and photo, Bio and biometrics, Profile and — in the Home panel only — a collapsed `settings` accordion; `bevy_panel_home_settings_view.js` owns the five settings sub-sections; `bevy_panel_home_privacy_view.js` the « Shared on my card » checklist and privacy-rule targets; `bevy_panel_home_identity_view.js` identity, photo and free `custom_fields`; `bevy_panel_home_nodes.js` the shared field/row/sub-accordion builders.
+- `eVe/intuition/runtime/bevy_panel/bevy_panel_home_*` owns the one card of a person. `bevy_panel_home_view.js` composes Identity and photo, Bio and biometrics, Profile and — in the Home panel only — a collapsed `settings` accordion; `bevy_panel_home_settings_view.js` owns the five settings sub-sections; `bevy_panel_home_privacy_view.js` the Display and Access choices, the « Shared on my card » checklist and the privacy-rule targets; `bevy_panel_home_identity_view.js` identity, photo and free `custom_fields`; `bevy_panel_home_nodes.js` the shared field/row/sub-accordion builders.
 - `bevy_panel_home_profile_editor.js` is the editing core shared by the Home panel and the unfolded card (path access, stable row keys, serialised save, list rows, photo); each owner only chooses where the card is saved.
 - Home runtime split: `bevy_panel_home_runtime.js` (the current user's panel), `bevy_panel_home_sections.js`, `bevy_panel_home_preferences.js`, `bevy_panel_home_security.js`. `bevy_panel_home_card.js` is the card unfolded in the Contact list (`createHomeCardRuntime`), with `bevy_panel_home_subject.js` reading and saving the person behind it.
 - `bevy_panel_contact_runtime.js` / `bevy_panel_contact_view.js`: the address book (list, filter, selection rail, import, add, delete) whose rows are accordions; the open row's body is the Home card.
 - Removed owners: `eVe/intuition/liquid/`, `atome_contextual_rail_liquid_surface.js`, `eVe/intuition/menu/navigation_taxonomy.js` (replaced by `menu_work_context.js`).
 - `atome/src/shared/profile_sharing.js` owns the shared-card field contract for both `bevy_panel_home_actions.js` and `server/directoryPublicService.js` (column `directory_public_profiles.card_json`).
-- Probes: `temp/home_unification_probe.mjs`, `temp/home_self_card_probe.mjs`, `temp/home_i18n_literal_probe.mjs`, `tests/server/directory_public.probe.mjs`.
+- Probes: `temp/home_unification_probe.mjs`, `temp/own_card_parity_probe.mjs`, `temp/home_i18n_literal_probe.mjs`, `tests/server/directory_public.probe.mjs`.
