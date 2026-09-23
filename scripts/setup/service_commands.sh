@@ -24,6 +24,14 @@ print_usage() {
     echo "  update                Update code + reinstall deps + restart"
     echo "  check                 Run system diagnostics (Nginx, SSL, ports)"
     echo ""
+    echo "Android Options:"
+    echo "  apk                   Build an Android APK/AAB (default: debug test APK)"
+    echo "      apk --dev         Run the app on a connected device with hot reload"
+    echo "      apk --prod        Build a signed release APK"
+    echo "      apk --aab         Emit an Android App Bundle instead of an APK"
+    echo "      apk --doctor      Report the Android toolchain and stop"
+    echo "      apk --help        Show all Android build options"
+    echo ""
     echo "  -h, --help            Show this help message"
     echo ""
     echo "Examples:"
@@ -36,6 +44,8 @@ print_usage() {
     echo "  $ENTRYPOINT_DISPLAY --prod            # Build Tauri production bundle"
     echo "  $ENTRYPOINT_DISPLAY --tauri --prod     # Build + launch Tauri production bundle"
     echo "  $ENTRYPOINT_DISPLAY --tauri-prod       # Same as above"
+    echo "  $ENTRYPOINT_DISPLAY apk               # Android: debug APK"
+    echo "  $ENTRYPOINT_DISPLAY apk --prod        # Android: signed release APK"
     echo ""
 }
 detect_service_system() {
@@ -383,6 +393,17 @@ dispatch_service_command_if_requested() {
         check)
             service_check
             exit 0
+            ;;
+        apk)
+            shift
+            android_apk_script="$SCRIPTS_DIR/android/apk.sh"
+            if [[ ! -f "$android_apk_script" ]]; then
+                echo "ERROR: Missing Android build script: $android_apk_script"
+                exit 1
+            fi
+            chmod +x "$android_apk_script"
+            "$android_apk_script" "$@"
+            exit $?
             ;;
     esac
 }

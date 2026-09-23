@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The application runs its own Axum server on the loopback interface and the
+  WebView is navigated to http://127.0.0.1:3000/. Release builds disable
+  cleartext traffic globally, so loopback is re-enabled explicitly here and
+  nothing else is: every other origin keeps the platform default.
+-->
+<network-security-config>
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">127.0.0.1</domain>
+        <domain includeSubdomains="false">localhost</domain>
+    </domain-config>
+</network-security-config>

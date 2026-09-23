@@ -1,3 +1,4 @@
+mod android_assets;
 mod audio_engine;
 mod bevy_backend;
 mod dev_logging;
@@ -170,6 +171,7 @@ fn load_env_from_candidates() {
     println!("[tauri] No .env file found in cwd/exe path hierarchy");
 }
 
+#[cfg(not(target_os = "android"))]
 fn live_repo_src_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .parent()
@@ -223,6 +225,19 @@ pub fn run() {
             println!("[tauri] fs plugin enabled");
             println!("[tauri] stt plugin enabled");
             let path_resolver = app.path();
+
+            // Android exposes no file system path for bundled resources:
+            // `resource_dir()` returns the URI "asset://localhost/" there. The staged
+            // web root is therefore written to the application data directory before
+            // the Axum server starts, and every consumer below works unchanged.
+            #[cfg(target_os = "android")]
+            let static_dir: PathBuf = match android_assets::materialize_project_root(app.handle())
+            {
+                Ok(dir) => dir,
+                Err(err) => panic!("Android assets could not be materialized: {err}"),
+            };
+
+            #[cfg(not(target_os = "android"))]
             let static_dir: PathBuf = if cfg!(debug_assertions) {
                 live_repo_src_dir()
             } else {

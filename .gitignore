@@ -257,6 +257,7 @@ server/data/*.json
 # Process files
 .watcher.pid
 platforms/desktop-tauri/Cargo.lock
+platforms/desktop-tauri/gen/android-webroot/
 platforms/desktop-tauri/gen/schemas/acl-manifests.json
 platforms/desktop-tauri/gen/schemas/desktop-schema.json
 atome/src/assets/videos/avengers.mp4

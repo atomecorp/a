@@ -1,0 +1,14 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "build": {
+    "frontendDist": "./gen/android-webroot"
+  },
+  "bundle": {
+    "resources": [],
+    "android": {
+      "minSdkVersion": 26,
+      "versionCode": 1,
+      "debugApplicationIdSuffix": ".debug"
+    }
+  }
+}

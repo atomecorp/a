@@ -111,6 +111,28 @@ node scripts need no registration.
 
 The Bevy integration is documented in `atome/documentations/bevy_integration.md`.
 
+### 8. Android APK / AAB
+
+```bash
+./run.sh apk                 # debug APK for arm64 devices (test lane)
+./run.sh apk --install       # same, then "adb install -r" on the connected device
+./run.sh apk --prod          # minified release APK signed with the local keystore
+./run.sh apk --prod --aab    # signed Play Store bundle
+./run.sh apk --doctor        # report the JDK/SDK/NDK/Rust-target chain, build nothing
+```
+
+`scripts/android/apk.sh` owns the complete lane. It resolves the JDK, the Android SDK
+packages, the NDK, the Rust Android targets and the Tauri CLI idempotently (already
+present and current means untouched, missing or older means installed, otherwise a
+named error), stages `platforms/desktop-tauri/gen/android-webroot`, runs the single
+`tauri android build` allowed in this repository, and verifies the produced artifact
+with `aapt2 dump badging` plus `apksigner verify`. `--dry-run` prints the exact plan
+without touching anything, and `--isolated-home <dir>` keeps the cargo, Gradle and
+Android user caches under `<dir>` instead of `$HOME` for hermetic or CI builds. The
+release keystore lives outside the checkout in `~/.atome/android/`, and
+`platforms/desktop-tauri/gen/android/` is generated once and kept in the repository so
+the signing configuration and manifest customizations survive.
+
 ## Upload workflow
 
 1. `DragDrop.createDropZone` in `src/application/aBox/index.js` collects dropped files.
@@ -174,7 +196,7 @@ The generated JS is still plain ES modules and ends up calling helpers like `cre
 
 - The root `CMakeLists.txt` builds shared targets: `dsp_core`, `ring_buffer`, `disk_reader`.
 - `platforms/web/audio-wasm` exposes the browser audio engine source, and `platforms/ios/atome-auv3` renders the Squirrel UI via WKWebView while routing audio through the Swift native AUv3 engine.
-- `scripts/run_fastify.sh` and `scripts/run_tauri.sh` are development launchers; `auv3.sh` deploys a debug AUv3 build to a connected device and `build_PWA_app.sh` packages the PWA. Release artifacts come from `./run.sh --tauri-prod` (macOS bundle) and `scripts/XCode_testflight_generator` (iOS/AUv3 upload).
+- `scripts/run_fastify.sh` and `scripts/run_tauri.sh` are development launchers; `auv3.sh` deploys a debug AUv3 build to a connected device and `build_PWA_app.sh` packages the PWA. Release artifacts come from `./run.sh --tauri-prod` (macOS bundle), `./run.sh apk` (Android APK/AAB, see below) and `scripts/XCode_testflight_generator` (iOS/AUv3 upload).
 - Historical incident records are retained under `atome/documentations/archive/problem-solving/`; they are not current architecture contracts.
 
 ## Documentation & references
