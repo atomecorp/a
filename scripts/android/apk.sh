@@ -52,6 +52,11 @@ readonly EMULATOR_DEFAULT_AVD="atome-api36"
 readonly EMULATOR_DEFAULT_API="36"
 readonly EMULATOR_BOOT_TIMEOUT=420
 readonly EMULATOR_DEFAULT_LOGCAT_SECONDS=25
+# The capture follows the application instead of trusting one fixed slice: the
+# Android start spends ~17 s materializing the embedded assets before the app is
+# on screen, so a crash that landed after the 25 s window was invisible in the
+# reports. The ceiling bounds the wait when the app survives it.
+readonly EMULATOR_DEFAULT_LOGCAT_MAX_SECONDS=120
 readonly EMULATOR_DEFAULT_PORT=5554
 # A debug APK carries a multi-hundred-megabyte unoptimized native library, so
 # the AVD asks for a phone-sized RAM allocation instead of the 2 GB profile
@@ -69,6 +74,19 @@ readonly EMULATOR_MEMORY_STEP=512
 readonly EMULATOR_GPU_MODES="auto host lavapipe swiftshader swangle"
 readonly EMULATOR_DEFAULT_GPU_MODE="host"
 readonly EMULATOR_HEADLESS_GPU_MODE="swiftshader"
+# Chromium reads its command line from this file when a WebView process starts,
+# and only for a debuggable application — which is what this lane installs. It
+# stays empty by default: the 20:07 run handed the WebView
+# `--enable-unsafe-webgpu` and the WebGPU adapter was still absent ("No available
+# adapters." 2 min 35 s after the launch, against 4 s in the run without it),
+# while the guest itself froze before the capture ended. A default must not cost
+# the measurement it is supposed to improve, so the attempt is now explicit.
+readonly EMULATOR_WEBVIEW_FLAGS_FILE="/data/local/tmp/webview-command-line"
+readonly EMULATOR_DEFAULT_WEBVIEW_FLAGS=""
+# A guest that froze stops writing to logcat; anything it logged afterwards is
+# not a verdict about the application. 30 s is well past the cadence of the
+# background chatter this capture always carries.
+readonly EMULATOR_LOG_STALL_SECONDS=30
 
 # Toolchain floor. Versions are pinned so the build is reproducible; anything
 # already installed at or above the floor is reused as-is.
@@ -131,12 +149,16 @@ EMULATOR_SDK_ROOT=""
 EMULATOR_STATE_DIR=""
 EMULATOR_PORT="$EMULATOR_DEFAULT_PORT"
 EMULATOR_LOGCAT_SECONDS="$EMULATOR_DEFAULT_LOGCAT_SECONDS"
+EMULATOR_LOGCAT_MAX_SECONDS="$EMULATOR_DEFAULT_LOGCAT_MAX_SECONDS"
 # Resolved from the host unless --emulator-memory overrides it.
 EMULATOR_MEMORY=""
 EMULATOR_GPU_MODE=""
+# Empty selects the default flags above; "none" writes no flags file at all.
+EMULATOR_WEBVIEW_FLAGS=""
 EMULATOR_SERIAL=""
 EMULATOR_LOG_FILE=""
 EMULATOR_CRASH_FILE=""
+EMULATOR_EXIT_FILE=""
 EMULATOR_STAMP=""
 EMULATOR_LOG_PID=""
 AVDMANAGER=""
@@ -177,6 +199,15 @@ Options:
       --emulator-memory <mb>       Guest RAM in MB (default: resolved from the host)
       --emulator-gpu <mode>        auto | host | lavapipe | swiftshader | swangle
                                    (default: host, or swiftshader with --emulator-headless)
+      --emulator-webview-flags <flags|none>
+                                   Chromium command line written to the WebView
+                                   before the launch. Nothing is written by
+                                   default, because a flag that changes nothing
+                                   and freezes the guest must stay a deliberate
+                                   choice; "none" says the same thing out loud.
+                                   This is where a WebGPU attempt belongs:
+                                   --enable-unsafe-webgpu, or
+                                   "--enable-unsafe-webgpu --use-webgpu-adapter=swiftshader"
       --emulator-wipe   Recreate the AVD from scratch before booting it and stop
                         a running instance, so the recreated AVD is the one used
       --emulator-avd <name>        AVD name (default: atome-api36)
@@ -186,7 +217,13 @@ Options:
       --emulator-sdk-root <dir>    Where emulator packages are installed
       --emulator-state-dir <dir>   Where the AVD and the emulator state live
       --emulator-port <port>       Emulator console port (default: 5554)
-      --logcat-seconds <n>         Logcat capture length after launch (default: 25)
+      --logcat-seconds <n>         Minimum logcat capture length after launch
+                                   (default: 25). The capture keeps following the
+                                   application past that window and stops as soon
+                                   as it disappears, so a late crash is recorded.
+      --follow-seconds <n>         Ceiling of that follow-up capture, in seconds
+                                   (default: 120); only reached while the app
+                                   stays alive.
       --doctor          Report the Android toolchain and stop; builds nothing
       --force-deps      Re-verify and update the toolchain before building
       --no-install-deps Never install or update a missing dependency; fail instead
@@ -252,12 +289,18 @@ parse_args() {
       --logcat-seconds)
         [[ $# -ge 2 ]] || fail "--logcat-seconds requires a value"
         EMULATOR_LOGCAT_SECONDS="$2"; shift 2 ;;
+      --follow-seconds)
+        [[ $# -ge 2 ]] || fail "--follow-seconds requires a value"
+        EMULATOR_LOGCAT_MAX_SECONDS="$2"; shift 2 ;;
       --emulator-memory)
         [[ $# -ge 2 ]] || fail "--emulator-memory requires a value"
         EMULATOR_MEMORY="$2"; shift 2 ;;
       --emulator-gpu)
         [[ $# -ge 2 ]] || fail "--emulator-gpu requires a value"
         EMULATOR_GPU_MODE="$2"; shift 2 ;;
+      --emulator-webview-flags)
+        [[ $# -ge 2 ]] || fail "--emulator-webview-flags requires a value"
+        EMULATOR_WEBVIEW_FLAGS="$2"; shift 2 ;;
       --doctor)         DO_DOCTOR=1; shift ;;
       --dry-run)        DO_DRY_RUN=1; shift ;;
       --force-deps)     FORCE_DEPS=1; shift ;;
@@ -957,6 +1000,48 @@ verify_native_runtime() {
   done
 }
 
+# A library that pulled in the NDK's *static* libc (`libc.a`) dies on its first
+# `getauxval` call: the private libc copy never receives the auxv the dynamic
+# linker fills in, so it dereferences a null pointer. Measured here on
+# 2026-09-23 as SIGSEGV at `getauxval+28` called from `init_have_lse_atomics`,
+# two seconds after a launch that never showed a frame. The dynamic libc is the
+# invariant - every Rust cdylib on Android declares `libc.so` - and what breaks
+# it is the link search path (see the Android branch of
+# platforms/desktop-tauri/build.rs), which is why this runs on the build output:
+# a missing DT_NEEDED cannot be repaired at packaging time.
+ndk_readelf_path() {
+  local prebuilt
+  prebuilt="$(ls -d "$ANDROID_NDK_RESOLVED/toolchains/llvm/prebuilt"/* 2>/dev/null | head -1)"
+  [[ -n "$prebuilt" && -x "$prebuilt/bin/llvm-readelf" ]] || return 1
+  printf '%s\n' "$prebuilt/bin/llvm-readelf"
+}
+
+verify_android_link() {
+  step "Android native link"
+  local readelf abi triple so needed
+  readelf="$(ndk_readelf_path || true)"
+  if [[ -z "$readelf" ]]; then
+    warn "llvm-readelf is missing under $ANDROID_NDK_RESOLVED; the static-libc check is skipped"
+    return 0
+  fi
+
+  while IFS= read -r abi; do
+    triple="$(rust_target_for_abi "$abi")"
+    so="$TAURI_DIR/target/$triple/$(build_type_dir_name)/libsquirrel_lib.so"
+    if [[ "$DO_DRY_RUN" -eq 1 ]]; then
+      printf '[apk] dry-run> %s -d %s (expect libc.so and libc++_shared.so)\n' "$readelf" "$so"
+      continue
+    fi
+    [[ -f "$so" ]] || fail "the build did not produce $so"
+    needed="$("$readelf" -d "$so" 2>/dev/null | sed -n 's/.*Shared library: \[\(.*\)\]/\1/p' || true)"
+    grep -qx "libc.so" <<<"$needed" \
+      || fail "$(basename "$so") does not link the dynamic libc (libc.so): the link search path is capturing the NDK's static libc.a, and the app dies with SIGSEGV in getauxval before its first frame. Check the Android branch of platforms/desktop-tauri/build.rs and rebuild"
+    grep -qx "libc++_shared.so" <<<"$needed" \
+      || fail "$(basename "$so") does not declare the C++ runtime (libc++_shared.so); the APK ships without it and the launch fails with dlopen failed: cannot locate symbol \"__cxa_pure_virtual\""
+    ok "$abi declares libc.so and libc++_shared.so"
+  done < <(selected_abis)
+}
+
 # The Tauri CLI reports every artifact it just assembled:
 #
 #     Finished 1 APK at:
@@ -1220,6 +1305,56 @@ emulator_resolved_gpu_mode() {
   fi
 }
 
+# An empty or "none" answer means "write nothing": the default is to leave the
+# WebView exactly as the system ships it, and a caller who wants to try a flag
+# names it explicitly.
+emulator_resolved_webview_flags() {
+  if [[ -z "$EMULATOR_WEBVIEW_FLAGS" ]]; then
+    printf '%s\n' "$EMULATOR_DEFAULT_WEBVIEW_FLAGS"
+  elif [[ "$EMULATOR_WEBVIEW_FLAGS" == "none" ]]; then
+    printf '\n'
+  else
+    printf '%s\n' "$EMULATOR_WEBVIEW_FLAGS"
+  fi
+}
+
+# The banner and the verdicts need one word for "no flags", not an empty field.
+emulator_webview_flags_label() {
+  local flags
+  flags="$(emulator_resolved_webview_flags)"
+  printf '%s\n' "${flags:-none}"
+}
+
+# The WebView reads that file once, when the application process starts, so it is
+# written after the guest has booted and before `am start`; the install in
+# between already stopped the previous process. A file that cannot be written is
+# reported instead of aborting the lane: the application still starts, it just
+# starts without the flags, and the verdict below then says so.
+emulator_install_webview_flags() {
+  local flags read_back
+  flags="$(emulator_resolved_webview_flags)"
+  if [[ -z "$flags" ]]; then
+    skip "WebView command line: none (--emulator-webview-flags <flags> tries one)"
+    return 0
+  fi
+  if [[ "$DO_DRY_RUN" -eq 1 ]]; then
+    printf '[apk] dry-run> adb -s %s shell "cat > %s && chmod 644 %s" <<< %q\n' \
+      "$EMULATOR_SERIAL" "$EMULATOR_WEBVIEW_FLAGS_FILE" "$EMULATOR_WEBVIEW_FLAGS_FILE" "$flags"
+    return 0
+  fi
+  printf '%s\n' "$flags" \
+    | adb -s "$EMULATOR_SERIAL" shell "cat > $EMULATOR_WEBVIEW_FLAGS_FILE && chmod 644 $EMULATOR_WEBVIEW_FLAGS_FILE" \
+      >/dev/null 2>&1 || true
+  # `pipefail` is active: a refused read-back must reach the warning below, never
+  # end the lane on the way there.
+  read_back="$(adb -s "$EMULATOR_SERIAL" shell cat "$EMULATOR_WEBVIEW_FLAGS_FILE" 2>/dev/null | tr -d '\r' | head -1 || true)"
+  if [[ "$read_back" == "$flags" ]]; then
+    ok "WebView command line: $flags"
+  else
+    warn "the WebView command line could not be installed at $EMULATOR_WEBVIEW_FLAGS_FILE (read back: ${read_back:-empty}); the application will start without it"
+  fi
+}
+
 # Single owner of the emulator command line, one argument per line. The line is
 # recorded so the next run can tell whether the instance already running was
 # booted with these settings: GPU and RAM only change on a fresh boot.
@@ -1252,10 +1387,29 @@ emulator_instance_pid() {
   [[ -f "$pid_file" ]] || return 1
   pid="$(tr -dc '0-9' <"$pid_file")"
   [[ -n "$pid" ]] || return 1
+  # Liveness first: a lock file or a pid file left behind by an instance that
+  # already exited must never be mistaken for a running emulator.
   kill -0 "$pid" 2>/dev/null || return 1
+  # The AVD lock is written by whichever instance is holding the device, and the
+  # emulator removes it on exit. It is the identity source that keeps working
+  # where `ps` is unavailable.
+  if emulator_pid_owns_avd "$pid"; then
+    printf '%s\n' "$pid"
+    return 0
+  fi
   command="$(ps -p "$pid" -o command= 2>/dev/null || true)"
   [[ "$command" == *emulator* ]] || return 1
   printf '%s\n' "$pid"
+}
+
+# `hardware-qemu.ini.lock` holds the pid of the instance holding the AVD; the
+# emulator writes it at boot and deletes it on exit, so its content is the
+# second, `ps`-free proof that the recorded pid is really the emulator.
+emulator_pid_owns_avd() {
+  local pid="$1" lock
+  lock="$(emulator_state_dir)/avd/$EMULATOR_AVD_NAME.avd/hardware-qemu.ini.lock"
+  [[ -f "$lock" ]] || return 1
+  [[ "$(tr -dc '0-9' <"$lock")" == "$pid" ]]
 }
 
 # Console shutdown first because that is the emulator's own clean path; a frozen
@@ -1381,8 +1535,19 @@ ensure_emulator_avd() {
   ok "AVD $name created under $state"
 }
 
+# A launch that cannot succeed - a second instance on the same port, a broken
+# AVD - is written to the log within seconds. Reporting it there keeps the lane
+# from spending the whole boot timeout on a process that already gave up.
+emulator_assert_boot_progress() {
+  local log="$1" line
+  [[ -f "$log" ]] || return 0
+  line="$(grep -m1 -E "^(FATAL|PANIC)|Address already in use|Another emulator instance" "$log" 2>/dev/null || true)"
+  [[ -z "$line" ]] || fail "the emulator cannot start: ${line#*| } (log: $log)"
+}
+
 emulator_wait_for_boot() {
-  local serial="$1" deadline=$((SECONDS + EMULATOR_BOOT_TIMEOUT)) state
+  local serial="$1" deadline=$((SECONDS + EMULATOR_BOOT_TIMEOUT)) state log
+  log="$(emulator_state_dir)/emulator.log"
   log "waiting for $serial to finish booting (timeout ${EMULATOR_BOOT_TIMEOUT}s)"
   while (( SECONDS < deadline )); do
     state="$(adb -s "$serial" shell getprop sys.boot_completed 2>/dev/null | tr -d '\r' || true)"
@@ -1390,9 +1555,10 @@ emulator_wait_for_boot() {
       ok "$serial booted"
       return 0
     fi
+    emulator_assert_boot_progress "$log"
     sleep 5
   done
-  fail "$serial did not finish booting within ${EMULATOR_BOOT_TIMEOUT}s (see $(emulator_state_dir)/emulator.log)"
+  fail "$serial did not finish booting within ${EMULATOR_BOOT_TIMEOUT}s (see $log)"
 }
 
 boot_emulator() {
@@ -1493,6 +1659,7 @@ emulator_capture_start() {
   EMULATOR_STAMP="$(date +%Y%m%d-%H%M%S)"
   EMULATOR_LOG_FILE="$EMULATOR_LOG_DIR/atome-$EMULATOR_STAMP.log"
   EMULATOR_CRASH_FILE="$EMULATOR_LOG_DIR/atome-crash-$EMULATOR_STAMP.log"
+  EMULATOR_EXIT_FILE="$EMULATOR_LOG_DIR/atome-exit-$EMULATOR_STAMP.log"
 
   adb -s "$EMULATOR_SERIAL" logcat -c -b main -b system -b crash
   log "capturing logcat into $EMULATOR_LOG_FILE"
@@ -1501,9 +1668,72 @@ emulator_capture_start() {
   EMULATOR_LOG_PID=$!
 }
 
+# The application pid, empty as soon as the process is gone. `pidof` prints one
+# line per match and the app is single-process, so the first one is the app.
+emulator_app_pid() {
+  adb -s "$EMULATOR_SERIAL" shell pidof "$1" 2>/dev/null | tr -d '\r' | awk '{print $1}'
+}
+
+# Android 11+ records *why* an application left: an uncaught exception, a native
+# signal, an ANR, a low-memory kill or a plain back-swipe. That record outlives
+# the logcat buffer, so it is the one line that answers a death the capture
+# window did not witness.
+emulator_exit_info() {
+  adb -s "$EMULATOR_SERIAL" shell dumpsys activity exit-info "$1" 2>/dev/null \
+    | tr -d '\r' | sed -n '1,40p'
+}
+
+# A frozen guest stops writing to logcat, so the last line of the capture is much
+# older than the moment the capture ended. That is what the 20:07 run left behind
+# — "Process system isn't responding" on screen, system_server unresponsive — and
+# such a run says nothing about the application, so the distance is measured and
+# reported before any other reading of the same file.
+emulator_log_stall_seconds() {
+  local last stamp last_epoch now_epoch
+  last="$(tail -1 "$EMULATOR_LOG_FILE" 2>/dev/null | cut -c1-18 || true)"
+  stamp="${last:0:14}"
+  [[ "$stamp" =~ ^[0-9]{2}-[0-9]{2}[[:space:]][0-9]{2}:[0-9]{2}:[0-9]{2}$ ]] || return 1
+  last_epoch="$(date -j -f "%m-%d %H:%M:%S" "$stamp" "+%s" 2>/dev/null || true)"
+  [[ -n "$last_epoch" ]] || return 1
+  now_epoch="$(date "+%s")"
+  printf '%s\n' "$(( now_epoch - last_epoch ))"
+}
+
 emulator_capture_finish() {
-  local app_id="$1" shot focus hits
-  sleep "$EMULATOR_LOGCAT_SECONDS"
+  local app_id="$1" shot focus hits pid reason render_hits bootstrap_hits missed=0 waited=0 died=0
+  local stall="" stall_hits=""
+  local ceiling="$EMULATOR_LOGCAT_MAX_SECONDS"
+  # A death is reported immediately: its crash buffer and its exit record are
+  # already written at that point, so waiting for the requested minimum would
+  # only delay the answer. The minimum therefore bounds the alive case, and the
+  # ceiling can never sit below it.
+  if (( ceiling < EMULATOR_LOGCAT_SECONDS )); then
+    ceiling="$EMULATOR_LOGCAT_SECONDS"
+  fi
+  # The capture follows the application instead of sleeping one fixed slice: the
+  # Android start needs ~17 s to leave the bootstrap page, and a reported crash
+  # that landed after the historical 25 s window left no trace at all. The loop
+  # stops the moment the process disappears.
+  log "following $app_id for up to ${ceiling}s; reproduce the crash now, the capture stops when the app disappears"
+  while :; do
+    sleep 1
+    waited=$((waited + 1))
+    pid="$(emulator_app_pid "$app_id")"
+    if [[ -n "$pid" ]]; then
+      missed=0
+    else
+      # A single empty answer is not a death: adb can be slow while the guest
+      # renders. Two consecutive misses are.
+      missed=$((missed + 1))
+      if (( missed >= 2 )); then
+        died=1
+        break
+      fi
+    fi
+    if (( waited >= ceiling )); then
+      break
+    fi
+  done
   kill "$EMULATOR_LOG_PID" 2>/dev/null || true
   wait "$EMULATOR_LOG_PID" 2>/dev/null || true
 
@@ -1518,17 +1748,34 @@ emulator_capture_finish() {
     ok "the crash buffer is empty"
   fi
 
-  if adb -s "$EMULATOR_SERIAL" shell pidof "$app_id" >/dev/null 2>&1; then
-    ok "$app_id is still running"
-  else
-    warn "$app_id is not running any more; the reason is in $EMULATOR_LOG_FILE or $EMULATOR_CRASH_FILE"
+  if [[ "$died" -eq 1 ]]; then
+    emulator_exit_info "$app_id" >"$EMULATOR_EXIT_FILE" 2>&1 || true
+    reason="$(grep -m1 -E '^[[:space:]]*reason=' "$EMULATOR_EXIT_FILE" 2>/dev/null | tr -d '\r' | sed 's/^[[:space:]]*//' || true)"
+    warn "$app_id disappeared after ${waited}s${reason:+ ($reason)}"
+    ok "exit record : $EMULATOR_EXIT_FILE"
+    if [[ -s "$EMULATOR_EXIT_FILE" ]]; then
+      log "--- application exit record ---"
+      sed 's/^/[apk] /' "$EMULATOR_EXIT_FILE"
+    fi
     log "--- $app_id lines (tail) ---"
-    grep -i -e "$app_id" -e "AndroidRuntime" "$EMULATOR_LOG_FILE" | tail -25 | sed 's/^/[apk] /' || true
+    grep -i -e "$app_id" -e "AndroidRuntime" -e "libc *: Fatal" "$EMULATOR_LOG_FILE" | tail -25 | sed 's/^/[apk] /' || true
+  else
+    ok "$app_id is still running after ${waited}s"
   fi
 
   # The verdict is written here so a single run is self-explanatory: the loader
   # failure that motivated this lane (__cxa_pure_virtual), a native crash, an ANR
   # and a launch that never reached the screen are named explicitly.
+  stall="$(emulator_log_stall_seconds || true)"
+  # Only the activity manager speaking about its own system counts here: an
+  # application ANR leaves the guest responsive and is named further below.
+  stall_hits="$(grep -i -m2 -E "Process system isn't responding|ANR in system|watchdog.*system_server|system_server.*not responding" "$EMULATOR_LOG_FILE" 2>/dev/null || true)"
+  if [[ -n "$stall_hits" ]] || [[ -n "$stall" && "$stall" -ge "$EMULATOR_LOG_STALL_SECONDS" ]]; then
+    log "--- guest frozen ---"
+    [[ -z "$stall_hits" ]] || printf '%s\n' "$stall_hits" | sed 's/^/[apk] /'
+    warn "the emulator guest stopped answering${stall:+ (logcat silent for ${stall}s before the capture ended)}: this run says nothing about the application — reboot the guest and read the WebGPU verdict below"
+  fi
+
   hits="$(grep -i -E "FATAL EXCEPTION|UnsatisfiedLinkError|dlopen failed|cannot locate symbol|ANR in|not responding|signal 11|SIGSEGV" "$EMULATOR_LOG_FILE" 2>/dev/null | head -8 || true)"
   if [[ -n "$hits" ]]; then
     log "--- failures in the captured window ---"
@@ -1536,6 +1783,28 @@ emulator_capture_finish() {
     warn "the launch produced failures; read $EMULATOR_LOG_FILE"
   else
     ok "no crash, ANR or native-loader failure in the captured window"
+  fi
+
+  # Two failures leave the page white and neither shows a crash, so this lane
+  # names them here: the Bevy renderer found no WebGPU adapter, or the window
+  # never left the bootstrap origin for the local server — the second is why the
+  # bootstrap page's module errors ("text/html" instead of JavaScript) matter.
+  render_hits="$(grep -m3 -E "No available adapters|Unable to find a GPU|bevy_renderer_webgpu_unavailable|bevy_renderer_start_failed_terminal" "$EMULATOR_LOG_FILE" 2>/dev/null || true)"
+  if [[ -n "$render_hits" ]]; then
+    log "--- white screen: WebGPU renderer ---"
+    printf '%s\n' "$render_hits" | sed 's/^/[apk] /'
+    warn "the Bevy renderer found no WebGPU adapter: every Bevy surface stays white (WebView command line: $(emulator_resolved_webview_flags))"
+  else
+    ok "no WebGPU adapter failure in the captured window"
+  fi
+
+  if ! grep -q "127.0.0.1:3000" "$EMULATOR_LOG_FILE" 2>/dev/null; then
+    bootstrap_hits="$(grep -m2 -E 'module_load_failed|MIME type of "text/html"' "$EMULATOR_LOG_FILE" 2>/dev/null || true)"
+    if [[ -n "$bootstrap_hits" ]]; then
+      log "--- white screen: local server never reached ---"
+      printf '%s\n' "$bootstrap_hits" | sed 's/^/[apk] /'
+      warn "the window stayed on the bootstrap origin; the modules it imports only exist on 127.0.0.1:3000"
+    fi
   fi
 
   # A live process proves nothing about what the user sees; the focused window is
@@ -1569,6 +1838,7 @@ emulator_session() {
   ensure_emulator_packages
   ensure_emulator_avd
   boot_emulator
+  emulator_install_webview_flags
   if [[ "$DO_DRY_RUN" -eq 1 ]]; then
     printf '[apk] dry-run> adb -s %s install -r <artifact>\n' "$EMULATOR_SERIAL"
     printf '[apk] dry-run> adb -s %s shell am start -n <applicationId>/<launcher activity>\n' "$EMULATOR_SERIAL"
@@ -1592,6 +1862,7 @@ emulator_session() {
 
   step "Emulator session ready"
   log "device      : $EMULATOR_SERIAL"
+  log "webview     : $(emulator_webview_flags_label)"
   log "follow live : adb -s $EMULATOR_SERIAL logcat -v threadtime"
   log "stop it     : adb -s $EMULATOR_SERIAL emu kill"
 }
@@ -1702,6 +1973,7 @@ main() {
   ensure_build_marker
   remove_stale_artifacts
   tauri_android_build
+  verify_android_link
   if [[ "$DO_DRY_RUN" -eq 1 ]]; then
     if [[ "$DO_EMULATOR" -eq 1 ]]; then emulator_session; fi
     return 0

@@ -540,12 +540,14 @@ Objectif : l'application installée doit s'appeler **atome** et porter le **logo
 ```bash
 ./run.sh apk --emulator                      # build + AVD + boot + install + lancement + logcat
 ./run.sh apk --emulator --emulator-wipe      # repart d'un AVD neuf (et arrête une instance déjà lancée)
-./run.sh apk --emulator --logcat-seconds 60  # capture plus longue
+./run.sh apk --emulator --logcat-seconds 60  # minimum de capture avant de conclure que l'app survit
+./run.sh apk --emulator --follow-seconds 60  # plafond de suivi (la capture s'arrête dès la mort de l'app)
 ./run.sh apk --emulator --emulator-headless  # sans fenêtre (GPU swiftshader)
+./run.sh apk --emulator --emulator-webview-flags none  # WebView d'origine, sans la ligne de commande Chromium
 ./run.sh apk --emulator --emulator-avd nom --emulator-api 35 --emulator-port 5556
 ```
 
-Chaque dépendance est vérifiée avant usage : ce qui est présent est réutilisé, ce qui manque est téléchargé, rien n'est téléchargé deux fois. La fenêtre de l'émulateur reste ouverte volontairement (c'est la preuve visuelle demandée) ; pour l'arrêter : `adb -s emulator-5554 emu kill`.
+Chaque dépendance est vérifiée avant usage : ce qui est présent est réutilisé, ce qui manque est téléchargé, rien n'est téléchargé deux fois. La fenêtre de l'émulateur reste ouverte volontairement (c'est la preuve visuelle demandée) ; pour l'arrêter : `adb -s emulator-5554 emu kill`. La capture `logcat` **suit l'application** : elle s'arrête dès que le processus disparaît (avec `atome-crash-<horodatage>.log` dumpé à cet instant et `atome-exit-<horodatage>.log` produit par `dumpsys activity exit-info`), et au plus tard au plafond de suivi quand l'application survit.
 
 **Preuve d'exécution réelle (2026-09-23, 16:16-16:17).** `./run.sh apk --emulator --emulator-wipe` seul sur sa ligne → `[apk] Done`, exit 0 : APK debug 481 Mo reconstruit et vérifié (`aapt2` : `application-label:'atome'`, `com.squirrel.desktop.debug`, `arm64-v8a` ; `apksigner` : signature debug valide ; sha256 `4f2b1e1de6b9fdcdee0d7996788dc32cc6cadface52891c9b4cb5ab4f0095dcb`), AVD `atome-api36` recréé, `emulator-5554` booté, `adb install` réussi, `am start` en `Status: ok`, puis 25 s de `logcat` capturés.
 
@@ -569,12 +571,17 @@ Chaîne de causes établie :
 
 Sur Android, `dlopen` résout les symboles à l'édition de liens : sans ce runtime, le chargement échoue systématiquement — sur l'émulateur comme sur le téléphone, puisque c'est le même APK. Le processus n'a donc jamais atteint le code Rust, ce qui explique l'absence de tout panic ou tombstone : le `SIGKILL` observé ensuite n'est que la conséquence de la mort de l'Activity.
 
-**Correctifs possibles (non appliqués, décision non prise dans cette passe)** : lier le runtime C++ partagé (`-lc++_shared` côté Rust, ou `ANDROID_STL=c++_shared` avec ajout de `libc++_shared.so` de la NDK dans `jniLibs/arm64-v8a/`), ou au contraire le lier statiquement (`c++_static` / `-static-libstdc++`). Le choix engage les builds Android et doit être validé par une nouvelle exécution de `./run.sh apk --emulator`.
+**Correctif appliqué (runtime C++ partagé), voir §12.13 pour les preuves.** Le runtime est lié **partagé**, pas statiquement : c'est le mode que le CLI Tauri sait déjà transporter dans l'APK, et il évite de dupliquer la bibliothèque C++ dans un binaire déjà très lourd. Deux pièces :
 
-**To verify.**
+- `platforms/desktop-tauri/build.rs` (branche `target_os = "android"`) déclare `cargo:rustc-link-arg=-lc++_shared` et la recherche de la NDK, ce qui inscrit `libc++_shared.so` dans le `DT_NEEDED` de `libsquirrel_lib.so` ;
+- ce `DT_NEEDED` est ce qui fait **copier automatiquement** `libc++_shared.so` de la NDK dans `gen/android/app/src/main/jniLibs/<abi>/` par le CLI, donc dans l'APK. Rien n'est ajouté à la main.
+
+**To verify (au moment de la rédaction de §12.11).**
 
 - Émulateur : fenêtre visible, lancement de l'application, captures `logcat` — **fait** dans cette passe. Reste à vérifier : rendu réel de l'interface (WebGPU/WebView dans l'émulateur) une fois le chargement de la bibliothèque corrigé.
 - Le crash n'est **pas corrigé** : renommer l'application et changer l'icône ne touchent pas au code d'exécution, et la cause est un défaut de liaison de la bibliothèque native, pas un panic Rust.
+
+**Suite donnée** : §12.13 (runtime C++ lié et vérifié automatiquement, gel de l'émulateur expliqué et traité, options `--emulator-memory` / `--emulator-gpu`).
 
 ### 12.12 Identité macOS complète — binaire `atome`, ressources sous `project/`, icône arrondie (2026-09-23, session suivante)
 
@@ -620,3 +627,229 @@ Objectif : après §12.10, le conteneur `atome.app` portait bien le bon nom, mai
 - iOS et Android restent inchangés volontairement : leurs icônes demeurent opaques et sans arrondi, les deux systèmes appliquant eux-mêmes le masque.
 
 **Contraintes respectées** : aucun commit, aucun staging, `eVe/` non modifié.
+
+
+### 12.13 Runtime C++ Android lié et vérifié, gel de l'émulateur expliqué, lane `--emulator` durcie (2026-09-23, session suivante)
+
+Objectif : rendre la lane utilisable en une seule commande, sans dépendance à installer à la main, et fermer la cause du crash établie en §12.11.
+
+**Deux pannes distinctes, deux traitements distincts.** Le dialogue de la capture d'écran (« Pixel Launcher isn't responding ») **n'était pas** un crash d'atome : c'est le lanceur **système** de l'invité qui ne répondait plus, pendant que l'application restait au premier plan invisible. Les deux causes sont indépendantes et sont traitées séparément.
+
+**1. Cause 1 — gel de l'émulateur : sursouscription mémoire + repli en rendu logiciel.**
+
+- `temp/android-avd/emulator.log` : `Software GL rendering will be used due to system memory pressure … (Available Memory: 2447 MB, Required: 5120 MB)` puis `detected a hanging thread 'QEMU2 main loop'. No response for 16736 ms`. Le boot s'était terminé (133 s) mais la boucle QEMU ne répondait plus : plus d'`adb`, plus de commande console, plus de fenêtre exploitable.
+- La configuration AVD livrée par `avdmanager` désactivait l'accélération GPU (`hw.gpu.enabled=no`, `hw.gpu.mode=auto`) et figeait `hw.ramSize=2G`, tandis que la ligne de commande demandait `-memory 4096` **sans** `-gpu`. L'émulateur retombait donc en GL logiciel, ce qui a rendu l'invité trop lent pour son propre lanceur.
+- Correctifs encodés dans `scripts/android/apk.sh`, tous automatiques :
+  - `emulator_resolve_memory` dimensionne l'invité sur ce que l'hôte peut réellement fournir (`vm_stat` : libre + inactif + spéculatif), plafond 4 Go, plancher 2 Go, pas de 512 Mo, avec avertissement explicite si la marge de 1 Go n'est pas disponible ;
+  - `emulator_resolved_gpu_mode` et `emulator_launch_args` **choisissent** le moteur : `-gpu host` (Metal/ANGLE) par défaut, `swiftshader` en mode sans fenêtre ; `swiftshader_indirect`, refusé par l'émulateur 37.1.11, a été retiré ;
+  - `emulator_normalize_avd_config` réécrit l'AVD (chemin réutilisé **et** chemin création) : `hw.gpu.enabled=yes`, `hw.gpu.mode=auto`, `hw.ramSize=<résolu>`, `hw.keyboard=yes` ;
+  - nouvelles options : `--emulator-memory <mb>` et `--emulator-gpu <mode>` (`auto|host|lavapipe|swiftshader|swangle`) pour forcer une valeur sans éditer le script.
+- **Repli utilisateur** : un invité plus léger reste possible avec `--emulator-gpu swiftshader` et `--emulator-memory 2048` sur une machine chargée.
+
+**2. Cause 2 — crash réel de l'application : runtime C++ absent de l'APK.**
+
+- Diagnostic de §12.11 confirmé : `libsquirrel_lib.so` laissait `__cxa_pure_virtual` non résolu et ne déclarait **aucun** `DT_NEEDED` vers `libc++_shared.so` ; l'APK ne contenait que `lib/arm64-v8a/libsquirrel_lib.so`.
+- Correctif appliqué dans le **propriétaire canonique** de la liaison, `platforms/desktop-tauri/build.rs` : branche `CARGO_CFG_TARGET_OS == "android"` → `cargo:rustc-link-arg=-lc++_shared` plus la recherche du sysroot NDK (`android_sysroot_triple`, `android_sysroot_lib_dir`, `rerun-if-env-changed` sur `ANDROID_NDK_HOME`, `NDK_HOME`, `ANDROID_NDK_ROOT`, `ANDROID_HOME`, `ANDROID_SDK_ROOT`).
+- **Preuve (exécutée)** : après recompilation, `llvm-readelf -d target/aarch64-linux-android/debug/libsquirrel_lib.so` liste `(NEEDED) Shared library: [libc++_shared.so]` aux côtés de `libamidi`, `liblog`, `libOpenSLES`, `libandroid`, `libaaudio`. Le CLI a suivi en copiant le runtime : `gen/android/app/src/main/jniLibs/arm64-v8a/libc++_shared.so` (lien vers `…/ndk/27.0.12077973/…/sysroot/usr/lib/aarch64-linux-android/libc++_shared.so`) et `libsquirrel_lib.so` sont présents côte à côte.
+- **Garde anti-régression** : `verify_native_runtime` (appelée par `verify_artifact`) ouvre l'APK produit, et exige pour **chaque** ABI `lib/<abi>/libsquirrel_lib.so` **et** `lib/<abi>/libc++_shared.so`. L'échec est nommé et cite le symptôme réel (`dlopen failed: cannot locate symbol "__cxa_pure_virtual"`), donc l'erreur ne peut plus réapparaître silencieusement sur un appareil.
+
+**3. Lane durcie : plus aucune reprise manuelle après un gel.**
+
+- `emulator_stop_instance` : arrêt par la console (`adb emu kill`), puis **SIGTERM**, puis **SIGKILL**, sur le pid enregistré à l'instant du lancement — un gel de la boucle QEMU n'est plus un blocage définitif comme celui de cette session (PID 45404, toujours vivant et non tuable depuis le bac à sable).
+- `emulator_instance_pid` : le pid n'est retenu qu'après preuve d'identité, par le verrou de l'AVD (`hardware-qemu.ini.lock`, qui contient le pid de l'instance qui tient l'appareil) ou, à défaut, par la ligne de commande ; un pid recyclé ne peut donc pas être tué par erreur.
+- `boot_emulator` ne réutilise une instance **que** si `temp/android-avd/emulator.args` correspond exactement à la configuration demandée : sinon redémarrage. Une instance **gelée mais absente d'`adb`** est désormais détectée et arrêtée au lieu d'être prise pour « aucun émulateur » (le nouveau lancement échouait alors sur le port occupé).
+- Fin de session : `emulator_focused_window` lit la fenêtre qui a réellement le focus, une **capture d'écran** `temp/logcat/atome-<horodatage>.png` est enregistrée, et un verdict unique résume la fenêtre capturée (`FATAL EXCEPTION`, `UnsatisfiedLinkError`, `dlopen failed`, `ANR in`, `not responding`, `signal 11`, `SIGSEGV`). Un processus vivant ne prouve plus rien à lui seul : ce qui est vérifié, c'est ce qui est **à l'écran**.
+
+**Preuves exécutées dans cette passe.**
+
+- `bash -n scripts/android/apk.sh` — syntaxe valide après chaque modification.
+- Banc de test isolé des fonctions d'arrêt (4 cas) : aucun pid → échec propre ; pid mort → ignoré même avec un verrou présent ; pid vivant **étranger** → non ciblé ; faux émulateur identifié par le verrou AVD → SIGTERM appliqué, pid file nettoyé, code retour 0.
+- `llvm-readelf -d` sur le binaire recompilé : `NEEDED [libc++_shared.so]` présent (preuve du correctif 2).
+- `gen/android/app/src/main/jniLibs/arm64-v8a/` : les deux bibliothèques attendues, avec leur date de copie.
+- `./run.sh apk --emulator --dry-run` : annonce `-memory 2048 -gpu host` avec l'avertissement de mémoire disponible, sans rien exécuter.
+
+**To verify (non exécuté ici, limite du bac à sable, pas du correctif).**
+
+- Le **build complet** et l'exécution dans l'émulateur n'ont **pas** pu être relancés depuis cette session : le CLI Tauri ouvre un serveur WebSocket pour piloter Gradle et le bac à sable refuse toute ouverture de port (`failed to build WebSocket server: Operation not permitted (os error 1)`), de même que le socket `adb`. La commande à lancer dans un terminal normal est `./run.sh apk --emulator` ; elle arrête l'instance gelée, reconstruit, vérifie le runtime C++, installe, lance atome et enregistre logcat + capture d'écran.
+- Conséquence de §12.11 : `remove_stale_artifacts` supprime l'APK précédent **avant** le build, donc l'échec de cette passe laisse le dossier `outputs/apk/universal/debug/` sans APK. Relancer la commande ci-dessus le régénère.
+- Reste à vérifier après ce run : absence d'`UnsatisfiedLinkError`, présence de `lib/arm64-v8a/libc++_shared.so` dans l'APK, et rendu réel de l'interface (WebGPU/WebView) dans l'émulateur.
+
+**Contraintes respectées** : aucun commit, aucun staging, aucune branche ; `eVe/` non modifié ; les identifiants techniques (`com.squirrel.desktop`, `squirrel_lib`, `Theme.squirrel`) restent inchangés.
+
+### 12.14 Régression du correctif §12.13 : libc statique et SIGSEGV dans `getauxval` (2026-09-23, session suivante)
+
+**Symptôme rapporté** : « l'application se referme illico et je ne sais pas où trouver les logs. » Avec `./run.sh apk --emulator`, l'émulateur boote, l'APK s'installe, `am start` répond `ok`, puis atome disparaît après **2 s** sans avoir affiché une seule frame. Ce qui reste à l'écran est le lanceur système — c'est précisément ce qui rendait le crash illisible.
+
+**Où sont les logs** (réponse directe à la question). Une série de fichiers par session `--emulator`, sous `temp/logcat/` :
+
+| Fichier | Contenu |
+| --- | --- |
+| `atome-<horodatage>.log` | `logcat -v threadtime` complet de la session |
+| `atome-crash-<horodatage>.log` | tampon `crash` seul : tombstones et backtraces natives |
+| `atome-<horodatage>.png` | capture de la fenêtre au premier plan en fin de session |
+
+En direct, pendant que l'appareil tourne : `adb -s emulator-5554 logcat -v threadtime`. Le fichier `atome-crash-*.log` est le premier à lire : quand une application meurt avant sa première frame, `atome-*.log` ne contient qu'un `ActivityManager` générique et donne l'impression que rien ne s'est passé.
+
+**La cause, prouvée.** `temp/logcat/atome-crash-20260923-181021.log` :
+
+```text
+Fatal signal 11 (SIGSEGV), code 1 (SEGV_MAPERR), fault addr 0x0
+Process uptime: 2s
+Cmdline: com.squirrel.desktop.debug
+Cause: null pointer dereference
+2 total frames
+  #00 pc 000000000e63afdc  base.apk (offset 0xe84000) (getauxval+28)
+  #01 pc 000000000e618c18  base.apk (offset 0xe84000) (init_have_lse_atomics+12)
+```
+
+L'offset `0xe84000` est celui de `libsquirrel_lib.so` dans l'APK : le crash est **dans notre bibliothèque**, pas dans la libc du système. Le journal applicatif (pid 2828) s'arrête juste après `DesktopModeFlags: Toggle override initialized to: OVERRIDE_UNSET` — aucun `WryActivity`, aucun WebView, aucun message Rust. La mort survient dans l'initialiseur du module, avant toute exécution applicative, ce qui explique l'absence de panic et de log côté Rust.
+
+Deux mesures indépendantes ont établi le mécanisme :
+
+1. `llvm-nm --defined-only` sur le `.so` d'alors : `getauxval` **et** `init_have_lse_atomics` étaient **définis dans la bibliothèque**, aux offsets exacts du crash (+28 et +12). La bibliothèque embarquait donc une **copie statique de la libc**.
+2. Reproduction minimale : `clang --target=aarch64-linux-android26 -shared -lc++_shared -lc` **avec** `-L<sysroot>/usr/lib/aarch64-linux-android` ne produit qu'un `NEEDED [libc++_shared.so]` ; **sans** ce `-L`, il produit `libc.so`, `libdl.so` et `libc++_shared.so`. Le `-L` capture `libc.a`.
+
+La chaîne complète : le `cargo:rustc-link-search=native=<sysroot>/usr/lib/<triple>` ajouté en §12.13 pointait sur un dossier qui contient `libc.a` et **pas** `libc.so` ; il captait le `-lc` du lien, la libc statique était embarquée, et son `getauxval` lisait un `__libc_auxv` que l'éditeur de liens dynamique ne remplit jamais pour une copie privée — d'où le déréférencement de `0x0`.
+
+**Correction de §12.13.** La « preuve » de §12.13 était exacte mais incomplète : elle vérifiait l'apparition de `libc++_shared.so` sans regarder la disparition de `libc.so`. Le correctif lui-même était la régression. La branche Android de `platforms/desktop-tauri/build.rs` est réduite à `println!("cargo:rustc-link-arg=-lc++_shared")` ; les helpers `android_sysroot_triple` / `android_sysroot_lib_dir` et le `rerun-if-env-changed` sont supprimés, remplacés par un commentaire qui nomme l'interdit.
+
+**Preuves exécutées après correction** (`.so` de 19:01, 489 789 072 octets) :
+
+- `llvm-readelf -d` : dix `NEEDED`, dont **`libc.so`** et `libc++_shared.so`, aux côtés de `libamidi`, `liblog`, `libOpenSLES`, `libandroid`, `libaaudio`, `libdl` et `libm`.
+- `llvm-nm --undefined-only` : `getauxval`, `malloc`, `free`, `abort`, `pthread_create` et `memcpy` sont tous **importés** — plus aucune fonction libc n'est définie localement.
+- Table dynamique : `UND getauxval@LIBC`.
+- `llvm-objdump -d` sur `init_have_lse_atomics` (seul symbole local restant, 136 octets) : il appelle **`getauxval@plt`**. Le lien passe donc par la libc partagée. C'est la vérification qui distingue ce correctif de celui de §12.13.
+
+**Garde anti-régression.** `verify_android_link()` dans `scripts/android/apk.sh`, appelée par `main()` juste après `tauri_android_build` et **avant** `collect_artifacts` : elle lit avec `llvm-readelf -d` le `.so` de chaque ABI demandée et exige **`libc.so` et `libc++_shared.so`**. Le message d'échec nomme la cause et le symptôme (`SIGSEGV dans getauxval`, `__cxa_pure_virtual`) au lieu de laisser l'erreur se manifester deux secondes après un lancement sur appareil. Une `DT_NEEDED` manquante ne peut pas être réparée à l'empaquetage : la garde porte donc sur la sortie du lien, pas sur l'APK. `verify_native_runtime` (contenu de l'APK) est conservée en aval.
+
+**To verify (limite du bac à sable, pas du correctif).** Le build complet et le lancement dans l'émulateur n'ont pas pu être rejoués ici : le CLI Tauri ouvre un serveur WebSocket que le bac à sable refuse (`failed to build WebSocket server: Operation not permitted (os error 1)`), comme le socket `adb`. La commande à lancer dans un terminal normal est `./run.sh apk --emulator`. À contrôler ensuite : plus de `SIGSEGV` dans le nouveau `atome-crash-*.log`, apparition de `WryActivity` dans `atome-*.log`, et rendu réel de l'interface.
+
+**Identité visuelle, état réel.** L'icône Android est bien le logo atome (visible dans le dock du lanceur sur la capture de session) et `gen/android/app/src/main/res/values/strings.xml` porte `app_name = atome`. Les constats « ça s'appelle Squirrel » et « ce n'est pas la bonne icône » viennent d'un **ancien APK** : `gen/android/app/build/outputs/apk/universal/release/app-universal-release.apk` (11:09) répond `application-label:'squirrel'` et ne contient que `lib/arm64-v8a/libsquirrel_lib.so`, sans `libc++_shared.so`. Toute installation faite depuis ce fichier reproduit les trois symptômes. Il doit être reconstruit ; `remove_stale_artifacts` supprime déjà l'APK précédent avant chaque build.
+
+**Contraintes respectées** : aucun commit, aucun staging, aucune branche ; `eVe/` non modifié.
+
+### 12.15 Écran blanc expliqué, capture qui suit l'application jusqu'à sa mort, icône Android remise dans la zone sûre (2026-09-23, session suivante)
+
+Objectif : répondre à « l'application s'est ouverte, j'ai eu un écran blanc et ça a craché » avec des preuves, et corriger l'icône Android rognée par le masque du lanceur.
+
+**Ce que la session enregistrée prouve réellement** (`temp/logcat/atome-20260923-191607.*`, lancement de 19:16:07 à 19:16:33).
+
+- Le correctif de liaison de §12.14 tient sur appareil : `atome-crash-20260923-191607.log` est **vide de 0 octet** et plus aucun `libc : Fatal signal 11` n'apparaît, là où la session de 18:10 mourait en 2 s dans `getauxval`.
+- L'application **a atteint l'écran d'accueil** : `atome-20260923-191607.png` montre le logo atome, « Essayer » et « Connexion / inscription ». Le processus (pid 2797) écrit encore des `s_glBindAttribLocation` à 19:16:33, dernière seconde de la fenêtre.
+- Chronologie mesurée : démarrage 19:16:07 → `[tauri] Materializing 1648 Android assets` 19:16:13.869 → `Materialized` 19:16:24.669 → navigation vers `http://127.0.0.1:3000/` 19:16:24.9 → versions `eVe 1.10` / `atome 1.10` lues depuis `squirrel/kickstart.js` 19:16:26.232 → premier rendu GL 19:16:31.
+- L'**écran blanc dure donc ~17 s** et n'est pas une panne : la WebView démarre sur la page de bootstrap `tauri.localhost`, pendant que le thread Android matérialise les 1 648 assets embarqués (~11 s) puis qu'Axum démarre et que la fenêtre est re-naviguée. Les erreurs `MIME type of "text/html"` sur `tauri.localhost/atome/src/...` et `[eVe] module_load_failed` appartiennent à cette page de bootstrap dont les chemins ne correspondent pas au webroot stagé (`atome/src` y est monté à la racine) ; elles disparaissent une fois la navigation faite, l'écran d'accueil le prouve.
+- Reste un défaut réel, non fatal dans cette fenêtre : `Cannot redefine property: postMessage / metadata / __TAURI_PATTERN__ / path / __TAURI_EVENT_PLUGIN_INTERNALS__` (19:16:24.980, page `http://127.0.0.1:3000/`) indique une **double injection des globales Tauri** sur la page servie par Axum. L'interface se monte quand même, mais toute commande Tauri (presse-papiers, STT, viewport) peut échouer : à trancher, ce n'est pas la cause du départ de l'application dans cette fenêtre.
+
+**Pourquoi le « crachat » n'est pas encore nommé.** La capture s'arrêtait après 25 s (`EMULATOR_DEFAULT_LOGCAT_SECONDS`), soit **avant** la mort rapportée par l'utilisateur : le journal se termine à 19:16:33 sur une application vivante et affichée. Le tampon `crash` de cette session est vide et le dernier événement GPU de l'émulateur (`emulator.log`, écrit à 19:18) est un `VkInstance` **Dawn** créé puis détruit, ce qui est cohérent avec l'ouverture d'un rendu WebGPU après l'accueil — hypothèse à confirmer, pas une preuve. Aucun `FATAL`, `AndroidRuntime`, `ANR`, `lmkd` ou `dlopen failed` n'existe dans la fenêtre enregistrée.
+
+**Correctif d'outillage (la capture suit maintenant l'application).** Dans `scripts/android/apk.sh` :
+
+- `emulator_app_pid()` lit le pid par `adb shell pidof` ; la boucle de `emulator_capture_finish()` **s'arrête dès que le processus disparaît** au lieu de dormir une durée fixe, avec un plafond `EMULATOR_DEFAULT_LOGCAT_MAX_SECONDS=120` quand l'application survit (nouvelle option `--follow-seconds <n>`, `--logcat-seconds` restant le minimum).
+- À la disparition, le script écrit `temp/logcat/atome-exit-<horodatage>.log` à partir de `adb shell dumpsys activity exit-info <pkg>` : Android 11+ y consigne `reason=…` (`REASON_CRASH`, `REASON_CRASH_NATIVE`, `REASON_ANR`, `REASON_LOW_MEMORY`, `REASON_USER_REQUESTED`), ce qui distingue un vrai crash d'une simple fermeture et survit au tampon logcat. Le verdict est imprimé en clair, avec le tampon `crash` dumpé **au moment** de la mort.
+- La bannière de session annonce la fenêtre : « following <pkg> for up to 120s; reproduce the crash now, the capture stops when the app disappears ». C'est cette fenêtre qui permet de reproduire le crash à la main (par exemple en touchant « Essayer ») et de le voir nommé.
+
+**Correctif d'icône (Android seulement).** Le premier plan adaptatif était l'art pleine page : cercle d'encre de rayon **304,8 px** sur une toile de 432 px, face à un masque de lanceur de **144 px** (72 dp) — d'où le logo rogné partout où le lanceur applique sa forme. Les cinq `mipmap-*/ic_launcher_foreground.png` ont été régénérés depuis `platforms/desktop-tauri/icons/icon.png` avec une échelle de **64/108** de la zone sûre (mdpi 64, hdpi 96, xhdpi 128, xxhdpi 193, xxxhdpi 257 px avant `-extent` 108/162/216/324/432) :
+
+- mesure sur `mipmap-xxxhdpi` : encre `trim` 217 × 217, **rayon du plus petit cercle englobant 132,3 px** (centre 215,5 ; 215,5) contre 132 px pour la zone sûre 66 dp et **144 px pour le masque** ;
+- le glyphe magenta, lui, occupe 197 × 171 px, soit **68 % × 59 % du masque** : le logo est entier, centré, et garde la marge qui manquait ;
+- `AndroidManifest.xml` ne déclare que `android:icon="@mipmap/ic_launcher"`, et `mipmap-anydpi-v26/ic_launcher.xml` route vers `@mipmap/ic_launcher_foreground` + `@color/ic_launcher_background` (`#fff`) : les fichiers legacy `ic_launcher.png` / `ic_launcher_round.png` ne sont **pas** lus sur API ≥ 26, ils restent intacts ;
+- aperçus du rendu masqué : `temp/icon_work/launcher/duo.png` (gauche = avant, droite = après), mesures dans `temp/icon_work/`.
+
+**To verify (à rejouer dans un terminal normal).** Rien de ce qui précède n'a pu être exécuté ici : le CLI Tauri ne peut pas ouvrir son serveur WebSocket (`Operation not permitted`) et le démon `adb` ne peut pas ouvrir son écouteur (`could not install *smartsocket* listener: Operation not permitted`). La commande est `./run.sh apk --emulator` — elle reconstruit l'APK (donc embarque l'icône corrigée et le `.so` corrigé), installe, lance, puis **suit** l'application jusqu'à 120 s. Il faut reproduire le crash pendant cette fenêtre ; le nom de la cause sortira dans `temp/logcat/atome-exit-*.log`, `atome-crash-*.log` et `atome-*.log`. À contrôler aussi : icône complète dans le lanceur, absence de `SIGSEGV`, et le sort de la double injection Tauri.
+
+**Interroger la session déjà en cours sans reconstruire** (l'émulateur de 19:15 est resté ouvert ; ces trois commandes suffisent à nommer la mort de 19:18 si elle est enregistrée par le système) :
+
+```bash
+ADB=/opt/homebrew/share/android-commandlinetools/platform-tools/adb
+$ADB -s emulator-5554 shell dumpsys activity exit-info com.squirrel.desktop.debug | head -60
+$ADB -s emulator-5554 logcat -d -b crash -v threadtime | tail -60
+$ADB -s emulator-5554 shell pidof com.squirrel.desktop.debug
+```
+
+**Contraintes respectées** : aucun commit, aucun staging, aucune branche ; `eVe/` non modifié.
+
+
+### 12.16 Écran blanc de 19:36 : le rendu Bevy n'obtient aucun adaptateur WebGPU sur l'émulateur (2026-09-23, session suivante)
+
+Objectif : répondre à « l'app se lance mais l'écran reste blanc, regarde les logs » en nommant la cause dans le journal de la session en cours, sans reconstruire.
+
+**Ce que le journal nomme exactement** (`temp/logcat/atome-20260923-193607.log`, 19:36:07 → 19:44:40, 6 347 890 octets ; pid 3090, puis seconde session pid 4190 à 19:42:10).
+
+- `09-23 19:36:22.875  3090  3090 W Tauri/Console: File: http://127.0.0.1:3000/ - Line 0 - Msg: No available adapters.`
+- `09-23 19:36:22.878  3090  3090 E Tauri/Console: File: http://127.0.0.1:3000/eVe/domains/rendering/bevy_web_renderer_module_loader.js - Line 60 - Msg: panicked at …/bevy_render-0.19.0/src/renderer/mod.rs:286:36:` suivi de `Unable to find a GPU! Make sure you have installed required drivers!` et de la pile WASM (`wasm/squirrel_bevy_renderer.js?v=af3061e968a8be5b:1398`).
+- Trois dixièmes de seconde avant, sur le thread GPU de la WebView dans le processus de l'application : `W libc: Access denied finding property "vendor.mesa.vk.trace.per.submit"` puis `"vendor.mesa.vk.wsi.headless.swa"` — l'ICD Vulkan chargé dans le guest est un pilote **Mesa**, donc un device logiciel, et non un GPU matériel.
+- La conséquence visible : `09-23 19:36:35.976  3090  3090 W Tauri/Console: … [preview] project atomes unavailable, falling back to the mounted scene … Error: bevy_renderer_start_failed_terminal:bevy_renderer_initial_present_timeout:{"before":{"redraw_applied":0},"current":{"redraw_applied":0}}` — aucune image n'a jamais été présentée.
+- Côté hôte (`temp/android-avd/emulator.log`) : `Created VkInstance … engine:'Dawn'.` puis `Destroyed VkInstance … engine:'Dawn'.` — Dawn (le backend WebGPU de Chromium) instancie bien Vulkan, puis ne retient aucun adaptateur.
+
+**Pourquoi l'écran blanc n'affiche aucune erreur.** Aucune surface d'échec n'existe pour ce cas : le démarrage terminal arrête les tentatives (`isTerminalWorkspaceBootFailure()`), mais rien n'est peint — `atome/src/index.html` n'a qu'un `<body>` vide et tout est construit par `squirrel/spark.js`. Une surface Bevy qui ne peut pas démarrer laisse donc une page blanche muette. La mort du processus 44 s plus tard (`Zygote: Process 3090 exited cleanly (0)`, `ActivityManager: Process com.squirrel.desktop.debug (pid 3090) has died: fg  TOP`) n'est pas un crash : tampon `crash` vide, aucun `FATAL`, code de sortie 0.
+
+**Ce n'est pas une régression de l'application, c'est la limite de cet émulateur.** La session 19:16 (`temp/logcat/atome-20260923-191607.log`, pid 2797) n'ouvre **aucune** surface Bevy : aucun `No available adapters`, aucune panique, et l'écran d'accueil s'affiche (`atome-20260923-191607.png`). Le défaut n'apparaît qu'à l'ouverture d'une surface Bevy — 4 s après la navigation vers `127.0.0.1:3000` dans la session 19:36.
+
+**Hypothèse retenue, et testable en une ligne.** Chromium ne remet pas un adaptateur **logiciel** à WebGPU sans `--enable-unsafe-webgpu` ; le device Vulkan du guest est justement un device logiciel. `No available adapters.` est donc cohérent avec un filtrage Chromium, pas avec une absence de Vulkan — c'est cette hypothèse que la ligne de commande ci-dessous met à l'épreuve.
+
+**Deuxième cause de blanc, indépendante, observée à 19:42.** La seconde session (pid 4190) n'atteint **jamais** `127.0.0.1:3000` : elle reste sur `http://tauri.localhost/…` et n'écrit que les erreurs de modules de la page de démarrage — `Failed to load module script: Expected a JavaScript module script but the server responded with a MIME type of "text/html"` (`atome/src/application/audio_runtime/runtime_audio_backend.js`) et `[eVe] module_load_failed … bevy_ui_runtime.js` — car cette page importe des chemins `/atome/src/…` que seul le serveur local sert. La fenêtre repasse ensuite en arrière-plan (`VRI[MainActivity]: visibilityChanged oldVisibility=true newVisibility=false`, 19:43:32). La navigation est conditionnée à `wait_for_local_http` (120 s) : le journal ne prouve pas que le serveur n'était pas simplement lent (la session 19:16 avait navigué en ~9 s), mais il prouve que **sans navigation la page reste blanche et bavarde dans la console**.
+
+**Correctif d'outillage (l'APK lui-même est inchangé).** Dans `scripts/android/apk.sh` :
+
+- `emulator_install_webview_flags()` pose la ligne de commande Chromium de la WebView (`/data/local/tmp/webview-command-line` — le seul mécanisme supporté, et uniquement pour une application *debuggable*, ce qu'est l'APK de cette lane) **après le boot et avant `am start`** : `--enable-unsafe-webgpu` par défaut. Nouvelle option `--emulator-webview-flags <flags|none>` (`none` ne touche à rien, `--dry-run` imprime la commande sans rien écrire). Un échec d'écriture est nommé et n'interrompt pas la lane.
+- `emulator_capture_finish()` conclut maintenant les deux causes de blanc : `--- white screen: WebGPU renderer ---` quand `No available adapters` / `Unable to find a GPU` / `bevy_renderer_webgpu_unavailable` / `bevy_renderer_start_failed_terminal` apparaissent, et `--- white screen: local server never reached ---` quand `127.0.0.1:3000` n'apparaît nulle part alors que les erreurs de modules de la page de démarrage, elles, sont présentes.
+- La bannière « Emulator session ready » affiche la ligne réellement posée (`webview     : --enable-unsafe-webgpu`).
+
+**Preuves exécutées ici, sans appareil.**
+
+- `bash -n scripts/android/apk.sh` → `SYNTAX OK`.
+- `temp/webview_flags_probe/probe.sh` extrait les deux fonctions réelles du script et les exerce contre un `adb` factice : défaut écrit, `none` n'écrit rien, flags explicites écrits verbatim, écriture refusée → `WARNING … the application will start without it` sans interrompre la lane, `--dry-run` imprime la commande et laisse zéro fichier. Le premier passage a révélé un vrai défaut — `pipefail` faisait sortir la lane au lieu d'avertir — corrigé par `|| true` dans la substitution de lecture.
+- Verdict vérifié sur les journaux réels : trois lignes sur `atome-20260923-193607.log` (`No available adapters`, `Unable to find a GPU`, `bevy_renderer_start_failed_terminal`) et **rien** sur `atome-20260923-191607.log` (session sans surface Bevy) ; `127.0.0.1:3000` y compte 223 occurrences, donc la branche « serveur local » ne se déclenche pas à tort.
+
+**To verify (à rejouer dans un terminal normal).**
+
+```bash
+./run.sh apk --emulator
+```
+
+À contrôler : plus de `No available adapters` dans le nouveau `atome-<horodatage>.log` (le rendu démarre, même lentement en logiciel), et le verdict de fin de session. Si le drapeau seul ne suffit pas, la variante suivante est `--emulator-webview-flags "--enable-unsafe-webgpu --use-webgpu-adapter=swiftshader"` ; si aucun adaptateur n'apparaît malgré tout, l'émulateur ne peut pas porter le rendu et le test du rendu doit se faire sur le téléphone.
+
+**Contraintes respectées** : aucun commit, aucun staging, aucune branche ; `eVe/` non modifié ; aucun fichier de l'APK modifié (le correctif porte sur la lane émulateur).
+
+> Amendement : le défaut décrit ci-dessus (`--enable-unsafe-webgpu`) a été retiré après la mesure de §12.17, qui montre que ce drapeau ne change pas le verdict et que la session est partie en gel. Le défaut est désormais de n'écrire aucune ligne de commande.
+
+### 12.17 Le drapeau WebGPU n'a rien changé, et le guest a gelé (2026-09-23, tour suivant : « ça bloque toujours »)
+
+Objectif : dire ce qu'a produit la nouvelle tentative après le correctif d'outillage de §12.16, sans reconstruire ni toucher `eVe/`.
+
+**Ce que la nouvelle session a produit** (`temp/logcat/atome-20260923-200723.log`, 20:07:24 → 20:10:11, 13 229 lignes, 2,0 Mo, application pid 2914 ; AVD relancé à 20:04 avec exactement les mêmes arguments qu'avant : `-memory 3072 -gpu host`).
+
+- Le drapeau a bien été posé par la lane sur cette exécution, et le verdict est **identique** : `20:10:00.998  2914  2914 W Tauri/Console: File: http://127.0.0.1:3000/ - Line 0 - Msg: No available adapters.`, suivi de `Unable to find a GPU!` et de la même pile WASM (`wasm/squirrel_bevy_renderer.js?v=af3061e968a8be5b:1398`).
+- Deux différences de rythme, elles, mesurables : l'échec arrive **2 min 35 s** après le lancement (20:07:25 → 20:10:00) contre **4 s** dans la session sans drapeau (§12.16), et le guest ne survit pas à l'échec — la session précédente, elle, se terminait proprement 44 s après le lancement.
+- **Le guest a gelé** : la capture d'écran prise par la lane elle-même (`temp/logcat/atome-20260923-200723.png`) montre `Process system isn't responding` / `Wait` / `Close app` — c'est-à-dire le système Android qui ne répond plus, pas l'application. Le journal s'arrête à `20:10:11.064` alors que la capture a continué, et `temp/android-avd/emulator.log` se termine par la séquence d'arrêt (`Wait for emulator (pid 91954) 20 seconds to shutdown gracefully before kill`, `removeAll`). La capture d'écran de l'utilisateur à 20:12 montre le même dialogue, la fenêtre étant restée ouverte.
+
+**Lecture honnête.** Ni le drapeau seul ni la variante SwiftShader n'ont été essayés dans des conditions propres : la session a dégénéré en gel du système, et un run gelé ne prouve rien — ni que WebGPU est impossible ici, ni qu'un drapeau meilleur échouerait. Ce qui est prouvé : `--enable-unsafe-webgpu` posé sur la WebView (Chromium 133, `com.google.android.webview 133.0.6943.137`) **ne suffit pas** sur cet AVD, et le laisser par défaut coûte la mesure qu'il devait améliorer.
+
+**Changements dans `scripts/android/apk.sh`.**
+
+- `EMULATOR_DEFAULT_WEBVIEW_FLAGS` devient **vide** : la lane n'écrit plus rien par défaut (`--- SKIPPED WebView command line: none`). L'option `--emulator-webview-flags <flags|none>` reste le seul chemin pour tenter un drapeau, et l'aide nomme les deux essais (`--enable-unsafe-webgpu`, puis `--enable-unsafe-webgpu --use-webgpu-adapter=swiftshader`).
+- Nouveau verdict `--- guest frozen ---` dans `emulator_capture_finish` : il se déclenche si le journal nomme un ANR système (`Process system isn't responding`, `ANR in system`, `watchdog.*system_server`) **ou** si le dernier horodatage du journal a plus de `EMULATOR_LOG_STALL_SECONDS` (30 s) de retard sur la fin de la capture. Le verdict dit alors que le run ne dit rien de l'application, au lieu de laisser les verdicts suivants accuser le produit.
+- La bannière affiche `webview : none` au lieu d'un champ vide (`emulator_webview_flags_label`).
+
+**Preuves exécutées ici, sans appareil.**
+
+- `bash -n scripts/android/apk.sh` → OK.
+- `temp/webview_flags_probe/probe.sh` passe désormais **7 scénarios sur 7** : défaut n'écrit rien (0 fichier sur le device), `none` n'écrit rien, drapeaux explicites écrits verbatim, écriture refusée → `WARNING … the application will start without it` sans interrompre la lane, `--dry-run` imprime et n'écrit rien, bannière (`none` / drapeau), détecteur de gel (journal vivant → 0 s ; journal figé à −120 s → 120 s ≥ seuil). La sonde lit maintenant le défaut réel depuis le script au lieu de le recopier.
+- `./run.sh apk --emulator --dry-run` de bout en bout : le plan affiche `[apk] SKIPPED WebView command line: none (--emulator-webview-flags <flags> tries one)` entre le boot et `am start`.
+- Mesure du détecteur sur les journaux réels : `atome-20260923-200723.log` → dernier horodatage `20:10:11.064` (session gelée), `atome-20260923-193607.log` → `20:01:24.424`, `atome-20260923-191607.log` → `19:16:33.544`.
+
+**Ce qui reste vrai et non résolu.** Une surface Bevy ne peut pas être validée dans cet émulateur : le device Vulkan du guest est un device logiciel et Dawn n'en retient aucun adaptateur. Le téléphone reste la cible de validation du rendu ; l'émulateur, lui, prouve l'application (coquille, navigation, accueil) comme le montre `temp/logcat/atome-20260923-191607.png`.
+
+**To verify (à rejouer dans un terminal normal).**
+
+```bash
+./run.sh apk --emulator
+```
+
+Attendu : la session se termine sur un verdict qui **nomme** ce qu'elle a vu (`guest frozen`, `white screen: WebGPU renderer`, ou rien du tout si la surface ne s'ouvre pas), et l'accueil s'affiche comme le 19:16. Puis, pour le rendu, sur le téléphone :
+
+```bash
+./run.sh apk --prod --install --device <serial>
+```
+
+**Contraintes respectées** : aucun commit, aucun staging, aucune branche ; `eVe/` non modifié ; aucun fichier de l'APK modifié.

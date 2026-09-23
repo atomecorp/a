@@ -1104,3 +1104,45 @@ fn partially_rounded_shape_gets_a_mask_even_with_a_zero_scalar_radius() {
     let handle = crate::spawn::texture_handle_for_node(&mut images, &node).unwrap();
     assert!(handle.is_some(), "a node with only per-corner radii must still receive a rounded mask");
 }
+
+// A widened glass surface (a ribbon tool revealing its inline field) must keep
+// its corner radius: the shader rebuilds the rounded rectangle from
+// `mesh.uv * size_radius.xy`, so the uniform size has to follow the mesh.
+#[test]
+fn backdrop_surface_resize_keeps_the_corner_radius_instead_of_stretching_it() {
+    let tool = AtomeRenderNode {
+        logical_position: [100.0, 400.0],
+        logical_size: [60.0, 60.0],
+        clip_rect: None,
+        corner_radius: 8.0,
+        corner_radii: None,
+        backdrop: Some(AtomeBackdropStyle { blur_px: 12.0, tint: [0.0, 0.0, 0.0, 0.84], tint_fade: 0.0 }),
+        presentation: true,
+        menu_plane: 0,
+        ..shape_node("backdrop_resize_tool")
+    };
+    let scene = AtomeRenderScene { nodes: vec![tool], effects: Vec::new(), selection_style: None };
+    let mut app = App::new();
+    app.add_plugins(AtomeBevyRendererPlugin::new(AtomeBevyRendererConfig::new(640.0, 480.0, scene)));
+    app.update();
+    let entity = app.world().resource::<AtomeEntityTable>().by_id["backdrop_resize_tool"];
+    let read = |app: &App| {
+        let handle = app
+            .world()
+            .get::<bevy::sprite_render::MeshMaterial2d<crate::backdrop_surface::BackdropSurfaceMaterial>>(entity)
+            .unwrap()
+            .0
+            .clone();
+        app.world()
+            .resource::<Assets<crate::backdrop_surface::BackdropSurfaceMaterial>>()
+            .get(&handle)
+            .unwrap()
+            .uniform
+            .size_radius
+    };
+    assert_eq!(read(&app), Vec4::new(60.0, 60.0, 8.0, 1.0));
+    crate::backdrop_surface::resize_backdrop_surface(app.world_mut(), entity, [300.0, 60.0]).unwrap();
+    // Same radius, new size: before the fix x stayed 60, so every corner was
+    // drawn 5x wider than tall.
+    assert_eq!(read(&app), Vec4::new(300.0, 60.0, 8.0, 1.0));
+}

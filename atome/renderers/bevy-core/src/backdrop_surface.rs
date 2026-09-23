@@ -147,6 +147,20 @@ pub fn resize_backdrop_surface(world: &mut World, entity: Entity, logical_size: 
         video_quad_mesh_handle_from_size(&mut meshes, logical_size, [0.0, 0.0, 1.0, 1.0])
     };
     world.entity_mut(entity).insert(Mesh2d(mesh));
+    // The shader rebuilds the rounded rectangle from `mesh.uv * size_radius.xy`.
+    // Left at the spawn size, a wider mesh stretched the corners by new/old
+    // width (a widened ribbon tool drew a long flat arc instead of its radius).
+    let handle = world
+        .get::<MeshMaterial2d<BackdropSurfaceMaterial>>(entity)
+        .map(|material| material.0.clone())
+        .ok_or_else(|| "bevy_backdrop_surface_component_missing".to_string())?;
+    let mut materials = world
+        .get_resource_mut::<Assets<BackdropSurfaceMaterial>>()
+        .ok_or_else(|| "bevy_backdrop_surface_assets_required".to_string())?;
+    let mut material =
+        materials.get_mut(&handle).ok_or_else(|| "bevy_backdrop_surface_material_missing".to_string())?;
+    material.uniform.size_radius.x = logical_size[0].max(1.0);
+    material.uniform.size_radius.y = logical_size[1].max(1.0);
     Ok(())
 }
 
