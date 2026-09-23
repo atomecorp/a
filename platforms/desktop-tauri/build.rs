@@ -1,3 +1,61 @@
+// Android has no C++ runtime of its own: libc++ ships as a separate shared
+// library (`libc++_shared.so`) inside the NDK, and the C++ dependencies of this
+// crate (MIDI, audio, WebView glue) leave the C++ ABI symbols undefined. Without
+// that runtime the loader aborts before `main` with
+// `dlopen failed: cannot locate symbol "__cxa_pure_virtual"`.
+// Recording the dependency also tells the Tauri CLI which shared library to
+// copy into jniLibs, which is what puts it inside the APK.
+fn android_sysroot_triple(target: &str) -> Option<&'static str> {
+    match target {
+        "aarch64-linux-android" => Some("aarch64-linux-android"),
+        "armv7-linux-androideabi" => Some("arm-linux-androideabi"),
+        "i686-linux-android" => Some("i686-linux-android"),
+        "x86_64-linux-android" => Some("x86_64-linux-android"),
+        _ => None,
+    }
+}
+
+// The NDK keeps the runtime in
+// `toolchains/llvm/prebuilt/<host>/sysroot/usr/lib/<triple>/libc++_shared.so`.
+fn android_sysroot_lib_dir(
+    triple: &str,
+) -> Option<std::path::PathBuf> {
+    let mut roots: Vec<std::path::PathBuf> = Vec::new();
+    for key in ["ANDROID_NDK_HOME", "NDK_HOME", "ANDROID_NDK_ROOT"] {
+        if let Ok(value) = std::env::var(key) {
+            if !value.is_empty() {
+                roots.push(std::path::PathBuf::from(value));
+            }
+        }
+    }
+    for key in ["ANDROID_HOME", "ANDROID_SDK_ROOT"] {
+        if let Ok(value) = std::env::var(key) {
+            if let Ok(entries) = std::fs::read_dir(std::path::Path::new(&value).join("ndk")) {
+                roots.extend(entries.flatten().map(|entry| entry.path()));
+            }
+        }
+    }
+
+    for root in roots {
+        let Ok(prebuilts) = std::fs::read_dir(root.join("toolchains").join("llvm").join("prebuilt"))
+        else {
+            continue;
+        };
+        for prebuilt in prebuilts.flatten() {
+            let dir = prebuilt
+                .path()
+                .join("sysroot")
+                .join("usr")
+                .join("lib")
+                .join(triple);
+            if dir.join("libc++_shared.so").is_file() {
+                return Some(dir);
+            }
+        }
+    }
+    None
+}
+
 fn main() {
     tauri_build::build();
 
@@ -27,6 +85,25 @@ fn main() {
                 local_vosk_dir.display()
             );
         }
+    }
+
+    if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("android") {
+        for key in [
+            "ANDROID_NDK_HOME",
+            "NDK_HOME",
+            "ANDROID_NDK_ROOT",
+            "ANDROID_HOME",
+            "ANDROID_SDK_ROOT",
+        ] {
+            println!("cargo:rerun-if-env-changed={key}");
+        }
+
+        if let Some(triple) = android_sysroot_triple(&std::env::var("TARGET").unwrap_or_default()) {
+            if let Some(dir) = android_sysroot_lib_dir(triple) {
+                println!("cargo:rustc-link-search=native={}", dir.display());
+            }
+        }
+        println!("cargo:rustc-link-arg=-lc++_shared");
     }
 
     if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("macos") {

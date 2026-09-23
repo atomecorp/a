@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "squirrel",
+  "productName": "atome",
   "version": "0.1.0",
   "identifier": "com.squirrel.desktop",
   "build": {
@@ -11,7 +11,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "squirrel",
+        "title": "atome",
         "width": 800,
         "height": 600,
         "dragDropEnabled": false
@@ -35,10 +35,10 @@
       "icons/icon.ico"
     ],
     "resources": {
-      "../../atome/version.txt": "version.txt",
-      "../../atome": "atome",
-      "../../eVe": "eVe",
-      "../../node_modules/rubberband-wasm/dist": "node_modules/rubberband-wasm/dist"
+      "../../atome/version.txt": "project/version.txt",
+      "../../atome": "project/atome",
+      "../../eVe": "project/eVe",
+      "../../node_modules/rubberband-wasm/dist": "project/node_modules/rubberband-wasm/dist"
     }
   }
 }

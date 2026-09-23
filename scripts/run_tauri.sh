@@ -31,8 +31,11 @@ echo "🖥️ Démarrage de Tauri..."
 
 stop_stale_tauri_dev_runtime() {
     local patterns=(
+        "target/debug/atome"
+        "target/debug/bundle/macos/atome.app/Contents/MacOS/atome"
+        # Pre-rename runtime name: a leftover `squirrel` process keeps
+        # 127.0.0.1:3000 bound and would block the rebuilt `atome` binary.
         "target/debug/squirrel"
-        "target/debug/bundle/macos/squirrel.app/Contents/MacOS/squirrel"
         "tauri dev"
         "npm run tauri:dev"
     )
@@ -58,7 +61,7 @@ stop_stale_tauri_dev_runtime() {
     sleep 1
 
     local remaining
-    remaining="$(pgrep -f "target/debug/(bundle/macos/squirrel\\.app/Contents/MacOS/)?squirrel" 2>/dev/null || true)"
+    remaining="$(pgrep -f "target/debug/(bundle/macos/atome\\.app/Contents/MacOS/)?(atome|squirrel)" 2>/dev/null || true)"
     if [[ -n "$remaining" ]]; then
         echo "WARN: Stale Tauri dev runtime did not exit after SIGTERM; forcing shutdown: $remaining"
         while IFS= read -r pid; do

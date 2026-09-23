@@ -48,7 +48,7 @@ It is not a release artifact.
 ### Output paths
 
 ```
-platforms/desktop-tauri/target/release/bundle/macos/   # squirrel.app
+platforms/desktop-tauri/target/release/bundle/macos/   # atome.app
 platforms/desktop-tauri/target/release/bundle/dmg/     # the generated .dmg
 ```
 
@@ -59,7 +59,8 @@ file name, which Tauri derives from `productName` and `version`.
 [`platforms/desktop-tauri/tauri.conf.json`](../../platforms/desktop-tauri/tauri.conf.json),
 so a macOS build emits both the `.app` and the `.dmg`. That file also declares
 the bundled resources (`atome/`, `eVe/`, `version.txt`, the rubberband-wasm
-dist) and points `bundle.macOS.infoPlist` at
+dist) under one `project/` root, which keeps every destination key distinct
+from the `atome` binary name, and points `bundle.macOS.infoPlist` at
 `platforms/desktop-tauri/Info.plist`, which carries the microphone, speech
 recognition, camera, and contacts usage descriptions.
 
@@ -157,9 +158,9 @@ opening the app on the build machine proves nothing, because the build machine
 trusts its own ad-hoc signature:
 
 ```bash
-codesign --verify --deep --strict --verbose=2 path/to/squirrel.app
-spctl --assess --type execute --verbose path/to/squirrel.app
-xcrun stapler validate path/to/squirrel.dmg
+codesign --verify --deep --strict --verbose=2 path/to/atome.app
+spctl --assess --type execute --verbose path/to/atome.app
+xcrun stapler validate path/to/atome.dmg
 ```
 
 The decisive test remains opening the DMG on a Mac that never built the app.

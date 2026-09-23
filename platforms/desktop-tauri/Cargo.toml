@@ -4,6 +4,10 @@ version = "0.1.0"
 description = "A Tauri App"
 authors = ["you"]
 edition = "2021"
+# The Tauri CLI treats the binary named by `default-run` (or by the package
+# name) as the main binary, so the `[[bin]] atome` target below has to be
+# declared here as well.
+default-run = "atome"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -13,6 +17,16 @@ edition = "2021"
 # This seems to be only an issue on Windows, see https://github.com/rust-lang/cargo/issues/8519
 name = "squirrel_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
+
+# macOS reads the application name from the executable whenever the app runs
+# outside its bundle, which is the case in `tauri dev`: the binary name is the
+# only visible identity owner on that lane, so it is `atome`. The crate and the
+# library keep the `squirrel` names because `System.loadLibrary("squirrel_lib")`
+# in the generated Android project and the installed application data depend on
+# them.
+[[bin]]
+name = "atome"
+path = "src/main.rs"
 
 [features]
 default = []

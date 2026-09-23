@@ -84,7 +84,7 @@ async function projectStateForRead(state, userId) {
     const atomeId = state?.atome_id || state?.id || null;
     if (!atomeId) return null;
     if (state?.vault_principal_id && String(state.vault_principal_id) === String(userId)) {
-        return { ...state, capabilities: { read: true, write: true, delete: true, share: true } };
+        return { ...state, capabilities: { read: true, write: true, create: true, delete: true, share: true } };
     }
     const properties = await projectAtomePropertiesForRead(atomeId, state.properties || {}, userId);
     if (!Object.keys(properties).length) return null;

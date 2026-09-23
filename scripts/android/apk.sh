@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Android APK automation for Squirrel (Atome / eVe).
+# Android APK automation for atome (Squirrel runtime / eVe).
 #
 # Single owner of:
 #   - the Android toolchain bootstrap (JDK, SDK, NDK, Rust targets, Tauri CLI)
@@ -39,6 +39,36 @@ readonly BUILD_MARKER="$TEMP_DIR/apk-build-marker"
 readonly KEYSTORE_DIR="${HOME}/.atome/android"
 readonly KEYSTORE_FILE="$KEYSTORE_DIR/squirrel-release.jks"
 readonly KEYSTORE_PROPERTIES="$KEYSTORE_DIR/keystore.properties"
+
+# The Android emulator is an optional, project-local toolchain. Its packages and
+# its AVD live under the git-ignored `temp/` tree, so nothing about it is
+# versioned and the global SDK / AVD directories stay untouched. The AVD is not
+# synchronized with the repository and can be deleted at any time: the next
+# `--emulator` run downloads it again.
+readonly EMULATOR_DEFAULT_SDK_ROOT="$TEMP_DIR/android-sdk"
+readonly EMULATOR_DEFAULT_STATE_DIR="$TEMP_DIR/android-avd"
+readonly EMULATOR_LOG_DIR="$TEMP_DIR/logcat"
+readonly EMULATOR_DEFAULT_AVD="atome-api36"
+readonly EMULATOR_DEFAULT_API="36"
+readonly EMULATOR_BOOT_TIMEOUT=420
+readonly EMULATOR_DEFAULT_LOGCAT_SECONDS=25
+readonly EMULATOR_DEFAULT_PORT=5554
+# A debug APK carries a multi-hundred-megabyte unoptimized native library, so
+# the AVD asks for a phone-sized RAM allocation instead of the 2 GB profile
+# default. The emulator silently falls back to software GL when the host cannot
+# back the request, and that fallback is what left the system launcher frozen on
+# a busy machine: the guest size is therefore capped by what the host can spare
+# (see emulator_resolve_memory).
+readonly EMULATOR_DEFAULT_MEMORY=4096
+readonly EMULATOR_MIN_MEMORY=2048
+readonly EMULATOR_MEMORY_STEP=512
+# Renderer modes accepted by `emulator -gpu` 37.x. `host` reaches Metal through
+# ANGLE/MoltenVK; the AVD device profile ships with GPU emulation disabled, so
+# the renderer is requested on the command line instead of being left to the
+# profile. `swiftshader_indirect` is a legacy value this emulator rejects.
+readonly EMULATOR_GPU_MODES="auto host lavapipe swiftshader swangle"
+readonly EMULATOR_DEFAULT_GPU_MODE="host"
+readonly EMULATOR_HEADLESS_GPU_MODE="swiftshader"
 
 # Toolchain floor. Versions are pinned so the build is reproducible; anything
 # already installed at or above the floor is reused as-is.
@@ -91,6 +121,25 @@ ASSUME_YES=0
 ALLOW_INSTALL=1
 TARGET_DEVICE=""
 ISOLATED_HOME=""
+DO_EMULATOR=0
+EMULATOR_HEADLESS=0
+EMULATOR_WIPE=0
+EMULATOR_AVD_NAME="$EMULATOR_DEFAULT_AVD"
+EMULATOR_API="$EMULATOR_DEFAULT_API"
+EMULATOR_IMAGE=""
+EMULATOR_SDK_ROOT=""
+EMULATOR_STATE_DIR=""
+EMULATOR_PORT="$EMULATOR_DEFAULT_PORT"
+EMULATOR_LOGCAT_SECONDS="$EMULATOR_DEFAULT_LOGCAT_SECONDS"
+# Resolved from the host unless --emulator-memory overrides it.
+EMULATOR_MEMORY=""
+EMULATOR_GPU_MODE=""
+EMULATOR_SERIAL=""
+EMULATOR_LOG_FILE=""
+EMULATOR_CRASH_FILE=""
+EMULATOR_STAMP=""
+EMULATOR_LOG_PID=""
+AVDMANAGER=""
 # Artifacts collected and verified by the last build, in report order.
 DISCOVERED_ARTIFACTS=()
 
@@ -112,6 +161,32 @@ Options:
       --split-per-abi   Emit one artifact per ABI
       --install         Install the produced artifact with "adb install -r"
       --device <id>     Target a specific device/emulator (adb serial, or --dev runner)
+      --emulator        After the build, boot the local Android emulator, install
+                        the APK, launch it, capture logcat and save a screenshot.
+                        A frozen instance from an earlier run is terminated
+                        (console, then SIGTERM/SIGKILL) before the reboot.
+                        The emulator
+                        packages and the AVD are downloaded into the git-ignored
+                        temp/ tree (nothing is versioned, nothing global changes).
+                        The AVD is sized for this machine: the renderer runs
+                        on the host GPU (Metal through ANGLE/MoltenVK) and the
+                        guest RAM is the largest of 2/2.5/3/3.5/4 GB the host can
+                        back, because the emulator falls back to software GL -
+                        and the system launcher freezes - when it is oversubscribed.
+      --emulator-headless  Boot the emulator without a window (swiftshader GPU)
+      --emulator-memory <mb>       Guest RAM in MB (default: resolved from the host)
+      --emulator-gpu <mode>        auto | host | lavapipe | swiftshader | swangle
+                                   (default: host, or swiftshader with --emulator-headless)
+      --emulator-wipe   Recreate the AVD from scratch before booting it and stop
+                        a running instance, so the recreated AVD is the one used
+      --emulator-avd <name>        AVD name (default: atome-api36)
+      --emulator-api <level>       Android API level (default: 36)
+      --emulator-image <package>   System image package; defaults to
+                                   system-images;android-<api>;google_apis;arm64-v8a
+      --emulator-sdk-root <dir>    Where emulator packages are installed
+      --emulator-state-dir <dir>   Where the AVD and the emulator state live
+      --emulator-port <port>       Emulator console port (default: 5554)
+      --logcat-seconds <n>         Logcat capture length after launch (default: 25)
       --doctor          Report the Android toolchain and stop; builds nothing
       --force-deps      Re-verify and update the toolchain before building
       --no-install-deps Never install or update a missing dependency; fail instead
@@ -129,6 +204,7 @@ Examples:
   ./run.sh apk --prod                # signed release APK
   ./run.sh apk --prod --aab          # signed release AAB for the Play Store
   ./run.sh apk --dev --device R58M   # hot-reload session on a specific device
+  ./run.sh apk --emulator            # build, then run and log on the local emulator
   ./run.sh apk --doctor              # toolchain report only
   ./run.sh apk --isolated-home temp/android-home   # caches kept in the project
 USAGE
@@ -152,6 +228,36 @@ parse_args() {
       --device)
         [[ $# -ge 2 ]] || fail "--device requires a value"
         TARGET_DEVICE="$2"; shift 2 ;;
+      --emulator)       DO_EMULATOR=1; shift ;;
+      --emulator-headless) EMULATOR_HEADLESS=1; shift ;;
+      --emulator-wipe)  EMULATOR_WIPE=1; shift ;;
+      --emulator-avd)
+        [[ $# -ge 2 ]] || fail "--emulator-avd requires a value"
+        EMULATOR_AVD_NAME="$2"; shift 2 ;;
+      --emulator-api)
+        [[ $# -ge 2 ]] || fail "--emulator-api requires a value"
+        EMULATOR_API="$2"; shift 2 ;;
+      --emulator-image)
+        [[ $# -ge 2 ]] || fail "--emulator-image requires a value"
+        EMULATOR_IMAGE="$2"; shift 2 ;;
+      --emulator-sdk-root)
+        [[ $# -ge 2 ]] || fail "--emulator-sdk-root requires a value"
+        EMULATOR_SDK_ROOT="$2"; shift 2 ;;
+      --emulator-state-dir)
+        [[ $# -ge 2 ]] || fail "--emulator-state-dir requires a value"
+        EMULATOR_STATE_DIR="$2"; shift 2 ;;
+      --emulator-port)
+        [[ $# -ge 2 ]] || fail "--emulator-port requires a value"
+        EMULATOR_PORT="$2"; shift 2 ;;
+      --logcat-seconds)
+        [[ $# -ge 2 ]] || fail "--logcat-seconds requires a value"
+        EMULATOR_LOGCAT_SECONDS="$2"; shift 2 ;;
+      --emulator-memory)
+        [[ $# -ge 2 ]] || fail "--emulator-memory requires a value"
+        EMULATOR_MEMORY="$2"; shift 2 ;;
+      --emulator-gpu)
+        [[ $# -ge 2 ]] || fail "--emulator-gpu requires a value"
+        EMULATOR_GPU_MODE="$2"; shift 2 ;;
       --doctor)         DO_DOCTOR=1; shift ;;
       --dry-run)        DO_DRY_RUN=1; shift ;;
       --force-deps)     FORCE_DEPS=1; shift ;;
@@ -176,8 +282,24 @@ parse_args() {
     *) fail "Unsupported --abi value: $ABI" ;;
   esac
 
+  if [[ -n "$EMULATOR_MEMORY" ]] && [[ ! "$EMULATOR_MEMORY" =~ ^[0-9]+$ ]]; then
+    fail "--emulator-memory expects a number of megabytes, got: $EMULATOR_MEMORY"
+  fi
+
+  if [[ -n "$EMULATOR_GPU_MODE" ]] && ! grep -qw -- "$EMULATOR_GPU_MODE" <<<"$EMULATOR_GPU_MODES"; then
+    fail "Unsupported --emulator-gpu value: $EMULATOR_GPU_MODE (expected one of: $EMULATOR_GPU_MODES)"
+  fi
+
   if [[ "$MODE" == "dev" && "$EMIT" == "aab" ]]; then
     fail "--dev runs the app on a device; it cannot emit an AAB"
+  fi
+
+  if [[ "$DO_EMULATOR" -eq 1 && "$MODE" == "dev" ]]; then
+    fail "--emulator builds and installs an artifact; --dev already drives a device with hot reload"
+  fi
+
+  if [[ "$DO_EMULATOR" -eq 1 && "$EMIT" == "aab" ]]; then
+    fail "--emulator installs an APK; convert the AAB first (bundletool build-apks)"
   fi
 }
 
@@ -348,6 +470,8 @@ resolve_android_sdk() {
 export_sdk_env() {
   export ANDROID_HOME="$ANDROID_SDK_RESOLVED"
   export ANDROID_SDK_ROOT="$ANDROID_SDK_RESOLVED"
+  # avdmanager ships next to sdkmanager in the same cmdline-tools release.
+  AVDMANAGER="$(dirname "$SDKMANAGER")/avdmanager"
   local extra=""
   if [[ -d "$ANDROID_SDK_RESOLVED/platform-tools" ]]; then
     extra="$extra:$ANDROID_SDK_RESOLVED/platform-tools"
@@ -790,6 +914,7 @@ verify_artifact() {
     else
       fail "APK signature verification failed for $artifact"
     fi
+    verify_native_runtime "$artifact"
   else
     log "--- jar contents (AAB) ---"
     unzip -l "$artifact" | head -20 | sed 's/^/[apk] /'
@@ -798,6 +923,38 @@ verify_artifact() {
   if command -v shasum >/dev/null 2>&1; then
     log "sha256 $(shasum -a 256 "$artifact" | cut -d' ' -f1)"
   fi
+}
+
+# The C++ dependencies of the runtime leave the C++ ABI symbols undefined, and
+# Android's libc does not provide them: `libc++_shared.so` has to travel inside
+# the APK next to the Rust library. The Tauri CLI copies it from the NDK because
+# `libsquirrel_lib.so` declares it as a needed shared library, which is what the
+# Android branch of platforms/desktop-tauri/build.rs arranges. Verifying the
+# packaged APK keeps a regression from reaching a device, where the only symptom
+# is `dlopen failed: cannot locate symbol "__cxa_pure_virtual"`.
+verify_native_runtime() {
+  local artifact="$1" abi lib
+  local -a entries=() abis=()
+  while IFS= read -r lib; do
+    [[ "$lib" == lib/*/*.so ]] || continue
+    entries+=("$lib")
+    abi="${lib#lib/}"
+    abi="${abi%%/*}"
+    if ! printf '%s\n' "${abis[@]:-}" | grep -qx "$abi"; then abis+=("$abi"); fi
+  done < <(unzip -Z1 "$artifact" 'lib/*' 2>/dev/null | sort)
+
+  [[ "${#entries[@]}" -gt 0 ]] \
+    || fail "No native library is packaged in $(basename "$artifact"); the APK cannot load the runtime"
+  log "native libraries: ${entries[*]}"
+
+  for abi in "${abis[@]}"; do
+    printf '%s\n' "${entries[@]}" | grep -qx "lib/$abi/libsquirrel_lib.so" \
+      || fail "lib/$abi is packaged without libsquirrel_lib.so in $(basename "$artifact")"
+    if ! printf '%s\n' "${entries[@]}" | grep -qx "lib/$abi/libc++_shared.so"; then
+      fail "$(basename "$artifact") packages lib/$abi/libsquirrel_lib.so without the C++ runtime (lib/$abi/libc++_shared.so); on a device this fails with: dlopen failed: cannot locate symbol \"__cxa_pure_virtual\". Check the Android branch of platforms/desktop-tauri/build.rs and rebuild"
+    fi
+    ok "C++ runtime packaged for $abi"
+  done
 }
 
 # The Tauri CLI reports every artifact it just assembled:
@@ -914,6 +1071,531 @@ install_artifact() {
   ok "installed $(basename "$artifact") on $serial"
 }
 
+# ------------------------------------------------------------- emulator lane
+#
+# `--emulator` owns the local Android emulator: it downloads the emulator
+# packages and one system image into a project-local SDK root, creates the AVD
+# under the git-ignored temp/ tree, boots it, installs the artifact this run
+# built and verified, launches it, and records logcat. Nothing here is
+# versioned and no global SDK or AVD directory is modified.
+
+emulator_sdk_root() {
+  printf '%s\n' "${EMULATOR_SDK_ROOT:-$EMULATOR_DEFAULT_SDK_ROOT}"
+}
+
+emulator_state_dir() {
+  printf '%s\n' "${EMULATOR_STATE_DIR:-$EMULATOR_DEFAULT_STATE_DIR}"
+}
+
+emulator_system_image() {
+  if [[ -n "$EMULATOR_IMAGE" ]]; then
+    printf '%s\n' "$EMULATOR_IMAGE"
+  else
+    printf 'system-images;android-%s;google_apis;arm64-v8a\n' "$EMULATOR_API"
+  fi
+}
+
+emulator_binary_path() {
+  local binary
+  binary="$(emulator_sdk_root)/emulator/emulator"
+  if [[ -x "$binary" ]]; then printf '%s\n' "$binary"; fi
+}
+
+emulator_system_image_dir() {
+  # A package id is its path under the SDK root: system-images;a;b;c -> system-images/a/b/c
+  printf '%s/%s\n' "$(emulator_sdk_root)" "${1//;//}"
+}
+
+# The emulator validates a candidate SDK root by requiring a platform-tools
+# subdirectory inside it. Without that directory it rejects the project-local
+# root and aborts with "Broken AVD system path", so platform-tools is part of
+# the emulator toolchain even though the lane drives adb from the global SDK.
+emulator_platform_tools_dir() {
+  printf '%s/platform-tools\n' "$(emulator_sdk_root)"
+}
+
+# The Android SDK licences were already accepted for the global SDK. A second
+# SDK root is a second licence store, so the accepted files are copied instead
+# of re-prompted or silently assumed; a licence that is genuinely missing stays
+# a named sdkmanager failure below.
+seed_emulator_licenses() {
+  local root="$1" licence
+  [[ -d "$root/licenses" ]] && return 0
+  [[ -d "$ANDROID_SDK_RESOLVED/licenses" ]] || return 0
+  run_cmd mkdir -p "$root/licenses"
+  while IFS= read -r licence; do
+    [[ -n "$licence" ]] || continue
+    run_cmd cp -f "$licence" "$root/licenses/"
+  done < <(find "$ANDROID_SDK_RESOLVED/licenses" -type f | sort)
+  ok "Android SDK licences reused from $ANDROID_SDK_RESOLVED/licenses"
+}
+
+ensure_emulator_packages() {
+  step "Android emulator packages"
+  local root image
+  root="$(emulator_sdk_root)"
+  image="$(emulator_system_image)"
+
+  if [[ -n "$(emulator_binary_path)" && -d "$(emulator_system_image_dir "$image")" \
+    && -d "$(emulator_platform_tools_dir)" ]]; then
+    ok "emulator, platform-tools and $image installed under $root"
+    return 0
+  fi
+
+  if [[ "$ALLOW_INSTALL" -eq 0 ]]; then
+    fail "The Android emulator is missing and --no-install-deps was given"
+  fi
+
+  miss "emulator packages under $root"
+  log "first run: downloading platform-tools, the emulator and $image into $root"
+  if [[ "$DO_DRY_RUN" -eq 1 ]]; then
+    printf '[apk] dry-run> %s --sdk_root=%s --install platform-tools emulator %s\n' "$SDKMANAGER" "$root" "$image"
+    return 0
+  fi
+
+  run_cmd mkdir -p "$root"
+  seed_emulator_licenses "$root"
+  run_cmd "$SDKMANAGER" --sdk_root="$root" --install "platform-tools" "emulator" "$image"
+  [[ -n "$(emulator_binary_path)" ]] \
+    || fail "sdkmanager finished but $root/emulator/emulator is missing"
+  [[ -d "$(emulator_system_image_dir "$image")" ]] \
+    || fail "sdkmanager finished but $image is not installed under $root/system-images"
+  [[ -d "$(emulator_platform_tools_dir)" ]] \
+    || fail "sdkmanager finished but platform-tools is not installed under $root"
+  ok "emulator toolchain ready under $root"
+}
+
+emulator_device_profile() {
+  local devices candidate
+  devices="$("$AVDMANAGER" list device 2>/dev/null || true)"
+  for candidate in pixel_7 pixel_6 pixel_5 pixel; do
+    if grep -q "\"$candidate\"" <<<"$devices"; then printf '%s\n' "$candidate"; return 0; fi
+  done
+  printf 'pixel\n'
+}
+
+# vm_stat is the only memory source that works in a restricted shell; `sysctl
+# hw.memsize` and `top` are blocked there. Free + inactive + speculative is what
+# the kernel can hand to a new process without swapping first.
+emulator_host_available_mb() {
+  vm_stat 2>/dev/null | awk '
+    /page size of/ { for (i = 1; i < NF; i++) if ($i == "of") size = $(i + 1) + 0 }
+    /^Pages free/        { free = $3 + 0 }
+    /^Pages inactive/    { inactive = $3 + 0 }
+    /^Pages speculative/ { speculative = $3 + 0 }
+    END {
+      if (size <= 0) size = 4096
+      printf "%d\n", (free + inactive + speculative) * size / 1048576
+    }'
+}
+
+# The emulator needs the guest RAM plus roughly 1 GB of overhead on the host.
+# Oversubscribing it is not a graceful degradation: the renderer switches to
+# software and the guest becomes slow enough for its launcher to ANR.
+emulator_resolve_memory() {
+  [[ -z "$EMULATOR_MEMORY" ]] || return 0
+
+  local available memory
+  available="$(emulator_host_available_mb)"
+  memory="$EMULATOR_DEFAULT_MEMORY"
+  while (( memory > EMULATOR_MIN_MEMORY )) && (( memory + 1024 > available )); do
+    memory=$(( memory - EMULATOR_MEMORY_STEP ))
+  done
+  EMULATOR_MEMORY="$memory"
+
+  if (( memory + 1024 > available )); then
+    warn "the host has ${available}MB available and the AVD boots with ${memory}MB; close heavy applications if the emulator feels slow"
+  else
+    ok "AVD memory ${memory}MB (host available ${available}MB)"
+  fi
+}
+
+emulator_resolved_gpu_mode() {
+  if [[ -n "$EMULATOR_GPU_MODE" ]]; then
+    printf '%s\n' "$EMULATOR_GPU_MODE"
+  elif [[ "$EMULATOR_HEADLESS" -eq 1 ]]; then
+    printf '%s\n' "$EMULATOR_HEADLESS_GPU_MODE"
+  else
+    printf '%s\n' "$EMULATOR_DEFAULT_GPU_MODE"
+  fi
+}
+
+# Single owner of the emulator command line, one argument per line. The line is
+# recorded so the next run can tell whether the instance already running was
+# booted with these settings: GPU and RAM only change on a fresh boot.
+emulator_launch_args() {
+  printf '%s\n' -avd "$EMULATOR_AVD_NAME" \
+    -port "$EMULATOR_PORT" \
+    -memory "$EMULATOR_MEMORY" \
+    -gpu "$(emulator_resolved_gpu_mode)" \
+    -no-boot-anim -no-snapshot-save -no-metrics
+  if [[ "$EMULATOR_HEADLESS" -eq 1 ]]; then printf '%s\n' -no-window; fi
+}
+
+# Any state counts as running: an instance that is still booting, unauthorized or
+# frozen must be restarted, never treated as ready.
+emulator_is_running() {
+  local serial="$1"
+  adb devices 2>/dev/null | awk 'NR > 1 && $1 != "" { print $1 }' | grep -qx "$serial"
+}
+
+# The pid recorded at launch is the only handle on an instance that no longer
+# answers adb. A frozen QEMU main loop keeps the process and the console port
+# alive while never serving `adb emu kill`, and adb stops listing the serial, so
+# the previous run would either be seen as "no emulator" (and the new instance
+# would fail on the busy port) or block the shutdown wait. The recorded command
+# line is checked before signalling, so a recycled pid can never take an
+# unrelated process down.
+emulator_instance_pid() {
+  local pid_file pid command
+  pid_file="$(emulator_state_dir)/emulator.pid"
+  [[ -f "$pid_file" ]] || return 1
+  pid="$(tr -dc '0-9' <"$pid_file")"
+  [[ -n "$pid" ]] || return 1
+  kill -0 "$pid" 2>/dev/null || return 1
+  command="$(ps -p "$pid" -o command= 2>/dev/null || true)"
+  [[ "$command" == *emulator* ]] || return 1
+  printf '%s\n' "$pid"
+}
+
+# Console shutdown first because that is the emulator's own clean path; a frozen
+# instance never serves it, so signals follow. The grace periods are short on
+# purpose: an AVD is throw-away, project-local state, and a wedged instance left
+# behind is exactly what made the previous run unusable.
+emulator_stop_instance() {
+  local serial="$1" pid deadline
+  if emulator_is_running "$serial"; then
+    log "asking $serial to shut down"
+    adb -s "$serial" emu kill >/dev/null 2>&1 || true
+    deadline=$((SECONDS + 20))
+    while (( SECONDS < deadline )) && emulator_is_running "$serial"; do sleep 2; done
+    emulator_is_running "$serial" || return 0
+  fi
+
+  pid="$(emulator_instance_pid)" || return 0
+  warn "$serial did not answer the console; terminating pid $pid"
+  kill "$pid" 2>/dev/null || true
+  deadline=$((SECONDS + 15))
+  while (( SECONDS < deadline )) && kill -0 "$pid" 2>/dev/null; do sleep 1; done
+  if kill -0 "$pid" 2>/dev/null; then
+    warn "pid $pid ignored SIGTERM; sending SIGKILL"
+    kill -9 "$pid" 2>/dev/null || true
+    deadline=$((SECONDS + 10))
+    while (( SECONDS < deadline )) && kill -0 "$pid" 2>/dev/null; do sleep 1; done
+  fi
+  if kill -0 "$pid" 2>/dev/null; then
+    warn "pid $pid is still alive after SIGKILL"
+    return 1
+  fi
+  rm -f "$(emulator_state_dir)/emulator.pid"
+  ok "$serial stopped"
+}
+
+# The AVD is project-local, throw-away state, and the profile avdmanager applies
+# is wrong for this lane: it disables GPU emulation and pins the guest RAM at
+# 2 GB. Normalizing the config also keeps the AVD usable from Android Studio,
+# which reads the same keys.
+emulator_set_avd_property() {
+  local config="$1" key="$2" value="$3" current
+  current="$(sed -n "s/^${key}=//p" "$config" 2>/dev/null | head -1)"
+  if [[ "$current" == "$value" ]]; then
+    skip "$key already $value"
+    return 0
+  fi
+
+  if [[ "$DO_DRY_RUN" -eq 1 ]]; then
+    printf '[apk] dry-run> set %s=%s in %s (currently "%s")\n' "$key" "$value" "$config" "$current"
+    return 0
+  fi
+
+  awk -v key="$key" -v value="$value" '
+    $0 ~ "^" key "=" { print key "=" value; seen = 1; next }
+    { print }
+    END { if (!seen) print key "=" value }
+  ' "$config" >"$config.tmp"
+  mv "$config.tmp" "$config"
+}
+
+emulator_normalize_avd_config() {
+  local config="$1"
+  step "Android virtual device settings"
+  log "normalizing $config"
+  emulator_set_avd_property "$config" hw.gpu.enabled yes
+  emulator_set_avd_property "$config" hw.gpu.mode auto
+  emulator_set_avd_property "$config" hw.ramSize "$EMULATOR_MEMORY"
+  emulator_set_avd_property "$config" hw.keyboard yes
+  ok "AVD settings ready (gpu=yes/auto, ram=${EMULATOR_MEMORY}MB, keyboard=yes)"
+}
+
+ensure_emulator_avd() {
+  step "Android virtual device"
+  local root state avd_home name image profile
+  root="$(emulator_sdk_root)"
+  state="$(emulator_state_dir)"
+  avd_home="$state/avd"
+  name="$EMULATOR_AVD_NAME"
+  image="$(emulator_system_image)"
+
+  # The AVD, the adb keys and the emulator preferences all stay under temp/.
+  export ANDROID_AVD_HOME="$avd_home"
+  export ANDROID_EMULATOR_HOME="$state"
+  export ANDROID_USER_HOME="$state/user"
+
+  if [[ "$DO_DRY_RUN" -eq 1 ]]; then
+    printf '[apk] dry-run> ANDROID_AVD_HOME=%s AVDMANAGER_OPTS=-Dcom.android.sdkmanager.toolsdir=%s/cmdline-tools/latest %s create avd -n %s -k %s -d <profile>\n' \
+      "$avd_home" "$root" "$AVDMANAGER" "$name" "$image"
+    return 0
+  fi
+
+  run_cmd mkdir -p "$avd_home" "$ANDROID_USER_HOME"
+
+  if [[ "$EMULATOR_WIPE" -eq 1 && -f "$avd_home/$name.ini" ]]; then
+    log "recreating the existing AVD $name"
+    run_cmd "$AVDMANAGER" delete avd -n "$name"
+  fi
+
+  if [[ -f "$avd_home/$name.ini" ]]; then
+    ok "AVD $name reused ($avd_home)"
+    emulator_normalize_avd_config "$avd_home/$name.avd/config.ini"
+    return 0
+  fi
+
+  profile="$(emulator_device_profile)"
+  log "creating AVD $name ($image, device profile $profile)"
+  # avdmanager ignores ANDROID_HOME and ANDROID_SDK_ROOT: its launcher sets the
+  # `com.android.sdkmanager.toolsdir` property to the cmdline-tools install and
+  # the CLI takes the SDK root from that path's grandparent. Overriding the
+  # property is what makes the project-local system image visible here instead
+  # of the global SDK, which holds no system image at all.
+  local toolsdir="$root/cmdline-tools/latest"
+  run_cmd mkdir -p "$toolsdir"
+  # avdmanager asks whether a custom hardware profile is wanted; answering "no"
+  # keeps the profile given on the command line.
+  printf 'no\n' | run_cmd env \
+    ANDROID_SDK_ROOT="$root" ANDROID_HOME="$root" \
+    ANDROID_AVD_HOME="$avd_home" ANDROID_USER_HOME="$ANDROID_USER_HOME" \
+    AVDMANAGER_OPTS="-Dcom.android.sdkmanager.toolsdir=$toolsdir" \
+    "$AVDMANAGER" create avd -n "$name" -k "$image" -d "$profile" --force
+  [[ -f "$avd_home/$name.ini" ]] || fail "avdmanager did not create $avd_home/$name.ini"
+  emulator_normalize_avd_config "$avd_home/$name.avd/config.ini"
+  ok "AVD $name created under $state"
+}
+
+emulator_wait_for_boot() {
+  local serial="$1" deadline=$((SECONDS + EMULATOR_BOOT_TIMEOUT)) state
+  log "waiting for $serial to finish booting (timeout ${EMULATOR_BOOT_TIMEOUT}s)"
+  while (( SECONDS < deadline )); do
+    state="$(adb -s "$serial" shell getprop sys.boot_completed 2>/dev/null | tr -d '\r' || true)"
+    if [[ "$state" == "1" ]]; then
+      ok "$serial booted"
+      return 0
+    fi
+    sleep 5
+  done
+  fail "$serial did not finish booting within ${EMULATOR_BOOT_TIMEOUT}s (see $(emulator_state_dir)/emulator.log)"
+}
+
+boot_emulator() {
+  step "Android emulator"
+  local root state avd_home emulator serial log args_file
+  root="$(emulator_sdk_root)"
+  state="$(emulator_state_dir)"
+  avd_home="$state/avd"
+  emulator="$(emulator_binary_path)"
+  serial="emulator-$EMULATOR_PORT"
+  log="$state/emulator.log"
+  args_file="$state/emulator.args"
+
+  EMULATOR_SERIAL="$serial"
+
+  local -a args=()
+  while IFS= read -r arg; do args+=("$arg"); done < <(emulator_launch_args)
+
+  # A running instance keeps the flags it was booted with, so it is only reused
+  # when it was started with exactly these settings. Anything else - a different
+  # renderer, a different guest size, a recreated AVD - is restarted, because the
+  # alternative is testing a configuration the caller did not ask for. An
+  # instance adb no longer lists while its recorded pid is alive is the frozen
+  # case (see todo/android.md 12.11): it still owns the console port, so it is
+  # restarted as well instead of being mistaken for "no emulator yet".
+  local restart_reason=""
+  if emulator_is_running "$serial"; then
+    if [[ "$EMULATOR_WIPE" -eq 0 && -f "$args_file" && "$(cat "$args_file")" == "${args[*]}" ]]; then
+      ok "$serial is already running with the current settings"
+      return 0
+    fi
+    restart_reason="it was booted with other settings"
+  elif [[ -n "$(emulator_instance_pid || true)" ]]; then
+    restart_reason="it is frozen and no longer answers adb"
+  fi
+
+  if [[ -n "$restart_reason" ]]; then
+    log "stopping $serial ($restart_reason)"
+    if [[ "$DO_DRY_RUN" -eq 1 ]]; then
+      printf '[apk] dry-run> adb -s %s emu kill, then SIGTERM/SIGKILL on the pid recorded in %s\n' "$serial" "$(emulator_state_dir)/emulator.pid"
+    else
+      emulator_stop_instance "$serial" \
+        || fail "$serial could not be stopped; kill the pid in $(emulator_state_dir)/emulator.pid and re-run"
+    fi
+  fi
+
+  log "launching $emulator ${args[*]}"
+  if [[ "$DO_DRY_RUN" -eq 1 ]]; then
+    printf '[apk] dry-run> ANDROID_AVD_HOME=%s %s %s\n' "$avd_home" "${emulator:-$root/emulator/emulator}" "${args[*]}"
+    return 0
+  fi
+
+  [[ -n "$emulator" ]] || fail "The emulator binary is missing under $root"
+
+  # The window is left open on purpose: it is the visible proof the user asked
+  # for, and it keeps the AVD's GPU surface alive while logcat is captured.
+  (
+    cd "$state" || exit 1
+    ANDROID_AVD_HOME="$avd_home" \
+    ANDROID_EMULATOR_HOME="$state" \
+    ANDROID_USER_HOME="$state/user" \
+    ANDROID_SDK_ROOT="$root" \
+    ANDROID_HOME="$root" \
+      nohup "$emulator" "${args[@]}" >"$log" 2>&1 &
+    echo $! > "$state/emulator.pid"
+  )
+  printf '%s\n' "${args[*]}" >"$args_file"
+  ok "emulator started (pid $(cat "$state/emulator.pid"), log $log)"
+
+  adb start-server >/dev/null 2>&1 \
+    || fail "The adb server could not be started (port $((EMULATOR_PORT + 1)) or 5037 blocked); run this lane outside a restricted sandbox"
+  emulator_wait_for_boot "$serial"
+}
+
+# The window that holds the focus is what the user sees; a running process alone
+# proves nothing, and the first report showed exactly that gap (the frozen
+# launcher ANR'd while the app was reported as started).
+emulator_focused_window() {
+  adb -s "$EMULATOR_SERIAL" shell dumpsys window 2>/dev/null \
+    | grep -m1 'mCurrentFocus=' \
+    | sed 's/.*mCurrentFocus=//' \
+    | tr -d '\r'
+}
+
+emulator_badging_field() {
+  local artifact="$1" expression="$2" aapt2
+  aapt2="$(build_tools_dir)/aapt2"
+  [[ -x "$aapt2" ]] || fail "aapt2 is missing under $ANDROID_SDK_RESOLVED/build-tools"
+  "$aapt2" dump badging "$artifact" | sed -n "$expression" | head -1
+}
+
+# The buffers are cleared and the capture starts *before* `am start`: the first
+# seconds of a startup failure are the whole point of this lane, and clearing
+# after the launch would throw exactly those lines away.
+emulator_capture_start() {
+  step "Logcat"
+  run_cmd mkdir -p "$EMULATOR_LOG_DIR"
+  EMULATOR_STAMP="$(date +%Y%m%d-%H%M%S)"
+  EMULATOR_LOG_FILE="$EMULATOR_LOG_DIR/atome-$EMULATOR_STAMP.log"
+  EMULATOR_CRASH_FILE="$EMULATOR_LOG_DIR/atome-crash-$EMULATOR_STAMP.log"
+
+  adb -s "$EMULATOR_SERIAL" logcat -c -b main -b system -b crash
+  log "capturing logcat into $EMULATOR_LOG_FILE"
+  adb -s "$EMULATOR_SERIAL" logcat -v threadtime -b main -b system -b crash \
+    >"$EMULATOR_LOG_FILE" 2>&1 &
+  EMULATOR_LOG_PID=$!
+}
+
+emulator_capture_finish() {
+  local app_id="$1" shot focus hits
+  sleep "$EMULATOR_LOGCAT_SECONDS"
+  kill "$EMULATOR_LOG_PID" 2>/dev/null || true
+  wait "$EMULATOR_LOG_PID" 2>/dev/null || true
+
+  adb -s "$EMULATOR_SERIAL" logcat -d -b crash -v threadtime >"$EMULATOR_CRASH_FILE" 2>&1 || true
+  ok "logcat      : $EMULATOR_LOG_FILE"
+  ok "crash buffer: $EMULATOR_CRASH_FILE"
+
+  if [[ -s "$EMULATOR_CRASH_FILE" ]]; then
+    log "--- crash buffer (tail) ---"
+    tail -40 "$EMULATOR_CRASH_FILE" | sed 's/^/[apk] /'
+  else
+    ok "the crash buffer is empty"
+  fi
+
+  if adb -s "$EMULATOR_SERIAL" shell pidof "$app_id" >/dev/null 2>&1; then
+    ok "$app_id is still running"
+  else
+    warn "$app_id is not running any more; the reason is in $EMULATOR_LOG_FILE or $EMULATOR_CRASH_FILE"
+    log "--- $app_id lines (tail) ---"
+    grep -i -e "$app_id" -e "AndroidRuntime" "$EMULATOR_LOG_FILE" | tail -25 | sed 's/^/[apk] /' || true
+  fi
+
+  # The verdict is written here so a single run is self-explanatory: the loader
+  # failure that motivated this lane (__cxa_pure_virtual), a native crash, an ANR
+  # and a launch that never reached the screen are named explicitly.
+  hits="$(grep -i -E "FATAL EXCEPTION|UnsatisfiedLinkError|dlopen failed|cannot locate symbol|ANR in|not responding|signal 11|SIGSEGV" "$EMULATOR_LOG_FILE" 2>/dev/null | head -8 || true)"
+  if [[ -n "$hits" ]]; then
+    log "--- failures in the captured window ---"
+    printf '%s\n' "$hits" | sed 's/^/[apk] /'
+    warn "the launch produced failures; read $EMULATOR_LOG_FILE"
+  else
+    ok "no crash, ANR or native-loader failure in the captured window"
+  fi
+
+  # A live process proves nothing about what the user sees; the focused window is
+  # the durable proof, and the screenshot is the visual one.
+  focus="$(emulator_focused_window)"
+  [[ -n "$focus" ]] && log "focused window: $focus"
+
+  shot="$EMULATOR_LOG_DIR/atome-$EMULATOR_STAMP.png"
+  if adb -s "$EMULATOR_SERIAL" exec-out screencap -p >"$shot" 2>/dev/null && [[ -s "$shot" ]]; then
+    ok "screen      : $shot"
+  else
+    warn "the screen could not be captured"
+    shot=""
+  fi
+
+  if [[ "$focus" == *"$app_id"* ]]; then
+    ok "atome is on screen ($app_id holds the focused window)"
+  elif [[ -n "$focus" ]]; then
+    warn "the focused window is not $app_id: $focus"
+  else
+    warn "the focused window could not be read from the device"
+  fi
+  [[ -z "$shot" ]] || log "open the screenshot with: open $shot"
+}
+
+emulator_session() {
+  local artifact app_id activity
+  # The guest size is decided once, before the AVD is created or normalized: the
+  # config file and the command line must agree on it.
+  emulator_resolve_memory
+  ensure_emulator_packages
+  ensure_emulator_avd
+  boot_emulator
+  if [[ "$DO_DRY_RUN" -eq 1 ]]; then
+    printf '[apk] dry-run> adb -s %s install -r <artifact>\n' "$EMULATOR_SERIAL"
+    printf '[apk] dry-run> adb -s %s shell am start -n <applicationId>/<launcher activity>\n' "$EMULATOR_SERIAL"
+    printf '[apk] dry-run> adb -s %s logcat -v threadtime > %s/atome-<timestamp>.log\n' "$EMULATOR_SERIAL" "$EMULATOR_LOG_DIR"
+    return 0
+  fi
+
+  # install_artifact stays the single owner of "install with adb".
+  TARGET_DEVICE="$EMULATOR_SERIAL"
+  install_artifact
+  artifact="${DISCOVERED_ARTIFACTS[0]}"
+  app_id="$(emulator_badging_field "$artifact" "s/^package: name='\([^']*\)'.*/\1/p")"
+  activity="$(emulator_badging_field "$artifact" "s/^launchable-activity: name='\([^']*\)'.*/\1/p")"
+  [[ -n "$app_id" && -n "$activity" ]] \
+    || fail "Could not read the package or the launcher activity from $(basename "$artifact")"
+
+  step "Launching $app_id on $EMULATOR_SERIAL"
+  emulator_capture_start
+  adb -s "$EMULATOR_SERIAL" shell am start -W -n "$app_id/$activity" | sed 's/^/[apk] /'
+  emulator_capture_finish "$app_id"
+
+  step "Emulator session ready"
+  log "device      : $EMULATOR_SERIAL"
+  log "follow live : adb -s $EMULATOR_SERIAL logcat -v threadtime"
+  log "stop it     : adb -s $EMULATOR_SERIAL emu kill"
+}
+
 # --------------------------------------------------------------- build phase
 
 tauri_android_build() {
@@ -973,6 +1655,8 @@ doctor() {
   printf '[apk] gen/android       : %s\n' "$([[ -d "$GEN_ANDROID_DIR" ]] && echo present || echo absent)"
   printf '[apk] tauri.android.conf: %s\n' "$([[ -f "$ANDROID_CONF" ]] && echo present || echo absent)"
   printf '[apk] web root          : %s\n' "$([[ -f "$ANDROID_WEBROOT/index.html" ]] && echo staged || echo 'not staged')"
+  printf '[apk] emulator          : %s\n' "$([[ -n "$(emulator_binary_path)" ]] && echo "$(emulator_binary_path)" || echo "not installed (./run.sh apk --emulator installs it under $(emulator_sdk_root))")"
+  printf '[apk] AVD state         : %s\n' "$(emulator_state_dir)"
   printf '[apk] requested mode    : %s (abi=%s, emit=%s)\n' "$MODE" "$ABI" "$EMIT"
   printf '[apk] isolated home     : %s\n' "${ISOLATED_HOME:-<default: \$HOME>}"
   printf '[apk] free disk         : %s\n' "$(df -h /System/Volumes/Data 2>/dev/null | awk 'NR==2 {print $4}' || df -h "$PROJECT_ROOT" | awk 'NR==2 {print $4}')"
@@ -983,7 +1667,7 @@ doctor() {
 main() {
   parse_args "$@"
 
-  log "Squirrel Android build"
+  log "atome Android build"
   log "mode=$MODE abi=$ABI emit=$EMIT dry_run=$DO_DRY_RUN"
 
   export_caches_env
@@ -1018,10 +1702,14 @@ main() {
   ensure_build_marker
   remove_stale_artifacts
   tauri_android_build
-  if [[ "$DO_DRY_RUN" -eq 1 ]]; then return 0; fi
+  if [[ "$DO_DRY_RUN" -eq 1 ]]; then
+    if [[ "$DO_EMULATOR" -eq 1 ]]; then emulator_session; fi
+    return 0
+  fi
 
   collect_artifacts
   if [[ "$DO_INSTALL" -eq 1 ]]; then install_artifact; fi
+  if [[ "$DO_EMULATOR" -eq 1 ]]; then emulator_session; fi
 
   step "Done"
   log "Artifacts are under $(artifact_dir)"

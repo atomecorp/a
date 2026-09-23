@@ -470,3 +470,153 @@ Objectif de cette passe : exécuter la lane pour de vrai et vérifier qu'elle pr
 **Non reproductible octet pour octet, et ce n'est pas un défaut.** Ce run a recompilé la crate (`Compiling squirrel`, deux fois : une par le CLI, une par la tâche Gradle) ; l'empreinte debug diffère donc de celle de §12.7 tout en gardant exactement la même taille et la même structure. Aucune revendication de reproductibilité binaire ne doit être faite pour le mode debug.
 
 **Toujours To verify, faute d'appareil sur ce poste.** Aucun AVD, aucune image système et aucun binaire `emulator` dans le SDK local ; le démon `adb` ne démarre pas dans le bac à sable (`could not install *smartsocket* listener: Operation not permitted`). L'installation et le démarrage réels sur appareil, `navigator.gpu` dans la WebView Android, le micro et le serveur Axum local restent donc non exécutés.
+
+### 12.10 Identité « atome » et icône Atome (2026-09-23, session suivante)
+
+Objectif : l'application installée doit s'appeler **atome** et porter le **logo Atome**, sur Android, sur iOS et dans la version Tauri pour macOS. Le point de départ était l'inverse : nom « squirrel » et icône Tauri par défaut dans l'APK installé.
+
+**Ce qui a été renommé (visible).**
+
+- `platforms/desktop-tauri/tauri.conf.json` : `productName` `squirrel` → `atome` et titre de la fenêtre principale → `atome`.
+- `platforms/desktop-tauri/gen/android/app/src/main/res/values/strings.xml` : `app_name` et `main_activity_title` → `atome`. C'est le **seul** endroit qui pilote le libellé du lanceur Android : `tauri android init` ne réécrit jamais un projet déjà généré, la modification est donc manuelle et durable.
+- `scripts/android/apk.sh` : bandeau `Squirrel Android build` → `atome Android build` (en-tête de fichier aligné : « Android APK automation for atome (Squirrel runtime / eVe) »).
+- `scripts/run_tauri.sh` : les motifs de nettoyage des process Tauri obsolètes suivent le bundle macOS renommé. Le binaire Cargo lui-même reste `squirrel` dans cette passe ; son renommage complet (`target/debug/atome`, `Contents/MacOS/atome`) est décrit en **§12.12**.
+- `atome/documentations/desktop_tauri_distribution.md` : `squirrel.app` / `squirrel.dmg` → `atome.app` / `atome.dmg`.
+- `maps/ARCHITECTURE_MAP.md` (section Tauri/Android) : phrase d'identité ajoutée — nom visible et icône, propriétaire unique par plateforme.
+
+**Ce qui n'a PAS été renommé, volontairement (identifiants techniques).**
+
+- `com.squirrel.desktop` et `com.squirrel.desktop.debug` : renommer l'`applicationId` installerait une **seconde** application à côté de celle déjà présente et orphelinerait la base locale ; l'APK actuel met à jour l'existant.
+- crate/lib Rust `squirrel` / `squirrel_lib` : le nom de la bibliothèque native est chargé par `System.loadLibrary("squirrel_lib")` dans `platforms/desktop-tauri/gen/android/app/src/main/java/com/squirrel/desktop/generated/Rust.kt`. Renommer les deux ensemble est possible, mais impose de réécrire un fichier **généré** (donc réécrit au prochain `tauri android init`) et une recompilation complète des deux cibles.
+- keystore `~/.atome/android/squirrel-release.jks` et son alias `squirrel`, thème Android `Theme.squirrel`, nom de service `squirrel`, répertoires de données `squirrel/Data`, `squirrel/Uploads`, `squirrel/project`.
+- Décision réversible : une identité technique complète (applicationId, crate, keystore) reste à trancher ; son coût est une réinstallation propre, une migration des données locales et une nouvelle clé de signature.
+
+**Icônes : une seule source d'art pour les trois plateformes.**
+
+- Source : `atome/src/assets/images/logos/atome.svg` (le dossier est `logos`, pas `logo`). Le master raster opaque 1024 (`temp/atome-icon-1024.png`) est dérivé de l'icône iOS existante `icon_1024.png`, elle-même identique au SVG (comparaison visuelle : même tracé magenta sur fond blanc).
+- `tauri icon <master>` a régénéré `platforms/desktop-tauri/icons/*` (dont `icon.icns` et `icon.ico`), les `mipmap-*` Android (`ic_launcher` / `ic_launcher_round` : 48/49/96/144/192 px ; `ic_launcher_foreground` : 108/162/216/324/432 px) et a créé `mipmap-anydpi-v26/ic_launcher.xml` (adaptive icon) plus `values/ic_launcher_background.xml` (`#fff`).
+- iOS : les 16 PNG de `platforms/ios/atome-auv3/application/Assets.xcassets/AppIcon.appiconset/` ont été régénérés depuis le master (rééchantillonnage Lanczos), **opaques et sans canal alpha** — Apple refuse un icône transparent et les anciens fichiers étaient transparents (sauf le 1024). `Contents.json` est inchangé : mêmes noms de fichiers, mêmes tailles déclarées.
+- Les fonds de l'icône adaptative Android et des icônes iOS sont blancs, comme le master 1024 : c'est le rendu du logo Atome utilisé partout ailleurs.
+
+**Preuves réellement exécutées.**
+
+- APK reconstruit par `./run.sh apk` seul sur sa ligne → `[apk] Done`, exit 0. `aapt2 dump badging` : `application-label:'atome'` (toutes locales), `launchable-activity: name='com.squirrel.desktop.MainActivity' label='atome'`, `package com.squirrel.desktop.debug`, `targetSdkVersion 36`, `native-code 'arm64-v8a'`, signature debug `318a2cd9…f144e8d7` valide.
+- APK : `platforms/desktop-tauri/gen/android/app/build/outputs/apk/universal/debug/app-universal-debug.apk`, **504 845 219 octets**, sha256 `2e0172db6697105bc960a60a07a040864b60caebb4db24b058af38c9d3f3f933`, 932 entrées, surcoût d'en-têtes 165 627 octets, `ZipFile.testzip()` sans erreur → toujours **zéro octet mort**.
+- Icône réellement embarquée : `res/mipmap-xxxhdpi-v4/ic_launcher.png` extrait de l'APK = logo Atome sur fond blanc (192×192) ; `res/mipmap-anydpi-v26/ic_launcher.xml` référence `@mipmap/ic_launcher_foreground` + `@color/ic_launcher_background`.
+- macOS : build debug réel `tauri build --debug --bundles app` (3 min 35 s) → `platforms/desktop-tauri/target/debug/bundle/macos/atome.app`, `CFBundleName` et `CFBundleDisplayName` = `atome`, `CFBundleExecutable` = `squirrel` (nom du binaire Cargo), `CFBundleIdentifier` = `com.squirrel.desktop`, `Resources/icon.icns` **identique octet pour octet** au `.icns` régénéré (sha256 `125817f247b44dc089a80a6a3b09c4a4284ea8c78c4141c8280b1b268f652eae`).
+- iOS : `xcrun actool --app-icon AppIcon … platforms/ios/atome-auv3/application/Assets.xcassets` compile l'Asset Catalog et produit `AppIcon60x60@2x.png` / `AppIcon76x76@2x~ipad.png` sans aucun avertissement d'icône ; le seul message d'erreur est l'absence de runtime simulateur dans le bac à sable. Les 17 fichiers de l'AppIcon set ont la taille déclarée dans `Contents.json` et aucun canal alpha.
+- Bancs de dépôt rejoués après les modifications : `check:no-fallbacks` OK (38 fichiers), `check:tauri-fs-boundary` PASS, `check:syntax` OK (2 189 fichiers). `check:map-paths` reste à 128 > 127 (échec préexistant, **delta 0** : la phrase ajoutée à la carte n'introduit aucun chemin manquant).
+
+**To verify.**
+
+- Installation réelle sur l'appareil : impossible depuis cette session (`adb` ne démarre pas dans le bac à sable). Voir le nom et l'icône sur le lanceur du téléphone reste la seule preuve visuelle définitive.
+- Build iOS complet (archive/TestFlight) non lancé : seul `actool` a été exécuté sur le catalogue.
+- **Le crash Android constaté avant ce renommage n'est ni diagnostiqué ni corrigé par cette passe** : renommer l'application et changer l'icône ne touche pas au code d'exécution. La piste reste un panic Rust au démarrage (le message précédent décrit les commandes `logcat` à lancer côté appareil).
+
+### 12.11 Émulateur Android local et cause du crash (2026-09-23, session suivante)
+
+**Question posée** : « dans ce que tu as installé pour créer l'APK, y a-t-il un émulateur Android ? »
+
+**Réponse vérifiée : non.** Le SDK installé (`/opt/homebrew/share/android-commandlinetools`) ne contenait que `build-tools`, `cmdline-tools`, `licenses`, `ndk`, `platform-tools` et `platforms` : aucun paquet `emulator`, aucune image système, aucun AVD sous `~/.android`, pas d'Android Studio. `adb` était présent, `sdkmanager` et `avdmanager` aussi.
+
+**Ce qui a été ajouté, et où.** Tout est **local au projet** et **non versionné** : `temp/` est ignoré par Git, donc rien de tout cela n'est synchronisé avec GitHub, et aucun répertoire global n'est modifié (ni le SDK Homebrew, ni `~/.android`).
+
+| Élément | Emplacement | Taille |
+| --- | --- | --- |
+| `platform-tools` | `temp/android-sdk/platform-tools` | ~40 Mo |
+| `emulator` (37.1.11) | `temp/android-sdk/emulator` | ~1,5 Go |
+| Image système `system-images;android-36;google_apis;arm64-v8a` | `temp/android-sdk/system-images` | ~3,9 Go |
+| AVD `atome-api36` (profil `pixel_7`, 4 Go de RAM) | `temp/android-avd/avd` | variable |
+| État de l'émulateur, `emulator.log`, `emulator.pid`, home utilisateur | `temp/android-avd` | — |
+| Captures `logcat` | `temp/logcat/atome-<horodatage>.log` et `atome-crash-<horodatage>.log` | — |
+
+**Deux contraintes non documentées ont dû être traitées** (elles sont désormais encodées dans `scripts/android/apk.sh`) :
+
+1. **`avdmanager` ignore `ANDROID_HOME` et `ANDROID_SDK_ROOT`.** Le CLI déduit son SDK root du **grand-parent** de son « toolsdir » (`-Dcom.android.sdkmanager.toolsdir`, posé par son script de lancement), donc de l'installation `cmdline-tools` globale. Avec une image système locale, `create avd -k …` échoue en `Error: Package path is not valid. Valid system image paths are:` suivi de `null`, quelle que soit la variable d'environnement. La lane surcharge donc la propriété : `AVDMANAGER_OPTS="-Dcom.android.sdkmanager.toolsdir=<sdk_root>/cmdline-tools/latest"`. L'avertissement `Could not load devices from …/devices.xml` qui suit est bénin : l'AVD est créé avec le profil demandé et sort en code 0.
+2. **L'émulateur refuse un SDK root sans `platform-tools`.** Il valide un candidat en exigeant un sous-dossier `platform-tools`, sinon il remonte l'arborescence puis abandonne en `FATAL | Broken AVD system path`. `platform-tools` fait donc partie du paquetage local, même si la lane pilote `adb` depuis le SDK global.
+
+**Utilisation : une seule ligne, tout le reste est automatique.**
+
+```bash
+./run.sh apk --emulator                      # build + AVD + boot + install + lancement + logcat
+./run.sh apk --emulator --emulator-wipe      # repart d'un AVD neuf (et arrête une instance déjà lancée)
+./run.sh apk --emulator --logcat-seconds 60  # capture plus longue
+./run.sh apk --emulator --emulator-headless  # sans fenêtre (GPU swiftshader)
+./run.sh apk --emulator --emulator-avd nom --emulator-api 35 --emulator-port 5556
+```
+
+Chaque dépendance est vérifiée avant usage : ce qui est présent est réutilisé, ce qui manque est téléchargé, rien n'est téléchargé deux fois. La fenêtre de l'émulateur reste ouverte volontairement (c'est la preuve visuelle demandée) ; pour l'arrêter : `adb -s emulator-5554 emu kill`.
+
+**Preuve d'exécution réelle (2026-09-23, 16:16-16:17).** `./run.sh apk --emulator --emulator-wipe` seul sur sa ligne → `[apk] Done`, exit 0 : APK debug 481 Mo reconstruit et vérifié (`aapt2` : `application-label:'atome'`, `com.squirrel.desktop.debug`, `arm64-v8a` ; `apksigner` : signature debug valide ; sha256 `4f2b1e1de6b9fdcdee0d7996788dc32cc6cadface52891c9b4cb5ab4f0095dcb`), AVD `atome-api36` recréé, `emulator-5554` booté, `adb install` réussi, `am start` en `Status: ok`, puis 25 s de `logcat` capturés.
+
+**Le crash d'installation sur téléphone est maintenant expliqué, preuve locale à l'appui.** L'application **ne peut pas démarrer** : l'échec est une `FATAL EXCEPTION: main` levée par le chargement de la bibliothèque native.
+
+```text
+java.lang.UnsatisfiedLinkError: dlopen failed: cannot locate symbol "__cxa_pure_virtual"
+  referenced by "/data/app/…/base.apk!/lib/arm64-v8a/libsquirrel_lib.so"
+	at java.lang.System.loadLibrary(System.java:1765)
+	at com.squirrel.desktop.Rust.<clinit>(Rust.kt:18)
+	at com.squirrel.desktop.WryActivity.onCreate(WryActivity.kt:117)
+	at com.squirrel.desktop.MainActivity.onCreate(MainActivity.kt:9)
+```
+
+Chaîne de causes établie :
+
+- `libsquirrel_lib.so` porte le code **C++ d'Oboe** (chaîne `oboe` présente dans le binaire ; Oboe vient de `cpal`/`kira`, dépendances audio de `platforms/desktop-tauri/Cargo.toml`) ;
+- il laisse **32 symboles C++ non résolus**, dont `__cxa_pure_virtual` et `_ZSt9terminatev`, qui appartiennent au runtime `libc++_shared.so` ;
+- son en-tête dynamique ne déclare **aucune** entrée `DT_NEEDED` pour `libc++_shared.so` (seuls `libamidi`, `liblog`, `libOpenSLES`, `libandroid`, `libaaudio`, `libdl`, `libm`, `libc`) ;
+- l'APK ne contient **qu'**`lib/arm64-v8a/libsquirrel_lib.so` : aucun `libc++_shared.so` n'est embarqué.
+
+Sur Android, `dlopen` résout les symboles à l'édition de liens : sans ce runtime, le chargement échoue systématiquement — sur l'émulateur comme sur le téléphone, puisque c'est le même APK. Le processus n'a donc jamais atteint le code Rust, ce qui explique l'absence de tout panic ou tombstone : le `SIGKILL` observé ensuite n'est que la conséquence de la mort de l'Activity.
+
+**Correctifs possibles (non appliqués, décision non prise dans cette passe)** : lier le runtime C++ partagé (`-lc++_shared` côté Rust, ou `ANDROID_STL=c++_shared` avec ajout de `libc++_shared.so` de la NDK dans `jniLibs/arm64-v8a/`), ou au contraire le lier statiquement (`c++_static` / `-static-libstdc++`). Le choix engage les builds Android et doit être validé par une nouvelle exécution de `./run.sh apk --emulator`.
+
+**To verify.**
+
+- Émulateur : fenêtre visible, lancement de l'application, captures `logcat` — **fait** dans cette passe. Reste à vérifier : rendu réel de l'interface (WebGPU/WebView dans l'émulateur) une fois le chargement de la bibliothèque corrigé.
+- Le crash n'est **pas corrigé** : renommer l'application et changer l'icône ne touchent pas au code d'exécution, et la cause est un défaut de liaison de la bibliothèque native, pas un panic Rust.
+
+### 12.12 Identité macOS complète — binaire `atome`, ressources sous `project/`, icône arrondie (2026-09-23, session suivante)
+
+Objectif : après §12.10, le conteneur `atome.app` portait bien le bon nom, mais l'application **lancée** affichait encore « Squirrel » et l'icône **carrée** par défaut de Tauri. Cette passe ferme les deux écarts et documente ce qui reste hors de portée du bac à sable.
+
+**Cause racine du blocage de build (binaire contre ressources).**
+
+- `bundle.resources` de `tauri.conf.json` copiait `../../atome` **dans le dossier de profil** sous la clé `atome`, c'est-à-dire exactement `target/debug/atome` — le chemin du nouveau binaire. À chaque build, `tauri-build` tentait de remplacer ce dossier par les ressources et échouait en `failed to remove file 'platforms/desktop-tauri/target/debug/atome'` / `Operation not permitted`. Le renommage du binaire a donc transformé une copie de ressources en conflit de noms.
+- Correctif : toutes les ressources sont désormais mappées sous une **racine unique** `project/` — `project/version.txt`, `project/atome`, `project/eVe`, `project/node_modules/rubberband-wasm/dist`. Aucune clé de ressource ne peut plus coïncider avec un nom de binaire.
+- `platforms/desktop-tauri/src/lib.rs` : le candidat `dir.join("project/atome/src")` est ajouté **en tête** de la liste de résolution release ; les anciens candidats `atome/src` et `_up_/atome/src` sont retirés (un seul chemin, pas de repli).
+
+**Ce que macOS lit réellement pour le nom.**
+
+- Dans le bundle, l'identité vient d'`Info.plist` : `CFBundleName`, `CFBundleDisplayName` et `CFBundleExecutable` valent `atome`, et `Contents/MacOS/atome` existe.
+- Hors bundle (`tauri dev`), le nom est porté par un `__info_plist` **embarqué dans le binaire** : `tauri-codegen` y écrit `CFBundleName` = `bundle.macOS.bundleName` ou `productName` — donc `atome` — plus `CFBundleShortVersionString` / `CFBundleVersion` issues de `version`, et fusionne `platforms/desktop-tauri/Info.plist` (descriptions d'usage micro/caméra/contacts). C'est ce `CFBundleName` qui pilote le nom affiché par le Dock et la barre de menus en développement.
+- Le nom du binaire reste un second propriétaire visible, côté CLI : `platforms/desktop-tauri/Cargo.toml` déclare `[[bin]] name = "atome"` **et** `default-run = "atome"` (le CLI Tauri désigne le binaire principal par `default-run`, ou à défaut par le nom du package ; sans cette clé il ne reconnaît pas `atome` comme binaire principal).
+- Restent volontairement techniques : `com.squirrel.desktop`, crate/lib `squirrel` / `squirrel_lib` (chargés par `System.loadLibrary("squirrel_lib")` du projet Android généré), keystore, `Theme.squirrel`, répertoires de données.
+
+**Icône macOS : convention arrondie, pas un carré plein.**
+
+- macOS n'arrondit pas les icônes fournies par les développeurs, contrairement à iOS qui masque lui-même : une icône livrée pleine page reste visuellement carrée, et un logo nu sans tuile ne ressemble à aucune autre icône du Mac. La conformité vient donc de l'art lui-même (tuile arrondie + coins transparents).
+- Géométrie mesurée sur les icônes Apple (Calculator, Music, Notes) : toile 1024, corps **856**, marge **84**, coins transparents. Le master Tauri 1024 fournit corps 856 / marge 84 ; les tailles dérivées conservent des coins transparents (voir preuves).
+- Les deux lanes utilisent la même icône : dans le bundle, macOS lit `Contents/Resources/icon.icns` ; en développement, `tauri` appelle `setApplicationIconImage` au démarrage (`RunEvent::Ready`, sous `dev` + macOS) avec l'icône embarquée par `tauri-codegen`, c'est-à-dire le premier `.icns` de `bundle.icon` = `icons/icon.icns`.
+- Aucun changement d'art : la source reste `atome/src/assets/images/logos/atome.svg` et son master raster.
+
+**Preuves réellement exécutées.**
+
+- `npm run build:molecule:tauri` → `Built application at: …/target/debug/atome` puis `Bundling atome.app` → `Finished 1 bundle`, exit 0.
+- Ressources stagées : `target/debug/project/{atome/src/index.html, eVe/version.txt, version.txt, node_modules/rubberband-wasm/dist}` — plus aucun dossier de ressources nommé `atome` à la racine du profil.
+- `Info.plist` du bundle : `CFBundleExecutable = atome`, `CFBundleName = atome`, `CFBundleDisplayName = atome`, `CFBundleIdentifier = com.squirrel.desktop`.
+- `Contents/Resources/icon.icns` est **identique octet pour octet** à `platforms/desktop-tauri/icons/icon.icns` (sha256 `ca03d715967ae9ceea5157608a0f5d1156559413a5a82a63aec5748d5c226d34`).
+- Décomposition `iconutil -c iconset` puis mesure pixel : les **10 tailles** de l'`.icns` embarqué ont leurs quatre coins transparents. 1024 → corps 856 / marge 84 / 32,96 % de pixels transparents ; 512 → 868 / 78 ; 256 → 880 / 72 ; 128 → 896 / 64.
+- Mesure de l'icône livrée **avant** cette passe (copie de référence `temp/pristine3`, `icon.icns` du 22/09) : coins transparents mais **76,63 % de pixels transparents** et corps non carré 949 × 825 — un **logo nu sans tuile**, à comparer aux 32,96 % et 856 × 856 de la version actuelle. Aperçus composés sur damier à l'échelle du Dock : `temp/dock-scale-preview-256.png`, `temp/atome-dock-icon-preview.png`, et la comparaison `temp/icon-comparaison-avant-apres.png` (gauche = avant, droite = après).
+- `./run.sh --tauri` → compilation puis `Running target/debug/atome` ; Axum écoute sur `127.0.0.1:3000` (le processus `atome` est bien le propriétaire du port).
+- Autres surfaces visibles : `atome/src/index.html` — `apple-mobile-web-app-title` valait `App`, corrigé en `atome` (nom affiché à l'ajout à l'écran d'accueil iOS) ; Android (`strings.xml`) et iOS (`INFOPLIST_KEY_CFBundleDisplayName = atome`, application **et** extension AUv3) étaient déjà corrects.
+- Bancs : `check:syntax` (2189 fichiers) réussi, `check:no-fallbacks` réussi, `check:tauri-fs-boundary` réussi, `check:map-paths` en échec **préexistant** (128 > 127, delta 0 — déjà constaté avant cette passe).
+
+**To verify (limites du bac à sable, pas des incertitudes produit).**
+
+- Le rendu du **Dock pour le processus en cours** n'a pas pu être capturé : `screencapture` refusé (« could not create image from display », autorisation d'enregistrement d'écran), `lsappinfo` vide, `NSRunningApplication(processIdentifier:)` ne voit pas un binaire nu lancé par `tauri dev` (non enregistré auprès de LaunchServices) et l'énumération AppKit est bloquée en bac à sable. La preuve retenue est la chaîne déterministe `Info.plist` + `.icns` ci-dessus, plus l'aperçu composé.
+- Si l'ancienne icône persiste dans le Dock après mise à jour d'une installation existante : c'est le cache du Dock/LaunchServices, pas le bundle — `killall Dock` le rafraîchit.
+- Toute modification d'icône exige une **recompilation** : `tauri-codegen` embarque l'`.icns` dans le binaire pour `dev`, et le bundle copie `icons/icon.icns` à la construction. Aucune des deux lanes ne relit le fichier à chaud.
+- iOS et Android restent inchangés volontairement : leurs icônes demeurent opaques et sans arrondi, les deux systèmes appliquant eux-mêmes le masque.
+
+**Contraintes respectées** : aucun commit, aucun staging, `eVe/` non modifié.

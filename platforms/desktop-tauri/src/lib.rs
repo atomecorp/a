@@ -244,14 +244,16 @@ pub fn run() {
                 match path_resolver.resource_dir() {
                     Ok(dir) => {
                         let mut resolved: Option<PathBuf> = None;
+                        // `bundle.resources` maps every tree under `project/`, so a released
+                        // bundle carries one project root at `<resource_dir>/project` and the
+                        // frontend at `<resource_dir>/project/atome/src`.
                         let candidates: Vec<PathBuf> = vec![
+                            dir.join("project/atome/src"),
                             dir.join("dist"),
                             dir.join("public"),
-                            dir.join("atome/src"),
                             dir.join("src"),
                             dir.join("_up_/dist"),
                             dir.join("_up_/public"),
-                            dir.join("_up_/atome/src"),
                             dir.join("_up_/src"),
                             dir.clone(),
                         ];
