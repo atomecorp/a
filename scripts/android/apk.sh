@@ -27,6 +27,15 @@ readonly GEN_ANDROID_DIR="$TAURI_DIR/gen/android"
 # into the shared library and exposes through `asset_resolver()`. This directory is
 # the explicit staging root that reproduces the desktop resource layout.
 readonly ANDROID_WEBROOT="$TAURI_DIR/gen/android-webroot"
+# Scratch space. `temp/` is git-ignored and is the only directory this
+# repository allows temporary files in.
+readonly TEMP_DIR="$PROJECT_ROOT/temp"
+# The Tauri CLI reports the artifacts it assembled; that report is kept so
+# discovery can read it instead of guessing AGP's output tree.
+readonly BUILD_LOG="$TEMP_DIR/apk-build.log"
+# Touched just before the build so mtime alone can separate this run's outputs
+# from a flavor left behind by an earlier one.
+readonly BUILD_MARKER="$TEMP_DIR/apk-build-marker"
 readonly KEYSTORE_DIR="${HOME}/.atome/android"
 readonly KEYSTORE_FILE="$KEYSTORE_DIR/squirrel-release.jks"
 readonly KEYSTORE_PROPERTIES="$KEYSTORE_DIR/keystore.properties"
@@ -82,6 +91,8 @@ ASSUME_YES=0
 ALLOW_INSTALL=1
 TARGET_DEVICE=""
 ISOLATED_HOME=""
+# Artifacts collected and verified by the last build, in report order.
+DISCOVERED_ARTIFACTS=()
 
 usage() {
   cat <<'USAGE'
@@ -724,6 +735,36 @@ artifact_dir() {
   echo "$GEN_ANDROID_DIR/app/build/outputs"
 }
 
+# AGP nests every artifact under its product flavor, so a debug APK lands in
+# outputs/apk/<flavor>/debug/ and a release bundle in outputs/bundle/<flavor>Release/.
+# The flavor is Gradle's business (this project generates universal, arm64, arm,
+# x86 and x86_64); the build type is the only part of that path this script owns.
+build_type_dir_name() {
+  if [[ "$MODE" == "test" ]]; then echo "debug"; else echo "release"; fi
+}
+
+artifact_extension() {
+  if [[ "$EMIT" == "aab" ]]; then echo "aab"; else echo "apk"; fi
+}
+
+# AGP re-packages into an existing output file without truncating it. The bytes
+# of the payload it wrote on a previous run therefore stay in the archive behind
+# the new entry offsets, which doubled a debug APK (994 683 526 bytes against
+# 504 916 716 bytes once the stale file was gone). Dropping this configuration's
+# previous artifact keeps every packaged APK at its real size.
+remove_stale_artifacts() {
+  local build_type suffix root stale
+  build_type="$(build_type_dir_name)"
+  suffix="$(artifact_extension)"
+  root="$(artifact_dir)"
+  [[ -d "$root" ]] || return 0
+  while IFS= read -r stale; do
+    [[ -n "$stale" ]] || continue
+    log "removing the previous $(basename "$stale") so Gradle packages from scratch"
+    run_cmd rm -f "$stale"
+  done < <(find "$root" -type f -name "*.${suffix}" -path "*${build_type}*" | sort)
+}
+
 verify_artifact() {
   local artifact="$1"
   local build_tools aapt2 apksigner
@@ -759,44 +800,115 @@ verify_artifact() {
   fi
 }
 
-collect_artifacts() {
-  local directories=() pattern found=0
-  if [[ "$MODE" == "test" ]]; then
-    directories+=("$GEN_ANDROID_DIR/app/build/outputs/apk/debug")
-  else
-    if [[ "$EMIT" == "aab" ]]; then
-      directories+=("$GEN_ANDROID_DIR/app/build/outputs/bundle/release")
+# The Tauri CLI reports every artifact it just assembled:
+#
+#     Finished 1 APK at:
+#         /abs/path/to/app-universal-debug.apk
+#
+# That report is the authoritative discovery source. AGP nests the artifact
+# under its product flavor (`outputs/apk/<flavor>/debug/`) and the flavor is
+# Gradle's business, not this script's; the report is also the only signal that
+# survives a Gradle up-to-date run, where the file on disk is not rewritten.
+cli_artifact_paths() {
+  local log="$1" suffix="$2" line path
+  local in_block=0
+  # Strip ANSI codes defensively; the lane always builds with --ci.
+  while IFS= read -r line; do
+    line="${line//$'\r'/}"
+    if [[ "$line" =~ Finished[[:space:]]+[0-9]+[[:space:]]+(APK|AAB)[[:space:]]+at: ]]; then
+      in_block=1
+      path="${line#*at:}"
+    elif [[ "$in_block" -eq 1 ]]; then
+      path="$line"
     else
-      directories+=("$GEN_ANDROID_DIR/app/build/outputs/apk/release")
+      continue
     fi
-  fi
-  local pattern="*.apk"
-  if [[ "$EMIT" == "aab" ]]; then pattern="*.aab"; fi
+    # A header line carries nothing after "at:"; a path line carries indentation.
+    path="${path#"${path%%[![:space:]]*}"}"
+    [[ -n "$path" ]] || continue
+    if [[ "$path" == *".${suffix}" ]]; then
+      printf '%s\n' "$path"
+    else
+      in_block=0
+    fi
+  done < <(sed -E $'s/\x1b\\[[0-9;]*[A-Za-z]//g' "$log")
+}
 
-  local dir
-  for dir in "${directories[@]}"; do
-    [[ -d "$dir" ]] || continue
+# Everything written after this marker belongs to the run that just started.
+ensure_build_marker() {
+  if [[ "$DO_DRY_RUN" -eq 1 ]]; then
+    printf '[apk] dry-run> mkdir -p %s && touch %s\n' "$TEMP_DIR" "$BUILD_MARKER"
+    return 0
+  fi
+  run_cmd mkdir -p "$TEMP_DIR"
+  run_cmd touch "$BUILD_MARKER"
+  [[ -f "$BUILD_MARKER" ]] || fail "Cannot create the build marker at $BUILD_MARKER"
+}
+
+collect_artifacts() {
+  local build_type suffix root artifact candidate newest
+  build_type="$(build_type_dir_name)"
+  suffix="$(artifact_extension)"
+  root="$(artifact_dir)"
+  [[ -d "$root" ]] || fail "Gradle wrote no output directory at $root"
+
+  local -a produced=()
+
+  # 1. What the CLI reported for this run, restricted to files that exist.
+  if [[ -f "$BUILD_LOG" ]]; then
     while IFS= read -r artifact; do
       [[ -n "$artifact" ]] || continue
-      found=1
-      verify_artifact "$artifact"
-    done < <(find "$dir" -maxdepth 1 -name "$pattern" -type f | sort)
-  done
+      [[ -f "$artifact" ]] || continue
+      produced+=("$artifact")
+    done < <(cli_artifact_paths "$BUILD_LOG" "$suffix" | sort -u)
+  fi
 
-  [[ "$found" -eq 1 ]] || fail "No $pattern artifact was produced under $(artifact_dir)"
+  # 2. Fallback: anything written after the marker. The build-type filter keeps
+  # a release bundle or another flavor out of a debug report.
+  if [[ "${#produced[@]}" -eq 0 ]]; then
+    while IFS= read -r artifact; do
+      [[ -n "$artifact" ]] || continue
+      produced+=("$artifact")
+    done < <(find "$root" -type f -name "*.${suffix}" -path "*${build_type}*" \
+      -newer "$BUILD_MARKER" | sort)
+  fi
+
+  # 3. Last resort: Gradle found every task up-to-date and rewrote nothing, so
+  # the newest artifact on disk is this configuration's output. Never silent.
+  if [[ "${#produced[@]}" -eq 0 ]]; then
+    newest=""
+    while IFS= read -r candidate; do
+      [[ -n "$candidate" ]] || continue
+      if [[ -z "$newest" || "$candidate" -nt "$newest" ]]; then newest="$candidate"; fi
+    done < <(find "$root" -type f -name "*.${suffix}" -path "*${build_type}*" | sort)
+    if [[ -n "$newest" ]]; then
+      warn "Gradle rewrote no *.${suffix} file; reusing the newest ${build_type} output on disk: $newest"
+      produced+=("$newest")
+    fi
+  fi
+
+  [[ "${#produced[@]}" -gt 0 ]] \
+    || fail "No *.${suffix} artifact for the ${build_type} build type under $root (build log: $BUILD_LOG)"
+
+  DISCOVERED_ARTIFACTS=("${produced[@]}")
+  for artifact in "${produced[@]}"; do
+    verify_artifact "$artifact"
+  done
 }
 
 install_artifact() {
+  [[ "$EMIT" == "apk" ]] \
+    || fail "--install needs an APK; convert the AAB first (bundletool build-apks)"
   command -v adb >/dev/null 2>&1 || fail "adb is not on PATH; cannot --install"
   local devices
   devices="$(adb devices | awk 'NR>1 && $2=="device" {print $1}')"
   [[ -n "$devices" ]] || fail "No authorized Android device is connected; plug one in or start an emulator"
 
   local serial="${TARGET_DEVICE:-$(head -1 <<<"$devices")}"
-  local artifact
-  artifact="$(find "$(artifact_dir)" -name '*.apk' -type f | head -1)"
-  [[ -n "$artifact" ]] || fail "No APK to install"
+  [[ "${#DISCOVERED_ARTIFACTS[@]}" -gt 0 ]] || fail "No verified artifact is available to install"
 
+  # Install exactly the artifact this run verified, never a second search result.
+  local artifact="${DISCOVERED_ARTIFACTS[0]}"
   step "Installing on $serial"
   run_cmd adb -s "$serial" install -r "$artifact"
   ok "installed $(basename "$artifact") on $serial"
@@ -820,13 +932,17 @@ tauri_android_build() {
   log "JAVA_HOME=$JAVA_HOME"
   log "ANDROID_HOME=$ANDROID_SDK_RESOLVED"
   log "NDK_HOME=$ANDROID_NDK_RESOLVED"
+  log "build log=$BUILD_LOG"
 
   if [[ "$DO_DRY_RUN" -eq 1 ]]; then
     printf '[apk] dry-run> (cd %s && %s %s)\n' "$TAURI_DIR" "$TAURI_CLI" "${args[*]}"
     return 0
   fi
 
-  ( cd "$TAURI_DIR" && "$TAURI_CLI" "${args[@]}" )
+  # Both streams keep streaming to the terminal and are captured for discovery:
+  # the Tauri CLI reports the artifact it assembled on stderr while Gradle
+  # diagnostics land on stdout. `pipefail` keeps a failing build failing here.
+  ( cd "$TAURI_DIR" && "$TAURI_CLI" "${args[@]}" ) 2>&1 | tee "$BUILD_LOG"
 }
 
 tauri_android_dev() {
@@ -899,6 +1015,8 @@ main() {
     return 0
   fi
 
+  ensure_build_marker
+  remove_stale_artifacts
   tauri_android_build
   if [[ "$DO_DRY_RUN" -eq 1 ]]; then return 0; fi
 

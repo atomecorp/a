@@ -133,6 +133,24 @@ release keystore lives outside the checkout in `~/.atome/android/`, and
 `platforms/desktop-tauri/gen/android/` is generated once and kept in the repository so
 the signing configuration and manifest customizations survive.
 
+Produced artifacts are located through the Tauri CLI's own report (`Finished N APK
+at:`), because Gradle nests them under a product flavor (`outputs/apk/universal/debug/`)
+whose naming belongs to the CLI. The build log and the freshness marker used by the
+filesystem fallbacks live in the git-ignored `temp/`; the log captures both streams,
+because the CLI reports the assembled artifact on stderr while Gradle writes its
+diagnostics to stdout.
+
+Before invoking the CLI, the lane deletes this build type's previous artifact.
+Gradle packs into an existing file without truncating it, so a repackaged debug APK
+otherwise carries the previous payload's bytes: 994 683 526 bytes measured with
+489 765 844 dead bytes, against 504 916 716 bytes with none when the stale file is
+removed first. An artifact of another build type is never touched.
+
+The Android floor is API 29 (Android 10), set by `bundle.android.minSdkVersion` and
+mirrored in `gen/android/app/build.gradle.kts`. The native MIDI backend links
+`libamidi.so`, and the NDK sysroot only ships that library from API 29 onward, so a
+lower floor fails at link time.
+
 ## Upload workflow
 
 1. `DragDrop.createDropZone` in `src/application/aBox/index.js` collects dropped files.

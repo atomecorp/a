@@ -129,7 +129,7 @@ Manquant / non configuré :
 - Conséquence : APK inutilisable (> 250 Mo) et très au-delà des limites Play (module de base ≈ 200 Mo).
 - Correction attendue : un `platforms/desktop-tauri/tauri.android.conf.json` (Tauri fusionne automatiquement `<plateforme>.conf.json`) qui :
   - limite `bundle.resources` au strict nécessaire (payload produit : `atome/src` sans `assets/videos|voice|images`, `eVe`, `node_modules/rubberband-wasm/dist`, `atome/version.txt`) ;
-  - fixe `bundle.android.minSdkVersion: 26` (défaut CLI = 24, incompatible avec le plancher CPAL/AAudio) et `versionCode` ;
+  - fixe `bundle.android.minSdkVersion: 29` (défaut CLI = 24 ; plancher réel = API 29, imposé par `libamidi.so`, voir §12.5) et `versionCode` ;
   - garde `bundle.targets` cohérent.
 
 ### 3.4 Bloquant — chemins de code dépendants du poste de développement
@@ -212,12 +212,12 @@ Preuve attendue : `./run.sh apk --doctor` sur une machine vierge (ou cache vidé
 
 ### Lot 1 — Projet Android généré + premier APK debug
 
-1. `platforms/desktop-tauri/tauri.android.conf.json` (minSdk 26, versionCode, ressources réduites, suffixe `.debug`).
+1. `platforms/desktop-tauri/tauri.android.conf.json` (minSdk 29, versionCode, ressources réduites, suffixe `.debug`).
 2. `npm run tauri -- android init --ci` ⇒ crée `platforms/desktop-tauri/gen/android/` (à **conserver dans le dépôt** ; le CLI ne le régénère pas).
 3. Ajustements du projet généré : `app/build.gradle.kts` (signing release), `app/src/main/AndroidManifest.xml` + `res/xml/network_security_config.xml` (cleartext loopback), `tauri.properties` versionné ou généré.
 4. `npm run tauri -- android build --debug --apk --target aarch64`.
 
-Preuve attendue : APK produit sous `platforms/desktop-tauri/gen/android/app/build/outputs/apk/**/*.apk`, `aapt2 dump badging` affichant `minSdkVersion 26`, `targetSdkVersion 36`, permissions attendues.
+Preuve attendue : APK produit sous `platforms/desktop-tauri/gen/android/app/build/outputs/apk/**/*.apk`, `aapt2 dump badging` affichant `minSdkVersion 29`, `targetSdkVersion 36`, permissions attendues.
 
 ### Lot 2 — Conformité Rust/lancement sur appareil
 
@@ -287,7 +287,7 @@ Risques qui peuvent allonger : WebGPU indisponible dans la WebView de l'appareil
 ## 9. Validation et preuves exigées (aucune étape ne peut être déclarée « fait » sans preuve)
 
 1. `./run.sh apk --doctor` : sortie complète, tous les éléments `OK`, deuxième exécution sans aucun téléchargement.
-2. `./run.sh apk` : APK produit ; chemin exact affiché ; `aapt2 dump badging` : `minSdkVersion 26`, `targetSdkVersion 36`, `package: com.squirrel.desktop.debug`, permissions `INTERNET` (+ `RECORD_AUDIO` si plugin STT inclus).
+2. `./run.sh apk` : APK produit ; chemin exact affiché ; `aapt2 dump badging` : `minSdkVersion 29`, `targetSdkVersion 36`, `package: com.squirrel.desktop.debug`, permissions `INTERNET` (+ `RECORD_AUDIO` si plugin STT inclus).
 3. `adb install -r` puis lancement : application qui **démarre** (pas d'écran vide), `#intuition` monté, ouverture d'un projet, création/déplacement d'un Atome, fermeture/réouverture (persistance).
 4. `adb logcat` : aucune erreur bloquante ; si `navigator.gpu` est absent, message produit explicite et nommé.
 5. `./run.sh apk --prod` : APK release **signé** (`apksigner verify --print-certs`), non `debuggable`, démarrage équivalent.
@@ -357,14 +357,17 @@ Ces commandes sont reproductibles et doivent être rejouées par l'agent d'impl�
 ./run.sh apk --dev --device <serial> # session hot reload sur appareil
 ```
 
-### 12.2 Fichiers implémentés (non committés, dépôt en lecture seule côté agent)
+### 12.2 Fichiers implémentés
 
-- `scripts/android/apk.sh` — propriétaire unique de la lane Android (résolution idempotente JDK/SDK/NDK/cibles Rust/CLI Tauri, staging du web root, keystore release, `tauri android build`/`dev`, vérification `aapt2` + `apksigner` + sha256, `--install`).
+Le lot initial a été committé par l'utilisateur le 2026-09-23 (`9c6ebb44 APK creation added`) ; les correctifs de la seconde passe (§12.5) ne sont pas committés. Le dépôt reste en lecture seule côté agent.
+
+- `scripts/android/apk.sh` — propriétaire unique de la lane Android (résolution idempotente JDK/SDK/NDK/cibles Rust/CLI Tauri, staging du web root, keystore release, `tauri android build`/`dev`, découverte des artefacts, vérification `aapt2` + `apksigner` + sha256, `--install`). La découverte lit le rapport du CLI Tauri, conserve le log de build dans `temp/apk-build.log` et s'appuie sur le marqueur `temp/apk-build-marker` (les deux sous `temp/`, gitignoré) — voir §12.5 défaut 3.
 - `scripts/setup/service_commands.sh` — dispatch du case `apk` et aide.
-- `platforms/desktop-tauri/tauri.android.conf.json` — overlay Android (minSdk 26, targetSdk 36, `frontendDist` = web root stagé, bundles de ressources vides).
-- `platforms/desktop-tauri/gen/android/` — projet Gradle généré par `tauri android init --ci`, à **conserver dans le dépôt** (signature release + `network_security_config.xml` cleartext loopback + résolution explicite de la CLI Tauri dans `BuildTask.kt`).
+- `platforms/desktop-tauri/tauri.android.conf.json` — overlay Android (minSdk 29, targetSdk 36, `frontendDist` = web root stagé, bundles de ressources vides).
+- `platforms/desktop-tauri/gen/android/` — projet Gradle généré par `tauri android init --ci`, à **conserver dans le dépôt** (signature release + `network_security_config.xml` cleartext loopback + résolution explicite de la CLI Tauri dans `BuildTask.kt`). `app/build.gradle.kts` y porte `minSdk = 29` et doit rester aligné sur `tauri.android.conf.json`.
 - `platforms/desktop-tauri/src/android_assets.rs` — matérialisation du web root embarqué dans `app_data_dir` (car `resource_dir()` renvoie `asset://localhost/` sur Android), avec manifeste d'idempotence.
-- `platforms/desktop-tauri/src/lib.rs`, `platforms/desktop-tauri/Cargo.toml` — branche `#[cfg(target_os = "android")]` et Reqwest en Rustls (sans OpenSSL hôte).
+- `platforms/desktop-tauri/src/lib.rs` — branche `#[cfg(target_os = "android")]`.
+- `platforms/desktop-tauri/Cargo.toml` — Reqwest en Rustls (sans OpenSSL hôte) et dépendances `src/server` sorties de la table macOS (voir §12.5).
 - `.gitignore`, `README.md`, `maps/ARCHITECTURE_MAP.md`, `maps/CODEMAP.md` — documentation et cartes.
 
 ### 12.3 Preuves réellement exécutées dans cette session
@@ -374,21 +377,96 @@ Ces commandes sont reproductibles et doivent être rejouées par l'agent d'impl�
 - Compilation de la cible hôte après modification : `cargo check --package squirrel --lib` → `Finished dev profile` en 3 min 32 s, **aucune erreur**, `reqwest v0.11.27` inclus.
 - Tests unitaires de `android_assets.rs` reconstruits et exécutés : **3 passed / 0 failed**.
 - `npm run check:no-fallbacks` : OK (38 fichiers).
-- Projection `aapt2 dump badging`, `apksigner verify`, sha256, installation `adb` : **To verify** — aucun APK n'a pu être produit ici (voir 12.4).
+- **APK réellement produit** (run utilisateur du 2026-09-23 ~10:45, sur un hôte autorisant les sockets locaux) : `platforms/desktop-tauri/gen/android/app/build/outputs/apk/universal/debug/app-universal-debug.apk`, **504 912 620 octets**, sha256 `8dee010baa3979368d67342b53d4048b47c54b098992cabfbdadc76a7e667306`.
+  - `aapt2 dump badging` : `package com.squirrel.desktop.debug`, `versionCode 1`, `versionName 0.1.0`, `minSdkVersion:'29'`, `targetSdkVersion:'36'`, `compileSdkVersion='36'`, `native-code: 'arm64-v8a'`, `application-debuggable`, `launchable-activity com.squirrel.desktop.MainActivity`, permissions `INTERNET` et `RECORD_AUDIO` (plus `DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION`, injectée par AGP). `testOnly` est absent.
+  - `aapt2 dump xmltree --file AndroidManifest.xml` : `minSdkVersion=29`, `targetSdkVersion=36`, `debuggable=true`, `usesCleartextTraffic=true` (nécessaire au serveur Axum loopback en debug) et `networkSecurityConfig` présent ; la `<queries>` sur `android.speech.RecognitionService` confirme l'installation du plugin STT.
+  - `apksigner verify --print-certs` : signature valide, certificat `C=US, O=Android, CN=Android Debug`, SHA-256 `318a2cd91765fd46175666dc98b6396c713cec962545c6017bb24671f144e8d7` — signature debug locale, attendue pour le mode test ; `--prod` doit produire la signature du keystore release.
+  - `unzip -l` : `classes.dex` (9 706 836 o) et `lib/arm64-v8a/libsquirrel_lib.so` (489 764 312 o, **stocké non compressé**). Le `.so` embarque le web root stagé, ce qui explique sa taille ; il est stocké sans compression parce que le manifeste porte `extractNativeLibs=false` (chargement direct depuis l'APK). La taille de 504 912 620 o est celle d'un APK **debug** (symboles non strippés, `keepDebugSymbols` du template) : `--prod` doit produire nettement plus petit.
+  - Le flavor produit est `universal` alors que la cible demandée est `-t aarch64` : la nomenclature des flavors appartient au CLI Tauri. C'est précisément ce que la découverte d'artefact ne doit pas présumer (défaut 3).
+- Ce même run a échoué **après** la production de l'APK : le script ne trouvait pas le fichier et sortait en erreur (défaut 3 du §12.5). L'APK produit était complet et valide.
 
-### 12.4 Blocages de l'environnement de la session (pas des défauts du framework)
+### 12.4 Preuves de la seconde passe (2026-09-23, après le retour des 223 erreurs)
 
-1. Écriture hors du dépôt refusée par le bac à sable : `~/.cargo` et `~/.gradle` → `Operation not permitted (os error 1)`.
-2. Réseau indisponible pour `cargo` et Gradle (DNS refusé) ; le seul accès réseau approuvé (`curl`) refuse d'écrire un fichier. Conséquence : **141 crates** restent hors du registre local, dont `android-build 0.1.4` et `jni-min-helper 0.3.4` — le premier build Android ne peut pas se faire hors ligne.
-3. Escalade d'approbation hors bac à sable en panne (`supported API model names are deepseek-flash, deepseek-v4-pro, but you passed codex-auto-review`) : toute action hors workspace est refusée.
-4. Disque : 1,3 Gio libres pour un besoin estimé de 8 à 10 Go (crates décompressées, `target/aarch64-linux-android`, caches Gradle + AGP).
+Ces preuves ont été produites après le premier `./run.sh apk` réel de l'utilisateur, qui a échoué sur 223 erreurs `rustc` pour la cible Android.
 
-Sur un poste normal (dossier personnel inscriptible + réseau), ces quatre points disparaissent et `./run.sh apk` fait le travail complet en une commande.
+- `cargo check --package squirrel --lib --target aarch64-linux-android --offline` : **`Finished dev profile` en 2 min 32 s, aucune erreur**. C'est le contrôle qui reproduit exactement les 223 erreurs signalées avant correctif.
+- `cargo build --lib --target aarch64-linux-android` tel que piloté par `tauri android build` : **`Finished dev profile` en 1 min 50 s**, puis `libsquirrel_lib.so` produit et lié dans `gen/android/app/src/main/jniLibs/arm64-v8a`.
+- Édition de liens réellement exécutée avec le wrapper NDK `aarch64-linux-android29-clang` ; le `.so` produit déclare `libamidi.so`, `liblog.so`, `libOpenSLES.so`, `libandroid.so`, `libaaudio.so`, `libdl.so`, `libm.so`, `libc.so`.
+- `cargo check --package squirrel --lib` sur la cible hôte (macOS) après correctif : **`Finished dev profile` en 2 min 51 s, aucune erreur** — la lane desktop n'est pas régressée.
+- Les crates Android jusqu'ici absentes sont présentes et compilées : `android-build 0.1.4`, `jni-min-helper 0.3.4`, `oboe 0.6.1`, `cpal 0.15.3` (Android), `rusqlite 0.31.0` + `libsqlite3-sys` bundle, `ring 0.17.14`, `midir 0.11.0`.
 
-### 12.5 Reste à faire / **To verify**
+### 12.5 Défauts corrigés dans cette passe
 
-- **To verify** : premier `./run.sh apk` réel jusqu'à l'APK, puis `aapt2 dump badging` (minSdk 26, targetSdk 36, `com.squirrel.desktop.debug`, `INTERNET`), `apksigner verify --print-certs`, sha256.
-- **To verify** : `./run.sh apk --prod` (keystore `~/.atome/android/squirrel-release.jks`) et `--prod --aab`.
-- **To verify** : installation et démarrage réels sur appareil (`--install`), `navigator.gpu` dans la WebView Android, permissions micro/réseau, serveur Axum local.
-- **To verify** : sites desktop-only à gater pour Android (`node`, `ffmpeg`, `midir`, `native_contacts`, `native_clipboard`) — non traités ici.
-- Nettoyage possible (gitignorés, 0 fichier suivi) : `temp/android-home/`, `temp/c`, `temp/android_check.sh`, `temp/android_*.txt|json`.
+1. **Dépendances serveur déclarées sous la cible macOS** (`platforms/desktop-tauri/Cargo.toml`). `rusqlite`, `bcrypt`, `uuid`, `chrono`, `jsonwebtoken`, `rand`, `sha2`, `hex`, `reqwest`, `zip`, `tempfile` et `dotenvy` étaient placées sous `[target.'cfg(target_os = "macos")'.dependencies]`. `src/server` les utilise pourtant sur toutes les cibles, ce qui produisait exactement les 223 erreurs signalées (94 `E0433` dont 71 `rusqlite`, 9 `reqwest`, 8 `chrono`, 3 `hex`, 2 `rand`, 1 `uuid`, plus 21 `E0277` et 1 `E0599` en cascade). Elles sont désormais dans `[dependencies]` ; seules `block2` et `objc2*` restent propres à macOS.
+2. **Plancher d'API trop bas pour l'édition de liens** (`tauri.android.conf.json`, `gen/android/app/build.gradle.kts`). `minSdk` était 26, mais le NDK ne fournit `libamidi.so` qu'à partir de l'API 29 (`toolchains/llvm/prebuilt/<hôte>/sysroot/usr/lib/<abi>/29/…`), et `midir`'s backend Android le lie. L'édition de liens échouait sur `ld.lld: error: unable to find library -lamidi`. Les deux fichiers passent à `29` et doivent rester alignés. Contrepartie assumée : Android 8.0–9.0 sortent du périmètre (aucun de ces appareils ne fournit WebGPU à la WebView).
+3. **Découverte d'artefact fausse** (`scripts/android/apk.sh`). AGP imbrique chaque artefact sous son **flavor** (`outputs/apk/<flavor>/debug/`), alors que le script cherchait `outputs/apk/debug` : le premier `./run.sh apk` réel a donc produit un APK valide puis affiché `ERROR No *.apk artifact was produced under …`. La découverte lit désormais le rapport du CLI Tauri (`Finished N APK at:`), seule source qui connaisse le flavor, avec deux replis explicites et jamais silencieux : les fichiers plus récents que le marqueur `temp/apk-build-marker`, puis — si Gradle n'a rien réécrit parce que toutes ses tâches étaient *up-to-date* — l'artefact `<build type>` le plus récent, accompagné d'un `WARNING` nommant le fichier réutilisé. `--install` consomme la liste déjà vérifiée au lieu de refaire une recherche divergente, et refuse un AAB (« needs an APK »).
+
+### 12.5.1 Vérification du correctif de découverte (cette passe)
+
+Le build Gradle ne peut pas être relancé ici (voir §12.6), mais la découverte peut l'être sur des entrées réelles : le banc `temp/_apk_discovery_test.sh` charge les fonctions de `scripts/android/apk.sh` (sans exécuter `main`) et rejoue le pipeline complet. **26 assertions sur 26 passent**, dont :
+
+- **entrée réelle bruitée** : le log brut du run utilisateur (build Gradle, lignes cargo, le rapport du CLI, l'erreur du script) donne **exactement et uniquement** le chemin de l'APK produit ; le bruit ne crée aucun faux positif, un log sans rapport ne donne rien ;
+- **vérification réelle** : `collect_artifacts` exécute `aapt2 dump badging` et `apksigner verify` sur l'APK découvert dans `gen/android/app/build/outputs` (les mêmes sorties que §12.3) ;
+- **priorité au rapport** : un artefact leurre plus récent dans un autre flavor n'est pas retenu quand le rapport nomme l'artefact de la configuration demandée ;
+- **fraîcheur** : sans rapport CLI, seul un fichier plus récent que le marqueur est retenu ;
+- **Gradle *up-to-date*** : plus rien n'est réécrit → un `WARNING` nomme le fichier réutilisé et la commande réussit au lieu d'échouer à tort ;
+- **échecs explicites** : arbre de sortie absent et arbre vide échouent tous deux avec le message nommé attendu (et le chemin du log de build) ;
+- **`--install`** : un AAB est refusé avec `needs an APK`.
+
+### 12.6 Environnement de la session (pas des défauts du framework)
+
+1. Écriture hors du dépôt refusée par le bac à sable : `~/.cargo`, `~/.gradle` et `~/.atome` renvoient `Operation not permitted (os error 1)`, et **aucun socket TCP local n'est autorisé** (`listen EPERM` sur `127.0.0.1:0`). Une commande exécutée **dans** le bac à sable échoue donc dans `tauri android build` sur `failed to build WebSocket server: Operation not permitted (os error 1)`, et Gradle ne démarre pas (`FileLockContentionHandler … java.net.SocketException`). Reproduit deux fois le 2026-09-23 ; c'est aussi la preuve que le chemin d'erreur de la lane est bruyant, nommé et non silencieux.
+2. La lane complète **est** exécutable depuis ce poste : le préfixe `./run.sh` est déjà approuvé et s'exécute hors bac à sable. C'est ainsi qu'ont été produits tous les runs réels de §12.7. Piège à retenir : ne pas enchaîner `./run.sh apk` derrière un pipe, un `;` ou une autre commande, sinon l'appel retombe dans le bac à sable et échoue comme au point 1.
+3. La suppression de fichiers (`rm`) reste refusée à l'agent — le réviseur d'approbation est en panne (`supported API model names are deepseek-flash, deepseek-v4-pro, but you passed codex-auto-review`). Tout ménage sous `temp/` doit être fait par l'utilisateur.
+
+Sur un poste normal, ces points disparaissent ; la lane Android est désormais vérifiée de bout en bout, y compris ses reprises après échec.
+
+### 12.7 Seconde passe réelle (2026-09-23, session suivante)
+
+Objectif de cette passe : exécuter la lane pour de vrai et vérifier qu'elle produit bien un APK fonctionnel. Trois défauts ont été trouvés ainsi, corrigés et couverts par le banc.
+
+**Run réel du mode test, de bout en bout.** `./run.sh apk` → `[apk] Done`, **exit 0** : la lane résout la chaîne, compile la cible `aarch64-linux-android`, laisse le CLI Tauri assembler via Gradle, découvre l'artefact par le rapport du CLI, le vérifie (`aapt2 dump badging`, `apksigner verify`, sha256) puis conclut. Trois runs consécutifs ont produit la même empreinte.
+
+**Run réel du second passage (Gradle *up-to-date*).** Un `./run.sh apk --install` lancé juste après un run complet a exercé le chemin « Gradle n'a rien réécrit » : `[apk] WARNING Gradle rewrote no *.apk file; reusing the newest debug output on disk: …`, puis la vérification, puis l'échec **nommé** attendu de `--install` (`No authorized Android device is connected; plug one in or start an emulator`) — aucun appareil n'était connecté. Le scénario T7 de §12.5.1 est donc confirmé sur un vrai Gradle, appareil absent compris.
+
+**Défaut 4 — le rapport du CLI n'atteignait jamais le log (corrigé).** `temp/apk-build.log` ne faisait que 567 octets et ne contenait **pas** la ligne `Finished 1 APK at:` : la CLI Tauri écrit ce rapport sur **stderr**, alors que le `tee` de la lane ne capturait que stdout. La « source autoritaire » de découverte restait donc morte en pratique et tout reposait sur le repli « plus récent que le marqueur ». Correctif : `( cd "$TAURI_DIR" && "$TAURI_CLI" … ) 2>&1 | tee "$BUILD_LOG"` — les deux flux continuent d'aller au terminal et `pipefail` continue de faire échouer la lane. Preuve sur le run `--prod` : le log passe à 27 619 octets et contient le rapport avec le chemin de l'APK release.
+
+**Défaut 5 — l'APK doublait de taille quand un artefact précédent existait (corrigé).** Mesuré sur l'APK debug : **994 683 526 octets** alors que la somme de ses entrées n'est que de 505 086 808 octets, soit **489 765 844 octets morts** insérés entre `classes9.dex` et `assets/tauri.conf.json`. AGP réempaquette dans le fichier existant **sans le tronquer** : les octets de la charge utile précédente restent derrière les nouveaux offsets. Reproductible : fichier présent avant packaging → 994 683 526 octets ; fichier absent → **504 916 716 octets et zéro octet mort**. Correctif : `remove_stale_artifacts()` supprime, juste avant le build, les `*.apk` / `*.aab` **du même type de build** sous l'arbre de sortie (un autre type de build, par exemple un release déjà signé pendant un run debug, est laissé intact ; `--dry-run` imprime le `rm` au lieu de l'exécuter). Après correctif, trois runs consécutifs debug donnent 504 916 716 octets, zéro gap, même sha256 `2cac16aef46f29573e32da53477e3e8ebad222c7c1f4620299ebd69f028dd9a6`.
+
+**Run réel du mode production.** `./run.sh apk --prod` → `[apk] Done`, exit 0 :
+
+- keystore release **créé** faute d'existant : `~/.atome/android/squirrel-release.jks` (RSA 4096, `CN=Squirrel, OU=Atome, O=Squirrel, L=Paris, C=FR`, 10 000 jours), mot de passe aléatoire conservé hors dépôt, identifiants stagés dans `gen/android/keystore.properties` (gitignoré). **À sauvegarder** : c'est cette clé qui définira les mises à jour de l'application.
+- `platforms/desktop-tauri/gen/android/app/build/outputs/apk/universal/release/app-universal-release.apk`, **229 264 109 octets** (219 Mio, contre 481 Mio en debug), `.so` strippé de 225 614 912 octets, `package com.squirrel.desktop` (sans suffixe `.debug`), `launchable-activity com.squirrel.desktop.MainActivity`, `native-code 'arm64-v8a'`, `targetSdkVersion 36`, aucun `application-debuggable`, **aucun octet mort** ;
+- signature `apksigner verify --print-certs` : `CN=Squirrel, OU=Atome, O=Squirrel, L=Paris, C=FR`, SHA-256 `e2fcef4afad5b4c98db3b8d8fb2ce9c8eca52f8d2e264a54d84e369e0e24f55f`, valide ; sha256 de l'APK `81e3f27bb078a92423e2d208cf93a1f4d20d49a793462a464421a0fecc91dda2`.
+
+**Banc étendu.** `temp/_apk_discovery_test.sh` : **30 assertions / 30**. Deux cas neufs : T11 (un CLI factice qui écrit le rapport sur stderr doit le faire apparaître dans le log capturé) et T12 (l'artefact debug périmé est supprimé, l'artefact release est épargné).
+
+### 12.8 Reste à faire / **To verify**
+
+- Fait : `./run.sh apk` réel jusqu'à l'APK, terminé en `0` avec `[apk] Done` — voir §12.3 (run utilisateur) et §12.7 (trois runs de l'agent, plus un run `--prod`).
+- Fait : chemin Gradle *up-to-date* observé sur un vrai Gradle (deuxième run), avec le `WARNING` nommé et l'artefact réutilisé — voir §12.7.
+- Fait : `./run.sh apk --prod` réel — APK release signé par le keystore release, plus léger que le debug, sans octet mort — voir §12.7.
+- Fait : `aapt2 dump badging`, `aapt2 dump xmltree`, `apksigner verify --print-certs` et sha256 sur l'APK debug comme sur l'APK release.
+- **To verify (appareil requis)** : `./run.sh apk --install` puis démarrage réel sur appareil, `navigator.gpu` dans la WebView Android, permissions micro/réseau, serveur Axum local. Le refus sans appareil est, lui, déjà vérifié (message nommé).
+- **To verify** : `./run.sh apk --prod --aab` (variante Play Store) et `--split-per-abi` ; le chemin AAB est implémenté et son refus par `--install` est couvert par le banc, mais aucun AAB réel n'a encore été produit.
+- **To verify** : `./run.sh apk --dev --device <serial>` (session hot reload), qui exige un appareil connecté.
+- Résolu dans cette passe : `midir` **n'a pas besoin d'être gaté** — la crate 0.11 fournit un backend Android réel (`src/backend/android`, JNI + AMidi). Restent à trancher : `native_contacts` (déjà gaté macOS/Windows, compile sans objet sur Android) et les 5 sites `Command::new(node)` de `src/server/mod.rs` plus `ffmpeg` (`src/server/mod.rs:314`, `audio_engine/transcode.rs:68`), qui compilent mais échouent à l'exécution sur Android car les binaires n'y existent pas.
+- Nettoyage possible (gitignorés, 0 fichier suivi) : `temp/android-home/` (~2,1 Go), `temp/apk-verify/` (~3,2 Go), `temp/c`, `temp/android_check.sh`, `temp/android_*.txt|json`, ainsi que le banc de cette passe (`temp/_apk_discovery_test.sh`, `temp/_apk_lane_under_test.sh`, `temp/_apk_*.log|out`, `temp/_apk_fixture/`) et le marqueur/log de build (`temp/apk-build-marker`, `temp/apk-build.log`), recréés à chaque run. `temp/apk-verify/` contient les clones des caches et peut être supprimé sans conséquence. S'y ajoute `temp/_apk_debug_with_hole.apk` (994 683 526 octets) : c'était la pièce à conviction du défaut 5, désormais redondante puisque §12.9 re-mesure l'absence d'octet mort sur l'artefact courant.
+
+### 12.9 Vérification finale indépendante (2026-09-23, 11:18, état courant du dépôt)
+
+**La lane repart de zéro et conclut.** `./run.sh apk` relancé seul sur sa ligne, avec l'APK debug précédent supprimé par la lane elle-même (`[apk] removing the previous app-universal-debug.apk so Gradle packages from scratch`) : compilation Rust `dev` réelle, assemblage Gradle, découverte par le rapport du CLI, vérification, puis `[apk] Done` avec **exit 0**.
+
+- APK debug : `platforms/desktop-tauri/gen/android/app/build/outputs/apk/universal/debug/app-universal-debug.apk`, **504 916 716 octets** (482 Mio), sha256 `2f9812ffa6830dcf35bfb03647a7a9cdea9ebb026fc1b0cdd0ef8736b3bbe693`.
+- Intégrité structurelle mesurée sur le fichier final : 931 entrées, somme des entrées compressées 504 751 214 octets, surcoût 165 502 octets (en-têtes locaux + répertoire central) → **zéro octet mort** ; `ZipFile.testzip()` (CRC32 de chaque entrée, soit les 482 Mio) sans erreur ; `assets/tauri.conf.json` présent (2 266 octets) ; `lib/arm64-v8a/libsquirrel_lib.so` de 489 768 408 octets.
+- `aapt2 dump badging` : `com.squirrel.desktop.debug`, `targetSdkVersion 36`, `native-code 'arm64-v8a'`, activité de lancement `com.squirrel.desktop.MainActivity`, permissions `INTERNET` et `RECORD_AUDIO`. `apksigner verify` : signature debug valide (`318a2cd9…f144e8d7`).
+- `temp/apk-build.log` : 5 127 octets et **contient** `Finished 1 APK at:` → le correctif du défaut 4 est actif dans l'état courant.
+- APK release re-mesuré sans reconstruction : 229 264 109 octets, 924 entrées, surcoût 133 424 octets, CRC intégral sans erreur, `.so` strippé de 225 614 912 octets → toujours aucun octet mort.
+- Politique réseau lue dans les deux manifestes compilés : debug `usesCleartextTraffic=true` ; release `usesCleartextTraffic=false` **plus** un `network_security_config` embarqué qui réautorise le cleartext pour `127.0.0.1` et `localhost` seulement — c'est la condition pour que la WebView joigne le serveur Axum local en production. Vérifié sur la ressource compilée de l'APK release (`res/8G.xml`), pas seulement sur la source.
+- Banc re-exécuté dans cet état : `bash temp/_apk_discovery_test.sh` → **30 passed, 0 failed**.
+
+**Le log collé par l'utilisateur (10:45) est antérieur aux correctifs.** Il se termine sur `[apk] ERROR No *.apk artifact was produced under …/app/build/outputs` alors que le CLI venait d'annoncer l'APK. Ce texte d'erreur **n'existe plus** dans `scripts/android/apk.sh` (le message courant nomme le type de build et le log), et la découverte lit désormais le rapport du CLI sur les deux flux (défaut 4), puis ses deux replis. Reproduire cette panne demanderait de désactiver T9 et T11 du banc.
+
+**Non reproductible octet pour octet, et ce n'est pas un défaut.** Ce run a recompilé la crate (`Compiling squirrel`, deux fois : une par le CLI, une par la tâche Gradle) ; l'empreinte debug diffère donc de celle de §12.7 tout en gardant exactement la même taille et la même structure. Aucune revendication de reproductibilité binaire ne doit être faite pour le mode debug.
+
+**Toujours To verify, faute d'appareil sur ce poste.** Aucun AVD, aucune image système et aucun binaire `emulator` dans le SDK local ; le démon `adb` ne démarre pas dans le bac à sable (`could not install *smartsocket* listener: Operation not permitted`). L'installation et le démarrage réels sur appareil, `navigator.gpu` dans la WebView Android, le micro et le serveur Axum local restent donc non exécutés.
