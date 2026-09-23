@@ -122,7 +122,10 @@ test('shared panel Table composes the native passive table kind from panel token
         assert.deepEqual(rule.style.size, [400, tokens.rowDividerThicknessPx]);
         assert.deepEqual(rule.style.background, tokens.rowDivider);
     });
-    assert.deepEqual(rules.map((rule) => rule.style.position[1]), [32, 64, 96]);
+    assert.deepEqual(
+        rules.map((rule) => rule.style.position[1]),
+        [0, 1, 2].map((index) => tokens.headerHeightPx + (tokens.rowHeightPx * index))
+    );
 
     collect(table).forEach((child) => {
         assert.equal(child.on, undefined);

@@ -142,7 +142,10 @@ test('mobile panels stay compact and retain floating geometry through viewport c
     });
     assert.equal(standardMobileGeometry.width, 370);
     assert.equal(standardMobileGeometry.height, 340);
-    assert.deepEqual([standardMobileGeometry.x, standardMobileGeometry.y], [10, 430]);
+    assert.deepEqual(
+        [standardMobileGeometry.x, standardMobileGeometry.y],
+        [10, 844 - 340 - resolveBevyMainMenuItemSize()]
+    );
     assert.equal(standardMobileGeometry.mobile, true);
     assert.deepEqual(panelLabGeometry, standardMobileGeometry, 'all product panels must share the compact mobile policy');
     const resizedPanelLabGeometry = resolveBevyPanelGeometry({
@@ -154,8 +157,8 @@ test('mobile panels stay compact and retain floating geometry through viewport c
     assert.deepEqual(
         resizedPanelLabGeometry,
         {
-            x: 70, y: 160, width: 300, height: 280, toolboxReservedHeight: 74, mobile: true, docked: false,
-            placement: { left: 70, bottomGap: 330, width: 300, height: 280 }
+            x: 70, y: 160, width: 300, height: 280, toolboxReservedHeight: resolveBevyMainMenuItemSize(), mobile: true, docked: false,
+            placement: { left: 70, bottomGap: 844 - 160 - 280 - resolveBevyMainMenuItemSize(), width: 300, height: 280 }
         },
         'Panel Lab mobile drag and resize results must not be replaced by fullscreen geometry'
     );
@@ -171,7 +174,7 @@ test('mobile panels stay compact and retain floating geometry through viewport c
     assert.deepEqual(
         keyboardGeometry,
         {
-            x: 10, y: 49, width: 370, height: 340, toolboxReservedHeight: 74, mobile: true, docked: false,
+            x: 10, y: 463 - 340 - resolveBevyMainMenuItemSize(), width: 370, height: 340, toolboxReservedHeight: resolveBevyMainMenuItemSize(), mobile: true, docked: false,
             placement: { left: 10, bottomGap: 0, width: 370, height: 340 }
         },
         'keyboard contraction must clamp the floating panel without overwriting its full-viewport geometry'

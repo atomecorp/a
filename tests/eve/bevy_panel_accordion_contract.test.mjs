@@ -15,6 +15,16 @@ const findNode = (node, id) => {
     return (node.children || []).map((child) => findNode(child, id)).find(Boolean) || null;
 };
 
+// The single disclosure caret is two oriented strokes: `>` closed, then `v` or
+// `^` toward the side the body opened on. The container itself stays unturned,
+// so the shape is read from the strokes, not from a container rotation.
+const caretShapeOf = (chevron) => {
+    const [upper, lower] = chevron?.children || [];
+    if (!upper || !lower) return 'missing';
+    if (upper.style.position[0] === lower.style.position[0]) return 'right';
+    return upper.style.rotation === 45 ? 'down' : 'up';
+};
+
 test('shared panel accordion has one native header and no hidden body when closed', () => {
     let activations = 0;
     const closed = accordionNode({
@@ -28,16 +38,21 @@ test('shared panel accordion has one native header and no hidden body when close
 
     assert.equal(closed.kind, 'panel');
     assert.equal(closed.on, undefined);
-    assert.deepEqual(closed.style.size, [358, 32]);
+    assert.deepEqual(closed.style.size, [358, BEVY_PANEL_TOKENS.accordion.headerHeightPx]);
     assert.equal(header.kind, 'accordion');
-    assert.deepEqual(header.style.size, [358, 32]);
+    assert.deepEqual(header.style.size, [358, BEVY_PANEL_TOKENS.accordion.headerHeightPx]);
     assert.deepEqual(header.style.padding, [0, 10, 0, 10]);
     assert.equal(header.style.radius, 3);
     assert.deepEqual(header.style.background, BEVY_PANEL_TOKENS.accordion.headerBackground);
     assert.deepEqual(header.style.shadow, BEVY_PANEL_TOKENS.accordion.collapsedShadow);
     assert.equal(typeof header.on.activate, 'function');
     assert.deepEqual(chevron.style.size, [12, 12]);
-    assert.equal(chevron.style.rotation, 0);
+    assert.equal(chevron.style.rotation, undefined);
+    assert.equal(caretShapeOf(chevron), 'right');
+    assert.deepEqual(chevron.children.map((stroke) => stroke.style.size), [
+        [BEVY_PANEL_TOKENS.accordion.chevronStrokeLengthPx, BEVY_PANEL_TOKENS.accordion.chevronStrokeThicknessPx],
+        [BEVY_PANEL_TOKENS.accordion.chevronStrokeLengthPx, BEVY_PANEL_TOKENS.accordion.chevronStrokeThicknessPx]
+    ]);
     assert.equal(findNode(closed, 'accordion_fixture_body'), null);
     const closedRecords = projectBevyUiTreeRecords({ tree: { root: closed }, treeId: 'accordion_closed', workspaceLayer: 'panel' });
     assert.deepEqual(
@@ -48,7 +63,7 @@ test('shared panel accordion has one native header and no hidden body when close
     assert.equal(activations, 1);
 });
 
-test('shared panel accordion opens a continuous 56 px body and keeps instances independent', () => {
+test('shared panel accordion opens a continuous one-unit body and keeps instances independent', () => {
     const open = accordionNode({
         id: 'accordion_open',
         label: 'Section',
@@ -59,14 +74,17 @@ test('shared panel accordion opens a continuous 56 px body and keeps instances i
     const header = findNode(open, 'accordion_open_header');
     const body = findNode(open, 'accordion_open_body');
 
-    assert.deepEqual(open.style.size, [358, 88]);
+    assert.deepEqual(open.style.size, [
+        358,
+        BEVY_PANEL_TOKENS.accordion.headerHeightPx + BEVY_PANEL_TOKENS.accordion.bodyHeightPx
+    ]);
     assert.deepEqual(open.style.shadow, BEVY_PANEL_TOKENS.accordion.expandedShadow);
     assert.deepEqual(header.style.radius_corners, [3, 3, 0, 0]);
     assert.equal(header.style.radius, undefined);
     assert.equal(header.style.shadow, undefined);
-    assert.deepEqual(findNode(open, 'accordion_open_chevron').style.rotation, 90);
-    assert.deepEqual(body.style.position, [0, 32]);
-    assert.deepEqual(body.style.size, [358, 56]);
+    assert.equal(caretShapeOf(findNode(open, 'accordion_open_chevron')), 'down');
+    assert.deepEqual(body.style.position, [0, BEVY_PANEL_TOKENS.accordion.headerHeightPx]);
+    assert.deepEqual(body.style.size, [358, BEVY_PANEL_TOKENS.accordion.bodyHeightPx]);
     assert.deepEqual(body.style.radius_corners, [0, 0, 3, 3]);
     assert.deepEqual(body.style.background, BEVY_PANEL_TOKENS.colors.control);
     assert.equal(findNode(open, 'accordion_open_body_text').text, 'Section content');

@@ -3,6 +3,7 @@ import { createDashboardLayout, hitTestDashboardLayout } from '../../eVe/domains
 import { itemsForRender } from '../../eVe/domains/dashboard/dashboard_environment.js';
 import { buildDashboardRecords, dashboardRecordId } from '../../eVe/domains/dashboard/dashboard_records.js';
 import { mergeDashboardTokens } from '../../eVe/domains/dashboard/dashboard_tokens.js';
+import { SYSTEM_UI_METRICS } from '../../eVe/elements/system_ui_tokens.js';
 
 const categories = [
     ['news', '#9f2f2f'], ['calendar', '#245f94'], ['projects', '#357245'],
@@ -84,8 +85,13 @@ describe('Dashboard fixed grid and visual focus', () => {
         expect(active.properties.material.backdrop.tint[3]).toBeGreaterThan(inactive.properties.material.backdrop.tint[3]);
     });
 
-    it('caps the canonical unit so four columns remain available on a narrow surface', () => {
+    it('keeps the canonical 2x unit at every width and scrolls the lane instead of shrinking it', () => {
         const layout = createDashboardLayout({ width: 320, height: 640, categories, itemsByCategory: sourceItems, tokens });
-        expect(layout.unit_width * 4 + tokens.metrics.gap * 3).toBeLessThanOrEqual(320);
+        expect(layout.unit_width).toBe(tokens.metrics.blockUnitSizePx);
+        expect(layout.unit_width).toBe(SYSTEM_UI_METRICS.doubleUnitPx);
+        const news = layout.projection_lanes[0];
+        const weatherRect = news.visible_item_rects.find((entry) => entry.item.id === weather.id).card_rect;
+        expect(weatherRect.width).toBe(layout.unit_width * 2);
+        expect(news.horizontal_scroll_max).toBeGreaterThan(0);
     });
 });

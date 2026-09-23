@@ -356,7 +356,7 @@ test('shared Bevy list drag preserves the pointer anchor when its drop target ch
 
 test('shared Bevy list exposes an insertion marker without moving row hit geometry', () => {
     const result = hierarchicalSelectableListNode({
-        id: 'reorder_list', width: 300, rowHeight: 32,
+        id: 'reorder_list', width: 300, rowHeight: 30,
         insertionSlot: 2,
         entries: [
             { id: 'first', value: 'first', label: 'First', dragging: true },

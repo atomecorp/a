@@ -1,4 +1,7 @@
 import { $ } from '../squirrel.js';
+// The slider's collapsed square is the framework base unit; the caller passes the
+// live surface size, this import is only the last-resort default.
+import { SYSTEM_UI_METRICS } from '../../../../eVe/elements/system_ui_tokens.js';
 import { createSliderToolElements } from './tool_slider_elements.js';
 import { createDirectSliderDragController } from './tool_slider_drag.js';
 import { createSliderEmitters } from './tool_slider_emit.js';
@@ -28,7 +31,7 @@ const mountIntuitionXSliderToolContent = ({
         ? 'vertical'
         : 'horizontal';
     const vertical = resolvedOrientation === 'vertical';
-    const toolSizePx = Math.max(1, Math.round(toFiniteNumber(collapsedWidthPx, 57)));
+    const toolSizePx = Math.max(1, Math.round(toFiniteNumber(collapsedWidthPx, SYSTEM_UI_METRICS.unitPx)));
     const expandedLength = Math.max(toolSizePx, Math.round(toFiniteNumber(expandedWidthPx, Math.round(toolSizePx * 3))));
     const min = toFiniteNumber(definition.sliderMin, 0);
     const max = Math.max(min, toFiniteNumber(definition.sliderMax, 100));

@@ -8,6 +8,7 @@ import { test } from 'vitest';
 import { WORKSPACE_SCENE_LAYER_IDS } from '../../eVe/domains/rendering/workspace_scene_layers.js';
 import { setMainMenuRuntime } from '../../eVe/intuition/ribbon/bevy_ui_product_registry.js';
 import { PANEL_SURFACE_DEFINITIONS } from '../../eVe/intuition/panel_definitions.js';
+import { resolveBevyMainMenuItemSize } from '../../eVe/intuition/ribbon/bevy_ui_main_menu_model.js';
 import { BEVY_PANEL_TOKENS } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_tokens.js';
 import { buildBevyPanelTree } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_tree.js';
 import { EVE_TOOL_SKIN_TOKENS } from '../../eVe/elements/skin/tool_skin.js';
@@ -289,7 +290,7 @@ test('Bevy panel contract removes tools dock and keeps system controls in footer
     assert.ok(panel.style.shadow, 'only the outer panel owns the drop shadow');
     assert.equal(
         panel.style.position[1] + panel.style.size[1],
-        768 - 74,
+        768 - resolveBevyMainMenuItemSize(),
         'desktop panel opening geometry must meet the top of the main toolbar'
     );
     assert.deepEqual(accent.style.position, [0, 0]);
@@ -313,7 +314,11 @@ test('Bevy panel contract removes tools dock and keeps system controls in footer
     await drag.on.drag({ client_x: 40, client_y: 30 });
     drag.on.release();
     const movedPanel = findNode(mounted.at(-1), 'eve_bevy_panel_timeline_panel');
-    assert.deepEqual(movedPanel.style.position, [372, 496], 'a panel cannot drag down across the toolbar boundary');
+    assert.deepEqual(
+        movedPanel.style.position,
+        [372, 768 - movedPanel.style.size[1] - resolveBevyMainMenuItemSize()],
+        'a panel cannot drag down across the toolbar boundary'
+    );
 
     await close.on.activate();
     assert.deepEqual(unmounted, ['eve_bevy_panel_timeline']);
