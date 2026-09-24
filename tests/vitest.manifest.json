@@ -87,6 +87,7 @@
   "tests/eve/context_menu_access_lifecycle.test.mjs",
   "tests/eve/context_menu_resolver.test.mjs",
   "tests/eve/context_menus_characterisation.test.mjs",
+  "tests/eve/contextual_rail_active_zone.test.mjs",
   "tests/eve/contextual_rail_scroll.test.mjs",
   "tests/eve/contextual_selection_levels.test.mjs",
   "tests/eve/create_tools_modes_contract.test.mjs",

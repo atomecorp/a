@@ -299,3 +299,19 @@ Structure cible (identifiants seulement, libellés via `labelKey`) :
 17. L'ordre canonique se modifie dans l'éditeur, et le nouvel ordre s'applique à l'identique dans tous les menus, niveaux et activités.
 18. L'éditeur et `save_taxonomy` n'existent que dans `tauri dev`. Ils écrivent le fichier source du dépôt, pas la copie `target/`.
 19. L'éditeur valide, montre le diff, écrit seulement `context_menus.json` de façon atomique et garde la version précédente ; il est absent du build public ; aucun secret GitHub dans atome.
+
+## 8. Retours UI du 25/09 (faits)
+
+1. **Premier affichage au bon niveau** : le menu principal affichait toutes les racines puis filtrait. Correctifs : dernier niveau connu mémorisé localement et lu de façon synchrone (`eVe/intuition/menu/visual_level_cache.js`), et publication de `preferences.visual` pendant la lecture du profil déjà faite au démarrage (`workspace_surface_preference.js`). Sonde : premier arbre monté après rechargement = 5 racines.
+2. **Poignée « atome »** : glyphe à la couleur de marque (`MYSTIC_CENTER_TINT`, comme le centre de Mystic). Vérifié sur les pixels : (201, 12, 125).
+3. **Organiser** : nouvelle icône `atome/src/assets/images/icons/organize.svg` (agenda), aussi utilisée par la tuile Dashboard de Mystic. `grid.svg` corrigé au passage : il manquait `width`/`height`, ce qui le dessinait en petit point.
+4. **Survol pendant un appui maintenu sur une palette** : le moteur de pointeur annonce `hover`/`hover_leave` à l'enfant sous le doigt (`bevy_ui_pointer_runtime.js`). L'enfant survolé passe en cyan (`interaction.hovered`, `elements/skin/tool_skin.js`), recopié sur la coque de l'outil. Relâcher sur la palette elle-même ne choisit rien.
+
+Sonde app réelle : 31/31 en fenêtre visible (`temp/probe_reports/taxonomy_real_app/palette_hover.png`).
+
+## 9. « Tout sélectionner » dans le rail du projet (25/09, fait)
+
+- Taxonomie : nouvelle commande `select_all` (ordre canonique : après Annuler/Rétablir), placée dans `menus.sidebar.objects.project` (dès débutant), **pas** dans Mystic.
+- Le rail du fond de projet lit désormais la composition **sidebar** `project` (`project_background_rail_runtime.js` passe `menu: 'sidebar'` ; `mystic_context_items_runtime.js` accepte ce menu). Cette composition reprend ce que le rail montrait jusqu'ici, plus `select_all` ; elle est réglable dans l'éditeur.
+- Action : `tool.main.select_all` → `eVe/intuition/tools/select_all_tool.js`. Il sélectionne tous les atomes sélectionnables de la scène du projet, par la règle du lasso (`collectProjectSceneSelectableAtoms`), via `applySelectionBatch(ids, 'replace')`.
+- Sonde app réelle : 34/34. Toucher le fond → rail avec « tout sélectionner » → toucher → les atomes du projet sont sélectionnés ; absent de Mystic.
