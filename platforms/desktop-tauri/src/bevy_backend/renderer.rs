@@ -115,6 +115,7 @@ mod tests {
             shadow: None,
             backdrop: None,
             presentation: false,
+            menu_plane: 0,
             color: Some([0.24, 0.55, 0.92, 1.0]),
             text: None,
             source: None,
@@ -145,8 +146,9 @@ mod tests {
         app.world_mut().run_schedule(Startup);
 
         let mut camera_query = app.world_mut().query::<&Camera2d>();
-        // Shared core owns one presentation camera plus capture and two-pass blur cameras.
-        assert_eq!(camera_query.iter(app.world()).count(), 4);
+        // Shared core owns one presentation camera plus the workspace capture camera
+        // (blur runs as a compute pass; menu capture cameras spawn lazily).
+        assert_eq!(camera_query.iter(app.world()).count(), 2);
 
         let mut node_query = app
             .world_mut()

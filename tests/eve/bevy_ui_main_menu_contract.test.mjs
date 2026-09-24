@@ -434,7 +434,7 @@ test('a leaf palette choice closes the palette, a cursor keeps it open and a nes
     } finally { harness.runtime.destroy(); harness.restore(); }
 });
 
-test('a latched tool takes its palette slot and that slot turns it off without opening the palette', async () => {
+test('a latched tool keeps its palette slot identity and that slot still turns it off', async () => {
     const invocations = [];
     const harness = createRuntimeHarness({ content: choicePaletteContent(),
         onInvoke: (entry, source, payload) => {
@@ -453,10 +453,12 @@ test('a latched tool takes its palette slot and that slot turns it off without o
         harness.runtime.setToolLatchedState({ tool_id: 'ui.text.create', latched: true });
         await waitMs(20);
         assert.equal(harness.runtime.getToolLatchedState({ tool_id: 'ui.text.create' }), true);
-        // R2 — l'emplacement porte l'icone ET le libelle de l'outil actif : le
-        // libelle se lit sur l'accessibilite du noeud, l'icone sur son enfant.
-        assert.equal(slot().accessibility.label, 'Text');
-        assert.match(slotIcon(), /edit\.svg$/);
+        // R2 (2026-09-24) — l'emplacement porte l'icone ET le libelle de SA
+        // palette : un enfant verrouille ne renomme jamais l'outil qui le contient.
+        assert.equal(slot().accessibility.label, 'Create');
+        assert.match(slotIcon(), /add\.svg$/);
+        // Le niveau affiche est celui de l'outil actif : Text n'a aucune option.
+        assert.equal(node('eve_bevy_ui_main_menu_tool_create__text_create'), null);
         // L'emplacement reste une palette : il ouvrirait son niveau s'il n'etait pas allume.
         assert.equal(typeof slot().on.palette_open, 'function');
         // R4 — l'appui eteint l'outil par le chemin canonique et n'ouvre pas la palette.
@@ -465,9 +467,15 @@ test('a latched tool takes its palette slot and that slot turns it off without o
         assert.equal(harness.runtime.measure().activePaletteKey, '');
         assert.equal(harness.runtime.getToolLatchedState({ tool_id: 'ui.text.create' }), false);
         await waitMs(20);
-        // R2 — l'extinction rend a la palette son icone et son libelle.
+        // L'emplacement a garde son identite pendant tout le cycle de verrouillage.
         assert.equal(slot().accessibility.label, 'Create');
         assert.match(slotIcon(), /add\.svg$/);
+        // L'extinction rend a la palette ses autres choix : elle se rouvre normalement.
+        await slot().on.activate({});
+        await waitMs(350);
+        assert.equal(harness.runtime.measure().activePaletteKey, 'create');
+        assert.ok(node('eve_bevy_ui_main_menu_tool_create__text_create'));
+        assert.deepEqual(invocations, [{ key: 'text_create', previousLatched: true }]);
     } finally { harness.runtime.destroy(); harness.restore(); }
 });
 
@@ -487,7 +495,8 @@ test('a latched tool that owns options replaces its palette other choices in the
         assert.equal(node('eve_bevy_ui_main_menu_tool_create__text_create'), null);
         assert.equal(node('eve_bevy_ui_main_menu_tool_create__create_draw'), null);
         assert.ok(node('eve_bevy_ui_main_menu_tool_create__draw_size'));
-        assert.equal(node('eve_bevy_ui_main_menu_tool_create').accessibility.label, 'Draw');
+        // R3 ne touche que les CHOIX : l'emplacement garde le libelle de sa palette.
+        assert.equal(node('eve_bevy_ui_main_menu_tool_create').accessibility.label, 'Create');
         // Eteint, les autres choix reviennent : il faut l'eteindre pour les revoir.
         harness.runtime.setToolLatchedState({ tool_id: 'tool.main.draw', latched: false });
         await waitMs(20);
@@ -496,22 +505,20 @@ test('a latched tool that owns options replaces its palette other choices in the
     } finally { harness.runtime.destroy(); harness.restore(); }
 });
 
-test('View and Mode slots present the current choice and still open their palette', async () => {
-    let currentView = 'view_list';
+test('View keeps its own icon and label when the canonical view mode changes', async () => {
     const content = choicePaletteContent();
-    content.view.selectedChildKey = () => currentView;
     const harness = createRuntimeHarness({ content, onInvoke: () => ({ ok: true }) });
     const latest = () => harness.calls.at(-1).payload.tree;
     const node = (id) => findNode(latest().root, id);
     try {
         await harness.runtime.showFully();
-        assert.match(node('eve_bevy_ui_main_menu_tool_view_icon').image.source, /hamburger\.svg$/);
-        assert.equal(node('eve_bevy_ui_main_menu_tool_view').accessibility.label, 'List');
-        // Le choix change chez son proprietaire canonique, pas dans le rendu.
-        currentView = 'view_table';
+        // La palette Vue garde SON icone et SON libelle, ici comme ailleurs
+        // (2026-09-24) : elle ne porte plus le mode de vue courant.
+        assert.match(node('eve_bevy_ui_main_menu_tool_view_icon').image.source, /visible_true\.svg$/);
+        assert.equal(node('eve_bevy_ui_main_menu_tool_view').accessibility.label, 'View');
         await harness.runtime.refresh();
-        assert.match(node('eve_bevy_ui_main_menu_tool_view_icon').image.source, /matrix\.svg$/);
-        assert.equal(node('eve_bevy_ui_main_menu_tool_view').accessibility.label, 'Matrix');
+        assert.match(node('eve_bevy_ui_main_menu_tool_view_icon').image.source, /visible_true\.svg$/);
+        assert.equal(node('eve_bevy_ui_main_menu_tool_view').accessibility.label, 'View');
         // R5 — un choix momentane n'a rien a eteindre : l'appui rouvre la palette.
         await node('eve_bevy_ui_main_menu_tool_view').on.activate({});
         await waitMs(350);

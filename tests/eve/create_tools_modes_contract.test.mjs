@@ -20,7 +20,7 @@ import { centeredEditorGeometry } from '../../eVe/intuition/tools/code_editor_ge
 import { buildBootstrapDefsA } from '../../eVe/intuition/tools/core/tool_runtime_bootstrap_defs_a.js';
 import { buildBootstrapDefsB } from '../../eVe/intuition/tools/core/tool_runtime_bootstrap_defs_b.js';
 import { hasDrawTravelled } from '../../eVe/intuition/tools/core/svg_draw_model.js';
-import { buildBevyMainMenuTree } from '../../eVe/intuition/ribbon/bevy_ui_main_menu_model.js';
+import { buildBevyMainMenuItems, buildBevyMainMenuTree } from '../../eVe/intuition/ribbon/bevy_ui_main_menu_model.js';
 
 const previousWindow = globalThis.window;
 const previousDocument = globalThis.document;
@@ -151,7 +151,7 @@ test('activating Text never wakes a lazy inactive Code toggle', async () => {
     assert.equal(globalThis.window.eveCodeToolApi, undefined);
 });
 
-test('the latched Create tool takes its palette slot instead of a sibling button', () => {
+test('the latched Create tool keeps its own slot identity and its level', () => {
     const content = createMainMenuCreateContent({
         translate: (_key, fallback) => fallback,
         createToolId: 'tool.main.create',
@@ -186,15 +186,13 @@ test('the latched Create tool takes its palette slot instead of a sibling button
     // Le libelle se lit sur l'accessibilite du noeud, l'icone sur son enfant.
     const slotLabel = (latched) => slot(latched).accessibility.label;
     const slotIcon = (latched) => find(treeFor(latched).root, `${slotId}_icon`).image.source;
-    const childLabel = find(treeFor(false).root, 'eve_bevy_ui_main_menu_tool_create__text_create').accessibility.label;
     // Eteint : la palette affiche ses propres choix et son propre libelle.
     assert.ok(find(treeFor(false).root, childId));
     assert.ok(slotLabel(false));
-    // Allume (R2/R3) : le choix de la palette est remplace par l'emplacement de
-    // l'outil actif, qui porte son icone ET SON libelle.
-    assert.equal(slotLabel(true), childLabel);
-    assert.notEqual(slotLabel(true), slotLabel(false));
-    assert.notEqual(slotIcon(true), slotIcon(false));
+    // Allume (2026-09-24) : l'emplacement garde l'icone et le libelle de SA
+    // palette ; seul le NIVEAU devient celui de l'outil verrouille (R3).
+    assert.equal(slotLabel(true), slotLabel(false));
+    assert.equal(slotIcon(true), slotIcon(false));
     assert.equal(find(treeFor(true).root, childId), null);
     // L'emplacement se lit comme allume, palette refermee : meme peignage que le
     // ruban actif, alors que la palette eteinte ne l'aurait pas.
@@ -223,14 +221,15 @@ const modeContentDependencies = (translate) => {
     ]);
 };
 
-test('the Mode palette reads its current choice from the canonical work-mode owner', async () => {
+test('the Mode palette keeps its own icon and label whatever the canonical work mode is', async () => {
     const { createMainMenuContentRuntime } = await import('../../eVe/intuition/runtime/eve_intuition/main_menu_content_runtime.js');
     const content = createMainMenuContentRuntime({
         ...modeContentDependencies((_key, fallback) => fallback),
         t: (_key, fallback) => fallback,
         trackContextMenuState: () => {}, announceContextMenuState: () => {}
     });
-    // Le mode de travail est celui de `getProjectWorkMode` : consommer -> mode_consume.
+    // Le mode de travail reste publie par `getProjectWorkMode` ; seule la
+    // PRESENTATION de la palette ne le suit plus (2026-09-24).
     const workMode = await import('../../eVe/domains/rendering/project_work_mode_state.js');
     const dom = new JSDOM('<!doctype html>');
     const previousWindow = globalThis.window;
@@ -238,11 +237,21 @@ test('the Mode palette reads its current choice from the canonical work-mode own
     dom.window.__eveWorkspaceMode = { mode: 'project', projectId: 'mode_project' };
     dom.window.__currentProject = { id: 'mode_project' };
     dom.window.evePerformApi = { deactivate: async () => ({ ok: true }) };
+    const menuContent = () => ({
+        toolbox: { children: ['mode'] }, mode: content.mode, perform: content.perform,
+        mode_edit: content.mode_edit, mode_consume: content.mode_consume
+    });
+    const slot = () => buildBevyMainMenuItems(menuContent()).find((item) => item.key === 'mode');
     try {
+        assert.equal(content.mode.selectedChildKey, undefined);
         await workMode.setProjectWorkMode('consultation', { windowRef: dom.window, prepare:async()=>({ok:true}) });
-        assert.equal(content.mode.selectedChildKey(), 'mode_consume');
+        assert.equal(slot().label, 'mode');
+        assert.match(slot().icon, /settings\.svg$/);
         await workMode.setProjectWorkMode('edit', { windowRef: dom.window });
-        assert.equal(content.mode.selectedChildKey(), 'mode_edit');
+        assert.equal(slot().label, 'mode');
+        assert.match(slot().icon, /settings\.svg$/);
+        // Le niveau de la palette reste celui de ses trois modes.
+        assert.deepEqual(slot().entry.children.map((child) => child.key), ['perform', 'mode_edit', 'mode_consume']);
     } finally {
         globalThis.window = previousWindow;
     }

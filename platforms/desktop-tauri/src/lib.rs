@@ -8,6 +8,7 @@ mod native_contacts;
 mod native_midi;
 mod runtime_logging;
 mod server;
+mod taxonomy_editor;
 mod viewport_runtime;
 
 use std::fs;
@@ -219,6 +220,8 @@ pub fn run() {
             native_clipboard::clipboard_write_text,
             native_clipboard::clipboard_read_text,
             native_clipboard::clipboard_has_text,
+            taxonomy_editor::taxonomy_read,
+            taxonomy_editor::taxonomy_save,
             project_root
         ])
         .setup(|app| {

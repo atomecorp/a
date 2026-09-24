@@ -363,6 +363,12 @@
           "markdownDescription": "Allows the main webview to read and write the host system clipboard.\n#### This permission set includes:\n\n- `allow-clipboard-write-text`\n- `allow-clipboard-read-text`\n- `allow-clipboard-has-text`"
         },
         {
+          "description": "Lets the developer taxonomy editor read and save eVe/intuition/menu/context_menus.json (writes only in debug builds).\n#### This permission set includes:\n\n- `allow-taxonomy-read`\n- `allow-taxonomy-save`",
+          "type": "string",
+          "const": "taxonomy-editor",
+          "markdownDescription": "Lets the developer taxonomy editor read and save eVe/intuition/menu/context_menus.json (writes only in debug builds).\n#### This permission set includes:\n\n- `allow-taxonomy-read`\n- `allow-taxonomy-save`"
+        },
+        {
           "description": "Enables the audio_destroy_clip command.",
           "type": "string",
           "const": "allow-audio-destroy-clip",
@@ -493,6 +499,18 @@
           "type": "string",
           "const": "allow-clipboard-write-text",
           "markdownDescription": "Enables the clipboard_write_text command."
+        },
+        {
+          "description": "Enables the taxonomy_read command.",
+          "type": "string",
+          "const": "allow-taxonomy-read",
+          "markdownDescription": "Enables the taxonomy_read command."
+        },
+        {
+          "description": "Enables the taxonomy_save command.",
+          "type": "string",
+          "const": "allow-taxonomy-save",
+          "markdownDescription": "Enables the taxonomy_save command."
         },
         {
           "description": "No features are enabled by default, as we believe\nthe clipboard can be inherently dangerous and it is \napplication specific if read and/or write access is needed.\n\nClipboard interaction needs to be explicitly enabled.\n",

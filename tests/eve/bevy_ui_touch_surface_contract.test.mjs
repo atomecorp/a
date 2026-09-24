@@ -235,6 +235,28 @@ test('contextual palettes keep the semantic accent on the rail interior in both 
     assert.equal(leftAccent.style.size[1], 60 - BEVY_MENU_TOKENS.paletteAccent.insetPx * 2);
 });
 
+test('a contextual palette slot keeps its own icon and label while the child in force reads pressed', () => {
+    const tree = buildAtomeContextualEditTree({
+        surface: { getBoundingClientRect: () => ({ width: 800, height: 600 }) },
+        activeAtomeId: 'a', activePaletteKey: 'container_play_mode', itemSize: 44, mainMenuHeight: 60,
+        definitions: [{
+            key: 'container_play_mode', label: 'Play Mode', icon: 'sequence', toolType: 'palette', priority: 10,
+            children: [
+                { key: 'container_play_random', label: 'Random', icon: 'matrix2', toolType: 'tool', active: true },
+                { key: 'container_play_loop', label: 'Loop', icon: 'redo', toolType: 'tool', active: false }
+            ]
+        }]
+    });
+    const slot = findNode(tree.root, 'atome_contextual_tool_container_play_mode');
+    const slotIcon = findNode(tree.root, 'atome_contextual_tool_container_play_mode_icon');
+    const chosen = findNode(tree.root, 'atome_contextual_tool_container_play_mode_container_play_random');
+    const other = findNode(tree.root, 'atome_contextual_tool_container_play_mode_container_play_loop');
+    assert.equal(slot.accessibility.label, 'Play Mode');
+    assert.equal(slotIcon.image.source, './assets/images/icons/sequence.svg');
+    assert.deepEqual(chosen.style.translation, [0, 2]);
+    assert.equal(other.style.translation, undefined);
+});
+
 test('Mystic palette accents are individual rounded top arcs', () => {
     const tree = buildBevyUiMysticTree({
         surface: { getBoundingClientRect: () => ({ width: 800, height: 600 }) },

@@ -15,6 +15,7 @@
     "stt:default",
     "audio-engine",
     "bevy-native-renderer",
-    "clipboard-bridge"
+    "clipboard-bridge",
+    "taxonomy-editor"
   ]
 }

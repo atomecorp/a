@@ -1,0 +1,19 @@
+"$schema" = "schemas/schema.json"
+
+[[set]]
+identifier = "taxonomy-editor"
+description = "Lets the developer taxonomy editor read and save eVe/intuition/menu/context_menus.json (writes only in debug builds)."
+permissions = [
+  "allow-taxonomy-read",
+  "allow-taxonomy-save",
+]
+
+[[permission]]
+identifier = "allow-taxonomy-read"
+description = "Enables the taxonomy_read command."
+commands.allow = ["taxonomy_read"]
+
+[[permission]]
+identifier = "allow-taxonomy-save"
+description = "Enables the taxonomy_save command."
+commands.allow = ["taxonomy_save"]

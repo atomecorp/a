@@ -1213,7 +1213,7 @@ The real-pointer harness remains molecule_eve_ui_acceptance_probe; molecule_ui_a
 
 Molecule Matrix tiles now display the shared composite preview of their children. Text edit/select cycles preserve viewer, menu, row and canvas geometry; blue ranges remain visible when a style tool takes keyboard focus. Draw control-point handles, flat/round strokes and selected opacity have real-pointer Web evidence. Full-height gray scrub handles, tool-height rows/project footer, opposite-handed layout, accordion and splitter are verified by layout_scrub_v5/layout_scroll_fixed. M/S source appearance and actual audio gains restore after attenuation is disabled. These checks do not establish a quantified performance improvement.
 
-Choice palettes (2026-09-08): Choice palettes display the selected child icon while retaining the parent label and help text. View switches immediately among Layout, List and Matrix icons; Play Mode shows its active playback mode. choice_icons_vector_history_verified confirms the visible View changes.
+Choice palettes (2026-09-08, superseded 2026-09-24): Choice palettes display the selected child icon while retaining the parent label and help text. View switches immediately among Layout, List and Matrix icons; Play Mode shows its active playback mode. choice_icons_vector_history_verified confirms the visible View changes. Since 2026-09-24 the opposite holds: a palette slot displays its own icon and label whatever the user picked, View/Mode/Activity/Play Mode keep their identity, and the state in force is read on the child inside the level.
 
 ### Web interaction checkpoint 2026-09-09 — empty ranges and Left restoration
 

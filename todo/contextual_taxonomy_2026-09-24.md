@@ -111,7 +111,15 @@ Mesures faites sur l'app réelle (port 3001, invité) via `window.atome.tools.v2
 
 ## 5. Travail à réaliser, dans l'ordre
 
-### Étape 0 — Catalogue d'outils exposables + Find assaini (priorité 1)
+### ✅ Étape 0 — Catalogue d'outils exposables + Find assaini (priorité 1)
+
+> **Fait le 2026-09-24.**
+> - Critère retenu : **atteignabilité depuis une surface**, pas `visibility`. Ce champ sert seulement à la boîte à outils générée ; dupliquer, rétablir et les captures sont `hidden` alors que ce sont de vrais boutons.
+> - Code : `eVe/intuition/tools/core/exposable_tools.js` ; `finder_data_sources.js` `selectExposableToolRecords` / `loadExposableToolRecords` ; branché dans `bevy_panel_finder_data.js` (scope `tools`).
+> - `loadToolRecordsFromDatabase` est laissé entier pour le sélecteur de liaison MIDI.
+> - Mesure en app réelle (invité, espace de travail) : **161 → 74 outils**, 0 doublon, noms = libellés des boutons.
+> - Sonde : `temp/finder_tools_scope_probe.mjs` (verte).
+> - Table : `maps/TOOL_SURFACE_MAP.md`, avec les écarts (outils atteignables absents du registre, clés sans `tool_id`).
 
 - **Critère.** `visibility !== 'hidden'` **et** au moins une des deux conditions :
   - l'outil est référencé par une surface (catalogue de `context_menus.json`, contenu du menu principal `main_menu_content_runtime.js`, rail) ;
@@ -125,7 +133,13 @@ Mesures faites sur l'app réelle (port 3001, invité) via `window.atome.tools.v2
   - aucun doublon ;
   - chaque bouton réellement visible dans les trois menus est présent.
 
-### Étape 1 — Modèle de données (`context_menus.json` v2)
+### ✅ Étape 1 — Modèle de données (`context_menus.json` v2)
+
+> **Fait le 2026-09-24.**
+> - Format retenu : chaque table (type d'objet, racines et enfants du menu principal, `minLevels`, `views.list`) associe une clé à son **niveau minimum**. La table complète = `advanced` ; l'inclusion débutant ⊆ intermédiaire ⊆ avancé est donc garantie par construction, et c'est directement ce que les cases à cocher de l'éditeur manipuleront.
+> - `order` = ordre canonique unique (52 commandes). Les activités deviennent des surcharges `add` / `remove` / `replace` (par projet et par type).
+> - Validateur v2 (`context_menus_loader.js`) : ids, ordre complet, niveaux, immuables jamais retirés, contradictions add/remove, aucune commande `system` dans Mystic, ≤ 5 racines débutant, catalogue de rendu.
+> - Niveau par défaut = `advanced` (`user_visual_preferences_model.js`). Ancienne version sauvegardée dans `temp/context_menus_v1_backup.json`.
 
 Structure cible (identifiants seulement, libellés via `labelKey`) :
 - **`catalog`** : pour chaque outil, `{ order, labelKey, tool_id, … }`. L'**`order` global** fait foi pour tous les menus (R4).
@@ -153,7 +167,16 @@ Structure cible (identifiants seulement, libellés via `labelKey`) :
   - que la racine `beginner` de `menus.main` compte au plus 5 entrées.
 - Migration : convertir le contenu actuel (compositions par kind et par `activity:*`) vers ce format, puis appliquer Q3 / Q3b.
 
-### Étape 2 — Moteur (resolver) et branchements
+### ✅ Étape 2 — Moteur (resolver) et branchements
+
+> **Fait le 2026-09-24.**
+> - Resolver : type → activité forcée → niveau → immuables → permissions → ordre canonique.
+> - Menu principal : racine **Organiser** (`tool.main.organize`, ouvre et ferme le Dashboard) ; racines et enfants filtrés par niveau (`resolveMenuLevelVisibility`).
+> - Palettes filtrées par niveau dans Mystic et le rail (z-order : 2 choix en débutant).
+> - Activité forcée : `forced_activity_state.js`, choix « Automatique » (`ui.activity.automatic`), re-toucher = débrayer, propriété projet `forced_activity` restaurée sur `squirrel:project-changed`.
+> - Coller : le menu principal faisait **déjà** clic = coller / appui long = historique. Ajouté : l'appui long dans le rail (`long_press_tool_id`) et dans Mystic (événement natif `long_press` + minuterie d'immobilité 6 px / 600 ms).
+> - Liste : `project_view_list_options.js` ; mute / solo / tout-aucun / force / édition de clip gardés par niveau ; indicateur inerte sur une ligne mutée ; redessin au changement de niveau ou d'activité.
+> - Sondes : `temp/contextual_taxonomy_matrix_probe.mjs` (330 cas) et `temp/taxonomy_real_app_probe.mjs` (19 contrôles, app réelle, vrais gestes).
 
 - `eVe/intuition/menu/context_menu_resolver.js` `resolveContextMenu`, dans cet ordre :
   1. surcharge du mode (consultation / exécution, inchangé) ;
@@ -171,14 +194,23 @@ Structure cible (identifiants seulement, libellés via `labelKey`) :
   - Un indicateur discret sur le bouton Activité montre qu'une activité est forcée.
   - **Persistance par projet** : l'activité forcée (ou « Automatique ») est enregistrée avec le projet et restaurée à son ouverture. S'appuyer sur la portée `project` déjà gérée par `activities_runtime.js` (`persistScopedDesktopState` / `restoreProjectDesktopState`). Ne plus se servir du choix global persistant `api.activities.setCurrent(..., persist)` pour l'embrayage.
 - **Coller (Q8).**
-  - Clic = coller directement la dernière copie ; appui long = historique (`ui.paste.panel`). C'est aujourd'hui l'inverse : le clic ouvre le panneau.
+  - Clic = coller directement la dernière copie ; appui long = historique (`ui.paste.panel`). *(Constat corrigé le 24/09 : le menu principal le faisait déjà ; seuls Mystic et le rail manquaient.)*
   - Brancher les deux gestes dans le menu principal, Mystic et le rail.
   - Vérifier que l'appui long sur une tuile Mystic n'entre pas en conflit avec le relâcher-pour-activer de Mystic (`bevy_ui_mystic_runtime.js` `releaseAt`).
 - **Menu principal.** `intuition/ribbon/bevy_ui_main_menu_runtime.js` (`menuOptions` → `buildBevyMainMenuItems`) filtre `toolbox.children` selon `menus.main` + niveau. Il se recompose sur `eve:profile-preferences-updated` (aujourd'hui seule la latéralité est lue, `intuition/menu/menu_work_context.js`).
 - **Vues.** `resolveViewOptions(view, context)`. Brancher `domains/rendering/project_view_mix_controls.js` : ne pas construire l'option masquée **et** ignorer le hit-test du nœud `_mute` masqué (l.168). Brancher aussi `intuition/runtime/bevy_panel/bevy_panel_selectable_list_fixed_row.js` (bouton `_mute`, l.69), en gardant l'indication d'état (R7).
 - Mystic (`mystic_context_items_runtime.js`) et rail (`atome_contextual_rail_model_runtime.js`) consomment déjà le resolver : vérifier seulement.
 
-### Étape 3 — Éditeur DEV de taxonomie + passerelle d'écriture
+### ✅ Étape 3 — Éditeur DEV de taxonomie + passerelle d'écriture
+
+> **Fait le 2026-09-24** (vérification finale de l'écriture réelle : à faire dans `npm run tauri:dev`, voir plus bas).
+> - Rust : `platforms/desktop-tauri/src/taxonomy_editor.rs`, commandes `taxonomy_read` / `taxonomy_save`. **Le code d'écriture n'existe qu'en debug** ; en release ce sont des bouchons qui renvoient `taxonomy_editor_unavailable`. Chemin unique = le fichier SOURCE `eVe/intuition/menu/context_menus.json` (depuis `CARGO_MANIFEST_DIR`, jamais une copie `target/`).
+> - Avant écriture : JSON valide, clés requises, `version: 2`, **refus si le fichier a changé sur disque** depuis l'ouverture. Sauvegarde horodatée **hors du dépôt** (`$TMPDIR/atome_taxonomy_backups/`, pas de bruit Git), puis écriture atomique (`.tmp` + rename).
+> - Permissions : `permissions/taxonomy-editor.toml` + `capabilities/default.json`.
+> - JS : `eVe/intuition/dev/taxonomy_editor/` — `taxonomy_editor_model.js` (pur : cases par niveau, surcharges d'activité, ordre, diff, validation par le vrai validateur), `taxonomy_editor_bridge.js`, `taxonomy_editor_panel.js` (panneau Bevy). Appliquer = valider → écrire → remplacer la taxonomie en mémoire et prévenir les menus, sans redémarrer.
+> - Ouverture : bouton « Taxonomie (dev) » à la fin de Contact → sa fiche → Préférences, rendu seulement si `taxonomy_read` répond (`__eveTaxonomyEditorAvailable`).
+> - **Écart assumé sur l'empaquetage** : `eVe/intuition/dev/` n'est pas retiré des bundles. La garantie est structurelle côté Rust (aucun code d'écriture en release) ; le module JS est inerte sans la commande de debug. Modifier les trois empaqueteurs (bundle Tauri, `apk.sh`, `package_ios_runtime.mjs`) n'ajoutait aucune sécurité.
+> - Sondes : `temp/taxonomy_editor_model_probe.mjs` (modèle) ; `temp/taxonomy_real_app_probe.mjs` (panneau dans l'app réelle avec une passerelle simulée qui n'écrit rien).
 
 - **Intégration (Q7) : Tauri, mode dev uniquement.**
   - Commande Rust `save_taxonomy` dans `platforms/desktop-tauri`, sous `#[cfg(debug_assertions)]`, enregistrée dans `invoke_handler` seulement en debug.
@@ -205,12 +237,20 @@ Structure cible (identifiants seulement, libellés via `labelKey`) :
 - **DEV-only structurel** : éditeur et passerelle exclus du build public (pas un bouton caché).
 - Aucun credential ni token GitHub, pas de push. Git voit un fichier modifié ; **l'utilisateur commit et push lui-même**.
 
-### Étape 4 — Données initiales
+### ✅ Étape 4 — Données initiales
+
+> **Fait le 2026-09-24.** Base `advanced` = taxonomie v1 convertie automatiquement (aucun palier inventé : les niveaux minimum reprennent exactement les anciens `levelVisibility`). Décisions appliquées : Q3/Q3b (texte, vidéo), Mystic projet + Activité (tous niveaux), z-order 2 choix en débutant, racines Q2, Créer en débutant = Texte + Dessin (code, page, placeholder et générateur à partir d'intermédiaire, **brouillon à ajuster dans l'éditeur**), options Liste §3ter. Les surcharges d'activité sont la conversion des anciennes compositions `activity:*` en `add` : **brouillon**, à affiner dans l'éditeur.
 
 - Base `advanced` = taxonomie actuelle convertie, avec Q2 / Q3 / Q3b appliqués.
 - Paliers `intermediate` / `beginner` : l'utilisateur les règle dans l'éditeur. Ne pas les inventer, sauf une proposition marquée « brouillon ».
 
-### Étape 5 — Vérification bout en bout
+### ✅ Étape 5 — Vérification bout en bout
+
+> **Fait le 2026-09-24**, toutes les sondes vertes :
+> - `temp/finder_tools_scope_probe.mjs`, `temp/contextual_taxonomy_matrix_probe.mjs` (330 cas), `temp/taxonomy_editor_model_probe.mjs` ;
+> - `temp/taxonomy_real_app_probe.mjs` : **23/23**, en headless **et** en fenêtre visible (`HEADLESS=0`), captures dans `temp/probe_reports/taxonomy_real_app/` ; le menu principal est lu sur l'arbre **monté** (une première version qui relisait le modèle masquait un vrai défaut : l'arbre dessiné ignorait le niveau, corrigé dans `bevy_ui_main_menu_model.js`) ;
+> - Rust : `cargo check` debug et release OK ; `cargo test --lib taxonomy_editor` 3/3 (sans la feature Bevy : un test préexistant du backend Bevy ne compile plus, `menu_plane` manquant dans `AtomeRenderNode`, sans rapport avec ce chantier).
+> - **Reste à faire par l'utilisateur** : l'écriture réelle dans `npm run tauri:dev`. Ouvrir Contact → sa fiche → Préférences → « Taxonomie (dev) », cocher une case, Appliquer, puis vérifier `git status` (seul `eVe/intuition/menu/context_menus.json` doit changer) et la sauvegarde dans `$TMPDIR/atome_taxonomy_backups/`.
 
 - **Sonde Node**, en important l'entrée du resolver (pas seulement `node --check`), sur la matrice menu × type × niveau × activité forcée. Elle vérifie :
   - que les immuables sont toujours présents ;
