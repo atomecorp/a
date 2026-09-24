@@ -81,6 +81,46 @@ fn intersection(rect: [f32; 4], clip: [f32; 4]) -> Option<[f32; 4]> {
     (right > left && bottom > top).then_some([left, top, right - left, bottom - top])
 }
 
+// Rotation ecran (y vers le bas, sens horaire pour un angle positif), comme
+// `atome_rect_transform_with_local` une fois ramene en coordonnees logiques.
+fn rotate_screen(point: Vec2, degrees: f32) -> Vec2 {
+    let (sin, cos) = degrees.to_radians().sin_cos();
+    Vec2::new(point.x * cos - point.y * sin, point.x * sin + point.y * cos)
+}
+
+/// La decoupe ramenee dans le repere PROPRE de l'atome (boite non tournee, coin
+/// haut-gauche = 0,0). La decoupe vit dans le repere de sa page (`clip_rotation`) ;
+/// l'atome pivote de `local.rotation` autour de son `origin`. Quand les deux angles
+/// sont egaux (page tournee avec ses membres) le resultat est exact ; sinon c'est la
+/// boite englobante de la decoupe dans le repere de l'atome.
+pub(crate) fn clip_in_atom_frame(
+    position: [f32; 2],
+    size: [f32; 2],
+    local: AtomeLocalTransform,
+    clip: [f32; 4],
+    clip_rotation: f32,
+) -> [f32; 4] {
+    let origin = Vec2::new(local.origin[0] * size[0], local.origin[1] * size[1]);
+    let pivot = Vec2::new(position[0], position[1]) + origin;
+    let scale = Vec2::new(
+        if local.scale[0].abs() > f32::EPSILON { local.scale[0] } else { 1.0 },
+        if local.scale[1].abs() > f32::EPSILON { local.scale[1] } else { 1.0 },
+    );
+    let corners = [
+        Vec2::new(clip[0], clip[1]),
+        Vec2::new(clip[0] + clip[2], clip[1]),
+        Vec2::new(clip[0] + clip[2], clip[1] + clip[3]),
+        Vec2::new(clip[0], clip[1] + clip[3]),
+    ]
+    .map(|corner| {
+        let screen = rotate_screen(corner, clip_rotation);
+        origin + rotate_screen(screen - pivot, -local.rotation) / scale
+    });
+    let min = corners.iter().fold(Vec2::splat(f32::INFINITY), |acc, value| acc.min(*value));
+    let max = corners.iter().fold(Vec2::splat(f32::NEG_INFINITY), |acc, value| acc.max(*value));
+    [min.x, min.y, max.x - min.x, max.y - min.y]
+}
+
 pub fn apply_entity_clip(world: &mut World, entity: Entity) -> Result<(), String> {
     let position = *world
         .get::<AtomeLogicalPosition>(entity)
@@ -89,6 +129,7 @@ pub fn apply_entity_clip(world: &mut World, entity: Entity) -> Result<(), String
         .get::<AtomeLogicalSize>(entity)
         .ok_or_else(|| "bevy_clip_size_missing".to_string())?;
     let clip = world.get::<AtomeClipRect>(entity).and_then(|value| value.0);
+    let clip_rotation = world.get::<AtomeClipRotation>(entity).map(|value| value.0).unwrap_or(0.0);
     let local = world
         .get::<AtomeLocalTransform>(entity)
         .copied()
@@ -99,9 +140,20 @@ pub fn apply_entity_clip(world: &mut World, entity: Entity) -> Result<(), String
         (config.width, config.height)
     };
     let original = [position.x, position.y, size.width, size.height];
-    let intersection = clip.and_then(|value| intersection(original, value));
+    // L'intersection se fait dans le repere de l'atome, puis on la replace a sa
+    // position logique : les fractions UV ci-dessous restent valables telles quelles.
+    let intersection = clip
+        .map(|value| clip_in_atom_frame([position.x, position.y], [size.width, size.height], local, value, clip_rotation))
+        .and_then(|value| intersection([0.0, 0.0, size.width, size.height], value))
+        .map(|value| [position.x + value[0], position.y + value[1], value[2], value[3]]);
     let clipped_out = clip.is_some() && intersection.is_none();
     let visible = intersection.unwrap_or(original);
+    // Le morceau visible pivote autour du pivot de l'atome ENTIER, pas du sien :
+    // sinon un membre tourne et coupe se decalait.
+    let visible_origin = [
+        (position.x + local.origin[0] * size.width - visible[0]) / visible[2].max(f32::EPSILON),
+        (position.y + local.origin[1] * size.height - visible[1]) / visible[3].max(f32::EPSILON),
+    ];
 
     if let Some(mut visibility) = world.get_mut::<Visibility>(entity) {
         *visibility = if clipped_out {
@@ -124,7 +176,7 @@ pub fn apply_entity_clip(world: &mut World, entity: Entity) -> Result<(), String
         depth_for_layer(layer),
         local.scale,
         local.rotation,
-        local.origin,
+        visible_origin,
     );
     world.entity_mut(entity).insert(transform);
     world

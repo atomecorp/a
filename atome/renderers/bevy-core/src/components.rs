@@ -27,6 +27,12 @@ pub struct AtomeLogicalPosition {
 #[derive(Clone, Copy, Debug, Component)]
 pub struct AtomeClipRect(pub Option<[f32; 4]>);
 
+/// Angle (degres, sens horaire ecran) du repere dans lequel `AtomeClipRect` est
+/// exprime : un point ecran p est visible si R(-angle).p tombe dans le rectangle.
+/// 0 = decoupe droite ; une page tournee decoupe ses membres dans SON repere.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Component)]
+pub struct AtomeClipRotation(pub f32);
+
 #[derive(Clone, Copy, Debug, Component)]
 pub struct AtomeSpriteSourceRect(pub Option<Rect>);
 

@@ -70,6 +70,7 @@ fn procedural_sdf_spawns_and_patches_one_full_surface_material_quad() {
             logical_position: [430.0, 150.0],
             logical_size: [420.0, 420.0],
             clip_rect: None,
+            clip_rotation: 0.0,
             scale: [1.0, 1.0],
             rotation: 0.0,
             origin: [0.0, 0.0],

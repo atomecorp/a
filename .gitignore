@@ -185,6 +185,7 @@ tests/rendering/*
 !tests/eve/realtime_projection_fanout.test.mjs
 !tests/eve/shared_project_override_canonical_state.test.mjs
 !tests/eve/bevy_panel_text_editing_retention.test.mjs
+!tests/eve/contextual_rail_active_zone.test.mjs
 !tests/atome/
 tests/atome/*
 !tests/atome/src/

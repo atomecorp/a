@@ -345,6 +345,7 @@ pub fn spawn_node_with_texture_handle(
         AtomeVisualOpacity(normalize_opacity(node.opacity)),
         AtomeCornerRadius(effective_corner_radii(&node)),
         AtomeClipRect(node.clip_rect),
+        AtomeClipRotation(node.clip_rotation),
     ));
     if let Some(source_rect) = world.get::<Sprite>(entity).map(|sprite| sprite.rect) {
         world.entity_mut(entity).insert(AtomeSpriteSourceRect(source_rect));

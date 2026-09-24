@@ -6,10 +6,10 @@ use bevy::{
 };
 
 use crate::{
-    render_math::{atome_rect_transform, color_from_rgba, depth_for_layer},
+    render_math::{atome_rect_transform, atome_rect_transform_with_local, color_from_rgba, depth_for_layer},
     shadow_texture::{build_gaussian_shadow_texture_rgba, shadow_padding},
     types::{
-        AtomeBevyRendererConfig, AtomeLayer, AtomeLogicalPosition, AtomeLogicalSize, AtomeSelected,
+        AtomeBevyRendererConfig, AtomeLayer, AtomeLocalTransform, AtomeLogicalPosition, AtomeLogicalSize, AtomeSelected,
         AtomeSelectionOverlay, SelectionVisualStyle,
     },
     workspace_backdrop::MENU_PRESENTATION_LAYER,
@@ -30,6 +30,50 @@ fn inherit_presentation_layer(world: &mut World, source: Entity, entities: &[Ent
         world.entity_mut(*entity).insert(
             bevy::camera::visibility::RenderLayers::layer(MENU_PRESENTATION_LAYER),
         );
+    }
+}
+
+// Les calques (cadre de selection, ombre) sont construits dans le repere NON tourne de
+// l'atome ; on leur applique ensuite la meme pose que l'atome (rotation + echelle autour
+// de son pivot), sinon un objet tourne garde un halo droit qui depasse derriere ses coins.
+pub(crate) fn follow_atom_pose(world: &mut World, atom: Entity, overlays: &[Entity]) {
+    // La pose vient de la boite ENTIERE : le `Transform` d'un atome decoupe par une
+    // page ne decrit que son morceau visible.
+    let Some(local) = world.get::<AtomeLocalTransform>(atom).copied() else {
+        return;
+    };
+    if local.rotation == 0.0 && local.scale == [1.0, 1.0] {
+        return;
+    }
+    let (Some(position), Some(size)) = (
+        world.get::<AtomeLogicalPosition>(atom).copied(),
+        world.get::<AtomeLogicalSize>(atom).copied(),
+    ) else {
+        return;
+    };
+    let (surface_width, surface_height) = {
+        let config = world.resource::<AtomeBevyRendererConfig>();
+        (config.width, config.height)
+    };
+    let (width, height) = (size.width.max(1.0), size.height.max(1.0));
+    let plain = atome_rect_transform(position.x, position.y, width, height, surface_width, surface_height, 0.0);
+    let pose = atome_rect_transform_with_local(
+        position.x, position.y, width, height, surface_width, surface_height, 0.0,
+        local.scale, local.rotation, local.origin,
+    );
+    for &overlay_entity in overlays {
+        let Some(current) = world.get::<Transform>(overlay_entity).copied() else {
+            continue;
+        };
+        let offset = current.translation - plain.translation;
+        let moved = pose.rotation * Vec3::new(offset.x * pose.scale.x, offset.y * pose.scale.y, 0.0);
+        let mut next = current;
+        next.translation.x = pose.translation.x + moved.x;
+        next.translation.y = pose.translation.y + moved.y;
+        next.rotation = pose.rotation * current.rotation;
+        world
+            .entity_mut(overlay_entity)
+            .insert((next, GlobalTransform::from(next)));
     }
 }
 
@@ -268,6 +312,7 @@ pub fn rebuild_selection_overlay(world: &mut World, entity: Entity) -> Result<()
         false,
         outline_z,
     );
+    follow_atom_pose(world, entity, &entities);
     inherit_presentation_layer(world, entity, &entities);
     world.entity_mut(entity).insert(AtomeSelectionOverlay {
         entities,

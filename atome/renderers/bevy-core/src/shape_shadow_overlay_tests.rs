@@ -13,6 +13,7 @@ fn shape_node(id: &str) -> AtomeRenderNode {
         logical_position: [12.0, 24.0],
         logical_size: [120.0, 50.0],
         clip_rect: None,
+        clip_rotation: 0.0,
         scale: [1.0, 1.0],
         rotation: 0.0,
         origin: [0.0, 0.0],
@@ -249,6 +250,7 @@ fn shape_shadow_translation_reuses_existing_texture() {
             logical_position: [72.0, 84.0],
             logical_size: [120.0, 50.0],
             clip_rect: None,
+            clip_rotation: 0.0,
             scale: [1.0, 1.0],
             rotation: 0.0,
             origin: [0.0, 0.0],
@@ -433,4 +435,91 @@ fn shape_shadow_keeps_rectangular_corners_without_radius() {
         build_shape_shadow_texture_rgba(shadow_style(), 120.0, 50.0, [0.0; 4]).unwrap();
 
     assert!(alpha_at(&rounded_rgba, rounded_width, 14, 14) > alpha_at(&rect_rgba, rect_width, 14, 14));
+}
+
+// Un atome tourne doit emporter son cadre de selection et son ombre : sinon le halo
+// reste un rectangle droit qui depasse derriere les coins de l'objet.
+#[test]
+fn rotated_atom_overlays_follow_its_pose() {
+    let mut world = test_world();
+    let shadow = AtomeShadowStyle { color: [0.0, 0.0, 0.0, 0.42], blur: 8.0, offset_x: 0.0, offset_y: 0.0, spread: 2.0 };
+    let entity = apply_spawn(
+        &mut world,
+        AtomeRenderNode {
+            selected: Some(true),
+            rotation: 30.0,
+            shadow: Some(shadow),
+            ..shape_node("rotated_shape")
+        },
+    )
+    .unwrap();
+    let check = |world: &World, degrees: f32| {
+        let pose = *world.get::<Transform>(entity).unwrap();
+        let expected = Quat::from_rotation_z(-degrees.to_radians());
+        assert!(pose.rotation.angle_between(expected) < 1e-3, "atom pose {:?} vs {:?}", pose.rotation, expected);
+        let selection = world.get::<AtomeSelectionOverlay>(entity).unwrap().entities[0];
+        let shape_shadow = world.get::<AtomeShapeShadowOverlay>(entity).unwrap().entities[0];
+        for overlay in [selection, shape_shadow] {
+            let transform = *world.get::<Transform>(overlay).unwrap();
+            assert!((transform.translation.truncate() - pose.translation.truncate()).length() < 0.01,
+                "overlay centre {:?} != atom centre {:?}", transform.translation, pose.translation);
+            assert!(transform.rotation.angle_between(expected) < 1e-3);
+        }
+    };
+    check(&world, 30.0);
+    apply_transform(
+        &mut world,
+        AtomeTransformPatch {
+            id: "rotated_shape".to_string(),
+            logical_position: [12.0, 24.0],
+            logical_size: [120.0, 50.0],
+            scale: [1.0, 1.0],
+            rotation: 0.0,
+            origin: [0.0, 0.0],
+            clip_rect: None,
+            clip_rotation: 0.0,
+        },
+    )
+    .unwrap();
+    check(&world, 0.0);
+}
+
+// Capture utilisateur du 24 sept. 2026 : une page tournee coupait ses membres sur
+// sa boite DROITE (non tournee), donc trop tard. La decoupe vit dans le repere de
+// la page ; un membre tourne avec elle doit etre coupe exactement sur son bord.
+#[test]
+fn a_rotated_page_clips_its_rotated_member_on_the_rotated_edge() {
+    let mut world = test_world();
+    let (surface_width, surface_height) = {
+        let config = world.resource::<AtomeBevyRendererConfig>();
+        (config.width, config.height)
+    };
+    let angle = 30.0_f32;
+    let rot = |v: Vec2, degrees: f32| {
+        let (sin, cos) = degrees.to_radians().sin_cos();
+        Vec2::new(v.x * cos - v.y * sin, v.x * sin + v.y * cos)
+    };
+    let page_pivot = Vec2::new(100.0, 100.0);
+    let frame_origin = rot(page_pivot, -angle);
+    // Membre pose a (200,50) dans la page 300x200 : il deborde de 100 a droite.
+    let member_pivot = page_pivot + rot(Vec2::new(200.0, 50.0), angle);
+    let entity = apply_spawn(
+        &mut world,
+        AtomeRenderNode {
+            logical_position: [member_pivot.x, member_pivot.y],
+            logical_size: [200.0, 100.0],
+            rotation: angle,
+            clip_rect: Some([frame_origin.x, frame_origin.y, 300.0, 200.0]),
+            clip_rotation: angle,
+            ..shape_node("page_member")
+        },
+    )
+    .unwrap();
+    let sprite = world.get::<Sprite>(entity).unwrap();
+    assert_vec2_near(sprite.custom_size, Vec2::new(100.0, 100.0));
+    let centre = member_pivot + rot(Vec2::new(50.0, 50.0), angle);
+    let transform = *world.get::<Transform>(entity).unwrap();
+    let expected = Vec2::new(centre.x - surface_width / 2.0, surface_height / 2.0 - centre.y);
+    assert!((transform.translation.truncate() - expected).length() < 0.05,
+        "visible piece centre {:?} != {:?}", transform.translation, expected);
 }

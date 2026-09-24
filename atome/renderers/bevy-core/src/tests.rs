@@ -11,6 +11,7 @@ fn shape_node(id: &str) -> AtomeRenderNode {
         logical_position: [12.0, 24.0],
         logical_size: [120.0, 50.0],
         clip_rect: None,
+        clip_rotation: 0.0,
         scale: [1.0, 1.0],
         rotation: 0.0,
         origin: [0.0, 0.0],
@@ -45,6 +46,7 @@ fn text_node_with_texture(id: &str) -> AtomeRenderNode {
         logical_position: [18.0, 26.0],
         logical_size: [80.0, 30.0],
         clip_rect: None,
+        clip_rotation: 0.0,
         scale: [1.0, 1.0],
         rotation: 0.0,
         origin: [0.0, 0.0],
@@ -136,6 +138,7 @@ fn backdrop_fixture_keeps_text_and_image_in_capture_and_large_glass_circle_in_pr
         logical_position: [70.0, 90.0],
         logical_size: [360.0, 240.0],
         clip_rect: None,
+        clip_rotation: 0.0,
         scale: [1.0, 1.0],
         rotation: 0.0,
         origin: [0.0, 0.0],
@@ -164,6 +167,7 @@ fn backdrop_fixture_keeps_text_and_image_in_capture_and_large_glass_circle_in_pr
         logical_position: [130.0, 160.0],
         logical_size: [220.0, 60.0],
         clip_rect: None,
+        clip_rotation: 0.0,
         layer: 3,
         text: Some("Backdrop fixture text".to_string()),
         texture: Some(AtomeTexture { animation: None, width: 220, height: 60, rgba: vec![255; 220 * 60 * 4] }),
@@ -173,6 +177,7 @@ fn backdrop_fixture_keeps_text_and_image_in_capture_and_large_glass_circle_in_pr
         logical_position: [150.0, 120.0],
         logical_size: [340.0, 340.0],
         clip_rect: None,
+        clip_rotation: 0.0,
         corner_radius: 170.0,
         corner_radii: None,
         backdrop: Some(AtomeBackdropStyle { blur_px: 12.0, tint: [0.36, 0.4, 0.47, 0.58], tint_fade: 0.3 }),
@@ -425,6 +430,7 @@ fn shape_clip_crops_on_spawn_and_restores_on_transform_update() {
             rotation: 0.0,
             origin: [0.0, 0.0],
             clip_rect: None,
+            clip_rotation: 0.0,
         },
     )
     .unwrap();
@@ -435,6 +441,7 @@ fn shape_clip_crops_on_spawn_and_restores_on_transform_update() {
 fn backdrop_clip_crops_the_resident_mesh_without_stretching_or_accumulating_assets() {
     let glass = AtomeRenderNode {
         clip_rect: Some([42.0, 34.0, 50.0, 30.0]),
+        clip_rotation: 0.0,
         backdrop: Some(AtomeBackdropStyle {
             blur_px: 12.0,
             tint: [0.2, 0.3, 0.4, 0.5],
@@ -495,6 +502,7 @@ fn backdrop_clip_crops_the_resident_mesh_without_stretching_or_accumulating_asse
             rotation: 0.0,
             origin: [0.0, 0.0],
             clip_rect: None,
+            clip_rotation: 0.0,
         },
     )
     .unwrap();
@@ -963,6 +971,7 @@ fn audio_waveform_progress_spawns_and_moves_bevy_playhead_overlay() {
             logical_position: [20.0, 30.0],
             logical_size: [200.0, 60.0],
             clip_rect: None,
+            clip_rotation: 0.0,
             scale: [1.0, 1.0],
             rotation: 0.0,
             origin: [0.0, 0.0],
@@ -1114,6 +1123,7 @@ fn backdrop_surface_resize_keeps_the_corner_radius_instead_of_stretching_it() {
         logical_position: [100.0, 400.0],
         logical_size: [60.0, 60.0],
         clip_rect: None,
+        clip_rotation: 0.0,
         corner_radius: 8.0,
         corner_radii: None,
         backdrop: Some(AtomeBackdropStyle { blur_px: 12.0, tint: [0.0, 0.0, 0.0, 0.84], tint_fade: 0.0 }),

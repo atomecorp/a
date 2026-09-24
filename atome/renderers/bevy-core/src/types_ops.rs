@@ -19,6 +19,8 @@ pub struct AtomeTransformPatch {
     pub origin: [f32; 2],
     #[serde(default)]
     pub clip_rect: Option<[f32; 4]>,
+    #[serde(default)]
+    pub clip_rotation: f32,
 }
 
 #[derive(Clone, Debug, Deserialize)]

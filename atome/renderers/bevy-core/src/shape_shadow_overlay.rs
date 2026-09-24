@@ -33,6 +33,11 @@ fn clip_shadow_overlay(
     let Some(clip) = world.get::<AtomeClipRect>(owner).and_then(|value| value.0) else {
         return;
     };
+    // Une decoupe tournee (page pivotee) n'est pas un rectangle ecran : l'ombre
+    // suit alors la pose de l'atome sans etre recadree.
+    if world.get::<crate::components::AtomeClipRotation>(owner).is_some_and(|value| value.0 != 0.0) {
+        return;
+    }
     let left = shadow_rect[0].max(clip[0]);
     let top = shadow_rect[1].max(clip[1]);
     let right = (shadow_rect[0] + shadow_rect[2]).min(clip[0] + clip[2]);
@@ -290,7 +295,7 @@ pub fn sync_shape_shadow_overlay_transform(
     let image_height = (shadow_height + padding * 2.0).ceil();
     let shadow_x = position.x + shadow.offset_x - shadow.spread - padding;
     let shadow_y = position.y + shadow.offset_y - shadow.spread - padding;
-    for overlay_entity in overlay.entities {
+    for &overlay_entity in &overlay.entities {
         if world.get_entity(overlay_entity).is_ok() {
             let transform = atome_rect_transform(
                 shadow_x,
@@ -306,6 +311,7 @@ pub fn sync_shape_shadow_overlay_transform(
                 .insert((transform, GlobalTransform::from(transform)));
         }
     }
+    crate::selection_overlay::follow_atom_pose(world, entity, &overlay.entities);
     clip_shadow_overlay(
         world,
         entity,
@@ -416,6 +422,7 @@ pub fn rebuild_shape_shadow_overlay(world: &mut World, entity: Entity) -> Result
         entities: vec![shadow_entity],
         image_handles: vec![handle],
     });
+    crate::selection_overlay::follow_atom_pose(world, entity, &[shadow_entity]);
     clip_shadow_overlay(
         world,
         entity,
