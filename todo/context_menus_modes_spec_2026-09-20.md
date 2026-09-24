@@ -1,6 +1,10 @@
 # Context and menu system for atome / eVe — audit, target specification, JSON architecture, implementation plan
 
 Date: 2026-09-20
+
+> **2026-09-24 — Superseded in part by `todo/contextual_taxonomy_2026-09-24.md`.** The object kind is the base;
+> an activity applies only when explicitly forced; `advanced` is the reference and lower levels are filters; tool
+> order is fixed. This replaces the type-vs-activity priority rule of §3.2, D10 and §3.5 of this document.
 Status: Analysis and plan only. No production code was modified by this document.
 Scope: usage modes, activities, mastery levels, Mystic, right sidebar contextual menu, Flower retirement.
 Reading contract: every claim below is tagged `[CODE]` (verified in the repository), `[RULE]` (required by the
@@ -28,7 +32,9 @@ File references include line numbers verified on 2026-09-20 at the current HEAD 
 - Exactly three mastery levels; a level is a UI adaptation, never a security permission. `[RULE]`
 - Exactly two configurable contextual menus: **Mystic** and the **right sidebar**. They share one reference
   context but have independent compositions and an independent inclusion chain per menu. `[RULE]`
-- The main menu stays constant and is not a third contextual configuration target. `[RULE]`
+- ~~The main menu stays constant and is not a third contextual configuration target.~~ **Superseded 2026-09-24
+  (D10)**: activity and mastery level also shape the main menu and the display options of views (lists, mix…).
+  The main menu keeps its identity and position; only its *content* is filtered/adapted. See §3.5. `[DECISION]`
 - Flower is abandoned; Mystic replaces it everywhere, with no coexistence, no selector and no fallback. `[RULE]`
 - Consultation: no editorial selection, no contextual sidebar, no main menu, placeholders inert. `[RULE]`
 - Performance: same restrictions, but placeholders work and may capture/record. `[RULE]`
@@ -462,6 +468,48 @@ effectiveLevel(activity) = activityLevels[activity] ?? profileLevel
 Consultation and Exécution all belong to the project level. This changes the current behaviour of Exécution,
 which today is a persisted profile preference (`perform_state.js:12`, key `performMode`).
 
+### 3.5 Surfaces driven by activity and level beyond the two contextual menus (D10, 2026-09-24)
+
+`[DECISION 2026-09-24, D10]` The pair *(activity, effective mastery level)* is a **cross-cutting UI context**. It
+drives four surface families, not two:
+
+| Surface | What activity × level may change | Owner today `[CODE]` |
+| --- | --- | --- |
+| Mystic | composition (existing, §3.2–3.3) | `menus.mystic` in `eVe/intuition/menu/context_menus.json` |
+| Right contextual sidebar | composition (existing) | `menus.sidebar` in the same file |
+| **Main menu** | which palettes and entries are shown; fewer entries at lower levels; a different arrangement per activity | `eVe/intuition/runtime/eve_intuition/main_menu_content_runtime.js` (+ `main_menu_*_content.js`) — no activity/level input today |
+| **View display options** (list, mix, timeline…) | which per-row / per-view controls are rendered, e.g. the **mute** / solo control of list rows | `eVe/domains/rendering/project_view_list_content.js`, `project_view_mix_controls.js` (`project_view_list_entry_<i>_mute`) — no activity/level input today |
+
+Rules:
+
+1. **One reference context.** The same `resolveContextMenuContext` output (mode, activity, level) feeds every
+   surface; no surface reads `activityLevels` / `masteryLevel` on its own.
+2. **Same JSON document, new top-level blocks.** `menus.main` joins `menus.mystic` and `menus.sidebar`
+   (groups + `composition` keyed by `activity:<id>` with a `default` entry + `levelVisibility`), and a `views`
+   block lists display options per view, e.g.
+   `"views": { "list": { "options": { "mute": ["intermediate","advanced"], "solo": ["advanced"] } } }`.
+   Values are identifiers only (i18n rule of §1.2 unchanged).
+3. **Inclusion chain per surface**: `beginner ⊆ intermediate ⊆ advanced` holds for the main menu and for each
+   view separately, validated by the loader exactly like `levelVisibility` today.
+4. **Main menu identity is preserved**: position, opening gesture and the always-present entries (mode exit,
+   Home/Dashboard access, Activity chooser, Level access) are declared `pinned` and are never filtered by the
+   level — otherwise a beginner could not reach the setting that raises their level.
+5. **A level is still not a permission** (§1.2): hiding an option is presentation only; permissions and mode
+   guards still decide execution.
+6. **Hidden ≠ reset**: hiding the mute control at a low level must not unmute or alter data; existing mute/solo
+   state keeps being played and remains visible as state (e.g. a dimmed row), only the control disappears.
+7. **Live update**: `eve:profile-preferences-updated` and `eve:context-menu-context-changed` already exist; the
+   main menu and open views must re-resolve on both (today only the sidebar re-renders on the first).
+
+`[CODE] Gap to fix before extending — measured 2026-09-24`: in the current resolver
+(`context_menu_resolver.js`, `resolveContextMenu`) an explicit activity replaces the kind composition, and at boot
+an activity is always selected (`activities.js` `applySelectedActivity` falls back to the first activity, `dtp`).
+Combined with `activity:*` compositions where almost every group is visible from `beginner`, **the level has
+practically no effect today** (only `relations` in `activity:daw`), and kind groups disappear under some activities
+(no `audio` group for an audio atome in `dtp`). Extending activity × level to the main menu and views is only
+meaningful once the `activity:*` compositions carry real level steps (or activity and kind compositions are
+intersected rather than substituted). This must be settled in the same lot.
+
 ### 3.4 Transitions
 
 | Situation | Target behaviour |
@@ -471,7 +519,7 @@ which today is a persisted profile preference (`perform_state.js:12`, key `perfo
 | Closing the Mystic menu without activating the exit | Does not change the mode |
 | Mode change during a capture/recording | Explicit finalize-or-abort rule with no silent data loss |
 | Late/asynchronous events after a mode change | Must not reinstall forbidden editing controls |
-| Activity, selection, capability or mastery change | Contextual surfaces update; the main menu is not recomposed |
+| Activity, selection, capability or mastery change | Contextual surfaces update; **activity or mastery change** also recomposes the main menu content and the view display options (§3.5, D10) — a selection change alone still does not touch the main menu |
 | Missing config / unknown reference / invalid JSON | Documented fallback inside Mystic; the long-press exit stays usable; Flower is never a fallback |
 | Old Flower entry point still present | Replaced by Mystic; no gesture, route or alternate path reactivates Flower |
 | No active project (Dashboard) | No artificial selection or activity applied |
@@ -1261,7 +1309,8 @@ Legend for "Test kind": **L** = logic, **UI** = UI integration, **UX** = human v
 | 2 | Performance: same editorial restrictions, but a placeholder works and records without selecting | L + UI | per-operation guard + placeholder path | **Partially satisfied**: recording exists; nothing prevents selection |
 | 3 | Long press in both modes → Mystic restricted to the declared entries plus the matching exit; no editorial choices, no extra entry; the level removes none | L + UI | mode-override composition of Lot 3 | **Not satisfied**: no exit exists for Consultation. D1, D8 and D9 are decided: the base cross is data, and Consultation and Exécution each override it with centre + exit |
 | 4 | Exit path usable with mouse and touch; closing the menu alone keeps the mode | UI + UX | gesture tests + manual | **Not satisfied** for Consultation |
-| 5 | Edit: selection and contextual tools work; the main menu keeps its structure and position across context changes | UI | main-menu identity test | To verify; `modernMainMenuVisible` already excludes non-editorial contexts |
+| 5 | Edit: selection and contextual tools work; the main menu keeps its position across context changes, and its content follows activity × level only (D10) | UI | main-menu identity + composition test | To verify; `modernMainMenuVisible` already excludes non-editorial contexts; no main-menu composition exists yet |
+| 5b | For the main menu and for each view option surface, `beginner ⊆ intermediate ⊆ advanced` per activity; a hidden option is never executable from that surface | L + UI | resolver on `menus.main` / `views.*` | **Not satisfied**: not implemented (D10) |
 | 6 | Without an explicit activity the kind guides tools; with one, the priority rule applies with no incompatible command | L | resolver step 3 | **Not satisfied**: the activity does not enter the radial composition at all |
 | 7 | For each menu separately, `beginner ⊆ intermediate ⊆ advanced`, shared tools keeping identity | L | resolver step 6 | **Not satisfied**: the dimension does not exist |
 | 8 | Mystic and the sidebar may differ for one context; changing one does not change the other | L | resolver independence test | **Not satisfied**: one shared resolver produces one list |
@@ -1424,6 +1473,16 @@ of them guards selection, drag or resize (§2.1), so nothing in the current code
 choice is a data value, not a code change.
 *Impact*: the content of `menus.mystic.modes.performance` only.
 *Requires validation*: no.
+
+**D10 — Activity and level also drive the main menu and view display options. — DECIDED 2026-09-24**
+
+`[DECISION]` The product owner extends the concept: the activity type and the user level also impact the
+**main menu** (it may be filtered, contain fewer entries, or be arranged differently) and the **display of some
+options in views** such as lists (example given: the **mute** button). This reverses the former rule "the main
+menu stays constant". Target described in §3.5.
+*Impact*: new `menus.main` and `views` blocks in `context_menus.json`, loader validation for them, main menu and
+list/mix view wiring, acceptance rows 5 and 5b. *Open points* `[TO VALIDATE]`: the exact list of pinned main
+menu entries, and per-activity default levels for each view option.
 
 ---
 

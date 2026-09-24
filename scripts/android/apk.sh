@@ -1789,11 +1789,23 @@ emulator_capture_finish() {
   # names them here: the Bevy renderer found no WebGPU adapter, or the window
   # never left the bootstrap origin for the local server — the second is why the
   # bootstrap page's module errors ("text/html" instead of JavaScript) matter.
+  # The boot failure surface prints its own verdict in the device log, so a run
+  # that ended on a named cause is never read as a mute white page.
+  surface_hits="$(grep -m2 -E '\[boot-failure\] surface painted' "$EMULATOR_LOG_FILE" 2>/dev/null || true)"
+  if [[ -n "$surface_hits" ]]; then
+    log "--- boot failure surface painted ---"
+    printf '%s\n' "$surface_hits" | sed 's/^/[apk] /'
+  fi
+
   render_hits="$(grep -m3 -E "No available adapters|Unable to find a GPU|bevy_renderer_webgpu_unavailable|bevy_renderer_start_failed_terminal" "$EMULATOR_LOG_FILE" 2>/dev/null || true)"
   if [[ -n "$render_hits" ]]; then
     log "--- white screen: WebGPU renderer ---"
     printf '%s\n' "$render_hits" | sed 's/^/[apk] /'
-    warn "the Bevy renderer found no WebGPU adapter: every Bevy surface stays white (WebView command line: $(emulator_resolved_webview_flags))"
+    if [[ -n "$surface_hits" ]]; then
+      warn "the Bevy renderer found no WebGPU adapter; the boot failure surface named the cause on screen (see the screenshot)"
+    else
+      warn "the Bevy renderer found no WebGPU adapter: every Bevy surface stays white (WebView command line: $(emulator_resolved_webview_flags))"
+    fi
   else
     ok "no WebGPU adapter failure in the captured window"
   fi

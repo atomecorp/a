@@ -1490,6 +1490,7 @@ Boundary rules:
 - The runtime owns boot-time window menu exposure, auth sync, panel surface registration, Mystic/contextual-edit/vector/draw installation, non-critical module warmup, UI tool registration, the closed contextual-edit module registry, and debug runtime installation.
 - It opens the default Dashboard workspace only after the closed `ensureProjectBootstrapReady` contract has restored, loaded, and rendered the authenticated current project. The Dashboard remains the initial view but is projected over that resident project surface.
 - It must receive all product callbacks by injection and must not own Bevy/WebGPU rendering, durable Atome state, or tool implementation behavior.
+- A terminal renderer failure is painted by the closed boot failure surface owned by `eVe/intuition/runtime/eve_intuition/boot_failure_surface.js` (`presentBootFailureSurface`, idempotent by id, silent on recoverable failures). It is an internal module export consumed by the boot runtime only, not a public API.
 
 Boundary status: Closed product runtime API. Public promotion would require a product-neutral boot registration contract.
 

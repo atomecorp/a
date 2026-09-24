@@ -853,3 +853,30 @@ Attendu : la session se termine sur un verdict qui **nomme** ce qu'elle a vu (`g
 ```
 
 **Contraintes respectées** : aucun commit, aucun staging, aucune branche ; `eVe/` non modifié ; aucun fichier de l'APK modifié.
+
+### 12.18 Écran blanc muet → surface d'échec nommée (2026-09-23, tour suivant : « vas y tu as mon accord »)
+
+Objectif : l'écran blanc de l'émulateur (§12.16, §12.17) ne laisse aucune trace lisible. Le boot s'arrête pourtant sur un échec **terminal** — il cesse de réessayer — mais rien n'est peint, parce que l'interface produit *est* la toile Bevy qui vient d'échouer et que `atome/src/index.html` n'a qu'un `<body>` vide. Le module qui suit rend cet état bavard, sans toucher au rendu.
+
+**Implémenté dans `eVe/` (fichiers non committés, sous-module intact côté Git).**
+
+- `eVe/intuition/runtime/eve_intuition/boot_failure_surface.js` (nouveau, 195 lignes) : unique propriétaire de ce qu'une voie d'affichage morte peut encore dire. DOM simple, aucun renderer, aucun design system — même raison que `TAURI_LOCAL_HTTP_FAILURE_SCRIPT` dans `platforms/desktop-tauri/src/lib.rs`. Il ne peint que les deux formes terminales qu'il peut prouver (`bevy_renderer_wasm_panic:`, `bevy_renderer_start_failed_terminal:`), nomme la cause (`gpu_unavailable`, `present_timeout`, `renderer_failed`), affiche le message exact dont un log de support a besoin (plafonné à 600 caractères), propose un unique bouton **Réessayer** (rechargement de page) et reste **muet** sur `remote_account_not_provisioned` — l'écran de connexion porte l'action qui répare ce cas — comme sur tout échec transitoire encore réessayé. Idempotent par id (`eve_boot_failure`) : un second échec terminal réutilise la surface peinte au lieu d'en empiler une deuxième.
+- `eVe/intuition/runtime/eve_intuition/boot_runtime.js` : le nouveau `settleTerminalWorkspaceBoot(result)` est l'unique chemin qui, après décision terminale de `isTerminalWorkspaceBootFailure()`, enregistre `workspaceBootOpenTerminalReason`, arrête les tentatives et appelle `presentBootFailureSurface({ failure: result })`. Aucune seconde autorité de cycle de vie : les deux branches d'échec existantes (`open_failed`, `open_threw`) le partagent.
+- La surface **se signale dans le journal de l'appareil**, canal qu'aucun autre propriétaire ne couvre quand la voie d'affichage est morte : `[boot-failure] surface painted: <clé i18n de la cause> <message>` via `console.warn` (visible en `Tauri/Console` dans logcat). La lane `scripts/android/apk.sh` cherche ce préfixe et imprime un verdict « --- boot failure surface painted --- » ; le verdict « --- white screen: WebGPU renderer --- » dit alors que la cause a été nommée à l'écran au lieu de laisser une page blanche muette.
+- `eVe/i18n/languages_fr_core.js` et `languages_en_core.js` : clés `eve.boot.failure.*` (title, gpu_unavailable, present_timeout, renderer_failed, data_intact) ; le bouton réutilise la clé existante `eve.user.retry`.
+
+**Preuves exécutées ici (sans appareil).**
+
+- `tests/eve/boot_failure_surface_contract.test.mjs` (ajouté au manifeste `tests/vitest.manifest.json`) : **8/8** — surface peinte avec `data-role`/`role="alert"` et position fixe, texte de cause exact, message de détail exact, idempotence, bouton dont le clic recharge la page, et trois exécutions du **vrai** runtime de boot : un échec terminal (panique GPU) peint la surface et n'ordonnance aucune nouvelle tentative ; **la chaîne terminale exacte produite par l'émulateur** (`bevy_renderer_start_failed_terminal:bevy_renderer_initial_present_timeout:{"before":{"redraw_applied":0},"current":{"redraw_applied":0}}`) peint la surface avec la cause « aucune image dans le délai prévu » et le message intégral ; un échec transitoire (`bevy_surface_not_ready`) continue de réessayer et ne peint rien.
+- Graphe embarqué : `node platforms/ios/package_ios_runtime.mjs --output=temp/ios_runtime_package_verify` → 652 fichiers, 43 propriétaires critiques ; le bundle `chunks/eve/critical-bootstrap.js` contient la surface (`eve-boot-failure` ×2) et ses cinq clés i18n. Android embarque `eVe/` par `rsync` intégral (`scripts/android/apk.sh`, `android_webroot_sources`) : le nouveau module part dans l'APK sans configuration.
+- Cartes mises à jour : `maps/CODEMAP.md` (entrée datée + contrat du propriétaire `boot_runtime.js`), `maps/ARCHITECTURE_MAP.md` (entrée datée + « Current boot resilience contract »), `maps/DESIGN_MAP.md` (exception assumée hors design system), `maps/API_MAP.md` (règle de frontière : export interne, pas d'API publique).
+
+**Ce qui n'a pas pu être fait ici, et pourquoi.** La validation réelle sur l'émulateur (`./run.sh apk --emulator`) exige l'ouverture de sockets locaux (serveur WebSocket du CLI Tauri, démon `adb`) et une fenêtre GUI : le bac à sable les refuse, et la voie d'escalade est **hors service** dans cette session — le réviseur automatique répond `The supported API model names are deepseek-flash, deepseek-v4-pro, but you passed codex-auto-review`, y compris pour `./run.sh apk --dry-run` (préfixe déjà autorisé). Aucune commande n'a donc été exécutée hors bac à sable ; rien n'a été contourné.
+
+**To verify (à rejouer dans un terminal normal).**
+
+```bash
+./run.sh apk --emulator
+```
+
+Attendu, sur cet émulateur sans GPU utilisable : l'application ouvre la page, le renderer échoue de façon terminale, et la **surface d'échec s'affiche** — titre « L'affichage n'a pas pu démarrer », cause « Le moteur graphique n'a affiché aucune image dans le délai prévu. », le message `bevy_renderer_...` en détail et le bouton Réessayer. La capture de fin de session (`temp/logcat/atome-<horodatage>.png`) doit le montrer, et le journal doit porter `--- boot failure surface painted ---` suivi de la ligne `[boot-failure] surface painted: …` ; la surface doit être **absente** sur un téléphone réel, où le renderer démarre.

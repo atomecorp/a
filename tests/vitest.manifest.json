@@ -72,6 +72,7 @@
   "tests/eve/bevy_web_renderer_runtime.test.mjs",
   "tests/eve/bevy_web_renderer_runtime_contract.test.mjs",
   "tests/eve/bevy_web_renderer_skipped_scene_baseline.test.mjs",
+  "tests/eve/boot_failure_surface_contract.test.mjs",
   "tests/eve/boot_initial_presentation.test.mjs",
   "tests/eve/button_builder_acyclic_contract.test.mjs",
   "tests/eve/calendar_alarm_actions.test.mjs",
