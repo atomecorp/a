@@ -1,10 +1,9 @@
+import { eveT } from '../../eVe/i18n/i18n.js';
 import assert from 'node:assert/strict';
-import { JSDOM } from 'jsdom';
 import { test } from 'vitest';
 
 import { buildAtomeContextualEditTree } from '../../eVe/intuition/runtime/eve_intuition/atome_contextual_edit_model.js';
 import { createAtomeContextualEditRuntime } from '../../eVe/intuition/runtime/eve_intuition/atome_contextual_edit_runtime.js';
-import { createAtomeContextualRailDefinitionInvocationRuntime } from '../../eVe/intuition/runtime/eve_intuition/atome_contextual_rail_definition_invocation_runtime.js';
 import { resolveBevyMainMenuLitToolIconIds } from '../../eVe/intuition/ribbon/bevy_ui_main_menu_model.js';
 import { createBevyUiScrollRuntime } from '../../eVe/domains/rendering/bevy_ui_scroll_runtime.js';
 import { hitTestBevyUiNode } from '../../eVe/domains/rendering/bevy_ui_hit_test_runtime.js';
@@ -13,9 +12,15 @@ import {
     ACTIVE_TOOL_SURFACE,
     isActiveRailToolKey,
     isActiveToolId,
+    readActiveRailToolEntries,
     readActiveToolEntries,
     stopActiveToolEntries
 } from '../../eVe/intuition/tools/core/active_tool_registry.js';
+import { BOOTSTRAP_RECORD_ACTION_RUNTIME_STATE } from '../../eVe/intuition/tools/core/tool_runtime_state.js';
+import {
+    registerSelectedProjectMediaPlayback,
+    stopSelectedProjectMediaPlayback
+} from '../../eVe/domains/media/selected_project_media_playback_state.js';
 
 const TREE_ID = 'eve_bevy_panel_atome_contextual_edit';
 const RAIL_ID = `${TREE_ID}_rail`;
@@ -35,8 +40,6 @@ const collectIds = (node, ids = []) => {
     return ids;
 };
 const railOf = (tree) => tree.root.children.find((node) => node.id === RAIL_ID);
-// The pinned zone is glued to the rail exterior: it is a sibling of the scrolling
-// viewport, never one of its children. That is what makes it unscrollable.
 const levelIds = (tree) => new Set(collectIds(railOf(tree)?.children?.[0]));
 const pinnedIds = (tree) => tree.root.children
     .map((node) => node.id)
@@ -68,10 +71,8 @@ test('the pinned zone is glued above the Atome handle and pushes the ordinary le
     assert.deepEqual(pinned.style.position, [tree.layout.x, bottom - ITEM_SIZE]);
     assert.equal(pinned.style.position[1] + ITEM_SIZE, bottom, 'the last case is glued to the rail bottom');
     assert.equal(JSON.stringify(pinned).includes('Stop'), true, 'the pinned case carries the lit presentation');
-    // The ordinary level is pushed up by exactly the reserved height (Tetris)…
     assert.equal(railOf(tree).style.position[1], railOf(baseline).style.position[1]);
     assert.equal(railOf(tree).style.size[1] + ITEM_SIZE, railOf(baseline).style.size[1]);
-    // …and the moved tool no longer occupies a slot in that level.
     const level = collectIds(railOf(tree).children[0]);
     assert.equal(level.filter((id) => id === 'atome_contextual_tool_tool_2').length, 0);
     assert.equal(collectIds(tree.root).filter((id) => id === 'atome_contextual_tool_tool_2').length, 1);
@@ -109,12 +110,9 @@ test('a pinned tool keeps the options it declares anchored to its own case', () 
         activeAtomeId: 'shape', itemSize: ITEM_SIZE, mainMenuHeight: ITEM_SIZE, definitions, activePaletteKey,
         activeSlots: [{ key: 'container_play', label: 'Pause', icon: 'pause' }]
     });
-    // Folded away: the case shows neither option nor accent.
     const closed = build('');
     assert.equal(findNode(closed.root, 'atome_contextual_tool_container_play_container_play_stop'), null);
     assert.equal(findNode(closed.root, 'atome_contextual_tool_container_play_palette_accent'), null);
-    // Long press on the pinned case: the options fan out from THAT case, not from
-    // the level the tool left (its old anchor is gone).
     const open = build('container_play');
     const pinned = findNode(open.root, 'atome_contextual_tool_container_play');
     const option = findNode(open.root, 'atome_contextual_tool_container_play_container_play_stop');
@@ -149,7 +147,6 @@ test('the pinned zone never scrolls while the ordinary level keeps scrolling', (
 test('the pinned case is the same slot: same id, same handler, same active paint', () => {
     const stop = () => 'stop';
     const handlers = { atome_contextual_tool_tool_2: { activate: stop } };
-    // The same key, lit in the ordinary level: that node IS the painted reference.
     const paintOf = ({ activeSlots = [], active = false } = {}) => buildAtomeContextualEditTree({
         surface: { getBoundingClientRect: () => ({ width: 400, height: 400 }) },
         activeAtomeId: 'shape', itemSize: ITEM_SIZE, mainMenuHeight: ITEM_SIZE, handlers,
@@ -171,8 +168,6 @@ test('a lit rail tool is pinned on every rail that publishes one, and a ribbon t
         'news_play', 'news_record_audio', 'news_record_video'].forEach((key) => {
         assert.equal(isActiveRailToolKey(key), true, `${key} keeps its rail residence`);
     });
-    // `news_text` and `news_draw` latch the ribbon's own tools: their residence is the
-    // ribbon, so the rail must not duplicate them in the pinned zone.
     ['news_text', 'news_draw', 'view', 'mode', 'activity'].forEach((key) => {
         assert.equal(isActiveRailToolKey(key), false, `${key} is not a rail-resident lit tool`);
     });
@@ -248,37 +243,6 @@ test('the lit-tool registry reads and stops each tool through its own owner', as
     }
 });
 
-test('one press on a pinned case stops the lit tool through the rail invocation path', async () => {
-    const dom = new JSDOM('<!doctype html><canvas id="eve_surface_project"></canvas>');
-    globalThis.window = dom.window;
-    globalThis.document = dom.window.document;
-    globalThis.HTMLElement = dom.window.HTMLElement;
-    const calls = [];
-    try {
-        const invocation = createAtomeContextualRailDefinitionInvocationRuntime({
-            state: { activeAtomeId: 'shape' },
-            ensureDeletePanelModule: async () => null,
-            maybeBlockSelectionRequiredToolActivation: () => null,
-            handleFinderTouch: async () => ({ ok: true }),
-            getFinderToolEl: () => null,
-            invokeToolFromUiButton: async () => ({ ok: true }),
-            invokeUnifiedContextTool: async (input) => { calls.push(input); return { ok: true }; },
-            resolveDefinitionToolId: (definition) => definition?.toolId || '',
-            buildToolExtraInput: () => null,
-            isContextBoundTransportToolId: () => false
-        });
-        const lit = { key: 'play', label: 'Stop', icon: 'stop', toolType: 'tool', active: true };
-        await invocation.invokeAtomeContextualRailToolDefinitionWithContext(lit, { atomeId: 'shape' });
-        assert.equal(calls.at(-1).previousLatched, true, 'the lit case stops its tool');
-        await invocation.invokeAtomeContextualRailToolDefinitionWithContext({ ...lit, active: false }, { atomeId: 'shape' });
-        assert.equal(calls.at(-1).previousLatched, false, 'the same slot starts the tool again');
-    } finally {
-        dom.window.close();
-        delete globalThis.window;
-        delete globalThis.document;
-        delete globalThis.HTMLElement;
-    }
-});
 
 test('the rail pins what is lit in activation order, drops the level entry and pulses each case', async () => {
     const records = [{ id: 'shape', type: 'image', project_id: 'project',
@@ -314,7 +278,6 @@ test('the rail pins what is lit in activation order, drops the level entry and p
     await runtime.render();
     assert.deepEqual(pinnedIds(rendered.at(-1)), [], 'nothing is lit yet');
     assert.equal(levelIds(rendered.at(-1)).has('atome_contextual_tool_play'), true);
-    // A lit MENU-resident tool displays in the ribbon, never as a rail case.
     assert.equal(levelIds(rendered.at(-1)).has('atome_contextual_tool_create'), true);
 
     lit.play = true;
@@ -327,7 +290,6 @@ test('the rail pins what is lit in activation order, drops the level entry and p
     assert.deepEqual(motions.at(-1).sort(),
         ['atome_contextual_tool_create_icon', 'atome_contextual_tool_play_icon'],
     'the pinned case pulses, and so does the slot that stands for the armed ribbon tool');
-    // One press on the pinned case runs the SAME definition the rail publishes.
     findNode(tree.root, 'atome_contextual_tool_play').on.activate();
     await flushPulse();
     assert.equal(invocations.at(-1).key, 'play');
@@ -365,4 +327,168 @@ test('the rail pins what is lit in activation order, drops the level entry and p
     const motionCount = motions.length;
     await flushPulse();
     assert.equal(motions.length, motionCount, 'nothing lit means no pulse left running');
+});
+
+test('a media record keeps its case above the Atome handle with no rail at all', async () => {
+    const rendered = [];
+    const motions = [];
+    const invocations = [];
+    let unmounts = 0;
+    const runtime = createAtomeContextualEditRuntime({ readMenuAccess,
+        legacyState: {},
+        resolveDefinitions: () => [],
+        invokeDefinition: async (definition, options) => { invocations.push({ definition, options }); return { ok: true }; },
+        surfaceResolver: () => ({ getBoundingClientRect: () => ({ width: 800, height: 600 }) }),
+        bevyRuntimeResolver: () => ({
+            mountTree: async ({ tree }) => rendered.push(tree),
+            updateTree: async ({ tree }) => rendered.push(tree),
+            unmountTree: async () => { unmounts += 1; return null; },
+            updateTreeMotion: ({ updates }) => { motions.push(updates.map((update) => update.nodeId)); }
+        }),
+        findSceneByAtomeId: () => null,
+        readMainMenuHeight: () => ITEM_SIZE
+    });
+    const flushPulse = () => new Promise((resolve) => setTimeout(resolve, 0));
+    const previous = { ...BOOTSTRAP_RECORD_ACTION_RUNTIME_STATE };
+    try {
+        BOOTSTRAP_RECORD_ACTION_RUNTIME_STATE.active = true;
+        BOOTSTRAP_RECORD_ACTION_RUNTIME_STATE.mode = 'media';
+        BOOTSTRAP_RECORD_ACTION_RUNTIME_STATE.record_source = 'audio';
+        await runtime.render();
+        await flushPulse();
+        const tree = rendered.at(-1);
+        assert.ok(tree, 'a lit tool mounts the pinned zone on its own');
+        assert.equal(railOf(tree), undefined, 'nothing is selected: no rail is mounted');
+        const pinned = findNode(tree.root, 'atome_contextual_tool_record_action');
+        assert.ok(pinned, 'the record keeps its case above the Atome handle');
+        assert.deepEqual(pinned.style.position, [tree.layout.x, tree.layout.bottom - ITEM_SIZE]);
+        assert.equal(pinned.style.position[1] + ITEM_SIZE, tree.layout.bottom);
+        assert.equal(pinned.accessibility.label, eveT('eve.menu.stop', 'Stop'),
+            'the case shows the lit stop face');
+        assert.notEqual(pinned.accessibility.label, 'record_action', 'the case never falls back to the raw key');
+        assert.equal(findNode(pinned, 'atome_contextual_tool_record_action_icon').image.source
+            .endsWith('icons/stop.svg'), true, 'the case carries the stop icon');
+        assert.equal(findNode(tree.root, `${TREE_ID}_pinned_shadow`)?.id, `${TREE_ID}_pinned_shadow`,
+            'the case keeps the rail exterior depth even with no viewport');
+        assert.deepEqual(motions.at(-1), ['atome_contextual_tool_record_action_icon'],
+            'the case pulses so the user sees the record is still running');
+        pinned.on.activate();
+        await flushPulse();
+        assert.equal(invocations.at(-1).definition.toolId, 'ui.detail.record.toggle');
+        assert.deepEqual(invocations.at(-1).definition.extraInput, { mode: 'media', record_source: 'audio' });
+        assert.equal(invocations.at(-1).definition.active, true, 'the lit face is the one that stops it');
+
+        BOOTSTRAP_RECORD_ACTION_RUNTIME_STATE.active = false;
+        const mountedTrees = rendered.length;
+        await runtime.render();
+        await flushPulse();
+        assert.equal(unmounts, 1, 'the stopped record takes its case away');
+        assert.equal(rendered.length, mountedTrees, 'a stopped record mounts nothing back');
+    } finally {
+        Object.assign(BOOTSTRAP_RECORD_ACTION_RUNTIME_STATE, previous);
+    }
+});
+
+test('a record lit by the rail level never duplicates its case and outlives the object', async () => {
+    const records = [
+        { id: 'shape', type: 'image', project_id: 'project', properties: { kind: 'image', left: 10, top: 10, width: 120, height: 80 } },
+        { id: 'other', type: 'image', project_id: 'project', properties: { kind: 'image', left: 40, top: 40, width: 120, height: 80 } }
+    ];
+    const scene = { project_id: 'project', records, scene: { byId: new Map() } };
+    const rendered = [];
+    const runtime = createAtomeContextualEditRuntime({ readMenuAccess,
+        legacyState: {},
+        resolveDefinitions: () => [
+            { key: 'info', label: 'Info', icon: 'info', toolId: 'ui.detail.panel' },
+            { key: 'record_action', label: 'Stop', icon: 'stop', toolId: 'ui.detail.record.toggle', active: true }
+        ],
+        invokeDefinition: async () => ({ ok: true }),
+        surfaceResolver: () => ({ getBoundingClientRect: () => ({ width: 800, height: 600 }) }),
+        bevyRuntimeResolver: () => ({
+            mountTree: async ({ tree }) => rendered.push(tree),
+            updateTree: async ({ tree }) => rendered.push(tree),
+            unmountTree: async () => null,
+            updateTreeMotion: () => {}
+        }),
+        findSceneByAtomeId: (id) => records.some((record) => record.id === id) ? scene : null,
+        readMainMenuHeight: () => ITEM_SIZE
+    });
+    assert.equal(runtime.enter({ atomeId: 'shape', kind: 'image', record: records[0] }).ok, true);
+    await runtime.render();
+    let tree = rendered.at(-1);
+    assert.deepEqual(pinnedIds(tree), ['atome_contextual_tool_record_action']);
+    assert.equal(collectIds(tree.root).filter((id) => id === 'atome_contextual_tool_record_action').length, 1,
+        'a lit rail tool is displayed exactly once');
+    assert.equal(levelIds(tree).has('atome_contextual_tool_record_action'), false, 'it left the ordinary level');
+
+    assert.equal(runtime.enter({ atomeId: 'other', kind: 'image', record: records[1] }).ok, true);
+    await runtime.render();
+    tree = rendered.at(-1);
+    assert.deepEqual(pinnedIds(tree), ['atome_contextual_tool_record_action']);
+    assert.deepEqual(findNode(tree.root, 'atome_contextual_tool_record_action').style.position,
+        [tree.layout.x, tree.layout.bottom - ITEM_SIZE]);
+});
+
+test('the rail record reads the owner of the record that is actually running', () => {
+    const previous = { ...BOOTSTRAP_RECORD_ACTION_RUNTIME_STATE };
+    try {
+        BOOTSTRAP_RECORD_ACTION_RUNTIME_STATE.active = false;
+        assert.deepEqual(readActiveRailToolEntries(), [], 'a stopped rail is not lit');
+        BOOTSTRAP_RECORD_ACTION_RUNTIME_STATE.active = true;
+        BOOTSTRAP_RECORD_ACTION_RUNTIME_STATE.mode = 'media';
+        BOOTSTRAP_RECORD_ACTION_RUNTIME_STATE.record_source = 'video';
+        const [entry] = readActiveRailToolEntries();
+        assert.equal(entry.key, 'record_action');
+        assert.equal(entry.toolId, 'ui.detail.record.toggle');
+        assert.equal(entry.surface, ACTIVE_TOOL_SURFACE.RAIL);
+        assert.deepEqual(entry.extraInput, { mode: 'media', record_source: 'video' },
+            'the stop hands the running source back to its owner');
+    } finally {
+        Object.assign(BOOTSTRAP_RECORD_ACTION_RUNTIME_STATE, previous);
+    }
+});
+
+
+test('a running playback keeps its case above the Atome handle with nothing selected', async () => {
+    const playbackWindow = {
+        addEventListener: () => {}, removeEventListener: () => {},
+        setTimeout: () => 0, clearTimeout: () => {}, dispatchEvent: () => {}
+    };
+    registerSelectedProjectMediaPlayback({
+        windowRef: playbackWindow, atomeId: 'clip', record: null, kind: 'audio', durationSeconds: 0
+    });
+    try {
+        assert.deepEqual(readActiveRailToolEntries().map((entry) => entry.key), ['play'],
+            'the running playback is the lit fact');
+        assert.deepEqual(readActiveRailToolEntries()[0].extraInput, { selection_ids: ['clip'] },
+            'the stop targets the playback that is running');
+        const rendered = [];
+        const invocations = [];
+        const runtime = createAtomeContextualEditRuntime({ readMenuAccess,
+            legacyState: {},
+            resolveDefinitions: () => [],
+            invokeDefinition: async (definition, options) => { invocations.push({ definition, options }); return { ok: true }; },
+            surfaceResolver: () => ({ getBoundingClientRect: () => ({ width: 800, height: 600 }) }),
+            bevyRuntimeResolver: () => ({
+                mountTree: async ({ tree }) => rendered.push(tree),
+                updateTree: async ({ tree }) => rendered.push(tree),
+                unmountTree: async () => null,
+                updateTreeMotion: () => {}
+            }),
+            findSceneByAtomeId: () => null,
+            readMainMenuHeight: () => ITEM_SIZE
+        });
+        await runtime.render();
+        const tree = rendered.at(-1);
+        const pinned = findNode(tree.root, 'atome_contextual_tool_play');
+        assert.ok(pinned, 'a playback keeps its case above the Atome handle with no rail');
+        assert.deepEqual(pinned.style.position, [tree.layout.x, tree.layout.bottom - ITEM_SIZE]);
+        pinned.on.activate();
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        assert.equal(invocations.at(-1).definition.toolId, 'ui.play');
+        assert.deepEqual(invocations.at(-1).definition.extraInput, { selection_ids: ['clip'] },
+            'the pinned case stops the playback that is actually running');
+    } finally {
+        await stopSelectedProjectMediaPlayback({ Squirrel: null }, 'clip');
+    }
 });

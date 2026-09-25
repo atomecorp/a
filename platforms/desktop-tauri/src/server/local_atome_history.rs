@@ -55,6 +55,17 @@ pub(super) fn capture_before(db: &Connection, event: &mut EventRecord) -> Result
         }
     }
     missing.sort();
+    // Same contract as Fastify (`database/adole_event_mutation.js`): the identity
+    // the atome had BEFORE this event, `null` when the event creates it. History
+    // reads it to undo a creation as a deletion, never as « erase every key ».
+    let identity: Option<(Option<String>, Option<String>)> = db
+        .query_row(
+            "SELECT parent_id, atome_type FROM atomes WHERE atome_id = ?1",
+            [atome_id],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .optional()
+        .map_err(|e| e.to_string())?;
     let mut payload = event
         .payload
         .take()
@@ -66,8 +77,54 @@ pub(super) fn capture_before(db: &Connection, event: &mut EventRecord) -> Result
         .unwrap_or_default();
     payload.insert("before".into(), json!(before));
     payload.insert("before_missing".into(), json!(missing));
+    payload.insert(
+        "before_identity".into(),
+        match identity {
+            Some((parent_id, atome_type)) => json!({"parent_id": parent_id, "atome_type": atome_type}),
+            None => JsonValue::Null,
+        },
+    );
     event.payload = Some(json!(payload));
     Ok(())
+}
+
+// Events of `tx_id` that CREATED their atome: `before_identity: null`, or — for
+// events recorded before `before_identity` existed — the atome's first event
+// when nothing existed before it (empty `before`). An atome that reached this
+// base without events (sync, fixtures) keeps its ordinary inversion.
+fn creation_event_ids(db: &Connection, events: &[JsonValue]) -> Result<HashSet<String>, String> {
+    let mut ids = HashSet::new();
+    for event in events {
+        if event["kind"] == "delete" {
+            continue;
+        }
+        let Some(event_id) = event["id"].as_str() else { continue };
+        let payload = &event["payload"];
+        let creation = match payload.get("before_identity") {
+            Some(JsonValue::Null) => true,
+            Some(_) => false,
+            None => {
+                let nothing_before = payload["before"].as_object().map_or(false, |before| before.is_empty());
+                if !nothing_before {
+                    continue;
+                }
+                let Some(atome_id) = event["atome_id"].as_str() else { continue };
+                let first: Option<String> = db
+                    .query_row(
+                        "SELECT id FROM events WHERE atome_id = ?1 ORDER BY ts, rowid LIMIT 1",
+                        [atome_id],
+                        |r| r.get(0),
+                    )
+                    .optional()
+                    .map_err(|e| e.to_string())?;
+                first.as_deref() == Some(event_id)
+            }
+        };
+        if creation {
+            ids.insert(event_id.to_string());
+        }
+    }
+    Ok(ids)
 }
 
 fn source_events(db: &Connection, tx_id: &str) -> Result<Vec<JsonValue>, String> {
@@ -113,13 +170,17 @@ pub async fn handle_history_command(
     let Some(request_key) = request_id.as_deref() else {
         return error_response(request_id, "history_request_id_required");
     };
-    let sources = match state
+    let (sources, creations) = match state
         .db
         .lock()
         .map_err(|e| e.to_string())
-        .and_then(|db| source_events(&db, source_tx))
+        .and_then(|db| {
+            let events = source_events(&db, source_tx)?;
+            let creations = creation_event_ids(&db, &events)?;
+            Ok((events, creations))
+        })
     {
-        Ok(events) if !events.is_empty() => events,
+        Ok((events, creations)) if !events.is_empty() => (events, creations),
         Ok(_) => return error_response(request_id, "history_source_transaction_not_found"),
         Err(error) => return error_response(request_id, &error),
     };
@@ -135,6 +196,18 @@ pub async fn handle_history_command(
     }
     let mut events = Vec::new();
     for source in sources {
+        // Undoing a creation deletes the atome; redoing it restores it (its
+        // properties were never erased). Erasing every key instead left an empty
+        // « ghost » atome in the project: an image with no source, drawn blank.
+        if creations.contains(source["id"].as_str().unwrap_or("")) {
+            events.push(json!({
+                "id": format!("history:{operation}:{request_key}:{}", source["id"].as_str().unwrap_or("")),
+                "kind": if operation == "undo" { "delete" } else { "restore" },
+                "atome_id": source["atome_id"], "project_id": source["project_id"],
+                "payload": {"source_tx_id": source_tx, "source_event_id": source["id"]}
+            }));
+            continue;
+        }
         let deletion = source["kind"] == "delete";
         let props = if deletion {
             json!({})

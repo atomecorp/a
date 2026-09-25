@@ -206,7 +206,15 @@ const surfaceItemsRuntime = createMysticContextItemsRuntime({
 });
 const classifiedItems = surfaceItemsRuntime.resolveMysticContextItems({ type: 'surface_item', atomeId: 'surface_project_a' });
 assert.equal(classifiedItems.find(item => item.key === 'communicate').type, 'tool');
+// The flag keeps its meaning for the runtime but no longer opens anything on a
+// crossing hover: `bevy_ui_mystic_runtime.js` waits for `MYSTIC_AUTO_OPEN_DWELL_MS`
+// (1500 ms) of immobile hover, exactly like a palette.
 assert.equal(classifiedItems.find(item => item.key === 'communicate').hoverActivate, true);
+assert.deepEqual(
+    classifiedItems.filter(item => item.hoverActivate === true).map(item => item.key),
+    ['find', 'capture', 'dashboard', 'communicate'],
+    'only the four configured persistent tools open on a stationary dwell'
+);
 assert.equal(classifiedItems.find(item => item.key === 'capture').type, 'palette');
 assert.deepEqual(
     surfaceItemsRuntime.resolveMysticContextItems({
