@@ -9,7 +9,11 @@ import {
     BEVY_ICON_BUTTON_TOKENS,
     resolveBevyIconButtonSurface
 } from '../../eVe/intuition/shared/bevy_ui_icon_button.js';
-import { radioGroupNode, toggleableRowNode } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_choice.js';
+import {
+    radioGroupNode,
+    selectionRailPosition,
+    toggleableRowNode
+} from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_choice.js';
 import { BEVY_PANEL_TOKENS } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_tokens.js';
 
 const tokens = BEVY_PANEL_TOKENS.choice;
@@ -84,6 +88,25 @@ test('a compact checkbox rail keeps its accessible label and owns vertical drag 
     rail.on.drag();
     rail.on.release();
     assert.deepEqual(events, ['press', 'drag', 'release']);
+});
+
+test('a rail dropped in a taller container is centered three pixels from the edge', () => {
+    const tallRowHeightPx = BEVY_PANEL_TOKENS.listRow.tall.heightPx;
+    const compact = toggleableRowNode({ id: 'compact', kind: 'checkbox', label: 'A', indicatorOnly: true });
+    const doubled = toggleableRowNode({
+        id: 'doubled', kind: 'checkbox', label: 'A', indicatorOnly: true, containerHeightPx: tallRowHeightPx
+    });
+
+    assert.equal(compact.style.position, undefined,
+        'a control that says nothing about its container keeps its historical placement');
+    assert.deepEqual(doubled.style.size, compact.style.size, 'only the placement moves, never the control');
+    assert.deepEqual(doubled.style.position, [
+        BEVY_PANEL_TOKENS.listRow.selectionInsetPx,
+        (tallRowHeightPx - BEVY_ICON_BUTTON_TOKENS.sizePx) / 2
+    ]);
+    assert.deepEqual(doubled.style.position, selectionRailPosition(tallRowHeightPx),
+        'the rail places itself through the one shared owner');
+    assert.equal(doubled.style.position[0], 3, 'three real pixels of air, like the footer close button');
 });
 
 test('the selected state is a distinct indicator treatment reusing the shared check mark', () => {
