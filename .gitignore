@@ -186,6 +186,9 @@ tests/rendering/*
 !tests/eve/shared_project_override_canonical_state.test.mjs
 !tests/eve/bevy_panel_text_editing_retention.test.mjs
 !tests/eve/contextual_rail_active_zone.test.mjs
+!tests/eve/armed_tool_rail_definitions.test.mjs
+!tests/eve/context_menus_characterisation.test.mjs
+!tests/eve/project_background_color_contract.test.mjs
 !tests/atome/
 tests/atome/*
 !tests/atome/src/

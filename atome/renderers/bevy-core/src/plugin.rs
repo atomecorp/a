@@ -46,6 +46,7 @@ impl Plugin for AtomeBevyRendererPlugin {
             .init_non_send::<crate::animated_png::PngAnimations>()
             .add_systems(Update, crate::animated_png::advance_animations)
             .add_systems(PostUpdate, crate::mystic_capture::sync_menu_capture)
+            .add_systems(PostUpdate, crate::clip_polygon::sync_clip_polygon_proxies)
             .add_systems(Startup, spawn_atome_bevy_scene);
     }
 }

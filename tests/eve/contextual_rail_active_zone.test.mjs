@@ -17,6 +17,8 @@ import {
     stopActiveToolEntries
 } from '../../eVe/intuition/tools/core/active_tool_registry.js';
 import { BOOTSTRAP_RECORD_ACTION_RUNTIME_STATE } from '../../eVe/intuition/tools/core/tool_runtime_state.js';
+import { buildArmedToolRailDefinitions, invokeArmedToolOption } from '../../eVe/intuition/runtime/eve_intuition/armed_tool_rail_runtime.js';
+import { createMainMenuCreateContent } from '../../eVe/intuition/runtime/eve_intuition/main_menu_create_content_runtime.js';
 import {
     registerSelectedProjectMediaPlayback,
     stopSelectedProjectMediaPlayback
@@ -490,5 +492,128 @@ test('a running playback keeps its case above the Atome handle with nothing sele
             'the pinned case stops the playback that is actually running');
     } finally {
         await stopSelectedProjectMediaPlayback({ Squirrel: null }, 'clip');
+    }
+});
+
+// A pinned creation tool (Page, Placeholder, Code, Generator) leaves the menu
+// and lives here while it is armed: one case in the pinned zone, and its press
+// disarms the tool through the owner that publishes its state.
+const armedCreationWindow = (stopped) => ({
+    addEventListener: () => {}, removeEventListener: () => {}, dispatchEvent: () => {},
+    eveProjectViewCreationApi: {
+        isPageToolActive: () => true,
+        setPageToolActive: (active) => { stopped.push(['page', active]); return active === true; },
+        finishTool: () => null
+    },
+    evePlaceholderCreationApi: {
+        isActive: () => true,
+        setActive: (active) => { stopped.push(['placeholder', active]); return active === true; }
+    },
+    eveCodeToolApi: {
+        isOpen: () => true,
+        close: () => { stopped.push(['code', false]); return true; }
+    },
+    eveGeneratorApi: {
+        isActive: () => true,
+        setActive: (active) => { stopped.push(['generator', active]); return active === true; }
+    }
+});
+
+const renderArmedRail = async ({ definitions = [], invoker }) => {
+    const rendered = [];
+    const runtime = createAtomeContextualEditRuntime({ readMenuAccess,
+        legacyState: {},
+        resolveDefinitions: () => [],
+        invokeDefinition: invoker,
+        surfaceResolver: () => ({ getBoundingClientRect: () => ({ width: 800, height: 600 }) }),
+        bevyRuntimeResolver: () => ({
+            mountTree: async ({ tree }) => rendered.push(tree),
+            updateTree: async ({ tree }) => rendered.push(tree),
+            unmountTree: async () => null,
+            updateTreeMotion: () => {}
+        }),
+        findSceneByAtomeId: () => null,
+        readMainMenuHeight: () => ITEM_SIZE
+    });
+    if (definitions.length) {
+        const entered = runtime.enterVirtual({
+            atomeId: 'rail_project', kind: 'tool', projectId: 'rail_project',
+            record: { id: 'rail_project', atome_id: 'rail_project', project_id: 'rail_project', type: 'project', properties: {} },
+            definitions,
+            invokeDefinition: invoker
+        });
+        assert.equal(entered.ok, true, 'the armed tool takes the rail before any object exists');
+    }
+    await runtime.render();
+    return rendered.at(-1);
+};
+
+test('an armed creation tool keeps its pinned case glued to the rail bottom, and the press stops it through its owner', async () => {
+    const stopped = [];
+    const previousWindow = globalThis.window;
+    globalThis.window = armedCreationWindow(stopped);
+    try {
+        assert.deepEqual(readActiveToolEntries().map((entry) => entry.key),
+            ['code', 'page', 'placeholder', 'generator'],
+            'the operative reader keeps the menu keys: a rail key is a residence, not a second tool');
+        assert.deepEqual(readActiveRailToolEntries().map((entry) => entry.key),
+            ['code_create', 'page_create', 'create_placeholder', 'generator'],
+            'each armed creation tool resides in the rail, keyed by its menu content key');
+        const tree = await renderArmedRail({ invoker: async () => ({ ok: true }) });
+        const keys = ['code_create', 'page_create', 'create_placeholder', 'generator'];
+        const nodes = keys.map((key) => findNode(tree.root, `atome_contextual_tool_${key}`));
+        assert.ok(nodes.every(Boolean), 'Code, Page, Placeholder and Generator are all pinned');
+        nodes.forEach((node, index) => {
+            assert.deepEqual(node.style.position, [tree.layout.x, tree.layout.bottom - (index + 1) * ITEM_SIZE],
+                `${keys[index]} stacks in the pinned zone`);
+        });
+        assert.equal(nodes[0].style.position[1] + ITEM_SIZE, tree.layout.bottom,
+            'the first tool activated is the closest to the Atome handle');
+        findNode(tree.root, 'atome_contextual_tool_page_create').on.activate();
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        findNode(tree.root, 'atome_contextual_tool_generator').on.activate();
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        assert.deepEqual(stopped, [['page', false], ['generator', false]],
+            'a press disarms the tool through the owner that reads it, never through a rail state');
+    } finally {
+        globalThis.window = previousWindow;
+    }
+});
+
+test('an armed Page shows its formats in the rail level, the current one lit, and a case arms that format', async () => {
+    const calls = [];
+    const previousWindow = globalThis.window;
+    const view = {
+        addEventListener: () => {}, removeEventListener: () => {}, dispatchEvent: () => {},
+        eveProjectViewCreationApi: {
+            readPageFormat: () => 'a4',
+            setActive: (active, format) => { calls.push([active, format]); return active === true; }
+        }
+    };
+    globalThis.window = view;
+    try {
+        const content = createMainMenuCreateContent({
+            translate: eveT, createToolId: 'tool.main.create', drawToolId: 'tool.main.draw'
+        });
+        const definitions = buildArmedToolRailDefinitions({
+            tool: 'page', projectId: 'rail_project', win: view, content
+        });
+        assert.deepEqual(definitions.map((definition) => definition.key), [
+            'page_format_free', 'page_format_sixteen_nine', 'page_format_four_three',
+            'page_format_three_two', 'page_format_a4', 'page_format_square'
+        ]);
+        const tree = await renderArmedRail({ definitions,
+            invoker: (definition, options) => invokeArmedToolOption('page', definition, options, view) });
+        const nodes = definitions.map((definition) => findNode(tree.root, `atome_contextual_tool_${definition.key}`));
+        assert.ok(nodes.every(Boolean), 'the six formats are cases of the rail level');
+        assert.deepEqual(pinnedIds(tree), [], 'the options are not pinned: the tool is');
+        const lit = nodes.filter((node) => node.style.translation !== undefined);
+        assert.deepEqual(lit.map((node) => node.id), ['atome_contextual_tool_page_format_a4'],
+            'the format read from its owner is the only lit case');
+        findNode(tree.root, 'atome_contextual_tool_page_format_square').on.activate();
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        assert.deepEqual(calls, [[true, 'square']], 'choosing a format arms the tool through its owner');
+    } finally {
+        globalThis.window = previousWindow;
     }
 });

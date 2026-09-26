@@ -3,6 +3,7 @@ pub mod backdrop_blur;
 pub mod backdrop_surface;
 pub mod background;
 pub mod clip;
+pub mod clip_polygon;
 pub mod components;
 pub mod plugin;
 pub mod procedural_sdf;

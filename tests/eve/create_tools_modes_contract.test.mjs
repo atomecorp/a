@@ -21,6 +21,9 @@ import { buildBootstrapDefsA } from '../../eVe/intuition/tools/core/tool_runtime
 import { buildBootstrapDefsB } from '../../eVe/intuition/tools/core/tool_runtime_bootstrap_defs_b.js';
 import { hasDrawTravelled } from '../../eVe/intuition/tools/core/svg_draw_model.js';
 import { buildBevyMainMenuItems, buildBevyMainMenuTree } from '../../eVe/intuition/ribbon/bevy_ui_main_menu_model.js';
+import { createRuntimeHarness, findNode } from './bevy_ui_main_menu_test_helpers.mjs';
+import { isActive as generatorIsActive, readChoice as generatorReadChoice, runGeneratorCase, setActive as setGeneratorActive } from '../../eVe/intuition/tools/generator/runtime.js';
+import '../../eVe/intuition/tools/generator/index.js';
 
 const previousWindow = globalThis.window;
 const previousDocument = globalThis.document;
@@ -582,4 +585,155 @@ test('Visual preserves a media projection identity when other composition member
     assert.equal(single.children[0].children[0].id, composite.children[0].children[0].children[0].id);
     panel.pinSubject(video, { reason: 'editing' });
     assert.deepEqual(panel.videoNodeIdsFor(video.id), compositeId);
+});
+
+// The Create palette, as the ribbon builds it: the real content runtime plus
+// the generator palette the registry projects into it.
+const createPaletteContent = () => ({
+    toolbox: { children: ['create'] },
+    ...createMainMenuCreateContent({
+        translate: (_key, fallback) => fallback,
+        createToolId: 'tool.main.create',
+        drawToolId: 'tool.main.draw'
+    }),
+    generator: {
+        labelKey: 'eve.menu.generator', label: 'generator', type: 'palette', tool_type: 'palette',
+        children: [], icon: 'modules', action: 'momentary', submenuInstantOnClick: true,
+        atome_tool: true, tool_id: 'tool.main.generator'
+    }
+});
+const createNodeId = (key) => `eve_bevy_ui_main_menu_tool_create__${key}`;
+const settleTree = async () => { await Promise.resolve(); await Promise.resolve(); };
+
+test('Create > Page is a plain tool: the real click arms it and closes the palette', async () => {
+    const content = createPaletteContent();
+    // Page used to be a ribbon palette of formats (`type:'palette'` plus
+    // `invoke_on_expand`): its click opened the list in place and left it open.
+    // Its residence is now the armed-tool rail, like Text, Draw and Code.
+    assert.equal(content.page_create.type, 'tool');
+    assert.equal(content.page_create.tool_type, undefined, 'no tool palette is declared locally');
+    assert.equal(content.page_create.children, undefined);
+    assert.equal(content.page_create.invoke_on_expand, undefined);
+    assert.equal(content.page_create.latch, true);
+    assert.equal(content.page_create.extra_input.content_kind, 'page');
+    // The formats stay in the catalogue: the rail reads their label and icon there.
+    for (const format of ['free', 'sixteen_nine', 'four_three', 'three_two', 'a4', 'square']) {
+        const definition = content[`page_format_${format}`];
+        assert.equal(definition.tool_id, 'ui.page.create');
+        assert.equal(definition.extra_input.page_format, format);
+    }
+
+    const invocations = [];
+    const harness = createRuntimeHarness({
+        content,
+        onInvoke: async (definition) => {
+            invocations.push(definition.toolId);
+            return { ok: true, active: true, latched: true, nextLatched: true };
+        }
+    });
+    try {
+        await harness.runtime.showFully();
+        const createNode = findNode(harness.calls.at(-1).payload.tree.root, 'eve_bevy_ui_main_menu_tool_create');
+        await createNode.on.activate();
+        await settleTree();
+        assert.equal(harness.runtime.measure().activePaletteKey, 'create');
+
+        const pageNode = findNode(harness.calls.at(-1).payload.tree.root, createNodeId('page_create'));
+        assert.ok(pageNode, 'Page is still listed in Create');
+        await pageNode.on.activate();
+        await settleTree();
+        assert.deepEqual(invocations, ['ui.page.create'], 'the click arms the page tool');
+        assert.equal(harness.runtime.measure().activePaletteKey, '',
+            'and closes the menu, exactly like Text and Code');
+    } finally {
+        harness.runtime.destroy();
+        harness.restore();
+    }
+});
+
+test('Create > Placeholder keeps its choices in place, and the choice arms the tool', async () => {
+    const content = createPaletteContent();
+    assert.equal(content.create_placeholder.type, 'palette', 'the list of choices stays in Create');
+    assert.deepEqual(content.create_placeholder.children, [
+        'placeholder_text', 'placeholder_video', 'placeholder_audio', 'placeholder_photo',
+        'placeholder_image', 'placeholder_shape', 'placeholder_duration', 'placeholder_max_chars'
+    ]);
+    for (const kind of ['text', 'video', 'audio', 'photo', 'image', 'shape']) {
+        assert.equal(content[`placeholder_${kind}`].extra_input.placeholder_kind, kind);
+    }
+
+    const invocations = [];
+    const harness = createRuntimeHarness({
+        content,
+        onInvoke: async (definition) => { invocations.push(definition.toolId); return { ok: true }; }
+    });
+    try {
+        await harness.runtime.showFully();
+        const createNode = findNode(harness.calls.at(-1).payload.tree.root, 'eve_bevy_ui_main_menu_tool_create');
+        await createNode.on.activate();
+        await settleTree();
+        const placeholderNode = findNode(harness.calls.at(-1).payload.tree.root, createNodeId('create_placeholder'));
+        assert.ok(placeholderNode, 'Placeholder is listed in Create');
+        await placeholderNode.on.activate();
+        await settleTree();
+        assert.equal(harness.runtime.measure().activePaletteKey, 'create_placeholder',
+            'its choices stay in place: the menu is not closed by the parent case');
+        assert.deepEqual(invocations, [], 'and the parent case arms nothing by itself');
+    } finally {
+        harness.runtime.destroy();
+        harness.restore();
+    }
+
+    const dom = new JSDOM('<!doctype html><body></body>');
+    globalThis.window = dom.window;
+    globalThis.document = dom.window.document;
+    const placeholderApi = async () => (await import('../../eVe/domains/rendering/placeholder_creation_runtime.js')).placeholderCreationRuntime;
+    const runtime = await placeholderApi();
+    try {
+        const invocation = createMainMenuCreateInvocationRuntime({
+            invokeToolFromUiButton: async () => ({ ok: true, active: true })
+        });
+        const result = await invocation.invoke({
+            definition: normalizeToolEntry('placeholder_audio', content.placeholder_audio, content),
+            sourceLayer: 'bevy_ui_main_menu'
+        });
+        assert.equal(result.active, true);
+        assert.equal(runtime.isActive(), true, 'choosing a kind arms the placeholder tool');
+        assert.equal(runtime.readChoice(), 'audio', 'through its own owner, with the chosen kind');
+    } finally {
+        runtime.setActive(false);
+        dom.window.close();
+    }
+});
+
+test('the Generator arms on a run, stays armed, and the next run moves the lit case', async () => {
+    const dom = new JSDOM('<!doctype html><body></body>');
+    globalThis.window = dom.window;
+    globalThis.document = dom.window.document;
+    const published = [];
+    dom.window.addEventListener('eve:tool-state-changed', (event) => published.push(event.detail));
+    const created = [];
+    dom.window.eveToolBase = {
+        createAtome: async (spec) => { created.push(spec); return { ok: true, id: `generated_${created.length}` }; }
+    };
+    try {
+        assert.equal(generatorIsActive(), false);
+        const first = await runGeneratorCase('text.title');
+        assert.equal(first.ok, true);
+        assert.equal(created.length, 1, 'the run still goes through `eveToolBase.createAtome`');
+        assert.equal(generatorIsActive(), true, 'running a generator arms its tool');
+        assert.equal(generatorReadChoice(), 'text.title', 'the lit case is the generator that ran');
+        const second = await runGeneratorCase('text.paragraph');
+        assert.equal(second.ok, true);
+        assert.equal(generatorIsActive(), true, 'the tool stays armed: generators follow each other');
+        assert.equal(generatorReadChoice(), 'text.paragraph');
+        assert.deepEqual(published.map((detail) => [detail.active, detail.route]), [[true, 'generator_runtime']],
+            'the armed state is published once, on the transition');
+        assert.equal(setGeneratorActive(false), false);
+        assert.equal(generatorIsActive(), false);
+        assert.equal(published.at(-1).action, 'state.off', 'disarming publishes the neutral state');
+    } finally {
+        setGeneratorActive(false);
+        dom.window.close();
+    }
 });

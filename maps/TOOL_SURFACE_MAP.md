@@ -2,6 +2,8 @@
 
 Généré le 2026-09-24 depuis le contenu réel du menu principal (`getMainMenuRuntime().getContent()`, session invité dans l'espace de travail) et depuis `eVe/intuition/menu/context_menus.json`.
 
+Mise à jour 2026-09-25 : les cases de rail des outils de création viennent de `menus.sidebar.tools` ; Page n'est plus une palette locale (ses 6 formats sont ses cases de rail) et le Générateur expose la liste projetée par son registre.
+
 Un outil est **exposable** (Find → Tools, futur catalogue de l'éditeur de taxonomie) s'il est **atteignable** depuis une surface :
 - les racines du menu principal (`toolbox.children`) et, par les enfants de palette, tout ce qu'elles ouvrent ;
 - les commandes déclarées par Mystic et le menu latéral dans `context_menus.json` (groupes, croix de base, surcharges de mode).
@@ -50,13 +52,36 @@ Code : `eVe/intuition/tools/core/exposable_tools.js` ; branché dans `finder_dat
 | main › create › draw_create | `draw_size` | `tool.main.size` | Taille |
 | main › create › draw_create | `draw_type` | `ui.draw.brush.type` | Brosse |
 | main › create | `code_create` | `ui.code.editor` | Code |
-| main › create | `page_create` | `ui.page.create` | Page |
-| main › create › page_create | `page_format_free` / `sixteen_nine` / `four_three` / `three_two` / `a4` / `square` | `ui.page.create` | Libre, 16:9, 4:3, 3:2, A4, Carré |
+| main › create | `page_create` | `ui.page.create` | Page (armement direct : la palette locale n'existe plus depuis le 2026-09-25) |
+| rail › page | `page_format_free` / `sixteen_nine` / `four_three` / `three_two` / `a4` / `square` | `ui.page.create` | Libre, 16:9, 4:3, 3:2, A4, Carré — cases du rail, choix courant allumé |
 | main › create | `create_placeholder` | `ui.placeholder.create` | Placeholder |
-| main › create › create_placeholder | `placeholder_text` / `video` / `audio` / `photo` / `image` / `shape` | `ui.placeholder.create` | Texte, Vidéo, Audio, Photo, Image, Dessin |
+| main › create › create_placeholder | `placeholder_text` / `video` / `audio` / `photo` / `image` / `shape` | `ui.placeholder.create` | Texte, Vidéo, Audio, Photo, Image, Dessin — la liste reste dans Créer et devient aussi les cases du rail |
 | main › create › create_placeholder | `placeholder_duration` | `ui.placeholder.duration.apply` | Durée |
 | main › create › create_placeholder | `placeholder_max_chars` | `ui.placeholder.max_chars.apply` | Caractères |
 | main › create | `generator` | `tool.main.generator` | générateur |
+
+## Rail de l'outil armé (`context_menus.json` → `menus.sidebar.tools`)
+
+Un outil de création `pinned: true` quitte « Créer » dès qu'il est armé : sa case épinglée en bas du rail contextuel le représente (un appui l'éteint par le propriétaire qui publie son état) et ses options sont les cases de ce même rail. Voir `maps/ARCHITECTURE_MAP.md` (« Armed creation tools: taxonomy residence… — 2026-09-25 »).
+
+| Outil | Clé de contenu | `tool_id` | Options du rail (ordre déclaré) | Propriétaire des valeurs |
+|---|---|---|---|---|
+| Texte | `text_create` | `ui.text.create` | `size`, `couleur`, `font` | `tool_presets.js`, panneaux couleur/police |
+| Dessin | `draw_create` | `tool.main.draw` | `couleur`, `draw_opacity`, `draw_size`, `draw_type` | `window.__eveDrawTool`, panneau couleur |
+| Code | `code_create` | `ui.code.editor` | — (son éditeur reste un panneau) | `eveCodeToolApi` |
+| Page | `page_create` | `ui.page.create` | les 6 `page_format_*` | `eveProjectViewCreationApi.readPageFormat()` |
+| Placeholder | `create_placeholder` | `ui.placeholder.create` | les 6 `placeholder_*` + `placeholder_duration`, `placeholder_max_chars` | `evePlaceholderCreationApi.readChoice()` / `readLimits()` |
+| Générateur | `generator` | `ui.generator.run` | liste projetée par `eVe/intuition/tools/generator/registry.js` (familles remplacées par leurs générateurs) | `window.eveGeneratorApi.readChoice()` |
+| Template | `template_create` | `ui.template.create` | — (aucune porte d'entrée dans le ruban aujourd'hui) | `eveTemplateCreationApi` |
+
+## Règle on/off des outils à panneau (2026-09-25)
+
+Tout outil qui ouvre un panneau est un bouton **on/off**, sur toutes les surfaces (ruban, rail contextuel, rail de l'outil armé, Mystic, rails News/niveau/molécule, rails des outils à input box) : allumé tant que son panneau est ouvert, un second appui le referme.
+
+- **Déclaration unique** : `context_menus.json` → `commands.<clé>.panel` (valeurs de `vocabulary.panels`) — aujourd'hui `couleur`, `font`, `info`, `communicate`, `home`, `calendar`, `find` (→ `finder`), `midi_binding`. Visible dans l'éditeur de taxonomie (« on/off · panneau … ») et dans son diff.
+- **Lecture** : `eVe/intuition/tools/core/panel_toggle_rule.js` — l'état allumé est lu sur le runtime des panneaux, jamais gardé par une surface. `invokeUnifiedContextTool` (point de passage du ruban, du rail et de Mystic) en déduit `state.on` / `state.off`.
+- **Rails virtuels** (définitions figées à l'entrée) : une case déclare `panel: '<surface>'`, le rail contextuel l'allume à chaque rendu.
+- **Garde** : le gestionnaire d'outils signale `panel_not_on_off` pour toute entrée de contenu qui ouvre un panneau sans être un latch.
 
 ## Mystic et menu latéral (`context_menus.json` → `commands`)
 

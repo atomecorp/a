@@ -78,6 +78,7 @@ pub fn apply_despawn(world: &mut World, id: &str) -> Result<(), String> {
     crate::animated_png::remove_animation(world, entity);
     remove_shape_shadow_overlay(world, entity);
     remove_waveform_playback_overlay(world, entity);
+    crate::clip_polygon::remove_sprite_polygon_proxy(world, entity);
     world.despawn(entity);
     refresh_workspace_backdrop_enabled(world)?;
     Ok(())

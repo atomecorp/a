@@ -156,3 +156,61 @@ test('selection style treatments recurse through nested Molecules without painti
     assert.equal((await applySelectionStyleMutation(() => ({ opacity: 0.4 }), { selectionIds: ['molecule_root'] })).ok, true);
     assert.deepEqual(commits.map((event) => event.atome_id), ['text_child', 'shape_nested', 'text_nested']);
 });
+
+test('a selected Page paints its own frame and never reaches its members', async () => {
+    const records = new Map([
+        ['page_1', { atome_id: 'page_1', type: 'group', project_id: 'project_1', parent_id: 'project_1',
+            properties: { kind: 'group', container_kind: 'page', name: 'Page', fill: '#ffffff' } }],
+        ['text_in_page', { atome_id: 'text_in_page', type: 'text', project_id: 'project_1', parent_id: 'page_1',
+            properties: { kind: 'text', text: 'Inside' } }],
+        ['shape_in_page', { atome_id: 'shape_in_page', type: 'shape', project_id: 'project_1', parent_id: 'page_1',
+            properties: { kind: 'shape' } }]
+    ]);
+    const commits = [];
+    globalThis.window = {
+        addEventListener() {}, removeEventListener() {},
+        Atome: {
+            getStateCurrent: async (id) => records.get(id),
+            listStateCurrent: async () => ({ items: [...records.values()] }),
+            commit: async (event) => { commits.push(event); return { ok: true }; }
+        }
+    };
+    const { applyColorToSelection, applyFontToSelection } = await import('../../eVe/intuition/tools/selection_style_apply.js');
+    const { applySelectionStyleMutation } = await import('../../eVe/intuition/tools/selection_style_atome.js');
+
+    assert.equal((await applyColorToSelection('#336699', { selectionIds: ['page_1'] })).ok, true);
+    const pageColorCommits = commits.splice(0);
+    assert.deepEqual(pageColorCommits, [{ kind: 'set', atome_id: 'page_1', props: { fill: '#336699' } }]);
+
+    // End to end: the property the tool writes is the one the render chain paints,
+    // on the Page frame only; the members it holds stay untouched.
+    const { createVirtualSceneTree } = await import('../../eVe/domains/rendering/virtual_scene_contract.js');
+    const { mapVirtualSceneTreeToBevyPayload } = await import('../../eVe/domains/rendering/bevy_projection_adapter.js');
+    const asRgb = (payload) => payload.color.slice(0, 3).map((component) => Math.round(component * 255));
+    const payloadById = () => new Map(mapVirtualSceneTreeToBevyPayload(createVirtualSceneTree([...records.values()]))
+        .map((payload) => [payload.id, payload]));
+    const paintCommits = (events) => {
+        for (const event of events) {
+            const record = records.get(event.atome_id);
+            records.set(event.atome_id, { ...record, properties: { ...record.properties, ...event.props } });
+        }
+    };
+    paintCommits(pageColorCommits);
+    assert.deepEqual(asRgb(payloadById().get('page_1')), [51, 102, 153]);
+    assert.equal(payloadById().get('text_in_page').color, null);
+    assert.equal(payloadById().get('shape_in_page').color, null);
+
+    assert.equal((await applyFontToSelection('Georgia', { selectionIds: ['page_1'] })).ok, false);
+    assert.deepEqual(commits, []);
+
+    assert.equal((await applySelectionStyleMutation(() => ({ opacity: 0.4 }), { selectionIds: ['page_1'] })).ok, true);
+    assert.deepEqual(commits.splice(0).map((event) => event.atome_id), ['page_1']);
+
+    assert.equal((await applyColorToSelection('#ff0000', { selectionIds: ['text_in_page', 'page_1'] })).ok, true);
+    const mixed = commits.splice(0);
+    assert.deepEqual(mixed.map((event) => event.atome_id), ['text_in_page', 'page_1']);
+    assert.deepEqual(mixed.map((event) => event.props.fill), [undefined, '#ff0000']);
+    paintCommits(mixed);
+    assert.deepEqual(asRgb(payloadById().get('page_1')), [255, 0, 0]);
+    assert.deepEqual(asRgb(payloadById().get('text_in_page')), [255, 0, 0]);
+});
