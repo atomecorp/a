@@ -47,7 +47,7 @@ fn ws_authenticated_user(data: &JsonValue, state: &AppState) -> Result<String, J
         .as_ref()
         .ok_or_else(|| json!({"type": "error", "message": "Auth state not initialized"}))?;
     let token = data.get("token").and_then(|value| value.as_str());
-    local_auth::verified_user_id_from_token(&auth_state.jwt_secret, token)
+    local_auth::verified_user_id_from_token(auth_state, token)
         .ok_or_else(|| json!({"type": "error", "message": "Authentication required"}))
 }
 

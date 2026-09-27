@@ -2,22 +2,24 @@
  * registerServerIdentityRoutes — extracted from auth.js registerAuthRoutes.
  */
 
-import path from 'path';
-import fsp from 'fs/promises';
-import { fileURLToPath } from 'url';
-import { appendEvent } from '../database/adole.js';
-import { getABoxEventBus } from './aBoxServer.js';
-import { initServerIdentity, signChallenge, getServerIdentity, isConfigured as serverIdentityConfigured } from './serverIdentity.js';
-import { ensureUserHome } from './userHome.js';
-import { normalizePhone, hashPassword, verifyPassword, requireConfiguredAuthSecret } from './auth_crypto.js';
-import { createUserAtome, findUserByPhone, findUserById, listAllUsers, updateUserParticle, deleteUserAtome, syncUserToTauri } from './auth_users.js';
-import { getUserOptionalParticles, ensureUserAtomeType, repairMistypedUserAtomes, upsertUserStateCurrent, normalizeUserOptional, normalizeAccessValue } from './auth_user_particles.js';
-import { generateOTP, storeOTP, verifyOTP, readClientRateKey, enforceAuthIdentityRateLimit, enforceAuthRateLimit, sendSMS } from './auth_otp.js';
-
-const PROJECT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const fs = fsp;
+import { signChallenge, getServerIdentity, isConfigured as serverIdentityConfigured } from './serverIdentity.js';
 
 export function registerServerIdentityRoutes(server, { dataSource, isProduction }) {
+    // Association and handoff are infrastructure only. GET never consumes a
+    // challenge, sends an SMS, or creates an authenticated session.
+    server.get('/.well-known/apple-app-site-association', async (_request, reply) => {
+        reply.type('application/json').header('Cache-Control', 'public, max-age=3600');
+        return { applinks: { apps: [], details: [{ appID: '2W25PVZ57F.one.atome.app', paths: ['/auth/v/*'] }] } };
+    });
+    server.get('/auth/v/:attemptId', { logLevel: 'silent' }, async (request, reply) => {
+        reply.header('Cache-Control', 'no-store').header('Referrer-Policy', 'no-referrer')
+            .header('X-Content-Type-Options', 'nosniff').header('X-Robots-Tag', 'noindex, nofollow')
+            .header('Content-Security-Policy', "default-src 'none'; script-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'");
+        if (!/^[A-Za-z0-9_-]{43}$/.test(request.params.attemptId) || Object.keys(request.query).length) {
+            return reply.code(400).send();
+        }
+        return reply.sendFile('auth-link.html', { cacheControl: false, etag: false, lastModified: false });
+    });
     server.get('/api/server/identity', async (request, reply) => {
         const identity = getServerIdentity();
         return {
@@ -95,13 +97,4 @@ export function registerServerIdentityRoutes(server, { dataSource, isProduction 
         };
     });
 
-    // =========================================================================
-    // ADMIN ROUTES (UPDATE SYSTEM)
-    // =========================================================================
-
-    /**
-     * POST /api/admin/apply-update
-     * Write update files to the server (admin only)
-     * Security: Only allows writes to specific directories
-     */
 }

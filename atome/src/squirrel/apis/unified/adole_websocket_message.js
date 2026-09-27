@@ -10,6 +10,7 @@ import { reportRuntimeError } from '../../runtime_errors.js';
 // Server pushes with no request id: re-emitted on `window` as `squirrel:<type>`.
 // Value = how to build the event detail from the message.
 const PUSH_EVENTS = {
+    'phone-link-ready': message => ({ attemptId: message.attemptId }),
     'ai-realtime-event': message => ({ session_id: message.session_id, event: message.event }),
     'surface-presence': (message) => ({
         event: message.event || null,
@@ -91,6 +92,9 @@ const RESPONSE_PAYLOADS = {
     }),
     'remote-control-response': (message) => ({
         session: message.session,
+        localSession: message.localSession,
+        users: message.users,
+        localSession: message.localSession,
         sessions: message.sessions,
         delivered: message.delivered
     }),
@@ -112,11 +116,16 @@ const RESPONSE_PAYLOADS = {
         restored_atome_ids: message.restored_atome_ids
     }),
     'auth-response': (message) => ({
+        attemptId: message.attemptId,
+        expiresAt: message.expiresAt,
+        challenge: message.challenge,
+        session: message.session,
+        pending: message.pending,
+        approved: message.approved,
         user: message.user,
         token: message.token,
         userId: message.userId,
-        code: message.code,
-        otpBypassed: message.otpBypassed,
+
         context: message.context
     }),
     'atome-response': (message) => ({
@@ -220,7 +229,7 @@ export const messageHandlerMixin = {
             message = JSON.parse(data);
         } catch (error) {
             // A malformed frame used to vanish without a trace in a transport layer.
-            reportRuntimeError(error, 'adole:ws:parse', { preview: String(data).slice(0, 120) });
+            reportRuntimeError(new Error('websocket_frame_invalid'), 'adole:ws:parse', { length: String(data).length });
             return;
         }
 

@@ -3,7 +3,7 @@ import {
     eventDeletedPropertyKeys,
     eventPropertyPatch,
     eventTouchedPropertyKeys
-} from '../database/adole_event_contract.js';
+} from '../atome/src/shared/adole_event_contract.js';
 import { classifyHistoryEvent, HISTORY_EVENT_CLASS } from '../database/adole_history_transactions.js';
 import { commitAtomeEvents } from './atomeRoutes.orm.js';
 import { wsResponse, wsErrorResponse, requestIdOf } from './wsResponse.js';

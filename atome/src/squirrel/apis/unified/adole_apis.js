@@ -1,9 +1,5 @@
 import auth from './adole_api/auth.js';
 import {
-  requestPhoneVerification,
-  verifyPhoneVerification
-} from './adole_api/auth_phone_verification.js';
-import {
   create_project,
   list_projects,
   delete_project,
@@ -54,10 +50,9 @@ import { getSessionState, waitForAuthCheck } from './adole_api/session.js';
 import { FastifyAdapter } from './adole.js';
 
 // Kick off auth bootstrap immediately so UI waits on a single source of truth.
-try {
-  auth.tryAutoLogin();
-} catch (error) {
-}
+void auth.tryAutoLogin().catch(error => {
+  globalThis.window?.dispatchEvent(new CustomEvent('squirrel:phone-login-error', { detail: { code: error.message || 'local_authorization_unavailable' } }));
+});
 
 const isAnonymousMode = () => getSessionState().mode === 'anonymous';
 const getAnonymousIdentity = () => {
@@ -68,18 +63,16 @@ const getAnonymousIdentity = () => {
 
 export const AdoleAPI = {
   auth: {
-    create: auth.register,
-    bootstrap: auth.bootstrap,
-    login: auth.login,
+    startPhoneLogin: auth.startPhoneLogin,
+    resumePhoneLogin: auth.resumePhoneLogin,
+    completePhoneLogin: auth.completePhoneLogin,
+    cancelPhoneLogin: auth.cancelPhoneLogin,
+    ensureLocalSession: auth.ensureLocalSession,
     logout: auth.logout,
     current: auth.current,
-    delete: auth.delete,
-    changePassword: auth.changePassword,
     deleteAccount: auth.deleteAccount,
+    changePhone: auth.changePhone,
     refreshToken: auth.refreshToken,
-    lookupPhone: auth.lookupPhone,
-    requestPhoneVerification,
-    verifyPhoneVerification,
     getCurrentInfo: auth.getCurrentInfo,
     setCurrentState: auth.setCurrentState,
     tryAutoLogin: auth.tryAutoLogin,
@@ -210,6 +203,8 @@ export const AdoleAPI = {
     startGuest: auth.startGuest,
     leaveGuest: auth.leaveGuest,
     adoptGuestWorkspace: auth.adoptGuestWorkspace,
+    guestAdoptionStatus: auth.guestAdoptionStatus,
+    declineGuestAdoption: auth.declineGuestAdoption,
     provisionAccount: auth.provisionAccount,
     signalAuthComplete: auth.signalAuthComplete,
     waitForAuthCheck: waitForAuthCheck

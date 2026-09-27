@@ -16,40 +16,38 @@ import {
     waitForAuthCheck
 } from './session.js';
 import { adapters, normalizePhone, getPrimaryBackend, getSecondaryBackend, hasToken, hasAuthenticatedToken } from './auth_core.js';
-import { loginBackend, meBackend, ensureBackendAvailability } from './auth_backends.js';
-import {
-    loadFastifyLoginCache,
-    ensureFastifyToken,
-    markFastifyAuthValid
-} from './auth_fastify_token.js';
+import { ensureFastifyToken } from './auth_fastify_token.js';
+import { restoreLocalAuthorization, lockLocalAuthorization, phoneLinkClient, initializePhoneLinks, setBrowserWorkspaceIdentity } from './auth_methods_login.js';
 import { transferGuestWorkspace } from './auth_workspace.js';
 import { requireAuth, normalizeSessionUser } from './auth_state.js';
 import { auth } from './auth.js';
 import { isTauriRuntime } from './runtime.js';
 
-const isAuthoritativeFastifySessionRefusal = (result) => {
-    const error = String(result?.error || result?.raw?.error || '').trim().toLowerCase();
-    return result?.raw?.authenticated === false
-        || result?.raw?.status === 401
-        || error === 'remote_account_not_provisioned';
-};
-
 export const sessionAccountMethods = {
     async logout() {
         if (isTauriRuntime()) {
-            try { await TauriAdapter?.sync?.clearRemote?.(); } catch (_) { }
+            const stopped = await TauriAdapter.sync.clearRemote();
+            if (!stopped?.ok && !stopped?.success) throw new Error(stopped?.error || 'local_sync_stop_failed');
         }
-        await TauriAdapter?.auth?.logout?.();
-        await FastifyAdapter?.auth?.logout?.();
-        TauriAdapter?.clearToken?.();
-        FastifyAdapter?.clearToken?.();
+        await lockLocalAuthorization();
+        const revoked = await phoneLinkClient().revoke();
+        TauriAdapter.clearToken();
+        FastifyAdapter.clearToken();
         clearSessionState();
         clearCurrentProjectCache();
-        resetWorkspaceForNextUser({ clearStorage: true, reason: 'logout' });
-        return {
-            tauri: { success: true },
-            fastify: { success: true }
-        };
+        resetWorkspaceForNextUser({ clearStorage: false, reason: 'logout' });
+        return { ok: true, revocationPending: revoked.revocationPending === true,
+            tauri: { success: true }, fastify: { success: revoked.revocationPending !== true } };
+    },
+
+    async changePhone({ phone, confirmed = false } = {}) {
+        return phoneLinkClient().changePhone(normalizePhone(phone), confirmed);
+    },
+
+    async deleteAccount({ confirmed = false } = {}) {
+        const result = await phoneLinkClient().deleteAccount(confirmed);
+        await auth.logout();
+        return result;
     },
 
     async current() {
@@ -80,106 +78,30 @@ export const sessionAccountMethods = {
     },
 
     async tryAutoLogin() {
-        const stored = loadSessionState();
-        if (!stored || stored.mode === 'logged_out') {
-            clearSessionState();
-            return { authenticated: false, user: null };
+        // Plaintext credentials from previous releases are removed, never reused.
+        for (const key of ['fastify_login_cache_v1', 'auth_token', 'local_auth_token', 'cloud_auth_token']) {
+            globalThis.localStorage?.removeItem(key);
+            globalThis.sessionStorage?.removeItem(key);
         }
-
-        const primary = getPrimaryBackend();
-        if (stored.mode === 'authenticated') {
-            const restoredUser = normalizeSessionUser(stored.user);
-            if (!restoredUser) {
-                clearSessionState();
-                return { authenticated: false, user: null };
-            }
-            const prevSession = getSessionState();
-            const prevProjectCache = getCurrentProjectCache();
-            const storedBackend = stored.backend || primary;
-            const requiresPrimaryMigration = storedBackend !== primary;
-            const allowSecondarySession = !isTauriRuntime();
-            const restoreSession = async (user, backend = primary) => {
-                setSessionState({
-                    mode: 'authenticated',
-                    user,
-                    backend
-                });
-                await ensureFastifyToken();
-                return { authenticated: true, user };
-            };
-
-            // Optimistically restore session to avoid spurious logout on startup.
-            setSessionState({
-                mode: 'authenticated',
-                user: restoredUser,
-                backend: primary
-            }, { silent: true });
-
-            const me = await meBackend(primary);
-            if (me.ok && me.user) {
-                return await restoreSession(me.user, primary);
-            }
-
-            const secondary = getSecondaryBackend();
-            if (allowSecondarySession && secondary !== primary) {
-                const secondaryMe = await meBackend(secondary);
-                if (secondaryMe.ok && secondaryMe.user) {
-                    return await restoreSession(secondaryMe.user, secondary);
-                }
-            }
-
-            const cached = loadFastifyLoginCache();
-            const cachedMatchesStored = cached?.phone && (!restoredUser.phone || normalizePhone(restoredUser.phone) === cached.phone);
-            if (cachedMatchesStored) {
-                const relogin = await loginBackend(primary, {
-                    phone: cached.phone,
-                    password: cached.password
-                });
-                if (relogin.ok && relogin.user) {
-                    return await restoreSession(relogin.user, primary);
-                }
-                if (allowSecondarySession && secondary !== primary) {
-                    const secondaryRelogin = await loginBackend(secondary, {
-                        phone: cached.phone,
-                        password: cached.password
-                    });
-                    if (secondaryRelogin.ok && secondaryRelogin.user) {
-                        return await restoreSession(secondaryRelogin.user, secondary);
-                    }
-                }
-            }
-
-            // Fastify cookie auth is authoritative for browser refreshes. Clear
-            // only when the server explicitly refuses the restored session.
-            const primaryRefusedAuth = isAuthoritativeFastifySessionRefusal(me);
-            if (primary === 'fastify' && primaryRefusedAuth) {
-                FastifyAdapter?.clearToken?.();
-                clearSessionState();
-                return { authenticated: false, user: null };
-            }
-            if (requiresPrimaryMigration || (primary !== 'fastify' && !hasToken(primary))) {
-                clearSessionState();
-                return { authenticated: false, user: null };
-            }
-
+        const stored = loadSessionState();
+        let restored = { authenticated: false };
+        let localError;
+        try { restored = await restoreLocalAuthorization(); }
+        catch (error) {
+            clearSessionState();
+            localError = error?.message || 'local_authorization_unavailable';
+        }
+        // A missing or unusable old grant must not prevent a fresh SMS login.
+        try { await initializePhoneLinks(); }
+        catch (error) {
+            globalThis.window?.dispatchEvent(new CustomEvent('squirrel:phone-login-error', { detail: { code: error.message } }));
+        }
+        if (restored.authenticated || getSessionState().mode === 'authenticated') {
+            void ensureFastifyToken();
             return { authenticated: true, user: getSessionState().user };
         }
-
-        if (stored.mode === 'anonymous') {
-            const guest = getGuestWorkspace();
-            const anonUser = normalizeSessionUser(guest?.user || stored.user);
-            if (anonUser?.id) {
-                setSessionState({
-                    mode: 'anonymous',
-                    user: anonUser,
-                    backend: 'local_guest'
-                });
-                return { authenticated: true, user: anonUser, anonymous: true };
-            }
-            clearSessionState();
-            return { authenticated: false, user: null, anonymous: false };
-        }
-
+        if (localError) return { authenticated: false, error: localError };
+        if (stored?.mode === 'anonymous') return auth.startGuest({ force: true });
         clearSessionState();
         return { authenticated: false, user: null };
     },
@@ -205,34 +127,33 @@ export const sessionAccountMethods = {
             const native = await adapters.tauri.auth.startGuest({ guestId: user.id });
             if (!native?.ok && !native?.success) return { ok: false, reason: native?.error || 'local_guest_start_failed', user: null };
         }
+        await setBrowserWorkspaceIdentity(user);
         setSessionState({ mode: 'anonymous', user, backend: 'local_guest' });
         return { ok: true, user, source: 'local_guest' };
-    },
-
-    async provisionAccount({ operationId, expiresAt, verifiedServerFingerprint, username, phone, password } = {}) {
-        if (!operationId || !expiresAt || !verifiedServerFingerprint) {
-            return { ok: false, error: 'remote_identity_unverified' };
-        }
-        const adapter = adapters.fastify;
-        if (!adapter?.auth?.provisionAccount) return { ok: false, error: 'provisioning_unavailable' };
-        const result = await adapter.auth.provisionAccount({
-            operationId,
-            expiresAt,
-            verifiedServerFingerprint,
-            username,
-            phone,
-            password
-        });
-        const ok = Boolean(result?.ok || result?.success);
-        return { ok, success: ok, ...result };
     },
 
     async leaveGuest({ discard = false } = {}) {
         if (getSessionState().mode !== 'anonymous') return { ok: false, error: 'guest_not_active' };
         if (isTauriRuntime() && adapters.tauri?.auth?.leaveGuest) await adapters.tauri.auth.leaveGuest();
         clearSessionState();
+        await setBrowserWorkspaceIdentity(null);
         if (discard) clearGuestWorkspace();
         return { ok: true, retained: !discard };
+    },
+
+    guestAdoptionStatus() {
+        const guest = getGuestWorkspace();
+        const account = getSessionState();
+        if (account.mode !== 'authenticated' || !guest?.user?.id || guest.adoptionDecision === 'declined') return null;
+        if (guest.adoptionAccountId && guest.adoptionAccountId !== account.user.id) return null;
+        return { pending: guest.adoptionDecision === 'accepted', prompt: !guest.adoptionDecision };
+    },
+
+    declineGuestAdoption() {
+        const guest = getGuestWorkspace();
+        if (guest?.adoptionDecision === 'accepted') return { ok: false, error: 'guest_adoption_in_progress' };
+        if (guest) setGuestWorkspace({ ...guest, adoptionDecision: 'declined' });
+        return { ok: true, retained: true };
     },
 
     async adoptGuestWorkspace({ confirmed = false, operationId = null } = {}) {
@@ -242,10 +163,11 @@ export const sessionAccountMethods = {
         if (state.mode !== 'authenticated' || !state.user?.id || !guest?.user?.id) {
             return { ok: false, error: 'authenticated_account_required' };
         }
+        if (guest.adoptionAccountId && guest.adoptionAccountId !== state.user.id) return { ok: false, error: 'guest_adoption_account_mismatch' };
         const persistedOperationId = guest.adoptionOperationId || null;
         const resolvedOperationId = operationId || persistedOperationId || globalThis.crypto?.randomUUID?.();
         if (!resolvedOperationId) return { ok: false, error: 'secure_random_unavailable' };
-        setGuestWorkspace({ ...guest, adoptionOperationId: resolvedOperationId });
+        setGuestWorkspace({ ...guest, adoptionOperationId: resolvedOperationId, adoptionDecision: 'accepted', adoptionAccountId: state.user.id });
         const result = await transferGuestWorkspace(guest.user.id, state.user.id, {
             operationId: resolvedOperationId
         });
@@ -265,15 +187,6 @@ export const sessionAccountMethods = {
     clearFastifyToken() {
         FastifyAdapter?.clearToken?.();
         return { ok: true };
-    },
-
-    async lookupPhone(phone) {
-        const cleanPhone = normalizePhone(phone);
-        if (!cleanPhone) return { ok: false, success: false, error: 'missing_phone' };
-        const backend = getPrimaryBackend();
-        const adapter = adapters[backend];
-        if (!adapter?.auth?.lookupPhone) return { ok: false, success: false, error: 'phone_lookup_unavailable', backend };
-        return adapter.auth.lookupPhone({ phone: cleanPhone });
     },
 
     getCurrentInfo() {
@@ -298,73 +211,8 @@ export const sessionAccountMethods = {
 
     requireAuth,
 
-    async changePassword({ currentPassword, newPassword }) {
-        const authCheck = requireAuth('change_password');
-        if (!authCheck.authenticated) return { ok: false, error: authCheck.error };
-        const primary = getPrimaryBackend();
-        const adapter = adapters[primary];
-        if (!adapter?.auth?.changePassword) return { ok: false, error: 'change_password_unavailable' };
-        return adapter.auth.changePassword({ currentPassword, newPassword });
-    },
-
-    async deleteAccount({ password }) {
-        const authCheck = requireAuth('delete_account');
-        const results = {
-            tauri: { success: false, data: null, error: null },
-            fastify: { success: false, data: null, error: null }
-        };
-        if (!authCheck.authenticated) {
-            results.tauri.error = authCheck.error;
-            results.fastify.error = authCheck.error;
-            return results;
-        }
-
-        const availability = await ensureBackendAvailability();
-        const primary = getPrimaryBackend();
-        const secondary = getSecondaryBackend();
-
-        const primaryAdapter = adapters[primary];
-        if (!primaryAdapter?.auth?.deleteAccount) {
-            results[primary] = { success: false, data: null, error: 'delete_account_unavailable' };
-        } else {
-            const res = await primaryAdapter.auth.deleteAccount({ password });
-            const ok = !!(res?.ok || res?.success);
-            results[primary] = { success: ok, data: res, error: ok ? null : (res?.error || 'delete_failed') };
-        }
-
-        if (availability[secondary]) {
-            const secondaryAdapter = adapters[secondary];
-            if (secondaryAdapter?.auth?.deleteAccount) {
-                const res = await secondaryAdapter.auth.deleteAccount({ password });
-                const ok = !!(res?.ok || res?.success);
-                results[secondary] = { success: ok, data: res, error: ok ? null : (res?.error || 'delete_failed') };
-            } else {
-                results[secondary] = { success: false, data: null, error: 'delete_account_unavailable' };
-            }
-        } else {
-            results[secondary] = { success: false, data: null, error: 'secondary_unavailable' };
-        }
-
-        if (results.tauri.success || results.fastify.success) {
-            await auth.logout();
-        }
-
-        return results;
-    },
-
-    // Legacy alias used by some UI flows
-    async delete(phone, password) {
-        if (!password) {
-            return {
-                tauri: { success: false, data: null, error: 'missing_password' },
-                fastify: { success: false, data: null, error: 'missing_password' }
-            };
-        }
-        return auth.deleteAccount({ password });
-    },
-
     async refreshToken() {
-        return { ok: true, success: true };
+        return ensureFastifyToken();
     },
 
     // Compatibility stubs for legacy sync/machine APIs.

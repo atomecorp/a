@@ -12,7 +12,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 const ROOT = process.cwd();
-const BUDGET = 127;
+const BUDGET = 106;
 const MAPS = ['maps/CODEMAP.md', 'maps/API_MAP.md', 'maps/ARCHITECTURE_MAP.md', 'maps/DESIGN_MAP.md'];
 const PATH_IN_BACKTICKS = /`((?:atome|eVe|server|database|scripts|tests|platforms)\/[A-Za-z0-9_./-]+\.(?:js|mjs|rs|swift|css|html|sql))`/g;
 

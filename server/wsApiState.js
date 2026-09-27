@@ -75,6 +75,10 @@ export function attachWsApiClientToUser(connection, userId) {
 }
 
 export function detachWsApiClient(connection) {
+    if (connection) {
+        connection._wsApiSessionId = null;
+        connection._wsApiDeviceClaims = null;
+    }
     const userId = connection && connection._wsApiUserId;
     if (!userId) return;
     detachWsApiSurface(connection);

@@ -17,7 +17,7 @@ extension WebViewManager {
         return json
     }
 
-    private static func sendNativeInvokeResponse(requestId: String,
+    static func sendNativeInvokeResponse(requestId: String,
                                                  payload: [String: Any]? = nil,
                                                  error: String? = nil) {
         print("[NATIVE_INVOKE] resolve request=\(requestId) success=\(error == nil) error=\(error ?? "<none>") payload_keys=\(Array((payload ?? [:]).keys).sorted())")
@@ -32,6 +32,16 @@ extension WebViewManager {
                                                   command: String,
                                                   payload: [String: Any]) {
         guard !requestId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        if command == "auth_link_take" {
+            sendNativeInvokeResponse(requestId: requestId, payload: AuthLinkInbox.take())
+            return
+        }
+        if command == "auth_device_key" {
+            AuthDeviceKey.handle(payload) { response, error in
+                sendNativeInvokeResponse(requestId: requestId, payload: response, error: error)
+            }
+            return
+        }
         guard let handler = nativeInvokeHandler else {
             print("[NATIVE_INVOKE] no_handler request=\(requestId) command=\(command)")
             sendNativeInvokeResponse(requestId: requestId, error: "ios_app_native_invoke_handler_unavailable")
@@ -76,7 +86,7 @@ extension WebViewManager {
             }
             webView.evaluateJavaScript(js) { result, error in
                 if let error = error {
-                    let jsSnippet = js.count > 200 ? String(js.prefix(200)) + "..." : js
+                    let jsSnippet = label.hasPrefix("nativeInvoke.") ? "[private bridge response]" : (js.count > 200 ? String(js.prefix(200)) + "..." : js)
                     shared.log.error("evaluateJS failed label=\(label, privacy: .public) error=\(error.localizedDescription, privacy: .public) js=\(jsSnippet, privacy: .public)")
                 }
                 completion?(result, error)

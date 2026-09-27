@@ -1,4 +1,5 @@
 mod android_assets;
+mod auth_device;
 mod audio_engine;
 mod bevy_backend;
 mod dev_logging;
@@ -194,6 +195,7 @@ pub fn run() {
         .plugin(tauri_plugin_clipboard_manager::init())
         .on_window_event(viewport_runtime::publish_native_viewport)
         .invoke_handler(tauri::generate_handler![
+            auth_device::auth_device_key,
             dev_logging::log_from_webview,
             native_contacts::macos_contacts_snapshot,
             native_midi::start_native_midi,

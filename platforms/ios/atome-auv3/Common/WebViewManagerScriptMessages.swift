@@ -158,6 +158,16 @@ extension WebViewManager {
                         let requestId = body["requestId"] as? String ?? ""
                         let command = body["command"] as? String ?? ""
                         let payload = body["payload"] as? [String: Any] ?? [:]
+                        if command == "auth_device_key" || command == "auth_link_take" {
+                            let source = message.frameInfo.request.url
+                            let bundledPage = source?.scheme == "atome" && source?.host == nil
+                                && source?.path == "/src/index.html"
+                            guard message.frameInfo.isMainFrame && bundledPage else {
+                                WebViewManager.sendNativeInvokeResponse(requestId: requestId,
+                                    error: "auth_device_origin_invalid")
+                                return
+                            }
+                        }
                         print("[NATIVE_INVOKE] recv request=\(requestId) command=\(command) payload_keys=\(Array(payload.keys).sorted())")
                         WebViewManager.handleNativeInvokeMessage(requestId: requestId, command: command, payload: payload)
                         return

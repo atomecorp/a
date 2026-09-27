@@ -520,3 +520,70 @@ GROUP BY a.atome_id;
 -- Pas de table users séparée: les users sont des atomes avec atome_type='user'
 -- Utilisez la vue users_view pour la compatibilité
 -- ============================================================================
+-- Authentication proofs are private server state, never Atome events or snapshots.
+CREATE TABLE IF NOT EXISTS auth_link_attempts (
+    attempt_id TEXT PRIMARY KEY,
+    phone_sealed TEXT NOT NULL,
+    phone_index TEXT NOT NULL,
+    candidate_id TEXT,
+    key_id TEXT NOT NULL,
+    public_key TEXT NOT NULL,
+    client_nonce TEXT NOT NULL,
+    token_hash TEXT NOT NULL,
+    state TEXT NOT NULL,
+    created_ms INTEGER NOT NULL,
+    expires_ms INTEGER NOT NULL,
+    approved_by TEXT
+);
+CREATE INDEX IF NOT EXISTS auth_link_attempt_expiry ON auth_link_attempts(expires_ms);
+CREATE TABLE IF NOT EXISTS auth_device_keys (
+    key_id TEXT PRIMARY KEY,
+    principal_id TEXT NOT NULL,
+    public_key TEXT NOT NULL,
+    enrolled_ms INTEGER NOT NULL,
+    restricted_until_ms INTEGER NOT NULL,
+    revoked_ms INTEGER
+);
+CREATE INDEX IF NOT EXISTS auth_device_principal ON auth_device_keys(principal_id);
+CREATE TABLE IF NOT EXISTS auth_device_sessions (
+    session_id TEXT PRIMARY KEY,
+    principal_id TEXT NOT NULL,
+    key_id TEXT NOT NULL,
+    generation INTEGER NOT NULL DEFAULT 0,
+    created_ms INTEGER NOT NULL,
+    idle_expires_ms INTEGER NOT NULL,
+    expires_ms INTEGER NOT NULL,
+    revoked_ms INTEGER
+);
+CREATE INDEX IF NOT EXISTS auth_session_principal ON auth_device_sessions(principal_id);
+CREATE TABLE IF NOT EXISTS auth_device_challenges (
+    challenge_id TEXT PRIMARY KEY,
+    purpose TEXT NOT NULL,
+    reference_id TEXT NOT NULL,
+    key_id TEXT NOT NULL,
+    nonce TEXT NOT NULL,
+    issued_ms INTEGER NOT NULL,
+    expires_ms INTEGER NOT NULL,
+    consumed_ms INTEGER
+);
+CREATE INDEX IF NOT EXISTS auth_challenge_expiry ON auth_device_challenges(expires_ms);
+CREATE TABLE IF NOT EXISTS auth_send_limits (
+    bucket TEXT PRIMARY KEY,
+    count INTEGER NOT NULL,
+    reset_ms INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS auth_security_events (
+    event_id TEXT PRIMARY KEY,
+    principal_id TEXT,
+    event_type TEXT NOT NULL,
+    reference_id TEXT,
+    created_ms INTEGER NOT NULL
+);
+
+-- A number change reuses the SMS attempt, but can only be initiated by a
+-- recognized device proving a recent, explicit change-phone intention.
+CREATE TABLE IF NOT EXISTS auth_phone_changes (
+    attempt_id TEXT PRIMARY KEY REFERENCES auth_link_attempts(attempt_id),
+    principal_id TEXT NOT NULL,
+    session_id TEXT NOT NULL
+);

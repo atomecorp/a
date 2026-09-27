@@ -35,6 +35,7 @@ final class FastifySyncClient {
     private var session: URLSession?
     private var syncTask: URLSessionWebSocketTask?
     private var configuration: Configuration?
+    private var remoteAccessToken = ""
     private var activePrincipalId = ""
     private var subscribedStreams: Set<String> = []
     private var connecting = false
@@ -282,7 +283,9 @@ final class FastifySyncClient {
         let defaults = UserDefaults(suiteName: SharedBus.appGroupSuite) ?? .standard
         let base = firstValue(defaults, keys: ["SQUIRREL_FASTIFY_URL", "SQUIRREL_TAURI_FASTIFY_URL"])
         let explicitSync = firstValue(defaults, keys: ["SQUIRREL_FASTIFY_WS_SYNC_URL"])
-        let token = firstValue(defaults, keys: ["SQUIRREL_FASTIFY_TOKEN", "SQUIRREL_FASTIFY_AUTH_TOKEN"])
+        defaults.removeObject(forKey: "SQUIRREL_FASTIFY_TOKEN")
+        defaults.removeObject(forKey: "SQUIRREL_FASTIFY_AUTH_TOKEN")
+        let token = remoteAccessToken
         let principal = firstValue(defaults, keys: ["SQUIRREL_FASTIFY_PRINCIPAL_ID"])
         guard !token.isEmpty, !principal.isEmpty else { return nil }
         let wsBase = base.replacingOccurrences(of: "https://", with: "wss://")
@@ -399,7 +402,8 @@ final class FastifySyncClient {
         let keys = ["SQUIRREL_FASTIFY_PRINCIPAL_ID", "SQUIRREL_FASTIFY_TOKEN", "SQUIRREL_FASTIFY_URL",
                     "SQUIRREL_SYNC_ENVIRONMENT_FINGERPRINT", "SQUIRREL_FASTIFY_LOCAL_PRINCIPAL_ID"]
         if message["action"] as? String == "clear-remote" {
-            keys.forEach { defaults.removeObject(forKey: $0) }; shared.disconnect()
+            keys.forEach { defaults.removeObject(forKey: $0) }
+            shared.queue.async { shared.remoteAccessToken = ""; shared.disconnectLocked() }
             return ["type":"sync-response", "requestId":requestId, "success":true, "configured":false]
         }
         let fields: [Any?] = [message["remote_user_id"] ?? message["remoteUserId"],
@@ -409,8 +413,9 @@ final class FastifySyncClient {
         guard values.prefix(3).allSatisfy({ !$0.isEmpty }) else {
             return ["type":"sync-response", "requestId":requestId, "success":false, "error":"Invalid remote sync configuration"]
         }
-        zip(keys, values).forEach { defaults.set($0.1, forKey: $0.0) }
-        shared.reloadConfiguration()
+        zip(keys, values).filter { $0.0 != "SQUIRREL_FASTIFY_TOKEN" }.forEach { defaults.set($0.1, forKey: $0.0) }
+        defaults.removeObject(forKey: "SQUIRREL_FASTIFY_TOKEN")
+        shared.queue.async { shared.remoteAccessToken = values[1]; shared.reloadConfiguration() }
         return ["type":"sync-response", "requestId":requestId, "success":true, "configured":true]
     }
 

@@ -1,5 +1,7 @@
 # Atome / eVe API Map
 
+2026-09-27 Phone-link application contract (partial runtime acceptance): AdoleAPI.auth exposes startPhoneLogin, resumePhoneLogin, completePhoneLogin, cancelPhoneLogin, ensureLocalSession, changePhone and deleteAccount. /ws/api auth uses phone-link start/challenge/consume/approve/resume/cancel, session challenge/renew/local-bind/logout/logout-all/revoke-device, phone-change-start and delete-account. Native local-link and local-session actions bind remote proofs and unlock or lock persistent local grants. Unsupported password/OTP actions return auth_protocol_upgrade_required. GET /auth/v/:attemptId is non-consuming; the iOS association route declares that path. Browser canonical commits persist locally before outbox synchronization. Full protocol/runtime acceptance remains open; see todo/auth_phone_link_implementation.md.
+
 2026-09-27 Panel quick mode adds one resolver and no new public surface. `eVe/intuition/tools/core/panel_toggle_rule.js#resolveToolPanelSurface({ key, toolId, declaredSurface })` sits beside the existing `readCommandPanelSurface` and answers with one resolution every surface shares — the taxonomy key first, else the surface a virtual rail declares on its own case, else `PANEL_SURFACE_DEFINITIONS`, else `buildPanelRuntimeConfigByToolId()` — so the ribbon, the contextual rail, the armed tool rail and Mystic never grow a second table. Nothing else is exported: the ribbon's `invokeToolItem`, `panelSurfaceForItem`, `itemOpensPanel`, `panelRevealHandlers` and the panel runtime's `decoratePanelSweepTree` stay module-private, and the panel tree contract gains no field — a control that already declares `activate` also answers the declared `palette_choose` / `hover` / `hover_leave`, and the hovered control's ring rides the existing `style.shadow`. The quick-mode release is a one-shot: `palette_choose` applies the control, then closes the surface (guarded by the mount, so it never closes twice), exactly like a palette leaf — while a plain click inside an already-open panel answers `activate` alone and keeps it open. No new event and no new node kind: `palette_slide_open` keeps its idempotent reveal contract (it opens a surface, it never toggles one shut).
 
 2026-09-27 Palette quick mode hit-testing adds no public API. `mountOrUpdate` accepts an internal optional `hitTree` beside `tree` — the mounted surface keeps the palette motion while `state.trees` carries the final-geometry tree the hit-test reads — and the motion update contract accepts an optional `hitPosition` beside `position`: `state.sourceTrees` and the projected records keep the animated position. No new event: `palette_slide_open` remains the declared handler and `palette_choose` still carries no drag-selection field.
@@ -887,13 +889,13 @@ Boundary status: Open application/data API. eVe tools may consume it, but must n
 
 Known constraints: `atome/src/squirrel/apis/unified/adole.js` is a large legacy surface and requires targeted verification before mutation.
 
-Authentication bootstrap: `AdoleAPI.auth.bootstrap(phone, password, username, visibility)` is the atomic first-auth contract. Existing-phone attempts must verify the password and return a real authenticated token/session; unknown-phone attempts may create the account. The unified result exposes legacy per-backend fields plus top-level `ok`, `user`, `token`, and `backend` after a successful authenticated login or creation. UI code must not emulate this by calling `auth.login` followed by `auth.create`, and must not add its own post-bootstrap session gate beyond the canonical bootstrap success result and auth/session events owned by Atome auth state. The eVe login submit payload may carry internal `onAuthenticating` and `onAuthenticated` visual callbacks; `user_home_panel_runtime.js` is the only owner allowed to call them. `onAuthenticating` runs immediately after local password-form validation and before `bootstrap`, with neutral wait text only; `onAuthenticated` runs only after `bootstrap` succeeds and before profile/project/dashboard/menu work begins, and it must not be awaited before the workspace flow starts.
+Authentication: AdoleAPI.auth.startPhoneLogin begins a device-bound SMS-link attempt. The existing session facade installs the proven remote identity and independent native/browser local authorization. The password bootstrap contract and its visual callbacks are retired.
 
-Guest workspace entry: `AdoleAPI.security.startGuest({ force: true })` creates or resumes the persistent opaque local guest principal for this installation. It does not bootstrap a Fastify account, credential, or reusable password verifier. Dashboard boot, main-handle toggle, and Mystic access remain local until an authenticated account explicitly confirms adoption. Account credentials use the separate Argon2id contract in `todo/cleanup_architecture/argon2id_password_hash_migration.md`.
+Guest workspace entry: `AdoleAPI.security.startGuest({ force: true })` creates or resumes the persistent opaque local guest principal for this installation. It does not bootstrap a Fastify account, credential, or reusable password verifier. Dashboard boot, main-handle toggle, and Mystic access remain local until an authenticated account explicitly confirms adoption. Login passwords are no longer part of this contract.
 
-Pre-auth account lookup: `AdoleAPI.auth.lookupPhone(phone)` is the browser-facing account-presence contract used before OTP. It normalizes the phone and calls only the active auth backend adapter resolved by `getPrimaryBackend()`; it must not force Fastify in Tauri mode and must not fall back to a secondary backend. A successful response with a user means the login UI skips OTP and asks for the password. An explicit `User not found` response means the login UI may request OTP for new-account setup. Any other response is a hard failure and must not request OTP.
+Pre-auth account lookup is not exposed. Phone-link start returns the same public shape for new and existing accounts.
 
-Pre-auth phone verification: `AdoleAPI.auth.requestPhoneVerification(phone, context, { exposeForTest })` and `AdoleAPI.auth.verifyPhoneVerification(phone, code, context)` are the browser-facing pre-auth OTP contract for login demos, account creation, and new-machine checks. The implementation lives in `atome/src/squirrel/apis/unified/adole_api/auth_phone_verification.js`, routes through the single active Adole WebSocket auth backend, and must not fall back to a secondary backend or add HTTP endpoints. Test/demo mode may expose `code` when the backend explicitly returns it. A production deployment may temporarily set `SQUIRREL_AUTH_ENROLLMENT_OTP_DISPLAY=1`; this authorizes `code` only for the `enrollment` purpose and leaves change, removal, and recovery closed. Local test mode launched through `./run.sh --test` exports `SQUIRREL_AUTH_OTP_BYPASS=1` with `NODE_ENV=test`; outside production the backend may answer with `otpBypassed: true`, and `adole_websocket_message.js` plus `auth_phone_verification.js` preserve that field so the login shell skips only the OTP entry step before continuing to password/bootstrap. Production never enables OTP bypass.
+Pre-auth phone verification uses only the device-bound link protocol in `atome/src/squirrel/apis/unified/adole_api/auth_methods_login.js`. Plain OTP exposure, enrollment display and bypass paths are retired.
 
 Atome mutation rule: `AdoleAPI.atomes.create` and `AdoleAPI.atomes.alter` are public compatibility method names, but their framework implementation must emit canonical event commits through `adapter.atome.commit`. Direct adapter-level `atome.create` / `atome.alter` calls are legacy WebSocket protocol adapters only and must not be used as durable framework write paths.
 
@@ -905,7 +907,7 @@ Current project restoration owner: `atome/src/squirrel/apis/unified/adole_api/se
 
 Ownership: Atome open server layer.
 
-Primary sources: `server/server.js`, `server/auth.js`, `server/atomeRoutes.orm.js`, `server/wsAtomeOperations.js`, `server/wsApiIdentity.js`, `server/wsSyncSecurity.js`, `server/atomeSyncRuntime.js`, `server/mailRoutes.js`, `server/sharing.js`, `server/userFiles.js`, `server/visio.js`, `server/wsApiState.js`, `server/wsSend.js`, `server/serverIdentity.js`.
+Primary sources: `server/server.js`, `server/auth_users.js`, `server/atomeRoutes.orm.js`, `server/wsAtomeOperations.js`, `server/wsApiIdentity.js`, `server/wsSyncSecurity.js`, `server/atomeSyncRuntime.js`, `server/mailRoutes.js`, `server/sharing.js`, `server/userFiles.js`, `server/visio.js`, `server/wsApiState.js`, `server/wsSend.js`, `server/serverIdentity.js`.
 
 Verified route families:
 
@@ -925,26 +927,9 @@ Boundary status: Open server infrastructure. Route names containing `eve` curren
 
 Principal identity contract: `/ws/api` authentication returns only opaque `user.id` / `user.user_id` principals. `principal_phone_credentials` is the private, active-phone registry; `principal_identity_aliases` resolves legacy principals solely for immutable history; `principal_identity_migrations` is the resumable migration journal. Phone values are neither Atome particles nor public projections or JWT claims.
 
-Phone verification WebSocket actions: `/ws/api` auth messages `request-phone-verification`, `verify-phone-verification`, `change-phone`, and `remove-phone` own phone credential enrollment, change, and removal. Verification requires the explicit `enrollment`, `change`, or `removal` purpose; change/removal require the already attached authenticated principal, revoke affected refresh sessions, and never synthesize a user from a phone lookup. `server/auth_otp.js` owns generation, TTL storage, delivery selection, rate limiting, and connection-scoped enrollment proof. Unknown-phone `bootstrap` consumes that proof or returns `phone_verification_required`; existing-phone password login is unchanged. No `/api/auth/request-phone-verification` or `/api/auth/verify-phone-verification` REST route is part of this contract. The local-only `SQUIRREL_AUTH_OTP_BYPASS=1` route remains request-validated and rate-limited before it returns `otpBypassed: true`, and it is never active in production.
+Phone verification WebSocket actions use the phone-link attempt protocol. A number change additionally requires fresh device proof tied to the exact new number and explicit confirmation, then consumption of its SMS link. Account deletion uses a separate fresh purpose-bound proof.
 
-SMS infrastructure boundary: eVe/Atome clients continue to use only typed `/ws/api`
-authentication actions. The server-owned SMS adapter is the sole permitted boundary to
-the selected OVHcloud SMS API. Exactly one restricted OVHcloud SMS account is configured
-per deployment; clients never receive its credentials or select a provider, and provider
-failure must be returned as `otp_delivery_unavailable` without automatic fallback. The only
-temporary exposure exception is enrollment on a deployment explicitly configured with
-`SQUIRREL_AUTH_ENROLLMENT_OTP_DISPLAY=1`; it does not apply to recovery or credential changes.
-No maintained OVHcloud adapter or dependency is present yet; the reusable current seam
-is `sendSMS()` in `server/auth_otp.js`. The incomplete OVHcloud boundary,
-cryptographically secure OTP generation and shared atomic TTL state are tracked by
-`todo/cleanup_architecture/production_sms_provider_boundary.md`.
-
-OTP persistence boundary: OTP challenges belong to one minimal transactional table in
-the existing PostgreSQL authentication infrastructure, never to Atomes or synchronized
-business history. The table stores a protected verifier plus opaque challenge,
-identity/purpose, expiry, attempt and consumption metadata; it never stores the plaintext
-OTP. Verification atomically consumes the challenge. Only the resulting authorized
-device public verification material and required security audit metadata are durable.
+SMS infrastructure boundary: server/auth_sms_ovh.js is the only OVH EU delivery owner. It uses server-only AK/AS/CK configuration, persistent send limits and a twenty-send default daily budget. An uncertain outcome never triggers automatic resend. Auth attempts and proofs use dedicated transactional tables in the existing database owner, outside Atome history. No OTP is exposed or typed. Real provider delivery remains unverified.
 
 Authentication throttling boundary: `/ws/api` authentication and OTP handlers apply
 progressive, purpose-scoped limits across principal, protected phone identity, challenge,
@@ -974,7 +959,7 @@ Tauri local ownership migration: `platforms/desktop-tauri/src/server/local_atome
 
 Sharing API ownership: `server/sharing.js` owns WebSocket message orchestration and route registration, `server/sharingPermissionService.js` owns permission creation/revocation/check/list APIs, and `server/sharingAtomeAccessors.js` owns canonical Atome field reads used by sharing code.
 
-Known constraints: `server/server.js`, `server/auth.js`, and `server/sharing.js` are oversized legacy files. Do not expand them without reduction ownership.
+Known constraints: `server/server.js`, `server/auth_users.js`, and `server/sharing.js` are oversized legacy files. Do not expand them without reduction ownership.
 
 ### Database and Object Persistence API
 

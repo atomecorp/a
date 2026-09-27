@@ -62,82 +62,6 @@ function createWebSocketAdapter(tokenKey, backend = 'tauri') {
         },
 
         auth: {
-            async register(data) {
-                const result = await getWs().send({
-                    type: 'auth',
-                    action: 'register',
-                    username: data.username,
-                    phone: data.phone,
-                    password: data.password,
-                    visibility: data.visibility || 'public', // 'public' (default) or 'private'
-                    optional: data.optional || undefined
-                });
-                const token = result?.token
-                    || result?.data?.token
-                    || result?.data?.data?.token
-                    || result?.result?.token
-                    || result?.data?.result?.token
-                    || null;
-                if (token) {
-                    setToken(tokenKey, token);
-                }
-                return result;
-            },
-            async bootstrap(data) {
-                const result = await getWs().send({
-                    type: 'auth',
-                    action: 'bootstrap',
-                    username: data.username,
-                    phone: data.phone,
-                    password: data.password,
-                    visibility: data.visibility || 'public',
-                    optional: data.optional || undefined
-                });
-                const token = result?.token
-                    || result?.data?.token
-                    || result?.data?.data?.token
-                    || result?.result?.token
-                    || result?.data?.result?.token
-                    || null;
-                if (token) {
-                    setToken(tokenKey, token);
-                }
-                return result;
-            },
-            async login(data) {
-                const result = await getWs().send({
-                    type: 'auth',
-                    action: 'login',
-                    phone: data.phone,
-                    password: data.password
-                });
-                const token = result?.token
-                    || result?.data?.token
-                    || result?.data?.data?.token
-                    || result?.result?.token
-                    || result?.data?.result?.token
-                    || null;
-                if (token) {
-                    setToken(tokenKey, token);
-                }
-                return result;
-            },
-            async provisionAccount(data = {}) {
-                const result = await getWs().send({
-                    type: 'auth',
-                    action: 'account-provision',
-                    intent: 'account_provision',
-                    operation_id: data.operationId || data.operation_id || null,
-                    expires_at: data.expiresAt || data.expires_at || null,
-                    verified_server_fingerprint: data.verifiedServerFingerprint || data.verified_server_fingerprint || null,
-                    username: data.username || null,
-                    phone: data.phone || null,
-                    password: data.password || null
-                });
-                const token = result?.token || result?.data?.token || null;
-                if (token) setToken(tokenKey, token);
-                return result;
-            },
             async startGuest(data = {}) {
                 const result = await getWs().send({
                     type: 'auth',
@@ -151,65 +75,11 @@ function createWebSocketAdapter(tokenKey, backend = 'tauri') {
             async leaveGuest() {
                 return getWs().send({ type: 'auth', action: 'leave-guest' });
             },
-            async logout() {
-                clearToken(tokenKey);
-                await getWs().send({ type: 'auth', action: 'logout' });
-                return { ok: true, success: true };
-            },
             async me() {
                 const token = getToken(tokenKey);
                 return getWs().send({ type: 'auth', action: 'me', token });
-            },
-            async changePassword(data) {
-                const token = getToken(tokenKey);
-                return getWs().send({
-                    type: 'auth',
-                    action: 'change-password',
-                    token,
-                    currentPassword: data.currentPassword,
-                    newPassword: data.newPassword
-                });
-            },
-            async requestPhoneVerification(data = {}) {
-                const purpose = data.purpose || (data.context === 'login_demo' ? 'enrollment' : data.context);
-                return getWs().send({
-                    type: 'auth',
-                    action: 'request-phone-verification',
-                    phone: data.phone,
-                    purpose,
-                    exposeForTest: data.exposeForTest === true
-                });
-            },
-            async verifyPhoneVerification(data = {}) {
-                const purpose = data.purpose || (data.context === 'login_demo' ? 'enrollment' : data.context);
-                return getWs().send({
-                    type: 'auth',
-                    action: 'verify-phone-verification',
-                    phone: data.phone,
-                    code: data.code,
-                    purpose
-                });
-            },
-            async deleteAccount(data) {
-                const token = getToken(tokenKey);
-                return getWs().send({
-                    type: 'auth',
-                    action: 'delete',
-                    token,
-                    password: data.password
-                });
-            },
-            async refreshToken() {
-                return { ok: true, success: true }; // JWT doesn't need refresh for local
-            },
-            async lookupPhone(data) {
-                const phone = data?.phone;
-                return getWs().send({
-                    type: 'auth',
-                    action: 'lookup-phone',
-                    phone
-                });
             }
+
         },
 
         atome: buildAtomeApi({ getWs, tokenKey }),

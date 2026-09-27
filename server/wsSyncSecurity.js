@@ -1,6 +1,7 @@
 import db from '../database/adole.js';
 import { canAccessFile } from './userFiles.js';
 import { resolveWsApiPrincipal } from './wsApiIdentity.js';
+import { validateConnectionDeviceSession } from './auth_session_validation.js';
 import {
     projectAtomeForRead
 } from './atomePropertySecurity.js';
@@ -15,26 +16,30 @@ function requestToken(request) {
     return String(request?.cookies?.access_token || request?.cookies?.token || '').trim();
 }
 
-export function authenticateWsSyncRequest(connection, request) {
+export async function authenticateWsSyncRequest(connection, request) {
     const token = requestToken(request);
     if (!token) return null;
     try {
+        await validateConnectionDeviceSession(connection, token, process.env.JWT_SECRET);
         return resolveWsApiPrincipal(connection, { token }, { registerClient: false });
     } catch (_) {
         return null;
     }
 }
 
-export function authenticateWsSyncMessage(connection, message = {}) {
+export async function authenticateWsSyncMessage(connection, message = {}) {
     if (message?.type !== 'auth') return null;
     try {
+        await validateConnectionDeviceSession(connection, message.token, process.env.JWT_SECRET);
         return resolveWsApiPrincipal(connection, { token: message.token }, { registerClient: false });
     } catch (_) {
         return null;
     }
 }
 
-export function validateWsSyncPrincipal(connection) {
+export async function validateWsSyncPrincipal(connection) {
+    try { await validateConnectionDeviceSession(connection, null, process.env.JWT_SECRET); }
+    catch { return null; }
     return resolveWsApiPrincipal(connection, {});
 }
 
@@ -151,8 +156,8 @@ export function buildWsSyncWelcome(clientId, version = {}) {
     };
 }
 
-export function handleWsSyncControlMessage(connection, message = {}) {
-    const userId = validateWsSyncPrincipal(connection);
+export async function handleWsSyncControlMessage(connection, message = {}) {
+    const userId = await validateWsSyncPrincipal(connection);
     if (!userId) return { type: 'error', code: 'authentication_required' };
     if (message.type === 'ping') return { type: 'pong' };
     if (message.type === 'register') return { type: 'registered', principal_id: userId };

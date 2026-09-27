@@ -47,7 +47,6 @@ export async function findPrincipalByPhone(dataSource, phone) {
     return one(dataSource, `SELECT a.atome_id AS user_id, a.atome_type, a.created_at,
         a.updated_at, a.last_sync, a.created_source,
         MAX(CASE WHEN p.particle_key = 'username' THEN p.particle_value END) AS username,
-        MAX(CASE WHEN p.particle_key = 'password_hash' THEN p.particle_value END) AS password_hash,
         MAX(CASE WHEN p.particle_key = 'visibility' THEN p.particle_value END) AS visibility
         FROM principal_phone_credentials c
         JOIN atomes a ON a.atome_id = c.principal_id
@@ -60,7 +59,6 @@ export async function findPrincipalByPhone(dataSource, phone) {
             ...record,
             phone: normalizedPhone,
             username: parseParticleValue(record.username),
-            password_hash: parseParticleValue(record.password_hash),
             visibility: parseParticleValue(record.visibility) || 'private'
         };
     });

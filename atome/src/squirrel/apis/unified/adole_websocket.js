@@ -78,6 +78,7 @@ class TauriWebSocket {
                     this.isConnected = true;
                     this.connectionGeneration += 1;
                     this.startPing();
+                    globalThis.window?.dispatchEvent(new CustomEvent('squirrel:auth-transport-open', { detail: { backend: this.backend } }));
                     resolve(true);
                 };
 
@@ -184,6 +185,16 @@ class TauriWebSocket {
 
     async send(message, { timeoutMs = 10000, onProgress = null, signal = null } = {}) {
         signal?.throwIfAborted();
+        if (message.type !== 'auth' && this.backend === 'tauri') {
+            const { ensureLocalSession } = await import('./adole_api/auth_methods_login.js');
+            try {
+                await ensureLocalSession();
+                const { TauriAdapter } = await import('./adole.js');
+                message.token = TauriAdapter.getToken();
+            } catch (error) {
+                return { ok: false, success: false, error: error.message };
+            }
+        }
         const connected = await this.connect();
         signal?.throwIfAborted();
         if (!connected || this.socket?.readyState !== WebSocket.OPEN) {

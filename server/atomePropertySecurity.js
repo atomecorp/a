@@ -3,7 +3,7 @@ import {
     eventDeletedPropertyKeys,
     eventPropertyPatch,
     eventTouchedPropertyKeys
-} from '../database/adole_event_contract.js';
+} from '../atome/src/shared/adole_event_contract.js';
 
 function idOfAtome(atome) {
     return atome?.atome_id || atome?.id || null;

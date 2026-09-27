@@ -488,8 +488,10 @@ final class LocalHTTPServer {
         }
 
         if type == "auth" {
-            let response = AiSRuntime.handleAuthMessage(payload)
-            sendWebSocketJson(response, on: connection)
+            AiSRuntime.handleAuthMessage(payload) { [weak self, weak connection] response in
+                guard let self, let connection else { return }
+                self.queue.async { self.sendWebSocketJson(response, on: connection) }
+            }
             return
         }
 
@@ -1658,13 +1660,7 @@ extension LocalHTTPServer {
 enum AiSRuntime {
     static let queue = DispatchQueue(label: "ais.runtime.queue")
     private static var db: OpaquePointer?
-    private static var phoneVerificationStore: [String: (code: String, expiresAt: Date)] = [:]
-    private static var authAttemptStore: [String: (count: Int, resetAt: Date)] = [:]
     private static let sqliteTransient = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
-    private static let tokenSecret = "ais-local-auth-v1"
-    private static let authAttemptWindow: TimeInterval = 15 * 60
-    private static let authAttemptLimit = 8
-    private static let otpExpiry: TimeInterval = 10 * 60
     private static let reservedUserParticleKeys: Set<String> = [
         "id", "atome_id", "user_id", "type", "kind", "owner_id", "creator_id",
         "created_at", "updated_at", "deleted_at", "sync_status", "last_sync",
@@ -1834,48 +1830,6 @@ enum AiSRuntime {
     CREATE INDEX IF NOT EXISTS idx_sync_queue_status ON sync_queue(status);
     """
 
-    static func handleAuthMessage(_ message: [String: Any]) -> [String: Any] {
-        queue.sync {
-            let requestId = stringValue(message["requestId"])
-            let action = stringValue(message["action"])
-            do {
-                let db = try openDatabase()
-                let response: [String: Any]
-                switch action {
-                case "register":
-                    response = try handleRegister(message, db: db, requestId: requestId)
-                case "bootstrap":
-                    response = try handleBootstrap(message, db: db, requestId: requestId)
-                case "login":
-                    response = try handleLogin(message, db: db, requestId: requestId)
-                case "start-guest":
-                    response = try handleStartGuest(message, db: db, requestId: requestId)
-                case "leave-guest":
-                    response = authResponse(requestId: requestId, success: true)
-                case "me":
-                    response = try handleMe(message, db: db, requestId: requestId)
-                case "lookup-phone":
-                    response = try handleLookupPhone(message, db: db, requestId: requestId)
-                case "request-phone-verification":
-                    response = handleRequestPhoneVerification(message, requestId: requestId)
-                case "verify-phone-verification":
-                    response = handleVerifyPhoneVerification(message, requestId: requestId)
-                case "logout":
-                    response = authResponse(requestId: requestId, success: true)
-                case "change-password":
-                    response = try handleChangePassword(message, db: db, requestId: requestId)
-                case "delete":
-                    response = try handleDeleteAccount(message, db: db, requestId: requestId)
-                default:
-                    response = authResponse(requestId: requestId, success: false, error: "Unknown action: \(action)")
-                }
-                return response
-            } catch {
-                return authResponse(requestId: requestId, success: false, error: error.localizedDescription)
-            }
-        }
-    }
-
     static func handleAtomeMessage(_ message: [String: Any]) -> [String: Any] {
         queue.sync {
             let requestId = stringValue(message["requestId"])
@@ -1946,9 +1900,10 @@ enum AiSRuntime {
                 do {
                     let db = try openDatabase()
                     let rows = try query(db, """
-                        SELECT queue_id, atome_id, operation, created_at FROM sync_queue
-                        WHERE status IN ('pending', 'syncing', 'failed') ORDER BY queue_id
-                        """)
+                        SELECT q.queue_id, q.atome_id, q.operation, q.created_at FROM sync_queue q
+                        JOIN atomes a ON a.atome_id = q.atome_id
+                        WHERE q.status IN ('pending', 'syncing', 'failed') AND a.owner_id = ? ORDER BY q.queue_id
+                        """, [.text(stringValue(claims["sub"]))])
                     return ["type":"sync-response", "requestId":requestId, "success":true, "changes":rows]
                 } catch {
                     return ["type":"sync-response", "requestId":requestId, "success":false, "error":error.localizedDescription]
@@ -1980,235 +1935,10 @@ enum AiSRuntime {
 
     static func resolveAuthenticatedUserId(token: String?, userIdHint: String?, phoneHint: String?) -> String? {
         queue.sync {
-            guard let db = try? openDatabase() else { return nil }
-            if let token,
-               !token.isEmpty,
-               let claims = try? verifyToken(token),
-               let userId = normalizedOptionalString(claims["sub"]),
-               (try? findUserRecordById(db, userId)) != nil {
-                return userId
-            }
-            if let userIdHint = normalizedOptionalString(userIdHint),
-               (try? findUserRecordById(db, userIdHint)) != nil {
-                return userIdHint
-            }
-            if let phoneHint = normalizedOptionalString(phoneHint) {
-                let normalizedPhone = normalizePhone(phoneHint)
-                if let record = try? findUserRecordByPhone(db, normalizedPhone) {
-                    return record.userId
-                }
-            }
-            return nil
+            guard let token, !token.isEmpty, let claims = try? verifyToken(token),
+                  let userId = normalizedOptionalString(claims["sub"]) else { return nil }
+            return userId
         }
-    }
-
-    private static func handleRegister(_ message: [String: Any], db: OpaquePointer?, requestId: String?) throws -> [String: Any] {
-        let username = stringValue(message["username"]).trimmingCharacters(in: .whitespacesAndNewlines)
-        if username.count < 2 {
-            return authResponse(requestId: requestId, success: false, error: "Username must be at least 2 characters")
-        }
-        return try registerUser(message, db: db, requestId: requestId, username: username, isBootstrap: false)
-    }
-
-    private static func handleBootstrap(_ message: [String: Any], db: OpaquePointer?, requestId: String?) throws -> [String: Any] {
-        let username = stringValue(message["username"]).trimmingCharacters(in: .whitespacesAndNewlines)
-        let resolvedUsername = username.count >= 2 ? username : "user"
-        return try registerUser(message, db: db, requestId: requestId, username: resolvedUsername, isBootstrap: true)
-    }
-
-    private static func handleStartGuest(_ message: [String: Any], db: OpaquePointer?, requestId: String?) throws -> [String: Any] {
-        let guestId = stringValue(message["guest_id"] ?? message["guestId"])
-        guard let principal = UUID(uuidString: guestId),
-              principal.uuidString.lowercased() == guestId.lowercased(),
-              principal.uuidString.split(separator: "-").dropFirst(2).first?.first == "4" else {
-            return authResponse(requestId: requestId, success: false, error: "Guest principal must be a UUID v4")
-        }
-        try execute(db, "INSERT OR IGNORE INTO guest_workspace_principals (guest_principal_id, status) VALUES (?1, 'active')", [.text(principal.uuidString.lowercased())])
-        let token = try createToken(userId: principal.uuidString.lowercased(), username: "Guest")
-        return authResponse(
-            requestId: requestId,
-            success: true,
-            user: ["id": principal.uuidString.lowercased(), "user_id": principal.uuidString.lowercased(), "username": "Guest"],
-            token: token
-        )
-    }
-
-    private static func registerUser(_ message: [String: Any], db: OpaquePointer?, requestId: String?, username: String, isBootstrap: Bool) throws -> [String: Any] {
-        let phone = normalizePhone(stringValue(message["phone"]))
-        if phone.count < 6 {
-            return authResponse(requestId: requestId, success: false, error: "Phone must be at least 6 characters")
-        }
-        let password = stringValue(message["password"])
-        if password.count < 8 {
-            return authResponse(requestId: requestId, success: false, error: "Password must be at least 8 characters")
-        }
-        let visibility = normalizeVisibility(stringValue(message["visibility"]))
-        let optional = normalizeUserOptional(message["optional"] as? [String: Any] ?? [:])
-        let userId = generateOpaquePrincipalId()
-        let now = isoNow()
-        let passwordHash = hashPassword(password)
-
-        // An account already holds this number. Fastify and the Tauri backend
-        // both verify the password before handing back a token, and both refuse
-        // a deleted account outright. This one used to skip the check entirely:
-        // knowing the number was enough to obtain a session on somebody else's
-        // account, and a soft-deleted account was revived with whatever
-        // password the caller supplied.
-        if let existing = try findUserRecordByPhone(db, phone) {
-            if !isBootstrap {
-                return authResponse(requestId: requestId, success: false, error: "Invalid credentials", alreadyExists: true)
-            }
-            if existing.deletedAt != nil {
-                return authResponse(requestId: requestId, success: false, error: "Invalid credentials")
-            }
-            let storedHash = try loadParticleString(db, atomeId: existing.userId, key: "password_hash") ?? ""
-            if !verifyPassword(password, storedHash: storedHash) {
-                return authResponse(requestId: requestId, success: false, error: "Invalid credentials")
-            }
-            try execute(db, "UPDATE atomes SET updated_at = ? WHERE atome_id = ?", [.text(now), .text(existing.userId)])
-            let user = try loadUserInfo(db, userId: existing.userId)
-            let token = try createToken(userId: existing.userId, username: user["username"] as? String ?? username)
-            return authResponse(requestId: requestId, success: true, user: user, token: token, alreadyExists: true)
-        }
-
-        try execute(db, """
-            INSERT INTO atomes (atome_id, atome_type, owner_id, creator_id, created_at, updated_at, created_source, sync_status)
-            VALUES (?, 'user', ?, ?, ?, ?, 'ais', 'local')
-            """, [.text(userId), .text(userId), .text(userId), .text(now), .text(now)])
-        try upsertRequiredUserParticles(db, atomeId: userId, username: username, phone: phone, passwordHash: passwordHash, visibility: visibility, now: now)
-        try assignVerifiedPhone(db, principalId: userId, phone: phone, now: now)
-        try upsertOptionalParticles(db, atomeId: userId, values: optional, changedBy: userId, now: now)
-        try upsertStateCurrent(db, atomeId: userId, ownerId: userId, properties: try loadParticles(db, atomeId: userId), now: now)
-        let token = try createToken(userId: userId, username: username)
-        let user = try loadUserInfo(db, userId: userId)
-        return authResponse(requestId: requestId, success: true, user: user, token: token)
-    }
-
-    private static func handleLogin(_ message: [String: Any], db: OpaquePointer?, requestId: String?) throws -> [String: Any] {
-        let phone = normalizePhone(stringValue(message["phone"]))
-        let password = stringValue(message["password"])
-        if phone.isEmpty || password.isEmpty {
-            return authResponse(requestId: requestId, success: false, error: "Phone and password are required")
-        }
-        guard let existing = try findUserRecordByPhone(db, phone) else {
-            return authResponse(requestId: requestId, success: false, error: "Invalid credentials")
-        }
-        let storedHash = try loadParticleString(db, atomeId: existing.userId, key: "password_hash") ?? ""
-        if !verifyPassword(password, storedHash: storedHash) {
-            return authResponse(requestId: requestId, success: false, error: "Invalid credentials")
-        }
-        let user = try loadUserInfo(db, userId: existing.userId)
-        let token = try createToken(userId: existing.userId, username: user["username"] as? String ?? "")
-        return authResponse(requestId: requestId, success: true, user: user, token: token)
-    }
-
-    private static func handleMe(_ message: [String: Any], db: OpaquePointer?, requestId: String?) throws -> [String: Any] {
-        let token = stringValue(message["token"])
-        guard let claims = try verifyToken(token) else {
-            return authResponse(requestId: requestId, success: false, error: "Token is required")
-        }
-        let userId = stringValue(claims["sub"])
-        guard let _ = try findUserRecordById(db, userId) else {
-            return authResponse(requestId: requestId, success: false, error: "User not found")
-        }
-        let user = try loadUserInfo(db, userId: userId)
-        return authResponse(requestId: requestId, success: true, user: user)
-    }
-
-    private static func handleLookupPhone(_ message: [String: Any], db: OpaquePointer?, requestId: String?) throws -> [String: Any] {
-        let phone = normalizePhone(stringValue(message["phone"]))
-        if phone.count < 6 {
-            return authResponse(requestId: requestId, success: false, error: "Phone must be at least 6 characters")
-        }
-        guard let existing = try findUserRecordByPhone(db, phone) else {
-            return authResponse(requestId: requestId, success: false, error: "User not found")
-        }
-        let user = try loadUserInfo(db, userId: existing.userId)
-        return authResponse(requestId: requestId, success: true, user: user)
-    }
-
-    private static func handleRequestPhoneVerification(_ message: [String: Any], requestId: String?) -> [String: Any] {
-        let phone = normalizePhone(stringValue(message["phone"]))
-        if phone.count < 6 {
-            return authResponse(requestId: requestId, success: false, error: "Phone must be at least 6 characters")
-        }
-        if let error = enforceAuthAttemptLimit(bucket: "phone_verification_request", identity: phone) {
-            return authResponse(requestId: requestId, success: false, error: error)
-        }
-        if authOtpBypassEnabled() {
-            return authResponse(requestId: requestId, success: true, otpBypassed: true)
-        }
-        let code = generateOtpCode()
-        phoneVerificationStore[phone] = (code: code, expiresAt: Date().addingTimeInterval(otpExpiry))
-        let exposeForTest = boolValue(message["exposeForTest"])
-        return authResponse(
-            requestId: requestId,
-            success: true,
-            code: exposeForTest && !isProductionRuntime() ? code : nil
-        )
-    }
-
-    private static func handleVerifyPhoneVerification(_ message: [String: Any], requestId: String?) -> [String: Any] {
-        let phone = normalizePhone(stringValue(message["phone"]))
-        if phone.count < 6 {
-            return authResponse(requestId: requestId, success: false, error: "Phone must be at least 6 characters")
-        }
-        let code = stringValue(message["code"]).trimmingCharacters(in: .whitespacesAndNewlines)
-        if code.isEmpty {
-            return authResponse(requestId: requestId, success: false, error: "Code is required")
-        }
-        if let error = enforceAuthAttemptLimit(bucket: "phone_verification_verify", identity: phone) {
-            return authResponse(requestId: requestId, success: false, error: error)
-        }
-        guard let pending = phoneVerificationStore[phone] else {
-            return authResponse(requestId: requestId, success: false, error: "No pending OTP request for this phone number")
-        }
-        if Date() > pending.expiresAt {
-            phoneVerificationStore.removeValue(forKey: phone)
-            return authResponse(requestId: requestId, success: false, error: "OTP has expired")
-        }
-        if pending.code != code {
-            return authResponse(requestId: requestId, success: false, error: "Invalid OTP code")
-        }
-        phoneVerificationStore.removeValue(forKey: phone)
-        return authResponse(requestId: requestId, success: true)
-    }
-
-    private static func handleChangePassword(_ message: [String: Any], db: OpaquePointer?, requestId: String?) throws -> [String: Any] {
-        let token = stringValue(message["token"])
-        guard let claims = try verifyToken(token) else {
-            return authResponse(requestId: requestId, success: false, error: "Token is required")
-        }
-        let userId = stringValue(claims["sub"])
-        let currentPassword = stringValue(message["currentPassword"])
-        let newPassword = stringValue(message["newPassword"])
-        if newPassword.count < 8 {
-            return authResponse(requestId: requestId, success: false, error: "Password must be at least 8 characters")
-        }
-        let storedHash = try loadParticleString(db, atomeId: userId, key: "password_hash") ?? ""
-        if !verifyPassword(currentPassword, storedHash: storedHash) {
-            return authResponse(requestId: requestId, success: false, error: "Invalid credentials")
-        }
-        let now = isoNow()
-        try upsertParticle(db, atomeId: userId, key: "password_hash", value: hashPassword(newPassword), changedBy: userId, now: now)
-        return authResponse(requestId: requestId, success: true)
-    }
-
-    private static func handleDeleteAccount(_ message: [String: Any], db: OpaquePointer?, requestId: String?) throws -> [String: Any] {
-        let token = stringValue(message["token"])
-        guard let claims = try verifyToken(token) else {
-            return authResponse(requestId: requestId, success: false, error: "Token is required")
-        }
-        let userId = stringValue(claims["sub"])
-        let password = stringValue(message["password"])
-        let storedHash = try loadParticleString(db, atomeId: userId, key: "password_hash") ?? ""
-        if !verifyPassword(password, storedHash: storedHash) {
-            return authResponse(requestId: requestId, success: false, error: "Invalid credentials")
-        }
-        let now = isoNow()
-        try execute(db, "UPDATE atomes SET deleted_at = ?, updated_at = ? WHERE atome_id = ?", [.text(now), .text(now), .text(userId)])
-        try execute(db, "DELETE FROM state_current WHERE atome_id = ?", [.text(userId)])
-        return authResponse(requestId: requestId, success: true)
     }
 
     private static func handleAtomeCreate(_ message: [String: Any], db: OpaquePointer?, requestId: String?) throws -> [String: Any] {
@@ -2218,7 +1948,8 @@ enum AiSRuntime {
         }
         let token = stringValue(message["token"])
         let claims = try verifyToken(token)
-        let userId = claims != nil ? stringValue(claims!["sub"]) : stringValue(message["owner_id"] ?? message["ownerId"])
+        guard let claims else { throw AiSError("not_authenticated") }
+        let userId = stringValue(claims["sub"])
         if userId.isEmpty {
             return atomeResponse(requestId: requestId, success: false, error: "Missing owner_id or token")
         }
@@ -2572,6 +2303,7 @@ enum AiSRuntime {
             throw AiSError(message)
         }
         try ensureSyncSchema(opened)
+        try ensureLocalAuthSchema(opened)
         db = opened
         return opened
     }
@@ -2692,53 +2424,6 @@ enum AiSRuntime {
         return payload
     }
 
-    private static func loadUserInfo(_ db: OpaquePointer?, userId: String) throws -> [String: Any] {
-        let username = try loadParticleString(db, atomeId: userId, key: "username") ?? ""
-        let rows = try query(db, "SELECT created_at FROM atomes WHERE atome_id = ? LIMIT 1", [.text(userId)])
-        let createdAt = rowString(rows.first, "created_at") ?? isoNow()
-        var info: [String: Any] = [
-            "user_id": userId,
-            "id": userId,
-            "username": username,
-            "created_at": createdAt
-        ]
-        // The client refuses a session whose user carries no phone: it cannot
-        // tell that account apart from somebody else's. Fastify and the Tauri
-        // backend both state it; omitting it here made every real sign-in on
-        // iOS fail as `phone_mismatch`, leaving only the guest session usable.
-        if let phone = try readVerifiedPhone(db, principalId: userId), !phone.isEmpty {
-            info["phone"] = phone
-        }
-        return info
-    }
-
-    private static func findUserRecordByPhone(_ db: OpaquePointer?, _ phone: String) throws -> UserRecord? {
-        let rows = try query(db, """
-            SELECT a.atome_id, a.atome_type, a.deleted_at
-            FROM atomes a
-            JOIN principal_phone_credentials c ON c.principal_id = a.atome_id
-            WHERE c.normalized_phone = ? AND c.revoked_at IS NULL
-            ORDER BY a.updated_at DESC
-            LIMIT 1
-            """, [.text(phone)])
-        guard let row = rows.first else { return nil }
-        return UserRecord(
-            userId: stringValue(rowValue(row, "atome_id")),
-            atomeType: stringValue(rowValue(row, "atome_type")),
-            deletedAt: rowString(row, "deleted_at")
-        )
-    }
-
-    private static func findUserRecordById(_ db: OpaquePointer?, _ userId: String) throws -> UserRecord? {
-        let rows = try query(db, "SELECT atome_id, atome_type, deleted_at FROM atomes WHERE atome_id = ? LIMIT 1", [.text(userId)])
-        guard let row = rows.first else { return nil }
-        return UserRecord(
-            userId: stringValue(rowValue(row, "atome_id")),
-            atomeType: stringValue(rowValue(row, "atome_type")),
-            deletedAt: rowString(row, "deleted_at")
-        )
-    }
-
     private static func findAtomeMeta(_ db: OpaquePointer?, atomeId: String) throws -> AtomeMeta? {
         let rows = try query(db, """
             SELECT atome_id, atome_type, parent_id, owner_id, creator_id, created_at, updated_at, created_source, sync_status
@@ -2764,44 +2449,6 @@ enum AiSRuntime {
         if record.ownerId == userId { return true }
         if record.creatorId == userId { return true }
         return false
-    }
-
-    private static func assignVerifiedPhone(_ db: OpaquePointer?, principalId: String, phone: String, now: String) throws {
-        let existing = try query(db, """
-            SELECT principal_id FROM principal_phone_credentials
-            WHERE normalized_phone = ? AND revoked_at IS NULL LIMIT 1
-            """, [.text(phone)])
-        if let owner = rowString(existing.first, "principal_id") {
-            if owner == principalId { return }
-            throw NSError(domain: "LocalHTTPServer", code: 409, userInfo: [NSLocalizedDescriptionKey: "phone_credential_already_assigned"])
-        }
-        try execute(db, """
-            INSERT INTO principal_phone_credentials
-            (principal_id, normalized_phone, verified_at, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?)
-            """, [.text(principalId), .text(phone), .text(now), .text(now), .text(now)])
-    }
-
-    private static func readVerifiedPhone(_ db: OpaquePointer?, principalId: String) throws -> String? {
-        let rows = try query(db, """
-            SELECT normalized_phone FROM principal_phone_credentials
-            WHERE principal_id = ? AND revoked_at IS NULL
-            ORDER BY credential_id DESC LIMIT 1
-            """, [.text(principalId)])
-        return rowString(rows.first, "normalized_phone")
-    }
-
-    private static func upsertRequiredUserParticles(_ db: OpaquePointer?, atomeId: String, username: String, phone _: String, passwordHash: String, visibility: String, now: String) throws {
-        try upsertParticle(db, atomeId: atomeId, key: "username", value: username, changedBy: atomeId, now: now)
-        try upsertParticle(db, atomeId: atomeId, key: "password_hash", value: passwordHash, changedBy: atomeId, now: now)
-        try upsertParticle(db, atomeId: atomeId, key: "visibility", value: visibility, changedBy: atomeId, now: now)
-        try upsertParticle(db, atomeId: atomeId, key: "access", value: visibility, changedBy: atomeId, now: now)
-    }
-
-    private static func upsertOptionalParticles(_ db: OpaquePointer?, atomeId: String, values: [String: Any], changedBy: String, now: String) throws {
-        for (key, value) in values {
-            try upsertParticle(db, atomeId: atomeId, key: key, value: value, changedBy: changedBy, now: now)
-        }
     }
 
     static func upsertParticle(_ db: OpaquePointer?, atomeId: String, key: String, value: Any, changedBy: String, now: String) throws {
@@ -2853,7 +2500,7 @@ enum AiSRuntime {
         return out
     }
 
-    private static func loadParticleString(_ db: OpaquePointer?, atomeId: String, key: String) throws -> String? {
+    static func loadParticleString(_ db: OpaquePointer?, atomeId: String, key: String) throws -> String? {
         let rows = try query(db, "SELECT particle_value FROM particles WHERE atome_id = ? AND particle_key = ? LIMIT 1", [.text(atomeId), .text(key)])
         guard let raw = rows.first?["particle_value"] as? String else { return nil }
         return stringValue(parseJSONValue(raw))
@@ -3014,21 +2661,6 @@ enum AiSRuntime {
         }
     }
 
-    private static func authResponse(requestId: String?, success: Bool, error: String? = nil, user: [String: Any]? = nil, token: String? = nil, alreadyExists: Bool? = nil, code: String? = nil, otpBypassed: Bool? = nil) -> [String: Any] {
-        var response: [String: Any] = [
-            "type": "auth-response",
-            "success": success
-        ]
-        if let requestId { response["request_id"] = requestId }
-        if let error { response["error"] = error }
-        if let user { response["user"] = user }
-        if let token { response["token"] = token }
-        if let alreadyExists { response["already_exists"] = alreadyExists }
-        if let code { response["code"] = code }
-        if let otpBypassed { response["otpBypassed"] = otpBypassed }
-        return response
-    }
-
     private static func atomeResponse(requestId: String?, success: Bool, error: String? = nil, data: [String: Any]? = nil, atomes: [[String: Any]]? = nil, count: Int64? = nil) -> [String: Any] {
         var response: [String: Any] = [
             "type": "atome-response",
@@ -3076,114 +2708,12 @@ enum AiSRuntime {
         return cleaned.replacingOccurrences(of: "+", with: "")
     }
 
-    private static func isProductionRuntime() -> Bool {
-        ProcessInfo.processInfo.environment["NODE_ENV"]?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "production"
-    }
-
-    private static func authOtpBypassEnabled() -> Bool {
-        !isProductionRuntime()
-            && ProcessInfo.processInfo.environment["SQUIRREL_AUTH_OTP_BYPASS"]?.trimmingCharacters(in: .whitespacesAndNewlines) == "1"
-    }
-
-    private static func enforceAuthAttemptLimit(bucket: String, identity: String) -> String? {
-        let now = Date()
-        let key = "\(bucket):\(identity.trimmingCharacters(in: .whitespacesAndNewlines).lowercased())"
-        if let current = authAttemptStore[key], now < current.resetAt {
-            let count = current.count + 1
-            authAttemptStore[key] = (count: count, resetAt: current.resetAt)
-            return count > authAttemptLimit ? "Too many authentication attempts" : nil
-        }
-        authAttemptStore[key] = (count: 1, resetAt: now.addingTimeInterval(authAttemptWindow))
-        return nil
-    }
-
-    private static func generateOtpCode() -> String {
-        String(Int.random(in: 100000...999999))
-    }
-
     private static func normalizeVisibility(_ value: String) -> String {
         value.lowercased() == "public" ? "public" : "private"
     }
 
-    private static func normalizeUserOptional(_ values: [String: Any]) -> [String: Any] {
-        var cleaned: [String: Any] = [:]
-        for (key, value) in values {
-            let trimmed = key.trimmingCharacters(in: .whitespacesAndNewlines)
-            if trimmed.isEmpty || trimmed.hasPrefix("_") || reservedUserParticleKeys.contains(trimmed) { continue }
-            cleaned[trimmed] = value
-        }
-        return cleaned
-    }
-
-    private static func hashPassword(_ password: String) -> String {
-        let salt = UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased()
-        let digest = SHA256.hash(data: Data("\(salt):\(password)".utf8))
-        return "sha256$\(salt)$\(hex(digest))"
-    }
-
-    private static func verifyPassword(_ password: String, storedHash: String) -> Bool {
-        let parts = storedHash.split(separator: "$")
-        guard parts.count == 3, parts[0] == "sha256" else { return false }
-        let salt = String(parts[1])
-        let expected = String(parts[2])
-        let digest = SHA256.hash(data: Data("\(salt):\(password)".utf8))
-        return hex(digest) == expected
-    }
-
-    private static func createToken(userId: String, username: String) throws -> String {
-        let header = try base64urlEncoded(["alg": "HS256", "typ": "JWT"])
-        let now = Int(Date().timeIntervalSince1970)
-        let payload = try base64urlEncoded([
-            "sub": userId,
-            "username": username,
-            "iat": now,
-            "exp": now + (7 * 24 * 60 * 60)
-        ])
-        let message = "\(header).\(payload)"
-        let signature = HMAC<SHA256>.authenticationCode(for: Data(message.utf8), using: SymmetricKey(data: Data(tokenSecret.utf8)))
-        return "\(message).\(base64url(Data(signature)))"
-    }
-
-    static func verifyToken(_ token: String) throws -> [String: Any]? {
-        let parts = token.split(separator: ".")
-        guard parts.count == 3 else { return nil }
-        let signed = "\(parts[0]).\(parts[1])"
-        let expected = HMAC<SHA256>.authenticationCode(for: Data(signed.utf8), using: SymmetricKey(data: Data(tokenSecret.utf8)))
-        guard base64url(Data(expected)) == String(parts[2]) else { return nil }
-        guard let payloadData = base64urlDecode(String(parts[1])),
-              let payload = try JSONSerialization.jsonObject(with: payloadData) as? [String: Any] else {
-            return nil
-        }
-        let exp = intValue(payload["exp"], defaultValue: 0)
-        if exp > 0 && exp < Int64(Date().timeIntervalSince1970) {
-            return nil
-        }
-        return payload
-    }
-
     private static func generateOpaquePrincipalId() -> String {
         UUID().uuidString.lowercased()
-    }
-
-    private static func base64urlEncoded(_ object: [String: Any]) throws -> String {
-        let data = try JSONSerialization.data(withJSONObject: object, options: [])
-        return base64url(data)
-    }
-
-    private static func base64url(_ data: Data) -> String {
-        data.base64EncodedString()
-            .replacingOccurrences(of: "+", with: "-")
-            .replacingOccurrences(of: "/", with: "_")
-            .replacingOccurrences(of: "=", with: "")
-    }
-
-    private static func base64urlDecode(_ value: String) -> Data? {
-        var base = value.replacingOccurrences(of: "-", with: "+").replacingOccurrences(of: "_", with: "/")
-        let padding = 4 - (base.count % 4)
-        if padding < 4 {
-            base += String(repeating: "=", count: padding)
-        }
-        return Data(base64Encoded: base)
     }
 
     static func parseJSONValue(_ raw: String) -> Any {
@@ -3287,7 +2817,7 @@ enum AiSRuntime {
 
 }
 
-fileprivate struct UserRecord {
+struct UserRecord {
     let userId: String
     let atomeType: String
     let deletedAt: String?

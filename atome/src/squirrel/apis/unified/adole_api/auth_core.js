@@ -2,6 +2,7 @@
 // result extractors, and primary/secondary backend resolution.
 import { TauriAdapter, FastifyAdapter, resolveAuthSource } from '../adole.js';
 import { isTauriRuntime } from './runtime.js';
+import { normalizePhoneToE164 } from '../../../../shared/phone_number.js';
 
 const adapters = {
     tauri: TauriAdapter,
@@ -9,15 +10,7 @@ const adapters = {
 };
 
 const normalizePhone = (phone) => {
-    if (phone === null || phone === undefined) return '';
-    const trimmed = String(phone).trim();
-    if (!trimmed) return '';
-    const cleaned = trimmed.replace(/[^\d+]/g, '');
-    if (!cleaned) return '';
-    if (cleaned.startsWith('+')) {
-        return `+${cleaned.slice(1).replace(/\+/g, '')}`;
-    }
-    return cleaned.replace(/\+/g, '');
+    return normalizePhoneToE164(phone);
 };
 const normalizeUsername = (name) => String(name || '').trim();
 const createTechnicalUsername = (candidate, phone) => {

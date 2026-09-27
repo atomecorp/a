@@ -540,7 +540,7 @@ fn resolve_media_authenticated_user(
 ) -> Option<String> {
     let token = extract_bearer_token(headers).or_else(|| extract_token_from_media_query(query));
     let token_user_id =
-        local_auth::extract_user_id_from_token(&auth_state.jwt_secret, token.as_deref());
+        local_auth::extract_user_id_from_token(auth_state, token.as_deref());
     if token_user_id != "anonymous" {
         return extract_user_id_from_media_query(query)
             .or_else(|| extract_user_id_from_headers(headers))
@@ -555,7 +555,7 @@ fn resolve_authenticated_user(
 ) -> Option<String> {
     let token = extract_bearer_token(headers);
     let token_user_id =
-        local_auth::extract_user_id_from_token(&auth_state.jwt_secret, token.as_deref());
+        local_auth::extract_user_id_from_token(auth_state, token.as_deref());
     if token_user_id != "anonymous" {
         return Some(token_user_id);
     }
@@ -2441,7 +2441,7 @@ async fn upload_handler(
 
     let token = extract_bearer_token(&headers);
     let token_user_id =
-        local_auth::extract_user_id_from_token(&auth_state.jwt_secret, token.as_deref());
+        local_auth::extract_user_id_from_token(auth_state, token.as_deref());
     let user_id = if token_user_id != "anonymous" {
         token_user_id
     } else if let Some(header_user_id) = extract_user_id_from_headers(&headers) {
@@ -3046,7 +3046,7 @@ async fn list_uploads_handler(
 
     let token = extract_bearer_token(&headers);
     let token_user_id =
-        local_auth::extract_user_id_from_token(&auth_state.jwt_secret, token.as_deref());
+        local_auth::extract_user_id_from_token(auth_state, token.as_deref());
     let user_id = if token_user_id != "anonymous" {
         token_user_id
     } else if let Some(header_user_id) = extract_user_id_from_headers(&headers) {
@@ -4481,7 +4481,7 @@ fn resolve_ws_file_user_id(data: &JsonValue, state: &AppState) -> Result<String,
 
     let token_user = state.auth_state.as_ref().map(|auth_state| {
         let token = json_string_field(data, "token");
-        local_auth::extract_user_id_from_token(&auth_state.jwt_secret, token.as_deref())
+        local_auth::extract_user_id_from_token(auth_state, token.as_deref())
     });
 
     if let Some(user_id) = explicit_user {
@@ -4777,7 +4777,7 @@ async fn handle_ws_sync(state: AppState, mut socket: WebSocket) {
         .and_then(|value| value.as_str())
         .unwrap_or("")
         .to_string();
-    let user_id = match local_auth::verified_user_id_from_token(&auth_state.jwt_secret, Some(&token))
+    let user_id = match local_auth::verified_user_id_from_token(auth_state, Some(&token))
     {
         Some(user_id) if auth_message.get("type").and_then(|value| value.as_str()) == Some("auth") => {
             user_id
@@ -4826,7 +4826,7 @@ async fn handle_ws_sync(state: AppState, mut socket: WebSocket) {
                                 continue;
                             },
                         };
-                        if local_auth::verified_user_id_from_token(&auth_state.jwt_secret, Some(&token)).as_deref() != Some(user_id.as_str()) {
+                        if local_auth::verified_user_id_from_token(auth_state, Some(&token)).as_deref() != Some(user_id.as_str()) {
                             let _ = ws_sender.send(Message::Text(json!({"type": "error", "code": "authentication_expired"}).to_string())).await;
                             break;
                         }
@@ -4856,7 +4856,7 @@ async fn handle_ws_sync(state: AppState, mut socket: WebSocket) {
             sync_msg = sync_rx.recv() => {
                 match sync_msg {
                     Ok(payload) => {
-                        if local_auth::verified_user_id_from_token(&auth_state.jwt_secret, Some(&token)).as_deref() != Some(user_id.as_str()) {
+                        if local_auth::verified_user_id_from_token(auth_state, Some(&token)).as_deref() != Some(user_id.as_str()) {
                             let _ = ws_sender.send(Message::Text(json!({"type": "error", "code": "authentication_expired"}).to_string())).await;
                             break;
                         }

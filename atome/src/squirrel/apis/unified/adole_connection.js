@@ -241,51 +241,18 @@ function isCloudFastifyTarget() {
     return base.includes('atome.one') || base.startsWith('https://');
 }
 
-function getToken(key, local = globalThis.localStorage, session = globalThis.sessionStorage) {
-    if (typeof local?.getItem === 'function') {
-        const token = local.getItem(key);
-        if (token) {
-            // Persistent storage is authoritative: native auth can refresh it after JS memory was hydrated.
-            tokenMemory.set(key, token);
-            return token;
-        }
-        const localKey = CONFIG.TAURI_TOKEN_KEY || 'local_auth_token';
-        const cloudKey = CONFIG.FASTIFY_TOKEN_KEY || 'cloud_auth_token';
-        if (key === cloudKey) {
-            // Previous migration: use auth_token as cloud token only.
-            const previous = local.getItem('auth_token');
-            if (previous) {
-                local.setItem(cloudKey, previous);
-                tokenMemory.set(cloudKey, previous);
-                return previous;
-            }
-        }
-    }
-    if (typeof session?.getItem === 'function') {
-        const token = session.getItem(key);
-        if (token) {
-            tokenMemory.set(key, token);
-            return token;
-        }
-    }
-    if (tokenMemory.has(key)) {
-        const cached = tokenMemory.get(key);
-        if (cached) return cached;
-    }
-    return null;
+function getToken(key) {
+    return tokenMemory.get(key) || null;
 }
 
-/**
- * Store token in localStorage
- * @param {string} key - Storage key
- * @param {string} token - Token value
- */
+// Access tokens are process-local. Durable resumption uses device-key proofs.
 function setToken(key, token, local = globalThis.localStorage, session = globalThis.sessionStorage) {
-    if (token) local?.setItem?.(key, token);
-    if (token) session?.setItem?.(key, token);
-    if (token) {
-        tokenMemory.set(key, token);
-    }
+    local?.removeItem?.(key);
+    session?.removeItem?.(key);
+    local?.removeItem?.('fastify_login_cache_v1');
+    clearPreviousFastifyTokenStorage(local, session);
+    if (token) tokenMemory.set(key, token);
+    else tokenMemory.delete(key);
 }
 
 /**

@@ -124,7 +124,7 @@ export class WsSyncRuntime {
         connection.on('close', () => this.cleanup(connection));
         connection.on('error', () => this.cleanup(connection));
         try {
-            const principalId = this.authenticateRequest(connection, request);
+            const principalId = await this.authenticateRequest(connection, request);
             if (principalId) await this.activate(record, principalId);
         } catch (_) {
             this.close(record, 'authentication_invalid');
@@ -161,7 +161,7 @@ export class WsSyncRuntime {
                 return;
             }
             try {
-                const principalId = this.authenticateMessage(record.connection, message);
+                const principalId = await this.authenticateMessage(record.connection, message);
                 if (!principalId) this.close(record, 'authentication_required');
                 else await this.activate(record, principalId);
             } catch (_) {
@@ -169,7 +169,7 @@ export class WsSyncRuntime {
             }
             return;
         }
-        const validated = this.validatePrincipal(record.connection);
+        const validated = await this.validatePrincipal(record.connection);
         if (!validated || String(validated) !== record.principalId) {
             this.close(record, 'authentication_expired');
             return;
@@ -301,6 +301,10 @@ export class WsSyncRuntime {
         let delivered = 0;
         for (const record of this.records.values()) {
             if (!record.authenticated || record.closed) continue;
+            if (await this.validatePrincipal(record.connection) !== record.principalId) {
+                this.close(record, 'authentication_expired');
+                continue;
+            }
             const access = await this.vaultRouter.streamAccess(record.principalId, stream);
             if (!record.subscriptions.has(stream)) {
                 if (access) {

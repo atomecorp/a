@@ -1,3 +1,4 @@
+import { browserWorkspaceRequest, ownsBrowserWorkspaceMessage } from './adole_api/browser_workspace.js';
 // Extracted from adole_adapter.js: the adapter's `atome` API sub-object (commit/list/get/etc.),
 // built per-adapter from the WS accessor + token key.
 import { sanitizeAtomeProperties } from '../../../shared/atome_contract.js';
@@ -35,10 +36,12 @@ const normalizeCommitEvent = (event = {}) => {
     return normalizedEvent;
 };
 
-export const buildAtomeApi = ({ getWs, tokenKey }) => ({
+export const buildAtomeApi = ({ getWs, tokenKey }) => {
+    const send = message => ownsBrowserWorkspaceMessage(message) ? browserWorkspaceRequest(message) : getWs().send(message);
+    return ({
             async commit(event = {}) {
                 const token = getToken(tokenKey);
-                return getWs().send({
+                return send({
                     type: 'events',
                     action: 'commit',
                     token,
@@ -50,7 +53,7 @@ export const buildAtomeApi = ({ getWs, tokenKey }) => ({
                 const normalizedEvents = Array.isArray(events)
                     ? events.map(normalizeCommitEvent)
                     : [];
-                return getWs().send({
+                return send({
                     type: 'events',
                     action: 'commit-batch',
                     token,
@@ -80,11 +83,11 @@ export const buildAtomeApi = ({ getWs, tokenKey }) => ({
                 if (ownerId) {
                     payload.owner_id = ownerId;
                 }
-                return getWs().send(payload);
+                return send(payload);
             },
             async get(id) {
                 const token = getToken(tokenKey);
-                return getWs().send({
+                return send({
                     type: 'atome',
                     action: 'get',
                     token,
@@ -97,7 +100,7 @@ export const buildAtomeApi = ({ getWs, tokenKey }) => ({
                 const parentId = params.parent_id || params.parent;
                 const atomeType = params.atome_type || params.type || params.kind;
                 const includeDeleted = params.include_deleted || params.includeDeleted || false;
-                return getWs().send({
+                return send({
                     type: 'atome',
                     action: 'list',
                     token,
@@ -118,7 +121,7 @@ export const buildAtomeApi = ({ getWs, tokenKey }) => ({
             // EVENEMENT canonique, comme toute autre ecriture.
             async commitDelete(id, actorId = '') {
                 const token = getToken(tokenKey);
-                return getWs().send({
+                return send({
                     type: 'events',
                     action: 'commit',
                     token,
@@ -132,7 +135,7 @@ export const buildAtomeApi = ({ getWs, tokenKey }) => ({
             async alter(id, data) {
                 const token = getToken(tokenKey);
                 const properties = sanitizeAtomeProperties(data?.properties || data?.particles || data);
-                return getWs().send({
+                return send({
                     type: 'atome',
                     action: 'alter',
                     token,
@@ -143,7 +146,7 @@ export const buildAtomeApi = ({ getWs, tokenKey }) => ({
             async update(id, data) {
                 const token = getToken(tokenKey);
                 const properties = sanitizeAtomeProperties(data?.properties || data?.particles || data);
-                return getWs().send({
+                return send({
                     type: 'atome',
                     action: 'update',
                     token,
@@ -153,7 +156,7 @@ export const buildAtomeApi = ({ getWs, tokenKey }) => ({
             },
             async transferOwner(data = {}) {
                 const token = getToken(tokenKey);
-                return getWs().send({
+                return send({
                     type: 'atome',
                     action: 'transfer-owner',
                     token,
@@ -186,7 +189,7 @@ export const buildAtomeApi = ({ getWs, tokenKey }) => ({
             },
             async delete(id) {
                 const token = getToken(tokenKey);
-                return getWs().send({
+                return send({
                     type: 'atome',
                     action: 'delete',
                     token,
@@ -195,7 +198,7 @@ export const buildAtomeApi = ({ getWs, tokenKey }) => ({
             },
             async history(id) {
                 const token = getToken(tokenKey);
-                return getWs().send({
+                return send({
                     type: 'atome',
                     action: 'history',
                     token,
@@ -204,7 +207,7 @@ export const buildAtomeApi = ({ getWs, tokenKey }) => ({
             },
             async undo(sourceTxId, requestId) {
                 const token = getToken(tokenKey);
-                return getWs().send({
+                return send({
                     type: 'history', action: 'undo', token,
                     source_tx_id: sourceTxId,
                     requestId
@@ -212,7 +215,7 @@ export const buildAtomeApi = ({ getWs, tokenKey }) => ({
             },
             async redo(sourceTxId, requestId) {
                 const token = getToken(tokenKey);
-                return getWs().send({
+                return send({
                     type: 'history', action: 'redo', token,
                     source_tx_id: sourceTxId,
                     requestId
@@ -220,7 +223,7 @@ export const buildAtomeApi = ({ getWs, tokenKey }) => ({
             },
             async restore(id, data) {
                 const token = getToken(tokenKey);
-                return getWs().send({
+                return send({
                     type: 'snapshot',
                     action: 'restore',
                     token,
@@ -230,7 +233,7 @@ export const buildAtomeApi = ({ getWs, tokenKey }) => ({
             },
             async getStateCurrent(id) {
                 const token = getToken(tokenKey);
-                return getWs().send({
+                return send({
                     type: 'state-current',
                     action: 'get',
                     token,
@@ -239,7 +242,7 @@ export const buildAtomeApi = ({ getWs, tokenKey }) => ({
             },
             async listStateCurrent(params = {}) {
                 const token = getToken(tokenKey);
-                return getWs().send({
+                return send({
                     type: 'state-current',
                     action: 'list',
                     token,
@@ -257,7 +260,7 @@ export const buildAtomeApi = ({ getWs, tokenKey }) => ({
             },
             async listEvents(params = {}) {
                 const token = getToken(tokenKey);
-                return getWs().send({
+                return send({
                     type: 'events',
                     action: 'list',
                     token,
@@ -274,7 +277,7 @@ export const buildAtomeApi = ({ getWs, tokenKey }) => ({
             },
             async conditions(params = {}) {
                 const token = getToken(tokenKey);
-                return getWs().send({
+                return send({
                     type: 'conditions',
                     action: params.action || 'once',
                     token,
@@ -283,7 +286,7 @@ export const buildAtomeApi = ({ getWs, tokenKey }) => ({
             },
             async createSnapshot(params = {}) {
                 const token = getToken(tokenKey);
-                return getWs().send({
+                return send({
                     type: 'snapshot',
                     action: 'create',
                     token,
@@ -296,7 +299,7 @@ export const buildAtomeApi = ({ getWs, tokenKey }) => ({
             },
             async listSnapshots(params = {}) {
                 const token = getToken(tokenKey);
-                return getWs().send({
+                return send({
                     type: 'snapshot',
                     action: 'list',
                     token,
@@ -307,7 +310,7 @@ export const buildAtomeApi = ({ getWs, tokenKey }) => ({
             },
             async getSnapshot(id) {
                 const token = getToken(tokenKey);
-                return getWs().send({
+                return send({
                     type: 'snapshot',
                     action: 'get',
                     token,
@@ -315,3 +318,4 @@ export const buildAtomeApi = ({ getWs, tokenKey }) => ({
                 });
             }
 });
+};

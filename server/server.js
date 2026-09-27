@@ -1,3 +1,4 @@
+import { registerOfflineAppAssets } from './offline_app_assets.js';
 // Server Fastify v5 moderne avec WebSocket natif
 import fastify from 'fastify';
 import fastifyStatic from '@fastify/static';
@@ -71,26 +72,11 @@ import {
   getABoxWatcherHandle,
   getABoxEventBus
 } from './aBoxServer.js';
-import {
-  authenticatedUserSnapshot,
-  consumePhoneVerification,
-  createUserAtome,
-  deleteUserAtome,
-  enforceAuthIdentityRateLimit,
-  findUserById,
-  findUserByPhone,
-  generateOpaquePrincipalId,
-  hashPassword,
-  listAllUsers,
-  markPhoneVerification,
-  normalizePhone,
-  requestPhoneVerificationDelivery,
-  updateUserParticle,
-  verifyOTP
-} from './auth.js';
-import { ensureOpaquePrincipalIdentity, replaceVerifiedPhone, removeVerifiedPhone } from './auth_identity.js';
-// Canonical helper; the /ws/api bootstrap branch used to redefine it locally.
-import { handleWsApiAccountProvision } from './wsApiAuthProvisioning.js';
+import { findUserById, findUserByPhone } from './auth_users.js';
+import { normalizePhone } from './auth_crypto.js';
+import { ensureOpaquePrincipalIdentity } from './auth_identity.js';
+import { createWsPhoneLinkHandler } from './wsPhoneLinkAuth.js';
+import { assertDeviceSessionClaims, validateConnectionDeviceSession } from './auth_session_validation.js';
 import { handleWsApiGuestAdoption } from './wsApiGuestAdoption.js';
 import { announceWsSurfaceDisconnect, handleWsSurfaceOperation } from './wsSurfaceOperations.js';
 import { handleTeleportSurfaceLoss, handleWsTeleportOperation } from './wsTeleportOperations.js';
@@ -102,7 +88,6 @@ import { registerServerIdentityRoutes } from './auth_routes_server.js';
 import { initServerIdentity } from './serverIdentity.js';
 import { isWsApiPrincipalProvisioned } from './wsApiIdentity.js';
 import { handleWsAtomeRealtimeOperation } from './wsAtomeRealtimeOperation.js';
-import { revokeAllRefreshSessions } from './auth_sessions.js';
 import {
   commitAtomeEvent,
   commitAtomeEvents,
@@ -573,6 +558,7 @@ async function startServer() {
     });
 
     server.addHook('onResponse', async (request, reply) => {
+      if (request.url.startsWith('/auth/v/')) return;
       if (MINIMAL_LOGS && reply.statusCode < 400) return;
       const durationMs = Date.now() - (request._requestStartMs || Date.now());
       logStructured('info', {
@@ -589,6 +575,7 @@ async function startServer() {
     });
 
     server.addHook('onError', async (request, reply, error) => {
+      if (request.url.startsWith('/auth/v/')) return;
       const lifecycle = classifyHttpLifecycleError({ error, request, reply });
       const details = {
         timestamp: new Date().toISOString(),
@@ -817,6 +804,8 @@ async function startServer() {
       preCompressed: true
     });
 
+    await registerOfflineAppAssets(server, { staticRoot, eveStaticRoot, projectRoot });
+
     // WebSocket natif Fastify v5
     await server.register(fastifyWebsocket);
 
@@ -842,6 +831,10 @@ async function startServer() {
         return secret;
       };
 
+    const phoneLinkAuth = DATABASE_ENABLED
+      ? createWsPhoneLinkHandler({ projectRoot, jwtSecret: getRequiredJwtSecret })
+      : null;
+
     // Helper function to validate token (for sharing routes)
     // SECURITY: always verify JWT signatures (never trust base64-decoded payload).
     const validateToken = async (request) => {
@@ -862,11 +855,11 @@ async function startServer() {
         if (!token) return null;
 
         if (server.jwt && typeof server.jwt.verify === 'function') {
-          return server.jwt.verify(token, options);
+          return assertDeviceSessionClaims(server.jwt.verify(token, options));
         }
 
         const jwt = await import('jsonwebtoken');
-        return jwt.default.verify(token, getRequiredJwtSecret(), options);
+        return assertDeviceSessionClaims(jwt.default.verify(token, getRequiredJwtSecret(), options));
       };
 
       // Try Bearer token first
@@ -2161,6 +2154,21 @@ async function startServer() {
             return;
           }
 
+          const phoneLinkResponse = await phoneLinkAuth?.handle(data, connection, request.ip);
+          if (phoneLinkResponse) {
+            safeSend(phoneLinkResponse);
+            return;
+          }
+
+          try {
+            await validateConnectionDeviceSession(connection, data.token, getRequiredJwtSecret());
+          } catch {
+            detachWsApiClient(connection);
+            safeSend({ type: `${String(data.type || 'error')}-response`, requestId: data.requestId || data.request_id,
+              success: false, ok: false, error: 'auth_session_invalid' });
+            return;
+          }
+
           const aiProviderResponse = await handleWsAiProviderOperation(data, connection);
           if (aiProviderResponse) {
             safeSend(aiProviderResponse);
@@ -2596,772 +2604,6 @@ async function startServer() {
           });
           if (guestAdoptionResponse) {
             safeSend(guestAdoptionResponse);
-            return;
-          }
-
-          if (data.type === 'auth') {
-            const action = data.action || '';
-            const requestId = data.requestId;
-
-            // Get dataSource adapter for auth functions
-            const dataSource = db.getDataSourceAdapter();
-
-            const provisionResponse = await handleWsApiAccountProvision(data, {
-              dataSource,
-              connection,
-              jwtSecret: getRequiredJwtSecret,
-              generatePrincipalId: generateOpaquePrincipalId,
-              attach: (targetConnection, userId, token) => {
-                if (!targetConnection) return;
-                attachWsApiClientToUser(targetConnection, userId);
-                const decoded = jwt.verify(token, getRequiredJwtSecret());
-                targetConnection._wsApiAuthExpMs = decoded?.exp ? decoded.exp * 1000 : null;
-              }
-            });
-            if (provisionResponse) {
-              safeSend(provisionResponse);
-              return;
-            }
-
-            try {
-              if (action === 'bootstrap' || action === 'register' || action === 'create-user') {
-                const { username, phone, password } = data;
-                const isBootstrap = action === 'bootstrap';
-                const requestedUsername = String(username || '').trim();
-                console.log(`[auth] bootstrap_started action=${action} access=private request_id=${requestId || 'missing'}`);
-                if ((!isBootstrap && !requestedUsername) || !phone || !password) {
-                  safeSend({
-                    type: 'auth-response',
-                    requestId,
-                    success: false,
-                    error: isBootstrap ? 'Missing required fields: phone, password' : 'Missing required fields: username, phone, password'
-                  });
-                  return;
-                }
-                if (typeof password !== 'string' || password.length < 8) {
-                  safeSend({
-                    type: 'auth-response',
-                    requestId,
-                    success: false,
-                    error: 'Password must be at least 8 characters'
-                  });
-                  return;
-                }
-
-                const cleanPhone = normalizePhone(phone);
-                if (!cleanPhone || cleanPhone.length < 6) {
-                  safeSend({
-                    type: 'auth-response',
-                    requestId,
-                    success: false,
-                    error: 'Valid phone number is required'
-                  });
-                  return;
-                }
-
-                // Account-creation flood guard, same limiter as login above.
-                const registerRate = enforceAuthIdentityRateLimit('auth_register', cleanPhone, 5);
-                if (!registerRate.ok) {
-                  safeSend({
-                    type: 'auth-response',
-                    requestId,
-                    success: false,
-                    error: 'Too many attempts',
-                    retry_after_seconds: registerRate.retryAfterSeconds
-                  });
-                  return;
-                }
-                const requestedTechnicalUsername = normalizePhone(requestedUsername) === cleanPhone
-                  ? ''
-                  : requestedUsername;
-
-                // Check if user already exists
-                const existingUser = await findUserByPhone(dataSource, cleanPhone);
-                if (existingUser) {
-                  if (!isBootstrap) {
-                    safeSend({
-                      type: 'auth-response',
-                      requestId,
-                      success: false,
-                      alreadyExists: true,
-                      error: 'Invalid credentials'
-                    });
-                    return;
-                  }
-
-                  const normalizedUserPhone = normalizePhone(existingUser.phone);
-                  if (!normalizedUserPhone || normalizedUserPhone !== cleanPhone) {
-                    console.warn(`[ws/api] 🚨 Phone mismatch on bootstrap: expected ${String(cleanPhone || '').slice(0, 4)}*** got ${String(existingUser.phone || '').slice(0, 4)}*** (userId=${existingUser.user_id})`);
-                    safeSend({
-                      type: 'auth-response',
-                      requestId,
-                      success: false,
-                      error: 'Invalid credentials'
-                    });
-                    return;
-                  }
-
-                  const { verifyPassword } = await import('./auth.js');
-                  const isValid = await verifyPassword(password, existingUser.password_hash);
-                  if (!isValid) {
-                    safeSend({
-                      type: 'auth-response',
-                      requestId,
-                      success: false,
-                      error: 'Invalid credentials'
-                    });
-                    return;
-                  }
-
-                  const jwt = await import('jsonwebtoken');
-                  const jwtSecret = getRequiredJwtSecret();
-                  const token = jwt.default.sign(
-                    { userId: existingUser.user_id },
-                    jwtSecret,
-                    { expiresIn: '7d' }
-                  );
-
-                  try {
-                    await ensureUserHome(projectRoot, {
-                      id: existingUser.user_id,
-                      username: existingUser.username,
-                    });
-                  } catch (e) {
-                    console.warn('[ws/api] Failed to prepare user home:', e.message);
-                  }
-
-                  safeSend({
-                    type: 'auth-response',
-                    requestId,
-                    success: true,
-                    ok: true,
-                    alreadyExists: true,
-                    token,
-                    user: {
-                      id: existingUser.user_id,
-                      user_id: existingUser.user_id,
-                      username: existingUser.username,
-                      phone: cleanPhone,
-                    },
-                    message: 'User authenticated successfully'
-                  });
-                  console.log(`[auth] bootstrap_succeeded account=existing request_id=${requestId || 'missing'}`);
-
-                  attachWsApiClientToUser(connection, existingUser.user_id);
-                  await userVaultRouter.provision(existingUser.user_id);
-                  try {
-                    const decoded = jwt.default.verify(token, jwtSecret);
-                    if (decoded && typeof decoded.exp === 'number') {
-                      connection._wsApiAuthExpMs = decoded.exp * 1000;
-                    } else {
-                      connection._wsApiAuthExpMs = null;
-                    }
-                  } catch (error) {
-                    console.warn("[server] operation failed", error);
-                    connection._wsApiAuthExpMs = null;
-                  }
-                  return;
-                }
-
-                if (!consumePhoneVerification(connection, cleanPhone, 'enrollment')) {
-                  safeSend({
-                    type: 'auth-response',
-                    requestId,
-                    success: false,
-                    error: 'phone_verification_required'
-                  });
-                  console.warn(`[auth] bootstrap rejected reason=phone_verification_required request_id=${requestId || 'missing'}`);
-                  return;
-                }
-
-                // Hash password and create user
-                // Account discovery requires an explicit later profile publication.
-                const passwordHash = await hashPassword(password);
-                const userId = generateOpaquePrincipalId();
-                const cleanUsername = requestedTechnicalUsername || `user_${userId}`;
-                try {
-                  await createUserAtome(dataSource, userId, cleanUsername, cleanPhone, passwordHash, 'private', data.optional || {});
-
-                  try {
-                    const accessRows = await dataSource.query(
-                      'SELECT particle_value FROM particles WHERE atome_id = ? AND particle_key = ?',
-                      [userId, 'access']
-                    );
-                    const storedAccess = accessRows?.[0]?.particle_value ? JSON.parse(accessRows[0].particle_value) : null;
-                    console.log(`[auth] bootstrap_persisted access=${storedAccess ?? 'unknown'} request_id=${requestId || 'missing'}`);
-                  } catch (error) {
-                    console.warn("[server] operation failed", error);
-                    console.log(`[auth] bootstrap_persisted access=unknown request_id=${requestId || 'missing'}`);
-                  }
-                } catch (err) {
-                  const message = err?.message || String(err);
-                  if (message.includes('User already exists')) {
-                    safeSend({
-                      type: 'auth-response',
-                      requestId,
-                      success: false,
-                      alreadyExists: true,
-                      error: 'Invalid credentials'
-                    });
-                    return;
-                  }
-                  throw err;
-                }
-
-                try {
-                  await directoryPublicService.refreshPrincipal(userId);
-                } catch (error) {
-                  console.warn("[server] operation failed", error);
-                }
-
-                // Issue JWT immediately so first post-register commit has a token.
-                const jwt = await import('jsonwebtoken');
-                const jwtSecret = getRequiredJwtSecret();
-                const token = jwt.default.sign(
-                  { userId },
-                  jwtSecret,
-                  { expiresIn: '7d' }
-                );
-
-                safeSend({
-                  type: 'auth-response',
-                  requestId,
-                  success: true,
-                  alreadyExists: false,
-                  userId,
-                  token,
-                  user: {
-                    id: userId,
-                    user_id: userId,
-                    username: cleanUsername,
-                    phone: cleanPhone,
-                  },
-                  message: 'User created successfully'
-                });
-                console.log(`[auth] bootstrap_succeeded account=created request_id=${requestId || 'missing'}`);
-
-                attachWsApiClientToUser(connection, userId);
-                await userVaultRouter.provision(userId);
-                try {
-                  const decoded = jwt.default.verify(token, jwtSecret);
-                  if (decoded && typeof decoded.exp === 'number') {
-                    connection._wsApiAuthExpMs = decoded.exp * 1000;
-                  } else {
-                    connection._wsApiAuthExpMs = null;
-                  }
-                } catch (error) {
-                  console.warn("[server] operation failed", error);
-                  connection._wsApiAuthExpMs = null;
-                }
-              } else if (action === 'request-phone-verification') {
-                const rawPhone = data.phone;
-                const purpose = String(data.purpose || '');
-                if (!['enrollment', 'change', 'removal'].includes(purpose)) {
-                  safeSend({ type: 'auth-response', requestId, success: false, error: 'Explicit verification purpose is required' });
-                  return;
-                }
-                if (purpose !== 'enrollment' && !connection?._wsApiUserId) {
-                  safeSend({ type: 'auth-response', requestId, success: false, error: 'Authentication is required' });
-                  return;
-                }
-                if (!rawPhone || typeof rawPhone !== 'string') {
-                  safeSend({
-                    type: 'auth-response',
-                    requestId,
-                    success: false,
-                    error: 'Missing required field: phone'
-                  });
-                  return;
-                }
-                const cleanPhone = normalizePhone(rawPhone);
-                if (!cleanPhone || cleanPhone.length < 6) {
-                  safeSend({
-                    type: 'auth-response',
-                    requestId,
-                    success: false,
-                    error: 'Valid phone number is required'
-                  });
-                  return;
-                }
-                const rate = enforceAuthIdentityRateLimit('phone_verification_request', cleanPhone, 3);
-                if (!rate.ok) {
-                  safeSend({
-                    type: 'auth-response',
-                    requestId,
-                    success: false,
-                    ok: false,
-                    retryAfterSeconds: rate.retryAfterSeconds,
-                    error: 'Too many verification requests'
-                  });
-                  return;
-                }
-                const delivery = await requestPhoneVerificationDelivery({
-                  phone: cleanPhone,
-                  purpose,
-                  exposeForTest: data.exposeForTest === true
-                });
-                if (delivery.otpBypassed === true) {
-                  markPhoneVerification(connection, cleanPhone, purpose);
-                }
-                const response = {
-                  type: 'auth-response',
-                  requestId,
-                  success: true,
-                  ok: true,
-                  purpose
-                };
-                if (delivery.code) response.code = delivery.code;
-                if (delivery.otpBypassed === true) response.otpBypassed = true;
-                console.log(`[auth] phone_verification_requested purpose=${purpose} delivery=${delivery.delivery} request_id=${requestId || 'missing'}`);
-                safeSend(response);
-              } else if (action === 'verify-phone-verification') {
-                const rawPhone = data.phone;
-                const purpose = String(data.purpose || '');
-                if (!['enrollment', 'change', 'removal'].includes(purpose)) {
-                  safeSend({ type: 'auth-response', requestId, success: false, error: 'Explicit verification purpose is required' });
-                  return;
-                }
-                if (purpose !== 'enrollment' && !connection?._wsApiUserId) {
-                  safeSend({ type: 'auth-response', requestId, success: false, error: 'Authentication is required' });
-                  return;
-                }
-                const code = data.code === undefined || data.code === null ? '' : String(data.code).trim();
-                if (!rawPhone || typeof rawPhone !== 'string' || !code) {
-                  safeSend({
-                    type: 'auth-response',
-                    requestId,
-                    success: false,
-                    error: 'Missing required fields: phone, code'
-                  });
-                  return;
-                }
-                const cleanPhone = normalizePhone(rawPhone);
-                const rate = enforceAuthIdentityRateLimit('phone_verification_verify', cleanPhone, 5);
-                if (!rate.ok) {
-                  safeSend({
-                    type: 'auth-response',
-                    requestId,
-                    success: false,
-                    ok: false,
-                    retryAfterSeconds: rate.retryAfterSeconds,
-                    error: 'Too many verification attempts'
-                  });
-                  return;
-                }
-                const result = verifyOTP(cleanPhone, code, purpose);
-                if (!result.valid) {
-                  safeSend({
-                    type: 'auth-response',
-                    requestId,
-                    success: false,
-                    ok: false,
-                    error: result.error || 'Invalid OTP code'
-                  });
-                  return;
-                }
-                if (purpose === 'enrollment') markPhoneVerification(connection, cleanPhone, purpose);
-                console.log(`[auth] phone_verification_confirmed purpose=${purpose} request_id=${requestId || 'missing'}`);
-                safeSend({
-                  type: 'auth-response',
-                  requestId,
-                  success: true,
-                  ok: true,
-                  purpose
-                });
-              } else if (action === 'change-phone' || action === 'remove-phone') {
-                const principalId = connection?._wsApiUserId ? String(connection._wsApiUserId) : null;
-                if (!principalId) {
-                  safeSend({ type: 'auth-response', requestId, success: false, error: 'Authentication is required' });
-                  return;
-                }
-                const purpose = action === 'change-phone' ? 'change' : 'removal';
-                const rawPhone = action === 'change-phone' ? data.phone : (await findUserById(dataSource, principalId))?.phone;
-                const cleanPhone = normalizePhone(rawPhone);
-                const code = String(data.code || '').trim();
-                if (!cleanPhone || !code) {
-                  safeSend({ type: 'auth-response', requestId, success: false, error: 'Verified phone and code are required' });
-                  return;
-                }
-                const verified = verifyOTP(cleanPhone, code, purpose);
-                if (!verified.valid) {
-                  safeSend({ type: 'auth-response', requestId, success: false, error: verified.error || 'Invalid verification code' });
-                  return;
-                }
-                if (purpose === 'change') await replaceVerifiedPhone(dataSource, principalId, cleanPhone);
-                else await removeVerifiedPhone(dataSource, principalId);
-                await revokeAllRefreshSessions(dataSource, principalId, `phone_${purpose}`);
-                const activeConnections = wsApiClientsByUserId.get(principalId);
-                for (const activeConnection of activeConnections || []) {
-                  if (activeConnection !== connection) detachWsApiClient(activeConnection);
-                }
-                safeSend({ type: 'auth-response', requestId, success: true, ok: true, user: { id: principalId, user_id: principalId } });
-              } else if (action === 'lookup-phone') {
-                const rawPhone = data.phone;
-                if (!rawPhone || typeof rawPhone !== 'string') {
-                  safeSend({
-                    type: 'auth-response',
-                    requestId,
-                    success: false,
-                    error: 'Missing required field: phone'
-                  });
-                  return;
-                }
-
-                const cleanPhone = rawPhone.trim().replace(/\s+/g, '');
-                const user = await findUserByPhone(dataSource, cleanPhone);
-                if (!user) {
-                  safeSend({
-                    type: 'auth-response',
-                    requestId,
-                    success: false,
-                    ok: false,
-                    error: 'User not found'
-                  });
-                  return;
-                }
-
-                // Read visibility without leaking other particles.
-                let visibility = 'private';
-                try {
-                  const rows = await dataSource.query(
-                    `SELECT particle_value FROM particles WHERE atome_id = ? AND particle_key = 'visibility' LIMIT 1`,
-                    [user.user_id]
-                  );
-                  if (rows && rows[0] && rows[0].particle_value) {
-                    try { visibility = JSON.parse(rows[0].particle_value); } catch (error) {
-                      console.warn("[server] operation failed", error); visibility = rows[0].particle_value;
-                    }
-                  }
-                } catch (error) {
-                  console.warn("[server] operation failed", error);
-                }
-
-                safeSend({
-                  type: 'auth-response',
-                  requestId,
-                  success: true,
-                  ok: true,
-                  user: {
-                    id: user.user_id,
-                    user_id: user.user_id,
-                    username: user.username,
-                    visibility: visibility === 'public' ? 'public' : 'private'
-                  }
-                });
-              } else if (action === 'delete' || action === 'delete-user') {
-                const { userId } = data;
-                const authenticatedUserId = connection?._wsApiUserId ? String(connection._wsApiUserId) : null;
-                const targetUserId = userId ? String(userId) : authenticatedUserId;
-
-                if (!targetUserId || targetUserId !== authenticatedUserId) {
-                  safeSend({
-                    type: 'auth-response',
-                    requestId,
-                    success: false,
-                    error: 'Authenticated principal is required'
-                  });
-                  return;
-                }
-
-                await deleteUserAtome(dataSource, targetUserId);
-
-                try {
-                  await directoryPublicService.refreshPrincipal(targetUserId, { deleted: true });
-                } catch (error) {
-                  console.warn("[server] operation failed", error);
-                }
-
-                safeSend({
-                  type: 'auth-response',
-                  requestId,
-                  success: true,
-                  message: 'User deleted successfully'
-                });
-              } else if (action === 'list-users') {
-                const users = await listAllUsers(dataSource);
-
-                safeSend({
-                  type: 'auth-response',
-                  requestId,
-                  success: true,
-                  users
-                });
-              } else if (action === 'get-user') {
-                const { userId, phone } = data;
-                if (phone && !connection?._wsApiUserId) {
-                  safeSend({ type: 'auth-response', requestId, success: false, error: 'Authentication is required' });
-                  return;
-                }
-                let user = null;
-
-                if (userId) {
-                  user = await findUserById(dataSource, userId);
-                } else if (phone) {
-                  user = await findUserByPhone(dataSource, phone);
-                }
-
-                const publicUser = user ? { ...user, phone: undefined, password_hash: undefined } : null;
-                safeSend({
-                  type: 'auth-response',
-                  requestId,
-                  success: true,
-                  user: publicUser
-                });
-              } else if (action === 'update-user') {
-                const { userId, key, value } = data;
-
-                if (!userId || !key) {
-                  safeSend({
-                    type: 'auth-response',
-                    requestId,
-                    success: false,
-                    error: 'Missing required fields: userId, key'
-                  });
-                  return;
-                }
-
-                // `key` vient du client. Le chemin canonique refuse désormais les
-                // champs d'enveloppe réservés (owner_id, parent_id, atomeId…);
-                // le refus doit devenir une réponse propre, pas une exception.
-                try {
-                  await updateUserParticle(dataSource, userId, key, value);
-                } catch (error) {
-                  safeSend({
-                    type: 'auth-response',
-                    requestId,
-                    success: false,
-                    error: String(error?.message || 'update_user_particle_rejected')
-                  });
-                  return;
-                }
-                if ([
-                  'visibility', 'access', 'name', 'first_name', 'firstname', 'firstName',
-                  'nickname', 'pseudonym', 'pseudo', 'display_name_source', 'user_face', 'eve_profile'
-                ].includes(String(key))) {
-                  await directoryPublicService.refreshPrincipal(userId);
-                }
-
-                safeSend({
-                  type: 'auth-response',
-                  requestId,
-                  success: true,
-                  message: 'User updated successfully'
-                });
-              } else if (action === 'login') {
-                const { phone, password } = data;
-
-                // Credential stuffing guard. The same limiter already protects
-                // phone verification; login and register were the two unthrottled
-                // doors (no HTTP rate-limit plugin is registered either, and bcrypt
-                // slows an attacker without stopping one).
-                const loginRate = enforceAuthIdentityRateLimit('auth_login', normalizePhone(phone) || 'unknown', 10);
-                if (!loginRate.ok) {
-                  safeSend({
-                    type: 'auth-response',
-                    requestId,
-                    success: false,
-                    error: 'Too many attempts',
-                    retry_after_seconds: loginRate.retryAfterSeconds
-                  });
-                  return;
-                }
-
-                if (!phone || !password) {
-                  safeSend({
-                    type: 'auth-response',
-                    requestId,
-                    success: false,
-                    error: 'Missing required fields: phone, password'
-                  });
-                  return;
-                }
-
-                // Find user by phone
-                const user = await findUserByPhone(dataSource, phone);
-                if (!user) {
-                  safeSend({
-                    type: 'auth-response',
-                    requestId,
-                    success: false,
-                    error: 'User not found'
-                  });
-                  return;
-                }
-                const normalizedInput = normalizePhone(phone);
-                const normalizedUserPhone = normalizePhone(user.phone);
-                if (!normalizedUserPhone || normalizedUserPhone !== normalizedInput) {
-                  console.warn(`[ws/api] 🚨 Phone mismatch on login: expected ${String(normalizedInput || '').slice(0, 4)}*** got ${String(user.phone || '').slice(0, 4)}*** (userId=${user.user_id})`);
-                  safeSend({
-                    type: 'auth-response',
-                    requestId,
-                    success: false,
-                    error: 'Invalid credentials'
-                  });
-                  return;
-                }
-
-                // Verify password
-                const { verifyPassword } = await import('./auth.js');
-                const isValid = await verifyPassword(password, user.password_hash);
-                if (!isValid) {
-                  safeSend({
-                    type: 'auth-response',
-                    requestId,
-                    success: false,
-                    error: 'Invalid password'
-                  });
-                  return;
-                }
-
-                // Generate JWT token
-                const jwt = await import('jsonwebtoken');
-                const jwtSecret = getRequiredJwtSecret();
-                const token = jwt.default.sign(
-                  { userId: user.user_id },
-                  jwtSecret,
-                  { expiresIn: '7d' }
-                );
-
-                try {
-                  await ensureUserHome(projectRoot, {
-                    id: user.user_id,
-                    username: user.username
-                  });
-                } catch (e) {
-                  console.warn('[ws/api] Failed to prepare user home:', e.message);
-                }
-
-                safeSend({
-                  type: 'auth-response',
-                  requestId,
-                  success: true,
-                  ok: true,
-                  token,
-                  user: authenticatedUserSnapshot(user)
-                });
-
-                // Associate this ws/api connection with the authenticated user.
-                attachWsApiClientToUser(connection, user.user_id);
-
-                // Cache expiry on the connection to prevent stale identity usage.
-                try {
-                  const decoded = jwt.default.verify(token, jwtSecret);
-                  if (decoded && typeof decoded.exp === 'number') {
-                    connection._wsApiAuthExpMs = decoded.exp * 1000;
-                  } else {
-                    connection._wsApiAuthExpMs = null;
-                  }
-                } catch (error) {
-                  console.warn("[server] operation failed", error);
-                  connection._wsApiAuthExpMs = null;
-                }
-              } else if (action === 'me') {
-                const { token } = data;
-
-                if (!token) {
-                  safeSend({
-                    type: 'auth-response',
-                    requestId,
-                    success: false,
-                    error: 'No token provided'
-                  });
-                  return;
-                }
-
-                try {
-                  const jwt = await import('jsonwebtoken');
-                  const jwtSecret = getRequiredJwtSecret();
-                  const decoded = jwt.default.verify(token, jwtSecret);
-                  const decodedUserId = decoded.userId || decoded.id || decoded.user_id || decoded.sub || null;
-                  let user = decodedUserId ? await findUserById(dataSource, String(decodedUserId)) : null;
-
-                  if (!user) {
-                    safeSend({
-                      type: 'auth-response',
-                      requestId,
-                      success: false,
-                      error: 'remote_account_not_provisioned'
-                    });
-                    return;
-                  }
-
-                  try {
-                    await ensureUserHome(projectRoot, {
-                      id: user.user_id,
-                      username: user.username
-                    });
-                  } catch (e) {
-                    console.warn('[ws/api] Failed to prepare user home:', e.message);
-                  }
-
-                  // Support registerAs ONLY when it matches the authenticated user id.
-                  // This prevents attaching the ws/api connection under an arbitrary identifier
-                  // (e.g. a phone number), which would break ACL checks and is unsafe.
-                  const requestedRegisterAs = data.registerAs ? String(data.registerAs) : null;
-                  const registerAsUserId = (requestedRegisterAs && requestedRegisterAs === String(user.user_id))
-                    ? requestedRegisterAs
-                    : String(user.user_id);
-
-                  safeSend({
-                    type: 'auth-response',
-                    requestId,
-                    success: true,
-                    ok: true,
-                    user: authenticatedUserSnapshot(user),
-                    registeredAs: registerAsUserId
-                  });
-
-                  // Associate this ws/api connection with the requested user ID.
-                  attachWsApiClientToUser(connection, registerAsUserId);
-                  if (process.env.WS_CONNECTION_DEBUG === '1') {
-                    console.log(`[ws/api] Auth: token=${user.user_id.substring(0, 8)}, registerAs=${registerAsUserId.substring(0, 8)}`);
-                  }
-
-                  // Cache expiry on the connection to prevent stale identity usage.
-                  if (decoded && typeof decoded.exp === 'number') {
-                    connection._wsApiAuthExpMs = decoded.exp * 1000;
-                  } else {
-                    connection._wsApiAuthExpMs = null;
-                  }
-                } catch (jwtError) {
-                  safeSend({
-                    type: 'auth-response',
-                    requestId,
-                    success: false,
-                    error: 'Invalid or expired token'
-                  });
-                }
-              } else if (action === 'logout') {
-                // Logout is client-side token clearing, just acknowledge
-                try {
-                  detachWsApiClient(connection);
-                } catch (error) {
-                  console.warn("[server] operation failed", error);
-                }
-                safeSend({
-                  type: 'auth-response',
-                  requestId,
-                  success: true,
-                  ok: true,
-                  message: 'Logged out successfully'
-                });
-              } else {
-                safeSend({
-                  type: 'auth-response',
-                  requestId,
-                  success: false,
-                  error: `Unknown auth action: ${action}`
-                });
-              }
-            } catch (error) {
-              console.error(`❌ Auth WebSocket error: ${error.message}`);
-              safeSend({
-                type: 'auth-response',
-                requestId,
-                success: false,
-                error: error.message
-              });
-            }
             return;
           }
 

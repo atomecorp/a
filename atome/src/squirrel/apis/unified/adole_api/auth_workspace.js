@@ -1,7 +1,7 @@
 // Extracted from auth.js: anonymous→account workspace migration + previous-session workspace recovery.
 import { adapters, getPrimaryBackend } from './auth_core.js';
 import { syncLocalProjectsToFastify } from './atomes.js';
-import { clearGuestWorkspace, guestAdoptionPayload, listGuestFiles } from './guest_workspace_store.js';
+import { completeBrowserGuestAdoption, guestAdoptionPayload, listGuestFiles } from './guest_workspace_store.js';
 
 const bytesToBase64 = (bytes) => {
     let value = '';
@@ -13,7 +13,7 @@ const bytesToBase64 = (bytes) => {
 const adoptBrowserGuestWorkspace = async (adapter, fromUserId, toUserId, operationId = null) => {
     const resolvedOperationId = operationId || globalThis.crypto?.randomUUID?.();
     if (!resolvedOperationId) return { ok: false, reason: 'secure_random_unavailable' };
-    const payload = await guestAdoptionPayload(fromUserId);
+    const payload = await guestAdoptionPayload(fromUserId, toUserId);
     const json = JSON.stringify(payload);
     const bytes = new TextEncoder().encode(json);
     const digest = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', bytes))).map((value) => value.toString(16).padStart(2, '0')).join('');
@@ -30,7 +30,7 @@ const adoptBrowserGuestWorkspace = async (adapter, fromUserId, toUserId, operati
     }
     const finalized = await adapter.ws.send({ type: 'guest-adoption', action: 'finalize', operation_id: resolvedOperationId });
     if (!finalized?.ok && !finalized?.success) return { ok: false, reason: finalized?.error || 'guest_adoption_finalize_failed' };
-    await clearGuestWorkspace(fromUserId);
+    await completeBrowserGuestAdoption(fromUserId, toUserId);
     return { ok: true, adopted: payload.atomes.length, operationId: resolvedOperationId };
 };
 const transferGuestWorkspace = async (fromUserId, toUserId, { operationId = null } = {}) => {

@@ -17,7 +17,7 @@ beforeAll(async () => {
     process.env.SQLITE_PATH = dbPath;
     adole = await import('../../database/adole.js');
     await adole.initDatabase();
-    const authModule = await import('../../server/auth.js');
+    const authModule = await import('../../server/auth_users.js');
     createUserAtome = authModule.createUserAtome;
     const stackModule = await import('../../server/notificationStack.js');
     pushNotificationToUserStack = stackModule.pushNotificationToUserStack;
@@ -34,7 +34,7 @@ afterAll(async () => {
 test('notification unread and archive updates remain durable in the canonical user stack', async () => {
     const userId = `notification_user_${Date.now()}`;
     await createUserAtome(
-        adole.getDataSourceAdapter(), userId, 'Notification user', '+15550003005', 'hash', 'public', {}
+        adole.getDataSourceAdapter(), userId, 'Notification user', '+15550003005', 'public', {}
     );
     await pushNotificationToUserStack({
         userId,

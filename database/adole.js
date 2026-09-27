@@ -59,7 +59,7 @@ import {
     extractEventPatch,
     resolveEventPayload,
     stripEventMetaPatch
-} from './adole_event_contract.js';
+} from '../atome/src/shared/adole_event_contract.js';
 import { createAdoleEventMutationApi } from './adole_event_mutation.js';
 import { createAdoleConflictApi } from './adole_conflicts.js';
 

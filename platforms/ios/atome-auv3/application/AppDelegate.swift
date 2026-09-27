@@ -26,14 +26,16 @@ struct atomeApp: App {
                     if !fileManager.isInitialized {
                         fileManager.initializeFileStructure()
                     }
-                    // Inbox disabled: no initial flush
+                    // The bundled page pulls pending authentication links when ready.
                 }
                 // Handle custom activation scheme (e.g., atomeapp://activate) from AUv3 nudge
-                .onOpenURL { _ in /* inbox disabled */ }
+                .onOpenURL { url in AuthLinkInbox.receive(url) }
                 // Handle NSUserActivity-based activation (fallback path)
                 .onContinueUserActivity(SharedBus.userActivityType) { _ in /* inbox disabled */ }
                 // Also handle general web-browsing user activities (universal links)
-                .onContinueUserActivity(NSUserActivityTypeBrowsingWeb) { _ in /* inbox disabled */ }
+                .onContinueUserActivity(NSUserActivityTypeBrowsingWeb) { activity in
+                    if let url = activity.webpageURL { AuthLinkInbox.receive(url) }
+                }
         }
         // React to scene lifecycle to flush inbox only when foregroundActive
         .onChange(of: scenePhase) { newPhase in

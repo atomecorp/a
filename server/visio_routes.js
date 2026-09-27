@@ -5,7 +5,7 @@
 
 import { v4 as uuidv4 } from 'uuid';
 import db from '../database/adole.js';
-import { findUserById } from './auth.js';
+import { findUserById } from './auth_users.js';
 import { nowIso, normalizePhone, makeRequestId, normalizeVisibility } from './visio_helpers.js';
 
 export function createVisioRoutes({ rooms, connectionRequests, connections, databaseEnabled, ensureRoom, resolveAuthUserFromRequest, resolveUserInfo, isConnected, addConnection, getRoomMeta, ensureRoomMeta }) {

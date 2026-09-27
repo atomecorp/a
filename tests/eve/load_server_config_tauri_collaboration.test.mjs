@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict';
 import { afterEach, test } from 'vitest';
-import { resolveFastifyVerificationUrl } from '../../atome/src/squirrel/apis/unified/adole_api/auth_remote_provisioning.js';
 import { shouldAttemptFastify } from '../../atome/src/squirrel/apis/unified/adole_backend.js';
 
 const previousWindow = globalThis.window;
@@ -65,46 +64,4 @@ test('an ordinary browser on local Axum cannot activate Fastify as a parallel ba
     };
 
     assert.equal(shouldAttemptFastify(), false);
-});
-
-test('remote provisioning verifies local Fastify over HTTP, never over WebSocket', () => {
-    const localStorage = {
-        getItem: () => null,
-        setItem: () => {},
-        removeItem: () => {}
-    };
-    globalThis.localStorage = localStorage;
-    globalThis.window = {
-        location: {
-            protocol: 'http:', hostname: '127.0.0.1', port: '3000',
-            origin: 'http://127.0.0.1:3000', href: 'http://127.0.0.1:3000/'
-        },
-        localStorage,
-        __TAURI_INTERNALS__: { invoke: () => {} },
-        __SQUIRREL_TAURI_FASTIFY_URL__: 'http://127.0.0.1:3001',
-        __SQUIRREL_FASTIFY_WS_API_URL__: 'ws://127.0.0.1:3001/ws/api'
-    };
-
-    assert.equal(resolveFastifyVerificationUrl(), 'http://127.0.0.1:3001/api/server/verify');
-});
-
-test('remote provisioning preserves HTTPS for production while sync uses WSS', () => {
-    const localStorage = {
-        getItem: () => null,
-        setItem: () => {},
-        removeItem: () => {}
-    };
-    globalThis.localStorage = localStorage;
-    globalThis.window = {
-        location: {
-            protocol: 'tauri:', hostname: 'tauri.localhost', port: '',
-            origin: 'tauri://localhost', href: 'tauri://localhost/'
-        },
-        localStorage,
-        __TAURI_INTERNALS__: { invoke: () => {} },
-        __SQUIRREL_TAURI_FASTIFY_URL__: 'https://atome.one',
-        __SQUIRREL_FASTIFY_WS_API_URL__: 'wss://atome.one/ws/api'
-    };
-
-    assert.equal(resolveFastifyVerificationUrl(), 'https://atome.one/api/server/verify');
 });

@@ -1,0 +1,6 @@
+"$schema" = "schemas/schema.json"
+
+[[permission]]
+identifier = "auth-device"
+description = "Allows the main application to sign authentication challenges with its protected device key."
+commands.allow = ["auth_device_key"]

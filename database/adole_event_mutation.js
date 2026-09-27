@@ -4,7 +4,7 @@ import {
     eventPropertyPatch,
     eventTouchedPropertyKeys,
     resolveEventPayload
-} from './adole_event_contract.js';
+} from '../atome/src/shared/adole_event_contract.js';
 
 const parseStoredValue = (value) => {
     if (value === null || value === undefined) return null;
