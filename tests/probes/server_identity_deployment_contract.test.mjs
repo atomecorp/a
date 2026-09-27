@@ -1,6 +1,6 @@
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { runInNewContext } from 'node:vm';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
@@ -8,17 +8,49 @@ import {
     validateServerIdentityKeyPair
 } from '../../server/serverIdentity.js';
 import { ensureServerIdentity } from '../../scripts/server_secure_config.js';
+import {
+    verifyProductionDependencyLock,
+    verifyRuntimeDependencies
+} from '../../scripts/verify_deployed_source.js';
 
 const tempRoots = [];
+const testTempRoot = fileURLToPath(new URL('../../temp/', import.meta.url));
 
 function createFixture() {
-    const root = mkdtempSync(path.join(tmpdir(), 'squirrel-server-identity-'));
+    mkdirSync(testTempRoot, { recursive: true });
+    const root = mkdtempSync(path.join(testTempRoot, 'squirrel-server-identity-'));
     tempRoots.push(root);
     const envDir = path.join(root, 'etc', 'squirrel');
     mkdirSync(envDir, { recursive: true });
     const envFile = path.join(envDir, 'squirrel.env');
     writeFileSync(envFile, 'NODE_ENV=production\n', { mode: 0o600 });
     return { root, envDir, envFile, identityDir: path.join(envDir, 'identity') };
+}
+
+function createDependencyFixture({ includeRuntime = false } = {}) {
+    mkdirSync(testTempRoot, { recursive: true });
+    const root = mkdtempSync(path.join(testTempRoot, 'squirrel-server-dependencies-'));
+    tempRoots.push(root);
+    writeFileSync(path.join(root, 'package.json'), JSON.stringify({
+        dependencies: { 'rubberband-wasm': '^3.3.0' }
+    }));
+    writeFileSync(path.join(root, 'package-lock.json'), JSON.stringify({
+        lockfileVersion: 3,
+        packages: {
+            '': { dependencies: { 'rubberband-wasm': '^3.3.0' } },
+            'node_modules/rubberband-wasm': {
+                version: '3.3.0',
+                integrity: 'sha512-test'
+            }
+        }
+    }));
+    if (includeRuntime) {
+        const dist = path.join(root, 'node_modules', 'rubberband-wasm', 'dist');
+        mkdirSync(dist, { recursive: true });
+        writeFileSync(path.join(dist, 'index.esm.js'), 'export {};\n');
+        writeFileSync(path.join(dist, 'rubberband.wasm'), 'wasm');
+    }
+    return root;
 }
 
 function envValues(envFile) {
@@ -144,6 +176,28 @@ describe('production server identity deployment', () => {
         expect(verifier).toContain('production server identity provisioning');
         expect(generator).toContain('createServerIdentityKeyPair');
         expect(generator).not.toContain("crypto.generateKeyPairSync('rsa'");
+    });
+});
+
+describe('production server dependency deployment', () => {
+    it('validates production dependencies semantically without npm layout markers', () => {
+        const root = createDependencyFixture();
+        expect(() => verifyProductionDependencyLock(root)).not.toThrow();
+    });
+
+    it('fails before restart when installed runtime assets are missing', () => {
+        const missingRuntimeRoot = createDependencyFixture();
+        const installedRuntimeRoot = createDependencyFixture({ includeRuntime: true });
+
+        expect(() => verifyRuntimeDependencies(missingRuntimeRoot))
+            .toThrow('missing rubberband-wasm runtime asset');
+        expect(() => verifyRuntimeDependencies(installedRuntimeRoot)).not.toThrow();
+
+        const updater = readFileSync(new URL('../../scripts/server_update.js', import.meta.url), 'utf8');
+        expect(updater.indexOf("phase('npm-ci'"))
+            .toBeLessThan(updater.indexOf("phase('verify-runtime-dependencies'"));
+        expect(updater.indexOf("phase('verify-runtime-dependencies'"))
+            .toBeLessThan(updater.indexOf("phase('restart'"));
     });
 });
 

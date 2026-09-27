@@ -10,6 +10,16 @@ const __dirname = path.dirname(__filename);
 
 const DEFAULT_PROJECT_ROOT = path.resolve(__dirname, '..');
 
+const REQUIRED_PRODUCTION_DEPENDENCIES = [
+    {
+        name: 'rubberband-wasm',
+        runtimeFiles: [
+            'dist/index.esm.js',
+            'dist/rubberband.wasm',
+        ],
+    },
+];
+
 const REQUIRED_MARKERS = [
     {
         file: 'server/server.js',
@@ -45,26 +55,6 @@ const REQUIRED_MARKERS = [
         file: 'scripts/setup/service_commands.sh',
         marker: 'Production foreground server mode does not accept extra arguments.',
         label: 'production --server argument guard',
-    },
-    {
-        file: 'package-lock.json',
-        marker: 'node_modules/@rolldown/binding-wasm32-wasi/node_modules/@emnapi/core',
-        label: 'package-lock @emnapi resolution',
-    },
-    {
-        file: 'package-lock.json',
-        marker: 'node_modules/@rolldown/binding-wasm32-wasi/node_modules/@emnapi/runtime',
-        label: 'package-lock @emnapi runtime resolution',
-    },
-    {
-        file: 'package-lock.json',
-        marker: '"node_modules/@emnapi/core"',
-        label: 'package-lock top-level @emnapi core peer resolution',
-    },
-    {
-        file: 'package-lock.json',
-        marker: '"node_modules/@emnapi/runtime"',
-        label: 'package-lock top-level @emnapi runtime peer resolution',
     },
     {
         file: 'scripts/server_secure_config.js',
@@ -173,6 +163,52 @@ function requireFile(projectRoot, spec) {
     }
 }
 
+function readJson(filePath, label) {
+    try {
+        return JSON.parse(fs.readFileSync(filePath, 'utf8'));
+    } catch (error) {
+        throw new Error(`[verify] invalid ${label}: ${filePath}\n[verify] ${error?.message || error}`);
+    }
+}
+
+export function verifyProductionDependencyLock(projectRoot = DEFAULT_PROJECT_ROOT) {
+    const resolvedRoot = path.resolve(projectRoot);
+    const packagePath = path.join(resolvedRoot, 'package.json');
+    const lockPath = path.join(resolvedRoot, 'package-lock.json');
+    const packageJson = readJson(packagePath, 'package manifest');
+    const lockJson = readJson(lockPath, 'package lockfile');
+    const lockedRootDependencies = lockJson.packages?.['']?.dependencies || {};
+
+    for (const spec of REQUIRED_PRODUCTION_DEPENDENCIES) {
+        const requested = packageJson.dependencies?.[spec.name];
+        const lockedRequest = lockedRootDependencies[spec.name];
+        const lockedPackage = lockJson.packages?.[`node_modules/${spec.name}`];
+
+        if (!requested) {
+            throw new Error(`[verify] missing production dependency declaration: ${spec.name}`);
+        }
+        if (lockedRequest !== requested) {
+            throw new Error(`[verify] stale production dependency lock request: ${spec.name} (${lockedRequest || 'missing'} != ${requested})`);
+        }
+        if (!lockedPackage?.version || !lockedPackage?.integrity) {
+            throw new Error(`[verify] missing locked production dependency package: ${spec.name}`);
+        }
+    }
+}
+
+export function verifyRuntimeDependencies(projectRoot = DEFAULT_PROJECT_ROOT) {
+    const resolvedRoot = path.resolve(projectRoot);
+
+    for (const spec of REQUIRED_PRODUCTION_DEPENDENCIES) {
+        for (const relativeFile of spec.runtimeFiles) {
+            requireFile(resolvedRoot, {
+                file: path.join('node_modules', spec.name, relativeFile),
+                label: `${spec.name} runtime asset`,
+            });
+        }
+    }
+}
+
 export function verifyDeployedSource(projectRoot = DEFAULT_PROJECT_ROOT) {
     const resolvedRoot = path.resolve(projectRoot);
 
@@ -188,7 +224,9 @@ export function verifyDeployedSource(projectRoot = DEFAULT_PROJECT_ROOT) {
         requireFile(resolvedRoot, spec);
     }
 
-    process.stdout.write('[verify] deployed source contains the expected production routing, eVe assets, and lockfile markers.\n');
+    verifyProductionDependencyLock(resolvedRoot);
+
+    process.stdout.write('[verify] deployed source contains the expected production routing, eVe assets, and production dependency lock.\n');
     process.stdout.write('[verify] === deployed source verification END ===\n');
 }
 

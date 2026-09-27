@@ -4,7 +4,7 @@ import { execSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { verifyDeployedSource } from './verify_deployed_source.js';
+import { verifyDeployedSource, verifyRuntimeDependencies } from './verify_deployed_source.js';
 import { backupServerIdentity, ensureProductionSecureConfig } from './server_secure_config.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -410,6 +410,8 @@ async function main() {
     } else {
         skipPhase('npm-ci', '--no-deps');
     }
+
+    phase('verify-runtime-dependencies', () => verifyRuntimeDependencies(projectRoot));
 
     if (!opts.noRestart) {
         phase('restart', () => run(`systemctl restart ${opts.serviceName}`));
