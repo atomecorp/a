@@ -759,6 +759,87 @@ test('a press-and-slide along the rail applies the option under the finger and c
     assert.equal(findNode(root, 'atome_contextual_tool_draw_draw_colour'), null);
 });
 
+// Le meme geste quand la palette est DEJA ouverte : l'appui la referme comme un
+// tap, mais le premier deplacement la revele de nouveau — il ne bascule jamais —
+// et le relachement applique l'option sous le doigt.
+test('a slide on an already open rail palette reveals it again and still applies the choice', () => {
+    const definitions = [
+        { key: 'tool_0', label: 'tool_0' },
+        { key: 'draw', label: 'draw', toolType: 'palette', children: [
+            { key: 'draw_colour', label: 'draw_colour' },
+            { key: 'draw_opacity', label: 'draw_opacity' }
+        ] }
+    ];
+    const invocations = [];
+    const railState = { activePaletteKey: 'draw', activeAtomeId: 'shape', railScrollOffset: 0 };
+    const pointerState = {
+        lastSurfacePoints: new Map(), pointerTarget: null, focusTarget: null,
+        hoverTarget: null, pendingTextActivation: null, handlers: new Map()
+    };
+    let root = null;
+    const render = () => {
+        const nodeHandlers = createAtomeContextualEditHandlers({
+            state: railState,
+            keyOf: (value) => String(value == null ? '' : value).trim(),
+            scheduleRender: render,
+            definitions: () => definitions,
+            sliderHandlers: () => ({}),
+            runActiveDefinition: (definition) => { invocations.push(definition.key); },
+            announceChange: () => {},
+            activeToolIds: () => null
+        });
+        const tree = buildAtomeContextualEditTree({
+            surface: { getBoundingClientRect: () => ({ width: 400, height: 400 }) },
+            activeAtomeId: 'shape', itemSize: ITEM_SIZE, mainMenuHeight: ITEM_SIZE, handedness: 'right',
+            definitions, activePaletteKey: railState.activePaletteKey, handlers: nodeHandlers
+        });
+        const handlers = new Map();
+        root = normalizeBevyUiTree({ id: TREE_ID, tree, handlers }).root;
+        pointerState.handlers = handlers;
+    };
+    render();
+    const centreOf = (id) => {
+        let box = null;
+        const walk = (node, x, y) => {
+            if (!node || box) return;
+            const [offsetX = 0, offsetY = 0] = node.style?.position || [];
+            if (node.id === id) {
+                box = [x + offsetX, y + offsetY, node.style.size[0], node.style.size[1]];
+                return;
+            }
+            (node.children || []).forEach((child) => walk(child, x + offsetX, y + offsetY));
+        };
+        walk(root, 0, 0);
+        assert.ok(box, `${id} exists`);
+        return { x: box[0] + box[2] / 2, y: box[1] + box[3] / 2 };
+    };
+    const toolPoint = centreOf('atome_contextual_tool_draw');
+    const optionPoint = centreOf('atome_contextual_tool_draw_draw_colour');
+    const canvas = { setPointerCapture: () => {}, releasePointerCapture: () => {} };
+    const runtime = createBevyUiPointerRuntime({
+        state: pointerState,
+        hitTestTrees: (_canvas, point) => {
+            const hit = hitTestBevyUiNode(root, point);
+            return hit ? {
+                treeId: TREE_ID, nodeId: hit.node.id, kind: hit.node.kind,
+                box: hit.box, scrollAncestors: hit.scrollAncestors || []
+            } : null;
+        },
+        localEventForTarget: (target, eventName) => ({ tree_id: TREE_ID, node_id: target.nodeId, event: eventName }),
+        emitUiEvents: (events) => events.forEach((event) => {
+            pointerState.handlers.get(`${event.tree_id}:${event.node_id}:${event.event}`)?.(event);
+        }),
+        scrollRuntime: { begin: () => {}, drag: () => false, end: () => false, hover: () => {}, wheel: () => false }
+    });
+    runtime.routePointerEvent({ canvas, phase: 'pointerdown', point: toolPoint, event: { pointerId: 5 } });
+    assert.equal(railState.activePaletteKey, '', 'the press on an open palette behaves like a tap');
+    runtime.routePointerEvent({ canvas, phase: 'pointermove', point: optionPoint, event: { pointerId: 5 } });
+    assert.equal(railState.activePaletteKey, 'draw', 'the slide reveals it again instead of toggling');
+    runtime.routePointerEvent({ canvas, phase: 'pointerup', point: optionPoint, event: { pointerId: 5 } });
+    assert.deepEqual(invocations, ['draw_colour'], 'the release applies the option under the finger');
+    assert.equal(railState.activePaletteKey, '', 'and the palette closes right after');
+});
+
 // The quick mode of a tool that keeps its own action (Lecture/Play, Replay
 // actions): the options are armed on the press, appear on the first travel
 // without a lift, and the release applies the one under the finger. A plain tap

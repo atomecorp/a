@@ -434,6 +434,32 @@ test('a leaf palette choice closes the palette, a cursor keeps it open and a nes
     } finally { harness.runtime.destroy(); harness.restore(); }
 });
 
+test('a slide on an already open ribbon palette keeps it and the release applies the option', async () => {
+    const invocations = [];
+    const harness = createRuntimeHarness({ content: choicePaletteContent(),
+        onInvoke: (entry) => { invocations.push(entry?.key); return { ok: true }; } });
+    const latest = () => harness.calls.at(-1).payload.tree;
+    const node = (id) => findNode(latest().root, id);
+    try {
+        await harness.runtime.showFully();
+        // R1 (2026-09-27) — l'outil porte le glissement partage : le premier
+        // deplacement d'un geste revele ses options sans lever le doigt.
+        assert.equal(typeof node('eve_bevy_ui_main_menu_tool_view').on.palette_slide_open, 'function');
+        await node('eve_bevy_ui_main_menu_tool_view').on.activate({});
+        await waitMs(350);
+        assert.equal(harness.runtime.measure().activePaletteKey, 'view');
+        // Le glissement sur une palette DEJA ouverte revele, il ne bascule pas :
+        // le doigt ne reste jamais au-dessus d'une palette refermee.
+        await node('eve_bevy_ui_main_menu_tool_view').on.palette_slide_open({});
+        assert.equal(harness.runtime.measure().activePaletteKey, 'view');
+        assert.deepEqual(invocations, []);
+        // Le relachement sur l'option applique le choix et referme.
+        await node('eve_bevy_ui_main_menu_tool_view__view_list').on.palette_choose({});
+        assert.deepEqual(invocations, ['view_list']);
+        assert.equal(harness.runtime.measure().activePaletteKey, '');
+    } finally { harness.runtime.destroy(); harness.restore(); }
+});
+
 test('a latched tool keeps its palette slot identity and that slot still turns it off', async () => {
     const invocations = [];
     const harness = createRuntimeHarness({ content: choicePaletteContent(),
