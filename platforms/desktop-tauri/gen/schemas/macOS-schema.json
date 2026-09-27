@@ -363,6 +363,12 @@
           "markdownDescription": "Allows the main webview to read and write the host system clipboard.\n#### This permission set includes:\n\n- `allow-clipboard-write-text`\n- `allow-clipboard-read-text`\n- `allow-clipboard-has-text`"
         },
         {
+          "description": "Allows the main webview to save an exported file into the Downloads folder.\n#### This permission set includes:\n\n- `allow-export-file-save`",
+          "type": "string",
+          "const": "file-export",
+          "markdownDescription": "Allows the main webview to save an exported file into the Downloads folder.\n#### This permission set includes:\n\n- `allow-export-file-save`"
+        },
+        {
           "description": "Lets the developer taxonomy editor read and save eVe/intuition/menu/context_menus.json (writes only in debug builds).\n#### This permission set includes:\n\n- `allow-taxonomy-read`\n- `allow-taxonomy-save`",
           "type": "string",
           "const": "taxonomy-editor",
@@ -499,6 +505,12 @@
           "type": "string",
           "const": "allow-clipboard-write-text",
           "markdownDescription": "Enables the clipboard_write_text command."
+        },
+        {
+          "description": "Enables the export_file_save command.",
+          "type": "string",
+          "const": "allow-export-file-save",
+          "markdownDescription": "Enables the export_file_save command."
         },
         {
           "description": "Enables the taxonomy_read command.",

@@ -267,9 +267,11 @@ fn op_targets_id(op: &AtomeRenderOp, id: &str) -> bool {
         AtomeRenderOp::Visibility(patch) => patch.id == id,
         AtomeRenderOp::Text(patch) => patch.id == id,
         AtomeRenderOp::Resource(patch) => patch.id == id,
+        AtomeRenderOp::ProjectSpace(patch) => patch.ids.iter().any(|target| target == id),
         AtomeRenderOp::Surface(_)
         | AtomeRenderOp::SurfaceBackground(_)
-        | AtomeRenderOp::SceneEffects(_) => false,
+        | AtomeRenderOp::SceneEffects(_)
+        | AtomeRenderOp::ProjectView(_) => false,
     }
 }
 

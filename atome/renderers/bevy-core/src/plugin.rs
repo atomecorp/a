@@ -40,6 +40,7 @@ impl Plugin for AtomeBevyRendererPlugin {
             .init_resource::<AtomeEntityTable>()
             .init_resource::<AtomeBackdropBlurState>()
             .init_resource::<AtomeRendererDiagnostics>()
+            .init_resource::<crate::project_view::AtomeProjectView>()
             .init_resource::<Assets<Image>>()
             .init_resource::<Assets<Mesh>>()
             .init_resource::<Time<Real>>()
@@ -47,6 +48,16 @@ impl Plugin for AtomeBevyRendererPlugin {
             .add_systems(Update, crate::animated_png::advance_animations)
             .add_systems(PostUpdate, crate::mystic_capture::sync_menu_capture)
             .add_systems(PostUpdate, crate::clip_polygon::sync_clip_polygon_proxies)
+            // The project view is a virtual parent: applied to the globals once
+            // transforms (and the clip proxies copying them) are final, before
+            // culling and extraction read them.
+            .add_systems(
+                PostUpdate,
+                crate::project_view::sync_project_view_globals
+                    .after(bevy::transform::TransformSystems::Propagate)
+                    .after(crate::clip_polygon::sync_clip_polygon_proxies)
+                    .before(bevy::camera::visibility::VisibilitySystems::CheckVisibility),
+            )
             .add_systems(Startup, spawn_atome_bevy_scene);
     }
 }

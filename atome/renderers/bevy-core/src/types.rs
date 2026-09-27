@@ -379,6 +379,10 @@ pub struct AtomeRenderNode {
     pub transition: Option<AtomeTransition>,
     #[serde(default)]
     pub procedural: Option<AtomeProceduralSdf>,
+    /// Drawn in project space: follows the project view (zoom/pan). UI, menus,
+    /// the Dashboard and the background stay in screen space (`false`).
+    #[serde(default)]
+    pub project_space: bool,
 }
 
 #[derive(Clone, Debug, Deserialize)]

@@ -6,7 +6,7 @@ mod native {
         apply_render_ops, AtomeEntityTable, AtomeLayerPatch, AtomeParentPatch, AtomeRenderNode,
         AtomeRenderOp, AtomeRenderScene, AtomeRendererDiagnostics, AtomeResourcePatch,
         AtomeSceneEffectsPatch, AtomeStylePatch, AtomeSurfacePatch, AtomeTextPatch, AtomeTransformPatch,
-        AtomeVisibilityPatch,
+        AtomeVisibilityPatch, AtomeProjectViewPatch, AtomeProjectSpacePatch,
     };
     use bevy::prelude::*;
     use serde::Deserialize;
@@ -119,6 +119,16 @@ mod native {
                 "bevy_native_scene_effects_patch_required",
             )
             .map(AtomeRenderOp::SceneEffects),
+            "project_view" => parse_patch::<AtomeProjectViewPatch>(
+                input.patch,
+                "bevy_native_project_view_patch_required",
+            )
+            .map(AtomeRenderOp::ProjectView),
+            "project_space" => parse_patch::<AtomeProjectSpacePatch>(
+                input.patch,
+                "bevy_native_project_space_patch_required",
+            )
+            .map(AtomeRenderOp::ProjectSpace),
             other => Err(format!("bevy_native_op_unsupported:{other}")),
         }
     }

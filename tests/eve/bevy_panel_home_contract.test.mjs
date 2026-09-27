@@ -510,3 +510,13 @@ test('Home exposes explicit activation for a configured provider without request
     render().find(node => node.id === 'home_key_openai_active').on?.activate?.();
     assert.equal(intents.length, 1);
 });
+
+test('a Home section request lands the card there before the profile answer', () => {
+    homeSurface.onOpen({ context: { section: 'settings', subsection: 'settings.passkeys',
+        revealNodeId: 'home_ai_keys_accordion' }, refresh: () => {} });
+    const snapshot = readHomePanelState();
+    assert.equal(snapshot.expanded, 'settings');
+    assert.equal(snapshot.subsections['settings.passkeys'], true);
+    assert.equal(snapshot.subsections['settings.preferences'], false);
+    assert.equal(snapshot.subsections['passkeys.keys'], true);
+});

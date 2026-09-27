@@ -7,6 +7,7 @@ pub mod clip_polygon;
 pub mod components;
 pub mod plugin;
 pub mod procedural_sdf;
+pub mod project_view;
 pub mod render_math;
 pub mod render_ops;
 pub mod resource_ops;
@@ -28,6 +29,7 @@ pub mod workspace_backdrop;
 pub mod workspace_blur;
 
 pub use plugin::{apply_render_ops, AtomeBevyRendererPlugin};
+pub use project_view::{AtomeProjectSpacePatch, AtomeProjectView, AtomeProjectViewPatch};
 pub use render_math::{atome_rect_transform, color_from_rgba, depth_for_layer};
 pub use render_ops::*;
 pub use types::*;

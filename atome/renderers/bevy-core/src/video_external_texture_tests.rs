@@ -14,6 +14,7 @@ use bevy::{
 
 fn video_node(id: &str) -> AtomeRenderNode {
     AtomeRenderNode {
+        project_space: false,
         id: id.to_string(),
         kind: "video".to_string(),
         parent_id: None,
@@ -471,6 +472,7 @@ fn video_node_carries_and_clamps_color_filters() {
     let entity = apply_spawn(
         &mut world,
         AtomeRenderNode {
+            project_space: false,
             filters: Some(AtomeColorFilters {
                 brightness: 1.5,
                 grayscale: 1.0,
@@ -498,6 +500,7 @@ fn video_node_carries_and_clamps_color_filters() {
     let clamped = apply_spawn(
         &mut world,
         AtomeRenderNode {
+            project_space: false,
             filters: Some(AtomeColorFilters {
                 brightness: -0.5,
                 contrast: f32::NAN,
@@ -592,6 +595,7 @@ fn video_node_and_style_carry_normalized_transition() {
     let entity = apply_spawn(
         &mut world,
         AtomeRenderNode {
+            project_space: false,
             transition: Some(AtomeTransition {
                 kind: 9.0,
                 progress: 2.0,

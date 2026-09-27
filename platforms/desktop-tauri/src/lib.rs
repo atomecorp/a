@@ -5,6 +5,7 @@ mod dev_logging;
 mod local_http_navigation;
 mod native_clipboard;
 mod native_contacts;
+mod native_file_export;
 mod native_midi;
 mod runtime_logging;
 mod server;
@@ -220,6 +221,7 @@ pub fn run() {
             native_clipboard::clipboard_write_text,
             native_clipboard::clipboard_read_text,
             native_clipboard::clipboard_has_text,
+            native_file_export::export_file_save,
             taxonomy_editor::taxonomy_read,
             taxonomy_editor::taxonomy_save,
             project_root

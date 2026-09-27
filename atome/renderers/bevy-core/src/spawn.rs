@@ -350,6 +350,9 @@ pub fn spawn_node_with_texture_handle(
     if let Some(source_rect) = world.get::<Sprite>(entity).map(|sprite| sprite.rect) {
         world.entity_mut(entity).insert(AtomeSpriteSourceRect(source_rect));
     }
+    if node.project_space {
+        world.entity_mut(entity).insert(crate::project_view::AtomeProjectSpace);
+    }
     if node.presentation {
         world.entity_mut(entity).insert(bevy::camera::visibility::RenderLayers::layer(
             crate::workspace_backdrop::MENU_PRESENTATION_LAYER,

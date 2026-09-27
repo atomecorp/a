@@ -5,6 +5,7 @@ use crate::*;
 
 fn shape_node(id: &str) -> AtomeRenderNode {
     AtomeRenderNode {
+        project_space: false,
         id: id.to_string(),
         kind: "shape".to_string(),
         parent_id: None,
@@ -40,6 +41,7 @@ fn shape_node(id: &str) -> AtomeRenderNode {
 
 fn text_node_with_texture(id: &str) -> AtomeRenderNode {
     AtomeRenderNode {
+        project_space: false,
         id: id.to_string(),
         kind: "text".to_string(),
         parent_id: None,
@@ -99,6 +101,7 @@ fn assert_alpha_near(color: Color, expected: f32) {
 fn plugin_spawns_projected_nodes_and_camera() {
     let scene = AtomeRenderScene {
         nodes: vec![AtomeRenderNode {
+            project_space: false,
             shadow: Some(AtomeShadowStyle {
                 color: [0.0, 0.0, 0.0, 0.3],
                 blur: 10.0,
@@ -132,6 +135,7 @@ fn plugin_spawns_projected_nodes_and_camera() {
 #[test]
 fn backdrop_fixture_keeps_text_and_image_in_capture_and_large_glass_circle_in_presentation() {
     let image = AtomeRenderNode {
+        project_space: false,
         id: "backdrop_fixture_image".to_string(),
         kind: "image".to_string(),
         parent_id: None,
@@ -164,6 +168,7 @@ fn backdrop_fixture_keeps_text_and_image_in_capture_and_large_glass_circle_in_pr
         procedural: None,
     };
     let text = AtomeRenderNode {
+        project_space: false,
         logical_position: [130.0, 160.0],
         logical_size: [220.0, 60.0],
         clip_rect: None,
@@ -174,6 +179,7 @@ fn backdrop_fixture_keeps_text_and_image_in_capture_and_large_glass_circle_in_pr
         ..text_node_with_texture("backdrop_fixture_text")
     };
     let circle = AtomeRenderNode {
+        project_space: false,
         logical_position: [150.0, 120.0],
         logical_size: [340.0, 340.0],
         clip_rect: None,
@@ -251,6 +257,7 @@ fn backdrop_fixture_keeps_text_and_image_in_capture_and_large_glass_circle_in_pr
 #[test]
 fn backdrop_style_patch_updates_the_resident_material_without_reallocation() {
     let glass = AtomeRenderNode {
+        project_space: false,
         backdrop: Some(AtomeBackdropStyle { blur_px: 9.0, tint: [0.03, 0.06, 0.09, 0.52], tint_fade: 0.0 }),
         presentation: true,
         menu_plane: 0,
@@ -311,6 +318,7 @@ fn backdrop_style_patch_updates_the_resident_material_without_reallocation() {
 #[test]
 fn backdrop_glass_follows_record_opacity_and_releases_the_capture_when_hidden() {
     let glass = AtomeRenderNode {
+        project_space: false,
         backdrop: Some(AtomeBackdropStyle { blur_px: 18.0, tint: [0.0, 0.0, 0.0, 0.84], tint_fade: 0.0 }),
         presentation: true,
         menu_plane: 0,
@@ -440,6 +448,7 @@ fn shape_clip_crops_on_spawn_and_restores_on_transform_update() {
 #[test]
 fn backdrop_clip_crops_the_resident_mesh_without_stretching_or_accumulating_assets() {
     let glass = AtomeRenderNode {
+        project_space: false,
         clip_rect: Some([42.0, 34.0, 50.0, 30.0]),
         clip_rotation: 0.0,
         backdrop: Some(AtomeBackdropStyle {
@@ -600,6 +609,7 @@ fn text_color_spawn_and_opacity_patch_update_text_alpha() {
     let entity = apply_spawn(
         &mut world,
         AtomeRenderNode {
+            project_space: false,
             kind: "text".to_string(),
             texture: None,
             opacity: 0.3,
@@ -639,6 +649,7 @@ fn shape_shadow_overlay_follows_owner_opacity() {
     let entity = apply_spawn(
         &mut world,
         AtomeRenderNode {
+            project_space: false,
             shadow: Some(AtomeShadowStyle {
                 color: [0.0, 0.0, 0.0, 0.3],
                 blur: 10.0,
@@ -919,6 +930,7 @@ fn audio_waveform_uv_window_is_applied_on_spawn_and_resource_update() {
     let entity = apply_spawn(
         &mut world,
         AtomeRenderNode {
+            project_space: false,
             id: "waveform_crop".to_string(),
             kind: "audio_waveform".to_string(),
             logical_size: [200.0, 40.0],
@@ -965,6 +977,7 @@ fn audio_waveform_progress_spawns_and_moves_bevy_playhead_overlay() {
     let entity = apply_spawn(
         &mut world,
         AtomeRenderNode {
+            project_space: false,
             id: "waveform_progress".to_string(),
             kind: "audio_waveform".to_string(),
             parent_id: None,
@@ -1105,6 +1118,7 @@ fn partially_rounded_shape_gets_a_mask_even_with_a_zero_scalar_radius() {
     // `corner_radii` used to fall through the `corner_radius > 0.0` guard and
     // was spawned as a plain square sprite.
     let node = AtomeRenderNode {
+        project_space: false,
         corner_radius: 0.0,
         corner_radii: Some([3.0, 3.0, 0.0, 0.0]),
         ..shape_node("accordion_header")
@@ -1120,6 +1134,7 @@ fn partially_rounded_shape_gets_a_mask_even_with_a_zero_scalar_radius() {
 #[test]
 fn backdrop_surface_resize_keeps_the_corner_radius_instead_of_stretching_it() {
     let tool = AtomeRenderNode {
+        project_space: false,
         logical_position: [100.0, 400.0],
         logical_size: [60.0, 60.0],
         clip_rect: None,
@@ -1155,4 +1170,25 @@ fn backdrop_surface_resize_keeps_the_corner_radius_instead_of_stretching_it() {
     // Same radius, new size: before the fix x stayed 60, so every corner was
     // drawn 5x wider than tall.
     assert_eq!(read(&app), Vec4::new(300.0, 60.0, 8.0, 1.0));
+}
+
+#[test]
+fn project_space_node_is_marked_and_follows_the_view() {
+    let mut world = World::new();
+    world.insert_resource(AtomeEntityTable::default());
+    world.insert_resource(AtomeBevyRendererConfig::empty(640.0, 480.0));
+    world.insert_resource(AtomeRendererDiagnostics::default());
+    world.insert_resource(Assets::<Image>::default());
+    world.init_resource::<crate::project_view::AtomeProjectView>();
+    let atom = apply_spawn(&mut world, AtomeRenderNode { project_space: true, ..shape_node("project_atom") }).unwrap();
+    let ui = apply_spawn(&mut world, shape_node("ui_node")).unwrap();
+    assert!(world.get::<crate::project_view::AtomeProjectSpace>(atom).is_some());
+    assert!(world.get::<crate::project_view::AtomeProjectSpace>(ui).is_none());
+    apply_render_op(&mut world, AtomeRenderOp::ProjectView(crate::AtomeProjectViewPatch { zoom: 2.0, pan_x: 0.0, pan_y: 0.0 })).unwrap();
+    crate::project_view::sync_project_view_globals(&mut world);
+    let local = *world.get::<Transform>(atom).unwrap();
+    let global = world.get::<GlobalTransform>(atom).unwrap().compute_transform();
+    assert!((global.scale.x - local.scale.x * 2.0).abs() < 1e-5);
+    let ui_local = *world.get::<Transform>(ui).unwrap();
+    assert_eq!(world.get::<GlobalTransform>(ui).unwrap().compute_transform().scale, ui_local.scale);
 }

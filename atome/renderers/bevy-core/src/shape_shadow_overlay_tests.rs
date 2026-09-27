@@ -7,6 +7,7 @@ use crate::*;
 
 fn shape_node(id: &str) -> AtomeRenderNode {
     AtomeRenderNode {
+        project_space: false,
         id: id.to_string(),
         kind: "shape".to_string(),
         parent_id: None,
@@ -94,6 +95,7 @@ fn shape_shadow_uses_bevy_overlay_without_changing_logical_size() {
     let entity = apply_spawn(
         &mut world,
         AtomeRenderNode {
+            project_space: false,
             shadow: Some(AtomeShadowStyle {
                 color: [0.0, 0.0, 0.0, 0.42],
                 blur: 8.0,
@@ -168,6 +170,7 @@ fn repeated_shape_shadow_updates_replace_the_overlay_without_accumulating_entiti
     let entity = apply_spawn(
         &mut world,
         AtomeRenderNode {
+            project_space: false,
             shadow: Some(shadow),
             ..shape_node("single_shadow_owner")
         },
@@ -224,6 +227,7 @@ fn shape_shadow_translation_reuses_existing_texture() {
     let entity = apply_spawn(
         &mut world,
         AtomeRenderNode {
+            project_space: false,
             shadow: Some(AtomeShadowStyle {
                 color: [0.0, 0.0, 0.0, 0.42],
                 blur: 8.0,
@@ -297,6 +301,7 @@ fn equivalent_shape_shadows_share_one_texture_asset() {
     let first = apply_spawn(
         &mut world,
         AtomeRenderNode {
+            project_space: false,
             shadow,
             ..shape_node("shared_shadow_a")
         },
@@ -305,6 +310,7 @@ fn equivalent_shape_shadows_share_one_texture_asset() {
     let second = apply_spawn(
         &mut world,
         AtomeRenderNode {
+            project_space: false,
             id: "shared_shadow_b".to_string(),
             logical_position: [220.0, 24.0],
             shadow,
@@ -353,6 +359,7 @@ fn rounded_shape_shadow_overlay_uses_card_radius() {
     let entity = apply_spawn(
         &mut world,
         AtomeRenderNode {
+            project_space: false,
             corner_radius: 10.0,
             shadow: Some(AtomeShadowStyle {
                 color: [0.0, 0.0, 0.0, 0.42],
@@ -390,6 +397,7 @@ fn rounded_shape_shadow_overlay_uses_card_radius() {
 fn initial_scene_rounded_shape_uses_mask_before_shadow_overlay() {
     let scene = AtomeRenderScene {
         nodes: vec![AtomeRenderNode {
+            project_space: false,
             corner_radius: 10.0,
             shadow: Some(AtomeShadowStyle {
                 color: [0.0, 0.0, 0.0, 0.42],
@@ -446,6 +454,7 @@ fn rotated_atom_overlays_follow_its_pose() {
     let entity = apply_spawn(
         &mut world,
         AtomeRenderNode {
+            project_space: false,
             selected: Some(true),
             rotation: 30.0,
             shadow: Some(shadow),
@@ -506,6 +515,7 @@ fn a_rotated_page_clips_its_rotated_member_on_the_rotated_edge() {
     let entity = apply_spawn(
         &mut world,
         AtomeRenderNode {
+            project_space: false,
             logical_position: [member_pivot.x, member_pivot.y],
             logical_size: [200.0, 100.0],
             rotation: angle,

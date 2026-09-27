@@ -133,4 +133,6 @@ pub enum AtomeRenderOp {
     Surface(AtomeSurfacePatch),
     SurfaceBackground(AtomeSurfaceBackgroundPatch),
     SceneEffects(AtomeSceneEffectsPatch),
+    ProjectView(crate::project_view::AtomeProjectViewPatch),
+    ProjectSpace(crate::project_view::AtomeProjectSpacePatch),
 }

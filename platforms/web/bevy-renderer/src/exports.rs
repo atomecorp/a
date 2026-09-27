@@ -3,6 +3,7 @@ use atome_bevy_renderer_core::{
     AtomeLayerPatch, AtomeParentPatch, AtomeRenderNode, AtomeRenderOp, AtomeRenderScene,
     AtomeResourcePatch, AtomeSceneEffectsPatch, AtomeStylePatch, AtomeSurfaceBackgroundPatch,
     AtomeSurfacePatch, AtomeTextPatch, AtomeTransformPatch, AtomeUiOp, AtomeVisibilityPatch,
+    AtomeProjectSpacePatch, AtomeProjectViewPatch,
 };
 use serde::Deserialize;
 use wasm_bindgen::prelude::*;
@@ -29,6 +30,8 @@ enum WebAtomeRenderOp {
     Surface { patch: AtomeSurfacePatch },
     SurfaceBackground { patch: AtomeSurfaceBackgroundPatch },
     SceneEffects { patch: AtomeSceneEffectsPatch },
+    ProjectView { patch: AtomeProjectViewPatch },
+    ProjectSpace { patch: AtomeProjectSpacePatch },
 }
 
 impl From<WebAtomeRenderOp> for AtomeRenderOp {
@@ -48,6 +51,8 @@ impl From<WebAtomeRenderOp> for AtomeRenderOp {
                 AtomeRenderOp::SurfaceBackground(patch)
             }
             WebAtomeRenderOp::SceneEffects { patch } => AtomeRenderOp::SceneEffects(patch),
+            WebAtomeRenderOp::ProjectView { patch } => AtomeRenderOp::ProjectView(patch),
+            WebAtomeRenderOp::ProjectSpace { patch } => AtomeRenderOp::ProjectSpace(patch),
         }
     }
 }
@@ -264,6 +269,14 @@ pub fn apply_atome_bevy_scene_effects(patch: JsValue) -> Result<(), JsValue> {
     let parsed: AtomeSceneEffectsPatch = serde_wasm_bindgen::from_value(patch)
         .map_err(|error| JsValue::from_str(&format!("bevy_scene_effects_decode_failed:{error}")))?;
     queue_web_op(AtomeRenderOp::SceneEffects(parsed));
+    Ok(())
+}
+
+#[wasm_bindgen]
+pub fn apply_atome_bevy_project_view(patch: JsValue) -> Result<(), JsValue> {
+    let parsed: AtomeProjectViewPatch = serde_wasm_bindgen::from_value(patch)
+        .map_err(|error| JsValue::from_str(&format!("bevy_project_view_decode_failed:{error}")))?;
+    queue_web_op(AtomeRenderOp::ProjectView(parsed));
     Ok(())
 }
 

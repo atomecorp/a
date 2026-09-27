@@ -1,0 +1,13 @@
+"$schema" = "schemas/schema.json"
+
+[[set]]
+identifier = "file-export"
+description = "Allows the main webview to save an exported file into the Downloads folder."
+permissions = [
+  "allow-export-file-save",
+]
+
+[[permission]]
+identifier = "allow-export-file-save"
+description = "Enables the export_file_save command."
+commands.allow = ["export_file_save"]

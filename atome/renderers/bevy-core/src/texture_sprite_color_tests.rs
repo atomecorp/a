@@ -4,6 +4,7 @@ use crate::*;
 
 fn textured_image_node(id: &str) -> AtomeRenderNode {
     AtomeRenderNode {
+        project_space: false,
         id: id.to_string(),
         kind: "image".to_string(),
         parent_id: None,

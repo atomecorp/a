@@ -352,6 +352,7 @@ mod clip_polygon_tests {
 
     fn tilted_shape(rotation: f32) -> crate::AtomeRenderNode {
         crate::AtomeRenderNode {
+            project_space: false,
             id: "tilted".to_string(), kind: "shape".to_string(), parent_id: None,
             logical_position: [100.0, 100.0], logical_size: [100.0, 100.0],
             // La page : un carre droit dont l'atome deborde une fois tourne.

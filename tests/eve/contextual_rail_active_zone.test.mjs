@@ -4,9 +4,12 @@ import { test } from 'vitest';
 
 import { buildAtomeContextualEditTree } from '../../eVe/intuition/runtime/eve_intuition/atome_contextual_edit_model.js';
 import { createAtomeContextualEditRuntime } from '../../eVe/intuition/runtime/eve_intuition/atome_contextual_edit_runtime.js';
+import { createAtomeContextualEditHandlers } from '../../eVe/intuition/runtime/eve_intuition/atome_contextual_edit_handlers.js';
+import { normalizeBevyUiTree } from '../../eVe/domains/rendering/bevy_ui_tree_normalization.js';
 import { resolveBevyMainMenuLitToolIconIds } from '../../eVe/intuition/ribbon/bevy_ui_main_menu_model.js';
 import { createBevyUiScrollRuntime } from '../../eVe/domains/rendering/bevy_ui_scroll_runtime.js';
 import { hitTestBevyUiNode } from '../../eVe/domains/rendering/bevy_ui_hit_test_runtime.js';
+import { createBevyUiPointerRuntime } from '../../eVe/domains/rendering/bevy_ui_pointer_runtime.js';
 import { createRuntimeHarness, waitFrame } from './bevy_ui_main_menu_test_helpers.mjs';
 import {
     ACTIVE_TOOL_SURFACE,
@@ -616,4 +619,236 @@ test('an armed Page shows its formats in the rail level, the current one lit, an
     } finally {
         globalThis.window = previousWindow;
     }
+});
+
+test('the lateral rail opens its palette on press and applies the option under the release', () => {
+    const definitions = [
+        { key: 'tool_0', label: 'tool_0' },
+        { key: 'palette_1', label: 'palette_1', toolType: 'palette', children: [
+            { key: 'option_a', label: 'option_a' },
+            { key: 'option_b', label: 'option_b' }
+        ] }
+    ];
+    for (const handedness of ['left', 'right']) {
+        const itemSize = ITEM_SIZE;
+        const handlers = {
+            atome_contextual_tool_palette_1: { activate: () => null },
+            atome_contextual_tool_palette_1_option_a: { activate: () => null },
+            atome_contextual_tool_palette_1_option_b: { activate: () => null }
+        };
+        const tree = buildAtomeContextualEditTree({
+            surface: { getBoundingClientRect: () => ({ width: 400, height: 400 }) },
+            activeAtomeId: 'shape', itemSize, mainMenuHeight: itemSize, handedness,
+            definitions, activePaletteKey: 'palette_1', handlers
+        });
+        const parent = findNode(tree.root, 'atome_contextual_tool_palette_1');
+        const first = findNode(tree.root, 'atome_contextual_tool_palette_1_option_a');
+        const second = findNode(tree.root, 'atome_contextual_tool_palette_1_option_b');
+        assert.ok(parent && first && second, `palette children exist (${handedness})`);
+        // The press opens the palette WITHOUT lifting: the parent carries the
+        // one gesture the shared pointer runtime needs, and the children carry
+        // the choice a release applies.
+        assert.equal(typeof parent.on.palette_open, 'function');
+        assert.equal(typeof first.on.palette_choose, 'function');
+        assert.equal(typeof second.on.palette_choose, 'function');
+        // Glued to the inner edge of the rail and centred on the tool's own row:
+        // the finger travels from the tool to the option without a gap. The
+        // options live at the surface level, the tool inside the scrolling rail,
+        // so both are compared in surface coordinates.
+        const toolLeft = tree.layout.x + parent.style.position[0];
+        const toolY = tree.layout.y + parent.style.position[1];
+        // A right-handed rail keeps its palette on its left, a left-handed rail
+        // on its right: either way the row leaves the tool towards the centre of
+        // the screen, so the tiling is read from the tool outwards.
+        const flowsLeft = handedness === 'right';
+        const facing = (option) => (flowsLeft
+            ? option.style.position[0] + option.style.size[0] : option.style.position[0]);
+        const far = (option) => (flowsLeft ? option.style.position[0] : option.style.position[0] + option.style.size[0]);
+        const toolInnerEdge = flowsLeft ? toolLeft : toolLeft + parent.style.size[0];
+        assert.equal(facing(first), toolInnerEdge, `the first option touches the tool (${handedness})`);
+        assert.equal(first.style.position[1], toolY, `the option sits on the tool row (${handedness})`);
+        assert.equal(facing(second), far(first), `the options touch each other (${handedness})`);
+    }
+});
+
+
+// The gesture is proven on the route the product really uses: the rail model
+// builds the palette, its own handlers own the choice, and the shared pointer
+// runtime decides what a press, a slide without a lift and a release mean.
+test('a press-and-slide along the rail applies the option under the finger and closes the palette', () => {
+    const definitions = [
+        { key: 'tool_0', label: 'tool_0' },
+        { key: 'draw', label: 'draw', toolType: 'palette', children: [
+            { key: 'draw_colour', label: 'draw_colour' },
+            { key: 'draw_opacity', label: 'draw_opacity' }
+        ] }
+    ];
+    const invocations = [];
+    const railState = { activePaletteKey: '', activeAtomeId: 'shape', railScrollOffset: 0 };
+    const pointerState = {
+        lastSurfacePoints: new Map(), pointerTarget: null, focusTarget: null,
+        hoverTarget: null, pendingTextActivation: null, handlers: new Map()
+    };
+    let tree = null;
+    let root = null;
+    // One single rebuild answers both the model and the gesture: the rail
+    // rebuilds its tree, then the shared normalizer registers the handlers of
+    // every node it carries — exactly the route the runtime takes on mount.
+    const render = () => {
+        const nodeHandlers = createAtomeContextualEditHandlers({
+            state: railState,
+            keyOf: (value) => String(value == null ? '' : value).trim(),
+            scheduleRender: render,
+            definitions: () => definitions,
+            sliderHandlers: () => ({}),
+            runActiveDefinition: (definition) => { invocations.push(definition.key); },
+            announceChange: () => {},
+            activeToolIds: () => null
+        });
+        tree = buildAtomeContextualEditTree({
+            surface: { getBoundingClientRect: () => ({ width: 400, height: 400 }) },
+            activeAtomeId: 'shape', itemSize: ITEM_SIZE, mainMenuHeight: ITEM_SIZE, handedness: 'right',
+            definitions, activePaletteKey: railState.activePaletteKey, handlers: nodeHandlers
+        });
+        const handlers = new Map();
+        root = normalizeBevyUiTree({ id: TREE_ID, tree, handlers }).root;
+        pointerState.handlers = handlers;
+    };
+    render();
+    const centreOf = (id) => {
+        let box = null;
+        const walk = (node, x, y) => {
+            if (!node || box) return;
+            const [offsetX = 0, offsetY = 0] = node.style?.position || [];
+            if (node.id === id) {
+                box = [x + offsetX, y + offsetY, node.style.size[0], node.style.size[1]];
+                return;
+            }
+            (node.children || []).forEach((child) => walk(child, x + offsetX, y + offsetY));
+        };
+        walk(root, 0, 0);
+        assert.ok(box, `${id} exists`);
+        return { x: box[0] + box[2] / 2, y: box[1] + box[3] / 2 };
+    };
+    const canvas = { setPointerCapture: () => {}, releasePointerCapture: () => {} };
+    const runtime = createBevyUiPointerRuntime({
+        state: pointerState,
+        hitTestTrees: (_canvas, point) => {
+            const hit = hitTestBevyUiNode(root, point);
+            return hit ? {
+                treeId: TREE_ID, nodeId: hit.node.id, kind: hit.node.kind,
+                box: hit.box, scrollAncestors: hit.scrollAncestors || []
+            } : null;
+        },
+        localEventForTarget: (target, eventName) => ({ tree_id: TREE_ID, node_id: target.nodeId, event: eventName }),
+        emitUiEvents: (events) => events.forEach((event) => {
+            pointerState.handlers.get(`${event.tree_id}:${event.node_id}:${event.event}`)?.(event);
+        }),
+        scrollRuntime: { begin: () => {}, drag: () => false, end: () => false, hover: () => {}, wheel: () => false }
+    });
+    const toolPoint = centreOf('atome_contextual_tool_draw');
+    runtime.routePointerEvent({ canvas, phase: 'pointerdown', point: toolPoint, event: { pointerId: 4 } });
+    assert.equal(railState.activePaletteKey, 'draw', 'the press opens the palette without a lift');
+    const optionPoint = centreOf('atome_contextual_tool_draw_draw_colour');
+    assert.ok(optionPoint.x < toolPoint.x, 'the option sits towards the centre of the screen');
+    assert.equal(optionPoint.y, toolPoint.y, 'the slide stays on the tool row');
+    runtime.routePointerEvent({ canvas, phase: 'pointermove', point: optionPoint, event: { pointerId: 4 } });
+    runtime.routePointerEvent({ canvas, phase: 'pointerup', point: optionPoint, event: { pointerId: 4 } });
+    assert.deepEqual(invocations, ['draw_colour'], 'the release applies the option under the finger');
+    assert.equal(railState.activePaletteKey, '', 'and the palette closes right after');
+    assert.equal(findNode(root, 'atome_contextual_tool_draw_draw_colour'), null);
+});
+
+// The quick mode of a tool that keeps its own action (Lecture/Play, Replay
+// actions): the options are armed on the press, appear on the first travel
+// without a lift, and the release applies the one under the finger. A plain tap
+// must still run the tool itself, and a still hold must still open the options
+// after the delay — the two shipped routes are not replaced.
+test('a slide from a rail hold tool opens its options, while a tap keeps the tool action', () => {
+    const definitions = [{
+        key: 'play', label: 'play', toolType: 'tool',
+        longPressChildren: [{ key: 'stop', label: 'stop', toolType: 'tool' }]
+    }];
+    const invocations = [];
+    const railState = { activePaletteKey: '', activeAtomeId: 'shape', railScrollOffset: 0 };
+    const pointerState = {
+        lastSurfacePoints: new Map(), pointerTarget: null, focusTarget: null,
+        hoverTarget: null, pendingTextActivation: null, handlers: new Map()
+    };
+    let root = null;
+    const render = () => {
+        const nodeHandlers = createAtomeContextualEditHandlers({
+            state: railState,
+            keyOf: (value) => String(value == null ? '' : value).trim(),
+            scheduleRender: render,
+            definitions: () => definitions,
+            sliderHandlers: () => ({}),
+            runActiveDefinition: (definition) => { invocations.push(definition.key); },
+            announceChange: () => {},
+            activeToolIds: () => null
+        });
+        const tree = buildAtomeContextualEditTree({
+            surface: { getBoundingClientRect: () => ({ width: 400, height: 400 }) },
+            activeAtomeId: 'shape', itemSize: ITEM_SIZE, mainMenuHeight: ITEM_SIZE, handedness: 'right',
+            definitions, activePaletteKey: railState.activePaletteKey, handlers: nodeHandlers
+        });
+        const handlers = new Map();
+        root = normalizeBevyUiTree({ id: TREE_ID, tree, handlers }).root;
+        pointerState.handlers = handlers;
+    };
+    render();
+    const centreOf = (id) => {
+        let box = null;
+        const walk = (node, x, y) => {
+            if (!node || box) return;
+            const [offsetX = 0, offsetY = 0] = node.style?.position || [];
+            if (node.id === id) {
+                box = [x + offsetX, y + offsetY, node.style.size[0], node.style.size[1]];
+                return;
+            }
+            (node.children || []).forEach((child) => walk(child, x + offsetX, y + offsetY));
+        };
+        walk(root, 0, 0);
+        assert.ok(box, `${id} exists`);
+        return { x: box[0] + box[2] / 2, y: box[1] + box[3] / 2 };
+    };
+    const canvas = { setPointerCapture: () => {}, releasePointerCapture: () => {} };
+    const runtime = createBevyUiPointerRuntime({
+        state: pointerState,
+        hitTestTrees: (_canvas, point) => {
+            const hit = hitTestBevyUiNode(root, point);
+            return hit ? {
+                treeId: TREE_ID, nodeId: hit.node.id, kind: hit.node.kind,
+                box: hit.box, scrollAncestors: hit.scrollAncestors || []
+            } : null;
+        },
+        localEventForTarget: (target, eventName) => ({ tree_id: TREE_ID, node_id: target.nodeId, event: eventName }),
+        emitUiEvents: (events) => events.forEach((event) => {
+            pointerState.handlers.get(`${event.tree_id}:${event.node_id}:${event.event}`)?.(event);
+        }),
+        scrollRuntime: { begin: () => {}, drag: () => false, end: () => false, hover: () => {}, wheel: () => false }
+    });
+
+    // 1. A tap runs the tool itself and never opens the options.
+    const toolPoint = centreOf('atome_contextual_tool_play');
+    runtime.routePointerEvent({ canvas, phase: 'pointerdown', point: toolPoint, event: { pointerId: 7 } });
+    assert.equal(railState.activePaletteKey, '', 'the press alone opens nothing');
+    assert.equal(findNode(root, 'atome_contextual_tool_play_stop'), null);
+    runtime.routePointerEvent({ canvas, phase: 'pointerup', point: toolPoint, event: { pointerId: 7 } });
+    assert.deepEqual(invocations, ['play'], 'the tap keeps the tool action');
+    assert.equal(railState.activePaletteKey, '');
+
+    // 2. A slide opens the options without a lift and the release applies the one
+    // under the finger, exactly like a palette opened by a press.
+    runtime.routePointerEvent({ canvas, phase: 'pointerdown', point: toolPoint, event: { pointerId: 8 } });
+    const nudged = { x: toolPoint.x - ITEM_SIZE * 0.6, y: toolPoint.y };
+    runtime.routePointerEvent({ canvas, phase: 'pointermove', point: nudged, event: { pointerId: 8 } });
+    assert.equal(railState.activePaletteKey, 'play', 'the slide opens the options without lifting');
+    const stopPoint = centreOf('atome_contextual_tool_play_stop');
+    assert.ok(stopPoint.x < toolPoint.x, 'the option sits towards the centre of the screen');
+    assert.equal(stopPoint.y, toolPoint.y, 'the option sits on the tool row');
+    runtime.routePointerEvent({ canvas, phase: 'pointermove', point: stopPoint, event: { pointerId: 8 } });
+    runtime.routePointerEvent({ canvas, phase: 'pointerup', point: stopPoint, event: { pointerId: 8 } });
+    assert.deepEqual(invocations, ['play', 'stop'], 'the release applies the option under the finger');
+    assert.equal(railState.activePaletteKey, '', 'and the options close right after');
 });

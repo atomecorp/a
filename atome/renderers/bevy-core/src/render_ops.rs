@@ -386,5 +386,7 @@ pub fn apply_render_op(world: &mut World, op: AtomeRenderOp) -> Result<(), Strin
         AtomeRenderOp::Surface(patch) => apply_surface(world, patch),
         AtomeRenderOp::SurfaceBackground(patch) => apply_surface_background(world, patch).map(|_| ()),
         AtomeRenderOp::SceneEffects(patch) => apply_scene_effects(world, patch),
+        AtomeRenderOp::ProjectView(patch) => crate::project_view::apply_project_view(world, patch),
+        AtomeRenderOp::ProjectSpace(patch) => crate::project_view::apply_project_space(world, patch),
     }
 }

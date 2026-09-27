@@ -64,6 +64,7 @@ fn procedural_sdf_spawns_and_patches_one_full_surface_material_quad() {
     let entity = apply_spawn(
         &mut world,
         AtomeRenderNode {
+            project_space: false,
             id: "assistant_sdf".to_string(),
             kind: "procedural_sdf".to_string(),
             parent_id: None,

@@ -99,6 +99,7 @@ mod tests {
 
     fn shape_node(id: &str) -> AtomeRenderNode {
         AtomeRenderNode {
+            project_space: false,
             id: id.to_string(),
             kind: "shape".to_string(),
             parent_id: None,

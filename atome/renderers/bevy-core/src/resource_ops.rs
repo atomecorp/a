@@ -83,6 +83,7 @@ pub fn apply_resource(world: &mut World, patch: AtomeResourcePatch) -> Result<()
             .map(|value| [value.width, value.height])
             .unwrap_or([1.0, 1.0]);
         let node = AtomeRenderNode {
+            project_space: false,
             id: patch.id,
             kind,
             parent_id: None,
