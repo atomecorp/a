@@ -48,18 +48,26 @@ export function createAuthDeviceStore({ indexedDB = globalThis.indexedDB, crypto
         });
     }
     async function phoneScope(phone) {
+        // Native runtimes keep the signing key in the platform keystore. Avoid
+        // persisting a WebCrypto CryptoKey merely to obscure the phone lookup:
+        // on WKWebView this can block indefinitely while Security.framework
+        // tries to decrypt WebKit's master key. The domain-separated digest is
+        // deterministic and only identifies the local IndexedDB record.
+        if (nativeKey) return hex(await crypto.subtle.digest(
+            'SHA-256', utf8(`atome.phone-scope.v1\0${phone}`)));
         let key = await read('lookup-key');
         if (!key) key = await insertOnce('lookup-key', await crypto.subtle.generateKey(
             { name: 'HMAC', hash: 'SHA-256', length: 256 }, false, ['sign']));
         return hex(await crypto.subtle.sign('HMAC', key, utf8(phone)));
     }
-    async function forPhone(phone) {
-        const scope = await phoneScope(phone);
-        let record = await read(`key:${scope}`);
+    async function forScope(scope) {
+        let record = null;
+        try { record = await read(`key:${scope}`); } catch (_) { /* native keystore can operate without Web storage */ }
         if (!record) {
             if (nativeKey) {
                 const publicKey = await nativeKey({ action: 'public', scope });
-                record = await insertOnce(`key:${scope}`, { publicKey, native: true, scope });
+                const candidate = { publicKey, native: true, scope };
+                try { record = await insertOnce(`key:${scope}`, candidate); } catch (_) { record = candidate; }
             } else {
                 const pair = await crypto.subtle.generateKey({ name: 'ECDSA', namedCurve: 'P-256' }, false, ['sign', 'verify']);
                 const publicKey = await crypto.subtle.exportKey('jwk', pair.publicKey);
@@ -82,7 +90,8 @@ export function createAuthDeviceStore({ indexedDB = globalThis.indexedDB, crypto
             }
         };
     }
-    return { forPhone, read, put, remove,
+    async function forPhone(phone) { return forScope(await phoneScope(phone)); }
+    return { forPhone, forScope, read, put, remove,
         async aliasPhone(previousPhone, nextPhone) {
             const previous = await read(`key:${await phoneScope(previousPhone)}`);
             if (!previous) throw new Error('auth_device_key_missing');

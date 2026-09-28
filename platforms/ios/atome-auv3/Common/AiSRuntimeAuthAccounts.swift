@@ -9,13 +9,21 @@ extension AiSRuntime {
               principal.uuidString.split(separator: "-").dropFirst(2).first?.first == "4" else {
             return authResponse(requestId: requestId, success: false, error: "Guest principal must be a UUID v4")
         }
-        guard try findUserRecordById(db, principal.uuidString.lowercased()) == nil else { throw AiSError("guest_principal_conflict") }
-        try execute(db, "INSERT OR IGNORE INTO guest_workspace_principals (guest_principal_id, status) VALUES (?1, 'active')", [.text(principal.uuidString.lowercased())])
-        let token = try createToken(userId: principal.uuidString.lowercased(), username: "Guest")
+        let id = principal.uuidString.lowercased()
+        let guestRows = try query(db, "SELECT status FROM guest_workspace_principals WHERE guest_principal_id=? LIMIT 1", [.text(id)])
+        if let status = rowString(guestRows.first, "status") {
+            guard status == "active" else { throw AiSError("guest_principal_conflict") }
+        } else {
+            // Resume is authorized by the active guest registry. The Atome table
+            // may already contain this guest owner after a legacy local write.
+            guard try findUserRecordById(db, id) == nil else { throw AiSError("guest_principal_conflict") }
+            try execute(db, "INSERT INTO guest_workspace_principals (guest_principal_id, status) VALUES (?1, 'active')", [.text(id)])
+        }
+        let token = try createToken(userId: id, username: "Guest")
         return authResponse(
             requestId: requestId,
             success: true,
-            user: ["id": principal.uuidString.lowercased(), "user_id": principal.uuidString.lowercased(), "username": "Guest"],
+            user: ["id": id, "user_id": id, "username": "Guest"],
             token: token
         )
     }
@@ -26,6 +34,10 @@ extension AiSRuntime {
             return authResponse(requestId: requestId, success: false, error: "Token is required")
         }
         let userId = stringValue(claims["sub"])
+        if claims["grant"] == nil {
+            return authResponse(requestId: requestId, success: true,
+                user: ["id": userId, "user_id": userId, "username": "Guest"])
+        }
         guard let _ = try findUserRecordById(db, userId) else {
             return authResponse(requestId: requestId, success: false, error: "User not found")
         }

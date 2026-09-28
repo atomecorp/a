@@ -129,6 +129,20 @@ export function createPhoneLinkAuth({ query, transaction, findByPhone, findById,
             return { ok: true, approved: true };
         });
     }
+    async function confirm(input) {
+        return transaction(async () => {
+            const value = await attempt(input.attemptId);
+            if (!['sent', 'approved'].includes(value.state)) reject();
+            requireHandle(input.token);
+            if (digest(input.token) !== value.token_hash) reject();
+            if (value.state === 'approved') return { ok: true, approved: true };
+            const changed = await query('run', `UPDATE auth_link_attempts SET state = 'approved', approved_by = NULL
+                WHERE attempt_id = ? AND state = 'sent'`, [input.attemptId]);
+            if (Number(changed.changes) !== 1) reject();
+            await proof.audit('sms_link_confirmed', value.candidate_id, input.attemptId);
+            return { ok: true, approved: true };
+        });
+    }
     async function cancel(input) {
         return transaction(async () => {
             const value = await attempt(input.attemptId);
@@ -143,5 +157,5 @@ export function createPhoneLinkAuth({ query, transaction, findByPhone, findById,
         if (keyId !== authorization.key_id) reject();
         return start({ ...input, phone: input.newPhone }, network, authorization);
     }
-    return { start, startPhoneChange, getChallenge, complete, approve, cancel, sessions };
+    return { start, startPhoneChange, getChallenge, complete, approve, confirm, cancel, sessions };
 }

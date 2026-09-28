@@ -61,6 +61,7 @@ extension AiSRuntime {
                 case "start-guest": result = try handleStartGuest(message, db: db, requestId: requestId)
                 case "leave-guest": result = [:]
                 case "me": result = try handleMe(message, db: db, requestId: requestId)
+                case "local-session-describe": result = try localAuthDescriptor(message, db: db)
                 case "local-session-challenge": result = try localAuthChallenge(message, db: db)
                 case "local-session-resume", "local-session-lock": result = try consumeLocalAuthChallenge(message, db: db)
                 default: throw AiSError("auth_protocol_upgrade_required")

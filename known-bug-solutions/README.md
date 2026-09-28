@@ -31,6 +31,7 @@ the established solution before attempting a new implementation.
 | iOS freezes after a rotation: the old frame is stretched, the bottom band stops answering and every tool raises the keyboard | [ios-rotation-freeze](ios-rotation-freeze/README.md) |
 | An AI-generated image or speech keeps displaying an older generation | [ai-generated-media-identity](ai-generated-media-identity/README.md) |
 | Production update stops on `@emnapi` and a later restart returns Nginx 502 | [production-update-dependency-gate](production-update-dependency-gate/README.md) |
+| Phone-link SMS stays inert in Tauri/iOS, Tauri hangs, or iOS never leaves its boot cover | [phone-link-native-runtime](phone-link-native-runtime/README.md) |
 
 ## Maintenance rules
 

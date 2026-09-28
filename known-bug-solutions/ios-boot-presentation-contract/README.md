@@ -48,11 +48,13 @@ up during the Dashboard entry, and a project open never re-publishes it.
   recorded in `known-bug-solutions/ios-boot-server-await`. The project load is
   local-first now, and the label persisted with the fix embedded in the built
   runtime.
-- A stalled auth check: `authentication.sequence_start` /
-  `authentication.sequence_started` / `workspace.signal_started` are published
-  before the contract, and `tryAutoLogin` publishes `squirrel:auth-checked` from
-  the stored session immediately (optimistic `setSessionState`), so the label
-  was never the auth gate.
+- A stalled auth check was not the cause in that campaign:
+  `authentication.sequence_start` / `authentication.sequence_started` /
+  `workspace.signal_started` were published before the contract and the stored
+  session settled. A later, separate regression proved that a rejected stored
+  guest restoration could leave authentication unsettled; that path is recorded
+  in `known-bug-solutions/phone-link-native-runtime` and now clears the failed
+  session before presenting login.
 - A native-side defect: `handleBootPresentationReady` and
   `handleBootAuthenticationReady` both cancel the watchdog and fade the
   surface; they were simply never called.

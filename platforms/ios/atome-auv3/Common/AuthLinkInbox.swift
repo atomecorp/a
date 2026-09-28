@@ -13,8 +13,12 @@ enum AuthLinkInbox {
               parts.user == nil, parts.password == nil, parts.query == nil,
               parts.percentEncodedPath.range(of: "^/auth/v/[A-Za-z0-9_-]{43}$", options: .regularExpression) != nil,
               let fragment = parts.percentEncodedFragment,
-              fragment.range(of: "^t=[A-Za-z0-9_-]{43}$", options: .regularExpression) != nil else { return false }
+              fragment.range(of: "^t=[A-Za-z0-9_-]{43}$", options: .regularExpression) != nil else {
+            print("[AUTH_LINK_INBOX] rejected")
+            return false
+        }
         queue.sync { pending = (url.absoluteString, Date().addingTimeInterval(300)) }
+        print("[AUTH_LINK_INBOX] accepted")
         WebViewManager.evaluateJS("window.dispatchEvent(new Event('atome:auth-link-available'));", label: "auth.link.available", priority: .critical)
         return true
     }

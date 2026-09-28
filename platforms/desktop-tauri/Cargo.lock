@@ -6911,6 +6911,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ef86cd5876211988985292b91c96a8f2d298df24e75989a43a3c73f2d4d8168b"
 dependencies = [
  "once_cell",
+ "ring",
  "rustls-pki-types",
  "rustls-webpki 0.103.13",
  "subtle",
@@ -7633,6 +7634,7 @@ dependencies = [
  "reqwest 0.11.27",
  "ringbuf",
  "rusqlite",
+ "rustls 0.23.40",
  "security-framework 3.7.0",
  "serde",
  "serde_json",

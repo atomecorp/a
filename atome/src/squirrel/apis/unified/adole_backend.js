@@ -4,6 +4,7 @@ import {
     canUseFastifyPrimaryOnLocalAxumPage,
     getCloudServerPort,
     getCloudServerUrl,
+    isDesktopTauriRuntime,
     isEmbeddedIosRuntime,
     isLocalAxumPage,
     getLocalServerPort,
@@ -351,7 +352,10 @@ function shouldAttemptFastify() {
     // runtime still needs Fastify as the secondary owner for account
     // provisioning and event replication. The browser-only guard must not
     // disable that sync lane inside the Tauri WebView.
-    if (!isInTauri() && isLocalAxumPage() && !allowFastifyPrimaryOnLocalAxumPage()) return false;
+    if (!isDesktopTauriRuntime()
+        && !isEmbeddedIosRuntime()
+        && isLocalAxumPage()
+        && !allowFastifyPrimaryOnLocalAxumPage()) return false;
     return !!getFastifyHttpBaseUrl();
 }
 

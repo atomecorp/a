@@ -153,6 +153,9 @@ tests/rendering/*
 !tests/eve/tool_runtime_native_bootstrap_fast_path.test.mjs
 !tests/eve/main_tool_interaction_failure_reporting.test.mjs
 !tests/eve/load_server_config_tauri_collaboration.test.mjs
+!tests/eve/auth_device.test.mjs
+!tests/eve/auth_phone_link_client.test.mjs
+!tests/eve/auth_native_restart_contract.test.mjs
 !tests/eve/tool_runtime_move_relative.test.mjs
 !tests/eve/bevy_project_renderer_guards.test.mjs
 !tests/eve/bevy_panel_contract.test.mjs

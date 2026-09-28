@@ -37,6 +37,29 @@ const TAURI_RUNTIME_INIT_SCRIPT: &str = concat!(
     "window.__SQUIRREL_TAURI_CANONICAL_URL__='http://127.0.0.1:3000/';"
 );
 
+fn configured_tauri_fastify_url() -> Option<String> {
+    let configured = std::env::var("SQUIRREL_FASTIFY_URL")
+        .or_else(|_| std::env::var("FASTIFY_URL"))
+        .ok()
+        .map(|value| value.trim().trim_end_matches('/').to_string())
+        .filter(|value| value.starts_with("https://") || value.starts_with("http://"));
+    if configured.is_some() {
+        return configured;
+    }
+    Some("https://atome.one".to_string())
+}
+
+fn tauri_runtime_init_script() -> String {
+    let mut script = TAURI_RUNTIME_INIT_SCRIPT.to_string();
+    if let Some(remote) = configured_tauri_fastify_url() {
+        let literal = serde_json::to_string(&remote).expect("Fastify URL must serialize");
+        script.push_str("window.__SQUIRREL_TAURI_FASTIFY_URL__=");
+        script.push_str(&literal);
+        script.push(';');
+    }
+    script
+}
+
 macro_rules! println {
     ($($arg:tt)*) => {
         if crate::runtime_logging::xcode_logs_enabled() {
@@ -185,12 +208,19 @@ fn live_repo_src_dir() -> PathBuf {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // The dependency graph enables both rustls providers (Tauri/Bevy bring
+    // aws-lc-rs while the native authentication socket uses ring). Rustls 0.23
+    // refuses to guess in that situation and otherwise panics on the first
+    // wss:// authentication request. Select the provider before any runtime or
+    // background service can create a TLS client.
+    let _ = rustls::crypto::ring::default_provider().install_default();
     load_env_from_candidates();
 
     let _log_guard = dev_logging::init_tracing();
+    let runtime_init_script = tauri_runtime_init_script();
 
     tauri::Builder::default()
-        .append_invoke_initialization_script(TAURI_RUNTIME_INIT_SCRIPT)
+        .append_invoke_initialization_script(runtime_init_script)
         .plugin(tauri_plugin_stt::init())
         .plugin(tauri_plugin_clipboard_manager::init())
         .on_window_event(viewport_runtime::publish_native_viewport)

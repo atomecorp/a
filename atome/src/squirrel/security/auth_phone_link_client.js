@@ -6,7 +6,21 @@ export function createPhoneLinkClient({ devices, send, installSession, locks = g
     now = Date.now }) {
     let serial = Promise.resolve();
     const exclusive = (work) => {
-        const run = () => locks ? locks.request('atome-phone-auth', work) : work();
+        const run = async () => {
+            if (!locks) return work();
+            // Some embedded WebKit builds execute the Web Locks callback but
+            // discard its return value. Capture it explicitly so the caller
+            // still receives the authentication result.
+            let completed = false;
+            let callbackResult;
+            await locks.request('atome-phone-auth', async () => {
+                callbackResult = await work();
+                completed = true;
+                return callbackResult;
+            });
+            if (!completed) throw new Error('auth_lock_unavailable');
+            return callbackResult;
+        };
         const result = serial.then(run);
         serial = result.catch(() => {});
         return result;
@@ -97,13 +111,11 @@ export function createPhoneLinkClient({ devices, send, installSession, locks = g
                 const result = await request('phone-link-consume', { ...link, ...signed });
                 return accept(result, record.phone, record.attemptId);
             }
-            // A forwarded link never enrolls this device. Its existing account key
-            // must already be recognized for the attempted account by the server.
-            const existing = await devices.read('session');
-            if (!existing) throw new Error('auth_trusted_phone_required');
-            const device = await devices.forPhone(existing.phone);
-            const signed = await attemptProof(link, 'approve', device);
-            return request('phone-link-approve', { ...link, keyId: device.keyId, ...signed });
+            // The device opening the SMS is an approval surface, not the session
+            // recipient. The secret fragment proves possession of the SMS; the
+            // originating device must still sign its own `resume` challenge before
+            // the server can issue a session. Never install that session here.
+            return request('phone-link-confirm', link);
         }),
         renew: () => exclusive(async () => {
             const record = await devices.read('session');

@@ -23,7 +23,7 @@ pub async fn handle_auth_message(message: JsonValue, state: &LocalAuthState) -> 
     let request_id = message.get("requestId").or_else(|| message.get("request_id")).cloned().unwrap_or(JsonValue::Null);
     let action = message["action"].as_str().unwrap_or("");
     let result = match action {
-        "local-link-challenge" | "local-link-complete" | "local-session-challenge"
+        "local-link-challenge" | "local-link-complete" | "local-session-describe" | "local-session-challenge"
             | "local-session-resume" | "local-session-lock" => device::handle(&message, state).await,
         "start-guest" => start_guest(&message, state),
         "leave-guest" => Ok(json!({"ok":true})),
@@ -48,12 +48,20 @@ fn start_guest(message: &JsonValue, state: &LocalAuthState) -> Result<JsonValue,
     let id = id.to_string();
     {
         let db = state.db.lock().map_err(|_| "local_database_unavailable")?;
-        // An existing account can never be reopened as an unauthenticated guest.
-        let exists = db.query_row("SELECT 1 FROM atomes WHERE atome_id = ?1", [&id], |_| Ok(true))
-            .optional().map_err(|_| "local_database_unavailable")?.unwrap_or(false);
-        if exists { return Err("guest_principal_invalid".into()); }
-        db.execute("INSERT OR IGNORE INTO guest_workspace_principals (guest_principal_id, status) VALUES (?1, 'active')", [&id])
-            .map_err(|_| "local_database_write_failed")?;
+        let status: Option<String> = db.query_row(
+            "SELECT status FROM guest_workspace_principals WHERE guest_principal_id = ?1",
+            [&id], |row| row.get(0)).optional().map_err(|_| "local_database_unavailable")?;
+        if status.as_deref() != Some("active") {
+            if status.is_some() { return Err("guest_principal_invalid".into()); }
+            // A new guest may not claim an existing principal. An already active
+            // guest remains resumable even when an older release materialized its
+            // workspace owner as a user-shaped Atome.
+            let exists = db.query_row("SELECT 1 FROM atomes WHERE atome_id = ?1", [&id], |_| Ok(true))
+                .optional().map_err(|_| "local_database_unavailable")?.unwrap_or(false);
+            if exists { return Err("guest_principal_invalid".into()); }
+            db.execute("INSERT INTO guest_workspace_principals (guest_principal_id, status) VALUES (?1, 'active')", [&id])
+                .map_err(|_| "local_database_write_failed")?;
+        }
     }
     let token = tokens::generate(state, &id, "Guest", None, None)?;
     Ok(json!({"ok":true,"token":token,"user":{"id":id,"user_id":id,"username":"Guest"}}))

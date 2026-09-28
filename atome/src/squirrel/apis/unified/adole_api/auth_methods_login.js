@@ -26,7 +26,17 @@ function deviceStore() {
         }
         const invoke = env.__TAURI_INTERNALS__?.invoke || env.__TAURI__?.core?.invoke || env.__TAURI__?.invoke;
         if (typeof invoke !== 'function') throw new Error('auth_protected_device_key_unavailable');
-        return invoke('auth_device_key', fields);
+        // Tauri validates every Rust command argument before entering the
+        // handler. `message` and `signature` are Option<String> in Rust, but
+        // they still need to be present in the JS payload: omitting them makes
+        // the public-key request fail before phone-link-start reaches the
+        // server. Explicit nulls deserialize to None.
+        return invoke('auth_device_key', {
+            action: fields.action,
+            scope: fields.scope,
+            message: fields.message ?? null,
+            signature: fields.signature ?? null
+        });
     } : null;
     devices = createAuthDeviceStore({ nativeKey });
     return devices;
@@ -37,7 +47,17 @@ export async function setBrowserWorkspaceIdentity(user) {
 }
 
 async function localRequest(action, fields = {}) {
-    const result = await TauriAdapter.ws.send({ type: 'auth', action, ...fields });
+    const env = globalThis.window || globalThis;
+    // iOS owns local grants in native SQLite and their signing key in the
+    // Keychain. Restoring that authority through the loopback WebSocket made
+    // application launch depend on a second server becoming ready first; when
+    // that race lost, tryAutoLogin cleared the durable session and presented a
+    // fresh SMS login. The native bridge is available before application code
+    // and reaches the exact same AiSRuntime auth handler, so use it for every
+    // local auth command on iOS. Desktop Tauri keeps its Axum WebSocket route.
+    const result = typeof env.__ATOME_IOS_NATIVE_INVOKE === 'function'
+        ? await env.__ATOME_IOS_NATIVE_INVOKE('auth_local_request', { action, ...fields })
+        : await TauriAdapter.ws.send({ type: 'auth', action, ...fields });
     if (!result?.ok) throw new Error(result?.error || 'local_auth_unavailable');
     return result;
 }
@@ -59,14 +79,19 @@ async function installRemote(result, { attemptId } = {}) {
     const device = await store.forPhone(phone);
     let local;
     if (isTauriRuntime()) {
-        const fields = { scope: device.scope, sessionId: result.session.id, generation: result.session.generation };
+        const fields = { scope: device.scope, keyId: device.keyId,
+            sessionId: result.session.id, generation: result.session.generation };
         const { challenge } = await localRequest('local-link-challenge', fields);
         if (challenge?.purpose !== 'local-bind' || challenge.reference !== `${fields.sessionId}:${fields.generation}`) {
             throw new Error('auth_challenge_invalid');
         }
         local = await localRequest('local-link-complete', { ...fields, ...await device.sign(challenge) });
-        await store.put('local-grant', { phone, keyId: device.keyId, user: normalizeUser(local.user),
-            localSession: local.localSession, locked: false });
+        try {
+            await store.put('local-grant', { phone, keyId: device.keyId, scope: device.scope, user: normalizeUser(local.user),
+                localSession: local.localSession, locked: false });
+        } catch (_) {
+            // Native SQLite is authoritative; this WebKit cache is optional.
+        }
     } else {
         local = result;
         await store.put('local-grant', { phone, keyId: device.keyId, user: normalizeUser(result.user), locked: false });
@@ -86,9 +111,19 @@ export function phoneLinkClient() {
 
 export async function restoreLocalAuthorization() {
     const store = deviceStore();
-    const record = await store.read('local-grant');
+    let record = null;
+    if (isTauriRuntime()) {
+        // SQLite + platform keystore are the native authority. IndexedDB is a
+        // cache and may be absent after a WebView origin/storage migration.
+        try { record = await store.read('local-grant'); } catch (_) { /* optional native cache */ }
+        const described = await localRequest('local-session-describe', {
+            grantId: record?.localSession?.id || undefined
+        });
+        record = described.localGrant;
+        if (record) try { await store.put('local-grant', record); } catch (_) { /* optional native cache */ }
+    } else record = await store.read('local-grant');
     if (!record || record.locked) return { authenticated: false };
-    const device = await store.forPhone(record.phone);
+    const device = record.scope ? await store.forScope(record.scope) : await store.forPhone(record.phone);
     if (device.keyId !== record.keyId) throw new Error('auth_device_binding_mismatch');
     if (!isTauriRuntime()) {
         await setBrowserWorkspaceIdentity(record.user);
@@ -104,7 +139,13 @@ export async function restoreLocalAuthorization() {
 
 export async function lockLocalAuthorization() {
     const store = deviceStore();
-    const record = await store.read('local-grant');
+    let record = null;
+    if (isTauriRuntime()) {
+        try { record = await store.read('local-grant'); } catch (_) { /* optional native cache */ }
+        record = (await localRequest('local-session-describe', {
+            grantId: record?.localSession?.id || undefined
+        })).localGrant;
+    } else record = await store.read('local-grant');
     if (!record) return;
     if (isTauriRuntime() && !record.locked) {
         const device = await store.forPhone(record.phone);
@@ -123,6 +164,26 @@ export function ensureRemoteSession() {
     if (FastifyAdapter.getToken() && remoteExpiresAt > Date.now()) return Promise.resolve({ ok: true });
     if (!renewal) renewal = phoneLinkClient().renew().then(() => ({ ok: true })).finally(() => { renewal = null; });
     return renewal;
+}
+
+export async function recoverDesktopAuthorization() {
+    const env = globalThis.window || globalThis;
+    // This repairs only the desktop crash window where the server session was
+    // issued and cached but native local binding did not finish. iOS owns a
+    // separate same-device lifecycle and must never be redirected through it.
+    if (!isTauriRuntime() || typeof env.__ATOME_IOS_NATIVE_INVOKE === 'function') {
+        return { authenticated: false, attempted: false };
+    }
+    const record = await deviceStore().read('session');
+    if (!record?.session?.id) return { authenticated: false, attempted: false };
+    try {
+        await phoneLinkClient().renew();
+        const state = getSessionState();
+        return { authenticated: state.mode === 'authenticated', attempted: true, user: state.user || null };
+    } catch (error) {
+        return { authenticated: false, attempted: true,
+            error: error?.message || 'local_authorization_unavailable' };
+    }
 }
 
 export function ensureLocalSession() {
@@ -198,7 +259,11 @@ export async function initializePhoneLinks() {
 }
 
 export const loginMethods = {
-    async startPhoneLogin(phone) { return phoneLinkClient().start(normalizePhone(phone)); },
+    async startPhoneLogin(phone) {
+        const result = await phoneLinkClient().start(normalizePhone(phone));
+        if (!result) throw new Error('auth_phone_link_empty_result');
+        return result;
+    },
     async resumePhoneLogin() { return phoneLinkClient().resume(); },
     async completePhoneLogin(link) { return phoneLinkClient().consumeLink(link); },
     async cancelPhoneLogin() { return phoneLinkClient().cancel(); },

@@ -20,9 +20,9 @@ const createRuntime = (options = {}) => createDashboardNewsModules({
 });
 
 describe('Dashboard weather runtime', () => {
-    it.each(['granted', 'prompt'])('automatically geolocates when permission is %s', async (permission) => {
+    it('automatically geolocates only when permission is already granted', async () => {
         const persistLocation = vi.fn(async () => ({ ok: true }));
-        const runtime = createRuntime({ navigatorRef: navigatorFor({ permission }), persistLocation });
+        const runtime = createRuntime({ navigatorRef: navigatorFor({ permission: 'granted' }), persistLocation });
         await runtime.bootstrap();
         expect(runtime.state.status).toBe('ready');
         expect(runtime.state.city).toBe('Clermont-Ferrand');
@@ -30,6 +30,17 @@ describe('Dashboard weather runtime', () => {
         const item = runtime.items(new Map([['news', []]])).get('news')[0];
         expect(item.span).toBe(2);
         expect(item.metadata.weather).toMatchObject({ temperature: 18.4, condition: 'cloudy' });
+    });
+
+    it('waits for an explicit locate action while permission is undecided', async () => {
+        const navigatorRef = navigatorFor({ permission: 'prompt' });
+        const runtime = createRuntime({ navigatorRef });
+        await runtime.bootstrap();
+        expect(runtime.state.status).toBe('manual');
+        expect(navigatorRef.geolocation.getCurrentPosition).not.toHaveBeenCalled();
+        await runtime.locate();
+        expect(navigatorRef.geolocation.getCurrentPosition).toHaveBeenCalledOnce();
+        expect(runtime.state.status).toBe('ready');
     });
 
     it('loads a remembered location and does not request GPS after refusal', async () => {

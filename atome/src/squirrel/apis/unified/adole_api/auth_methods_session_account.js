@@ -17,7 +17,7 @@ import {
 } from './session.js';
 import { adapters, normalizePhone, getPrimaryBackend, getSecondaryBackend, hasToken, hasAuthenticatedToken } from './auth_core.js';
 import { ensureFastifyToken } from './auth_fastify_token.js';
-import { restoreLocalAuthorization, lockLocalAuthorization, phoneLinkClient, initializePhoneLinks, setBrowserWorkspaceIdentity } from './auth_methods_login.js';
+import { restoreLocalAuthorization, recoverDesktopAuthorization, lockLocalAuthorization, phoneLinkClient, initializePhoneLinks, setBrowserWorkspaceIdentity } from './auth_methods_login.js';
 import { transferGuestWorkspace } from './auth_workspace.js';
 import { requireAuth, normalizeSessionUser } from './auth_state.js';
 import { auth } from './auth.js';
@@ -96,12 +96,37 @@ export const sessionAccountMethods = {
         catch (error) {
             globalThis.window?.dispatchEvent(new CustomEvent('squirrel:phone-login-error', { detail: { code: error.message } }));
         }
+        if (!restored.authenticated && !localError) {
+            const recovered = await recoverDesktopAuthorization();
+            if (recovered.authenticated) {
+                void ensureFastifyToken();
+                return { authenticated: true, user: recovered.user };
+            }
+            if (recovered.attempted && recovered.error) localError = recovered.error;
+        }
         if (restored.authenticated || getSessionState().mode === 'authenticated') {
             void ensureFastifyToken();
             return { authenticated: true, user: getSessionState().user };
         }
         if (localError) return { authenticated: false, error: localError };
-        if (stored?.mode === 'anonymous') return auth.startGuest({ force: true });
+        if (stored?.mode === 'anonymous') {
+            const guest = await auth.startGuest({ force: true });
+            if (guest?.ok === true || guest?.success === true) return guest;
+
+            // A persisted guest is a convenience, never a boot gate. The local
+            // native backend may be temporarily unavailable or may reject a
+            // record written by an older build. Leaving sessionState untouched
+            // here meant no `squirrel:auth-checked` event was ever emitted, so
+            // the native launch cover stayed over a completely loaded page.
+            // Keep the guest workspace itself for a later retry, but settle the
+            // auth contract as logged out so the login choices are presented.
+            clearSessionState();
+            return {
+                authenticated: false,
+                user: null,
+                error: guest?.reason || guest?.error || 'local_guest_restore_failed'
+            };
+        }
         clearSessionState();
         return { authenticated: false, user: null };
     },

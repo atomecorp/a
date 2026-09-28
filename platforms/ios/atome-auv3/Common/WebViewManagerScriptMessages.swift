@@ -158,7 +158,7 @@ extension WebViewManager {
                         let requestId = body["requestId"] as? String ?? ""
                         let command = body["command"] as? String ?? ""
                         let payload = body["payload"] as? [String: Any] ?? [:]
-                        if command == "auth_device_key" || command == "auth_link_take" {
+                        if command == "auth_device_key" || command == "auth_link_take" || command == "auth_local_request" {
                             let source = message.frameInfo.request.url
                             let bundledPage = source?.scheme == "atome" && source?.host == nil
                                 && source?.path == "/src/index.html"

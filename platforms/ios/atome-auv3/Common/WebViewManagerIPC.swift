@@ -42,6 +42,14 @@ extension WebViewManager {
             }
             return
         }
+        if command == "auth_local_request" {
+            var message = payload
+            message["type"] = "auth"
+            AiSRuntime.handleAuthMessage(message) { response in
+                sendNativeInvokeResponse(requestId: requestId, payload: response)
+            }
+            return
+        }
         guard let handler = nativeInvokeHandler else {
             print("[NATIVE_INVOKE] no_handler request=\(requestId) command=\(command)")
             sendNativeInvokeResponse(requestId: requestId, error: "ios_app_native_invoke_handler_unavailable")

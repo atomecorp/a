@@ -26,9 +26,9 @@ import { buildFastifyWsUrl } from './loadServerConfigWs.js';
 import { isDesktopTauriRuntime, isEmbeddedIosRuntime } from './serverUrls.js';
 
 let _loadPromise = null;
-
 function shouldBlockFastifyPrimaryOnLocalAxumPage() {
     if (typeof window === 'undefined') return false;
+    if (isEmbeddedIosRuntime()) return false;
     return !isDesktopTauriRuntime()
         && isLocalAxumPage()
         && !canUseFastifyPrimaryOnLocalAxumPage();
@@ -80,7 +80,15 @@ function resolveTauriProdFastifyHttpBase() {
     if (override) return override;
 
     const already = usable(window.__SQUIRREL_FASTIFY_URL__);
-    if (already) return already;
+    // A desktop build may be served by the local Axum shell while its
+    // collaboration/authentication backend remains the public Fastify server.
+    // Only an explicit native or persisted override is allowed to opt back in
+    // to loopback.  Reusing an implicit localhost value here made packaged
+    // Tauri sessions report "Envoi indisponible" whenever the Rust bootstrap
+    // script was unavailable or ran after this module.
+    if (already && !(isDesktopTauriRuntime() && isLocalFastifyBase(already))) {
+        return already;
+    }
 
     return 'https://atome.one';
 }
@@ -219,7 +227,6 @@ function clearFastifyOverrideStorage() {
     if (typeof window === 'undefined') return;
     window.localStorage?.removeItem?.('squirrel_tauri_fastify_url_override');
 }
-
 function isLocalFastifyBase(base) {
     if (typeof base !== 'string' || !base.trim()) return false;
     try {
@@ -230,9 +237,10 @@ function isLocalFastifyBase(base) {
         return false;
     }
 }
-
 function readTauriFastifyOverride() {
     if (typeof window === 'undefined') return '';
+    const injected = normalizeNoTrailingSlash(window.__SQUIRREL_TAURI_FASTIFY_URL__);
+    if (injected && !isInvalidFastifyLoopbackBase(injected)) return injected;
     if (shouldBlockFastifyPrimaryOnLocalAxumPage()) {
         clearFastifyRuntimeGlobals();
         clearFastifyOverrideStorage();
@@ -251,7 +259,6 @@ function readTauriFastifyOverride() {
         return '';
     }
 }
-
 function applyFastifyGlobalsFromHttpBase(httpBase, config = null) {
     const base = resolveCanonicalFastifyHttpBase(httpBase);
     if (!base) return false;
@@ -402,6 +409,7 @@ export async function loadServerConfigOnce() {
                     || isDisallowedFastifyLoopbackPort(existing, currentConfig)
                     || isLikelyUiLoopbackBase(existing, currentConfig)
                     || isLikelyTauriLoopbackBase(existing, currentConfig)
+                    || (isTauriRuntime && !tauriOverride && isLocalFastifyBase(existing))
                 );
                 if (!invalidExisting) return;
             }
@@ -433,7 +441,7 @@ export async function loadServerConfigOnce() {
                 window.__SQUIRREL_TAURI_FASTIFY_URL__ = tauriOverride;
                 applyFastifyGlobalsFromHttpBase(tauriOverride, config);
             } else {
-                const httpBase = buildFastifyHttpBase(config);
+                const httpBase = resolveTauriProdFastifyHttpBase();
                 if (httpBase) {
                     applyFastifyGlobalsFromHttpBase(httpBase, config);
                 }
@@ -470,9 +478,8 @@ export async function loadServerConfigOnce() {
 
             if (isTauriRuntime) {
                 tauriOverride = readTauriFastifyOverride() || tauriOverride;
-            }
-            if (tauriOverride) {
-                applyFastifyGlobalsFromHttpBase(tauriOverride, config);
+                const httpBase = tauriOverride || resolveTauriProdFastifyHttpBase();
+                applyFastifyGlobalsFromHttpBase(httpBase, config);
                 return config;
             }
 

@@ -4,8 +4,9 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     var window: UIWindow?
 
     func scene(_ scene: UIScene, willConnectTo session: UISceneSession, options connectionOptions: UIScene.ConnectionOptions) {
-    // Inbox disabled
         _ = scene as? UIWindowScene
+        receiveAuthenticationLinks(from: connectionOptions.userActivities)
+        receiveAuthenticationLinks(from: connectionOptions.urlContexts)
         // App-only: optionally observe external display events (no-op in AUv3)
         if FeatureFlags.externalDisplayObservation {
             ExternalDisplayGuards.shared.startObservingIfApp(observer: DummyExternalDisplayObserver.shared)
@@ -13,12 +14,29 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     }
 
     func sceneDidBecomeActive(_ scene: UIScene) {
-    print("🟢 Scene became active (inbox disabled)")
+        print("🟢 Scene became active")
     }
 
     func scene(_ scene: UIScene, openURLContexts URLContexts: Set<UIOpenURLContext>) {
-        guard !URLContexts.isEmpty else { return }
-    // Inbox disabled: ignore URL contexts
+        receiveAuthenticationLinks(from: URLContexts)
+    }
+
+    func scene(_ scene: UIScene, continue userActivity: NSUserActivity) {
+        receiveAuthenticationLink(from: userActivity)
+    }
+
+    private func receiveAuthenticationLinks(from activities: Set<NSUserActivity>) {
+        activities.forEach(receiveAuthenticationLink)
+    }
+
+    private func receiveAuthenticationLink(from activity: NSUserActivity) {
+        guard activity.activityType == NSUserActivityTypeBrowsingWeb,
+              let url = activity.webpageURL else { return }
+        _ = AuthLinkInbox.receive(url)
+    }
+
+    private func receiveAuthenticationLinks(from contexts: Set<UIOpenURLContext>) {
+        contexts.forEach { _ = AuthLinkInbox.receive($0.url) }
     }
 }
 

@@ -1,9 +1,40 @@
 # Phone-link authentication implementation status
 
-Date: 2026-09-27. Status: partial; not ready for production cutover or publication.
-The approved six-part plan remains the acceptance contract. No Git write,
-production deployment, paid SMS or archive was performed. The user stopped the
-concurrent archive; that coordination constraint is resolved.
+Date: 2026-09-27. Status: production cross-device handoff repaired; one real post-deploy SMS acceptance remains to verify.
+The approved six-part plan remains the acceptance contract. No Git write or
+archive was performed. Production SMS jobs have now been accepted through the
+normal Tauri UI; carrier delivery and link consumption are not yet proven.
+
+## Cross-device Tauri → SMS → iOS handoff repair
+
+- The SMS opener is now strictly an approval surface. For a foreign attempt it
+  sends `phone-link-confirm` with the fragment capability, installs no session
+  and needs no pre-existing iOS account session.
+- The server verifies the hashed token, marks only that attempt approved and
+  notifies the already-subscribed requester socket. Tauri must then sign a fresh
+  `resume` challenge with the exact key recorded when it requested the SMS;
+  only that step creates and returns the Tauri-bound session.
+- The old same-device path remains valid: when the opener owns the matching
+  local attempt, it may still consume it directly with its originating key.
+- Production server files were backed up and deployed, `squirrel.service` is
+  active and `https://atome.one/` returns HTTP 200. Final Tauri Debug and signed
+  iOS builds include the new client action; iOS was installed over the existing
+  app without clearing data. Focused cross-device/auth tests pass 25/25.
+
+## Native restart regression repair
+
+- Tauri now injects the production Fastify authority in Debug and Release; an
+  environment value remains the single explicit override.
+- Active persisted guests resume on Tauri/iOS even when their legacy workspace
+  owner already exists as a user-shaped Atome. New guest/account collisions and
+  adopted guests remain rejected.
+- Native SQLite grants, not IndexedDB, discover the account on restart. The
+  exact stored Keychain/Secure Enclave scope is reopened and the existing fresh
+  signed challenge is still mandatory. Web storage is only a cache.
+- Focused contracts and native compilation pass. A real environment-free Tauri
+  run starts and resumes its existing guest after process restart. The signed
+  iPhone build passes, but installation/relaunch remains pending because the
+  phone became unavailable to CoreDevice immediately after compilation.
 
 ## Phone-entry repair after interactive feedback
 
@@ -17,10 +48,10 @@ concurrent archive; that coordination constraint is resolved.
   user to open the link received in their messages. Provider/link errors return
   to an editable field instead of leaving the screen inert.
 - Focused normalization, phone-link client/server/provider suites and rewritten
-  mobile/visual probes pass. Local OVH keys, sender, service, database and JWT
-  settings are present without exposing their values. Actual carrier delivery
-  still requires a user-observed send to a real test recipient; it is not
-  inferred from simulated provider acceptance.
+  mobile/visual probes pass. Production OVH keys, sender, service, database and
+  JWT settings are present without exposing their values. A normal Tauri UI send
+  reached production provider acceptance, but the user did not observe delivery;
+  carrier delivery is not inferred from provider acceptance.
 
 ## Implemented code
 
@@ -58,6 +89,9 @@ concurrent archive; that coordination constraint is resolved.
   automatic retry after uncertain delivery. User-provided `private/opt.txt` was
   translated to `Private/ovh_sms.env`; both have mode 0600 and are ignored by Git.
   Secrets were not printed or added to application sources.
+- The six validated browser/native WebView JavaScript owners are deployed to
+  `/opt/a` after a targeted server backup. Local/server hashes and the public
+  `loadServerConfig.js` hash match; production health remains HTTP 200.
 
 ## Executed evidence
 
@@ -68,10 +102,17 @@ concurrent archive; that coordination constraint is resolved.
   test-manifest governance. Last local adoption additions also passed separately.
 - Tauri: `cargo check --offline --manifest-path platforms/desktop-tauri/Cargo.toml
   --lib` passed (`temp/auth-native-check.log`).
+- Tauri follow-up: the final Debug app bundle builds and launches to the login
+  surface. A normal UI request reached “SMS envoyé” and production security
+  events recorded `authentication_started` then `sms_provider_accepted`.
 - iOS: full Debug simulator `xcodebuild`, unsigned, passed after correcting the
   SQLite binding type in the account-scoped queue query (`temp/auth-ios-build.log`).
   This is compilation evidence, not Secure Enclave hardware or Universal Link
   acceptance. No archive was created.
+- iOS follow-up: the signed Debug device build succeeds with the repaired runtime.
+  A previous installed build reached `authentication_ready` with zero missing
+  requests; installation of the final package was unavailable because the phone
+  was disconnected from CoreDevice.
 - Chromium: a real click on the welcome login choice displayed only the phone
   input. No SMS was sent. A separate real-browser probe installed the application
   cache, reloaded offline, entered guest mode through a real click, created and
@@ -93,12 +134,12 @@ concurrent archive; that coordination constraint is resolved.
 
 ## External validation still unavailable
 
-A real signed read-only OVH request to `GET /sms/sms-uh8326-1` returned HTTP 403
-`NOT_GRANTED_CALL`. This proves that call is not authorized, not that all keys or
-SMS sending are invalid. Service availability, balance and sender approval remain
-unverified. The user was asked for a real test recipient, confirmation of the
-approved ATOME sender and read permission to inspect the service. No answer or
-SMS delivery is assumed.
+A real production send was accepted by OVH and recorded without exposing the
+recipient or link. A signed read of the recipient's outgoing history returned
+HTTP 403 `This call has not been granted`, so the current token can create jobs
+but cannot read their delivery receipts. This does not prove carrier delivery;
+the user reports that the latest expected SMS was not observed. Grant the
+minimum outgoing-history GET permission, then inspect delivery without retrying.
 
 The production domain, association file, proxy logging policy, compatible server
 and clients must be deployed together. Actual browser login, macOS login, iPhone

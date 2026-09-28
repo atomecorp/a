@@ -9,6 +9,27 @@ extension AiSRuntime {
         return base64url(Data(bytes))
     }
 
+    static func localAuthDescriptor(_ message: [String: Any], db: OpaquePointer?) throws -> [String: Any] {
+        let requested = stringValue(message["grantId"])
+        let requestedRows = requested.isEmpty ? []
+            : try query(db, "SELECT * FROM auth_local_grants WHERE grant_id=? AND locked=0 LIMIT 1", [.text(requested)])
+        let row: [String: Any]?
+        if let requestedRow = requestedRows.first {
+            row = requestedRow
+        } else {
+            row = try query(db, "SELECT * FROM auth_local_grants WHERE locked=0 ORDER BY rowid DESC LIMIT 1", []).first
+        }
+        guard let row else { return ["localGrant": NSNull()] }
+        let principal = stringValue(row["local_principal"])
+        let user = try loadUserInfo(db, userId: principal)
+        return ["localGrant": [
+            "phone": stringValue(user["phone"]), "keyId": stringValue(row["key_id"]),
+            "scope": stringValue(row["key_scope"]), "user": user, "locked": false,
+            "localSession": ["id": stringValue(row["grant_id"]),
+                "generation": intValue(row["generation"], defaultValue: 0)]
+        ]]
+    }
+
     static func localAuthChallenge(_ message: [String: Any], db: OpaquePointer?) throws -> [String: Any] {
         let grant = stringValue(message["grantId"]), purpose = stringValue(message["purpose"])
         guard ["local-resume", "local-lock"].contains(purpose),

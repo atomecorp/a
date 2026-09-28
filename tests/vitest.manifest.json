@@ -17,6 +17,7 @@
   "tests/eve/auth_device.test.mjs",
   "tests/eve/auth_fastify_token_tauri_restart.test.mjs",
   "tests/eve/auth_home_security.test.mjs",
+  "tests/eve/auth_native_restart_contract.test.mjs",
   "tests/eve/auth_phone_link_client.test.mjs",
   "tests/eve/auth_tauri_primary_invariant.test.mjs",
   "tests/eve/background_default_wallpaper_contract.test.mjs",

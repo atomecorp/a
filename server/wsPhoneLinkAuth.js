@@ -11,7 +11,7 @@ import { AUTH_LINK_ORIGIN, AUTH_ACCESS_TTL_SECONDS } from '../atome/src/shared/a
 import { attachWsApiClientToUser, detachWsApiClient, wsApiConnections } from './wsApiState.js';
 
 const ACTIONS = new Set(['phone-link-start', 'phone-change-start', 'phone-link-challenge', 'phone-link-consume',
-    'phone-link-approve', 'phone-link-resume', 'phone-link-cancel', 'session-challenge',
+    'phone-link-approve', 'phone-link-confirm', 'phone-link-resume', 'phone-link-cancel', 'session-challenge',
     'session-delete-account', 'session-renew', 'session-local-bind', 'session-logout', 'session-logout-all', 'session-revoke-device']);
 const PUBLIC_ERRORS = new Set(['auth_phone_e164_required', 'auth_rate_limited', 'sms_delivery_unavailable',
     'sms_configuration_required', 'auth_trusted_phone_required', 'auth_session_invalid',
@@ -86,6 +86,7 @@ export function createWsPhoneLinkHandler({ projectRoot, jwtSecret, sendLink, dat
                     result = await service.complete({ ...message, action: 'resume' });
                     break;
                 case 'phone-link-approve': result = await service.approve(message); break;
+                case 'phone-link-confirm': result = await service.confirm(message); break;
                 case 'phone-link-cancel': result = await service.cancel(message); break;
                 case 'session-challenge': result = await service.sessions.getChallenge(message, network); break;
                 case 'session-renew': result = await service.sessions.renew(message); break;
@@ -93,7 +94,7 @@ export function createWsPhoneLinkHandler({ projectRoot, jwtSecret, sendLink, dat
                 case 'session-local-bind': result = await service.sessions.localBind(message); break;
                 default: result = await service.sessions.revoke({ ...message, action: message.action.slice('session-'.length) });
             }
-            if (message.action === 'phone-link-approve' && result.approved) {
+            if (['phone-link-approve', 'phone-link-confirm'].includes(message.action) && result.approved) {
                 for (const origin of wsApiConnections) {
                     if (origin._authLinkAttemptId === message.attemptId && origin.readyState === 1) {
                         origin.send(JSON.stringify({ type: 'phone-link-ready', attemptId: message.attemptId }));
