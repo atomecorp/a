@@ -202,6 +202,7 @@
   "tests/eve/project_workspace_activation_contract.test.mjs",
   "tests/eve/project_workspace_empty_activation.test.mjs",
   "tests/eve/project_workspace_presentation_preservation.test.mjs",
+  "tests/eve/recorded_media_contextual_play_contract.test.mjs",
   "tests/eve/render_surface_resize_reconciliation.test.mjs",
   "tests/eve/render_surface_size_contract.test.mjs",
   "tests/eve/rich_text_style_contract.test.mjs",

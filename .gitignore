@@ -193,6 +193,7 @@ tests/rendering/*
 !tests/eve/armed_tool_rail_definitions.test.mjs
 !tests/eve/context_menus_characterisation.test.mjs
 !tests/eve/project_background_color_contract.test.mjs
+!tests/eve/recorded_media_contextual_play_contract.test.mjs
 !tests/atome/
 tests/atome/*
 !tests/atome/src/

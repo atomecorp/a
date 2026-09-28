@@ -94,8 +94,14 @@ fail() {
     exit 1
 }
 
+# `set -E` lets this trap run inside the command substitutions the discovery
+# helpers rely on. Reporting from there duplicated the banner and let the
+# surrounding command hide the failure, so only the main shell reports.
 on_error() {
     local exit_code=$?
+
+    [ "$BASH_SUBSHELL" -eq 0 ] || exit "$exit_code"
+
     restore_product_version_files
     printf '\nFAILED\nStep: %s\nExit code: %s\n' "$CURRENT_STEP" "$exit_code" >&2
     exit "$exit_code"
@@ -196,6 +202,8 @@ discover_application_scheme() {
     local matching_scheme_count=0
 
     project_json="$(xcodebuild_for_container -list -json)"
+    printf '%s' "$project_json" | /usr/bin/ruby -rjson -e 'JSON.parse(STDIN.read)' 2>/dev/null \
+        || fail "xcodebuild -list -json did not return readable JSON."
     while IFS= read -r scheme; do
         settings="$(release_settings_for_scheme "$scheme")"
         product_type="$(extract_setting "$settings" "PRODUCT_TYPE")"
@@ -212,8 +220,10 @@ discover_application_scheme() {
         fi
     done < <(append_json_values "$project_json" "targets")
 
-    for scheme in "${application_schemes[@]}"; do
-        for target in "${application_targets[@]}"; do
+    # macOS ships bash 3.2, where an empty "${array[@]}" is an unbound
+    # variable under `set -u`; the guarded form reports the real error instead.
+    for scheme in ${application_schemes[@]+"${application_schemes[@]}"}; do
+        for target in ${application_targets[@]+"${application_targets[@]}"}; do
             if [ "$scheme" = "$target" ]; then
                 matching_schemes+=("$scheme")
                 ((matching_scheme_count += 1))
@@ -274,7 +284,7 @@ discover_release_targets() {
     [ -n "$TEAM_ID" ] || fail "DEVELOPMENT_TEAM is not configured for $APP_TARGET."
     [ -n "$SIGNING_STYLE" ] || fail "CODE_SIGN_STYLE is not configured for $APP_TARGET."
 
-    for target in "${EXTENSION_TARGETS[@]}"; do
+    for target in ${EXTENSION_TARGETS[@]+"${EXTENSION_TARGETS[@]}"}; do
         settings="$(release_settings_for_target "$target")"
         target_marketing_version="$(extract_setting "$settings" "MARKETING_VERSION")"
         target_build="$(extract_setting "$settings" "CURRENT_PROJECT_VERSION")"
@@ -305,17 +315,38 @@ increment_marketing_version() {
     NEXT_MARKETING_VERSION="$version_prefix.$next_component"
 }
 
+# Returns the version, or a non-zero status with a one-line diagnostic the
+# caller reports. This helper runs inside command substitutions where `fail`
+# would be swallowed by the surrounding command, so it never calls it.
 read_product_version() {
     local file="$1"
     local version
 
-    [ -f "$file" ] || fail "Version file is missing: $file"
+    [ -s "$file" ] || {
+        printf '%s is missing or empty.\n' "$file" >&2
+        return 1
+    }
+
     if [[ "$file" == *.json ]]; then
-        version="$(/usr/bin/ruby -rjson -e 'print JSON.parse(File.read(ARGV[0])).fetch("version", "")' "$file")"
+        version="$(/usr/bin/ruby -rjson -e '
+            begin
+                document = JSON.parse(File.read(ARGV[0]))
+            rescue JSON::ParserError, SystemCallError => error
+                detail = error.message.gsub(/\s+/, " ").strip[0, 200]
+                warn "#{ARGV[0]} is not readable as JSON: #{detail}"
+                exit 1
+            end
+            print document.fetch("version", "")
+        ' "$file")" || return 1
     else
-        version="$(tr -d '[:space:]' < "$file")"
+        version="$(tr -d '[:space:]' < "$file")" || return 1
     fi
-    [[ "$version" =~ ^[0-9]+(\.[0-9]+)+$ ]] || fail "$file must hold dot-separated numeric components, found: $version"
+
+    [[ "$version" =~ ^[0-9]+(\.[0-9]+)+$ ]] || {
+        printf '%s must hold dot-separated numeric components, found: %s\n' "$file" "$version" >&2
+        return 1
+    }
+
     printf '%s' "$version"
 }
 
@@ -327,10 +358,20 @@ highest_version() {
 # highest of the incremented Xcode ledger and both product version files, so a
 # product version bumped by hand is published as is instead of being overtaken.
 align_with_product_versions() {
-    ATOME_VERSION="$(read_product_version "$ATOME_VERSION_FILE")"
-    EVE_VERSION="$(read_product_version "$EVE_VERSION_FILE")"
-    NEXT_MARKETING_VERSION="$(highest_version "$NEXT_MARKETING_VERSION" "$ATOME_VERSION" "$EVE_VERSION" \
-        "$(read_product_version "$ATOME_VERSION_JSON_FILE")")"
+    local ledger_version="$NEXT_MARKETING_VERSION"
+    local json_version
+
+    ATOME_VERSION="$(read_product_version "$ATOME_VERSION_FILE")" \
+        || fail "The atome version file is unusable: $ATOME_VERSION_FILE"
+    EVE_VERSION="$(read_product_version "$EVE_VERSION_FILE")" \
+        || fail "The eVe version file is unusable: $EVE_VERSION_FILE"
+    # Read before calling highest_version: a failure inside an argument
+    # substitution is invisible to `set -e`, which is how an emptied
+    # version.json used to pass discovery and only break the version writers.
+    json_version="$(read_product_version "$ATOME_VERSION_JSON_FILE")" \
+        || fail "The version ledger is unusable: $ATOME_VERSION_JSON_FILE is empty or invalid JSON; restore it before releasing."
+
+    NEXT_MARKETING_VERSION="$(highest_version "$ledger_version" "$ATOME_VERSION" "$EVE_VERSION" "$json_version")"
 }
 
 # Written before the archive so the published bundle carries its own version;
@@ -505,7 +546,9 @@ main() {
     resolve_version_ledger
     discover_application_scheme
 
-    APP_BUNDLE_IDENTIFIER="$(extract_setting "$(release_settings_for_scheme "$APP_SCHEME")" "PRODUCT_BUNDLE_IDENTIFIER")"
+    local app_settings
+    app_settings="$(release_settings_for_scheme "$APP_SCHEME")"
+    APP_BUNDLE_IDENTIFIER="$(extract_setting "$app_settings" "PRODUCT_BUNDLE_IDENTIFIER")"
     [ -n "$APP_BUNDLE_IDENTIFIER" ] || fail "PRODUCT_BUNDLE_IDENTIFIER is not configured for scheme $APP_SCHEME."
     discover_release_targets
     print_release_summary

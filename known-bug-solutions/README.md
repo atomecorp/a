@@ -32,6 +32,7 @@ the established solution before attempting a new implementation.
 | An AI-generated image or speech keeps displaying an older generation | [ai-generated-media-identity](ai-generated-media-identity/README.md) |
 | Production update stops on `@emnapi` and a later restart returns Nginx 502 | [production-update-dependency-gate](production-update-dependency-gate/README.md) |
 | Phone-link SMS stays inert in Tauri/iOS, Tauri hangs, or iOS never leaves its boot cover | [phone-link-native-runtime](phone-link-native-runtime/README.md) |
+| A recorded video or audio shows no Play in the contextual rail or Mystic menu | [recorded-media-contextual-play](recorded-media-contextual-play/README.md) |
 
 ## Maintenance rules
 
