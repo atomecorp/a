@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { test } from 'vitest';
+import { test, vi } from 'vitest';
 import { BEVY_MAIN_MENU_ATOME_ID, buildBevyMainMenuItems, resolveBevyMainMenuItemSize } from '../../eVe/intuition/ribbon/bevy_ui_main_menu_model.js';
 import { createBevyUiMainMenuRuntime } from '../../eVe/intuition/ribbon/bevy_ui_main_menu_runtime.js';
 import { setMainMenuRuntime } from '../../eVe/intuition/ribbon/bevy_ui_product_registry.js';
@@ -14,6 +14,17 @@ import { BEVY_MENU_TOKENS } from '../../eVe/intuition/ribbon/bevy_ui_menu_surfac
 import { EVE_BUTTON_SKIN_TOKENS } from '../../eVe/elements/skin/button_skin.js';
 import { EVE_COMMON_SKIN_TOKENS } from '../../eVe/elements/skin/tokens.js';
 import { TOOL_KEYS, menuContent, installDom, findNode, waitFrame, waitMs, createRuntimeHarness } from './bevy_ui_main_menu_test_helpers.mjs';
+
+// « Organiser » is the one main-menu tool whose destination is not a gateway
+// tool: it runs the workspace Dashboard toggle, the same owner as the Mystic
+// tile. The module is mocked so the contract stays on the invocation route.
+const workspaceSurfaceRuntime = vi.hoisted(() => ({
+    toggleWorkspaceDashboardAndMainMenu: vi.fn(async () => ({ ok: true }))
+}));
+
+vi.mock('../../eVe/intuition/tools/user_workspace_surface_runtime.js', () => ({
+    toggleWorkspaceDashboardAndMainMenu: workspaceSurfaceRuntime.toggleWorkspaceDashboardAndMainMenu
+}));
 
 const collectJavaScriptSources = (directory) => readdirSync(directory, { withFileTypes: true })
     .flatMap((entry) => {
@@ -391,6 +402,48 @@ test('BevyUI invocation forwards its latch state as routing metadata, never tool
     } finally {
         env.restore();
     }
+});
+
+test('« Organiser » runs the Mystic Dashboard toggle instead of a gateway tool', async () => {
+    const env = installDom();
+    const invocations = [];
+    workspaceSurfaceRuntime.toggleWorkspaceDashboardAndMainMenu.mockClear();
+    const runtime = createContextToolInvocationRuntime({
+        getFinderToolEl: () => null,
+        handleFinderTouch: () => null,
+        invokeToolFromUiButton: async (input) => {
+            invocations.push(input);
+            return { ok: true, nextLatched: null };
+        }
+    });
+    try {
+        const result = await runtime.invokeIntuitionXMainRibbonToolDefinition({
+            key: 'organize',
+            type: 'tool',
+            actionMode: 'momentary'
+        }, 'bevy_ui.activate', { source: 'bevy_ui_main_menu' });
+        assert.deepEqual(workspaceSurfaceRuntime.toggleWorkspaceDashboardAndMainMenu.mock.calls,
+            [[{ source: 'main_menu_organize' }]], 'the main menu must call the canonical workspace toggle');
+        assert.deepEqual(invocations, [], 'no gateway tool may stand between the button and the toggle');
+        assert.equal(result.ok, true);
+    } finally {
+        env.restore();
+    }
+});
+
+test('« Organiser » keeps one identity across the main menu and Mystic', () => {
+    const source = readFileSync(resolve(process.cwd(),
+        'eVe/intuition/runtime/eve_intuition/main_menu_content_runtime.js'), 'utf8');
+    const organizeDef = source.match(/organize:\s*\{[^}]*\}/)?.[0] || '';
+    assert.match(organizeDef, /labelKey:\s*'eve\.menu\.organize'/);
+    assert.match(organizeDef, /atome_tool:\s*true/, 'the root stays visible in the main toolbox');
+    assert.doesNotMatch(organizeDef, /tool_id|touch/,
+        'the button declares no gateway tool and no local handler beside the shared invocation route');
+    // The Mystic tile's own definition (key `dashboard`) shows the same name.
+    assert.match(source, /dashboard:\s*\{\s*labelKey:\s*'eve\.menu\.organize'/);
+    const taxonomy = JSON.parse(readFileSync(resolve(process.cwd(),
+        'eVe/intuition/menu/context_menus.json'), 'utf8'));
+    assert.equal(taxonomy.commands.dashboard.labelKey, 'eve.menu.organize');
 });
 
 test('retired Panel Lab shortcuts are absent from product menu content', () => {
