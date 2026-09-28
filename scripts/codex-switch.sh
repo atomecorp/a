@@ -4,74 +4,87 @@ umask 077
 
 # codex_switch_gpt_deepseek.sh
 #
-# Safe GPT <-> DeepSeek switch for Codex CLI.
+# GPT <-> DeepSeek switch for the Codex desktop app and CLI.
 #
 # Design:
-#   - GPT/OpenAI always uses the normal main Codex home: ~/.codex
-#   - DeepSeek always uses a separate home: ~/.codex-deepseek-worker
-#   - The script NEVER rewrites ~/.codex/config.toml
-#   - The script NEVER rewrites ~/.codex/AGENTS.md
-#   - No provider/model setting is copied from DeepSeek into the GPT side
-#   - The selected wrapper mode is stored outside both Codex homes
-#
-# This avoids the local-state collision that can make the OpenAI model picker
-# behave differently on one Mac from another.
+#   - `deepseek`, `pro` and `gpt` update ~/.codex/config.toml and exit.
+#   - `cli-deepseek`, `cli-pro` and `cli-gpt` open an interactive CLI session.
+#   - The original OpenAI model settings are restored when switching to GPT.
+#   - DeepSeek CLI/delegation can still use a separate isolated Codex home.
 #
 # DeepSeek key:
 #   1) DEEPSEEK_API_KEY environment variable, or
 #   2) <project>/private/DeepSeek_key
 #
 # Usage examples:
-#   ./codex_switch_gpt_deepseek.sh mode gpt
-#   ./codex_switch_gpt_deepseek.sh mode deepseek
-#   ./codex_switch_gpt_deepseek.sh
 #   ./codex_switch_gpt_deepseek.sh gpt
 #   ./codex_switch_gpt_deepseek.sh deepseek
+#   ./codex_switch_gpt_deepseek.sh pro
+#   ./codex_switch_gpt_deepseek.sh cli-deepseek
 #   ./codex_switch_gpt_deepseek.sh delegate "Fix this bug"
 #   ./codex_switch_gpt_deepseek.sh status
 #   ./codex_switch_gpt_deepseek.sh doctor
 #
-# IMPORTANT:
-# This switches only the Codex CLI launched through this wrapper.
-# It does NOT rewrite the ChatGPT/Codex desktop application's provider config.
-
 SCRIPT_NAME="codex_switch_gpt_deepseek"
-SCRIPT_VERSION="4.0.0"
+SCRIPT_VERSION="5.0.0"
 
 MAIN_CODEX_HOME="${MAIN_CODEX_HOME:-$HOME/.codex}"
 DEEPSEEK_CODEX_HOME="${DEEPSEEK_CODEX_HOME:-$HOME/.codex-deepseek-worker}"
-SWITCH_HOME="${CODEX_SWITCH_HOME:-$HOME/.codex-provider-switch}"
-MODE_FILE="$SWITCH_HOME/mode"
 KEY_FILE_REL="${DEEPSEEK_KEY_FILE_REL:-private/DeepSeek_key}"
+MAIN_CONFIG="$MAIN_CODEX_HOME/config.toml"
+BACKUP_DIR="$MAIN_CODEX_HOME/codex-switch-backup"
+ORIGINAL_MODEL_SETTINGS="$BACKUP_DIR/original-model-settings.toml"
+SWITCH_TAG="# codex-switch"
 
 DEFAULT_DEEPSEEK_MODEL="${DEEPSEEK_MODEL:-deepseek-flash}"
 DEFAULT_DEEPSEEK_REASONING="${DEEPSEEK_REASONING:-high}"
-
-if [[ -n "${CODEX_BIN:-}" ]]; then
-  :
-else
-  CODEX_BIN="$(command -v codex 2>/dev/null || true)"
-fi
 
 say()  { printf '%s\n' "$*"; }
 err()  { printf 'ERROR: %s\n' "$*" >&2; }
 warn() { printf 'WARNING: %s\n' "$*" >&2; }
 
+resolve_codex_bin() {
+  local candidate
+
+  if [[ -n "${CODEX_BIN:-}" ]]; then
+    return
+  fi
+
+  CODEX_BIN="$(command -v codex 2>/dev/null || true)"
+  [[ -n "$CODEX_BIN" && -x "$CODEX_BIN" ]] && return
+
+  # The Codex desktop bundle is not always added to PATH (notably when a
+  # terminal was opened before the app was installed or updated).
+  for candidate in \
+    "/Applications/ChatGPT.app/Contents/Resources/codex-cli/bin/codex" \
+    "$HOME/Applications/ChatGPT.app/Contents/Resources/codex-cli/bin/codex" \
+    "/Applications/Codex.app/Contents/Resources/codex-cli/bin/codex" \
+    "$HOME/Applications/Codex.app/Contents/Resources/codex-cli/bin/codex"
+  do
+    if [[ -x "$candidate" ]]; then
+      CODEX_BIN="$candidate"
+      return
+    fi
+  done
+
+  CODEX_BIN=""
+}
+
+resolve_codex_bin
+
 usage() {
   cat <<'USAGE'
-codex_switch_gpt_deepseek.sh v4.0
+codex_switch_gpt_deepseek.sh v5.0
 
-SAFE SWITCH
-  ./codex_switch_gpt_deepseek.sh mode gpt
-  ./codex_switch_gpt_deepseek.sh mode deepseek
+CONFIGURE CODEX (does not open a terminal prompt)
+  ./codex_switch_gpt_deepseek.sh gpt
+  ./codex_switch_gpt_deepseek.sh deepseek
+  ./codex_switch_gpt_deepseek.sh pro
 
-RUN CURRENT MODE
-  ./codex_switch_gpt_deepseek.sh
-  ./codex_switch_gpt_deepseek.sh -- <codex arguments>
-
-RUN ONE MODE WITHOUT CHANGING SAVED MODE
-  ./codex_switch_gpt_deepseek.sh gpt [codex arguments]
-  ./codex_switch_gpt_deepseek.sh deepseek [codex arguments]
+OPEN AN INTERACTIVE CLI SESSION
+  ./codex_switch_gpt_deepseek.sh cli-gpt [codex arguments]
+  ./codex_switch_gpt_deepseek.sh cli-deepseek [codex arguments]
+  ./codex_switch_gpt_deepseek.sh cli-pro [codex arguments]
 
 DELEGATE ONE TASK TO DEEPSEEK
   ./codex_switch_gpt_deepseek.sh delegate "task"
@@ -80,7 +93,6 @@ DELEGATE ONE TASK TO DEEPSEEK
 DIAGNOSTICS
   ./codex_switch_gpt_deepseek.sh status
   ./codex_switch_gpt_deepseek.sh doctor
-  ./codex_switch_gpt_deepseek.sh reset-mode
   ./codex_switch_gpt_deepseek.sh version
 
 DEEPSEEK PER-TASK OPTIONS
@@ -88,16 +100,16 @@ DEEPSEEK PER-TASK OPTIONS
   delegate --level low|medium|high|max "task"
 
 NOTES
-  - GPT mode uses ~/.codex and does not force a model.
-  - DeepSeek mode uses ~/.codex-deepseek-worker.
-  - The main ~/.codex config is never rewritten by this script.
-  - The saved switch mode lives in ~/.codex-provider-switch/mode.
+  - Plain model names update ~/.codex/config.toml and then exit.
+  - Quit Codex with Cmd+Q and reopen it after changing provider.
+  - The DeepSeek key remains in private/DeepSeek_key.
+  - CLI/delegation DeepSeek sessions use ~/.codex-deepseek-worker.
 USAGE
 }
 
 require_codex() {
   if [[ -z "$CODEX_BIN" || ! -x "$CODEX_BIN" ]]; then
-    err "Codex CLI not found in PATH."
+    err "Codex CLI not found in PATH or in the Codex desktop app."
     err "Install/update Codex CLI or run with CODEX_BIN=/absolute/path/to/codex"
     exit 1
   fi
@@ -127,10 +139,9 @@ normalized_path() {
 }
 
 validate_isolation() {
-  local main worker switch
+  local main worker
   main="$(normalized_path "$MAIN_CODEX_HOME")"
   worker="$(normalized_path "$DEEPSEEK_CODEX_HOME")"
-  switch="$(normalized_path "$SWITCH_HOME")"
 
   if [[ "$worker" == "$main" || "$worker" == "$main/"* ]]; then
     err "Unsafe DEEPSEEK_CODEX_HOME: $DEEPSEEK_CODEX_HOME"
@@ -140,13 +151,6 @@ validate_isolation() {
 
   if [[ "$main" == "$worker/"* ]]; then
     err "Unsafe homes: main Codex home is nested inside the DeepSeek home."
-    return 1
-  fi
-
-  if [[ "$switch" == "$main" || "$switch" == "$main/"* ||
-        "$switch" == "$worker" || "$switch" == "$worker/"* ]]; then
-    err "Unsafe CODEX_SWITCH_HOME: $SWITCH_HOME"
-    err "Switch state must be outside both Codex homes."
     return 1
   fi
 
@@ -282,37 +286,140 @@ EOF_CONFIG
   mv -f "$tmp" "$DEEPSEEK_CODEX_HOME/config.toml"
 }
 
-current_mode() {
-  if [[ -f "$MODE_FILE" ]]; then
-    local mode
-    mode="$(tr -d '[:space:]' < "$MODE_FILE")"
-    case "$mode" in
-      gpt|deepseek)
-        printf '%s\n' "$mode"
-        return
-        ;;
-    esac
-  fi
-  printf '%s\n' "gpt"
+toml_escape() {
+  printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'
 }
 
-save_mode() {
+strip_managed_config() {
+  local source="$1"
+
+  awk -v tag="$SWITCH_TAG" '
+    BEGIN { top = 1 }
+    index($0, tag " begin") { tagged = 1; next }
+    index($0, tag " end")   { tagged = 0; next }
+    tagged { next }
+
+    /^\[model_providers\.deepseek(\.auth)?\][[:space:]]*$/ {
+      deepseek_table = 1
+      next
+    }
+    /^\[/ {
+      deepseek_table = 0
+      top = 0
+    }
+    deepseek_table { next }
+
+    top && /^(model|model_provider|model_reasoning_effort)[[:space:]]*=/ { next }
+    index($0, tag) { next }
+    { print }
+  ' "$source"
+}
+
+capture_original_model_settings() {
+  mkdir -p "$BACKUP_DIR"
+  chmod 700 "$BACKUP_DIR" 2>/dev/null || true
+
+  if [[ ! -f "$ORIGINAL_MODEL_SETTINGS" ]]; then
+    awk '
+      BEGIN { top = 1 }
+      /^\[/ { top = 0 }
+      top && /^(model|model_provider|model_reasoning_effort)[[:space:]]*=/ { print }
+    ' "$MAIN_CONFIG" > "$ORIGINAL_MODEL_SETTINGS"
+    chmod 600 "$ORIGINAL_MODEL_SETTINGS" 2>/dev/null || true
+  fi
+
+  if [[ ! -f "$BACKUP_DIR/config.toml.original" ]]; then
+    cp -p "$MAIN_CONFIG" "$BACKUP_DIR/config.toml.original"
+  fi
+  cp -p "$MAIN_CONFIG" "$BACKUP_DIR/config.toml.before-last-switch"
+}
+
+rewrite_main_config() {
   local mode="$1"
-  validate_isolation || exit 4
+  local model="${2:-}"
+  local key_path="${3:-}"
+  local tmp escaped_key
 
-  case "$mode" in
-    gpt|deepseek) ;;
-    *)
-      err "Unknown mode: $mode"
-      exit 2
-      ;;
-  esac
+  mkdir -p "$MAIN_CODEX_HOME"
+  chmod 700 "$MAIN_CODEX_HOME" 2>/dev/null || true
+  [[ -f "$MAIN_CONFIG" ]] || printf '%s' '' > "$MAIN_CONFIG"
+  capture_original_model_settings
 
-  mkdir -p "$SWITCH_HOME"
-  chmod 700 "$SWITCH_HOME" 2>/dev/null || true
-  printf '%s\n' "$mode" > "$MODE_FILE"
-  chmod 600 "$MODE_FILE" 2>/dev/null || true
-  say "Saved mode: $mode"
+  tmp="$(mktemp "$MAIN_CODEX_HOME/.config.toml.tmp.XXXXXX")"
+
+  if [[ "$mode" == "deepseek" ]]; then
+    escaped_key="$(toml_escape "$key_path")"
+    {
+      printf 'model = "%s" %s\n' "$model" "$SWITCH_TAG"
+      printf 'model_provider = "deepseek" %s\n' "$SWITCH_TAG"
+      printf 'model_reasoning_effort = "%s" %s\n' "$DEFAULT_DEEPSEEK_REASONING" "$SWITCH_TAG"
+      strip_managed_config "$MAIN_CONFIG"
+      printf '\n%s begin\n' "$SWITCH_TAG"
+      printf '[model_providers.deepseek]\n'
+      printf 'name = "DeepSeek"\n'
+      printf 'base_url = "https://api.deepseek.com/"\n'
+      printf 'wire_api = "responses"\n'
+      printf 'request_max_retries = 4\n'
+      printf 'stream_max_retries = 5\n'
+      printf 'stream_idle_timeout_ms = 300000\n\n'
+      printf '[model_providers.deepseek.auth]\n'
+      printf 'command = "/bin/cat"\n'
+      printf 'args = ["%s"]\n' "$escaped_key"
+      printf 'timeout_ms = 5000\n'
+      printf '%s end\n' "$SWITCH_TAG"
+    } > "$tmp"
+  else
+    {
+      if [[ -f "$ORIGINAL_MODEL_SETTINGS" ]]; then
+        cat "$ORIGINAL_MODEL_SETTINGS"
+      fi
+      strip_managed_config "$MAIN_CONFIG"
+    } > "$tmp"
+  fi
+
+  chmod 600 "$tmp" 2>/dev/null || true
+  mv -f "$tmp" "$MAIN_CONFIG"
+}
+
+configure_deepseek() {
+  local requested_model="$1"
+  local root key_path model
+
+  root="$(resolve_project_root)"
+  key_path="$(key_file_path "$root")"
+  if [[ ! -r "$key_path" || -z "$(tr -d '[:space:]' < "$key_path")" ]]; then
+    err "A persistent DeepSeek switch requires a readable key file."
+    err "Expected: $key_path"
+    exit 3
+  fi
+
+  model="$(normalize_deepseek_model "$requested_model")" || {
+    err "Invalid DeepSeek model: $requested_model"
+    exit 2
+  }
+
+  rewrite_main_config "deepseek" "$model" "$key_path"
+  say "Codex is now configured for DeepSeek ($model)."
+  say "Quit Codex completely (Cmd+Q), then reopen it."
+  say "Backup: $BACKUP_DIR/config.toml.before-last-switch"
+}
+
+configure_gpt() {
+  if [[ ! -f "$MAIN_CONFIG" ]]; then
+    say "Codex already uses its default OpenAI configuration."
+    return
+  fi
+
+  if ! grep -qF "$SWITCH_TAG" "$MAIN_CONFIG" &&
+     ! grep -qE '^model_provider[[:space:]]*=[[:space:]]*"deepseek"' "$MAIN_CONFIG"; then
+    say "Codex already uses OpenAI/GPT; configuration unchanged."
+    return
+  fi
+
+  rewrite_main_config "gpt"
+  rm -f "$ORIGINAL_MODEL_SETTINGS"
+  say "Codex is now configured for OpenAI/GPT."
+  say "Quit Codex completely (Cmd+Q), then reopen it."
 }
 
 run_gpt() {
@@ -340,8 +447,8 @@ run_deepseek() {
 
   local root model reasoning api_key
   root="$(resolve_project_root)"
-  model="$(normalize_deepseek_model "$DEFAULT_DEEPSEEK_MODEL")" || {
-    err "Invalid DeepSeek model: $DEFAULT_DEEPSEEK_MODEL"
+  model="$(normalize_deepseek_model "${DEEPSEEK_RUN_MODEL:-$DEFAULT_DEEPSEEK_MODEL}")" || {
+    err "Invalid DeepSeek model: ${DEEPSEEK_RUN_MODEL:-$DEFAULT_DEEPSEEK_MODEL}"
     exit 2
   }
   reasoning="$(normalize_reasoning "$DEFAULT_DEEPSEEK_REASONING")" || {
@@ -471,14 +578,22 @@ EOF_PROMPT
 }
 
 status() {
-  local mode
-  mode="$(current_mode)"
+  local configured_model configured_provider
 
   say "$SCRIPT_NAME v$SCRIPT_VERSION"
-  say "Saved wrapper mode: $mode"
+  say "Codex config: $MAIN_CONFIG"
   say "Main GPT/OpenAI CODEX_HOME: $MAIN_CODEX_HOME"
   say "DeepSeek CODEX_HOME: $DEEPSEEK_CODEX_HOME"
-  say "Switch state: $SWITCH_HOME"
+
+  if [[ -f "$MAIN_CONFIG" ]]; then
+    configured_model="$(awk 'BEGIN { top=1 } /^\[/ { top=0 } top && /^model[[:space:]]*=/ { sub(/^[^=]*=[[:space:]]*/, ""); sub(/[[:space:]]*#.*/, ""); gsub(/"/, ""); print; exit }' "$MAIN_CONFIG")"
+    configured_provider="$(awk 'BEGIN { top=1 } /^\[/ { top=0 } top && /^model_provider[[:space:]]*=/ { sub(/^[^=]*=[[:space:]]*/, ""); sub(/[[:space:]]*#.*/, ""); gsub(/"/, ""); print; exit }' "$MAIN_CONFIG")"
+    say "Configured model: ${configured_model:-default}"
+    say "Configured provider: ${configured_provider:-openai}"
+  else
+    say "Configured model: default"
+    say "Configured provider: openai"
+  fi
 
   if [[ -n "$CODEX_BIN" && -x "$CODEX_BIN" ]]; then
     say "Codex CLI: $CODEX_BIN"
@@ -493,14 +608,10 @@ status() {
     say "Isolation: INVALID"
   fi
 
-  if [[ -f "$MAIN_CODEX_HOME/config.toml" ]]; then
-    if grep -qiE 'deepseek|api\.deepseek\.com' "$MAIN_CODEX_HOME/config.toml"; then
-      warn "DeepSeek text still exists in MAIN config: $MAIN_CODEX_HOME/config.toml"
-    else
-      say "Main config: no obvious DeepSeek entry"
-    fi
+  if [[ -f "$MAIN_CONFIG" ]] && grep -qF "$SWITCH_TAG" "$MAIN_CONFIG"; then
+    say "Managed provider switch: DeepSeek"
   else
-    say "Main config: absent/clean initial state"
+    say "Managed provider switch: OpenAI/GPT"
   fi
 }
 
@@ -536,13 +647,16 @@ doctor() {
     say "Global CODEX_SQLITE_HOME in shell: not set"
   fi
 
-  if [[ -f "$MAIN_CODEX_HOME/config.toml" ]] &&
-     grep -qiE 'model_provider[[:space:]]*=[[:space:]]*"deepseek"|api\.deepseek\.com|\[model_providers\.deepseek\]' "$MAIN_CODEX_HOME/config.toml"; then
-    warn "DeepSeek provider data found in MAIN Codex config."
-    warn "Run the separate hard-reset script before using this switch."
-    failed=1
+  if [[ -f "$MAIN_CONFIG" ]] &&
+     grep -qiE 'model_provider[[:space:]]*=[[:space:]]*"deepseek"|\[model_providers\.deepseek\]' "$MAIN_CONFIG"; then
+    if grep -qF "$SWITCH_TAG" "$MAIN_CONFIG"; then
+      say "Main Codex provider: managed DeepSeek configuration"
+    else
+      warn "Unmanaged DeepSeek provider data found in $MAIN_CONFIG"
+      failed=1
+    fi
   else
-    say "Main Codex provider contamination: not detected"
+    say "Main Codex provider: OpenAI/GPT"
   fi
 
   local root
@@ -563,24 +677,34 @@ doctor() {
 
 main() {
   local command="${1:-}"
-  local mode
 
   case "$command" in
-    mode|switch)
+    gpt|openai|chatgpt|app-gpt|app-openai)
       shift
-      [[ $# -ge 1 ]] || {
-        say "Current mode: $(current_mode)"
-        exit 0
-      }
-      save_mode "$1"
+      [[ $# -eq 0 ]] || { err "Use cli-gpt to pass Codex arguments."; exit 2; }
+      configure_gpt
       ;;
-    gpt|openai|chatgpt)
+    deepseek|ds|flash|deepseek-flash|app-deepseek|app-ds)
+      shift
+      [[ $# -eq 0 ]] || { err "Use cli-deepseek to pass Codex arguments."; exit 2; }
+      configure_deepseek "deepseek-flash"
+      ;;
+    pro|deepseek-v4-pro|v4-pro|app-pro)
+      shift
+      [[ $# -eq 0 ]] || { err "Use cli-pro to pass Codex arguments."; exit 2; }
+      configure_deepseek "deepseek-v4-pro"
+      ;;
+    cli-gpt)
       shift
       run_gpt "$@"
       ;;
-    deepseek|ds)
+    cli-deepseek|cli-ds|cli-flash)
       shift
-      run_deepseek "$@"
+      DEEPSEEK_RUN_MODEL="deepseek-flash" run_deepseek "$@"
+      ;;
+    cli-pro|cli-deepseek-v4-pro)
+      shift
+      DEEPSEEK_RUN_MODEL="deepseek-v4-pro" run_deepseek "$@"
       ;;
     delegate)
       shift
@@ -592,41 +716,19 @@ main() {
     doctor|check)
       doctor
       ;;
-    reset-mode)
-      rm -f "$MODE_FILE"
-      say "Saved mode removed. Default is now GPT."
-      ;;
     version|--version)
       say "$SCRIPT_NAME $SCRIPT_VERSION"
       ;;
     help|-h|--help)
       usage
       ;;
-    --)
-      shift
-      mode="$(current_mode)"
-      if [[ "$mode" == "deepseek" ]]; then
-        run_deepseek "$@"
-      else
-        run_gpt "$@"
-      fi
-      ;;
     "")
-      mode="$(current_mode)"
-      if [[ "$mode" == "deepseek" ]]; then
-        run_deepseek
-      else
-        run_gpt
-      fi
+      usage
       ;;
     *)
-      # Any other arguments are passed to Codex using the saved wrapper mode.
-      mode="$(current_mode)"
-      if [[ "$mode" == "deepseek" ]]; then
-        run_deepseek "$@"
-      else
-        run_gpt "$@"
-      fi
+      err "Unknown command: $command"
+      usage >&2
+      exit 2
       ;;
   esac
 }
