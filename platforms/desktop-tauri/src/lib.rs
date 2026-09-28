@@ -226,6 +226,8 @@ pub fn run() {
         .on_window_event(viewport_runtime::publish_native_viewport)
         .invoke_handler(tauri::generate_handler![
             auth_device::auth_device_key,
+            auth_device::auth_local_request,
+            auth_device::auth_development_request,
             dev_logging::log_from_webview,
             native_contacts::macos_contacts_snapshot,
             native_midi::start_native_midi,

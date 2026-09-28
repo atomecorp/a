@@ -382,6 +382,7 @@ TAURI_ONLY=false
 SERVER_ONLY=false
 TEST_MODE=false
 FASTIFY_URL=""
+AUTH_MODE=""
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -411,8 +412,20 @@ while [[ $# -gt 0 ]]; do
             shift
             ;;
         --fastify-url)
+            if [[ $# -lt 2 ]]; then
+                echo "ERROR: --fastify-url requires a URL."
+                exit 1
+            fi
             FASTIFY_URL="$2"
             shift 2
+            ;;
+        --auth-local)
+            AUTH_MODE="local"
+            shift
+            ;;
+        --auth-prod)
+            AUTH_MODE="production"
+            shift
             ;;
         --help|-h)
             print_usage
@@ -425,6 +438,47 @@ while [[ $# -gt 0 ]]; do
             ;;
     esac
 done
+
+if [[ -n "$FASTIFY_URL" && -n "$AUTH_MODE" ]]; then
+    echo "ERROR: --fastify-url cannot be combined with --auth-local or --auth-prod."
+    exit 1
+fi
+
+if [[ "$AUTH_MODE" == "local" && ( "$PROD_BUILD" = true || "${NODE_ENV:-}" == "production" ) ]]; then
+    echo "ERROR: --auth-local cannot be used in production."
+    exit 1
+fi
+
+if [[ "$AUTH_MODE" == "local" && "$TAURI_ONLY" = true ]]; then
+    echo "ERROR: --auth-local needs the local Fastify server; do not combine it with --tauri."
+    exit 1
+fi
+
+# A complete local development launch uses a local, cryptographically verified
+# link without contacting the paid SMS provider. Tauri-only and production
+# builds have no local Fastify authority, so they retain the public service.
+PRODUCTION_SERVER_SETUP=false
+if is_production_install; then
+    PRODUCTION_SERVER_SETUP=true
+fi
+
+if [[ -z "$FASTIFY_URL" ]]; then
+    if [[ "$AUTH_MODE" == "production" || "$PROD_BUILD" = true || "$TAURI_ONLY" = true \
+        || "${NODE_ENV:-}" == "production" || ( "$PRODUCTION_SERVER_SETUP" = true && "$TEST_MODE" = false ) ]]; then
+        FASTIFY_URL="https://atome.one"
+        export SQUIRREL_AUTH_SMS_MOCK=0
+        echo "📱 Authentification réelle: atome.one (SMS facturable)"
+    else
+        FASTIFY_URL="http://127.0.0.1:3001"
+        export SQUIRREL_AUTH_SMS_MOCK=1
+        export HOST="127.0.0.1"
+        echo "🧪 Authentification locale: validation simulée, aucun SMS envoyé"
+    fi
+else
+    export SQUIRREL_AUTH_SMS_MOCK=0
+    echo "🌐 Autorité d'authentification personnalisée: $FASTIFY_URL"
+fi
+export SQUIRREL_FASTIFY_URL="$FASTIFY_URL"
 
 if [ "$TEST_MODE" = true ]; then
     if [[ "${NODE_ENV:-}" == "production" ]]; then
@@ -441,11 +495,8 @@ if [ "$TEST_MODE" = true ]; then
     echo "🧪 Test mode enabled: pre-auth OTP verification bypass is active."
 fi
 
-# Export Fastify URL for Tauri to use
-if [[ -n "$FASTIFY_URL" ]]; then
-    export SQUIRREL_FASTIFY_URL="$FASTIFY_URL"
-    echo "🌐 Remote Fastify URL: $FASTIFY_URL"
-fi
+# The selected authority is exported above for both the WebView and the native
+# local-session binding phase.
 
 # =============================================================================
 # MODE DETECTION - Handle modes BEFORE doing any setup

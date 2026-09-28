@@ -19,6 +19,13 @@ const PUBLIC_ERRORS = new Set(['auth_phone_e164_required', 'auth_rate_limited', 
 
 export function createWsPhoneLinkHandler({ projectRoot, jwtSecret, sendLink, database = db } = {}) {
     loadLocalSmsConfig(projectRoot);
+    const mockSmsRequested = process.env.SQUIRREL_AUTH_SMS_MOCK === '1';
+    if (mockSmsRequested && process.env.NODE_ENV === 'production') {
+        throw new Error('auth_sms_mock_forbidden_in_production');
+    }
+    const deliverLink = sendLink || (mockSmsRequested
+        ? async (_phone, link) => ({ accepted: true, provider: 'local-development', developmentLink: link })
+        : (phone, link) => createOvhSmsProvider().sendValidationLink(phone, link));
     const dataSource = database.getDataSourceAdapter();
     const service = createPhoneLinkAuth({
         query: database.query, transaction: database.withTransaction,
@@ -31,7 +38,7 @@ export function createWsPhoneLinkHandler({ projectRoot, jwtSecret, sendLink, dat
             const id = generateOpaquePrincipalId();
             return createUserAtome(dataSource, id, `user_${id}`, phone, 'private');
         },
-        sendLink: sendLink || ((phone, link) => createOvhSmsProvider().sendValidationLink(phone, link)),
+        sendLink: deliverLink,
         issueAccess: ({ principalId, keyId, sessionId }) => jwt.sign(
             { sub: principalId, userId: principalId, sid: sessionId, cnf: { kid: keyId }, auth_version: 1 },
             jwtSecret(), { algorithm: 'HS256', issuer: AUTH_LINK_ORIGIN, audience: 'atome-ws', expiresIn: AUTH_ACCESS_TTL_SECONDS }),

@@ -44,8 +44,9 @@ export function createPhoneLinkAuth({ query, transaction, findByPhone, findById,
             if (phoneChange) await query('run', 'INSERT INTO auth_phone_changes VALUES (?, ?, ?)', [id, phoneChange.principal_id, phoneChange.session_id]);
             await proof.audit('authentication_started', account?.user_id || null, id);
         });
+        let delivery;
         try {
-            await sendLink(phone, `${AUTH_LINK_ORIGIN}/auth/v/${id}#t=${token}`);
+            delivery = await sendLink(phone, `${AUTH_LINK_ORIGIN}/auth/v/${id}#t=${token}`);
             await transaction(async () => {
                 await query('run', "UPDATE auth_link_attempts SET state = 'sent' WHERE attempt_id = ? AND state = 'created'", [id]);
                 await proof.audit('sms_provider_accepted', null, id);
@@ -57,7 +58,8 @@ export function createPhoneLinkAuth({ query, transaction, findByPhone, findById,
             });
             reject('sms_delivery_unavailable');
         }
-        return { ok: true, attemptId: id, expiresAt: now() + AUTH_LINK_TTL_MS };
+        return { ok: true, attemptId: id, expiresAt: now() + AUTH_LINK_TTL_MS,
+            ...(delivery?.developmentLink ? { developmentLink: delivery.developmentLink } : {}) };
     }
     async function getChallenge({ attemptId, keyId, purpose }, network) {
         if (!['consume', 'approve', 'resume', 'cancel'].includes(purpose)) reject('auth_request_invalid');

@@ -55,9 +55,13 @@ async function localRequest(action, fields = {}) {
     // fresh SMS login. The native bridge is available before application code
     // and reaches the exact same AiSRuntime auth handler, so use it for every
     // local auth command on iOS. Desktop Tauri keeps its Axum WebSocket route.
+    const message = { type: 'auth', action, ...fields };
+    const tauriInvoke = env.__TAURI_INTERNALS__?.invoke || env.__TAURI__?.core?.invoke || env.__TAURI__?.invoke;
     const result = typeof env.__ATOME_IOS_NATIVE_INVOKE === 'function'
         ? await env.__ATOME_IOS_NATIVE_INVOKE('auth_local_request', { action, ...fields })
-        : await TauriAdapter.ws.send({ type: 'auth', action, ...fields });
+        : typeof tauriInvoke === 'function'
+            ? await tauriInvoke('auth_local_request', { message })
+            : await TauriAdapter.ws.send(message);
     if (!result?.ok) throw new Error(result?.error || 'local_auth_unavailable');
     return result;
 }
@@ -105,7 +109,19 @@ async function installRemote(result, { attemptId } = {}) {
 }
 
 export function phoneLinkClient() {
-    if (!client) client = createPhoneLinkClient({ devices: deviceStore(), send: (message) => FastifyAdapter.ws.send(message), installSession: installRemote });
+    if (!client) client = createPhoneLinkClient({ devices: deviceStore(), send: async (message) => {
+        const env = globalThis.window || globalThis;
+        // run.sh's local mode is deliberately self-contained: the native shell
+        // forwards the short proof exchange to the loopback Fastify process.
+        // This avoids WebKit cross-origin/network policy differences while the
+        // server still validates the same device signatures as production.
+        const localAuthority = String(env.__SQUIRREL_TAURI_FASTIFY_URL__ || '').trim();
+        if (/^http:\/\/(127\.0\.0\.1|localhost)(?::\d+)?$/.test(localAuthority)
+            && typeof env.__TAURI_INTERNALS__?.invoke === 'function') {
+            return env.__TAURI_INTERNALS__.invoke('auth_development_request', { message });
+        }
+        return FastifyAdapter.ws.send(message);
+    }, installSession: installRemote });
     return client;
 }
 

@@ -31,14 +31,30 @@ fn key_id(message: &JsonValue) -> Result<&str, String> {
     Ok(value)
 }
 
-// TLS peer validation is performed by the native WebSocket stack against the
-// fixed production authority. JS cannot supply a verification server or result.
+fn auth_authority_ws_url() -> Result<String, String> {
+    let base = std::env::var("SQUIRREL_FASTIFY_URL")
+        .or_else(|_| std::env::var("FASTIFY_URL"))
+        .unwrap_or_else(|_| "https://atome.one".into());
+    let trimmed = base.trim().trim_end_matches('/');
+    let websocket = if let Some(rest) = trimmed.strip_prefix("https://") {
+        format!("wss://{rest}/ws/api")
+    } else if let Some(rest) = trimmed.strip_prefix("http://") {
+        format!("ws://{rest}/ws/api")
+    } else {
+        return Err("auth_remote_configuration_invalid".into());
+    };
+    Ok(websocket)
+}
+
+// The process environment selects the authority; untrusted JS cannot supply a
+// verification server or result. Production defaults to the TLS endpoint.
 async fn remote(mut message: JsonValue) -> Result<JsonValue, String> {
     let request_id = Uuid::new_v4().to_string();
     message["requestId"] = json!(request_id);
     message["type"] = json!("auth");
+    let authority = auth_authority_ws_url()?;
     tokio::time::timeout(std::time::Duration::from_secs(15), async {
-        let (mut socket, _) = connect_async("wss://atome.one/ws/api")
+        let (mut socket, _) = connect_async(authority)
             .await
             .map_err(|_| "auth_remote_unavailable")?;
         socket
@@ -159,12 +175,35 @@ fn bind(
         } else {
             Uuid::new_v4().to_string()
         };
-        let other: bool = tx.query_row("SELECT 1 FROM auth_local_grants WHERE local_principal = ?1 AND remote_principal != ?2 LIMIT 1",
+        let other: bool = tx.query_row("SELECT 1 FROM auth_local_grants WHERE local_principal = ?1 AND remote_principal != ?2 AND locked=0 LIMIT 1",
             rusqlite::params![principal,remote_id], |_| Ok(true)).optional().map_err(|_| "local_database_unavailable")?.unwrap_or(false);
         let old_binding: bool = tx.query_row("SELECT 1 FROM remote_sync_stream_cursors WHERE local_user_id=?1 AND remote_user_id!=?2 LIMIT 1",
             rusqlite::params![principal,remote_id], |_| Ok(true)).optional().map_err(|_| "local_database_unavailable")?.unwrap_or(false);
         if other || old_binding {
-            return Err("local_account_binding_conflict".into());
+            // A local development server can be recreated while the durable
+            // Tauri workspace remains. The same verified phone then receives a
+            // new opaque remote principal. In mock mode only, retire the stale
+            // grant and reset remote projection metadata; local atomes and files
+            // remain untouched. Production continues to reject identity changes.
+            if std::env::var("SQUIRREL_AUTH_SMS_MOCK").as_deref() != Ok("1") {
+                return Err("local_account_binding_conflict".into());
+            }
+            tx.execute(
+                "UPDATE auth_local_grants SET locked=1, generation=generation+1
+                 WHERE local_principal=?1 AND remote_principal!=?2 AND locked=0",
+                rusqlite::params![principal, remote_id],
+            )
+            .map_err(|_| "local_account_write_failed")?;
+            tx.execute(
+                "DELETE FROM remote_sync_stream_cursors WHERE local_user_id=?1",
+                [principal.as_str()],
+            )
+            .map_err(|_| "local_account_write_failed")?;
+            tx.execute(
+                "DELETE FROM remote_projection_access WHERE local_user_id=?1",
+                [principal.as_str()],
+            )
+            .map_err(|_| "local_account_write_failed")?;
         }
         let now = Utc::now().to_rfc3339();
         let inserted = tx.execute("INSERT OR IGNORE INTO atomes (atome_id, atome_type, owner_id, creator_id, created_at, updated_at, created_source, sync_status)

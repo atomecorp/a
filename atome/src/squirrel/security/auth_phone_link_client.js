@@ -97,6 +97,16 @@ export function createPhoneLinkClient({ devices, send, installSession, locks = g
             const response = await request('phone-link-start', { phone, publicKey: device.publicKey, clientNonce });
             const record = { phone, clientNonce, attemptId: response.attemptId, expiresAt: response.expiresAt };
             await devices.put('attempt', record);
+            // A development server may return the freshly generated link to the
+            // same originating socket. Consume it with the normal device proof:
+            // no SMS is sent and no authentication check is bypassed.
+            if (response.developmentLink) {
+                const link = parseAuthLink(response.developmentLink);
+                if (link.attemptId !== record.attemptId) throw new Error('auth_link_invalid');
+                const signed = await attemptProof(record, 'consume', device);
+                const result = await request('phone-link-consume', { ...link, ...signed });
+                return accept(result, record.phone, record.attemptId);
+            }
             // Signed resume also subscribes this socket to approval notifications.
             await resumeAttempt(record);
             return { ok: true, attemptId: record.attemptId, expiresAt: record.expiresAt, pending: true };
