@@ -45,12 +45,25 @@ const childPositions = (tree) => Object.fromEntries(
 );
 
 describe('urgent campaign contracts', () => {
-    it('resolves contextual media tools through the shared JSON owner',()=>{
+    // 2026-09-29: the Mystic is one constant list whatever the object is; only
+    // the access guards and the playback capability still filter it. `font`
+    // left the Mystic — it stays reachable from the text rail.
+    it('resolves the one constant Mystic list through the shared JSON owner',()=>{
+        const FIXED=['ai','capture','import','communicate','dashboard','new_project','copy','paste','delete','utilities','info','activity'];
         for(const kind of ['audio','video','image','shape','text']) {
             const keys=resolveContextMenu({context:{kind,selected:true,level:'advanced'}}).map(item=>item.key);
-            expect(keys).toContain('delete'); expect(keys).toContain('copy');
-            expect(keys.includes('font')).toBe(kind==='text');
+            expect(keys).toEqual(FIXED);
         }
+        // `play` is the one capability guard: it joins the same list, at the same
+        // rank, as soon as something is playable.
+        for(const kind of ['audio','video']) {
+            const keys=resolveContextMenu({context:{kind,selected:true,level:'advanced',capabilities:['playback']}}).map(item=>item.key);
+            expect(keys).toEqual([...FIXED.slice(0,9),'play',...FIXED.slice(9)]);
+        }
+        // The lasso keeps its own creation table: drawing a region creates, it
+        // does not select.
+        expect(resolveContextMenu({context:{type:'lasso',selected:true,level:'advanced'}}).map(item=>item.key))
+            .toEqual(['ai','capture','text','molecule','shape','copy','paste','delete']);
     });
 
     it('uses localized verbs for all contextual Mystic actions', () => {

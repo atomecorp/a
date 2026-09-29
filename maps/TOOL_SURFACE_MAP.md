@@ -4,6 +4,12 @@ Généré le 2026-09-24 depuis le contenu réel du menu principal (`getMainMenuR
 
 Mise à jour 2026-09-25 : les cases de rail des outils de création viennent de `menus.sidebar.tools` ; Page n'est plus une palette locale (ses 6 formats sont ses cases de rail) et le Générateur expose la liste projetée par son registre.
 
+Mise à jour 2026-09-29 : la palette `capture` (enr./rec.) ne liste plus que ses sources et Actions ; `preview`, `import`, `capture_actions` (Relire) et `validation` sortent du ruban mais restent des outils déclarés (contexte, rail, API).
+
+Mise à jour 2026-09-29 (vague 2) : `mode` quitte la liste constante du Mystic pour la palette `utilities` (« Utilitaires / Utilities ») — `mode` (sous-palette perform/mode_edit/mode_consume), `validation` (`ui.capture.validation`) et `matrix` (`tool.main.matrix`, les projets en vignettes comme le Dashboard). Hors édition, le Mystic ne garde que les deux bascules de son mode de travail (consultation : `perform` + `mode_edit` ; performance : `mode_edit` + `mode_consume`) ; en édition, la liste reste constante. Le fond de projet est jouable sans sélection : sa tuile `play` appelle `ui.project.transport` (`operation: 'play' | 'stop'`).
+
+Mise à jour 2026-09-29 (menus) : le **menu du bas est permanent** — les cinq intentions, puis `calendar` et `view`, puis `help` (l'outil existant, aucun second) et `contact` (`commands.contact.panel = 'contact'`), les deux au niveau `beginner` pour que la barre soit la même à tous les niveaux ; `mode` et `activity` quittent la barre mais gardent leur définition (atteignables par Mystic). Le **Mystic n'est plus contextuel** : un clic long ou un clic droit ouvre la même liste, dans l'ordre de `menus.mystic.fixed` — `[ai]` puis `capture`, `import`, `communicate`, `dashboard`, `new_project`, `copy`, `paste`, `delete`, `play`, `utilities`, `info`, `activity`. Le geste choisit toujours la CIBLE ; seuls l'accès et la capability (`play` sans média jouable) filtrent encore, et hors édition la composition se réduit aux deux bascules du mode de travail (vague 2). Le lasso garde sa table de création.
+
 Un outil est **exposable** (Find → Tools, futur catalogue de l'éditeur de taxonomie) s'il est **atteignable** depuis une surface :
 - les racines du menu principal (`toolbox.children`) et, par les enfants de palette, tout ce qu'elles ouvrent ;
 - les commandes déclarées par Mystic et le menu latéral dans `context_menus.json` (groupes, croix de base, surcharges de mode).
@@ -16,37 +22,23 @@ Code : `eVe/intuition/tools/core/exposable_tools.js` ; branché dans `finder_dat
 
 | Chemin | Clé | `tool_id` | Libellé |
 |---|---|---|---|
-| main | `help` | `tool.main.help` | aide |
-| main | `home` | `tool.main.home` | accueil |
-| main | `find` | `tool.main.find` | trouver |
+| main | `organize` | — (tuile permanente, bascule le Dashboard par la route partagée) | Organiser |
 | main | `capture` | `tool.main.capture` | enr. |
 | main › capture | `audio` | `ui.capture.audio` | audio |
 | main › capture | `video` | `ui.capture.video` | video |
-| main › capture | `preview` | `ui.capture.preview` | prévisualiser |
 | main › capture | `photo` | `ui.capture.photo` | photo |
-| main › capture | `import` | `ui.capture.import` | importer |
 | main › capture | `screen` | `ui.capture.screen` | ecran |
 | main › capture | `record_actions` | `ui.record.actions` | Actions |
-| main › capture | `capture_actions` | — (palette) | Relire |
-| main › capture › capture_actions | `play_actions_realtime` | `ui.record.actions.replay` | Temps réel |
-| main › capture › capture_actions | `play_actions_final` | `ui.record.actions.replay` | État final |
-| main › capture › capture_actions | `save_actions_template` | `ui.record.actions.template` | En template |
-| main › capture | `validation` | `ui.capture.validation` | validation |
-| main | `time` | `tool.main.time` | temps |
-| main › time | `clock` | `ui.clock.set` | afficher l’heure |
-| main › time | `calendar` | `ui.calendar.panel` | calendrier |
-| main › time | `alarm` | `ui.alarm` | alarme |
+| main | `create` | `tool.main.create` | Créer (palette, voir ses enfants plus bas) |
+| main | `find` | `tool.main.find` | trouver |
 | main | `communicate` | `tool.main.communicate` | communiquer |
-| main | `mode` | `tool.main.mode` | mode |
-| main › mode | `perform` | `tool.main.perform` | Exécution |
-| main › mode | `mode_edit` | `ui.mode.edit` | edit |
-| main › mode | `mode_consume` | `ui.mode.consume` | Consultation |
+| main | `calendar` | `ui.calendar.panel` | calendrier (déplie une boîte de saisie) |
 | main | `view` | `tool.main.view` | Vue |
 | main › view | `view_list` | `ui.view.mode.list` | Liste |
 | main › view | `view_table` | `ui.view.mode.table` | Matrice |
 | main › view | `view_natural` | `ui.view.mode.natural` | Disposition |
-| main | `activity` | `tool.main.activity` | Activité (enfants dynamiques : une entrée par activité) |
-| main | `create` | `tool.main.create` | Créer |
+| main | `help` | `tool.main.help` | aide (outil existant : `tools/help_tool.js`) |
+| main | `contact` | `ui.contact.panel` | contact (commande à panneau, on/off) |
 | main › create | `text_create` | `ui.text.create` | Texte |
 | main › create | `draw_create` | `tool.main.draw` | Dessin |
 | main › create › draw_create | `draw_size` | `tool.main.size` | Taille |
@@ -87,11 +79,25 @@ Tout outil qui ouvre un panneau est un bouton **on/off**, sur toutes les surface
 
 ## Mystic et menu latéral (`context_menus.json` → `commands`)
 
+Le Mystic est **une liste constante** depuis le 2026-09-29 : `menus.mystic.fixed` (ordre d'affichage et ancrages `slot` : `capture` à l'est, `communicate` à l'ouest, `dashboard` au sud) décide seul de la composition ; le tableau ci-dessous reste le catalogue des commandes déclarées, pas la composition d'un menu. `font`, `size`, `couleur`, `z_order`, `line_splitter`, `draw*`, `vector`, `sound`, `teleport*` sortent du Mystic et vivent désormais dans les rails contextuels ou de création ; `mode` et `activity` y restent.
+
+Hors `lasso`, les clés du tableau vivent dans `commands` ; les palettes `utilities` et `mode`, leurs enfants `validation` et `matrix`, ainsi que les `tool_id` de `new_project`, `help` et `contact` sont définis par le contenu du menu principal (`eVe/intuition/runtime/eve_intuition/main_menu_content_runtime.js`), que le Mystic résout par le même fournisseur de contenu. `context_menus.json` ne porte pour ces clés que le libellé (`utilities`, `mode`, `new_project`, `help`, `contact`) ; `validation` (`ui.capture.validation`) et `matrix` (`tool.main.matrix`) n'existent que comme enfants de la palette `utilities`.
+
 | Clé | `tool_id` | Libellé |
 |---|---|---|
 | `text` / `molecule` / `shape` | — (commandes du lasso, action locale) | |
 | `ai` | `tool.main.ai` | IA |
-| `dashboard` | — (tuile Mystic, aucune entrée de contenu) | |
+| `utilities` | — (palette : `mode`, `validation`, `matrix`) | Utilitaires |
+| `mode` | `tool.main.mode` | mode (sous-palette : `perform`, `mode_edit`, `mode_consume`) |
+| `perform` | `tool.main.perform` | Exécution |
+| `mode_edit` | `ui.mode.edit` | édition (`edit`) |
+| `mode_consume` | `ui.mode.consume` | Consultation |
+| `validation` | `ui.capture.validation` | validation |
+| `matrix` | `tool.main.matrix` | projets en vignettes (même vue que le Dashboard) |
+| `new_project` | `ui.new_project` | Nouveau projet |
+| `help` | `tool.main.help` | aide (outil existant) |
+| `contact` | `ui.contact.panel` | contact (commande à panneau, on/off) |
+| `dashboard` | — (tuile Mystic, bascule par le handler partagé `toggleWorkspaceDashboardAndMainMenu`) | Organiser |
 | `copy` | `tool.main.copy` | copier |
 | `paste` | `tool.main.paste` | coller |
 | `delete` | `tool.main.delete` | supprimer |
@@ -102,6 +108,7 @@ Tout outil qui ouvre un panneau est un bouton **on/off**, sur toutes les surface
 | `font` | `tool.main.font` | changer la police |
 | `line_splitter` | `ui.text.line_splitter` | Séparer les lignes |
 | `play` | `ui.play` | lire |
+| `play` (fond de projet) | `ui.project.transport` | lire / arrêter le projet entier |
 | `sound` | `tool.main.sound` | son |
 | `audio_to_midi` | `ui.audio.to_midi` | to MIDI |
 | `draw` | `tool.main.draw` | Dessin |
@@ -123,6 +130,7 @@ Tout outil qui ouvre un panneau est un bouton **on/off**, sur toutes les surface
   - `tool.main.z_order`, `ui.placeholder.create`, `ui.draw.brush.type`, `ui.draw.opacity.apply` ;
   - `ui.teleport.*` (send, return, persist, retarget, preview, request_access, remote_keyboard) ;
   - `ui.trackpad.toggle`.
-- **Sans `tool_id`** : `capture_actions` (palette), `dashboard`, `ungroup`, `rename`.
+- **Sans `tool_id`** : `capture_actions` (palette), `utilities` (palette), `dashboard`, `ungroup`, `rename`.
+- **Même `tool_id`, deux entrées** : `play` (`ui.play` pour un média sélectionné, `ui.project.transport` sur le fond de projet), `mode` et `utilities` (palette sans `tool_id`, enfants résolus par le contenu), `validation` = `ui.capture.validation` (aucune redéfinition).
 - **Plusieurs boutons pour un même `tool_id`** : `ui.page.create` (6 formats), `ui.placeholder.create` (6 types), `ui.record.actions.replay` (temps réel / état final), `ui.detail.record.toggle` (plusieurs clés d'enregistrement). Find montre un seul outil, nommé par le premier bouton.
 - **Libellés à revoir en i18n** (hors périmètre de l'étape 0) : `ecran`, `video`, `edit`, `enr.`, `to MIDI`, `laisser`.

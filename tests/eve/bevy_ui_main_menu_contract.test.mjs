@@ -72,6 +72,108 @@ test('Capture screen icon is canonical before and after its lazy module loads', 
     assert.doesNotMatch(initialContentSource, /tool_id:\s*'ui\.capture\.screen',\s*icon:\s*'screen'/);
 });
 
+test('the capture palette keeps only its capture sources and Actions while the removed tools stay declared', async () => {
+    const { createMainMenuContentRuntime } = await import('../../eVe/intuition/runtime/eve_intuition/main_menu_content_runtime.js');
+    const inertDependencies = [
+        'applyDeleteSelection', 'closeBackgroundPanel', 'closeCalendarPanel', 'closeCanonicalHomePanel',
+        'closeCommunicatePanel', 'closeCouleurPanel', 'closeDeletePanel', 'closeFinderPanel',
+        'closeFontPanel', 'closeInfoPanel', 'closeLayerPanel', 'closeMatrixView', 'closePastePanel',
+        'closeTimelinePanel', 'closeUndoPanel', 'defaultOrientation', 'directionValueToLabel',
+        'ensureActivitiesModule', 'ensureCopyModule', 'ensurePastePanelModule', 'handleAiTouch',
+        'handleFinderTouch', 'invokeTool', 'openBackgroundPanel', 'openCalendarPanel',
+        'openCanonicalHomePanel', 'openCommunicatePanel', 'openCouleurPanel', 'openDeletePanel',
+        'openFinderPanel', 'openFontPanel', 'openInfoPanel', 'openLayerPanel', 'openMatrixView',
+        'openPastePanel', 'openTimelinePanel', 'openUndoPanel', 'orientationChanged'
+    ];
+    const content = createMainMenuContentRuntime({
+        ...Object.fromEntries(inertDependencies.map((name) => [name, () => null])),
+        directionValues: [],
+        mainToolIdByKey: {
+            mode: 'ui.mode', create: 'tool.main.create', draw: 'tool.main.draw',
+            capture: 'tool.main.capture', view: 'tool.main.view', time: 'tool.main.time',
+            find: 'tool.main.find', home: 'tool.main.home', help: 'tool.main.help',
+            communicate: 'tool.main.communicate', activity: 'tool.main.activity'
+        },
+        translate: (_key, fallback) => fallback
+    });
+    // La palette « rec. » ne garde que les sources de capture et Actions ;
+    // import, validation, Relire (capture_actions) et apercu en sortent (2026-09-29).
+    assert.deepEqual(content.capture.children, ['audio', 'video', 'photo', 'screen', 'record_actions']);
+    for (const key of ['preview', 'import', 'validation', 'capture_actions']) {
+        assert.ok(content[key], `${key} doit rester un outil declare, hors palette`);
+    }
+    // Les trois listes synchronisees du ruban portent la meme composition.
+    const runtimeSource = readFileSync(resolve(process.cwd(), 'eVe/intuition/tools/core/tool_runtime.js'), 'utf8');
+    const captureSource = readFileSync(resolve(process.cwd(), 'eVe/intuition/tools/capture.js'), 'utf8');
+    assert.match(runtimeSource, /children: \['ui\.capture\.audio', 'ui\.capture\.video', 'ui\.capture\.photo', 'ui\.capture\.screen', 'ui\.record\.actions'\]/);
+    assert.match(captureSource, /const CAPTURE_CHILDREN = \['audio', 'video', 'photo', 'screen', 'record_actions'\];/);
+});
+
+test('the permanent bar is the five intents plus view/help/contact; mode and activity stay declared', async () => {
+    const { createMainMenuContentRuntime } = await import('../../eVe/intuition/runtime/eve_intuition/main_menu_content_runtime.js');
+    const inertDependencies = [
+        'applyDeleteSelection', 'closeBackgroundPanel', 'closeCalendarPanel', 'closeCanonicalHomePanel',
+        'closeCommunicatePanel', 'closeCouleurPanel', 'closeDeletePanel', 'closeFinderPanel',
+        'closeFontPanel', 'closeInfoPanel', 'closeLayerPanel', 'closeMatrixView', 'closePastePanel',
+        'closeTimelinePanel', 'closeUndoPanel', 'defaultOrientation', 'directionValueToLabel',
+        'ensureActivitiesModule', 'ensureCopyModule', 'ensurePastePanelModule', 'handleAiTouch',
+        'handleFinderTouch', 'invokeTool', 'openBackgroundPanel', 'openCalendarPanel',
+        'openCanonicalHomePanel', 'openCommunicatePanel', 'openCouleurPanel', 'openDeletePanel',
+        'openFinderPanel', 'openFontPanel', 'openInfoPanel', 'openLayerPanel', 'openMatrixView',
+        'openPastePanel', 'openTimelinePanel', 'openUndoPanel', 'orientationChanged'
+    ];
+    const content = createMainMenuContentRuntime({
+        ...Object.fromEntries(inertDependencies.map((name) => [name, () => null])),
+        directionValues: [],
+        mainToolIdByKey: {
+            mode: 'tool.main.mode', create: 'tool.main.create', draw: 'tool.main.draw',
+            capture: 'tool.main.capture', view: 'tool.main.view', help: 'tool.main.help',
+            activity: 'tool.main.activity', matrix: 'tool.main.matrix', perform: 'tool.main.perform'
+        },
+        translate: (_key, fallback) => fallback
+    });
+    // 2026-09-29 : `mode` et `activity` quittent la barre permanente ; `help`
+    // (l'outil existant) et `contact` les remplacent a la meme place.
+    assert.deepEqual(content.toolbox.children,
+        ['organize', 'capture', 'create', 'find', 'communicate', 'calendar', 'view', 'help', 'contact']);
+    for (const key of ['mode', 'activity']) {
+        assert.ok(content[key], `${key} reste un outil declare, hors barre permanente`);
+        assert.equal(content.toolbox.children.includes(key), false, `${key} ne reside plus dans la barre`);
+    }
+    assert.equal(content.mode.children.length, 3, 'la palette Mode garde ses trois modes');
+    assert.equal(content.activity.type, 'palette', 'activite reste une palette');
+    // « Utilitaire » (2026-09-29) : la palette du Mystic qui remplace `mode`
+    // dans la liste constante. Aucun outil n'y est redefini : `validation` est
+    // la commande de la capture, `matrix` la porte des projets en vignettes.
+    assert.equal(content.utilities.type, 'palette');
+    assert.equal(content.utilities.tool_type, 'palette');
+    assert.deepEqual(content.utilities.children, ['mode', 'validation', 'matrix']);
+    assert.deepEqual(content.mode.children, ['perform', 'mode_edit', 'mode_consume']);
+    assert.equal(content.validation.tool_id, 'ui.capture.validation');
+    assert.equal(content.matrix.tool_id, 'tool.main.matrix');
+    assert.equal(typeof content.matrix.active, 'function');
+    assert.equal(typeof content.matrix.inactive, 'function');
+    // `help` is the existing tool: same tool_id, same handler, no second one.
+    assert.equal(content.help.tool_id, 'tool.main.help');
+    assert.equal(typeof content.help.touch, 'function');
+    // `contact` is a panel command: the taxonomy owns the surface, the bootstrap
+    // owns the panel, and no ribbon-local handler is created.
+    assert.equal(content.contact.tool_id, 'ui.contact.panel');
+    assert.equal(content.contact.touch, undefined);
+    // The roots the ribbon really draws come from the taxonomy, in its own order.
+    const { resolveMainMenuVisibility } = await import('../../eVe/intuition/menu/context_menu_resolver.js');
+    assert.deepEqual(resolveMainMenuVisibility({ level: 'advanced' }).roots, content.toolbox.children);
+    // `help` et `contact` sont `beginner` : la barre permanente est complete a
+    // tous les niveaux (2026-09-29). Seuls `calendar` et `view` restent
+    // au-dessus du niveau debutant.
+    assert.deepEqual(resolveMainMenuVisibility({ level: 'beginner' }).roots,
+        ['organize', 'capture', 'create', 'find', 'communicate', 'help', 'contact']);
+    const taxonomy = JSON.parse(readFileSync(resolve(process.cwd(),
+        'eVe/intuition/menu/context_menus.json'), 'utf8'));
+    assert.equal(taxonomy.commands.contact.panel, 'contact');
+    assert.equal(taxonomy.commands.help.labelKey, 'eve.menu.help');
+});
+
 test('Copy, Cut, Paste and Matrix use canonical full-size icon assets', () => {
     const contentSource = readFileSync(
         resolve(process.cwd(), 'eVe/intuition/runtime/eve_intuition/main_menu_content_runtime.js'),

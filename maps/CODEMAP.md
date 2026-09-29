@@ -65,7 +65,8 @@ Current assistant gesture and provider activation evidence: eVe/documentations/M
 
 ### Mystic canonical owners — 2026-09-20
 
-- `eVe/intuition/menu/context_menus.json`, `eVe/intuition/menu/context_menus_loader.js` and `eVe/intuition/menu/context_menu_resolver.js`: validated separate Mystic/sidebar composition.
+- `eVe/intuition/menu/context_menus.json`, `eVe/intuition/menu/context_menus_loader.js` and `eVe/intuition/menu/context_menu_resolver.js`: validated composition — the Mystic is one constant ordered list (`menus.mystic.fixed`, read by `resolveFixedMysticMenu`; `utilities` is its palette and replaces `mode` there), reduced outside edit to the two switches of the work mode (`menus.mystic.modes`: consultation = `perform` + `mode_edit`, performance = `mode_edit` + `mode_consume`), the lasso and an armed tool keep their own tables, and `menus.main.roots` drives the permanent bar.
+- `eVe/intuition/runtime/eve_intuition/main_menu_content_runtime.js` owns the `utilities` palette (`mode`/`validation`/`matrix`, no tool redefined); `eVe/intuition/runtime/eve_intuition/mystic_context_items_runtime.js` renders those children and routes the project background's `play` to `ui.project.transport`; `eVe/intuition/mystic/context.js` owns the released-pointer rule (no dwell after a release, `dwell: false`).
 - `eVe/voice/assistant/assistant_dock.js`: corner controls over the standard Atom tile and existing text-session composition; shared main-menu hold recognition controls text visibility.
 - `atome/src/squirrel/voice/realtime_session.js`: authoritative acquired microphone-track state.
 - `eVe/intuition/runtime/bevy_panel/bevy_panel_home_view.js`: explicit stored-provider activation via the existing vault runtime.

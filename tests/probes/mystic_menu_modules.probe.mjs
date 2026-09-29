@@ -211,10 +211,13 @@ assert.equal(classifiedItems.find(item => item.key === 'communicate').type, 'too
 // (`RIBBON_TOKENS.mysticAutoOpenDwellMs`, 750 ms) of immobile hover, exactly
 // like a palette.
 assert.equal(classifiedItems.find(item => item.key === 'communicate').hoverActivate, true);
+// 2026-09-29 : le Mystic n'est plus contextuel — une seule liste, l'ordre de
+// `menus.mystic.fixed` — et seuls les trois ancrages declares gardent leur
+// ouverture sur dwell stationnaire (`find` a quitte la croix).
 assert.deepEqual(
     classifiedItems.filter(item => item.hoverActivate === true).map(item => item.key),
-    ['find', 'capture', 'dashboard', 'communicate'],
-    'only the four configured persistent tools open on a stationary dwell'
+    ['capture', 'communicate', 'dashboard'],
+    'only the three configured persistent tools open on a stationary dwell'
 );
 assert.equal(classifiedItems.find(item => item.key === 'capture').type, 'palette');
 assert.deepEqual(
@@ -223,8 +226,8 @@ assert.deepEqual(
         atomeId: 'surface_project_a',
         onRename: () => ({ ok: true })
     }).map((item) => item.key),
-    ['ai', 'find', 'capture', 'dashboard', 'communicate', 'rename', 'duplicate', 'copy', 'paste', 'delete', 'info'],
-    'Dashboard cards, List rows, and Matrix cells must share the complete surface-item Mystic menu'
+    ['ai', 'capture', 'import', 'communicate', 'dashboard', 'new_project', 'copy', 'paste', 'delete', 'utilities', 'info', 'activity'],
+    'Dashboard cards, List rows, and Matrix cells share the one constant Mystic menu'
 );
 let dashboardProjectDeleteCount = 0;
 const dashboardProjectActionCounts = { duplicate: 0, copy: 0, paste: 0 };
@@ -243,7 +246,14 @@ const dashboardProjectDelete = surfaceItemsRuntime.resolveMysticContextItems({
 }).find((item) => item.key === 'delete');
 assert.deepEqual(await dashboardProjectDelete.onSelect({}), { ok: true, owner: 'project' });
 assert.equal(dashboardProjectDeleteCount, 1, 'Dashboard project Delete must use the context project owner, not generic Atome deletion');
-for (const key of ['duplicate', 'copy', 'paste']) {
+// `rename` et `duplicate` ne font plus partie du Mystic constant : les actions
+// de surface atteignables par la liste sont `copy` et `paste`.
+const surfaceKeys = surfaceItemsRuntime.resolveMysticContextItems({
+    type: 'surface_item', atomeId: 'surface_project_a'
+}).map((item) => item.key);
+assert.equal(surfaceKeys.includes('duplicate'), false, 'duplicate no longer lives in the constant Mystic');
+assert.equal(surfaceKeys.includes('rename'), false, 'rename no longer lives in the constant Mystic');
+for (const key of ['copy', 'paste']) {
     const item = surfaceItemsRuntime.resolveMysticContextItems({
         type: 'surface_item',
         atomeId: 'surface_project_a',
@@ -254,7 +264,7 @@ for (const key of ['duplicate', 'copy', 'paste']) {
     }).find((entry) => entry.key === key);
     assert.deepEqual(await item.onSelect({}), { ok: true, owner: 'project', action: key });
 }
-assert.deepEqual(dashboardProjectActionCounts, { duplicate: 1, copy: 1, paste: 1 }, 'surface actions must delegate to their supplied canonical owner');
+assert.deepEqual(dashboardProjectActionCounts, { duplicate: 0, copy: 1, paste: 1 }, 'surface actions must delegate to their supplied canonical owner');
 
 const duplicateCommits = [];
 window.Atome = {

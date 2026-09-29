@@ -118,6 +118,28 @@ test('a crossing, a leaving hover or a moving hover never opens a destination', 
     await closeMenu(mystic);
 });
 
+test('a released hover opens no palette on its own, and a fresh click still opens it', { timeout: 20000 }, async () => {
+    const harness = makeHarness();
+    let childCalls = 0;
+    const picture = { key: 'photo', label: 'Photo', onSelect: () => { childCalls += 1; } };
+    const items = [{ key: 'capture', label: 'Capture', type: 'palette', children: [picture] }];
+    // Un clic droit ouvre sans appui retenu : le survol qui suit ne doit plus
+    // ouvrir la palette tout seul (regression du 2026-09-29).
+    const mystic = await openMenu(harness, items, { holding: false });
+    assert.equal(await settledPhase(mystic, 'open'), true);
+    harness.setHit(tileNodeId(harness, 'capture'));
+    mystic.updateHover({ clientX: 384, clientY: 240, allowActivation: false, dwell: false });
+    await wait(MYSTIC_AUTO_OPEN_DWELL_MS + 300);
+    assert.equal(mystic.measure().stackDepth, 0, 'a released hover never opens the palette on its own');
+    assert.equal(childCalls, 0, 'and it fires no child either');
+    // Le nouveau clic sur la palette l'ouvre, comme avant.
+    assert.equal(mystic.releaseAt({ clientX: 384, clientY: 240 }), true);
+    assert.equal(await settledPhase(mystic, 'opening'), true);
+    assert.equal(mystic.measure().stackDepth, 1, 'a fresh click opens the palette');
+    assert.equal(childCalls, 0, 'the palette never fires a child on its own');
+    await closeMenu(mystic);
+});
+
 test('a release fires the tool or the palette under the finger, never the centre', { timeout: 20000 }, async () => {
     const harness = makeHarness();
     let toolCalls = 0;
@@ -310,14 +332,17 @@ const appendCaptureProbe = (type) => {
     return { reached, remove: () => window.document.removeEventListener(type, listener, true) };
 };
 
-test('a released pointer still owns the stationary dwell', { timeout: 20000 }, async () => {
+test('a released pointer arms no dwell any more: it only follows the hover', { timeout: 20000 }, async () => {
     gesture.open = true;
     gesture.hoverOptions.length = 0;
     gesture.releases.length = 0;
     projectCanvas.dispatchEvent(pointerEvent('pointermove', { clientX: 340, clientY: 300 }));
     const hovered = gesture.hoverOptions.at(-1);
     assert.equal(hovered?.allowActivation, false, 'a released pointer never activates on hover');
-    assert.equal(hovered?.dwell, true, 'a released pointer still arms the stationary dwell');
+    // 2026-09-29 : une palette ne s'ouvre plus toute seule sous un curseur qui
+    // survole apres le relachement. Le dwell n'appartient qu'a l'appui retenu
+    // et drague ; apres le relachement, il faut un nouveau clic.
+    assert.notEqual(hovered?.dwell, true, 'a released pointer never arms the stationary dwell');
     gesture.open = false;
 });
 
