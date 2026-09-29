@@ -2,6 +2,11 @@ import Foundation
 import UIKit
 import WebKit
 
+// File-type tokens the web layer sends instead of file extensions. `photos`
+// belongs to `PhotoLibraryImportPicker`; this one asks for the source choice
+// under a request that declares no type at all.
+private let anySourceImportToken = "*"
+
 extension FileSystemBridge {
     func handleCreateDirectory(body: [String: Any], webView: WKWebView?) {
         guard let path = body["path"] as? String, !path.isEmpty,
@@ -205,22 +210,117 @@ extension FileSystemBridge {
             return
         }
         let types = body["fileTypes"] as? [String] ?? ["atome", "json", "m4a", "mp3", "wav"]
+        let allowsMultiple = body["multiple"] as? Bool ?? true
         guard let controller = findViewController(from: webView) else {
             sendErrorResponse(to: webView, error: "Cannot find view controller")
             return
         }
-        iCloudFileManager.shared.loadFilesWithDocumentPicker(fileTypes: types, from: controller) {
-            [weak self] success, results, error in
+        // A picture request is answered by Apple Photos, not by the file
+        // provider that has no access to the library.
+        if types.contains(PhotoLibraryImportPicker.fileTypeToken) {
+            presentPhotoLibraryPicker(allowsMultiple: allowsMultiple, controller: controller, webView: webView)
+            return
+        }
+        // A request that names no type may be a picture or a document: the
+        // person chooses the source instead of the bridge choosing for him.
+        if types.contains(anySourceImportToken) {
+            presentImportSourceChoice(allowsMultiple: allowsMultiple, controller: controller, webView: webView)
+            return
+        }
+        presentImportDocumentPicker(
+            types: types,
+            allowsMultiple: allowsMultiple,
+            controller: controller,
+            webView: webView
+        )
+    }
+
+    private func presentPhotoLibraryPicker(
+        allowsMultiple: Bool,
+        controller: UIViewController,
+        webView: WKWebView
+    ) {
+        PhotoLibraryImportPicker.loadImages(
+            selectionLimit: allowsMultiple ? 0 : 1,
+            from: controller
+        ) { [weak self] success, results, error in
             DispatchQueue.main.async {
-                if success, let results {
-                    let files: [[String: Any]] = results.map { pair in
-                        ["name": pair.0, "base64": pair.1.base64EncodedString()]
-                    }
-                    self?.sendSuccessResponse(to: webView, data: ["files": files])
-                } else {
-                    self?.sendErrorResponse(to: webView, error: error?.localizedDescription ?? "Unknown error")
-                }
+                self?.sendLoadedFiles(success: success, results: results, error: error, webView: webView)
             }
+        }
+    }
+
+    private func presentImportDocumentPicker(
+        types: [String],
+        allowsMultiple: Bool,
+        controller: UIViewController,
+        webView: WKWebView
+    ) {
+        iCloudFileManager.shared.loadFilesWithDocumentPicker(
+            fileTypes: types,
+            multiple: allowsMultiple,
+            from: controller
+        ) { [weak self] success, results, error in
+            DispatchQueue.main.async {
+                self?.sendLoadedFiles(success: success, results: results, error: error, webView: webView)
+            }
+        }
+    }
+
+    // The two sources an undeclared import may carry. Cancelling answers the
+    // same "User cancelled" the pickers answer, so the web layer keeps reading
+    // one cancellation shape.
+    private func presentImportSourceChoice(
+        allowsMultiple: Bool,
+        controller: UIViewController,
+        webView: WKWebView
+    ) {
+        let alert = UIAlertController(title: "Importer depuis", message: nil, preferredStyle: .actionSheet)
+        alert.addAction(UIAlertAction(title: "Photos", style: .default) { [weak self] _ in
+            self?.presentPhotoLibraryPicker(allowsMultiple: allowsMultiple, controller: controller, webView: webView)
+        })
+        alert.addAction(UIAlertAction(title: "Fichiers", style: .default) { [weak self] _ in
+            self?.presentImportDocumentPicker(
+                types: [],
+                allowsMultiple: allowsMultiple,
+                controller: controller,
+                webView: webView
+            )
+        })
+        alert.addAction(UIAlertAction(title: "Annuler", style: .cancel) { [weak self] _ in
+            let error = NSError(
+                domain: "ImportSource",
+                code: -1,
+                userInfo: [NSLocalizedDescriptionKey: "User cancelled"]
+            )
+            self?.sendLoadedFiles(success: false, results: nil, error: error, webView: webView)
+        })
+        if let popover = alert.popoverPresentationController {
+            popover.sourceView = controller.view
+            popover.sourceRect = CGRect(
+                x: controller.view.bounds.midX,
+                y: controller.view.bounds.midY,
+                width: 0,
+                height: 0
+            )
+            popover.permittedArrowDirections = []
+        }
+        DispatchQueue.main.async { controller.present(alert, animated: true) }
+    }
+
+    private func sendLoadedFiles(
+        success: Bool,
+        results: [(String, Data)]?,
+        error: Error?,
+        webView: WKWebView
+    ) {
+        if success, let results {
+            let files: [[String: Any]] = results.map { pair in
+                ["name": pair.0, "base64": pair.1.base64EncodedString()]
+            }
+            sendSuccessResponse(to: webView, data: ["files": files])
+        } else {
+            sendErrorResponse(to: webView, error: error?.localizedDescription ?? "Unknown error")
         }
     }
 

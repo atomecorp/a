@@ -282,8 +282,20 @@ for (const pointerType of ['mouse', 'touch', 'pen']) {
    projectCanvas.dispatchEvent(makeMysticPointerEvent('pointerup', { pointerType, pointerId: 81 }));
   } else projectCanvas.dispatchEvent(makeMysticPointerEvent(termination, { pointerType, pointerId: 80 }));
   reads.forEach(resolve => resolve()); await delay(1);
-  assert.equal(mysticInteraction.openCount, before + Number(termination === 'pointerup'), pointerType + ':' + termination);
-  assert.equal(getMysticPointerLock(80), null, 'every terminal path must release the lock');
+  // Perdre la capture n'est pas un relachement : depuis la correction du
+  // 2026-09-28 (MYSTIC_RELEASE_DWELL_FLING_VALIDATION_2026-09-25.md), le Flower
+  // garde un appui en cours de prise en main jusqu'au vrai lever du bouton.
+  // L'ouverture en vol se termine donc, et le verrou reste pose.
+  const keepsThePress = termination === 'lostpointercapture';
+  assert.equal(mysticInteraction.openCount, before + Number(termination === 'pointerup' || keepsThePress),
+   pointerType + ':' + termination);
+  if (keepsThePress) {
+   assert.notEqual(getMysticPointerLock(80), null, 'a lost capture must not release the held pointer');
+   projectCanvas.dispatchEvent(makeMysticPointerEvent('pointerup', { pointerType, pointerId: 80 }));
+   assert.equal(getMysticPointerLock(80), null, 'the real release still hands the pointer back');
+  } else {
+   assert.equal(getMysticPointerLock(80), null, 'every terminal path must release the lock');
+  }
   if (termination === 'pointerup') {
    assert.equal(mysticInteraction.holding, false);
    projectCanvas.dispatchEvent(makeMysticPointerEvent('pointermove', { pointerType, buttons: 0 }));

@@ -23,6 +23,22 @@ export function createWsPhoneLinkHandler({ projectRoot, jwtSecret, sendLink, dat
     if (mockSmsRequested && process.env.NODE_ENV === 'production') {
         throw new Error('auth_sms_mock_forbidden_in_production');
     }
+    // The public directory entry of a principal is a projection of its user
+    // profile, owned by `DirectoryPublicService`. This handler is the only
+    // server-side writer of that profile outside the client commit pipeline
+    // (account creation, `update-user`, account deletion), so it refreshes the
+    // projection itself: without it the new user stays invisible in
+    // Communication until the next server boot rebuilds the projection.
+    const refreshDirectoryProfile = async (connection, principalId, options = {}) => {
+        const service = connection?._wsApiDirectoryService;
+        const id = String(principalId || '').trim();
+        if (!id || typeof service?.refreshPrincipal !== 'function') return;
+        try {
+            await service.refreshPrincipal(id, options);
+        } catch (error) {
+            console.warn('[auth] directory refresh failed', id, error?.message || error);
+        }
+    };
     const deliverLink = sendLink || (mockSmsRequested
         ? async (_phone, link) => ({ accepted: true, provider: 'local-development', developmentLink: link })
         : (phone, link) => createOvhSmsProvider().sendValidationLink(phone, link));
@@ -79,6 +95,7 @@ export function createWsPhoneLinkHandler({ projectRoot, jwtSecret, sendLink, dat
                     if (message.userId !== claims.sub || typeof message.key !== 'string'
                         || /password|token|credential|secret|phone|session/i.test(message.key)) throw new Error('auth_request_rejected');
                     await updateUserParticle(dataSource, claims.sub, message.key, message.value);
+                    await refreshDirectoryProfile(connection, claims.sub);
                     result = { ok: true };
                 }
                 return { type: 'auth-response', requestId, success: true, ...result };
@@ -97,7 +114,12 @@ export function createWsPhoneLinkHandler({ projectRoot, jwtSecret, sendLink, dat
                 case 'phone-link-cancel': result = await service.cancel(message); break;
                 case 'session-challenge': result = await service.sessions.getChallenge(message, network); break;
                 case 'session-renew': result = await service.sessions.renew(message); break;
-                case 'session-delete-account': result = await service.sessions.removeAccount(message); break;
+                case 'session-delete-account':
+                    result = await service.sessions.removeAccount(message);
+                    if (result.ok) {
+                        await refreshDirectoryProfile(connection, connection._wsApiDeviceClaims?.sub, { deleted: true });
+                    }
+                    break;
                 case 'session-local-bind': result = await service.sessions.localBind(message); break;
                 default: result = await service.sessions.revoke({ ...message, action: message.action.slice('session-'.length) });
             }
@@ -117,6 +139,7 @@ export function createWsPhoneLinkHandler({ projectRoot, jwtSecret, sendLink, dat
                 });
                 connection._wsApiDeviceClaims = claims;
                 connection._wsApiAuthExpMs = claims.exp * 1000;
+                await refreshDirectoryProfile(connection, result.user.id);
             }
             return { type: 'auth-response', requestId, success: result.ok === true, ...result };
         } catch (error) {

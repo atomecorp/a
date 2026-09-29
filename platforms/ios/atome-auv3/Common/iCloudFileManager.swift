@@ -514,16 +514,16 @@ public class iCloudFileManager: ObservableObject {
     }
 
     // MARK: - Multiple files loader
-    public func loadFilesWithDocumentPicker(fileTypes: [String], from viewController: UIViewController, completion: @escaping (Bool, [(String, Data)]?, Error?) -> Void) {
+    public func loadFilesWithDocumentPicker(fileTypes: [String], multiple: Bool = true, from viewController: UIViewController, completion: @escaping (Bool, [(String, Data)]?, Error?) -> Void) {
         if fileAccessGrantedOnce {
-            DispatchQueue.main.async { self.proceedWithMultipleDocumentPicker(fileTypes: fileTypes, from: viewController, completion: completion) }
+            DispatchQueue.main.async { self.proceedWithMultipleDocumentPicker(fileTypes: fileTypes, multiple: multiple, from: viewController, completion: completion) }
         } else {
             self.requestFileAccessPermission(from: viewController) { [weak self] granted in
                 guard let self = self else { return }
                 guard granted else { completion(false, nil, NSError(domain: "FileAccess", code: -1, userInfo: [NSLocalizedDescriptionKey: "Permission requise"])) ; return }
                 self.fileAccessGrantedOnce = true
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
-                    self.proceedWithMultipleDocumentPicker(fileTypes: fileTypes, from: viewController, completion: completion)
+                    self.proceedWithMultipleDocumentPicker(fileTypes: fileTypes, multiple: multiple, from: viewController, completion: completion)
                 }
             }
         }
@@ -660,7 +660,7 @@ public class iCloudFileManager: ObservableObject {
         documentPicker.shouldShowFileExtensions = true
     DispatchQueue.main.async { viewController.present(documentPicker, animated: true) }
     }
-    private func proceedWithMultipleDocumentPicker(fileTypes: [String], from viewController: UIViewController, completion: @escaping (Bool, [(String, Data)]?, Error?) -> Void) {
+    private func proceedWithMultipleDocumentPicker(fileTypes: [String], multiple: Bool, from viewController: UIViewController, completion: @escaping (Bool, [(String, Data)]?, Error?) -> Void) {
         let multipleDelegate = DocumentPickerLoadMultipleDelegate { success, results, error in
             completion(success, results, error)
         }
@@ -681,7 +681,7 @@ public class iCloudFileManager: ObservableObject {
         utTypes.append(contentsOf: [.audio, .data, .item, .content])
         let picker = UIDocumentPickerViewController(forOpeningContentTypes: utTypes)
         picker.delegate = multipleDelegate
-        picker.allowsMultipleSelection = true
+        picker.allowsMultipleSelection = multiple
         picker.shouldShowFileExtensions = true
         picker.modalPresentationStyle = .fullScreen
         DispatchQueue.main.async { viewController.present(picker, animated: true) }

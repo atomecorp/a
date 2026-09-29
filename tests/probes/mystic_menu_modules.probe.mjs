@@ -208,7 +208,8 @@ const classifiedItems = surfaceItemsRuntime.resolveMysticContextItems({ type: 's
 assert.equal(classifiedItems.find(item => item.key === 'communicate').type, 'tool');
 // The flag keeps its meaning for the runtime but no longer opens anything on a
 // crossing hover: `bevy_ui_mystic_runtime.js` waits for `MYSTIC_AUTO_OPEN_DWELL_MS`
-// (1500 ms) of immobile hover, exactly like a palette.
+// (`RIBBON_TOKENS.mysticAutoOpenDwellMs`, 750 ms) of immobile hover, exactly
+// like a palette.
 assert.equal(classifiedItems.find(item => item.key === 'communicate').hoverActivate, true);
 assert.deepEqual(
     classifiedItems.filter(item => item.hoverActivate === true).map(item => item.key),

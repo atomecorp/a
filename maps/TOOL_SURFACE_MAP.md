@@ -54,11 +54,11 @@ Code : `eVe/intuition/tools/core/exposable_tools.js` ; branché dans `finder_dat
 | main › create | `code_create` | `ui.code.editor` | Code |
 | main › create | `page_create` | `ui.page.create` | Page (armement direct : la palette locale n'existe plus depuis le 2026-09-25) |
 | rail › page | `page_format_free` / `sixteen_nine` / `four_three` / `three_two` / `a4` / `square` | `ui.page.create` | Libre, 16:9, 4:3, 3:2, A4, Carré — cases du rail, choix courant allumé |
-| main › create | `create_placeholder` | `ui.placeholder.create` | Placeholder |
-| main › create › create_placeholder | `placeholder_text` / `video` / `audio` / `photo` / `image` / `shape` | `ui.placeholder.create` | Texte, Vidéo, Audio, Photo, Image, Dessin — la liste reste dans Créer et devient aussi les cases du rail |
-| main › create › create_placeholder | `placeholder_duration` | `ui.placeholder.duration.apply` | Durée |
-| main › create › create_placeholder | `placeholder_max_chars` | `ui.placeholder.max_chars.apply` | Caractères |
-| main › create | `generator` | `tool.main.generator` | générateur |
+| main › create | `create_placeholder` | `ui.placeholder.create` | Placeholder (armement direct : la palette locale n'existe plus, ses choix sont les cases du rail) |
+| catalogue › placeholder | `placeholder_text` / `video` / `audio` / `photo` / `image` / `shape` | `ui.placeholder.create` | Texte, Vidéo, Audio, Photo, Image, Dessin — cases du rail ; libellé et icône lus ici |
+| catalogue › placeholder | `placeholder_duration` | `ui.placeholder.duration.apply` | Durée |
+| catalogue › placeholder | `placeholder_max_chars` | `ui.placeholder.max_chars.apply` | Caractères |
+| main › create | `generator` | `ui.generator.run` | Générateur (armement direct ; sa liste de rail est `generator.option_keys`, projetée par le registre) |
 
 ## Rail de l'outil armé (`context_menus.json` → `menus.sidebar.tools`)
 
@@ -67,12 +67,14 @@ Un outil de création `pinned: true` quitte « Créer » dès qu'il est armé : 
 | Outil | Clé de contenu | `tool_id` | Options du rail (ordre déclaré) | Propriétaire des valeurs |
 |---|---|---|---|---|
 | Texte | `text_create` | `ui.text.create` | `size`, `couleur`, `font` | `tool_presets.js`, panneaux couleur/police |
-| Dessin | `draw_create` | `tool.main.draw` | `couleur`, `draw_opacity`, `draw_size`, `draw_type` | `window.__eveDrawTool`, panneau couleur |
+| Dessin | `draw_create` | `tool.main.draw` | `couleur`, `draw_opacity`, `draw_size`, `draw_type` | `window.__eveDrawTool`, panneau couleur ; en plus, `draw_size` s'applique au dessin sélectionné |
 | Code | `code_create` | `ui.code.editor` | — (son éditeur reste un panneau) | `eveCodeToolApi` |
 | Page | `page_create` | `ui.page.create` | les 6 `page_format_*` | `eveProjectViewCreationApi.readPageFormat()` |
 | Placeholder | `create_placeholder` | `ui.placeholder.create` | les 6 `placeholder_*` + `placeholder_duration`, `placeholder_max_chars` | `evePlaceholderCreationApi.readChoice()` / `readLimits()` |
 | Générateur | `generator` | `ui.generator.run` | liste projetée par `eVe/intuition/tools/generator/registry.js` (familles remplacées par leurs générateurs) | `window.eveGeneratorApi.readChoice()` |
 | Template | `template_create` | `ui.template.create` | — (aucune porte d'entrée dans le ruban aujourd'hui) | `eveTemplateCreationApi` |
+
+Contrat des deux listes : les cases d'un outil épinglé viennent de la taxonomie (`menus.sidebar.tools.<outil>.options`) ou, quand son contenu déclare la liste lui-même, de `catalog[cléDeContenu].option_keys` (Générateur). Les `children` d'une entrée `type: 'palette'` restent réservés au ruban : une liste publiée en `children` serait peinte par le ruban à côté de la colonne du rail, jamais dedans.
 
 ## Règle on/off des outils à panneau (2026-09-25)
 

@@ -8,7 +8,7 @@ import { createMainMenuCreateContent, createMainMenuCreateInvocationRuntime } fr
 import { textCreationSession } from '../../eVe/core/atome_events/text_creation_session.js';
 import * as viewMode from '../../eVe/domains/rendering/project_view_mode_state.js';
 import { createContextToolInvocationRuntime } from '../../eVe/intuition/runtime/eve_intuition/context_tool_invocation_runtime.js';
-import { normalizeToolEntry } from '../../eVe/intuition/ribbon/menu_model.js';
+import { mergeContentPatch, normalizeToolEntry } from '../../eVe/intuition/ribbon/menu_model.js';
 import { resolvePageFrame } from '../../eVe/domains/rendering/project_view_creation_geometry.js';
 import { resolveInsertionTarget } from '../../eVe/domains/rendering/project_view_insertion_target.js';
 import { resolveVisualSourcePoint } from '../../eVe/domains/rendering/project_view_visual_geometry.js';
@@ -22,7 +22,7 @@ import { buildBootstrapDefsB } from '../../eVe/intuition/tools/core/tool_runtime
 import { hasDrawTravelled } from '../../eVe/intuition/tools/core/svg_draw_model.js';
 import { buildBevyMainMenuItems, buildBevyMainMenuTree } from '../../eVe/intuition/ribbon/bevy_ui_main_menu_model.js';
 import { createRuntimeHarness, findNode } from './bevy_ui_main_menu_test_helpers.mjs';
-import { isActive as generatorIsActive, readChoice as generatorReadChoice, runGeneratorCase, setActive as setGeneratorActive } from '../../eVe/intuition/tools/generator/runtime.js';
+import { buildGeneratorMenuPatch, isActive as generatorIsActive, readChoice as generatorReadChoice, runGeneratorCase, setActive as setGeneratorActive } from '../../eVe/intuition/tools/generator/runtime.js';
 import '../../eVe/intuition/tools/generator/index.js';
 
 const previousWindow = globalThis.window;
@@ -587,26 +587,24 @@ test('Visual preserves a media projection identity when other composition member
     assert.deepEqual(panel.videoNodeIdsFor(video.id), compositeId);
 });
 
-// The Create palette, as the ribbon builds it: the real content runtime plus
-// the generator palette the registry projects into it.
-const createPaletteContent = () => ({
+// The Create content, as the ribbon builds it: the real content runtime plus the
+// generator projection the registry pulses into it. That projection travels as
+// the tool's RAIL list (`option_keys`), never as the `children` a palette would
+// hand to the ribbon.
+const translate = (_key, fallback) => fallback;
+const createToolsContent = () => mergeContentPatch({
     toolbox: { children: ['create'] },
     ...createMainMenuCreateContent({
-        translate: (_key, fallback) => fallback,
+        translate,
         createToolId: 'tool.main.create',
         drawToolId: 'tool.main.draw'
-    }),
-    generator: {
-        labelKey: 'eve.menu.generator', label: 'generator', type: 'palette', tool_type: 'palette',
-        children: [], icon: 'modules', action: 'momentary', submenuInstantOnClick: true,
-        atome_tool: true, tool_id: 'tool.main.generator'
-    }
-});
+    })
+}, buildGeneratorMenuPatch({ translate }).patch);
 const createNodeId = (key) => `eve_bevy_ui_main_menu_tool_create__${key}`;
 const settleTree = async () => { await Promise.resolve(); await Promise.resolve(); };
 
 test('Create > Page is a plain tool: the real click arms it and closes the palette', async () => {
-    const content = createPaletteContent();
+    const content = createToolsContent();
     // Page used to be a ribbon palette of formats (`type:'palette'` plus
     // `invoke_on_expand`): its click opened the list in place and left it open.
     // Its residence is now the armed-tool rail, like Text, Draw and Code.
@@ -651,39 +649,104 @@ test('Create > Page is a plain tool: the real click arms it and closes the palet
     }
 });
 
-test('Create > Placeholder keeps its choices in place, and the choice arms the tool', async () => {
-    const content = createPaletteContent();
-    assert.equal(content.create_placeholder.type, 'palette', 'the list of choices stays in Create');
-    assert.deepEqual(content.create_placeholder.children, [
-        'placeholder_text', 'placeholder_video', 'placeholder_audio', 'placeholder_photo',
-        'placeholder_image', 'placeholder_shape', 'placeholder_duration', 'placeholder_max_chars'
-    ]);
+test('Create > Placeholder is a plain tool: the real click arms it and closes the palette', async () => {
+    const content = createToolsContent();
+    // Placeholder used to be a ribbon palette of kinds (`type:'palette'` plus
+    // `children`): its choices opened in place and left the menu open. Its
+    // residence is now the armed-tool rail, like Text, Draw, Page and Code.
+    assert.equal(content.create_placeholder.type, 'tool');
+    assert.equal(content.create_placeholder.tool_type, undefined, 'no tool palette is declared locally');
+    assert.equal(content.create_placeholder.children, undefined);
+    assert.equal(content.create_placeholder.latch, true);
+    assert.equal(content.create_placeholder.extra_input.content_kind, 'placeholder');
+    // The kinds and the two limits stay in the catalogue: the rail reads their
+    // label, icon and action there.
     for (const kind of ['text', 'video', 'audio', 'photo', 'image', 'shape']) {
+        assert.equal(content[`placeholder_${kind}`].tool_id, 'ui.placeholder.create');
         assert.equal(content[`placeholder_${kind}`].extra_input.placeholder_kind, kind);
     }
+    assert.equal(content.placeholder_duration.tool_id, 'ui.placeholder.duration.apply');
+    assert.equal(content.placeholder_max_chars.tool_id, 'ui.placeholder.max_chars.apply');
 
     const invocations = [];
     const harness = createRuntimeHarness({
         content,
-        onInvoke: async (definition) => { invocations.push(definition.toolId); return { ok: true }; }
+        onInvoke: async (definition) => {
+            invocations.push(definition.toolId);
+            return { ok: true, active: true, latched: true, nextLatched: true };
+        }
     });
     try {
         await harness.runtime.showFully();
         const createNode = findNode(harness.calls.at(-1).payload.tree.root, 'eve_bevy_ui_main_menu_tool_create');
         await createNode.on.activate();
         await settleTree();
+        assert.equal(harness.runtime.measure().activePaletteKey, 'create');
+
         const placeholderNode = findNode(harness.calls.at(-1).payload.tree.root, createNodeId('create_placeholder'));
-        assert.ok(placeholderNode, 'Placeholder is listed in Create');
+        assert.ok(placeholderNode, 'Placeholder is still listed in Create');
         await placeholderNode.on.activate();
         await settleTree();
-        assert.equal(harness.runtime.measure().activePaletteKey, 'create_placeholder',
-            'its choices stay in place: the menu is not closed by the parent case');
-        assert.deepEqual(invocations, [], 'and the parent case arms nothing by itself');
+        assert.deepEqual(invocations, ['ui.placeholder.create'], 'the click arms the placeholder tool');
+        assert.equal(harness.runtime.measure().activePaletteKey, '',
+            'and closes the menu, exactly like Text and Code');
     } finally {
         harness.runtime.destroy();
         harness.restore();
     }
+});
 
+test('Create > Generator is a plain tool fed by its registry: the real click arms it and closes the palette', async () => {
+    const content = createToolsContent();
+    // The registry projection used to ride the `children` of a ribbon palette:
+    // while the tool was armed the ribbon painted those cases beside the rail's
+    // column (partly under the main menu). It now travels as the tool's RAIL
+    // list (`option_keys`), which the rail alone turns into cases.
+    assert.equal(content.generator.type, 'tool');
+    assert.equal(content.generator.tool_type, undefined, 'no tool palette is declared locally');
+    assert.equal(content.generator.children, undefined, 'the ribbon never receives this list as palette children');
+    assert.equal(content.generator.latch, true);
+    assert.equal(content.generator.extra_input.content_kind, 'generator');
+    const { patch } = buildGeneratorMenuPatch({ translate });
+    assert.deepEqual(content.generator.option_keys, patch.generator.option_keys);
+    for (const key of content.generator.option_keys) {
+        assert.ok(content[key], `${key} is projected into the catalogue for the rail`);
+    }
+    assert.equal(content.generator_run_text_title.tool_id, 'ui.generator.run');
+    assert.equal(content.generator_run_text_title.extra_input.generator_id, 'text.title');
+    assert.ok(content.generator_family_text.children.length,
+        'a family keeps its children, which the rail flattens into its own level');
+
+    const invocations = [];
+    const harness = createRuntimeHarness({
+        content,
+        onInvoke: async (definition) => {
+            invocations.push(definition.toolId);
+            return { ok: true, active: true, latched: true, nextLatched: true };
+        }
+    });
+    try {
+        await harness.runtime.showFully();
+        const createNode = findNode(harness.calls.at(-1).payload.tree.root, 'eve_bevy_ui_main_menu_tool_create');
+        await createNode.on.activate();
+        await settleTree();
+        assert.equal(harness.runtime.measure().activePaletteKey, 'create');
+
+        const generatorNode = findNode(harness.calls.at(-1).payload.tree.root, createNodeId('generator'));
+        assert.ok(generatorNode, 'Generator is still listed in Create');
+        await generatorNode.on.activate();
+        await settleTree();
+        assert.deepEqual(invocations, ['ui.generator.run'], 'the click arms the generator tool');
+        assert.equal(harness.runtime.measure().activePaletteKey, '',
+            'and closes the menu, exactly like Text, Page and Placeholder');
+    } finally {
+        harness.runtime.destroy();
+        harness.restore();
+    }
+});
+
+test('the Placeholder invocation arms its owner with the chosen kind', async () => {
+    const content = createToolsContent();
     const dom = new JSDOM('<!doctype html><body></body>');
     globalThis.window = dom.window;
     globalThis.document = dom.window.document;

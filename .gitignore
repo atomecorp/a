@@ -194,6 +194,8 @@ tests/rendering/*
 !tests/eve/context_menus_characterisation.test.mjs
 !tests/eve/project_background_color_contract.test.mjs
 !tests/eve/recorded_media_contextual_play_contract.test.mjs
+!tests/eve/project_view_visual_mystic_handover.test.mjs
+!tests/eve/mystic_release_dwell_fling.test.mjs
 !tests/atome/
 tests/atome/*
 !tests/atome/src/

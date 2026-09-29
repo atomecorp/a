@@ -933,3 +933,75 @@ test('a slide from a rail hold tool opens its options, while a tap keeps the too
     assert.deepEqual(invocations, ['play', 'stop'], 'the release applies the option under the finger');
     assert.equal(railState.activePaletteKey, '', 'and the options close right after');
 });
+
+test('the rail reserves the band the menu publishes, and re-renders when that band moves', async () => {
+    const records = [{ id: 'shape', type: 'image', project_id: 'project',
+        properties: { kind: 'image', left: 10, top: 10, width: 120, height: 80 } }];
+    const scene = { project_id: 'project', records, scene: { byId: new Map() } };
+    const rendered = [];
+    let band = ITEM_SIZE;
+    const listeners = new Map();
+    const previousWindow = globalThis.window;
+    globalThis.window = {
+        __eveWorkspaceMode: { mode: 'project', projectId: 'project' },
+        __selectedAtomeIds: [],
+        addEventListener: (type, handler) => {
+            if (!listeners.has(type)) listeners.set(type, new Set());
+            listeners.get(type).add(handler);
+        },
+        removeEventListener: (type, handler) => listeners.get(type)?.delete(handler),
+        dispatchEvent: (event) => {
+            (listeners.get(event?.type) || []).forEach((handler) => handler(event));
+            return true;
+        },
+        CustomEvent: class CustomEvent {
+            constructor(type, init = {}) { this.type = type; this.detail = init.detail; }
+        },
+        requestAnimationFrame: (callback) => setTimeout(() => callback(0), 0),
+        cancelAnimationFrame: (id) => clearTimeout(id)
+    };
+    const runtime = createAtomeContextualEditRuntime({ readMenuAccess,
+        legacyState: {},
+        resolveDefinitions: () => [{ key: 'info', label: 'Info', icon: 'info', toolId: 'ui.detail.panel' }],
+        invokeDefinition: async () => ({ ok: true }),
+        surfaceResolver: () => ({ getBoundingClientRect: () => ({ width: 800, height: 600 }) }),
+        bevyRuntimeResolver: () => ({
+            mountTree: async ({ tree }) => rendered.push(tree),
+            updateTree: async ({ tree }) => rendered.push(tree),
+            unmountTree: async () => null,
+            updateTreeMotion: () => {}
+        }),
+        findSceneByAtomeId: (id) => records.some((record) => record.id === id) ? scene : null,
+        readMainMenuHeight: () => band
+    });
+    const settle = () => new Promise((resolve) => setTimeout(resolve, 20));
+    try {
+        runtime.install();
+        runtime.enter({ atomeId: 'shape', kind: 'image', contextLevel: 'selection', record: records[0] });
+        await runtime.render();
+        const first = rendered.at(-1);
+        assert.equal(first.layout.bottom, 600 - ITEM_SIZE,
+            'the rail level stops at the band the menu reserves');
+
+        // The band moves (an input box is laid out, the Atome slot stays visible):
+        // the menu publishes the new geometry and the rail re-reads it.
+        band = ITEM_SIZE * 2;
+        globalThis.window.dispatchEvent(new globalThis.window.CustomEvent('eve:intuitionx-state-changed', {
+            detail: { source: 'bevy_ui_main_menu', reservedHeight: band }
+        }));
+        await settle();
+        const second = rendered.at(-1);
+        assert.notEqual(second, first, 'the rail re-renders on the geometry the menu publishes');
+        assert.equal(second.layout.bottom, 600 - ITEM_SIZE * 2,
+            'and reserves the band where it is now, never the one it remembered');
+
+        globalThis.window.dispatchEvent(new globalThis.window.CustomEvent('eve:intuitionx-state-changed', {
+            detail: { source: 'other_publisher', reservedHeight: 400 }
+        }));
+        await settle();
+        assert.equal(rendered.at(-1).layout.bottom, second.layout.bottom,
+            'another publisher never moves the band: only the menu height counts');
+    } finally {
+        globalThis.window = previousWindow;
+    }
+});
