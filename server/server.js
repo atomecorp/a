@@ -77,6 +77,7 @@ import { normalizePhone } from './auth_crypto.js';
 import { ensureOpaquePrincipalIdentity } from './auth_identity.js';
 import { createWsPhoneLinkHandler } from './wsPhoneLinkAuth.js';
 import { assertDeviceSessionClaims, validateConnectionDeviceSession } from './auth_session_validation.js';
+import { issueMediaToken, readMediaTokenFromQuery, verifyMediaToken } from './media_capability.js';
 import { handleWsApiGuestAdoption } from './wsApiGuestAdoption.js';
 import { announceWsSurfaceDisconnect, handleWsSurfaceOperation } from './wsSurfaceOperations.js';
 import { handleTeleportSurfaceLoss, handleWsTeleportOperation } from './wsTeleportOperations.js';
@@ -949,88 +950,42 @@ async function startServer() {
       };
     };
 
-    const resolveUserFromHeaders = (request) => {
-      const userId = getHeaderValue(request, 'x-user-id') || getHeaderValue(request, 'x-userid');
-      const username = getHeaderValue(request, 'x-username') || getHeaderValue(request, 'x-user-name');
-      const phone = getHeaderValue(request, 'x-phone') || getHeaderValue(request, 'x-user-phone');
-      if (!userId && !username && !phone) return null;
-      return {
-        id: userId || null,
-        user_id: userId || null,
-        username: username || null,
-        phone: phone || null
-      };
-    };
-
-    const normalizeUploadResolvedUser = (user = null) => {
-      if (!user || typeof user !== 'object') return null;
-      const userId = String(user.user_id || user.userId || user.id || '').trim();
-      if (!userId) return null;
-      return {
-        id: userId,
-        user_id: userId,
-        username: user.username || user.name || null,
-        phone: user.phone || null
-      };
-    };
-
-    const resolvePersistedUploadUserFromHeaders = async (headerUser = null) => {
-      if (!headerUser || typeof headerUser !== 'object' || DATABASE_ENABLED !== true) return null;
-      const dataSource = db.getDataSourceAdapter?.();
-      if (!dataSource) return null;
-
-      const normalizedPhone = normalizePhone(headerUser.phone || '');
-      if (normalizedPhone) {
-        const byPhone = await findUserByPhone(dataSource, normalizedPhone);
-        const normalizedByPhone = normalizeUploadResolvedUser(byPhone);
-        if (normalizedByPhone) return normalizedByPhone;
-      }
-
-      const headerUserId = String(headerUser.id || headerUser.user_id || headerUser.userId || '').trim();
-      if (headerUserId) {
-        const byId = await findUserById(dataSource, headerUserId);
-        const normalizedById = normalizeUploadResolvedUser(byId);
-        if (normalizedById) return normalizedById;
-      }
-
-      return null;
-    };
-
+    // Identite d'upload : UNIQUEMENT une session d'appareil verifiee (Bearer / cookie).
+    // Les en-tetes `x-user-id` / `x-phone` / `x-username` ne sont jamais crus : n'importe
+    // quel client pouvait sinon deposer un fichier au nom de n'importe qui.
     const resolveUploadIdentity = async (request) => {
       const tokenUser = await validateToken(request);
       if (tokenUser) {
         return { user: tokenUser, userId: resolveUserId(tokenUser), source: 'token' };
       }
-      const headerUser = resolveUserFromHeaders(request);
-      if (headerUser) {
-        const persistedUser = await resolvePersistedUploadUserFromHeaders(headerUser);
-        if (persistedUser) {
-          return { user: persistedUser, userId: resolveUserId(persistedUser), source: 'headers_resolved' };
-        }
-        return { user: headerUser, userId: resolveUserId(headerUser), source: 'headers' };
-      }
       return { user: null, userId: 'anonymous', source: 'anonymous' };
     };
 
-    const readMediaQueryUserId = (request) => {
-      const raw = request.query?.media_user_id
-        || request.query?.user_id
-        || request.query?.userId
-        || request.query?.x_user_id
-        || '';
-      const value = Array.isArray(raw) ? raw[0] : raw;
-      const userId = String(value || '').trim();
-      if (!userId || userId === 'anonymous') return '';
-      return /^[a-zA-Z0-9_-]+$/.test(userId) ? userId : '';
-    };
-
+    // Lecture media : session verifiee, sinon capacite media signee `?media_token=`
+    // (les elements <video>/<audio>/<img> ne peuvent pas envoyer d'Authorization).
+    // `?media_user_id=` reste un simple indice de chemin pour les serveurs locaux
+    // (axum, Swift) et n'est plus une identite ici.
     const resolveMediaDownloadIdentity = async (request) => {
       const identity = await resolveUploadIdentity(request);
       if (identity.userId && identity.userId !== 'anonymous') return identity;
-      const queryUserId = readMediaQueryUserId(request);
-      if (queryUserId) return { user: null, userId: queryUserId, source: 'media_query' };
+      const mediaUserId = await verifyMediaToken(readMediaTokenFromQuery(request.query), getRequiredJwtSecret(), {
+        fileParam: request.params?.file || ''
+      });
+      if (mediaUserId) return { user: null, userId: mediaUserId, source: 'media_token' };
       return identity;
     };
+
+    server.post('/api/media-token', async (request, reply) => {
+      const claims = await validateToken(request);
+      if (!claims) return reply.code(401).send({ success: false, error: 'auth_required' });
+      try {
+        const issued = issueMediaToken(claims, getRequiredJwtSecret(), { file: request.body?.file });
+        reply.header('Cache-Control', 'no-store');
+        return { success: true, ...issued };
+      } catch (error) {
+        return reply.code(403).send({ success: false, error: error?.message || 'media_token_denied' });
+      }
+    });
 
     registerMailRoutes(server);
 
