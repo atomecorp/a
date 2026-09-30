@@ -1025,6 +1025,9 @@ async function startServer() {
     server.post('/api/uploads', async (request, reply) => {
       try {
         const { user, userId } = await resolveUploadIdentity(request);
+        if (DATABASE_ENABLED && userId === 'anonymous') {
+          return reply.code(401).send({ success: false, error: 'upload_identity_required' });
+        }
 
         const headerValue = Array.isArray(request.headers['x-filename'])
           ? request.headers['x-filename'][0]
@@ -1243,6 +1246,9 @@ async function startServer() {
     server.post('/api/uploads/chunk', async (request, reply) => {
       try {
         const { userId } = await resolveUploadIdentity(request);
+        if (DATABASE_ENABLED && userId === 'anonymous') {
+          return reply.code(401).send({ success: false, error: 'upload_identity_required' });
+        }
 
         const headerValue = Array.isArray(request.headers['x-filename'])
           ? request.headers['x-filename'][0]
@@ -1310,6 +1316,9 @@ async function startServer() {
     server.post('/api/uploads/complete', async (request, reply) => {
       try {
         const { user, userId } = await resolveUploadIdentity(request);
+        if (DATABASE_ENABLED && userId === 'anonymous') {
+          return reply.code(401).send({ success: false, error: 'upload_identity_required' });
+        }
 
         const headerValue = Array.isArray(request.headers['x-filename'])
           ? request.headers['x-filename'][0]
@@ -1994,7 +2003,7 @@ async function startServer() {
         return reply.send(createReadStream(cachedAudio));
       } catch (error) {
         request.log.error({ err: error }, 'Audio extraction failed');
-        reply.code(500);
+        reply.code(error?.status || (error?.code === 'ENOENT' ? 404 : 500));
         return { success: false, error: error?.message || 'Audio extraction failed' };
       }
     });

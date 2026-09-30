@@ -1,4 +1,5 @@
 import auth from './adole_api/auth.js';
+import { flushBrowserWorkspace } from './adole_api/auth_methods_login.js';
 import {
   create_project,
   list_projects,
@@ -138,12 +139,21 @@ export const AdoleAPI = {
     respond: share_respond,
     publish: share_publish,
     policy: share_policy,
+    // Modele de droits D8–D10 : changer les droits d'un partage, revoquer (en cascade),
+    // lister les partages avec un pair.
+    updateRights: (payload = {}) => fastifyCall({ type: 'share', action: 'update-rights', share_id: payload.shareId || payload.share_id,
+      permissions: payload.permissions || payload.rights || {}, readable_properties: payload.readableProperties,
+      writable_properties: payload.writableProperties }, 'sharing_auth_unavailable'),
+    revoke: (shareId) => fastifyCall({ type: 'share', action: 'revoke', share_id: shareId }, 'sharing_auth_unavailable'),
+    withPeer: (peerUserId) => fastifyCall({ type: 'share', action: 'with-peer', peer_user_id: peerUserId }, 'sharing_auth_unavailable'),
     grantPermission: grant_share_permission,
     setPrivacyRule: set_property_privacy_rule,
     listPrivacyRules: list_property_privacy_rules
   },
   sync: {
     sync: auth.sync,
+    // Envoie au serveur ce que le workspace navigateur a cree localement (web seulement).
+    flushWorkspace: flushBrowserWorkspace,
     listUnsynced: auth.listUnsynced,
     maybeSync: auth.maybeSync
   },

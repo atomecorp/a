@@ -50,7 +50,7 @@ export async function handleShareMessage(message, userId, dependencies = {}) {
     try {
         const canonicalActions = new Set([
             'request', 'respond', 'publish', 'create', 'revoke', 'inbox',
-            'shared-with-me', 'my-shares', 'policy'
+            'shared-with-me', 'my-shares', 'policy', 'update-rights', 'with-peer'
         ]);
         if (dependencies.syncSharingService && canonicalActions.has(String(action || '').toLowerCase())) {
             const result = await dependencies.syncSharingService.handle(message, userId);

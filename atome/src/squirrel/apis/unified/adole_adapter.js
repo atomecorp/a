@@ -103,8 +103,27 @@ function createWebSocketAdapter(tokenKey, backend = 'tauri') {
                     permissions: data.permissions || {},
                     mode: data.mode || 'real-time',
                     share_type: data.share_type || data.shareType || null,
-                    property_overrides: data.property_overrides || data.propertyOverrides || {}
+                    property_overrides: data.property_overrides || data.propertyOverrides || {},
+                    // Droits D8 : ce que le destinataire voit / peut modifier, et jusqu'a quand.
+                    // Ces cles etaient perdues ici : la restriction d'ecriture n'arrivait jamais.
+                    readable_properties: data.readable_properties || data.readableProperties || null,
+                    writable_properties: data.writable_properties || data.writableProperties
+                        || data.allowed_properties || data.allowedProperties || null,
+                    expires_at: data.expires_at || data.expiresAt || null
                 });
+            },
+            async updateRights(data) {
+                return getWs().send({
+                    type: 'share',
+                    action: 'update-rights',
+                    share_id: data.share_id || data.shareId || null,
+                    permissions: data.permissions || data.rights || {},
+                    readable_properties: data.readable_properties ?? data.readableProperties,
+                    writable_properties: data.writable_properties ?? data.writableProperties
+                });
+            },
+            async withPeer(data) {
+                return getWs().send({ type: 'share', action: 'with-peer', peer_user_id: data.peer_user_id || data.peerUserId || data.userId || null });
             },
             async respond(data) {
                 return observeShareStreams(await getWs().send({
@@ -168,6 +187,7 @@ function createWebSocketAdapter(tokenKey, backend = 'tauri') {
                 return getWs().send({
                     type: 'share',
                     action: 'revoke',
+                    share_id: data.share_id || data.shareId || null,
                     user_id: data.user_id || data.userId,
                     permission_id: data.permission_id || data.permissionId
                 });

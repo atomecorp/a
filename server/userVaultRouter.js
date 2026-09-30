@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import db from '../database/adole.js';
 import { createUserVaultProvider } from './userVaultProvider.js';
+import { normalizeRights } from '../atome/src/shared/share_rights.js';
 import {
     ACTIVE_LINKED_SHARE_SQL,
     activeSharesForPrincipal,
@@ -22,10 +23,14 @@ const parseJson = (value, fallback = null) => {
     try { return JSON.parse(value); } catch (_) { return fallback; }
 };
 
-const allowedProperties = (share) => {
-    const value = parseJson(share?.allowed_properties_json, null);
+// Deux listes distinctes (D8) : ce que le destinataire VOIT et ce qu'il peut MODIFIER.
+// `allowed_properties_json` (historique) sert de repli aux deux.
+const propertySet = (share, column) => {
+    const value = parseJson(share?.[column], null) ?? parseJson(share?.allowed_properties_json, null);
     return Array.isArray(value) && value.length ? new Set(value.map(String)) : null;
 };
+const allowedProperties = (share) => propertySet(share, 'readable_properties_json');
+const writableProperties = (share) => propertySet(share, 'writable_properties_json');
 
 const filterProperties = (properties, share) => {
     const allowed = allowedProperties(share);
@@ -318,8 +323,8 @@ export class UserVaultRouter {
 
     async authorizeSharedCreate(principalId, ownerId, parentId) {
         const share = await this.shareForAtome(principalId, parentId, ownerId);
-        const permissions = sharePermissions(share);
-        if (!share || (permissions.can_create !== true && permissions.create !== true)) {
+        const permissions = normalizeRights(sharePermissions(share));
+        if (!share || permissions.create !== true) {
             throw new Error('property_create_denied');
         }
         return true;
@@ -328,14 +333,15 @@ export class UserVaultRouter {
     async authorizeSharedWrite(principalId, event, ownerId = null) {
         const share = await this.shareForAtome(principalId, event.atome_id, ownerId);
         if (!share) throw new Error('property_write_denied');
-        const permissions = sharePermissions(share);
-        if (String(event.kind || '').toLowerCase() === 'delete' && permissions.can_delete !== true && permissions.delete !== true) {
-            throw new Error('property_delete_denied');
+        const permissions = normalizeRights(sharePermissions(share));
+        const isDelete = String(event.kind || '').toLowerCase() === 'delete';
+        // Supprimer est une capacite a part entiere : elle n'exige pas en plus `write`.
+        if (isDelete) {
+            if (permissions.delete !== true) throw new Error('property_delete_denied');
+            return true;
         }
-        if (permissions.can_write !== true && permissions.write !== true && permissions.alter !== true) {
-            throw new Error('property_write_denied');
-        }
-        const allowed = allowedProperties(share);
+        if (permissions.write !== true) throw new Error('property_write_denied');
+        const allowed = writableProperties(share);
         if (!allowed) return true;
         const payload = event.payload || {};
         const touched = [...Object.keys(payload.props || {}), ...(payload.delete_keys || payload.deleteKeys || [])];

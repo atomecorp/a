@@ -83,6 +83,7 @@ test('the capture palette keeps only its capture sources and Actions while the r
         'handleFinderTouch', 'invokeTool', 'openBackgroundPanel', 'openCalendarPanel',
         'openCanonicalHomePanel', 'openCommunicatePanel', 'openCouleurPanel', 'openDeletePanel',
         'openFinderPanel', 'openFontPanel', 'openInfoPanel', 'openLayerPanel', 'openMatrixView',
+        'openMediaPanel', 'closeMediaPanel',
         'openPastePanel', 'openTimelinePanel', 'openUndoPanel', 'orientationChanged'
     ];
     const content = createMainMenuContentRuntime({
@@ -120,6 +121,7 @@ test('the permanent bar is the five intents plus view/help/contact; mode and act
         'handleFinderTouch', 'invokeTool', 'openBackgroundPanel', 'openCalendarPanel',
         'openCanonicalHomePanel', 'openCommunicatePanel', 'openCouleurPanel', 'openDeletePanel',
         'openFinderPanel', 'openFontPanel', 'openInfoPanel', 'openLayerPanel', 'openMatrixView',
+        'openMediaPanel', 'closeMediaPanel',
         'openPastePanel', 'openTimelinePanel', 'openUndoPanel', 'orientationChanged'
     ];
     const content = createMainMenuContentRuntime({
@@ -212,6 +214,8 @@ test('the main Paste tool is a direct action while its history panel remains sep
     assert.match(bootstrapSource, /'tool\.main\.paste':\s*\(payload = \{\}\) => executeBootstrapActionProxyHandler\(payload, \{ kind: 'clipboard', operation: 'paste', proxy_tool_id: 'ui\.paste\.action' \}\)/);
     assert.doesNotMatch(runtimeSource, /'tool\.main\.paste':\s*\{ kind: 'panel'/);
     assert.match(editMenuSource, /copy:\s*\{[\s\S]*?extra_input:\s*\{ context_type:\s*'project' \}[\s\S]*?touch:/);
+    assert.match(editMenuSource, /copy:\s*\{[\s\S]*?touch:[\s\S]*?long_press_tool_id:\s*'ui\.copy\.duplicate'/, 'a long press on Copy is Copy then Paste, never a third verb');
+    assert.match(editMenuSource, /long_press_tool_id:\s*'ui\.copy\.duplicate'[\s\S]*?long_press_module:\s*'copy'/, 'the duplicate verb lives in the lazily loaded copy module');
     assert.match(menuSource, /paste:\s*\{[\s\S]*?extra_input:\s*\{ context_type:\s*'project' \}[\s\S]*?touch:[\s\S]*?longPressActive:\s*openPastePanel/);
     assert.match(shortcutSource, /`\$\{modifier\}\+v`[^\n]*triggerClipboardTool\('ui\.paste\.action'/);
 });

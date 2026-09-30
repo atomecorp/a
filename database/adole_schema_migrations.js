@@ -145,7 +145,15 @@ async function ensureSyncEventTables(query) {
         CHECK(share_mode IN ('real-time', 'manual')),
         CHECK(status IN ('pending', 'active', 'accepted', 'rejected', 'revoked', 'expired'))
     )`);
+    // Modele de droits D8–D10 : chaine de repartage et listes de proprietes lisibles /
+    // ecrivables distinctes (`allowed_properties_json` reste lu en repli, pour l'existant).
+    for (const [column, ddl] of [
+        ['parent_share_id', 'ALTER TABLE sync_share_requests ADD COLUMN parent_share_id TEXT'],
+        ['readable_properties_json', 'ALTER TABLE sync_share_requests ADD COLUMN readable_properties_json TEXT'],
+        ['writable_properties_json', 'ALTER TABLE sync_share_requests ADD COLUMN writable_properties_json TEXT']
+    ]) await ensureColumn({ query, table: 'sync_share_requests', column, ddl });
     await query('run', 'CREATE INDEX IF NOT EXISTS idx_sync_share_recipient ON sync_share_requests(principal_id, status)');
+    await query('run', 'CREATE INDEX IF NOT EXISTS idx_sync_share_parent ON sync_share_requests(parent_share_id)');
     await query('run', 'CREATE INDEX IF NOT EXISTS idx_sync_share_stream ON sync_share_requests(stream_id, principal_id, status)');
     await query('run', `CREATE TABLE IF NOT EXISTS sync_share_policies (
         owner_id TEXT NOT NULL,

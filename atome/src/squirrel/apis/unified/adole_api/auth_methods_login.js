@@ -220,6 +220,16 @@ export function ensureLocalSession() {
 }
 
 let linksInitialized = false;
+let workspaceSynchronize = null;
+// Vider la file d'envoi du workspace navigateur AVANT une action serveur qui porte sur un
+// objet cree localement (partager un projet tout juste cree echouait : `share_owner_required`).
+// Deux passes : une synchronisation deja en cours ne contient pas les derniers evenements.
+export async function flushBrowserWorkspace() {
+    if (typeof workspaceSynchronize !== 'function') return { ok: true, skipped: true };
+    await workspaceSynchronize();
+    await workspaceSynchronize();
+    return { ok: true };
+}
 export async function initializePhoneLinks() {
     const env = globalThis.window;
     if (!env || linksInitialized) return;
@@ -257,6 +267,7 @@ export async function initializePhoneLinks() {
                 return response.json();
             } });
     };
+    workspaceSynchronize = synchronize;
     const requestSync = () => { void synchronize().catch(error => env.dispatchEvent(new CustomEvent('squirrel:workspace-sync-paused', { detail: { code: error.message } }))); };
     env.addEventListener('squirrel:remote-session-ready', requestSync, { signal: listeners.signal });
     env.addEventListener('squirrel:workspace-outbox-ready', requestSync, { signal: listeners.signal });

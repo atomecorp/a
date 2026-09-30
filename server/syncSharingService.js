@@ -1,6 +1,10 @@
 import crypto from 'node:crypto';
 import db from '../database/adole.js';
 import { resolveTargetUserId } from './sharing.js';
+import {
+    OWNER_RIGHTS, attenuatePropertyList, attenuateRights, normalizePropertyList, normalizeRights,
+    roleOfRights, toStoredPermissions
+} from '../atome/src/shared/share_rights.js';
 
 const parseJson = (value, fallback = null) => {
     if (value == null) return fallback;
@@ -11,6 +15,14 @@ const parseJson = (value, fallback = null) => {
 const activeLinkedShareSql = `status IN ('active', 'accepted') AND share_type = 'linked'
     AND (expires_at IS NULL OR expires_at > datetime('now'))`;
 
+// SQLite compare `expires_at` a `datetime('now')` en TEXTE : 'AAAA-MM-JJ HH:MM:SS' UTC,
+// jamais un ISO avec 'T' (qui se trierait apres toute heure du meme jour).
+const sqlTime = (value) => {
+    if (!value) return null;
+    const date = new Date(String(value).includes('T') || /Z$/.test(String(value)) ? value : `${String(value).replace(' ', 'T')}Z`);
+    return Number.isFinite(date.getTime()) ? date.toISOString().replace('T', ' ').slice(0, 19) : null;
+};
+
 const normalizeMode = (value) => ['manual', 'validation-based', 'non-real-time'].includes(
     String(value || '').trim().toLowerCase()
 ) ? 'manual' : 'real-time';
@@ -19,13 +31,9 @@ const normalizeType = (value) => ['copy', 'detached'].includes(
     String(value || '').trim().toLowerCase()
 ) ? 'detached' : 'linked';
 
-const normalizePermissions = (value = {}) => ({
-    can_read: value.can_read === true || value.read === true,
-    can_write: value.can_write === true || value.write === true || value.alter === true,
-    can_delete: value.can_delete === true || value.delete === true,
-    can_create: value.can_create === true || value.create === true,
-    can_share: value.can_share === true || value.share === true
-});
+// Capacites D8 (read, write, create, delete, reshare, manage), stockees sous leurs noms
+// historiques `can_*` (voir atome/src/shared/share_rights.js).
+const normalizePermissions = (value = {}) => toStoredPermissions(normalizeRights(value));
 
 const allowedProperties = (message = {}) => {
     const direct = message.allowed_properties || message.allowedProperties;
@@ -51,7 +59,12 @@ const visibleRow = (row) => ({
     share_mode: row.share_mode,
     status: row.status,
     permissions: parseJson(row.permissions_json, {}),
+    rights: normalizeRights(parseJson(row.permissions_json, {})),
+    role: roleOfRights(parseJson(row.permissions_json, {})),
     allowed_properties: parseJson(row.allowed_properties_json, null),
+    readable_properties: parseJson(row.readable_properties_json, null) ?? parseJson(row.allowed_properties_json, null),
+    writable_properties: parseJson(row.writable_properties_json, null) ?? parseJson(row.allowed_properties_json, null),
+    parent_share_id: row.parent_share_id || null,
     publication_cursor: Number(row.publication_cursor || 0),
     detached_atome_id: row.detached_atome_id || null,
     expires_at: row.expires_at || null,
@@ -110,39 +123,73 @@ export class SyncSharingService {
         ]));
     }
 
-    async request(ownerId, message) {
+    // Autorite de `granterId` sur `atomeId` : proprietaire (tous les droits) ou detenteur d'un
+    // partage actif portant `reshare` (D9). Renvoie le proprietaire reel et les droits tenus.
+    async grantAuthority(granterId, atomeId, capability = 'reshare') {
+        try {
+            const stream = await this.ownedStream(granterId, atomeId);
+            return { ownerId: String(granterId), stream, rights: OWNER_RIGHTS, share: null };
+        } catch (_) { /* pas proprietaire : on cherche un partage */ }
+        const share = typeof this.vaultRouter?.shareForAtome === 'function'
+            ? await this.vaultRouter.shareForAtome(granterId, atomeId)
+            : null;
+        const rights = normalizeRights(parseJson(share?.permissions_json, {}));
+        if (!share || rights[capability] !== true) {
+            throw new Error(share ? `share_${capability}_denied` : 'share_owner_required');
+        }
+        const stream = await this.ownedStream(share.owner_id, atomeId);
+        return { ownerId: String(share.owner_id), stream, rights, share };
+    }
+
+    async request(granterId, message) {
         const principalId = await this.targetId(message);
         if (!principalId || !await this.isProvisioned(principalId)) throw new Error('target_not_provisioned');
+        if (String(principalId) === String(granterId)) throw new Error('share_target_is_self');
         const ids = Array.isArray(message.atome_ids)
             ? message.atome_ids.map(String).filter(Boolean)
             : [message.atome_id || message.atomeId].filter(Boolean).map(String);
         if (!ids.length) throw new Error('share_atome_required');
-        const peerPolicy = await this.policy(principalId, ownerId);
+        const peerPolicy = await this.policy(principalId, granterId);
         if (peerPolicy?.policy === 'block') throw new Error('blocked');
         const requested = normalizePermissions(message.permissions || message.permission || {});
         const accepted = parseJson(peerPolicy?.permissions_json, null);
-        const permissions = peerPolicy?.policy === 'always'
-            ? this.constrainPermissions(requested, accepted)
-            : requested;
         const shareMode = normalizeMode(message.mode || message.share_mode);
         const shareType = normalizeType(message.share_type || message.shareType || message.property_overrides?.__shareType);
-        const initialStatus = peerPolicy?.policy === 'always'
-            ? (shareType === 'linked' ? 'active' : 'accepted')
-            : (peerPolicy?.policy === 'never' ? 'rejected' : 'pending');
         const rows = [];
         for (const atomeId of ids) {
-            const stream = await this.ownedStream(ownerId, atomeId);
+            const authority = await this.grantAuthority(granterId, atomeId);
+            if (String(principalId) === authority.ownerId) throw new Error('share_target_is_owner');
+            if ((await this.policy(principalId, authority.ownerId))?.policy === 'block') throw new Error('blocked');
+            // Jamais plus que ce que l'on tient (D9) — droits, proprietes et duree.
+            const granted = attenuateRights(authority.rights, requested);
+            const permissions = toStoredPermissions(peerPolicy?.policy === 'always' ? attenuateRights(granted, accepted || {}) : granted);
+            const parentReadable = authority.share
+                ? (parseJson(authority.share.readable_properties_json, null) ?? parseJson(authority.share.allowed_properties_json, null))
+                : null;
+            const parentWritable = authority.share
+                ? (parseJson(authority.share.writable_properties_json, null) ?? parseJson(authority.share.allowed_properties_json, null))
+                : null;
+            const readable = attenuatePropertyList(parentReadable, message.readable_properties ?? message.readableProperties ?? null);
+            const writable = attenuatePropertyList(parentWritable, message.writable_properties ?? message.writableProperties ?? allowedProperties(message));
+            const requestedExpiry = sqlTime(message.expires_at || message.expiresAt || null);
+            const parentExpiry = authority.share?.expires_at || null;
+            const expiresAt = parentExpiry && (!requestedExpiry || requestedExpiry > parentExpiry) ? parentExpiry : requestedExpiry;
+            const initialStatus = peerPolicy?.policy === 'always'
+                ? (shareType === 'linked' ? 'active' : 'accepted')
+                : (peerPolicy?.policy === 'never' ? 'rejected' : 'pending');
             const shareId = crypto.randomUUID();
             await db.query(
                 'run',
                 `INSERT INTO sync_share_requests
                  (share_id, owner_id, principal_id, atome_id, stream_id, share_type,
-                  share_mode, status, permissions_json, allowed_properties_json, expires_at)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                  share_mode, status, permissions_json, allowed_properties_json,
+                  readable_properties_json, writable_properties_json, parent_share_id, expires_at)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
                 [
-                    shareId, ownerId, principalId, atomeId, stream.stream_id, shareType,
-                    shareMode, initialStatus, JSON.stringify(permissions),
-                    JSON.stringify(allowedProperties(message)), message.expires_at || message.expiresAt || null
+                    shareId, authority.ownerId, principalId, atomeId, authority.stream.stream_id, shareType,
+                    shareMode, initialStatus, JSON.stringify(permissions), null,
+                    readable ? JSON.stringify(readable) : null, writable ? JSON.stringify(writable) : null,
+                    authority.share?.share_id || null, expiresAt
                 ]
             );
             let row = await this.get(shareId);
@@ -160,6 +207,83 @@ export class SyncSharingService {
         return { ok: true, requests: rows, streams: rows.filter((row) => row.share_type === 'linked').map((row) => row.stream_id) };
     }
 
+    // Tous les partages issus de `shareId` (repartages en chaine), sans cycle.
+    async descendants(shareId) {
+        const result = [];
+        const queue = [String(shareId)];
+        const seen = new Set(queue);
+        while (queue.length) {
+            const children = await db.query('all', 'SELECT * FROM sync_share_requests WHERE parent_share_id = ?', [queue.shift()]) || [];
+            for (const child of children) {
+                if (seen.has(child.share_id)) continue;
+                seen.add(child.share_id);
+                result.push(child);
+                queue.push(child.share_id);
+            }
+        }
+        return result;
+    }
+
+    // Qui peut agir sur un partage donne : le proprietaire, celui qui l'a accorde (repartage),
+    // ou un detenteur de `manage` sur le meme atome. Renvoie les droits dont il dispose.
+    async authorityOver(actorId, row) {
+        const actor = String(actorId);
+        if (actor === String(row.owner_id)) return OWNER_RIGHTS;
+        if (row.parent_share_id) {
+            const parent = await this.get(row.parent_share_id);
+            if (parent && String(parent.principal_id) === actor && ['active', 'accepted'].includes(parent.status)) {
+                return normalizeRights(parseJson(parent.permissions_json, {}));
+            }
+        }
+        const held = typeof this.vaultRouter?.shareForAtome === 'function'
+            ? await this.vaultRouter.shareForAtome(actor, row.atome_id, row.owner_id)
+            : null;
+        const rights = normalizeRights(parseJson(held?.permissions_json, {}));
+        return held && rights.manage === true && String(held.share_id) !== String(row.share_id) ? rights : null;
+    }
+
+    async updateRights(actorId, message) {
+        const shareId = String(message.share_id || message.request_id || '').trim();
+        const row = await this.get(shareId);
+        if (!row || ['revoked', 'rejected', 'expired'].includes(row.status)) throw new Error('share_request_not_found');
+        if (String(row.principal_id) === String(actorId)) throw new Error('share_rights_self_denied');
+        const authority = await this.authorityOver(actorId, row);
+        if (!authority) throw new Error('share_manage_denied');
+        const rights = toStoredPermissions(attenuateRights(authority, message.permissions || message.rights || {}));
+        const readable = normalizePropertyList(message.readable_properties ?? parseJson(row.readable_properties_json, null));
+        const writable = normalizePropertyList(message.writable_properties ?? parseJson(row.writable_properties_json, null));
+        await db.query('run',
+            `UPDATE sync_share_requests SET permissions_json = ?, readable_properties_json = ?, writable_properties_json = ?,
+             updated_at = datetime('now') WHERE share_id = ?`,
+            [JSON.stringify(rights), readable ? JSON.stringify(readable) : null, writable ? JSON.stringify(writable) : null, shareId]);
+        // Un maillon restreint restreint toute la chaine qui en decoule.
+        const limits = new Map([[shareId, rights]]);
+        for (const child of await this.descendants(shareId)) {
+            const parentRights = limits.get(child.parent_share_id) || rights;
+            const childRights = toStoredPermissions(attenuateRights(parentRights, parseJson(child.permissions_json, {})));
+            limits.set(child.share_id, childRights);
+            await db.query('run', `UPDATE sync_share_requests SET permissions_json = ?, updated_at = datetime('now') WHERE share_id = ?`,
+                [JSON.stringify(childRights), child.share_id]);
+        }
+        const updated = visibleRow(await this.get(shareId));
+        this.notifyPrincipal(row.principal_id, { type: 'share-updated', share: updated });
+        return { ok: true, request: updated };
+    }
+
+    // Partages entre moi et un pair, dans les deux sens (trace « qui a donne quoi a qui »).
+    async withPeer(principalId, message) {
+        const peer = String(message.peer_user_id || message.peerUserId || message.user_id || '').trim();
+        if (!peer) throw new Error('share_peer_required');
+        const rows = await db.query('all',
+            `SELECT * FROM sync_share_requests
+             WHERE ((owner_id = ? AND principal_id = ?) OR (owner_id = ? AND principal_id = ?)
+                OR (principal_id = ? AND parent_share_id IN (SELECT share_id FROM sync_share_requests WHERE principal_id = ?)))
+               AND status NOT IN ('revoked', 'rejected')
+             ORDER BY created_at DESC`,
+            [principalId, peer, peer, principalId, peer, principalId]) || [];
+        return { ok: true, requests: rows.map(visibleRow) };
+    }
+
     async get(shareId) {
         return db.query('get', 'SELECT * FROM sync_share_requests WHERE share_id = ?', [shareId]);
     }
@@ -169,7 +293,8 @@ export class SyncSharingService {
         if (row.share_type === 'detached') {
             const state = await this.vaultRouter.getState(row.owner_id, row.atome_id);
             if (!state) throw new Error('share_source_state_missing');
-            const allowed = parseJson(row.allowed_properties_json, null);
+            // Une copie figee ne contient que ce que le destinataire a le droit de VOIR.
+            const allowed = parseJson(row.readable_properties_json, null) ?? parseJson(row.allowed_properties_json, null);
             const properties = allowed?.length
                 ? Object.fromEntries(Object.entries(state.properties || {}).filter(([key]) => allowed.includes(key)))
                 : { ...(state.properties || {}) };
@@ -276,22 +401,27 @@ export class SyncSharingService {
     async revoke(principalId, message) {
         const shareId = String(message.share_id || message.permission_id || message.request_id || '').trim();
         const row = await this.get(shareId);
-        if (!row || ![row.owner_id, row.principal_id].map(String).includes(String(principalId))) {
+        if (!row) throw new Error('share_revoke_denied');
+        // Le destinataire peut toujours renoncer ; sinon il faut une autorite sur ce partage.
+        if (String(row.principal_id) !== String(principalId) && !await this.authorityOver(principalId, row)) {
             throw new Error('share_revoke_denied');
         }
-        await db.query('run', "UPDATE sync_share_requests SET status = 'revoked', updated_at = datetime('now') WHERE share_id = ?", [shareId]);
-        const remaining = await db.query(
-            'get',
-            `SELECT share_id FROM sync_share_requests WHERE principal_id = ? AND stream_id = ?
-             AND ${activeLinkedShareSql}
-             LIMIT 1`,
-            [row.principal_id, row.stream_id]
-        );
-        if (!remaining) this.syncRuntime?.revokeStream?.(row.principal_id, row.stream_id);
-        this.notifyPrincipal(row.owner_id === principalId ? row.principal_id : row.owner_id, {
-            type: 'share-revoked', share_id: shareId, stream_id: row.stream_id
-        });
-        return { ok: true, share_id: shareId };
+        const chain = [row, ...await this.descendants(shareId)];
+        for (const link of chain) {
+            await db.query('run', "UPDATE sync_share_requests SET status = 'revoked', updated_at = datetime('now') WHERE share_id = ?", [link.share_id]);
+            const remaining = await db.query(
+                'get',
+                `SELECT share_id FROM sync_share_requests WHERE principal_id = ? AND stream_id = ?
+                 AND ${activeLinkedShareSql}
+                 LIMIT 1`,
+                [link.principal_id, link.stream_id]
+            );
+            if (!remaining) this.syncRuntime?.revokeStream?.(link.principal_id, link.stream_id);
+            this.notifyPrincipal(String(link.principal_id) === String(principalId) ? link.owner_id : link.principal_id, {
+                type: 'share-revoked', share_id: link.share_id, stream_id: link.stream_id
+            });
+        }
+        return { ok: true, share_id: shareId, revoked: chain.map((link) => link.share_id) };
     }
 
     async handle(message, principalId) {
@@ -309,6 +439,8 @@ export class SyncSharingService {
             message.permissions
         );
         if (action === 'revoke') return this.revoke(principalId, message);
+        if (action === 'update-rights') return this.updateRights(principalId, message);
+        if (action === 'with-peer') return this.withPeer(principalId, message);
         if (action === 'inbox' || action === 'shared-with-me') return this.list(principalId, 'inbox');
         if (action === 'my-shares') return this.list(principalId, 'outbox');
         throw new Error(`unsupported_sync_share_action:${action || 'missing'}`);

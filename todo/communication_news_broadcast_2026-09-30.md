@@ -46,6 +46,45 @@ Documents antérieurs dont ce cahier prend la suite (ne pas les rouvrir) :
   « partager un projet à tout le monde » appellent la **même** API. Le Dashboard disparaîtra :
   la réception alimente aussi l'outil Communication du bas.
 
+## D8–D10 — Modèle de droits de partage (30 sept. 2026)
+
+Objectif : un partage lisible en un geste, précis quand on le veut — l'inverse des boîtes de
+permissions opaques. **La communication de base partage en lecture seule** ; les options
+avancées du panneau Communication ouvrent le reste.
+
+### D8 — Rôles + réglages fins
+| Rôle | Capacités |
+|---|---|
+| **Lecteur** (défaut) | `read` |
+| **Contributeur** | `read`, `create` |
+| **Éditeur** | `read`, `write`, `create`, `delete` |
+| **Co-propriétaire** | Éditeur + `reshare` + `manage` |
+
+Les options avancées déplient chaque capacité ; un écart à un rôle s'affiche « Personnalisé ».
+
+Capacités atomiques, **appliquées par le serveur** (jamais par l'interface seule) :
+- `read` — voir ; `readable_properties` (optionnel) masque les autres propriétés ;
+- `write` — modifier ; `writable_properties` (optionnel) limite les propriétés modifiables ;
+- `create` — ajouter dans un projet / une molécule partagé ;
+- `delete` — supprimer ;
+- `reshare` — repartager à son tour (D9) ;
+- `manage` — changer les droits des autres destinataires et les révoquer ; jamais l'auteur.
+
+### D9 — Repartage par atténuation
+On ne peut jamais accorder plus que ses propres droits (intersection). L'auteur voit toute la
+chaîne (`parent_share_id`) ; révoquer un maillon révoque tout ce qui en découle. Premier contact
+et blocage (D3/D4) s'appliquent à chaque repartage.
+
+### D10 — Trois modes
+- **Direct** — lié, chaque modification arrive en temps réel ;
+- **Figé** — copie détachée à l'instant de l'envoi, jamais mise à jour ;
+- **Mises à jour choisies** — lié, le destinataire ne voit une nouvelle version que lorsque
+  l'auteur la publie.
+
+Transverse : durée / expiration (`expires_at`, transmise par tous les chemins d'envoi),
+révocation, trace consultable « qui a donné quoi à qui » (fiche Contact). Une News reste en
+lecture seule.
+
 ## Contrats d'API
 
 ### Serveur — WebSocket `/ws/api` (connexion authentifiée, identité = session)
@@ -147,6 +186,23 @@ Enveloppes 1:1 des trames ci-dessus.
 - [x] Visio : en-têtes `x-user-id`/`x-phone` forgés sans jeton refusés.
 - [x] Visio : `joinRoom` d'une room dont on n'est pas membre refusé.
 - [x] Visio : invitation d'un non-contact ou d'un bloqueur refusée.
+
+### L10 — Modèle de droits (D8–D10)
+- [x] Défaut Lecteur : le destinataire voit, ne modifie, ne crée, ne supprime rien.
+- [x] Contributeur : crée, ne modifie ni ne supprime.
+- [x] Éditeur : modifie et supprime, ne repartage pas.
+- [x] Co-propriétaire : repartage et gère les droits.
+- [x] Propriété masquée non lue ; propriété non écrivable refusée.
+- [x] Direct : modification reçue en temps réel.
+- [x] Figé : modification jamais reçue, la copie reste.
+- [x] Mises à jour choisies : rien avant publication, tout après.
+- [x] Repartage atténué (jamais plus que ses droits) ; sans `reshare` refusé.
+- [x] Révocation en cascade de la chaîne.
+- [x] `manage` : change les droits d'un autre (atténué) ; sans `manage` refusé ; l'auteur intouchable.
+- [x] Expiration : plus d'accès après `expires_at`.
+- [x] Repartage vers un bloqueur refusé silencieusement.
+- [x] Panneau : rôle choisi envoyé ; défaut Lecteur ; trois modes ; interrupteurs avancés.
+- [x] Fiche Contact : partages avec cette personne, rôle, modifier, révoquer.
 
 ## Journal
 
@@ -262,10 +318,57 @@ navigateurs 15/15 · rouge d'abord 4/4.
   silencieusement une trame `/ws/api` inconnue (`contact`, `news` y expireraient). Axum (Tauri) et
   le serveur Swift (iOS) n'implémentent ni `direct-message` ni ces trames : la communication passe
   par Fastify. **Tauri et iOS : non vérifiés.**
-- **Identité des médias** (hors périmètre, tâche proposée) : `resolveUploadIdentity` croit
-  `x-user-id`, `resolveMediaDownloadIdentity` croit `?user_id=` → URL média signée à introduire.
+- [x] **Identité des médias** (corrigé le 30 sept. 2026) : upload = session d'appareil seule
+  (401 sinon), lecture = Bearer ou capacité signée `?media_token=` (`server/media_capability.js`,
+  `POST /api/media-token`, aud `atome-media`, liée au `sid` → meurt à la révocation, TTL 2 h,
+  option `file`). `media_user_id` n'est plus qu'un indice de chemin pour axum/Swift. Client web :
+  `atome/src/squirrel/security/media_capability_client.js` + `appendStreamingMediaAuthQuery`,
+  `getCloudAuthToken()` = bearer Fastify en mémoire (web seulement), fond d'écran, extract-audio.
+  Rouge d'abord 16/32 → `temp/comm/media_identity_security.probe.mjs` 32/32,
+  `temp/comm/media_identity_browser.probe.mjs` 11/11 (vrais navigateurs), L1/L6/L9 toujours verts.
 - **Relation « Demande envoyée »** : un refus ou un blocage de l'autre côté reste affiché
   « demande envoyée » (volontaire, D4).
 - `tests/eve/communication_notifications_publications.test.mjs` importe
   `createCommunicationNewsPublication`, supprimé (boucle client remplacée par la diffusion
   serveur) — suite du repo non lancée (consigne).
+
+### 30 sept. — L10 modèle de droits (D8–D10)
+Modèle pur partagé client/serveur : `atome/src/shared/share_rights.js` (capacités `read`,
+`write`, `create`, `delete`, `reshare`, `manage` ; rôles Lecteur / Contributeur / Éditeur /
+Co-propriétaire ; `attenuateRights` ; modes Direct / Figé / Mises à jour choisies).
+Serveur (`syncSharingService.js`) : repartage par un détenteur de `reshare` (propriétaire réel
+conservé, `parent_share_id`), droits, propriétés et échéance atténués ; `update-rights` réservé
+au propriétaire, à l'auteur du maillon ou à un détenteur de `manage` — jamais sur soi-même ;
+une restriction descend la chaîne ; révocation en cascade ; `with-peer` (trace par personne) ;
+`expires_at` normalisé au format SQLite. Routeur de coffre : `readable_properties` (masque de
+lecture) et `writable_properties` (écriture) séparés ; supprimer est une capacité à part.
+Client : défaut **Lecteur + Direct** ; section « Droits » (rôle + cases par capacité,
+« Personnalisé » dès qu'on s'écarte) ; trois modes ; propriétés lisibles/écrivables et fin
+transmises ; fiche Contact : partages avec la personne (sens, rôle, mode), Changer le rôle,
+Publier la mise à jour (mode Mises à jour choisies), Révoquer / Quitter.
+- Rouge d'abord : `COMM_SERVER_ROOT=<HEAD> node temp/comm/l10_rights.probe.mjs` → échecs dès les
+  rôles, le repartage et les masques de propriétés (puis arrêt : repartage inexistant).
+- `node temp/comm/l10_rights.probe.mjs` → **28/28 PASS** (4 comptes).
+- `node temp/comm/l10_browser.probe.mjs` → **9/9 PASS** (2 navigateurs) : défaut Lecteur, rôle,
+  « Personnalisé », trois modes, **envoi réel depuis le panneau** (projet, Éditeur, Figé, fin à 1 h
+  → enregistré tel quel), fiche Contact liste / change le rôle / révoque.
+- Écart au plan : « Publier la mise à jour » est dans la ligne du partage de la fiche Contact
+  (par destinataire), pas dans le rail de l'objet. La publication est vérifiée côté serveur
+  (L10) ; le bouton lui-même n'a pas été cliqué en navigateur.
+
+Défauts préexistants trouvés et corrigés :
+- Défaut du panneau `writeMode: 'all'` : un partage « de base » accordait modifier + créer.
+- L'adaptateur de partage perdait les propriétés restreintes et l'échéance : la restriction
+  d'écriture choisie n'atteignait jamais le serveur.
+- Deux chemins morts (`ShareAPI.share_with`, jamais chargé ; `api.sharing.share` en dur
+  `alter:true`) supprimés : un seul chemin d'envoi.
+- Filtre des destinataires privés sur un cache local : celui qui avait DEMANDÉ le contact ne
+  pouvait pas écrire à qui l'avait accepté → lit désormais les contacts du serveur.
+- **Partager un objet tout juste créé échouait** (`share_owner_required`) : la file du workspace
+  navigateur n'était pas encore envoyée → `AdoleAPI.sync.flushWorkspace()` avant tout partage.
+- La référence du partage canonique (`requests[0]`) n'était pas lue → l'envoi se terminait en
+  `share_request_reference_missing` alors que le partage existait.
+
+### Régression complète après L10
+L0 2/2 · L1 16/16 · L2/L3 28/28 · L4/L5 16/16 · L6 11/11 · L9 visio 13/13 · L9 notes 10/10 ·
+L10 28/28 · rouge d'abord 4/4 · navigateurs L7/L8 15/15 · navigateurs L10 9/9.

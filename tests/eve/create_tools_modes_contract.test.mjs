@@ -215,6 +215,7 @@ const modeContentDependencies = (translate) => {
         'handleFinderTouch', 'invokeTool', 'openBackgroundPanel', 'openCalendarPanel',
         'openCanonicalHomePanel', 'openCommunicatePanel', 'openCouleurPanel', 'openDeletePanel',
         'openFinderPanel', 'openFontPanel', 'openInfoPanel', 'openLayerPanel', 'openMatrixView',
+        'openMediaPanel', 'closeMediaPanel',
         'openPastePanel', 'openTimelinePanel', 'openUndoPanel', 'orientationChanged'
     ];
     return Object.fromEntries([

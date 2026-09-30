@@ -163,7 +163,10 @@ const RESPONSE_PAYLOADS = {
         count: message.count,
         atome_id: message.atome_id,
         permission: message.permission,
-        granted: message.granted
+        granted: message.granted,
+        requests: message.requests ?? message.data?.requests,
+        request: message.request ?? message.data?.request,
+        revoked: message.revoked ?? message.data?.revoked
     }),
     'direct-message-response': (message) => ({ delivered: message.delivered })
 };
