@@ -2,7 +2,6 @@ import { listAtomeTypes } from '../../shared/atome_universal_contract.js';
 import { listCoreAtomeTypeDefinitions } from '../../shared/core_atome_types.js';
 
 const MAX_DISCOVERY_DEPTH = 3;
-const GEOMETRY_FIELDS = new Set(['width', 'height', 'left', 'top', 'x', 'y', 'rotation']);
 const GENERIC_SOURCES = Object.freeze([
     'atome', 'record', 'contact', 'profile', 'actor', 'operation', 'property',
     'runtime', 'session', 'calendar'
@@ -150,21 +149,6 @@ export function registerCanonicalConditionSources(registry) {
             }
         });
     }
-    // Géométrie d'un atome candidat en nombres (px) : les propriétés stockées sont des
-    // chaînes CSS (« 40px ») qu'un opérateur numérique ne sait pas comparer. Le champ
-    // est lu sur l'atome du contexte (`context.atome`), sans valeur par défaut : une
-    // dimension absente reste « indisponible » (état unknown), jamais 0.
-    registry.registerSource({
-        source: 'geometry',
-        describe: (field) => ({ source: 'geometry', field, type: 'number', unit: 'px' }),
-        resolve: (context, field) => {
-            const key = normalizeText(field).toLowerCase();
-            if (!GEOMETRY_FIELDS.has(key)) return { available: false, value: undefined, reasonCode: 'geometry_field_unknown' };
-            const raw = candidateEnvelope(context?.atome || {})[key === 'x' ? 'left' : key === 'y' ? 'top' : key];
-            const number = Number.parseFloat(String(raw ?? ''));
-            return Number.isFinite(number) ? { available: true, value: number } : { available: false, value: undefined };
-        }
-    });
     registry.registerSource({
         source: 'time',
         describe: (field) => ({ source: 'time', field, type: field === 'now' ? 'datetime' : 'any' }),

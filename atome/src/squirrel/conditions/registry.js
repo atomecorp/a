@@ -1,3 +1,4 @@
+const NUMBER_WITH_UNIT = /^\s*[-+]?(?:\d+\.?\d*|\.\d+)(?:e[-+]?\d+)?\s*[a-z%]*\s*$/i;
 const normalizeKey = (value) => String(value || '').trim().toLowerCase();
 const propertyKey = (source, field) => `${normalizeKey(source)}.${String(field || '').trim()}`;
 
@@ -15,7 +16,11 @@ const sameValue = (left, right) => {
 
 const comparable = (value, type) => {
     if (type === 'number') {
-        const result = Number(value);
+        // Une valeur d'atome stockée avec son unité (« 40px », « 50% », « 1.5s ») se
+        // compare par sa quantité, quelle que soit la propriété.
+        const result = typeof value === 'string' && NUMBER_WITH_UNIT.test(value)
+            ? Number.parseFloat(value)
+            : Number(value);
         return Number.isFinite(result) ? result : null;
     }
     if (type === 'date' || type === 'datetime' || type === 'time') {
