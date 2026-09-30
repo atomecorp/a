@@ -1,4 +1,4 @@
-// Relations pair-a-pair : premier contact et blocage (todo/communication_news_broadcast_2026-09-30.md, D3/D4).
+// Relations pair-a-pair : premier contact et blocage (done/communication_news_broadcast_2026-09-30.md, D3/D4).
 //
 // Deux faits, deux proprietaires, aucun doublon :
 // - le BLOCAGE vit dans `sync_share_policies` (policy 'block'), deja applique par le partage ;
@@ -11,11 +11,44 @@
 // 'accepted' et qu'aucun des deux n'a bloque l'autre.
 
 import db from '../database/adole.js';
+import { MAX_CONTACT_BOOK_HASHES, contactBookHash, contactBookPhone } from '../atome/src/shared/contact_book_hash.js';
 
 const CONTACT_STATUSES = new Set(['pending', 'accepted', 'refused']);
 
-export function createCommunicationRelations({ query = (...args) => db.query(...args), notify = async () => {} } = {}) {
+export function createCommunicationRelations({
+    query = (...args) => db.query(...args),
+    notify = async () => {},
+    // Resolution par numero (L11) : `findUserByPhone(e164)` / `findUserById(id)` -> { user_id, phone }.
+    findUserByPhone = async () => null,
+    findUserById = async () => null
+} = {}) {
     const id = (value) => String(value || '').trim();
+
+    // Preference « accepter les demandes de personnes absentes de mon carnet » (defaut : oui)
+    // et carnet sous forme d'empreintes salees par le proprietaire (jamais de numero en clair).
+    const preferencesOf = async (userId) => {
+        const row = await query('get', 'SELECT accept_unknown, address_book_json FROM communication_preferences WHERE user_id = ?', [id(userId)]);
+        let book = [];
+        try { book = JSON.parse(row?.address_book_json || '[]'); } catch (_) { book = []; }
+        return { acceptUnknown: row ? Number(row.accept_unknown) !== 0 : true, book: Array.isArray(book) ? book : [] };
+    };
+    const upsertPreferences = (userId, { acceptUnknown = null, book = null } = {}) => query('run',
+        `INSERT INTO communication_preferences (user_id, accept_unknown, address_book_json)
+         VALUES (?, COALESCE(?, 1), COALESCE(?, '[]'))
+         ON CONFLICT(user_id) DO UPDATE SET
+           accept_unknown = COALESCE(?, communication_preferences.accept_unknown),
+           address_book_json = COALESCE(?, communication_preferences.address_book_json),
+           updated_at = datetime('now')`,
+        [id(userId), acceptUnknown, book, acceptUnknown, book]);
+    // La cible accepte-t-elle une demande de `senderId` ? Oui si elle accepte les inconnus,
+    // sinon seulement si le numero de l'expediteur est dans son carnet.
+    const acceptsRequestFrom = async (targetId, senderId) => {
+        const prefs = await preferencesOf(targetId);
+        if (prefs.acceptUnknown) return true;
+        const sender = await findUserById(id(senderId)).catch(() => null);
+        const hash = sender?.phone ? await contactBookHash(targetId, sender.phone) : '';
+        return Boolean(hash) && prefs.book.includes(hash);
+    };
 
     const hasBlocked = async (ownerId, peerId) => {
         const row = await query('get',
@@ -57,9 +90,17 @@ export function createCommunicationRelations({ query = (...args) => db.query(...
 
     const blockedEitherWay = async (a, b) => (await hasBlocked(a, b)) || (await hasBlocked(b, a));
 
-    const request = async (senderId, targetId, { note = '' } = {}) => {
+    const request = async (senderId, targetId, { note = '', phone = '' } = {}) => {
         const sender = id(senderId);
-        const target = id(targetId);
+        let target = id(targetId);
+        // Par numero : un numero sans compte repond comme un succes — on ne revele jamais
+        // si un numero correspond a un compte.
+        if (!target && phone) {
+            const e164 = contactBookPhone(phone);
+            const found = e164 ? await findUserByPhone(e164).catch(() => null) : null;
+            if (!found?.user_id) return { ok: true, status: 'pending' };
+            target = id(found.user_id);
+        }
         if (!sender || !target || sender === target) throw new Error('contact_target_invalid');
         if (await hasBlocked(sender, target)) throw new Error('contact_blocked_by_you');
         // L'emetteur consent a recevoir du destinataire : c'est lui qui demande.
@@ -69,6 +110,8 @@ export function createCommunicationRelations({ query = (...args) => db.query(...
         const current = await contactStatus(target, sender);
         if (current === 'accepted') return { ok: true, status: 'accepted' };
         if (current === 'refused') return { ok: true, status: 'pending' };
+        // Hors du carnet d'une cible qui refuse les inconnus : ignore, sans le reveler.
+        if (!await acceptsRequestFrom(target, sender)) return { ok: true, status: 'pending' };
         await setContact(target, sender, 'pending', sender);
         await notify(target, sender, { kind: 'connection-request', message: String(note || '').slice(0, 280) });
         return { ok: true, status: 'pending' };
@@ -140,7 +183,19 @@ export function createCommunicationRelations({ query = (...args) => db.query(...
     const handle = async (message, userId) => {
         const action = String(message?.action || '').toLowerCase();
         const peer = message.userId || message.toUserId || message.fromUserId || message.peerId;
-        if (action === 'request') return request(userId, peer, { note: message.note });
+        if (action === 'request') return request(userId, peer, { note: message.note, phone: message.phone });
+        if (action === 'preferences-get') return { ok: true, acceptUnknown: (await preferencesOf(userId)).acceptUnknown };
+        if (action === 'preferences-set') {
+            await upsertPreferences(userId, { acceptUnknown: message.acceptUnknown === false ? 0 : 1 });
+            return { ok: true, acceptUnknown: message.acceptUnknown !== false };
+        }
+        if (action === 'address-book-set') {
+            const hashes = [...new Set((Array.isArray(message.hashes) ? message.hashes : [])
+                .map((hash) => String(hash || '').trim().toLowerCase())
+                .filter((hash) => /^[0-9a-f]{64}$/.test(hash)))].slice(0, MAX_CONTACT_BOOK_HASHES);
+            await upsertPreferences(userId, { book: JSON.stringify(hashes) });
+            return { ok: true, count: hashes.length };
+        }
         if (action === 'respond') return respond(userId, peer, message.decision);
         if (action === 'block') return block(userId, peer);
         if (action === 'unblock') return unblock(userId, peer);

@@ -1,4 +1,4 @@
-// Diffusion serveur des News (todo/communication_news_broadcast_2026-09-30.md, L4/L5).
+// Diffusion serveur des News (done/communication_news_broadcast_2026-09-30.md, L4/L5).
 //
 // Une publication est enregistree UNE fois, puis le serveur choisit ses destinataires :
 // - audience 'all' : tout utilisateur (abonne par defaut, D1), sauf l'auteur ;

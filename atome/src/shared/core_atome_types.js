@@ -273,6 +273,23 @@ export const CORE_ATOME_TYPE_DEFINITIONS = Object.freeze([
             continuous: { type: 'object' }
         }
     }),
+    // Interaction (todo/Templates_and_Interactivity_tool_Dashboard.md §3) : un
+    // déclencheur, une cible fixe ou dynamique (arbre de conditions du moteur
+    // Conditions) et une cascade ordonnée d'actions d'outils réels.
+    defineType({
+        type: 'interaction',
+        kind: 'data_model',
+        traits: ['data', 'binding', 'nonvisual', 'executable'],
+        schema: {
+            name: { type: 'string' },
+            enabled: { type: 'boolean' },
+            order: { type: 'number' },
+            modes: { type: 'array' },
+            trigger: { type: 'object' },
+            target: { type: 'object' },
+            actions: { type: 'array' }
+        }
+    }),
     defineType({
         type: 'condition_set',
         kind: 'data_model',

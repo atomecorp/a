@@ -84,14 +84,22 @@ function remoteControlDetail(message) {
 // Replies that settle a pending request. Value = the type-specific fields added
 // to the common `{ ok, success, status, error }` envelope.
 const RESPONSE_PAYLOADS = {
-    // Relations pair-a-pair et News diffusees (todo/communication_news_broadcast_2026-09-30.md).
+    // Relations pair-a-pair et News diffusees (done/communication_news_broadcast_2026-09-30.md).
     'contact-response': (message) => ({
         status: message.status,
         statuses: message.statuses,
         contacts: message.contacts,
         pending: message.pending,
         refused: message.refused,
-        blocked: message.blocked
+        blocked: message.blocked,
+        acceptUnknown: message.acceptUnknown,
+        count: message.count
+    }),
+    // La pile renvoyee par le serveur fait foi (lecture, mise a jour, retrait).
+    'notification-stack-response': (message) => ({
+        stack: message.stack,
+        count: message.count,
+        notification: message.notification
     }),
     'news-response': (message) => ({
         news_id: message.news_id,

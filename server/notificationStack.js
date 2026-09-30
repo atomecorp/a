@@ -57,7 +57,12 @@ const normalizeNotification = (input = {}) => {
         archived: input.archived === true,
         todo: input.todo === true,
         urgent: input.urgent === true,
-        publication: input.publication && typeof input.publication === 'object' ? input.publication : null
+        publication: input.publication && typeof input.publication === 'object' ? input.publication : null,
+        // Visio : la salle a rejoindre et la raison d'un refus survivent au rechargement.
+        room_id: input.room_id || input.roomId || null,
+        reason: input.reason || null,
+        starts_at: input.starts_at || input.startsAt || null,
+        ends_at: input.ends_at || input.endsAt || null
     };
 };
 

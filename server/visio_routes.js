@@ -8,7 +8,10 @@ import db from '../database/adole.js';
 import { findUserById } from './auth_users.js';
 import { nowIso, normalizePhone, makeRequestId, normalizeVisibility } from './visio_helpers.js';
 
-export function createVisioRoutes({ rooms, connectionRequests, connections, databaseEnabled, ensureRoom, resolveAuthUserFromRequest, resolveUserInfo, isConnected, addConnection, getRoomMeta, ensureRoomMeta, canJoinRoom, relations = null }) {
+// Participants au plus par salle, pendant la phase de test (todo/visio_client_2026-09-30.md).
+const MAX_ROOM_PARTICIPANTS = 6;
+
+export function createVisioRoutes({ rooms, connectionRequests, connections, databaseEnabled, ensureRoom, resolveAuthUserFromRequest, resolveUserInfo, isConnected, addConnection, getRoomMeta, resolveRoomMeta = async (id) => getRoomMeta(id), saveScheduledRoom = async () => {}, ensureRoomMeta, canJoinRoom, relations = null, notify = async () => {} }) {
   function registerRoutes(server) {
     const replyJson = (reply, statusCode, payload) => {
       reply.code(statusCode);
@@ -147,7 +150,7 @@ export function createVisioRoutes({ rooms, connectionRequests, connections, data
 
     server.get('/rooms/:room_id', async (request, reply) => {
       const roomId = request.params?.room_id;
-      const meta = roomId ? getRoomMeta(roomId) : null;
+      const meta = roomId ? await resolveRoomMeta(roomId) : null;
       if (!meta) {
         return replyJson(reply, 404, { success: false, error: 'Room not found' });
       }
@@ -171,32 +174,106 @@ export function createVisioRoutes({ rooms, connectionRequests, connections, data
       }
 
       const roomId = request.params?.room_id;
-      const meta = roomId ? getRoomMeta(roomId) : null;
+      const meta = roomId ? await resolveRoomMeta(roomId) : null;
       if (!meta) {
         return replyJson(reply, 404, { success: false, error: 'Room not found' });
       }
-      if (meta.owner_user_id && meta.owner_user_id !== userId) {
-        return replyJson(reply, 403, { success: false, error: 'Only owner can invite' });
+      // Appel improvise : le proprietaire, ou un participant deja invite, peut ajouter
+      // quelqu'un (« + » du panneau de visio).
+      if (meta.owner_user_id && meta.owner_user_id !== userId && !meta.invites?.has(userId)) {
+        return replyJson(reply, 403, { success: false, error: 'Only participants can invite' });
       }
 
+      const toUserId = String(request.body?.user_id || request.body?.userId || '').trim();
       const toPhone = normalizePhone(request.body?.to_phone_e164 || request.body?.toPhone);
-      if (!toPhone) {
-        return replyJson(reply, 400, { success: false, error: 'Missing to_phone_e164' });
+      if (!toUserId && !toPhone) {
+        return replyJson(reply, 400, { success: false, error: 'Missing user_id or to_phone_e164' });
       }
 
-      const toUserInfo = await resolveUserInfo(null, toPhone);
+      // Un contact du carnet peut porter un id local : le numero prend alors le relais.
+      const toUserInfo = (toUserId ? await resolveUserInfo(toUserId, null) : null)
+        || (toPhone ? await resolveUserInfo(null, toPhone) : null);
       if (!toUserInfo?.id) {
         return replyJson(reply, 404, { success: false, error: 'User not found' });
       }
 
       // Inviter, c'est appeler : il faut etre contact accepte, et ne pas etre bloque (D3/D4),
-      // meme pour une room publique.
-      if (!await isConnected(userId, toUserInfo.id)) {
+      // meme pour une room publique. Un destinataire qui a bloque l'appelant n'est pas sonne,
+      // et l'appelant n'en sait rien.
+      const verdict = relations ? await relations.canCommunicate(userId, toUserInfo.id) : { ok: await isConnected(userId, toUserInfo.id) };
+      if (!verdict.ok && verdict.silent) return { success: true };
+      if (!verdict.ok) {
         return replyJson(reply, 403, { success: false, error: 'Not connected to user' });
+      }
+      if (!meta.invites.has(toUserInfo.id) && meta.invites.size + 1 >= MAX_ROOM_PARTICIPANTS) {
+        return replyJson(reply, 409, { success: false, error: 'room_full' });
       }
 
       meta.invites.add(toUserInfo.id);
+      // La sonnerie part par la messagerie : la notification arrive dans l'outil Com.
+      await notify(toUserInfo.id, userId, {
+        kind: 'call-invitation', message: meta.name || '', extra: { room_id: roomId }
+      });
       return { success: true };
+    });
+
+    // Visio planifiee (invitation au calendrier, V4) : salle persistee, chaque contact recoit
+    // `call-scheduled` ; en l'acceptant, son client cree l'evenement dans son calendrier.
+    server.post('/rooms/schedule', async (request, reply) => {
+      const auth = await resolveAuthUserFromRequest(request);
+      const userId = auth?.id || auth?.user_id || null;
+      if (!userId) return replyJson(reply, 401, { success: false, error: 'Unauthorized' });
+      const startsAt = new Date(request.body?.starts_at || '');
+      const endsAt = request.body?.ends_at ? new Date(request.body.ends_at) : null;
+      if (Number.isNaN(startsAt.getTime()) || (endsAt && (Number.isNaN(endsAt.getTime()) || endsAt < startsAt))) {
+        return replyJson(reply, 400, { success: false, error: 'invalid_schedule' });
+      }
+      const targets = Array.isArray(request.body?.participants) ? request.body.participants : [];
+      if (!targets.length) return replyJson(reply, 400, { success: false, error: 'participants_required' });
+      if (targets.length + 1 > MAX_ROOM_PARTICIPANTS) return replyJson(reply, 409, { success: false, error: 'room_full' });
+
+      const roomId = uuidv4();
+      const title = String(request.body?.title || 'Visio').slice(0, 200);
+      const meta = ensureRoomMeta(roomId, userId, title, 'private');
+      Object.assign(meta, { scheduled: true, starts_at: startsAt.toISOString(), ends_at: endsAt ? endsAt.toISOString() : null });
+      const invited = [];
+      const failed = [];
+      for (const target of targets) {
+        const toUserId = String(target?.user_id || target?.userId || '').trim();
+        const toPhone = normalizePhone(target?.to_phone_e164 || target?.phone);
+        const info = (toUserId ? await resolveUserInfo(toUserId, null) : null) || (toPhone ? await resolveUserInfo(null, toPhone) : null);
+        if (!info?.id || info.id === userId) { failed.push({ target: toUserId || toPhone, error: 'user_not_found' }); continue; }
+        const verdict = relations ? await relations.canCommunicate(userId, info.id) : { ok: await isConnected(userId, info.id) };
+        // Bloque : ni invitation ni indice pour l'organisateur (comme l'appel direct).
+        if (!verdict.ok && verdict.silent) continue;
+        if (!verdict.ok) { failed.push({ target: info.id, error: 'not_connected' }); continue; }
+        meta.invites.add(info.id);
+        invited.push(info.id);
+      }
+      if (!invited.length && failed.length) return replyJson(reply, 403, { success: false, error: 'no_invitee', failed });
+      await saveScheduledRoom(meta);
+      for (const id of invited) {
+        await notify(id, userId, {
+          kind: 'call-scheduled', message: title, subject: title,
+          extra: { room_id: roomId, starts_at: meta.starts_at, ends_at: meta.ends_at }
+        });
+      }
+      return { success: true, room_id: roomId, starts_at: meta.starts_at, ends_at: meta.ends_at, invited, failed };
+    });
+
+    // Refuser, occupe ou sans reponse : l'appelant (proprietaire) en est prevenu.
+    server.post('/rooms/:room_id/decline', async (request, reply) => {
+      const auth = await resolveAuthUserFromRequest(request);
+      const userId = auth?.id || auth?.user_id || null;
+      if (!userId) return replyJson(reply, 401, { success: false, error: 'Unauthorized' });
+      const roomId = request.params?.room_id;
+      const meta = roomId ? await resolveRoomMeta(roomId) : null;
+      if (!meta || !meta.invites?.has(userId)) return replyJson(reply, 404, { success: false, error: 'Room not found' });
+      const reason = ['busy', 'missed'].includes(String(request.body?.reason)) ? String(request.body.reason) : 'declined';
+      if (meta.owner_user_id) {
+        await notify(meta.owner_user_id, userId, { kind: 'call-declined', message: reason, extra: { room_id: roomId, reason } });
+      }
+      return { success: true, reason };
     });
 
     server.post('/rooms/:room_id/join', async (request, reply) => {
@@ -207,7 +284,7 @@ export function createVisioRoutes({ rooms, connectionRequests, connections, data
       }
 
       const roomId = request.params?.room_id;
-      const meta = roomId ? getRoomMeta(roomId) : null;
+      const meta = roomId ? await resolveRoomMeta(roomId) : null;
       if (!meta) {
         return replyJson(reply, 404, { success: false, error: 'Room not found' });
       }

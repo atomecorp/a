@@ -17,6 +17,8 @@ import {
     updateProjectSceneOverlay
 } from '../../eVe/domains/rendering/project_scene_runtime.js';
 import { createVirtualSceneTree } from '../../eVe/domains/rendering/virtual_scene_contract.js';
+import { createSelectableListDragPreviewNode } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_selectable_list_preview.js';
+import { BEVY_PANEL_TOKENS } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_tokens.js';
 import {
     clearAllMysticPointerLocks,
     clearMysticPointerLock,
@@ -419,6 +421,86 @@ test('BevyUI panel translation moves flattened overlay content exactly once', as
 
     assert.deepEqual([record.properties.left, record.properties.top], [32, 46]);
     assert.deepEqual(runtime.state.sourceTrees.get(treeId).tree.root.children[0].style.position, [50, 45]);
+    await runtime.unmountTree(treeId);
+    clearAllProjectScenes();
+});
+
+// Le glissement d'une vignette de panneau deplace une surface flottante entiere :
+// sa decoupe etait un rectangle ABSOLU qui ne suivait pas le mouvement, donc la
+// miniature se faisait rogner a sa position d'origine, et le texte du badge de
+// compte restait derriere. La vignette reelle du panneau Media sert ici de
+// temoin : aucune valeur de ce test n'est propre au panneau.
+test('BevyUI moved clipping surface carries its descendant clip and text badge', async () => {
+    clearAllProjectScenes();
+    const surface = createSurface();
+    surface.getBoundingClientRect = () => ({ left: 0, top: 0, right: 400, bottom: 400, width: 400, height: 400 });
+    const runtime = createEveBevyUiRuntime({ imageResolverFactory: () => async () => null, requestFrame: () => 0 });
+    const treeId = 'media_drag_clip_fixture';
+    const thumbnailPx = BEVY_PANEL_TOKENS.listRow.dragThumbnailSizePx;
+    // Deux cartes glissées forment un paquet : la boîte de l'aperçu grandit d'un
+    // cran, et la découpe recopiée sur les enfants reste bornée par elle. C'est
+    // ce rectangle absolu qui rognait la vignette tant qu'il ne suivait pas le
+    // mouvement du paquet.
+    const stackOffsetPx = BEVY_PANEL_TOKENS.listRow.dragStackOffsetPx;
+    const boxPx = thumbnailPx + stackOffsetPx;
+    const preview = createSelectableListDragPreviewNode({
+        id: 'media_drag_preview',
+        preview: {
+            thumbnailPx,
+            stackOffsetPx,
+            stackMaxPx: BEVY_PANEL_TOKENS.listRow.dragStackMaxPx,
+            count: 2,
+            position: [40, 60],
+            visualRecord: {
+                id: 'img_1', type: 'image', atome_type: 'image',
+                properties: { source: '/api/uploads/affiche.png', file_name: 'affiche.png' }
+            }
+        }
+    });
+    await runtime.mountTree({
+        id: treeId,
+        surface,
+        tree: { id: treeId, root: { id: 'media_drag_root', kind: 'root', style: { size: [400, 400] }, children: [preview] } }
+    });
+    const recordNamed = (needle) => getProjectSceneState('__eve_dashboard_workspace__').records
+        .find((entry) => String(entry.id).includes(needle));
+    const boxOf = (needle) => {
+        const record = recordNamed(needle);
+        const clip = record.properties.clip;
+        return {
+            left: record.properties.left,
+            top: record.properties.top,
+            clip: [clip.x, clip.y, clip.width, clip.height]
+        };
+    };
+    const watched = ['media_drag_preview_thumbnail_0_visual', 'media_drag_preview_count_label_text'];
+    const before = Object.fromEntries(watched.map((needle) => [needle, boxOf(needle)]));
+    // La decoupe projetee sur un descendant est l'intersection de sa propre
+    // boite avec celle de l'ancetre qui decoupe (`overflowClipForNode`) : elle
+    // est donc bornee par le paquet, et sa taille ne depend pas du mouvement —
+    // c'est son rectangle absolu qui doit suivre.
+    watched.forEach((needle) => {
+        const clip = before[needle].clip;
+        assert.ok(clip[2] > 0 && clip[3] > 0, `${needle} doit porter une decoupe`);
+        assert.ok(clip[2] <= boxPx && clip[3] <= boxPx, `${needle} ne doit pas depasser le paquet`);
+    });
+    assert.deepEqual(before['media_drag_preview_thumbnail_0_visual'].clip, [40, 60, thumbnailPx, thumbnailPx]);
+
+    await runtime.updateTreeMotion({
+        id: treeId,
+        updates: [{ nodeId: 'media_drag_preview', position: [140, 160] }]
+    });
+
+    // La surface a glisse de (100, 100) : chaque record enfant suit du meme
+    // deplacement, ET sa decoupe absolue suit avec lui.
+    watched.forEach((needle) => {
+        const after = boxOf(needle);
+        assert.deepEqual([after.left - before[needle].left, after.top - before[needle].top], [100, 100]);
+        assert.deepEqual(after.clip, [
+            before[needle].clip[0] + 100, before[needle].clip[1] + 100,
+            before[needle].clip[2], before[needle].clip[3]
+        ]);
+    });
     await runtime.unmountTree(treeId);
     clearAllProjectScenes();
 });

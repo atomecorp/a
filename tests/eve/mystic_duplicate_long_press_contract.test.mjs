@@ -46,6 +46,9 @@ const installProject = (records) => {
         records: new Map(records.map((record) => [record.atome_id, record]))
     });
     const clones = () => records.map((record) => JSON.parse(JSON.stringify(record)));
+    // Le projet courant porte deux lectures du chemin reel : la resolution des
+    // enfants a copier et le projet cible du collage.
+    window.__currentProject = { id: projectId };
     window.Atome = {
         getStateCurrent: async (atomeId) => clones().find((record) => record.atome_id === String(atomeId)) || null,
         listStateCurrent: async () => clones(),
@@ -153,6 +156,118 @@ test('the Copy long press falls below the source when the row has no room', asyn
     expect(committed.at(-1).props.left).toBe('300px');
     // 200 + 80 (hauteur) + 24 (gouttiere), meme gauche que la source.
     expect(committed.at(-1).props.top).toBe('304px');
+});
+
+// Une forme qui sert de MASQUE est nommee par la molecule qui la porte
+// (`properties.mask.sourceId`). C'est une reference d'atome comme `children` ou
+// une piste de timeline : elle doit suivre la copie. Sans ce remappage le clone
+// gardait l'identifiant de la forme ORIGINALE, le renderer decoupait donc le
+// clone avec une silhouette posee a l'emplacement de l'original, et la copie ne
+// peignait plus rien — le bug « dupliquer une forme ne marche pas ».
+test('duplicating a masked molecule points the clone mask at its own copied shape', async () => {
+    setupDom();
+    const { clearProjectSceneFlowReservations } = await import('../../eVe/domains/rendering/project_scene_stack_runtime.js');
+    clearProjectSceneFlowReservations(null);
+    await import('../../eVe/intuition/runtime/tool.js');
+    const { duplicateSelectionViaClipboard } = await import('../../eVe/intuition/tools/copy.js');
+    const { createVirtualSceneTree } = await import('../../eVe/domains/rendering/virtual_scene_contract.js');
+
+    const projectId = 'p_dup_mask';
+    const molecule = {
+        atome_id: 'm1',
+        type: 'group',
+        project_id: projectId,
+        properties: {
+            left: '0px', top: '0px', width: '300px', height: '200px',
+            kind: 'group', type: 'group', parent_id: projectId,
+            children: ['v1', 'star1'],
+            mask: { mode: 'alpha', sourceId: 'star1' }
+        }
+    };
+    const star = shape('star1', projectId, { left: 90, top: 60, width: 100, height: 100 });
+    star.properties.parent_id = 'm1';
+    star.properties.shape_variant = 'star';
+    const masked = {
+        atome_id: 'v1',
+        type: 'video_recording',
+        project_id: projectId,
+        properties: { left: '0px', top: '0px', width: '300px', height: '200px', parent_id: 'm1' }
+    };
+    const sources = [molecule, star, masked];
+    const { committed } = installProject(sources);
+
+    const result = await duplicateSelectionViaClipboard({ selectionIds: ['m1'], projectId });
+    expect(result.ok).toBe(true);
+    expect(committed).toHaveLength(3);
+
+    const cloneMolecule = committed.find((event) => event.props.mask);
+    const cloneStar = committed.find((event) => event.atome_id !== 'star1' && event.props.shape_variant === 'star');
+    const cloneVideo = committed.find((event) => event.type === 'video_recording');
+    expect(cloneMolecule.props.mask.sourceId).toBe(cloneStar.atome_id);
+    expect(cloneMolecule.props.mask.sourceId).not.toBe('star1');
+    expect(cloneStar.props.mask).toBeUndefined();
+    // Le clone se range CONTRE sa source : a sa droite (meme haut), comme le
+    // reste de la duplication.
+    expect(cloneMolecule.props.left).toBe('324px');
+    expect(cloneMolecule.props.top).toBe('0px');
+
+    // Ce que le renderer resout : la forme du clone EST la silhouette, et c'est
+    // elle qui decoupe le contenu du clone. La reference croisee (masque du clone
+    // pointe sur la forme de l'original) effacait tout le clone a l'ecran.
+    const scene = createVirtualSceneTree([
+        ...sources,
+        ...committed.map((event) => ({
+            atome_id: event.atome_id,
+            type: event.type,
+            project_id: event.project_id,
+            parent_id: event.parent_id,
+            properties: event.props
+        }))
+    ]);
+    const node = (id) => scene.nodes.find((entry) => entry.id === id);
+    expect(node(cloneStar.atome_id).maskSource).toBe(true);
+    expect(node(cloneVideo.atome_id).mask.sourceId).toBe(cloneStar.atome_id);
+    expect(node(node(cloneMolecule.atome_id).id).mask ?? null).toBeNull();
+});
+
+test('a mask whose source stays behind is dropped from the copy', async () => {
+    setupDom();
+    const { clearProjectSceneFlowReservations } = await import('../../eVe/domains/rendering/project_scene_stack_runtime.js');
+    clearProjectSceneFlowReservations(null);
+    await import('../../eVe/intuition/runtime/tool.js');
+    const { duplicateSelectionViaClipboard } = await import('../../eVe/intuition/tools/copy.js');
+
+    const projectId = 'p_dup_mask_orphan';
+    // La source du masque n'est PAS un membre de la molecule : elle reste dans le
+    // projet quand on copie la molecule seule. Le clone ne peut pas etre decoupe
+    // par elle (un masque vit dans le meme parent que ce qu'il decoupe) : garder
+    // la declaration produirait un clone invisible.
+    const outside = shape('star_outside', projectId, { left: 90, top: 60, width: 100, height: 100 });
+    const molecule = {
+        atome_id: 'm1',
+        type: 'group',
+        project_id: projectId,
+        properties: {
+            left: '0px', top: '0px', width: '300px', height: '200px',
+            kind: 'group', type: 'group', parent_id: projectId,
+            children: ['v1'],
+            mask: { mode: 'alpha', sourceId: 'star_outside' }
+        }
+    };
+    const masked = {
+        atome_id: 'v1',
+        type: 'video_recording',
+        project_id: projectId,
+        properties: { left: '0px', top: '0px', width: '300px', height: '200px', parent_id: 'm1' }
+    };
+    const { committed } = installProject([outside, molecule, masked]);
+
+    const result = await duplicateSelectionViaClipboard({ selectionIds: ['m1'], projectId });
+    expect(result.ok).toBe(true);
+    const cloneMolecule = committed.find((event) => event.type === 'group');
+    expect(cloneMolecule.props.mask).toBeUndefined();
+    // La source laissee derriere n'est jamais touchee par la copie.
+    expect(committed.some((event) => event.atome_id === 'star_outside')).toBe(false);
 });
 
 test('a paste with an explicit drop point keeps landing at the click', async () => {

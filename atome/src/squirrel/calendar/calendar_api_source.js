@@ -41,6 +41,7 @@ const normalizeCalendarEvent = (event = {}) => ({
     dueAt: toDate(event.dueAt || event.due_at || (event.kind === 'todo' ? event.start : null)),
     completedAt: toDate(event.completedAt || event.completed_at),
     color: normalizeText(event.color || ''),
+    visioRoomId: normalizeText(event.visioRoomId || event.visio_room_id || ''),
     raw: event
 });
 

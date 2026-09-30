@@ -274,6 +274,13 @@ CREATE TABLE IF NOT EXISTS sync_share_policies (
 );
 
 -- Communication : premier contact (le blocage vit dans sync_share_policies) et News diffusees.
+CREATE TABLE IF NOT EXISTS communication_preferences (
+    user_id TEXT PRIMARY KEY,
+    accept_unknown INTEGER NOT NULL DEFAULT 1,
+    address_book_json TEXT NOT NULL DEFAULT '[]',
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 CREATE TABLE IF NOT EXISTS communication_contacts (
     owner_id TEXT NOT NULL,
     peer_id TEXT NOT NULL,
@@ -313,6 +320,17 @@ CREATE TABLE IF NOT EXISTS news_tags (
 );
 
 CREATE INDEX IF NOT EXISTS idx_news_publications_author ON news_publications(author_id);
+
+-- Visio planifiee (invitation au calendrier) : la salle survit au redemarrage du serveur.
+CREATE TABLE IF NOT EXISTS visio_rooms (
+    room_id TEXT PRIMARY KEY,
+    owner_id TEXT NOT NULL,
+    title TEXT,
+    starts_at TEXT,
+    ends_at TEXT,
+    invitees_json TEXT NOT NULL DEFAULT '[]',
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
 
 CREATE TABLE IF NOT EXISTS directory_public_profiles (
     principal_id TEXT PRIMARY KEY,

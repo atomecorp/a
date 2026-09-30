@@ -52,6 +52,22 @@ async function pathExists(filePath) {
   }
 }
 
+// Identité d'un objet déjà stocké : même chemin, mêmes octets. La comparaison
+// est faite sur le contenu — la taille seule ne suffit pas à décider que deux
+// fichiers sont le même objet.
+async function fileEqualsContent(filePath, content) {
+  if (!content) return false;
+  const expected = Buffer.isBuffer(content) ? content : Buffer.from(content);
+  if (!expected.length) return false;
+  try {
+    const stats = await fs.stat(filePath);
+    if (stats.size !== expected.length) return false;
+    return (await fs.readFile(filePath)).equals(expected);
+  } catch (error) {
+    return false;
+  }
+}
+
 export async function ensureUserDownloadsDir(projectRoot, user, options = {}) {
   const dirName = options.downloadsDirName || DOWNLOADS_DIR_NAME;
   const homeInfo = await ensureUserHome(projectRoot, user, options.userRoot);
@@ -65,8 +81,17 @@ export async function resolveUserUploadPath(projectRoot, user, rawName, options 
   const sanitized = sanitizeFileName(rawName);
   const ext = path.extname(sanitized);
   const stem = path.basename(sanitized, ext);
+  const wantedPath = path.join(downloadsDir, sanitized);
+  // Le même objet ne se stocke qu'une fois : un fichier déjà présent sous ce nom
+  // avec exactement les mêmes octets est réutilisé au lieu de créer un doublon
+  // `nom_1`. Rien n'est écrasé — deux fichiers différents qui partagent un nom
+  // gardent le compteur ci-dessous, et l'identité est vérifiée par le contenu,
+  // jamais par la seule taille.
+  if (await fileEqualsContent(wantedPath, options.content)) {
+    return { fileName: sanitized, filePath: wantedPath, downloadsDir, reused: true };
+  }
   let candidate = sanitized;
-  let targetPath = path.join(downloadsDir, candidate);
+  let targetPath = wantedPath;
   let counter = 1;
 
   while (await pathExists(targetPath)) {

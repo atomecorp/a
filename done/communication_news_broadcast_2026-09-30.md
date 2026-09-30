@@ -177,7 +177,10 @@ Enveloppes 1:1 des trames ci-dessus.
 
 ### L8 — Outil Communication du bas
 - [x] Une News reçue apparaît dans l'outil et défile avec les messages non lus.
-- [ ] Inbox (`communication_inbox_*`) rebranchée ; un seul bandeau sur l'outil. **Décision produit attendue** : le bandeau de l'inbox et la boîte de saisie du ruban (`communication_input_tool.js`) se disputent le même emplacement de l'outil.
+- [x] Réception dans le panneau Communication (décision du 30 sept.) : l'outil du ruban
+      s'agrandit en boîte de saisie où défilent les non-lus ; son icône « Panneau » ouvre le
+      panneau complet — **écriture en haut, réception en bas**, en liste d'Atome (accordéon par
+      message, même composant que les Contacts). Les modules d'inbox mis de côté sont supprimés.
 
 ### L9 — Audio / vidéo
 - [x] Note vocale A→B (contact accepté) : reçue et lisible par B.
@@ -372,3 +375,55 @@ Défauts préexistants trouvés et corrigés :
 ### Régression complète après L10
 L0 2/2 · L1 16/16 · L2/L3 28/28 · L4/L5 16/16 · L6 11/11 · L9 visio 13/13 · L9 notes 10/10 ·
 L10 28/28 · rouge d'abord 4/4 · navigateurs L7/L8 15/15 · navigateurs L10 9/9.
+
+### 30 sept. — L8 réception dans le panneau Communication
+Liste d'Atome extraite des Contacts (`bevy_panel_accordion_list.js`, identifiants et arbre des
+Contacts inchangés — comparé à l'ancienne vue) ; réception `bevy_panel_comm_inbox_view.js` :
+en-tête avatar · expéditeur · résumé (● non lu), corps déplié = type · date · marqueurs, texte
+complet, actions Accepter/Refuser/Bloquer (demandes), Répondre (champ d'écriture du haut, aucun
+second champ), Non lu, À traiter, Urgent, Archiver, Supprimer ; déplier = lu ; sélection multiple
+par le propriétaire unique du geste (`bevy_panel_list_selection.js`) avec Tout sélectionner /
+Archiver (n) / Supprimer (n) + confirmation. Supprimés : `communication_inbox_{view,rail,runtime}.js`,
+`bevy_panel_notification_table.js`, colonnes du tableau, accent de rail `inbox`, clés i18n mortes ;
+`communication_inbox_model.js` réduit aux trois règles utilisées.
+- Rouge d'abord : jusqu'au commit eVe `2c97f230` le panneau commençait par le tableau
+  (`notificationsNode` avant `composeNode`).
+- `node temp/comm/l8_inbox_browser.probe.mjs` → **15/15 PASS** (2 navigateurs + 1 compte WS).
+
+Défaut préexistant trouvé par ce parcours et corrigé : **sur le web, la liste de Communication
+perdait des notifications**. Le client lisait sa pile dans la copie IndexedDB de l'atome
+utilisateur (le workspace intercepte `atomes.get`), jamais la pile écrite par le serveur, et la
+réponse de `update`/`remove` n'était pas remontée (`notification-stack-response` inconnu) — au
+premier « lu », la liste retombait sur la copie locale ; en plus, le client réécrivait toute la
+pile. Corrigé : trame `notification-stack`/`read` (serveur = source), réponse mappée, et le web ne
+réécrit plus jamais la pile (le natif local garde sa fusion). Mesuré : avant, 4 notifications au
+serveur, 1 seule côté client après le premier dépliage ; après, 4/4. (`temp/comm/l8_stack_race.probe.mjs`
+a écarté une course serveur : 20/20 messages simultanés gardés, y compris sur HEAD.)
+
+### Régression complète après L8
+L0 2/2 · L1 16/16 · L2/L3 28/28 · L4/L5 16/16 · L6 11/11 · pile concurrente 1/1 · L9 visio 13/13 ·
+L9 notes 10/10 · L10 28/28 · rouge d'abord 4/4 · navigateurs L7/L8 15/15 · L8 réception 15/15 ·
+L10 9/9.
+
+### 30 sept. — L11 demande de contact par numéro + préférence « hors de mon carnet »
+- [x] Demande de contact par simple numéro (même tapé « 06 … ») ; numéro sans compte = succès
+      apparent, rien ne se passe ; un message à un numéro sans compte répond `contact_required`
+      comme pour un non-contact (plus aucun moyen de sonder un numéro).
+- [x] Message refusé faute de contact → le panneau affiche « Cette personne n'est pas encore un
+      contact » et le bouton « Envoyer une demande de contact » (par id ou par numéro tapé).
+- [x] Préférence « Accepter les demandes de contact de personnes absentes de mon carnet »
+      (Accueil › Réglages › Préférences › Communication), **activée par défaut**, stockée et
+      appliquée par le SERVEUR (`communication_preferences`).
+- [x] Carnet envoyé au serveur en empreintes salées par le propriétaire
+      (`atome/src/shared/contact_book_hash.js`, `eVe/domains/user/contact_book_sync.js`), jamais en
+      clair ; l'expéditeur hors carnet est ignoré en silence ; le blocage reste prioritaire.
+- [x] Fiche Contact d'un contact du carnet (sans compte connu) : « Demander le contact » par son numéro.
+Preuves : `node temp/comm/l11_contact_by_phone.probe.mjs` → rouge 2/10 avant, **11/11** après ;
+`node temp/comm/l11_browser.probe.mjs` → **9/9** (2 navigateurs + 2 comptes WS).
+Défauts préexistants corrigés en route : aucun échec d'envoi du panneau n'était affiché
+(`eve-comm-send-error` sans écouteur) ; un numéro tapé avec des espaces n'était pas reconnu
+(regex `\\s`) ; un destinataire numéro partait comme id ; le pré-filtre local des destinataires
+privés écartait tout numéro et tout contact accepté par l'autre (supprimé : le serveur décide) ;
+le message direct ne normalisait pas le numéro en E.164 et révélait l'existence d'un compte.
+Régression complète : L0 2/2 · L1 16/16 · L2/L3 28/28 · L4/L5 16/16 · L6 11/11 · pile 1/1 ·
+L9 13/13 + 10/10 · L10 28/28 · rouge 4/4 · navigateurs L7/L8 15/15, L8 15/15, L10 9/9, L11 9/9.

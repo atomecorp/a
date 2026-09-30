@@ -133,10 +133,11 @@ import { handleWsAtomeDeleteOperation } from './wsAtomeDeleteOperation.js';
 import { executeShellCommand } from './shell.js';
 import { ensureUserHome } from './userHome.js';
 import { createVisioService } from './visio.js';
-import { pushNotificationToUserStack, updateNotificationInUserStack, removeNotificationFromUserStack } from './notificationStack.js';
+import { pushNotificationToUserStack, updateNotificationInUserStack, removeNotificationFromUserStack, readNotificationStack } from './notificationStack.js';
 import { createCommunicationRelations } from './communication_relations.js';
 import { createNotificationDelivery, createRateLimiter, guardDirectMessage } from './communication_delivery.js';
 import { createNewsBroadcast } from './news_broadcast.js';
+import { contactBookPhone } from '../atome/src/shared/contact_book_hash.js';
 import {
   ensureUserDownloadsDir,
   resolveUserUploadPath,
@@ -191,7 +192,9 @@ const deliverCommNotification = createNotificationDelivery({
   findUserById: (id) => findUserById(db.getDataSourceAdapter(), id)
 });
 const communicationRelations = createCommunicationRelations({
-  notify: (targetId, senderId, notification) => deliverCommNotification(targetId, senderId, notification)
+  notify: (targetId, senderId, notification) => deliverCommNotification(targetId, senderId, notification),
+  findUserByPhone: (phone) => findUserByPhone(db.getDataSourceAdapter(), phone),
+  findUserById: (id) => findUserById(db.getDataSourceAdapter(), id)
 });
 const directMessageRateAllowed = createRateLimiter();
 // News : diffusion serveur (tous les utilisateurs, y compris prives : D1), tags, abonnements.
@@ -993,7 +996,8 @@ async function startServer() {
       databaseEnabled: DATABASE_ENABLED,
       jwtSecret: process.env.JWT_SECRET,
       logger: server.log,
-      relations: communicationRelations
+      relations: communicationRelations,
+      notify: (targetId, senderId, notification) => deliverCommNotification(targetId, senderId, notification)
     });
     visioService.registerRoutes(server);
     visioService.registerWebsocket(server, { path: '/ws/visio' });
@@ -2214,6 +2218,13 @@ async function startServer() {
               });
               return;
             }
+            // `read` : la pile telle que le serveur l'a ecrite. Le navigateur n'en avait qu'une
+            // copie locale en retard (workspace IndexedDB), d'ou des notifications perdues.
+            if (data.action === 'read') {
+              const result = await readNotificationStack(attachedUserId);
+              safeSend({ type: 'notification-stack-response', requestId, success: result.ok === true, ...result });
+              return;
+            }
             if (data.action !== 'update' && data.action !== 'remove') {
               safeSend({
                 type: 'notification-stack-response', requestId, success: false,
@@ -2246,8 +2257,9 @@ async function startServer() {
             const toUserId = data.toUserId || data.to_user_id;
             let msgText = data.message;
 
+            // Un numero tape « a la francaise » (06…) est ramene au format E.164 du compte.
             const normalizedToPhone = (typeof toPhone === 'string')
-              ? toPhone.trim().replace(/\s+/g, '')
+              ? (contactBookPhone(toPhone) || toPhone.trim().replace(/\s+/g, ''))
               : toPhone;
 
             // STRICT MODE: require an authenticated ws/api connection.
@@ -2412,11 +2424,13 @@ async function startServer() {
               }
 
               if (!targetUserId || !targetUser) {
+                // Par numero : ne jamais reveler si un numero a un compte. Meme reponse que pour
+                // un non-contact ; la demande de contact qui suit ne fera rien (L11).
                 safeSend({
                   type: 'direct-message-response',
                   requestId,
                   success: false,
-                  error: 'remote_account_not_provisioned',
+                  error: normalizedToPhone && !toUserId ? 'contact_required' : 'remote_account_not_provisioned',
                   sender_id: senderUserId,
                   sender_phone: null,
                   sender_name: senderUsername,

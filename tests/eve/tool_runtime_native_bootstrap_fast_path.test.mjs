@@ -69,6 +69,33 @@ describe('Runtime V2 built-in tool fast path', () => {
         expect(handler).toBeTypeOf('function');
         expect(storageList).not.toHaveBeenCalled();
     });
+    it('executes the first preuploaded drop without bootstrap or an upload API', async () => {
+        const { createProjectDropExternalRuntime } = await import('../../eVe/intuition/tools/project_drop_external_runtime.js');
+        const boot = vi.spyOn(toolRuntimeV2, 'bootstrap').mockImplementation(() => { throw new Error('bootstrap_forbidden'); });
+        const previousBase = window.eveToolBase;
+        const createAtome = vi.fn(async () => ({ ok: true, id: 'media_atome' }));
+        window.eveToolBase = { createAtome };
+        const runtime = createProjectDropExternalRuntime({
+            ensureABoxApi: async () => { throw new Error('upload_api_forbidden'); },
+            computeDropBase: () => ({ left: 10, top: 20 }), resolveDropType: () => 'image',
+            readDroppedTextContent: async () => null, buildDropOffset: () => ({ dx: 0, dy: 0 }),
+            buildExtraProperties: () => ({}), resolveCreatorResultAtomeId: result => result?.result?.atome_id
+        });
+        try {
+            const result = await runtime.importFilesToProjectViaCreator({
+                entries: [{ width: 640, height: 480, preuploaded: {
+                    type: 'image', fileName: 'photo.png', mediaUrl: '/media/photo.png'
+                } }], projectId: 'media_project'
+            });
+            expect(result).toMatchObject({ ok: true, created: 1 });
+            expect(createAtome).toHaveBeenCalledTimes(1);
+            expect(boot).not.toHaveBeenCalled();
+            expect(storageList).not.toHaveBeenCalled();
+        } finally {
+            window.eveToolBase = previousBase;
+            boot.mockRestore();
+        }
+    });
     it('discovers graphical built-ins even when the persisted native catalog is empty', async () => {
         const { toolRegistryV2 } = await import('../../eVe/intuition/tools/core/tool_registry.js');
         const boot = vi.spyOn(toolRuntimeV2, 'bootstrap').mockResolvedValue({ ok: true });

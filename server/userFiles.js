@@ -263,7 +263,7 @@ export async function getAccessibleFiles(userId) {
  * Check if user can access file
  */
 // Droits de LECTURE qui ne vivent pas dans la table `permissions` historique
-// (todo/communication_news_broadcast_2026-09-30.md) : partage du service de synchronisation
+// (done/communication_news_broadcast_2026-09-30.md) : partage du service de synchronisation
 // (note vocale / video envoyee a un contact) et medias d'une News (D6). Installes par
 // server.js ; `(userId, atomeId, ownerId) -> boolean`, ou `ownerId` est le proprietaire du
 // FICHIER : un droit n'est reconnu que s'il emane de lui (les noms de fichiers ne sont pas

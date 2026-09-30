@@ -1,4 +1,4 @@
-// Livraison et garde des communications pair-a-pair (todo/communication_news_broadcast_2026-09-30.md, L2).
+// Livraison et garde des communications pair-a-pair (done/communication_news_broadcast_2026-09-30.md, L2).
 //
 // - `guardDirectMessage` : enveloppe, liste blanche de `kind`, taille, debit. Le serveur
 //   reecrit l'identite de l'expediteur dans l'enveloppe : un client ne peut plus afficher un

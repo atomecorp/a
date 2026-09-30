@@ -195,6 +195,8 @@ export const AdoleAPI = {
         type: 'notification-stack', action: 'update', notificationId: id, patch
       });
     },
+    // La pile de notifications telle que le serveur l'a ecrite (jamais la copie locale).
+    readNotifications: () => fastifyCall({ type: 'notification-stack', action: 'read' }, 'communication_auth_unavailable'),
     removeNotification: async ({ notificationId = null } = {}) => {
       const prepared = await auth.ensureFastifyToken();
       if (!prepared?.ok) throw new Error(prepared?.error || prepared?.reason || 'communication_auth_unavailable');
@@ -205,7 +207,22 @@ export const AdoleAPI = {
   },
   // Relations pair-a-pair (premier contact, blocage) : le serveur fait foi.
   contacts: {
-    request: (userId, { note = '' } = {}) => fastifyCall({ type: 'contact', action: 'request', userId, note }, 'contacts_auth_unavailable'),
+    // `target` : un id d'utilisateur, ou `{ userId }` / `{ phone }` (un numero suffit, L11).
+    request: (target, { note = '' } = {}) => {
+      const byObject = target && typeof target === 'object';
+      return fastifyCall({
+        type: 'contact', action: 'request', note,
+        userId: byObject ? target.userId || null : target,
+        phone: byObject ? target.phone || null : null
+      }, 'contacts_auth_unavailable');
+    },
+    // « Accepter les demandes de personnes absentes de mon carnet » (defaut : oui).
+    getPreferences: () => fastifyCall({ type: 'contact', action: 'preferences-get' }, 'contacts_auth_unavailable'),
+    setPreferences: ({ acceptUnknown = true } = {}) => fastifyCall(
+      { type: 'contact', action: 'preferences-set', acceptUnknown: acceptUnknown !== false }, 'contacts_auth_unavailable'
+    ),
+    // Carnet sous forme d'empreintes (atome/src/shared/contact_book_hash.js), jamais en clair.
+    setAddressBook: (hashes = []) => fastifyCall({ type: 'contact', action: 'address-book-set', hashes }, 'contacts_auth_unavailable'),
     respond: (userId, decision) => fastifyCall({ type: 'contact', action: 'respond', userId, decision }, 'contacts_auth_unavailable'),
     block: (userId) => fastifyCall({ type: 'contact', action: 'block', userId }, 'contacts_auth_unavailable'),
     unblock: (userId) => fastifyCall({ type: 'contact', action: 'unblock', userId }, 'contacts_auth_unavailable'),

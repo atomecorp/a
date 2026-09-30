@@ -22,7 +22,9 @@ export function createVisioService(options = {}) {
     rtcMaxPort = Number(process.env.MEDIASOUP_RTC_MAX_PORT) || DEFAULT_RTC_MAX_PORT,
     // Premier contact et blocage (server/communication_relations.js) : la visio n'a plus de
     // carnet de contacts a elle ; un appel est une communication pair-a-pair comme une autre.
-    relations = null
+    relations = null,
+    // Livraison d'une notification a un utilisateur (sonnerie, refus) : communication_delivery.
+    notify = async () => {}
   } = options;
 
   let worker = null;
@@ -224,8 +226,32 @@ export function createVisioService(options = {}) {
 
   // Droit d'entrer dans une room : proprietaire, invite, room publique, ou room « contacts »
   // du proprietaire — jamais si l'un a bloque l'autre.
+  // Salle planifiee : relue de la table au premier besoin (redemarrage du serveur).
+  async function resolveRoomMeta(roomId) {
+    if (!roomId) return null;
+    if (roomMeta.has(roomId)) return roomMeta.get(roomId);
+    if (!databaseEnabled) return null;
+    const row = await db.query('get', 'SELECT * FROM visio_rooms WHERE room_id = ?', [String(roomId)]).catch(() => null);
+    if (!row) return null;
+    roomMeta.set(roomId, {
+      room_id: row.room_id, owner_user_id: row.owner_id, name: row.title || 'Visio', visibility: 'private',
+      created_at: row.created_at, starts_at: row.starts_at, ends_at: row.ends_at, scheduled: true,
+      invites: new Set(Array.isArray(safeParseJson(row.invitees_json)) ? safeParseJson(row.invitees_json) : [])
+    });
+    return roomMeta.get(roomId);
+  }
+
+  async function saveScheduledRoom(meta) {
+    if (!databaseEnabled) return;
+    await db.query('run', `INSERT INTO visio_rooms (room_id, owner_id, title, starts_at, ends_at, invitees_json)
+      VALUES (?, ?, ?, ?, ?, ?)
+      ON CONFLICT(room_id) DO UPDATE SET title = excluded.title, starts_at = excluded.starts_at,
+        ends_at = excluded.ends_at, invitees_json = excluded.invitees_json`,
+    [meta.room_id, meta.owner_user_id, meta.name, meta.starts_at, meta.ends_at, JSON.stringify([...meta.invites])]);
+  }
+
   async function canJoinRoom(userId, roomId) {
-    const meta = roomMeta.get(roomId);
+    const meta = await resolveRoomMeta(roomId);
     if (!userId || !meta) return false;
     if (meta.owner_user_id === userId) return true;
     if (relations && meta.owner_user_id && await relations.blockedEitherWay(meta.owner_user_id, userId)) return false;
@@ -289,7 +315,7 @@ export function createVisioService(options = {}) {
     });
   }
 
-  const registerRoutes = createVisioRoutes({ rooms, connectionRequests, connections, databaseEnabled, ensureRoom, resolveAuthUserFromRequest, resolveUserInfo, isConnected, addConnection, getRoomMeta, ensureRoomMeta, canJoinRoom, relations });
+  const registerRoutes = createVisioRoutes({ rooms, connectionRequests, connections, databaseEnabled, ensureRoom, resolveAuthUserFromRequest, resolveUserInfo, isConnected, addConnection, getRoomMeta, resolveRoomMeta, saveScheduledRoom, ensureRoomMeta, canJoinRoom, relations, notify });
 
   return {
     registerWebsocket,

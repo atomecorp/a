@@ -21,6 +21,9 @@ export const createVoiceInputMeter = ({ env = globalThis, onFrame = () => { } } 
     let buffer = null;
     let frame = 0;
     let active = false;
+    // A stream handed in by the caller (a remote call participant) is measured, never
+    // stopped: it belongs to the caller. Only the microphone opened here is released.
+    let ownsStream = true;
     // Every stop invalidates the acquisitions that are still pending, so a
     // permission or stream answer that arrives late can never switch the
     // microphone back on after the listening session ended.
@@ -33,7 +36,7 @@ export const createVoiceInputMeter = ({ env = globalThis, onFrame = () => { } } 
         frame = 0;
         source?.disconnect?.();
         analyser?.disconnect?.();
-        stream?.getTracks?.().forEach((track) => track.stop?.());
+        if (ownsStream) stream?.getTracks?.().forEach((track) => track.stop?.());
         if (audioContext?.close) await audioContext.close();
         stream = null;
         audioContext = null;
@@ -54,10 +57,10 @@ export const createVoiceInputMeter = ({ env = globalThis, onFrame = () => { } } 
     };
 
     return Object.freeze({
-        async start() {
+        async start({ stream: providedStream = null } = {}) {
             const mediaDevices = env?.navigator?.mediaDevices;
             const AudioContextCtor = env?.AudioContext || env?.webkitAudioContext;
-            if (!mediaDevices?.getUserMedia) throw new Error('microphone_unavailable');
+            if (!providedStream && !mediaDevices?.getUserMedia) throw new Error('microphone_unavailable');
             if (typeof AudioContextCtor !== 'function') throw new Error('audio_context_unavailable');
             const entryGeneration = generation;
             await stop();
@@ -69,7 +72,8 @@ export const createVoiceInputMeter = ({ env = globalThis, onFrame = () => { } } 
             const startGeneration = generation;
             let acquiredStream = null;
             try {
-                acquiredStream = await mediaDevices.getUserMedia({
+                ownsStream = !providedStream;
+                acquiredStream = providedStream || await mediaDevices.getUserMedia({
                     audio: {
                         echoCancellation: true,
                         noiseSuppression: true,
@@ -78,7 +82,7 @@ export const createVoiceInputMeter = ({ env = globalThis, onFrame = () => { } } 
                     }
                 });
                 if (startGeneration !== generation) {
-                    acquiredStream.getTracks?.().forEach((track) => track.stop?.());
+                    if (ownsStream) acquiredStream.getTracks?.().forEach((track) => track.stop?.());
                     throw new Error('microphone_capture_cancelled');
                 }
                 stream = acquiredStream;
@@ -93,7 +97,7 @@ export const createVoiceInputMeter = ({ env = globalThis, onFrame = () => { } } 
                 render();
                 return true;
             } catch (error) {
-                acquiredStream?.getTracks?.().forEach((track) => track.stop?.());
+                if (ownsStream) acquiredStream?.getTracks?.().forEach((track) => track.stop?.());
                 await stop();
                 throw error;
             }

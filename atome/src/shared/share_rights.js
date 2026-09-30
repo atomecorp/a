@@ -1,5 +1,5 @@
 // Share rights model — shared by the client (Communication panel) and the server
-// (sync sharing). todo/communication_news_broadcast_2026-09-30.md, D8–D10.
+// (sync sharing). done/communication_news_broadcast_2026-09-30.md, D8–D10.
 //
 // A share carries atomic CAPABILITIES; a ROLE is only a readable name for a known set of
 // them. The server stores and enforces capabilities, never roles.

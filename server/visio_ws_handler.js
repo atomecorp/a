@@ -102,14 +102,18 @@ export function createWsHandler({ rooms, listenIp, announcedIp, ensureRoom, noti
         connection._visioRoomId = requestedRoomId;
       }
 
+      peer.username = connection._visioUsername || null;
       const existingProducers = [];
+      const participants = [];
       for (const otherPeer of room.peers.values()) {
         if (otherPeer.id === peer.id) continue;
+        participants.push({ peer_user_id: otherPeer.userId || null, username: otherPeer.username || null });
         for (const producer of otherPeer.producers.values()) {
           existingProducers.push({
             producer_id: producer.id,
             kind: producer.kind,
-            peer_user_id: otherPeer.userId || null
+            peer_user_id: otherPeer.userId || null,
+            paused: producer.paused === true
           });
         }
       }
@@ -119,8 +123,12 @@ export function createWsHandler({ rooms, listenIp, announcedIp, ensureRoom, noti
         requestId,
         room_id: requestedRoomId,
         rtpCapabilities: room.router.rtpCapabilities,
-        existingProducers
+        existingProducers,
+        participants
       });
+      notifyRoom(requestedRoomId, {
+        type: 'participantJoined', peer_user_id: peer.userId || null, username: peer.username || null
+      }, peer.id);
       return;
     }
 
@@ -285,6 +293,29 @@ export function createWsHandler({ rooms, listenIp, announcedIp, ensureRoom, noti
           appData: consumer.appData || {}
         }
       });
+      return;
+    }
+
+    // Micro / camera coupes : le producteur est mis en pause, et les autres le savent.
+    if (data.type === 'pauseProducer' || data.type === 'resumeProducer' || data.type === 'closeProducer') {
+      const producerId = data.producer_id || data.producerId;
+      const producer = producerId ? peer.producers.get(producerId) : null;
+      if (!producer) {
+        safeSend({ type: 'error', error: 'Producer not found', requestId });
+        return;
+      }
+      if (data.type === 'closeProducer') {
+        producer.close();
+        peer.producers.delete(producer.id);
+        notifyRoom(roomId, { type: 'producerClosed', producer_id: producer.id, peer_user_id: peer.userId || null }, peer.id);
+      } else if (data.type === 'pauseProducer') {
+        await producer.pause();
+        notifyRoom(roomId, { type: 'producerPaused', producer_id: producer.id, kind: producer.kind, peer_user_id: peer.userId || null }, peer.id);
+      } else {
+        await producer.resume();
+        notifyRoom(roomId, { type: 'producerResumed', producer_id: producer.id, kind: producer.kind, peer_user_id: peer.userId || null }, peer.id);
+      }
+      safeSend({ type: 'producerUpdated', requestId, producer_id: producer.id, paused: producer.paused === true });
       return;
     }
 

@@ -434,6 +434,12 @@ async function prepareAdoleSchemaColumns(query) {
 }
 
 async function ensureCommunicationTables(query) {
+    await query('run', `CREATE TABLE IF NOT EXISTS communication_preferences (
+        user_id TEXT PRIMARY KEY,
+        accept_unknown INTEGER NOT NULL DEFAULT 1,
+        address_book_json TEXT NOT NULL DEFAULT '[]',
+        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )`);
     await query('run', `CREATE TABLE IF NOT EXISTS communication_contacts (
         owner_id TEXT NOT NULL,
         peer_id TEXT NOT NULL,
@@ -469,6 +475,16 @@ async function ensureCommunicationTables(query) {
         updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     )`);
     await query('run', 'CREATE INDEX IF NOT EXISTS idx_news_publications_author ON news_publications(author_id)');
+    // Visio planifiee (invitation au calendrier) : la salle survit au redemarrage du serveur.
+    await query('run', `CREATE TABLE IF NOT EXISTS visio_rooms (
+        room_id TEXT PRIMARY KEY,
+        owner_id TEXT NOT NULL,
+        title TEXT,
+        starts_at TEXT,
+        ends_at TEXT,
+        invitees_json TEXT NOT NULL DEFAULT '[]',
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )`);
 }
 
 async function runAdoleSchemaMigrations(query) {
