@@ -2,6 +2,8 @@ import mediasoup from 'mediasoup';
 import { v4 as uuidv4 } from 'uuid';
 import db from '../database/adole.js';
 import { findUserByPhone, findUserById } from './auth_users.js';
+import { assertDeviceSessionClaims } from './auth_session_validation.js';
+import { AUTH_LINK_ORIGIN } from '../atome/src/shared/auth_link_contract.js';
 import { wsSendJson } from './wsSend.js';
 
 import { DEFAULT_RTC_MIN_PORT, DEFAULT_RTC_MAX_PORT, DEFAULT_LISTEN_IP, DEFAULT_MEDIA_CODECS, nowIso, normalizePhone, makeRequestId, safeParseJson, normalizeVisibility, ensureSet } from './visio_helpers.js';
@@ -17,7 +19,10 @@ export function createVisioService(options = {}) {
     listenIp = process.env.MEDIASOUP_LISTEN_IP || DEFAULT_LISTEN_IP,
     announcedIp = process.env.MEDIASOUP_ANNOUNCED_IP || null,
     rtcMinPort = Number(process.env.MEDIASOUP_RTC_MIN_PORT) || DEFAULT_RTC_MIN_PORT,
-    rtcMaxPort = Number(process.env.MEDIASOUP_RTC_MAX_PORT) || DEFAULT_RTC_MAX_PORT
+    rtcMaxPort = Number(process.env.MEDIASOUP_RTC_MAX_PORT) || DEFAULT_RTC_MAX_PORT,
+    // Premier contact et blocage (server/communication_relations.js) : la visio n'a plus de
+    // carnet de contacts a elle ; un appel est une communication pair-a-pair comme une autre.
+    relations = null
   } = options;
 
   let worker = null;
@@ -130,46 +135,42 @@ export function createVisioService(options = {}) {
     }
   }
 
-  async function verifyJwtToken(server, token) {
+  // Seule une session d'appareil valide (emise par le flux phone-link, non revoquee) ouvre
+  // la visio — meme contrat que /ws/api et /ws/sync.
+  async function verifyJwtToken(_server, token) {
     if (!token) return null;
-    if (server?.jwt && typeof server.jwt.verify === 'function') {
-      return server.jwt.verify(token);
-    }
     const configuredJwtSecret = String(jwtSecret || '').trim();
     if (configuredJwtSecret.length < 32) {
       throw new Error('JWT_SECRET must be configured with at least 32 characters');
     }
     const jwt = await import('jsonwebtoken');
-    return jwt.default.verify(token, configuredJwtSecret);
+    const claims = jwt.default.verify(token, configuredJwtSecret, {
+      algorithms: ['HS256'], issuer: AUTH_LINK_ORIGIN, audience: 'atome-ws'
+    });
+    await assertDeviceSessionClaims(claims);
+    return claims;
   }
+
+  // Les routes lisent `id` : une session d'appareil porte l'identite dans `sub`.
+  const principalOf = (claims) => (claims?.sub ? { ...claims, id: String(claims.sub), user_id: String(claims.sub) } : null);
 
   async function resolveAuthUserFromRequest(request) {
     const authHeader = request.headers?.authorization;
     if (authHeader && authHeader.startsWith('Bearer ')) {
       try {
-        return await verifyJwtToken(request.server, authHeader.slice(7));
+        return principalOf(await verifyJwtToken(request.server, authHeader.slice(7)));
       } catch (error) {
         console.warn("[cleanup] operation failed", error); }
     }
     if (request.cookies?.access_token) {
       try {
-        return await verifyJwtToken(request.server, request.cookies.access_token);
+        return principalOf(await verifyJwtToken(request.server, request.cookies.access_token));
       } catch (error) {
         console.warn("[cleanup] operation failed", error); }
     }
 
-    const headerUserId = request.headers?.['x-user-id'] || request.headers?.['x-userid'] || null;
-    const headerPhone = request.headers?.['x-phone'] || request.headers?.['x-user-phone'] || null;
-    const headerUsername = request.headers?.['x-username'] || request.headers?.['x-user-name'] || null;
-    if (headerUserId || headerPhone || headerUsername) {
-      return {
-        id: headerUserId || null,
-        user_id: headerUserId || null,
-        phone: headerPhone || null,
-        username: headerUsername || null
-      };
-    }
-
+    // Aucun en-tete d'identite (`x-user-id`, `x-phone`…) n'est cru : n'importe qui peut
+    // les ecrire.
     return null;
   }
 
@@ -213,10 +214,23 @@ export function createVisioService(options = {}) {
     };
   }
 
-  function isConnected(userId, otherUserId) {
+  // `userId` peut joindre `otherUserId` : contact accepte et aucun blocage (D3/D4).
+  async function isConnected(userId, otherUserId) {
     if (!userId || !otherUserId) return false;
+    if (relations) return (await relations.canCommunicate(userId, otherUserId)).ok === true;
     const set = connections.get(userId);
     return set ? set.has(otherUserId) : false;
+  }
+
+  // Droit d'entrer dans une room : proprietaire, invite, room publique, ou room « contacts »
+  // du proprietaire — jamais si l'un a bloque l'autre.
+  async function canJoinRoom(userId, roomId) {
+    const meta = roomMeta.get(roomId);
+    if (!userId || !meta) return false;
+    if (meta.owner_user_id === userId) return true;
+    if (relations && meta.owner_user_id && await relations.blockedEitherWay(meta.owner_user_id, userId)) return false;
+    if (meta.invites?.has(userId) || meta.visibility === 'public') return true;
+    return meta.visibility === 'connections' && await isConnected(meta.owner_user_id, userId);
   }
 
   function addConnection(userId, otherUserId) {
@@ -243,7 +257,7 @@ export function createVisioService(options = {}) {
     return roomMeta.get(roomId);
   }
 
-  const handleWsMessage = createWsHandler({ rooms, listenIp, announcedIp, ensureRoom, notifyRoom, closePeer, verifyJwtToken, resolveUserInfo, ensureRoomMeta });
+  const handleWsMessage = createWsHandler({ rooms, listenIp, announcedIp, ensureRoom, notifyRoom, closePeer, verifyJwtToken, resolveUserInfo, ensureRoomMeta, canJoinRoom });
 
   function registerWebsocket(server, options = {}) {
     const wsPath = options.path || '/ws/visio';
@@ -275,7 +289,7 @@ export function createVisioService(options = {}) {
     });
   }
 
-  const registerRoutes = createVisioRoutes({ rooms, connectionRequests, connections, databaseEnabled, ensureRoom, resolveAuthUserFromRequest, resolveUserInfo, isConnected, addConnection, getRoomMeta, ensureRoomMeta });
+  const registerRoutes = createVisioRoutes({ rooms, connectionRequests, connections, databaseEnabled, ensureRoom, resolveAuthUserFromRequest, resolveUserInfo, isConnected, addConnection, getRoomMeta, ensureRoomMeta, canJoinRoom, relations });
 
   return {
     registerWebsocket,

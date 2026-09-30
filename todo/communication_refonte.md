@@ -191,3 +191,5 @@ Exécute les contrôles ciblés réellement disponibles et les parcours dans les
 ## Livrable final
 
 Livre l’implémentation intégrée, les validations pertinentes et un compte rendu court indiquant les composants réutilisés, les comportements réalisés, les décisions restantes et les environnements effectivement vérifiés. Signale explicitement toute limite réelle. N’effectue aucune opération d’écriture Git.
+
+> Suite (30 sept. 2026) : le rebranchement de l’inbox est le lot L8 de `communication_news_broadcast_2026-09-30.md`.

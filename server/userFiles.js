@@ -262,6 +262,31 @@ export async function getAccessibleFiles(userId) {
 /**
  * Check if user can access file
  */
+// Droits de LECTURE qui ne vivent pas dans la table `permissions` historique
+// (todo/communication_news_broadcast_2026-09-30.md) : partage du service de synchronisation
+// (note vocale / video envoyee a un contact) et medias d'une News (D6). Installes par
+// server.js ; `(userId, atomeId, ownerId) -> boolean`, ou `ownerId` est le proprietaire du
+// FICHIER : un droit n'est reconnu que s'il emane de lui (les noms de fichiers ne sont pas
+// uniques entre comptes). Jamais d'ecriture par ce chemin.
+const fileReadResolvers = new Map();
+export function setFileReadResolver(name, resolver) {
+    if (typeof resolver === 'function') fileReadResolvers.set(String(name), resolver);
+    else fileReadResolvers.delete(String(name));
+}
+const readableThroughResolvers = async (userId, atomeIds, requiredAccess, ownerId) => {
+    if (requiredAccess !== 'read' || !fileReadResolvers.size || !userId || userId === 'anonymous' || !ownerId) return false;
+    for (const atomeId of new Set(atomeIds.filter(Boolean).map(String))) {
+        for (const [name, resolver] of fileReadResolvers) {
+            try {
+                if (await resolver(String(userId), atomeId, String(ownerId))) return true;
+            } catch (error) {
+                console.warn(`[userFiles] ${name} read resolver failed`, error?.message || error);
+            }
+        }
+    }
+    return false;
+};
+
 export async function canAccessFile(fileIdentifier, userId, requiredAccess = 'read') {
     const meta = await getFileMetadata(fileIdentifier);
 
@@ -312,13 +337,16 @@ export async function canAccessFile(fileIdentifier, userId, requiredAccess = 're
                     if (refAccess) return true;
                 }
             }
+            if (await readableThroughResolvers(userId, [meta.atome_id, fileIdentifier, ...(referencing || []).map((ref) => ref.atome_id)], requiredAccess, meta.owner_id)) {
+                return true;
+            }
         } catch (error) {
         console.warn("[cleanup] operation failed", error);
             // Secondary query failed - continue with denial
         }
     }
 
-    return false;
+    return readableThroughResolvers(userId, [meta.atome_id, fileIdentifier], requiredAccess, meta.owner_id);
 }
 
 /**

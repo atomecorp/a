@@ -214,9 +214,17 @@ export async function load_saved_current_project() {
         return { id: cached.id, name: cached.name || null };
     }
 
-    // Fallback: try reading user atome for current_project_id if available
-    
-        const userAtome = await get_atome(currentUserId);
+    // Fallback: try reading user atome for current_project_id if available.
+    // A brand-new web account has no user atome in the local workspace yet: that
+    // means "nothing saved", not a failure. Throwing here failed the workspace boot
+    // eleven times, so the Communication owner (messages, News) never loaded.
+        let userAtome = null;
+        try {
+            userAtome = await get_atome(currentUserId);
+        } catch (error) {
+            if (String(error?.message || error) !== 'atome_not_available_locally') throw error;
+            return null;
+        }
         const raw = userAtome?.atome || userAtome?.data || null;
         if (raw && typeof raw === 'object') {
             const props = raw.properties || raw.particles || raw.data || {};

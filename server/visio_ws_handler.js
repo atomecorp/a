@@ -5,9 +5,8 @@
 
 import { v4 as uuidv4 } from 'uuid';
 import { wsSendJson } from './wsSend.js';
-import { normalizePhone } from './visio_helpers.js';
 
-export function createWsHandler({ rooms, listenIp, announcedIp, ensureRoom, notifyRoom, closePeer, verifyJwtToken, resolveUserInfo, ensureRoomMeta }) {
+export function createWsHandler({ rooms, listenIp, announcedIp, ensureRoom, notifyRoom, closePeer, verifyJwtToken, resolveUserInfo, ensureRoomMeta, canJoinRoom }) {
   async function handleWsMessage(connection, data) {
     const requestId = data?.requestId || data?.request_id || null;
     const safeSend = (payload) => {
@@ -25,25 +24,22 @@ export function createWsHandler({ rooms, listenIp, announcedIp, ensureRoom, noti
     }
 
     if (data.type === 'auth') {
+      // Un jeton de session est obligatoire : un simple numero de telephone permettait de
+      // se connecter sous l'identite de n'importe qui.
       const token = data.token || data.access_token || null;
-      const phone = normalizePhone(data.phone_e164 || data.phone || null);
       let decoded = null;
-      if (token) {
-        try {
-          decoded = await verifyJwtToken(connection?.server, token);
-        } catch (err) {
-          safeSend({
-            type: 'authError',
-            error: 'Invalid token',
-            requestId
-          });
-          return;
-        }
+      try {
+        decoded = token ? await verifyJwtToken(connection?.server, token) : null;
+      } catch (err) {
+        decoded = null;
+      }
+      if (!decoded) {
+        safeSend({ type: 'authError', error: 'Invalid token', requestId });
+        return;
       }
 
-      const userId = decoded?.userId || decoded?.id || decoded?.user_id || decoded?.sub || null;
-      const userPhone = normalizePhone(decoded?.phone || phone);
-      const userInfo = await resolveUserInfo(userId, userPhone);
+      const userId = decoded?.sub || decoded?.userId || null;
+      const userInfo = await resolveUserInfo(userId, null);
 
       if (!userInfo?.id) {
         safeSend({
@@ -75,6 +71,14 @@ export function createWsHandler({ rooms, listenIp, announcedIp, ensureRoom, noti
       const requestedRoomId = data.room_id || data.roomId;
       if (!requestedRoomId) {
         safeSend({ type: 'error', error: 'Missing room_id', requestId });
+        return;
+      }
+      if (!connection._visioUserId) {
+        safeSend({ type: 'error', error: 'Authentication required', requestId });
+        return;
+      }
+      if (!await canJoinRoom(connection._visioUserId, requestedRoomId)) {
+        safeSend({ type: 'error', error: 'Access denied', requestId });
         return;
       }
 

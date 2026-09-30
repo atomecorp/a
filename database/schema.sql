@@ -270,6 +270,47 @@ CREATE TABLE IF NOT EXISTS sync_share_policies (
     CHECK(policy IN ('one-shot', 'always', 'never', 'block'))
 );
 
+-- Communication : premier contact (le blocage vit dans sync_share_policies) et News diffusees.
+CREATE TABLE IF NOT EXISTS communication_contacts (
+    owner_id TEXT NOT NULL,
+    peer_id TEXT NOT NULL,
+    status TEXT NOT NULL,
+    requested_by TEXT,
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY(owner_id, peer_id),
+    CHECK(status IN ('pending', 'accepted', 'refused'))
+);
+
+CREATE TABLE IF NOT EXISTS news_publications (
+    news_id TEXT PRIMARY KEY,
+    author_id TEXT NOT NULL,
+    project_id TEXT,
+    title TEXT,
+    summary TEXT,
+    tags_json TEXT NOT NULL DEFAULT '[]',
+    audience_json TEXT NOT NULL DEFAULT '"all"',
+    payload_json TEXT,
+    media_json TEXT NOT NULL DEFAULT '[]',
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS news_subscriptions (
+    user_id TEXT PRIMARY KEY,
+    tags_json TEXT NOT NULL DEFAULT '[]',
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS news_tags (
+    slug TEXT PRIMARY KEY,
+    label TEXT NOT NULL,
+    origin TEXT NOT NULL DEFAULT 'user',
+    use_count INTEGER NOT NULL DEFAULT 0,
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_news_publications_author ON news_publications(author_id);
+
 CREATE TABLE IF NOT EXISTS directory_public_profiles (
     principal_id TEXT PRIMARY KEY,
     display_name TEXT NOT NULL,

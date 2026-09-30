@@ -110,7 +110,7 @@ export class SyncSharingService {
         ]));
     }
 
-    async request(ownerId, message, { direct = false } = {}) {
+    async request(ownerId, message) {
         const principalId = await this.targetId(message);
         if (!principalId || !await this.isProvisioned(principalId)) throw new Error('target_not_provisioned');
         const ids = Array.isArray(message.atome_ids)
@@ -126,7 +126,7 @@ export class SyncSharingService {
             : requested;
         const shareMode = normalizeMode(message.mode || message.share_mode);
         const shareType = normalizeType(message.share_type || message.shareType || message.property_overrides?.__shareType);
-        const initialStatus = direct || peerPolicy?.policy === 'always'
+        const initialStatus = peerPolicy?.policy === 'always'
             ? (shareType === 'linked' ? 'active' : 'accepted')
             : (peerPolicy?.policy === 'never' ? 'rejected' : 'pending');
         const rows = [];
@@ -297,7 +297,9 @@ export class SyncSharingService {
     async handle(message, principalId) {
         const action = String(message.action || '').toLowerCase();
         if (action === 'request') return this.request(principalId, message);
-        if (action === 'create') return this.request(principalId, message, { direct: true });
+        // `create` activait un partage sans l'accord du destinataire : il suit desormais le
+        // meme chemin que `request` (consentement, sauf policy 'always' deja accordee).
+        if (action === 'create') return this.request(principalId, message);
         if (action === 'respond') return this.respond(principalId, message);
         if (action === 'publish') return this.publish(principalId, message);
         if (action === 'policy') return this.setPolicy(

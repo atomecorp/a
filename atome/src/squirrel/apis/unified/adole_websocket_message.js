@@ -84,6 +84,24 @@ function remoteControlDetail(message) {
 // Replies that settle a pending request. Value = the type-specific fields added
 // to the common `{ ok, success, status, error }` envelope.
 const RESPONSE_PAYLOADS = {
+    // Relations pair-a-pair et News diffusees (todo/communication_news_broadcast_2026-09-30.md).
+    'contact-response': (message) => ({
+        status: message.status,
+        statuses: message.statuses,
+        contacts: message.contacts,
+        pending: message.pending,
+        refused: message.refused,
+        blocked: message.blocked
+    }),
+    'news-response': (message) => ({
+        news_id: message.news_id,
+        tags: message.tags,
+        delivered: message.delivered,
+        filtered: message.filtered,
+        blocked: message.blocked,
+        failed: message.failed,
+        recipients: message.recipients
+    }),
     'surface-grant-response': (message) => ({
         grant: message.grant,
         grants: message.grants,
@@ -208,9 +226,11 @@ const handleConsoleMessage = (message) => {
     if (typeof window !== 'undefined' && command.command === 'eve-comm-share') {
         dispatchWindowEvent('adole-new-message', {
             ...params,
-            fromId: params.fromId || senderInfo.userId,
-            fromPhone: params.fromPhone || senderInfo.phone,
-            fromName: params.fromName || senderInfo.username,
+            // L'identite authentifiee par le serveur fait foi ; celle du payload est ecrite
+            // par l'expediteur et ne sert que de repli.
+            fromId: senderInfo.userId || params.fromId,
+            fromPhone: senderInfo.phone || null,
+            fromName: senderInfo.username || params.fromName,
             date: params.date || senderInfo.timestamp,
             persisted: true
         });

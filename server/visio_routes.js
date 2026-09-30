@@ -8,7 +8,7 @@ import db from '../database/adole.js';
 import { findUserById } from './auth_users.js';
 import { nowIso, normalizePhone, makeRequestId, normalizeVisibility } from './visio_helpers.js';
 
-export function createVisioRoutes({ rooms, connectionRequests, connections, databaseEnabled, ensureRoom, resolveAuthUserFromRequest, resolveUserInfo, isConnected, addConnection, getRoomMeta, ensureRoomMeta }) {
+export function createVisioRoutes({ rooms, connectionRequests, connections, databaseEnabled, ensureRoom, resolveAuthUserFromRequest, resolveUserInfo, isConnected, addConnection, getRoomMeta, ensureRoomMeta, canJoinRoom, relations = null }) {
   function registerRoutes(server) {
     const replyJson = (reply, statusCode, payload) => {
       reply.code(statusCode);
@@ -32,7 +32,12 @@ export function createVisioRoutes({ rooms, connectionRequests, connections, data
         return replyJson(reply, 404, { success: false, error: 'User not found' });
       }
 
-      if (isConnected(fromUserId, toUserInfo.id)) {
+      // Une seule relation de contact dans tout le produit (server/communication_relations.js).
+      if (relations) {
+        const result = await relations.request(fromUserId, toUserInfo.id);
+        return { success: true, status: result.status, request_id: null };
+      }
+      if (await isConnected(fromUserId, toUserInfo.id)) {
         return { success: true, status: 'already_connected', request_id: null };
       }
 
@@ -184,7 +189,9 @@ export function createVisioRoutes({ rooms, connectionRequests, connections, data
         return replyJson(reply, 404, { success: false, error: 'User not found' });
       }
 
-      if (!isConnected(userId, toUserInfo.id) && meta.visibility !== 'public') {
+      // Inviter, c'est appeler : il faut etre contact accepte, et ne pas etre bloque (D3/D4),
+      // meme pour une room publique.
+      if (!await isConnected(userId, toUserInfo.id)) {
         return replyJson(reply, 403, { success: false, error: 'Not connected to user' });
       }
 
@@ -205,12 +212,7 @@ export function createVisioRoutes({ rooms, connectionRequests, connections, data
         return replyJson(reply, 404, { success: false, error: 'Room not found' });
       }
 
-      const isOwner = meta.owner_user_id === userId;
-      const isInvited = meta.invites?.has(userId);
-      const isVisible = meta.visibility === 'public';
-      const isConnection = meta.visibility === 'connections' && isConnected(userId, meta.owner_user_id);
-
-      if (!isOwner && !isInvited && !isVisible && !isConnection) {
+      if (!await canJoinRoom(userId, roomId)) {
         return replyJson(reply, 403, { success: false, error: 'Access denied' });
       }
 

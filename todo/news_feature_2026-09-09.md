@@ -265,3 +265,5 @@ news:delete_symmetric   disparu des deux rangees
 
 Les contributions des autres sont verrouillees chez chaque destinataire, la sienne reste
 editable — verifie a chaque tour.
+
+> Suite (30 sept. 2026) : abonnements par tags, diffusion serveur, premier contact, blocage et API News → `communication_news_broadcast_2026-09-30.md`.

@@ -43,6 +43,43 @@ const locateNodeBox = (node, nodeId, parentBox = null, forcedBox = null) => {
     return null;
 };
 
+test('retained panel rows keep fully clipped composite children mounted but invisible', () => {
+    const records = projectBevyUiTreeRecords({
+        tree: {
+            root: {
+                id: 'root', kind: 'root', style: { size: [240, 160] }, children: [{
+                    id: 'body', kind: 'scroll_area',
+                    style: { position: [0, 0], size: [200, 50], overflow: 'scroll_y' },
+                    children: [{
+                        id: 'phone_row', kind: 'panel',
+                        style: { position: [0, 80], size: [180, 60], background: [0, 0, 0, 0] },
+                        children: [{
+                            id: 'phone_avatar', kind: 'panel',
+                            style: {
+                                position: [0, 0], size: [48, 48], background: [0.4, 0.4, 0.4, 1],
+                                overflow: 'hidden'
+                            },
+                            children: [{
+                                id: 'phone_avatar_image', kind: 'image',
+                                style: { position: [6, 6], size: [36, 36] },
+                                image: { source: '/contact.svg' }
+                            }]
+                        }]
+                    }]
+                }]
+            }
+        },
+        treeId: 'eve_bevy_panel_contact',
+        workspaceLayer: 'panel'
+    });
+    const avatar = records.find((record) => record.id.endsWith('_phone_avatar'));
+    const image = records.find((record) => record.id.endsWith('_phone_avatar_image_image'));
+    assert.ok(avatar, 'the offscreen avatar remains mounted for stable scroll reconciliation');
+    assert.ok(image, 'the nested avatar image remains mounted too');
+    assert.equal(avatar.properties.opacity, 0);
+    assert.equal(image.properties.opacity, 0, 'a null nested intersection must never mean unclipped');
+});
+
 test('BevyUI keeps the presented tree on failure and reports it without an implicit retry', async () => {
     const surface = createSurface();
     let rect = { width: 240, height: 240 };

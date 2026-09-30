@@ -55,6 +55,12 @@ void auth.tryAutoLogin().catch(error => {
 });
 
 const isAnonymousMode = () => getSessionState().mode === 'anonymous';
+// Trame authentifiee vers Fastify ; `errorCode` nomme l'echec d'authentification.
+const fastifyCall = async (message, errorCode) => {
+  const prepared = await auth.ensureFastifyToken();
+  if (!prepared?.ok) throw new Error(prepared?.error || prepared?.reason || errorCode);
+  return FastifyAdapter.ws.send(message);
+};
 const getAnonymousIdentity = () => {
   const state = getSessionState();
   if (state.mode !== 'anonymous') return { phone: null, username: null };
@@ -186,6 +192,23 @@ export const AdoleAPI = {
       if (!id) throw new Error('communication_notification_id_required');
       return FastifyAdapter.ws.send({ type: 'notification-stack', action: 'remove', notificationId: id });
     }
+  },
+  // Relations pair-a-pair (premier contact, blocage) : le serveur fait foi.
+  contacts: {
+    request: (userId, { note = '' } = {}) => fastifyCall({ type: 'contact', action: 'request', userId, note }, 'contacts_auth_unavailable'),
+    respond: (userId, decision) => fastifyCall({ type: 'contact', action: 'respond', userId, decision }, 'contacts_auth_unavailable'),
+    block: (userId) => fastifyCall({ type: 'contact', action: 'block', userId }, 'contacts_auth_unavailable'),
+    unblock: (userId) => fastifyCall({ type: 'contact', action: 'unblock', userId }, 'contacts_auth_unavailable'),
+    list: () => fastifyCall({ type: 'contact', action: 'list' }, 'contacts_auth_unavailable')
+  },
+  // News diffusees par le serveur : publication unique, abonnements par tags, registre de tags.
+  news: {
+    publish: ({ publication, tags = [], audience = 'all' } = {}) => fastifyCall(
+      { type: 'news', action: 'publish', publication, tags, audience }, 'news_auth_unavailable'
+    ),
+    getSubscriptions: () => fastifyCall({ type: 'news', action: 'subscriptions-get' }, 'news_auth_unavailable'),
+    setSubscriptions: (tags = []) => fastifyCall({ type: 'news', action: 'subscriptions-set', tags }, 'news_auth_unavailable'),
+    searchTags: (query = '', { limit = 20 } = {}) => fastifyCall({ type: 'news', action: 'tags-search', query, limit }, 'news_auth_unavailable')
   },
   machine: {
     getCurrent: auth.getCurrentMachine,

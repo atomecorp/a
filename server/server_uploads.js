@@ -222,6 +222,9 @@ export async function resolveDownloadTarget(fileParam, userId) {
         const particles = await db.query('all', `
           SELECT particle_key, particle_value FROM particles WHERE atome_id = ?
         `, [row.atome_id]);
+        // « Sans proprietaire » au sens strict : un fichier possede n'est JAMAIS servi a un
+        // visiteur anonyme par son simple nom (il l'etait, quel que soit son proprietaire).
+        if (row.owner_id && String(row.owner_id) !== 'anonymous') continue;
         const meta = {
           atome_id: row.atome_id,
           atome_type: row.atome_type,
@@ -328,6 +331,25 @@ export async function resolveDownloadTarget(fileParam, userId) {
       const filePath = await resolveUserFilePath(projectRoot, meta.owner_id || userId, safeName);
       await fs.access(filePath);
       return { filePath, downloadName, meta };
+    }
+  }
+
+  // Un media PARTAGE (note vocale/video, media d'une News) garde la source de son auteur
+  // (`/api/uploads/<nom>`), qui ne designe rien dans le dossier du destinataire. On cherche
+  // alors, parmi les fichiers de ce nom, celui que ce compte a le DROIT de lire.
+  if (DATABASE_ENABLED && safeParam && userId && userId !== 'anonymous') {
+    const candidates = await db.query('all', `
+      SELECT a.atome_id FROM atomes a
+      JOIN particles p ON a.atome_id = p.atome_id
+      WHERE p.particle_key = 'file_name' AND p.particle_value = ?
+        AND a.owner_id != ? AND a.deleted_at IS NULL
+      ORDER BY COALESCE(a.updated_at, a.created_at) DESC
+      LIMIT 12
+    `, [JSON.stringify(safeParam), String(userId)]).catch(() => []);
+    for (const candidate of (candidates || [])) {
+      if (!await canAccessFile(candidate.atome_id, userId)) continue;
+      const shared = await resolveDownloadTarget(candidate.atome_id, userId);
+      if (shared?.filePath) return shared;
     }
   }
 

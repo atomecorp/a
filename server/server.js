@@ -72,7 +72,7 @@ import {
   getABoxWatcherHandle,
   getABoxEventBus
 } from './aBoxServer.js';
-import { findUserById, findUserByPhone } from './auth_users.js';
+import { findUserById, findUserByPhone, listAllUsers } from './auth_users.js';
 import { normalizePhone } from './auth_crypto.js';
 import { ensureOpaquePrincipalIdentity } from './auth_identity.js';
 import { createWsPhoneLinkHandler } from './wsPhoneLinkAuth.js';
@@ -104,7 +104,8 @@ import {
   getAccessibleFiles,
   canAccessFile,
   setFilePublic,
-  getFileStats
+  getFileStats,
+  setFileReadResolver
 } from './userFiles.js';
 import { shareFile, unshareFile } from './user_files_sharing.js';
 import { initUserFiles } from './user_files_message_api.js';
@@ -132,6 +133,9 @@ import { executeShellCommand } from './shell.js';
 import { ensureUserHome } from './userHome.js';
 import { createVisioService } from './visio.js';
 import { pushNotificationToUserStack, updateNotificationInUserStack, removeNotificationFromUserStack } from './notificationStack.js';
+import { createCommunicationRelations } from './communication_relations.js';
+import { createNotificationDelivery, createRateLimiter, guardDirectMessage } from './communication_delivery.js';
+import { createNewsBroadcast } from './news_broadcast.js';
 import {
   ensureUserDownloadsDir,
   resolveUserUploadPath,
@@ -178,6 +182,34 @@ const syncSharingService = createSyncSharingService({
     { scope: 'ws/api', op: payload.type, targetUserId: principalId }
   )
 });
+// Communication pair-a-pair : livraison serveur des notifications, premier contact, blocage.
+const deliverCommNotification = createNotificationDelivery({
+  pushNotificationToUserStack,
+  wsSendJsonToUser,
+  enqueuePendingConsoleMessage,
+  findUserById: (id) => findUserById(db.getDataSourceAdapter(), id)
+});
+const communicationRelations = createCommunicationRelations({
+  notify: (targetId, senderId, notification) => deliverCommNotification(targetId, senderId, notification)
+});
+const directMessageRateAllowed = createRateLimiter();
+// News : diffusion serveur (tous les utilisateurs, y compris prives : D1), tags, abonnements.
+const newsBroadcast = createNewsBroadcast({
+  relations: communicationRelations,
+  deliver: (targetId, senderId, notification) => deliverCommNotification(targetId, senderId, notification),
+  listUserIds: async () => (await listAllUsers(db.getDataSourceAdapter(), true)).map((user) => user.user_id),
+  findUserName: async (id) => (await findUserById(db.getDataSourceAdapter(), id).catch(() => null))?.username || null,
+  getFileMetadata
+});
+const newsPublishRateAllowed = createRateLimiter({ max: 10, windowMs: 60_000 });
+setFileReadResolver('news', (userId, atomeId, ownerId) => newsBroadcast.canReadNewsMedia(userId, atomeId, { authorId: ownerId }));
+// Un partage accepte (lien actif, ou copie acceptee) ouvre la lecture du fichier de l'atome
+// partage : sans cela, une note vocale partagee a un contact etait injouable (403).
+setFileReadResolver('sync_share', async (userId, atomeId, ownerId) => Boolean(await db.query('get',
+  `SELECT share_id FROM sync_share_requests
+   WHERE principal_id = ? AND atome_id = ? AND owner_id = ? AND status IN ('active', 'accepted')
+     AND (expires_at IS NULL OR expires_at > datetime('now')) LIMIT 1`,
+  [String(userId), String(atomeId), String(ownerId)])));
 const directoryPublicService = createDirectoryPublicService({
   syncRuntime: wsSyncRuntime,
   vaultRouter: userVaultRouter
@@ -1005,7 +1037,8 @@ async function startServer() {
     const visioService = createVisioService({
       databaseEnabled: DATABASE_ENABLED,
       jwtSecret: process.env.JWT_SECRET,
-      logger: server.log
+      logger: server.log,
+      relations: communicationRelations
     });
     visioService.registerRoutes(server);
     visioService.registerWebsocket(server, { path: '/ws/visio' });
@@ -2247,7 +2280,7 @@ async function startServer() {
             const requestId = data.requestId || data.request_id;
             const toPhone = data.toPhone;
             const toUserId = data.toUserId || data.to_user_id;
-            const msgText = data.message;
+            let msgText = data.message;
 
             const normalizedToPhone = (typeof toPhone === 'string')
               ? toPhone.trim().replace(/\s+/g, '')
@@ -2432,11 +2465,53 @@ async function startServer() {
                 return;
               }
 
+              // Garde L2/L3 : debit, enveloppe, kind, premier contact, blocage. Le serveur
+              // reecrit l'identite de l'expediteur ; aucun telephone n'est relaye.
+              const rejectDirectMessage = (error) => safeSend({
+                type: 'direct-message-response', requestId, success: false, error,
+                sender_id: senderUserId, sender_name: senderUsername,
+                receiver_id: targetUserId, receiver_name: null, recipientConnections: 0, queueSize: 0
+              });
+              if (!directMessageRateAllowed(String(senderUserId))) {
+                rejectDirectMessage('direct_message_rate_limited');
+                return;
+              }
+              const guarded = guardDirectMessage(String(msgText), { userId: senderUserId, username: senderUsername });
+              if (!guarded.ok) {
+                rejectDirectMessage(guarded.error);
+                return;
+              }
+              const relation = await communicationRelations.canCommunicate(senderUserId, targetUserId);
+              if (!relation.ok && relation.silent) {
+                // Bloque par le destinataire : indiscernable d'un destinataire hors ligne.
+                safeSend({
+                  type: 'direct-message-response', requestId, success: true, delivered: false, queued: true,
+                  receiver_id: targetUserId, receiver_name: null, sender_id: senderUserId,
+                  sender_name: senderUsername, recipientConnections: 0, queueSize: 1
+                });
+                return;
+              }
+              if (!relation.ok) {
+                rejectDirectMessage(relation.error);
+                return;
+              }
+              if (guarded.kind === 'share-request') {
+                const shared = await db.query('get',
+                  `SELECT share_id FROM sync_share_requests WHERE owner_id = ? AND principal_id = ? LIMIT 1`,
+                  [String(senderUserId), String(targetUserId)]);
+                if (!shared) {
+                  rejectDirectMessage('direct_message_share_reference_missing');
+                  return;
+                }
+              }
+              msgText = guarded.text;
+              senderPhone = null;
+
               const payload = {
                 type: 'console-message',
                 message: String(msgText),
-                from: { userId: senderUserId, phone: senderPhone, username: senderUsername },
-                to: { userId: targetUserId, phone: targetUser ? targetUser.phone : (normalizedToPhone ? String(normalizedToPhone) : null) },
+                from: { userId: senderUserId, username: senderUsername },
+                to: { userId: targetUserId },
                 timestamp: new Date().toISOString()
               };
 
@@ -2462,9 +2537,7 @@ async function startServer() {
                   request_atome_id: params.requestAtomeId || null,
                   from_id: senderUserId,
                   from_name: senderUsername,
-                  from_phone: senderPhone,
                   to_user_id: targetUserId,
-                  to_phone: targetUser ? targetUser.phone : (normalizedToPhone ? String(normalizedToPhone) : null),
                   timestamp: nowIso,
                   unread: true,
                   box: 'inbox',
@@ -2543,10 +2616,8 @@ async function startServer() {
                 delivered,
                 queued,
                 receiver_id: targetUserId,
-                receiver_phone: targetUser ? targetUser.phone : (normalizedToPhone ? String(normalizedToPhone) : null),
                 receiver_name: targetUser ? targetUser.username : null,
                 sender_id: senderUserId,
-                sender_phone: senderPhone,
                 sender_name: senderUsername,
                 recipientConnections,
                 queueSize
@@ -3349,6 +3420,45 @@ async function startServer() {
           }
 
           // Handle share requests (permissions) over ws/api
+          if (data.type === 'news') {
+            const requestId = data.requestId || data.request_id;
+            const userId = connection?._wsApiUserId ? String(connection._wsApiUserId) : null;
+            if (!userId || !await isWsApiPrincipalProvisioned(userId)) {
+              safeSend({ type: 'news-response', requestId, success: false, error: 'news_auth_required' });
+              return;
+            }
+            try {
+              if (String(data.action || '').toLowerCase() === 'publish' && !newsPublishRateAllowed(userId)) {
+                throw new Error('news_rate_limited');
+              }
+              const result = await newsBroadcast.handle(data, userId);
+              safeSend({ type: 'news-response', requestId, success: result.ok !== false, ...result });
+            } catch (error) {
+              safeSend({ type: 'news-response', requestId, success: false, error: error.message });
+            }
+            return;
+          }
+
+          if (data.type === 'contact') {
+            const requestId = data.requestId || data.request_id;
+            const userId = connection?._wsApiUserId ? String(connection._wsApiUserId) : null;
+            if (!userId || !await isWsApiPrincipalProvisioned(userId)) {
+              safeSend({ type: 'contact-response', requestId, success: false, error: 'contact_auth_required' });
+              return;
+            }
+            try {
+              const peerId = data.userId || data.toUserId || data.fromUserId || data.peerId;
+              if (peerId && data.action !== 'list' && !await isWsApiPrincipalProvisioned(String(peerId))) {
+                throw new Error('contact_target_invalid');
+              }
+              const result = await communicationRelations.handle(data, userId);
+              safeSend({ type: 'contact-response', requestId, success: result.ok !== false, ...result });
+            } catch (error) {
+              safeSend({ type: 'contact-response', requestId, success: false, error: error.message });
+            }
+            return;
+          }
+
           if (data.type === 'share') {
             const requestId = data.requestId || data.request_id;
             const userId = connection?._wsApiUserId ? String(connection._wsApiUserId) : null;
@@ -3371,6 +3481,21 @@ async function startServer() {
               return;
             }
 
+            // Premier contact et blocage (D3/D4) : une demande de partage est une communication
+            // pair-a-pair. Bloque par le destinataire -> succes apparent, rien n'est cree.
+            const shareAction = String(data.action || '').toLowerCase();
+            if (shareAction === 'request' || shareAction === 'create') {
+              const shareTargetId = await syncSharingService.targetId(data).catch(() => null);
+              const relation = await communicationRelations.canCommunicate(userId, shareTargetId);
+              if (!relation.ok && relation.silent) {
+                safeSend({ type: 'share-response', requestId, success: true, ok: true, requests: [], streams: [] });
+                return;
+              }
+              if (!relation.ok) {
+                safeSend({ type: 'share-response', requestId, success: false, error: relation.error });
+                return;
+              }
+            }
             try {
               const response = await handleShareMessage(data, userId, { syncSharingService });
               safeSend({ type: 'share-response', ...response });
