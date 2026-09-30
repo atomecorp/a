@@ -284,11 +284,11 @@ extension auv3Utils {
 
     func startMicRecordingEngine(url: URL) throws -> (sampleRate: Double, channels: Int) {
         let engine = AVAudioEngine()
-#if os(iOS)
-        let session = AVAudioSession.sharedInstance()
-        try? session.setCategory(.playAndRecord, mode: .default, options: [.mixWithOthers, .defaultToSpeaker, .allowBluetoothHFP])
-        try? session.setActive(true)
-#endif
+        // The host application owns the audio session, its category and its
+        // routing. An AUv3 extension must never reconfigure the shared session
+        // for capture: doing so would change the host's route (and could drop
+        // its musical Bluetooth output to telephony) just because the user
+        // pressed record inside the plug-in.
         let input = engine.inputNode
         let format = input.outputFormat(forBus: 0)
         guard format.sampleRate > 0, format.channelCount > 0 else {

@@ -14,6 +14,7 @@ import { resolveInsertionTarget } from '../../eVe/domains/rendering/project_view
 import { resolveVisualSourcePoint } from '../../eVe/domains/rendering/project_view_visual_geometry.js';
 import { createProjectViewVisualInteractionRuntime } from '../../eVe/domains/rendering/project_view_visual_interaction_runtime.js';
 import { createProjectViewCreateDraftRuntime } from '../../eVe/domains/rendering/project_view_create_draft_runtime.js';
+import { normalizeRenderAtom } from '../../eVe/domains/rendering/render_atom.js';
 import { recordPreviewNode } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_record_preview.js';
 import { createProjectViewVisualPanel } from '../../eVe/domains/rendering/project_view_visual_panel.js';
 import { centeredEditorGeometry } from '../../eVe/intuition/tools/code_editor_geometry.js';
@@ -799,4 +800,32 @@ test('the Generator arms on a run, stays armed, and the next run moves the lit c
         setGeneratorActive(false);
         dom.window.close();
     }
+});
+
+test('the rounding switch hides the radius from the renderer without erasing the value', () => {
+    // L'arrondi est NON destructif : `rounding_enabled: false` retire l'effet au
+    // rendu, jamais la valeur. Le document n'est pas reecrit, donc rallumer
+    // l'interrupteur rend exactement le meme rayon.
+    const record = { id: 'rounded_1', type: 'image', properties: { width: 320, height: 180, corner_radius: 24 } };
+    assert.equal(normalizeRenderAtom(record).style.cornerRadius, 24);
+    assert.equal(normalizeRenderAtom(record).style.cornerRadii, null, 'a scalar radius travels alone');
+    assert.equal(normalizeRenderAtom({ id: 'plain_1', type: 'image', properties: {} }).style.cornerRadius, 0,
+        'an object written before the tool existed is square, never NaN');
+    record.properties.rounding_enabled = false;
+    const off = normalizeRenderAtom(record);
+    assert.equal(off.style.cornerRadius, 0, 'the switch hides the rounding');
+    assert.equal(off.style.cornerRadii, null);
+    delete record.properties.rounding_enabled;
+    assert.equal(normalizeRenderAtom(record).style.cornerRadius, 24,
+        'the very same radius comes back: the record was never rewritten');
+    // Les quatre rayons voyagent ensemble, dans l'ordre DOM TL, TR, BR, BL, avec
+    // un scalaire nul : une surface partiellement arrondie ne se peint jamais en
+    // accordeon.
+    const corners = normalizeRenderAtom({ id: 'cornered_1', type: 'shape',
+        properties: { width: 200, height: 200, corner_radii: [4, 8, 12, 16] } });
+    assert.deepEqual(corners.style.cornerRadii, [4, 8, 12, 16]);
+    assert.equal(corners.style.cornerRadius, 0, 'a partially rounded surface carries a zero scalar');
+    const hidden = normalizeRenderAtom({ id: 'cornered_1', type: 'shape',
+        properties: { width: 200, height: 200, corner_radii: [4, 8, 12, 16], rounding_enabled: false } });
+    assert.equal(hidden.style.cornerRadii, null, 'the switch hides the four radii too');
 });

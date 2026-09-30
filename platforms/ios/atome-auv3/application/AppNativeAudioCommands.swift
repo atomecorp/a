@@ -10,7 +10,7 @@ extension AppNativeAudioController {
             do {
                 switch normalizedCommand {
                 case "audio_init":
-                    try self.configureAudioSessionIfNeeded()
+                    try self.acquirePlaybackAudioSessionConsumer()
                     self.complete(completion, payload: ["success": true])
 
                 case "audio_record_start":
@@ -20,7 +20,7 @@ extension AppNativeAudioController {
                     self.stopAudioRecording(payload: payload, completion: completion)
 
                 case "audio_load_clip":
-                    try self.configureAudioSessionIfNeeded()
+                    try self.acquirePlaybackAudioSessionConsumer()
                     let id = self.resolveString(payload, ["id"])
                     let rawPath = self.resolveString(payload, ["path"])
                     guard !id.isEmpty else {
@@ -91,7 +91,7 @@ extension AppNativeAudioController {
                     ], completion: completion)
 
                 case "audio_play_instance":
-                    try self.configureAudioSessionIfNeeded()
+                    try self.acquirePlaybackAudioSessionConsumer()
                     let assetId = self.resolveString(payload, ["assetId", "asset_id"])
                     let voiceId = self.resolveString(payload, ["voiceId", "voice_id"])
                     guard !assetId.isEmpty, !voiceId.isEmpty else {
@@ -346,6 +346,7 @@ extension AppNativeAudioController {
                     }
 
                 case "audio_shutdown":
+                    self.captureGate.cancel()
                     self.shutdownAudioRecording()
                     Array(self.voices.keys).forEach { voiceId in
                         self.stopVoiceLocked(voiceId, reason: "audio_shutdown")
@@ -353,10 +354,11 @@ extension AppNativeAudioController {
                     self.clips.removeAll()
                     self.engine.stop()
                     self.engine.reset()
+                    self.releaseAllAudioSessionConsumers(transition: "audio_shutdown")
                     self.complete(completion, payload: ["success": true])
 
                 case "audio_load_clip_from_bytes":
-                    try self.configureAudioSessionIfNeeded()
+                    try self.acquirePlaybackAudioSessionConsumer()
                     let id = self.resolveString(payload, ["id"])
                     guard !id.isEmpty else {
                         self.complete(completion, payload: ["success": false], error: "Missing clip id")

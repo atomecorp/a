@@ -13,6 +13,7 @@ pub mod render_ops;
 pub mod resource_ops;
 pub mod selection_overlay;
 pub mod shadow_texture;
+pub mod shape_sdf;
 pub mod shape_shadow_overlay;
 pub mod spawn;
 pub mod texture;
@@ -40,6 +41,12 @@ pub use video_diagnostics::*;
 mod backdrop_blur_tests;
 #[cfg(test)]
 mod procedural_sdf_tests;
+#[cfg(test)]
+mod mask_rounding_live_tests;
+#[cfg(test)]
+mod shadow_style_tests;
+#[cfg(test)]
+mod shape_sdf_tests;
 #[cfg(test)]
 mod shape_shadow_overlay_tests;
 #[cfg(test)]

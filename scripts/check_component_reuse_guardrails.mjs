@@ -47,8 +47,7 @@ const RULES = [
             // `inline_search` holds no editor skeleton and may not be a copy.
             // The two Panel Lab runtimes left with the Panel Lab retirement
             // (2026-08-16) and are struck from this list — done, not deferred.
-            'eVe/intuition/ribbon/bevy_ui_main_menu_inline_search_runtime.js',
-            'eVe/intuition/runtime/bevy_panel/bevy_panel_numeric_field_runtime.js'
+            'eVe/intuition/ribbon/bevy_ui_main_menu_inline_search_runtime.js'
         ]
     }),
     rule({
@@ -89,6 +88,45 @@ const RULES = [
         // A second width resolver is what makes a header and its rows disagree.
         pattern: /const\s+resolveColumnWidths\s*=/,
         allow: ['atome/src/squirrel/components/table_contract.js']
+    }),
+    rule({
+        id: 'panel-color-conversion',
+        owner: 'eVe/intuition/runtime/bevy_panel/bevy_panel_color_picker.js',
+        what: 'panel colour parsing and conversion',
+        pattern: /const\s+(hexToChannels|channelsToHex|colorSwatchGridNode)\s*=/,
+        allow: ['eVe/intuition/runtime/bevy_panel/bevy_panel_color_picker.js']
+    }),
+    rule({
+        id: 'panel-color-control',
+        owner: 'eVe/intuition/runtime/bevy_panel/bevy_panel_color_control.js',
+        what: 'complete panel colour control',
+        pattern: /const\s+createColorControlRuntime\s*=/,
+        allow: ['eVe/intuition/runtime/bevy_panel/bevy_panel_color_control.js']
+    }),
+    rule({
+        id: 'panel-chip-layout',
+        owner: 'eVe/intuition/runtime/bevy_panel/bevy_panel_chips.js',
+        what: 'panel chip wrapping and layout',
+        pattern: /const\s+layoutChipRows\s*=/,
+        allow: ['eVe/intuition/runtime/bevy_panel/bevy_panel_chips.js']
+    }),
+    rule({
+        id: 'panel-notification-table',
+        owner: 'eVe/intuition/runtime/bevy_panel/bevy_panel_notification_table.js',
+        what: 'notification table rows',
+        pattern: /const\s+notificationTableNode\s*=/,
+        allow: ['eVe/intuition/runtime/bevy_panel/bevy_panel_notification_table.js']
+    }),
+    rule({
+        id: 'panel-timeline-adapter',
+        owner: 'eVe/intuition/runtime/bevy_panel/bevy_panel_timeline_controller.js',
+        what: 'panel timeline backend access',
+        pattern: /\bAtome\.timeline\b/,
+        allow: [
+            'eVe/intuition/runtime/bevy_panel/bevy_panel_timeline_controller.js',
+            // Tool execution is not a panel and remains a legitimate adapter.
+            'eVe/intuition/tools/core/tool_runtime_executors.js'
+        ]
     })
 ];
 

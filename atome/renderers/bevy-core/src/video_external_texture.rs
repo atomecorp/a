@@ -1,5 +1,6 @@
 use bevy::{
     asset::RenderAssetUsages,
+    image::Image,
     mesh::{Indices, Mesh, Mesh2d},
     prelude::*,
     render::{
@@ -9,7 +10,8 @@ use bevy::{
 };
 
 use crate::types::{
-    normalize_opacity, normalize_uv_rect, AtomeColorFilters, AtomeRenderNode, AtomeTransition,
+    normalize_opacity, normalize_uv_rect, AtomeColorFilters, AtomeMaskStyle, AtomeRenderNode,
+    AtomeTransition,
 };
 
 #[derive(Clone, Debug, Component, ExtractComponent)]
@@ -20,6 +22,11 @@ pub struct AtomeVideoExternalTexture {
     pub uv_rect: [f32; 4],
     pub filters: AtomeColorFilters,
     pub transition: AtomeTransition,
+    /// La texture d'alpha du masque, cuite sur le CPU comme celle d'un sprite.
+    /// Une texture EXTERNE (le flux de la balise `<video>`) ne peut pas etre
+    /// recopiee : c'est donc le fragment shader qui echantillonne cette
+    /// texture-la et compose l'alpha sur le GPU. `None` = pas de masque.
+    pub mask_texture: Option<Handle<Image>>,
 }
 
 pub struct AtomeVideoExternalTexturePlugin;
@@ -57,7 +64,52 @@ pub fn video_external_texture_component_from_node(
             .transition
             .unwrap_or_else(AtomeTransition::none)
             .normalized(),
+        mask_texture: None,
     })
+}
+
+/// La silhouette resolue d'un noeud video, cuite en texture d'alpha. Le masque
+/// vient de la projection (elle seule connait l'atome source) : sans silhouette
+/// utilisable, aucune texture n'est creee et la video reste entiere.
+fn video_mask_texture_handle(world: &mut World, node: &AtomeRenderNode) -> Option<Handle<Image>> {
+    let mask = node.mask.clone().and_then(AtomeMaskStyle::normalized)?;
+    video_mask_handle_for_style(world, &mask, node.logical_size, &node.id)
+}
+
+fn video_mask_handle_for_style(
+    world: &mut World,
+    mask: &AtomeMaskStyle,
+    logical_size: [f32; 2],
+    id: &str,
+) -> Option<Handle<Image>> {
+    let texture = crate::shape_sdf::mask_texture_for_target(mask, logical_size);
+    let mut images = world.get_resource_mut::<Assets<Image>>()?;
+    crate::texture::image_handle_from_texture(&mut images, &Some(texture), &format!("{id}:mask")).ok()
+}
+
+/// Replaces only the alpha resource of a live external video. The entity, mesh,
+/// HTMLVideoElement association and playback cursor remain untouched.
+pub fn apply_video_mask_style(
+    world: &mut World,
+    entity: Entity,
+    mask: Option<AtomeMaskStyle>,
+) -> Result<(), String> {
+    let size = world
+        .get::<crate::types::AtomeLogicalSize>(entity)
+        .copied()
+        .ok_or_else(|| "bevy_video_mask_size_missing".to_string())?;
+    let id = world
+        .get::<crate::types::AtomeEntityId>(entity)
+        .map(|value| value.0.clone())
+        .ok_or_else(|| "bevy_video_mask_id_missing".to_string())?;
+    let handle = mask
+        .as_ref()
+        .and_then(|value| video_mask_handle_for_style(world, value, [size.width, size.height], &id));
+    let mut video = world
+        .get_mut::<AtomeVideoExternalTexture>(entity)
+        .ok_or_else(|| format!("bevy_video_external_texture_missing:{id}"))?;
+    video.mask_texture = handle;
+    Ok(())
 }
 
 fn video_quad_uvs(uv_rect: [f32; 4]) -> Vec<[f32; 2]> {
@@ -74,9 +126,19 @@ pub fn insert_video_external_texture_component_for_node(
     entity: Entity,
     node: &AtomeRenderNode,
 ) {
-    if let Some(component) = video_external_texture_component_from_node(node) {
-        world.entity_mut(entity).insert(component);
-    }
+    let Some(mut component) = video_external_texture_component_from_node(node) else {
+        return;
+    };
+    // Une mise a jour de RESSOURCE (la source qui arrive, un uv_rect qui bouge)
+    // reconstruit ce composant sans rejouer la projection : la silhouette deja
+    // posee est conservee, sinon le masque disparaissait a la premiere mise a
+    // jour de la video. Un masque retire, lui, passe par un respawn complet.
+    component.mask_texture = video_mask_texture_handle(world, node).or_else(|| {
+        world
+            .get::<AtomeVideoExternalTexture>(entity)
+            .and_then(|video| video.mask_texture.clone())
+    });
+    world.entity_mut(entity).insert(component);
 }
 
 pub(crate) fn video_quad_mesh_from_size(logical_size: [f32; 2], uv_rect: [f32; 4]) -> Mesh {

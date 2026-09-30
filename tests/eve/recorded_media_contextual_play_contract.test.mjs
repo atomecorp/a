@@ -4,6 +4,7 @@ import { test } from 'vitest';
 import { resolveContextMenu, resolveContextMenuContext } from '../../eVe/intuition/menu/context_menu_resolver.js';
 import { resolveMysticSelectionMode } from '../../eVe/intuition/mystic/context_selection.js';
 import { createAtomeContextualRailModelRuntime } from '../../eVe/intuition/runtime/eve_intuition/atome_contextual_rail_model_runtime.js';
+import { expandMaskedMediaTransportIds } from '../../eVe/domains/media/masked_media_transport_targets.js';
 
 // A RECORDED media keeps its provenance in the persisted type
 // (`video_recording`, `audio_recording`). Playback only depends on the family
@@ -65,8 +66,8 @@ test('a recorded audio keeps Play like every other audio kind', () => {
     assert.ok(menuKeys(selectionMode.kind).includes('play'));
 });
 
-test('photo and image gain no playback capability', () => {
-    for (const kind of ['image', 'photo']) assert.ok(!menuKeys(kind).includes('play'), `${kind} has no transport`);
+test('photo and image keep the fixed Mystic Play tile even without playback capability', () => {
+    for (const kind of ['image', 'photo']) assert.ok(menuKeys(kind).includes('play'), `${kind} keeps the fixed tile`);
 });
 
 test('the contextual rail keeps Play for a recorded video and drops record_action like an imported video', () => {
@@ -89,4 +90,33 @@ test('the contextual rail keeps Play for a recorded audio', () => {
         assert.ok(railKeysFor(rail, kind).includes('play'), `${kind} keeps its Play tool`);
         assert.deepEqual(railKeysFor(rail, kind), sound, `${kind} resolves the audio rail`);
     }
+});
+
+const transportRecord = (id, type, parentId = '', properties = {}) => ({
+    id, type, parent_id:parentId, properties:{ kind:type, ...properties }
+});
+
+const transportScenes = (records) => new Map([['project', {
+    records:new Map(records.map((entry) => [entry.id,entry]))
+}]]);
+
+test('Play on a mask wrapper targets its video and never the parametric source', () => {
+    const scenes = transportScenes([
+        transportRecord('mask','group','project',{ mask:{ sourceId:'star', mode:'alpha' } }),
+        transportRecord('video','video','mask',{ media_url:'/clip.mp4' }),
+        transportRecord('star','shape','mask',{ shape_variant:'star' })
+    ]);
+    assert.deepEqual(expandMaskedMediaTransportIds(['mask'],{ scenes }),['video']);
+});
+
+test('Play on a masked molecule recursively targets all content descendants', () => {
+    const scenes = transportScenes([
+        transportRecord('mask','group','project',{ mask:{ sourceId:'star', mode:'alpha' } }),
+        transportRecord('target_group','group','mask'),
+        transportRecord('video','video','target_group',{ media_url:'/clip.mp4' }),
+        transportRecord('wave','audio_waveform','target_group',{ source:'/sound.wav' }),
+        transportRecord('star','shape','mask',{ shape_variant:'star' })
+    ]);
+    assert.deepEqual(expandMaskedMediaTransportIds(['mask'],{ scenes }),['target_group','video','wave']);
+    assert.deepEqual(expandMaskedMediaTransportIds(['target_group'],{ scenes }),['target_group']);
 });

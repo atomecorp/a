@@ -97,7 +97,19 @@ export const CORE_ATOME_TYPE_DEFINITIONS = Object.freeze([
             ...orderSchema,
             ...frameSchema,
             label: { type: 'string' },
-            children: { type: 'array' }
+            children: { type: 'array' },
+            // A mask is a structural property of its dedicated Molecule owner.
+            // Keeping it in the canonical schema is essential: core Atome types
+            // reject unknown properties, so an undeclared mask could disappear
+            // between the atomic combine event and the reloaded scene.
+            mask: {
+                type: 'object',
+                properties: {
+                    sourceId: { type: 'string' },
+                    mode: { type: 'string', enum: ['alpha'] }
+                },
+                required: ['sourceId', 'mode']
+            }
         }
     }),
     defineType({

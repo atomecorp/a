@@ -989,6 +989,10 @@ test('Bevy external-video shader linearizes the sampled frame before the sRGB ta
     // `frame.rgb` passthrough that would double-encode to the sRGB target.
     assert.match(shader, /return\s+vec4<f32>\(\s*srgb_to_linear\(filtered\)\s*,\s*opacity\s*\)/);
     assert.doesNotMatch(shader, /return\s+vec4<f32>\(\s*frame\.rgb\s*,\s*opacity\s*\)/);
+    assert.match(shader, /textureSample\(\s*mask_texture\s*,\s*mask_sampler\s*,\s*in\.uv\s*\)/,
+        'WGSL samples a regular texture through the textureSample builtin');
+    assert.doesNotMatch(shader, /mask_texture\s*\.\s*sample\s*\(/,
+        'method-call texture sampling is invalid WGSL and breaks the whole video pipeline');
 });
 
 test('Bevy web runtime republishes the surface when only the physical signature changed', async () => {

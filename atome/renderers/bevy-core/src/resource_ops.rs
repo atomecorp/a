@@ -98,8 +98,16 @@ pub fn apply_resource(world: &mut World, patch: AtomeResourcePatch) -> Result<()
             opacity,
             corner_radius: 0.0,
             corner_radii: None,
+            // Une retouche de style ne rejoue pas la silhouette : elle est relue
+            // du composant pose au spawn par l'ombre, jamais du noeud.
+            shape_variant: None,
+            star_branches: None,
+            star_inner_radius: None,
+            polygon_sides: None,
             shadow: None,
             backdrop: None,
+            mask: None,
+            mask_source: false,
             presentation: false,
             menu_plane: 0,
             color: None,

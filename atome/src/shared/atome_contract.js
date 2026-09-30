@@ -91,6 +91,30 @@ const validateSchemaValue = (key, value, rule = {}) => {
             actual
         });
     }
+    if (Array.isArray(rule.enum) && !rule.enum.includes(value)) {
+        throw new AtomeContractError(`Invalid Atome property enum for ${key}`, {
+            key,
+            allowed: rule.enum.slice(),
+            actual: value
+        });
+    }
+    if (type === 'object' && hasObjectShape(rule.properties)) {
+        const required = Array.isArray(rule.required) ? rule.required : [];
+        for (const requiredKey of required) {
+            if (!Object.prototype.hasOwnProperty.call(value, requiredKey)
+                || value[requiredKey] == null
+                || value[requiredKey] === '') {
+                throw new AtomeContractError(`Required Atome property missing: ${key}.${requiredKey}`, {
+                    key: `${key}.${requiredKey}`
+                });
+            }
+        }
+        for (const [childKey, childValue] of Object.entries(value)) {
+            const childRule = rule.properties[childKey];
+            if (!childRule) continue;
+            validateSchemaValue(`${key}.${childKey}`, childValue, childRule);
+        }
+    }
 };
 
 const sanitizeAtomeProperties = (properties = {}, options = {}) => {

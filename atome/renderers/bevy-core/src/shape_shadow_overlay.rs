@@ -8,12 +8,17 @@ use bevy::{
 
 use crate::{
     components::{
-        AtomeClipRect, AtomeCornerRadius, AtomeShapeShadow, AtomeShapeShadowCacheKey,
-        AtomeShapeShadowOverlay, AtomeShapeShadowTextureCache, AtomeVisualOpacity,
+        AtomeClipRect, AtomeCornerRadius, AtomeResolvedMask, AtomeShapeProfile, AtomeShapeShadow,
+        AtomeShapeShadowCacheKey, AtomeShapeShadowOverlay, AtomeShapeShadowTextureCache,
+        AtomeVisualOpacity,
     },
     render_math::{atome_rect_transform, depth_for_layer},
-    shadow_texture::{build_gaussian_outer_shadow_texture_rgba, channel_to_u8, shadow_padding},
-    texture::AtomeCornerRadii,
+    shadow_texture::{
+        build_block_shadow_texture_rgba_for_silhouette,
+        build_gaussian_shadow_texture_rgba_for_silhouette, build_shadow_texture_rgba_for_alpha,
+        channel_to_u8, shadow_padding,
+    },
+    shape_sdf::AtomeShapeSilhouette,
     types::{
         normalize_opacity, AtomeBevyRendererConfig, AtomeLayer, AtomeLogicalPosition,
         AtomeLogicalSize, AtomeShadowStyle,
@@ -100,14 +105,18 @@ fn cache_signed_scalar(value: f32) -> i32 {
 
 fn shape_shadow_cache_key(
     shadow: AtomeShadowStyle,
-    shadow_width: f32,
-    shadow_height: f32,
-    corner_radii: AtomeCornerRadii,
+    silhouette: &AtomeShapeSilhouette,
 ) -> AtomeShapeShadowCacheKey {
     AtomeShapeShadowCacheKey {
-        width: cache_dimension(shadow_width),
-        height: cache_dimension(shadow_height),
-        corner_radii: corner_radii.map(cache_scalar),
+        kind: u8::from(shadow.kind == crate::types::AtomeShadowKind::Block),
+        invert: shadow.invert,
+        width: cache_dimension(silhouette.width),
+        height: cache_dimension(silhouette.height),
+        corner_radii: silhouette.corner_radii.map(cache_scalar),
+        variant: silhouette.geometry.variant.cache_code(),
+        star_branches: silhouette.geometry.star_branches,
+        star_inner_radius: (silhouette.geometry.star_inner_radius * 100.0).round() as u32,
+        polygon_sides: silhouette.geometry.polygon_sides,
         blur: cache_scalar(shadow.blur),
         spread: cache_scalar(shadow.spread),
         offset_x: cache_signed_scalar(shadow.offset_x),
@@ -124,16 +133,9 @@ fn shape_shadow_cache_key(
 fn cached_shape_shadow_handle(
     world: &mut World,
     shadow: AtomeShadowStyle,
-    shadow_width: f32,
-    shadow_height: f32,
-    corner_radii: AtomeCornerRadii,
+    silhouette: &AtomeShapeSilhouette,
 ) -> Result<Option<(Handle<Image>, u32, u32)>, String> {
-    let key = shape_shadow_cache_key(
-        shadow,
-        shadow_width,
-        shadow_height,
-        corner_radii,
-    );
+    let key = shape_shadow_cache_key(shadow, silhouette);
     if let Some(handle) = world
         .get_resource::<AtomeShapeShadowTextureCache>()
         .and_then(|cache| cache.handles.get(&key))
@@ -156,13 +158,25 @@ fn cached_shape_shadow_handle(
             .total_bytes
             .saturating_sub(cache.byte_sizes.remove(&key).unwrap_or(0));
     }
-    let texture = build_gaussian_outer_shadow_texture_rgba(
-        shadow.color,
-        shadow_width,
-        shadow_height,
-        corner_radii,
-        shadow.blur,
-    );
+    // The two silhouettes are two different images: the drop shadow is the
+    // BLURRED silhouette, the block shadow is the hard silhouette itself (and
+    // its
+    // `invert` band). Neither is ever built from the other.
+    let texture = if shadow.kind == crate::types::AtomeShadowKind::Block {
+        build_block_shadow_texture_rgba_for_silhouette(
+            silhouette,
+            shadow.color,
+            shadow.spread,
+            shadow.invert,
+        )
+    } else {
+        build_gaussian_shadow_texture_rgba_for_silhouette(
+            silhouette,
+            shadow.color,
+            shadow.blur,
+            false,
+        )
+    };
     let Some((image_width, image_height, rgba)) = texture else {
         return Ok(None);
     };
@@ -218,9 +232,9 @@ pub(crate) fn build_shape_shadow_texture_rgba(
     style: crate::types::SelectionVisualStyle,
     width: f32,
     height: f32,
-    corner_radii: AtomeCornerRadii,
+    corner_radii: crate::texture::AtomeCornerRadii,
 ) -> Option<(u32, u32, Vec<u8>)> {
-    build_gaussian_outer_shadow_texture_rgba(
+    crate::shadow_texture::build_gaussian_outer_shadow_texture_rgba(
         style.shadow_color,
         width,
         height,
@@ -234,10 +248,16 @@ pub(crate) fn build_backdrop_shadow_texture_rgba(
     color: [f32; 4],
     width: f32,
     height: f32,
-    corner_radii: AtomeCornerRadii,
+    corner_radii: crate::texture::AtomeCornerRadii,
     blur: f32,
 ) -> Option<(u32, u32, Vec<u8>)> {
-    build_gaussian_outer_shadow_texture_rgba(color, width, height, corner_radii, blur)
+    crate::shadow_texture::build_gaussian_outer_shadow_texture_rgba(
+        color,
+        width,
+        height,
+        corner_radii,
+        blur,
+    )
 }
 
 pub fn remove_shape_shadow_overlay(world: &mut World, entity: Entity) {
@@ -374,14 +394,47 @@ pub fn rebuild_shape_shadow_overlay(world: &mut World, entity: Entity) -> Result
         .map(|value| value.0)
         .unwrap_or([0.0; 4])
         .map(|radius| if radius > 0.0 { radius + shadow.spread } else { 0.0 });
-    let Some((handle, image_width, image_height)) =
-        cached_shape_shadow_handle(
-            world,
+    // La silhouette de l'ombre est celle de LA variante : une etoile projette
+    // ses pointes, un polygone ses sommets, et l'arrondi de sommets du panneau
+    // Arrondi se retrouve dans l'ombre du meme coup.
+    let silhouette = AtomeShapeSilhouette {
+        geometry: world
+            .get::<AtomeShapeProfile>(entity)
+            .map(|value| value.0)
+            .unwrap_or_default(),
+        width: shadow_width,
+        height: shadow_height,
+        corner_radii,
+    };
+    let resolved_mask = world
+        .get::<AtomeResolvedMask>(entity)
+        .and_then(|value| value.0.clone());
+    let masked_shadow = resolved_mask.and_then(|mask| {
+        let texture = crate::shape_sdf::mask_texture_for_target(&mask, [size.width, size.height]);
+        build_shadow_texture_rgba_for_alpha(
+            &texture.rgba,
+            texture.width,
+            texture.height,
             shadow,
-            shadow_width,
-            shadow_height,
-            corner_radii,
-        )?
+        )
+    });
+    let shadow_asset = if let Some((image_width, image_height, rgba)) = masked_shadow {
+        let image = Image::new(
+            Extent3d { width: image_width, height: image_height, depth_or_array_layers: 1 },
+            TextureDimension::D2,
+            rgba,
+            TextureFormat::Rgba8UnormSrgb,
+            RenderAssetUsages::default(),
+        );
+        let handle = world
+            .get_resource_mut::<Assets<Image>>()
+            .ok_or_else(|| "bevy_shape_shadow_image_assets_required".to_string())?
+            .add(image);
+        Some((handle, image_width, image_height))
+    } else {
+        cached_shape_shadow_handle(world, shadow, &silhouette)?
+    };
+    let Some((handle, image_width, image_height)) = shadow_asset
     else {
         return Ok(());
     };

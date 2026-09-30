@@ -1,6 +1,8 @@
 use bevy::{
+    asset::RenderAssetUsages,
     core_pipeline::core_2d::{Transparent2d, CORE_2D_DEPTH_FORMAT},
     ecs::system::lifetimeless::{Read, SRes},
+    image::Image,
     math::FloatOrd,
     mesh::{Mesh2d, VertexBufferLayout},
     prelude::*,
@@ -14,14 +16,16 @@ use bevy::{
         render_resource::{
             BindGroup, BindGroupLayoutDescriptor, BindGroupLayoutEntry, BindingResource,
             BindingType, BlendState, Buffer, BufferBindingType, BufferInitDescriptor, BufferUsages,
-            ColorTargetState, ColorWrites, CompareFunction, DepthBiasState, DepthStencilState,
+            ColorTargetState, ColorWrites, CompareFunction, DepthBiasState, DepthStencilState, Extent3d,
             Face, FragmentState, MultisampleState, PipelineCache, PrimitiveState,
             RenderPipelineDescriptor, Sampler, SamplerBindingType, SamplerDescriptor, ShaderStages,
             SpecializedRenderPipeline, SpecializedRenderPipelines, StencilFaceState, StencilState,
-            VertexFormat, VertexState, VertexStepMode,
+            TextureDimension, TextureFormat, TextureSampleType, TextureViewDimension, VertexFormat,
+            VertexState, VertexStepMode,
         },
         renderer::RenderDevice,
         sync_world::{MainEntity, MainEntityHashMap},
+        texture::GpuImage,
         view::{ExtractedView, RenderVisibleEntities},
         Render, RenderApp, RenderStartup, RenderSystems,
     },
@@ -49,6 +53,11 @@ const IDENTITY_GAMUT_CONVERSION: [f32; 9] = [1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 
 
 #[derive(Resource)]
 struct VideoExternalTextureShader(Handle<Shader>);
+
+/// La texture 1x1 opaque liee a toute video SANS masque : meme liaison, meme
+/// formule d'alpha, aucun cas particulier dans le shader.
+#[derive(Resource)]
+struct VideoExternalMaskFallback(Handle<Image>);
 
 #[derive(Resource)]
 struct VideoExternalTexturePipeline {
@@ -111,10 +120,15 @@ pub fn build_web_external_texture_renderer(app: &mut App) {
         let mut shaders = app.world_mut().resource_mut::<Assets<Shader>>();
         shaders.add(Shader::from_wgsl(VIDEO_EXTERNAL_SHADER, file!()))
     };
+    let mask_fallback = {
+        let mut images = app.world_mut().resource_mut::<Assets<Image>>();
+        images.add(mask_fallback_image())
+    };
 
     if let Some(render_app) = app.get_sub_app_mut(RenderApp) {
         render_app
             .insert_resource(VideoExternalTextureShader(shader))
+            .insert_resource(VideoExternalMaskFallback(mask_fallback))
             .add_render_command::<Transparent2d, DrawVideoExternalTexture2d>()
             .init_resource::<SpecializedRenderPipelines<VideoExternalTexturePipeline>>()
             .init_resource::<PreparedVideoExternalTextureBindGroups>()
@@ -167,6 +181,25 @@ fn init_video_external_texture_pipeline(
                 },
                 count: None,
             },
+            // La silhouette du masque : une texture d'alpha echantillonnee par
+            // le fragment shader (une texture externe ne peut pas etre recopiee
+            // cote CPU comme l'est celle d'un sprite).
+            BindGroupLayoutEntry {
+                binding: 3,
+                visibility: ShaderStages::FRAGMENT,
+                ty: BindingType::Texture {
+                    sample_type: TextureSampleType::Float { filterable: true },
+                    view_dimension: TextureViewDimension::D2,
+                    multisampled: false,
+                },
+                count: None,
+            },
+            BindGroupLayoutEntry {
+                binding: 4,
+                visibility: ShaderStages::FRAGMENT,
+                ty: BindingType::Sampler(SamplerBindingType::Filtering),
+                count: None,
+            },
         ],
     );
     let sampler = render_device.create_sampler(&SamplerDescriptor {
@@ -181,6 +214,22 @@ fn init_video_external_texture_pipeline(
         video_layout,
         sampler,
     });
+}
+
+/// Une image 1x1 blanche : l'alpha du masque y vaut 1, donc la video sans
+/// masque traverse le meme chemin que la video masquee.
+fn mask_fallback_image() -> Image {
+    Image::new_fill(
+        Extent3d {
+            width: 1,
+            height: 1,
+            depth_or_array_layers: 1,
+        },
+        TextureDimension::D2,
+        &[255, 255, 255, 255],
+        TextureFormat::Rgba8UnormSrgb,
+        RenderAssetUsages::default(),
+    )
 }
 
 impl SpecializedRenderPipeline for VideoExternalTexturePipeline {
@@ -249,10 +298,19 @@ fn prepare_video_external_texture_bind_groups(
     render_device: Res<RenderDevice>,
     pipeline: Res<VideoExternalTexturePipeline>,
     pipeline_cache: Res<PipelineCache>,
+    gpu_images: Res<RenderAssets<GpuImage>>,
+    mask_fallback: Res<VideoExternalMaskFallback>,
     mut prepared: ResMut<PreparedVideoExternalTextureBindGroups>,
     videos: Query<(&MainEntity, &AtomeVideoExternalTexture)>,
 ) {
     prepared.0.clear();
+
+    // Sans l'image de repli, aucune video ne peut etre liee : la liaison 3 est
+    // obligatoire dans le layout. Elle existe des la construction du plugin,
+    // donc ce cas ne se produit qu'a la toute premiere image.
+    let Some(fallback_image) = gpu_images.get(&mask_fallback.0) else {
+        return;
+    };
 
     for (main_entity, video) in &videos {
         let Some(source) = hidden_video_source_for_id(&video.id) else {
@@ -284,6 +342,13 @@ fn prepare_video_external_texture_bind_groups(
             contents: &params_uniform,
             usage: BufferUsages::UNIFORM,
         });
+        // La silhouette du masque quand le noeud en porte un, l'image blanche
+        // de repli sinon : la video se lit dans les deux cas.
+        let mask_image = video
+            .mask_texture
+            .as_ref()
+            .and_then(|handle| gpu_images.get(handle))
+            .unwrap_or(fallback_image);
         let bind_group = render_device.create_bind_group(
             Some("atome_video_external_texture_bind_group"),
             &pipeline_cache.get_bind_group_layout(&pipeline.video_layout),
@@ -299,6 +364,14 @@ fn prepare_video_external_texture_bind_groups(
                 wgpu::BindGroupEntry {
                     binding: 2,
                     resource: opacity_buffer.as_entire_binding(),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 3,
+                    resource: BindingResource::TextureView(&mask_image.texture_view),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 4,
+                    resource: BindingResource::Sampler(&pipeline.sampler),
                 },
             ],
         );

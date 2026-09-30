@@ -515,3 +515,119 @@ test('Bevy projection carries an axis-aligned clip rectangle on spawn and transf
     assert.deepEqual(node.clip_rect, [15, 25, 60, 30]);
     assert.deepEqual(patch.clip_rect, [15, 25, 60, 30]);
 });
+
+test('Shape variants, corners, shadow and mask cross the projection without touching the document', () => {
+    const star = mapVirtualSceneNodeToBevyPayload({
+        id: 'shape_star_contract',
+        kind: 'shape',
+        bounds: { x: 0, y: 0, width: 120, height: 120 },
+        layer: 3,
+        material: {
+            fill: '#ffffff',
+            shapeVariant: 'star',
+            starBranches: 7,
+            starInnerRadius: 0.4,
+            polygonSides: 5,
+            cornerRadius: 12
+        }
+    });
+    assert.equal(star.shape_variant, 'star');
+    assert.equal(star.star_branches, 7);
+    assert.equal(star.star_inner_radius, 0.4);
+    assert.equal(star.polygon_sides, 5);
+    assert.equal(star.corner_radius, 12);
+    // The rail bounds are re-applied here: a hand-edited document can never
+    // paint a two-branch star or a folded inner radius.
+    const clamped = mapVirtualSceneNodeToBevyPayload({
+        id: 'shape_clamped_contract',
+        kind: 'shape',
+        bounds: { x: 0, y: 0, width: 40, height: 40 },
+        layer: 3,
+        material: { shape_variant: 'POLYGON', star_branches: 99, star_inner_radius: 4, polygon_sides: 1 }
+    });
+    assert.equal(clamped.shape_variant, 'polygon');
+    assert.equal(clamped.star_branches, 20);
+    assert.equal(clamped.star_inner_radius, 0.95);
+    assert.equal(clamped.polygon_sides, 3);
+    // An unknown variant is not invented: the renderer keeps the rectangle it
+    // painted before the Shape tool existed.
+    const unknown = mapVirtualSceneNodeToBevyPayload({
+        id: 'shape_unknown_contract',
+        kind: 'shape',
+        bounds: { x: 0, y: 0, width: 40, height: 40 },
+        layer: 3,
+        material: { shape_variant: 'hexagon' }
+    });
+    assert.equal(unknown.shape_variant, null);
+
+    // The mask names its source and its mode; a mask without a source is no
+    // mask at all, and a mode the renderer cannot paint is refused.
+    const masked = mapVirtualSceneNodeToBevyPayload({
+        id: 'masked_image_contract',
+        kind: 'image',
+        bounds: { x: 0, y: 0, width: 40, height: 40 },
+        layer: 3,
+        content: { source: '/api/uploads/masked.png' },
+        mask: { sourceId: 'shape_mask_contract', mode: 'alpha' }
+    });
+    assert.deepEqual(masked.mask, { source_id: 'shape_mask_contract', mode: 'alpha' });
+    const sourceless = mapVirtualSceneNodeToBevyPayload({
+        id: 'masked_image_sourceless',
+        kind: 'image',
+        bounds: { x: 0, y: 0, width: 40, height: 40 },
+        layer: 3,
+        content: { source: '/api/uploads/masked.png' },
+        mask: { sourceId: '   ' }
+    });
+    assert.equal(sourceless.mask, null);
+    assert.throws(
+        () => mapVirtualSceneNodeToBevyPayload({
+            id: 'masked_image_luminance',
+            kind: 'image',
+            bounds: { x: 0, y: 0, width: 40, height: 40 },
+            layer: 3,
+            content: { source: '/api/uploads/masked.png' },
+            mask: { sourceId: 'shape_mask_contract', mode: 'luminance' }
+        }),
+        /bevy_projection_mask_mode_invalid:masked_image_luminance:luminance/
+    );
+});
+
+test('A live corner or mask change is a style patch, not a rebuild', () => {
+    const corner = mapVirtualSceneStyleToBevyPatch({
+        id: 'shape_live_corner',
+        patch: { material: { cornerRadius: 18 } }
+    });
+    assert.equal(corner.corner_radius, 18);
+    const corners = mapVirtualSceneStyleToBevyPatch({
+        id: 'shape_live_corners',
+        patch: { material: { corner_radii: [6, 0, 12, 4] } }
+    });
+    assert.deepEqual(corners.corner_radii, [6, 0, 12, 4]);
+    // Four zeroes mean "no per-corner outline": the scalar stays in charge.
+    const cleared = mapVirtualSceneStyleToBevyPatch({
+        id: 'shape_live_corners_cleared',
+        patch: { material: { corner_radii: [0, 0, 0, 0] } }
+    });
+    assert.equal(cleared.corner_radii, null);
+    assert.throws(
+        () => mapVirtualSceneStyleToBevyPatch({
+            id: 'shape_live_corners_invalid',
+            patch: { material: { corner_radii: [1, 2] } }
+        }),
+        /bevy_projection_corner_radii_invalid:shape_live_corners_invalid/
+    );
+    const variant = mapVirtualSceneStyleToBevyPatch({
+        id: 'shape_live_variant',
+        patch: { material: { shapeVariant: 'circle', starBranches: 6 } }
+    });
+    assert.equal(variant.shape_variant, 'circle');
+    assert.equal(variant.star_branches, 6);
+    const mask = mapVirtualSceneStyleToBevyPatch({
+        id: 'masked_live',
+        patch: { mask: { sourceId: 'shape_mask_contract', mode: 'alpha' } }
+    });
+    assert.deepEqual(mask.mask, { source_id: 'shape_mask_contract', mode: 'alpha' });
+    const removed = mapVirtualSceneStyleToBevyPatch({ id: 'masked_live', patch: { mask: null } });
+    assert.equal(removed.mask, null);
+});

@@ -22,6 +22,12 @@ fn shape_node(id: &str) -> AtomeRenderNode {
         opacity: 1.0,
         corner_radius: 0.0,
         corner_radii: None,
+        shape_variant: None,
+        star_branches: None,
+        star_inner_radius: None,
+        polygon_sides: None,
+        mask: None,
+        mask_source: false,
         shadow: None,
         backdrop: None,
         presentation: false,
@@ -102,6 +108,8 @@ fn shape_shadow_uses_bevy_overlay_without_changing_logical_size() {
                 offset_x: 3.0,
                 offset_y: 4.0,
                 spread: 2.0,
+                kind: crate::types::AtomeShadowKind::Drop,
+                invert: false,
             }),
             ..shape_node("shadowed_shape")
         },
@@ -132,6 +140,13 @@ fn shape_shadow_uses_bevy_overlay_without_changing_logical_size() {
     apply_style(
         &mut world,
         AtomeStylePatch {
+            corner_radius: None,
+            corner_radii: None,
+            shape_variant: None,
+            star_branches: None,
+            star_inner_radius: None,
+            polygon_sides: None,
+            mask: None,
             id: "shadowed_shape".to_string(),
             color: None,
             shadow: Some(None),
@@ -166,6 +181,8 @@ fn repeated_shape_shadow_updates_replace_the_overlay_without_accumulating_entiti
         offset_x: 0.0,
         offset_y: 0.0,
         spread: 0.0,
+        kind: crate::types::AtomeShadowKind::Drop,
+        invert: false,
     };
     let entity = apply_spawn(
         &mut world,
@@ -186,6 +203,13 @@ fn repeated_shape_shadow_updates_replace_the_overlay_without_accumulating_entiti
         apply_style(
             &mut world,
             AtomeStylePatch {
+                corner_radius: None,
+                corner_radii: None,
+                shape_variant: None,
+                star_branches: None,
+                star_inner_radius: None,
+                polygon_sides: None,
+                mask: None,
                 id: "single_shadow_owner".to_string(),
                 color: None,
                 shadow: Some(Some(shadow)),
@@ -234,6 +258,8 @@ fn shape_shadow_translation_reuses_existing_texture() {
                 offset_x: 3.0,
                 offset_y: 4.0,
                 spread: 2.0,
+                kind: crate::types::AtomeShadowKind::Drop,
+                invert: false,
             }),
             ..shape_node("translated_shadow")
         },
@@ -296,6 +322,8 @@ fn equivalent_shape_shadows_share_one_texture_asset() {
         offset_x: 0.0,
         offset_y: 0.0,
         spread: 0.0,
+        kind: crate::types::AtomeShadowKind::Drop,
+        invert: false,
     });
 
     let first = apply_spawn(
@@ -339,6 +367,8 @@ fn equivalent_shape_shadows_share_one_texture_asset() {
     );
 }
 
+// Le halo de SELECTION et l'ombre de BACKDROP restent exterieurs : leur centre
+// est couvert par la surface qu'ils accompagnent, qui n'est jamais decalee.
 #[test]
 fn rounded_drop_shadow_keeps_the_owner_interior_transparent() {
     let (width, height, rgba) =
@@ -367,6 +397,8 @@ fn rounded_shape_shadow_overlay_uses_card_radius() {
                 offset_x: 0.0,
                 offset_y: 0.0,
                 spread: 0.0,
+                kind: crate::types::AtomeShadowKind::Drop,
+                invert: false,
             }),
             ..shape_node("rounded_shadowed_shape")
         },
@@ -389,7 +421,8 @@ fn rounded_shape_shadow_overlay_uses_card_radius() {
         .as_ref()
         .expect("rounded shadow should keep rgba data");
     assert_eq!(alpha_at(data, width, 1, 10), 0);
-    assert_eq!(alpha_at(data, width, 72, 37), 0);
+    // Le corps de l'ombre est plein : un offset ne decouvre donc jamais de vide.
+    assert!(alpha_at(data, width, 72, 37) > 100);
     assert!(alpha_at(data, width, 132, 37) > 0);
 }
 
@@ -405,6 +438,8 @@ fn initial_scene_rounded_shape_uses_mask_before_shadow_overlay() {
                 offset_x: 0.0,
                 offset_y: 0.0,
                 spread: 0.0,
+                kind: crate::types::AtomeShadowKind::Drop,
+                invert: false,
             }),
             ..shape_node("initial_rounded_shadowed_shape")
         }],
@@ -450,7 +485,10 @@ fn shape_shadow_keeps_rectangular_corners_without_radius() {
 #[test]
 fn rotated_atom_overlays_follow_its_pose() {
     let mut world = test_world();
-    let shadow = AtomeShadowStyle { color: [0.0, 0.0, 0.0, 0.42], blur: 8.0, offset_x: 0.0, offset_y: 0.0, spread: 2.0 };
+    let shadow = AtomeShadowStyle { color: [0.0, 0.0, 0.0, 0.42], blur: 8.0, offset_x: 0.0, offset_y: 0.0, spread: 2.0,
+                     kind: crate::types::AtomeShadowKind::Drop,
+                     invert: false,
+                 };
     let entity = apply_spawn(
         &mut world,
         AtomeRenderNode {

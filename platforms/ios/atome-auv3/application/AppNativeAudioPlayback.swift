@@ -12,7 +12,7 @@ extension AppNativeAudioController {
     }
 
     func preparePlaybackEngine() throws {
-        try configureAudioSessionIfNeeded()
+        try acquirePlaybackAudioSessionConsumer()
         let routeSignature = currentPlaybackRouteSignature()
         if !playbackRouteSignature.isEmpty && playbackRouteSignature != routeSignature {
             playbackEngineNeedsReset = true

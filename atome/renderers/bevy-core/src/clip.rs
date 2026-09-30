@@ -202,8 +202,9 @@ pub fn apply_entity_clip(world: &mut World, entity: Entity) -> Result<(), String
         (position.y + local.origin[1] * size.height - visible[1]) / visible[3].max(f32::EPSILON),
     ];
 
+    let mask_source = world.get::<AtomeMaskSource>(entity).is_some();
     if let Some(mut visibility) = world.get_mut::<Visibility>(entity) {
-        *visibility = if clipped_out {
+        *visibility = if clipped_out || mask_source {
             Visibility::Hidden
         } else {
             Visibility::Visible
@@ -342,6 +343,7 @@ mod video_clip_tests {
                 uv_rect: uv,
                 filters: AtomeColorFilters::identity(),
                 transition: crate::types::AtomeTransition::none(),
+                mask_texture: None,
             })
             .id();
         (world, entity)

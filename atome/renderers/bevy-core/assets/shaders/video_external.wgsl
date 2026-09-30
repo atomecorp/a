@@ -15,6 +15,12 @@ struct VideoParams {
 
 @group(2) @binding(2) var<uniform> video_params: VideoParams;
 
+// La silhouette du masque, dans l'espace UV du quad. Quand aucun masque n'est
+// pose, une texture blanche 1x1 laisse l'alpha a 1 : un seul chemin, aucun
+// branchement dans le shader.
+@group(2) @binding(3) var mask_texture: texture_2d<f32>;
+@group(2) @binding(4) var mask_sampler: sampler;
+
 struct Vertex {
     @builtin(instance_index) instance_index: u32,
     @location(0) position: vec3<f32>,
@@ -123,6 +129,9 @@ fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
     let transition = apply_transition(in.uv, video_params.transition);
     let frame = textureSampleBaseClampToEdge(video_frame, video_sampler, transition.uv);
     let filtered = apply_color_filters(frame.rgb, video_params.base, video_params.filters);
-    let opacity = clamp(video_params.base.x, 0.0, 1.0) * transition.alpha;
+    // Le masque ne coupe que la COUVERTURE : la video continue de se lire
+    // derriere la silhouette, elle n'est jamais arretee ni recopiee.
+    let mask_alpha = clamp(textureSample(mask_texture, mask_sampler, in.uv).a, 0.0, 1.0);
+    let opacity = clamp(video_params.base.x, 0.0, 1.0) * transition.alpha * mask_alpha;
     return vec4<f32>(srgb_to_linear(filtered), opacity);
 }

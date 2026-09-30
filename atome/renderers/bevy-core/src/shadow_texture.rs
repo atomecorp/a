@@ -1,4 +1,12 @@
-use crate::texture::{rounded_rect_signed_distance, AtomeCornerRadii};
+use crate::shape_sdf::AtomeShapeSilhouette;
+use crate::texture::AtomeCornerRadii;
+use crate::types::{AtomeShadowKind, AtomeShadowStyle};
+
+/// La silhouette d'un rectangle arrondi : ce que TOUTES les ombres etaient avant
+/// l'outil Shape, et ce que restent celles des medias, du texte et du son.
+fn rect_silhouette(width: f32, height: f32, corner_radii: AtomeCornerRadii) -> AtomeShapeSilhouette {
+    AtomeShapeSilhouette::rect(width, height, corner_radii)
+}
 
 const GAUSSIAN_SIGMA_RATIO: f32 = 0.5;
 const GAUSSIAN_TAIL_SIGMAS: f32 = 3.0;
@@ -47,6 +55,73 @@ fn convolve_axis(source: &[f32], width: usize, height: usize, kernel: &[f32], ho
     result
 }
 
+/// Builds a shadow from the alpha that is actually painted after masking.
+/// This is the path used by masked atoms: deriving it from the pre-mask
+/// rectangle would bring back a rectangular shadow around a star/circle mask.
+pub(crate) fn build_shadow_texture_rgba_for_alpha(
+    source_rgba: &[u8],
+    source_width: u32,
+    source_height: u32,
+    shadow: AtomeShadowStyle,
+) -> Option<(u32, u32, Vec<u8>)> {
+    if source_width == 0 || source_height == 0 || shadow.color[3] <= 0.0 {
+        return None;
+    }
+    let blur_padding = if shadow.kind == AtomeShadowKind::Drop { shadow_padding(shadow.blur) } else { 0 };
+    let spread_padding = shadow.spread.max(0.0).ceil() as u32;
+    let padding = blur_padding.max(spread_padding) as usize;
+    let width = source_width as usize + padding * 2;
+    let height = source_height as usize + padding * 2;
+    let mut base = vec![0.0; width * height];
+    for y in 0..source_height as usize {
+        for x in 0..source_width as usize {
+            let source_offset = (y * source_width as usize + x) * 4 + 3;
+            if source_offset < source_rgba.len() {
+                base[(y + padding) * width + x + padding] = source_rgba[source_offset] as f32 / 255.0;
+            }
+        }
+    }
+    let alpha = if shadow.kind == AtomeShadowKind::Drop && shadow.blur > 0.0 {
+        let kernel = gaussian_kernel(shadow.blur);
+        let horizontal = convolve_axis(&base, width, height, &kernel, true);
+        convolve_axis(&horizontal, width, height, &kernel, false)
+    } else if spread_padding > 0 {
+        let radius = spread_padding as isize;
+        let mut grown = vec![0.0_f32; width * height];
+        for y in 0..height {
+            for x in 0..width {
+                let mut value = 0.0_f32;
+                for dy in -radius..=radius {
+                    for dx in -radius..=radius {
+                        let sx = x as isize + dx;
+                        let sy = y as isize + dy;
+                        if sx >= 0 && sy >= 0 && sx < width as isize && sy < height as isize {
+                            value = value.max(base[sy as usize * width + sx as usize]);
+                        }
+                    }
+                }
+                grown[y * width + x] = if shadow.invert {
+                    value * (1.0 - base[y * width + x])
+                } else {
+                    value
+                };
+            }
+        }
+        grown
+    } else {
+        base
+    };
+    let mut rgba = vec![0; width * height * 4];
+    for (index, value) in alpha.into_iter().enumerate() {
+        let offset = index * 4;
+        rgba[offset] = channel_to_u8(shadow.color[0]);
+        rgba[offset + 1] = channel_to_u8(shadow.color[1]);
+        rgba[offset + 2] = channel_to_u8(shadow.color[2]);
+        rgba[offset + 3] = channel_to_u8(shadow.color[3] * value);
+    }
+    Some((width as u32, height as u32, rgba))
+}
+
 fn build_gaussian_shadow_texture_rgba_with_cutout(
     color: [f32; 4],
     width: f32,
@@ -55,9 +130,32 @@ fn build_gaussian_shadow_texture_rgba_with_cutout(
     blur: f32,
     inner_cutout: bool,
 ) -> Option<(u32, u32, Vec<u8>)> {
-    if blur <= 0.0 || color[3] <= 0.0 {
+    build_gaussian_shadow_texture_rgba_for_silhouette(
+        &rect_silhouette(width, height, corner_radii),
+        color,
+        blur,
+        inner_cutout,
+    )
+}
+
+/// La meme ombre portee, mais pour une silhouette quelconque : une etoile
+/// projette une ombre d'etoile, un polygone une ombre de polygone.
+pub(crate) fn build_gaussian_shadow_texture_rgba_for_silhouette(
+    silhouette: &AtomeShapeSilhouette,
+    color: [f32; 4],
+    blur: f32,
+    inner_cutout: bool,
+) -> Option<(u32, u32, Vec<u8>)> {
+    let (width, height) = (silhouette.width, silhouette.height);
+    // La silhouette PLEINE est peinte, interieur compris. L'ancienne version ne
+    // peignait que l'exterieur en supposant que l'objet recouvrait le trou : des
+    // que l'ombre est decalee, le trou voyage avec elle et laisse une bande
+    // claire entre l'objet et son ombre. Un flou nul reste une ombre : c'est un
+    // aplat dur, pas un trou.
+    if color[3] <= 0.0 {
         return None;
     }
+    let blur = blur.max(0.0);
     let padding = shadow_padding(blur) as usize;
     let shape_width = width.max(1.0);
     let shape_height = height.max(1.0);
@@ -68,13 +166,19 @@ fn build_gaussian_shadow_texture_rgba_with_cutout(
         let y = py as f32 + 0.5 - padding as f32;
         for px in 0..image_width {
             let x = px as f32 + 0.5 - padding as f32;
-            let distance = rounded_rect_signed_distance(x, y, shape_width, shape_height, corner_radii);
+            let distance = silhouette.signed_distance(x, y);
             mask[py * image_width + px] = (0.5 - distance).clamp(0.0, 1.0);
         }
     }
-    let kernel = gaussian_kernel(blur);
-    let horizontal = convolve_axis(&mask, image_width, image_height, &kernel, true);
-    let alpha = convolve_axis(&horizontal, image_width, image_height, &kernel, false);
+    let alpha = if blur > 0.0 {
+        let kernel = gaussian_kernel(blur);
+        let horizontal = convolve_axis(&mask, image_width, image_height, &kernel, true);
+        convolve_axis(&horizontal, image_width, image_height, &kernel, false)
+    } else {
+        // Sans flou, la rampe d'un demi-pixel deja presente dans le masque suffit :
+        // elle est l'antialiasing du contour, exactement comme le bloc.
+        mask.clone()
+    };
     let mut rgba = vec![0; image_width * image_height * 4];
     for (index, value) in alpha.iter().enumerate() {
         let offset = index * 4;
@@ -87,6 +191,91 @@ fn build_gaussian_shadow_texture_rgba_with_cutout(
         rgba[offset + 1] = channel_to_u8(color[1]);
         rgba[offset + 2] = channel_to_u8(color[2]);
         rgba[offset + 3] = channel_to_u8(color[3] * visible_alpha);
+    }
+    Some((image_width as u32, image_height as u32, rgba))
+}
+
+/// The HARD silhouette of the block shadow: no gaussian, no sigma, no blur.
+///
+/// `invert` asks for the inner shadow: the band BETWEEN the silhouette grown by
+/// `spread` and the silhouette itself. With no spread there is no band, which is
+/// exactly what an inner shadow with neither blur nor spread is: invisible.
+pub fn build_block_shadow_texture_rgba(
+    color: [f32; 4],
+    width: f32,
+    height: f32,
+    corner_radii: AtomeCornerRadii,
+    spread: f32,
+    invert: bool,
+) -> Option<(u32, u32, Vec<u8>)> {
+    build_block_shadow_texture_rgba_for_silhouette(
+        &rect_silhouette(width, height, corner_radii),
+        color,
+        spread,
+        invert,
+    )
+}
+
+/// La meme silhouette DURE, pour une forme quelconque : l'ombre d'une etoile a
+/// ses pointes, et son `invert` decoupe le meme contour.
+pub(crate) fn build_block_shadow_texture_rgba_for_silhouette(
+    silhouette: &AtomeShapeSilhouette,
+    color: [f32; 4],
+    spread: f32,
+    invert: bool,
+) -> Option<(u32, u32, Vec<u8>)> {
+    let (width, height, corner_radii) =
+        (silhouette.width, silhouette.height, silhouette.corner_radii);
+    if color[3] <= 0.0 {
+        return None;
+    }
+    let padding = spread.max(0.0).ceil() as usize;
+    let shape_width = width.max(1.0);
+    let shape_height = height.max(1.0);
+    let image_width = shape_width.ceil() as usize + padding * 2;
+    let image_height = shape_height.ceil() as usize + padding * 2;
+    let grown_width = shape_width + padding as f32 * 2.0;
+    let grown_height = shape_height + padding as f32 * 2.0;
+    let grown_radii = corner_radii.map(|radius| radius.max(0.0) + padding as f32);
+    // Les deux silhouettes de la bande inversee : celle qui a grandi de `spread`
+    // et l'objet lui-meme, decale du meme rembourrage.
+    let grown = AtomeShapeSilhouette {
+        width: grown_width,
+        height: grown_height,
+        corner_radii: grown_radii,
+        geometry: silhouette.geometry,
+    };
+    let mut rgba = vec![0; image_width * image_height * 4];
+    let mut painted = false;
+    for py in 0..image_height {
+        // The texture IS the grown silhouette: its own frame starts at the
+        // grown rect's origin, and the object sits `padding` inside it.
+        let y = py as f32 + 0.5;
+        for px in 0..image_width {
+            let x = px as f32 + 0.5;
+            let outer = grown.signed_distance(x, y);
+            let visible = if invert {
+                // The interior of the object is its own hole: only the band the
+                // spread grows around it is painted. Both rects share the same
+                // centre, so the inner one is simply recessed by the padding.
+                outer <= 0.0
+                    && silhouette.signed_distance(x - padding as f32, y - padding as f32) >= 0.0
+            } else {
+                outer <= 0.0
+            };
+            if !visible {
+                continue;
+            }
+            painted = true;
+            let offset = (py * image_width + px) * 4;
+            rgba[offset] = channel_to_u8(color[0]);
+            rgba[offset + 1] = channel_to_u8(color[1]);
+            rgba[offset + 2] = channel_to_u8(color[2]);
+            rgba[offset + 3] = channel_to_u8(color[3]);
+        }
+    }
+    if !painted {
+        return None;
     }
     Some((image_width as u32, image_height as u32, rgba))
 }
@@ -108,13 +297,26 @@ pub(crate) fn build_gaussian_shadow_texture_rgba(
     )
 }
 
-pub(crate) fn build_gaussian_outer_shadow_texture_rgba(
+pub fn build_gaussian_outer_shadow_texture_rgba(
     color: [f32; 4],
     width: f32,
     height: f32,
     corner_radii: AtomeCornerRadii,
     blur: f32,
 ) -> Option<(u32, u32, Vec<u8>)> {
+    build_gaussian_outer_shadow_texture_rgba_for_silhouette(
+        &rect_silhouette(width, height, corner_radii),
+        color,
+        blur,
+    )
+}
+
+pub(crate) fn build_gaussian_outer_shadow_texture_rgba_for_silhouette(
+    silhouette: &AtomeShapeSilhouette,
+    color: [f32; 4],
+    blur: f32,
+) -> Option<(u32, u32, Vec<u8>)> {
+    let (width, height) = (silhouette.width, silhouette.height);
     if blur <= 0.0 || color[3] <= 0.0 {
         return None;
     }
@@ -129,7 +331,7 @@ pub(crate) fn build_gaussian_outer_shadow_texture_rgba(
         let y = py as f32 + 0.5 - padding as f32;
         for px in 0..image_width {
             let x = px as f32 + 0.5 - padding as f32;
-            let distance = rounded_rect_signed_distance(x, y, shape_width, shape_height, corner_radii);
+            let distance = silhouette.signed_distance(x, y);
             // The owner paints the interior. Rendering only outside the exact
             // silhouette gives the halo a visible contact edge without a
             // spread-created gap or any change to the owner's fill.

@@ -2,8 +2,8 @@ use serde::Deserialize;
 
 use crate::types::{
     default_transform_origin, default_transform_scale, AtomeBackdropStyle, AtomeColorFilters,
-    AtomeProceduralSdf, AtomeRenderNode, AtomeSceneEffectsPatch, AtomeShadowStyle, AtomeTexture,
-    AtomeTransition,
+    AtomeMaskStyle, AtomeProceduralSdf, AtomeRenderNode, AtomeSceneEffectsPatch, AtomeShadowStyle,
+    AtomeTexture, AtomeTransition,
 };
 
 #[derive(Clone, Debug, Deserialize)]
@@ -62,18 +62,34 @@ impl AtomeSurfaceBackgroundPatch {
     }
 }
 
+
+/// Un double Option doit distinguer trois etats : la cle absente du patch
+/// (`None`), la cle presente a `null` (`Some(None)`, le document retire la
+/// retouche) et la cle presente avec une valeur (`Some(Some(v))`). La
+/// derivation serde, elle, ecrase `null` en `None` et confond donc le retrait
+/// avec l'absence : c'est ce qui faisait qu'une ombre ou un arrondi supprime
+/// dans l'app ne disparaissait jamais a l'ecran. Ce deserialiseur force la
+/// couche exterieure a `Some` des que la cle est presente.
+fn deserialize_clearing<'de, D, T>(deserializer: D) -> Result<Option<Option<T>>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: Deserialize<'de>,
+{
+    Option::<T>::deserialize(deserializer).map(Some)
+}
+
 #[derive(Clone, Debug, Deserialize)]
 pub struct AtomeStylePatch {
     pub id: String,
     pub color: Option<[f32; 4]>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "deserialize_clearing")]
     pub shadow: Option<Option<AtomeShadowStyle>>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "deserialize_clearing")]
     pub backdrop: Option<Option<AtomeBackdropStyle>>,
     pub selected: Option<bool>,
     #[serde(default)]
     pub opacity: Option<f32>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "deserialize_clearing")]
     pub playback_progress: Option<Option<f32>>,
     #[serde(default)]
     pub filters: Option<AtomeColorFilters>,
@@ -81,6 +97,27 @@ pub struct AtomeStylePatch {
     pub transition: Option<AtomeTransition>,
     #[serde(default)]
     pub procedural: Option<AtomeProceduralSdf>,
+    // Les retouches NON destructives d'un objet deja pose : l'arrondi, la
+    // variante de forme et le masque. Elles arrivent par le style parce que
+    // l'objet garde son entite, sa pose et son calque ; sans ces champs le
+    // renderer ignorait le patch et l'ecran gardait la valeur de la creation.
+    #[serde(default)]
+    pub corner_radius: Option<f32>,
+    /// Un double Option : Some(None) veut dire que le document a RETIRE
+    /// l'arrondi par coins (le rayon scalaire reprend alors la main), et None
+    /// que le patch n'en parle pas du tout.
+    #[serde(default, deserialize_with = "deserialize_clearing")]
+    pub corner_radii: Option<Option<[f32; 4]>>,
+    #[serde(default)]
+    pub shape_variant: Option<String>,
+    #[serde(default)]
+    pub star_branches: Option<u32>,
+    #[serde(default)]
+    pub star_inner_radius: Option<f32>,
+    #[serde(default)]
+    pub polygon_sides: Option<u32>,
+    #[serde(default, deserialize_with = "deserialize_clearing")]
+    pub mask: Option<Option<AtomeMaskStyle>>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -113,7 +150,7 @@ pub struct AtomeResourcePatch {
     pub id: String,
     pub source: Option<String>,
     pub texture_size: Option<[u32; 2]>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "deserialize_clearing")]
     pub uv_rect: Option<Option<[f32; 4]>>,
     pub texture: Option<AtomeTexture>,
     pub peaks: Option<Vec<f32>>,

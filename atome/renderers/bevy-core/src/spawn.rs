@@ -11,11 +11,13 @@ use crate::{
     procedural_sdf::insert_procedural_sdf,
     render_math::{atome_rect_transform_with_local, color_from_rgba, depth_for_layer},
     selection_overlay::rebuild_selection_overlay,
+    shape_sdf::{
+        apply_spatial_mask_to_texture, cached_image_handle_from_shape_mask, shape_mask_texture,
+        AtomeShapeSilhouette,
+    },
     shape_shadow_overlay::rebuild_shape_shadow_overlay,
     texture::{
-        cached_image_handle_from_rounded_rect_mask, corner_radii_are_zero,
-        image_handle_from_rounded_rect_mask, image_handle_from_texture, uniform_corner_radii,
-        AtomeCornerRadii,
+        image_handle_from_texture, uniform_corner_radii, AtomeCornerRadii,
     },
     types::*,
     video_external_texture::{
@@ -55,42 +57,28 @@ fn node_base_components(
     height: f32,
     surface_width: f32,
     surface_height: f32,
-) -> (
-    AtomeEntityId,
-    AtomeParentEntityId,
-    AtomeLogicalPosition,
-    AtomeLogicalSize,
-    AtomeLocalTransform,
-    AtomeLayer,
-    AtomeRenderKind,
-    AtomeTextMetadata,
-    AtomeMediaSource,
-    AtomeWaveformPeaks,
-    AtomeWaveformPlaybackProgress,
-    AtomeSelected,
-    AtomeShapeShadow,
-    Visibility,
-    Transform,
-) {
-    (
-        AtomeEntityId(node.id.clone()),
-        AtomeParentEntityId(node.parent_id.clone()),
-        AtomeLogicalPosition {
+) -> AtomeNodeBaseBundle {
+    AtomeNodeBaseBundle {
+        entity_id: AtomeEntityId(node.id.clone()),
+        parent_entity_id: AtomeParentEntityId(node.parent_id.clone()),
+        logical_position: AtomeLogicalPosition {
             x: node.logical_position[0],
             y: node.logical_position[1],
         },
-        AtomeLogicalSize { width, height },
-        AtomeLocalTransform::new(node.scale, node.rotation, node.origin),
-        AtomeLayer(node.layer),
-        AtomeRenderKind(node.kind.clone()),
-        AtomeTextMetadata(node.text.clone()),
-        AtomeMediaSource(node.source.clone()),
-        AtomeWaveformPeaks(node.peaks.clone().unwrap_or_default()),
-        AtomeWaveformPlaybackProgress(node.playback_progress.map(|value| value.clamp(0.0, 1.0))),
-        AtomeSelected(node.selected.unwrap_or(false)),
-        AtomeShapeShadow(node.shadow),
-        Visibility::Visible,
-        atome_rect_transform_with_local(
+        logical_size: AtomeLogicalSize { width, height },
+        local_transform: AtomeLocalTransform::new(node.scale, node.rotation, node.origin),
+        layer: AtomeLayer(node.layer),
+        render_kind: AtomeRenderKind(node.kind.clone()),
+        text_metadata: AtomeTextMetadata(node.text.clone()),
+        media_source: AtomeMediaSource(node.source.clone()),
+        waveform_peaks: AtomeWaveformPeaks(node.peaks.clone().unwrap_or_default()),
+        waveform_progress: AtomeWaveformPlaybackProgress(node.playback_progress.map(|value| value.clamp(0.0, 1.0))),
+        selected: AtomeSelected(node.selected.unwrap_or(false)),
+        shape_shadow: AtomeShapeShadow(node.shadow),
+        resolved_mask: AtomeResolvedMask(node.mask.clone().and_then(AtomeMaskStyle::normalized)),
+        shape_profile: AtomeShapeProfile(node.shape_geometry()),
+        visibility: Visibility::Visible,
+        transform: atome_rect_transform_with_local(
             node.logical_position[0],
             node.logical_position[1],
             width,
@@ -102,7 +90,7 @@ fn node_base_components(
             node.rotation,
             node.origin,
         ),
-    )
+    }
 }
 
 /// A node may carry per-corner radii instead of the uniform scalar. A partially
@@ -113,6 +101,34 @@ pub(crate) fn effective_corner_radii(node: &AtomeRenderNode) -> AtomeCornerRadii
         .unwrap_or_else(|| uniform_corner_radii(node.corner_radius))
 }
 
+/// La silhouette complete d'un noeud : sa variante, ses reglages, sa boite et
+/// son arrondi resolu. Le meme objet sert au masque ET a l'ombre, pour qu'une
+/// etoile ne puisse pas projeter l'ombre d'un carre.
+pub(crate) fn shape_silhouette_for_node(node: &AtomeRenderNode) -> AtomeShapeSilhouette {
+    AtomeShapeSilhouette {
+        geometry: node.shape_geometry(),
+        width: node.logical_size[0].max(1.0),
+        height: node.logical_size[1].max(1.0),
+        corner_radii: effective_corner_radii(node),
+    }
+}
+
+/// Le masque alpha d'un noeud, quand sa projection en a resolu un.
+fn node_mask(node: &AtomeRenderNode) -> Option<AtomeMaskStyle> {
+    node.mask.clone().and_then(AtomeMaskStyle::normalized)
+}
+
+/// Une texture decoupee par la silhouette du masque : l'alpha est compose ICI,
+/// sur le CPU, dans la texture qui part a la carte graphique. Le noeud garde son
+/// materiau, sa pose et ses calques ; seule sa couverture change — et une image
+/// sans masque n'est jamais recopiee.
+fn masked_texture(texture: &AtomeTexture, mask: Option<&AtomeMaskStyle>) -> Option<AtomeTexture> {
+    match mask {
+        Some(mask) => Some(apply_spatial_mask_to_texture(texture, mask)),
+        None => None,
+    }
+}
+
 pub(crate) fn texture_handle_for_node(
     images: &mut Assets<Image>,
     node: &AtomeRenderNode,
@@ -120,22 +136,21 @@ pub(crate) fn texture_handle_for_node(
     if node.kind == "video" {
         return Ok(None);
     }
-    if node.texture.is_some() {
-        return Ok(Some(image_handle_from_texture(
-            images,
-            &node.texture,
-            &node.id,
-        )?));
+    let mask = node_mask(node);
+    if let Some(source) = node.texture.as_ref() {
+        return match masked_texture(source, mask.as_ref()) {
+            Some(masked) => Ok(Some(image_handle_from_texture(images, &Some(masked), &node.id)?)),
+            None => Ok(Some(image_handle_from_texture(images, &node.texture, &node.id)?)),
+        };
     }
-    let radii = effective_corner_radii(node);
-    if node.kind == "shape" && !corner_radii_are_zero(radii) {
-        return Ok(Some(image_handle_from_rounded_rect_mask(
-            images,
-            node.logical_size[0],
-            node.logical_size[1],
-            radii,
-            &node.id,
-        )?));
+    let silhouette = shape_silhouette_for_node(node);
+    // Un masque demande une texture a decouper : meme un rectangle plein en
+    // recoit une, sinon l'alpha du masque n'aurait rien a multiplier et la
+    // forme restait entiere.
+    if node.kind == "shape" && (silhouette.requires_mask() || mask.is_some()) {
+        let texture = shape_mask_texture(&silhouette);
+        let texture = masked_texture(&texture, mask.as_ref()).unwrap_or(texture);
+        return Ok(Some(image_handle_from_texture(images, &Some(texture), &node.id)?));
     }
     Ok(None)
 }
@@ -144,15 +159,15 @@ pub(crate) fn texture_handle_for_node_in_world(
     world: &mut World,
     node: &AtomeRenderNode,
 ) -> Result<Option<Handle<Image>>, String> {
-    let radii = effective_corner_radii(node);
-    if node.kind == "shape" && node.texture.is_none() && !corner_radii_are_zero(radii) {
-        return Ok(Some(cached_image_handle_from_rounded_rect_mask(
-            world,
-            node.logical_size[0],
-            node.logical_size[1],
-            radii,
-            &node.id,
-        )?));
+    let silhouette = shape_silhouette_for_node(node);
+    // Une forme SANS texture ET sans masque se sert du cache : c'est le cas de
+    // tres loin le plus frequent (chaque carre arrondi de l'interface).
+    if node.kind == "shape"
+        && node.texture.is_none()
+        && silhouette.requires_mask()
+        && node_mask(node).is_none()
+    {
+        return Ok(Some(cached_image_handle_from_shape_mask(world, &silhouette, &node.id)?));
     }
     let mut images = world
         .get_resource_mut::<Assets<Image>>()
@@ -185,6 +200,20 @@ pub fn spawn_node_in_world(world: &mut World, node: AtomeRenderNode) -> Result<E
     rebuild_shape_shadow_overlay(world, entity)?;
     rebuild_waveform_playback_overlay(world, entity)?;
     apply_entity_clip(world, entity)?;
+    // Une forme qui SERT de masque garde son atome, sa pose et sa selection :
+    // seule sa peinture disparait, puisque c'est sa silhouette qui travaille.
+    // L'extinction vient EN DERNIER : la decoupe ci-dessus recalcule la
+    // visibilite de tout noeud qu'elle touche, et rallumait la source.
+    if node.mask_source {
+        world
+            .entity_mut(entity)
+            .insert((AtomeMaskSource, Visibility::Hidden));
+        // La peinture disparue, son ombre disparait avec elle : le calque
+        // d'ombre se construit sur la visibilite, qui vient de passer a
+        // Hidden. Le contour de selection, lui, reste — c'est par lui qu'on
+        // continue d'attraper la forme pour la remodeler.
+        rebuild_shape_shadow_overlay(world, entity)?;
+    }
     Ok(entity)
 }
 

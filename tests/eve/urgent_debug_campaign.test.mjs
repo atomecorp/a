@@ -45,20 +45,18 @@ const childPositions = (tree) => Object.fromEntries(
 );
 
 describe('urgent campaign contracts', () => {
-    // 2026-09-29: the Mystic is one constant list whatever the object is; only
-    // the access guards and the playback capability still filter it. `font`
+    // 2026-09-29: the Mystic is one constant list whatever the object is. `font`
     // left the Mystic — it stays reachable from the text rail.
     it('resolves the one constant Mystic list through the shared JSON owner',()=>{
-        const FIXED=['ai','capture','import','communicate','dashboard','new_project','copy','paste','delete','utilities','info','activity'];
+        const FIXED=['ai','capture','import','communicate','dashboard','new_project','copy','paste','delete','play','utilities','info','activity'];
         for(const kind of ['audio','video','image','shape','text']) {
             const keys=resolveContextMenu({context:{kind,selected:true,level:'advanced'}}).map(item=>item.key);
             expect(keys).toEqual(FIXED);
         }
-        // `play` is the one capability guard: it joins the same list, at the same
-        // rank, as soon as something is playable.
+        // Playback capability changes enabled state, never the list or its rank.
         for(const kind of ['audio','video']) {
             const keys=resolveContextMenu({context:{kind,selected:true,level:'advanced',capabilities:['playback']}}).map(item=>item.key);
-            expect(keys).toEqual([...FIXED.slice(0,9),'play',...FIXED.slice(9)]);
+            expect(keys).toEqual(FIXED);
         }
         // The lasso keeps its own creation table: drawing a region creates, it
         // does not select.

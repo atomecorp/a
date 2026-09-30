@@ -2,10 +2,35 @@ import AVFoundation
 import Foundation
 
 extension AppNativeAudioController {
+    /// Consumer identifier for the recording that is about to start.
+    func makeRecordingAudioSessionConsumerId() -> String {
+        audioRecordingConsumerSequence &+= 1
+        return "record:\(audioRecordingConsumerSequence)"
+    }
+
     func startAudioRecording(payload: [String: Any],
                              completion: @escaping ([String: Any], String?) -> Void) {
+        let requestedSessionId = resolveString(payload, ["sessionId", "session_id"])
+        let prefersBluetoothMicrophone = resolveString(payload, ["preferredInput", "preferred_input"])
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased() == "bluetooth"
+        let startToken = captureGate.begin()
         requestMicrophonePermission { granted in
             self.queue.async {
+                guard self.captureGate.accepts(startToken) else {
+                    // A cancellation (shutdown, newer request) landed while the
+                    // permission controller was pending: the microphone must
+                    // not be reactivated by the late answer.
+                    AppNativeAudioDiagnostics.log(
+                        "record_start cancelled_while_pending token=\(startToken)"
+                    )
+                    self.complete(
+                        completion,
+                        payload: ["success": false],
+                        error: "audio_recording_start_cancelled"
+                    )
+                    return
+                }
                 guard granted else {
                     self.complete(
                         completion,
@@ -23,8 +48,21 @@ extension AppNativeAudioController {
                         )
                         return
                     }
-                    try self.configureAudioSessionIfNeeded()
-                    let sessionId = self.resolveString(payload, ["sessionId", "session_id"])
+                    let sessionId = requestedSessionId
+                    let consumerId = self.makeRecordingAudioSessionConsumerId()
+                    // The microphone is acquired only here, and only for the
+                    // time this recording needs it.
+                    try self.acquireAudioSessionConsumer(
+                        consumerId,
+                        kind: .musicCapture,
+                        prefersBluetoothMicrophone: prefersBluetoothMicrophone
+                    )
+                    var recordingStarted = false
+                    defer {
+                        if !recordingStarted {
+                            self.releaseAudioSessionConsumer(consumerId)
+                        }
+                    }
                     let requestedFileName = self.resolveString(payload, ["fileName", "file_name"])
                     let fileName = requestedFileName.isEmpty
                         ? "audio_\(Int(Date().timeIntervalSince1970)).wav"
@@ -84,6 +122,7 @@ extension AppNativeAudioController {
                     self.activeRecordingAbsolutePath = url.path
                     self.activeRecordingSampleRate = format.sampleRate
                     self.activeRecordingChannels = Int(format.channelCount)
+                    self.activeRecordingConsumerId = consumerId
 
                     input.installTap(
                         onBus: 0,
@@ -114,6 +153,7 @@ extension AppNativeAudioController {
                     }
 
                     self.startRecordingScopeMonitor(sessionId: sessionId)
+                    recordingStarted = true
                     self.complete(completion, payload: [
                         "success": true,
                         "session_id": sessionId,
@@ -330,6 +370,7 @@ extension AppNativeAudioController {
     }
 
     func shutdownAudioRecording() {
+        captureGate.cancel()
         guard activeRecordingSessionId != nil else { return }
         recordingEngine.inputNode.removeTap(onBus: 0)
         recordingEngine.stop()
@@ -349,6 +390,10 @@ extension AppNativeAudioController {
     }
 
     func resetActiveRecordingState() {
+        if let consumerId = activeRecordingConsumerId {
+            activeRecordingConsumerId = nil
+            releaseAudioSessionConsumer(consumerId)
+        }
         activeRecordingSessionId = nil
         activeRecordingFileName = nil
         activeRecordingPath = nil

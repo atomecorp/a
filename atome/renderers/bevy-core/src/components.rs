@@ -3,7 +3,7 @@ use std::collections::{HashMap, VecDeque};
 
 use crate::types::{
     default_transform_origin, default_transform_scale, normalize_transform_origin, normalize_transform_rotation,
-    normalize_transform_scale, AtomeRenderScene, AtomeSceneEffect, AtomeShadowStyle, SelectionVisualStyle,
+    normalize_transform_scale, AtomeMaskStyle, AtomeRenderScene, AtomeSceneEffect, AtomeShadowStyle, SelectionVisualStyle,
 };
 
 #[derive(Clone, Debug, Component)]
@@ -99,6 +99,49 @@ pub struct AtomeSelectionOverlay {
 pub struct AtomeShapeShadow(pub Option<AtomeShadowStyle>);
 
 #[derive(Clone, Debug, Component)]
+pub struct AtomeResolvedMask(pub Option<AtomeMaskStyle>);
+
+/// La forme qui SERT de masque ne se peint jamais : c'est sa silhouette qui
+/// travaille. Le role est un COMPOSANT, et non une position dans le spawn,
+/// parce que d'autres chemins recalculent la visibilite d'un noeud deja pose —
+/// la decoupe d'abord, puis les patchs de visibilite. La source se rallumait
+/// alors par-dessus le contenu qu'elle venait de decouper, et le masque
+/// semblait sans effet.
+#[derive(Clone, Copy, Debug, Component)]
+pub struct AtomeMaskSource;
+
+/// La VARIANTE de la forme portee par l'entite : l'ombre en a besoin pour
+/// epouser la silhouette (une etoile projette une ombre d'etoile), et le
+/// composant est pose sur TOUT atome — un media ou un texte vaut le carre par
+/// defaut, donc rien de plus n'est lu pour eux.
+#[derive(Clone, Copy, Debug, Component)]
+pub struct AtomeShapeProfile(pub crate::shape_sdf::AtomeShapeGeometry);
+
+/// Les composants poses sur TOUT atome. Une structure derivee plutot qu'un
+/// tuple : Bevy n'implante `Bundle` que jusqu'a quinze elements, et le profil
+/// de forme est le seizieme. L'ordre des champs est celui du tuple historique.
+#[derive(Bundle)]
+pub struct AtomeNodeBaseBundle {
+    pub entity_id: AtomeEntityId,
+    pub parent_entity_id: AtomeParentEntityId,
+    pub logical_position: AtomeLogicalPosition,
+    pub logical_size: AtomeLogicalSize,
+    pub local_transform: AtomeLocalTransform,
+    pub layer: AtomeLayer,
+    pub render_kind: AtomeRenderKind,
+    pub text_metadata: AtomeTextMetadata,
+    pub media_source: AtomeMediaSource,
+    pub waveform_peaks: AtomeWaveformPeaks,
+    pub waveform_progress: AtomeWaveformPlaybackProgress,
+    pub selected: AtomeSelected,
+    pub shape_shadow: AtomeShapeShadow,
+    pub resolved_mask: AtomeResolvedMask,
+    pub shape_profile: AtomeShapeProfile,
+    pub visibility: Visibility,
+    pub transform: Transform,
+}
+
+#[derive(Clone, Debug, Component)]
 pub struct AtomeShapeShadowOverlay {
     pub entities: Vec<Entity>,
     pub image_handles: Vec<Handle<Image>>,
@@ -106,9 +149,18 @@ pub struct AtomeShapeShadowOverlay {
 
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
 pub struct AtomeShapeShadowCacheKey {
+    /// `0` drop, `1` block — part of the key so the two silhouettes never share
+    /// a texture.
+    pub kind: u8,
+    pub invert: bool,
     pub width: u32,
     pub height: u32,
     pub corner_radii: [u32; 4],
+    // La variante : une ombre d'etoile ne doit jamais etre servie pour un carre.
+    pub variant: u32,
+    pub star_branches: u32,
+    pub star_inner_radius: u32,
+    pub polygon_sides: u32,
     pub blur: u32,
     pub spread: u32,
     pub offset_x: i32,
@@ -147,6 +199,13 @@ pub struct AtomeRoundedRectMaskCacheKey {
     // order, quantised to 1/100 px. A partially rounded shape (accordion header,
     // table row, outer segment) must not reuse the uniform-radius mask.
     pub radii: [u32; 4],
+    // La VARIANTE et ses reglages : une etoile de meme boite qu'un carre ne doit
+    // evidemment pas reutiliser son masque. Zero partout = le rectangle plein,
+    // donc l'entree d'un masque d'avant l'outil Shape reste celle d'un carre.
+    pub variant: u32,
+    pub star_branches: u32,
+    pub star_inner_radius: u32,
+    pub polygon_sides: u32,
 }
 
 // CPU-generated rounded-rect alpha masks are expensive at full-surface sizes

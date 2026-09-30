@@ -76,6 +76,86 @@ test('Placeholder exposes its six kinds and its two limits, each read from its o
     assert.equal(byKey.get('placeholder_max_chars').toolId, 'ui.placeholder.max_chars.apply');
 });
 
+test('Shape exposes its four variants, then only the parameters the chosen variant owns', () => {
+    const win = {
+        eveShapeCreationApi: {
+            readChoice: () => 'star',
+            readOptions: () => ({ star_branches: 7, star_inner_radius: 0.4, polygon_sides: 6 })
+        }
+    };
+    // Un type ne deplie que SES reglages : l'etoile montre ses branches et son
+    // rayon interne, jamais les sommets du polygone — et le rail garde les
+    // quatre types, pour qu'on change de type sans quitter la palette.
+    const definitions = railOf('shape', win);
+    assert.deepEqual(definitions.map((definition) => definition.key), [
+        'shape_square', 'shape_circle', 'shape_star', 'shape_polygon',
+        'shape_star_branches', 'shape_star_inner_radius'
+    ], 'the four variants first, then the parameters of the current one, in the one canonical order');
+    assert.deepEqual(definitions.filter((definition) => definition.active).map((definition) => definition.key),
+        ['shape_star'], 'the chosen variant is the only lit case');
+    const byKey = new Map(definitions.map((definition) => [definition.key, definition]));
+    assert.deepEqual(definitions.filter((definition) => definition.toolType === 'slider').map((definition) => definition.key),
+        ['shape_star_branches', 'shape_star_inner_radius'],
+        'the parameters are sliders; the variants are plain cases');
+    assert.deepEqual(
+        ['shape_star_branches', 'shape_star_inner_radius']
+            .map((key) => [byKey.get(key).sliderValue, byKey.get(key).sliderMin, byKey.get(key).sliderMax, byKey.get(key).sliderStep]),
+        [[7, 3, 20, 1], [0.4, 0.15, 0.95, 0.01]],
+        'the value comes from the shape runtime; the bounds are declared once, by the tool');
+    for (const [key, toolId] of [['shape_star_branches', 'ui.shape.star.branches.apply'],
+        ['shape_star_inner_radius', 'ui.shape.star.inner_radius.apply']]) {
+        assert.equal(byKey.get(key).toolId, toolId, `${key} drives its own registered action`);
+    }
+    for (const variant of ['shape_square', 'shape_circle', 'shape_star', 'shape_polygon']) {
+        assert.equal(byKey.get(variant).toolId, 'ui.shape.create', `${variant} arms the one shape tool`);
+        assert.equal(byKey.get(variant).toolType, 'standard');
+    }
+    // Le polygone deplie ses sommets, et rien que les siens.
+    const polygon = railOf('shape', { eveShapeCreationApi: { readChoice: () => 'polygon', readOptions: () => ({ polygon_sides: 6 }) } });
+    assert.deepEqual(polygon.map((definition) => definition.key),
+        ['shape_square', 'shape_circle', 'shape_star', 'shape_polygon', 'shape_polygon_sides']);
+    assert.equal(polygon.find((definition) => definition.key === 'shape_polygon_sides').toolId,
+        'ui.shape.polygon.sides.apply');
+    // Un carre et un cercle n'ont RIEN a regler : quatre types, aucun curseur.
+    for (const variant of ['square', 'circle']) {
+        const bare = railOf('shape', { eveShapeCreationApi: { readChoice: () => variant, readOptions: () => ({}) } });
+        assert.deepEqual(bare.map((definition) => definition.key),
+            ['shape_square', 'shape_circle', 'shape_star', 'shape_polygon'], `${variant} carries no parameter`);
+        assert.deepEqual(bare.filter((definition) => definition.active).map((definition) => definition.key),
+            [`shape_${variant}`], 'changing the variant changes the lit case, nothing here remembers it');
+    }
+    const ownerless = railOf('shape', {});
+    assert.deepEqual(ownerless.map((definition) => definition.key),
+        ['shape_square', 'shape_circle', 'shape_star', 'shape_polygon'],
+        'without an owner no parameter is owned either: the rail invents no value');
+    assert.deepEqual(ownerless.filter((definition) => definition.active).map((definition) => definition.key), []);
+});
+
+test('a Shape case arms the tool on its variant, and a parameter reaches its registered action', async () => {
+    const calls = [];
+    const win = {
+        eveShapeCreationApi: {
+            readChoice: () => 'star',
+            setActive: (active, variant) => { calls.push([active, variant]); return active === true; }
+        }
+    };
+    const definitions = railOf('shape', win);
+    const [polygonCase] = definitions.filter((definition) => definition.key === 'shape_polygon');
+    assert.deepEqual(await invokeArmedToolOption('shape', polygonCase, { payload: {} }, win),
+        { ok: true, variant: 'polygon', active: true },
+        'choosing a variant arms the tool through its owner, like a placeholder kind');
+    assert.deepEqual(calls, [[true, 'polygon']]);
+
+    gatewayCalls.length = 0;
+    const [branchCase] = definitions.filter((definition) => definition.key === 'shape_star_branches');
+    await invokeArmedToolOption('shape', branchCase, { payload: { value: 9 } }, win);
+    assert.deepEqual(gatewayCalls.at(-1), {
+        tool_id: 'ui.shape.star.branches.apply', event: 'on_change', action: 'apply',
+        input: { value: 9 }, presentation: 'ui', source: { type: 'ui', layer: 'armed_tool_rail' }
+    }, 'the parameter goes to the registered action, exactly like a placeholder limit');
+    assert.deepEqual(calls, [[true, 'polygon']], 'a parameter never arms or disarms the tool');
+});
+
 test('the Generator rail is the registry projection, in its order, with the current run lit', () => {
     const win = { eveGeneratorApi: { readChoice: () => 'audio.ai' } };
     const definitions = railOf('generator', win);

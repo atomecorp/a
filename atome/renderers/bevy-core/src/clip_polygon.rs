@@ -358,7 +358,10 @@ mod clip_polygon_tests {
             // La page : un carre droit dont l'atome deborde une fois tourne.
             clip_rect: Some([100.0, 100.0, 100.0, 100.0]), clip_rotation: 0.0,
             scale: [1.0, 1.0], rotation, origin: [0.5, 0.5], layer: 3, opacity: 1.0,
-            corner_radius: 0.0, corner_radii: None, shadow: None, backdrop: None,
+            corner_radius: 0.0, corner_radii: None,
+            shape_variant: None, star_branches: None, star_inner_radius: None, polygon_sides: None,
+            mask: None, mask_source: false,
+            shadow: None, backdrop: None,
             presentation: false, menu_plane: 0, color: Some([0.1, 0.2, 0.3, 1.0]),
             text: None, source: None, texture_size: None, uv_rect: None, texture: None,
             peaks: None, playback_progress: None, selected: None, filters: None,

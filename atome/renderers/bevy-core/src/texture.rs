@@ -145,6 +145,12 @@ pub fn cached_image_handle_from_rounded_rect_mask(
             (radii[2].max(0.0) * 100.0).round() as u32,
             (radii[3].max(0.0) * 100.0).round() as u32,
         ],
+        // Le rectangle arrondi est la variante `square` : il partage le cache
+        // avec les formes a pointes sans jamais partager leur texture.
+        variant: 0,
+        star_branches: 0,
+        star_inner_radius: 0,
+        polygon_sides: 0,
     };
     let cached = world
         .resource::<AtomeRoundedRectMaskCache>()

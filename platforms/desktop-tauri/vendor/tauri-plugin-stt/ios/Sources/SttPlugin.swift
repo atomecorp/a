@@ -39,6 +39,17 @@ class SttPlugin: Plugin, SFSpeechRecognitionTaskDelegate {
     private var wasListeningBeforeInterruption = false
     private var maxDurationTimer: DispatchWorkItem?
     private var lastAudioLevelAt: CFTimeInterval = 0
+
+    /// The session profile this plugin borrowed for speech recognition. The
+    /// plugin restores it when listening ends instead of deactivating the
+    /// shared session, which would cut every other audio consumer (music,
+    /// video, another recorder).
+    private struct BorrowedAudioSession {
+        let category: AVAudioSession.Category
+        let mode: AVAudioSession.Mode
+        let options: AVAudioSession.CategoryOptions
+    }
+    private var borrowedAudioSession: BorrowedAudioSession?
     
     override init() {
         super.init()
@@ -477,9 +488,23 @@ class SttPlugin: Plugin, SFSpeechRecognitionTaskDelegate {
         NSLog("[SttPlugin] Configuring audio session...")
         let audioSession = AVAudioSession.sharedInstance()
         do {
-            try audioSession.setCategory(.playAndRecord, mode: .measurement, options: [.defaultToSpeaker, .allowBluetooth])
-            try audioSession.setActive(true, options: .notifyOthersOnDeactivation)
-            NSLog("[SttPlugin] Audio session configured successfully")
+            if audioSession.category == .playAndRecord {
+                // A capture profile is already installed by another owner: keep
+                // its mode and options so a running recording is not altered.
+                borrowedAudioSession = nil
+                try audioSession.setActive(true)
+                NSLog("[SttPlugin] Audio session reused an existing capture profile")
+            } else {
+                let previous = BorrowedAudioSession(
+                    category: audioSession.category,
+                    mode: audioSession.mode,
+                    options: audioSession.categoryOptions
+                )
+                try audioSession.setCategory(.playAndRecord, mode: .measurement, options: [.defaultToSpeaker, .allowBluetoothHFP])
+                try audioSession.setActive(true)
+                borrowedAudioSession = previous
+                NSLog("[SttPlugin] Audio session configured for speech recognition")
+            }
         } catch {
             NSLog("[SttPlugin] Audio session configuration failed: \(error)")
             throw error
@@ -618,13 +643,23 @@ class SttPlugin: Plugin, SFSpeechRecognitionTaskDelegate {
         // Reset manual stop flag after cleanup
         isManualStop = false
         
-        // Deactivate audio session - log errors but don't throw since we're in cleanup
-        do {
-            try AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
-            NSLog("[SttPlugin]   Audio session deactivated successfully")
-        } catch {
-            NSLog("[SttPlugin]   Failed to deactivate audio session: \(error.localizedDescription)")
-            // Don't throw here since deactivation failure is not critical during cleanup
+        // Hand the session back to its previous profile. The session itself is
+        // deliberately left active: the host application owns activation and
+        // deactivating the shared session would silence its music.
+        if let previous = borrowedAudioSession {
+            borrowedAudioSession = nil
+            do {
+                try AVAudioSession.sharedInstance().setCategory(
+                    previous.category,
+                    mode: previous.mode,
+                    options: previous.options
+                )
+                NSLog("[SttPlugin]   Audio session restored to its previous profile")
+            } catch {
+                NSLog("[SttPlugin]   Failed to restore the audio session profile: \(error.localizedDescription)")
+            }
+        } else {
+            NSLog("[SttPlugin]   Audio session left to its existing owner")
         }
         NSLog("[SttPlugin]   stopRecognition() complete")
     }

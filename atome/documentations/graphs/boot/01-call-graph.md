@@ -14,7 +14,6 @@ flowchart TD
   Loader --> ProjectBoot["eve.project_bootstrap\neVe.js:22"]
   Loader --> IntuitionBoot["eve.bootstrap\neVe.js:23"]
   IntuitionBoot --> BootIntuition["bootstrapIntuition\nbootstrap.js:11"]
-  BootIntuition --> CapturePerm["bootstrapCaptureDevicePermissionsOnLaunch\nbootstrap.js:14"]
   BootIntuition --> Activities["ensureActivitiesModule\nbootstrap.js:15"]
   Kickstart["initKickstart\nkickstart.js:4"] --> View["window.define/window.$ view\nkickstart.js:11-37"]
   View --> Ready["dispatch squirrel:ready\nkickstart.js:42"]

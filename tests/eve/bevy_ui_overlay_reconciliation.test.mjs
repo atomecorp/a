@@ -5,6 +5,7 @@ import { JSDOM } from 'jsdom';
 import { createEveBevyUiRuntime } from '../../eVe/domains/rendering/bevy_ui_runtime.js';
 import { layoutForNodeCached, nodeBox } from '../../eVe/domains/rendering/bevy_ui_layout_runtime.js';
 import { projectBevyUiTreeOverlay } from '../../eVe/domains/rendering/bevy_ui_project_overlay_runtime.js';
+import { projectBevyUiTreeRecords } from '../../eVe/domains/rendering/bevy_ui_overlay_record_projection.js';
 import { buildBevyPanelTree } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_tree.js';
 import {
     calendarRuntimeState,
@@ -138,6 +139,28 @@ test('BevyUI rebuilds geometry changed during image preparation before its first
     assert.equal(published.length, 1);
     assert.deepEqual(published[0].root.style.size, [1280, 720]);
     assert.deepEqual(published[0].root.children[0].style.position, [1220, 660]);
+});
+
+test('scroll projection keeps clipped panel records mounted while their transforms move through the viewport', () => {
+    const tree = (scrollY) => ({
+        id: 'eve_bevy_panel_stable_scroll_records',
+        root: {
+            id: 'stable_scroll_root', kind: 'root', style: { size: [100, 100] }, children: [{
+                id: 'stable_scroll_area', kind: 'scroll_area',
+                style: { size: [100, 50], overflow: 'scroll_y', scroll: [0, scrollY] },
+                children: ['first', 'second', 'third'].map((id, index) => ({
+                    id: `stable_scroll_${id}`, kind: 'panel',
+                    style: { size: [100, 40], background: [index === 0 ? 1 : 0, index === 1 ? 1 : 0, index === 2 ? 1 : 0, 1] }
+                }))
+            }]
+        }
+    });
+    const recordIds = (scrollY) => projectBevyUiTreeRecords({
+        tree: tree(scrollY), treeId: 'eve_bevy_panel_stable_scroll_records', workspaceLayer: 'panel'
+    }).map((record) => record.id).sort();
+
+    assert.deepEqual(recordIds(0), recordIds(70),
+        'scrolling must update transforms and clipping without despawning/recreating panel elements at viewport edges');
 });
 
 test('Bevy panel overlay reconciliation removes stale Contact records without relying on a prior id list', async () => {

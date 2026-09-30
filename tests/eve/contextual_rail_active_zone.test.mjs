@@ -22,6 +22,10 @@ import {
 import { BOOTSTRAP_RECORD_ACTION_RUNTIME_STATE } from '../../eVe/intuition/tools/core/tool_runtime_state.js';
 import { buildArmedToolRailDefinitions, invokeArmedToolOption } from '../../eVe/intuition/runtime/eve_intuition/armed_tool_rail_runtime.js';
 import { createMainMenuCreateContent } from '../../eVe/intuition/runtime/eve_intuition/main_menu_create_content_runtime.js';
+import { createAtomeContextualRailModelRuntime } from '../../eVe/intuition/runtime/eve_intuition/atome_contextual_rail_model_runtime.js';
+import { createAtomeContextualRailDefinitionInvocationRuntime } from '../../eVe/intuition/runtime/eve_intuition/atome_contextual_rail_definition_invocation_runtime.js';
+import { TOOL_HANDLER_REGISTRY } from '../../eVe/intuition/runtime/tool_state.js';
+import { EVE_DEFAULT_MESSAGES } from '../../eVe/i18n/languages.js';
 import {
     registerSelectedProjectMediaPlayback,
     stopSelectedProjectMediaPlayback
@@ -1003,5 +1007,173 @@ test('the rail reserves the band the menu publishes, and re-renders when that ba
             'another publisher never moves the band: only the menu height counts');
     } finally {
         globalThis.window = previousWindow;
+    }
+});
+
+// Les trois effets d'objet se rangent SOUS l'ordre (50) et AVANT la
+// communication (60) : on range, puis on arrondit et on ombre, puis on masque ce
+// que l'objet recouvre, avant de parler de lui.
+test('rounding, shadow and mask sit under the z-order and before communicate', () => {
+    const TOOL_IDS = {
+        z_order: 'ui.z_order', rounding: 'ui.rounding.panel', shadow: 'ui.shadow.panel',
+        mask: 'ui.mask.apply', communicate: 'ui.communicate'
+    };
+    const content = Object.fromEntries(Object.entries(TOOL_IDS).map(([key, toolId]) => [key, {
+        key, labelKey: `eve.menu.${key}`, icon: key, tool_id: toolId
+    }]));
+    const railModel = (locale) => createAtomeContextualRailModelRuntime({
+        mainToolIdByKey: TOOL_IDS,
+        intuitionContent: content,
+        normalizeMainToolKey: (value) => String(value || '').trim().toLowerCase(),
+        normalizeCatalogToolEntry: ({ key, def }) => ({ key, ...def }),
+        normalizeRecordActionRecordSource: (value) => String(value || '').trim().toLowerCase() || null,
+        resolveCanonicalMainToolId: (value) => String(value || '').trim(),
+        resolveCurrentTextSizeValue: (value) => value,
+        isSelectionRequiredToolKey: () => false,
+        getAtomeElement: () => null,
+        getAtomeRuntimeState: () => null,
+        translate: (key, fallback) => EVE_DEFAULT_MESSAGES[locale][key] || fallback || key
+    });
+    const rail = railModel('fr');
+    const definition = (key) => rail.resolveAtomeContextualRailToolDefinition(key, {});
+    const priority = (key) => definition(key).priority;
+    assert.ok(priority('z_order') < priority('rounding'), 'the order comes first');
+    assert.ok(priority('rounding') < priority('shadow'), 'the rounding, then the shadow');
+    assert.ok(priority('shadow') < priority('mask'), 'the mask closes the group');
+    assert.ok(priority('mask') < priority('communicate'), 'and the three stay before communication');
+    // L'arrondi et l'ombre OUVRENT un panneau : leur case est un bouton on/off,
+    // allume tant que le panneau est ouvert, comme la couleur et la police. Le
+    // masque reste une action ponctuelle.
+    for (const key of ['rounding', 'shadow']) {
+        const entry = definition(key);
+        assert.equal(entry.actionMode, 'toggle', `${key} is an on/off button`);
+        assert.equal(entry.latch, true, `${key} latches`);
+        assert.equal(entry.toolType, 'standard');
+        assert.equal(entry.gatewayAction, '', 'a panel command never goes to the gateway');
+    }
+    const mask = definition('mask');
+    assert.equal(mask.actionMode, '', 'the mask is applied, never latched');
+    assert.equal(mask.latch, false);
+    assert.equal(mask.toolId, 'ui.mask.apply');
+    assert.equal(definition('rounding').toolId, 'ui.rounding.panel');
+    assert.equal(definition('shadow').toolId, 'ui.shadow.panel');
+    // Le libelle est traduit, jamais la cle brute.
+    assert.equal(definition('rounding').label, 'Arrondi');
+    assert.equal(definition('shadow').label, 'Ombre');
+    assert.equal(definition('mask').label, 'Masque');
+    assert.equal(railModel('en').resolveAtomeContextualRailToolDefinition('rounding', {}).label, 'Rounding');
+    assert.equal(railModel('en').resolveAtomeContextualRailToolDefinition('mask', {}).label, 'Mask');
+});
+
+test('the contextual rail loads the mask action before invoking it and forwards its selection', async () => {
+    const previousHTMLElement = globalThis.HTMLElement;
+    globalThis.HTMLElement = class HTMLElement {};
+    TOOL_HANDLER_REGISTRY.delete('ui.mask.apply');
+    let invocation = null;
+    try {
+        const runtime = createAtomeContextualRailDefinitionInvocationRuntime({
+            state: { activeAtomeId: 'source_shape' },
+            ensureDeletePanelModule: async () => {},
+            maybeBlockSelectionRequiredToolActivation: () => null,
+            handleFinderTouch: async () => ({ ok: true }),
+            getFinderToolEl: () => null,
+            invokeToolFromUiButton: async () => ({ ok: true }),
+            invokeUnifiedContextTool: async (payload) => {
+                invocation = payload;
+                assert.equal(typeof TOOL_HANDLER_REGISTRY.get('ui.mask.apply'), 'function',
+                    'the lazy action is registered before the gateway is crossed');
+                return { ok: true };
+            },
+            resolveDefinitionToolId: (definition) => definition.toolId,
+            buildToolExtraInput: ({ activeAtomeId }) => ({ selection_ids: [activeAtomeId] }),
+            isContextBoundTransportToolId: () => false
+        });
+        const result = await runtime.invokeAtomeContextualRailToolDefinitionWithContext({
+            key: 'mask', toolId: 'ui.mask.apply', selectionRequired: true
+        });
+        assert.equal(result.ok, true);
+        assert.equal(invocation.toolId, 'ui.mask.apply');
+        assert.deepEqual(invocation.extraInput, { selection_ids: ['source_shape'] });
+    } finally {
+        globalThis.HTMLElement = previousHTMLElement;
+    }
+});
+
+test('a Bevy rail click captures its atome before the closing render can clear the active slot', () => {
+    const state = { activeAtomeId: 'source_shape', activePaletteKey: 'effects' };
+    const invocations = [];
+    const handlers = createAtomeContextualEditHandlers({
+        state,
+        keyOf: (value) => String(value || '').trim().toLowerCase(),
+        scheduleRender: () => { state.activeAtomeId = ''; },
+        definitions: () => [{ key: 'mask', toolType: 'standard', toolId: 'ui.mask.apply' }],
+        sliderHandlers: () => ({}),
+        runActiveDefinition: (definition, options) => invocations.push({ definition, options }),
+        announceChange: () => {},
+        activeToolIds: () => new Set()
+    });
+    handlers.atome_contextual_tool_mask.activate();
+    assert.equal(state.activeAtomeId, '', 'the synchronous refresh reproduces the selection race');
+    assert.equal(invocations.length, 1);
+    assert.equal(invocations[0].options.atomeId, 'source_shape',
+        'the action keeps the contextual owner captured at pointer activation');
+});
+
+test('a mask Shape Edit definition targets the hidden parametric source instead of its wrapper', async () => {
+    let invocation = null;
+    const runtime = createAtomeContextualRailDefinitionInvocationRuntime({
+        state: { activeAtomeId: 'mask_wrapper' },
+        ensureDeletePanelModule: async () => {},
+        maybeBlockSelectionRequiredToolActivation: () => null,
+        handleFinderTouch: async () => ({ ok:true }),
+        getFinderToolEl: () => null,
+        invokeToolFromUiButton: async () => ({ ok:true }),
+        invokeUnifiedContextTool: async (payload) => { invocation = payload; return { ok:true }; },
+        resolveDefinitionToolId: (definition) => definition.toolId,
+        buildToolExtraInput: ({ activeAtomeId }) => ({
+            target_atome_id: activeAtomeId,
+            selection_ids: [activeAtomeId]
+        }),
+        isContextBoundTransportToolId: () => false
+    });
+    await runtime.invokeAtomeContextualRailToolDefinitionWithContext({
+        key:'shape_edit_square', toolId:'ui.shape.variant.square', targetAtomeId:'mask_shape'
+    }, { atomeId:'mask_wrapper' });
+    assert.equal(invocation.toolId, 'ui.shape.variant.square');
+    assert.deepEqual(invocation.extraInput, {
+        target_atome_id:'mask_shape', selection_ids:['mask_shape']
+    });
+});
+
+test('the contextual rail registers and invokes canonical ungroup instead of a missing V2 tool', async () => {
+    const previousHTMLElement = globalThis.HTMLElement;
+    globalThis.HTMLElement = class HTMLElement {};
+    TOOL_HANDLER_REGISTRY.delete('ui.molecule.ungroup');
+    let invocation = null;
+    try {
+        const runtime = createAtomeContextualRailDefinitionInvocationRuntime({
+            state: { activeAtomeId: 'mask_wrapper' },
+            ensureDeletePanelModule: async () => {},
+            maybeBlockSelectionRequiredToolActivation: () => null,
+            handleFinderTouch: async () => ({ ok: true }),
+            getFinderToolEl: () => null,
+            invokeToolFromUiButton: async () => ({ ok: true }),
+            invokeUnifiedContextTool: async (payload) => {
+                invocation = payload;
+                assert.equal(typeof TOOL_HANDLER_REGISTRY.get('ui.molecule.ungroup'), 'function');
+                return { ok: true };
+            },
+            resolveDefinitionToolId: (definition) => definition.toolId,
+            buildToolExtraInput: ({ activeAtomeId }) => ({ selection_ids: [activeAtomeId] }),
+            isContextBoundTransportToolId: () => false
+        });
+        const result = await runtime.invokeAtomeContextualRailToolDefinitionWithContext({
+            key: 'ungroup', toolId: 'ui.molecule.ungroup', selectionRequired: true
+        });
+        assert.equal(result.ok, true);
+        assert.equal(invocation.toolId, 'ui.molecule.ungroup');
+        assert.deepEqual(invocation.extraInput, { selection_ids: ['mask_wrapper'] });
+    } finally {
+        globalThis.HTMLElement = previousHTMLElement;
     }
 });

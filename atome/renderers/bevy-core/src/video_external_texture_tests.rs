@@ -2,10 +2,12 @@ use crate::video_external_texture::*;
 use crate::{
     render_math::depth_for_layer,
     render_ops::{apply_resource, apply_spawn, apply_style, apply_transform},
+    shape_sdf::{AtomeShapeGeometry, AtomeShapeSilhouette, AtomeShapeVariant},
     types::{
         default_uv_rect, AtomeBevyRendererConfig, AtomeColorFilters, AtomeEntityTable,
-        AtomeLocalTransform, AtomeRenderNode, AtomeRendererDiagnostics, AtomeResourcePatch,
-        AtomeSelectionOverlay, AtomeStylePatch, AtomeTransformPatch, AtomeTransition,
+        AtomeLocalTransform, AtomeMaskStyle, AtomeRenderNode, AtomeRendererDiagnostics,
+        AtomeResourcePatch, AtomeSelectionOverlay, AtomeStylePatch, AtomeTransformPatch,
+        AtomeTransition,
     },
 };
 use bevy::{
@@ -29,6 +31,12 @@ fn video_node(id: &str) -> AtomeRenderNode {
         opacity: 0.65,
         corner_radius: 0.0,
         corner_radii: None,
+        shape_variant: None,
+        star_branches: None,
+        star_inner_radius: None,
+        polygon_sides: None,
+        mask: None,
+        mask_source: false,
         shadow: None,
         backdrop: None,
         presentation: false,
@@ -99,11 +107,147 @@ fn video_nodes_spawn_external_texture_mesh_without_bevy_image_copy_target() {
     assert_eq!(video.layer, 2);
     assert_eq!(video.opacity, 0.65);
     assert_eq!(video.uv_rect, default_uv_rect());
+    assert!(video.mask_texture.is_none(), "no mask, no alpha texture");
     assert!(world.get::<Mesh2d>(entity).is_some());
     assert!(world.get::<NoAutomaticBatching>(entity).is_some());
     assert!(world.get::<Sprite>(entity).is_none());
     assert_eq!(world.resource::<Assets<Image>>().len(), 0);
     assert_eq!(world.resource::<Assets<Mesh>>().len(), 1);
+}
+
+fn star_mask(width: f32, height: f32) -> AtomeMaskStyle {
+    AtomeMaskStyle {
+        source_id: "mask_star".to_string(),
+        mode: "alpha".to_string(),
+        alpha: vec![],
+        placement: None,
+        layers: vec![],
+        silhouette: AtomeShapeSilhouette {
+            geometry: AtomeShapeGeometry::new(AtomeShapeVariant::Star),
+            width,
+            height,
+            corner_radii: [0.0; 4],
+        },
+    }
+}
+
+#[test]
+fn masked_video_nodes_bake_the_silhouette_into_an_alpha_texture() {
+    let mut world = world_with_video_assets();
+    let mut node = video_node("masked_video");
+    node.mask = Some(star_mask(64.0, 48.0));
+
+    let entity = apply_spawn(&mut world, node).unwrap();
+
+    // La texture externe ne peut pas etre recopiee cote CPU : c'est cette
+    // silhouette-la que le fragment shader echantillonne pour decouper.
+    let video = world.get::<AtomeVideoExternalTexture>(entity).unwrap();
+    let handle = video
+        .mask_texture
+        .as_ref()
+        .expect("a resolved silhouette must become a texture");
+    let image = world
+        .resource::<Assets<Image>>()
+        .get(handle)
+        .expect("the mask image must exist");
+    assert_eq!(image.texture_descriptor.size.width, 160, "the alpha resource matches the video quad");
+    assert_eq!(image.texture_descriptor.size.height, 90, "the alpha resource matches the video quad");
+    let data = image.data.as_ref().expect("the mask image carries pixels");
+    assert_eq!(data.len(), 160 * 90 * 4);
+    // Le coin haut-gauche d'une etoile est HORS silhouette : alpha nul.
+    assert_eq!(data[3], 0);
+    // Le centre est dans la silhouette : alpha plein.
+    let center = ((45 * 160) + 80) * 4 + 3;
+    assert_eq!(data[center], 255);
+    // La video elle-meme reste une texture EXTERNE : aucun sprite n'est cree.
+    assert!(world.get::<Sprite>(entity).is_none());
+}
+
+#[test]
+fn a_mask_without_usable_silhouette_never_erases_the_video() {
+    let mut world = world_with_video_assets();
+    let mut node = video_node("degenerate_mask");
+    // Une source de taille nulle ne decoupe rien : mieux vaut la video entiere
+    // qu'une video entierement effacee.
+    node.mask = Some(star_mask(0.0, 0.0));
+
+    let entity = apply_spawn(&mut world, node).unwrap();
+
+    let video = world.get::<AtomeVideoExternalTexture>(entity).unwrap();
+    assert!(video.mask_texture.is_none());
+    assert_eq!(world.resource::<Assets<Image>>().len(), 0);
+}
+
+#[test]
+fn a_video_resource_update_keeps_the_mask_silhouette() {
+    let mut world = world_with_video_assets();
+    let mut node = video_node("kept_mask");
+    node.mask = Some(star_mask(32.0, 32.0));
+    let entity = apply_spawn(&mut world, node).unwrap();
+    let before = world
+        .get::<AtomeVideoExternalTexture>(entity)
+        .unwrap()
+        .mask_texture
+        .clone();
+    assert!(before.is_some());
+
+    // La source qui arrive ne rejoue pas la projection : le masque deja pose
+    // doit survivre a la mise a jour, sinon il disparaissait aussitot pose.
+    apply_resource(
+        &mut world,
+        AtomeResourcePatch {
+            id: "kept_mask".to_string(),
+            source: Some("/fixtures/replaced.mp4".to_string()),
+            texture_size: Some([320, 180]),
+            uv_rect: None,
+            texture: None,
+            peaks: None,
+        },
+    )
+    .unwrap();
+
+    assert_eq!(
+        world
+            .get::<AtomeVideoExternalTexture>(entity)
+            .unwrap()
+            .mask_texture
+            .clone(),
+        before
+    );
+}
+
+#[test]
+fn a_live_mask_style_patch_keeps_the_video_entity_and_playback_mesh() {
+    let mut world = world_with_video_assets();
+    let mut node = video_node("live_mask_video");
+    node.mask = Some(star_mask(32.0, 32.0));
+    let entity = apply_spawn(&mut world, node).unwrap();
+    let mesh_before = world.get::<Mesh2d>(entity).unwrap().0.clone();
+    let mask_before = world
+        .get::<AtomeVideoExternalTexture>(entity)
+        .unwrap()
+        .mask_texture
+        .clone();
+
+    let patch: AtomeStylePatch = serde_json::from_str(r#"{
+        "id":"live_mask_video",
+        "mask":{
+            "source_id":"mask_star",
+            "mode":"alpha",
+            "silhouette":{"geometry":{"variant":"star","star_branches":11},"width":48.0,"height":48.0,"corner_radii":[0.0,0.0,0.0,0.0]}
+        }
+    }"#).unwrap();
+    apply_style(&mut world, patch).unwrap();
+
+    assert_eq!(world.resource::<AtomeEntityTable>().by_id.get("live_mask_video"), Some(&entity));
+    assert_eq!(world.get::<Mesh2d>(entity).unwrap().0, mesh_before);
+    let mask_after = world
+        .get::<AtomeVideoExternalTexture>(entity)
+        .unwrap()
+        .mask_texture
+        .clone();
+    assert!(mask_before.is_some() && mask_after.is_some());
+    assert_ne!(mask_before, mask_after, "only the alpha texture is replaced");
 }
 
 #[test]
@@ -416,6 +560,13 @@ fn video_style_patch_updates_external_texture_opacity() {
     apply_style(
         &mut world,
         AtomeStylePatch {
+            corner_radius: None,
+            corner_radii: None,
+            shape_variant: None,
+            star_branches: None,
+            star_inner_radius: None,
+            polygon_sides: None,
+            mask: None,
             id: "external_opacity".to_string(),
             color: None,
             shadow: None,
@@ -441,6 +592,13 @@ fn video_style_patch_updates_external_texture_opacity() {
     apply_style(
         &mut world,
         AtomeStylePatch {
+            corner_radius: None,
+            corner_radii: None,
+            shape_variant: None,
+            star_branches: None,
+            star_inner_radius: None,
+            polygon_sides: None,
+            mask: None,
             id: "external_opacity".to_string(),
             color: None,
             shadow: None,
@@ -556,6 +714,13 @@ fn video_style_patch_updates_color_filters() {
     apply_style(
         &mut world,
         AtomeStylePatch {
+            corner_radius: None,
+            corner_radii: None,
+            shape_variant: None,
+            star_branches: None,
+            star_inner_radius: None,
+            polygon_sides: None,
+            mask: None,
             id: "filter_style".to_string(),
             color: None,
             shadow: None,
@@ -633,6 +798,13 @@ fn video_node_and_style_carry_normalized_transition() {
     apply_style(
         &mut world,
         AtomeStylePatch {
+            corner_radius: None,
+            corner_radii: None,
+            shape_variant: None,
+            star_branches: None,
+            star_inner_radius: None,
+            polygon_sides: None,
+            mask: None,
             id: "plain_transition".to_string(),
             color: None,
             shadow: None,

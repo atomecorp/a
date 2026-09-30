@@ -44,7 +44,10 @@ final class AppNativeAudioController: NSObject {
 
     var clips: [String: ClipEntry] = [:]
     var voices: [String: VoiceEntry] = [:]
-    var audioSessionReady = false
+    var audioSessionConsumers = AppNativeAudioConsumerRegistry()
+    var captureGate = AppNativeAudioCaptureGate()
+    var audioRecordingConsumerSequence: UInt64 = 0
+    var activeRecordingConsumerId: String?
     var playbackEngineNeedsReset = false
     var playbackRouteSignature = ""
     var activeRecordingSessionId: String?
@@ -195,36 +198,44 @@ final class AppNativeAudioController: NSObject {
         return Float(clamp(linear, min: 0, max: 4))
     }
 
-    func configureAudioSessionIfNeeded() throws {
-        let session = AVAudioSession.sharedInstance()
-        if !audioSessionReady {
-            try session.setCategory(
-                .playAndRecord,
-                mode: .default,
-                options: [.mixWithOthers, .defaultToSpeaker, .allowBluetoothHFP]
-            )
-            audioSessionReady = true
-        }
-        try session.setActive(true)
-    }
-
     @objc private func handleAudioSessionInterruption(_ notification: Notification) {
+        let userInfo = notification.userInfo ?? [:]
+        let typeValue = userInfo[AVAudioSessionInterruptionTypeKey] as? UInt ?? 0
+        let interruptionType = AVAudioSession.InterruptionType(rawValue: typeValue)
+        let optionsValue = userInfo[AVAudioSessionInterruptionOptionKey] as? UInt ?? 0
+        let options = AVAudioSession.InterruptionOptions(rawValue: optionsValue)
         queue.async {
-            self.audioSessionReady = false
             self.playbackEngineNeedsReset = true
+            guard interruptionType == .ended else {
+                AppNativeAudioDiagnostics.log(
+                    "session interruption_began \(self.audioSessionDiagnosticSnapshot())"
+                )
+                return
+            }
+            guard options.contains(.shouldResume) else { return }
+            // The system owns the session while it is interrupted; the plan is
+            // re-applied only once it gives the session back.
+            self.applyCurrentAudioSessionPlan(transition: "interruption_ended")
         }
     }
 
     @objc private func handleAudioSessionRouteChange(_ notification: Notification) {
         queue.async {
             self.playbackEngineNeedsReset = true
+            guard !self.audioSessionConsumers.captureConsumerIds.isEmpty else { return }
+            AppNativeAudioDiagnostics.log(
+                "session route_changed \(self.audioSessionDiagnosticSnapshot())"
+            )
         }
     }
 
     @objc private func handleAudioSessionMediaServicesReset(_ notification: Notification) {
         queue.async {
-            self.audioSessionReady = false
             self.playbackEngineNeedsReset = true
+            // The media server rebuilt every session: nothing we applied
+            // survives, so re-assert the plan for the current consumers.
+            AppNativeAudioDiagnostics.log("session media_services_reset")
+            self.applyCurrentAudioSessionPlan(transition: "media_services_reset")
         }
     }
 

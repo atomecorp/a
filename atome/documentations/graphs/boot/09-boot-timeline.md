@@ -21,7 +21,6 @@ sequenceDiagram
   Loader->>Runtime: tool genesis / commit / timeline
   Loader->>Project: import project_bootstrap.js
   Loader->>Runtime: import intuition/bootstrap.js
-  Runtime-->>Runtime: bootstrapCaptureDevicePermissionsOnLaunch (ASYNC_RISK void)
   Runtime->>Runtime: ensureActivitiesModule
   Project->>Auth: waitForAuthCheck
   Auth-->>Project: squirrel:auth-checked or API current or timeout
