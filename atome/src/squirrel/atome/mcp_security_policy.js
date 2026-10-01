@@ -1,3 +1,4 @@
+import { TV_COMMANDS } from '../tv/contracts.js';
 import { cloneValue } from './mcp_core.js';
 import { listMcpPromptEntries, listMcpResourceEntries } from './mcp_resources.js';
 import { normalizeRuntimeToolIdentifier } from './mcp_runtime.js';
@@ -272,8 +273,15 @@ export function resolveAccessPolicy(method, params = {}) {
             idempotent: true
         };
     }
+    if (normalizedMethod.startsWith('tv.')) {
+        const command = TV_COMMANDS.find(entry => entry.name === normalizedMethod);
+        return { ...defaultPolicy, scope: 'tool', subject: normalizedMethod,
+            required_capabilities: command ? [command.capability] : ['tv.control'] };
+    }
     if (normalizedMethod === 'runtime.tools.call') {
         const toolId = normalizeRuntimeToolIdentifier(params);
+        const tvCommand = TV_COMMANDS.find(entry => entry.name === toolId);
+        if (tvCommand) return { ...defaultPolicy, scope: 'tool', subject: toolId, required_capabilities: [tvCommand.capability] };
         const timelineCapabilities = resolveTimelineToolCapability(toolId);
         if (timelineCapabilities) {
             return {

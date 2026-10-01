@@ -42,6 +42,7 @@ export function normalizeRuntimeToolEntry(tool = {}) {
         parameters: tool?.input_schema && typeof tool.input_schema === 'object'
             ? JSON.parse(JSON.stringify(tool.input_schema))
             : { type: 'object', properties: {} },
+        ...(tool.output_schema ? { outputSchema: JSON.parse(JSON.stringify(tool.output_schema)) } : {}),
         runtime: {
             execution_mode: String(tool?.runtime?.execution_mode || '').trim() || null,
             contexts,

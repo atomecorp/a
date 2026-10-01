@@ -1,3 +1,4 @@
+import { handleAuthenticatedTvOperation } from './tvDistribution.js';
 import db from '../database/adole.js';
 import { buildStateSnapshotRestoreEvents } from '../database/state_snapshot_restore.js';
 import {
@@ -25,23 +26,19 @@ const MUTATING_ACTIONS = new Set([
     'history:undo',
     'history:redo'
 ]);
-
 function actionOf(message) {
     return String(message?.action || message?.action_type || message?.op || '').trim();
 }
-
 function requestCache(connection) {
     if (!connection._wsApiRequestResults) connection._wsApiRequestResults = new Map();
     return connection._wsApiRequestResults;
 }
-
 function cachedMutation(connection, message) {
     const requestId = requestIdOf(message);
     const key = `${message?.type || ''}:${actionOf(message)}`;
     if (!requestId || !MUTATING_ACTIONS.has(key)) return null;
     return requestCache(connection).get(`${key}:${requestId}`) || null;
 }
-
 function rememberMutation(connection, message, result) {
     const requestId = requestIdOf(message);
     const key = `${message?.type || ''}:${actionOf(message)}`;
@@ -51,7 +48,6 @@ function rememberMutation(connection, message, result) {
     while (cache.size > 200) cache.delete(cache.keys().next().value);
     return result;
 }
-
 async function requirePrincipal(connection, message, type) {
     try {
         const userId = resolveWsApiPrincipal(connection, message);
@@ -62,15 +58,12 @@ async function requirePrincipal(connection, message, type) {
         return { error: errorResponse(type, message, error) };
     }
 }
-
 async function canReadTarget(userId, targetId) {
     return Boolean(userId && targetId && await db.canRead(String(targetId), String(userId)));
 }
-
 async function canWriteTarget(userId, targetId) {
     return Boolean(userId && targetId && await db.canWrite(String(targetId), String(userId)));
 }
-
 async function filterReadableEvents(events, userId) {
     const result = [];
     for (const event of events) {
@@ -79,7 +72,6 @@ async function filterReadableEvents(events, userId) {
     }
     return result;
 }
-
 async function projectStateForRead(state, userId) {
     const atomeId = state?.atome_id || state?.id || null;
     if (!atomeId) return null;
@@ -106,7 +98,6 @@ async function projectStateForRead(state, userId) {
     );
     return { ...state, properties, property_versions: propertyVersions, capabilities };
 }
-
 async function conditionAuthorityFor(userId) {
     const loadStates = async (scope = {}, request = {}) => {
         const projectId = scope.projectId || scope.project_id || request.projectId || request.project_id || null;
@@ -125,7 +116,6 @@ async function conditionAuthorityFor(userId) {
     const readState = async (id) => projectStateForRead(await db.getStateCurrent(id), userId);
     return createServerConditionAuthority({ loadStates, readState });
 }
-
 async function handleConditions(message, userId) {
     const action = actionOf(message);
     const authority = await conditionAuthorityFor(userId);
@@ -138,7 +128,6 @@ async function handleConditions(message, userId) {
     }
     return errorResponse('conditions', message, `Unknown conditions action: ${action || 'missing'}`);
 }
-
 async function handleDirectory(message, connection, userId) {
     const service = connection?._wsApiDirectoryService;
     if (!service) return errorResponse('directory', message, 'directory_service_unavailable');
@@ -154,7 +143,6 @@ async function handleDirectory(message, connection, userId) {
     });
     return response('directory', message, true, { entries });
 }
-
 async function handleEvents(message, connection, userId) {
     const action = actionOf(message);
     const vaultRouter = connection?._wsApiVaultRouter || null;
@@ -235,7 +223,6 @@ async function handleEvents(message, connection, userId) {
     }
     return errorResponse('events', message, `Unknown events action: ${action || 'missing'}`);
 }
-
 async function handleStateCurrent(message, userId, connection) {
     const action = actionOf(message);
     const vaultRouter = connection?._wsApiVaultRouter || null;
@@ -269,14 +256,12 @@ async function handleStateCurrent(message, userId, connection) {
     }
     return errorResponse('state-current', message, `Unknown state-current action: ${action || 'missing'}`);
 }
-
 async function requireSnapshotAccess(snapshot, userId, mode) {
     const targetId = snapshot?.project_id || snapshot?.atome_id || null;
     return mode === 'write'
         ? canWriteTarget(userId, targetId)
         : canReadTarget(userId, targetId);
 }
-
 async function handleSnapshot(message, userId) {
     const action = actionOf(message);
     if (action === 'create') {
@@ -330,7 +315,6 @@ async function handleSnapshot(message, userId) {
             return errorResponse('snapshot', message, 'Access denied');
         }
         if (action === 'get') return response('snapshot', message, true, { snapshot });
-
         const actor = { type: 'user', id: userId };
         const events = buildStateSnapshotRestoreEvents(snapshot, { actor });
         for (const event of events) {
@@ -352,7 +336,6 @@ async function handleSnapshot(message, userId) {
     }
     return errorResponse('snapshot', message, `Unknown snapshot action: ${action || 'missing'}`);
 }
-
 async function handleAtomeHistory(message, userId) {
     const atomeId = message.atome_id || message.atomeId || message.id || null;
     if (!atomeId) return errorResponse('atome', message, 'Missing atome_id');
@@ -370,7 +353,6 @@ async function handleAtomeHistory(message, userId) {
         events: projected
     });
 }
-
 async function handleUserData(message, userId) {
     const action = actionOf(message);
     const rows = await db.getAtomesByOwner(userId, { limit: 10000 });
@@ -417,7 +399,6 @@ async function handleUserData(message, userId) {
     }
     return errorResponse('user-data', message, `Unknown user-data action: ${action || 'missing'}`);
 }
-
 async function handleSync(message, userId, connection) {
     const action = actionOf(message);
     const vaultRouter = connection?._wsApiVaultRouter || null;
@@ -468,7 +449,6 @@ async function handleSync(message, userId, connection) {
     }
     return errorResponse('sync', message, `Unknown sync action: ${action || 'missing'}`);
 }
-
 export async function handleWsAtomeOperation(message, connection) {
     const type = String(message?.type || '').trim();
     const action = actionOf(message);
@@ -480,17 +460,17 @@ export async function handleWsAtomeOperation(message, connection) {
         || type === 'history'
         || type === 'conditions'
         || type === 'directory'
+        || type === 'tv'
         || (type === 'atome' && action === 'history');
     if (!supported) return null;
-
     const cached = cachedMutation(connection, message);
     if (cached) return cached;
     const auth = await requirePrincipal(connection, message, type);
     if (auth.error) return auth.error;
-
     try {
         let result;
-        if (type === 'events') result = await handleEvents(message, connection, auth.userId);
+        if (type === 'tv') result = await handleAuthenticatedTvOperation(message, connection, auth.userId);
+        else if (type === 'events') result = await handleEvents(message, connection, auth.userId);
         else if (type === 'state-current') result = await handleStateCurrent(message, auth.userId, connection);
         else if (type === 'snapshot') result = await handleSnapshot(message, auth.userId);
         else if (type === 'user-data') result = await handleUserData(message, auth.userId);

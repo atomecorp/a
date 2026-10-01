@@ -10,10 +10,11 @@ export async function listUnifiedMcpTools() {
             (Array.isArray(runtimeTools) ? runtimeTools : []).forEach((entry) => {
                 tools.push({
                     name: String(entry?.id || entry?.tool_key || '').trim() || null,
-                    description: String(entry?.meta?.name || entry?.ui?.label_fallback || entry?.tool_key || '').trim() || null,
+                    description: String(entry?.meta?.description || entry?.meta?.name || entry?.ui?.label_fallback || entry?.tool_key || '').trim() || null,
                     domain: 'runtime',
                     risk_tier: 'low',
                     parameters: cloneValue(entry?.input_schema || { type: 'object', properties: {} }),
+                    ...(entry?.output_schema ? { outputSchema: cloneValue(entry.output_schema) } : {}),
                     source: 'runtime_v2',
                     kind: 'tool'
                 });

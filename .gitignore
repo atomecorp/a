@@ -48,6 +48,8 @@ tests
 
 tests/*
 !tests/
+!tests/tv/
+!tests/tv/*.test.mjs
 !tests/database/
 tests/database/*
 !tests/database/adole_event_replay_rebuild.test.mjs
