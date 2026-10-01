@@ -93,6 +93,10 @@ pub struct RecordResult {
     pub output_format: String,
 }
 
+pub fn has_active_sessions() -> bool {
+    SESSIONS.lock().map(|sessions| !sessions.is_empty()).unwrap_or(true)
+}
+
 pub fn start(
     session_id: &str,
     abs_wav_path: &str,
@@ -117,6 +121,7 @@ pub fn start_with_options(
     output_format: OutputFormat,
     buffer_hint: BufferSizeHint,
 ) -> Result<(), String> {
+    super::wake_capture::stop()?;
     let mut sessions = SESSIONS.lock().map_err(|e| format!("Lock error: {e}"))?;
     if sessions.contains_key(session_id) {
         return Err(format!("Session '{session_id}' already active"));

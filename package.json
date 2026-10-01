@@ -125,7 +125,9 @@
     "probes": "node scripts/run_probes.mjs",
     "probes:list": "node scripts/run_probes.mjs --list",
     "check:map-paths": "node scripts/check_map_paths.mjs",
-    "check:property-aliases": "node scripts/check_property_aliases.mjs"
+    "check:property-aliases": "node scripts/check_property_aliases.mjs",
+    "bundle:porcupine": "node scripts/bundle-porcupine.js",
+    "test:assistant-wake": "vitest run --config tests/voice_wake.vitest.config.mjs"
   },
   "devDependencies": {
     "@rollup/plugin-commonjs": "^28.0.6",
@@ -173,6 +175,8 @@
     "onnxruntime-web": "^1.27.0",
     "pino": "^9.5.0",
     "rubberband-wasm": "^3.3.0",
-    "uuid": "^9.0.1"
+    "uuid": "^9.0.1",
+    "@picovoice/porcupine-web": "4.0.1",
+    "@picovoice/web-voice-processor": "4.0.10"
   }
 }

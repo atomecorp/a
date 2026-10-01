@@ -143,6 +143,22 @@ export const createGlobalVoiceApi = ({
 
     const api = {
         ensureReady,
+        wake: {
+            getState: () => env[SERVICE_KEY]?.wake.getState() || { phase: 'off', error: '', armed: false, testing: false },
+            async start() { return (await ensureReady()).wake.start(); },
+            async stop() { return (await ensureReady()).wake.stop(); },
+            async test() { return (await ensureReady()).wake.test(); },
+            async configure(config) { return (await ensureReady()).wake.configure(config); },
+            async setEnabled(value) { return (await ensureReady()).wake.setEnabled(value); },
+            async suspend(reason) { return (await ensureReady()).wake.suspend(reason); },
+            async resume(reason) { return (await ensureReady()).wake.resume(reason); },
+            subscribe(listener) {
+                let cancelled = false, unsubscribe = () => {};
+                ensureReady().then(service => { if (!cancelled) unsubscribe = service.wake.subscribe(listener); })
+                    .catch(() => { if (!cancelled) listener({ phase: 'unavailable', error: 'wake_service_unavailable' }); });
+                return () => { cancelled = true; unsubscribe(); };
+            }
+        },
         get service() {
             return env[SERVICE_KEY] || null;
         },

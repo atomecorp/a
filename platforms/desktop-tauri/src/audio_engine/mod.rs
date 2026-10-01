@@ -11,3 +11,5 @@ pub mod transcode;
 
 #[cfg(test)]
 mod tests;
+
+pub mod wake_capture;

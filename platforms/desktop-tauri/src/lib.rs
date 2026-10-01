@@ -223,7 +223,14 @@ pub fn run() {
         .append_invoke_initialization_script(runtime_init_script)
         .plugin(tauri_plugin_stt::init())
         .plugin(tauri_plugin_clipboard_manager::init())
-        .on_window_event(viewport_runtime::publish_native_viewport)
+        .on_window_event(|window, event| {
+            viewport_runtime::publish_native_viewport(window, event);
+            if let tauri::WindowEvent::Focused(focused) = event {
+                if let Err(error) = audio_engine::wake_capture::set_foreground(*focused) {
+                    eprintln!("wake foreground transition failed: {}", error);
+                }
+            }
+        })
         .invoke_handler(tauri::generate_handler![
             auth_device::auth_device_key,
             auth_device::auth_local_request,
@@ -244,6 +251,9 @@ pub fn run() {
             audio_engine::bridge::audio_set_volume,
             audio_engine::bridge::audio_set_pan,
             audio_engine::bridge::audio_set_playback_rate,
+            audio_engine::bridge::audio_wake_start,
+            audio_engine::bridge::audio_wake_stop,
+            audio_engine::bridge::audio_wake_read,
             audio_engine::bridge::audio_record_start,
             audio_engine::bridge::audio_record_stop,
             audio_engine::bridge::audio_get_levels,

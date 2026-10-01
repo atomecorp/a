@@ -6,7 +6,7 @@ export const createVoiceSttRuntime = ({
     sttSessions,
     ensureSession,
     ensureSupported,
-    inputMeter,
+    inputMeter, wake,
     runtimeContext,
     startBrowserRecognition,
     startTauriRecognition
@@ -39,7 +39,10 @@ export const createVoiceSttRuntime = ({
     async start(options = {}) {
         const selectedProvider = providers.stt.selected;
         ensureSupported('stt', selectedProvider);
-        const session = ensureSession(options);
+        await wake?.suspend('stt');
+        let session;
+        try {
+        session = ensureSession(options);
         // Native STT provides the canonical microphone stream, so subscribe
         // before it starts. Browser Web Speech starts immediately while its
         // separate permission-bound meter initializes asynchronously.
@@ -47,7 +50,6 @@ export const createVoiceSttRuntime = ({
             purpose: options.purpose || 'user_turn'
         });
         if (selectedProvider === 'tauri_plugin_stt') await inputMeterReady;
-        try {
             const started = selectedProvider === 'tauri_plugin_stt'
                 ? await startTauriRecognition(runtimeContext, session.session_id, options, { provider: selectedProvider })
                 : selectedProvider === 'browser_web_speech'
@@ -55,10 +57,11 @@ export const createVoiceSttRuntime = ({
                     : (() => { throw new Error(`Unsupported STT provider bridge: ${selectedProvider}`); })();
             return {
                 ...started,
-                promise: Promise.resolve(started?.promise).finally(() => inputMeter.stop(session.session_id))
+                promise: Promise.resolve(started?.promise).finally(async () => { await inputMeter.stop(session.session_id); await wake?.resume('stt'); })
             };
         } catch (error) {
-            await inputMeter.stop(session.session_id);
+            await inputMeter.stop(session?.session_id);
+            await wake?.resume('stt');
             throw error;
         }
     },

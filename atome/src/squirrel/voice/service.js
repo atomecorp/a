@@ -24,6 +24,7 @@ import { startTauriRecognition } from './service_tauri_stt.js';
 import { settleTtsStop, startSpeechSynthesis } from './service_tts_runtime.js';
 import { createTtsRuntime } from './tts_runtime.js';
 import { createVoiceInputMeterRuntime } from './service_input_meter.js';
+import { createWakeRuntime } from './wake_runtime.js';
 import { createVoiceSttRuntime } from './service_stt_runtime.js';
 export { VOICE_V1_PROVIDER_DECISION, resolveVoiceProviders } from './service_providers.js';
 export const createVoiceService = ({
@@ -149,9 +150,12 @@ export const createVoiceService = ({
         }
     };
 
+    const wake = createWakeRuntime({ env });
     const capture = {
         async start(options = {}) {
             ensureSupported('capture', providers.capture.selected);
+            await wake.suspend('capture');
+            try {
             const session = ensureSession(options);
             sessionRuntime.startCapture(session.session_id, {
                 source: options.source || 'mic'
@@ -169,12 +173,14 @@ export const createVoiceService = ({
                 session_id: session.session_id,
                 provider: providers.capture.selected
             };
+            } catch (error) { await wake.resume('capture'); throw error; }
         },
         async stop(sessionId) {
             ensureSupported('capture', providers.capture.selected);
             const recordStop = readEnv(env, 'record_stop');
             const result = await recordStop(sessionId);
             sessionRuntime.stopCapture(sessionId, result || {});
+            await wake.resume('capture');
             return {
                 session_id: sessionId,
                 provider: providers.capture.selected,
@@ -182,6 +188,7 @@ export const createVoiceService = ({
             };
         },
         async cancel(sessionId) {
+            await capture.stop(sessionId);
             sessionRuntime.cancelCapture(sessionId, 'capture_cancelled');
             return {
                 session_id: sessionId,
@@ -199,6 +206,7 @@ export const createVoiceService = ({
         ensureSupported,
         inputMeter,
         runtimeContext,
+        wake,
         startBrowserRecognition,
         startTauriRecognition
     });
@@ -241,6 +249,7 @@ export const createVoiceService = ({
     };
 
     return {
+        wake,
         runtime: sessionRuntime,
         orchestrator,
         providers,

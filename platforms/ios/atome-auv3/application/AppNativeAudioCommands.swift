@@ -13,6 +13,14 @@ extension AppNativeAudioController {
                     try self.acquirePlaybackAudioSessionConsumer()
                     self.complete(completion, payload: ["success": true])
 
+                case "audio_wake_start":
+                    self.wakeCaptureFailed = false
+                    self.startWakeCapture(payload: payload, completion: completion)
+                case "audio_wake_read":
+                    self.complete(completion, payload: self.readWakeCapture())
+                case "audio_wake_stop":
+                    self.stopWakeCapture()
+                    self.complete(completion, payload: ["active": false])
                 case "audio_record_start":
                     self.startAudioRecording(payload: payload, completion: completion)
 
@@ -347,6 +355,7 @@ extension AppNativeAudioController {
 
                 case "audio_shutdown":
                     self.captureGate.cancel()
+                    self.stopWakeCapture()
                     self.shutdownAudioRecording()
                     Array(self.voices.keys).forEach { voiceId in
                         self.stopVoiceLocked(voiceId, reason: "audio_shutdown")
