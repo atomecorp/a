@@ -17,17 +17,27 @@ import {
 } from './session.js';
 import { adapters, normalizePhone, getPrimaryBackend, getSecondaryBackend, hasToken, hasAuthenticatedToken } from './auth_core.js';
 import { ensureFastifyToken } from './auth_fastify_token.js';
-import { restoreLocalAuthorization, recoverDesktopAuthorization, lockLocalAuthorization, phoneLinkClient, initializePhoneLinks, setBrowserWorkspaceIdentity } from './auth_methods_login.js';
+import { restoreLocalAuthorization, recoverDesktopAuthorization, lockLocalAuthorization, phoneLinkClient, initializePhoneLinks, setBrowserWorkspaceIdentity, flushBrowserWorkspace } from './auth_methods_login.js';
 import { transferGuestWorkspace } from './auth_workspace.js';
 import { requireAuth, normalizeSessionUser } from './auth_state.js';
 import { auth } from './auth.js';
 import { isTauriRuntime } from './runtime.js';
+
+const LOGOUT_WORKSPACE_FLUSH_BUDGET_MS = 3000;
 
 export const sessionAccountMethods = {
     async logout() {
         if (isTauriRuntime()) {
             const stopped = await TauriAdapter.sync.clearRemote();
             if (!stopped?.ok && !stopped?.success) throw new Error(stopped?.error || 'local_sync_stop_failed');
+        } else if (getSessionState().mode === 'authenticated') {
+            // Pousser les dernieres ecritures du compte sortant pendant que sa session est encore
+            // valide. Hors ligne ou trop lent : elles restent dans SON magasin local et partiront
+            // a sa prochaine connexion (jamais sous l'identite du compte suivant).
+            await Promise.race([
+                flushBrowserWorkspace().catch(() => null),
+                new Promise((resolve) => setTimeout(resolve, LOGOUT_WORKSPACE_FLUSH_BUDGET_MS))
+            ]);
         }
         await lockLocalAuthorization();
         const revoked = await phoneLinkClient().revoke();

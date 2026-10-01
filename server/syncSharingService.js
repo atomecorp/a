@@ -98,11 +98,9 @@ export class SyncSharingService {
         if (!object || String(object.vault_principal_id) !== String(ownerId)) {
             throw new Error('share_owner_required');
         }
-        const stream = await db.query(
-            'get',
-            'SELECT * FROM vault_stream_registry WHERE atome_id = ? AND vault_principal_id = ?',
-            [atomeId, ownerId]
-        );
+        // Le flux est celui ou vivent les evenements de l'objet (un flux par projet), pas la
+        // ligne du registre qui porte par hasard cet atome_id (dernier objet ecrit du flux).
+        const stream = await this.vaultRouter.streamForAtome(ownerId, atomeId);
         if (!stream) throw new Error('share_stream_not_found');
         return stream;
     }

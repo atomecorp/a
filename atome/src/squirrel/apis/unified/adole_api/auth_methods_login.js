@@ -223,10 +223,9 @@ let linksInitialized = false;
 let workspaceSynchronize = null;
 // Vider la file d'envoi du workspace navigateur AVANT une action serveur qui porte sur un
 // objet cree localement (partager un projet tout juste cree echouait : `share_owner_required`).
-// Deux passes : une synchronisation deja en cours ne contient pas les derniers evenements.
+// Une passe suffit : une demande recue pendant une passe en cours la fait relancer.
 export async function flushBrowserWorkspace() {
     if (typeof workspaceSynchronize !== 'function') return { ok: true, skipped: true };
-    await workspaceSynchronize();
     await workspaceSynchronize();
     return { ok: true };
 }

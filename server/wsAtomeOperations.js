@@ -86,6 +86,12 @@ async function projectStateForRead(state, userId) {
     if (state?.vault_principal_id && String(state.vault_principal_id) === String(userId)) {
         return { ...state, capabilities: { read: true, write: true, create: true, delete: true, share: true } };
     }
+    // Etat d'un autre coffre deja autorise par un partage actif et filtre par le routeur de
+    // coffres (proprietes lisibles, capacites du partage). L'ancien modele `permissions`
+    // central ne connait pas ces partages et les rejetait tous.
+    if (state?.vault_principal_id && state?.sync_share_id) {
+        return Object.keys(state.properties || {}).length || state.type ? state : null;
+    }
     const properties = await projectAtomePropertiesForRead(atomeId, state.properties || {}, userId);
     if (!Object.keys(properties).length) return null;
     const propertyVersions = await projectAtomePropertyVersionsForRead(

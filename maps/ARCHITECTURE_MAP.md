@@ -1202,6 +1202,11 @@ Sync:
 - `registered` announces the verified principal's authorized opaque streams;
   `stream-available` and `revoked` update live subscriptions. Each subscribe and
   replay batch is independently reauthorized, so discovery is never permission.
+  A stream spans a whole project (`project:<id>`) while a share covers a root
+  and its descendants: a non-owner reaches a stream only through an active
+  linked share naming it, and each event is delivered only when its atome lies
+  within that share's root (`userVaultRouter.streamAccess` /
+  `projectStreamEvent`, 2026-10-01).
 - `wsSyncRuntime.js` serializes control frames in arrival order per WebSocket
   connection. A registration followed by a large subscription burst therefore
   opens at most one replay request at a time for that connection instead of

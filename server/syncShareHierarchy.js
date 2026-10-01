@@ -72,7 +72,6 @@ const sharePermissions = (share) => parseJson(share?.permissions_json, {});
 
 export {
     ACTIVE_LINKED_SHARE_SQL,
-    activeSharesForPrincipal,
     findShareForAtome,
     isWithinSharedRoot,
     sharePermissions,

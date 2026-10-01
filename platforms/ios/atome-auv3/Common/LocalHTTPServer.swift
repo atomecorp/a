@@ -1998,8 +1998,17 @@ enum AiSRuntime {
     }
 
     private static func handleAtomeList(_ message: [String: Any], db: OpaquePointer?, requestId: String?) throws -> [String: Any] {
+        guard let claims = (try? verifyToken(stringValue(message["token"]))) ?? nil,
+              let userId = normalizedOptionalString(claims["sub"]) else {
+            return atomeResponse(requestId: requestId, success: false, error: "Access denied")
+        }
         let atomeType = stringValue(message["atome_type"])
-        let ownerId = stringValue(message["owner_id"])
+        // Le proprietaire vient du jeton, jamais du client (`*` listait tous les comptes).
+        let requestedOwnerId = stringValue(message["owner_id"])
+        if !requestedOwnerId.isEmpty && requestedOwnerId != "*" && requestedOwnerId != userId {
+            return atomeResponse(requestId: requestId, success: true, atomes: [], count: 0)
+        }
+        let ownerId = userId
         let parentId = stringValue(message["parent_id"])
         let limit = intValue(message["limit"], defaultValue: 500)
         let offset = intValue(message["offset"], defaultValue: 0)
@@ -2014,10 +2023,9 @@ enum AiSRuntime {
             sql += " AND atome_type = ?"
             bindings.append(.text(atomeType))
         }
-        if !ownerId.isEmpty && ownerId != "*" {
-            sql += " AND owner_id = ?"
-            bindings.append(.text(ownerId))
-        }
+        sql += " AND (owner_id = ? OR creator_id = ?)"
+        bindings.append(.text(ownerId))
+        bindings.append(.text(ownerId))
         if !parentId.isEmpty {
             sql += " AND parent_id = ?"
             bindings.append(.text(parentId))
@@ -2037,6 +2045,13 @@ enum AiSRuntime {
         let atomeId = stringValue(message["atome_id"] ?? message["id"])
         if atomeId.isEmpty {
             return atomeResponse(requestId: requestId, success: false, error: "Missing atome_id")
+        }
+        guard let claims = (try? verifyToken(stringValue(message["token"]))) ?? nil,
+              let userId = normalizedOptionalString(claims["sub"]) else {
+            return atomeResponse(requestId: requestId, success: false, error: "Access denied")
+        }
+        if let record = try findAnyAtomeMeta(db, atomeId: atomeId), !canWrite(record: record, userId: userId) {
+            return atomeResponse(requestId: requestId, success: false, error: "Access denied")
         }
         let atome = try serializeAtome(db, atomeId: atomeId)
         return atomeResponse(requestId: requestId, success: true, data: atome)
@@ -2196,13 +2211,10 @@ enum AiSRuntime {
         guard let rawEvent = message["event"] as? [String: Any] else {
             return eventsResponse(requestId: requestId, success: false, error: "Invalid event payload")
         }
-        let atomeId = stringValue(rawEvent["atome_id"] ?? rawEvent["atomeId"])
-        if !atomeId.isEmpty,
-           let record = try findAtomeMeta(db, atomeId: atomeId),
-           !canWrite(record: record, userId: actorId) {
-            return eventsResponse(requestId: requestId, success: false, error: "Access denied")
-        }
-        let event = try normalizeEventInput(rawEvent, defaultActorId: actorId)
+        let authorized: [String: Any]
+        do { authorized = try authorizedWebViewEvent(rawEvent, db: db, actorId: actorId) }
+        catch { return eventsResponse(requestId: requestId, success: false, error: error.localizedDescription) }
+        let event = try normalizeEventInput(authorized, defaultActorId: actorId)
         try appendEvent(db, event: event)
         return eventsResponse(requestId: requestId, success: true, event: event)
     }
@@ -2215,22 +2227,21 @@ enum AiSRuntime {
         guard let rawEvents = message["events"] as? [[String: Any]] else {
             return eventsResponse(requestId: requestId, success: false, error: "Missing events array")
         }
-        let events = try rawEvents.map { raw -> [String: Any] in
-            let atomeId = stringValue(raw["atome_id"] ?? raw["atomeId"])
-            if !atomeId.isEmpty,
-               let record = try findAtomeMeta(db, atomeId: atomeId),
-               !canWrite(record: record, userId: defaultActorId) {
-                throw NSError(
-                    domain: "AiSRuntime",
-                    code: 403,
-                    userInfo: [NSLocalizedDescriptionKey: "Access denied"]
-                )
+        // Un parent cree plus tot dans le meme lot est autorise (contrat Axum `batch_create_ids`).
+        var createdInBatch = Set<String>()
+        let events: [[String: Any]]
+        do {
+            events = try rawEvents.map { raw -> [String: Any] in
+                var event = try authorizedWebViewEvent(raw, db: db, actorId: defaultActorId, createdInBatch: createdInBatch)
+                let atomeId = stringValue(raw["atome_id"] ?? raw["atomeId"])
+                if !atomeId.isEmpty, try findAnyAtomeMeta(db, atomeId: atomeId) == nil { createdInBatch.insert(atomeId) }
+                if !txId.isEmpty, event["tx_id"] == nil, event["txId"] == nil {
+                    event["tx_id"] = txId
+                }
+                return try normalizeEventInput(event, defaultActorId: defaultActorId)
             }
-            var event = raw
-            if !txId.isEmpty, event["tx_id"] == nil, event["txId"] == nil {
-                event["tx_id"] = txId
-            }
-            return try normalizeEventInput(event, defaultActorId: defaultActorId)
+        } catch {
+            return eventsResponse(requestId: requestId, success: false, error: error.localizedDescription)
         }
         try appendEvents(db, events: events)
         return eventsResponse(requestId: requestId, success: true, events: events)
@@ -2238,10 +2249,10 @@ enum AiSRuntime {
 
     private static func handleEventList(_ message: [String: Any], db: OpaquePointer?, requestId: String?) throws -> [String: Any] {
         let token = stringValue(message["token"])
-        guard (try verifyToken(token)) != nil else {
+        guard let claims = try verifyToken(token), let userId = normalizedOptionalString(claims["sub"]) else {
             return eventsResponse(requestId: requestId, success: false, error: "Access denied")
         }
-        let events = try listEvents(
+        let listed = try listEvents(
             db,
             projectId: normalizedOptionalString(message["project_id"] ?? message["projectId"]),
             atomeId: normalizedOptionalString(message["atome_id"] ?? message["atomeId"]),
@@ -2253,6 +2264,14 @@ enum AiSRuntime {
             offset: intValue(message["offset"], defaultValue: 0),
             order: normalizedOptionalString(message["order"]) ?? "asc"
         )
+        // Une base pour tous les comptes de l'appareil : un id de projet ou d'atome fourni par
+        // le client ne vaut pas autorisation. Meme frontiere que `canReadState`.
+        let events = try listed.filter { event in
+            if let record = try findAnyAtomeMeta(db, atomeId: stringValue(event["atome_id"])) {
+                return canWrite(record: record, userId: userId)
+            }
+            return resolveActorId(event["actor"]) == userId
+        }
         return eventsResponse(requestId: requestId, success: true, events: events)
     }
 
@@ -2449,6 +2468,43 @@ enum AiSRuntime {
         if record.ownerId == userId { return true }
         if record.creatorId == userId { return true }
         return false
+    }
+
+    private static func eventPatchObject(_ event: [String: Any]) -> [String: Any]? {
+        let payload = event["payload"] as? [String: Any]
+        return (event["props"] ?? event["properties"] ?? payload?["props"] ?? payload?["properties"]) as? [String: Any]
+    }
+
+    // Autorise un evenement emis par le WebView pour le compte du jeton, avec le meme contrat
+    // qu'Axum (`authorize_event`) : ecrire un atome existant exige d'en etre proprietaire ou
+    // createur et ne change jamais son proprietaire ; creer exige que le proprietaire demande
+    // soit le compte lui-meme et que le parent (ou projet) existant lui appartienne. L'acteur
+    // est toujours celui du jeton. Tous les comptes de l'appareil partagent une seule base.
+    private static func authorizedWebViewEvent(_ raw: [String: Any], db: OpaquePointer?, actorId: String, createdInBatch: Set<String> = []) throws -> [String: Any] {
+        let atomeId = stringValue(raw["atome_id"] ?? raw["atomeId"])
+        let patch = eventPatchObject(raw)
+        let requestedOwner = normalizedOptionalString(raw["owner_id"] ?? raw["ownerId"] ?? raw["owner"]
+            ?? patch?["owner_id"] ?? patch?["ownerId"] ?? patch?["owner"])
+        if !atomeId.isEmpty, let record = try findAnyAtomeMeta(db, atomeId: atomeId) {
+            guard canWrite(record: record, userId: actorId) else { throw AiSError("Access denied") }
+            // Seule exception : un atome herite sans proprietaire, cree par ce compte, peut etre revendique.
+            if let requestedOwner, requestedOwner != record.ownerId, !(record.ownerId.isEmpty && requestedOwner == actorId) {
+                throw AiSError("owner_change_denied")
+            }
+        } else {
+            if let requestedOwner, requestedOwner != actorId { throw AiSError("create_owner_mismatch") }
+            let payload = raw["payload"] as? [String: Any]
+            let parentId = normalizedOptionalString(raw["parent_id"] ?? raw["parentId"] ?? payload?["parent_id"] ?? payload?["parentId"]
+                ?? patch?["parent_id"] ?? patch?["parentId"] ?? raw["project_id"] ?? raw["projectId"])
+            if let parentId, parentId != atomeId, !createdInBatch.contains(parentId),
+               let parent = try findAnyAtomeMeta(db, atomeId: parentId),
+               !canWrite(record: parent, userId: actorId) {
+                throw AiSError("parent_create_denied")
+            }
+        }
+        var event = raw
+        event["actor"] = ["type": "user", "id": actorId]
+        return event
     }
 
     static func upsertParticle(_ db: OpaquePointer?, atomeId: String, key: String, value: Any, changedBy: String, now: String) throws {

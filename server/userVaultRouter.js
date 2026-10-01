@@ -4,8 +4,8 @@ import { createUserVaultProvider } from './userVaultProvider.js';
 import { normalizeRights } from '../atome/src/shared/share_rights.js';
 import {
     ACTIVE_LINKED_SHARE_SQL,
-    activeSharesForPrincipal,
     findShareForAtome,
+    isWithinSharedRoot,
     sharePermissions,
     stateAtomeId,
     stateParentId,
@@ -36,6 +36,42 @@ const filterProperties = (properties, share) => {
     const allowed = allowedProperties(share);
     if (!allowed) return { ...(properties || {}) };
     return Object.fromEntries(Object.entries(properties || {}).filter(([key]) => allowed.has(key)));
+};
+
+const SYSTEM_STATE_TYPES = new Set(['project', 'user', 'blackhole', 'tool', 'tool_macro', 'toolbox', 'tool_block', 'panel', 'system']);
+const stateType = (state) => String(state?.type || state?.atome_type || state?.properties?.type || state?.properties?.kind || '').toLowerCase();
+const stateProjectId = (state) => state?.meta?.project_id || state?.project_id || state?.properties?.project_id || null;
+
+// Memes criteres que `listStateCurrent` (database/adole.js) cote proprietaire.
+const matchesListScope = (state, options = {}) => {
+    const projectId = options.project_id || options.projectId || null;
+    if (projectId && String(stateProjectId(state) || '') !== String(projectId)) return false;
+    const atomeType = String(options.atome_type || options.atomeType || '').trim().toLowerCase();
+    if (atomeType && stateType(state) !== atomeType && String(state?.kind || '').toLowerCase() !== atomeType) return false;
+    if (options.exclude_system === true || options.excludeSystem === true) {
+        const id = String(stateAtomeId(state) || '').toLowerCase();
+        if (SYSTEM_STATE_TYPES.has(stateType(state)) || id.startsWith('tool.ui.') || id.startsWith('tool_ui.')) return false;
+    }
+    return true;
+};
+
+// Etat d'un autre coffre vu au travers d'un partage actif : proprietes lisibles seulement,
+// et capacites = celles du partage (et non celles de l'ancien modele de permissions central).
+const projectSharedState = (state, share) => {
+    const rights = normalizeRights(sharePermissions(share));
+    return {
+        ...state,
+        properties: filterProperties(state.properties, share),
+        vault_principal_id: share.owner_id,
+        sync_share_id: share.share_id,
+        capabilities: {
+            read: rights.read,
+            write: rights.write,
+            create: rights.create,
+            delete: rights.delete,
+            share: rights.reshare
+        }
+    };
 };
 
 export class UserVaultRouter {
@@ -150,25 +186,33 @@ export class UserVaultRouter {
         }
         const share = await this.shareForAtome(requestingPrincipalId, atomeId);
         if (!share) return null;
-        return {
-            ...state,
-            properties: filterProperties(state.properties, share),
-            vault_principal_id: ownerId,
-            sync_share_id: share.share_id
-        };
+        return projectSharedState(state, share);
     }
 
     async listStates(requestingPrincipalId, options = {}) {
         await this.provision(requestingPrincipalId);
-        const states = await this.provider.request(requestingPrincipalId, 'state:list', options);
-        const own = (states || []).map((state) => ({ ...state, vault_principal_id: requestingPrincipalId }));
-        if (options.includeShared !== true && options.include_shared !== true) return own;
+        const includeShared = options.includeShared === true || options.include_shared === true;
+        if (!includeShared) {
+            const states = await this.provider.request(requestingPrincipalId, 'state:list', options);
+            return (states || []).map((state) => ({ ...state, vault_principal_id: requestingPrincipalId }));
+        }
+        // Pagination sur l'ensemble FUSIONNE (propres puis partages) : le client avance son
+        // offset du nombre d'etats recus, donc des partages ajoutes a chaque page creaient des
+        // doublons et faisaient sauter des etats propres.
+        const limit = Math.max(1, Math.min(Number(options.limit) || 1000, 10000));
+        const offset = Math.max(0, Number(options.offset) || 0);
+        const ownStates = await this.provider.request(requestingPrincipalId, 'state:list', {
+            ...options,
+            limit: Math.min(offset + limit, 10000),
+            offset: 0
+        });
+        const merged = (ownStates || []).map((state) => ({ ...state, vault_principal_id: requestingPrincipalId }));
         const shares = await db.query(
             'all',
             `SELECT * FROM sync_share_requests WHERE principal_id = ? AND ${ACTIVE_LINKED_SHARE_SQL}`,
             [requestingPrincipalId]
         );
-        const seen = new Set(own.map((state) => String(stateAtomeId(state))));
+        const seen = new Set(merged.map((state) => String(stateAtomeId(state))));
         for (const share of shares || []) {
             const states = await statesWithinSharedRoot({
                 provider: this.provider,
@@ -177,17 +221,14 @@ export class UserVaultRouter {
             });
             for (const state of states) {
                 const id = String(stateAtomeId(state));
-                if (seen.has(id)) continue;
+                // Les filtres de la requete (projet, type, systeme) valent aussi pour les
+                // partages : sinon ouvrir un projet y injectait tous les objets partages.
+                if (seen.has(id) || !matchesListScope(state, options)) continue;
                 seen.add(id);
-                own.push({
-                    ...state,
-                    properties: filterProperties(state.properties, share),
-                    vault_principal_id: share.owner_id,
-                    sync_share_id: share.share_id
-                });
+                merged.push(projectSharedState(state, share));
             }
         }
-        return own;
+        return merged.slice(offset, offset + limit);
     }
 
     async listEvents(requestingPrincipalId, options = {}) {
@@ -202,6 +243,11 @@ export class UserVaultRouter {
         return result;
     }
 
+    // Un flux de synchro couvre un PROJET entier (`project:<id>`), alors qu'un partage couvre
+    // une racine (un objet et ses descendants). L'acces au flux vient donc des partages actifs
+    // qui le designent, et chaque evenement est ensuite filtre par objet (`projectStreamEvent`).
+    // Le registre ne retient qu'un `atome_id` par flux (le dernier ecrit) : il ne peut pas
+    // servir d'autorite, sinon partager un objet ouvre tout le projet.
     async streamAccess(principalId, streamId) {
         const stream = await db.query(
             'get',
@@ -210,8 +256,31 @@ export class UserVaultRouter {
         );
         if (!stream) return null;
         if (String(stream.vault_principal_id) === String(principalId)) return { ...stream, owner: true };
-        const share = stream.atome_id ? await this.shareForAtome(principalId, stream.atome_id, stream.vault_principal_id) : null;
-        return share ? { ...stream, owner: false, share } : null;
+        const shares = await db.query(
+            'all',
+            `SELECT * FROM sync_share_requests
+             WHERE principal_id = ? AND owner_id = ? AND stream_id = ? AND ${ACTIVE_LINKED_SHARE_SQL}
+             ORDER BY updated_at DESC`,
+            [principalId, stream.vault_principal_id, stream.stream_id]
+        );
+        return shares?.length ? { ...stream, owner: false, shares } : null;
+    }
+
+    // Flux dans lequel vivent les evenements d'un objet du coffre de `ownerId`.
+    async streamForAtome(ownerId, atomeId) {
+        const events = await this.provider.request(ownerId, 'events:list', {
+            atome_id: atomeId,
+            limit: 1,
+            order: 'desc'
+        });
+        const streamId = String(events?.[0]?.stream_id || events?.[0]?.stream || '').trim();
+        if (!streamId) return null;
+        const stream = await db.query(
+            'get',
+            'SELECT * FROM vault_stream_registry WHERE stream_id = ? AND vault_principal_id = ?',
+            [streamId, ownerId]
+        );
+        return stream || null;
     }
 
     async listAuthorizedStreams(principalId) {
@@ -220,40 +289,23 @@ export class UserVaultRouter {
             'SELECT stream_id FROM vault_stream_registry WHERE vault_principal_id = ? ORDER BY stream_id',
             [principalId]
         );
-        const shared = [];
-        const shares = await activeSharesForPrincipal(db, principalId);
-        for (const share of shares || []) {
-            const streams = await db.query(
-                'all',
-                'SELECT stream_id, atome_id FROM vault_stream_registry WHERE vault_principal_id = ? ORDER BY stream_id',
-                [share.owner_id]
-            );
-            for (const stream of streams || []) {
-                if (await this.shareForAtome(principalId, stream.atome_id, share.owner_id)) shared.push(stream);
-            }
-        }
-        return Array.from(new Set([...(owned || []), ...shared].map((row) => row.stream_id).filter(Boolean)));
+        const shared = await db.query(
+            'all',
+            `SELECT DISTINCT stream_id FROM sync_share_requests
+             WHERE principal_id = ? AND ${ACTIVE_LINKED_SHARE_SQL} ORDER BY stream_id`,
+            [principalId]
+        );
+        return Array.from(new Set([...(owned || []), ...(shared || [])].map((row) => row.stream_id).filter(Boolean)));
     }
 
     async listShareStreams(principalId, shareId) {
         const share = await db.query(
             'get',
-            `SELECT * FROM sync_share_requests
+            `SELECT stream_id FROM sync_share_requests
              WHERE share_id = ? AND principal_id = ? AND ${ACTIVE_LINKED_SHARE_SQL}`,
             [shareId, principalId]
         );
-        if (!share) return [];
-        const streams = await db.query(
-            'all',
-            'SELECT stream_id, atome_id FROM vault_stream_registry WHERE vault_principal_id = ? ORDER BY stream_id',
-            [share.owner_id]
-        );
-        const result = [];
-        for (const stream of streams || []) {
-            const resolved = await this.shareForAtome(principalId, stream.atome_id, share.owner_id);
-            if (String(resolved?.share_id || '') === String(shareId)) result.push(stream.stream_id);
-        }
-        return result;
+        return share?.stream_id ? [share.stream_id] : [];
     }
 
     async listStreamEvents(principalId, streamId, options = {}) {
@@ -265,10 +317,31 @@ export class UserVaultRouter {
             cursor: options.cursor,
             limit: requestedLimit
         });
-        const deliverable = stream.owner || stream.share.share_mode === 'real-time'
-            ? rows
-            : rows.filter((event) => Number(event.sequence) <= Number(stream.share.publication_cursor || 0));
-        return deliverable.map((event) => this.projectStreamEvent(event, stream));
+        const shareCache = new Map();
+        const projected = [];
+        for (const event of rows || []) {
+            const visible = await this.projectStreamEvent(event, stream, shareCache);
+            if (visible) projected.push(visible);
+        }
+        return projected;
+    }
+
+    // Partage (parmi ceux qui ouvrent ce flux) dont la racine contient l'objet de l'evenement.
+    async shareCoveringEvent(event, access, cache = new Map()) {
+        const atomeId = String(event?.atome_id || '').trim();
+        if (!atomeId) return null;
+        if (cache.has(atomeId)) return cache.get(atomeId);
+        let covering = null;
+        for (const share of access.shares || []) {
+            if (await isWithinSharedRoot({
+                provider: this.provider,
+                ownerId: access.vault_principal_id,
+                atomeId,
+                rootAtomeId: share.atome_id
+            })) { covering = share; break; }
+        }
+        cache.set(atomeId, covering);
+        return covering;
     }
 
     async streamHead(principalId, streamId) {
@@ -279,9 +352,11 @@ export class UserVaultRouter {
         return this.provider.request(stream.vault_principal_id, 'stream:head', { stream_id: streamId });
     }
 
-    projectStreamEvent(event, access) {
+    async projectStreamEvent(event, access, shareCache = new Map()) {
         if (access.owner) return { ...event, vault_principal_id: access.vault_principal_id };
-        const share = access.share;
+        const share = await this.shareCoveringEvent(event, access, shareCache);
+        if (!share) return null;
+        if (share.share_mode === 'manual' && Number(event.sequence) > Number(share.publication_cursor || 0)) return null;
         const payload = event?.payload && typeof event.payload === 'object' ? event.payload : {};
         const allowed = allowedProperties(share);
         const props = filterProperties(payload.props, share);
@@ -304,8 +379,6 @@ export class UserVaultRouter {
     async projectEventForPrincipal(principalId, event) {
         const access = await this.streamAccess(principalId, event?.stream_id || event?.stream);
         if (!access) return null;
-        if (!access.owner && access.share.share_mode === 'manual'
-            && Number(event.sequence) > Number(access.share.publication_cursor || 0)) return null;
         return this.projectStreamEvent(event, access);
     }
 

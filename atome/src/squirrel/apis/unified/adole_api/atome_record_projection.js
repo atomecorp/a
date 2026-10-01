@@ -11,7 +11,10 @@ function positiveInteger(value, fallback) {
 
 function stateCurrentRequestKey(backend, options = {}) {
     const excludedParticleKeys = options.excludeParticleKeys || options.exclude_particle_keys || [];
+    // Le compte fait partie de la cle : une lecture en vol lancee pour un compte ne doit
+    // jamais etre partagee avec le compte suivant (changement d'utilisateur pendant la lecture).
     return JSON.stringify([
+        getSessionState()?.user?.id || null,
         backend,
         options.atome_type || options.type || options.atomeType || null,
         options.project_id || options.projectId || options.parent_id || options.parentId || null,

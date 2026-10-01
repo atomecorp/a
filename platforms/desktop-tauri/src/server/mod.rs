@@ -67,6 +67,8 @@ mod local_atome_sync_bootstrap;
 mod local_atome_sync_media;
 mod local_atome_sync_worker;
 mod local_atome_ws_sync;
+#[cfg(test)]
+mod local_atome_isolation_tests;
 mod remote_control;
 mod remote_control_ws;
 mod static_asset_cache;
