@@ -66,12 +66,16 @@ extension FileSystemBridge {
                     action: 'showStorageSettings'
                 });
             },
-            loadFilesWithDocumentPicker: function(fileTypes, callback, multiple) {
+            loadFilesWithDocumentPicker: function(fileTypes, callback, multiple, options) {
                 window.fileSystemCallback = callback;
+                var extra = (options && typeof options === 'object') ? options : {};
                 webkit.messageHandlers.fileSystem.postMessage({
                     action: 'loadFilesWithDocumentPicker',
                     fileTypes: fileTypes || [],
-                    multiple: multiple !== false
+                    multiple: multiple !== false,
+                    sources: extra.sources || null,
+                    kinds: extra.kinds || null,
+                    labels: extra.labels || null
                 });
             },
             copy_to_ios_local: function(requestedDestPath, fileTypes, callback){

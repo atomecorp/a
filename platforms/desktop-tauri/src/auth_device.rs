@@ -1,6 +1,6 @@
 use serde_json::{json, Value};
 
-async fn auth_ws_request(
+pub(crate) async fn auth_ws_request(
     authority: String,
     mut message: Value,
     unavailable: &'static str,

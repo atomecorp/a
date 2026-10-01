@@ -94,7 +94,11 @@ tests/shared/*
 !tests/shared/semantic_rename_contract.test.mjs
 !tests/eve/
 tests/eve/*
+!tests/eve/finder_import_context.test.mjs
+!tests/eve/context_menu_resolver.test.mjs
+!tests/eve/bevy_ui_mystic_menu.test.mjs
 !tests/eve/youtube_finder.test.mjs
+!tests/eve/project_program.test.mjs
 !tests/eve/atome_commit.sanitization.test.mjs
 !tests/eve/atome_edit_footer_delete_cold_start.test.mjs
 !tests/eve/atome_record_projection_project_id.test.mjs

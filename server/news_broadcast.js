@@ -9,6 +9,7 @@
 // Un destinataire en echec n'arrete jamais les suivants.
 
 import db from '../database/adole.js';
+import { hasPrivateProgramAncestor } from './syncShareHierarchy.js';
 
 const text = (value) => String(value == null ? '' : value).trim();
 const parseJson = (value, fallback) => { try { return value ? JSON.parse(value) : fallback; } catch { return fallback; } };
@@ -44,7 +45,8 @@ export function createNewsBroadcast({
     listUserIds,
     findUserName = async () => null,
     // (identifier, { ownerId }) -> metadonnees du fichier (server/userFiles.js getFileMetadata).
-    getFileMetadata = async () => null
+    getFileMetadata = async () => null,
+    vaultProvider = null
 }) {
     // Un media n'est publiable que par son proprietaire : sinon lister l'id d'un media
     // d'autrui suffirait a en ouvrir la lecture a toute l'audience.
@@ -93,6 +95,14 @@ export function createNewsBroadcast({
         const source = message.publication && typeof message.publication === 'object' ? message.publication : null;
         if (!source) throw new Error('news_publication_required');
         const props = { ...(source.properties || {}) };
+        const sourceMembers = Array.isArray(props.news_payload?.members) ? props.news_payload.members : [];
+        const sourceIds = [props.news_source_project_id, source.id,
+            ...sourceMembers.flatMap(member => [member?.id, member?.properties?.media_atome_id])];
+        for (const atomeId of new Set(sourceIds.map(text).filter(Boolean))) {
+            if (vaultProvider && await hasPrivateProgramAncestor({ provider: vaultProvider, ownerId: author, atomeId })) {
+                throw new Error('program_sharing_not_finalized');
+            }
+        }
         const newsId = text(props.news_id || source.id);
         const postId = text(source.id || props.news_post_id || newsId);
         if (!newsId || !postId) throw new Error('news_id_required');
@@ -103,7 +113,6 @@ export function createNewsBroadcast({
         // L'identite de l'auteur est celle de la session, jamais celle du client.
         const authorName = (await findUserName(author)) || '';
         const media = [];
-        const sourceMembers = Array.isArray(props.news_payload?.members) ? props.news_payload.members : [];
         const members = [];
         for (const member of sourceMembers) {
             if (!text(member?.properties?.media_atome_id)) { members.push(member); continue; }

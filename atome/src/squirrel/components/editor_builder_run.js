@@ -1,6 +1,7 @@
 // Extracted from editor_builder.js createEditor: runs the editor buffer (JS via new Function,
 // Ruby via dynamically-loaded Opal) and renders captured console output into the editor's
 // output panel. Depends only on the shared `state` + the editor `container` element.
+import { sealHealthAccessForUntrustedCode } from '../health/index.js';
 export function runEditorCode(state, container) {
         const code = state.editorView?.state.doc.toString() || '';
         if (!code.trim()) return;
@@ -150,6 +151,9 @@ export function runEditorCode(state, container) {
 
         if (lang === 'javascript' || lang === 'js') {
             // JavaScript execution
+            // User code shares this realm: health access is closed for the rest
+            // of the page load before it runs (see health/index.js).
+            sealHealthAccessForUntrustedCode();
             try {
                 const result = new Function('console', code)(executionConsole);
                 displayOutput();
@@ -159,6 +163,7 @@ export function runEditorCode(state, container) {
             }
         } else if (lang === 'ruby' || lang === 'rb') {
             // Ruby execution via Opal (async loading)
+            sealHealthAccessForUntrustedCode();
             loadOpal().then(() => {
                 try {
                     // Compile Ruby to JavaScript

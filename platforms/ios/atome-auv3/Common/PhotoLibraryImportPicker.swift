@@ -1,5 +1,6 @@
 import PhotosUI
 import UIKit
+import UniformTypeIdentifiers
 
 // Apple Photos import.
 //
@@ -22,6 +23,15 @@ final class PhotoLibraryImportPicker: NSObject, PHPickerViewControllerDelegate {
         self.completion = completion
     }
 
+    // The camera roll holds pictures and videos: the filter follows the kinds
+    // the web layer asked for (`image`, `video`), both when none is named.
+    static func filter(for kinds: [String]) -> PHPickerFilter {
+        let wantsImages = kinds.isEmpty || kinds.contains("image")
+        let wantsVideos = kinds.isEmpty || kinds.contains("video")
+        if wantsImages && wantsVideos { return .any(of: [.images, .videos]) }
+        return wantsVideos ? .videos : .images
+    }
+
     // `selectionLimit` 0 keeps the multi-selection contract of the bridge;
     // single-picture flows (a contact face, a background) ask for 1.
     static func loadImages(
@@ -29,9 +39,21 @@ final class PhotoLibraryImportPicker: NSObject, PHPickerViewControllerDelegate {
         from viewController: UIViewController,
         completion: @escaping (Bool, [(String, Data)]?, Error?) -> Void
     ) {
+        loadMedia(kinds: ["image"], selectionLimit: selectionLimit, from: viewController, completion: completion)
+    }
+
+    static func loadMedia(
+        kinds: [String],
+        selectionLimit: Int,
+        from viewController: UIViewController,
+        completion: @escaping (Bool, [(String, Data)]?, Error?) -> Void
+    ) {
         let picker = PhotoLibraryImportPicker(completion: completion)
         var configuration = PHPickerConfiguration()
-        configuration.filter = .images
+        configuration.filter = filter(for: kinds)
+        // Videos are read from their file representation: keep the original
+        // container instead of a transcode the import does not need.
+        configuration.preferredAssetRepresentationMode = .current
         configuration.selectionLimit = max(0, selectionLimit)
         let controller = PHPickerViewController(configuration: configuration)
         controller.delegate = picker
@@ -77,6 +99,10 @@ final class PhotoLibraryImportPicker: NSObject, PHPickerViewControllerDelegate {
         let rest = Array(results.dropFirst())
         let position = index
         let provider = result.itemProvider
+        if provider.hasItemConformingToTypeIdentifier(UTType.movie.identifier) {
+            readVideo(provider, rest: rest, index: position, collected: collected)
+            return
+        }
         guard provider.canLoadObject(ofClass: UIImage.self) else {
             read(rest, index: position + 1, collected: collected)
             return
@@ -88,6 +114,20 @@ final class PhotoLibraryImportPicker: NSObject, PHPickerViewControllerDelegate {
                 next.append((Self.fileName(provider: provider, index: position, fileExtension: encoded.fileExtension), encoded.data))
             }
             self.read(rest, index: position + 1, collected: next)
+        }
+    }
+
+    // The temporary file only lives inside the callback: its bytes are read
+    // there, before the provider deletes it.
+    private func readVideo(_ provider: NSItemProvider, rest: [PHPickerResult], index: Int, collected: [(String, Data)]) {
+        provider.loadFileRepresentation(forTypeIdentifier: UTType.movie.identifier) { [weak self] url, _ in
+            guard let self else { return }
+            var next = collected
+            if let url, let data = try? Data(contentsOf: url), !data.isEmpty {
+                let fileExtension = url.pathExtension.isEmpty ? "mov" : url.pathExtension.lowercased()
+                next.append((Self.fileName(provider: provider, index: index, fileExtension: fileExtension, fallbackStem: "video"), data))
+            }
+            self.read(rest, index: index + 1, collected: next)
         }
     }
 
@@ -115,9 +155,9 @@ final class PhotoLibraryImportPicker: NSObject, PHPickerViewControllerDelegate {
         }
     }
 
-    private static func fileName(provider: NSItemProvider, index: Int, fileExtension: String) -> String {
+    private static func fileName(provider: NSItemProvider, index: Int, fileExtension: String, fallbackStem: String = "photo") -> String {
         let suggested = String(provider.suggestedName ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         let stem = (suggested as NSString).deletingPathExtension
-        return "\(stem.isEmpty ? "photo_\(index)" : stem).\(fileExtension)"
+        return "\(stem.isEmpty ? "\(fallbackStem)_\(index)" : stem).\(fileExtension)"
     }
 }

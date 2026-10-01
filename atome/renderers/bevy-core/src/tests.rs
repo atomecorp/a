@@ -980,6 +980,58 @@ fn surface_background_contain_shows_whole_image_undistorted_over_backdrop() {
 }
 
 #[test]
+fn surface_background_tile_repeats_seamless_image_at_screen_relative_size() {
+    let mut world = World::new();
+    world.insert_resource(AtomeEntityTable::default());
+    world.insert_resource(AtomeBevyRendererConfig::empty(1000.0, 500.0));
+    world.insert_resource(AtomeRendererDiagnostics::default());
+    world.insert_resource(Assets::<Image>::default());
+
+    let entity = background::apply_surface_background(
+        &mut world,
+        AtomeSurfaceBackgroundPatch {
+            signature: "tile".to_string(),
+            color: [0.0, 0.0, 0.0, 1.0],
+            texture: Some(AtomeTexture { animation: None, width: 1254, height: 1254, rgba: vec![255; 1254 * 1254 * 4] }),
+            fit: Some("tile".to_string()),
+            backdrop: None,
+        },
+    )
+    .unwrap();
+
+    // No contain image, no blur: the full-surface sprite itself repeats.
+    assert_eq!(world.query::<&AtomeSurfaceBackgroundImage>().iter(&world).count(), 0);
+    let sprite = world.get::<Sprite>(entity).unwrap();
+    assert_vec2_near(sprite.custom_size, Vec2::new(1000.0, 500.0));
+    // 60 % of 1000 = 600 px tiles: the surface spans 1000/600 x 500/600 tiles,
+    // centred on the middle of one tile.
+    let rect = sprite.rect.unwrap();
+    assert_vec2_near(Some(rect.size()), Vec2::new(1254.0 * 1000.0 / 600.0, 1254.0 * 500.0 / 600.0));
+    assert_vec2_near(Some(rect.center()), Vec2::new(627.0, 627.0));
+    let handle = sprite.image.clone();
+    let image = world.resource::<Assets<Image>>().get(&handle).unwrap();
+    let ImageSampler::Descriptor(descriptor) = &image.sampler else { panic!("repeat sampler expected") };
+    assert_eq!(descriptor.address_mode_u, bevy::image::ImageAddressMode::Repeat);
+    assert_eq!(descriptor.address_mode_v, bevy::image::ImageAddressMode::Repeat);
+
+    // Bounds: a phone never gets tiles under 480 px, a big desktop never over 900 px.
+    assert_vec2_near(Some(background::tile_size(390.0, 844.0, 1.0, [1254, 1254])), Vec2::new(506.4, 506.4));
+    assert_vec2_near(Some(background::tile_size(300.0, 400.0, 1.0, [1254, 1254])), Vec2::new(480.0, 480.0));
+    assert_vec2_near(Some(background::tile_size(2560.0, 1440.0, 1.0, [1254, 1254])), Vec2::new(900.0, 900.0));
+    // Never blown up past 1.5x the native pixels (3x screen: 1254 / 3 * 1.5 = 627).
+    assert_vec2_near(Some(background::tile_size(1400.0, 900.0, 3.0, [1254, 1254])), Vec2::new(627.0, 627.0));
+
+    // Resizing keeps the tile rule instead of falling back to a cover crop.
+    apply_surface(
+        &mut world,
+        AtomeSurfacePatch { width: 390.0, height: 844.0, pixel_width: None, pixel_height: None, device_pixel_ratio: None },
+    )
+    .unwrap();
+    let resized = world.get::<Sprite>(entity).unwrap().rect.unwrap();
+    assert_vec2_near(Some(resized.size()), Vec2::new(1254.0 * 390.0 / 506.4, 1254.0 * 844.0 / 506.4));
+}
+
+#[test]
 fn selected_nodes_create_overlay_from_configured_visual_style() {
     let mut world = World::new();
     world.insert_resource(AtomeEntityTable::default());

@@ -127,6 +127,23 @@ set, binding and evaluation operations. Reads require `conditions.read`; mutatio
 audit/idempotency path. MCP does not create a second evaluator or persistence
 route.
 
+Health is never readable through MCP: every Conditions MCP handler runs behind
+`atome/src/squirrel/health/health_actor_gate.js`, and while it runs the `health`
+source discovers nothing and resolves `health_access_denied_for_actor`
+(including through sets, bindings and computed properties). The MCP actor's
+declared capabilities do not change this.
+
+## Health source
+
+The `health` live source keeps its single field `heart_rate`. Since 2026-10-01
+its connector (`native_health.js`) is a consumer of the single health owner
+(`atome/src/squirrel/health/`, see `health_monitors.md`). It no longer starts
+HealthKit itself, never requests a permission, and receives values only for the
+signed-in account whose device association exists. Freshness counts from the
+measurement time (15 min), not from the read time. The old window events
+`atome:native-health-sample` / `atome:native-health-revoked` are gone: values
+travel only in the sealed channel's invoke replies.
+
 ## Permission and realtime security
 
 ADOLE migrates legacy permission conditions to schema version 1 and evaluates

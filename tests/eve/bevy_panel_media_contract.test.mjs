@@ -49,6 +49,7 @@ const harness = ({
             return systemResult ? systemResult() : { ok: true };
         },
         closePanel: () => closes.push(true),
+        resolveProjectId: () => 'p1',
         resolveDropPoint
     });
     const surface = panel.surface;
@@ -335,7 +336,7 @@ test('a cancelled system window or a failed import leaves the panel open', async
     const { content } = broken.draw();
     assert.equal(broken.surface.readState().statusKind, null, 'la liste ne cède pas la place à un état d’erreur');
     assert.equal(visit(content, (node) => node.id === 'media_list') !== null, true, 'la liste reste utilisable');
-    assert.equal(visit(content, (node) => node.id === 'media_notice').text, 'Import impossible',
+    assert.match(visit(content, (node) => node.id === 'media_notice').text, /media_import_failed/,
         'l’échec se dit sous la liste');
 });
 
@@ -701,16 +702,15 @@ test('the listing paints each wave and keeps the previous rows while it refreshe
         'la vague suivante remplace la precedente');
 });
 
-// Un lot peut n aboutir qu en partie : ce qui est cree est sur le projet, donc
-// l import est termine et la fenetre se referme. Seul l echec total laisse
-// reessayer.
-test('a batch that only partly creates atomes still closes the panel', async () => {
+// Partial transfers retain failures for review without replaying successful entries.
+test('a partial batch restores the panel and reports its failure', async () => {
     const partial = harness({ importResult: () => ({ ok: false, created: 1, error: 'media_create_failed' }) });
     await open(partial.surface);
     const result = await partial.surface.handleEvent({ type: 'media.row.activate', value: 'img_1' });
 
     assert.equal(result.ok, false);
-    assert.deepEqual(partial.closes, [true], 'un atome cree referme le panneau');
+    assert.deepEqual(partial.closes, []);
+    assert.match(partial.surface.readState().notice, /media_create_failed/);
 
     const nothing = harness({ importResult: () => ({ ok: false, created: 0, error: 'media_create_failed' }) });
     await open(nothing.surface);

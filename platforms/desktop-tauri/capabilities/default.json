@@ -18,6 +18,7 @@
     "bevy-native-renderer",
     "clipboard-bridge",
     "file-export",
-    "taxonomy-editor"
+    "taxonomy-editor",
+    "health-bridge"
   ]
 }

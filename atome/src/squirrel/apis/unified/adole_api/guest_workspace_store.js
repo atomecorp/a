@@ -115,7 +115,7 @@ export async function commitWorkspaceEvents(ownerId, inputs, { actorType = 'user
                                 eventDeletedPropertyKeys(event).forEach(name => delete properties[name]);
                                 const record = {
                                     ...previous, key: key(ownerId, event.atome_id), atome_id: event.atome_id, id: event.atome_id,
-                                    atome_type: patch.type || patch.kind || previous?.atome_type || 'shape',
+                                    atome_type: patch.type || event.type || previous?.atome_type || patch.kind || 'shape',
                                     owner_id: String(ownerId), creator_id: previous?.creator_id || String(ownerId),
                                     project_id: event.payload?.scope === 'global' ? null : event.project_id || previous?.project_id || null,
                                     parent_id: event.parent_id || patch.parent_id || previous?.parent_id || null,

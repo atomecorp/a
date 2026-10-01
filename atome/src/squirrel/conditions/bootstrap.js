@@ -3,6 +3,8 @@ import { createConditionService } from './service.js';
 import { registerCanonicalConditionSources } from './property_catalog.js';
 import { registerLiveConditionSources } from './live_sources.js';
 import { createNativeHealthConnector } from './native_health.js';
+import { getHealthOwner } from '../health/index.js';
+import { healthAccessAllowedNow } from '../health/health_actor_gate.js';
 
 const SERVICE_KEY = '__SQUIRREL_CONDITIONS_SERVICE__';
 
@@ -26,15 +28,12 @@ export const createGlobalConditionsApi = ({ env = globalThis } = {}) => {
     const registry = createConditionRegistry();
     registerCanonicalConditionSources(registry);
     const resolveAtomeApi = () => env.Atome || env.window?.Atome || null;
-    const nativeInvoke = env.__ATOME_IOS_NATIVE_INVOKE || env.window?.__ATOME_IOS_NATIVE_INVOKE || null;
     const liveSources = registerLiveConditionSources(registry, {
         geolocation: env.navigator?.geolocation || env.window?.navigator?.geolocation || null,
         navigatorState: env.navigator || env.window?.navigator || null,
         eventTarget: env.addEventListener ? env : env.window,
-        healthConnector: createNativeHealthConnector({
-            invoke: typeof nativeInvoke === 'function' ? nativeInvoke.bind(env) : null,
-            eventTarget: env.addEventListener ? env : env.window
-        })
+        healthConnector: createNativeHealthConnector({ owner: getHealthOwner() }),
+        healthAccessAllowed: healthAccessAllowedNow
     });
     const loadStates = async (scope = {}, options = {}) => {
         const api = resolveAtomeApi();

@@ -675,10 +675,16 @@ public class iCloudFileManager: ObservableObject {
             case "m4a": if let t = UTType(filenameExtension: "m4a") { utTypes.append(t) } else { utTypes.append(.mpeg4Audio) }
             case "mp3": if #available(iOS 15.0, *) { utTypes.append(UTType.mp3) } else { utTypes.append(.audio) }
             case "wav": if #available(iOS 15.0, *) { utTypes.append(UTType.wav) } else { utTypes.append(.audio) }
+            // Media kinds sent by the Media panel: the picker only offers that family.
+            case "image": utTypes.append(.image)
+            case "video": utTypes.append(contentsOf: [.movie, .video])
+            case "audio": utTypes.append(.audio)
             default: utTypes.append(.data)
             }
         }
-        utTypes.append(contentsOf: [.audio, .data, .item, .content])
+        let mediaKinds: Set<String> = ["image", "video", "audio"]
+        let kindsOnly = !fileTypes.isEmpty && fileTypes.allSatisfy { mediaKinds.contains($0.lowercased()) }
+        if !kindsOnly { utTypes.append(contentsOf: [.audio, .data, .item, .content]) }
         let picker = UIDocumentPickerViewController(forOpeningContentTypes: utTypes)
         picker.delegate = multipleDelegate
         picker.allowsMultipleSelection = multiple

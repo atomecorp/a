@@ -220,3 +220,17 @@ test('Bevy web renderer preserves the previous applied image when a resource tex
     assert.equal(resourceOps[0].patch.id, 'menu_icon');
     assert.deepEqual(resourceOps[0].patch.texture, texture(90, 120, 150));
 });
+
+
+test('a renderer diff invalidated while resolving textures never submits stale canvas operations', async () => {
+    let finish; let current=true;
+    const {calls,surface}=await createHarness(()=>new Promise(resolve=>{finish=resolve;}));
+    const node=imageNode('outgoing_project_image','/fixture.png');
+    const pending=applyBevyWebRendererDiffs({surface,ops:[{type:VIRTUAL_SCENE_DIFF_TYPES.spawn,node}],virtualScene:scene([node]),waitForPresentation:false,isCurrent:()=>current});
+    for(let i=0; i<20&&!finish; i++) await new Promise(resolve=>setTimeout(resolve,0));
+    assert.equal(typeof finish,'function');current=false;finish(texture());
+    const result=await pending;
+    assert.equal(result.skipped,'project_scene_foreground_changed');
+    assert.equal(calls.filter(call=>call.type==='ops').length,0);
+    assert.equal(readBevyWebRendererState(surface).virtual_scene.nodes.length,0);
+});

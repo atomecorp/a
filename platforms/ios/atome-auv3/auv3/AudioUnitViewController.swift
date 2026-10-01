@@ -73,6 +73,10 @@ public class AudioUnitViewController: AUViewController, AUAudioUnitFactory, Audi
             AppNativeClipboardController.shared.handle(command: command, payload: payload, completion: completion)
         } else if AppNativeBevyRendererController.canHandle(command: command) {
             AppNativeBevyRendererController.shared.handle(command: command, payload: payload, completion: completion)
+        } else if AppNativeHealthController.canHandle(command: command) {
+            // The extension has no HealthKit entitlement and must not read health
+            // data next to the real-time audio thread: an explicit, clean refusal.
+            completion(["ok": false, "error": "health_host_unsupported"], nil)
         } else if command == "audio_init" {
             let sampleRate: Double
             let channels: UInt32
