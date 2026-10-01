@@ -62,9 +62,9 @@
     <key>NSLocationWhenInUseUsageDescription</key>
     <string>Atome utilise votre position uniquement lorsque vous demandez la météo locale.</string>
     <key>NSHealthShareUsageDescription</key>
-    <string>Atome utilise les mesures de fréquence cardiaque que vous autorisez pour alimenter vos critères dynamiques.</string>
-    <key>NSHealthUpdateUsageDescription</key>
-    <string>Atome ne modifie pas vos données de santé.</string>
+    <string>Atome lit uniquement les données de santé que vous choisissez d'afficher dans vos moniteurs (rubrique Moniteur du Dashboard) et dans vos critères dynamiques. Ces données restent sur cet appareil.</string>
+    <key>NSMotionUsageDescription</key>
+    <string>Atome compte les pas mesurés par cet iPhone pour le moniteur « Pas de cet iPhone » que vous avez choisi.</string>
     <key>NSPhotoLibraryUsageDescription</key>
     <string>Atome peut accéder aux photos pour charger des samples audio</string>
     <key>NSPhotoLibraryAddUsageDescription</key>

@@ -26,6 +26,8 @@ extension WebViewManager {
     public func webView(_ webView: WKWebView, didStartProvisionalNavigation navigation: WKNavigation!) {
         WebViewManager.markBootMilestone("navigation_started")
         WebViewManager.markPageLoading()
+        // A new page claims a new health channel; observers of the old page stop.
+        AppNativeHealthController.shared.pageWillLoad()
     }
 
     public func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {

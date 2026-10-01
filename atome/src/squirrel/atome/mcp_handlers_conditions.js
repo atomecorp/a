@@ -1,4 +1,5 @@
 import { createGlobalConditionsApi } from '../conditions/bootstrap.js';
+import { runWithoutHealthAccess } from '../health/health_actor_gate.js';
 
 const conditionsApi = () => globalThis.atome?.conditions
     || globalThis.window?.atome?.conditions
@@ -9,8 +10,14 @@ const authorizedOptions = (params = {}) => ({
     ...(params.projectId ? { projectId: String(params.projectId) } : {})
 });
 
+// Health values are never readable by an MCP actor, whatever the capabilities
+// it declares: every Conditions handler runs behind the health actor gate.
+const withoutHealth = (handlers) => Object.fromEntries(Object.entries(handlers).map(([name, handler]) => [
+    name, (params) => runWithoutHealthAccess(() => handler(params))
+]));
+
 export function createMcpConditionHandlers() {
-    return {
+    return withoutHealth({
         async 'conditions.evaluate'(params = {}) {
             const api = conditionsApi();
             return api.match(params.conditionSet || params.condition || params.root, params.context || {}, {
@@ -97,5 +104,5 @@ export function createMcpConditionHandlers() {
         async 'conditions.bindings.evaluate'(params = {}) {
             return conditionsApi().bindings.evaluate(String(params.id || ''), params.context || {});
         }
-    };
+    });
 }

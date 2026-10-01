@@ -369,6 +369,12 @@
           "markdownDescription": "Allows the main webview to save an exported file into the Downloads folder.\n#### This permission set includes:\n\n- `allow-export-file-save`"
         },
         {
+          "description": "Allows the main webview to use the single gated health command. The command itself checks the per-page channel token, the verified account and the local association before any Health Connect read.\n#### This permission set includes:\n\n- `allow-health-invoke`",
+          "type": "string",
+          "const": "health-bridge",
+          "markdownDescription": "Allows the main webview to use the single gated health command. The command itself checks the per-page channel token, the verified account and the local association before any Health Connect read.\n#### This permission set includes:\n\n- `allow-health-invoke`"
+        },
+        {
           "description": "Lets the developer taxonomy editor read and save eVe/intuition/menu/context_menus.json (writes only in debug builds).\n#### This permission set includes:\n\n- `allow-taxonomy-read`\n- `allow-taxonomy-save`",
           "type": "string",
           "const": "taxonomy-editor",
@@ -511,6 +517,12 @@
           "type": "string",
           "const": "allow-export-file-save",
           "markdownDescription": "Enables the export_file_save command."
+        },
+        {
+          "description": "Enables the health_invoke command.",
+          "type": "string",
+          "const": "allow-health-invoke",
+          "markdownDescription": "Enables the health_invoke command."
         },
         {
           "description": "Enables the taxonomy_read command.",

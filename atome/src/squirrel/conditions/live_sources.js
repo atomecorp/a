@@ -1,3 +1,5 @@
+import { getHealthMonitor } from '../health/health_catalog.js';
+
 const normalizeId = (value) => String(value == null ? '' : value).trim();
 
 const subjectIdOf = (context = {}) => normalizeId(
@@ -151,10 +153,10 @@ const geolocationConnector = (geolocation, ttlMs) => ({
 export function registerLiveConditionSources(registry, {
     geolocation = null,
     healthConnector = null,
+    healthAccessAllowed = () => true,
     eventTarget = null,
     navigatorState = null,
     locationTtlMs = 60000,
-    healthTtlMs = 15000,
     now
 } = {}) {
     const location = createLiveConditionSource({
@@ -193,18 +195,24 @@ export function registerLiveConditionSources(registry, {
         },
         subscribe: location.subscribe
     });
+    // Conditions keep their single historical health field. Its definition
+    // comes from the health catalog; freshness is set per sample by the
+    // connector from the measurement time. Actors that must not read health
+    // (MCP requests) get an explicit denial at the source, not a hidden field.
+    const heartRate = getHealthMonitor('heart_rate');
     const health = createLiveConditionSource({
         source: 'health',
-        fields: [{ field: 'heart_rate', type: 'number', unit: 'bpm', group: 'live', ttlMs: healthTtlMs }],
+        fields: [{ field: heartRate.id, type: 'number', unit: heartRate.unit, group: 'live' }],
         connector: healthConnector,
         now
     });
+    const healthDenied = Object.freeze({ available: false, reasonCode: 'health_access_denied_for_actor' });
     registry.registerSource({
         source: 'health',
-        describe: (field) => health.fields().find((entry) => entry.field === field),
-        discover: () => health.fields(),
-        resolve: health.read,
-        subscribe: health.subscribe
+        describe: (field) => (healthAccessAllowed() ? health.fields().find((entry) => entry.field === field) : undefined),
+        discover: () => (healthAccessAllowed() ? health.fields() : []),
+        resolve: (context, field) => (healthAccessAllowed() ? health.read(context, field) : healthDenied),
+        subscribe: (dependencies, callback) => (healthAccessAllowed() ? health.subscribe(dependencies, callback) : () => {})
     });
 
     const subscribeEvents = (dependencies, prefix, names, callback) => {

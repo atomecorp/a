@@ -95,6 +95,7 @@ tests/shared/*
 !tests/eve/
 tests/eve/*
 !tests/eve/youtube_finder.test.mjs
+!tests/eve/project_program.test.mjs
 !tests/eve/atome_commit.sanitization.test.mjs
 !tests/eve/atome_edit_footer_delete_cold_start.test.mjs
 !tests/eve/atome_record_projection_project_id.test.mjs

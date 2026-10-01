@@ -363,6 +363,24 @@
           "markdownDescription": "Allows the main webview to read and write the host system clipboard.\n#### This permission set includes:\n\n- `allow-clipboard-write-text`\n- `allow-clipboard-read-text`\n- `allow-clipboard-has-text`"
         },
         {
+          "description": "Allows the main webview to save an exported file into the Downloads folder.\n#### This permission set includes:\n\n- `allow-export-file-save`",
+          "type": "string",
+          "const": "file-export",
+          "markdownDescription": "Allows the main webview to save an exported file into the Downloads folder.\n#### This permission set includes:\n\n- `allow-export-file-save`"
+        },
+        {
+          "description": "Allows the main webview to use the single gated health command. The command itself checks the per-page channel token, the verified account and the local association before any Health Connect read.\n#### This permission set includes:\n\n- `allow-health-invoke`",
+          "type": "string",
+          "const": "health-bridge",
+          "markdownDescription": "Allows the main webview to use the single gated health command. The command itself checks the per-page channel token, the verified account and the local association before any Health Connect read.\n#### This permission set includes:\n\n- `allow-health-invoke`"
+        },
+        {
+          "description": "Lets the developer taxonomy editor read and save eVe/intuition/menu/context_menus.json (writes only in debug builds).\n#### This permission set includes:\n\n- `allow-taxonomy-read`\n- `allow-taxonomy-save`",
+          "type": "string",
+          "const": "taxonomy-editor",
+          "markdownDescription": "Lets the developer taxonomy editor read and save eVe/intuition/menu/context_menus.json (writes only in debug builds).\n#### This permission set includes:\n\n- `allow-taxonomy-read`\n- `allow-taxonomy-save`"
+        },
+        {
           "description": "Enables the audio_destroy_clip command.",
           "type": "string",
           "const": "allow-audio-destroy-clip",
@@ -493,6 +511,36 @@
           "type": "string",
           "const": "allow-clipboard-write-text",
           "markdownDescription": "Enables the clipboard_write_text command."
+        },
+        {
+          "description": "Enables the export_file_save command.",
+          "type": "string",
+          "const": "allow-export-file-save",
+          "markdownDescription": "Enables the export_file_save command."
+        },
+        {
+          "description": "Enables the health_invoke command.",
+          "type": "string",
+          "const": "allow-health-invoke",
+          "markdownDescription": "Enables the health_invoke command."
+        },
+        {
+          "description": "Enables the taxonomy_read command.",
+          "type": "string",
+          "const": "allow-taxonomy-read",
+          "markdownDescription": "Enables the taxonomy_read command."
+        },
+        {
+          "description": "Enables the taxonomy_save command.",
+          "type": "string",
+          "const": "allow-taxonomy-save",
+          "markdownDescription": "Enables the taxonomy_save command."
+        },
+        {
+          "description": "Allows the main application to sign authentication challenges with its protected device key.",
+          "type": "string",
+          "const": "auth-device",
+          "markdownDescription": "Allows the main application to sign authentication challenges with its protected device key."
         },
         {
           "description": "No features are enabled by default, as we believe\nthe clipboard can be inherently dangerous and it is \napplication specific if read and/or write access is needed.\n\nClipboard interaction needs to be explicitly enabled.\n",

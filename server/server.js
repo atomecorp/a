@@ -200,6 +200,7 @@ const communicationRelations = createCommunicationRelations({
 const directMessageRateAllowed = createRateLimiter();
 // News : diffusion serveur (tous les utilisateurs, y compris prives : D1), tags, abonnements.
 const newsBroadcast = createNewsBroadcast({
+  vaultProvider: userVaultRouter.provider,
   relations: communicationRelations,
   deliver: (targetId, senderId, notification) => deliverCommNotification(targetId, senderId, notification),
   listUserIds: async () => (await listAllUsers(db.getDataSourceAdapter(), true)).map((user) => user.user_id),

@@ -7,6 +7,7 @@ mod local_http_navigation;
 mod native_clipboard;
 mod native_contacts;
 mod native_file_export;
+mod native_health;
 mod native_midi;
 mod runtime_logging;
 mod server;
@@ -223,6 +224,15 @@ pub fn run() {
         .append_invoke_initialization_script(runtime_init_script)
         .plugin(tauri_plugin_stt::init())
         .plugin(tauri_plugin_clipboard_manager::init())
+        .plugin(tauri_plugin_health::init())
+        .manage(std::sync::Mutex::new(native_health::state()))
+        // A main-frame page load claims a new health channel (see native_health.rs).
+        .on_page_load(|webview, payload| {
+            if webview.label() == "main" && payload.event() == tauri::webview::PageLoadEvent::Started {
+                use tauri::Manager;
+                native_health::reset_on_page_load(&webview.state::<std::sync::Mutex<native_health::HealthChannelState>>());
+            }
+        })
         .on_window_event(viewport_runtime::publish_native_viewport)
         .invoke_handler(tauri::generate_handler![
             auth_device::auth_device_key,
@@ -256,6 +266,7 @@ pub fn run() {
             native_clipboard::clipboard_read_text,
             native_clipboard::clipboard_has_text,
             native_file_export::export_file_save,
+            native_health::health_invoke,
             taxonomy_editor::taxonomy_read,
             taxonomy_editor::taxonomy_save,
             project_root

@@ -537,6 +537,16 @@ Time conditions schedule only their next semantic deadline; presence/session
 reuse browser connectivity and canonical Squirrel authentication events, while
 location and health use expiring live samples. None installs a permanent poller.
 
+Health (2026-10-01): the only health owner is `atome/src/squirrel/health/`. The
+Dashboard and Conditions are consumers of `health_owner.js`; neither talks to the
+native host. The sealed channel is claimed at boot (conditions bootstrap wave,
+before any project code); identity is verified natively from the local session
+token; reading requires an explicit per-device, per-account association that is
+never synchronized. Values live in memory only and are never committed, synced,
+logged or exposed to MCP (`health_actor_gate.js`). Running user code in the realm
+(code editor) seals health access until reload. A 60 s visibility-aware poll runs
+only while a consumer exists and the page is visible; no background collection.
+
 Current project-state reliability contract (2026-08-11): project listing has a raw read phase and a serialized per-user reconciliation phase. Creation/insertion reads the complete authoritative list under that lock, deduplicates by ID, assigns collision-free slots deterministically by creation time then ID, and writes one `commitBatch`; Dashboard opening repairs historical collisions without deleting projects or previews. Dashboard `projects` data is account-global and uses one global cache invalidated by create/rename/delete, while project-scoped categories retain per-project caches. Shared record identity accessors in `atome_record_utils.js` are the sole root/`properties`/`meta` authority used by scene loading, structured project views, and Infos.
 
 Current playback transition contract (2026-08-11): media playback state lives in `selected_project_media_playback_runtime.js`, never in DOM state. A selection with at least one stopped playable medium exposes Play; when all playable media are active it exposes Stop. Play resets the selected media and restarts all at zero; Stop resets all. Mystic and contextual footer reproject from the single playback-state event. Decoder control remains owned by `media_reader_tool_runtime.js`; changing project stops only outgoing-project media and does not touch assistant/TTS/global streams.
@@ -1756,3 +1766,9 @@ Three object tools and one contextual category, all riding the existing surfaces
 Known limit, stated rather than hidden: the alpha mask of a **live video quad** is not delivered — the video pipeline of a live source (`atome/renderers/bevy-core/src/video_external_web.rs`, `video_external.wgsl`) is `#[cfg(target_arch = "wasm32")]` and is not compiled in this desktop check, so only sprites, images and shapes are masked today. `setMask` stays the consumer to extend there.
 
 Evidence: `tests/eve/create_tools_shape_contract.test.mjs` (9/9), `tests/eve/selection_effects_rounding_shadow_mask_contract.test.mjs` (13/13), `tests/eve/bevy_projection_adapter_contract.test.mjs` (17/17), `tests/eve/contextual_rail_active_zone.test.mjs`, `tests/eve/armed_tool_rail_definitions.test.mjs`, `tests/eve/context_menus_characterisation.test.mjs`, `tests/eve/context_menu_resolver.test.mjs`, `tests/eve/create_tools_modes_contract.test.mjs`, `cargo test --manifest-path atome/renderers/bevy-core/Cargo.toml` (129 passed), `npm run check:syntax`, `npm run check:m0`. Real app (Web/Tauri) **To verify**.
+
+## Private programme lifecycle (2026-10-01)
+
+Finder projects catalogue definitions without writes. Explicit creation uses system template/project owners. Programme commands run through the existing tool gateway and registered handlers; the programme domain persists through the canonical batch pipeline. Preview is read-only. Accepted action keys retain calendar event identities, while calendar dates/completions remain authoritative. Revision history uses native record Atomes; observations use native text. There is no second persistent store. Programme templates opt into pinned source versions; existing templates retain live synchronization. Native share hierarchy excludes private programme descendants; shared programme consent and unique cross-project time attribution are not finalized. Evidence and limits: `eVe/documentations/programs/README.md`.
+
+Programme confidentiality reuses `eVe/domains/news/news_publish_api.js` and `server/news_broadcast.js` (canonical vault ancestor checks) before mutation/broadcast; `server/server.js` injects the existing vault provider. Native guest projection in `atome/src/squirrel/apis/unified/adole_api/guest_workspace_store.js` preserves canonical type before considering business `kind`. These are owner extensions, not separate storage or rights systems.
