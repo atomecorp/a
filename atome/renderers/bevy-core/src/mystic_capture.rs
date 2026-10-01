@@ -17,6 +17,7 @@ pub struct MenuCapture {
     geometry: [Vec4; 24],
     epoch: f32,
     warmup: u8,
+    face_warmup: u8,
 }
 
 fn target(images: &mut Assets<Image>, size: UVec2) -> Handle<Image> {
@@ -62,20 +63,33 @@ pub fn sync_menu_capture(world: &mut World) {
         // -2; the regular presentation at 0 then samples these two targets.
         let cameras = [spawn(world, front.clone(), -2, RenderLayers::layer(0).with(1)),
             spawn(world, face.clone(), -1, RenderLayers::layer(MENU_FACE_LAYER))];
-        world.insert_resource(MenuCapture { front, face, cameras, size, geometry: [Vec4::ZERO; 24], epoch: -1.0, warmup: 2 });
+        world.insert_resource(MenuCapture { front, face, cameras, size, geometry: [Vec4::ZERO; 24], epoch: -1.0, warmup: 2, face_warmup: 2 });
     }
     let face_changed = world.query::<(Ref<Sprite>, &RenderLayers)>().iter(world)
         .any(|(sprite, layers)| layers.intersects(&RenderLayers::layer(MENU_FACE_LAYER)) && sprite.is_changed());
     let text_changed = world.query::<(Ref<Text2d>, &RenderLayers)>().iter(world)
         .any(|(text, layers)| layers.intersects(&RenderLayers::layer(MENU_FACE_LAYER)) && text.is_changed());
+    // A record of the face moved or was rescaled (the Mystic Auto-size lens
+    // patches transforms only): the face must be re-captured with it.
+    let face_moved = world.query_filtered::<(Ref<Transform>, &RenderLayers), Without<Camera>>().iter(world)
+        .any(|(transform, layers)| layers.intersects(&RenderLayers::layer(MENU_FACE_LAYER)) && transform.is_changed());
     let (front, face, cameras, refresh_front, refresh_face) = {
         let mut capture = world.resource_mut::<MenuCapture>();
-        if capture.geometry != geometry || capture.epoch != epoch {
-            capture.geometry = geometry; capture.epoch = epoch; capture.warmup = 2;
+        // A new epoch (opening, page, palette) re-captures the workspace. A
+        // geometry change alone (the Auto-size lens, every frame it animates)
+        // only moves the plates over the SAME workspace: re-capturing it would
+        // re-render the whole scene each frame for nothing.
+        if capture.epoch != epoch {
+            capture.geometry = geometry; capture.epoch = epoch; capture.warmup = 2; capture.face_warmup = 2;
+        } else if capture.geometry != geometry {
+            capture.geometry = geometry; capture.face_warmup = 2;
         }
         let front_active = capture.warmup > 0;
         capture.warmup = capture.warmup.saturating_sub(1);
-        (capture.front.clone(), capture.face.clone(), capture.cameras, front_active, front_active || moving || face_changed || text_changed)
+        let face_active = capture.face_warmup > 0;
+        capture.face_warmup = capture.face_warmup.saturating_sub(1);
+        (capture.front.clone(), capture.face.clone(), capture.cameras, front_active,
+            front_active || face_active || moving || face_changed || text_changed || face_moved)
     };
     for (camera, active) in cameras.into_iter().zip([refresh_front, refresh_face]) {
         if let Some(mut component) = world.get_mut::<Camera>(camera) { component.is_active = active; }

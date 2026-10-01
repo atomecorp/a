@@ -1,5 +1,7 @@
 # Tool surface map — clé de menu ↔ `tool_id`
 
+2026-10-01 Finder exposure follows V2 surface declarations and palette children; internal registry commands remain excluded. YouTube, Placeholder, Shape, Generator, New project and Stacking order have normal bootstrap declarations and reuse existing business owners. Entertainment uses normal activity taxonomy with YouTube/TV at beginner level. Static reachability on the current catalogue: 29 before the traversal fix, 95 after; isolated guest runtime after correction: 233 registered definitions, 102 actually exposed tools and 102 Finder results; exhaustive surface-to-registry-to-Finder comparison has zero missing tools. Full inventory: `eVe/documentations/FINDER_TOOLS_INVENTORY_2026-10-01.json`.
+
 Généré le 2026-09-24 depuis le contenu réel du menu principal (`getMainMenuRuntime().getContent()`, session invité dans l'espace de travail) et depuis `eVe/intuition/menu/context_menus.json`.
 
 Mise à jour 2026-09-25 : les cases de rail des outils de création viennent de `menus.sidebar.tools` ; Page n'est plus une palette locale (ses 6 formats sont ses cases de rail) et le Générateur expose la liste projetée par son registre.

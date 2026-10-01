@@ -4,7 +4,7 @@ import {getProjectWorkMode,setProjectWorkMode} from '../../eVe/domains/rendering
 import {resolveContextMenu} from '../../eVe/intuition/menu/context_menu_resolver.js';
 test('the Mystic is one constant list in edit, and the project background reads like the rest',()=>{
  const keys=context=>resolveContextMenu({context}).map(item=>item.key);
- const FIXED=['ai','capture','import','communicate','dashboard','new_project','copy','paste','delete','play','utilities','info','activity'];
+ const FIXED=['ai','find','capture','import','communicate','dashboard','new_project','copy','paste','delete','play','utilities','info','activity'];
  // Le fond de projet est lisible (2026-09-29) : sa tuile Play pilote le
  // transport du projet entier, la liste y gagne `play` au meme rang.
  assert.deepEqual(keys({type:'project'}),FIXED);

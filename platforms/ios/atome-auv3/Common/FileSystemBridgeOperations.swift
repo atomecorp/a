@@ -215,6 +215,19 @@ extension FileSystemBridge {
             sendErrorResponse(to: webView, error: "Cannot find view controller")
             return
         }
+        // The Media panel's « Ajouter des fichiers externes » sends the sources
+        // it wants (files, camera roll, music) for the kinds it accepts: the
+        // person always chooses, the bridge never jumps to one of them.
+        if let requested = body["sources"] as? [String], !requested.isEmpty {
+            let request = ImportSourceRequest(
+                sources: requested,
+                kinds: body["kinds"] as? [String] ?? [],
+                labels: body["labels"] as? [String: String] ?? [:],
+                allowsMultiple: allowsMultiple
+            )
+            presentImportSources(request, controller: controller, webView: webView)
+            return
+        }
         // A picture request is answered by Apple Photos, not by the file
         // provider that has no access to the library.
         if types.contains(PhotoLibraryImportPicker.fileTypeToken) {
@@ -306,6 +319,102 @@ extension FileSystemBridge {
             popover.permittedArrowDirections = []
         }
         DispatchQueue.main.async { controller.present(alert, animated: true) }
+    }
+
+    private struct ImportSourceRequest {
+        let sources: [String]
+        let kinds: [String]
+        let labels: [String: String]
+        let allowsMultiple: Bool
+
+        func label(_ key: String, _ fallback: String) -> String {
+            let value = labels[key]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            return value.isEmpty ? fallback : value
+        }
+    }
+
+    // The Music library cannot be presented from an Audio Unit extension
+    // (no library entitlement in a host process): the source is left out there.
+    private func availableImportSources(_ requested: [String]) -> [String] {
+        let known = ["files", "photos", "music"]
+        return requested.filter { source in
+            guard known.contains(source) else { return false }
+            return source != "music" || !ExternalDisplayGuards.isRunningInExtension
+        }
+    }
+
+    private func presentImportSources(_ request: ImportSourceRequest, controller: UIViewController, webView: WKWebView) {
+        let sources = availableImportSources(request.sources)
+        if sources.count == 1, let only = sources.first {
+            presentImportSource(only, request: request, controller: controller, webView: webView)
+            return
+        }
+        let alert = UIAlertController(title: request.label("title", "Ajouter depuis"), message: nil, preferredStyle: .actionSheet)
+        let titles = [
+            "files": request.label("files", "Fichiers"),
+            "photos": request.label("photos", "Pellicule"),
+            "music": request.label("music", "Musique")
+        ]
+        for source in sources {
+            alert.addAction(UIAlertAction(title: titles[source] ?? source, style: .default) { [weak self] _ in
+                self?.presentImportSource(source, request: request, controller: controller, webView: webView)
+            })
+        }
+        alert.addAction(UIAlertAction(title: request.label("cancel", "Annuler"), style: .cancel) { [weak self] _ in
+            let error = NSError(domain: "ImportSource", code: -1, userInfo: [NSLocalizedDescriptionKey: "User cancelled"])
+            self?.sendLoadedFiles(success: false, results: nil, error: error, webView: webView)
+        })
+        if let popover = alert.popoverPresentationController {
+            popover.sourceView = controller.view
+            popover.sourceRect = CGRect(x: controller.view.bounds.midX, y: controller.view.bounds.midY, width: 0, height: 0)
+            popover.permittedArrowDirections = []
+        }
+        DispatchQueue.main.async { controller.present(alert, animated: true) }
+    }
+
+    private func presentImportSource(
+        _ source: String,
+        request: ImportSourceRequest,
+        controller: UIViewController,
+        webView: WKWebView
+    ) {
+        switch source {
+        case "photos":
+            PhotoLibraryImportPicker.loadMedia(
+                kinds: request.kinds,
+                selectionLimit: request.allowsMultiple ? 0 : 1,
+                from: controller
+            ) { [weak self] success, results, error in
+                DispatchQueue.main.async {
+                    self?.sendLoadedFiles(success: success, results: results, error: error, webView: webView)
+                }
+            }
+        case "music":
+            MusicLibraryImportPicker.loadTracks(
+                allowsMultiple: request.allowsMultiple,
+                protectedMessage: request.label("musicProtected", "Ce titre Apple Music est protégé et ne peut pas être importé"),
+                from: controller
+            ) { [weak self] success, results, error in
+                DispatchQueue.main.async {
+                    self?.sendLoadedFiles(success: success, results: results, error: error, webView: webView)
+                }
+            }
+        default:
+            presentImportDocumentPicker(
+                types: Self.documentTypes(for: request.kinds),
+                allowsMultiple: request.allowsMultiple,
+                controller: controller,
+                webView: webView
+            )
+        }
+    }
+
+    // The document picker vocabulary of `iCloudFileManager`: an empty list
+    // opens every document; a kind restricts to its family.
+    private static func documentTypes(for kinds: [String]) -> [String] {
+        let all = ["image", "video", "audio"]
+        if kinds.isEmpty || Set(kinds).isSuperset(of: all) { return [] }
+        return kinds
     }
 
     private func sendLoadedFiles(

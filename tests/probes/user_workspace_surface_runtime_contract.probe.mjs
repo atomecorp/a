@@ -33,7 +33,8 @@ setMainMenuRuntime({
 window.eveToolBase = {
     loadProjectAtomes: async () => {
         calls.push({ name: 'loadProjectAtomes' });
-        throw new Error('resident_dashboard_toggle_must_not_reload_project');
+        projectHost.appendChild(canvas);
+        return {ok:true};
     },
     getProjectSceneState: () => ({
         records: [{ id: '__eve_bevy_ui_eve_bevy_ui_main_menu_root' }]
@@ -77,10 +78,11 @@ const {
 
 const opened = await openWorkspaceDashboardAndMainMenu({ source: 'main_handle' });
 assert.equal(opened.ok, true);
-assert.equal(opened.sceneProjectId, 'project_resident');
+assert.equal(opened.sceneProjectId, '__eve_dashboard_workspace__');
 assert.equal(window.__eveWorkspaceMode.mode, 'dashboard');
-assert.equal(window.__eveWorkspaceMode.projectId, 'project_resident');
-assert.equal(canvas.parentElement, projectHost);
+assert.equal(window.__eveWorkspaceMode.projectId, '__eve_dashboard_workspace__');
+assert.equal(canvas.parentElement.id, 'project_view___eve_dashboard_workspace__');
+assert.equal(projectHost.style.display, 'none');
 assert.equal(document.querySelectorAll('#eve_surface_project').length, 1);
 assert.deepEqual(calls.map((entry) => entry.name), ['closePanel', 'open']);
 assert.equal(calls[0].context?.source?.type, 'dashboard.open');
@@ -92,13 +94,13 @@ assert.equal(closed.suspended, true);
 assert.equal(window.__eveWorkspaceMode.mode, 'project');
 assert.equal(window.__eveWorkspaceMode.projectId, 'project_resident');
 assert.equal(canvas.parentElement, projectHost);
-assert.deepEqual(calls.map((entry) => entry.name), ['close', 'showFully']);
-assert.equal(calls.some((entry) => entry.name === 'loadProjectAtomes'), false);
+assert.deepEqual(calls.map((entry) => entry.name), ['close', 'loadProjectAtomes', 'showFully']);
+assert.equal(calls.some((entry) => entry.name === 'loadProjectAtomes'), true);
 
 calls.length = 0;
 const reopened = await toggleWorkspaceDashboardAndMainMenu({ source: 'main_handle' });
 assert.equal(reopened.ok, true);
-assert.equal(reopened.sceneProjectId, 'project_resident');
+assert.equal(reopened.sceneProjectId, '__eve_dashboard_workspace__');
 assert.deepEqual(calls.map((entry) => entry.name), ['closePanel', 'open']);
 
 await toggleWorkspaceDashboardAndMainMenu();

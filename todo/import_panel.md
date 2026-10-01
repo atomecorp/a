@@ -349,6 +349,54 @@ restent à faire sur une bibliothèque représentative, puis sur iOS/web si ces 
 
 ---
 
+## 8. Import unifié — le panneau Média est la seule porte (1er octobre 2026)
+
+**Demande** : la photo de profil (Contact / Moi) et le fond d'écran ouvraient **directement** la pellicule Apple (`requestProjectImportFiles({ accept: 'image/*' })` → jeton iOS `photos`). On ne pouvait ni choisir une image déjà possédée, ni prendre un fichier sur le disque. Désormais **tout import passe par le panneau Média**, et son bouton « Ajouter des fichiers externes » propose toutes les sources.
+
+### 8.1 Mode « choix » du panneau
+- Entrée unique : `requestMediaSelection({ kinds, multiple, title })` (`eVe/intuition/tools/media.js`). Elle rend `{ ok, items }`, où chaque élément vaut `{ origin: 'library', file }` (média déjà stocké) ou `{ origin: 'external', file: File }`. Une fermeture sans choix rend `{ ok: false, cancelled: true }`.
+- Dans le panneau (`bevy_panel_media_runtime.js`) :
+  - seuls les types demandés sont listés, et il n'y a pas de chips quand un seul type est demandé ;
+  - le titre est celui fourni (« Choisir une image ») ;
+  - un clic de ligne rend la ligne choisie ;
+  - le glisser vers le canevas est coupé ;
+  - « Choisir (N) » n'apparaît qu'en `multiple` ;
+  - le bouton externe passe le filtre (`accept` et `kinds`) à la fenêtre système.
+- Le mode projet (§2) est **inchangé**. Ouvrir le panneau en mode projet pendant un choix annule ce choix.
+- Pour un élément `library` :
+  - `resolveSelectionItemMediaUrl(item)` donne l'URL routée, utilisée par le fond et l'emplacement **sans second téléversement** ;
+  - `readSelectionItemAsFile(item)` relit les octets : URL avec `appendStreamingMediaAuthQuery` d'abord, puis repli `fetchProtectedMediaBytes`. C'est ce qu'utilisent la photo de profil (data URL) et l'assistant.
+
+### 8.2 Appelants unifiés
+| Appelant | Fichier | Comportement |
+|---|---|---|
+| Photo de profil | `bevy_panel_home_profile_editor.js` `pickPhoto` | choix d'une image ; le dépôt sur le cadre reste direct |
+| Fond d'écran | `tools/background.js` `openBackgroundImportDialog` → `applyLibraryBackgroundImage` | choix d'une image |
+| Emplacement image | `project_view_placeholder_fill.js` `fillImageFromPicker` / `fillImageFromLibrary` | choix d'une image |
+| Assistant (références) | `assistant_media_session.js` `attach` | choix de plusieurs images |
+| Capture › import | `invokeProjectMediaImport` | **ouvre le panneau Média en mode projet** (conteneur transmis dans le contexte) — revient sur « capture inchangé » du §1 |
+
+La fenêtre système n'est plus appelée que par le panneau : `importProjectMediaFromSystemWindow` (mode projet) et `requestProjectImportFiles` (mode choix), toutes deux via `tools/media.js`. Garde : `temp/media_import_single_door.probe.mjs`.
+
+### 8.3 « Ajouter des fichiers externes » complet
+- **iOS** : le JS envoie `{ sources, kinds, labels }`. Les libellés viennent de l'i18n `eve.media.source.*`. L'hôte affiche **toujours** une feuille « Ajouter depuis » :
+  - Fichiers ;
+  - Pellicule, si une image ou une vidéo est demandée. `PHPicker` filtre selon les types demandés et **lit maintenant les vidéos** (`loadFileRepresentation`) ;
+  - Musique, si un son est demandé, avec le nouveau `MusicLibraryImportPicker.swift` (`MPMediaPickerController`, export M4A). Les titres Apple Music protégés ou seulement dans le cloud sont ignorés, avec un message traduit. Cette source est masquée dans l'extension AUv3.
+- Le sélecteur de documents filtre par famille (`image` / `video` / `audio`).
+- `NSAppleMusicUsageDescription` est ajouté à `application/Info.plist`.
+- L'ancien format `fileTypes` reste lu (compatibilité).
+- **Web / Tauri** : `showOpenFilePicker` reçoit enfin `types` (auparavant, `accept` était ignoré sur Chromium). L'`<input>` garde son `accept`.
+- **Android** : pas de cible dans le dépôt ; le chemin web donne le sélecteur système.
+
+### 8.4 Vérifié
+- `temp/media_pick_unified_real_app.probe.mjs` : instance isolée, compte réel, 11/11 vérifications, deux passes. Couvre le fond d'écran (externe et bibliothèque, 0 téléversement), la photo de profil depuis la bibliothèque (data URL), l'annulation, et Capture qui ouvre le panneau en mode projet avec son conteneur.
+- iOS simulateur (RWI) : la feuille à 3 sources ; une vidéo de la pellicule rendue en `video/mp4` ; une demande image seule qui montre Fichiers + Pellicule ; Annuler qui rend `cancelled`.
+- **Non vérifié** :
+  - la source Musique : le simulateur n'a pas de bibliothèque, il faut tester sur appareil avec un titre local et un titre Apple Music protégé ;
+  - l'emplacement image depuis la bibliothèque : pas exercé en app ;
+  - les grosses vidéos via le pont base64 : non mesurées.
+
 ## Annexe — constats d'origine (reprise au §7)
 
 ### Annexe A — instances dupliquées / multipliées dans le panneau d'import
