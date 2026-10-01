@@ -1,1 +1,4 @@
 *.sh text eol=lf
+
+# Generated SDK includes verbatim shader strings; preserve their formatting.
+atome/src/assets/vendor/porcupine/porcupine.bundle.js linguist-generated=true whitespace=-blank-at-eol

@@ -270,6 +270,14 @@ pub fn audio_get_scope() -> Result<Value, String> {
 
 #[tauri::command]
 pub fn audio_shutdown() -> Result<Value, String> {
+    super::wake_capture::stop()?;
     playback::shutdown()?;
     Ok(json!({ "success": true }))
 }
+
+#[tauri::command]
+pub fn audio_wake_start(sample_rate: u32) -> Result<Value, String> { super::wake_capture::start(sample_rate) }
+#[tauri::command]
+pub fn audio_wake_stop() -> Result<Value, String> { super::wake_capture::stop() }
+#[tauri::command]
+pub fn audio_wake_read() -> Result<Value, String> { super::wake_capture::read() }

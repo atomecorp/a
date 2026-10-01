@@ -286,3 +286,10 @@ platforms/desktop-tauri/gen/schemas/desktop-schema.json
 atome/src/assets/videos/avengers.mp4
 platforms/ios/atome-auv3/atome.xcodeproj/project.xcworkspace/xcuserdata/jean-ericgodard.xcuserdatad/UserInterfaceState.xcuserstate
 eve/application
+
+# Foreground assistant wake and routing regression suites
+!tests/voice_wake.vitest.config.mjs
+!tests/eve/wake_runtime.test.mjs
+!tests/eve/wake_porcupine.test.mjs
+!tests/eve/wake_preferences.test.mjs
+!tests/eve/assistant_routing.test.mjs

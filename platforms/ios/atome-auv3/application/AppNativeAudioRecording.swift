@@ -14,6 +14,7 @@ extension AppNativeAudioController {
         let prefersBluetoothMicrophone = resolveString(payload, ["preferredInput", "preferred_input"])
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .lowercased() == "bluetooth"
+        stopWakeCapture()
         let startToken = captureGate.begin()
         requestMicrophonePermission { granted in
             self.queue.async {

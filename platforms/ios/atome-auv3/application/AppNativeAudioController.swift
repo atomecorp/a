@@ -1,5 +1,6 @@
 import AVFoundation
 import Foundation
+import UIKit
 
 final class AppNativeAudioController: NSObject {
     static let shared = AppNativeAudioController()
@@ -48,6 +49,13 @@ final class AppNativeAudioController: NSObject {
     var captureGate = AppNativeAudioCaptureGate()
     var audioRecordingConsumerSequence: UInt64 = 0
     var activeRecordingConsumerId: String?
+    var wakeCaptureToken: UInt64?
+    var wakeCaptureActive = false
+    var wakeCaptureSamples: [Int16] = []
+    var wakeCaptureOverrun = false
+    var wakeCaptureFailed = false
+    var wakeCaptureInterrupted = false
+    var wakeCaptureBackground = false
     var playbackEngineNeedsReset = false
     var playbackRouteSignature = ""
     var activeRecordingSessionId: String?
@@ -66,6 +74,8 @@ final class AppNativeAudioController: NSObject {
     private override init() {
         super.init()
         let center = NotificationCenter.default
+        center.addObserver(self, selector: #selector(handleWakeBackground), name: UIApplication.didEnterBackgroundNotification, object: nil)
+        center.addObserver(self, selector: #selector(handleWakeForeground), name: UIApplication.didBecomeActiveNotification, object: nil)
         center.addObserver(
             self,
             selector: #selector(handleAudioSessionInterruption),
@@ -198,6 +208,14 @@ final class AppNativeAudioController: NSObject {
         return Float(clamp(linear, min: 0, max: 4))
     }
 
+    @objc private func handleWakeBackground() {
+        queue.async { self.wakeCaptureBackground = true; self.stopWakeCapture() }
+    }
+
+    @objc private func handleWakeForeground() {
+        queue.async { self.wakeCaptureBackground = false }
+    }
+
     @objc private func handleAudioSessionInterruption(_ notification: Notification) {
         let userInfo = notification.userInfo ?? [:]
         let typeValue = userInfo[AVAudioSessionInterruptionTypeKey] as? UInt ?? 0
@@ -207,11 +225,15 @@ final class AppNativeAudioController: NSObject {
         queue.async {
             self.playbackEngineNeedsReset = true
             guard interruptionType == .ended else {
+                self.wakeCaptureInterrupted = true
+                self.captureGate.cancel()
+                self.stopWakeCapture()
                 AppNativeAudioDiagnostics.log(
                     "session interruption_began \(self.audioSessionDiagnosticSnapshot())"
                 )
                 return
             }
+            self.wakeCaptureInterrupted = false
             guard options.contains(.shouldResume) else { return }
             // The system owns the session while it is interrupted; the plan is
             // re-applied only once it gives the session back.
