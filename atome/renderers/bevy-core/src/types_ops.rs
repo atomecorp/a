@@ -47,11 +47,20 @@ impl AtomeSurfacePatch {
     }
 }
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Default, Deserialize)]
 pub struct AtomeSurfaceBackgroundPatch {
     pub signature: String,
     pub color: [f32; 4],
     pub texture: Option<AtomeTexture>,
+    /// `contain` shows the whole texture, undistorted, centred on the surface;
+    /// anything else (or nothing) keeps the historical `cover` crop.
+    #[serde(default)]
+    pub fit: Option<String>,
+    /// Fills the bands a `contain` image leaves: a tiny copy of the image the
+    /// linear sampler stretches into a soft blur. Without it the bands take
+    /// `color`.
+    #[serde(default)]
+    pub backdrop: Option<AtomeTexture>,
 }
 
 impl AtomeSurfaceBackgroundPatch {
@@ -59,6 +68,11 @@ impl AtomeSurfaceBackgroundPatch {
         self.texture
             .as_ref()
             .map(|texture| [texture.width, texture.height])
+    }
+
+    pub fn is_contain(&self) -> bool {
+        self.texture.is_some()
+            && self.fit.as_deref().map(str::trim).map(str::to_ascii_lowercase).as_deref() == Some("contain")
     }
 }
 

@@ -18,14 +18,28 @@ const stateParentId = (state) => {
 const stateAtomeId = (state) => state?.atome_id || state?.atomeId || state?.id
     || state?.atome?.id || state?.atome?.atome_id || null;
 
+// Programme instances are private while granular consent/ACL sharing is unverified.
+const isPrivateProgramState = state => !!(state?.properties || state?.particles || {}).project_program;
+const hasPrivateProgramAncestor = async ({ provider, ownerId, atomeId }) => {
+    let cursor = String(atomeId || '').trim(); const visited = new Set();
+    while (cursor && !visited.has(cursor)) {
+        visited.add(cursor);
+        const state = await provider.request(ownerId, 'state:get', { atome_id: cursor });
+        if (isPrivateProgramState(state)) return true;
+        cursor = String(stateParentId(state) || '').trim();
+    }
+    return false;
+};
+
 const isWithinSharedRoot = async ({ provider, ownerId, atomeId, rootAtomeId }) => {
     let cursor = String(atomeId || '').trim();
     const root = String(rootAtomeId || '').trim();
     const visited = new Set();
     while (cursor && !visited.has(cursor)) {
-        if (cursor === root) return true;
-        visited.add(cursor);
         const state = await provider.request(ownerId, 'state:get', { atome_id: cursor });
+        if (isPrivateProgramState(state)) return false;
+        if (cursor === root) return !await hasPrivateProgramAncestor({ provider, ownerId, atomeId: cursor });
+        visited.add(cursor);
         cursor = String(stateParentId(state) || '').trim();
     }
     return false;
@@ -59,7 +73,17 @@ const statesWithinSharedRoot = async ({ provider, ownerId, rootAtomeId }) => {
         let cursor = String(stateAtomeId(state) || '').trim();
         const visited = new Set();
         while (cursor && !visited.has(cursor)) {
-            if (cursor === String(rootAtomeId)) return true;
+            if (isPrivateProgramState(stateById.get(cursor))) return false;
+            if (cursor === String(rootAtomeId)) {
+                let parent = String(stateParentId(stateById.get(cursor)) || '');
+                const ancestors = new Set();
+                while (parent && !ancestors.has(parent)) {
+                    ancestors.add(parent);
+                    if (isPrivateProgramState(stateById.get(parent))) return false;
+                    parent = String(stateParentId(stateById.get(parent)) || '');
+                }
+                return true;
+            }
             visited.add(cursor);
             cursor = String(stateParentId(stateById.get(cursor)) || '').trim();
         }
@@ -72,6 +96,7 @@ const sharePermissions = (share) => parseJson(share?.permissions_json, {});
 
 export {
     ACTIVE_LINKED_SHARE_SQL,
+    hasPrivateProgramAncestor,
     findShareForAtome,
     isWithinSharedRoot,
     sharePermissions,

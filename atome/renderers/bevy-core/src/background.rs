@@ -4,12 +4,14 @@ use crate::{
     render_math::{color_from_rgba, BEVY_LAYER_DEPTH_LIMIT},
     texture::image_handle_from_texture,
     types::{
-        AtomeBevyRendererConfig, AtomeSurfaceBackground, AtomeSurfaceBackgroundPatch,
-        AtomeSurfaceBackgroundVisual,
+        AtomeSurfaceBackground, AtomeSurfaceBackgroundImage, AtomeSurfaceBackgroundPatch,
+        AtomeSurfaceBackgroundVisual, AtomeBevyRendererConfig,
     },
 };
 
 const BACKGROUND_DEPTH: f32 = -BEVY_LAYER_DEPTH_LIMIT - 1.0;
+// Still below every atome layer: the image only has to sit above its own fill.
+const BACKGROUND_IMAGE_DEPTH: f32 = BACKGROUND_DEPTH + 0.5;
 
 fn cover_source_rect(
     surface_width: f32,
@@ -34,52 +36,71 @@ fn cover_source_rect(
     Some(Rect::from_corners(inset, inset + crop_size))
 }
 
+/// The largest size with the texture's aspect that fits inside the surface:
+/// the whole image stays visible and is never stretched.
+pub(crate) fn contain_size(surface_width: f32, surface_height: f32, texture_size: [u32; 2]) -> Vec2 {
+    let surface = Vec2::new(surface_width.max(1.0), surface_height.max(1.0));
+    let [texture_width, texture_height] = texture_size;
+    if texture_width == 0 || texture_height == 0 {
+        return surface;
+    }
+    let texture = Vec2::new(texture_width as f32, texture_height as f32);
+    let scale = (surface.x / texture.x).min(surface.y / texture.y);
+    texture * scale
+}
+
+/// The full-surface sprite: the cover-cropped wallpaper, or — for a `contain`
+/// wallpaper — the backdrop that fills the bands (a plain colour without one).
 fn background_sprite(
     patch: &AtomeSurfaceBackgroundPatch,
     images: &mut Assets<Image>,
-) -> Result<(Sprite, Option<Handle<Image>>), String> {
-    if patch.texture.is_some() {
-        let handle = image_handle_from_texture(images, &patch.texture, "surface_background")?;
+) -> Result<(Sprite, Option<Handle<Image>>, Option<[u32; 2]>), String> {
+    let fill = if patch.is_contain() { &patch.backdrop } else { &patch.texture };
+    if let Some(texture) = fill.as_ref() {
+        let handle = image_handle_from_texture(images, fill, "surface_background")?;
         let mut sprite = Sprite::from_image(handle.clone());
         sprite.color = Color::WHITE;
-        Ok((sprite, Some(handle)))
+        Ok((sprite, Some(handle), Some([texture.width, texture.height])))
     } else {
-        Ok((
-            Sprite::from_color(color_from_rgba(patch.color), Vec2::ONE),
-            None,
-        ))
+        Ok((Sprite::from_color(color_from_rgba(patch.color), Vec2::ONE), None, None))
     }
 }
 
-fn background_components(
-    patch: AtomeSurfaceBackgroundPatch,
-    sprite: Sprite,
-    texture_handle: Option<Handle<Image>>,
+fn despawn_background_images(world: &mut World) {
+    let entities: Vec<Entity> = world
+        .query_filtered::<Entity, With<AtomeSurfaceBackgroundImage>>()
+        .iter(world)
+        .collect();
+    for entity in entities {
+        world.despawn(entity);
+    }
+}
+
+fn spawn_background_image(
+    world: &mut World,
+    patch: &AtomeSurfaceBackgroundPatch,
     surface_width: f32,
     surface_height: f32,
-) -> (
-    AtomeSurfaceBackground,
-    AtomeSurfaceBackgroundVisual,
-    Sprite,
-    Transform,
-) {
-    let texture_size = patch.texture_size();
-    let size = Vec2::new(surface_width, surface_height);
-    let source_rect = cover_source_rect(surface_width, surface_height, texture_size);
-    (
-        AtomeSurfaceBackground,
-        AtomeSurfaceBackgroundVisual {
-            signature: patch.signature,
-            texture_size,
-            image_handle: texture_handle,
-        },
-        Sprite {
-            custom_size: Some(size),
-            rect: source_rect,
-            ..sprite
-        },
-        Transform::from_translation(Vec3::new(0.0, 0.0, BACKGROUND_DEPTH)),
-    )
+) -> Result<(), String> {
+    let Some(texture) = patch.texture.as_ref() else {
+        return Ok(());
+    };
+    let texture_size = [texture.width, texture.height];
+    let handle = {
+        let mut images = world
+            .get_resource_mut::<Assets<Image>>()
+            .ok_or_else(|| "bevy_image_assets_required".to_string())?;
+        image_handle_from_texture(&mut images, &patch.texture, "surface_background_image")?
+    };
+    let mut sprite = Sprite::from_image(handle.clone());
+    sprite.color = Color::WHITE;
+    sprite.custom_size = Some(contain_size(surface_width, surface_height, texture_size));
+    world.spawn((
+        AtomeSurfaceBackgroundImage { texture_size, image_handle: handle },
+        sprite,
+        Transform::from_translation(Vec3::new(0.0, 0.0, BACKGROUND_IMAGE_DEPTH)),
+    ));
+    Ok(())
 }
 
 pub fn apply_surface_background(
@@ -94,14 +115,30 @@ pub fn apply_surface_background(
         let config = world.resource::<AtomeBevyRendererConfig>();
         (config.width, config.height)
     };
-    let (sprite, texture_handle) = {
+    let (sprite, fill_handle, fill_size) = {
         let mut images = world
             .get_resource_mut::<Assets<Image>>()
             .ok_or_else(|| "bevy_image_assets_required".to_string())?;
         background_sprite(&patch, &mut images)?
     };
-    let components =
-        background_components(patch, sprite, texture_handle, surface_width, surface_height);
+    despawn_background_images(world);
+    if patch.is_contain() {
+        spawn_background_image(world, &patch, surface_width, surface_height)?;
+    }
+    let components = (
+        AtomeSurfaceBackground,
+        AtomeSurfaceBackgroundVisual {
+            signature: patch.signature,
+            texture_size: fill_size,
+            image_handle: fill_handle,
+        },
+        Sprite {
+            custom_size: Some(Vec2::new(surface_width, surface_height)),
+            rect: cover_source_rect(surface_width, surface_height, fill_size),
+            ..sprite
+        },
+        Transform::from_translation(Vec3::new(0.0, 0.0, BACKGROUND_DEPTH)),
+    );
     if let Some(entity) = existing {
         world.entity_mut(entity).insert(components);
         Ok(entity)
@@ -119,5 +156,9 @@ pub fn resize_surface_background(world: &mut World) {
     for (mut sprite, visual) in query.iter_mut(world) {
         sprite.custom_size = Some(Vec2::new(surface_width, surface_height));
         sprite.rect = cover_source_rect(surface_width, surface_height, visual.texture_size);
+    }
+    let mut images = world.query::<(&mut Sprite, &AtomeSurfaceBackgroundImage)>();
+    for (mut sprite, image) in images.iter_mut(world) {
+        sprite.custom_size = Some(contain_size(surface_width, surface_height, image.texture_size));
     }
 }

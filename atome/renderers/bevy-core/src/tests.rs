@@ -832,7 +832,7 @@ fn surface_background_stays_behind_atomes_and_outside_entity_table() {
     let atome_entity = apply_spawn(&mut world, shape_node("shape_above_background")).unwrap();
     let background_entity = background::apply_surface_background(
         &mut world,
-        AtomeSurfaceBackgroundPatch { signature: "solid".to_string(), color: [0.1, 0.1, 0.1, 1.0], texture: None },
+        AtomeSurfaceBackgroundPatch { signature: "solid".to_string(), color: [0.1, 0.1, 0.1, 1.0], texture: None, ..Default::default() },
     )
     .unwrap();
 
@@ -860,6 +860,7 @@ fn surface_background_cover_size_tracks_surface_resize() {
             signature: "wide".to_string(),
             color: [0.0, 0.0, 0.0, 1.0],
             texture: Some(AtomeTexture { animation: None, width: 200, height: 100, rgba: vec![255; 200 * 100 * 4] }),
+            ..Default::default()
         },
     )
     .unwrap();
@@ -892,6 +893,7 @@ fn surface_background_cover_size_tracks_surface_resize() {
             signature: "tall".to_string(),
             color: [0.0, 0.0, 0.0, 1.0],
             texture: Some(AtomeTexture { animation: None, width: 100, height: 200, rgba: vec![255; 100 * 200 * 4] }),
+            ..Default::default()
         },
     )
     .unwrap();
@@ -900,6 +902,81 @@ fn surface_background_cover_size_tracks_surface_resize() {
     let tall_rect = tall.rect.unwrap();
     assert_vec2_near(Some(tall_rect.min), Vec2::new(0.0, 50.0));
     assert_vec2_near(Some(tall_rect.max), Vec2::new(100.0, 150.0));
+}
+
+#[test]
+fn surface_background_contain_shows_whole_image_undistorted_over_backdrop() {
+    let mut world = World::new();
+    world.insert_resource(AtomeEntityTable::default());
+    world.insert_resource(AtomeBevyRendererConfig::empty(400.0, 800.0));
+    world.insert_resource(AtomeRendererDiagnostics::default());
+    world.insert_resource(Assets::<Image>::default());
+
+    let wide = || Some(AtomeTexture { animation: None, width: 300, height: 200, rgba: vec![255; 300 * 200 * 4] });
+    let background_entity = background::apply_surface_background(
+        &mut world,
+        AtomeSurfaceBackgroundPatch {
+            signature: "contain".to_string(),
+            color: [0.0, 0.0, 0.0, 1.0],
+            texture: wide(),
+            fit: Some("contain".to_string()),
+            backdrop: Some(AtomeTexture { animation: None, width: 3, height: 2, rgba: vec![128; 3 * 2 * 4] }),
+        },
+    )
+    .unwrap();
+
+    let image_size = |world: &mut World| {
+        let mut query = world.query::<(&Sprite, &AtomeSurfaceBackgroundImage)>();
+        let sizes: Vec<Vec2> = query.iter(world).map(|(sprite, _)| sprite.custom_size.unwrap()).collect();
+        sizes
+    };
+    // Portrait surface, landscape image: full width, height keeps the 3:2 ratio.
+    let sizes = image_size(&mut world);
+    assert_eq!(sizes.len(), 1);
+    assert_vec2_near(Some(sizes[0]), Vec2::new(400.0, 400.0 * 2.0 / 3.0));
+    // The fill covers the whole surface with the backdrop, cover-cropped.
+    let fill = world.get::<Sprite>(background_entity).unwrap();
+    assert_vec2_near(fill.custom_size, Vec2::new(400.0, 800.0));
+    let fill_rect = fill.rect.unwrap();
+    assert_vec2_near(Some(fill_rect.max - fill_rect.min), Vec2::new(1.0, 2.0));
+    let image_z = {
+        let mut query = world.query_filtered::<&Transform, With<AtomeSurfaceBackgroundImage>>();
+        query.single(&world).unwrap().translation.z
+    };
+    assert!(image_z > world.get::<Transform>(background_entity).unwrap().translation.z);
+    assert!(image_z < -crate::render_math::BEVY_LAYER_DEPTH_LIMIT);
+
+    apply_surface(
+        &mut world,
+        AtomeSurfacePatch { width: 900.0, height: 300.0, pixel_width: None, pixel_height: None, device_pixel_ratio: None },
+    )
+    .unwrap();
+    // Landscape surface: full height, width keeps the ratio — nothing is cropped.
+    let sizes = image_size(&mut world);
+    assert_eq!(sizes.len(), 1);
+    assert_vec2_near(Some(sizes[0]), Vec2::new(450.0, 300.0));
+
+    // A new wallpaper replaces the image instead of stacking a second one.
+    background::apply_surface_background(
+        &mut world,
+        AtomeSurfaceBackgroundPatch {
+            signature: "contain:2".to_string(),
+            color: [0.0, 0.0, 0.0, 1.0],
+            texture: wide(),
+            fit: Some("contain".to_string()),
+            backdrop: None,
+        },
+    )
+    .unwrap();
+    assert_eq!(image_size(&mut world).len(), 1);
+
+    // Back to a colour (project surface): no wallpaper image is left behind.
+    background::apply_surface_background(
+        &mut world,
+        AtomeSurfaceBackgroundPatch { signature: "solid".to_string(), color: [0.2, 0.2, 0.2, 1.0], ..Default::default() },
+    )
+    .unwrap();
+    assert!(image_size(&mut world).is_empty());
 }
 
 #[test]

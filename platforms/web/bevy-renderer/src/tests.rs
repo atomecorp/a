@@ -351,6 +351,7 @@ fn queued_surface_background_export_uses_shared_core_op() {
             signature: "generated:surface".to_string(),
             color: [0.12, 0.12, 0.12, 1.0],
             texture: None,
+            ..Default::default()
         },
     ));
 

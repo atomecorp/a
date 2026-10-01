@@ -245,8 +245,17 @@ pub struct AtomeSurfaceBackground;
 #[derive(Clone, Debug, Component)]
 pub struct AtomeSurfaceBackgroundVisual {
     pub signature: String,
+    /// Size of the texture this (full-surface) sprite samples with a cover crop.
     pub texture_size: Option<[u32; 2]>,
     pub image_handle: Option<Handle<Image>>,
+}
+
+/// The whole wallpaper image of a `contain` background, drawn undistorted and
+/// centred above the full-surface sprite that fills the bands.
+#[derive(Clone, Debug, Component)]
+pub struct AtomeSurfaceBackgroundImage {
+    pub texture_size: [u32; 2],
+    pub image_handle: Handle<Image>,
 }
 
 #[derive(Clone, Debug, Component)]

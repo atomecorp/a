@@ -1,3 +1,4 @@
+import { hasPrivateProgramAncestor } from './syncShareHierarchy.js';
 import crypto from 'node:crypto';
 import db from '../database/adole.js';
 import { resolveTargetUserId } from './sharing.js';
@@ -124,6 +125,9 @@ export class SyncSharingService {
     // Autorite de `granterId` sur `atomeId` : proprietaire (tous les droits) ou detenteur d'un
     // partage actif portant `reshare` (D9). Renvoie le proprietaire reel et les droits tenus.
     async grantAuthority(granterId, atomeId, capability = 'reshare') {
+        if (await hasPrivateProgramAncestor({ provider: this.vaultRouter.provider, ownerId: granterId, atomeId })) {
+            throw new Error('program_sharing_not_finalized');
+        }
         try {
             const stream = await this.ownedStream(granterId, atomeId);
             return { ownerId: String(granterId), stream, rights: OWNER_RIGHTS, share: null };

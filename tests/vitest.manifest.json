@@ -172,6 +172,7 @@
   "tests/eve/project_list_authority.test.mjs",
   "tests/eve/project_media_atome_renderer_pending.test.mjs",
   "tests/eve/project_preview_runtime.test.mjs",
+  "tests/eve/project_program.test.mjs",
   "tests/eve/project_scene_direct_transform_contract.test.mjs",
   "tests/eve/project_scene_gesture_geometry.test.mjs",
   "tests/eve/project_scene_gesture_performance.test.mjs",

@@ -47,6 +47,11 @@ final class FullscreenWebViewController: UIViewController {
         // Same rule as the AUv3 factory: no native long-press link preview, the
         // product owns every context menu.
         webView.allowsLinkPreview = false
+        // Same opt-in as the AUv3 factory: inspectable only for a deliberate
+        // diagnostic launch (`-AtomeWebInspector`, Debug builds).
+        if #available(iOS 16.4, *) {
+            webView.isInspectable = FeatureFlags.webInspectorEnabled
+        }
         webView.isOpaque = false
         if #available(iOS 15.0, *) {
             webView.underPageBackgroundColor = .clear

@@ -79,6 +79,15 @@ export const CORE_ATOME_TYPE_DEFINITIONS = Object.freeze([
         schema: {
             ...orderSchema,
             project_view_split: { type: 'object' },
+            project_program: { type: 'object', properties: {
+                definition: { type: 'object' }, status: { type: 'string', enum: ['draft', 'active', 'paused'] },
+                revision: { type: 'number', minimum: 0 }, accepted: { type: 'object' }, pausedAt: { type: 'string' },
+                involvement: { type: 'object', properties: { minutes: { type: 'number', minimum: 0, maximum: 10080 },
+                    basis: { type: 'string', enum: ['day', 'week'] }, days: { type: 'array' }, rhythm: { type: 'number', minimum: 1, maximum: 5 }
+                }, required: ['minutes', 'basis', 'days', 'rhythm'] }
+            }, required: ['definition', 'status', 'revision', 'involvement'] },
+            template_update_policy: { type: 'string', enum: ['pinned', 'live'] },
+            template_link: { type: 'object' },
             project_intent: { type: 'object', properties: {
                 family: { type: 'string', enum: ['health', 'creation', 'recording', 'publication'] },
                 goal: { type: 'string' },
@@ -117,6 +126,10 @@ export const CORE_ATOME_TYPE_DEFINITIONS = Object.freeze([
         kind: 'visual',
         traits: ['visual', 'textual', 'editable', 'selectable'],
         schema: {
+            program_observation: { type: 'object', properties: {
+                kind: { type: 'string', enum: ['declaration', 'measurement', 'hypothesis', 'completion', 'benefit'] },
+                date: { type: 'string' }, provenance: { type: 'string' }, useInFollowup: { type: 'boolean' }, missing: { type: 'boolean' }
+            }, required: ['kind', 'date', 'provenance', 'useInFollowup'] },
             ...orderSchema,
             ...frameSchema,
             text: { type: 'string' },
@@ -238,6 +251,19 @@ export const CORE_ATOME_TYPE_DEFINITIONS = Object.freeze([
             turns: { type: 'array' },
             assets: { type: 'array' },
             updated_iso: { type: 'string' }
+        }
+    }),
+    defineType({
+        type: 'calendar_event', kind: 'data_model', traits: ['data', 'editable', 'navigable'],
+        schema: {
+            title: { type: 'string' }, description: { type: 'string' }, location: { type: 'string' },
+            start: { type: 'string' }, end: { type: 'string' }, all_day: { type: 'boolean' },
+            calendar_id: { type: 'string' }, timezone: { type: 'string' }, color: { type: 'string' },
+            alarms: { type: 'string' }, recurrence: { type: 'string' }, conditions: { type: 'string' },
+            kind: { type: 'string', enum: ['event', 'todo'] }, status: { type: 'string', enum: ['open', 'done'] },
+            due_at: { type: 'string' }, completed_at: { type: 'string' }, visio_room_id: { type: 'string' },
+            created_iso: { type: 'string' }, updated_iso: { type: 'string' },
+            program_link: { type: 'object' }, suspended: { type: 'boolean' }, locked: { type: 'boolean' }
         }
     }),
     defineType({
