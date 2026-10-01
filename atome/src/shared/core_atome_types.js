@@ -29,6 +29,8 @@ const frameSchema = Object.freeze({
 const mediaSchema = Object.freeze({
     media_source: { type: 'string' },
     media_url: { type: 'string' },
+    youtube_video_id: { type: 'string' },
+    youtube_title: { type: 'string' },
     transcript: { type: 'string' },
     duration: { type: 'number' },
     duration_sec: { type: 'number' },
@@ -170,6 +172,7 @@ export const CORE_ATOME_TYPE_DEFINITIONS = Object.freeze([
             ...orderSchema,
             ...frameSchema,
             ...mediaSchema,
+            name: { type: 'string' },
             poster_source: { type: 'string' },
             captions: { type: 'array' }
         }

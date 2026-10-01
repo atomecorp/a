@@ -84,7 +84,7 @@ Mandatory inherited rules include, without limitation:
 - Product styling must remain JavaScript-driven through approved structured design contracts.
 - Temporary files must be created only under `./temp`.
 - Persistent tests must be created only under `./tests`.
-- Git is read-only. Do not run any Git command that mutates the repository, index, refs, branches, commits, remotes, stash, submodules, or configuration.
+- Git write operations require an explicit user request for conflict resolution or integration and follow the policy in module 02. Agents must never run git push.
 - Architecture maps must be updated when structure, ownership, rendering contracts, APIs, or design contracts change.
 - Comments, logs, warnings, errors, documentation, and developer-facing messages must be written in English.
 
@@ -668,7 +668,7 @@ If any answer is `no`, the change is not allowed until the architecture is corre
 For very small future tasks, this shorter block may be pasted before the task, but it does not replace the full pre-prompt above:
 
 ```text
-Before acting, read and apply .codex/AGENTS.md. Preserve the Atome/eVe cleaned architecture: canonical state outside DOM, WebGPU-first rendering, one visible canvas per rendering zone, no visible DOM subtree per Atome, no visible canvas per Atome, no fallback renderer, no duplicated renderer, no DOM-owned state, no direct mutation outside window.Atome.commit / commitBatch, no TypeScript, no Python, no Git write operations, no temporary files outside ./temp, no persistent tests outside ./tests. Reuse existing architecture and prefer the simplest architecture-compliant change: do not add speculative abstractions, caches, adapters, registries, dependencies, or execution paths; remove safe dead and duplicate code in the touched scope. Update maps when ownership/API/design/rendering contracts change, and validate with tests or guardrails. If the request conflicts with these rules, stop with the exact blocking rule and the smallest compliant next action. Do not simplify, skip, postpone, or mark complete without proof.
+Before acting, read and apply .codex/AGENTS.md. Preserve the Atome/eVe cleaned architecture: canonical state outside DOM, WebGPU-first rendering, one visible canvas per rendering zone, no visible DOM subtree per Atome, no visible canvas per Atome, no fallback renderer, no duplicated renderer, no DOM-owned state, no direct mutation outside window.Atome.commit / commitBatch, no TypeScript, no Python, Git conflict resolution per module 02 with no git push, no temporary files outside ./temp, no persistent tests outside ./tests. Reuse existing architecture and prefer the simplest architecture-compliant change: do not add speculative abstractions, caches, adapters, registries, dependencies, or execution paths; remove safe dead and duplicate code in the touched scope. Update maps when ownership/API/design/rendering contracts change, and validate with tests or guardrails. If the request conflicts with these rules, stop with the exact blocking rule and the smallest compliant next action. Do not simplify, skip, postpone, or mark complete without proof.
 ```
 
 ---

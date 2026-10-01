@@ -106,6 +106,12 @@ pub(super) async fn handle_ws_api(mut socket: WebSocket, state: AppState) {
                     continue;
                 }
 
+                if msg_type == "youtube-search" {
+                    let response = super::youtube_search_relay::search(&data).await;
+                    if socket.send(Message::Text(response.to_string())).await.is_err() { break; }
+                    continue;
+                }
+
                 if msg_type == "ai-provider" {
                     let result = match ws_authenticated_user(&data, &state) {
                         Ok(user_id) => match state.atome_state.as_ref() {
@@ -316,4 +322,3 @@ pub(super) async fn handle_ws_api(mut socket: WebSocket, state: AppState) {
 
     println!("🔌 WebSocket API connection closed");
 }
-

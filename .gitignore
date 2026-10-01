@@ -58,6 +58,7 @@ tests/database/*
 !tests/database/adole_restart_safe_interactions.test.mjs
 !tests/server/
 tests/server/*
+!tests/server/ws_youtube_search.test.mjs
 !tests/server/principal_file_migration.test.mjs
 !tests/server/atome_property_security.test.mjs
 !tests/server/atome_persistence_boundary.test.mjs
@@ -91,6 +92,7 @@ tests/shared/*
 !tests/shared/semantic_rename_contract.test.mjs
 !tests/eve/
 tests/eve/*
+!tests/eve/youtube_finder.test.mjs
 !tests/eve/atome_commit.sanitization.test.mjs
 !tests/eve/atome_edit_footer_delete_cold_start.test.mjs
 !tests/eve/atome_record_projection_project_id.test.mjs

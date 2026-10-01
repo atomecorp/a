@@ -140,7 +140,7 @@ Reference integrity marker for the integrated source before the split:
 2. The modules listed above are one single active rule set and MUST be applied together according to the routing rules below.
 3. If several modules apply, enforce the strictest rule.
 4. If a true unresolved conflict remains, stop, identify the exact conflicting sections, and report the smallest compliant next action.
-5. Git write operations remain forbidden.
+5. Git write operations are allowed only when a user explicitly requests conflict resolution or integration, under the policy in module 02. Git push remains forbidden for agents.
 6. The future guardrails in `.codex/modules/07-future-code-guardrails.md` remain mandatory for every code addition, modification, refactor, cleanup, rendering change, UI change, media change, state change, mutation change, test update, map update, or maintenance task.
 
 ## Mandatory reading order
@@ -166,7 +166,7 @@ Reference integrity marker for the integrated source before the split:
 ## Module index
 
 - `.codex/modules/01-root-constitution.md`: constitutional authority, DOM authority, DOM projection contract, reading order bridge, task routing, core role, and final operational rule.
-- `.codex/modules/02-coding-standards-and-prohibitions.md`: code quality, file-size standards, patch prohibition, language policy, temporary files, Git read-only policy, fallback policy, and internationalization policy.
+- `.codex/modules/02-coding-standards-and-prohibitions.md`: code quality, file-size standards, patch prohibition, language policy, temporary files, Git conflict resolution policy, fallback policy, and internationalization policy.
 - `.codex/modules/03-debugging-testing-and-ui-validation.md`: autonomous validation, full-scope debugging, evidence and cleanup rules, and explicit UI debugging procedure routing.
 - `.codex/modules/04-feature-work-cleanup-and-framework-reuse.md`: legacy removal, architectural authority, map maintenance, framework reuse, and feature-work planning obligations.
 - `.codex/modules/05-api-rendering-and-ui.md`: API and MCP policy, communication architecture, WebGPU rendering pipeline, and Squirrel/UI component rules.
@@ -255,4 +255,3 @@ Procedure:
 Do not switch the main GUI conversation away from ChatGPT/OpenAI. DeepSeek is a delegated worker only.
 Do not delegate unless the user explicitly requests DeepSeek or the active project instructions explicitly require it.
 <!-- ATOME_DEEPSEEK_DELEGATION_END -->
-

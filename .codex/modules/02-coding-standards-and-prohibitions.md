@@ -165,42 +165,13 @@ Persistent test files MUST be created exclusively under ./tests.
 
 Temporary files MUST NEVER be created in source directories, documentation directories, tool directories, project root, or anywhere outside ./temp.
 
-## ABSOLUTE GIT READ-ONLY POLICY
+## GIT CONFLICT RESOLUTION POLICY
 
-Git is strictly read-only.
+Git inspection is allowed when needed for the task.
 
-Allowed Git operations are limited to inspection commands that do not mutate repository state, the working tree, the index, references, submodules, branches, commits, remotes, hooks, or configuration.
+Only when a user explicitly asks the agent to perform Git conflict resolution or integration may the agent run Git write operations for that request. A coding task, a request to inspect Git status, or the presence of conflicts does not by itself authorize Git write operations. For an explicitly authorized request, the agent may fetch changes, start or continue a merge or rebase, preserve local work with stash, resolve conflicts, stage resolved files, create or switch to a branch, update a submodule, and create the commits needed to complete the integration. Before acting, inspect the working tree and preserve unrelated local changes. Inspect the resulting diff and report the commits and remaining local changes.
 
-Strictly forbidden Git operations include, without exception:
-
-- git restore;
-- git checkout;
-- git reset;
-- git clean;
-- git add;
-- git rm;
-- git mv;
-- git commit;
-- git merge;
-- git rebase;
-- git switch;
-- git branch creation, deletion, or mutation;
-- git tag creation, deletion, or mutation;
-- git stash;
-- git apply;
-- git am;
-- git cherry-pick;
-- git revert;
-- git submodule update or mutation;
-- git config mutation;
-- git push;
-- git pull;
-- git fetch when used to update local refs;
-- any Git command that writes to `.git`, changes tracked files, changes the index, changes refs, changes remotes, or changes submodule state.
-
-Reading Git status, diffs, logs, blame, show output, and other non-mutating inspection data is permitted only when needed for diagnosis.
-
-If a rollback, restore, staging, commit, branch operation, or any other Git mutation appears necessary, stop and ask for an explicit non-Git alternative. Never perform Git write operations, even if requested indirectly or under urgency.
+Agents must never run git push, including force-push. The user performs every push. Agents must not delete branches or tags, discard local changes with reset --hard, restore, or clean, or change Git credentials, hooks, remotes, or configuration. Outside the scope of an explicit user request for conflict resolution or integration, Git remains read-only for agents.
 
 ## FALLBACK POLICY
 
