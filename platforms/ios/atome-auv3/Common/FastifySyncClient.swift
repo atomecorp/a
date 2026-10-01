@@ -396,6 +396,61 @@ final class FastifySyncClient {
         }
     }
 
+    func searchYoutube(_ payload: [String: Any], reply: @escaping ([String: Any]) -> Void) {
+        let requestId = payload["requestId"] ?? NSNull()
+        let failure: (String) -> Void = { error in
+            reply(["type":"youtube-search-response", "requestId":requestId,
+                "ok":false, "success":false, "error":error])
+        }
+        let defaults = UserDefaults(suiteName: SharedBus.appGroupSuite) ?? .standard
+        let configured = firstValue(defaults, keys: ["SQUIRREL_FASTIFY_URL", "SQUIRREL_TAURI_FASTIFY_URL"])
+        let base = configured.isEmpty ? "https://atome.one" : configured
+        guard var components = URLComponents(string: base),
+              let host = components.host,
+              components.scheme == "https" || (components.scheme == "http" && ["localhost", "127.0.0.1"].contains(host)) else {
+            failure("youtube_search_service_invalid"); return
+        }
+        components.scheme = components.scheme == "https" ? "wss" : "ws"
+        components.path = "/ws/api"
+        components.query = nil
+        components.fragment = nil
+        guard let url = components.url else { failure("youtube_search_service_invalid"); return }
+        let config = URLSessionConfiguration.ephemeral
+        config.timeoutIntervalForRequest = 8
+        let session = URLSession(configuration: config)
+        let task = session.webSocketTask(with: url)
+        task.resume()
+        let outgoing: [String: Any] = ["type":"youtube-search", "requestId":requestId,
+            "query":payload["query"] ?? NSNull(), "pageToken":payload["pageToken"] ?? ""]
+        guard let bytes = try? JSONSerialization.data(withJSONObject: outgoing) else {
+            task.cancel(with: .goingAway, reason: nil); session.invalidateAndCancel()
+            failure("youtube_search_invalid_query"); return
+        }
+        task.send(.data(bytes)) { sendError in
+            guard sendError == nil else {
+                task.cancel(with: .goingAway, reason: nil); session.invalidateAndCancel()
+                failure("youtube_search_unavailable"); return
+            }
+            task.receive { result in
+                defer { task.cancel(with: .goingAway, reason: nil); session.invalidateAndCancel() }
+                guard case .success(let message) = result else { failure("youtube_search_unavailable"); return }
+                let received: Data?
+                switch message {
+                case .data(let data): received = data
+                case .string(let text): received = text.data(using: .utf8)
+                @unknown default: received = nil
+                }
+                guard let received,
+                      let response = (try? JSONSerialization.jsonObject(with: received)) as? [String: Any],
+                      response["type"] as? String == "youtube-search-response",
+                      String(describing: response["requestId"] ?? "") == String(describing: requestId) else {
+                    failure("youtube_search_unavailable"); return
+                }
+                reply(response)
+            }
+        }
+    }
+
     static func configureRemote(_ message: [String: Any], localUserId: String) -> [String: Any] {
         let requestId = message["requestId"] ?? NSNull()
         let defaults = UserDefaults(suiteName: SharedBus.appGroupSuite) ?? .standard

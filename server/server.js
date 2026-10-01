@@ -77,6 +77,7 @@ import { normalizePhone } from './auth_crypto.js';
 import { ensureOpaquePrincipalIdentity } from './auth_identity.js';
 import { createWsPhoneLinkHandler } from './wsPhoneLinkAuth.js';
 import { assertDeviceSessionClaims, validateConnectionDeviceSession } from './auth_session_validation.js';
+import { handleWsYoutubeSearch } from './ws_youtube_search.js';
 import { issueMediaToken, readMediaTokenFromQuery, verifyMediaToken } from './media_capability.js';
 import { handleWsApiGuestAdoption } from './wsApiGuestAdoption.js';
 import { announceWsSurfaceDisconnect, handleWsSurfaceOperation } from './wsSurfaceOperations.js';
@@ -2167,6 +2168,12 @@ async function startServer() {
             detachWsApiClient(connection);
             safeSend({ type: `${String(data.type || 'error')}-response`, requestId: data.requestId || data.request_id,
               success: false, ok: false, error: 'auth_session_invalid' });
+            return;
+          }
+
+          const youtubeSearchResponse = await handleWsYoutubeSearch(data, request.ip);
+          if (youtubeSearchResponse) {
+            safeSend(youtubeSearchResponse);
             return;
           }
 

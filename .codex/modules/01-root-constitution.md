@@ -80,7 +80,7 @@ If a conflict exists:
 
 Compliance is mandatory and non-negotiable.
 
-The ABSOLUTE GIT READ-ONLY POLICY defined in this document is part of that non-negotiable precedence and must never be overridden.
+The GIT CONFLICT RESOLUTION POLICY in module 02 governs Git operations. Agents must never run git push.
 
 ## NON-NEGOTIABLE STATE AND DOM AUTHORITY
 
@@ -256,7 +256,7 @@ Always-active sections:
 - ABSOLUTE PROHIBITION OF PATCHING;
 - LANGUAGE AND STACK POLICY;
 - TEMPORARY FILE POLICY;
-- ABSOLUTE GIT READ-ONLY POLICY;
+- GIT CONFLICT RESOLUTION POLICY;
 - MANDATORY FRAMEWORK REUSE AND FACTORIZATION RULE;
 - FINAL OPERATIONAL RULE.
 

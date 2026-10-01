@@ -74,6 +74,7 @@ mod remote_control_ws;
 mod static_asset_cache;
 mod ws_api;
 mod provider_relay;
+mod youtube_search_relay;
 
 #[derive(Clone)]
 struct AppState {

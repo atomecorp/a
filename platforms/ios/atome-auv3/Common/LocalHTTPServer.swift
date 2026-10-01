@@ -507,6 +507,14 @@ final class LocalHTTPServer {
             return
         }
 
+        if type == "youtube-search" {
+            FastifySyncClient.shared.searchYoutube(payload) { [weak self, weak connection] response in
+                guard let self, let connection else { return }
+                self.queue.async { self.sendWebSocketJson(response, on: connection) }
+            }
+            return
+        }
+
         if type == "atome" {
             let response = AiSRuntime.handleAtomeMessage(payload)
             sendWebSocketJson(response, on: connection)
