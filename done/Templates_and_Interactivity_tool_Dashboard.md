@@ -847,12 +847,82 @@ Cette section est ajoutée par l’exécutant après l’audit en lecture seule 
 | L1 | Persistance du mode de travail à la fermeture. | R05–R06, C-03 | **RÉUSSI** — nouveau `eVe/domains/rendering/project_work_mode_persistence.js` (propriété `work_mode` du record projet ; fermeture = sortie du projet via `eve:workspace-mode-changed`, ou `pagehide` noté de façon synchrone puis reporté à la réouverture) ; `restoreProjectWorkModeValue` ajouté à `project_work_mode_state.js` ; restauration branchée dans `project_workspace_activation_runtime.js`. **Défaut préexistant corrigé** : rouvrir un projet en Consultation/Performance échouait (`workspace_main_menu_overlay_missing`) parce que le menu principal y est vide par contrat — `workspace_main_menu_visibility.js` l’accepte désormais. Sonde `temp/templates_interactivity/l1_work_mode_persistence.probe.mjs` : 10/10. |
 | L2 | Projet-template, instanciation liée, synchronisation structure/données. | R01–R04, R10–R14, R19, C-01/02/05–07 | **RÉUSSI** — `eVe/domains/templates/project_template_model.js` (pur : tag `template`, `project_template`, `template_link`, `template_slot_id`, `template_instance_id`, planificateur `planTemplateInstanceSync`) et `project_template_runtime.js` (marquer/lister/instancier/synchroniser, propagation vivante sur `atome:changed`, synchro à l’ouverture branchée dans `project_workspace_activation_runtime.js`). Commandes Mystic `template_toggle` / `from_template` sur les tuiles projet du Dashboard (taxonomie, `main_menu_edit_content.js`, i18n FR/EN, `context_target.js`, `mystic_context_items_runtime.js`, `dashboard_item_mystic_menu.js`). Sondes : `l2_template_model.probe.mjs` 11/11 (pur), `l2_templates_real_app.probe.mjs` 23/23 (app réelle). C-02 (droits) : aucune écriture ne contourne le serveur ; test multi-comptes reporté à S5. |
 | L3 | Instance embarquée (page liée) et héritage du mode du parent. | R08, C-04 | **RÉUSSI** — `instantiateProjectTemplate(id, { targetProjectId })` crée un conteneur `page` portant `template_link` ; ses atomes vivent dans le projet parent (mode hérité par construction), décalés de la position du conteneur ; cycle d’imbrication refusé (`template_instance_cycle`). Couvert par `l2_templates_real_app.probe.mjs`. |
-| L4 | Type `interaction` + moteur (cible fixe/dynamique, conditions, cascade, garde de mode et anti-boucle). | R25, R27–R28, C-09/10 | À faire |
-| L5 | Activité Interactivité + panneau Interaction (Finder, conditions imbriquées, options natives). | R22–R26, C-08 | À faire |
-| L6 | S1 : outil Taille X/Y/proportions, projet-exemple, tests S1-01…16. | S1 | À faire |
-| L7 | Sources partagées (Date/Heure, Météo, Contacts, Calendrier, News), liaison de données ; S3-01…11. | R20, R30, S3 | À faire |
-| L8 | Slider générique + liaison bidirectionnelle au transport ; S4-01…13. | S4 | À faire |
-| L9 | Liste → fiches (instances liées, choix de template, liaisons de placeholders, import dossier) ; S2-01…19. | S2 | À faire |
-| L10 | Dashboard comme template système (rails, leaders, épinglés, zone centrale, Nouveau), 2 instances, propagation ; S5-01…28. | R17–R19, S5 | À faire |
+| L4 | Type `interaction` + moteur (cible fixe/dynamique, conditions, cascade, garde de mode et anti-boucle). | R25, R27–R28, C-09/10 | **RÉUSSI** — `atome/src/shared/core_atome_types.js` (type `interaction`), `eVe/intuition/runtime/interaction_model.js` (pur) et `interaction_runtime.js` (stockage = atomes du projet, résolution par le moteur Conditions, exécution par `invokeToolGateway` avec la cible en `selection_ids` — contrat canonique des outils), `eVe/domains/rendering/interaction_surface_layer.js` (toucher hors Édition). Garde de mode : `authorizeProjectTool` accepte les appels pendant une exécution réelle (jeton actif, appels imbriqués compris). Comparaison numérique générique des quantités avec unité (« 40px », « 50% ») dans `conditions/registry.js` et `property_catalog.js` — aucune propriété privilégiée. Sondes : `l4_conditions_units.probe.mjs` 5/5, `l4_interaction_real_app.probe.mjs` 14/14. |
+| L5 | Activité Interactivité + panneau Interaction (Finder, conditions imbriquées, options natives). | R22–R26, C-08 | **RÉUSSI** — `eVe/intuition/runtime/bevy_panel/bevy_panel_interaction_runtime.js` : trois blocs *Quand / Sur quoi / Faire* ; groupes du composant Conditions existant reliés par ET/OU (option générique `listActions` ajoutée au composant) ; outils = vraies tuiles du ruban (`buildBevyMenuToolNode`) et vrais curseurs (`buildBevyToolSliderNode`) ; paramétrage par capture de l’usage réel de l’outil (`beginToolInvocationCapture`, `tool_gateway.js`) sans effet sur le projet. Ouverture par l’outil `ui.interaction.panel` (commande `interaction`, panneau on/off), activité `interactivity`. Sonde `l5_interaction_panel.probe.mjs` 17/17 (vrai clic sur une tuile, exécution par vrai toucher en Consultation, *Tester* en Édition). |
+| L6 | S1 : outil Taille X/Y/proportions, projet-exemple, tests S1-01…16. | S1 | **RETIRÉ** (décision utilisateur) — exemples reportés ; aucun axe X/Y ajouté : le système reste agnostique (toute propriété, tout outil). Les critères S1-01…08 sont couverts par la sonde L4 sur des propriétés quelconques. |
+| L7 | Sources partagées (Date/Heure, Météo, Contacts, Calendrier, News), liaison de données ; S3-01…11. | R20, R30, S3 | **RETIRÉ** (décision utilisateur : exemples à tester plus tard). |
+| L8 | Slider générique + liaison bidirectionnelle au transport ; S4-01…13. | S4 | **RETIRÉ** (décision utilisateur). Le déclencheur `transport` existe dans le moteur. |
+| L9 | Liste → fiches (instances liées, choix de template, liaisons de placeholders, import dossier) ; S2-01…19. | S2 | **RETIRÉ** (décision utilisateur). Les instances liées/embarquées (L2/L3) sont en place. |
+| L10 | Dashboard comme template système (rails, leaders, épinglés, zone centrale, Nouveau), 2 instances, propagation ; S5-01…28. | R17–R19, S5 | **RETIRÉ** (décision utilisateur : peut-être fait à la main plus tard). |
 
 Preuves : `temp/probe_reports/templates_interactivity/<lot>/`. Statuts : RÉUSSI / ÉCHEC / BLOQUÉ / NON EXÉCUTÉ.
+
+
+### 13.6 Recadrage de la mission par l'utilisateur (30 septembre 2026, soir)
+
+- Les projets-exemples (S1 à S4) ne sont pas à construire maintenant ; ils seront testés plus tard.
+- Le Dashboard comme template système (S5) n'est pas urgent ; l'utilisateur le fera peut-être à la main.
+- Rien de spécifique : toute propriété peut être conditionnée et tout outil peut être une action. Les axes X/Y de Redimensionner (issus de S1) ont été abandonnés et la source `geometry` remplacée par une comparaison numérique générique.
+- Le panneau Interaction n'utilise que des éléments existants ; un outil y apparaît avec sa vraie apparence et on le paramètre en l'utilisant.
+
+### 13.7 État final
+
+**Livré et vérifié dans l'app réelle** (serveur de dev 3001, Playwright, un compte de test) : L0, L1, L2, L3, L4, L5.
+
+| Sonde (`temp/templates_interactivity/`) | Résultat |
+|---|---|
+| `l0_dashboard_baseline.probe.mjs` | 2/2 |
+| `l1_work_mode_persistence.probe.mjs` | 10/10 |
+| `l2_template_model.probe.mjs` (pur) | 11/11 |
+| `l2_templates_real_app.probe.mjs` | 23/23 |
+| `l4_conditions_units.probe.mjs` (moteur réel) | 5/5 |
+| `l4_interaction_real_app.probe.mjs` | 14/14 |
+| `l5_interaction_panel.probe.mjs` | 17/17 |
+| `taxonomy_validate.probe.mjs` (validateur réel) | 1/1 |
+
+Preuves : `temp/probe_reports/templates_interactivity/<lot>/report.json` et captures PNG.
+
+**Défauts préexistants corrigés en chemin** : réouverture d'un projet en Consultation/Performance (`workspace_main_menu_overlay_missing`) ; outils bloqués hors Édition même pour une action configurée par l'auteur.
+
+**Limites connues** :
+- un outil dont l'usage ne passe pas par le gateway d'outils (ex. navigation d'espace de travail) ne peut pas être capturé : Organiser/Dashboard sont exclus du catalogue ;
+- un outil à champ de saisie (`input_box`, ex. Aide, Communication) garde son champ dans le ruban : dans le panneau, on le paramètre en l'utilisant depuis le ruban pendant la capture ;
+- le déclencheur « Changement » réagit à toute propriété de l'objet (pas encore de choix de propriété dans le panneau) ;
+- l'accès à la palette d'activités « Interactivité » a été vérifié par la taxonomie et l'ouverture par l'outil, pas par un geste sur le sélecteur d'activité.
+
+### 13.8 Seconde phase (30 septembre 2026, nuit) : templates livrés, Matrix, outils transverses
+
+Demande de l'utilisateur : réaliser deux ou trois templates, dont le Tableau de bord d'après la capture, des templates de News (vidéo, audio, texte avec tags, publication à tous), un outil Matrix réutilisable pour afficher les collections, et les outils visuels manquants (effet de fond, ombre).
+
+**Livré**
+
+| Élément | Fichiers | Principe |
+|---|---|---|
+| Module **Matrix** | `eVe/domains/matrix/matrix_module_{model,runtime}.js` | Un atome ordinaire `module: 'matrix'`. Il est rendu par une instance EMBARQUÉE du runtime du Dashboard : mêmes données, layout, cartes, verre, création guidée (court/long), défilement, latéralité. Options : `matrix_categories`, `matrix_headers`, `layout_fill: 'surface'`. Passif en Édition (l'atome se sélectionne et se déplace), interactif en Consultation et Performance. |
+| Runtime du Dashboard paramétré | `eVe/domains/dashboard/dashboard_bevy_ui_runtime.js`, `dashboard_bevy_ui_tree.js`, `dashboard_data_controller.js` | Option `embedded` (arbre propre, cadre, colonne d'en-têtes masquable, catégories, zones déléguées aux Interactions). Le Dashboard principal est inchangé (sonde L0 verte). Records translatés dans le cadre, découpés au cadre, profondeurs relatives à l'atome. |
+| Outils Matrix | `ui.matrix.place` (palette Créer › Matrix : Tout, Calendrier, News, Contacts, Moniteur, Projets), `ui.matrix.focus` (rubrique), `ui.matrix.create` (guidé ou immédiat) | Outils d'usage, autorisés dans tous les modes. |
+| Interactions : zones et appui long | `interaction_model.js`, `interaction_runtime.js` | Déclencheur `hold`, filtre `zone`, déclencheur multi-atomes (`atome_ids`, bouton = forme + libellé), délai de garde de 15 s par étape. |
+| **Templates système** | `eVe/domains/templates/system_template_catalog.js`, `system_template_runtime.js` | Projets-templates (scope system) décrits par références et installés ou mis à jour dans le compte (versionnés) ; instances liées ; références internes remappées sur l'instance (synchro en deux passes). |
+| Tableau de bord (template) | catalogue `dashboard` v2 | Un Matrix plein écran avec en-têtes, plus trois Interactions : rubrique (`header_filter` → `ui.matrix.focus`), Nouveau guidé (`header_new` → `ui.matrix.create` guided), Nouveau immédiat (`hold` sur `header_new` → immediate). Le Moniteur garde son en-tête, son « Nouveau » est sans effet. |
+| News vidéo / audio / texte | catalogue `news_video`, `news_audio`, `news_text` v3 | Vraie News (création canonique, contribution de l'auteur) dont Titre et Corps deviennent des placeholders. Le template apporte le placeholder vidéo ou audio (capture au toucher) et les boutons Importer (panneau Média), Tags (liste des 15 tags prédéfinis + création) et Publier (`ui.news.publish`, à tous). L'instance s'ouvre en Consultation. |
+| Création guidée | `dashboard_creation_catalog.js`, `dashboard_creation_runtime.js`, `dashboard_creation_actions.js` | « Nouveau » News propose Vidéo, Audio, Texte, puis les formes existantes. « Nouveau » Projet propose une famille Templates › Tableau de bord. Les templates système n'apparaissent pas dans la rangée Projets. |
+| Outil **Effet de fond** | `eVe/intuition/tools/backdrop.js`, `backdrop_effect_model.js`, `bevy_panel_backdrop_runtime.js`, `selection_effect_apply.js` | Verre dépoli (`material.backdrop` : flou, teinte, opacité) sur tout objet, comme l'ombre : palette Effets, rail des objets, panneau (flou, teinte, couleurs, retirer). |
+| Ombre | `eVe/intuition/tools/shadow.js` | Respecte une cible explicite (`selection_ids`). |
+| Ouvrir un panneau | `ui.panel.open` | Outil générique (ouvrir / fermer / basculer un panneau par sa clé), même route que les rails. |
+
+**Sondes (app réelle, `temp/templates_interactivity/`)**
+
+| Sonde | Résultat |
+|---|---|
+| `m1_matrix_module.probe.mjs` | 11/11 |
+| `t1_dashboard_template.probe.mjs` | 13/13 : vrais gestes, rubrique, Nouveau guidé, Moniteur inactif, gaucher/droitier, appui long, propagation v1 → v2 |
+| `t2_news_templates.probe.mjs` | 20/20, plus 1 **BLOQUÉ** : la publication elle-même. Le serveur de dev (lancé à 9 h 09) ne connaît pas encore la route `news/publish` ajoutée à 21 h 06 et répond « Request timeout ». Il faut le redémarrer. |
+| `b1_backdrop_tool.probe.mjs` | 5/5 |
+| Régression L0, L1, L2 (pure + app), L4 (units + app), L5, taxonomie | toutes vertes |
+
+Comparaison visuelle : `T1_dashboard_template/template_dashboard_right.png` et `template_dashboard_left.png` reproduisent la capture fournie (fond, en-têtes teintés, horloge, météo, contacts, projets).
+
+**Limites**
+- Le Tableau de bord-template ne remplace pas le Dashboard d'accueil : il s'ouvre comme un projet (Nouveau › Projets › Templates › Tableau de bord). En faire l'accueil par défaut est une décision à prendre.
+- Les rangées d'un Matrix se choisissent à la pose (palette Matrix) ; il n'y a pas encore de réglage des rangées après coup dans un panneau.
+- Le rail Moniteur reste vide : il n'existe aucune source de monitoring (conforme à la demande).

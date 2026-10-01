@@ -24,6 +24,8 @@ const inferType = (value) => {
         if (/^\d{4}-\d{2}-\d{2}(?:[T ][^ ]+)?$/.test(text) && Number.isFinite(Date.parse(text))) {
             return text.length > 10 ? 'datetime' : 'date';
         }
+        // « 40px », « 50% », « 1.5s » : une quantité, comparable comme un nombre.
+        if (/^[-+]?(?:\d+\.?\d*|\.\d+)\s*[a-z%]+$/i.test(text)) return 'number';
         return 'string';
     }
     return 'object';
