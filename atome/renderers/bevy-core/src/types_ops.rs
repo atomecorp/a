@@ -70,9 +70,18 @@ impl AtomeSurfaceBackgroundPatch {
             .map(|texture| [texture.width, texture.height])
     }
 
-    pub fn is_contain(&self) -> bool {
+    fn fit_is(&self, expected: &str) -> bool {
         self.texture.is_some()
-            && self.fit.as_deref().map(str::trim).map(str::to_ascii_lowercase).as_deref() == Some("contain")
+            && self.fit.as_deref().map(str::trim).map(str::to_ascii_lowercase).as_deref() == Some(expected)
+    }
+
+    pub fn is_contain(&self) -> bool {
+        self.fit_is("contain")
+    }
+
+    /// A seamless image repeated at a screen-relative tile size.
+    pub fn is_tile(&self) -> bool {
+        self.fit_is("tile")
     }
 }
 

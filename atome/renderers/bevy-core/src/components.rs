@@ -248,6 +248,8 @@ pub struct AtomeSurfaceBackgroundVisual {
     /// Size of the texture this (full-surface) sprite samples with a cover crop.
     pub texture_size: Option<[u32; 2]>,
     pub image_handle: Option<Handle<Image>>,
+    /// The texture repeats (seamless wallpaper) instead of being cover-cropped.
+    pub tiled: bool,
 }
 
 /// The whole wallpaper image of a `contain` background, drawn undistorted and
