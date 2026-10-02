@@ -191,14 +191,15 @@ fn procedural_sdf_mystic_mode_is_one_isolated_turning_tile_branch() {
     assert!(mystic < liquid);
     assert!(!shader.contains("fn flower_liquid("));
     // Both plates are rounded rectangles, so the SDF is shared instead of
-    // copy-pasted into each design branch. Mystic calls it three times — the
-    // turning plate, the flat hole it leaves in its cell, and the cell's own
-    // footprint, which is the distance the contact shadow fades over when a pixel
-    // never projects onto the plate plane — hence five call sites in all, the
-    // definition included.
+    // copy-pasted into each design branch. Mystic reaches it through ONE tile
+    // SDF (`sd_mystic_tile`, which also cuts a palette tile's folded corner),
+    // called three times — the turning plate, the flat hole it leaves in its
+    // cell, and the cell's own footprint, which is the distance the contact
+    // shadow fades over when a pixel never projects onto the plate plane.
     assert!(shader.contains("fn sd_rounded_box"));
     assert!(!shader.contains("intuition_liquid_rounded_box"));
-    assert_eq!(shader.matches("sd_rounded_box(").count(), 5);
+    assert_eq!(shader.matches("sd_rounded_box(").count(), 3);
+    assert_eq!(shader.matches("sd_mystic_tile(").count(), 4);
     // The contact shadow fades over the distance to the PLATE, never over a
     // distance that reads as zero off the plate: that is what turned the whole
     // `reach` of a turning tile into one dark rectangle.
@@ -217,12 +218,20 @@ fn procedural_sdf_mystic_mode_is_one_isolated_turning_tile_branch() {
     // the cell it leaves behind is filled with the menu plate: the hole.
     assert!(shader.contains("plate_color = textureSampleLevel(menu_front, menu_front_sampler, source_uv, 0.0).rgb"));
     assert!(!shader.contains("back_alpha"));
-    assert!(shader.contains("let hole_distance = sd_rounded_box(delta, vec2(half_side)"));
+    assert!(shader.contains("let hole_distance = sd_mystic_tile(delta, half_side,"));
+    // A palette tile's top-right corner is folded: `mystic_tile_motion.w` is the
+    // fold's side, and the plate, its contact shadow and its hole are all cut
+    // along the same diagonal.
+    assert!(shader.contains("fn sd_mystic_tile(point: vec2<f32>, half_side: f32, corner: f32, fold: f32) -> f32"));
+    assert!(shader.contains("let fold = clamp(motion.w, 0.0, half_side);"));
+    assert!(shader.contains("let footprint_distance = sd_mystic_tile(delta, half_side,"));
+    assert!(shader.contains("contact_distance = sd_mystic_tile(face_point, half_side,"));
     assert!(shader.contains("* hole_dose"));
-    // The contact shadow is occluded by the plate it belongs to, and only a plate
-    // that is really turning carries one.
+    // The contact shadow is occluded by the plate it belongs to. A turning plate
+    // carries its full shadow; a plate lying flat keeps atome's standard tool
+    // shadow at `mystic_style.y`, on its menu face only.
     assert!(shader.contains("* shadow_dose * (1.0 - plate_mask) * lifted"));
-    assert!(shader.contains("let lifted = abs(sine)"));
+    assert!(shader.contains("let lifted = max(abs(sine), clamp(material.mystic_style.y, 0.0, 1.0) * select(0.0, 1.0, cosine < 0.0));"));
     // A tile that has not started turning paints nothing at all.
     assert!(shader.contains("if progress <= 0.0 { continue; }"));
     // Every mystic uniform is declared, and in the bind group order.

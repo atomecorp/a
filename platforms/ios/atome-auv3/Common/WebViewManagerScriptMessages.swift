@@ -161,7 +161,8 @@ extension WebViewManager {
                         // Auth and health commands are honoured only from the bundled
                         // app page in the main frame: never from an iframe or another origin.
                         if command == "auth_device_key" || command == "auth_link_take" || command == "auth_local_request"
-                            || command.hasPrefix("health_") {
+                            || command.hasPrefix("health_")
+                            || ["macos_contacts_snapshot", "native_calendar_snapshot", "export_file_save"].contains(command) {
                             let source = message.frameInfo.request.url
                             let bundledPage = source?.scheme == "atome" && source?.host == nil
                                 && source?.path == "/src/index.html"

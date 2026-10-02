@@ -5,8 +5,9 @@ import {
 import { toText } from '../shared/scalars.js';
 
 
-const getTauriInvoke = () => {
+export const getNativeImportInvoke = () => {
     if (typeof window === 'undefined') return null;
+    if (typeof window.__ATOME_IOS_NATIVE_INVOKE === 'function') return window.__ATOME_IOS_NATIVE_INVOKE;
     if (window.__TAURI__ && typeof window.__TAURI__.invoke === 'function') {
         return window.__TAURI__.invoke.bind(window.__TAURI__);
     }
@@ -26,7 +27,7 @@ const normalizeList = (items = []) => (Array.isArray(items) ? items : [])
     .filter((entry) => entry.value);
 
 const buildCustomFields = ({ phones = [], emails = [], organization = '', note = '' } = {}) => {
-    const fields = [{ label: 'source', value: 'Apple Contacts' }];
+    const fields = [];
     if (organization) fields.push({ label: 'organisation', value: organization });
     normalizeList(phones).forEach((entry, index) => {
         if (index === 0) return;
@@ -48,7 +49,8 @@ export const normalizeMacosContact = (record = {}) => {
     const nickname = toText(record.nickname || '');
     const organization = toText(record.organization || '');
     const name = toText(record.name || [firstName, lastName].filter(Boolean).join(' ')) || nickname || organization || phones[0]?.value || emails[0]?.value || 'Contact';
-    const sourceContactId = toText(record.id || record.source_contact_id || '') || `macos:${name}:${phones[0]?.value || emails[0]?.value || 'unknown'}`;
+    const sourceContactId = toText(record.id || record.source_contact_id || '');
+    if (!sourceContactId) throw new Error('native_contact_identity_missing');
     return {
         id: '',
         source_contact_id: sourceContactId,
@@ -57,7 +59,6 @@ export const normalizeMacosContact = (record = {}) => {
         nickname,
         phone: phones[0]?.value || '',
         email: emails[0]?.value || '',
-        user_face: '',
         access: 'private',
         visibility: 'private',
         read_only: true,
@@ -106,7 +107,7 @@ export const createMacosContactsSource = ({
         label_key: 'eve.contact.import_source_apple',
         write_capabilities: writable ? ['contacts_update'] : []
     });
-    const invoke = typeof commandRunner === 'function' ? commandRunner : getTauriInvoke();
+    const invoke = typeof commandRunner === 'function' ? commandRunner : getNativeImportInvoke();
     const contactsById = new Map();
     let lastCursor = null;
     let permission = 'not_determined';
@@ -117,7 +118,7 @@ export const createMacosContactsSource = ({
         permission
     });
 
-    const fetchSnapshot = async (mode = 'initial') => {
+    const fetchSnapshot = async (mode = 'initial', options = {}) => {
         if (typeof invoke !== 'function') {
             return {
                 ok: false,
@@ -125,7 +126,7 @@ export const createMacosContactsSource = ({
                 source_id
             };
         }
-        const response = await invoke('macos_contacts_snapshot', {});
+        const response = await invoke('macos_contacts_snapshot', { cursor: options.cursor || null, collections: options.collections || null });
         permission = toText(response?.permission || permission) || 'not_determined';
         if (!response || response.ok !== true) {
             return {
@@ -136,17 +137,21 @@ export const createMacosContactsSource = ({
                 source_id
             };
         }
-        contactsById.clear();
+        if (response.mode !== 'delta') contactsById.clear();
+        for (const id of response.removed_ids || []) contactsById.delete(String(id));
         const normalized = (Array.isArray(response.contacts) ? response.contacts : []).map((entry) => normalizeMacosContact(entry));
         normalized.forEach((entry) => {
             contactsById.set(entry.source_contact_id, entry);
         });
-        lastCursor = toText(response.fetched_at || '') || new Date().toISOString();
+        lastCursor = toText(response.cursor || response.fetched_at || '') || new Date().toISOString();
         return {
             ok: true,
             source_id,
             cursor: lastCursor,
-            mode,
+            mode: response.mode || 'snapshot',
+            complete: response.complete !== false,
+            groups: response.groups || [],
+            removed_ids: response.removed_ids || [],
             permission,
             items: normalized.map((entry) => ({ ...entry }))
         };
@@ -189,11 +194,11 @@ export const createMacosContactsSource = ({
                 contact: { ...contact }
             };
         },
-        async syncInitial() {
-            return fetchSnapshot('initial');
+        async syncInitial(options = {}) {
+            return fetchSnapshot('initial', options);
         },
-        async syncIncremental() {
-            return fetchSnapshot('delta');
+        async syncIncremental(options = {}) {
+            return fetchSnapshot('delta', options);
         }
     };
 };

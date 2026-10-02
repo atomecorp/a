@@ -1,3 +1,4 @@
+import { PERSONAL_IMPORT_TYPES, CALENDAR_IMPORT_FIELDS } from './personal_import_types.js';
 import { registerAtomeType } from './atome_universal_contract.js';
 
 export const CORE_ATOME_TYPE_VERSION = 1;
@@ -74,6 +75,7 @@ const defineType = (definition) => Object.freeze({
 });
 
 export const CORE_ATOME_TYPE_DEFINITIONS = Object.freeze([
+    ...PERSONAL_IMPORT_TYPES.map(defineType),
     defineType({
         type: 'project',
         kind: 'project',
@@ -259,11 +261,12 @@ export const CORE_ATOME_TYPE_DEFINITIONS = Object.freeze([
     defineType({
         type: 'calendar_event', kind: 'data_model', traits: ['data', 'editable', 'navigable'],
         schema: {
+            ...CALENDAR_IMPORT_FIELDS,
             title: { type: 'string' }, description: { type: 'string' }, location: { type: 'string' },
             start: { type: 'string' }, end: { type: 'string' }, all_day: { type: 'boolean' },
             calendar_id: { type: 'string' }, timezone: { type: 'string' }, color: { type: 'string' },
             alarms: { type: 'string' }, recurrence: { type: 'string' }, conditions: { type: 'string' },
-            kind: { type: 'string', enum: ['event', 'todo'] }, status: { type: 'string', enum: ['open', 'done'] },
+            kind: { type: 'string', enum: ['event', 'todo'] }, status: { type: 'string', enum: ['open', 'done', 'cancelled'] },
             due_at: { type: 'string' }, completed_at: { type: 'string' }, visio_room_id: { type: 'string' },
             created_iso: { type: 'string' }, updated_iso: { type: 'string' },
             program_link: { type: 'object' }, suspended: { type: 'boolean' }, locked: { type: 'boolean' }

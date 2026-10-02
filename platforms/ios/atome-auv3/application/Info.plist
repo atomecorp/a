@@ -219,5 +219,11 @@
         <key>NSAllowsLocalNetworking</key>
         <true/>
     </dict>
+    <key>NSContactsUsageDescription</key>
+    <string>Import selected contacts into your private Atome workspace.</string>
+    <key>NSCalendarsFullAccessUsageDescription</key>
+    <string>Read selected calendars into your private Atome workspace.</string>
+    <key>NSCalendarsUsageDescription</key>
+    <string>Read selected calendars into your private Atome workspace.</string>
 </dict>
 </plist>

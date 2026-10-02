@@ -1,4 +1,11 @@
+import { PERSONAL_IMPORT_TOOLS, personalImportToolResult } from '#shared/personal_import_tools.js';
 export const registerContactsDefaultTools = ({ Agent, safeString, prepareContactsApi, requireContactsApi }) => {
+    for (const tool of PERSONAL_IMPORT_TOOLS.filter(tool => tool.name.startsWith('contacts.'))) Agent.registerTool({
+        name: tool.name, description: tool.description, capabilities: [tool.write ? 'contacts.write' : 'contacts.read'],
+        risk_tier: tool.write ? 'MEDIUM' : 'LOW', parameters: { type: 'object', properties: tool.properties, required: tool.param ? [tool.param] : [] },
+        handler: async ({ params = {} }) => { const api = await requireContactsApi(); return personalImportToolResult(tool,
+            await (tool.param ? api[tool.method](params[tool.param], params) : api[tool.method](params))); }
+    });
     Agent.registerTool({
         name: 'contacts.sources',
         description: 'List contact sources currently bridged into eVe.',
@@ -159,7 +166,7 @@ export const registerContactsDefaultTools = ({ Agent, safeString, prepareContact
 
     Agent.registerTool({
         name: 'contacts.import_macos',
-        description: 'Import contacts from the local macOS Contacts snapshot into the eVe local contacts store.',
+        description: 'Import contacts from the local macOS Contacts snapshot into private canonical contacts.',
         capabilities: ['contacts.write'],
         risk_tier: 'LOW',
         handler: async ({ params }) => {
@@ -174,7 +181,7 @@ export const registerContactsDefaultTools = ({ Agent, safeString, prepareContact
 
     Agent.registerTool({
         name: 'contacts.import_icloud',
-        description: 'Import contacts from iCloud CardDAV into the eVe local contacts store.',
+        description: 'Import contacts from iCloud CardDAV into private canonical contacts.',
         capabilities: ['contacts.write'],
         risk_tier: 'LOW',
         handler: async ({ params }) => {

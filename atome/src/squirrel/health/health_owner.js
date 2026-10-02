@@ -18,6 +18,12 @@ const MAX_BACKOFF_MS = 15 * 60000;
 const READ_BATCH_LIMIT = 16;
 
 const hostFamily = (host) => (host === 'ios' ? 'ios' : host === 'android' ? 'android' : null);
+// Access states a host reports per monitor. `not_determined`: never asked, the
+// system sheet can be shown. `not_granted`: not granted, whether it was asked
+// is unknown (Health Connect). `denied` / `restricted`: the system no longer
+// shows a sheet; only its settings can change it. `unknowable`: asked, but the
+// platform hides read grants (HealthKit).
+const SETTINGS_ONLY_ACCESS = new Set(['denied', 'restricted']);
 
 const readingOf = (monitorId, state, reasonCode = state) => Object.freeze({
     monitorId, state, value: null, reasonCode, fetchedAt: null, measuredTo: null
@@ -50,12 +56,20 @@ export function createHealthOwner({
     let backoffMs = 0;
     let accessQueue = Promise.resolve();
     let accessPending = null;
+    // Monitors still not granted right after a completed request: the host may
+    // not show its sheet again (Health Connect after two refusals), so only its
+    // settings are offered for them until access is observed granted.
+    const refused = new Set();
+    const statusListeners = new Set();
 
     const context = () => Object.freeze({ generation, accountId });
     const isCurrent = (ctx) => !sealed && ctx.generation === generation && ctx.accountId === accountId;
     const hidden = () => documentRef?.visibilityState === 'hidden';
 
     const publish = (monitorId, reading) => {
+        if (reading.state === 'needs_permission' && refused.has(monitorId)) {
+            reading = Object.freeze({ ...reading, state: 'denied', reasonCode: 'health_access_refused' });
+        }
         readings.set(monitorId, reading);
         (consumers.get(monitorId) || new Set()).forEach((listener) => {
             try { listener(reading); } catch (_) { /* a consumer failure never blocks the others */ }
@@ -75,6 +89,28 @@ export function createHealthOwner({
         reason: sealed ? 'health_access_sealed' : (family ? null : 'health_host_unsupported')
     });
 
+    // Something that decides access may have changed (sheet answered, return
+    // from the system settings, account change): forget the cached state and
+    // tell status consumers to look again. Never prompts.
+    let accessEpoch = 0;
+    const invalidateAccess = () => {
+        accessEpoch += 1;
+        capabilities = null;
+        capabilitiesPromise = null;
+        statusListeners.forEach((listener) => {
+            try { listener(); } catch (_) { /* a consumer failure never blocks the others */ }
+        });
+    };
+
+    const withRefusals = (value) => {
+        const monitors = {};
+        Object.entries(value.monitors || {}).forEach(([id, entry]) => {
+            if (entry?.access === 'granted') refused.delete(id);
+            monitors[id] = entry?.access === 'not_granted' && refused.has(id) ? { ...entry, access: 'denied' } : entry;
+        });
+        return Object.freeze({ ...value, monitors: Object.freeze(monitors) });
+    };
+
     // Capabilities never trigger a permission sheet.
     const loadCapabilities = () => {
         if (!family || sealed) {
@@ -83,13 +119,16 @@ export function createHealthOwner({
         if (capabilities) return Promise.resolve(capabilities);
         if (!capabilitiesPromise) {
             const ctx = context();
+            const epoch = accessEpoch;
             capabilitiesPromise = call('health_capabilities', {
                 monitors: healthMonitorsForHost(family).map((entry) => entry.id)
             }, ctx).then((reply) => {
+                // An answer computed before access changed is not cached.
+                if (epoch !== accessEpoch) return loadCapabilities();
                 capabilitiesPromise = null;
                 if (reply.stale) return loadCapabilities();
                 const value = reply.ok
-                    ? Object.freeze({ available: reply.result?.available === true, reason: reply.result?.reason || null, monitors: reply.result?.monitors || {} })
+                    ? withRefusals({ available: reply.result?.available === true, reason: reply.result?.reason || null, monitors: reply.result?.monitors || {} })
                     : Object.freeze({ available: false, reason: reply.error, monitors: {} });
                 if (reply.ok) capabilities = value;
                 return value;
@@ -105,12 +144,15 @@ export function createHealthOwner({
         const ctx = context();
         const reply = await call('health_link_status', {}, ctx);
         if (reply.stale) return loadLinkStatus();
-        linkState = Object.freeze({
+        const status = Object.freeze({
             accountId,
             linked: reply.ok && reply.result?.linked === true,
             reason: reply.ok ? (reply.result?.reason || null) : reply.error
         });
-        return linkState;
+        // Only an answer is remembered: a refused token or a transport error
+        // is asked again on the next read instead of freezing "link required".
+        if (reply.ok) linkState = status;
+        return status;
     };
 
     // Explicit user gesture only: associates this device's health store with
@@ -121,14 +163,20 @@ export function createHealthOwner({
         if (reply.stale) return { ok: false, error: 'health_context_changed' };
         linkState = null;
         if (reply.ok) scheduleRead(Array.from(consumers.keys()));
+        invalidateAccess();
         return reply.ok ? { ok: true } : { ok: false, error: reply.error };
     };
 
     // One native permission request in flight; ids requested meanwhile are
     // merged into the next request. Only ever called from a user gesture.
+    // Monitors the system will no longer ask about are not requested again
+    // (no silent sheet-less loop): they are answered as `settings`.
     const requestAccess = (monitorIds) => {
-        const ids = (Array.isArray(monitorIds) ? monitorIds : [monitorIds]).filter((id) => getHealthMonitor(id));
-        if (!ids.length) return Promise.resolve({ ok: true, requested: [] });
+        const known = capabilities?.monitors || {};
+        const valid = (Array.isArray(monitorIds) ? monitorIds : [monitorIds]).filter((id) => getHealthMonitor(id));
+        const settings = valid.filter((id) => refused.has(id) || SETTINGS_ONLY_ACCESS.has(known[id]?.access));
+        const ids = valid.filter((id) => !settings.includes(id));
+        if (!ids.length) return Promise.resolve({ ok: true, requested: [], settings });
         if (accessPending) {
             ids.forEach((id) => accessPending.ids.add(id));
             return accessPending.promise;
@@ -141,13 +189,29 @@ export function createHealthOwner({
             const requested = Array.from(pending.ids);
             const reply = await call('health_request_access', { monitors: requested }, ctx);
             if (reply.stale) return { ok: false, error: 'health_context_changed', requested };
-            capabilities = null;
+            // Hosts that report per-type results (Health Connect) tell which
+            // types stayed refused; HealthKit hides it and reports none.
+            const notGranted = Array.isArray(reply.result?.notGranted) ? reply.result.notGranted.map(String) : [];
+            const granted = Array.isArray(reply.result?.granted) ? reply.result.granted.map(String) : [];
+            granted.forEach((id) => refused.delete(id));
+            if (reply.ok && reply.result?.completed !== false) notGranted.forEach((id) => refused.add(id));
+            invalidateAccess();
             scheduleRead(requested.filter((id) => consumers.has(id)));
             return reply.ok
                 ? { ok: true, requested, ...(reply.result || {}) }
                 : { ok: false, error: reply.error, requested };
         });
         return pending.promise;
+    };
+
+    // Explicit user gesture only: opens the system place where these
+    // monitors' access is managed (app settings, Health Connect). The state is
+    // checked again when the app returns to the foreground.
+    const openSettings = async (monitorIds) => {
+        const ids = (Array.isArray(monitorIds) ? monitorIds : [monitorIds]).filter((id) => getHealthMonitor(id));
+        const reply = await call('health_open_settings', { monitors: ids }, context());
+        if (reply.stale) return { ok: false, error: 'health_context_changed' };
+        return reply.ok ? { ok: true, ...(reply.result || {}) } : { ok: false, error: reply.error };
     };
 
     const flushReads = async () => {
@@ -255,6 +319,7 @@ export function createHealthOwner({
         capabilities = null;
         capabilitiesPromise = null;
         linkState = null;
+        refused.clear();
         inflight.clear();
         pendingReads = new Set();
         readings.clear();
@@ -267,6 +332,7 @@ export function createHealthOwner({
         });
         if (accountId && consumers.size) scheduleRead(Array.from(consumers.keys()));
         schedulePoll();
+        invalidateAccess();
         return ctx;
     };
 
@@ -288,6 +354,15 @@ export function createHealthOwner({
     };
 
     const onInvalidated = (event) => {
+        // A host "access may have changed" signal (return to the foreground,
+        // where the system settings may have been changed): re-check access and
+        // re-read every monitor still consumed. Carries no value either.
+        if (event?.detail?.access === true) {
+            if (hidden()) return;
+            invalidateAccess();
+            if (consumers.size) scheduleRead(Array.from(consumers.keys()));
+            return;
+        }
         const ids = Array.isArray(event?.detail?.monitors) ? event.detail.monitors : [];
         // The signal carries no value; it only schedules a re-read of monitors
         // that still have consumers. Forged signals cost one deduped read.
@@ -300,7 +375,7 @@ export function createHealthOwner({
             pollTimer = null;
             return;
         }
-        capabilities = null;
+        invalidateAccess();
         if (consumers.size) scheduleRead(Array.from(consumers.keys()));
         schedulePoll();
     };
@@ -321,6 +396,13 @@ export function createHealthOwner({
         linkStatus: loadLinkStatus,
         link,
         requestAccess,
+        openSettings,
+        // Called (no argument) whenever access may have changed; returns release().
+        onAccessChange: (listener) => {
+            if (typeof listener !== 'function') return () => false;
+            statusListeners.add(listener);
+            return () => statusListeners.delete(listener);
+        },
         subscribe,
         refresh: (ids) => scheduleRead(ids || Array.from(consumers.keys())),
         reading: (monitorId) => readings.get(monitorId) || null,

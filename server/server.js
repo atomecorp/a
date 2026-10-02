@@ -77,6 +77,7 @@ import { normalizePhone } from './auth_crypto.js';
 import { ensureOpaquePrincipalIdentity } from './auth_identity.js';
 import { createWsPhoneLinkHandler } from './wsPhoneLinkAuth.js';
 import { assertDeviceSessionClaims, validateConnectionDeviceSession } from './auth_session_validation.js';
+import { handleWsPersonalImport } from './ws_personal_import.js';
 import { handleWsYoutubeSearch } from './ws_youtube_search.js';
 import { issueMediaToken, readMediaTokenFromQuery, verifyMediaToken } from './media_capability.js';
 import { handleWsApiGuestAdoption } from './wsApiGuestAdoption.js';
@@ -2171,6 +2172,9 @@ async function startServer() {
               success: false, ok: false, error: 'auth_session_invalid' });
             return;
           }
+
+          const personalImportResponse = await handleWsPersonalImport(data, connection);
+          if (personalImportResponse) { safeSend(personalImportResponse); return; }
 
           const youtubeSearchResponse = await handleWsYoutubeSearch(data, request.ip);
           if (youtubeSearchResponse) {

@@ -1,5 +1,7 @@
 # Atome / eVe Design Map
 
+2026-10-02 Personal import/export actions reuse Contact fixed actions and Calendar toolbar/native options in the existing Bevy panels. Contact rows wrap in one measured footer column. Existing Finder/Import intake routes VCF/ICS through the common gateway; there is no provider panel or DOM contact/calendar surface. File saving reuses native document export and browser explicit download. Visual acceptance and native limits: `eVe/documentations/PERSONAL_IMPORT_VALIDATION_2026-10-02.md`.
+
 2026-10-01 Home → Settings → Preferences gains the Assistant accordion, using shared choice/button/text nodes and French/English eveT labels. Activation is off by default; phrase Ève, écoute-moi and French model language are fixed. The panel shows state/reason, a device arming button and a 30-second local test. A synchronized enabled profile does not activate another microphone. Detection pauses standby, opens the existing assistant once, and emits a brief signal only after input readiness; wait for that signal before dictation. Missing resources are explicit. No new publication or YouTube channel-creation flow. UI node/persistence tests pass; live native UI and energy behavior are not acceptance-tested.
 
 2026-10-01 Finder uses seven primary categories, metadata tags combined with AND, standard selection checkboxes and a virtualized continuous list. Drag hides the panel only after movement; partial failures remain reviewable. Mystic keeps its compass and translates the whole geometry at edges; pagination preserves cardinal anchors. Evidence and physical-platform limits: `eVe/documentations/FINDER_IMPORT_CONTEXT_VALIDATION_2026-10-01.md`.
@@ -1305,3 +1307,35 @@ Pinned case without a rail (2026-09-24): the reserved zone above the Atome handl
 ## Programme panel composition (2026-10-01)
 
 `eVe/intuition/runtime/bevy_panel/bevy_panel_program_runtime.js` composes the canonical Bevy panel shell, `createPanelTextEditingRuntime`, `textInputNode`, scope chips, selectable lists and `bevy_ui_tool_slider`. Involvement contains exactly two native sliders: time and rhythm. Unit changes affect display only; conversion waits for selected days. Five optional Finder family chips remain separate from activity filters. Journal consent is explicit. Monitor displays consented observations and declared completions separately; missing data has no efficacy score. No HTML app, private editor or new rendering path is introduced. Cross-platform acceptance is tracked in `eVe/documentations/programs/README.md`.
+
+## Unified menu tools (2026-10-02)
+
+One design for Mystic, the main ribbon and the contextual rail.
+
+- **Tile**: `eVe/intuition/ribbon/bevy_ui_menu_surface.js` (`buildBevyMenuToolNode`, `resolveBevyMenuSurface`). Square, `toolGapPx` seam (`elements/skin/tool_skin.js`), one light `toolShadow` per tile. Mystic paints the same family colour through its shader (`mystic_tile_colors`, sRGB → linear in `mystic_tokens.js`).
+- **Five families**: `eVe/intuition/shared/tool_family.js` (`TOOL_FAMILY_BY_KEY`, `classifyTool`), colours in `EVE_TOOL_FAMILY_COLORS` (`elements/skin/tokens.js`). Every menu reads it through `resolveToolPresentation` (`intuition/shared/tool_presentation.js`). Default is `system`, never a grey ground. The per-slot Mystic tint (`SLOT_FAMILIES`) and the per-palette accent bar (`familyByPaletteKey`, `buildBevyMenuPaletteAccent`) are removed.
+- **Palette marker**: a real folded corner, shown when `toolHasPaletteChildren(definition)` is true. That check covers declared children, hold options, and dynamic palettes that are still empty. A panel or a slider is not a palette.
+  - The tile's top-right corner is cut along a diagonal, and the flap comes back on the tile with a gradient, a light fold edge and a soft shadow underneath (`buildBevyMenuPaletteCorner`, `bevy_ui_menu_surface.js`).
+  - On the ribbon and the rail, the palette tile's ground is that one SVG image (`resolveBevyMenuPalettePlateSource`: cut ground plus the tile's light shadow plus the flap); its panel stays transparent and shadowless.
+  - In Mystic, the shader cuts the plate (`sd_mystic_tile` in `procedural_sdf.wgsl`, fold side passed in `mystic_tile_motion.w`), and the image carries only the flap (`resolveBevyMenuPaletteFlapSource`).
+- **Lens on the bars**: `eVe/intuition/ribbon/bevy_ui_linear_menu_lens.js` reuses the Mystic springs and painter. The shared pointer runtime owns the `lens` states (`domains/rendering/bevy_ui_pointer_runtime.js`): armed on press when the bar cannot scroll, engaged by a still hold or by the first travel along the bar, and handing over to a palette on a sideways travel. The release runs the grown tool only when it ends on that tool.
+- **Deported sliders**: the trigger is a square tool. The real slider shows beside it, in the bar's direction (vertical next to the rail, horizontal above the ribbon). You enter and leave it across the bar and set the value along the bar, relative and without jumps.
+- **Nested rail palettes**: `state.activePalettePath` with `resolveRailPaletteLevels` (`atome_contextual_edit_model.js`). Parent levels fold onto their real triggers against the rail; touching a retained level closes only what comes after it.
+- **Completed 2026-10-02 (second pass)**:
+  - Rail palette compaction is animated: retained cases slide to their slot and new options come out of their trigger (`animateCompaction` in `atome_contextual_edit_projection_runtime.js`). Hit-testing reads the destination from the first frame.
+  - A nested palette option opens after a short rest during a held gesture (`NESTED_DWELL_MS`).
+  - An overflowing rail scrolls one case when the browse reaches its edge (`edgeScroll`, through `revealTreeNode`).
+  - A Mystic slider tile opens the real slider's value entry and applies nothing on hover or growth.
+
+### 2026-10-02 — project questions and stable nested controls
+
+New project immediately fades to white through the Dashboard presentation owner. Opaque family-color cards use luminance-based contrasting labels; Empty project is a first-step choice. The rail survives questions and preparation, while choices disappear on final selection; project readiness precedes rail departure and bottom-menu arrival. Existing project selection hides background/cards before loading. Painted panel ancestors must precede descendant controls at a lower composition layer; scrolling updates transforms without replacing identities or materials.
+- **Regressions fixed (2026-10-02, third pass)** — details in `todo/menu_regressions_2026-10-02.md`:
+  - **Tools wear the standard shadow** (`systemSurface.shadow`). A case no longer clips its own content, and the rail's scroll viewport paints its tiles' shadow through `clip_margin`, a paint-only margin in `overflowClipForNode` that leaves hit-testing unchanged.
+  - **Label on top, icon below**, in `buildBevyMenuToolContent`.
+  - **A resized rounded shape re-cuts its mask** (`render_ops.rs`, `apply_transform`).
+  - **Slider tools:**
+    - crossing one does nothing;
+    - a tap or a release pins the real slider;
+    - turning inward reveals it under the finger;
+    - coming back to the bar folds it.

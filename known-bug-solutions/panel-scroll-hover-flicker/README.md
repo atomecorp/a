@@ -50,3 +50,9 @@ The panel material contract additionally requires `material`, `controlMaterial` 
 ## Real-runtime acceptance
 
 In Web, Tauri and iOS, open Home and continuously scroll across the identity fields, accordion rows (`Profile` included), guest-project attachment section and `Disconnect`. No row, fixed action or footer band may pale, become transparent, disappear or gain paint merely because content scrolls. Pressed, focused and selected states must remain visible and functional.
+
+## 2026-10-02 — opaque ancestor depth regression
+
+The iPhone Auto-size recording also reproduces on the real Web canvas after hover and backdrop stabilization. Captured source/projected records retain checked state, IDs, opacity 1 and blue control material. However, the control background and both opaque accordion bodies all project at z=2351, allowing ancestor paint to cover the control as scroll ordering changes. This is a separate confirmed composition fault.
+
+The common panelBodyLayer owner in eVe/intuition/runtime/bevy_panel/bevy_panel_tree.js now advances the inherited child layer when the parent paints an opaque surface or shadow. It preserves relative explicit layer requests and transform-only scroll diffs; no checkbox-specific layer or renderer fork is added. The nested opaque-control regression in tests/eve/bevy_panel_choice_contract.test.mjs failed before the change and passes afterwards. Headed Web wheel captures retain control paint. Native touch inertia remains a separate acceptance requirement; see eVe/documentations/SIX_CORRECTIONS_VALIDATION_2026-10-02.md for actual evidence.

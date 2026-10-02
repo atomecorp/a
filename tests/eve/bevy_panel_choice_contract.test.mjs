@@ -165,3 +165,25 @@ test('native choice controls activate through the canonical pointer route', () =
     runtime.routePointerEvent({ canvas, phase: 'pointerup', point: { x: 12, y: 12 }, event: { pointerId: 12 } });
     assert.deepEqual(emitted.map((event) => event.type), ['press', 'focus', 'release', 'activate']);
 });
+
+test('nested opaque panel surfaces stay below choice backgrounds while scrolling', async () => {
+    const { panelBodyLayer } = await import('../../eVe/intuition/runtime/bevy_panel/bevy_panel_tree.js');
+    const { projectBevyUiTreeRecords } = await import('../../eVe/domains/rendering/bevy_ui_overlay_record_projection.js');
+    const { createVirtualSceneTree, diffVirtualSceneTrees } = await import('../../eVe/domains/rendering/virtual_scene_contract.js');
+    const choice = toggleableRowNode({ id: 'autosize', kind: 'checkbox', label: 'Auto-size', checked: true });
+    const tree = offset => ({ root: panelBodyLayer({ id: 'outer', kind: 'panel', style: { position: [0, offset], size: [400, 400], background: [0.1, 0.1, 0.1, 1] },
+        children: [{ id: 'inner', kind: 'panel', style: { size: [300, 300], background: [0.2, 0.2, 0.2, 1], z_index: 0 }, children: [choice] }] }) });
+    const project = offset => projectBevyUiTreeRecords({ tree: tree(offset), treeId: 'eve_bevy_panel_test', workspaceLayer: 'panel' });
+    const records = project(0);
+    const outer = records.find(record => record.id.endsWith('_outer'));
+    const inner = records.find(record => record.id.endsWith('_inner'));
+    const background = records.find(record => record.id.endsWith('_autosize_background'));
+    assert.ok(inner.properties.z_index > outer.properties.z_index, 'the inner opaque surface is above its enclosing surface');
+    assert.ok(background.properties.z_index > inner.properties.z_index, 'the checked material cannot share the parent surface depth');
+    const moved = project(-40);
+    assert.deepEqual(moved.map(record => record.id), records.map(record => record.id));
+    assert.equal(moved.find(record => record.id === background.id).properties.color, background.properties.color);
+    const ops = diffVirtualSceneTrees(createVirtualSceneTree(records), createVirtualSceneTree(moved));
+    assert.ok(ops.length > 0);
+    assert.ok(ops.every(op => op.type === 'updateTransform'), 'scroll changes only geometry, preserving entities and materials');
+});

@@ -1,78 +1,12 @@
-import {
-    normalizeText,
-    xmlDecode,
-    escapeVcardValue,
-    resolveUrl,
-    makeGeneratedUid
-} from './carddav_shared.js';
+import { normalizeText, resolveUrl, makeGeneratedUid } from './carddav_shared.js';
+import { buildContentLine, escapeContentText, decodeContentText, splitContentValue, readContentComponents, foldContentLine } from '../shared/content_lines.js';
 
-const unfoldVcard = (value = '') => String(value || '').replace(/\r?\n[ \t]/g, '');
-
-const parseVcardProperty = (line = '') => {
-    const separator = line.indexOf(':');
-    if (separator === -1) return null;
-    const rawKey = line.slice(0, separator);
-    const value = line.slice(separator + 1);
-    const [namePart, ...paramParts] = rawKey.split(';');
-    const params = {};
-    paramParts.forEach((part) => {
-        const [paramKey, paramValue] = part.split('=');
-        if (!paramKey) return;
-        params[String(paramKey || '').toUpperCase()] = String(paramValue || '');
-    });
-    return {
-        name: String(namePart || '').toUpperCase(),
-        params,
-        value
-    };
+const normalizeCarddavLabel = params => String(params?.TYPE || 'other').split(',')[0].toLowerCase();
+const deriveWritableContactUid = contact => {
+    const uid = contact.exchange_uid || contact.uid || contact.id;
+    if (!uid) throw new Error('contact_exchange_uid_required');
+    return String(uid);
 };
-
-const decodeVcardValue = (value = '') => xmlDecode(String(value || '').replace(/\\,/g, ',').replace(/\\;/g, ';').replace(/\\n/gi, '\n'));
-
-const normalizeCustomFieldLabel = (value) => normalizeText(value || '').toLowerCase();
-
-const normalizeCarddavLabel = (params = {}) => {
-    const type = String(params.TYPE || params.type || '').split(',').map((entry) => entry.trim()).filter(Boolean);
-    return type[0] || 'other';
-};
-
-const normalizeList = (value = []) => (Array.isArray(value) ? value : [])
-    .map((entry) => ({
-        label: normalizeText(entry?.label || '') || 'other',
-        value: normalizeText(entry?.value || '')
-    }))
-    .filter((entry) => entry.value);
-
-const dedupeByValue = (items = []) => {
-    const seen = new Set();
-    return normalizeList(items).filter((entry) => {
-        const key = `${normalizeCustomFieldLabel(entry.label)}:${entry.value}`;
-        if (seen.has(key)) return false;
-        seen.add(key);
-        return true;
-    });
-};
-
-const findCustomFieldValue = (customFields = [], aliases = []) => {
-    const labels = (Array.isArray(aliases) ? aliases : [aliases])
-        .map((entry) => normalizeCustomFieldLabel(entry))
-        .filter(Boolean);
-    if (!labels.length) return '';
-    const field = (Array.isArray(customFields) ? customFields : []).find((entry) => labels.includes(normalizeCustomFieldLabel(entry?.label || '')));
-    return normalizeText(field?.value || '');
-};
-
-const deriveWritableContactUid = (contact = {}) => {
-    const candidates = [
-        contact?.raw?.original_source_contact_id,
-        contact?.source_contact_id,
-        contact?.id,
-        contact?.raw?.id
-    ].map((entry) => normalizeText(entry || '')).filter(Boolean);
-    const explicit = candidates.find((entry) => !/^(phone:|email:|name:|local:)/i.test(entry));
-    return explicit || makeGeneratedUid();
-};
-
 const buildAddressbookHref = (addressbookUrl, uid, existingHref = null) => {
     const explicit = normalizeText(existingHref || '');
     if (explicit) return explicit;
@@ -97,151 +31,100 @@ const buildHrefValue = (addressbookUrl, targetUrl, existingHref = null) => {
     return normalizeText(targetUrl || '') || null;
 };
 
-const normalizeWritableContactPayload = (contact = {}, { uid = null, href = null, etag = null, addressbook_url = null, raw_vcard = null } = {}) => {
-    const phones = dedupeByValue([
-        ...(Array.isArray(contact?.raw?.phones) ? contact.raw.phones : []),
-        ...(contact?.phone ? [{ label: 'cell', value: contact.phone }] : [])
-    ]);
-    const emails = dedupeByValue([
-        ...(Array.isArray(contact?.raw?.emails) ? contact.raw.emails : []),
-        ...(contact?.email ? [{ label: 'home', value: contact.email }] : [])
-    ]);
-    const customFields = Array.isArray(contact?.custom_fields) ? contact.custom_fields : [];
-    const organization = normalizeText(contact?.raw?.organization || findCustomFieldValue(customFields, ['organisation', 'organization', 'org']) || '');
-    const note = normalizeText(contact?.raw?.note || findCustomFieldValue(customFields, ['note']) || '');
-    const firstName = normalizeText(contact?.first_name || contact?.raw?.first_name || '');
-    const name = normalizeText(contact?.name || contact?.raw?.name || '') || firstName || emails[0]?.value || phones[0]?.value || 'Contact';
-    return {
-        id: normalizeText(uid || deriveWritableContactUid(contact)),
-        name,
-        first_name: firstName,
-        nickname: normalizeText(contact?.nickname || contact?.raw?.nickname || ''),
-        phones,
-        emails,
-        organization,
-        note,
-        href: normalizeText(href || contact?.href || contact?.raw?.href || '') || null,
-        etag: normalizeText(etag || contact?.etag || contact?.raw?.etag || '') || null,
-        addressbookId: normalizeText(addressbook_url || contact?.addressbookId || contact?.raw?.addressbookId || '') || null,
-        raw_vcard: normalizeText(raw_vcard || '') || null
+
+const MANAGED = new Set(['VERSION', 'UID', 'FN', 'N', 'NICKNAME', 'ORG', 'TITLE', 'ROLE', 'NOTE', 'TEL', 'EMAIL', 'ADR', 'URL', 'BDAY', 'ANNIVERSARY', 'PHOTO', 'CATEGORIES', 'GENDER']);
+const SAFE_EXTRA = /^(?:X-|[A-Z])[A-Z0-9-]*$/;
+const PRIVATE_EXTRA = /TOKEN|PASSWORD|SECRET|AUTH|ATOME|CONFLICT/i;
+function normalizeWritableContactPayload(contact = {}, options = {}) {
+    const field = name => Object.hasOwn(contact, name) ? contact[name] : contact.raw?.[name];
+    const output = { ...contact, id: options.uid || deriveWritableContactUid(contact) };
+    for (const key of ['phones', 'emails', 'addresses', 'urls', 'extra_properties', 'categories']) output[key] = field(key) || [];
+    for (const key of ['first_name', 'last_name', 'middle_name', 'prefix', 'suffix', 'nickname', 'organization', 'title', 'role', 'note', 'birthday', 'anniversary', 'photo', 'gender']) output[key] = field(key) ?? '';
+    // The edited projection replaces its original first value, including deletion.
+    for (const [singular, plural, label] of [['phone','phones','cell'],['email','emails','home']]) {
+        if (!Object.hasOwn(contact, singular)) continue;
+        const list = [...output[plural]];
+        if (contact[singular]) list.splice(0, 1, { ...(list[0] || { label }), value: contact[singular] });
+        else if (list[0]?.value === contact.raw?.[singular]) list.shift();
+        output[plural] = list;
+    }
+    output.href = options.href || contact.href || contact.raw?.href || null;
+    output.etag = options.etag || contact.etag || contact.raw?.etag || null;
+    output.addressbookId = options.addressbook_url || contact.addressbookId || null;
+    return output;
+}
+function buildWritableVcard(contact = {}, { version = '3.0' } = {}) {
+    if (!['3.0','4.0'].includes(version)) throw new Error('vcard_version_unsupported');
+    const data = normalizeWritableContactPayload(contact);
+    const lines = ['BEGIN:VCARD', 'VERSION:' + version];
+    const add = (name, value, params = {}, escaped = true) => {
+        lines.push(buildContentLine({ name, params, value: escaped ? escapeContentText(value) : value }, version));
     };
-};
-
-const buildWritableVcard = (contact = {}) => {
-    const uid = normalizeText(contact.id || '') || makeGeneratedUid();
-    const fullName = normalizeText(contact.name || '') || contact.emails?.[0]?.value || contact.phones?.[0]?.value || 'Contact';
-    const firstName = normalizeText(contact.first_name || '');
-    const lastName = firstName && fullName.startsWith(firstName)
-        ? normalizeText(fullName.slice(firstName.length).trim())
-        : '';
-    const lines = [
-        'BEGIN:VCARD',
-        'VERSION:3.0',
-        `UID:${escapeVcardValue(uid)}`,
-        `FN:${escapeVcardValue(fullName)}`,
-        `N:${escapeVcardValue(lastName)};${escapeVcardValue(firstName)};;;`
-    ];
-    if (contact.nickname) {
-        lines.push(`NICKNAME:${escapeVcardValue(contact.nickname)}`);
+    add('UID', data.id); add('FN', data.name || data.first_name || 'Contact');
+    add('N', [data.last_name, data.first_name, data.middle_name, data.prefix, data.suffix].map(escapeContentText).join(';'), {}, false);
+    for (const [property, field] of [['NICKNAME','nickname'],['ORG','organization'],['TITLE','title'],['ROLE','role'],['NOTE','note'],['BDAY','birthday'],['ANNIVERSARY','anniversary'],['GENDER','gender']]) {
+        if (data[field]) add(property, data[field]);
     }
-    if (contact.organization) {
-        lines.push(`ORG:${escapeVcardValue(contact.organization)}`);
-    }
-    if (contact.note) {
-        lines.push(`NOTE:${escapeVcardValue(contact.note)}`);
-    }
-    dedupeByValue(contact.phones).forEach((entry) => {
-        lines.push(`TEL;TYPE=${escapeVcardValue((entry.label || 'other').toUpperCase())}:${escapeVcardValue(entry.value)}`);
-    });
-    dedupeByValue(contact.emails).forEach((entry) => {
-        lines.push(`EMAIL;TYPE=${escapeVcardValue((entry.label || 'other').toUpperCase())}:${escapeVcardValue(entry.value)}`);
-    });
-    lines.push('END:VCARD');
-    return lines.join('\r\n');
-};
-
-const parseVcardData = (vcard = '') => {
-    const text = unfoldVcard(vcard);
-    const lines = text.split(/\r?\n/);
-    const state = {
-        id: null,
-        name: '',
-        first_name: '',
-        last_name: '',
-        middle_name: '',
-        nickname: '',
-        organization: '',
-        note: '',
-        phones: [],
-        emails: []
-    };
-
-    lines.forEach((line) => {
-        const trimmed = String(line || '').trim();
-        if (!trimmed || /^BEGIN:VCARD$/i.test(trimmed) || /^END:VCARD$/i.test(trimmed) || /^VERSION:/i.test(trimmed)) {
-            return;
+    for (const [name, field] of [['TEL','phones'],['EMAIL','emails'],['URL','urls']]) {
+        for (const entry of data[field]) {
+            const value = typeof entry === 'string' ? entry : entry.value;
+            if (!value) continue;
+            const params = { ...(entry.params || {}) };
+            if (entry.label && (!params.TYPE || normalizeCarddavLabel(params) !== entry.label)) params.TYPE = entry.label;
+            if (name === 'TEL' && version === '4.0') params.VALUE = 'text';
+            if (version === '3.0') delete params.PREF;
+            add(name, value, params);
         }
-        const property = parseVcardProperty(trimmed);
-        if (!property) return;
-        const value = decodeVcardValue(property.value);
-        switch (property.name) {
-        case 'UID':
-            state.id = normalizeText(value) || null;
-            break;
-        case 'FN':
-            state.name = normalizeText(value);
-            break;
-        case 'N': {
-            const [lastName, firstName, middleName] = String(value || '').split(';');
-            if (!state.last_name) state.last_name = normalizeText(lastName);
-            if (!state.first_name) state.first_name = normalizeText(firstName);
-            if (!state.middle_name) state.middle_name = normalizeText(middleName);
-            break;
-        }
-        case 'NICKNAME':
-            state.nickname = normalizeText(value);
-            break;
-        case 'ORG':
-            state.organization = normalizeText(String(value || '').split(';').filter(Boolean).join(' '));
-            break;
-        case 'NOTE':
-            state.note = normalizeText(value);
-            break;
-        case 'TEL':
-            state.phones.push({
-                label: normalizeCarddavLabel(property.params),
-                value: normalizeText(value)
-            });
-            break;
-        case 'EMAIL':
-            state.emails.push({
-                label: normalizeCarddavLabel(property.params),
-                value: normalizeText(value)
-            });
-            break;
-        default:
-            break;
-        }
-    });
-
-    if (!state.name) {
-        state.name = [state.first_name, state.middle_name, state.last_name].filter(Boolean).join(' ').trim()
-            || state.nickname
-            || state.organization
-            || state.emails[0]?.value
-            || state.phones[0]?.value
-            || 'Contact';
     }
-
+    for (const entry of data.addresses) {
+        const values = entry.values || [entry.po_box,entry.extended,entry.street,entry.city,entry.region,entry.postal_code,entry.country];
+        add('ADR', values.map(value => escapeContentText(value || '')).join(';'), { ...(entry.params || {}), ...(entry.label ? { TYPE: entry.label } : {}) }, false);
+    }
+    if (data.categories.length) add('CATEGORIES', data.categories.map(escapeContentText).join(','), {}, false);
+    if (data.photo) {
+        if (version === '3.0' && /^data:image\//i.test(data.photo)) {
+            const match = data.photo.match(/^data:image\/([a-z0-9+.-]+);base64,([A-Za-z0-9+/=]+)$/i);
+            if (!match) throw new Error('vcard_photo_invalid');
+            add('PHOTO', match[2], { ENCODING: 'b', TYPE: match[1].toUpperCase() }, false);
+        } else add('PHOTO', data.photo, version === '3.0' ? { VALUE: 'URI' } : {}, false);
+    }
+    for (const property of data.extra_properties) {
+        if (MANAGED.has(property.name) || !SAFE_EXTRA.test(property.name) || PRIVATE_EXTRA.test(property.name)) continue;
+        lines.push(buildContentLine(property, version));
+    }
+    lines.push('END:VCARD'); return lines.map(foldContentLine).join('\r\n') + '\r\n';
+}
+function parseVcardData(vcard = '') {
+    const components = readContentComponents(vcard, 'VCARD');
+    if (components.length !== 1) throw new Error('vcard_single_contact_required');
+    const properties = components[0];
+    const version = properties.find(property => property.name === 'VERSION')?.value;
+    if (!['3.0','4.0'].includes(version)) throw new Error('vcard_version_unsupported');
+    const state = { id: null, uid: null, name: '', first_name: '', last_name: '', middle_name: '', prefix: '', suffix: '',
+        nickname: '', organization: '', title: '', role: '', note: '', birthday: '', anniversary: '', photo: '', gender: '',
+        phones: [], emails: [], addresses: [], urls: [], categories: [], extra_properties: [], version };
+    const scalar = { FN:'name', NICKNAME:'nickname', ORG:'organization', TITLE:'title', ROLE:'role', NOTE:'note', BDAY:'birthday', ANNIVERSARY:'anniversary', GENDER:'gender' };
+    for (const property of properties) {
+        const { name, value, params } = property;
+        if (name === 'UID') state.id = state.uid = decodeContentText(value);
+        else if (name === 'N') {
+            const parts = splitContentValue(value).map(decodeContentText);
+            ['last_name','first_name','middle_name','prefix','suffix'].forEach((key,index) => { state[key] = parts[index] || ''; });
+        } else if (scalar[name]) state[scalar[name]] = decodeContentText(value);
+        else if (['TEL','EMAIL','URL'].includes(name)) {
+            const field = { TEL:'phones', EMAIL:'emails', URL:'urls' }[name];
+            state[field].push({ label: normalizeCarddavLabel(params), params, value: decodeContentText(value) });
+        } else if (name === 'ADR') state.addresses.push({ label: normalizeCarddavLabel(params), params, values: splitContentValue(value).map(decodeContentText) });
+        else if (name === 'CATEGORIES') state.categories = splitContentValue(value, ',').map(decodeContentText);
+        else if (name === 'PHOTO') state.photo = String(params.ENCODING || '').toLowerCase() === 'b'
+            ? 'data:image/' + String(params.TYPE || 'jpeg').toLowerCase() + ';base64,' + value : value;
+        else if (!MANAGED.has(name) && !PRIVATE_EXTRA.test(name)) state.extra_properties.push(property);
+    }
+    if (!state.name) state.name = [state.first_name,state.middle_name,state.last_name].filter(Boolean).join(' ') || 'Contact';
     return state;
-};
-
-export {
-    normalizeCarddavLabel,
-    deriveWritableContactUid,
-    buildAddressbookHref,
-    buildHrefValue,
-    normalizeWritableContactPayload,
-    buildWritableVcard,
-    parseVcardData
-};
+}
+function parseVcards(input) {
+    return readContentComponents(input, 'VCARD').map(properties => parseVcardData(['BEGIN:VCARD',...properties.map(property => buildContentLine(property)), 'END:VCARD'].join('\r\n')));
+}
+export { normalizeCarddavLabel, deriveWritableContactUid, buildAddressbookHref, buildHrefValue,
+    normalizeWritableContactPayload, buildWritableVcard, parseVcardData, parseVcards };

@@ -114,6 +114,9 @@ const normalizeRange = (options = {}, now = () => new Date()) => {
 };
 
 const overlapsRange = (event = {}, start = null, end = null) => {
+    // The projection needs masters and cancellation exceptions even when their
+    // DTSTART lies outside the visible range (or is omitted on cancellation).
+    if (event.recurrence || event.recurrence_id) return true;
     const eventStart = toDate(event.start);
     const eventEnd = toDate(event.end || event.start);
     if (!eventStart && !eventEnd) return false;
@@ -221,7 +224,8 @@ export const createCalendarService = ({
     };
 
     const collectSources = async (options = {}) => {
-        const sourceEntries = resolveTargetSources(options?.source_id);
+        const canonical = getSource(primarySource.source_id);
+        const sourceEntries = canonical ? [canonical] : [];
         const pulls = await Promise.all(sourceEntries.map(async (source) => {
             if (typeof source.listEvents !== 'function') {
                 return {
@@ -235,6 +239,7 @@ export const createCalendarService = ({
                 const items = Array.isArray(response?.items) ? response.items : [];
                 return {
                     ok: response?.ok !== false,
+                    ...(response?.ok === false ? { error: response.error || 'calendar_source_read_failed' } : {}),
                     source_id: source.source_id,
                     items: items.map((entry) => decorateEvent(entry, source))
                 };
@@ -247,6 +252,8 @@ export const createCalendarService = ({
             }
         }));
 
+        const failed = pulls.find(entry => entry.ok !== true);
+        if (failed) return { ok: false, error: failed.error || 'calendar_source_read_failed', source_id: failed.source_id, sources: listRegisteredSources(), sync: pulls };
         const allItems = pulls.flatMap((entry) => Array.isArray(entry?.items) ? entry.items : []);
         const resolved = resolveConflicts(allItems);
         return {
@@ -275,10 +282,13 @@ export const createCalendarService = ({
     };
 
     const readEvent = async (eventId, options = {}) => {
-        const listed = await listUnified({
-            ...options,
-            limit: 500
-        });
+        const source = getSource(primarySource.source_id);
+        if (typeof source?.getEvent === 'function') {
+            const result = await source.getEvent(toText(eventId));
+            return result?.ok && result.event ? { ok: true, event: decorateEvent(result.event, source) } : result;
+        }
+        // Identity lookup must not inherit a list page's range or item limit.
+        const listed = await collectSources(options);
         if (listed.ok !== true) return listed;
         const event = listed.items.find((entry) => entry.id === toText(eventId));
         if (!event) {

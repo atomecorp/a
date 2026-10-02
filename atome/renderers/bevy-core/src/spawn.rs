@@ -234,8 +234,14 @@ pub fn spawn_node_with_texture_handle(
     let entity = match node.kind.as_str() {
         "shape" => {
             if let Some(backdrop) = node.backdrop {
+                // Le verre lit l'opacite du noeud a sa creation : elle doit etre la
+                // avant lui, sinon un verre ne a 0 (une UI qui va apparaitre en fondu)
+                // s'affiche plein jusqu'au premier patch d'opacite.
                 let entity = world
-                    .spawn(node_base_components(&node, width, height, surface_width, surface_height))
+                    .spawn((
+                        node_base_components(&node, width, height, surface_width, surface_height),
+                        AtomeVisualOpacity(normalize_opacity(node.opacity)),
+                    ))
                     .id();
                 insert_backdrop_surface(world, entity, [width, height], node.corner_radius, backdrop)?;
                 entity

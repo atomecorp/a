@@ -1,5 +1,7 @@
 # Atome / eVe Code Map
 
+2026-10-02 Personal imports now have one canonical owner (`atome/src/squirrel/shared/canonical_import.js`) and collector (`atome/src/squirrel/shared/import_lifecycle.js`). Contacts local storage and duplicate ICS/recurrence implementations are replaced; native Apple history, DAV continuation, media photos and explicit file exports reuse existing owners. Implementation and acceptance limits: `eVe/documentations/PERSONAL_IMPORT_VALIDATION_2026-10-02.md`.
+
 2026-10-01 Foreground wake and main-assistant routing. New owners: atome/src/squirrel/voice/wake_runtime.js (device lifecycle), wake_porcupine.js (vault-bound SDK/PCM boundary), wake_preferences.js (profile schema); atome/src/squirrel/ai/assistant_provider_config.js fixes the main assistant to OpenAI. eVe/intuition/runtime/bevy_panel/bevy_panel_home_assistant.js projects existing shared controls. eVe/intuition/tools/ai_generators/assistant_generation.js reuses kinds/video.js and kinds/audio.js with Runway/MusicGPT and confirmed canonical import. eVe/voice/assistant/assistant_conversation_actions.js separates saved-conversation/input actions from the visual runtime. Native PCM owners: platforms/desktop-tauri/src/audio_engine/wake_capture.rs and platforms/ios/atome-auv3/application/AppNativeWakeCapture.swift. Dependency rebuild: scripts/bundle-porcupine.js; acceptance/provisioning: eVe/documentations/assistant_wake_provisioning.md.
 
 2026-10-01 Finder/Import share selectable-list virtual windows, selection, drag and transfer lifecycles. `tool_registry.js` exposes runtime definitions before persistence; bootstrap reconciliation explicitly reads stored records. Dashboard claims the existing neutral scene and foreground revision guards asynchronous render submissions. Activity context changes refresh the virtual project rail. Evidence: `eVe/documentations/FINDER_IMPORT_CONTEXT_VALIDATION_2026-10-01.md`.
@@ -2967,3 +2969,18 @@ Execution acceptance: the browser text-placeholder fill survived reload, then My
 - `eVe/intuition/runtime/bevy_panel/bevy_panel_program_runtime.js` consumes shared panel, editor, chip, list and native slider owners.
 - `eVe/domains/templates/system_template_catalog.js` owns Sleep and Music definitions; `project_template_runtime.js` implements their opt-in pinned synchronization.
 - Source audit and acceptance evidence: `eVe/documentations/programs/README.md`.
+
+### 2026-10-02 — six-defect ownership update
+
+- eVe/intuition/tools/contact_model_helpers.js: canonical awaited contact hydration/read shared by projections.
+- eVe/intuition/runtime/bevy_panel/bevy_panel_runtime.js: awaited panel initialization and post-mount reveal.
+- eVe/domains/dashboard/dashboard_lifecycle_runtime.js: workspace open/close/destroy/clock lifecycle.
+- eVe/domains/dashboard/dashboard_open_state.js: visible hydration scope.
+- eVe/domains/dashboard/dashboard_bevy_ui_action_handlers.js: action-hit reconstruction.
+- eVe/domains/dashboard/dashboard_presentation_runtime.js: white creation surface, rail-only loading and restoration.
+- eVe/domains/rendering/project_thumbnail_transition.js: existing project arrival and main-menu fade.
+- eVe/intuition/runtime/bevy_panel/bevy_panel_tree.js: ordered opaque descendant layers.
+- platforms/ios/atome-auv3/Common/NativeHealthTypes.swift: existing monitor catalog and quantity authorization types.
+- platforms/ios/atome-auv3/Common/AppNativeHealthQueries.swift: existing native controller query extension.
+
+- eVe/domains/rendering/bevy_ui_overlay_reconciliation.js: existing overlay owner now also applies prepared/fading tree opacity; the public runtime keeps queue ordering and remains under 500 lines.

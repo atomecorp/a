@@ -1,3 +1,4 @@
+import { PERSONAL_IMPORT_TOOLS } from '#shared/personal_import_tools.js';
 import { TV_COMMANDS } from '../tv/contracts.js';
 import { cloneValue } from './mcp_core.js';
 import { listMcpPromptEntries, listMcpResourceEntries } from './mcp_resources.js';
@@ -280,6 +281,7 @@ export function resolveAccessPolicy(method, params = {}) {
     }
     if (normalizedMethod === 'runtime.tools.call') {
         const toolId = normalizeRuntimeToolIdentifier(params);
+        if (PERSONAL_IMPORT_TOOLS.some(tool => tool.name === toolId)) return resolveAccessPolicy(toolId, params.input || {});
         const tvCommand = TV_COMMANDS.find(entry => entry.name === toolId);
         if (tvCommand) return { ...defaultPolicy, scope: 'tool', subject: toolId, required_capabilities: [tvCommand.capability] };
         const timelineCapabilities = resolveTimelineToolCapability(toolId);
@@ -343,6 +345,8 @@ export function resolveAccessPolicy(method, params = {}) {
             const stepMethod = String(step?.method || '').trim();
             if (stepMethod === 'runtime.tools.call') {
                 requiredCapabilities.push('runtime.execute');
+                const importTool = PERSONAL_IMPORT_TOOLS.find(tool => tool.name === normalizeRuntimeToolIdentifier(step?.params || {}));
+                if (importTool) requiredCapabilities.push(`${importTool.name.split('.')[0]}.${importTool.write ? 'write' : 'read'}`);
                 if (isSensitiveRuntimeTool(normalizeRuntimeToolIdentifier(step?.params || {}))) {
                     requiredCapabilities.push('runtime.sensitive');
                     return true;
@@ -413,6 +417,7 @@ export function resolveAccessPolicy(method, params = {}) {
         || normalizedMethod === 'contacts.create'
         || normalizedMethod === 'contacts.update'
         || normalizedMethod === 'contacts.delete'
+        || PERSONAL_IMPORT_TOOLS.some(tool => tool.name === normalizedMethod && tool.write && tool.name.startsWith('contacts.'))
     ) {
         return {
             ...defaultPolicy,
@@ -429,12 +434,12 @@ export function resolveAccessPolicy(method, params = {}) {
             required_capabilities: ['contacts.read']
         };
     }
-    if (normalizedMethod === 'calendar.delete') {
+    if (normalizedMethod === 'calendar.delete' || PERSONAL_IMPORT_TOOLS.some(tool => tool.name === normalizedMethod && tool.write)) {
         return {
             ...defaultPolicy,
             scope: 'tool',
             subject: normalizedMethod,
-            required_capabilities: ['calendar.write']
+            required_capabilities: [normalizedMethod.startsWith('contacts.') ? 'contacts.write' : 'calendar.write']
         };
     }
     if (normalizedMethod.startsWith('calendar.')) {

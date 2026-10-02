@@ -1,3 +1,10 @@
+import { readDavImport } from '../shared/dav_import_transport.js';
+import { exportContactPhoto } from './photo_media.js';
+import { createCanonicalImport } from '../shared/canonical_import.js';
+import { createImportLifecycle } from '../shared/import_lifecycle.js';
+import { buildWritableVcard, parseVcards } from './carddav_vcard.js';
+import { importIdentity } from '../shared/canonical_import.js';
+import { saveExportFile } from '../shared/file_export.js';
 import { CONTACTS_V1_ARCHITECTURE_DECISION } from './connector_contract.js';
 import { createIcloudContactsConnector } from './icloud_connector.js';
 import { createLocalContactsSource } from './local_source.js';
@@ -29,15 +36,10 @@ const installContactsGlobals = (env, api) => {
     return api;
 };
 
-const isStorageLike = (value) => !!value
-    && typeof value.getItem === 'function'
-    && typeof value.setItem === 'function';
-
 const getOrCreateService = (env) => {
     if (env[SERVICE_KEY]) return env[SERVICE_KEY];
-    const storage = isStorageLike(env.localStorage) ? env.localStorage : null;
     const service = createContactsService({
-        primarySource: createLocalContactsSource({ storage })
+        primarySource: createLocalContactsSource({ api: () => env.Atome || env.window?.Atome })
     });
     env[SERVICE_KEY] = service;
     return service;
@@ -97,6 +99,19 @@ export const createGlobalContactsApi = ({
     }
     if (env[API_KEY]) return env[API_KEY];
 
+    let lifecycle;
+    const imports = () => lifecycle || (lifecycle = createImportLifecycle({
+        domain: 'contact', env: env.window || env, api: () => env.Atome || env.window?.Atome,
+        run: async (id, options) => {
+            const result = await getOrCreateService(env).importSource(id, options);
+            if (result.ok) dispatchPeopleDirectoryUpdated(env);
+            return result;
+        },
+        restore: async (id, options) => {
+            if (id === 'macos_contacts') api.ensureMacosSource();
+            else if (id === 'icloud_contacts') await api.configureIcloudConnector(options);
+        }
+    }));
     const api = {
         get service() {
             return getOrCreateService(env);
@@ -120,7 +135,7 @@ export const createGlobalContactsApi = ({
             return api.configureMacosSource(options);
         },
         async importSource(sourceId, options = {}) {
-            return getOrCreateService(env).importSource(sourceId, options);
+            return imports().activate(sourceId, options);
         },
         async importMacosContacts(options = {}) {
             const service = getOrCreateService(env);
@@ -131,14 +146,19 @@ export const createGlobalContactsApi = ({
                     commandRunner: options.commandRunner
                 });
             }
-            return service.importMacosContacts({
+            return imports().activate('macos_contacts', {
                 ...options,
                 source_id: CONTACTS_V1_ARCHITECTURE_DECISION.import_source.id
             });
         },
         async configureIcloudConnector(options = {}) {
             const resolvedOptions = await resolveSecureAuthOptions(env, options);
-            const connector = createIcloudContactsConnector(resolvedOptions);
+            const connector = createIcloudContactsConnector({ ...resolvedOptions,
+                carddavClientFactory: options.carddavClientFactory || (() => ({
+                    fetchInitialContacts: pull => readDavImport('contact', options, pull, env),
+                    fetchDelta: pull => readDavImport('contact', options, pull, env)
+                })) });
+            connector.source_key = options.source_key || [options.auth_ref, options.addressbook_url || options.carddav?.addressbook_url].join('/');
             getOrCreateService(env).registerSource(connector);
             return {
                 ok: true,
@@ -153,7 +173,34 @@ export const createGlobalContactsApi = ({
             if (!hasSource) {
                 await api.configureIcloudConnector(options);
             }
-            return service.importSource(sourceId, options);
+            return imports().activate(sourceId, { ...options, addressbook_url: options.addressbook_url || options.carddav?.addressbook_url,
+                source_key: options.source_key || service.getSource(sourceId)?.source_key });
+        },
+        activateSource(sourceId, options = {}) { return imports().activate(sourceId, options); },
+        stopSource(sourceId) { return imports().deactivate(sourceId); },
+        importStatus() { return imports().status(); },
+        dispose() { lifecycle?.dispose(); },
+        async importVcf(content, options = {}) {
+            const contacts = parseVcards(content);
+            for (const contact of contacts) {
+                if (!contact.uid) contact.id = contact.uid = 'vcf-' + await importIdentity([contact]);
+            }
+            const source = { source_id: 'vcard_file', role: 'import', writable: false,
+                async syncInitial() { return { ok: true, items: contacts, complete: true }; } };
+            const service = getOrCreateService(env); service.registerSource(source);
+            const result = await service.importSource(source.source_id, { ...options, source_key: 'vcard_file' });
+            if (result.ok) dispatchPeopleDirectoryUpdated(env);
+            return result;
+        },
+        async exportVcf(options = {}) {
+            await api.ensureReady();
+            const items = api.list().items.filter(contact => !options.ids || options.ids.includes(contact.id));
+            const context = createCanonicalImport({ type: 'contact', api: () => env.Atome || env.window?.Atome }).capture();
+            const portable = [];
+            for (const contact of items) portable.push(await exportContactPhoto(contact, context));
+            const vcf = portable.map(contact => buildWritableVcard(contact, { version: options.version || '4.0' })).join('');
+            if (options.save === true) return { ...(await saveExportFile(options.filename || options.name || 'contacts.vcf', new TextEncoder().encode(vcf), 'text/vcard')), count: items.length };
+            return { ok: true, vcf, count: items.length, version: options.version || '4.0' };
         },
         async pushContactToIcloud(options = {}) {
             if (options?.confirmed !== true) {
@@ -243,6 +290,11 @@ export const createGlobalContactsApi = ({
         },
         async openPanel() {
             const panelPerfStart = perfNowMs();
+            if (!env?.open_contact_panel && !env?.window?.open_contact_panel && !globalThis.open_contact_panel
+                && typeof globalThis.document !== 'undefined') {
+                const { ensureToolModule } = await import('../../../../eVe/intuition/panel_definitions.js');
+                await ensureToolModule('contact');
+            }
             const openPanel = env?.open_contact_panel
                 || env?.window?.open_contact_panel
                 || globalThis?.open_contact_panel
@@ -275,6 +327,7 @@ export const createGlobalContactsApi = ({
     };
 
     env[API_KEY] = installContactsGlobals(env, api);
+    imports();
     return env[API_KEY];
 };
 

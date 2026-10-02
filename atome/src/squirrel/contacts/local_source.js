@@ -1,311 +1,110 @@
-import {
-    CONTACTS_V1_ARCHITECTURE_DECISION,
-    createContactsConnectorContract
-} from './connector_contract.js';
-import { cloneLenient as cloneValue, toText } from '../shared/scalars.js';
+import { createContactsConnectorContract } from './connector_contract.js';
+import { createCanonicalImport, importRecordId, importRecordProps, importRecordDeleted } from '../shared/canonical_import.js';
+import { importData } from '../shared/import_reconciliation.js';
+import { matchesQuery } from './service_contact_utils.js';
+import { getSessionState } from '../apis/unified/adole_api/session.js';
+import { persistContactPhoto } from './photo_media.js';
 
-
-const normalizeLabel = (value) => toText(value).toLowerCase();
-
-const normalizePhoneKey = (value) => toText(value).replace(/[^\d+]/g, '');
-const normalizeEmailKey = (value) => toText(value).toLowerCase();
-
-
-const ensureArray = (value) => (Array.isArray(value) ? value : []);
-const hasFiniteLimit = (value) => value !== null && value !== undefined && String(value).trim() !== '' && Number.isFinite(Number(value));
-
-const normalizeCustomFields = (fields = []) => ensureArray(fields)
-    .map((entry) => ({
-        label: toText(entry?.label || ''),
-        value: toText(entry?.value || '')
-    }))
-    .filter((entry) => entry.label || entry.value);
-
-const dedupeCustomFields = (fields = []) => {
-    const seen = new Set();
-    return normalizeCustomFields(fields).filter((entry) => {
-        const key = `${normalizeLabel(entry.label)}:${entry.value}`;
-        if (seen.has(key)) return false;
-        seen.add(key);
-        return true;
-    });
-};
-
-const matchesQuery = (contact = {}, query = '') => {
-    const needle = toText(query).toLowerCase();
-    if (!needle) return true;
-    return [
-        contact.name,
-        contact.first_name,
-        contact.nickname,
-        contact.phone,
-        contact.email,
-        contact.source_contact_id,
-        ...(Array.isArray(contact.custom_fields) ? contact.custom_fields.flatMap((entry) => [entry?.label, entry?.value]) : [])
-    ].some((value) => toText(value).toLowerCase().includes(needle));
-};
-
-const buildStableSourceContactId = (record = {}) => {
-    const explicit = toText(record.source_contact_id || record.id || '');
-    if (explicit) return explicit;
-    const phone = normalizePhoneKey(record.phone);
-    if (phone) return `phone:${phone}`;
-    const email = normalizeEmailKey(record.email);
-    if (email) return `email:${email}`;
-    const name = toText(record.name || record.first_name || record.nickname).toLowerCase();
-    return name ? `name:${name}` : `local:${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
-};
-
-const mergeImportedMetadataFields = (record = {}, meta = {}) => {
-    const fields = normalizeCustomFields(record.custom_fields);
-    const extra = [];
-    const importedFromLabel = toText(meta.imported_from_label || meta.imported_from_source_label || '');
-    const importedFromSource = toText(meta.imported_from_source || '');
-    if (importedFromLabel) extra.push({ label: 'importe depuis', value: importedFromLabel });
-    if (importedFromSource) extra.push({ label: 'source import', value: importedFromSource });
-    return dedupeCustomFields([...fields, ...extra]);
-};
-
-export const normalizeLocalContact = (record = {}, meta = {}) => {
-    const sourceContactId = buildStableSourceContactId(record);
-    const importedFromSource = toText(meta.imported_from_source || record?.raw?.imported_from_source || '');
-    const importedFromLabel = toText(meta.imported_from_label || record?.raw?.imported_from_label || '');
-    return {
-        id: '',
-        source_contact_id: sourceContactId,
-        name: toText(record.name || record.first_name || record.nickname || record.email || record.phone || 'Contact'),
-        first_name: toText(record.first_name || ''),
-        nickname: toText(record.nickname || ''),
-        phone: toText(record.phone || ''),
-        email: toText(record.email || ''),
-        user_face: toText(record.user_face || ''),
-        access: toText(record.access || 'private') || 'private',
-        visibility: toText(record.visibility || record.access || 'private') || 'private',
-        read_only: false,
-        source_provider: CONTACTS_V1_ARCHITECTURE_DECISION.primary_read_source.id,
-        source_label: 'eVe Contacts',
-        source_writable: true,
-        custom_fields: mergeImportedMetadataFields(record, {
-            imported_from_source: importedFromSource,
-            imported_from_label: importedFromLabel
-        }),
-        raw: {
-            ...(record.raw && typeof record.raw === 'object' ? cloneValue(record.raw) || {} : {}),
-            imported_from_source: importedFromSource || null,
-            imported_from_label: importedFromLabel || null,
-            original_source_contact_id: toText(record.source_contact_id || record.id || '') || null
-        }
+const TEXT_FIELDS = ['name', 'first_name', 'last_name', 'middle_name', 'prefix', 'suffix', 'nickname', 'phone', 'email', 'user_face',
+    'organization', 'title', 'role', 'note', 'birthday', 'anniversary', 'gender', 'photo', 'photo_asset_id', 'exchange_uid'];
+const LIST_FIELDS = ['phones', 'emails', 'addresses', 'urls', 'categories', 'custom_fields', 'extra_properties', 'collections'];
+export function normalizeContactProperties(input = {}) {
+    const props = {};
+    for (const field of TEXT_FIELDS) if (Object.hasOwn(input, field)) props[field] = String(input[field] ?? '');
+    for (const field of LIST_FIELDS) if (Object.hasOwn(input, field)) {
+        if (!Array.isArray(input[field])) throw new Error('contact_field_array_required');
+        props[field] = importData(input[field]);
+    }
+    // Native and DAV collectors expose structured fields in raw; convert once at intake.
+    for (const field of [...TEXT_FIELDS, ...LIST_FIELDS]) {
+        if (!Object.hasOwn(props, field) && Object.hasOwn(input.raw || {}, field)) props[field] = importData(input.raw[field]);
+    }
+    if (Object.hasOwn(input, 'user_face') && input.raw && input.user_face !== input.raw.user_face && !Object.hasOwn(input, 'photo_asset_id')) {
+        props.photo = String(input.user_face || ''); props.photo_asset_id = '';
+    }
+    if (Object.hasOwn(input, 'phone') && (!input.raw || input.raw.phone !== input.phone)) {
+        const phones = props.phones || [];
+        props.phones = input.phone ? [{ ...(phones[0] || { label: 'cell' }), value: String(input.phone) }, ...phones.slice(1)] : phones.slice(1);
+    }
+    if (Object.hasOwn(input, 'email') && (!input.raw || input.raw.email !== input.email)) {
+        const emails = props.emails || [];
+        props.emails = input.email ? [{ ...(emails[0] || { label: 'home' }), value: String(input.email) }, ...emails.slice(1)] : emails.slice(1);
+    }
+    return { ...props, access: 'private', visibility: 'private' };
+}
+export function normalizeLocalContact(record = {}) {
+    const props = record.properties ? importRecordProps(record) : record;
+    const id = importRecordId(record) || record.source_contact_id;
+    return { ...props, id, source_contact_id: id, name: props.name || props.first_name || props.nickname || 'Contact',
+        phone: props.phone ?? props.phones?.[0]?.value ?? '', email: props.email ?? props.emails?.[0]?.value ?? '',
+        source_provider: 'eve_contacts_local', source_label: 'eVe Contacts', source_writable: true, read_only: false,
+        custom_fields: props.custom_fields || [], raw: { ...props } };
+}
+export function createLocalContactsSource({ source_id = 'eve_contacts_local', role = 'primary', writable = true,
+    api, session } = {}) {
+    const store = createCanonicalImport({ type: 'contact', api, session, normalize: normalizeContactProperties });
+    const groups = createCanonicalImport({ type: 'contact_group', api, session, normalize: input => ({ name: String(input.name || ''), members: input.members || [] }) });
+    let cache = [], cacheOwner = null, persisted = false;
+    const clearOnSessionChange = () => {
+        const state = (session || getSessionState)();
+        const owner = state?.mode === 'authenticated' ? state.user?.id : null;
+        if (owner !== cacheOwner) { cache = []; persisted = false; cacheOwner = owner; }
+        return owner;
     };
-};
-
-const buildContactKey = (contact = {}) => {
-    const phone = normalizePhoneKey(contact.phone);
-    if (phone) return `phone:${phone}`;
-    const email = normalizeEmailKey(contact.email);
-    if (email) return `email:${email}`;
-    const sourceContactId = toText(contact.source_contact_id || contact.id || '');
-    if (sourceContactId) return `id:${sourceContactId}`;
-    const name = toText(contact.name).toLowerCase();
-    return name ? `name:${name}` : '';
-};
-
-const createMemoryStorage = () => {
-    const map = new Map();
-    return {
-        getItem(key) {
-            return map.has(key) ? map.get(key) : null;
+    const hydrate = async () => {
+        if (!clearOnSessionChange()) return;
+        const rows = await store.list();
+        clearOnSessionChange();
+        cache = rows.filter(row => !importRecordDeleted(row)).map(normalizeLocalContact);
+        persisted = true;
+    };
+    const listContactsSync = ({ query = '', limit = null } = {}) => {
+        clearOnSessionChange();
+        return { ok: true, source_id, items: cache.filter(entry => matchesQuery(entry, query))
+            .slice(0, limit == null ? undefined : Math.max(1, Number(limit))).map(entry => structuredClone(entry)) };
+    };
+    const refresh = async () => { await hydrate(); return listContactsSync(); };
+    return { source_id, role, writable, contract: createContactsConnectorContract({ provider: source_id, role, write_capabilities: ['contacts_import'] }),
+        captureImportSession: () => store.capture().check,
+        listContactsSync, async listContacts(options) { await hydrate(); return listContactsSync(options); },
+        async getContact(id) { await hydrate(); const contact = cache.find(row => row.id === id); return contact ? { ok: true, contact } : { ok: false, error: 'contacts_not_found' }; },
+        syncInitial: refresh, syncIncremental: refresh,
+        syncStatus() { return { persisted, hydrated: persisted, durability: persisted ? 'canonical_commit' : null }; },
+        async importContacts(items, meta) {
+            const context = store.capture(), prepared = [];
+            for (const item of items) prepared.push(await persistContactPhoto(item, context, meta.signal));
+            items = prepared;
+            const contactIds = await store.resolveIds(items, meta.source_key || meta.imported_from_source);
+            const groupItems = (meta.groups || []).map(group => ({ ...group,
+                members: (group.members || items.filter(item => (item.collections || item.raw?.collections || []).includes(group.id))
+                    .map(item => item.source_contact_id || item.uid || item.id)).map(id => contactIds.get(String(id))).filter(Boolean) }));
+            const groupResult = await groups.collect(groupItems, { ...meta, complete: false });
+            const ids = new Map(groupResult.correspondences.map(p => [p.external_id, p.canonical_id]));
+            const result = await store.collect(items.map(item => {
+                const collections = item.collections || item.raw?.collections;
+                return collections ? { ...item, collections: collections.map(id => ids.get(id) || id) } : item;
+            }), meta);
+            await hydrate(); return { ...result, items: cache };
         },
-        setItem(key, value) {
-            map.set(key, String(value));
-        }
-    };
-};
-
-const isStorageLike = (value) => {
-    return !!value
-        && typeof value.getItem === 'function'
-        && typeof value.setItem === 'function';
-};
-
-export const createLocalContactsSource = ({
-    source_id = CONTACTS_V1_ARCHITECTURE_DECISION.primary_read_source.id,
-    role = CONTACTS_V1_ARCHITECTURE_DECISION.primary_read_source.role,
-    writable = CONTACTS_V1_ARCHITECTURE_DECISION.primary_read_source.writable,
-    storageKey = CONTACTS_V1_ARCHITECTURE_DECISION.local_storage_key,
-    storage = null
-} = {}) => {
-    const contract = createContactsConnectorContract({
-        provider: CONTACTS_V1_ARCHITECTURE_DECISION.provider,
-        protocol: CONTACTS_V1_ARCHITECTURE_DECISION.protocol,
-        role,
-        write_capabilities: writable ? ['contacts_import'] : []
-    });
-    const fallbackStorage = createMemoryStorage();
-    const globalStorage = (typeof globalThis !== 'undefined' && isStorageLike(globalThis.localStorage))
-        ? globalThis.localStorage
-        : null;
-    const resolvedStorage = isStorageLike(storage)
-        ? storage
-        : (globalStorage || fallbackStorage);
-
-    const readState = () => {
-        try {
-            const raw = resolvedStorage.getItem(storageKey);
-            const parsed = raw ? JSON.parse(raw) : null;
-            if (!parsed || typeof parsed !== 'object') {
-                return { cursor: null, items: [] };
+        async createContact(input) { const id = await store.create(input); await hydrate(); return { ok: true, created: true, contact: cache.find(row => row.id === id), items: cache }; },
+        async replaceContacts(items) { await store.replace(items); await hydrate(); return { ok: true, items: cache }; },
+        async updateContact(id, changes) {
+            await hydrate(); const current = cache.find(row => row.id === id);
+            if (!current) return { ok: false, error: 'contacts_not_found' };
+            const next = { ...current, ...changes, id, source_contact_id: id, raw: current.raw };
+            if (Object.hasOwn(changes, 'user_face') && !Object.hasOwn(changes, 'photo')) {
+                next.photo = changes.user_face || ''; next.photo_asset_id = '';
             }
-            return {
-                cursor: toText(parsed.cursor || '') || null,
-                items: ensureArray(parsed.items).map((entry) => normalizeLocalContact(entry, {
-                    imported_from_source: entry?.raw?.imported_from_source || '',
-                    imported_from_label: entry?.raw?.imported_from_label || ''
-                }))
-            };
-        } catch (_) {
-            return { cursor: null, items: [] };
+            await store.replace(cache.map(row => row.id === id ? next : row)); await hydrate();
+            return { ok: true, updated: true, contact: cache.find(row => row.id === id), items: cache };
+        },
+        async deleteContact(id) {
+            await hydrate(); if (!cache.some(row => row.id === id)) return { ok: false, error: 'contacts_not_found' };
+            await store.replace(cache.filter(row => row.id !== id)); await hydrate(); return { ok: true, deleted: true, contact_id: id, items: cache };
+        },
+        async importLegacy(items, { owner_id } = {}) {
+            if (owner_id !== store.capture().owner) throw new Error('legacy_contact_owner_confirmation_required');
+            return store.collect(items, { source_key: 'legacy_contacts_explicit' });
         }
     };
-
-    const writeState = (state = {}) => {
-        const payload = {
-            cursor: toText(state.cursor || '') || null,
-            items: ensureArray(state.items).map((entry) => normalizeLocalContact(entry, {
-                imported_from_source: entry?.raw?.imported_from_source || '',
-                imported_from_label: entry?.raw?.imported_from_label || ''
-            }))
-        };
-        resolvedStorage.setItem(storageKey, JSON.stringify(payload));
-        return payload;
-    };
-
-    const listItems = ({ query = '', limit = null } = {}) => {
-        const state = readState();
-        const normalizedLimit = hasFiniteLimit(limit) ? Math.max(1, Number(limit)) : null;
-        const items = state.items
-            .filter((entry) => matchesQuery(entry, query))
-            .slice(0, normalizedLimit || undefined)
-            .map((entry) => ({ ...entry, custom_fields: cloneValue(entry.custom_fields) || [], raw: cloneValue(entry.raw) || null }));
-        return {
-            cursor: state.cursor,
-            items
-        };
-    };
-
-    const syncStatus = () => {
-        const state = readState();
-        return {
-            cursor: state.cursor,
-            synced: state.items.length > 0,
-            persisted: true
-        };
-    };
-
-    return {
-        source_id,
-        role,
-        writable,
-        contract,
-        syncStatus,
-        listContactsSync(options = {}) {
-            const listed = listItems(options);
-            return {
-                ok: true,
-                source_id,
-                cursor: listed.cursor,
-                items: listed.items
-            };
-        },
-        async listContacts(options = {}) {
-            const listed = listItems(options);
-            return {
-                ok: true,
-                source_id,
-                cursor: listed.cursor,
-                items: listed.items
-            };
-        },
-        async getContact(contactId) {
-            const key = toText(contactId || '');
-            const listed = listItems({});
-            const contact = listed.items.find((entry) => {
-                return toText(entry.source_contact_id) === key || toText(entry.id) === key || buildContactKey(entry) === buildContactKey({ source_contact_id: key });
-            }) || null;
-            if (!contact) {
-                return { ok: false, error: 'contacts_not_found', source_id, contact_id: key || null };
-            }
-            return {
-                ok: true,
-                source_id,
-                contact
-            };
-        },
-        async syncInitial() {
-            const listed = listItems({});
-            return {
-                ok: true,
-                source_id,
-                cursor: listed.cursor,
-                mode: 'initial',
-                items: listed.items
-            };
-        },
-        async syncIncremental() {
-            const listed = listItems({});
-            return {
-                ok: true,
-                source_id,
-                cursor: listed.cursor,
-                mode: 'delta',
-                items: listed.items
-            };
-        },
-        async importContacts(items = [], meta = {}) {
-            const state = readState();
-            const bucket = new Map();
-            ensureArray(state.items).forEach((entry) => {
-                const key = buildContactKey(entry);
-                if (key) bucket.set(key, normalizeLocalContact(entry, {
-                    imported_from_source: entry?.raw?.imported_from_source || '',
-                    imported_from_label: entry?.raw?.imported_from_label || ''
-                }));
-            });
-            ensureArray(items).forEach((entry) => {
-                const normalized = normalizeLocalContact(entry, {
-                    imported_from_source: meta.imported_from_source || entry?.source_provider || '',
-                    imported_from_label: meta.imported_from_label || entry?.source_label || ''
-                });
-                const key = buildContactKey(normalized);
-                if (!key) return;
-                bucket.set(key, normalized);
-            });
-            const nextState = writeState({
-                cursor: new Date().toISOString(),
-                items: Array.from(bucket.values())
-            });
-            return {
-                ok: true,
-                source_id,
-                imported: ensureArray(items).length,
-                cursor: nextState.cursor,
-                items: nextState.items.map((entry) => ({ ...entry, custom_fields: cloneValue(entry.custom_fields) || [], raw: cloneValue(entry.raw) || null }))
-            };
-        },
-        async replaceContacts(items = [], meta = {}) {
-            const nextState = writeState({
-                cursor: new Date().toISOString(),
-                items: ensureArray(items).map((entry) => normalizeLocalContact(entry, {
-                    imported_from_source: meta.imported_from_source || entry?.source_provider || '',
-                    imported_from_label: meta.imported_from_label || entry?.source_label || ''
-                }))
-            });
-            return {
-                ok: true,
-                source_id,
-                imported: ensureArray(items).length,
-                cursor: nextState.cursor,
-                items: nextState.items.map((entry) => ({ ...entry, custom_fields: cloneValue(entry.custom_fields) || [], raw: cloneValue(entry.raw) || null }))
-            };
-        }
-    };
-};
+}

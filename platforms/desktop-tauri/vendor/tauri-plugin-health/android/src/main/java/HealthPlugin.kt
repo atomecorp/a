@@ -3,6 +3,9 @@ package one.atome.health
 import android.Manifest
 import android.app.Activity
 import android.content.Context
+import android.content.Intent
+import android.net.Uri
+import android.provider.Settings
 import android.content.pm.PackageManager
 import android.hardware.Sensor
 import android.hardware.SensorEvent
@@ -106,6 +109,15 @@ class HealthPlugin(private val activity: Activity) : Plugin(activity) {
 
     override fun load(webView: WebView) {
         this.webView = webView
+    }
+
+    // Back from Health Connect or the app settings: access may have changed.
+    // Value-less signal; the page re-checks capabilities and re-reads.
+    override fun onResume() {
+        val view = webView ?: return
+        activity.runOnUiThread {
+            view.evaluateJavascript("window.dispatchEvent(new CustomEvent('atome:native-health-invalidated',{detail:{access:true}}));", null)
+        }
     }
 
     private fun sdkStatus(): Int = HealthConnectClient.getSdkStatus(activity)
@@ -218,6 +230,32 @@ class HealthPlugin(private val activity: Activity) : Plugin(activity) {
         pendingActivityIds = emptyList()
         // Each type is independent: a refused type never blocks the others.
         invoke.resolve(JSObject().put("completed", true).put("granted", ok).put("notGranted", refused))
+    }
+
+    // ---- settings (explicit gesture) ------------------------------------------
+    // Health Connect stops showing its sheet after repeated refusals; access is
+    // then only changed in Health Connect itself (or, for the phone step
+    // sensor, in this app's system settings). Health Connect missing or out of
+    // date: its store page.
+
+    @Command
+    fun openSettings(invoke: Invoke) {
+        val requested = ids(invoke)
+        val intent = when {
+            requested.isNotEmpty() && requested.all { it == STEP_SENSOR_ID } ->
+                Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", activity.packageName, null))
+            sdkStatus() == HealthConnectClient.SDK_UNAVAILABLE_PROVIDER_UPDATE_REQUIRED ->
+                Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=com.google.android.apps.healthdata&url=healthconnect%3A%2F%2Fonboarding"))
+            else -> Intent(HealthConnectClient.ACTION_HEALTH_CONNECT_SETTINGS)
+        }
+        activity.runOnUiThread {
+            try {
+                activity.startActivity(intent)
+                invoke.resolve(JSObject().put("opened", true))
+            } catch (_: Exception) {
+                fail(invoke, "health_settings_unavailable")
+            }
+        }
     }
 
     // ---- reads --------------------------------------------------------------
@@ -389,7 +427,9 @@ class HealthPlugin(private val activity: Activity) : Plugin(activity) {
         val (records, truncated) = readAll(hc, spec.record, range, ascending = true)
         val sessions = JSONArray()
         records.forEach { record ->
-            if (record is IntervalRecord) sessions.put(JSONObject().put("start", record.startTime.toEpochMilli()).put("end", record.endTime.toEpochMilli()))
+            // IntervalRecord is internal in connect-client 1.1.0; the only
+            // "sessions" monitor reads ExerciseSessionRecord.
+            if (record is ExerciseSessionRecord) sessions.put(JSONObject().put("start", record.startTime.toEpochMilli()).put("end", record.endTime.toEpochMilli()))
         }
         val cover = coverage(from, to)
         if (truncated) cover.put("partial", true).put("reason", "read_limit")

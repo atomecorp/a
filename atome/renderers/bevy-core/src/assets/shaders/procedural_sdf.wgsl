@@ -120,6 +120,18 @@ fn sd_rounded_box(point: vec2<f32>, half_size: vec2<f32>, corner: f32) -> f32 {
     return length(max(outer, vec2(0.0))) + min(max(outer.x, outer.y), 0.0) - radius;
 }
 
+// A mystic tile whose tool owns children has its top-right corner FOLDED: the
+// plate is cut along the diagonal from `fold` px before the corner on the top
+// edge to `fold` px below it on the right edge (the flap itself is drawn by the
+// menu's own image). `point` is in screen orientation, y up; `fold <= 0` is a
+// plain tile.
+fn sd_mystic_tile(point: vec2<f32>, half_side: f32, corner: f32, fold: f32) -> f32 {
+    let plate = sd_rounded_box(point, vec2(half_side), corner);
+    if fold <= 0.0 { return plate; }
+    let cut = (point.x + point.y - (2.0 * half_side - fold)) * 0.70710678;
+    return max(plate, cut);
+}
+
 // --- INTUITION LIQUID — début -----------------------------------
 // Branche de design ISOLEE, selectionnee par `material.surface_style.x` (mode) > 1.5.
 // Elle ne partage aucun etat avec la branche assistant (mode 0) ni avec
@@ -620,18 +632,23 @@ fn intuition_mystic(pixel_position: vec2<f32>, screen_uv: vec2<f32>) -> vec4<f32
         // plate turned. A pixel that never projects onto the plate plane (the
         // profile line, where the plate stands edge-on) keeps the cell's own
         // footprint, which is where that plate stands.
-        let footprint_distance = sd_rounded_box(delta, vec2(half_side), clamp(tile.w, 0.0, half_side));
+        // `motion.w`: the side of the folded corner, in pixels (0 = none).
+        let fold = clamp(motion.w, 0.0, half_side);
+        let footprint_distance = sd_mystic_tile(delta, half_side, clamp(tile.w, 0.0, half_side), fold);
         var contact_distance = footprint_distance;
         let denominator = cosine * eye + along * sine;
         if abs(denominator) > 0.0001 {
             let candidate_aside = along * eye / denominator;
             let depth = max(eye - candidate_aside * sine, eye * INTUITION_MYSTIC_EYE_MIN);
             let candidate_bside = across * depth / eye;
-            contact_distance = sd_rounded_box(
-                vec2(candidate_aside, candidate_bside),
-                vec2(half_side),
-                clamp(tile.w, 0.0, half_side)
+            // The fold is cut on the MENU face, in screen orientation: the same
+            // mapping the face sample uses below (at rest it is `delta` itself).
+            let face_point = select(
+                vec2(-candidate_aside, candidate_bside),
+                vec2(candidate_bside, -candidate_aside),
+                turning_y
             );
+            contact_distance = sd_mystic_tile(face_point, half_side, clamp(tile.w, 0.0, half_side), fold);
             if abs(candidate_aside) <= half_side && abs(candidate_bside) <= half_side {
                 aside = candidate_aside;
                 bside = candidate_bside;
@@ -671,7 +688,10 @@ fn intuition_mystic(pixel_position: vec2<f32>, screen_uv: vec2<f32>) -> vec4<f32
         // it from showing through the menu, and gating it on the sine keeps a tile
         // lying flat from drawing a grid of halos over the workspace. Drawn after
         // the plate, so the hole (drawn next) is behind it.
-        let lifted = abs(sine);
+        // A plate lying flat keeps atome's standard tool shadow at
+        // `mystic_style.y` (the open menu reads as raised tools, like the
+        // ribbon and the rail); a turning plate casts its full contact shadow.
+        let lifted = max(abs(sine), clamp(material.mystic_style.y, 0.0, 1.0) * select(0.0, 1.0, cosine < 0.0));
         let shadow_value = (1.0 - smoothstep(0.0, shadow_blur, max(contact_distance, 0.0)))
             * shadow_dose * (1.0 - plate_mask) * lifted;
         let shadow_contribution = shadow_value * (1.0 - alpha);
@@ -682,7 +702,7 @@ fn intuition_mystic(pixel_position: vec2<f32>, screen_uv: vec2<f32>) -> vec4<f32
         // THE HOLE. The cell's own footprint, filled with the menu plate and laid
         // flat under the turning plate: this is what the user sees where the plate
         // used to be, and what makes the cell read as CUT OUT of the workspace.
-        let hole_distance = sd_rounded_box(delta, vec2(half_side), clamp(tile.w, 0.0, half_side));
+        let hole_distance = sd_mystic_tile(delta, half_side, clamp(tile.w, 0.0, half_side), fold);
         let hole_mask = (1.0 - smoothstep(-softness, softness, hole_distance)) * hole_dose;
         if hole_mask > 0.002 {
             let hole_color = mix(tint.rgb, family.rgb, family.a);

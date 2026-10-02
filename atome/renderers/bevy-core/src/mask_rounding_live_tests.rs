@@ -410,3 +410,39 @@ fn a_masked_object_shadow_uses_the_final_mask_alpha() {
     assert_eq!(alpha(0, 0), 0, "the old rectangular shadow must not return");
     assert!(alpha(width / 2, height / 2) > 0, "the visible masked centre casts the shadow");
 }
+
+#[test]
+fn resizing_a_rounded_shape_recuts_its_mask_instead_of_stretching_the_corners() {
+    let mut world = test_world();
+    let entity = apply_spawn(
+        &mut world,
+        AtomeRenderNode { corner_radius: 6.0, ..shape_node("widening_rounded") },
+    )
+    .unwrap();
+    let before = sprite_image(&world, entity);
+    let before_size = world.resource::<Assets<Image>>().get(&before).expect("mask image").size();
+
+    apply_transform(
+        &mut world,
+        AtomeTransformPatch {
+            id: "widening_rounded".to_string(),
+            logical_position: [12.0, 24.0],
+            logical_size: [400.0, 50.0],
+            scale: [1.0, 1.0],
+            rotation: 0.0,
+            origin: [0.0, 0.0],
+            clip_rect: None,
+            clip_rotation: 0.0,
+        },
+    )
+    .unwrap();
+
+    let after = sprite_image(&world, entity);
+    let after_size = world.resource::<Assets<Image>>().get(&after).expect("mask image").size();
+    assert_ne!(before, after, "la decoupe est refaite a la nouvelle taille");
+    let ratio_before = before_size.x as f32 / before_size.y as f32;
+    let ratio_after = after_size.x as f32 / after_size.y as f32;
+    assert!((ratio_before - 120.0 / 50.0).abs() < 0.1, "masque initial {before_size:?}");
+    assert!((ratio_after - 400.0 / 50.0).abs() < 0.2, "masque redecoupe {after_size:?}");
+    assert_eq!(world.get::<AtomeCornerRadius>(entity).unwrap().0, [6.0; 4]);
+}

@@ -1,5 +1,15 @@
 fn main() {
     tauri_build::build();
+    if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("macos") {
+        cc::Build::new().file("native/personal_import.m")
+            .file("../ios/atome-auv3/Common/AtomeContactHistory.m")
+            .flag("-fobjc-arc").compile("atome_personal_import");
+        for framework in ["Foundation", "Contacts", "EventKit"] {
+            println!("cargo:rustc-link-lib=framework={framework}");
+        }
+        println!("cargo:rerun-if-changed=native/personal_import.m");
+        println!("cargo:rerun-if-changed=../ios/atome-auv3/Common/AtomeContactHistory.m");
+    }
 
     if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("linux") {
         let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap_or_else(|_| ".".to_string());

@@ -14,7 +14,6 @@ export const CONTACTS_V1_ARCHITECTURE_DECISION = Object.freeze({
         role: 'import',
         writable: false
     },
-    local_storage_key: 'eve_contacts_local_store_v1',
     read_capabilities: ['contacts_list', 'contacts_search', 'contacts_sources']
 });
 

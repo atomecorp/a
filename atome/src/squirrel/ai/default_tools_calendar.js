@@ -1,4 +1,11 @@
+import { PERSONAL_IMPORT_TOOLS, personalImportToolResult } from '#shared/personal_import_tools.js';
 export const registerCalendarDefaultTools = ({ Agent, safeString, requireCalendarServiceApi, invokeRuntimeDefaultTool }) => {
+    for (const tool of PERSONAL_IMPORT_TOOLS.filter(tool => tool.name.startsWith('calendar.'))) Agent.registerTool({
+        name: tool.name, description: tool.description, capabilities: [tool.write ? 'calendar.write' : 'calendar.read'],
+        risk_tier: tool.write ? 'MEDIUM' : 'LOW', parameters: { type: 'object', properties: tool.properties, required: tool.param ? [tool.param] : [] },
+        handler: async ({ params = {} }) => { const api = await requireCalendarServiceApi(); return personalImportToolResult(tool,
+            await (tool.param ? api[tool.method](params[tool.param], params) : api[tool.method](params))); }
+    });
     for (const [name, description, required, properties] of [
         ['time.read', 'Read current time, epoch milliseconds and local timezone.', [], {}],
         ['alarm.set', 'Set an agenda alarm at an ISO date with timezone or after delay_ms. Optional command runs a Runtime V2 tool through MCP at that time; sensitive actions still need approval. Runs only while the application is alive. eventId/alarmId replace an existing alarm.', [], {

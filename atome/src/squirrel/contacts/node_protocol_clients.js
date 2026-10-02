@@ -1,3 +1,4 @@
+import { readDavInitial, readDavDelta } from '../shared/dav_collection_read.js';
 import { normalizeText, resolveUrl, xmlDecode } from './carddav_shared.js';
 import {
     deriveWritableContactUid,
@@ -84,6 +85,7 @@ export const createNodeCarddavClient = ({
         return response;
     };
 
+    let discoveredCollections = null;
     const discoverAddressBookUrl = async () => {
         const configuredUrl = normalizeText(carddav?.addressbook_url || '');
         if (!configuredUrl) {
@@ -128,6 +130,10 @@ export const createNodeCarddavClient = ({
         if (!href) {
             throw new Error('carddav_addressbook_collection_missing');
         }
+        discoveredCollections = responseBlocks.filter(hasAddressBookCollectionType).map(block => ({
+            url: resolveUrl(configuredUrl, xmlDecode(extractTagValue(block, 'href'))),
+            name: xmlDecode(extractTagValue(block, 'displayname') || '')
+        }));
         discoveredAddressBookUrl = resolveUrl(configuredUrl, href);
         return discoveredAddressBookUrl;
     };
@@ -140,52 +146,25 @@ export const createNodeCarddavClient = ({
     };
 
     return {
-        async fetchInitialContacts({
-            addressbook_url = carddav?.addressbook_url
-        } = {}) {
-            const resolvedUrl = await ensureAddressBookUrl(addressbook_url);
-            const response = await requestXml({
-                method: 'REPORT',
-                addressbook_url: resolvedUrl,
-                body: buildAddressBookQueryBody(),
-                depth: '1'
-            });
-            const parsed = parseMultiStatus(response.text);
-            const normalized = normalizeCarddavResponseItems(parsed.responses, {
-                addressbook_url: resolvedUrl
-            });
-            discoveredAddressBookUrl = resolvedUrl;
-            return {
-                ok: true,
-                addressbook_url: resolvedUrl,
-                cursor: parsed.sync_token || null,
-                items: normalized.items,
-                removed_hrefs: normalized.removed_hrefs
-            };
+        async discoverCollections() {
+            await discoverAddressBookUrl();
+            return discoveredCollections || [{ url: discoveredAddressBookUrl, name: '' }];
         },
-        async fetchDelta({
-            addressbook_url = carddav?.addressbook_url,
-            cursor = null
-        } = {}) {
-            const resolvedUrl = await ensureAddressBookUrl(addressbook_url);
-            const response = await requestXml({
-                method: 'REPORT',
-                addressbook_url: resolvedUrl,
-                body: buildSyncCollectionBody({ cursor }),
-                depth: '1'
-            });
-            const parsed = parseMultiStatus(response.text);
-            const normalized = normalizeCarddavResponseItems(parsed.responses, {
-                addressbook_url: resolvedUrl
-            });
-            discoveredAddressBookUrl = resolvedUrl;
-            return {
-                ok: true,
-                addressbook_url: resolvedUrl,
-                cursor: parsed.sync_token || cursor || null,
-                items: normalized.items,
-                removed_hrefs: normalized.removed_hrefs
-            };
+        async fetchInitialContacts(options = {}) {
+            const resolvedUrl = await ensureAddressBookUrl(options.addressbook_url);
+            const result = await readDavInitial({ url: resolvedUrl, domain: 'contact',
+                request: async opts => (await requestXml({ ...opts, addressbook_url: resolvedUrl })).text,
+                queryBody: buildAddressBookQueryBody(), parse: parseMultiStatus,
+                normalize: responses => normalizeCarddavResponseItems(responses, { addressbook_url: resolvedUrl }) });
+            return { ok: true, addressbook_url: resolvedUrl, ...result };
+        },
+        async fetchDelta(options = {}) {
+            const resolvedUrl = await ensureAddressBookUrl(options.addressbook_url);
+            const result = await readDavDelta({ cursor: options.cursor, body: buildSyncCollectionBody,
+                request: async opts => (await requestXml({ ...opts, addressbook_url: resolvedUrl })).text,
+                parse: parseMultiStatus, normalize: responses => normalizeCarddavResponseItems(responses, { addressbook_url: resolvedUrl }),
+                initial: () => this.fetchInitialContacts(options) });
+            return { ok: true, addressbook_url: resolvedUrl, ...result };
         },
         async createOrUpdateContact({
             contact = {},

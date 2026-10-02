@@ -117,14 +117,16 @@ export const createIcloudContactsConnector = ({
         removed_ids = []
     } = {}) => {
         const normalizedItems = (Array.isArray(items) ? items : []).map((entry) => ({
+            uid: entry.uid || null,
             id: normalizeText(entry.id || entry.source_contact_id || ''),
-            source_contact_id: normalizeText(entry.id || entry.source_contact_id || ''),
+            source_contact_id: [entry.source_collection || entry.addressbookId, normalizeText(entry.id || entry.source_contact_id || '')].filter(Boolean).join('|'),
+            source_collection: entry.source_collection || entry.addressbookId || '',
+            collections: entry.source_collection ? [entry.source_collection] : [],
             name: normalizeText(entry.name || ''),
             first_name: normalizeText(entry.first_name || ''),
             nickname: normalizeText(entry.nickname || ''),
             phone: normalizeText(entry.phones?.[0]?.value || entry.phone || ''),
             email: normalizeText(entry.emails?.[0]?.value || entry.email || ''),
-            user_face: '',
             access: 'private',
             visibility: 'private',
             read_only: true,
@@ -225,6 +227,8 @@ export const createIcloudContactsConnector = ({
                     source_id: config.source_id,
                     addressbook_url: response.addressbook_url || config.carddav.addressbook_url || null,
                     cursor,
+                    complete: response.complete === true,
+                    removed_hrefs: response.removed_hrefs || [], groups: response.groups || [],
                     items: Array.from(contactsById.values()).map((entry) => ({ ...entry })),
                     changes: applied.items,
                     removed_ids: applied.removed_ids

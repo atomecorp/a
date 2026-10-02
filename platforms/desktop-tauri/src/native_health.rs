@@ -131,6 +131,8 @@ pub async fn health_invoke<R: Runtime>(
     let result = match command.as_str() {
         "health_channel_close" | "health_context_reset" => plugin(&app, "reset", json!({})).await,
         "health_capabilities" => plugin(&app, "capabilities", monitors_payload(&payload)).await,
+        // Opens Health Connect / the app settings; reads nothing.
+        "health_open_settings" => plugin(&app, "openSettings", monitors_payload(&payload)).await,
         "health_link_status" | "health_link" | "health_request_access" | "health_read" | "health_observe"
         | "health_unobserve" => {
             let account = match verified_account(&payload["auth"]).await {

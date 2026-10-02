@@ -41,14 +41,9 @@ export const cloneSourceInfo = (source = {}) => ({
 });
 
 export const buildContactKey = (contact = {}) => {
-    const phone = normalizePhoneKey(contact.phone);
-    if (phone) return `phone:${phone}`;
-    const email = normalizeEmailKey(contact.email);
-    if (email) return `email:${email}`;
     const id = toText(contact.id || contact.source_contact_id);
     if (id) return `id:${id}`;
-    const name = toText(contact.name).toLowerCase();
-    return name ? `name:${name}` : '';
+    return '';
 };
 
 export const matchesContactIdentifier = (contact = {}, contactId = '') => {

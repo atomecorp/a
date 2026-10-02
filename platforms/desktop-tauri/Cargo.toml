@@ -56,6 +56,7 @@ bevy_renderer_native = [
 ]
 
 [build-dependencies]
+cc = "1"
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
@@ -112,7 +113,3 @@ dotenvy = "0.15"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 security-framework = { version = "3.7.0", features = ["OSX_10_15"] }
-block2 = "0.5.1"
-objc2 = "0.5.2"
-objc2-foundation = { version = "0.2.2", features = ["NSArray", "NSEnumerator", "NSError", "NSObject", "NSString"] }
-objc2-contacts = { version = "0.2.2", features = ["block2", "CNContact", "CNContactFetchRequest", "CNContactStore", "CNFetchRequest", "CNFetchResult", "CNLabeledValue", "CNPhoneNumber"] }

@@ -152,6 +152,11 @@ pub fn apply_transform(world: &mut World, patch: AtomeTransformPatch) -> Result<
         }
         resize_procedural_sdf(world, entity, [width, height])?;
         resize_backdrop_surface(world, entity, [width, height])?;
+        // A rounded shape is painted through a cut-out mask rasterised at its
+        // size: stretching the sprite alone stretched its corners too (a ribbon
+        // tool widening for its input box showed flattened arcs). Its
+        // silhouette is re-cut at the new size, exactly as a creation would.
+        refresh_shape_surface(world, entity, &patch.id)?;
         if let Some(mut bounds) = world.get_mut::<TextBounds>(entity) {
             *bounds = TextBounds::from(Vec2::new(width, height));
         }

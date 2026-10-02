@@ -293,3 +293,9 @@ eve/application
 !tests/eve/wake_porcupine.test.mjs
 !tests/eve/wake_preferences.test.mjs
 !tests/eve/assistant_routing.test.mjs
+
+!tests/eve/canonical_contact_import.test.mjs
+!tests/eve/personal_exchange.test.mjs
+!tests/server/ws_personal_import.test.mjs
+!tests/eve/personal_import_lifecycle.test.mjs
+!tests/eve/personal_calendar_crud.test.mjs

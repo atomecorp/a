@@ -1,3 +1,4 @@
+import { PERSONAL_IMPORT_TOOLS, personalImportToolResult } from '#shared/personal_import_tools.js';
 import {
     ensureBankApi,
     ensureCalendarApi,
@@ -13,6 +14,10 @@ import {
 } from './mcp_communication.js';
 
 export const createMcpCommunicationHandlers = () => ({
+    ...Object.fromEntries(PERSONAL_IMPORT_TOOLS.map(tool => [tool.name, async (params = {}) => {
+        const api = tool.name.startsWith('contacts.') ? ensureContactsApi() : ensureCalendarApi();
+        return personalImportToolResult(tool, await (tool.param ? api[tool.method](params[tool.param], params) : api[tool.method](params)));
+    }])),
     async 'communication.list'(params = {}) {
         return listCommunicationItems(params);
     },

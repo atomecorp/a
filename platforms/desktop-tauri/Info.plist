@@ -10,5 +10,9 @@
     <string>eVe a besoin de la camera pour capturer photos et videos dans tes projets.</string>
     <key>NSContactsUsageDescription</key>
     <string>eVe requests access to Apple Contacts only when you choose Import.</string>
+    <key>NSCalendarsFullAccessUsageDescription</key>
+    <string>Import selected calendars into your private Atome workspace.</string>
+    <key>NSCalendarsUsageDescription</key>
+    <string>Import selected calendars into your private Atome workspace.</string>
 </dict>
 </plist>

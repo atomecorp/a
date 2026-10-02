@@ -1,3 +1,5 @@
+import { readDavImport } from '../shared/dav_import_transport.js';
+import { createCalendarImport } from './import_source.js';
 import { createCalendarApiSource } from './calendar_api_source.js';
 import { emitPerfEvent, perfElapsedMs, perfLog, perfNowMs } from '../../utils/perf_runtime.js';
 import { createCalendarService } from './service.js';
@@ -22,6 +24,11 @@ const ensureCalendarPanelApi = async () => {
     if (typeof globalThis !== 'undefined' && typeof globalThis.open_calendar_panel === 'function') {
         return true;
     }
+    if (typeof globalThis.document !== 'undefined') {
+        const { ensureToolModule } = await import('../../../../eVe/intuition/panel_definitions.js');
+        await ensureToolModule('calendar');
+        return typeof globalThis.open_calendar_panel === 'function';
+    }
     return false;
 };
 
@@ -42,7 +49,26 @@ export const createGlobalCalendarApi = ({
     }
     if (env[API_KEY]) return env[API_KEY];
 
+    const imports = createCalendarImport({ env });
     const api = {
+        registerImportSource: imports.register,
+        configureDavSource(options = {}) {
+            const id = options.source_id || 'dav_calendar';
+            imports.register(id, pull => readDavImport('calendar_event', options, pull, env));
+            return { ok: true, source_id: id };
+        },
+        importDav(options = {}) {
+            api.configureDavSource(options);
+            return imports.activate(options.source_id || 'dav_calendar', { ...options,
+                source_key: options.source_key || [options.auth_ref, options.calendar_url].join('/') });
+        },
+        activateSource: imports.activate,
+        stopSource: imports.stop,
+        importStatus: imports.status,
+        importIcs: imports.importIcs,
+        exportIcs: imports.exportIcs,
+        importNative(options = {}) { return imports.activate('native_calendar', options); },
+        dispose: imports.dispose,
         get service() {
             return getOrCreateService(env);
         },

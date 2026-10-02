@@ -107,7 +107,11 @@ final class FullscreenWebViewController: UIViewController {
             }
         }
         AppNativeMediaCaptureController.shared.attachPreviewHost(webView: webView)
-        AppNativeHealthController.shared.attach(webView: webView)
+        AppNativeHealthController.shared.attach(webView: webView, openSettings: {
+            // This app's page in Settings: Motion & Fitness and Health access.
+            guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
+            UIApplication.shared.open(url)
+        })
         view.insetsLayoutMarginsFromSafeArea = true
         webView.scrollView.contentInsetAdjustmentBehavior = .automatic
         webView.scrollView.contentInset = .zero

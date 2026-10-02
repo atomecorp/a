@@ -26,6 +26,7 @@ pub const METHODS: &[&str] = &[
     "reset",
     "isLinked",
     "link",
+    "openSettings",
 ];
 
 pub fn init<R: Runtime>() -> TauriPlugin<R> {

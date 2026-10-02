@@ -6,6 +6,7 @@ mod dev_logging;
 mod local_http_navigation;
 mod native_clipboard;
 mod native_contacts;
+mod native_personal_import;
 mod native_file_export;
 mod native_health;
 mod native_midi;
@@ -247,6 +248,7 @@ pub fn run() {
             auth_device::auth_development_request,
             dev_logging::log_from_webview,
             native_contacts::macos_contacts_snapshot,
+            native_personal_import::native_calendar_snapshot,
             native_midi::start_native_midi,
             native_midi::send_native_midi,
             audio_engine::bridge::audio_init,

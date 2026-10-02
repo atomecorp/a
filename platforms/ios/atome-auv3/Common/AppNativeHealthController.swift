@@ -31,13 +31,16 @@ final class AppNativeHealthController {
     private static let commands: Set<String> = [
         "health_channel_open", "health_channel_close", "health_capabilities", "health_link_status",
         "health_link", "health_request_access", "health_read", "health_observe", "health_unobserve",
-        "health_context_reset"
+        "health_context_reset", "health_open_settings"
     ]
     private static let maxRequests = 32
-    private static let maxSamples = 200
-    private static let maxSleepSamples = 2000
+    static let maxSamples = 200
+    static let maxSleepSamples = 2000
 
     private weak var webView: WKWebView?
+    // Injected by the app target (UIApplication.shared is unavailable in the
+    // AUv3 extension, which refuses every health command anyway).
+    private var settingsOpener: (() -> Void)?
     private let stateQueue = DispatchQueue(label: "one.atome.health.state")
     private var channelToken: String?
     private var channelClosed = false
@@ -45,7 +48,7 @@ final class AppNativeHealthController {
     private var accessInFlight = false
 
     #if canImport(HealthKit)
-    private let healthStore = HKHealthStore()
+    let healthStore = HKHealthStore()
     private var observers: [String: HKObserverQuery] = [:]
     #endif
     #if canImport(CoreMotion)
@@ -58,14 +61,18 @@ final class AppNativeHealthController {
         #if canImport(UIKit)
         NotificationCenter.default.addObserver(forName: UIApplication.willEnterForegroundNotification, object: nil, queue: nil) { [weak self] _ in
             self?.signalAllObserved()
+            // Access may have been changed in Settings / Health meanwhile: the
+            // page re-checks it (value-less signal, like every invalidation).
+            self?.signalAccessChanged()
         }
         #endif
     }
 
     static func canHandle(command: String) -> Bool { commands.contains(command) }
 
-    func attach(webView: WKWebView) {
+    func attach(webView: WKWebView, openSettings: (() -> Void)? = nil) {
         self.webView = webView
+        self.settingsOpener = openSettings
     }
 
     // Main-frame navigation: the next page load claims a fresh channel.
@@ -108,7 +115,13 @@ final class AppNativeHealthController {
                 self.stopEverything()
                 reply(["reset": true])
             case "health_capabilities":
-                reply(self.capabilities(ids: Self.monitorIds(payload["monitors"])))
+                self.capabilities(ids: Self.monitorIds(payload["monitors"]), generation: generation, reply: reply)
+            case "health_open_settings":
+                // Opens this app's page in Settings (Motion & Fitness, Health
+                // access). There is no API that re-shows a refused sheet.
+                guard let opener = self.settingsOpener else { return fail("health_settings_unavailable") }
+                DispatchQueue.main.async { opener() }
+                reply(["opened": true])
             default:
                 guard let account = Self.verifiedAccount(payload["auth"]) else { return fail("health_account_required") }
                 self.handleAccountCommand(command, account: account, payload: payload, generation: generation, reply: reply, fail: fail)
@@ -170,6 +183,13 @@ final class AppNativeHealthController {
         }
     }
 
+    private func signalAccessChanged() {
+        DispatchQueue.main.async {
+            WebViewManager.evaluateJS("window.dispatchEvent(new CustomEvent('atome:native-health-invalidated',{detail:{access:true}}));",
+                                      label: "nativeHealthAccessChanged", targetWebView: self.webView)
+        }
+    }
+
     private func signalAllObserved() {
         stateQueue.async { self.signal(Array(self.observedIds())) }
     }
@@ -198,10 +218,11 @@ final class AppNativeHealthController {
 
     // MARK: - Capabilities (never prompts)
 
-    private func capabilities(ids: [String]) -> [String: Any] {
+    private func capabilities(ids: [String], generation: UInt64, reply: @escaping ([String: Any]) -> Void) {
         var monitors: [String: Any] = [:]
         #if canImport(HealthKit)
         let storeAvailable = HKHealthStore.isHealthDataAvailable()
+        var pendingTypes: [(String, Set<HKObjectType>)] = []
         #else
         let storeAvailable = false
         #endif
@@ -225,15 +246,41 @@ final class AppNativeHealthController {
             #if canImport(HealthKit)
             if !storeAvailable {
                 monitors[id] = ["supported": false, "reason": "health_store_unavailable"]
-            } else if spec.objectType() == nil {
-                monitors[id] = ["supported": false, "reason": "health_os_version_unsupported"]
+            } else if let types = spec.authorizationTypes() {
+                pendingTypes.append((id, types))
             } else {
-                // Read authorization is deliberately unknowable on HealthKit.
-                monitors[id] = ["supported": true, "access": "unknowable"]
+                monitors[id] = ["supported": false, "reason": "health_os_version_unsupported"]
             }
             #endif
         }
-        return ["available": storeAvailable, "host": "ios_app", "monitors": monitors]
+        #if canImport(HealthKit)
+        guard !pendingTypes.isEmpty else {
+            return reply(["available": storeAvailable, "host": "ios_app", "monitors": monitors])
+        }
+        // Read grants are deliberately unknowable on HealthKit, but whether the
+        // sheet was already shown for a type is not: `shouldRequest` = never
+        // asked (the sheet will appear), `unnecessary` = already answered.
+        // Asking for the status never shows anything.
+        let group = DispatchGroup()
+        let lock = NSLock()
+        for (id, types) in pendingTypes {
+            group.enter()
+            healthStore.getRequestStatusForAuthorization(toShare: [], read: types) { status, error in
+                let access = (error == nil && status == .shouldRequest) ? "not_determined" : "unknowable"
+                lock.lock()
+                monitors[id] = error == nil ? ["supported": true, "access": access]
+                    : ["supported": false, "reason": "health_capability_check_failed"]
+                lock.unlock()
+                group.leave()
+            }
+        }
+        group.notify(queue: stateQueue) {
+            guard self.current(generation) else { return reply(["ok": false, "error": "health_context_changed"]) }
+            reply(["available": storeAvailable, "host": "ios_app", "monitors": monitors])
+        }
+        #else
+        reply(["available": storeAvailable, "host": "ios_app", "monitors": monitors])
+        #endif
     }
 
     // MARK: - Authorization (explicit gesture only, one sheet at a time)
@@ -254,7 +301,7 @@ final class AppNativeHealthController {
         let wantsMotion = false
         #endif
         #if canImport(HealthKit)
-        let readTypes = Set(specs.compactMap { $0.objectType() })
+        let readTypes = Set(specs.flatMap { Array($0.authorizationTypes() ?? []) })
         guard HKHealthStore.isHealthDataAvailable() || readTypes.isEmpty else {
             accessInFlight = false
             return fail("health_store_unavailable")
@@ -411,7 +458,7 @@ final class AppNativeHealthController {
     }
 
     #if canImport(HealthKit)
-    private static func statusCode(_ error: Error?) -> String {
+    static func statusCode(_ error: Error?) -> String {
         guard let error = error as? HKError else { return "error" }
         switch error.code {
         case .errorDatabaseInaccessible: return "store_locked"
@@ -423,226 +470,5 @@ final class AppNativeHealthController {
         }
     }
 
-    private func failure(_ error: Error?) -> [String: Any] {
-        let code = Self.statusCode(error)
-        return ["status": code, "reason": "healthkit_\(code)"]
-    }
-
-    private func dateMs(_ date: Date) -> Double { date.timeIntervalSince1970 * 1000 }
-
-    private func readSum(_ spec: HealthMonitorSpec, from: Date, to: Date, coverage: [String: Any], completion: @escaping ([String: Any]) -> Void) {
-        guard let type = spec.objectType() as? HKQuantityType, let unit = spec.unit else { return completion(["status": "error", "reason": "health_spec_invalid"]) }
-        let predicate = HKQuery.predicateForSamples(withStart: from, end: to, options: .strictStartDate)
-        // HealthKit statistics apply the store's own source merging; raw
-        // samples from several sources are never summed here.
-        let query = HKStatisticsQuery(quantityType: type, quantitySamplePredicate: predicate, options: .cumulativeSum) { _, statistics, error in
-            if let error = error as? HKError, error.code == .errorNoData {
-                return completion(["status": "ok", "hasData": false, "coverage": coverage])
-            }
-            if error != nil { return completion(self.failure(error)) }
-            guard let sum = statistics?.sumQuantity() else { return completion(["status": "ok", "hasData": false, "coverage": coverage]) }
-            completion(["status": "ok", "hasData": true, "value": sum.doubleValue(for: unit),
-                        "from": self.dateMs(from), "to": self.dateMs(to), "coverage": coverage])
-        }
-        healthStore.execute(query)
-    }
-
-    private func readLatest(_ spec: HealthMonitorSpec, from: Date, to: Date, coverage: [String: Any], completion: @escaping ([String: Any]) -> Void) {
-        guard let type = spec.sampleType(), let unit = spec.unit else { return completion(["status": "error", "reason": "health_spec_invalid"]) }
-        let predicate = HKQuery.predicateForSamples(withStart: from, end: to, options: [])
-        let sort = [NSSortDescriptor(key: HKSampleSortIdentifierEndDate, ascending: false)]
-        let query = HKSampleQuery(sampleType: type, predicate: predicate, limit: 20, sortDescriptors: sort) { _, samples, error in
-            if error != nil { return completion(self.failure(error)) }
-            let rows: [[String: Any]] = (samples ?? []).compactMap { sample in
-                guard let quantity = sample as? HKQuantitySample, quantity.quantityType.is(compatibleWith: unit) else { return nil }
-                var row: [String: Any] = ["value": quantity.quantity.doubleValue(for: unit),
-                                          "start": self.dateMs(quantity.startDate), "end": self.dateMs(quantity.endDate),
-                                          "source": ["name": quantity.sourceRevision.source.name]]
-                if let context = quantity.metadata?[HKMetadataKeyHeartRateMotionContext] as? NSNumber {
-                    row["qualifiers"] = ["motion_context": context.intValue]
-                }
-                return row
-            }
-            completion(["status": "ok", "samples": rows, "scale": spec.fraction ? "fraction" : "absolute", "coverage": coverage])
-        }
-        healthStore.execute(query)
-    }
-
-    // Each blood-pressure correlation is one measurement: systolic and
-    // diastolic are taken from the SAME correlation, never paired across.
-    private func readPressure(_ spec: HealthMonitorSpec, from: Date, to: Date, coverage: [String: Any], completion: @escaping ([String: Any]) -> Void) {
-        guard let type = HKCorrelationType.correlationType(forIdentifier: .bloodPressure),
-              let systolicType = HKQuantityType.quantityType(forIdentifier: .bloodPressureSystolic),
-              let diastolicType = HKQuantityType.quantityType(forIdentifier: .bloodPressureDiastolic) else {
-            return completion(["status": "unsupported"])
-        }
-        let unit = HKUnit.millimeterOfMercury()
-        let predicate = HKQuery.predicateForSamples(withStart: from, end: to, options: [])
-        let sort = [NSSortDescriptor(key: HKSampleSortIdentifierEndDate, ascending: false)]
-        let query = HKSampleQuery(sampleType: type, predicate: predicate, limit: 20, sortDescriptors: sort) { _, samples, error in
-            if error != nil { return completion(self.failure(error)) }
-            let rows: [[String: Any]] = (samples ?? []).compactMap { sample in
-                guard let correlation = sample as? HKCorrelation,
-                      let systolic = correlation.objects(for: systolicType).first as? HKQuantitySample,
-                      let diastolic = correlation.objects(for: diastolicType).first as? HKQuantitySample else { return nil }
-                return ["systolic": systolic.quantity.doubleValue(for: unit), "diastolic": diastolic.quantity.doubleValue(for: unit),
-                        "start": self.dateMs(correlation.startDate), "end": self.dateMs(correlation.endDate),
-                        "source": ["name": correlation.sourceRevision.source.name]]
-            }
-            completion(["status": "ok", "samples": rows, "coverage": coverage])
-        }
-        healthStore.execute(query)
-    }
-
-    private func sleepStage(_ value: Int) -> String {
-        if #available(iOS 16.0, *) {
-            switch HKCategoryValueSleepAnalysis(rawValue: value) {
-            case .inBed: return "in_bed"
-            case .asleepUnspecified: return "asleep_unspecified"
-            case .awake: return "awake"
-            case .asleepCore: return "asleep_core"
-            case .asleepDeep: return "asleep_deep"
-            case .asleepREM: return "asleep_rem"
-            default: return "unknown"
-            }
-        }
-        switch HKCategoryValueSleepAnalysis(rawValue: value) {
-        case .inBed: return "in_bed"
-        case .awake: return "awake"
-        case .some: return "asleep_unspecified"
-        default: return "unknown"
-        }
-    }
-
-    // Raw intervals with their stage; grouping into a session and the union of
-    // asleep stages happen in health_values.js (tested), never by summing.
-    private func readSleep(_ spec: HealthMonitorSpec, from: Date, to: Date, coverage: [String: Any], completion: @escaping ([String: Any]) -> Void) {
-        guard let type = spec.sampleType() else { return completion(["status": "unsupported"]) }
-        let predicate = HKQuery.predicateForSamples(withStart: from, end: to, options: [])
-        let sort = [NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: true)]
-        let limit = Self.maxSleepSamples
-        let query = HKSampleQuery(sampleType: type, predicate: predicate, limit: limit, sortDescriptors: sort) { _, samples, error in
-            if error != nil { return completion(self.failure(error)) }
-            let rows: [[String: Any]] = (samples ?? []).compactMap { sample in
-                guard let category = sample as? HKCategorySample else { return nil }
-                return ["stage": self.sleepStage(category.value), "start": self.dateMs(category.startDate),
-                        "end": self.dateMs(category.endDate), "source": category.sourceRevision.source.name]
-            }
-            var cover = coverage
-            if rows.count >= limit { cover["partial"] = true; cover["reason"] = "read_limit" }
-            completion(["status": "ok", "intervals": rows, "coverage": cover])
-        }
-        healthStore.execute(query)
-    }
-
-    private func readSessions(_ spec: HealthMonitorSpec, from: Date, to: Date, coverage: [String: Any], completion: @escaping ([String: Any]) -> Void) {
-        guard let type = spec.sampleType() else { return completion(["status": "unsupported"]) }
-        let predicate = HKQuery.predicateForSamples(withStart: from, end: to, options: [])
-        let query = HKSampleQuery(sampleType: type, predicate: predicate, limit: Self.maxSamples, sortDescriptors: nil) { _, samples, error in
-            if error != nil { return completion(self.failure(error)) }
-            let rows: [[String: Any]] = (samples ?? []).map { ["start": self.dateMs($0.startDate), "end": self.dateMs($0.endDate)] }
-            var cover = coverage
-            if rows.count >= Self.maxSamples { cover["partial"] = true; cover["reason"] = "read_limit" }
-            completion(["status": "ok", "sessions": rows, "coverage": cover])
-        }
-        healthStore.execute(query)
-    }
     #endif
-}
-
-// Native allow-list of monitors. Ids MUST match atome/src/squirrel/health/
-// health_catalog.js (checked by temp/health_native_tables.probe.mjs).
-enum HealthMonitorKind { case dailySum, latest, pressure, sleep, sessions, pedometer }
-
-struct HealthMonitorSpec {
-    let kind: HealthMonitorKind
-    let identifier: String
-    let unitString: String?
-    let fraction: Bool
-
-    #if canImport(HealthKit)
-    var unit: HKUnit? { unitString.map { HKUnit(from: $0) } }
-
-    func objectType() -> HKObjectType? {
-        switch identifier {
-        case "HKWorkoutType": return HKObjectType.workoutType()
-        case "HKCorrelationTypeIdentifierBloodPressure": return HKObjectType.correlationType(forIdentifier: .bloodPressure)
-        case "HKCategoryTypeIdentifierSleepAnalysis": return HKObjectType.categoryType(forIdentifier: .sleepAnalysis)
-        case "HKCategoryTypeIdentifierMindfulSession": return HKObjectType.categoryType(forIdentifier: .mindfulSession)
-        case "HKQuantityTypeIdentifierAppleSleepingWristTemperature":
-            if #available(iOS 16.0, *) { return HKObjectType.quantityType(forIdentifier: .appleSleepingWristTemperature) }
-            return nil
-        default:
-            return HKObjectType.quantityType(forIdentifier: HKQuantityTypeIdentifier(rawValue: identifier))
-        }
-    }
-
-    func sampleType() -> HKSampleType? { objectType() as? HKSampleType }
-    #endif
-}
-
-enum HealthMonitorTable {
-    private static let q = HealthMonitorKind.latest
-    static let specs: [String: HealthMonitorSpec] = [
-        "steps": .init(kind: .dailySum, identifier: "HKQuantityTypeIdentifierStepCount", unitString: "count", fraction: false),
-        "distance_walking_running": .init(kind: .dailySum, identifier: "HKQuantityTypeIdentifierDistanceWalkingRunning", unitString: "m", fraction: false),
-        "distance_cycling": .init(kind: .dailySum, identifier: "HKQuantityTypeIdentifierDistanceCycling", unitString: "m", fraction: false),
-        "distance_wheelchair": .init(kind: .dailySum, identifier: "HKQuantityTypeIdentifierDistanceWheelchair", unitString: "m", fraction: false),
-        "wheelchair_pushes": .init(kind: .dailySum, identifier: "HKQuantityTypeIdentifierPushCount", unitString: "count", fraction: false),
-        "floors_climbed": .init(kind: .dailySum, identifier: "HKQuantityTypeIdentifierFlightsClimbed", unitString: "count", fraction: false),
-        "active_energy": .init(kind: .dailySum, identifier: "HKQuantityTypeIdentifierActiveEnergyBurned", unitString: "kcal", fraction: false),
-        "basal_energy": .init(kind: .dailySum, identifier: "HKQuantityTypeIdentifierBasalEnergyBurned", unitString: "kcal", fraction: false),
-        "exercise_minutes": .init(kind: .dailySum, identifier: "HKQuantityTypeIdentifierAppleExerciseTime", unitString: "min", fraction: false),
-        "stand_minutes": .init(kind: .dailySum, identifier: "HKQuantityTypeIdentifierAppleStandTime", unitString: "min", fraction: false),
-        "hydration": .init(kind: .dailySum, identifier: "HKQuantityTypeIdentifierDietaryWater", unitString: "mL", fraction: false),
-        "workout_duration": .init(kind: .sessions, identifier: "HKWorkoutType", unitString: nil, fraction: false),
-        "mindful_minutes": .init(kind: .sessions, identifier: "HKCategoryTypeIdentifierMindfulSession", unitString: nil, fraction: false),
-        "walking_speed": .init(kind: q, identifier: "HKQuantityTypeIdentifierWalkingSpeed", unitString: "m/s", fraction: false),
-        "heart_rate": .init(kind: q, identifier: "HKQuantityTypeIdentifierHeartRate", unitString: "count/min", fraction: false),
-        "resting_heart_rate": .init(kind: q, identifier: "HKQuantityTypeIdentifierRestingHeartRate", unitString: "count/min", fraction: false),
-        "walking_heart_rate_average": .init(kind: q, identifier: "HKQuantityTypeIdentifierWalkingHeartRateAverage", unitString: "count/min", fraction: false),
-        "hrv_sdnn": .init(kind: q, identifier: "HKQuantityTypeIdentifierHeartRateVariabilitySDNN", unitString: "ms", fraction: false),
-        "respiratory_rate": .init(kind: q, identifier: "HKQuantityTypeIdentifierRespiratoryRate", unitString: "count/min", fraction: false),
-        "oxygen_saturation": .init(kind: q, identifier: "HKQuantityTypeIdentifierOxygenSaturation", unitString: "%", fraction: true),
-        "blood_pressure": .init(kind: .pressure, identifier: "HKCorrelationTypeIdentifierBloodPressure", unitString: "mmHg", fraction: false),
-        "blood_glucose": .init(kind: q, identifier: "HKQuantityTypeIdentifierBloodGlucose", unitString: "mg/dL", fraction: false),
-        "body_temperature": .init(kind: q, identifier: "HKQuantityTypeIdentifierBodyTemperature", unitString: "degC", fraction: false),
-        "basal_body_temperature": .init(kind: q, identifier: "HKQuantityTypeIdentifierBasalBodyTemperature", unitString: "degC", fraction: false),
-        "sleeping_wrist_temperature": .init(kind: q, identifier: "HKQuantityTypeIdentifierAppleSleepingWristTemperature", unitString: "degC", fraction: false),
-        "vo2_max": .init(kind: q, identifier: "HKQuantityTypeIdentifierVO2Max", unitString: "ml/(kg*min)", fraction: false),
-        "weight": .init(kind: q, identifier: "HKQuantityTypeIdentifierBodyMass", unitString: "kg", fraction: false),
-        "height": .init(kind: q, identifier: "HKQuantityTypeIdentifierHeight", unitString: "cm", fraction: false),
-        "body_fat": .init(kind: q, identifier: "HKQuantityTypeIdentifierBodyFatPercentage", unitString: "%", fraction: true),
-        "lean_body_mass": .init(kind: q, identifier: "HKQuantityTypeIdentifierLeanBodyMass", unitString: "kg", fraction: false),
-        "body_mass_index": .init(kind: q, identifier: "HKQuantityTypeIdentifierBodyMassIndex", unitString: "count", fraction: false),
-        "sleep": .init(kind: .sleep, identifier: "HKCategoryTypeIdentifierSleepAnalysis", unitString: nil, fraction: false),
-        "device_steps_today": .init(kind: .pedometer, identifier: "CMPedometer", unitString: nil, fraction: false)
-    ]
-
-    static func spec(_ id: String) -> HealthMonitorSpec? { specs[id] }
-}
-
-// Local association device store <-> account. Keychain, this device only,
-// never synchronizable: it is not a transportable permission.
-enum HealthLinkStore {
-    private static let service = "one.atome.health.link"
-
-    private static func query(_ account: String) -> [String: Any] {
-        [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service,
-         kSecAttrAccount as String: account, kSecAttrSynchronizable as String: false]
-    }
-
-    static func isLinked(_ account: String) -> Bool {
-        var read = query(account)
-        read[kSecReturnData as String] = false
-        return SecItemCopyMatching(read as CFDictionary, nil) == errSecSuccess
-    }
-
-    static func link(_ account: String) -> Bool {
-        if isLinked(account) { return true }
-        var write = query(account)
-        write[kSecValueData as String] = Data("1".utf8)
-        write[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
-        return SecItemAdd(write as CFDictionary, nil) == errSecSuccess
-    }
 }

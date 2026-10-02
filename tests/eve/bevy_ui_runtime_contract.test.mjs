@@ -555,6 +555,27 @@ test('BevyUI explicit vertical drag handlers take priority over ancestor scrolli
     await runtime.unmountTree('drag_over_scroll_tree');
 });
 
+test('a menu starts at its prepared opacity and retains a fade across tree refreshes', async () => {
+    const projections = [];
+    const nativeOps = [];
+    const surface = createSurface();
+    const runtime = createEveBevyUiRuntime({ requestFrame: () => 0, nativeUiEnabled: true,
+        moduleProvider: async () => ({ apply_atome_bevy_ui_ops: ops => nativeOps.push(...ops), drain_atome_bevy_ui_events: () => [] }),
+        overlayProjector: {
+        clear: async () => null,
+        project: async ({ opacity }) => { projections.push(opacity); return []; }
+    } });
+    const tree = { id: 'prepared_menu', root: { id: 'menu_root', kind: 'root', style: { size: [200, 200] }, children: [] } };
+    await runtime.setTreeOpacity({ id: 'prepared_menu', opacity: 0 });
+    await runtime.mountTree({ id: 'prepared_menu', surface, tree });
+    assert.equal(projections[0], 0, 'the first menu frame must not flash at full opacity');
+    await runtime.setTreeOpacity({ id: 'prepared_menu', opacity: 0.4 });
+    await runtime.updateTree({ id: 'prepared_menu', surface, tree });
+    assert.equal(projections.at(-1), 0.4, 'late hydration must not reset an active fade');
+    assert.deepEqual(nativeOps.filter(op => op.type === 'set_subtree_opacity').map(op => op.opacity), [0, 0.4, 0.4]);
+    await runtime.unmountTree('prepared_menu');
+});
+
 test('BevyUI tree suspension retains projection records and disables hit-testing atomically', async () => {
     const surface = createSurface();
     surface.getBoundingClientRect = () => ({ left: 0, top: 0, width: 200, height: 200 });

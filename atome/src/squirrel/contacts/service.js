@@ -80,7 +80,8 @@ export const createContactsService = ({
     };
 
     const syncFromSources = async (mode = 'initial', options = {}) => {
-        const activeSources = resolveSources(options.source_id);
+        const primary = getPrimarySource();
+        const activeSources = primary ? [primary] : [];
         if (!activeSources.length) {
             return { ok: false, error: 'contacts_source_missing', source_id: toText(options.source_id) || null };
         }
@@ -133,7 +134,6 @@ export const createContactsService = ({
         const primarySourceEntry = getPrimarySource();
         if (!primarySourceEntry || typeof primarySourceEntry.listContactsSync !== 'function') return;
         if (requestedSourceId && requestedSourceId !== primarySourceEntry.source_id) return;
-        if (!requestedSourceId && contactIndex.size > 0) return;
         const listed = primarySourceEntry.listContactsSync(options);
         if (listed?.ok !== true || !Array.isArray(listed.items)) return;
         storeContacts(listed.items, {
@@ -156,16 +156,23 @@ export const createContactsService = ({
             return { ok: false, error: 'contacts_primary_import_unavailable', source_id: CONTACTS_V1_ARCHITECTURE_DECISION.primary_read_source.id };
         }
 
-        const sourcePull = typeof source.syncInitial === 'function'
-            ? await source.syncInitial(options)
+        const checkSession = primarySourceEntry.captureImportSession?.();
+        const pullMethod = options.incremental === true ? source.syncIncremental : source.syncInitial;
+        const sourcePull = typeof pullMethod === 'function'
+            ? await pullMethod.call(source, options)
             : (typeof source.listContacts === 'function' ? await source.listContacts({ ...options, autosync: true }) : null);
+        checkSession?.();
         if (!sourcePull || sourcePull.ok !== true) {
             return sourcePull || { ok: false, error: 'contacts_import_pull_failed', source_id: normalizedSourceId };
         }
 
         const imported = await primarySourceEntry.importContacts(Array.isArray(sourcePull.items) ? sourcePull.items : [], {
             imported_from_source: source.source_id,
-            imported_from_label: toText(source.contract?.provider || source.source_id)
+            imported_from_label: toText(source.contract?.provider || source.source_id),
+            source_key: options.source_key || source.source_key || source.source_id,
+            cursor: sourcePull.cursor, complete: sourcePull.complete === true,
+            removed_ids: sourcePull.removed_ids || [], removed_hrefs: sourcePull.removed_hrefs || [], groups: sourcePull.groups || [],
+            device_id: options.device_id, signal: options.signal, checkSession
         });
         if (imported?.ok !== true) {
             return imported || { ok: false, error: 'contacts_import_store_failed', source_id: normalizedSourceId };
@@ -185,173 +192,16 @@ export const createContactsService = ({
         };
     };
 
-    const createLocalContact = async (contact = {}, options = {}) => {
-        const primarySourceEntry = getPrimarySource();
-        if (!primarySourceEntry || typeof primarySourceEntry.importContacts !== 'function') {
-            return { ok: false, error: 'contacts_primary_import_unavailable', source_id: CONTACTS_V1_ARCHITECTURE_DECISION.primary_read_source.id };
-        }
-        const payload = (contact && typeof contact === 'object') ? { ...contact } : {};
-        if (!toText(payload.name || payload.first_name || payload.nickname || payload.phone || payload.email)) {
-            return { ok: false, error: 'contacts_create_payload_missing' };
-        }
-        const createdKey = buildContactKey(payload);
-        const imported = await primarySourceEntry.importContacts([payload], {
-            imported_from_source: CONTACTS_V1_ARCHITECTURE_DECISION.primary_read_source.id,
-            imported_from_label: 'eVe Contacts',
-            ...options
-        });
-        if (imported?.ok !== true) {
-            return imported || { ok: false, error: 'contacts_create_store_failed' };
-        }
-        const refreshed = await syncFromSources('initial', {
-            ...options,
-            source_id: primarySourceEntry.source_id
-        });
-        const matchCreatedContact = (items = []) => {
-            const pool = Array.isArray(items) ? items : [];
-            const direct = pool.find((entry) => buildContactKey(entry) === createdKey);
-            if (direct) return cloneContact(direct);
-            const fallback = pool.find((entry) => {
-                return toText(entry?.name) === toText(payload.name)
-                    && toText(entry?.phone) === toText(payload.phone)
-                    && toText(entry?.email) === toText(payload.email);
-            });
-            return fallback ? cloneContact(fallback) : null;
-        };
-        const createdContact = matchCreatedContact(refreshed?.items) || matchCreatedContact(imported?.items);
-        return {
-            ok: refreshed?.ok === true,
-            created: true,
-            source_id: primarySourceEntry.source_id,
-            contact: createdContact,
-            items: refreshed?.items || [],
-            stats: refreshed?.stats || null,
-            cursor: refreshed?.cursor || imported?.cursor || null
-        };
+    const mutatePrimary = async (method, ...args) => {
+        const primary = getPrimarySource();
+        if (typeof primary?.[method] !== 'function') return { ok: false, error: 'contacts_primary_mutation_unavailable' };
+        const result = await primary[method](...args);
+        if (result.ok) storeContacts(result.items || [], { mode: 'local' });
+        return result;
     };
-
-    const loadPrimaryContacts = async () => {
-        const primarySourceEntry = getPrimarySource();
-        if (!primarySourceEntry) {
-            return { ok: false, error: 'contacts_primary_source_missing', source_id: CONTACTS_V1_ARCHITECTURE_DECISION.primary_read_source.id };
-        }
-        if (typeof primarySourceEntry.syncInitial === 'function') {
-            const synced = await primarySourceEntry.syncInitial({});
-            if (synced?.ok !== true) return synced || { ok: false, error: 'contacts_primary_sync_failed', source_id: primarySourceEntry.source_id };
-            return {
-                ok: true,
-                source: primarySourceEntry,
-                items: Array.isArray(synced?.items) ? synced.items.map((entry) => cloneContact(entry)) : []
-            };
-        }
-        if (typeof primarySourceEntry.listContacts === 'function') {
-            const listed = await primarySourceEntry.listContacts({});
-            if (listed?.ok !== true) return listed || { ok: false, error: 'contacts_primary_list_failed', source_id: primarySourceEntry.source_id };
-            return {
-                ok: true,
-                source: primarySourceEntry,
-                items: Array.isArray(listed?.items) ? listed.items.map((entry) => cloneContact(entry)) : []
-            };
-        }
-        return { ok: false, error: 'contacts_primary_list_unavailable', source_id: primarySourceEntry.source_id };
-    };
-
-    const persistPrimaryContacts = async (items = [], source = null, options = {}) => {
-        const primarySourceEntry = source || getPrimarySource();
-        if (!primarySourceEntry || typeof primarySourceEntry.replaceContacts !== 'function') {
-            return {
-                ok: false,
-                error: 'contacts_primary_replace_unavailable',
-                source_id: primarySourceEntry?.source_id || CONTACTS_V1_ARCHITECTURE_DECISION.primary_read_source.id
-            };
-        }
-        const replaced = await primarySourceEntry.replaceContacts(items, {
-            imported_from_source: CONTACTS_V1_ARCHITECTURE_DECISION.primary_read_source.id,
-            imported_from_label: 'eVe Contacts',
-            ...options
-        });
-        if (replaced?.ok !== true) {
-            return replaced || { ok: false, error: 'contacts_primary_replace_failed', source_id: primarySourceEntry.source_id };
-        }
-        const refreshed = await syncFromSources('initial', {
-            ...options,
-            source_id: primarySourceEntry.source_id
-        });
-        return {
-            ok: refreshed?.ok === true,
-            source: primarySourceEntry,
-            items: refreshed?.items || [],
-            stats: refreshed?.stats || null,
-            cursor: refreshed?.cursor || replaced?.cursor || null
-        };
-    };
-
-    const updateLocalContact = async (contactId, changes = {}, options = {}) => {
-        const targetId = toText(contactId || changes?.contact_id || changes?.contactId || changes?.id || '');
-        if (!targetId) {
-            return { ok: false, error: 'contacts_update_contact_missing' };
-        }
-        const loaded = await loadPrimaryContacts();
-        if (loaded?.ok !== true) return loaded;
-        const items = Array.isArray(loaded.items) ? loaded.items : [];
-        const index = items.findIndex((entry) => matchesContactIdentifier(entry, targetId));
-        if (index < 0) {
-            return { ok: false, error: 'contacts_not_found', contact_id: targetId };
-        }
-        const current = items[index];
-        const next = {
-            ...current,
-            ...(changes && typeof changes === 'object' ? { ...changes } : {}),
-            id: toText(current.id || ''),
-            source_contact_id: toText(current.source_contact_id || current.id || targetId)
-        };
-        if (Array.isArray(changes?.custom_fields)) {
-            next.custom_fields = changes.custom_fields.map((entry) => ({ ...entry }));
-        }
-        if (changes?.raw && typeof changes.raw === 'object') {
-            next.raw = { ...(current.raw && typeof current.raw === 'object' ? current.raw : {}), ...changes.raw };
-        }
-        items[index] = next;
-        const persisted = await persistPrimaryContacts(items, loaded.source, options);
-        if (persisted?.ok !== true) return persisted;
-        const updatedContact = Array.isArray(persisted.items)
-            ? persisted.items.find((entry) => toText(entry.source_contact_id || entry.id) === toText(next.source_contact_id || next.id))
-            : null;
-        return {
-            ok: true,
-            updated: true,
-            source_id: loaded.source?.source_id || CONTACTS_V1_ARCHITECTURE_DECISION.primary_read_source.id,
-            contact: updatedContact ? cloneContact(updatedContact) : cloneContact(next),
-            items: persisted.items || [],
-            stats: persisted.stats || null,
-            cursor: persisted.cursor || null
-        };
-    };
-
-    const deleteLocalContact = async (contactId, options = {}) => {
-        const targetId = toText(contactId || '');
-        if (!targetId) {
-            return { ok: false, error: 'contacts_delete_contact_missing' };
-        }
-        const loaded = await loadPrimaryContacts();
-        if (loaded?.ok !== true) return loaded;
-        const items = Array.isArray(loaded.items) ? loaded.items : [];
-        const nextItems = items.filter((entry) => !matchesContactIdentifier(entry, targetId));
-        if (nextItems.length === items.length) {
-            return { ok: false, error: 'contacts_not_found', contact_id: targetId };
-        }
-        const persisted = await persistPrimaryContacts(nextItems, loaded.source, options);
-        if (persisted?.ok !== true) return persisted;
-        return {
-            ok: true,
-            deleted: true,
-            source_id: loaded.source?.source_id || CONTACTS_V1_ARCHITECTURE_DECISION.primary_read_source.id,
-            contact_id: targetId,
-            items: persisted.items || [],
-            stats: persisted.stats || null,
-            cursor: persisted.cursor || null
-        };
-    };
+    const createLocalContact = (input, options) => mutatePrimary('createContact', input, options);
+    const updateLocalContact = (id, changes, options) => mutatePrimary('updateContact', id, changes, options);
+    const deleteLocalContact = (id, options) => mutatePrimary('deleteContact', id, options);
 
     const resolvePushContactPayload = (options = {}) => {
         if (options?.contact && typeof options.contact === 'object') {

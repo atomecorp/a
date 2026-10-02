@@ -3,13 +3,11 @@ import {
     createCalendarConnectorContract
 } from './connector_contract.js';
 import { toText as normalizeText } from '../shared/scalars.js';
+import { canonicalCalendarDate } from './icalendar.js';
 
 
 const toDate = (value) => {
-    if (!value) return null;
-    if (value instanceof Date) return value;
-    const date = new Date(value);
-    return Number.isNaN(date.getTime()) ? null : date;
+    return canonicalCalendarDate(value);
 };
 
 const toIso = (value) => {
@@ -24,6 +22,7 @@ const loadCalendarApi = async () => {
 };
 
 const normalizeCalendarEvent = (event = {}) => ({
+    ...event,
     id: normalizeText(event.id || event.event_id || event.uid || ''),
     calendarId: normalizeText(event.calendarId || event.calendar_id || ''),
     title: normalizeText(event.title || event.name || ''),
@@ -37,7 +36,7 @@ const normalizeCalendarEvent = (event = {}) => ({
     recurrence: event.recurrence && typeof event.recurrence === 'object' ? { ...event.recurrence } : null,
     alarms: Array.isArray(event.alarms) ? event.alarms.map((alarm) => ({ ...alarm })) : [],
     kind: event.kind === 'todo' ? 'todo' : 'event',
-    status: event.status === 'done' ? 'done' : 'open',
+    status: event.status || 'open',
     dueAt: toDate(event.dueAt || event.due_at || (event.kind === 'todo' ? event.start : null)),
     completedAt: toDate(event.completedAt || event.completed_at),
     color: normalizeText(event.color || ''),

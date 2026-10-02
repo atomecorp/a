@@ -1,3 +1,4 @@
+import { PERSONAL_IMPORT_TOOLS } from '#shared/personal_import_tools.js';
 import { resolveAtomeRuntimeInvocation } from './runtime_tool_resolution.js';
 import {
     ATOME_MCP_PROTOCOL,
@@ -113,6 +114,7 @@ export const createMcpPlatformHandlers = (getHandlers) => ({
                 'mail.archive',
                 'mail.delete',
                 'mail.send',
+                ...PERSONAL_IMPORT_TOOLS.map(tool => tool.name),
                 'contacts.sources',
                 'contacts.list',
                 'contacts.search',

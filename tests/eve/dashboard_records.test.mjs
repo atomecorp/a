@@ -29,7 +29,7 @@ const weather = {
 };
 const items = () => new Map([
     ['news', [weather, { id: 'news-one', category_id: 'news', title: 'Une actualité' }]],
-    ['calendar', [{ id: 'event-one', category_id: 'calendar', title: 'Rendez-vous', payload: { start: '2026-09-16T10:00:00Z' } }]],
+    ['calendar', [{ id: 'dashboard_module_clock', category_id: 'calendar', metadata: { dashboard_module: 'clock' } }, { id: 'event-one', category_id: 'calendar', title: 'Rendez-vous', payload: { start: '2026-09-16T10:00:00Z' } }]],
     ['projects', [{ id: 'project-one', category_id: 'projects', title: 'Projet', metadata: {
         project_preview_source: 'data:image/png;base64,AA==', project_preview_width: 1600, project_preview_height: 900
     } }]],
@@ -70,9 +70,11 @@ describe('Dashboard WebGPU records', () => {
         expect(record(records, 'surface_image')).toBeUndefined();
     });
 
-    it('has no obsolete veil, bands, shadows, focus spread or plus records', () => {
+    it('keeps the canonical header band and shadow without obsolete veil or focus records', () => {
         const records = buildDashboardRecords({ layout: layout(), tokens });
-        expect(records.some((entry) => /project_veil|bottom_shadow|header_side_shadow|focus_spread|create_bg|__eve_dashboard_lane_|__eve_dashboard_table/.test(entry.id))).toBe(false);
+        expect(record(records, 'header_band')).toBeDefined();
+        expect(record(records, 'header_side_shadow')).toBeDefined();
+        expect(records.some((entry) => /project_veil|bottom_shadow|focus_spread|create_bg|__eve_dashboard_lane_|__eve_dashboard_table/.test(entry.id))).toBe(false);
     });
 
     it('paints no settings header and keeps the rail to the category rows', () => {
@@ -103,7 +105,7 @@ describe('Dashboard WebGPU records', () => {
         }
         expect(header.properties.material.shadow).toBe(EVE_COMMON_SKIN_TOKENS.bevy.systemSurface.shadow);
         expect(records.filter((entry) => entry.properties?.material?.shadow).every((entry) => (
-            entry.id.includes('header_bg_') || /^__eve_dashboard_card_[^_]+_/.test(entry.id)
+            entry.id === dashboardRecordId('header_band') || entry.id.includes('header_bg_') || /^__eve_dashboard_card_[^_]+_/.test(entry.id)
         ))).toBe(true);
     });
 
@@ -114,7 +116,7 @@ describe('Dashboard WebGPU records', () => {
         expect(record(records, 'card_news_dashboard_module_weather').properties.width).toBe(target.unit_width * 2);
         expect(record(records, 'card_weather_icon_news_dashboard_module_weather').properties.source).toContain('data:image/svg+xml');
         expect(record(records, 'card_weather_temperature_news_dashboard_module_weather').properties.text).toBe('18°');
-        expect(record(records, 'card_weather_city_news_dashboard_module_weather').properties.text).toBe('Clermont.');
+        expect(record(records, 'card_weather_city_news_dashboard_module_weather').properties.text).toBe('Clermont-F.');
         expect(box.width).toBe(target.unit_width * 2);
     });
 
@@ -151,23 +153,25 @@ describe('Dashboard WebGPU records', () => {
 
     it('uses one fixed ordinary label size and truncates only the settled projection', () => {
         expect(formatDashboardDisplayLabel('12345678', tokens.labelText)).toBe('12345678');
-        expect(formatDashboardDisplayLabel('123456789', tokens.labelText)).toBe('12345678.');
+        expect(formatDashboardDisplayLabel('1234567890', tokens.labelText)).toBe('1234567890');
+        expect(formatDashboardDisplayLabel('12345678901', tokens.labelText)).toBe('1234567890.');
         expect(formatDashboardDisplayLabel('e\u0301clairci', tokens.labelText)).toBe('éclairci');
-        expect(formatDashboardDisplayLabel('e\u0301claircie', tokens.labelText)).toBe('éclairci.');
+        expect(formatDashboardDisplayLabel('e\u0301claircie', tokens.labelText)).toBe('éclaircie');
         const family = '👨‍👩‍👧‍👦';
-        expect(formatDashboardDisplayLabel(family.repeat(9), tokens.labelText)).toBe(`${family.repeat(8)}.`);
+        expect(formatDashboardDisplayLabel(family.repeat(11), tokens.labelText)).toBe(`${family.repeat(10)}.`);
 
         const target = layout();
         const settled = buildDashboardRecords({ layout: target, tokens });
         const ordinary = settled.filter((entry) => entry.type === 'text'
-            && !entry.id.endsWith('header_calendar_time')
+            && !entry.id.includes('card_clock_')
             && !entry.id.includes('card_weather_temperature_'));
         expect(ordinary.length).toBeGreaterThan(0);
         expect(ordinary.every((entry) => entry.properties.text_style.font_size === 16)).toBe(true);
-        expect(ordinary.every((entry) => entry.properties.text_style.text_fit === undefined)).toBe(true);
-        expect(record(settled, 'header_calendar_time').properties.text_style.font_size).toBeGreaterThan(16);
+        expect(ordinary.every(entry => [undefined, 'shrink'].includes(entry.properties.text_style.text_fit))).toBe(true);
+        expect(record(settled, 'card_title_news_news-one').properties.text_style.text_fit).toBe('shrink');
+        expect(record(settled, 'card_clock_time_calendar_dashboard_module_clock').properties.text_style.font_size).toBeGreaterThan(16);
         expect(record(settled, 'card_weather_temperature_news_dashboard_module_weather').properties.text_style.font_size).toBeGreaterThan(16);
-        expect(record(settled, 'card_title_news_news-one').properties.text).toBe('Une actu.');
+        expect(record(settled, 'card_title_news_news-one').properties.text).toBe('Une actual.');
 
         const editing = buildDashboardRecords({
             layout: target,
@@ -202,7 +206,7 @@ describe('Dashboard WebGPU records', () => {
             const icon = record(records, `header_icon_${lane.category.id}`);
             expect(icon.properties.width).toBe(icon.properties.height);
             expect(background.properties.height).toBe(target.block_unit_size);
-            expect(background.properties.clip).toEqual(target.vertical_viewport_rect);
+            expect(background.properties.clip).toEqual({ ...target.vertical_viewport_rect, x: 0, width: target.surface_rect.width });
             expect(icon.properties.clip).toEqual(lane.header_visible_rect);
             expect(lane.header_visible_rect.height).toBeLessThan(lane.header_rect.height);
         }
@@ -231,10 +235,10 @@ describe('Dashboard WebGPU records', () => {
         const target = layout();
         const before = buildDashboardRecords({ layout: target, tokens, now: new Date('2026-09-16T23:59:00') });
         const after = buildDashboardRecords({ layout: target, tokens, now: new Date('2026-09-17T00:00:00') });
-        expect(record(before, 'header_calendar_time').properties.text)
-            .not.toBe(record(after, 'header_calendar_time').properties.text);
-        expect(record(before, 'header_calendar_date').properties.text)
-            .not.toBe(record(after, 'header_calendar_date').properties.text);
+        expect(record(before, 'card_clock_time_calendar_dashboard_module_clock').properties.text)
+            .not.toBe(record(after, 'card_clock_time_calendar_dashboard_module_clock').properties.text);
+        expect(record(before, 'card_clock_date_calendar_dashboard_module_clock').properties.text)
+            .not.toBe(record(after, 'card_clock_date_calendar_dashboard_module_clock').properties.text);
     });
 
     it('keeps one minute-aligned clock timer and clears it on close and destroy', async () => {
@@ -286,7 +290,7 @@ describe('Dashboard WebGPU records', () => {
             expect(timers.size).toBe(1);
             const firstTimer = [...timers.values()][0];
             expect(firstTimer.delay).toBe(125);
-            const before = runtime.state.tree.root.children.find((node) => node.id === '__eve_dashboard_header_calendar_time')?.text;
+            const before = runtime.state.tree.root.children.find((node) => node.id === '__eve_dashboard_card_clock_time_calendar_dashboard_module_clock')?.text;
             timers.clear();
             currentTime = '2026-09-17T10:01:00.010';
             firstTimer.callback();
@@ -323,7 +327,7 @@ describe('Dashboard WebGPU records', () => {
 
     it('keeps calendar event title and date as independent projected text records', () => {
         const records = buildDashboardRecords({ layout: layout(), tokens });
-        expect(record(records, 'card_title_calendar_event-one').properties.text).toBe('Rendez-v.');
+        expect(record(records, 'card_title_calendar_event-one').properties.text).toBe('Rendez-vou.');
         expect(record(records, 'card_date_calendar_event-one').properties.text).toMatch(/09|16/);
     });
 

@@ -76,7 +76,7 @@ export function createHealthChannel({ invoke = null, host = 'web', getAuthToken 
 
     const call = async (command, payload = {}) => {
         if (!(await open())) return { ...HOST_UNSUPPORTED, error: refused || HOST_UNSUPPORTED.error };
-        const auth = getAuthToken();
+        const auth = await getAuthToken();
         try {
             const reply = await invoke(command, { ...payload, channel: token, auth: typeof auth === 'string' ? auth : null });
             return { ok: true, result: unwrap(reply) };

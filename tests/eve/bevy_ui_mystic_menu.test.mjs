@@ -19,8 +19,7 @@ import {
 } from '../../eVe/intuition/mystic/mystic_layout.js';
 import {
     MYSTIC_CENTER_FALLBACK, MYSTIC_CENTER_SLOT, MYSTIC_ITEM_SLOTS,
-    isMysticCenterItem, resolveMysticCenterItem, resolveMysticItemSlot, resolveMysticMenuLayout,
-    resolveMysticSlotFamily
+    isMysticCenterItem, resolveMysticCenterItem, resolveMysticItemSlot, resolveMysticMenuLayout
 } from '../../eVe/intuition/mystic/mystic_menu_items.js';
 import {
     INTUITION_MYSTIC_MODE, MYSTIC_CENTER_PLATE, MYSTIC_CENTER_TINT,
@@ -619,7 +618,7 @@ test('the material packs the tiles once, in one order, and flips y for the botto
     // The edge softness is capped on the seam this frame really has, so a plate's
     // anti-aliasing can never reach the middle of the gap between two cells.
     assert.deepEqual(uniforms.mystic_style, [
-        MYSTIC_PERSPECTIVE_TILES, 0, 0,
+        MYSTIC_PERSPECTIVE_TILES, 1, 0,
         resolveMysticEdgeSoftness(MYSTIC_TILE_GAP_PX)
     ]);
     for (const key of ['mystic_tiles', 'mystic_tile_motion', 'mystic_tile_colors']) {
@@ -631,13 +630,15 @@ test('the material packs the tiles once, in one order, and flips y for the botto
         tile.point[0], RECT.height - tile.point[1], TILE / 2, tile.radius
     ]);
     assert.deepEqual(uniforms.mystic_tile_motion[index], [0, 1, -1, 0]);
-    // The family belongs to the rung, not to the entry that landed on it.
-    assert.deepEqual(uniforms.mystic_tile_colors[index], [...resolveMysticFamilyColor('cross')]);
-    const diagonal = layout.tiles.findIndex((entry) => entry.slot === 'northWest');
-    assert.deepEqual(uniforms.mystic_tile_colors[diagonal], [...resolveMysticFamilyColor('orange')]);
-    assert.equal(resolveMysticSlotFamily('southEast'), 'blue');
-    assert.equal(resolveMysticSlotFamily('center'), 'center');
-    assert.equal(resolveMysticSlotFamily('unsupported'), 'cross');
+    // The colour belongs to the TOOL's family (shared/tool_family.js), never to
+    // the rung it landed on; a tile that names no family is a system tile.
+    assert.deepEqual(uniforms.mystic_tile_colors[index], [...resolveMysticFamilyColor('system')]);
+    const familied = buildMysticSurfaceUniforms({
+        tiles: layout.tiles.map((entry, i) => (i === index ? { ...entry, family: 'creation' } : entry)),
+        width: RECT.width, height: RECT.height
+    });
+    assert.deepEqual(familied.mystic_tile_colors[index], [...resolveMysticFamilyColor('creation')]);
+    assert.notDeepEqual(resolveMysticFamilyColor('creation'), resolveMysticFamilyColor('modification'));
     // The padding is never painted: the shader only walks `mystic_count.x` tiles.
     assert.deepEqual(uniforms.mystic_tiles[MYSTIC_MAX_TILES - 1], [0, 0, 0, 0]);
     // A frame pushed by the wave is the same shape as the one pushed at rest.

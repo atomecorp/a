@@ -15,11 +15,23 @@ const accountId = () => {
     return session?.mode === 'authenticated' ? (session.user?.id || null) : null;
 };
 
+// The local access token expires after 15 minutes: renew it through the same
+// owner as every other local API before handing it to the host, otherwise the
+// host answers `health_account_required` to a signed-in user. Imported lazily:
+// this module is evaluated in the boot wave, before the auth owner.
+const freshLocalToken = async () => {
+    try {
+        const { ensureLocalSession } = await import('../apis/unified/adole_api/auth_methods_login.js');
+        await ensureLocalSession();
+    } catch (_) { /* the host refuses a missing or expired token by itself */ }
+    return getToken(CONFIG.TAURI_TOKEN_KEY);
+};
+
 const native = resolveNativeHealthInvoke(env);
 const channel = createHealthChannel({
     invoke: native.invoke,
     host: native.host,
-    getAuthToken: () => getToken(CONFIG.TAURI_TOKEN_KEY)
+    getAuthToken: freshLocalToken
 });
 if (native.invoke) void channel.open();
 

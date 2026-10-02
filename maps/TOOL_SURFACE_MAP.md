@@ -1,5 +1,7 @@
 # Tool surface map — clé de menu ↔ `tool_id`
 
+2026-10-02 The existing Contact and Calendar surfaces expose explicit VCF/ICS export and collector stop/native options. VCF/ICS selected through the existing Import/Finder file path invoke the same public tool contracts; AI/MCP registration shares `atome/src/shared/personal_import_tools.js`. Existing source selection, project tasks and explicitly confirmed external push remain. Acceptance: `eVe/documentations/PERSONAL_IMPORT_VALIDATION_2026-10-02.md`.
+
 2026-10-01 Finder exposure follows V2 surface declarations and palette children; internal registry commands remain excluded. YouTube, Placeholder, Shape, Generator, New project and Stacking order have normal bootstrap declarations and reuse existing business owners. Entertainment uses normal activity taxonomy with YouTube/TV at beginner level. Static reachability on the current catalogue: 29 before the traversal fix, 95 after; isolated guest runtime after correction: 233 registered definitions, 102 actually exposed tools and 102 Finder results; exhaustive surface-to-registry-to-Finder comparison has zero missing tools. Full inventory: `eVe/documentations/FINDER_TOOLS_INVENTORY_2026-10-01.json`.
 
 Généré le 2026-09-24 depuis le contenu réel du menu principal (`getMainMenuRuntime().getContent()`, session invité dans l'espace de travail) et depuis `eVe/intuition/menu/context_menus.json`.
@@ -162,3 +164,7 @@ Hors `lasso`, les clés du tableau vivent dans `commands` ; les palettes `utilit
 - **Même `tool_id`, deux entrées** : `play` (`ui.play` pour un média sélectionné, `ui.project.transport` sur le fond de projet), `mode` et `utilities` (palette sans `tool_id`, enfants résolus par le contenu), `validation` = `ui.capture.validation` (aucune redéfinition).
 - **Plusieurs boutons pour un même `tool_id`** : `ui.page.create` (6 formats), `ui.placeholder.create` (6 types), `ui.record.actions.replay` (temps réel / état final), `ui.detail.record.toggle` (plusieurs clés d'enregistrement). Find montre un seul outil, nommé par le premier bouton.
 - **Libellés à revoir en i18n** (hors périmètre de l'étape 0) : `ecran`, `video`, `edit`, `enr.`, `to MIDI`, `laisser`.
+
+### 2026-10-02 — domain-specific exact opening
+
+Contacts remain the address-book service and panel. Calendars retain collections/sources and event membership; Dashboard event actions target the existing Calendar event editor. Exact Dashboard contact/event actions wait for registered surfaces, reveal the requested canonical object and show an explicit missing-object state. Moniteur > Nouveau opens the existing selector without authorization; selecting a measure owns the permission request. Dashboard project creation keeps guided choices and adds Empty project through the existing creator and shared project transition.
