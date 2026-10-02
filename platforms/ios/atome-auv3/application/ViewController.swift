@@ -9,6 +9,7 @@ import SwiftUI
 import WebKit
 
 final class FullscreenWebViewController: UIViewController {
+    private let bootBackgroundColor = UIColor(named: "LaunchBackground")!
     private(set) var webView: WKWebView!
     private let bootOverlay = UIView()
     private let bootLogo = UIImageView(image: UIImage(named: "LaunchLogo"))
@@ -152,7 +153,7 @@ final class FullscreenWebViewController: UIViewController {
 
     private func installBootOverlay(in root: UIView) {
         bootOverlay.translatesAutoresizingMaskIntoConstraints = false
-        bootOverlay.backgroundColor = .black
+        bootOverlay.backgroundColor = bootBackgroundColor
         bootOverlay.isOpaque = true
 
         bootLogo.translatesAutoresizingMaskIntoConstraints = false
@@ -208,7 +209,7 @@ final class FullscreenWebViewController: UIViewController {
             return
         }
         bootOverlay.layer.removeAllAnimations()
-        bootOverlay.backgroundColor = .black
+        bootOverlay.backgroundColor = bootBackgroundColor
         bootOverlay.isOpaque = true
         bootOverlay.isUserInteractionEnabled = true
         bootOverlay.alpha = 1
