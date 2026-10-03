@@ -6,6 +6,7 @@ import HealthKit
 extension AppNativeHealthController {
     private func failure(_ error: Error?) -> [String: Any] {
         let code = Self.statusCode(error)
+        Self.log.error("HealthKit query failed status=\(code, privacy: .public) domain=\((error as NSError?)?.domain ?? "unknown", privacy: .public) code=\((error as NSError?)?.code ?? 0)")
         return ["status": code, "reason": "healthkit_\(code)"]
     }
 

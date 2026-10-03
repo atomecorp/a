@@ -43,7 +43,7 @@ export const handleWsYoutubeSearch = async (message, address, {
     }
   }
   const params = new URLSearchParams({
-    part: 'snippet', type: 'video', q: query, maxResults: '10', key: apiKey
+    part: 'snippet', type: 'video', videoEmbeddable: 'true', videoSyndicated: 'true', q: query, maxResults: '10', key: apiKey
   });
   if (pageToken) params.set('pageToken', pageToken);
   try {

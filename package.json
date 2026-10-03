@@ -128,7 +128,8 @@
     "check:property-aliases": "node scripts/check_property_aliases.mjs",
     "bundle:porcupine": "node scripts/bundle-porcupine.js",
     "test:assistant-wake": "vitest run --config tests/voice_wake.vitest.config.mjs",
-    "bundle:ical": "node scripts/bundle-ical.js"
+    "bundle:ical": "node scripts/bundle-ical.js",
+    "bundle:hls": "node scripts/bundle-hls.js"
   },
   "devDependencies": {
     "@rollup/plugin-commonjs": "^28.0.6",
@@ -172,13 +173,14 @@
     "events": "^3.3.0",
     "fastify": "^5.8.5",
     "gsap": "^3.13.0",
+    "hls.js": "1.7.3",
+    "ical.js": "^2.2.1",
     "jsonwebtoken": "^9.0.2",
     "mediasoup": "^3.13.0",
     "mediasoup-client": "^3.18.3",
     "onnxruntime-web": "^1.27.0",
     "pino": "^9.5.0",
     "rubberband-wasm": "^3.3.0",
-    "uuid": "^9.0.1",
-    "ical.js": "^2.2.1"
+    "uuid": "^9.0.1"
   }
 }

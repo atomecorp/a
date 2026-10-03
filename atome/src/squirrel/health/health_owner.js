@@ -11,6 +11,7 @@
 
 import { getHealthMonitor, healthMonitorsForHost } from './health_catalog.js';
 import { normalizeHealthResult, requestRangeFor } from './health_values.js';
+import { buildLogEnvelope } from '../../shared/logging.js';
 
 const DEFAULT_POLL_MS = 60000;
 const INVALIDATION_EVENT = 'atome:native-health-invalidated';
@@ -65,11 +66,17 @@ export function createHealthOwner({
     const context = () => Object.freeze({ generation, accountId });
     const isCurrent = (ctx) => !sealed && ctx.generation === generation && ctx.accountId === accountId;
     const hidden = () => documentRef?.visibilityState === 'hidden';
+    const diagnose = (message, data) => {
+        if (globalThis.window?.__DEBUG__) console.info(buildLogEnvelope({
+            source: 'health', component: 'health_owner', level: 'debug', message, data
+        }));
+    };
 
     const publish = (monitorId, reading) => {
         if (reading.state === 'needs_permission' && refused.has(monitorId)) {
             reading = Object.freeze({ ...reading, state: 'denied', reasonCode: 'health_access_refused' });
         }
+        if (readings.get(monitorId)?.state !== reading.state) diagnose('Monitor state delivered', { monitorId, state: reading.state, reason: reading.reasonCode });
         readings.set(monitorId, reading);
         (consumers.get(monitorId) || new Set()).forEach((listener) => {
             try { listener(reading); } catch (_) { /* a consumer failure never blocks the others */ }
@@ -78,8 +85,11 @@ export function createHealthOwner({
 
     const call = async (command, payload, ctx) => {
         if (sealed || !family) return { ok: false, error: sealed ? 'health_access_sealed' : 'health_host_unsupported' };
+        if (!isCurrent(ctx)) return { ok: false, error: 'health_context_changed', stale: true };
+        if (command === 'health_request_access') diagnose('Native health command started', { command, monitors: payload.monitors });
         const reply = await channel.call(command, payload);
         if (!isCurrent(ctx)) return { ok: false, error: 'health_context_changed', stale: true };
+        if (command === 'health_request_access' || !reply.ok) diagnose('Native health reply received', { command, ok: reply.ok, completed: reply.result?.completed, error: reply.error || reply.result?.error });
         return reply;
     };
 
@@ -130,7 +140,8 @@ export function createHealthOwner({
                 const value = reply.ok
                     ? withRefusals({ available: reply.result?.available === true, reason: reply.result?.reason || null, monitors: reply.result?.monitors || {} })
                     : Object.freeze({ available: false, reason: reply.error, monitors: {} });
-                if (reply.ok) capabilities = value;
+                if (reply.ok && !Object.values(value.monitors).some(entry =>
+                    ['health_capability_check_failed', 'health_authorization_status_unknown'].includes(entry?.reason))) capabilities = value;
                 return value;
             });
         }
@@ -172,6 +183,7 @@ export function createHealthOwner({
     // Monitors the system will no longer ask about are not requested again
     // (no silent sheet-less loop): they are answered as `settings`.
     const requestAccess = (monitorIds) => {
+        const ctx = context();
         const known = capabilities?.monitors || {};
         const valid = (Array.isArray(monitorIds) ? monitorIds : [monitorIds]).filter((id) => getHealthMonitor(id));
         const settings = valid.filter((id) => refused.has(id) || SETTINGS_ONLY_ACCESS.has(known[id]?.access));
@@ -184,8 +196,7 @@ export function createHealthOwner({
         const pending = { ids: new Set(ids), promise: null };
         accessPending = pending;
         pending.promise = accessQueue = accessQueue.then(async () => {
-            accessPending = null;
-            const ctx = context();
+            if (accessPending === pending) accessPending = null;
             const requested = Array.from(pending.ids);
             const reply = await call('health_request_access', { monitors: requested }, ctx);
             if (reply.stale) return { ok: false, error: 'health_context_changed', requested };
@@ -197,9 +208,9 @@ export function createHealthOwner({
             if (reply.ok && reply.result?.completed !== false) notGranted.forEach((id) => refused.add(id));
             invalidateAccess();
             scheduleRead(requested.filter((id) => consumers.has(id)));
-            return reply.ok
+            return reply.ok && reply.result?.completed !== false
                 ? { ok: true, requested, ...(reply.result || {}) }
-                : { ok: false, error: reply.error, requested };
+                : { ...(reply.result || {}), ok: false, error: reply.error || reply.result?.error || 'health_access_request_failed', requested };
         });
         return pending.promise;
     };
@@ -231,10 +242,15 @@ export function createHealthOwner({
         for (let index = 0; index < ids.length; index += READ_BATCH_LIMIT) {
             const batch = ids.slice(index, index + READ_BATCH_LIMIT);
             const requests = batch.map((id) => ({ id, ...requestRangeFor(getHealthMonitor(id), nowMs) }));
+            const epoch = accessEpoch;
             batch.forEach((id) => inflight.set(id, ctx.generation));
             const reply = await call('health_read', { requests }, ctx);
             batch.forEach((id) => { if (inflight.get(id) === ctx.generation) inflight.delete(id); });
             if (reply.stale) return;
+            if (epoch !== accessEpoch) {
+                scheduleRead(batch.filter(id => consumers.has(id)));
+                continue;
+            }
             if (!reply.ok) {
                 const transient = reply.error === 'health_store_locked' || reply.error === 'health_rate_limited';
                 if (transient) backoffMs = Math.min(MAX_BACKOFF_MS, backoffMs ? backoffMs * 2 : pollMs);
@@ -320,6 +336,7 @@ export function createHealthOwner({
         capabilitiesPromise = null;
         linkState = null;
         refused.clear();
+        accessPending = null;
         inflight.clear();
         pendingReads = new Set();
         readings.clear();

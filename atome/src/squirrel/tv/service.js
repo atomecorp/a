@@ -65,6 +65,15 @@ export function createTvService({ channels = TV_CHANNELS, adapters = createTvPro
         const target = resolve(input.channel);
         if (!target.ok) return target;
         const channel = target.channel;
+        if (activePlayer && state.channel_id === channel.id && state.action_required === 'USER_GESTURE_REQUIRED') {
+            const token = revision;
+            const started = await activePlayer.play();
+            if (token !== revision) return fail('CANCELLED');
+            if (started?.ok === false) return fail(started.error);
+            state.action_required = null;
+            if (state.playback === 'user_action_required') state.playback = 'opened_unconfirmed';
+            return notify();
+        }
         const candidates = channel.routes.map(route => ({ route, adapter: adapters[route.provider],
             gate: adapters[route.provider]?.capabilities(route, context()) }));
         const candidate = candidates.filter(item => item.gate?.ok).sort((a, b) => (Number(b.route.priority) || 0) - (Number(a.route.priority) || 0))[0];

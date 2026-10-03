@@ -1,6 +1,7 @@
 import Foundation
 import WebKit
 import Security
+import os.log
 #if canImport(UIKit)
 import UIKit
 #endif
@@ -27,6 +28,7 @@ import CoreMotion
 //   generation neither answers with data nor re-arms an observer.
 final class AppNativeHealthController {
     static let shared = AppNativeHealthController()
+    static let log = Logger(subsystem: "atome", category: "Health")
 
     private static let commands: Set<String> = [
         "health_channel_open", "health_channel_close", "health_capabilities", "health_link_status",
@@ -157,7 +159,7 @@ final class AppNativeHealthController {
 
     private static func monitorIds(_ value: Any?) -> [String] {
         let ids = (value as? [Any] ?? []).compactMap { $0 as? String }.filter { HealthMonitorTable.spec($0) != nil }
-        return Array(Set(ids)).prefix(maxRequests).map { $0 }
+        return Array(Set(ids)).sorted()
     }
 
     // Verified on the canonical database queue, like every protected local API.
@@ -222,6 +224,7 @@ final class AppNativeHealthController {
         var monitors: [String: Any] = [:]
         #if canImport(HealthKit)
         let storeAvailable = HKHealthStore.isHealthDataAvailable()
+        Self.log.debug("HealthKit available=\(storeAvailable) monitors=\(ids.count)")
         var pendingTypes: [(String, Set<HKObjectType>)] = []
         #else
         let storeAvailable = false
@@ -257,19 +260,22 @@ final class AppNativeHealthController {
         guard !pendingTypes.isEmpty else {
             return reply(["available": storeAvailable, "host": "ios_app", "monitors": monitors])
         }
-        // Read grants are deliberately unknowable on HealthKit, but whether the
-        // sheet was already shown for a type is not: `shouldRequest` = never
-        // asked (the sheet will appear), `unnecessary` = already answered.
-        // Asking for the status never shows anything.
+        // Request status describes whether a sheet is needed, never read grants.
         let group = DispatchGroup()
         let lock = NSLock()
         for (id, types) in pendingTypes {
             group.enter()
             healthStore.getRequestStatusForAuthorization(toShare: [], read: types) { status, error in
-                let access = (error == nil && status == .shouldRequest) ? "not_determined" : "unknowable"
+                Self.log.debug("Capability monitor=\(id, privacy: .public) request_status=\(status.rawValue)")
                 lock.lock()
-                monitors[id] = error == nil ? ["supported": true, "access": access]
-                    : ["supported": false, "reason": "health_capability_check_failed"]
+                if let error {
+                    Self.log.error("Capability failed domain=\((error as NSError).domain, privacy: .public) code=\((error as NSError).code)")
+                    monitors[id] = ["supported": false, "reason": "health_capability_check_failed"]
+                } else if status == .unknown {
+                    monitors[id] = ["supported": false, "reason": "health_authorization_status_unknown"]
+                } else {
+                    monitors[id] = ["supported": true, "access": status == .shouldRequest ? "not_determined" : "unknowable"]
+                }
                 lock.unlock()
                 group.leave()
             }
@@ -301,7 +307,8 @@ final class AppNativeHealthController {
         let wantsMotion = false
         #endif
         #if canImport(HealthKit)
-        let readTypes = Set(specs.flatMap { Array($0.authorizationTypes() ?? []) })
+        let readTypes = Set(specs.filter { $0.kind != .pedometer }.flatMap { Array($0.authorizationTypes() ?? []) })
+        Self.log.debug("Authorization read_types=\(readTypes.map { $0.identifier }.sorted().joined(separator: ","), privacy: .public)")
         guard HKHealthStore.isHealthDataAvailable() || readTypes.isEmpty else {
             accessInFlight = false
             return fail("health_store_unavailable")
@@ -317,14 +324,23 @@ final class AppNativeHealthController {
             #endif
         }
         guard !readTypes.isEmpty else { return requestMotion() }
-        DispatchQueue.main.async {
-            // Read only: the share set is always empty. Success means the
-            // procedure completed, NOT that every read type was granted.
-            self.healthStore.requestAuthorization(toShare: [], read: readTypes) { success, error in
-                if !success {
-                    return finish(["completed": false, "error": Self.statusCode(error)])
+        healthStore.getRequestStatusForAuthorization(toShare: [], read: readTypes) { status, error in
+            Self.log.debug("Authorization request_status=\(status.rawValue)")
+            if let error {
+                Self.log.error("Authorization status failed domain=\((error as NSError).domain, privacy: .public) code=\((error as NSError).code)")
+                return finish(["completed": false, "error": "health_authorization_status_check_failed"])
+            }
+            guard status != .unknown else { return finish(["completed": false, "error": "health_authorization_status_unknown"]) }
+            DispatchQueue.main.async {
+                guard self.stateQueue.sync(execute: { self.current(generation) }) else { return finish(["completed": false, "error": "health_context_changed"]) }
+                guard status == .shouldRequest else { return requestMotion() }
+                Self.log.debug("HealthKit requestAuthorization started")
+                // Success means the procedure completed, not that reads were granted.
+                self.healthStore.requestAuthorization(toShare: [], read: readTypes) { success, error in
+                    Self.log.debug("Authorization callback completed=\(success) error_code=\((error as NSError?)?.code ?? 0)")
+                    if !success || error != nil { return finish(["completed": false, "error": "healthkit_\(Self.statusCode(error))"]) }
+                    requestMotion()
                 }
-                requestMotion()
             }
         }
         #else
@@ -407,7 +423,9 @@ final class AppNativeHealthController {
         for (id, start, end) in valid {
             guard let spec = HealthMonitorTable.spec(id) else { continue }
             group.enter()
+            Self.log.debug("Health read started monitor=\(id, privacy: .public)")
             readOne(spec, from: start, to: end) { result in
+                Self.log.debug("Health read reply monitor=\(id, privacy: .public) status=\(result["status"] as? String ?? "error", privacy: .public)")
                 lock.lock(); results[id] = result; lock.unlock()
                 group.leave()
             }

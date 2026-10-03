@@ -1,15 +1,20 @@
 use bevy::{
+    asset::RenderAssetUsages,
     image::{Image, ImageAddressMode, ImageFilterMode, ImageSampler, ImageSamplerDescriptor},
+    mesh::{Indices, Mesh, Mesh2d},
     prelude::*,
+    render::render_resource::PrimitiveTopology,
 };
 
 use crate::{
     render_math::{color_from_rgba, BEVY_LAYER_DEPTH_LIMIT},
     texture::image_handle_from_texture,
     types::{
-        AtomeSurfaceBackground, AtomeSurfaceBackgroundImage, AtomeSurfaceBackgroundPatch,
-        AtomeSurfaceBackgroundVisual, AtomeBevyRendererConfig,
+        AtomeColorFilters, AtomeSurfaceBackground, AtomeSurfaceBackgroundImage,
+        AtomeSurfaceBackgroundPatch, AtomeSurfaceBackgroundVideo, AtomeSurfaceBackgroundVisual,
+        AtomeBevyRendererConfig, AtomeTransition,
     },
+    video_external_texture::AtomeVideoExternalTexture,
 };
 
 const BACKGROUND_DEPTH: f32 = -BEVY_LAYER_DEPTH_LIMIT - 1.0;
@@ -61,22 +66,133 @@ pub(crate) fn tile_size(surface_width: f32, surface_height: f32, device_pixel_ra
 }
 
 /// The texture region the full-surface sprite samples so the repeat sampler
-/// lays tiles of `tile_size`, one tile centred on the surface centre.
-fn tile_source_rect(surface_width: f32, surface_height: f32, device_pixel_ratio: f32, texture_size: [u32; 2]) -> Rect {
+/// lays tiles. A file tiled at its own size (`explicit_tile`) starts at the
+/// top-left corner, like a CSS `background-repeat`: growing or rotating the
+/// surface only reveals more tiles, the ones already on screen never move. The
+/// bundled wallpaper keeps its screen-relative tile, centred on the surface.
+pub(crate) fn tile_source_rect(
+    surface_width: f32,
+    surface_height: f32,
+    device_pixel_ratio: f32,
+    texture_size: [u32; 2],
+    explicit_tile: Option<Vec2>,
+) -> Rect {
     let [texture_width, texture_height] = texture_size;
     let texture = Vec2::new(texture_width.max(1) as f32, texture_height.max(1) as f32);
+    let surface = Vec2::new(surface_width.max(1.0), surface_height.max(1.0));
+    if let Some(tile) = explicit_tile {
+        return Rect::from_corners(Vec2::ZERO, surface / tile.max(Vec2::ONE) * texture);
+    }
     let tile = tile_size(surface_width, surface_height, device_pixel_ratio, texture_size);
-    let span = Vec2::new(surface_width.max(1.0), surface_height.max(1.0)) / tile * texture;
+    let span = surface / tile * texture;
     let centre = texture * 0.5;
     Rect::from_corners(centre - span * 0.5, centre + span * 0.5)
 }
 
-fn surface_source_rect(world: &World, tiled: bool, texture_size: Option<[u32; 2]>) -> Option<Rect> {
-    let config = world.resource::<AtomeBevyRendererConfig>();
+fn surface_source_rect(
+    surface_width: f32,
+    surface_height: f32,
+    device_pixel_ratio: f32,
+    tiled: bool,
+    texture_size: Option<[u32; 2]>,
+    explicit_tile: Option<Vec2>,
+) -> Option<Rect> {
     match (tiled, texture_size) {
-        (true, Some(size)) => Some(tile_source_rect(config.width, config.height, config.device_pixel_ratio, size)),
-        _ => cover_source_rect(config.width, config.height, texture_size),
+        (true, Some(size)) => Some(tile_source_rect(surface_width, surface_height, device_pixel_ratio, size, explicit_tile)),
+        _ => cover_source_rect(surface_width, surface_height, texture_size),
     }
+}
+
+/// The quad and UVs of an animated wallpaper. Tiled: the quad covers the
+/// surface and its UVs run past 1, one unit per tile from the top-left corner
+/// (the video shader wraps them). Otherwise the whole video, undistorted and
+/// centred, like a `contain` image.
+pub(crate) fn video_background_geometry(
+    surface_width: f32,
+    surface_height: f32,
+    video: &AtomeSurfaceBackgroundVideo,
+) -> (Vec2, [f32; 4]) {
+    let surface = Vec2::new(surface_width.max(1.0), surface_height.max(1.0));
+    if video.tiled {
+        let tile = video
+            .tile_size
+            .unwrap_or_else(|| Vec2::new(video.video_size[0].max(1) as f32, video.video_size[1].max(1) as f32))
+            .max(Vec2::ONE);
+        let span = surface / tile;
+        return (surface, [0.0, 0.0, span.x, span.y]);
+    }
+    (contain_size(surface_width, surface_height, video.video_size), [0.0, 0.0, 1.0, 1.0])
+}
+
+fn video_background_mesh(size: Vec2, uv: [f32; 4]) -> Mesh {
+    let half = size * 0.5;
+    let [left, top, width, height] = uv;
+    let (right, bottom) = (left + width, top + height);
+    let mut mesh = Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages::default());
+    mesh.insert_attribute(
+        Mesh::ATTRIBUTE_POSITION,
+        vec![
+            [-half.x, -half.y, 0.0],
+            [half.x, -half.y, 0.0],
+            [-half.x, half.y, 0.0],
+            [half.x, half.y, 0.0],
+        ],
+    );
+    mesh.insert_attribute(
+        Mesh::ATTRIBUTE_UV_0,
+        vec![[left, bottom], [right, bottom], [left, top], [right, top]],
+    );
+    mesh.insert_indices(Indices::U32(vec![0, 1, 2, 2, 1, 3]));
+    mesh
+}
+
+fn video_background_mesh_handle(
+    world: &mut World,
+    surface_width: f32,
+    surface_height: f32,
+    video: &AtomeSurfaceBackgroundVideo,
+) -> Result<Handle<Mesh>, String> {
+    let (size, uv) = video_background_geometry(surface_width, surface_height, video);
+    let mut meshes = world
+        .get_resource_mut::<Assets<Mesh>>()
+        .ok_or_else(|| "bevy_mesh_assets_required".to_string())?;
+    Ok(meshes.add(video_background_mesh(size, uv)))
+}
+
+// Below every atome layer (depth_for_layer clamps there), above the fill.
+const BACKGROUND_VIDEO_LAYER: i32 = -(BEVY_LAYER_DEPTH_LIMIT as i32);
+
+fn spawn_background_video(
+    world: &mut World,
+    patch: &AtomeSurfaceBackgroundPatch,
+    surface_width: f32,
+    surface_height: f32,
+) -> Result<(), String> {
+    let Some(source) = patch.video_source() else {
+        return Ok(());
+    };
+    let video = AtomeSurfaceBackgroundVideo {
+        video_size: [source.width, source.height],
+        tile_size: patch.explicit_tile_size(),
+        tiled: patch.is_video_tile(),
+    };
+    let mesh = video_background_mesh_handle(world, surface_width, surface_height, &video)?;
+    world.spawn((
+        video,
+        Mesh2d(mesh),
+        AtomeVideoExternalTexture {
+            id: source.id.clone(),
+            layer: BACKGROUND_VIDEO_LAYER,
+            opacity: 1.0,
+            uv_rect: [0.0, 0.0, 1.0, 1.0],
+            filters: AtomeColorFilters::identity(),
+            transition: AtomeTransition::none(),
+            mask_texture: None,
+        },
+        Transform::from_translation(Vec3::new(0.0, 0.0, BACKGROUND_IMAGE_DEPTH)),
+        Visibility::Visible,
+    ));
+    Ok(())
 }
 
 fn set_repeat_sampler(images: &mut Assets<Image>, handle: &Handle<Image>) {
@@ -126,7 +242,7 @@ fn background_sprite(
 
 fn despawn_background_images(world: &mut World) {
     let entities: Vec<Entity> = world
-        .query_filtered::<Entity, With<AtomeSurfaceBackgroundImage>>()
+        .query_filtered::<Entity, Or<(With<AtomeSurfaceBackgroundImage>, With<AtomeSurfaceBackgroundVideo>)>>()
         .iter(world)
         .collect();
     for entity in entities {
@@ -169,9 +285,9 @@ pub fn apply_surface_background(
         .query_filtered::<Entity, With<AtomeSurfaceBackground>>()
         .iter(world)
         .next();
-    let (surface_width, surface_height) = {
+    let (surface_width, surface_height, device_pixel_ratio) = {
         let config = world.resource::<AtomeBevyRendererConfig>();
-        (config.width, config.height)
+        (config.width, config.height, config.device_pixel_ratio)
     };
     let (sprite, fill_handle, fill_size) = {
         let mut images = world
@@ -183,8 +299,10 @@ pub fn apply_surface_background(
     if patch.is_contain() {
         spawn_background_image(world, &patch, surface_width, surface_height)?;
     }
+    spawn_background_video(world, &patch, surface_width, surface_height)?;
     let tiled = patch.is_tile();
-    let rect = surface_source_rect(world, tiled, fill_size);
+    let tile_size = patch.explicit_tile_size();
+    let rect = surface_source_rect(surface_width, surface_height, device_pixel_ratio, tiled, fill_size, tile_size);
     let components = (
         AtomeSurfaceBackground,
         AtomeSurfaceBackgroundVisual {
@@ -192,6 +310,7 @@ pub fn apply_surface_background(
             texture_size: fill_size,
             image_handle: fill_handle,
             tiled,
+            tile_size,
         },
         Sprite {
             custom_size: Some(Vec2::new(surface_width, surface_height)),
@@ -216,13 +335,28 @@ pub fn resize_surface_background(world: &mut World) {
     let mut query = world.query::<(&mut Sprite, &AtomeSurfaceBackgroundVisual)>();
     for (mut sprite, visual) in query.iter_mut(world) {
         sprite.custom_size = Some(Vec2::new(surface_width, surface_height));
-        sprite.rect = match (visual.tiled, visual.texture_size) {
-            (true, Some(size)) => Some(tile_source_rect(surface_width, surface_height, device_pixel_ratio, size)),
-            _ => cover_source_rect(surface_width, surface_height, visual.texture_size),
-        };
+        sprite.rect = surface_source_rect(
+            surface_width,
+            surface_height,
+            device_pixel_ratio,
+            visual.tiled,
+            visual.texture_size,
+            visual.tile_size,
+        );
     }
     let mut images = world.query::<(&mut Sprite, &AtomeSurfaceBackgroundImage)>();
     for (mut sprite, image) in images.iter_mut(world) {
         sprite.custom_size = Some(contain_size(surface_width, surface_height, image.texture_size));
+    }
+    // A video quad is rebuilt at the new size: more tiles, never a stretch.
+    let videos: Vec<(Entity, AtomeSurfaceBackgroundVideo)> = world
+        .query::<(Entity, &AtomeSurfaceBackgroundVideo)>()
+        .iter(world)
+        .map(|(entity, video)| (entity, video.clone()))
+        .collect();
+    for (entity, video) in videos {
+        if let Ok(mesh) = video_background_mesh_handle(world, surface_width, surface_height, &video) {
+            world.entity_mut(entity).insert(Mesh2d(mesh));
+        }
     }
 }

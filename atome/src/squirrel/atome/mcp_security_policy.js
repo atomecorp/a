@@ -1,5 +1,7 @@
 import { PERSONAL_IMPORT_TOOLS } from '#shared/personal_import_tools.js';
 import { TV_COMMANDS } from '../tv/contracts.js';
+import { SOCIAL_COMMANDS } from '../social/contracts.js';
+const SOCIAL_CONFIRMED = ['social.connect', 'social.publish', 'social.disconnect'];
 import { cloneValue } from './mcp_core.js';
 import { listMcpPromptEntries, listMcpResourceEntries } from './mcp_resources.js';
 import { normalizeRuntimeToolIdentifier } from './mcp_runtime.js';
@@ -123,6 +125,7 @@ export function listAclRules() {
             { subject: 'calendar.update', access: 'confirm', required_capabilities: ['calendar.write'] },
             { subject: 'calendar.delete', access: 'confirm', required_capabilities: ['calendar.write'] },
             { subject: 'calendar.share', access: 'confirm', required_capabilities: ['calendar.write', 'share.write'] },
+            ...SOCIAL_COMMANDS.map(command => ({ subject: command.name, required_capabilities: [command.capability], access: SOCIAL_CONFIRMED.includes(command.name) ? 'confirm' : 'allow' })),
             {
                 subject: 'runtime.tools.call:ui.capture.*',
                 access: 'confirm',
@@ -274,16 +277,19 @@ export function resolveAccessPolicy(method, params = {}) {
             idempotent: true
         };
     }
-    if (normalizedMethod.startsWith('tv.')) {
-        const command = TV_COMMANDS.find(entry => entry.name === normalizedMethod);
-        return { ...defaultPolicy, scope: 'tool', subject: normalizedMethod,
-            required_capabilities: command ? [command.capability] : ['tv.control'] };
+    // Contract commands (TV, social), direct or via runtime.tools.call. Social connect, publish
+    // and disconnect act on an external account (SOCIAL_CONFIRMED) and need confirmation.
+    const contractId = normalizedMethod === 'runtime.tools.call' ? normalizeRuntimeToolIdentifier(params) : normalizedMethod;
+    const contract = [...TV_COMMANDS, ...SOCIAL_COMMANDS].find(entry => entry.name === contractId);
+    if (contract || normalizedMethod.startsWith('tv.')) {
+        const confirm = SOCIAL_CONFIRMED.includes(contract?.name);
+        return { ...defaultPolicy, scope: 'tool', subject: contractId, required_capabilities: [contract?.capability || 'tv.control'],
+            ...(confirm ? { access: 'confirm', confirmation_required: true, proposal_required: contract.name === 'social.publish', sensitive: true } : {}),
+            ...(contract?.name.startsWith('social.') ? { idempotent: contract.name !== 'social.connect' } : {}) };
     }
     if (normalizedMethod === 'runtime.tools.call') {
         const toolId = normalizeRuntimeToolIdentifier(params);
         if (PERSONAL_IMPORT_TOOLS.some(tool => tool.name === toolId)) return resolveAccessPolicy(toolId, params.input || {});
-        const tvCommand = TV_COMMANDS.find(entry => entry.name === toolId);
-        if (tvCommand) return { ...defaultPolicy, scope: 'tool', subject: toolId, required_capabilities: [tvCommand.capability] };
         const timelineCapabilities = resolveTimelineToolCapability(toolId);
         if (timelineCapabilities) {
             return {

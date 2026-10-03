@@ -94,6 +94,8 @@ tests/shared/*
 !tests/shared/semantic_rename_contract.test.mjs
 !tests/eve/
 tests/eve/*
+!tests/eve/dashboard_creation_contract.test.mjs
+!tests/eve/dashboard_project_change_events.test.mjs
 !tests/eve/finder_import_context.test.mjs
 !tests/eve/context_menu_resolver.test.mjs
 !tests/eve/bevy_ui_mystic_menu.test.mjs
@@ -299,3 +301,8 @@ eve/application
 !tests/server/ws_personal_import.test.mjs
 !tests/eve/personal_import_lifecycle.test.mjs
 !tests/eve/personal_calendar_crud.test.mjs
+
+# YouTube and TV Finder/player regression suites
+!tests/eve/finder_media_input.test.mjs
+!tests/eve/youtube_player_lifecycle.test.mjs
+!tests/eve/tv_catalog_transport.test.mjs

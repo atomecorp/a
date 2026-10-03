@@ -14,10 +14,10 @@ static void initialize(void) {
         contacts = [CNContactStore new]; events = [EKEventStore new];
         NSNotificationCenter *center = NSNotificationCenter.defaultCenter;
         observers = @[
-            [center addObserverForName:CNContactStoreDidChangeNotification object:nil queue:nil usingBlock:^(NSNotification *n) {
+            [center addObserverForName:CNContactStoreDidChangeNotification object:nil queue:nil usingBlock:^(NSNotification *__unused n) {
                 if (changed) changed("contact");
             }],
-            [center addObserverForName:EKEventStoreChangedNotification object:nil queue:nil usingBlock:^(NSNotification *n) {
+            [center addObserverForName:EKEventStoreChangedNotification object:nil queue:nil usingBlock:^(NSNotification *__unused n) {
                 if (changed) changed("calendar_event");
             }]
         ];
@@ -45,7 +45,7 @@ static NSDictionary *readContacts(NSDictionary *options) {
     CNAuthorizationStatus status = [CNContactStore authorizationStatusForEntityType:CNEntityTypeContacts];
     if (status == CNAuthorizationStatusNotDetermined) {
         dispatch_semaphore_t signal = dispatch_semaphore_create(0);
-        [contacts requestAccessForEntityType:CNEntityTypeContacts completionHandler:^(BOOL granted, NSError *error) {
+        [contacts requestAccessForEntityType:CNEntityTypeContacts completionHandler:^(BOOL __unused granted, NSError *__unused error) {
             dispatch_semaphore_signal(signal);
         }];
         if (dispatch_semaphore_wait(signal, dispatch_time(DISPATCH_TIME_NOW, 60 * NSEC_PER_SEC)))
@@ -124,7 +124,7 @@ static NSDictionary *readCalendar(NSDictionary *options) {
     EKAuthorizationStatus status = [EKEventStore authorizationStatusForEntityType:EKEntityTypeEvent];
     if (status == EKAuthorizationStatusNotDetermined) {
         dispatch_semaphore_t signal = dispatch_semaphore_create(0);
-        void (^complete)(BOOL, NSError *) = ^(BOOL granted, NSError *error) { dispatch_semaphore_signal(signal); };
+        void (^complete)(BOOL, NSError *) = ^(BOOL __unused granted, NSError *__unused error) { dispatch_semaphore_signal(signal); };
         if (@available(macOS 14.0, *)) [events requestFullAccessToEventsWithCompletion:complete];
         else [events requestAccessToEntityType:EKEntityTypeEvent completion:complete];
         if (dispatch_semaphore_wait(signal, dispatch_time(DISPATCH_TIME_NOW, 60 * NSEC_PER_SEC))) return failure(@"calendar_permission_timeout");

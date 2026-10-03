@@ -19,6 +19,8 @@ test('YouTube search requests videos only and returns bounded Finder data', asyn
         }
     });
     assert.equal(requested.searchParams.get('type'), 'video');
+    assert.equal(requested.searchParams.get('videoEmbeddable'), 'true');
+    assert.equal(requested.searchParams.get('videoSyndicated'), 'true');
     assert.equal(requested.searchParams.get('q'), 'music');
     assert.equal(requested.searchParams.get('pageToken'), 'next-page');
     assert.equal(requested.searchParams.get('maxResults'), '10');

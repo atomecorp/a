@@ -99,6 +99,12 @@ final class FullscreenWebViewController: UIViewController {
                     payload: payload,
                     completion: completion
                 )
+            } else if NativeCalendarAlarm.canHandle(command: command) {
+                NativeCalendarAlarm.shared.handle(
+                    command: command,
+                    payload: payload,
+                    completion: completion
+                )
             } else {
                 AppNativeAudioController.shared.handle(
                     command: command,

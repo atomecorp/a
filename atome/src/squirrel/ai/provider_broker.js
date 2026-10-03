@@ -54,7 +54,20 @@ const PROVIDER_ACTION_TIMEOUT_MS = Object.freeze({
     'video.generate': 60000,
     'video.job': 30000,
     'video.cancel': 30000,
-    'video.output': 180000
+    'video.output': 180000,
+    // Social sharing: the official login page waits for the user; a provider
+    // may process a long video for minutes inside one publish request.
+    'social.accounts': 30000,
+    'social.connect.start': 15000,
+    'social.connect.await': 660000,
+    'social.connect.cancel': 15000,
+    'social.disconnect': 30000,
+    'social.prepare': 300000,
+    'social.publish': 1200000,
+    'social.status': 300000,
+    'social.cancel': 60000,
+    'social.handoff': 15000,
+    'social.confirm': 15000
 });
 const DEFAULT_PROVIDER_TIMEOUT_MS = 180000;
 
@@ -142,6 +155,8 @@ export const requestProviderService = async (action, payload = {}, {
                 ? 'provider_route_unanswered'
                 : (result?.error || 'provider_request_failed'));
             error.http_status = result?.http_status;
+            if (result?.detail) error.detail = result.detail;
+            if (result?.provider_code) error.provider_code = result.provider_code;
             // The relay's own word for it is “no principal”; the reason the link
             // could not be rebuilt is the only actionable half.
             if (linkReason) error.link_reason = linkReason;

@@ -921,6 +921,7 @@ fn surface_background_contain_shows_whole_image_undistorted_over_backdrop() {
             texture: wide(),
             fit: Some("contain".to_string()),
             backdrop: Some(AtomeTexture { animation: None, width: 3, height: 2, rgba: vec![128; 3 * 2 * 4] }),
+            ..Default::default()
         },
     )
     .unwrap();
@@ -965,6 +966,7 @@ fn surface_background_contain_shows_whole_image_undistorted_over_backdrop() {
             texture: wide(),
             fit: Some("contain".to_string()),
             backdrop: None,
+            ..Default::default()
         },
     )
     .unwrap();
@@ -995,6 +997,7 @@ fn surface_background_tile_repeats_seamless_image_at_screen_relative_size() {
             texture: Some(AtomeTexture { animation: None, width: 1254, height: 1254, rgba: vec![255; 1254 * 1254 * 4] }),
             fit: Some("tile".to_string()),
             backdrop: None,
+            ..Default::default()
         },
     )
     .unwrap();
@@ -1029,6 +1032,115 @@ fn surface_background_tile_repeats_seamless_image_at_screen_relative_size() {
     .unwrap();
     let resized = world.get::<Sprite>(entity).unwrap().rect.unwrap();
     assert_vec2_near(Some(resized.size()), Vec2::new(1254.0 * 390.0 / 506.4, 1254.0 * 844.0 / 506.4));
+}
+
+#[test]
+fn surface_background_tile_keeps_the_file_size_from_the_top_left_corner() {
+    let mut world = World::new();
+    world.insert_resource(AtomeEntityTable::default());
+    world.insert_resource(AtomeBevyRendererConfig::empty(1000.0, 500.0));
+    world.insert_resource(AtomeRendererDiagnostics::default());
+    world.insert_resource(Assets::<Image>::default());
+
+    // A 64 x 32 texture, decoded at 128 x 64 (a denser copy): the tile is the
+    // file's logical size, never a screen fraction and never an upscale.
+    let entity = background::apply_surface_background(
+        &mut world,
+        AtomeSurfaceBackgroundPatch {
+            signature: "tile:file".to_string(),
+            color: [0.0, 0.0, 0.0, 1.0],
+            texture: Some(AtomeTexture { animation: None, width: 128, height: 64, rgba: vec![255; 128 * 64 * 4] }),
+            fit: Some("tile".to_string()),
+            tile_size: Some([64.0, 32.0]),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    let sprite = world.get::<Sprite>(entity).unwrap();
+    assert_vec2_near(sprite.custom_size, Vec2::new(1000.0, 500.0));
+    let rect = sprite.rect.unwrap();
+    // 1000 / 64 = 15.625 tiles across, 500 / 32 = 15.625 down, in texels.
+    assert_vec2_near(Some(rect.min), Vec2::ZERO);
+    assert_vec2_near(Some(rect.max), Vec2::new(15.625 * 128.0, 15.625 * 64.0));
+
+    // Rotation to portrait: more tiles down, fewer across, the same tile size,
+    // and the first tile stays in the top-left corner.
+    apply_surface(
+        &mut world,
+        AtomeSurfacePatch { width: 390.0, height: 844.0, pixel_width: None, pixel_height: None, device_pixel_ratio: None },
+    )
+    .unwrap();
+    let resized = world.get::<Sprite>(entity).unwrap().rect.unwrap();
+    assert_vec2_near(Some(resized.min), Vec2::ZERO);
+    assert_vec2_near(Some(resized.max), Vec2::new(390.0 / 64.0 * 128.0, 844.0 / 32.0 * 64.0));
+}
+
+#[test]
+fn surface_background_video_tiles_one_quad_with_wrapping_uvs() {
+    let mut world = World::new();
+    world.insert_resource(AtomeEntityTable::default());
+    world.insert_resource(AtomeBevyRendererConfig::empty(1000.0, 500.0));
+    world.insert_resource(AtomeRendererDiagnostics::default());
+    world.insert_resource(Assets::<Image>::default());
+    world.insert_resource(Assets::<Mesh>::default());
+
+    let video_patch = |fit: &str| AtomeSurfaceBackgroundPatch {
+        signature: format!("video:{fit}"),
+        color: [0.0, 0.0, 0.0, 1.0],
+        fit: Some(fit.to_string()),
+        tile_size: Some([200.0, 100.0]),
+        video: Some(AtomeSurfaceBackgroundVideoSource { id: "bg_video".to_string(), width: 400, height: 200 }),
+        ..Default::default()
+    };
+    background::apply_surface_background(&mut world, video_patch("tile")).unwrap();
+
+    // ONE quad, one video source: every tile samples the same frame.
+    let quads: Vec<(Entity, String, AtomeSurfaceBackgroundVideo)> = world
+        .query::<(Entity, &crate::video_external_texture::AtomeVideoExternalTexture, &AtomeSurfaceBackgroundVideo)>()
+        .iter(&world)
+        .map(|(entity, texture, video)| (entity, texture.id.clone(), video.clone()))
+        .collect();
+    assert_eq!(quads.len(), 1);
+    assert_eq!(quads[0].1, "bg_video");
+    let uvs = |world: &World, entity: Entity| {
+        let handle = world.get::<bevy::mesh::Mesh2d>(entity).unwrap().0.clone();
+        let mesh = world.resource::<Assets<Mesh>>().get(&handle).unwrap();
+        let Some(VertexAttributeValues::Float32x2(values)) = mesh.attribute(Mesh::ATTRIBUTE_UV_0) else {
+            panic!("uv expected")
+        };
+        values.clone()
+    };
+    // 1000 / 200 = 5 tiles across, 500 / 100 = 5 down.
+    assert!(uvs(&world, quads[0].0).contains(&[5.0, 5.0]));
+    assert!(uvs(&world, quads[0].0).contains(&[0.0, 0.0]));
+    let (size, uv) = background::video_background_geometry(1000.0, 500.0, &quads[0].2);
+    assert_vec2_near(Some(size), Vec2::new(1000.0, 500.0));
+    assert_eq!(uv, [0.0, 0.0, 5.0, 5.0]);
+
+    // A resize rebuilds the quad: more tiles, same tile size.
+    apply_surface(
+        &mut world,
+        AtomeSurfacePatch { width: 400.0, height: 800.0, pixel_width: None, pixel_height: None, device_pixel_ratio: None },
+    )
+    .unwrap();
+    assert!(uvs(&world, quads[0].0).contains(&[2.0, 8.0]));
+
+    // Not tiled: the whole video, undistorted, UVs inside [0,1].
+    background::apply_surface_background(&mut world, video_patch("contain")).unwrap();
+    let videos: Vec<AtomeSurfaceBackgroundVideo> =
+        world.query::<&AtomeSurfaceBackgroundVideo>().iter(&world).cloned().collect();
+    assert_eq!(videos.len(), 1);
+    let (size, uv) = background::video_background_geometry(400.0, 800.0, &videos[0]);
+    assert_vec2_near(Some(size), Vec2::new(400.0, 200.0));
+    assert_eq!(uv, [0.0, 0.0, 1.0, 1.0]);
+
+    // Back to a colour: no video quad is left behind.
+    background::apply_surface_background(
+        &mut world,
+        AtomeSurfaceBackgroundPatch { signature: "solid".to_string(), color: [0.2, 0.2, 0.2, 1.0], ..Default::default() },
+    )
+    .unwrap();
+    assert_eq!(world.query::<&AtomeSurfaceBackgroundVideo>().iter(&world).count(), 0);
 }
 
 #[test]

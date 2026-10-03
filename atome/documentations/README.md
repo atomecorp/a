@@ -10,6 +10,7 @@ Primary framework contracts:
 - security_architecture.md and sync_protocol.md: security and synchronization contracts.
 - CRUD_apis.md, AI.md, and tools_api_and_coding.md: mutation, AI, and tool interfaces.
 - AUv3_API_Reference.md, media_capture_apis.md, and the AUv3 platform guides: active platform references.
+- [social_sharing.md](social_sharing.md): TikTok, Instagram and Facebook connections and publishing, official routes, delivery statuses and the producer contract (ZRecord Canvas).
 
 Build and release paths:
 

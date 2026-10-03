@@ -32,7 +32,7 @@ extension WebViewManager {
                                                   command: String,
                                                   payload: [String: Any]) {
         guard !requestId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
-        if ["macos_contacts_snapshot", "native_calendar_snapshot", "export_file_save"].contains(command) {
+        if ["macos_contacts_snapshot", "native_calendar_snapshot", "export_file_save", "export_file_share"].contains(command) {
             NativePersonalImport.shared.handle(command, payload: payload) { response, error in
                 sendNativeInvokeResponse(requestId: requestId, payload: response, error: error)
             }

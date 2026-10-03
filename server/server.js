@@ -99,6 +99,7 @@ import {
 import { handleShareMessage } from './sharing_message_api.js';
 import { buildUserExportZip, inspectUserExportZip, importUserExportZip } from './userExportImport.js';
 import { registerMailRoutes } from './mailRoutes.js';
+import { registerSocialRoutes } from './social/social_oauth.js';
 import {
   registerFileUpload,
   resolveOwnerPrincipal,
@@ -597,7 +598,7 @@ async function startServer() {
     });
 
     server.addHook('onResponse', async (request, reply) => {
-      if (request.url.startsWith('/auth/v/')) return;
+      if (request.url.startsWith('/auth/v/') || request.url.startsWith('/api/social/')) return;
       if (MINIMAL_LOGS && reply.statusCode < 400) return;
       const durationMs = Date.now() - (request._requestStartMs || Date.now());
       logStructured('info', {
@@ -614,7 +615,7 @@ async function startServer() {
     });
 
     server.addHook('onError', async (request, reply, error) => {
-      if (request.url.startsWith('/auth/v/')) return;
+      if (request.url.startsWith('/auth/v/') || request.url.startsWith('/api/social/')) return;
       const lifecycle = classifyHttpLifecycleError({ error, request, reply });
       const details = {
         timestamp: new Date().toISOString(),
@@ -994,6 +995,7 @@ async function startServer() {
     });
 
     registerMailRoutes(server);
+    registerSocialRoutes(server, { projectRoot });
 
     const visioService = createVisioService({
       databaseEnabled: DATABASE_ENABLED,

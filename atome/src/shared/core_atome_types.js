@@ -59,8 +59,12 @@ const capability = (key, effects = ['read']) => ({
     risk_level: effects.includes('write') || effects.includes('persistent') ? 'MEDIUM' : 'LOW'
 });
 
+// Every core type carries the full shape: a type declared without `traits`
+// (the personal import types) broke `listCoreAtomeTypeDefinitions`, hence the
+// Conditions discovery, hence every Finder list (« Impossible de lire »).
 const defineType = (definition) => Object.freeze({
     version: CORE_ATOME_TYPE_VERSION,
+    traits: [],
     allow_unknown_properties: false,
     default_policy: { visibility: 'private' },
     default_capabilities: [

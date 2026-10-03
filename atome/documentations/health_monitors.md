@@ -1,15 +1,16 @@
 # Moniteurs de santé (rubrique Moniteur du Dashboard)
 
-Statut au 1er octobre 2026 : implémenté pour iOS (HealthKit + CMPedometer, app conteneur) et Android (Health Connect + capteur de pas, hôte Tauri mobile). Lecture seule. **Aucune vérification sur appareil physique n'a été faite** : voir « Procédures appareil ».
+Status on 2026-10-03: existing iOS/Android read-only owners are preserved. iOS HealthKit authorization is centralized at header entry after explicit device/account association. The latest signed device build and signature verification pass; it was installed and launched on the physical iPhone. Physical permission-sheet acceptance remains **To verify** because WebDriverAgent failed to start (remote-process connection invalidated, Xcode exit 65).
 
 ## Parcours
 
 Dashboard → rubrique **Moniteur** (clé `monitor`) → bande « Nouveau » de l'en-tête → panneau Bevy standard `dashboard_health_monitors` → liste standard (`hierarchicalSelectableListNode`) avec le rail de cases standard (`createListSelectionRuntime`) → cellules de la ligne Moniteur (et sa vue filtrée existante).
 
-- L'ouverture du panneau ne demande **aucune** permission. Elle lit seulement les capacités et la liaison.
-- Cocher une case (ou une série au rail) : la sélection est enregistrée (`preferences.dashboard.health_monitors.ids`, propriétaire de profil privé), avec retour en arrière en cas d'échec. Ensuite la liaison locale est vérifiée, puis, **à la fin du geste**, une seule demande système est faite pour les types cochés. Enfin la lecture a lieu.
+- iOS header entry checks capabilities and account association, then requests the available HealthKit catalog only when the system reports a request is necessary. Tile entry only opens the existing panel and never requests HealthKit. Android panel entry still checks status without prompting.
+- Checking preserves canonical selection, persistence rollback, subscriptions and cells. iOS HealthKit types never request from a checkbox; the direct Motion sensor and Android retain their selected-type requests. Association resumes the central HealthKit initialization.
 - Décocher : la cellule et l'abonnement sont retirés immédiatement. Aucune donnée n'est effacée dans Santé ou Health Connect, et la permission système n'est pas révoquée.
-- Deux actions seulement s'ajoutent, en pied du même panneau et uniquement quand elles servent : « Associer » (liaison locale) et « Autoriser l'accès » (essai volontaire après refus ou autorisation manquante).
+- The fixed footer shows Associate before any measure is checked when the device/account link is missing, or when an iOS HealthKit request is still unanswered. Its action uses the existing link/request owner. Android retains Allow access; known denied/restricted access retains Open settings. No read refusal is inferred from empty HealthKit data.
+- Opening awaits capability/link status before mounting the first tree: the shared shell suppresses refresh while initializing. Help paragraphs are removed, and fixed-row actions share the available width so no action is pushed outside the panel.
 
 ## Architecture (propriétaires)
 
@@ -136,15 +137,18 @@ Pour l'IMC, seul l'échantillon natif HealthKit est lu ; aucun IMC dérivé n'es
 | Compilation desktop Tauri (app + plugin) | `cargo check --lib` | OK, sans avertissement |
 | Typage Swift cible app (73 fichiers, dont le contrôleur Santé) | `swiftc -typecheck` (SDK simulateur, iOS 15.6) | OK (contrôle négatif : une erreur injectée est bien détectée) |
 | Typage Swift cible AUv3 (65 fichiers) | `swiftc -typecheck` (SDK simulateur, iOS 16.6) | OK |
-| Build Xcode complet (simulateur) | `xcodebuild … build` | **BLOQUÉ** : disque plein (`No space left on device`), sans rapport avec le code |
+| Full Xcode simulator build (ARM64) | `xcodebuild … -sdk iphonesimulator ARCHS=arm64 ONLY_ACTIVE_ARCH=YES … build` | Passed (2026-10-03); universal build interrupted after ARM64 Rust compilation to avoid unrelated Intel compilation |
+| Signed device build / signature | `xcodebuild … -sdk iphoneos … build` / `codesign --verify --verbose=2 …/atome.app` | Passed (2026-10-03); minimum deployment target remains iOS 15.6 |
+| Persistent authorization regressions | `vitest run tests/eve/dashboard_health_authorization.test.mjs tests/probes/health_owner_authorization.test.mjs tests/probes/native_health_authorization_contract.test.mjs` | 28 passed (2026-10-03); includes first-mount timing, footer bounds at 320/390/440 px, account/seal gates; permission host is a double |
+| Health association UI at phone width | Real canvas pointer + inspected before/after screenshots | 7/7; visible Associate, removed help, link then 32-type request, action removed on completion, no console/network errors; native host is a double |
 | APK Android et compilation Kotlin du plugin | `./run.sh apk --dev` / Gradle `:tauri-plugin-health:compileDebugKotlin` | **BLOQUÉ** : disque plein, rien n'a été compilé, Kotlin **non vérifié** |
 
 ## Procédures appareil (non exécutées ici)
 
 **iOS (iPhone réel, app `atome`)**
 1. Build signé avec un profil qui inclut la capacité HealthKit.
-2. Ouvrir Dashboard → Moniteur → Nouveau, cocher « Fréquence cardiaque » et « Pas ».
-3. Associer, puis vérifier qu'une seule feuille Santé s'affiche avec ces deux types seulement.
+2. Open Dashboard → Monitor → New. For an already linked account, verify a single system sheet for the available HealthKit catalog; Motion is excluded.
+3. For an unlinked account, use the visible Associate action before or after choosing monitors. Verify centralized HealthKit initialization, unchanged cells, and no HealthKit request from subsequent checkbox or tile actions.
 4. Refuser l'un des deux. Le moniteur doit rester affiché, avec « Aucune donnée lisible » et non « refusé ».
 5. Ajouter une mesure dans l'app Santé. La cellule doit se mettre à jour au retour.
 6. Se déconnecter puis se connecter avec un autre compte : aucune valeur, « Association requise ».

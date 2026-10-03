@@ -145,3 +145,18 @@ test('closing during a pending presentation transition keeps state closed', asyn
     assert.equal((await transition).error, 'CANCELLED');
     assert.equal(s.service.snapshot().fullscreen, false); assert.equal(s.service.snapshot().playback, 'closed');
 });
+
+test('autoplay retry reuses the resolved player and needs a real playing event', async () => {
+    let prepares = 0, plays = 0, resolves = 0, disposed = 0, report;
+    const s = setup({ adapters: createTvProviderAdapters({ request: async () => { resolves++; return access; } }),
+        player: { prepare: async (_, { onState }) => { prepares++; report = onState; return { ok: true,
+            play: async () => (++plays === 1 ? { ok: false, error: 'USER_GESTURE_REQUIRED' } : { ok: true }),
+            dispose: async () => { disposed++; } }; } } });
+    assert.equal((await s.service.execute('open_channel', { channel: 'fr2' })).error, 'USER_GESTURE_REQUIRED');
+    assert.equal(s.service.snapshot().playback, 'user_action_required');
+    const retried = await s.service.execute('open_channel', { channel: 'france2' });
+    assert.equal(retried.ok, true); assert.equal(retried.playback, 'opened_unconfirmed'); assert.equal(retried.action_required, null);
+    assert.equal(prepares, 1); assert.equal(resolves, 1); assert.equal(plays, 2); assert.equal(disposed, 0);
+    report({ playback: 'playing' }); assert.equal(s.service.snapshot().playback, 'playing');
+    await s.service.close(); report({ playback: 'playing' }); assert.equal(s.service.snapshot().playback, 'closed'); assert.equal(disposed, 1);
+});

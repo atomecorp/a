@@ -55,3 +55,27 @@ test('capability discovery uses authorization quantity types and never requests 
     assert.ok(!authorizationTypes.includes('correlationType('));
     assert.ok(/requestAuthorization\(toShare: \[\], read: readTypes\)/.test(controller));
 });
+
+test('the full iOS catalog survives native capability discovery and HealthKit remains read-only', () => {
+    assert.equal(HEALTH_MONITORS.filter(entry => entry.ios || entry.direct?.host === 'ios').length, 33);
+    const monitorIds = controller.slice(controller.indexOf('private static func monitorIds('), controller.indexOf('private static func verifiedAccount('));
+    assert.ok(!monitorIds.includes('.prefix('), 'capability discovery must not truncate the 33-monitor allow-list');
+    assert.ok(monitorIds.includes('HealthMonitorTable.spec($0) != nil'), 'the bounded native allow-list must remain authoritative');
+    for (const file of ['atome.entitlements', 'atomeRelease.entitlements']) {
+        assert.match(read(`platforms/ios/atome-auv3/application/${file}`), /<key>com.apple.developer.healthkit<\/key>\s*<true\/>/);
+    }
+    const plist = read('platforms/ios/atome-auv3/application/Info.plist');
+    assert.ok(plist.includes('NSHealthShareUsageDescription'));
+    assert.ok(!plist.includes('NSHealthUpdateUsageDescription'));
+    assert.ok(!/healthStore\.(save|delete)\(/.test(controller + read('platforms/ios/atome-auv3/Common/AppNativeHealthQueries.swift')));
+});
+
+test('authorization checks necessity and rejects unknown status before presenting the system sheet', () => {
+    const request = controller.slice(controller.indexOf('private func requestAccess('), controller.indexOf('private func observe('));
+    assert.ok(request.indexOf('getRequestStatusForAuthorization(') < request.indexOf('.requestAuthorization('));
+    assert.ok(request.includes('status == .shouldRequest'));
+    assert.ok(request.includes('health_authorization_status_unknown'));
+    assert.ok(request.includes('DispatchQueue.main.async'));
+    assert.ok(request.includes('$0.kind != .pedometer'), 'Motion must not be converted to an HK type');
+    assert.ok(!controller.includes('healthStore.authorizationStatus(for:'));
+});

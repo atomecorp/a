@@ -26,6 +26,7 @@ final class NativePersonalImport {
     func handle(_ command: String, payload: [String: Any], completion: @escaping ([String: Any]?, String?) -> Void) {
         guard !WebViewManager.runningInExtension else { completion(nil, "personal_import_app_required"); return }
         if command == "export_file_save" { save(payload, completion: completion); return }
+        if command == "export_file_share" { share(payload, completion: completion); return }
         watch()
         let read = { self.queue.async {
             do {
@@ -165,6 +166,43 @@ final class NativePersonalImport {
             iCloudFileManager.shared.saveFileWithDocumentPicker(data: data, fileName: name, from: presenter) { ok, _ in
                 completion(["success": ok, "cancelled": !ok], nil)
             }
+        }
+    }
+
+    // Hands an exported file to the system share sheet (social sharing: TikTok,
+    // Instagram or Facebook finish the post in their own app). The answer only
+    // says whether a receiver accepted it and which one — never that it posted.
+    private func share(_ payload: [String: Any], completion: @escaping ([String: Any]?, String?) -> Void) {
+        guard let name = payload["name"] as? String, !name.isEmpty, name.utf8.count < 180,
+              !name.contains("/"), !name.contains("\\"), name != ".", name != "..",
+              let encoded = payload["dataBase64"] as? String, encoded.count < 90_000_000,
+              let data = Data(base64Encoded: encoded), data.count <= 64 * 1024 * 1024 else {
+            completion(nil, "export_payload_invalid"); return
+        }
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("atome-share-\(UUID().uuidString)", isDirectory: true)
+        let file = folder.appendingPathComponent(name)
+        do {
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            try data.write(to: file)
+        } catch { completion(nil, "export_write_failed"); return }
+        DispatchQueue.main.async {
+            guard var presenter = WebViewManager.webView?.window?.rootViewController else {
+                try? FileManager.default.removeItem(at: folder)
+                completion(nil, "export_presenter_unavailable"); return
+            }
+            while let child = presenter.presentedViewController { presenter = child }
+            let sheet = UIActivityViewController(activityItems: [file], applicationActivities: nil)
+            if let popover = sheet.popoverPresentationController {
+                popover.sourceView = presenter.view
+                popover.sourceRect = CGRect(x: presenter.view.bounds.midX, y: presenter.view.bounds.midY, width: 1, height: 1)
+                popover.permittedArrowDirections = []
+            }
+            sheet.completionWithItemsHandler = { activity, completed, _, error in
+                try? FileManager.default.removeItem(at: folder)
+                completion(["success": completed, "cancelled": !completed && error == nil,
+                            "activity_type": activity?.rawValue ?? NSNull()], nil)
+            }
+            presenter.present(sheet, animated: true)
         }
     }
 }

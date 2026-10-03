@@ -440,7 +440,12 @@ fn queue_video_external_textures(
                 );
             let pipeline_id = pipelines.specialize(&pipeline_cache, &pipeline, key);
             let mesh_z = depth_for_layer(video.layer);
-            transparent_phase.add_retained(Transparent2d {
+            // Transient, like sprites: this system re-queues every visible video
+            // each frame. A retained item was never removed, so a despawned (or
+            // no longer visible) video left its pipeline in the phase, and once
+            // that pipeline no longer matched the pass the whole command buffer
+            // was invalid — the canvas went black for good.
+            transparent_phase.add_transient(Transparent2d {
                 entity: (render_entity, visible_entity.into()),
                 draw_function: draw_video,
                 pipeline: pipeline_id,

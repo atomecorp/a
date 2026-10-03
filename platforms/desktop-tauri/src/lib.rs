@@ -225,6 +225,8 @@ pub fn run() {
         .append_invoke_initialization_script(runtime_init_script)
         .plugin(tauri_plugin_stt::init())
         .plugin(tauri_plugin_clipboard_manager::init())
+        // Opens the official social login pages in the system browser.
+        .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_health::init())
         .manage(std::sync::Mutex::new(native_health::state()))
         // A main-frame page load claims a new health channel (see native_health.rs).

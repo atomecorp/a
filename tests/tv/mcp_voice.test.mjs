@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createMcpTvHandlers } from '../../atome/src/squirrel/atome/mcp_handlers_tv.js';
+import { createMcpTvHandlers } from '../../atome/src/squirrel/atome/mcp_handlers_contracts.js';
 import { TV_COMMANDS } from '../../atome/src/squirrel/tv/contracts.js';
 import { resolveAccessPolicy } from '../../atome/src/squirrel/atome/mcp_security_policy.js';
 import { createConversationSession } from '../../atome/src/squirrel/ai/conversation_session.js';

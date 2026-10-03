@@ -1,3 +1,4 @@
+use bevy::math::Vec2;
 use serde::Deserialize;
 
 use crate::types::{
@@ -61,6 +62,23 @@ pub struct AtomeSurfaceBackgroundPatch {
     /// `color`.
     #[serde(default)]
     pub backdrop: Option<AtomeTexture>,
+    /// The size, in logical px, of one tile of a `tile` background: the file's
+    /// own size, so a texture is repeated as it is and never stretched. Absent,
+    /// the tile keeps the screen-relative size of the bundled wallpaper.
+    #[serde(default)]
+    pub tile_size: Option<[f32; 2]>,
+    /// An animated wallpaper: one hidden `<video>` the page registers under
+    /// `id` in the video source lookup. It is drawn by the video external
+    /// texture pipeline on one quad, every tile sampling the same frame.
+    #[serde(default)]
+    pub video: Option<AtomeSurfaceBackgroundVideoSource>,
+}
+
+#[derive(Clone, Debug, Default, Deserialize)]
+pub struct AtomeSurfaceBackgroundVideoSource {
+    pub id: String,
+    pub width: u32,
+    pub height: u32,
 }
 
 impl AtomeSurfaceBackgroundPatch {
@@ -70,16 +88,38 @@ impl AtomeSurfaceBackgroundPatch {
             .map(|texture| [texture.width, texture.height])
     }
 
+    fn fit_named(&self, expected: &str) -> bool {
+        self.fit.as_deref().map(str::trim).map(str::to_ascii_lowercase).as_deref() == Some(expected)
+    }
+
     fn fit_is(&self, expected: &str) -> bool {
-        self.texture.is_some()
-            && self.fit.as_deref().map(str::trim).map(str::to_ascii_lowercase).as_deref() == Some(expected)
+        self.texture.is_some() && self.video.is_none() && self.fit_named(expected)
+    }
+
+    /// The animated wallpaper, when one with a usable size is carried.
+    pub fn video_source(&self) -> Option<&AtomeSurfaceBackgroundVideoSource> {
+        self.video
+            .as_ref()
+            .filter(|video| !video.id.trim().is_empty() && video.width > 0 && video.height > 0)
+    }
+
+    pub fn is_video_tile(&self) -> bool {
+        self.video_source().is_some() && self.fit_named("tile")
+    }
+
+    /// The explicit tile size, when a usable one is carried.
+    pub fn explicit_tile_size(&self) -> Option<Vec2> {
+        self.tile_size
+            .map(|[width, height]| Vec2::new(width, height))
+            .filter(|size| size.x.is_finite() && size.y.is_finite() && size.x >= 1.0 && size.y >= 1.0)
     }
 
     pub fn is_contain(&self) -> bool {
         self.fit_is("contain")
     }
 
-    /// A seamless image repeated at a screen-relative tile size.
+    /// A seamless image repeated: at its own size (`tile_size`), or at the
+    /// screen-relative size of the bundled wallpaper.
     pub fn is_tile(&self) -> bool {
         self.fit_is("tile")
     }

@@ -63,8 +63,6 @@
     <string>Atome utilise votre position uniquement lorsque vous demandez la météo locale.</string>
     <key>NSHealthShareUsageDescription</key>
     <string>Atome lit uniquement les données de santé que vous choisissez d'afficher dans vos moniteurs (rubrique Moniteur du Dashboard) et dans vos critères dynamiques. Ces données restent sur cet appareil.</string>
-    <key>NSHealthUpdateUsageDescription</key>
-    <string>Atome utilise Apple Santé pour afficher les données que vous choisissez dans vos moniteurs et critères dynamiques. Atome ne crée ni ne modifie de données dans Apple Santé.</string>
     <key>NSMotionUsageDescription</key>
     <string>Atome compte les pas mesurés par cet iPhone pour le moniteur « Pas de cet iPhone » que vous avez choisi.</string>
     <key>NSAppleMusicUsageDescription</key>
@@ -225,5 +223,7 @@
     <string>Read selected calendars into your private Atome workspace.</string>
     <key>NSCalendarsUsageDescription</key>
     <string>Read selected calendars into your private Atome workspace.</string>
+    <key>NSAlarmKitUsageDescription</key>
+    <string>Atome utilise les alarmes pour déclencher, à l'heure prévue, les alarmes que vous programmez dans votre calendrier, même lorsque l'application ne tourne pas.</string>
 </dict>
 </plist>

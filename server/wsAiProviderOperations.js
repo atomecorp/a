@@ -10,8 +10,11 @@ import { getAudioAiService } from './ai_audio/index.js';
 import { AUDIO_AI_ERRORS } from './ai_audio/service.js';
 import { getVideoAiService } from './ai_video/index.js';
 import { VIDEO_AI_ERRORS } from './ai_video/service.js';
+import { handleSocialAction } from './social/social_operations.js';
+import { readSocialConfig } from './social/social_sessions.js';
 
 const operations = new WeakMap();
+const SOCIAL_TIMEOUT_MS = Object.freeze({ 'social.connect.await': 11 * 60_000, 'social.publish': 20 * 60_000, 'social.status': 5 * 60_000 });
 const ROOT = 'https://api.openai.com/v1';
 const ROUTES = Object.freeze({
     models: ['GET', '/models'],
@@ -158,7 +161,9 @@ export const handleWsAiProviderOperation = async (message, connection, {
         const controller = new AbortController();
         entry = { controller, principal, action };
         active.set(requestId, entry);
-        const timeout = setTimeout(() => controller.abort(), 180_000);
+        // Waiting for the user on the official login page, or for a provider to
+        // process a long video, legitimately outlasts a model call.
+        const timeout = setTimeout(() => controller.abort(), SOCIAL_TIMEOUT_MS[action] ?? 180_000);
         entry.timer = timeout;
         const vault = await resolveVault(connection?._wsApiVaultRouter?.provider, principal);
         const credentialProvider = String(message.provider || message.payload?.provider || 'openai');
@@ -174,6 +179,12 @@ export const handleWsAiProviderOperation = async (message, connection, {
             await audioCredential.validateKey?.(candidate, { fetchImpl, signal: controller.signal });
             if (resolvePrincipal(connection, message) !== principal) throw new Error('provider_principal_changed');
             return reply(true, await vault.store(credentialProvider, candidate));
+        }
+        if (action.startsWith('social.')) {
+            const data = await handleSocialAction(action, message.payload || {}, {
+                principal, signal: controller.signal, ctx: { vault, config: readSocialConfig(), fetchImpl } });
+            if (resolvePrincipal(connection, message) !== principal) throw new Error('provider_principal_changed');
+            return reply(true, { data });
         }
         if (action.startsWith('video.')) {
             return reply(true, { data: await handleVideoAction(action, message.payload || {}, {
@@ -258,10 +269,11 @@ export const handleWsAiProviderOperation = async (message, connection, {
         if (resolvePrincipal(connection, message) !== principal) throw new Error('provider_principal_changed');
         return reply(true, { data: hosted ? hosted.accept(data) : data });
     } catch (error) {
-        const known = /^(?:provider_|not_authenticated|no_ai_key_configured|invalid_api_key|insufficient_quota|rate_limit_exceeded)/;
+        const known = /^(?:provider_|social_|not_authenticated|no_ai_key_configured|invalid_api_key|insufficient_quota|rate_limit_exceeded)/;
         const code = entry?.controller.signal.aborted ? 'provider_cancelled'
             : known.test(error.message) || AUDIO_AI_ERRORS.includes(error.message) || VIDEO_AI_ERRORS.includes(error.message) ? error.message : 'provider_operation_failed';
-        return reply(false, { error: code, http_status: error.http_status || null });
+        return reply(false, { error: code, http_status: error.http_status || error.httpStatus || null,
+            ...(code.startsWith('social_') ? { detail: error.detail || null, provider_code: error.providerCode || null } : {}) });
     } finally {
         if (entry) { clearTimeout(entry.timer); if (active.get(requestId) === entry) active.delete(requestId); }
     }
