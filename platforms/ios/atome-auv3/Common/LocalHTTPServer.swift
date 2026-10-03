@@ -246,7 +246,7 @@ final class LocalHTTPServer {
         } else if routePath.hasPrefix("/file/") {
             let raw = String(routePath.dropFirst("/file/".count))
             let decoded = raw.removingPercentEncoding ?? raw
-            serveUnified(named: decoded, rangeHeader: rangeHeader, on: connection)
+            serveUnified(named: decoded, requestHeaders: headers, rangeHeader: rangeHeader, on: connection)
         } else if routePath == "/health" {
             serveHealth(on: connection)
         } else if routePath == "/tree" {
@@ -646,7 +646,7 @@ final class LocalHTTPServer {
     }
 
     // Unified file serving (any extension) via /file/<path>
-    private func serveUnified(named name: String, rangeHeader: String?, on connection: NWConnection) {
+    private func serveUnified(named name: String, requestHeaders: [String: String], rangeHeader: String?, on connection: NWConnection) {
         let lower = name.lowercased()
         // Audio fast path → reuse audio pipeline (range, faststart)
         if lower.hasSuffix(".m4a") { serveAudio(named: name, rangeHeader: rangeHeader, on: connection); return }
@@ -684,12 +684,17 @@ final class LocalHTTPServer {
         }()
         // Video/audio types need Range request support for <video>/<audio> tags
         let needsRange = mime.hasPrefix("video/") || mime.hasPrefix("audio/")
+        let validators = needsRange ? nil : fileValidators(for: url)
         if needsRange {
             serveFileWithRange(url: url, mime: mime, rangeHeader: rangeHeader, on: connection)
+        } else if rangeHeader == nil && isConditionalCacheHit(requestHeaders, validators: validators) {
+            sendNotModified(validators, on: connection)
         } else {
             do {
                 let data = try Data(contentsOf: url)
-                sendRaw(status: 200, reason: "OK", headers: ["Content-Type": mime], body: data, on: connection)
+                var headers: [String: String] = cacheHeaders(validators)
+                headers["Content-Type"] = mime
+                sendRaw(status: 200, reason: "OK", headers: headers, body: data, on: connection)
             } catch {
                 sendSimple(status: 500, reason: "Internal Server Error", body: "read fail", on: connection)
             }
@@ -1040,6 +1045,62 @@ final class LocalHTTPServer {
         connection.send(content: out, completion: .contentProcessed { [weak self] _ in self?.requestCancel(connection) })
     }
 
+    // MARK: - HTTP cache validators
+    //
+    // The local server answers `no-cache` style: clients may store a response but
+    // must revalidate it. When the bytes are unchanged we answer 304, which avoids
+    // re-sending multi-megabyte bodies (e.g. a photo requested twice during boot)
+    // without ever serving stale content.
+    private struct FileValidators {
+        let etag: String
+        let lastModified: String
+        let modified: Date
+    }
+
+    private func fileValidators(for url: URL) -> FileValidators? {
+        guard let attrs = try? FileManager.default.attributesOfItem(atPath: url.path) else { return nil }
+        let size = (attrs[.size] as? NSNumber)?.uint64Value ?? 0
+        let modified = (attrs[.modificationDate] as? Date) ?? Date(timeIntervalSince1970: 0)
+        let etag = "\"\(String(size, radix: 16))-\(String(Int64(modified.timeIntervalSince1970), radix: 16))\""
+        return FileValidators(etag: etag, lastModified: httpDate(modified), modified: modified)
+    }
+
+    private func httpDate(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = TimeZone(identifier: "GMT")
+        formatter.dateFormat = "EEE, dd MMM yyyy HH:mm:ss 'GMT'"
+        return formatter.string(from: date)
+    }
+
+    private func cacheHeaders(_ validators: FileValidators?) -> [String: String] {
+        guard let validators else { return [:] }
+        return [
+            "ETag": validators.etag,
+            "Last-Modified": validators.lastModified,
+            "Cache-Control": "no-cache"
+        ]
+    }
+
+    private func isConditionalCacheHit(_ headers: [String: String], validators: FileValidators?) -> Bool {
+        guard let validators else { return false }
+        if let ifNoneMatch = headers["if-none-match"], !ifNoneMatch.isEmpty {
+            let candidates = ifNoneMatch.split(separator: ",").map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            return candidates.contains(validators.etag) || candidates.contains("*")
+        }
+        guard let ifModifiedSince = headers["if-modified-since"], !ifModifiedSince.isEmpty else { return false }
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = TimeZone(identifier: "GMT")
+        formatter.dateFormat = "EEE, dd MMM yyyy HH:mm:ss 'GMT'"
+        guard let since = formatter.date(from: ifModifiedSince) else { return false }
+        return validators.modified <= since.addingTimeInterval(0.5)
+    }
+
+    private func sendNotModified(_ validators: FileValidators?, on connection: NWConnection) {
+        sendRaw(status: 304, reason: "Not Modified", headers: cacheHeaders(validators), body: Data(), on: connection)
+    }
+
     private func handleAiProviderCompletionPost(body: Data, on connection: NWConnection) {
         LocalAiProxy.handle(body: body) { [weak self] response in
             guard let self = self else { return }
@@ -1186,7 +1247,7 @@ final class LocalHTTPServer {
             sendJsonResponse(["success": false, "error": "File not found"], status: 404, on: connection)
             return
         }
-        serveUploadFile(fileURL: fileURL, label: "UPLOAD", fileName: fileName, rangeHeader: rangeHeader, isHead: isHead, on: connection)
+        serveUploadFile(fileURL: fileURL, label: "UPLOAD", fileName: fileName, requestHeaders: headers, rangeHeader: rangeHeader, isHead: isHead, on: connection)
     }
 
     private func handleRecordingGet(fileName: String, headers: [String: String], rangeHeader: String?, isHead: Bool, on connection: NWConnection) {
@@ -1196,22 +1257,30 @@ final class LocalHTTPServer {
             sendJsonResponse(["success": false, "error": "File not found"], status: 404, on: connection)
             return
         }
-        serveUploadFile(fileURL: fileURL, label: "RECORDING", fileName: fileName, rangeHeader: rangeHeader, isHead: isHead, on: connection)
+        serveUploadFile(fileURL: fileURL, label: "RECORDING", fileName: fileName, requestHeaders: headers, rangeHeader: rangeHeader, isHead: isHead, on: connection)
     }
 
-    private func serveUploadFile(fileURL: URL, label: String, fileName: String, rangeHeader: String?, isHead: Bool, on connection: NWConnection) {
+    private func serveUploadFile(fileURL: URL, label: String, fileName: String, requestHeaders: [String: String], rangeHeader: String?, isHead: Bool, on connection: NWConnection) {
         let mime = mimeType(for: fileURL.lastPathComponent)
         let attributes = try? FileManager.default.attributesOfItem(atPath: fileURL.path)
         let size = (attributes?[.size] as? NSNumber)?.intValue ?? 0
+        let validators = fileValidators(for: fileURL)
+        let isMedia = mime.hasPrefix("video/") || mime.hasPrefix("audio/")
+        let notModified = !isHead && !isMedia && rangeHeader == nil
+            && isConditionalCacheHit(requestHeaders, validators: validators)
         if isHead || (!mime.hasPrefix("video/") && !mime.hasPrefix("audio/")) {
-            print("[\(label)] \(isHead ? "HEAD" : "GET") 200 file=\(fileName) bytes=\(size) mime=\(mime)")
+            print("[\(label)] \(isHead ? "HEAD" : "GET") \(notModified ? 304 : 200) file=\(fileName) bytes=\(size) mime=\(mime)")
+        }
+        if notModified {
+            sendNotModified(validators, on: connection)
+            return
         }
         if isHead {
-            sendRaw(status: 200, reason: "OK", headers: [
-                "Content-Type": mime,
-                "Content-Length": String(size),
-                "Accept-Ranges": "bytes"
-            ], body: Data(), on: connection)
+            var headers: [String: String] = cacheHeaders(validators)
+            headers["Content-Type"] = mime
+            headers["Content-Length"] = String(size)
+            headers["Accept-Ranges"] = "bytes"
+            sendRaw(status: 200, reason: "OK", headers: headers, body: Data(), on: connection)
             return
         }
         if mime.hasPrefix("video/") || mime.hasPrefix("audio/") || rangeHeader != nil {
@@ -1220,9 +1289,9 @@ final class LocalHTTPServer {
         }
         do {
             let data = try Data(contentsOf: fileURL)
-            sendRaw(status: 200, reason: "OK", headers: [
-                "Content-Type": mime
-            ], body: data, on: connection)
+            var headers: [String: String] = cacheHeaders(validators)
+            headers["Content-Type"] = mime
+            sendRaw(status: 200, reason: "OK", headers: headers, body: data, on: connection)
         } catch {
             print("[\(label)] GET 500 file=\(fileName) error=\(error)")
             sendJsonResponse(["success": false, "error": error.localizedDescription], status: 500, on: connection)
@@ -2336,14 +2405,29 @@ enum AiSRuntime {
     }
 
     private static func ensureSyncSchema(_ db: OpaquePointer?) throws {
-        let additions = [
-            "ALTER TABLE events ADD COLUMN stream_id TEXT",
-            "ALTER TABLE events ADD COLUMN sequence INTEGER",
-            "ALTER TABLE events ADD COLUMN source TEXT",
-            "ALTER TABLE events ADD COLUMN lww_decisions TEXT",
-            "ALTER TABLE events ADD COLUMN projection TEXT"
-        ]
-        for statement in additions { _ = sqlite3_exec(db, statement, nil, nil, nil) }
+        // `schemaSQL` already creates `events` on fresh databases; this only
+        // backfills legacy ones. Guarding with PRAGMA keeps the migration
+        // idempotent (no more "duplicate column name") and, crucially, lets a
+        // genuine failure surface instead of being swallowed by `_ = sqlite3_exec`.
+        let eventsExists = try !query(
+            db,
+            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'events' LIMIT 1",
+            []
+        ).isEmpty
+        if eventsExists {
+            let existingColumns = Set(
+                try query(db, "PRAGMA table_info(events)", []).compactMap { $0["name"] as? String }
+            )
+            for (column, ddl) in [
+                ("stream_id", "ALTER TABLE events ADD COLUMN stream_id TEXT"),
+                ("sequence", "ALTER TABLE events ADD COLUMN sequence INTEGER"),
+                ("source", "ALTER TABLE events ADD COLUMN source TEXT"),
+                ("lww_decisions", "ALTER TABLE events ADD COLUMN lww_decisions TEXT"),
+                ("projection", "ALTER TABLE events ADD COLUMN projection TEXT")
+            ] where !existingColumns.contains(column) {
+                try execute(db, ddl)
+            }
+        }
         try execute(db, """
             CREATE UNIQUE INDEX IF NOT EXISTS idx_events_stream_sequence
             ON events(stream_id, sequence) WHERE stream_id IS NOT NULL AND sequence IS NOT NULL

@@ -96,9 +96,11 @@ extension WebViewManager {
             "outcome=\(outcome)",
             "reason=\(report["reason"] as? String ?? "-")",
             "elapsed_ms=\(report["native_elapsed_ms"] as? Int ?? -1)",
-            "requests=\(scheme?["request_count"] as? Int ?? -1)",
-            "bytes=\(scheme?["byte_count"] as? Int ?? -1)",
-            "missing=\(scheme?["missing_count"] as? Int ?? -1)",
+            // `byte_count` is stored as `Int64`; casting it straight to `Int`
+            // through `Any` fails and silently reports `-1`, so bridge via NSNumber.
+            "requests=\((scheme?["request_count"] as? NSNumber)?.intValue ?? -1)",
+            "bytes=\((scheme?["byte_count"] as? NSNumber)?.intValue ?? -1)",
+            "missing=\((scheme?["missing_count"] as? NSNumber)?.intValue ?? -1)",
             "native_peak_mb=\(report["native_peak_memory_mb"] as? Int ?? -1)",
             "wasm_heap_mb=\(milestones.keys.filter { $0.contains("wasm_heap") }.compactMap { Int($0.split(separator: ".").last ?? "") }.max().map(String.init) ?? "-")",
             "last_milestone=\(last?.key ?? "-")@\(last?.value ?? -1)"
