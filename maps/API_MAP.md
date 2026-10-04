@@ -1,4 +1,10 @@
+2026-10-04 Boot/auth contract: failed desktop automatic recovery publishes the existing logged-out/auth-checked state via `clearSessionState`; user background startup precedes intuition bootstrap so login pixel readiness does not depend on deferred-module presentation. No new public API.
+
 # Atome / eVe API Map
+
+2026-10-04 readResolvedBevySurfaceBackgroundMedia accepts {waitForVideo:false} as its third argument for login presentation. Pending playback/metadata returns the canonical colour and video descriptor without blocking; decoder errors remain recorded by the existing background owner. Normal consumers keep awaited video resolution. Logout resets live background params immediately to the public default without writing the profile.
+
+2026-10-04 DEFAULT_BACKGROUND_MEDIA_ASSET replaces the image-only default constant and points to assets/videos/eVe.mp4. defaultUserBackgroundParams sets backgroundMediaKind to video; existing saved image preferences without a media kind still resolve as images. No public action or wire contract changed.
 
 2026-10-04 Video wallpaper import and selected-media application reuse the existing Background media selector/store and public apply_background_from_selection action. Native imports use the local uploader; browser imports use the browser vault. Protected media reads use buildUserHeaders and current in-memory local/cloud sessions from asset_box_auth, rather than obsolete localStorage tokens. Direct video sources are decoded according to their actual container instead of being gated on MP4 support. No endpoint or state owner added.
 

@@ -118,7 +118,12 @@ export const sessionAccountMethods = {
             void ensureFastifyToken();
             return { authenticated: true, user: getSessionState().user };
         }
-        if (localError) return { authenticated: false, error: localError };
+        if (localError) {
+            // Recovery can fail after a readable but revoked desktop session.
+            // Publish the logged-out state so the auth gate can present login.
+            clearSessionState();
+            return { authenticated: false, error: localError };
+        }
         if (stored?.mode === 'anonymous') {
             const guest = await auth.startGuest({ force: true });
             if (guest?.ok === true || guest?.success === true) return guest;

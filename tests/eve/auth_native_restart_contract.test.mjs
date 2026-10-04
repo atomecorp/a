@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import vm from 'node:vm';
 import { test, expect } from 'vitest';
 
 const read = (path) => fs.readFileSync(new URL(`../../${path}`, import.meta.url), 'utf8');
@@ -72,4 +73,36 @@ test('an active guest is resumable while a new guest cannot claim an existing ac
     expect(rust.indexOf('status.as_deref() != Some("active")')).toBeLessThan(rust.indexOf('SELECT 1 FROM atomes'));
     expect(swift).toMatch(/if let status[\s\S]*guard status == "active"[\s\S]*findUserRecordById/);
     expect(swift).toMatch(/claims\["grant"\] == nil[\s\S]*"username": "Guest"/);
+});
+
+
+test('failed desktop session recovery settles authentication instead of blocking login', async () => {
+    const source = read('atome/src/squirrel/apis/unified/adole_api/auth_methods_session_account.js')
+        .replace(/import[\s\S]*?from ['"][^'"]+['"];\n/g, '')
+        .replace('export const sessionAccountMethods', 'const sessionAccountMethods');
+    let settled = 0;
+    const context = {
+        loadSessionState: () => ({ mode: 'logged_out' }),
+        restoreLocalAuthorization: async () => ({ authenticated: false }),
+        initializePhoneLinks: async () => {},
+        recoverDesktopAuthorization: async () => ({ authenticated: false, attempted: true, error: 'auth_session_invalid' }),
+        getSessionState: () => ({ mode: 'logged_out' }),
+        clearSessionState: () => { settled++; },
+        ensureFastifyToken: () => { throw new Error('must not authorize failed recovery'); }
+    };
+    const method = source.slice(source.indexOf('async tryAutoLogin()'), source.indexOf('async startGuest(')).trim().replace(/,$/, '');
+    const methods = vm.runInNewContext(`({${method}})`, context);
+    const result = await methods.tryAutoLogin();
+    expect(result.authenticated).toBe(false);
+    expect(result.error).toBe('auth_session_invalid');
+    expect(settled).toBe(1);
+});
+
+test('the canonical background starts before login can request its first pixels', () => {
+    const source = read('eVe/eVe.js');
+    const critical = source.slice(source.indexOf('const eveSequentialModules'), source.indexOf('const eveDeferredModules'));
+    const deferred = source.slice(source.indexOf('const eveDeferredModules'), source.indexOf('let deferredModulesPromise'));
+    expect(critical.indexOf("id: 'eve.user_background'")).toBeGreaterThanOrEqual(0);
+    expect(critical.indexOf("id: 'eve.user_background'")).toBeLessThan(critical.indexOf("id: 'eve.bootstrap'"));
+    expect(deferred).not.toContain("id: 'eve.user_background'");
 });

@@ -1,5 +1,9 @@
 # Atome / eVe Design Map
 
+2026-10-04 Login controls render while wallpaper video playback/metadata is pending. The shared renderer paints the canonical background colour during loading and the same centred video when available; logout restores the public default immediately. No additional player or visible DOM rendering path.
+
+2026-10-04 The bundled default wallpaper is assets/videos/eVe.mp4 on Dashboard and phone-number authentication. It reuses the canonical background video decoder and login presentation, autoplaying muted in a loop with centred cover. Custom stored wallpapers retain priority. The unused bundled eVe.PNG/eVe.png asset was removed.
+
 2026-10-04 Wallpaper selection accepts imported or existing videos alongside images. Videos autoplay muted and loop in the shared Bevy video source registry; the existing centred cover crop applies at metadata readiness and viewport resize. Existing media selections are reused without another upload.
 
 2026-10-04 All wallpaper images and looping videos fill the viewport without repetition, distortion or letterboxing. The scale is `max(viewportWidth/mediaWidth, viewportHeight/mediaHeight)`; overflow is cropped equally on opposite sides. Bevy images, external-video UVs and login Canvas presentation share this geometry. Repeat/whole-image controls and their EN/FR labels were removed from Home and Background. Generated patterns keep their existing renderer.
