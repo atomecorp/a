@@ -20,6 +20,11 @@ const assetBox = vi.hoisted(() => ({
 vi.mock('../../eVe/domains/user/profile_api.js', () => profileApi);
 vi.mock('../../eVe/domains/media/asset_box.js', () => assetBox);
 
+const mediaAuth = vi.hoisted(() => ({
+    buildUserHeaders: vi.fn(), getCloudToken: vi.fn(), getLocalToken: vi.fn()
+}));
+vi.mock('../../eVe/domains/media/asset_box_auth.js', () => mediaAuth);
+
 const videoSource = vi.hoisted(() => ({ register: vi.fn() }));
 vi.mock('../../eVe/domains/rendering/bevy_video_stream_source_runtime.js', () => ({
     registerBevyVideoStreamSource: videoSource.register
@@ -90,6 +95,10 @@ const bootBackgroundRuntime = async ({ currentUser = null, embedded = false } = 
 };
 
 beforeEach(() => {
+    mediaAuth.buildUserHeaders.mockReset().mockResolvedValue({ 'X-User-Id': 'wallpaper-owner' });
+    mediaAuth.getCloudToken.mockReset().mockReturnValue('cloud-memory-session');
+    mediaAuth.getLocalToken.mockReset().mockReturnValue('native-memory-session');
+    videoSource.register.mockReset();
     profileApi.loadUserProfile.mockReset();
     profileApi.upsertUserProfile.mockReset();
     assetBox.sendFileToServer.mockReset();
@@ -98,6 +107,7 @@ beforeEach(() => {
 
 afterEach(() => {
     if (restoreGlobals) restoreGlobals();
+    vi.restoreAllMocks();
     vi.useRealTimers();
 });
 
@@ -313,4 +323,78 @@ test('the video background waits for metadata before applying its natural dimens
     Object.assign(video, { videoWidth: 1920, videoHeight: 1080 });
     video.dispatchEvent(new window.Event('loadedmetadata'));
     await vi.waitFor(() => assert.ok(applied.some(patch => patch.video?.width === 1920 && patch.video?.height === 1080)));
+});
+
+test.each([false, true])('a protected video uses its current session before starting a muted cover loop (native=%s)', async (embedded) => {
+    const { window } = await bootBackgroundRuntime({ embedded });
+    const { surface } = installCoverCanvasHarness(window);
+    const runtime = await import('../../eVe/domains/rendering/bevy_surface_background_runtime.js');
+    const patches = [];
+    runtime.registerBevySurfaceBackgroundRuntime(surface, { started: true, wasmModule: {
+        apply_atome_bevy_surface_background(patch) { patches.push(patch); }
+    } });
+    const blobUrl = 'blob:authorized-wallpaper-video';
+    vi.spyOn(URL, 'createObjectURL').mockReturnValue(blobUrl);
+    vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+    // Stored credentials must never override the current in-memory session.
+    window.localStorage.setItem('local_auth_token', 'obsolete-local');
+    window.localStorage.setItem('cloud_auth_token', 'obsolete-cloud');
+    if (embedded) {
+        mediaAuth.getLocalToken.mockReturnValue('not-yet-refreshed');
+        mediaAuth.buildUserHeaders.mockImplementation(async () => {
+            mediaAuth.getLocalToken.mockReturnValue('native-memory-session');
+            return { 'X-User-Id': 'wallpaper-owner' };
+        });
+    }
+    const expectedBearer = embedded ? 'native-memory-session' : 'cloud-memory-session';
+    fetchMock.mockImplementation(async (url, options) => ({
+        ok: options.headers.Authorization === `Bearer ${expectedBearer}`,
+        status: options.headers.Authorization === `Bearer ${expectedBearer}` ? 200 : 401,
+        blob: async () => new Blob(['video'], { type: 'video/webm' })
+    }));
+    const video = { videoWidth: 1920, videoHeight: 1080, readyState: 2, seeking: false };
+    videoSource.register.mockResolvedValue({ ok: true, video, dispose() {} });
+    window.eveBackground.setParams({ backgroundSource: 'image', backgroundMediaKind: 'video',
+        backgroundImageUrl: '/api/uploads/wallpaper.webm?media_user_id=wallpaper-owner' });
+    await vi.waitFor(() => assert.equal(patches.at(-1)?.video?.width, 1920));
+    assert.equal(fetchMock.mock.calls.length, 1);
+    assert.equal(fetchMock.mock.calls[0][1].headers.Authorization, `Bearer ${expectedBearer}`);
+    assert.equal(mediaAuth.buildUserHeaders.mock.calls.length, 1);
+    assert.equal(window.__eveSurfaceBackground.fit, 'cover');
+    assert.equal(window.__eveSurfaceBackground.sourceUrl, blobUrl);
+    const options = videoSource.register.mock.calls.at(-1)[0];
+    assert.equal(options.source, blobUrl);
+    assert.equal(options.autoplay, true);
+    assert.equal(options.loop, true);
+    assert.equal(options.muted, true);
+});
+
+const { createBackgroundImage } = await import('../../eVe/intuition/tools/background_image.js');
+
+test.each([{ name: 'wallpaper.mov', type: 'video/quicktime' }, { name: 'wallpaper.WEBM', type: '' }])('a video import uses the canonical local upload without forcing cloud ($name)', async (file) => {
+    assetBox.sendFileToServer.mockResolvedValue({ ok: true, mediaUrl: '/api/uploads/wallpaper.mov', fileName: file.name });
+    const patches = [];
+    const image = createBackgroundImage({ applyBackgroundParams: params => patches.push(params), schedulePreferenceSave: async () => ({ ok: true }) });
+    const result = await image.importBackgroundImageFile(file);
+    assert.equal(result.ok, true);
+    assert.deepEqual(assetBox.sendFileToServer.mock.calls[0][1], { typeOverride: 'video', createAtome: false });
+    assert.equal(patches[0].backgroundMediaKind, 'video');
+    assert.equal(patches[0].backgroundImageUrl, '/api/uploads/wallpaper.mov');
+});
+
+test.each(['video', 'image'])('use selection preserves the selected %s kind without uploading it again', async (kind) => {
+    const previousWindow = globalThis.window;
+    const extension = kind === 'video' ? 'mp4' : 'png';
+    const patches = [];
+    globalThis.window = { __selectedAtomeId: 'selected-media', Atome: {
+        getStateCurrent: async () => ({ type: kind, properties: { media_url: `/api/uploads/media.${extension}`, file_name: `media.${extension}` } })
+    } };
+    try {
+        const image = createBackgroundImage({ applyBackgroundParams: params => patches.push(params), schedulePreferenceSave: async () => ({ ok: true }) });
+        const result = await image.applySelectedMediaAsBackground();
+        assert.equal(result.ok, true);
+        assert.equal(patches[0].backgroundMediaKind, kind);
+        assert.equal(patches[0].backgroundImageAtomeId, 'selected-media');
+        assert.equal(assetBox.sendFileToServer.mock.calls.length, 0);
+    } finally { globalThis.window = previousWindow; }
 });

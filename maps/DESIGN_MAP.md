@@ -1,5 +1,7 @@
 # Atome / eVe Design Map
 
+2026-10-04 Wallpaper selection accepts imported or existing videos alongside images. Videos autoplay muted and loop in the shared Bevy video source registry; the existing centred cover crop applies at metadata readiness and viewport resize. Existing media selections are reused without another upload.
+
 2026-10-04 All wallpaper images and looping videos fill the viewport without repetition, distortion or letterboxing. The scale is `max(viewportWidth/mediaWidth, viewportHeight/mediaHeight)`; overflow is cropped equally on opposite sides. Bevy images, external-video UVs and login Canvas presentation share this geometry. Repeat/whole-image controls and their EN/FR labels were removed from Home and Background. Generated patterns keep their existing renderer.
 
 2026-10-03 Social sharing UI composes existing owners only: `subAccordion`/`column`/`actionRow` (Home nodes), `accordionNode`, `toggleableRowNode`, `radioGroupNode` (TikTok privacy with no default), `removableChipGroupNode`, `mediaCardNode` (thumbnail of the prepared file), `buttonNode` variants and `BEVY_PANEL_TOKENS`. No new token, style or control. Texts in `eVe/i18n/languages_{fr,en}_social.js`.

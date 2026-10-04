@@ -244,3 +244,28 @@ test('fifty register/dispose cycles release every hidden decoder without taking 
         delete globalThis.document;
     }
 });
+
+test('a direct wallpaper video loops and advances frames without an MP4 capability requirement', async () => {
+    const dom = new JSDOM('<!doctype html><html><body><canvas id="eve_surface_project"></canvas></body></html>');
+    globalThis.document = dom.window.document; globalThis.window = dom.window;
+    const surface = dom.window.document.getElementById('eve_surface_project');
+    try {
+        await withVideoStubs(dom.window, async () => {
+            const registration = await registerBevyVideoStreamSource({ id: 'wallpaper',
+                source: 'blob:webm-wallpaper', format: 'video', autoplay: true, muted: true, loop: true, surface });
+            assert.equal(registration.ok, true);
+            const video = registration.video;
+            assert.equal(video.canPlayType('video/mp4'), '');
+            assert.equal(video.src, 'blob:webm-wallpaper');
+            assert.equal(video.loop, true);
+            assert.equal(video.muted, true);
+            assert.equal(video.paused, false);
+            video.__setPresentable();
+            video.__flushVideoFrame(0); video.__flushVideoFrame(80);
+            assert.equal(getBevyVideoStreamSourceStatus({ id: 'wallpaper', surface }).frameVersion, 2);
+            assert.equal(dom.window.__EVE_BEVY_VIDEO_SOURCE_FOR_ID__('wallpaper'), video);
+            registration.dispose();
+            assert.equal(video.isConnected, false);
+        });
+    } finally { stopAllBevyVideoDecodeSources(); delete globalThis.window; delete globalThis.document; }
+});
