@@ -248,29 +248,14 @@ pub struct AtomeSurfaceBackgroundVisual {
     /// Size of the texture this (full-surface) sprite samples with a cover crop.
     pub texture_size: Option<[u32; 2]>,
     pub image_handle: Option<Handle<Image>>,
-    /// The texture repeats (seamless wallpaper) instead of being cover-cropped.
-    pub tiled: bool,
-    /// The tile's own size in logical px; `None` keeps the screen-relative
-    /// size of the bundled wallpaper.
-    pub tile_size: Option<Vec2>,
+
 }
 
-/// The quad of an animated wallpaper. One video, one quad: tiling is done by
-/// UVs past 1 that the video shader wraps, so every tile shows the same frame.
 #[derive(Clone, Debug, Component)]
 pub struct AtomeSurfaceBackgroundVideo {
     pub video_size: [u32; 2],
-    pub tile_size: Option<Vec2>,
-    pub tiled: bool,
 }
 
-/// The whole wallpaper image of a `contain` background, drawn undistorted and
-/// centred above the full-surface sprite that fills the bands.
-#[derive(Clone, Debug, Component)]
-pub struct AtomeSurfaceBackgroundImage {
-    pub texture_size: [u32; 2],
-    pub image_handle: Handle<Image>,
-}
 
 #[derive(Clone, Debug, Component)]
 pub struct AtomeBackdropBlurVisual;

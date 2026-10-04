@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const surface = vi.hoisted(() => ({
     mode: 'natural',
@@ -65,6 +65,7 @@ const deferred = () => {
 
 describe('project view mode state', () => {
     const projectId = 'project_ios_restore_race';
+    afterEach(() => vi.unstubAllGlobals());
 
     beforeEach(() => {
         forgetProjectViewMode(projectId);
@@ -76,6 +77,17 @@ describe('project view mode state', () => {
         persistence.commitBatch.mockClear();
         persistence.getStateCurrent.mockReset();
         persistence.getStateCurrent.mockResolvedValue({ properties: { view_mode: 'natural' } });
+    });
+
+    it.each(['beginner', 'intermediate', 'advanced'])('preserves stored views and the legacy missing-view fallback at %s level', async (masteryLevel) => {
+        vi.stubGlobal('window', { __eveProfilePreferences: { visual: { masteryLevel } } });
+        for (const stored of [undefined, 'natural', 'list', 'table', 'mix', 'timeline']) {
+            persistence.getStateCurrent.mockResolvedValue({ properties: { view_mode: stored } });
+            const restored = await restoreProjectViewMode(projectId);
+            expect(restored.ok).toBe(true);
+            expect(restored.mode).toBe(stored || 'natural');
+            expect(persistence.commitBatch).not.toHaveBeenCalled();
+        }
     });
 
     it('keeps an explicit Natural choice authoritative over a delayed Matrix restore', async () => {

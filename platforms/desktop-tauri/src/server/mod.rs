@@ -363,17 +363,338 @@ async fn transcode_video_to_mp4(source_path: &Path, output_path: &Path) -> Resul
     Ok(())
 }
 
+const MAX_TOP_LEVEL_ATOMS: usize = 256;
+const MAX_MOOV_BYTES: u64 = 32 * 1024 * 1024;
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum VideoPlaybackNormalization {
+    Transcode,
+    Remux,
+}
+
+fn is_audio_only_name(file_name: &str) -> bool {
+    let lower = file_name.trim().to_ascii_lowercase();
+    lower.starts_with("audio_") || lower.starts_with("audio_recording_")
+}
+
+fn is_mp4_container_extension(extension: &str) -> bool {
+    matches!(extension, "mp4" | "m4v" | "mov")
+}
+
+fn is_always_transcoded_extension(extension: &str) -> bool {
+    matches!(
+        extension,
+        "webm" | "mkv" | "avi" | "mpeg" | "mpg" | "wmv"
+    )
+}
+
+fn read_atom_u32(bytes: &[u8], offset: usize) -> u64 {
+    u32::from_be_bytes([
+        bytes[offset],
+        bytes[offset + 1],
+        bytes[offset + 2],
+        bytes[offset + 3],
+    ]) as u64
+}
+
+fn read_atom_u64(bytes: &[u8], offset: usize) -> u64 {
+    let mut raw = [0u8; 8];
+    raw.copy_from_slice(&bytes[offset..offset + 8]);
+    u64::from_be_bytes(raw)
+}
+
+fn atom_type(bytes: &[u8], offset: usize) -> String {
+    String::from_utf8_lossy(&bytes[offset..offset + 4]).to_string()
+}
+
+// En-têtes d'atomes de premier niveau, sans lire `mdat` : l'ordre `moov`/`mdat`
+// dit si le fichier est faststart.
+async fn read_mp4_top_level_boxes(path: &Path) -> std::io::Result<Vec<(String, u64, u64)>> {
+    let mut file = fs::File::open(path).await?;
+    let size = file.metadata().await?.len();
+    let mut boxes: Vec<(String, u64, u64)> = Vec::new();
+    let mut offset: u64 = 0;
+    while offset + 8 <= size && boxes.len() < MAX_TOP_LEVEL_ATOMS {
+        let mut header = [0u8; 16];
+        file.seek(std::io::SeekFrom::Start(offset)).await?;
+        let read = file.read(&mut header).await?;
+        if read < 8 {
+            break;
+        }
+        let mut box_size = read_atom_u32(&header, 0);
+        let box_type = atom_type(&header, 4);
+        let mut header_size: u64 = 8;
+        if box_size == 1 {
+            if read < 16 {
+                break;
+            }
+            box_size = read_atom_u64(&header, 8);
+            header_size = 16;
+        } else if box_size == 0 {
+            box_size = size - offset;
+        }
+        if box_size < header_size {
+            break;
+        }
+        boxes.push((box_type, offset, box_size));
+        offset += box_size;
+    }
+    Ok(boxes)
+}
+
+async fn read_mp4_moov_bytes(path: &Path, offset: u64, size: u64) -> Option<Vec<u8>> {
+    if size > MAX_MOOV_BYTES {
+        return None;
+    }
+    let mut file = fs::File::open(path).await.ok()?;
+    file.seek(std::io::SeekFrom::Start(offset)).await.ok()?;
+    let mut buffer = vec![0u8; size as usize];
+    let mut filled = 0usize;
+    while filled < buffer.len() {
+        let read = file.read(&mut buffer[filled..]).await.ok()?;
+        if read == 0 {
+            break;
+        }
+        filled += read;
+    }
+    if filled == buffer.len() {
+        Some(buffer)
+    } else {
+        None
+    }
+}
+
+fn for_each_child_box<F: FnMut(&str, usize, usize, usize)>(
+    bytes: &[u8],
+    start: usize,
+    end: usize,
+    mut visit: F,
+) {
+    let mut offset = start;
+    while offset + 8 <= end {
+        let mut size = read_atom_u32(bytes, offset);
+        let kind = atom_type(bytes, offset + 4);
+        let mut header_size: u64 = 8;
+        if size == 1 {
+            if offset + 16 > end {
+                return;
+            }
+            size = read_atom_u64(bytes, offset + 8);
+            header_size = 16;
+        } else if size == 0 {
+            size = (end - offset) as u64;
+        }
+        if size < header_size {
+            return;
+        }
+        let box_end = offset + size as usize;
+        if box_end > end {
+            return;
+        }
+        visit(&kind, offset, box_end, offset + header_size as usize);
+        offset = box_end;
+    }
+}
+
+struct Mp4MoovSummary {
+    video_codecs: Vec<String>,
+}
+
+fn summarize_mp4_moov(moov: &[u8]) -> Mp4MoovSummary {
+    let mut video_codecs: Vec<String> = Vec::new();
+    if moov.len() < 16 {
+        return Mp4MoovSummary { video_codecs };
+    }
+    for_each_child_box(moov, 8, moov.len(), |kind, start, end, _| {
+        if kind != "trak" {
+            return;
+        }
+        let mut handler = String::new();
+        let mut codec = String::new();
+        for_each_child_box(moov, start + 8, end, |mdia_kind, mdia_start, mdia_end, _| {
+            if mdia_kind != "mdia" {
+                return;
+            }
+            for_each_child_box(moov, mdia_start + 8, mdia_end, |child, _child_start, child_end, child_content| {
+                if child == "hdlr" && child_content + 12 <= child_end {
+                    handler = atom_type(moov, child_content + 8);
+                }
+                if child != "minf" {
+                    return;
+                }
+                for_each_child_box(moov, child_content, child_end, |minf, _minf_start, minf_end, minf_content| {
+                    if minf != "stbl" {
+                        return;
+                    }
+                    for_each_child_box(moov, minf_content, minf_end, |stbl, _, stbl_end, stbl_content| {
+                        if stbl != "stsd" || !codec.is_empty() {
+                            return;
+                        }
+                        let entry_start = stbl_content + 8;
+                        if entry_start + 8 <= stbl_end {
+                            codec = atom_type(moov, entry_start + 4);
+                        }
+                    });
+                });
+            });
+        });
+        if handler == "vide" {
+            if !codec.is_empty() {
+                video_codecs.push(codec.to_ascii_lowercase());
+            }
+        }
+    });
+    Mp4MoovSummary { video_codecs }
+}
+
+async fn resolve_video_playback_normalization(
+    source_path: &Path,
+    file_name: &str,
+    mime_type: &str,
+) -> Option<VideoPlaybackNormalization> {
+    let extension = lower_file_extension(file_name);
+    let lower_mime = mime_type.trim().to_ascii_lowercase();
+    if is_audio_only_name(file_name) {
+        return None;
+    }
+    if should_serve_webm_video_as_mp4(file_name) {
+        return Some(VideoPlaybackNormalization::Transcode);
+    }
+    if is_always_transcoded_extension(&extension) {
+        return Some(VideoPlaybackNormalization::Transcode);
+    }
+    if !is_mp4_container_extension(&extension) && !lower_mime.starts_with("video/") {
+        return None;
+    }
+    let boxes = match read_mp4_top_level_boxes(source_path).await {
+        Ok(value) => value,
+        Err(_) => return Some(VideoPlaybackNormalization::Transcode),
+    };
+    let Some(moov_index) = boxes.iter().position(|(kind, _, _)| kind == "moov") else {
+        return Some(VideoPlaybackNormalization::Transcode);
+    };
+    let mdat_index = boxes.iter().position(|(kind, _, _)| kind == "mdat");
+    let fast_start = match mdat_index {
+        Some(index) => moov_index < index,
+        None => true,
+    };
+    let (_, moov_offset, moov_size) = boxes[moov_index].clone();
+    let moov = read_mp4_moov_bytes(source_path, moov_offset, moov_size).await;
+    let hevc = moov
+        .as_deref()
+        .map(summarize_mp4_moov)
+        .map(|summary| {
+            summary
+                .video_codecs
+                .iter()
+                .any(|codec| codec == "hvc1" || codec == "hev1")
+        })
+        .unwrap_or(false);
+    if hevc {
+        return Some(VideoPlaybackNormalization::Transcode);
+    }
+    if !fast_start {
+        return Some(VideoPlaybackNormalization::Remux);
+    }
+    None
+}
+
+async fn run_ffmpeg(args: Vec<String>) -> Result<(), String> {
+    let ffmpeg_result = tokio::task::spawn_blocking(move || {
+        let mut command = Command::new("ffmpeg");
+        for arg in &args {
+            command.arg(arg);
+        }
+        command.output()
+    })
+    .await
+    .map_err(|err| format!("video_normalization_task_failed: {err}"))?
+    .map_err(|err| format!("video_normalization_spawn_failed: {err}"))?;
+    if !ffmpeg_result.status.success() {
+        let stderr = String::from_utf8_lossy(&ffmpeg_result.stderr)
+            .trim()
+            .to_string();
+        return Err(format!(
+            "video_normalization_failed: {}",
+            if stderr.is_empty() {
+                "ffmpeg exited without details"
+            } else {
+                stderr.as_str()
+            }
+        ));
+    }
+    Ok(())
+}
+
+// Réencodage canonique : H.264 8 bits yuv420p, sans profil/level figé (donc
+// valable au-delà de 720p) + faststart.
+async fn transcode_video_to_canonical_mp4(
+    source_path: &Path,
+    output_path: &Path,
+) -> Result<(), String> {
+    run_ffmpeg(vec![
+        "-y".into(),
+        "-hide_banner".into(),
+        "-loglevel".into(),
+        "error".into(),
+        "-i".into(),
+        source_path.to_string_lossy().into_owned(),
+        "-map".into(),
+        "0:v:0".into(),
+        "-map".into(),
+        "0:a?".into(),
+        "-c:v".into(),
+        "libx264".into(),
+        "-pix_fmt".into(),
+        "yuv420p".into(),
+        "-movflags".into(),
+        "+faststart".into(),
+        "-c:a".into(),
+        "aac".into(),
+        "-b:a".into(),
+        "128k".into(),
+        output_path.to_string_lossy().into_owned(),
+    ])
+    .await
+}
+
+// Recopie sans perte : conteneur et codecs lisibles, seul le `moov` doit
+// remonter avant le `mdat`.
+async fn remux_video_fast_start(source_path: &Path, output_path: &Path) -> Result<(), String> {
+    run_ffmpeg(vec![
+        "-y".into(),
+        "-hide_banner".into(),
+        "-loglevel".into(),
+        "error".into(),
+        "-i".into(),
+        source_path.to_string_lossy().into_owned(),
+        "-map".into(),
+        "0:v:0".into(),
+        "-map".into(),
+        "0:a?".into(),
+        "-c".into(),
+        "copy".into(),
+        "-movflags".into(),
+        "+faststart".into(),
+        output_path.to_string_lossy().into_owned(),
+    ])
+    .await
+}
+
 async fn resolve_playback_media_file(
     source_path: &Path,
     file_name: &str,
 ) -> Result<(PathBuf, &'static str, String), String> {
-    if !should_serve_webm_video_as_mp4(file_name) {
+    let mime_type = guess_mime_from_ext(file_name);
+    let Some(normalization) =
+        resolve_video_playback_normalization(source_path, file_name, mime_type).await
+    else {
         return Ok((
             source_path.to_path_buf(),
             guess_mime_from_ext(file_name),
             sanitize_file_name(file_name),
         ));
-    }
+    };
 
     let (cached_path, cached_name) = video_cache_path(source_path, file_name)?;
     if let Some(parent) = cached_path.parent() {
@@ -382,7 +703,14 @@ async fn resolve_playback_media_file(
             .map_err(|err| format!("video_cache_create_failed: {err}"))?;
     }
     if fs::metadata(&cached_path).await.is_err() {
-        transcode_video_to_mp4(source_path, &cached_path).await?;
+        match normalization {
+            VideoPlaybackNormalization::Remux => {
+                remux_video_fast_start(source_path, &cached_path).await?
+            }
+            VideoPlaybackNormalization::Transcode => {
+                transcode_video_to_canonical_mp4(source_path, &cached_path).await?
+            }
+        }
     }
     Ok((cached_path, "video/mp4", cached_name))
 }

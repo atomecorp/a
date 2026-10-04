@@ -127,12 +127,7 @@ fn apply_transition(uv_in: vec2<f32>, t: vec4<f32>) -> TransitionResult {
 @fragment
 fn fragment(in: VertexOutput) -> @location(0) vec4<f32> {
     let transition = apply_transition(in.uv, video_params.transition);
-    // A tiled wallpaper runs its UVs past 1 (one unit per tile): they wrap, so
-    // every tile samples the SAME frame of the one video. Inside [0,1] — every
-    // ordinary video — nothing changes, the right edge stays the right edge.
-    let outside = (transition.uv < vec2<f32>(0.0)) | (transition.uv > vec2<f32>(1.0));
-    let sample_uv = select(transition.uv, fract(transition.uv), outside);
-    let frame = textureSampleBaseClampToEdge(video_frame, video_sampler, sample_uv);
+    let frame = textureSampleBaseClampToEdge(video_frame, video_sampler, transition.uv);
     let filtered = apply_color_filters(frame.rgb, video_params.base, video_params.filters);
     // Le masque ne coupe que la COUVERTURE : la video continue de se lire
     // derriere la silhouette, elle n'est jamais arretee ni recopiee.

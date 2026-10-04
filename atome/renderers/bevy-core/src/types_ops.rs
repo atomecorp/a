@@ -1,4 +1,3 @@
-use bevy::math::Vec2;
 use serde::Deserialize;
 
 use crate::types::{
@@ -53,23 +52,8 @@ pub struct AtomeSurfaceBackgroundPatch {
     pub signature: String,
     pub color: [f32; 4],
     pub texture: Option<AtomeTexture>,
-    /// `contain` shows the whole texture, undistorted, centred on the surface;
-    /// anything else (or nothing) keeps the historical `cover` crop.
-    #[serde(default)]
-    pub fit: Option<String>,
-    /// Fills the bands a `contain` image leaves: a tiny copy of the image the
-    /// linear sampler stretches into a soft blur. Without it the bands take
-    /// `color`.
-    #[serde(default)]
-    pub backdrop: Option<AtomeTexture>,
-    /// The size, in logical px, of one tile of a `tile` background: the file's
-    /// own size, so a texture is repeated as it is and never stretched. Absent,
-    /// the tile keeps the screen-relative size of the bundled wallpaper.
-    #[serde(default)]
-    pub tile_size: Option<[f32; 2]>,
     /// An animated wallpaper: one hidden `<video>` the page registers under
-    /// `id` in the video source lookup. It is drawn by the video external
-    /// texture pipeline on one quad, every tile sampling the same frame.
+    /// `id` in the video source lookup. One quad covers the surface with a centred crop.
     #[serde(default)]
     pub video: Option<AtomeSurfaceBackgroundVideoSource>,
 }
@@ -82,20 +66,6 @@ pub struct AtomeSurfaceBackgroundVideoSource {
 }
 
 impl AtomeSurfaceBackgroundPatch {
-    pub fn texture_size(&self) -> Option<[u32; 2]> {
-        self.texture
-            .as_ref()
-            .map(|texture| [texture.width, texture.height])
-    }
-
-    fn fit_named(&self, expected: &str) -> bool {
-        self.fit.as_deref().map(str::trim).map(str::to_ascii_lowercase).as_deref() == Some(expected)
-    }
-
-    fn fit_is(&self, expected: &str) -> bool {
-        self.texture.is_some() && self.video.is_none() && self.fit_named(expected)
-    }
-
     /// The animated wallpaper, when one with a usable size is carried.
     pub fn video_source(&self) -> Option<&AtomeSurfaceBackgroundVideoSource> {
         self.video
@@ -103,26 +73,7 @@ impl AtomeSurfaceBackgroundPatch {
             .filter(|video| !video.id.trim().is_empty() && video.width > 0 && video.height > 0)
     }
 
-    pub fn is_video_tile(&self) -> bool {
-        self.video_source().is_some() && self.fit_named("tile")
-    }
 
-    /// The explicit tile size, when a usable one is carried.
-    pub fn explicit_tile_size(&self) -> Option<Vec2> {
-        self.tile_size
-            .map(|[width, height]| Vec2::new(width, height))
-            .filter(|size| size.x.is_finite() && size.y.is_finite() && size.x >= 1.0 && size.y >= 1.0)
-    }
-
-    pub fn is_contain(&self) -> bool {
-        self.fit_is("contain")
-    }
-
-    /// A seamless image repeated: at its own size (`tile_size`), or at the
-    /// screen-relative size of the bundled wallpaper.
-    pub fn is_tile(&self) -> bool {
-        self.fit_is("tile")
-    }
 }
 
 

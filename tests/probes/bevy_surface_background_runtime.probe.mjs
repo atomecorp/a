@@ -30,6 +30,7 @@ const createWindowHarness = ({ createImage } = {}) => {
                     width: 2,
                     height: 1,
                     complete: true,
+                    removeAttribute() {},
                     addEventListener() {},
                     removeEventListener() {},
                     decode: async () => {}
@@ -112,7 +113,8 @@ test('Bevy surface background runtime applies generated texture payloads', async
     assert.deepEqual(calls[0], {
         signature: 'generated:test',
         color: [0.2, 0.3, 0.4, 1],
-        texture: { width: 1, height: 1, rgba: new Uint8Array([8, 9, 10, 255]) }
+        texture: { width: 1, height: 1, rgba: new Uint8Array([8, 9, 10, 255]) },
+        video: null
     });
     assert.deepEqual(calls[1], { redraw: true });
     assert.equal(readLatestBevySurfaceBackground().signature, 'generated:test');
@@ -161,6 +163,7 @@ test('Bevy surface background runtime survives WebKit decode rejection after syn
             set src(_value) {
                 imageListeners.get('load')?.();
             },
+            removeAttribute() {},
             decode: async () => {
                 throw new Error('webkit_decode_rejected_after_load');
             }
@@ -246,7 +249,7 @@ test('Bevy surface background runtime applies payload emitted before surface reg
 });
 
 test('Bevy web renderer registers the surface background after renderer start', () => {
-    const source = fs.readFileSync(path.join(repoRoot, 'eVe/domains/rendering/bevy_web_renderer_runtime.js'), 'utf8');
+    const source = fs.readFileSync(path.join(repoRoot, 'eVe/domains/rendering/bevy_web_renderer_startup.js'), 'utf8');
     assert.equal(
         source.includes('registerBevySurfaceBackgroundRuntime(canvas, state);\n        scheduleDeferredInitialNodes'),
         false,
@@ -300,7 +303,7 @@ test('user background restore waits for async auth identity after refresh', () =
 });
 
 test('saved background selection persists as the current wallpaper', () => {
-    const source = fs.readFileSync(path.join(repoRoot, 'eVe/intuition/tools/background_panel_view.js'), 'utf8');
+    const source = fs.readFileSync(path.join(repoRoot, 'eVe/intuition/tools/background.js'), 'utf8');
     const applySavedStart = source.indexOf('const applySavedBackground =');
     const deleteStart = source.indexOf('const deleteSavedBackground =');
     assert.ok(applySavedStart > 0);
@@ -470,7 +473,7 @@ test('Bevy background runtime skips duplicate surface signatures', () => {
     const source = fs.readFileSync(path.join(repoRoot, 'eVe/domains/rendering/bevy_surface_background_runtime.js'), 'utf8');
     assert.match(source, /SURFACE_APPLICATIONS = new WeakMap/);
     assert.match(source, /previous\?\.signature === signature && previous\?\.rendererState === state/);
-    assert.match(source, /IMAGE_TEXTURE_CACHE\.set\(sourceUrl, pending\)/);
+    assert.match(source, /IMAGE_TEXTURE_CACHE\.set\(cacheKey, pending\)/);
 });
 
 test('the wallpaper follows the workspace mode: Dashboard only, clean surface in the project', async () => {
@@ -506,14 +509,14 @@ test('the wallpaper follows the workspace mode: Dashboard only, clean surface in
 
         runtime.start();
         const dashboard = globalThis.window.__eveSurfaceBackground;
-        assert.equal(dashboard.signature, 'image:/api/uploads/wallpaper.png');
+        assert.equal(dashboard.signature, 'image:cover:/api/uploads/wallpaper.png');
         assert.equal(dashboard.sourceUrl, '/api/uploads/wallpaper.png');
 
         // Leaving the Dashboard is a fade: the Dashboard is still the visible
         // surface, so the wallpaper must survive the transition untouched.
         globalThis.window.__eveWorkspaceMode = { mode: 'transition', targetMode: 'project' };
         harness.emit('eve:workspace-mode-changed', { mode: 'transition', targetMode: 'project' });
-        assert.equal(globalThis.window.__eveSurfaceBackground.signature, 'image:/api/uploads/wallpaper.png');
+        assert.equal(globalThis.window.__eveSurfaceBackground.signature, 'image:cover:/api/uploads/wallpaper.png');
 
         globalThis.window.__eveWorkspaceMode = { mode: 'project', projectId: 'project-1' };
         harness.emit('eve:workspace-mode-changed', { mode: 'project', projectId: 'project-1' });
@@ -530,7 +533,7 @@ test('the wallpaper follows the workspace mode: Dashboard only, clean surface in
         globalThis.window.__eveWorkspaceMode = { mode: 'dashboard', projectId: '__eve_dashboard_workspace__' };
         harness.emit('eve:workspace-mode-changed', { mode: 'dashboard', projectId: '__eve_dashboard_workspace__' });
         const restored = globalThis.window.__eveSurfaceBackground;
-        assert.equal(restored.signature, 'image:/api/uploads/wallpaper.png');
+        assert.equal(restored.signature, 'image:cover:/api/uploads/wallpaper.png');
         assert.equal(restored.sourceUrl, '/api/uploads/wallpaper.png');
     } finally {
         if (previousGetComputedStyle === undefined) {

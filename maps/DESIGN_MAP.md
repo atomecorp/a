@@ -1,5 +1,7 @@
 # Atome / eVe Design Map
 
+2026-10-04 All wallpaper images and looping videos fill the viewport without repetition, distortion or letterboxing. The scale is `max(viewportWidth/mediaWidth, viewportHeight/mediaHeight)`; overflow is cropped equally on opposite sides. Bevy images, external-video UVs and login Canvas presentation share this geometry. Repeat/whole-image controls and their EN/FR labels were removed from Home and Background. Generated patterns keep their existing renderer.
+
 2026-10-03 Social sharing UI composes existing owners only: `subAccordion`/`column`/`actionRow` (Home nodes), `accordionNode`, `toggleableRowNode`, `radioGroupNode` (TikTok privacy with no default), `removableChipGroupNode`, `mediaCardNode` (thumbnail of the prepared file), `buttonNode` variants and `BEVY_PANEL_TOKENS`. No new token, style or control. Texts in `eVe/i18n/languages_{fr,en}_social.js`.
 
 2026-10-03 YouTube/TV use the standard textInputNode inside the existing Finder body and its shared hidden-text editor. Their temporary context omits generic category/tag/condition/transfer controls. YouTube submits on Return and retains the query/page token; TV loads immediately and filters locally, including restoration on clear; Return never activates a channel. Existing result activation, viewer footer, Close and fullscreen ownership are retained. Ribbon input consumers were removed from these two tools. Structural/input-session tests pass; actual Safari/Chrome/Tauri/iOS pixels and gestures remain unverified because native computer control is blocked by the locked Mac.

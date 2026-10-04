@@ -1378,3 +1378,91 @@ test('a required voice failure rolls back every voice in the shared media batch'
     assert.equal(calls.filter(({ type }) => type === 'stop_instance').length, 2);
     assert.equal(readSelectedProjectMediaPlaybackState(['atomic_audio_ok', 'atomic_audio_fail']).anyPlaying, false);
 });
+
+test('a silent video proven by container inspection plays without mandatory audio', async () => {
+    const dom = await createProjectHost([
+        {
+            id: 'silent_video',
+            type: 'video',
+            properties: {
+                kind: 'video',
+                media_url: '/api/uploads/silent.mov',
+                file_path: 'data/users/user_a/Downloads/silent.mov',
+                left: 10,
+                top: 12,
+                width: 160,
+                height: 90
+            }
+        }
+    ]);
+    globalThis.window = dom.window;
+    globalThis.document = dom.window.document;
+    const calls = [];
+    dom.window.Squirrel = {
+        av: {
+            audio: {
+                playback: { loadAsset: async (payload) => { calls.push({ type: 'load', payload }); return { ok: true }; } },
+                play_instance: async (payload) => { calls.push({ type: 'play_instance', payload }); return { ok: true }; },
+                stop_instance: async () => ({ ok: true }),
+                play: async () => ({ ok: true }),
+                stop: async () => ({ ok: true })
+            }
+        }
+    };
+
+    const result = await runSelectedProjectMediaPlaybackAction({
+        action: 'toggle',
+        atomeIds: ['silent_video'],
+        windowRef: dom.window,
+        documentRef: dom.window.document,
+        projectTimelineAction: async () => ({ ok: true, target_playheads: { silent_video: 0 } }),
+        probeVideoAudioTrack: async () => ({ hasAudio: false, audioTrackCount: 0 })
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(result.results[0].audio.skipped, true);
+    assert.equal(calls.some(({ type }) => type === 'load'), false);
+});
+
+test('a video whose audio presence is unknown keeps the mandatory audio contract', async () => {
+    const dom = await createProjectHost([
+        {
+            id: 'unknown_audio_video',
+            type: 'video',
+            properties: {
+                kind: 'video',
+                media_url: '/api/uploads/unknown.mov',
+                file_path: 'data/users/user_a/Downloads/unknown.mov',
+                left: 10,
+                top: 12,
+                width: 160,
+                height: 90
+            }
+        }
+    ]);
+    globalThis.window = dom.window;
+    globalThis.document = dom.window.document;
+    dom.window.Squirrel = {
+        av: {
+            audio: {
+                playback: { loadAsset: async () => ({ ok: false, error: 'video_audio_missing' }) },
+                play_instance: async () => ({ ok: true }),
+                stop_instance: async () => ({ ok: true }),
+                play: async () => ({ ok: true }),
+                stop: async () => ({ ok: true })
+            }
+        }
+    };
+
+    const result = await runSelectedProjectMediaPlaybackAction({
+        action: 'toggle',
+        atomeIds: ['unknown_audio_video'],
+        windowRef: dom.window,
+        documentRef: dom.window.document,
+        projectTimelineAction: async () => ({ ok: true, target_playheads: { unknown_audio_video: 0 } }),
+        probeVideoAudioTrack: async () => null
+    });
+
+    assert.equal(result.ok, false);
+    assert.equal(result.results[0].error, 'video_audio_missing');
+});

@@ -165,11 +165,9 @@ test('the permanent bar is the five intents plus view/help/contact; mode and act
     // The roots the ribbon really draws come from the taxonomy, in its own order.
     const { resolveMainMenuVisibility } = await import('../../eVe/intuition/menu/context_menu_resolver.js');
     assert.deepEqual(resolveMainMenuVisibility({ level: 'advanced' }).roots, content.toolbox.children);
-    // `help` et `contact` sont `beginner` : la barre permanente est complete a
-    // tous les niveaux (2026-09-29). Seuls `calendar` et `view` restent
-    // au-dessus du niveau debutant.
-    assert.deepEqual(resolveMainMenuVisibility({ level: 'beginner' }).roots,
-        ['organize', 'capture', 'create', 'find', 'communicate', 'help', 'contact']);
+    // Beginner keeps only the Atom handle; protected levels keep all families.
+    assert.deepEqual(resolveMainMenuVisibility({ level: 'beginner' }).roots, []);
+    assert.deepEqual(resolveMainMenuVisibility({ level: 'intermediate' }).roots, content.toolbox.children);
     const taxonomy = JSON.parse(readFileSync(resolve(process.cwd(),
         'eVe/intuition/menu/context_menus.json'), 'utf8'));
     assert.equal(taxonomy.commands.contact.panel, 'contact');

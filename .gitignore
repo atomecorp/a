@@ -306,3 +306,16 @@ eve/application
 !tests/eve/finder_media_input.test.mjs
 !tests/eve/youtube_player_lifecycle.test.mjs
 !tests/eve/tv_catalog_transport.test.mjs
+
+# Expertise scope regression and pre-change protected-level projections
+!tests/eve/beginner_interface_scope.test.mjs
+!tests/eve/__snapshots__/
+!tests/eve/__snapshots__/beginner_interface_scope.test.mjs.snap
+!tests/eve/background_default_wallpaper_contract.test.mjs
+
+# Video codec normalization and silent-video playback regressions
+!tests/eve/media_audio_track_probe.test.mjs
+!tests/eve/media_container_boxes.test.mjs
+!tests/eve/helpers/
+!tests/eve/helpers/mp4_fixture.mjs
+!tests/server/server_media_normalization.test.mjs
