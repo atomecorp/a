@@ -137,6 +137,12 @@ pub(crate) fn texture_handle_for_node(
         return Ok(None);
     }
     let mask = node_mask(node);
+    if let Some(paint) = node.surface_paint.as_ref().filter(|_| node.kind == "shape") {
+        if !paint.valid() { return Err(format!("bevy_surface_paint_invalid:{}", node.id)); }
+        let texture = paint.texture(&shape_silhouette_for_node(node), color_for_node(node));
+        let texture = masked_texture(&texture, mask.as_ref()).unwrap_or(texture);
+        return Ok(Some(image_handle_from_texture(images, &Some(texture), &node.id)?));
+    }
     if let Some(source) = node.texture.as_ref() {
         return match masked_texture(source, mask.as_ref()) {
             Some(masked) => Ok(Some(image_handle_from_texture(images, &Some(masked), &node.id)?)),
@@ -160,6 +166,11 @@ pub(crate) fn texture_handle_for_node_in_world(
     node: &AtomeRenderNode,
 ) -> Result<Option<Handle<Image>>, String> {
     let silhouette = shape_silhouette_for_node(node);
+    if node.kind == "shape" && node.texture.is_none() && node_mask(node).is_none() {
+        if let Some(paint) = &node.surface_paint {
+            return Ok(Some(crate::shape_texture::cached_image_handle_from_shape_surface(world, &silhouette, Some(paint), color_for_node(node), &node.id)?));
+        }
+    }
     // Une forme SANS texture ET sans masque se sert du cache : c'est le cas de
     // tres loin le plus frequent (chaque carre arrondi de l'interface).
     if node.kind == "shape"
@@ -249,7 +260,7 @@ pub fn spawn_node_with_texture_handle(
             let sprite = if let Some(handle) = texture_handle {
                 let mut sprite = Sprite::from_image(handle);
                 sprite.custom_size = Some(size);
-                sprite.color = color_from_rgba(visible_color);
+                sprite.color = if node.surface_paint.is_some() { white_with_opacity(node.opacity) } else { color_from_rgba(visible_color) };
                 sprite
             } else {
                 Sprite::from_color(color_from_rgba(visible_color), size)
@@ -375,6 +386,7 @@ pub fn spawn_node_with_texture_handle(
         }
         other => return Err(format!("bevy_render_kind_unsupported:{other}")),
     };
+    world.entity_mut(entity).insert(crate::surface_paint::AtomeSurfacePaint(node.surface_paint.clone()));
     world.entity_mut(entity).insert((
         AtomeVisualColor(visual_color),
         AtomeVisualOpacity(normalize_opacity(node.opacity)),

@@ -162,7 +162,7 @@ pub struct AtomeShapeShadowCacheKey {
     pub star_inner_radius: u32,
     pub polygon_sides: u32,
     pub blur: u32,
-    pub spread: u32,
+    pub spread: i32,
     pub offset_x: i32,
     pub offset_y: i32,
     pub color: [u8; 4],
@@ -206,6 +206,7 @@ pub struct AtomeRoundedRectMaskCacheKey {
     pub star_branches: u32,
     pub star_inner_radius: u32,
     pub polygon_sides: u32,
+    pub paint: Vec<u32>,
 }
 
 // CPU-generated rounded-rect alpha masks are expensive at full-surface sizes

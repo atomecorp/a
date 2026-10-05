@@ -121,6 +121,7 @@ mod tests {
             mask: None,
             mask_source: false,
             shadow: None,
+            surface_paint: None,
             backdrop: None,
             presentation: false,
             menu_plane: 0,

@@ -34,6 +34,7 @@
   "tests/eve/bevy_panel_contact_contract.test.mjs",
   "tests/eve/bevy_panel_contact_pick_contract.test.mjs",
   "tests/eve/bevy_panel_contract.test.mjs",
+  "tests/eve/bevy_panel_dark_skin_contract.test.mjs",
   "tests/eve/bevy_panel_finder_map_gesture_contract.test.mjs",
   "tests/eve/bevy_panel_geometry_contract.test.mjs",
   "tests/eve/bevy_panel_home_contract.test.mjs",

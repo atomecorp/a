@@ -304,7 +304,7 @@ test('the fixed button at the bottom hands over to the system import window', as
 
     const button = visit(fixed, (node) => node.id === 'media_import_system');
     assert.equal(button.kind, 'button');
-    assert.equal(visit(fixed, (node) => node.id === 'media_import_system_label').text,
+    assert.equal(button.accessibility.label,
         'Ajouter des fichiers externes', 'le bouton systeme dit ce qu’il ouvre, pas « importer » tout court');
 
     button.on.activate();

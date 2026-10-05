@@ -33,6 +33,7 @@ fn shape_node(id: &str) -> AtomeRenderNode {
         corner_radii: None,
         color: Some([0.1, 0.2, 0.3, 1.0]),
         shadow: None,
+        surface_paint: None,
         backdrop: None,
         presentation: false,
         procedural: None,

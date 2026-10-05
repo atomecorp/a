@@ -151,6 +151,7 @@ pub fn cached_image_handle_from_rounded_rect_mask(
         star_branches: 0,
         star_inner_radius: 0,
         polygon_sides: 0,
+        paint: Vec::new(),
     };
     let cached = world
         .resource::<AtomeRoundedRectMaskCache>()

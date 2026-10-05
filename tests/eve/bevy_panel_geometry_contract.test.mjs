@@ -126,7 +126,7 @@ test('natural panel height is exactly content, padding, gaps and footer', () => 
             { id: 'b', kind: 'panel', style: { size: [300, 32] }, children: [] }
         ],
         bodyGap: 8
-    }), 128);
+    }), Math.ceil(64 + 8 + BEVY_PANEL_TOKENS.paddingPx * 2 + BEVY_PANEL_TOKENS.footerHeightPx));
 });
 
 test('mobile panels stay compact and retain floating geometry through viewport changes', () => {
@@ -356,7 +356,9 @@ test('Bevy panel restores its pre-keyboard position after the iOS viewport expan
     });
     await openBevyPanelSurface('ios_keyboard_restore_fixture');
     const panelId = 'eve_bevy_panel_ios_keyboard_restore_fixture_panel';
-    assert.deepEqual(findNode(mounted.at(-1), panelId).style.position, [10, 734]);
+    const initialPosition = [...findNode(mounted.at(-1), panelId).style.position];
+    assert.equal(initialPosition[0], 10);
+    assert.equal(initialPosition[1] + findNode(mounted.at(-1), panelId).style.size[1], 844 - 74);
 
     viewportHeight = 500;
     viewport.dispatchEvent(new dom.window.Event('resize'));
@@ -365,7 +367,8 @@ test('Bevy panel restores its pre-keyboard position after the iOS viewport expan
     viewportHeight = 463;
     viewport.dispatchEvent(new dom.window.Event('resize'));
     await new Promise((resolve) => dom.window.setTimeout(resolve, 120));
-    assert.deepEqual(findNode(mounted.at(-1), panelId).style.position, [10, 353]);
+    assert.equal(findNode(mounted.at(-1), panelId).style.position[0], 10);
+    assert.equal(findNode(mounted.at(-1), panelId).style.position[1] + findNode(mounted.at(-1), panelId).style.size[1], 463 - 74);
     assert.equal(mounted.length, 2, 'one settled keyboard transition must produce one panel update');
 
     viewportHeight = 844;
@@ -373,7 +376,7 @@ test('Bevy panel restores its pre-keyboard position after the iOS viewport expan
     await new Promise((resolve) => dom.window.setTimeout(resolve, 120));
     assert.deepEqual(
         findNode(mounted.at(-1), panelId).style.position,
-        [10, 734],
+        initialPosition,
         'keyboard dismissal must restore the exact pre-keyboard position'
     );
     await closeBevyPanelSurface('ios_keyboard_restore_fixture');
@@ -447,7 +450,8 @@ test('structural viewport resize and orientation reanchor every open Bevy panel 
         dom.window.dispatchEvent(new dom.window.Event('resize'));
         await new Promise((resolve) => dom.window.setTimeout(resolve, 120));
         let edgePanel = findNode(projected.get('eve_bevy_panel_resize_fixture_edge'), 'eve_bevy_panel_resize_fixture_edge_panel');
-        assert.deepEqual(edgePanel.style.position, [20, 367]);
+        assert.equal(edgePanel.style.position[0], 20);
+        assert.equal(edgePanel.style.position[1] + edgePanel.style.size[1] / 2, (height - 74) / 2);
         assert.equal(edgePanel.style.size[0], 370);
         width = 1000;
         height = 800;

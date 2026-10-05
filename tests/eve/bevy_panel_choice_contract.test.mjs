@@ -17,7 +17,7 @@ import {
 import { BEVY_PANEL_TOKENS } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_tokens.js';
 
 const tokens = BEVY_PANEL_TOKENS.choice;
-const rowWidth = BEVY_ICON_BUTTON_TOKENS.sizePx
+const rowWidth = tokens.controlColumnPx
     + BEVY_ICON_BUTTON_TOKENS.labelGapPx
     + BEVY_ICON_BUTTON_TOKENS.labelWidthPx;
 
@@ -58,7 +58,7 @@ test('each choice control uses its own native interactive kind and the shared ro
 
     // One shared indicator column keeps every label aligned whatever the shape.
     const labelLeft = (node, id) => findNode(node, id).style.position[0];
-    assert.equal(labelLeft(checkbox, 'cb_label'), BEVY_ICON_BUTTON_TOKENS.sizePx + BEVY_ICON_BUTTON_TOKENS.labelGapPx);
+    assert.equal(labelLeft(checkbox, 'cb_label'), tokens.controlColumnPx + BEVY_ICON_BUTTON_TOKENS.labelGapPx);
     assert.equal(labelLeft(toggle, 'sw_label'), labelLeft(checkbox, 'cb_label'));
     assert.equal(labelLeft(group, 'rg_left_label'), labelLeft(checkbox, 'cb_label'));
     assert.deepEqual(findNode(checkbox, 'cb_indicator').style.size, [tokens.boxSizePx, tokens.boxSizePx]);
@@ -117,7 +117,7 @@ test('the selected state is a distinct indicator treatment reusing the shared ch
     assert.ok(findNode(on, 'on_selected_mark_short'));
     assert.ok(findNode(on, 'on_selected_mark_long'));
     assert.deepEqual(findNode(on, 'on_background').style.background, resolveBevyIconButtonSurface({ tone: 'neutral', active: true }).background);
-    assert.deepEqual(findNode(off, 'off_background').style.background, resolveBevyIconButtonSurface({ tone: 'neutral' }).background);
+    assert.deepEqual(findNode(off, 'off_background').style.background, BEVY_PANEL_TOKENS.controlMaterial.background);
 
     const group = radioGroupNode({ id: 'rg', options: radioOptions, value: 'right' });
     assert.ok(findNode(group, 'rg_right_indicator_dot'));
@@ -143,7 +143,7 @@ test('the complete visual-state matrix reuses the canonical icon-button surface'
     assert.deepEqual(findNode(focused, 'f_background').style.shadow, BEVY_ICON_BUTTON_TOKENS.focusShadow);
     assert.notDeepEqual(findNode(pressed, 'p_background').style.background, findNode(selected, 's_background').style.background);
     assert.deepEqual(findNode(radio, 'r_left_background').style.background, resolveBevyIconButtonSurface({ tone: 'danger', active: true }).background);
-    assert.deepEqual(findNode(toggle, 't_background').style.background, resolveBevyIconButtonSurface({ tone: 'warning' }).background);
+    assert.deepEqual(findNode(toggle, 't_background').style.background, BEVY_PANEL_TOKENS.controlMaterial.background);
     assert.equal(disabled.style.opacity, BEVY_ICON_BUTTON_TOKENS.disabled.opacity);
     assert.equal(disabled.on, undefined, 'a disabled control must expose no handler');
     assert.equal(idle.style.opacity, 1);

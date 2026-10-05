@@ -361,7 +361,7 @@ mod clip_polygon_tests {
             corner_radius: 0.0, corner_radii: None,
             shape_variant: None, star_branches: None, star_inner_radius: None, polygon_sides: None,
             mask: None, mask_source: false,
-            shadow: None, backdrop: None,
+            shadow: None, backdrop: None, surface_paint: None,
             presentation: false, menu_plane: 0, color: Some([0.1, 0.2, 0.3, 1.0]),
             text: None, source: None, texture_size: None, uv_rect: None, texture: None,
             peaks: None, playback_progress: None, selected: None, filters: None,

@@ -118,7 +118,7 @@ fn shape_shadow_cache_key(
         star_inner_radius: (silhouette.geometry.star_inner_radius * 100.0).round() as u32,
         polygon_sides: silhouette.geometry.polygon_sides,
         blur: cache_scalar(shadow.blur),
-        spread: cache_scalar(shadow.spread),
+        spread: cache_signed_scalar(shadow.spread),
         offset_x: cache_signed_scalar(shadow.offset_x),
         offset_y: cache_signed_scalar(shadow.offset_y),
         color: [
@@ -308,8 +308,8 @@ pub fn sync_shape_shadow_overlay_transform(
         let config = world.resource::<AtomeBevyRendererConfig>();
         (config.width, config.height)
     };
-    let shadow_width = size.width.max(1.0) + shadow.spread * 2.0;
-    let shadow_height = size.height.max(1.0) + shadow.spread * 2.0;
+    let shadow_width = (size.width.max(1.0) + shadow.spread * 2.0).max(1.0);
+    let shadow_height = (size.height.max(1.0) + shadow.spread * 2.0).max(1.0);
     let padding = shadow_padding(shadow.blur) as f32;
     let image_width = (shadow_width + padding * 2.0).ceil();
     let image_height = (shadow_height + padding * 2.0).ceil();
@@ -384,8 +384,8 @@ pub fn rebuild_shape_shadow_overlay(world: &mut World, entity: Entity) -> Result
         .get::<AtomeVisualOpacity>(entity)
         .map(|value| value.0)
         .unwrap_or_else(|| normalize_opacity(1.0));
-    let shadow_width = size.width.max(1.0) + shadow.spread * 2.0;
-    let shadow_height = size.height.max(1.0) + shadow.spread * 2.0;
+    let shadow_width = (size.width.max(1.0) + shadow.spread * 2.0).max(1.0);
+    let shadow_height = (size.height.max(1.0) + shadow.spread * 2.0).max(1.0);
     // The shadow silhouette follows the shape, so a partially rounded surface
     // keeps its square corners square in the shadow too. Spread grows every
     // non-zero corner; a zero corner stays sharp.
@@ -393,7 +393,7 @@ pub fn rebuild_shape_shadow_overlay(world: &mut World, entity: Entity) -> Result
         .get::<AtomeCornerRadius>(entity)
         .map(|value| value.0)
         .unwrap_or([0.0; 4])
-        .map(|radius| if radius > 0.0 { radius + shadow.spread } else { 0.0 });
+        .map(|radius| if radius > 0.0 { (radius + shadow.spread).max(0.0) } else { 0.0 });
     // La silhouette de l'ombre est celle de LA variante : une etoile projette
     // ses pointes, un polygone ses sommets, et l'arrondi de sommets du panneau
     // Arrondi se retrouve dans l'ombre du meme coup.

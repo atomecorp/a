@@ -29,7 +29,7 @@ test('shared panel accordion has one native header and no hidden body when close
     let activations = 0;
     const closed = accordionNode({
         id: 'accordion_fixture',
-        label: 'Section',
+        label: 'Section', direction: 'down',
         bodyChildren: [textNode('accordion_fixture_body_text', 'Body')],
         onActivate: () => { activations += 1; }
     });
@@ -41,12 +41,12 @@ test('shared panel accordion has one native header and no hidden body when close
     assert.deepEqual(closed.style.size, [358, BEVY_PANEL_TOKENS.accordion.headerHeightPx]);
     assert.equal(header.kind, 'accordion');
     assert.deepEqual(header.style.size, [358, BEVY_PANEL_TOKENS.accordion.headerHeightPx]);
-    assert.deepEqual(header.style.padding, [0, 10, 0, 10]);
-    assert.equal(header.style.radius, 3);
+    assert.deepEqual(header.style.padding, [0, 0, 0, 0]);
+    assert.equal(header.style.radius, BEVY_PANEL_TOKENS.radiusPx);
     assert.deepEqual(header.style.background, BEVY_PANEL_TOKENS.accordion.headerBackground);
     assert.deepEqual(header.style.shadow, BEVY_PANEL_TOKENS.accordion.collapsedShadow);
     assert.equal(typeof header.on.activate, 'function');
-    assert.deepEqual(chevron.style.size, [12, 12]);
+    assert.deepEqual(chevron.style.size, [BEVY_PANEL_TOKENS.accordion.chevronSizePx, BEVY_PANEL_TOKENS.accordion.chevronSizePx]);
     assert.equal(chevron.style.rotation, undefined);
     assert.equal(caretShapeOf(chevron), 'right');
     assert.deepEqual(chevron.children.map((stroke) => stroke.style.size), [
@@ -57,7 +57,7 @@ test('shared panel accordion has one native header and no hidden body when close
     const closedRecords = projectBevyUiTreeRecords({ tree: { root: closed }, treeId: 'accordion_closed', workspaceLayer: 'panel' });
     assert.deepEqual(
         closedRecords.find((record) => record.id === '__eve_bevy_ui_accordion_closed_accordion_fixture_header')?.properties?.material?.shadow,
-        { color: [0, 0, 0, 0.18], blur: 3, spread: 0, offsetX: 0, offsetY: 1 }
+        { color: BEVY_PANEL_TOKENS.accordion.collapsedShadow.color, blur: BEVY_PANEL_TOKENS.accordion.collapsedShadow.blur, spread: BEVY_PANEL_TOKENS.accordion.collapsedShadow.spread, offsetX: BEVY_PANEL_TOKENS.accordion.collapsedShadow.offset[0], offsetY: BEVY_PANEL_TOKENS.accordion.collapsedShadow.offset[1] }
     );
     header.on.activate();
     assert.equal(activations, 1);
@@ -66,7 +66,7 @@ test('shared panel accordion has one native header and no hidden body when close
 test('shared panel accordion opens a continuous one-unit body and keeps instances independent', () => {
     const open = accordionNode({
         id: 'accordion_open',
-        label: 'Section',
+        label: 'Section', direction: 'down',
         expanded: true,
         bodyChildren: [textNode('accordion_open_body_text', 'Section content')]
     });
@@ -79,20 +79,20 @@ test('shared panel accordion opens a continuous one-unit body and keeps instance
         BEVY_PANEL_TOKENS.accordion.headerHeightPx + BEVY_PANEL_TOKENS.accordion.bodyHeightPx
     ]);
     assert.deepEqual(open.style.shadow, BEVY_PANEL_TOKENS.accordion.expandedShadow);
-    assert.deepEqual(header.style.radius_corners, [3, 3, 0, 0]);
-    assert.equal(header.style.radius, undefined);
-    assert.equal(header.style.shadow, undefined);
+    assert.equal(header.style.radius, BEVY_PANEL_TOKENS.radiusPx);
+    assert.equal(header.style.radius_corners, undefined);
+    assert.deepEqual(header.style.shadow, BEVY_PANEL_TOKENS.surfaces.active.shadow);
     assert.equal(caretShapeOf(findNode(open, 'accordion_open_chevron')), 'down');
     assert.deepEqual(body.style.position, [0, BEVY_PANEL_TOKENS.accordion.headerHeightPx]);
     assert.deepEqual(body.style.size, [358, BEVY_PANEL_TOKENS.accordion.bodyHeightPx]);
-    assert.deepEqual(body.style.radius_corners, [0, 0, 3, 3]);
-    assert.deepEqual(body.style.background, BEVY_PANEL_TOKENS.colors.control);
+    assert.equal(body.style.radius, BEVY_PANEL_TOKENS.radiusPx);
+    assert.deepEqual(body.style.background, BEVY_PANEL_TOKENS.controlMaterial.background);
     assert.equal(findNode(open, 'accordion_open_body_text').text, 'Section content');
     assert.equal(findNode(other, 'accordion_other_body'), null);
     const openRecords = projectBevyUiTreeRecords({ tree: { root: open }, treeId: 'accordion_open', workspaceLayer: 'panel' });
     assert.deepEqual(
         openRecords.find((record) => record.id === '__eve_bevy_ui_accordion_open_accordion_open')?.properties?.material?.shadow,
-        { color: [0, 0, 0, 0.22], blur: 5, spread: 1, offsetX: 0, offsetY: 2 }
+        { color: BEVY_PANEL_TOKENS.accordion.expandedShadow.color, blur: BEVY_PANEL_TOKENS.accordion.expandedShadow.blur, spread: BEVY_PANEL_TOKENS.accordion.expandedShadow.spread, offsetX: BEVY_PANEL_TOKENS.accordion.expandedShadow.offset[0], offsetY: BEVY_PANEL_TOKENS.accordion.expandedShadow.offset[1] }
     );
 });
 
@@ -118,7 +118,7 @@ test('native accordion headers use the canonical pointer activation route', () =
 // `radius_corners` while the active WebGPU overlay projection read only the
 // scalar `style.radius`, so an open accordion painted fully square. Asserting
 // the tree kept passing throughout — only the projected record catches it.
-test('open accordion projects its partial corner radii to the GPU record', () => {
+test('open accordion projects the common surface radius to the GPU record', () => {
     const open = accordionNode({
         id: 'accordion_corner_fixture',
         label: 'Section',
@@ -132,9 +132,9 @@ test('open accordion projects its partial corner radii to the GPU record', () =>
 
     const header = recordFor('accordion_corner_fixture_header');
     assert.equal(header?.shape, 'rounded_rect');
-    assert.deepEqual(header?.corner_radii, [BEVY_PANEL_TOKENS.radiusPx, BEVY_PANEL_TOKENS.radiusPx, 0, 0]);
+    assert.equal(header?.corner_radius, BEVY_PANEL_TOKENS.radiusPx);
 
     const body = recordFor('accordion_corner_fixture_body');
     assert.equal(body?.shape, 'rounded_rect');
-    assert.deepEqual(body?.corner_radii, [0, 0, BEVY_PANEL_TOKENS.radiusPx, BEVY_PANEL_TOKENS.radiusPx]);
+    assert.equal(body?.corner_radius, BEVY_PANEL_TOKENS.radiusPx);
 });

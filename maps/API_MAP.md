@@ -1,3 +1,5 @@
+2026-10-04 Optional panel presentation: shared UI builders accept `panelTokens` with the current panel preset as default; workspace consumers explicitly retain the workspace preset. No business APIs/events changed. Bevy shape payload/style accepts optional `surface_paint` with linear gradient stops, inset shadows and optional border edge colours. Omitted paint keeps the existing renderer; an explicit null style patch clears paint while retaining geometry, selection, opacity and resolved masks. Footer composition accepts existing-action children; badges invoke the existing projection reveal/scroll callback only.
+
 2026-10-04 Boot/auth contract: failed desktop automatic recovery publishes the existing logged-out/auth-checked state via `clearSessionState`; user background startup precedes intuition bootstrap so login pixel readiness does not depend on deferred-module presentation. No new public API.
 
 # Atome / eVe API Map

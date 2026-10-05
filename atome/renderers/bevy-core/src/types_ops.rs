@@ -100,6 +100,8 @@ pub struct AtomeStylePatch {
     pub shadow: Option<Option<AtomeShadowStyle>>,
     #[serde(default, deserialize_with = "deserialize_clearing")]
     pub backdrop: Option<Option<AtomeBackdropStyle>>,
+    #[serde(default, deserialize_with = "deserialize_clearing")]
+    pub surface_paint: Option<Option<crate::surface_paint::SurfacePaint>>,
     pub selected: Option<bool>,
     #[serde(default)]
     pub opacity: Option<f32>,

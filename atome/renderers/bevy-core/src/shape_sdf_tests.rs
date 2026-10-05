@@ -262,6 +262,7 @@ fn a_node_reads_its_variant_and_its_defaults() {
             star_inner_radius: None,
             polygon_sides: None,
             shadow: None,
+            surface_paint: None,
             backdrop: None,
             mask: None,
             mask_source: false,

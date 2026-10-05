@@ -16,11 +16,6 @@ pub fn normalize_opacity(opacity: f32) -> f32 {
     }
 }
 
-/// The two silhouettes a shadow can take.
-///
-/// `drop` is the historic Gaussian exterior shadow. `block` is the HARD
-/// silhouette, drawn at the very offset with no gaussian at all, and it is the
-/// only one that understands `invert` (the inner shadow).
 #[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum AtomeShadowKind {
@@ -30,12 +25,6 @@ pub enum AtomeShadowKind {
 }
 
 #[derive(Clone, Copy, Debug, Default, Deserialize, PartialEq)]
-/// Canonical GPU shadow for an object silhouette.
-///
-/// The renderer derives the alpha mask from the owner's rounded geometry,
-/// composites the resulting shadow below that owner, and never samples or
-/// blurs the backdrop behind it. `drop` blurs that mask; `block` keeps it hard
-/// and `invert` then carves it into an inner shadow.
 pub struct AtomeShadowStyle {
     #[serde(default, rename = "type")]
     pub kind: AtomeShadowKind,
@@ -48,8 +37,6 @@ pub struct AtomeShadowStyle {
     pub offset_y: f32,
     #[serde(default)]
     pub spread: f32,
-    /// The INNER shadow of the block silhouette. It never applies to a blurred
-    /// drop shadow, and `normalized()` clears it there.
     #[serde(default)]
     pub invert: bool,
 }
@@ -80,10 +67,6 @@ pub struct AtomeMaskPlacement {
     pub target_size: [f32; 2],
 }
 
-/// Le maskage par silhouette : l'alpha d'un AUTRE atome decoupe celui-ci.
-///
-/// La projection resout la source et livre sa silhouette — le renderer n'a donc
-/// jamais a chercher un atome dans la scene, il ne compose que des pixels.
 #[derive(Clone, Debug, Deserialize, PartialEq)]
 pub struct AtomeMaskStyle {
     #[serde(default)]
@@ -92,24 +75,15 @@ pub struct AtomeMaskStyle {
     pub mode: String,
     #[serde(default)]
     pub silhouette: crate::shape_sdf::AtomeShapeSilhouette,
-    /// Optional raster alpha for non-parametric sources such as text glyphs.
-    /// One byte per source pixel, in silhouette coordinates.
     #[serde(default)]
     pub alpha: Vec<u8>,
-    /// Spatial relationship between the parametric source and this concrete
-    /// target node. Each descendant of a masked group gets its own placement,
-    /// so the source is never stretched independently over every child.
     #[serde(default)]
     pub placement: Option<AtomeMaskPlacement>,
-    /// Additional enclosing masks, multiplied with the primary alpha. Vec
-    /// provides the indirection required for nested masked Molecules.
     #[serde(default)]
     pub layers: Vec<AtomeMaskStyle>,
 }
 
 impl AtomeMaskStyle {
-    /// `alpha` est le seul mode : une declaration d'un autre mode est ignoree
-    /// plutot que devinee.
     pub fn normalized(mut self) -> Option<Self> {
         if self.source_id.trim().is_empty() || self.mode.trim().to_ascii_lowercase() != "alpha" {
             return None;
@@ -137,9 +111,6 @@ impl AtomeShadowStyle {
         ];
         let kind = self.kind;
         let blur = finite_or(self.blur, 0.0).max(0.0);
-        // Une ombre portee sans flou n'est plus un cas impossible : sa
-        // silhouette PLEINE est deja un aplat, et le curseur de flou descend
-        // jusqu'a zero. Seule la transparence totale retire l'ombre.
         if color[3] <= 0.0 {
             return None;
         }
@@ -149,15 +120,12 @@ impl AtomeShadowStyle {
             blur,
             offset_x: finite_or(self.offset_x, 0.0),
             offset_y: finite_or(self.offset_y, 0.0),
-            spread: finite_or(self.spread, 0.0).max(0.0),
-            // The inner cutout only exists in the hard silhouette: on a blurred
-            // shadow it has no meaning, so it is never carried.
+            spread: finite_or(self.spread, 0.0),
             invert: kind == AtomeShadowKind::Block && self.invert,
         })
     }
 }
 
-/// Identity for the multiplicative CSS filters (brightness/contrast/saturate).
 pub fn default_filter_unit() -> f32 {
     1.0
 }
@@ -170,10 +138,6 @@ fn finite_or(value: f32, fallback: f32) -> f32 {
     }
 }
 
-/// CSS-style per-clip color filters (identity = no visual change). Deserialized
-/// from the node/style payload and copied into the Bevy video material uniform —
-/// see `assets/shaders/video_external.wgsl`. Missing fields default to identity,
-/// so a partial `{ "brightness": 1.2 }` leaves the rest untouched.
 #[derive(Clone, Copy, Debug, PartialEq, Deserialize)]
 pub struct AtomeColorFilters {
     #[serde(default = "default_filter_unit")]
@@ -205,8 +169,6 @@ impl AtomeColorFilters {
         }
     }
 
-    /// Coerce to renderable ranges: non-finite values fall back to identity,
-    /// the [0,1]-mix filters are clamped, the multiplicative gains stay >= 0.
     pub fn normalized(self) -> Self {
         Self {
             brightness: finite_or(self.brightness, 1.0).max(0.0),
@@ -220,10 +182,6 @@ impl AtomeColorFilters {
     }
 }
 
-/// Per-clip timeline transition applied in the video material — see
-/// `apply_transition` in `assets/shaders/video_external.wgsl`. All-f32 so it
-/// copies straight into the uniform. kind: 0 none, 1 fade, 2 wipe, 3 slide;
-/// role: 0 incoming, 1 outgoing. `none()` = no transition (identity).
 #[derive(Clone, Copy, Debug, PartialEq, Deserialize)]
 pub struct AtomeTransition {
     #[serde(default)]
@@ -246,8 +204,6 @@ impl AtomeTransition {
         }
     }
 
-    /// Coerce to renderable ranges: kind snapped to {0,1,2,3}, progress in
-    /// [0,1], role to {0,1}, softness in [0,1]; non-finite falls back to none.
     pub fn normalized(self) -> Self {
         let kind = finite_or(self.kind, 0.0).round().clamp(0.0, 3.0);
         Self {
@@ -452,36 +408,28 @@ pub struct AtomeRenderNode {
     pub opacity: f32,
     #[serde(default)]
     pub corner_radius: f32,
-    // Per-corner override in [top_left, top_right, bottom_right, bottom_left]
-    // order. When absent the uniform `corner_radius` applies to all four.
     #[serde(default)]
     pub corner_radii: Option<[f32; 4]>,
-    /// La VARIANTE de l'outil Shape : `square` (le defaut implicite de tout
-    /// document ecrit avant l'outil), `circle`, `star` ou `polygon`.
     #[serde(default)]
     pub shape_variant: Option<String>,
-    /// Nombre de branches de l'etoile (3 a 20).
     #[serde(default)]
     pub star_branches: Option<f32>,
-    /// Rayon des creux de l'etoile, en fraction du rayon des pics (0.15 a 0.95).
     #[serde(default)]
     pub star_inner_radius: Option<f32>,
-    /// Nombre de sommets du polygone regulier (3 a 12).
     #[serde(default)]
     pub polygon_sides: Option<f32>,
     #[serde(default)]
     pub shadow: Option<AtomeShadowStyle>,
     #[serde(default)]
     pub backdrop: Option<AtomeBackdropStyle>,
-    /// La silhouette qui decoupe ce noeud, livree resolue par la projection.
+    #[serde(default)]
+    pub surface_paint: Option<crate::surface_paint::SurfacePaint>,
     #[serde(default)]
     pub mask: Option<AtomeMaskStyle>,
-    /// Ce noeud EST un masque : sa silhouette travaille, il ne se peint pas.
     #[serde(default)]
     pub mask_source: bool,
     #[serde(default)]
     pub presentation: bool,
-    /// Compositor-only menu face (1) or overlay (2); never persisted Atome state.
     #[serde(default)]
     pub menu_plane: u8,
     pub color: Option<[f32; 4]>,
@@ -499,8 +447,6 @@ pub struct AtomeRenderNode {
     pub transition: Option<AtomeTransition>,
     #[serde(default)]
     pub procedural: Option<AtomeProceduralSdf>,
-    /// Drawn in project space: follows the project view (zoom/pan). UI, menus,
-    /// the Dashboard and the background stay in screen space (`false`).
     #[serde(default)]
     pub project_space: bool,
 }
@@ -519,8 +465,6 @@ pub struct AtomeTexture {
 pub struct AtomeBackdropStyle {
     pub blur_px: f32,
     pub tint: [f32; 4],
-    /// Share of the tint alpha removed at the bottom edge (0 = uniform tint).
-    /// The hue never changes; the glass only grows clearer downwards.
     #[serde(default)]
     pub tint_fade: f32,
 }

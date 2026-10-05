@@ -105,6 +105,7 @@ pub fn apply_resource(world: &mut World, patch: AtomeResourcePatch) -> Result<()
             star_inner_radius: None,
             polygon_sides: None,
             shadow: None,
+            surface_paint: None,
             backdrop: None,
             mask: None,
             mask_source: false,

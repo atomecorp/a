@@ -14,6 +14,9 @@ pub mod resource_ops;
 pub mod selection_overlay;
 pub mod shadow_texture;
 pub mod shape_sdf;
+mod shape_texture;
+pub mod surface_paint;
+mod render_style_ops;
 pub mod shape_shadow_overlay;
 pub mod spawn;
 pub mod texture;
@@ -59,3 +62,7 @@ mod video_external_texture_tests;
 mod workspace_blur_tests;
 pub mod animated_png;
 mod animated_png_pixels;
+
+#[cfg(test)]
+#[path = "../../../../tests/rendering/panel_surface_paint.rs"]
+mod panel_surface_paint_tests;
