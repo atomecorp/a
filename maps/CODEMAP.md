@@ -2996,3 +2996,5 @@ Execution acceptance: the browser text-placeholder fill survived reload, then My
 - platforms/ios/atome-auv3/Common/AppNativeHealthQueries.swift: existing native controller query extension.
 
 - eVe/domains/rendering/bevy_ui_overlay_reconciliation.js: existing overlay owner now also applies prepared/fading tree opacity; the public runtime keeps queue ordering and remains under 500 lines.
+
+2026-10-05 panel-stack ownership: `eVe/intuition/runtime/bevy_panel/bevy_panel_runtime.js` owns opening order and superseded-request cancellation; existing `bevy_panel_projection.js` owns relative-to-compact paint range projection and shared sweep decoration. Tree/footer builders emit relative levels, and the shared record projector keeps content/preview records within the owning range. Tests: `tests/eve/bevy_panel_stack_contract.test.mjs`; evidence: `eVe/documentations/panel_stack_validation_2026-10-05.md`.

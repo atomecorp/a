@@ -325,3 +325,6 @@ eve/application
 !tests/eve/helpers/
 !tests/eve/helpers/mp4_fixture.mjs
 !tests/server/server_media_normalization.test.mjs
+
+# Shared Bevy panel stacking regression
+!tests/eve/bevy_panel_stack_contract.test.mjs

@@ -56,6 +56,7 @@
   "tests/eve/bevy_panel_selectable_list_contract.test.mjs",
   "tests/eve/bevy_panel_selectable_list_visual_contract.test.mjs",
   "tests/eve/bevy_panel_size_font_contract.test.mjs",
+  "tests/eve/bevy_panel_stack_contract.test.mjs",
   "tests/eve/bevy_panel_state_contract.test.mjs",
   "tests/eve/bevy_panel_sweep_contract.test.mjs",
   "tests/eve/bevy_panel_table_contract.test.mjs",

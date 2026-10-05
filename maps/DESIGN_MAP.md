@@ -1357,3 +1357,7 @@ New project immediately fades to white through the Dashboard presentation owner.
     - a tap or a release pins the real slider;
     - turning inward reveals it under the finger;
     - coming back to the bar folds it.
+
+## Complete panel-window paint order (2026-10-05)
+
+Shared Bevy panels are opaque stacking groups: shells, shadow stacks, hierarchy rails/badges, text/media, popups, fixed commands and footers share a window range. Each open/reopen receives a higher range than all older mounted panels; ordinary refresh does not raise a window. Fixed commands paint above their enclosing band. This correction changes relative paint order only; neutral gradient, shared skin, corner radii, dimensions and compact footer remain unchanged. Verified Web overlap/pixel evidence and unverified native paths: `eVe/documentations/panel_stack_validation_2026-10-05.md`.
