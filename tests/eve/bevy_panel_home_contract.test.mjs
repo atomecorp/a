@@ -442,6 +442,7 @@ test('Home opening geometry follows handedness, side centering and compact mobil
     const desktopSurface = { getBoundingClientRect: () => ({ width: 1024, height: 768 }) };
     try {
         setMainMenuRuntime({ handedness: 'left', getReservedHeight: () => 74 });
+        globalThis.window.__eveIntuitionXState = { handedness: 'left' };
         const left = resolveBevyPanelGeometry({
             surface: desktopSurface,
             defaultGeometry: homeSurface.defaultGeometry,
@@ -451,6 +452,7 @@ test('Home opening geometry follows handedness, side centering and compact mobil
         assert.deepEqual([left.x, left.y, left.width, left.height], [0, 37, 480, 620]);
 
         setMainMenuRuntime({ handedness: 'right', getReservedHeight: () => 74 });
+        globalThis.window.__eveIntuitionXState = { handedness: 'right' };
         const right = resolveBevyPanelGeometry({
             surface: desktopSurface,
             defaultGeometry: homeSurface.defaultGeometry,

@@ -116,8 +116,8 @@ test('the selected state is a distinct indicator treatment reusing the shared ch
     assert.equal(findNode(off, 'off_selected_mark'), null);
     assert.ok(findNode(on, 'on_selected_mark_short'));
     assert.ok(findNode(on, 'on_selected_mark_long'));
-    assert.deepEqual(findNode(on, 'on_background').style.background, resolveBevyIconButtonSurface({ tone: 'neutral', active: true }).background);
-    assert.deepEqual(findNode(off, 'off_background').style.background, BEVY_PANEL_TOKENS.controlMaterial.background);
+    assert.deepEqual(findNode(on, 'on_indicator').style.background, BEVY_PANEL_TOKENS.buttonMaterial.selected.background);
+    assert.deepEqual(findNode(off, 'off_indicator').style.background, BEVY_PANEL_TOKENS.buttonMaterial.idle.background);
 
     const group = radioGroupNode({ id: 'rg', options: radioOptions, value: 'right' });
     assert.ok(findNode(group, 'rg_right_indicator_dot'));
@@ -129,7 +129,7 @@ test('the selected state is a distinct indicator treatment reusing the shared ch
     assert.equal(switchOn.style.position[0], tokens.switchWidthPx - tokens.switchKnobPx - tokens.switchKnobInsetPx);
 });
 
-test('the complete visual-state matrix reuses the canonical icon-button surface', () => {
+test('the complete visual-state matrix reuses the approved panel material', () => {
     const idle = toggleableRowNode({ id: 'i', kind: 'checkbox', label: 'A' });
     const focused = toggleableRowNode({ id: 'f', kind: 'checkbox', label: 'A', focused: true });
     const pressed = toggleableRowNode({ id: 'p', kind: 'checkbox', label: 'A', pressed: true });
@@ -140,10 +140,11 @@ test('the complete visual-state matrix reuses the canonical icon-button surface'
 
     assert.deepEqual(idle.style.background, BEVY_PANEL_TOKENS.colors.transparent);
     assert.deepEqual(pressed.style.translation, BEVY_ICON_BUTTON_TOKENS.pressedTranslation);
-    assert.deepEqual(findNode(focused, 'f_background').style.shadow, BEVY_ICON_BUTTON_TOKENS.focusShadow);
-    assert.notDeepEqual(findNode(pressed, 'p_background').style.background, findNode(selected, 's_background').style.background);
-    assert.deepEqual(findNode(radio, 'r_left_background').style.background, resolveBevyIconButtonSurface({ tone: 'danger', active: true }).background);
-    assert.deepEqual(findNode(toggle, 't_background').style.background, BEVY_PANEL_TOKENS.controlMaterial.background);
+    assert.deepEqual(findNode(focused, 'f_indicator').style.shadows.at(-1), BEVY_PANEL_TOKENS.buttonMaterial.focusShadow);
+    assert.notDeepEqual(findNode(pressed, 'p_indicator').style.background, findNode(selected, 's_indicator').style.background);
+    assert.equal(findNode(radio, 'r_left_background'), null, 'the approved Radio has no coloured backing plate');
+    assert.deepEqual(findNode(radio, 'r_left_indicator').style.background, BEVY_PANEL_TOKENS.buttonMaterial.selected.background);
+    assert.deepEqual(findNode(toggle, 't_indicator').style.background, BEVY_PANEL_TOKENS.buttonMaterial.idle.background);
     assert.equal(disabled.style.opacity, BEVY_ICON_BUTTON_TOKENS.disabled.opacity);
     assert.equal(disabled.on, undefined, 'a disabled control must expose no handler');
     assert.equal(idle.style.opacity, 1);
@@ -177,7 +178,7 @@ test('nested opaque panel surfaces stay below choice backgrounds while scrolling
     const records = project(0);
     const outer = records.find(record => record.id.endsWith('_outer'));
     const inner = records.find(record => record.id.endsWith('_inner'));
-    const background = records.find(record => record.id.endsWith('_autosize_background'));
+    const background = records.find(record => record.id.endsWith('_autosize_indicator'));
     assert.ok(inner.properties.z_index > outer.properties.z_index, 'the inner opaque surface is above its enclosing surface');
     assert.ok(background.properties.z_index > inner.properties.z_index, 'the checked material cannot share the parent surface depth');
     const moved = project(-40);
@@ -186,4 +187,22 @@ test('nested opaque panel surfaces stay below choice backgrounds while scrolling
     const ops = diffVirtualSceneTrees(createVirtualSceneTree(records), createVirtualSceneTree(moved));
     assert.ok(ops.length > 0);
     assert.ok(ops.every(op => op.type === 'updateTransform'), 'scroll changes only geometry, preserving entities and materials');
+});
+
+test('approved Radio paint follows the disc geometry, with no rectangular plate or decorative border', () => {
+    for(const state of ['idle','selected','hovered','pressed','focused','disabled']) {
+        const row=radioGroupNode({id:'radio',options:[{value:'choice',label:'Radio'}],value:state==='selected'?'choice':null,hoveredValue:state==='hovered'?'choice':null,pressedValue:state==='pressed'?'choice':null,focusedValue:state==='focused'?'choice':null,disabled:state==='disabled'});
+        assert.equal(findNode(row,'radio_choice_background'),null);
+        const indicator=findNode(row,'radio_choice_indicator');
+        assert.equal(indicator.style.radius,tokens.radioSizePx/2);
+        assert.equal(indicator.style.border,undefined);
+        assert.equal(indicator.style.surfacePaint.border.color[3],0);
+        const records=projectBevyUiTreeRecords({tree:{root:row},treeId:'radio_states',workspaceLayer:'panel'});
+        const disc=records.find(record=>record.id.endsWith('_radio_choice_indicator'));
+        assert.equal(disc.properties.corner_radius,tokens.radioSizePx/2);
+        assert.equal(disc.properties.width,tokens.radioSizePx);
+        assert.equal(disc.properties.height,tokens.radioSizePx);
+        if(state==='selected') assert.deepEqual(findNode(row,'radio_choice_indicator_dot').style.background,BEVY_PANEL_TOKENS.buttonMaterial.dot);
+        if(state==='focused') assert.ok(indicator.style.shadows.includes(BEVY_PANEL_TOKENS.buttonMaterial.focusShadow));
+    }
 });

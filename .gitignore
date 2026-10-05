@@ -109,6 +109,9 @@ tests/eve/*
 !tests/eve/bevy_panel_contact_contract.test.mjs
 !tests/eve/bevy_panel_contact_pick_contract.test.mjs
 !tests/eve/bevy_panel_input_contract.test.mjs
+!tests/eve/bevy_panel_approved_material_contract.test.mjs
+!tests/eve/bevy_panel_scope_chip_contract.test.mjs
+!tests/eve/bevy_panel_segmented_control_contract.test.mjs
 !tests/eve/bevy_panel_select_contract.test.mjs
 !tests/eve/bevy_panel_media_contract.test.mjs
 !tests/eve/capture_audio_scope_contract.test.mjs

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { test } from 'vitest';
+import { test, beforeEach, afterEach } from 'vitest';
 
 import { normalizeSelectPresentation } from '../../atome/src/squirrel/components/select_contract.js';
 import { projectBevyUiTreeRecords } from '../../eVe/domains/rendering/bevy_ui_overlay_record_projection.js';
@@ -9,6 +9,9 @@ import { createBevyUiScrollRuntime } from '../../eVe/domains/rendering/bevy_ui_s
 import { EVE_DEFAULT_MESSAGES } from '../../eVe/i18n/languages.js';
 import { selectNode } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_select.js';
 import { BEVY_PANEL_TOKENS } from '../../eVe/intuition/runtime/bevy_panel/bevy_panel_tokens.js';
+let previousWindow;
+beforeEach(() => { previousWindow = globalThis.window; globalThis.window = { __eveProfilePreferences: { visual: { accordionDirection: 'down' } } }; });
+afterEach(() => { globalThis.window = previousWindow; });
 
 const options = [
     { value: 'fr', label: 'French' },
@@ -46,14 +49,11 @@ test('shared panel Select uses the native select node and panel token contract w
     assert.equal(control.kind, 'select');
     assert.deepEqual(control.style.size, [BEVY_PANEL_TOKENS.inputWidthPx, BEVY_PANEL_TOKENS.select.controlHeightPx]);
     assert.deepEqual(control.style.padding, [0, 10, 0, 10]);
-    assert.deepEqual(control.style.background, BEVY_PANEL_TOKENS.controlMaterial.background);
-    assert.deepEqual(control.style.shadow, BEVY_PANEL_TOKENS.controlMaterial.shadow);
+    assert.deepEqual(control.style.background, BEVY_PANEL_TOKENS.buttonMaterial.idle.background);
+    assert.deepEqual(control.style.shadow, BEVY_PANEL_TOKENS.buttonMaterial.idle.shadow);
     assert.equal(control.style.radius, BEVY_PANEL_TOKENS.radiusPx);
     assert.equal(label.text, 'French');
-    assert.deepEqual(
-        findNode(closed, 'select_fixture_indicator_divider').style.position,
-        [BEVY_PANEL_TOKENS.inputWidthPx - BEVY_PANEL_TOKENS.select.indicatorWidthPx, BEVY_PANEL_TOKENS.select.dividerInsetPx]
-    );
+    assert.equal(findNode(closed, 'select_fixture_indicator_divider'), null);
     assert.equal(findNode(closed, 'select_fixture_chevron').style.rotation, undefined);
     assert.equal(findNode(closed, 'select_fixture_chevron_upper').style.rotation, 45);
     assert.equal(findNode(closed, 'select_fixture_chevron_lower').style.rotation, -45);
@@ -63,9 +63,9 @@ test('shared panel Select uses the native select node and panel token contract w
     const hovered = selectNode({ id: 'select_hovered', options, value: 'fr', hovered: true });
     const focused = selectNode({ id: 'select_focused', options, value: 'fr', focused: true });
     const disabled = selectNode({ id: 'select_disabled', options, value: 'fr', disabled: true });
-    assert.deepEqual(findNode(hovered, 'select_hovered_control').style.background, BEVY_PANEL_TOKENS.controlMaterial.background);
-    assert.deepEqual(findNode(focused, 'select_focused_control').style.background, BEVY_PANEL_TOKENS.controlMaterial.background);
-    assert.deepEqual(findNode(focused, 'select_focused_control').style.shadow, BEVY_PANEL_TOKENS.select.focusShadow);
+    assert.deepEqual(findNode(hovered, 'select_hovered_control').style.background, BEVY_PANEL_TOKENS.buttonMaterial.hover.background);
+    assert.deepEqual(findNode(focused, 'select_focused_control').style.background, BEVY_PANEL_TOKENS.buttonMaterial.idle.background);
+    assert.deepEqual(findNode(focused, 'select_focused_control').style.shadows.at(-1), BEVY_PANEL_TOKENS.buttonMaterial.focusShadow);
     assert.equal(findNode(disabled, 'select_disabled_control').style.opacity, BEVY_PANEL_TOKENS.select.disabledOpacity);
     assert.equal(findNode(disabled, 'select_disabled_control').on, undefined);
 });
@@ -85,14 +85,14 @@ test('shared panel Select expands with selected option state and a single WebGPU
     assert.equal(open.style.z_index, BEVY_PANEL_TOKENS.select.popupZIndex);
     assert.equal(control.style.radius, BEVY_PANEL_TOKENS.radiusPx);
     assert.equal(findNode(open, 'select_open_chevron').style.rotation, undefined);
-    assert.equal(findNode(open, 'select_open_chevron_upper').style.rotation, -45);
-    assert.equal(findNode(open, 'select_open_chevron_lower').style.rotation, 45);
+    assert.equal(findNode(open, 'select_open_chevron_upper').style.rotation, 45);
+    assert.equal(findNode(open, 'select_open_chevron_lower').style.rotation, -45);
     assert.deepEqual(optionsRoot.style.size, [BEVY_PANEL_TOKENS.inputWidthPx, 3 * BEVY_PANEL_TOKENS.select.optionHeightPx]);
     assert.deepEqual(optionsRoot.style.position, [0, BEVY_PANEL_TOKENS.select.controlHeightPx + BEVY_PANEL_TOKENS.select.menuGapPx]);
-    assert.deepEqual(optionsRoot.style.radius_corners, [0, 0, 3, 3]);
+    assert.deepEqual(optionsRoot.style.radius_corners, [0, 0, BEVY_PANEL_TOKENS.radiusPx, BEVY_PANEL_TOKENS.radiusPx]);
     assert.deepEqual(optionsRoot.style.shadow, BEVY_PANEL_TOKENS.select.menuShadow);
-    assert.deepEqual(findNode(open, 'select_open_option_1').style.background, BEVY_PANEL_TOKENS.select.selectedBackground);
-    assert.deepEqual(findNode(open, 'select_open_option_2').style.background, BEVY_PANEL_TOKENS.select.pressedBackground);
+    assert.deepEqual(findNode(open, 'select_open_option_1').style.background, BEVY_PANEL_TOKENS.select.optionSelected);
+    assert.deepEqual(findNode(open, 'select_open_option_2').style.background, BEVY_PANEL_TOKENS.buttonMaterial.pressed.background);
     assert.ok(findNode(open, 'select_open_option_1_selected_mark'));
     assert.equal(findNode(open, 'select_open_option_1_label').text, 'English');
 

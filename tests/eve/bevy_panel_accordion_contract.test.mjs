@@ -138,3 +138,44 @@ test('open accordion projects the common surface radius to the GPU record', () =
     assert.equal(body?.shape, 'rounded_rect');
     assert.equal(body?.corner_radius, BEVY_PANEL_TOKENS.radiusPx);
 });
+
+test('left and right accordion controls reserve symmetric space and closed chevrons point inward', () => {
+    for (const width of [180,358]) for (const handedness of ['left','right']) for (const expanded of [false,true]) for (const direction of ['up','down']) {
+        const inner=accordionNode({id:'inner',label:'Nested',width:width-24,handedness,expanded,direction});
+        const tree=accordionNode({id:'outer',label:'A long section title',width,handedness,expanded,direction,
+            leadingWidth:40, leadingChildren:[{id:'avatar',kind:'panel',style:{position:[10,10],size:[40,40]}}],bodyChildren:[inner]});
+        const caret=findNode(tree,'outer_chevron'), label=findNode(tree,'outer_label'), avatar=findNode(tree,'avatar');
+        const tokens=BEVY_PANEL_TOKENS.accordion;
+        assert.ok(Math.abs((handedness==='left'?caret.style.position[0]:width-caret.style.position[0]-caret.style.size[0])-tokens.contentPaddingPx)<1e-8);
+        if(handedness==='left') assert.ok(avatar.style.position[0]>=caret.style.position[0]+caret.style.size[0]);
+        assert.ok(label.style.size[0]>0);
+        assert.ok(avatar.style.position[0]+avatar.style.size[0]<=label.style.position[0]);
+        if(handedness==='right') assert.ok(label.style.position[0]+label.style.size[0]<=caret.style.position[0]);
+        else assert.ok(label.style.position[0]>=caret.style.position[0]+caret.style.size[0]);
+        const [upper,lower]=caret.children;
+        if(!expanded) assert.deepEqual([upper.style.rotation,lower.style.rotation],handedness==='left'?[45,-45]:[-45,45]);
+        else assert.equal(caretShapeOf(caret),direction);
+        if(expanded) assert.equal(findNode(tree,'inner_chevron').style.position[0],handedness==='left'?tokens.contentPaddingPx:(width-24)-tokens.contentPaddingPx-tokens.chevronSizePx);
+    }
+});
+
+test('the canonical handedness event rebuilds already open and nested accordion consumers', async () => {
+    const {JSDOM}=await import('jsdom');
+    const {setHandedness}=await import('../../eVe/intuition/core/state.js');
+    const previousWindow=globalThis.window, previousDocument=globalThis.document, previousCustomEvent=globalThis.CustomEvent;
+    const dom=new JSDOM('<!doctype html><html><body></body></html>');
+    globalThis.window=dom.window;globalThis.document=dom.window.document;globalThis.CustomEvent=dom.window.CustomEvent;
+    let rebuilt;
+    const rebuild=()=>{rebuilt=accordionNode({id:'outer',label:'Open',expanded:true,bodyChildren:[accordionNode({id:'nested',label:'Nested'})]});};
+    const {bevyPanelRuntimeState}=await import('../../eVe/intuition/runtime/bevy_panel/bevy_panel_runtime.js');
+    bevyPanelRuntimeState.mounted.set('handedness_fixture',{refresh:rebuild});
+    try {
+        setHandedness('right');
+        const right=findNode(rebuilt,'outer_chevron').style.position[0];
+        setHandedness('left');
+        assert.equal(findNode(rebuilt,'outer_chevron').style.position[0],BEVY_PANEL_TOKENS.accordion.contentPaddingPx);
+        assert.equal(findNode(rebuilt,'nested_chevron').style.position[0],BEVY_PANEL_TOKENS.accordion.contentPaddingPx);
+        setHandedness('right');
+        assert.equal(findNode(rebuilt,'outer_chevron').style.position[0],right);
+    } finally {bevyPanelRuntimeState.mounted.delete('handedness_fixture');dom.window.close();globalThis.window=previousWindow;globalThis.document=previousDocument;globalThis.CustomEvent=previousCustomEvent;}
+});

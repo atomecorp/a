@@ -29,6 +29,7 @@
   "tests/eve/bevy_native_media_texture_contract.test.mjs",
   "tests/eve/bevy_native_renderer_runtime.test.mjs",
   "tests/eve/bevy_panel_accordion_contract.test.mjs",
+  "tests/eve/bevy_panel_approved_material_contract.test.mjs",
   "tests/eve/bevy_panel_choice_contract.test.mjs",
   "tests/eve/bevy_panel_component_reuse_contract.test.mjs",
   "tests/eve/bevy_panel_contact_contract.test.mjs",
